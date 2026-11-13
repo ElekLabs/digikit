@@ -144,6 +144,19 @@ const USB_USBCMD: u32 = 0xfc0b_0140;
 const USB_ULPI_VIEWPORT: u32 = 0xfc0b_0170;
 const USB_OTGSC: u32 = 0xfc0b_01a4;
 const OTGSC_BSV: u32 = 1 << 11;
+/// Registers a USBCMD.RST write resets, with the reset value from the RM: USBSTS (SRI = 1), USBINTR, DEVICEADDR, ENDPTPRIME, ENDPTSTAT, ENDPTCOMPLETE,
+/// ENDPTCTRL1 to 3.
+const USB_RST_REGS: [(u32, u32); 9] = [
+    (0xfc0b_0144, 0x80),
+    (0xfc0b_0148, 0),
+    (0xfc0b_0154, 0),
+    (0xfc0b_01b0, 0),
+    (0xfc0b_01b8, 0),
+    (0xfc0b_01bc, 0),
+    (0xfc0b_01c4, 0),
+    (0xfc0b_01c8, 0),
+    (0xfc0b_01cc, 0),
+];
 /// The log is bounded: a guest that polls the viewport for ever must not grow it without limit.
 const USB_PHY_LOG_MAX: usize = 4096;
 
@@ -158,6 +171,8 @@ pub enum UsbPhyEvent {
     PhyRead { reg: u8, value: u8 },
     /// USBCMD.RS changed to this value.
     RunStop(bool),
+    /// USBCMD.RST was written 1 (controller reset).
+    Reset,
 }
 
 /// Caller-mapped 1 MiB RAM pages.  The tagged 4096-entry table is indexed by
@@ -1612,9 +1627,22 @@ impl Board {
         const WAKE: u32 = 1 << 31;
         const RUN: u32 = 1 << 30;
         const WRITE: u32 = 1 << 29;
+        const RST: u32 = 1 << 1;
         match addr {
             USB_USBCMD => {
                 let before = self.read_inner_unforced(addr, 4).unwrap_or(0) & 1;
+                if value & RST != 0 {
+                    // Controller reset (RM 24.3.4.1): completes at once, so RST reads 0. RS is cleared. The device-mode registers below take their
+                    // reset values (RM 24.3.4.2, .3, .6, .18, .20, .21, .23). The RM lists no other register as reset or kept: those stay as written.
+                    if before != 0 {
+                        self.usb_phy_note(UsbPhyEvent::RunStop(false));
+                    }
+                    self.usb_phy_note(UsbPhyEvent::Reset);
+                    for (reg, reset) in USB_RST_REGS {
+                        self.ram_write(reg, 4, reset);
+                    }
+                    return value & !(RST | 1);
+                }
                 if before != value & 1 {
                     self.usb_phy_note(UsbPhyEvent::RunStop(value & 1 != 0));
                 }

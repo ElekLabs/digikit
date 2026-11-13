@@ -117,6 +117,8 @@ static inline __attribute__((always_inline)) u32 reg_rd(u32 off)
 #define ULPI_RW 0x20000000u  /* bit 29: 1 write */
 #define ULPI_SS                                                                                    \
     0x08000000u /* bit 27: the ULPI interface is in normal sync state; a run is undefined without it */
+#define GPTIMER0CTL                                                                                \
+    0x84u /* USB general purpose timer 0: bits 23:0 count down in microseconds on the USB clock */
 #define ULPI_FUNC_CTRL 0x04u
 /* ULPI function control: XcvrSelect 01 (full speed), TermSelect 0 (no pull-up), OpMode 01 (non-driving), Reset 0, SuspendM 1 */
 #define ULPI_FC_DETACH 0x49u
@@ -160,6 +162,8 @@ extern i32 usb_fw_queue_td(u32 index, u8 *dtd);
 extern void usb_fw_cancel_ep(u32 index);
 extern u8 *usb_fw_td_alloc(void);
 extern void usb_fw_stop(void);
+extern void usb_fw_reset_stop(
+    void); /* the firmware's stop with restart type 2: after 30 ticks its tick resets the controller (USBCMD.RST), initialises it and starts it if VBUS is present. Interrupts masked; never usb_fw_restart after it. */
 extern void usb_fw_restart(void);
 extern u8
     usb_restart_delay[]; /* u32 in RAM: 30 down to 0, non-zero while a stop waits to restart */
@@ -940,7 +944,10 @@ enum {
     SW_GIVEUP,
     SW_DONE,
     SW_TIMEOUT,
-    SW_DROPPED
+    SW_DROPPED,
+    SW_PHY_BUSY,
+    SW_PHY_ID,
+    SW_PHY_WAKE
 };
 #define SW_KIND 44u
 #define SW_FLAGS (2u << 1)       /* level 2 (info) in bits 1-3 */
@@ -954,13 +961,18 @@ enum {
 #define SW_NOCONF_MS 2000u /* DONE without CONFIGURED, this long after ADDRESSED */
 /* `last`: the sampled words of the previous pass; `fc`: the last ULPI function control value seen (0xff unknown); `ov_ms`, `ov_ps`: the stamp of a callback event (~0 / 0: none).
  * `reset_seen`: after the switch a bus reset showed (connect callback, URI, or address 0); `en_cleared`: the EP1 enables were seen 0; `addr_at`: the time of ADDRESSED.
- * `hold_ov`: the events of the switch carry the time and words stamped right after usb_fw_mode_switch (`hold_ms`, `hold_w`). */
+ * `hold_ov`: the events of the switch carry the time and words stamped right after usb_fw_mode_switch (`hold_ms`, `hold_w`).
+ * `win`: the window ends SW_WINDOW_MS after this time (ms; a recovery moves it). `rec_n`: ENUM_LATE controller resets started for this switch; `gave`: the watchdog gave up. */
 static struct {
     u32 start, per, no, target, dir, n, seen, dis, con, last_fr, rs_at, stopped, waited, late;
-    u32 reset_seen, en_cleared, addr_at, hold_ov, hold_ms;
+    u32 reset_seen, en_cleared, addr_at, hold_ov, hold_ms, win, rec_n, gave, sof, fw;
     u32 last[3], hold_w[3];
+    u32 last_gpt, clk;
 } sw;
+/* `sw.sof`: FRINDEX changed since RS_UP. */
 static u32 sw_fc = 0xffu, sw_ov_ms = ~0u, sw_ov_ps;
+/* `sw_x_set`: the next event takes words 2 (bit 0) and 3 (bit 1) from `sw_x_a2` and `sw_x_a3` (PHY_BUSY, late PHY_PARK) */
+static u32 sw_x_set, sw_x_a2, sw_x_a3;
 
 static u32 sw_ms(void)
 {
@@ -981,10 +993,12 @@ static void sw_words(u32 *a)
     u32 en = sw_ep(reg_rd(ENDPTCTRL1)) | (sw_ep(reg_rd(ENDPTCTRL2)) << 2) |
              (sw_ep(reg_rd(ENDPTCTRL3)) << 4);
     u32 audio = ((reg_rd(ENDPTSTAT) | reg_rd(ENDPTPRIME)) >> 19) & 1u;
+    u32 gpt = reg_rd(GPTIMER0CTL) & 0xffffffu;
     a[2] = (reg_rd(USBSTS) & 0xffffu) | ((reg_rd(USBCMD) & USBCMD_RS) << 16) | (sw_fc << 24);
     a[3] = reg_rd(PORTSC);
     a[4] = ((otg >> 11) & 1u) | ((u32)(fr != sw.last_fr) << 1) | (audio << 2) |
-           (((reg_rd(DEVICEADDR) >> 25) & 0x7fu) << 8) | (en << 16) | ((sw_con_cnt & 0xffu) << 24);
+           ((u32)(gpt != sw.last_gpt) << 3) | (((reg_rd(DEVICEADDR) >> 25) & 0x7fu) << 8) |
+           (en << 16) | ((sw_con_cnt & 0xffu) << 24);
 }
 
 static void sw_ev(u32 phase, u32 detail)
@@ -995,7 +1009,7 @@ static void sw_ev(u32 phase, u32 detail)
     sw.seen |= 1u << phase;
     if (phase == SW_STATE ? sw.n >= SW_STATE_MAX
                           : sw.n >= SW_MAX_EVENTS && phase != SW_DONE && phase != SW_TIMEOUT &&
-                                phase != SW_GIVEUP && phase != SW_DROPPED)
+                                phase != SW_GIVEUP && phase != SW_DROPPED && phase != SW_RECOVERY)
         return;
     sw.n++;
     sw_words(a);
@@ -1004,6 +1018,10 @@ static void sw_ev(u32 phase, u32 detail)
         a[3] = sw.hold_w[1];
         a[4] = sw.hold_w[2];
     }
+    if ((sw_x_set & 1u) != 0u)
+        a[2] = sw_x_a2;
+    if ((sw_x_set & 2u) != 0u)
+        a[3] = sw_x_a3;
     a[0] = phase | ((sw.target & 0xfu) << 8) | (sw.dir << 12) | ((detail & 7u) << 13) |
            ((sw.no & 0xffffu) << 16);
     a[1] = sw_ov_ms != ~0u ? sw_ov_ms : sw.hold_ov ? sw.hold_ms : sw_ms();
@@ -1012,40 +1030,74 @@ static void sw_ev(u32 phase, u32 detail)
     sw_ov_ms = ~0u;
     sw_ov_ps = 0;
     dkrt_log_ev(SW_KIND,
-                phase == SW_STATE                              ? SW_FLAGS_STATE
-                : phase == SW_ENUM_LATE || phase == SW_TIMEOUT ? SW_FLAGS_WARN
-                : phase == SW_GIVEUP                           ? SW_FLAGS_ERROR
-                                                               : SW_FLAGS,
+                phase == SW_STATE ? SW_FLAGS_STATE
+                : phase == SW_ENUM_LATE || phase == SW_TIMEOUT || phase == SW_PHY_BUSY
+                    ? SW_FLAGS_WARN
+                : phase == SW_GIVEUP ? SW_FLAGS_ERROR
+                                     : SW_FLAGS,
                 a);
 }
 
 /* An accepted request (usb_bulk_takeover, usb_bulk_giveback, the automatic give-back) opens the window; REQ is logged here, from the tick. */
-static void sw_pend_poll(void)
+static void sw_begin(u32 dir, u32 target, u32 no, u32 fw)
 {
-    u32 sr, d, per, a[5];
-    if (!sw_pend)
-        return;
-    sr = sr_mask();
-    d = sw_pend;
-    sw_pend = 0;
-    sr_restore(sr);
+    u32 per, a[5];
     sw_open = 0;
     sw.start = to_peek(&per);
     sw.per = per;
-    sw.dir = d - 1u;
-    sw.target = d == 1u ? PORT_ENTRY : to_orig;
-    sw.no = usb_bulk_switches + (to_pend_port == 0u ? 1u : 0u);
+    sw.dir = dir;
+    sw.target = target;
+    sw.no = no;
     sw.n = sw.seen = sw.stopped = sw.waited = sw.late = 0;
     sw.reset_seen = sw.en_cleared = sw.addr_at = sw.hold_ov = 0;
+    sw.win = sw.rec_n = sw.gave = sw.sof = 0;
+    sw.fw = fw;
     sw.dis = sw_dis_cnt;
     sw.con = sw_con_cnt;
     sw_open = 1;
     sw_words(a);
     sw.last[0] = a[2];
     sw.last[1] = a[3];
-    sw.last[2] = a[4] & ~2u;
+    sw.last[2] = a[4] & ~0xau;
     sw.last_fr = reg_rd(FRINDEX);
-    sw_ev(SW_REQ, 0);
+    sw.last_gpt = reg_rd(GPTIMER0CTL) & 0xffffffu;
+    sw.clk = 0;
+    sw_ev(SW_REQ, fw ? 4u : 0u);
+    if (fw) /* the firmware's switch was made before the window opened: no FW_SWITCH event, the sampler goes on as after it */
+        sw.seen |= 1u << SW_FW_SWITCH;
+}
+
+static void sw_pend_poll(void)
+{
+    u32 sr, d;
+    if (!sw_pend)
+        return;
+    sr = sr_mask();
+    d = sw_pend;
+    sw_pend = 0;
+    sr_restore(sr);
+    sw_begin(d - 1u, d == 1u ? PORT_ENTRY : to_orig,
+             usb_bulk_switches + (to_pend_port == 0u ? 1u : 0u), 0);
+}
+
+/* A mode switch the adapter did not ask for (the stock USB CONFIG menu calls the firmware's switch itself): when the active port changes with no switch of ours in
+ * flight (no claimed switch, no request, no open window), log it as a REQ with detail 4. The window is never recovered (wd_tick skips `sw.fw`). Once a pass,
+ * after takeover_tick (our own switch is made there and opens its window before this runs). */
+static void sw_fw_poll(void)
+{
+    static u32 last_port, last_set;
+    u32 port = *(volatile u32 *)usb_active_port;
+    if (!last_set) {
+        last_set = 1;
+        last_port = port;
+        return;
+    }
+    if (port == last_port)
+        return;
+    last_port = port;
+    if (sw_open || sw_pend || to_pend_port != 0u || to_req != 0u)
+        return;
+    sw_begin(port == PORT_ENTRY ? 0u : 1u, port, usb_bulk_switches, 1);
 }
 
 /* the time of a callback stamp (block clock), or `ms` when it has none */
@@ -1113,24 +1165,33 @@ static void sw_sample(void)
             sw_ev(SW_ADDRESSED, sw.reset_seen);
             fired = 1;
         }
+        if (SW_SEEN(SW_RS_UP) && (a[4] & 2u) != 0u)
+            sw.sof = 1;
         if (SW_SEEN(SW_RS_UP) && !SW_SEEN(SW_ADDRESSED) && !sw.late &&
             ms - sw.rs_at >= SW_LATE_MS) {
             sw.late = 1;
-            sw_ev(SW_ENUM_LATE, 0);
+            sw_ev(SW_ENUM_LATE, sw.sof); /* detail 1: SOF seen, no recovery */
             fired = 1;
         }
     }
-    if (ms >= SW_WINDOW_MS) {
+    if (ms >= sw.win && ms - sw.win >= SW_WINDOW_MS) {
         sw_ev(SW_TIMEOUT, 0);
+        if (sw.rec_n != 0u &&
+            !sw.gave) { /* a recovery ran and the host never configured: the timeline ends with GIVEUP */
+            sw.gave = 1;
+            sw_ev(SW_GIVEUP, 0);
+        }
         sw_open = 0;
         return;
     }
-    if (!fired && (a[2] != sw.last[0] || a[3] != sw.last[1] || (a[4] & ~2u) != sw.last[2]))
+    if (!fired && (a[2] != sw.last[0] || a[3] != sw.last[1] || (a[4] & ~0xau) != sw.last[2]))
         sw_ev(SW_STATE, 0);
     sw.last[0] = a[2];
     sw.last[1] = a[3];
-    sw.last[2] = a[4] & ~2u;
+    sw.last[2] = a[4] & ~0xau;
     sw.last_fr = reg_rd(FRINDEX);
+    sw.last_gpt = reg_rd(GPTIMER0CTL) & 0xffffffu;
+    sw.clk = (a[4] >> 3) & 1u;
 }
 
 /* record a switch made now. Interrupts masked by the caller. */
@@ -1159,7 +1220,7 @@ static void sw_stamp(void)
  * present, recovery_tick calls the firmware's restart itself. Nothing here runs unless a switch of ours was made (hold_on, rec_armed), and the firmware's own menu
  * path is untouched. UB_ULPI_DETACH 0 turns the PHY writes off (the hold and the recovery stay). */
 #ifndef UB_ULPI_DETACH
-#define UB_ULPI_DETACH 1
+#define UB_ULPI_DETACH 0
 #endif
 
 /* One ULPI register access through the viewport. 0 done (`*rd` the read value), -1 refused (`usb_bulk_phy_why`): the interface is not in normal sync state and the
@@ -1219,6 +1280,7 @@ out:
 /* Reset the PHY (function control bit 5, self-clearing; the PHY returns to its default state). Only for the recovery, with the controller stopped; the wait for the bit to
  * clear is bounded (20 reads). */
 #define ULPI_FC_RESET 0x61u /* full speed, TermSelect 0, normal, Reset, SuspendM */
+#if UB_ULPI_DETACH
 static void phy_reset(void)
 {
     u32 i, fc = 0, junk;
@@ -1229,6 +1291,7 @@ static void phy_reset(void)
             break;
     }
 }
+#endif
 
 /* The state of the hold. UI task only (hold_begin from the take-over tick, hold_service and recovery_tick from the tick). `hold_on`: a stop of ours waits for its
  * restart, or the PHY is still parked. `phy_parked`: the PHY holds ULPI_FC_DETACH and `phy_saved` is the function control to put back; `phy_tries`: failed attempts to put it back. */
@@ -1239,6 +1302,67 @@ static u32 hold_began,
     hold_park; /* the result of hold_begin for the timeline: the hold began; the park: 0 none, 1 done, 2 refused */
 /* for the emulator test and the hardware log */
 volatile u32 usb_bulk_hold_ticks, usb_bulk_phy_late, usb_bulk_phy_refused, usb_bulk_forced_restarts;
+
+/* The park retry. `park_retry`: the park was refused and is tried again once a pass while the hold lasts; `park_tries`: attempts so far; `park_why`: usb_bulk_phy_why of the
+ * first refusal; `park_saved`: `phy_saved` holds a value read in this hold (a retry after a write that did not finish may read ULPI_FC_DETACH back). */
+#define ULPI_FC_STOCK 0x41u /* the function control the controller sets up itself */
+static u32 park_retry, park_tries, park_why, park_saved;
+
+/* PHY_ID, once per boot, right after a successful park (controller stopped, viewport idle: never while the controller runs, the firmware's viewport watchdog would reset it on a
+ * hung run). Reads ULPI registers 0 to 3 (vendor and product ID). a2 = vendor (reg 1 << 8 | reg 0), a3 = product (reg 3 << 8 | reg 2), a4 the usual OTG word, a1 = 0. detail 0 ok;
+ * a refused read tries again at the next park; after PID_TRIES_MAX refused tries detail 1 is logged once (the words hold what was read). UI task only. */
+#define PID_TRIES_MAX 50u
+static u32 pid_done, pid_tries;
+
+static void phy_id_try(void)
+{
+    u32 a[5], r[4], i, bad = 0;
+    if (pid_done)
+        return;
+    r[0] = r[1] = r[2] = r[3] = 0;
+    for (i = 0; i < 4u && !bad; i++)
+        bad = (u32)(ulpi_xfer(0, i, 0, &r[i]) != 0);
+    if (bad && ++pid_tries < PID_TRIES_MAX)
+        return;
+    pid_done = 1;
+    sw_words(a);
+    a[0] = SW_PHY_ID | ((bad & 7u) << 13) | ((usb_bulk_switches & 0xffffu) << 16);
+    a[1] = 0;
+    a[2] = (r[1] << 8) | r[0];
+    a[3] = (r[3] << 8) | r[2];
+    dkrt_log_ev(SW_KIND, SW_FLAGS, a);
+}
+
+/* One park attempt: read the function control, write ULPI_FC_DETACH. 1 when parked. UI task, controller stopped. */
+static u32 park_try(void)
+{
+    u32 fc = 0, back = 0;
+    if (ulpi_xfer(0, ULPI_FUNC_CTRL, 0, &fc) != 0)
+        return 0;
+    if (fc != ULPI_FC_DETACH) {
+        phy_saved = fc;
+        park_saved = 1;
+    } else if (!park_saved) {
+        phy_saved = ULPI_FC_STOCK;
+        park_saved = 1;
+    }
+    if (ulpi_xfer(1, ULPI_FUNC_CTRL, ULPI_FC_DETACH, &back) != 0)
+        return 0;
+    phy_parked = 1;
+    phy_id_try();
+    return 1;
+}
+
+/* PHY_BUSY (and the late PHY_PARK): word 2 = why (bits 0-7), tries (8-15), USBCMD.RS (16), last function control (24-31); PHY_BUSY word 3 = the raw ULPI_VIEWPORT */
+static void sw_park_ev(u32 phase, u32 detail)
+{
+    sw_x_a2 = (park_why & 0xffu) | ((park_tries & 0xffu) << 8) |
+              ((reg_rd(USBCMD) & USBCMD_RS) << 16) | (sw_fc << 24);
+    sw_x_a3 = reg_rd(ULPI_VIEWPORT);
+    sw_x_set = phase == SW_PHY_BUSY ? 3u : 1u;
+    sw_ev(phase, detail);
+    sw_x_set = 0;
+}
 
 /* Right after the firmware's stop: raise the counter, release the line. Interrupts on, UI task. */
 static void hold_begin(void)
@@ -1262,16 +1386,17 @@ static void hold_begin(void)
     if (began)
         sw.stopped |= stopped;
 #if UB_ULPI_DETACH
+    park_retry = 0;
     if (stopped) { /* the hold is 2 s: the accesses need no mask around the pair */
-        u32 fc = 0, back = 0;
-        if (ulpi_xfer(0, ULPI_FUNC_CTRL, 0, &fc) == 0 &&
-            ulpi_xfer(1, ULPI_FUNC_CTRL, ULPI_FC_DETACH, &back) == 0) {
-            phy_saved = fc;
-            phy_parked = 1;
+        park_saved = 0;
+        park_tries = 1;
+        if (park_try()) {
             hold_park = 1;
         } else {
             usb_bulk_phy_refused++;
             hold_park = 2;
+            park_why = usb_bulk_phy_why;
+            park_retry = 1; /* hold_service tries again once a pass */
         }
     }
 #endif
@@ -1289,6 +1414,18 @@ static void hold_service(void)
     d = *(volatile u32 *)usb_restart_delay;
     rs = (reg32(USBCMD) & USBCMD_RS) != 0u;
     sr_restore(sr);
+    if (park_retry) { /* one attempt a pass, not after the restore time */
+        if (!rs && d > HOLD_RESTORE_TICKS && d <= FW_RESTART_TICKS) {
+            park_tries++;
+            if (park_try()) {
+                park_retry = 0;
+                sw_park_ev(SW_PHY_PARK, 2);
+            }
+        } else {
+            park_retry = 0;
+            sw_park_ev(SW_PHY_BUSY, 3); /* the hold ended without a park */
+        }
+    }
     if (phy_parked &&
         (rs || d <= HOLD_RESTORE_TICKS)) { /* d == 0: the restart did not run (no VBUS) */
         u32 fc = 0, junk = 0;
@@ -1534,8 +1671,217 @@ static void takeover_tick(void)
             sw_ev(SW_HOLD_BEGIN, 0);
         if (hold_park != 0u)
             sw_ev(SW_PHY_PARK, hold_park - 1u);
+        if (hold_park == 2u)
+            sw_park_ev(SW_PHY_BUSY, 0); /* the first refusal of this switch */
         sw.hold_ov = 0;
     }
+}
+
+/* ---- the ENUM_LATE watchdog ----
+ * ENUM_LATE (the controller runs, but no host addressed the device 3 s after RS_UP) starts a recovery, at most WD_MAX a switch: RECOVERY is logged, then the firmware's
+ * stop with restart type 2 (usb_fw_reset_stop), under the interrupt mask. Its tick resets the controller (USBCMD.RST) 30 ticks later, initialises it and starts it if VBUS is
+ * present: this is the firmware's own reset of a hung USB block. Nothing else is done (no PHY access, no usb_fw_restart: that sets restart type 1, a plain restart). A plain
+ * stop and restart did not heal a link that the PHY had lost (hardware, finding 123). The timeline window goes on: its milestones and ENUM_LATE can fire again, and its end moves
+ * to SW_WINDOW_MS after the call. A third ENUM_LATE logs GIVEUP. It claims the switch guard like a switch and does not run while a switch, a request, a hold, a restart of the
+ * firmware or a forced restart is pending, or without VBUS. The firmware's init may rewrite entry 2 of the port table: once RS shows 1 again the hooks are checked. UI task only. */
+#define WD_MAX 2u
+#define WD_BOOT_MAX                                                                                \
+    2u /* resets a boot (usb_bulk_enum_recoveries): the firmware's init registers its USB tick in one of 16 shared timer slots each time and never frees it */
+volatile u32 usb_bulk_enum_recoveries;
+static u32 wd_rehook; /* a reset was made: check the port entry once RS shows 1 again */
+
+/* The reset was made: the milestones and ENUM_LATE can fire again, the window ends SW_WINDOW_MS from now. */
+static void wd_rearm(void)
+{
+    sw.win = sw_ms();
+    sw.seen &= ~((1u << SW_RS_UP) | (1u << SW_ADDRESSED) | (1u << SW_CONFIGURED));
+    sw.late = sw.reset_seen = sw.en_cleared = sw.addr_at = sw.sof = 0;
+    sw.stopped = 1; /* RS_UP is logged when RS shows 1 again */
+}
+
+/* The firmware's init after the reset may rewrite entry 2 of the port table. Once RS shows 1 again (the firmware started the controller) the four words are compared with
+ * ours and written back if they differ (the same words usb_bulk_enable writes); the note says which differed (bit n = word n). Nothing is checked while bulk is not enabled. */
+static void wd_rehook_check(void)
+{
+    u32 sr, diff = 0;
+    u32 *e = (u32 *)(usb_port_table + PORT_ENTRY * PORT_ENTRY_BYTES);
+    if ((reg_rd(USBCMD) & USBCMD_RS) == 0u)
+        return;
+    sr = sr_mask();
+    wd_rehook = 0;
+    if (enabled) {
+        diff = (u32)(e[0] != (u32)usb_bulk_connect) |
+               ((u32)(e[1] != (u32)usb_bulk_disconnect) << 1) |
+               ((u32)(e[3] != (u32)desc_buf()) << 3) | ((u32)(e[4] != DESC_BYTES) << 4);
+        if (diff != 0u) {
+            e[3] = (u32)desc_buf();
+            e[4] = DESC_BYTES;
+            e[0] = (u32)usb_bulk_connect;
+            e[1] = (u32)usb_bulk_disconnect;
+        }
+    }
+    sr_restore(sr);
+    if (diff != 0u)
+        UB_NOTE("ub.rehook", diff);
+}
+
+/* After a reset the controller may stay stopped with VBUS not seen (OTGSC.BSV 0) and the USB timer (GPT0) not counting: the firmware's init clears MISCCR.USBSRC, so the
+ * PHY's 60 MHz output drives the controller clock, and a PHY that stopped its clock gives no BSV. The ULPI wake-up operation (RM 24.3.4.12: WU set, RUN clear) puts the
+ * interface into normal operation and re-enables the clock. Once a recovery, WD_WAKE_MS after the reset call, with RS 0, BSV 0 and no timer movement: one bounded
+ * poll (WD_WAKE_POLL_MS, interrupts not masked). After a wake that worked: if BSV shows and RS stays 0 for WD_START_MS, usb_fw_restart (the firmware's own BSV interrupt
+ * may start the controller first; RS 1 ends the wait). `wd_wk`: 0 idle, 1 waiting for the wake-up, 2 waiting for BSV and the start. UI task only. */
+#define WD_WAKE_MS 1500u
+#define WD_WAKE_POLL_MS 15u
+#define WD_BSV_WAIT_MS 2000u
+#define WD_START_MS 1000u
+static u32 wd_wk, wd_wk_at, wd_wk_no, wd_wk_rec, wd_wk_bsv, wd_wk_bsv_at;
+
+/* PHY_WAKE: word 2 = ULPI_VIEWPORT after the poll, word 3 = ms polled */
+static void wd_wake_ev(u32 detail, u32 vp, u32 polled)
+{
+    sw_x_a2 = vp;
+    sw_x_a3 = polled;
+    sw_x_set = 3u;
+    sw_ev(SW_PHY_WAKE, detail);
+    sw_x_set = 0;
+}
+
+static void wd_wake_tick(void)
+{
+    u32 ms, v, i, t0, el = 0;
+    if (wd_wk == 0u)
+        return;
+    if (!sw_open || sw.no != wd_wk_no || sw.rec_n != wd_wk_rec ||
+        (reg_rd(USBCMD) & USBCMD_RS) != 0u) {
+        wd_wk = 0;
+        return;
+    }
+    ms = sw_ms();
+    if (ms < wd_wk_at)
+        return;
+    if (wd_wk == 1u) {
+        if (ms - wd_wk_at < WD_WAKE_MS || (reg_rd(OTGSC) & OTGSC_BSV) != 0u || sw.clk)
+            return;
+        v = reg_rd(ULPI_VIEWPORT);
+        if ((v & ULPI_RUN) != 0u) {
+            wd_wk = 0;
+            wd_wake_ev(2, v, 0);
+            return;
+        }
+        USB_REG(ULPI_VIEWPORT) = ULPI_WU; /* port 0, RUN clear */
+        t0 = dkrt_blocks();
+        for (i = 0; i < ULPI_SPINS * 20u; i++) {
+            v = reg_rd(ULPI_VIEWPORT);
+            if ((v & ULPI_WU) == 0u)
+                break;
+            if (t0 != 0u) {
+                el = to_elapsed_ms(t0, dkrt_blocks(), 1500u);
+                if (el >= WD_WAKE_POLL_MS)
+                    break;
+            }
+        }
+        if (t0 != 0u)
+            el = to_elapsed_ms(t0, dkrt_blocks(), 1500u);
+        if ((v & ULPI_WU) == 0u) {
+            wd_wk = 2;
+            wd_wk_at = sw_ms();
+            wd_wk_bsv = 0;
+            wd_wake_ev(0, v, el);
+        } else {
+            wd_wk = 0;
+            wd_wake_ev(1, v, el);
+        }
+        return;
+    }
+    if (ms - wd_wk_at > WD_BSV_WAIT_MS && !wd_wk_bsv) {
+        wd_wk = 0;
+        return;
+    }
+    if ((reg_rd(OTGSC) & OTGSC_BSV) == 0u)
+        return;
+    if (!wd_wk_bsv) {
+        wd_wk_bsv = 1;
+        wd_wk_bsv_at = ms;
+        return;
+    }
+    if (ms - wd_wk_bsv_at >= WD_START_MS && *(volatile u32 *)usb_restart_delay == 0u) {
+        wd_wk = 0;
+        usb_fw_restart();
+    }
+}
+
+static void wd_tick(void)
+{
+    u32 sr, per, now, go, take = 0;
+    if (wd_rehook)
+        wd_rehook_check();
+    wd_wake_tick();
+    if (!sw_open || sw.fw || !sw.late || SW_SEEN(SW_ADDRESSED) || sw.gave)
+        return;
+    if (sw.rec_n >= WD_MAX) {
+        sw.gave = 1;
+        sw_ev(SW_GIVEUP, 0);
+        return;
+    }
+    if (sw.sof) /* the link is alive (SOF seen since RS_UP): ENUM_LATE detail 1, no recovery */
+        return;
+    if (usb_bulk_enum_recoveries >=
+        WD_BOOT_MAX) { /* every reset leaks a firmware timer slot: no more this boot */
+        static u32 cap_noted;
+        sw.gave = 1;
+        sw_ev(SW_GIVEUP, 0);
+        if (!cap_noted) {
+            cap_noted = 1;
+            UB_NOTE("ub.reset.cap", usb_bulk_enum_recoveries);
+        }
+        return;
+    }
+    sr = sr_mask();
+    go = (reg_rd(USBCMD) & USBCMD_RS) != 0u && (reg_rd(OTGSC) & OTGSC_BSV) != 0u && !rec_armed &&
+         !hold_on && to_req == 0u && !sw_pend && *(volatile u32 *)usb_active_port == sw.target &&
+         *(volatile u32 *)usb_restart_delay == 0u && !tx_in_flight() && sw_guard_open();
+    /* Hardware experiment: no reset for a failed take-over. The reset zero-fills the USB SRAM queue heads and the dTD pool, which the bulk endpoint (port entry 2) uses;
+     * take-over support needs the adapter to rebuild its bulk state first. Only a failed release (target is the stock port) is reset. */
+    if (go && sw.target == PORT_ENTRY) {
+        go = 0;
+        take = 1;
+    }
+    if (go) { /* claim the guard like a switch (no switch number); the firmware restarts the controller (recovery_tick is not armed) */
+        now = to_peek(&per);
+        to_sw_set = 1;
+        to_sw_at = now;
+        to_sw_per = per;
+        to_pend_port = sw.target;
+        to_active = 1;
+    }
+    sr_restore(sr);
+    if (take) {
+        static u32 take_noted;
+        sw.gave = 1;
+        sw_ev(SW_GIVEUP, 0);
+        if (!take_noted) {
+            take_noted = 1;
+            UB_NOTE("ub.reset.take", 0);
+        }
+        return;
+    }
+    if (!go)
+        return;
+    sw.rec_n++;
+    sw_ev(SW_RECOVERY, sw.rec_n); /* before the reset */
+    usb_bulk_enum_recoveries++;
+    sr = sr_mask();
+    to_quiet = 1; /* the stop runs our disconnect callback: not a host leaving */
+    usb_fw_reset_stop();
+    to_quiet = 0;
+    to_pend_port = 0;
+    sr_restore(sr);
+    wd_rehook = 1;
+    wd_rearm();
+    wd_wk = 1;
+    wd_wk_at = sw.win;
+    wd_wk_no = sw.no;
+    wd_wk_rec = sw.rec_n;
 }
 
 /* The job is woken every HK_WAKE_MS while the interface is enabled: the module has no timer of its own (a retry of usb_bulk_enable while the mode switch settles,
@@ -1568,7 +1914,9 @@ void usb_bulk_tick(void)
     hold_service();
     recovery_tick();
     takeover_tick();
+    sw_fw_poll();
     sw_sample();
+    wd_tick();
     if (free_req && !taken)
         buffers_free();
     if (!enabled)

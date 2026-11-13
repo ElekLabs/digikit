@@ -46,6 +46,34 @@
   },
   {
    "addend": 0,
+   "offset": 90,
+   "section": ".text.ulpi_xfer",
+   "symbol": ".sec..bss.usb_bulk_phy_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 220,
+   "section": ".text.ulpi_xfer",
+   "symbol": ".sec..bss.usb_bulk_phy_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 258,
+   "section": ".text.ulpi_xfer",
+   "symbol": ".sec..bss.usb_bulk_phy_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 274,
+   "section": ".text.ulpi_xfer",
+   "symbol": ".sec..data.sw_fc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 2,
    "section": ".text.to_drop",
    "symbol": ".sec..bss.sw_open",
@@ -263,6 +291,20 @@
   },
   {
    "addend": 0,
+   "offset": 30,
+   "section": ".text.tx_in_flight",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 42,
+   "section": ".text.tx_in_flight",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 10,
    "section": ".text.tick_register.part.0",
    "symbol": ".sec..bss.tick_added",
@@ -287,27 +329,6 @@
    "offset": 38,
    "section": ".text.tick_register.part.0",
    "symbol": ".sec..bss.tick_added",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 86,
-   "section": ".text.ulpi_xfer.constprop.0",
-   "symbol": ".sec..bss.usb_bulk_phy_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 178,
-   "section": ".text.ulpi_xfer.constprop.0",
-   "symbol": ".sec..data.sw_fc",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 208,
-   "section": ".text.ulpi_xfer.constprop.0",
-   "symbol": ".sec..bss.usb_bulk_phy_why",
    "type": "cf.32"
   },
   {
@@ -662,21 +683,28 @@
   },
   {
    "addend": 0,
-   "offset": 78,
+   "offset": 90,
    "section": ".text.sw_words",
    "symbol": ".sec..data.sw_fc",
    "type": "cf.32"
   },
   {
+   "addend": 36,
+   "offset": 144,
+   "section": ".text.sw_words",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
    "addend": 0,
-   "offset": 134,
+   "offset": 152,
    "section": ".text.sw_words",
    "symbol": ".sec..bss.sw_con_cnt",
    "type": "cf.32"
   },
   {
-   "addend": 36,
-   "offset": 228,
+   "addend": 120,
+   "offset": 180,
    "section": ".text.sw_words",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
@@ -704,345 +732,478 @@
   },
   {
    "addend": 20,
-   "offset": 84,
+   "offset": 86,
    "section": ".text.sw_ev",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 90,
+   "offset": 92,
    "section": ".text.sw_ev",
    "symbol": ".sec..text.sw_words",
    "type": "cf.32"
   },
   {
    "addend": 68,
-   "offset": 98,
+   "offset": 100,
    "section": ".text.sw_ev",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 88,
-   "offset": 108,
+   "addend": 108,
+   "offset": 110,
    "section": ".text.sw_ev",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 92,
-   "offset": 118,
+   "addend": 112,
+   "offset": 120,
    "section": ".text.sw_ev",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 96,
-   "offset": 128,
-   "section": ".text.sw_ev",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 16,
-   "offset": 140,
-   "section": ".text.sw_ev",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 150,
-   "section": ".text.sw_ev",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 12,
-   "offset": 162,
+   "addend": 116,
+   "offset": 130,
    "section": ".text.sw_ev",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 198,
+   "offset": 140,
+   "section": ".text.sw_ev",
+   "symbol": ".sec..bss.sw_x_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 152,
+   "section": ".text.sw_ev",
+   "symbol": ".sec..bss.sw_x_a2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 168,
+   "section": ".text.sw_ev",
+   "symbol": ".sec..bss.sw_x_a3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 180,
+   "section": ".text.sw_ev",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 190,
+   "section": ".text.sw_ev",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 202,
+   "section": ".text.sw_ev",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 238,
    "section": ".text.sw_ev",
    "symbol": ".sec..data.sw_ov_ms",
    "type": "cf.32"
   },
   {
    "addend": 72,
-   "offset": 212,
+   "offset": 252,
    "section": ".text.sw_ev",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 222,
+   "offset": 262,
    "section": ".text.sw_ev",
    "symbol": ".sec..bss.sw_ov_ps",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 240,
-   "section": ".text.sw_ev",
-   "symbol": ".sec..data.sw_ov_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 246,
-   "section": ".text.sw_ev",
-   "symbol": ".sec..bss.sw_ov_ps",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 260,
-   "section": ".text.sw_ev",
-   "symbol": ".sec..rodata.CSWTCH.309",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 280,
    "section": ".text.sw_ev",
+   "symbol": ".sec..data.sw_ov_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 286,
+   "section": ".text.sw_ev",
+   "symbol": ".sec..bss.sw_ov_ps",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 300,
+   "section": ".text.sw_ev",
+   "symbol": ".sec..rodata.CSWTCH.371",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 320,
+   "section": ".text.sw_ev",
    "symbol": "dkrt_log_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 294,
+   "offset": 334,
    "section": ".text.sw_ev",
    "symbol": ".sec..text.sw_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 12,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw_pend",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 18,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw_pend",
+   "section": ".text.sw_park_ev",
+   "symbol": ".sec..bss.park_tries",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 30,
-   "section": ".text.sw_pend_poll.part.0",
+   "offset": 24,
+   "section": ".text.sw_park_ev",
+   "symbol": ".sec..data.sw_fc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text.sw_park_ev",
+   "symbol": ".sec..bss.sw_x_a2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.sw_park_ev",
+   "symbol": ".sec..bss.sw_x_a3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text.sw_park_ev",
+   "symbol": ".sec..bss.sw_x_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".text.sw_park_ev",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.sw_park_ev",
+   "symbol": ".sec..bss.sw_x_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.sw_begin",
    "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 40,
-   "section": ".text.sw_pend_poll.part.0",
+   "offset": 16,
+   "section": ".text.sw_begin",
    "symbol": ".sec..text.to_peek",
    "type": "cf.32"
   },
   {
+   "addend": 52,
+   "offset": 22,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 28,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 34,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
    "addend": 0,
-   "offset": 58,
-   "section": ".text.sw_pend_poll.part.0",
+   "offset": 44,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 50,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 56,
+   "section": ".text.sw_begin",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 66,
-   "section": ".text.sw_pend_poll.part.0",
+   "offset": 62,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 68,
+   "offset": 72,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 64,
+   "offset": 78,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 60,
+   "offset": 84,
+   "section": ".text.sw_begin",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 16,
-   "offset": 72,
-   "section": ".text.sw_pend_poll.part.0",
+   "offset": 90,
+   "section": ".text.sw_begin",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 86,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.to_orig",
+   "addend": 56,
+   "offset": 100,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 88,
+   "offset": 106,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 112,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 92,
-   "section": ".text.sw_pend_poll.part.0",
+   "offset": 118,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 128,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 76,
+   "offset": 134,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 140,
+   "section": ".text.sw_begin",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 98,
+   "offset": 146,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw_dis_cnt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 156,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 162,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw_con_cnt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 168,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 92,
+   "offset": 174,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 186,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 192,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..text.sw_words",
+   "type": "cf.32"
+  },
+  {
+   "addend": 96,
+   "offset": 208,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 100,
+   "offset": 218,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 104,
+   "offset": 224,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 36,
+   "offset": 236,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 124,
+   "offset": 248,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 120,
+   "offset": 260,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 278,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 296,
+   "section": ".text.sw_begin",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.sw_pend_poll.part.0",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.sw_pend_poll.part.0",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
    "section": ".text.sw_pend_poll.part.0",
    "symbol": ".sec..bss.to_pend_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 104,
+   "offset": 28,
    "section": ".text.sw_pend_poll.part.0",
    "symbol": ".sec..bss.usb_bulk_switches",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 110,
+   "offset": 48,
    "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw_dis_cnt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 52,
-   "offset": 116,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 28,
-   "offset": 126,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_orig",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 132,
+   "offset": 64,
    "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw_con_cnt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 48,
-   "offset": 138,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 32,
-   "offset": 144,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 44,
-   "offset": 154,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 24,
-   "offset": 160,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 20,
-   "offset": 166,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 68,
-   "offset": 172,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 64,
-   "offset": 180,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 60,
-   "offset": 186,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 192,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 202,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 208,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 214,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..text.sw_words",
-   "type": "cf.32"
-  },
-  {
-   "addend": 76,
-   "offset": 230,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 80,
-   "offset": 240,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 84,
-   "offset": 246,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 36,
-   "offset": 260,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 270,
-   "section": ".text.sw_pend_poll.part.0",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..text.sw_begin",
    "type": "cf.32"
   },
   {
@@ -1607,1990 +1768,3026 @@
   },
   {
    "addend": 0,
-   "offset": 54,
+   "offset": 58,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
+   "symbol": ".sec..bss.park_retry",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 100,
+   "offset": 102,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ulpi_xfer.constprop.0",
+   "symbol": ".sec..text.ulpi_xfer",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 128,
+   "offset": 108,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_saved",
+   "symbol": ".sec..bss.park_tries",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 138,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ulpi_xfer.constprop.0",
+   "symbol": ".sec..bss.phy_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 154,
+   "offset": 146,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_phy_late",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 166,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 172,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.park_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 180,
    "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.pid_done",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 188,
+   "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 196,
+   "offset": 254,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_on",
+   "symbol": ".sec..bss.pid_tries",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 202,
+   "offset": 262,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_armed",
+   "symbol": ".sec..bss.pid_tries",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 230,
+   "offset": 280,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_target",
+   "symbol": ".sec..bss.park_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 236,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_active_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 244,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_armed",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 260,
+   "offset": 294,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.phy_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 270,
+   "offset": 300,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ulpi_xfer.constprop.0",
+   "symbol": ".sec..bss.park_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 284,
+   "offset": 316,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_tries",
+   "symbol": ".sec..bss.pid_done",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 292,
+   "offset": 332,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_tries",
+   "symbol": ".sec..text.sw_words",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 308,
+   "offset": 340,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_switches",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 404,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "dkrt_log_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 418,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.park_retry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 428,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_park_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 436,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 318,
+   "offset": 462,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_phy_refused",
+   "symbol": ".sec..text.ulpi_xfer",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 324,
+   "offset": 510,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.phy_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 330,
+   "offset": 536,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_tries",
+   "symbol": ".sec..bss.usb_bulk_phy_late",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 336,
+   "offset": 548,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 342,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log.constprop.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 360,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_peek",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 380,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_per",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 394,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_per",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 400,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 410,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_restart_delay",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 426,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_on",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 440,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 446,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 466,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_count",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 474,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 18,
-   "offset": 488,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 494,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_armed",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 500,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log.constprop.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 514,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 524,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.taken",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 534,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 544,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.live",
+   "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 554,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.buffers_alloc",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 574,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_drop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 582,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 592,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 604,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_words",
-   "type": "cf.32"
-  },
-  {
-   "addend": 24,
-   "offset": 614,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 634,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_dis_cnt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 28,
-   "offset": 652,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 662,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_dis_cnt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 28,
-   "offset": 668,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 674,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_dis_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 688,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_dis_ps",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 694,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_ov_ps",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 702,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..data.sw_ov_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 712,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 44,
-   "offset": 732,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 738,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_con_cnt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 32,
-   "offset": 744,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 752,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_con_cnt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 32,
-   "offset": 758,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 764,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 774,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 780,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_con_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 794,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_con_ps",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 800,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_ov_ps",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 808,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..data.sw_ov_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 818,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 828,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 850,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 60,
-   "offset": 866,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 24,
-   "offset": 872,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 60,
-   "offset": 886,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 908,
-   "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 920,
+   "offset": 562,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.phy_parked",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 926,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 936,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 944,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.taken",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 958,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.alloc_busy",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 972,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 980,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.enabled",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 990,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "dkrt_blocks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 998,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.io_job",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1012,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_passes",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1020,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_passes",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1028,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1036,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_per",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1048,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1054,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1074,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1080,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1086,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hk_per",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1092,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.wake",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1104,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1112,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.prime_all",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1118,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_retry",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1124,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_retry",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1146,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.wake",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1154,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_count",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1160,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_forced_restarts",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1168,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rec_count",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1178,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1200,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ulpi_xfer.constprop.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1230,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ulpi_xfer.constprop.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1260,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_forced_restarts",
-   "type": "cf.32"
-  },
-  {
-   "addend": 35,
-   "offset": 1266,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1272,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ub_log.constprop.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1278,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_restart",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1300,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_passes",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1306,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_peek",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1322,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1332,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_active_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1338,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_guard_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1372,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1392,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_per_s",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1400,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_per_s",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1406,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1412,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1418,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1424,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1432,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1438,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1446,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1464,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_drop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1470,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1480,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1494,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1500,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1510,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1538,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_pend",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1546,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_pend_poll.part.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1552,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_drop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1566,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_drop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1572,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1578,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 48,
-   "offset": 1590,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 48,
-   "offset": 1606,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1612,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1640,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_mode_switch",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1646,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1652,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 72,
-   "offset": 1662,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1668,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_words",
-   "type": "cf.32"
-  },
-  {
-   "addend": 88,
-   "offset": 1680,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 92,
-   "offset": 1690,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 68,
-   "offset": 1700,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 96,
-   "offset": 1706,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1718,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_restart_delay",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1740,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_restart_delay",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1746,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_hold_ticks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1752,
+   "offset": 578,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.hold_on",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1758,
+   "offset": 584,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
+   "symbol": "usb_active_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1764,
+   "offset": 590,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_tries",
+   "symbol": ".sec..bss.rec_armed",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1786,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_park",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1792,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_began",
-   "type": "cf.32"
-  },
-  {
-   "addend": 44,
-   "offset": 1802,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1828,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ulpi_xfer.constprop.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1856,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ulpi_xfer.constprop.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1878,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_saved",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1884,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.phy_parked",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1890,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_park",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1902,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1910,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_began",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1924,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1932,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.hold_park",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1950,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 68,
-   "offset": 1958,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1968,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_pend_port",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 1978,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2004,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2012,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2018,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2028,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2036,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2046,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2054,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2062,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2070,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_orig",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2078,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_pend",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2084,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2090,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2096,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2106,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2116,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2122,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2132,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2138,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2148,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_due_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2184,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_orig",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2192,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2208,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2216,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_active",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2222,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2248,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_act_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2254,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2274,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2302,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2312,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2318,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2332,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus_at",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2338,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2360,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2372,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2378,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.taken",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2384,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2390,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_gone",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2396,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.to_sus",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2412,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_stamp",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2418,
+   "offset": 618,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.rec_target",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2424,
+   "offset": 630,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_armed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 646,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.park_retry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 664,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_saved",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 690,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 698,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 716,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_parked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 726,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_phy_refused",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 732,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 738,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 744,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 750,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log.constprop.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 768,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_peek",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 788,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 802,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 808,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 818,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 834,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_on",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 848,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 854,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 874,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 882,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 18,
+   "offset": 896,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 902,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_armed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 908,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log.constprop.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 922,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 934,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.taken",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 944,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 954,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.live",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 964,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.buffers_alloc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 984,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 994,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.last_set.3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1006,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.last_set.3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1012,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.last_port.2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1018,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1028,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1040,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_words",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 1050,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1070,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_dis_cnt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 1088,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1098,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_dis_cnt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 1104,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1110,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_dis_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1124,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_dis_ps",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1130,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_ov_ps",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1138,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..data.sw_ov_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1148,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 1168,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1174,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_con_cnt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 1180,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1188,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_con_cnt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 1194,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 1200,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 1210,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1216,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_con_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1230,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_con_ps",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1236,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_ov_ps",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1244,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..data.sw_ov_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1254,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 1264,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 1286,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 60,
+   "offset": 1302,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 1308,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 60,
+   "offset": 1322,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1344,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1356,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1362,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1372,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_rehook",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1398,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_rehook",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1404,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.enabled",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1416,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1424,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1432,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_no",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 1438,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1446,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_rec",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 1452,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1474,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1480,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 1490,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 92,
+   "offset": 1500,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 1506,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 1512,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 1532,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 1544,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1554,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1568,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1574,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_forced_restarts",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1582,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1592,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1600,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_forced_restarts",
+   "type": "cf.32"
+  },
+  {
+   "addend": 35,
+   "offset": 1606,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1612,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log.constprop.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1618,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_restart",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1638,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1644,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_peek",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1660,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.to_pend_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2456,
+   "offset": 1672,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_phy_refused",
+   "symbol": ".sec..text.sw_guard_open",
    "type": "cf.32"
   },
   {
-   "addend": 4,
-   "offset": 2474,
+   "addend": 0,
+   "offset": 1682,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.tx_in_flight",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1694,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_per_s",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1702,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_per_s",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1708,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1714,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1720,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1726,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1734,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1740,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1748,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1766,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1772,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1782,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1796,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1802,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1812,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1840,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1848,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_pend_poll.part.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1854,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1868,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1874,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1880,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 1892,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 1908,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1914,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1942,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_mode_switch",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1948,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1954,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 72,
+   "offset": 1964,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1970,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_words",
+   "type": "cf.32"
+  },
+  {
+   "addend": 108,
+   "offset": 1982,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 112,
+   "offset": 1996,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 68,
+   "offset": 2002,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 116,
+   "offset": 2008,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2024,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2042,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2048,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_hold_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2054,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_on",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2060,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_parked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2066,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.phy_tries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2088,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_park",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2094,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_began",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 2104,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2116,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2124,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_began",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2138,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2146,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_park",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2164,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2174,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_park",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2188,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_park_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 68,
+   "offset": 2196,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2206,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2220,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2228,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2234,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2244,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2252,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2262,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2270,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2278,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2286,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_orig",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2294,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2300,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2306,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2312,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2322,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2332,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2338,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2348,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2354,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2364,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_due_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2400,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_orig",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2408,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2424,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2432,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2438,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2464,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_act_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2470,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 2490,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2498,
+   "offset": 2518,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2528,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2534,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2548,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2554,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.to_elapsed_ms",
    "type": "cf.32"
   },
   {
-   "addend": 44,
-   "offset": 2518,
+   "addend": 0,
+   "offset": 2576,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 24,
-   "offset": 2528,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 40,
-   "offset": 2552,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_sus",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2558,
+   "offset": 2588,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 2578,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.free_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 2594,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.taken",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2602,
+   "offset": 2600,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.to_elapsed_ms",
+   "symbol": ".sec..bss.to_req",
    "type": "cf.32"
   },
   {
-   "addend": 64,
-   "offset": 2618,
+   "addend": 0,
+   "offset": 2606,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.to_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2612,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sus",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2628,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_stamp",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2634,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_target",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 2640,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.to_pend_port",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2646,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
    "offset": 2672,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.last_port.2",
    "type": "cf.32"
   },
   {
-   "addend": 64,
-   "offset": 2692,
+   "addend": 0,
+   "offset": 2682,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
+   "symbol": ".sec..bss.last_port.2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2688,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 2698,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.sw_ev",
+   "symbol": ".sec..bss.sw_pend",
    "type": "cf.32"
   },
   {
-   "addend": 24,
+   "addend": 0,
    "offset": 2708,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2718,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2734,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_switches",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2752,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_begin",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 2770,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 52,
-   "offset": 2728,
+   "addend": 0,
+   "offset": 2786,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2794,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 2814,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 2824,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 40,
-   "offset": 2738,
+   "offset": 2848,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2854,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 2874,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2890,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2898,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 64,
+   "offset": 2914,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2936,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2942,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 2968,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 64,
+   "offset": 2988,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2994,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 3004,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 88,
+   "offset": 3028,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 52,
-   "offset": 2760,
+   "offset": 3040,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 3050,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 88,
+   "offset": 3064,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 3076,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2766,
+   "offset": 3082,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
    "addend": 76,
-   "offset": 2804,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 80,
-   "offset": 2816,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 84,
-   "offset": 2834,
+   "offset": 3092,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2848,
+   "offset": 3118,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..text.sw_ev",
    "type": "cf.32"
   },
   {
-   "addend": 76,
-   "offset": 2866,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.sw",
-   "type": "cf.32"
-  },
-  {
    "addend": 80,
-   "offset": 2876,
+   "offset": 3126,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 84,
-   "offset": 2882,
+   "offset": 3134,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 3150,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3156,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3164,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 96,
+   "offset": 3182,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 100,
+   "offset": 3190,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 104,
+   "offset": 3208,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3222,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 96,
+   "offset": 3244,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 100,
+   "offset": 3252,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 104,
+   "offset": 3258,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 36,
-   "offset": 2894,
+   "offset": 3270,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 2904,
+   "addend": 120,
+   "offset": 3294,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.live",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 2912,
+   "addend": 124,
+   "offset": 3300,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_slots",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2920,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2930,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 2942,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2952,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.connected",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2962,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2974,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 2986,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3002,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.free_req",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3024,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3040,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3052,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.stopping",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3058,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ep2_flush.isra.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3068,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_cancel_ep",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3080,
-   "section": ".text.usb_bulk_tick",
-   "symbol": "usb_fw_cancel_ep",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3088,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..text.ep2_lists_clear",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3110,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_slots",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3116,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3128,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_count",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3134,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3140,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_head",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3154,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 3160,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 3174,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3180,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3186,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.stopping",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3304,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
+   "symbol": ".sec..bss.sw",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 3310,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
+   "symbol": ".sec..text.usb_bulk_disconnect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 3318,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
    "addend": 0,
+   "offset": 3326,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.usb_bulk_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 3332,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3340,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_alias_delta",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3346,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.desc_mem",
+   "type": "cf.32"
+  },
+  {
+   "addend": 92,
    "offset": 3364,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.blk_raw",
+   "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 3370,
+   "addend": 96,
+   "offset": 3380,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.usb_bulk_free_why",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3376,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.live",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3382,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.blk_raw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3388,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_area",
+   "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 3394,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_area",
+   "symbol": ".sec..text.usb_bulk_connect",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 3400,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_state",
+   "symbol": ".sec..text.usb_bulk_disconnect",
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 92,
+   "offset": 3406,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 96,
    "offset": 3412,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.rx_slots",
+   "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 80,
    "offset": 3418,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_count",
+   "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 84,
    "offset": 3424,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.order_head",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 3434,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3430,
+   "offset": 3440,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 1,
-   "offset": 3436,
-   "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.tx_state",
+   "symbol": ".sec..text.ub_log.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3442,
+   "offset": 3460,
    "section": ".text.usb_bulk_tick",
-   "symbol": ".sec..bss.need_prime",
+   "symbol": ".sec..text.sw_ms",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3448,
+   "offset": 3466,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3484,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 124,
+   "offset": 3516,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3548,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3554,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3560,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3566,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3580,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3586,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3604,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3656,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3688,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3696,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3702,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3708,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3730,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3754,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3764,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3770,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3780,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3796,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3806,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3812,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_restart",
+   "type": "cf.32"
+  },
+  {
+   "addend": 88,
+   "offset": 3822,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3834,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_enum_recoveries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 3848,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3854,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3862,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.cap_noted.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3872,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_enum_recoveries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3878,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.cap_noted.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 62,
+   "offset": 3884,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3890,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ub_log.constprop.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3934,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rec_armed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3944,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hold_on",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3954,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3964,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_pend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 3974,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3986,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_restart_delay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3996,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.tx_in_flight",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4008,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_guard_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4020,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 4028,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4042,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_peek",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 4048,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4060,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4066,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sw_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4072,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sw_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4078,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_sw_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4084,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 4092,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 4106,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4114,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_enum_recoveries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4128,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_quiet",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4134,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_reset_stop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4140,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_quiet",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4146,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.to_pend_port",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4158,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_rehook",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4170,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 4176,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 88,
+   "offset": 4182,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 64,
+   "offset": 4188,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 4194,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 80,
+   "offset": 4200,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 76,
+   "offset": 4206,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 60,
+   "offset": 4212,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 4218,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 4224,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 4230,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4236,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4242,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4252,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_no",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4258,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_rec",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4264,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.free_req",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3458,
+   "offset": 4272,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.taken",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4286,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.alloc_busy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4300,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4308,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.enabled",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4318,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4326,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.io_job",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4340,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4348,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4356,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4364,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4376,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4382,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4402,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4408,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4414,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.hk_per",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4420,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.wake",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4432,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4440,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.prime_all",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4446,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_retry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4452,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_retry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4474,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.wake",
+   "type": "cf.32"
+  },
+  {
+   "addend": 84,
+   "offset": 4490,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4500,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.take_noted.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4514,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.take_noted.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 75,
+   "offset": 4520,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..rodata.usb_bulk_tick.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4536,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.live",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4544,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4552,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4562,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 4576,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4586,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.connected",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4596,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 4616,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4632,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.free_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4654,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4670,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4682,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.stopping",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4688,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ep2_flush.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4698,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_cancel_ep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4708,
+   "section": ".text.usb_bulk_tick",
+   "symbol": "usb_fw_cancel_ep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4714,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.ep2_lists_clear",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4734,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4742,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4754,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4762,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_head",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4776,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 4782,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 4796,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4802,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4808,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.stopping",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4926,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4932,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4986,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.blk_raw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4992,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.usb_bulk_free_why",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4998,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.live",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5004,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.blk_raw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5010,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_area",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5016,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_area",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5022,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5034,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.rx_slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5040,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5046,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.order_head",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5052,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1,
+   "offset": 5058,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.tx_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5064,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.need_prime",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5070,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.free_req",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5080,
    "section": ".text.usb_bulk_tick",
    "symbol": "usb_fw_mem_free",
    "type": "cf.32"
   },
   {
    "addend": 56,
-   "offset": 3512,
+   "offset": 5120,
    "section": ".text.usb_bulk_tick",
    "symbol": ".sec..bss.sw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5146,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.to_elapsed_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5166,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5172,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..text.sw_ms",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5178,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_bsv",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5184,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5190,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_a3",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5198,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.wd_wk_at",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 5204,
+   "section": ".text.usb_bulk_tick",
+   "symbol": ".sec..bss.sw_x_set",
    "type": "cf.32"
   },
   {
@@ -4738,6 +5935,13 @@
   },
   {
    "align": 2,
+   "hex": "4feffff448d7040c226f001040c246fc27002039fc0b01700800001b6644203c8000000023c0fc0b01702039fc0b0170223c000003e84a806c0c2039fc0b017053814a8166f022000281880000000c8108000000670c720123c10000000070ff6058223c000003e80800001e66584a896772223c60000000202f0018718020402608202f0014484042408083808123c0fc0b01702039fc0b0170223c000003e80800001e6646e088246f001c720471802480b2af00146752428046c24cd7040c4fef000c4e752039fc0b017053814a8166960800001e6796760223c3000000006000ff7c223c40000000608c2039fc0b017053814a8166a80800001e67a8700323c0000000006000ff564a896702200823c00000000060a0",
+   "kind": "text",
+   "name": ".text.ulpi_xfer",
+   "size": 280
+  },
+  {
+   "align": 2,
    "hex": "4ab90000000066084ab9000000006708700123c000000000700123c00000000042b90000000042b90000000042b90000000042b9000000004e75",
    "kind": "text",
    "name": ".text.to_drop",
@@ -4773,17 +5977,17 @@
   },
   {
    "align": 2,
+   "hex": "2239fc0b01b82039fc0b01b080810280000300004a80670470014e7571b9000000007202b28067f0103900000000b3804a0057c07100448060e0",
+   "kind": "text",
+   "name": ".text.tx_in_flight",
+   "size": 58
+  },
+  {
+   "align": 2,
    "hex": "2f0240c246fc27004ab90000000066204879000000004eb900000000588f4a806608720123c10000000046c2241f4e75428060f6",
    "kind": "text",
    "name": ".text.tick_register.part.0",
    "size": 52
-  },
-  {
-   "align": 2,
-   "hex": "2f0a2f02226f000c40c246fc27002039fc0b01700800001b664a203c8000000023c0fc0b01702039fc0b0170223c000003e84a806c0c2039fc0b017053814a8166f022000281880000000c81080000006712720123c10000000070ff46c2241f245f4e75223c000003e80800001e664a4a896762203c60000000222f001073818081204108c0001223c0fc0b01702039fc0b0170223c000003e80800001e663ee088246f0014718024804a896702200823c000000000428060a22039fc0b017053814a8166a40800001e67a4700223c0000000006084203c40000000609c2039fc0b017053814a8166b00800001e67b0700360da",
-   "kind": "text",
-   "name": ".text.ulpi_xfer.constprop.0",
-   "size": 244
   },
   {
    "align": 2,
@@ -4843,24 +6047,38 @@
   },
   {
    "align": 2,
-   "hex": "4fefffd848d700fc226f002c2039fc0b01a42239fc0b014c2f4100242c39fc0b01c42639fc0b01c82e39fc0b01cc2439fc0b01b82f4200182839fc0b01b020442a39fc0b01442839fc0b014022390000000074187bc548444244e5a90284000100002f41002082858284234100082239fc0b01842341000c2a39fc0b01542403ee8a7201283900000000c4817216e2ab7202c6812202740182832606ee8bc6827416e4ae7402e589cc8274168c83760182862c07e4afee8e740be4a87419cc83e4ad7602ce837601c083e18d7618e7ac240884af00188c878085e98e8084282f0024b8b90000000056c3780482867703484142414483d68380837611e6aac48480824cd700fc8280234100104fef00284e75",
+   "hex": "4fefffd448d700fc206f00302039fc0b01a42f40001c2839fc0b014c2439fc0b01c42639fc0b01c82239fc0b01cc22412a39fc0b01b82f4500242039fc0b01b02f4000182239fc0b00842c39fc0b01442e39fc0b014070182a39000000007dc648474247e1ad0287000100008c858e86214700082e39fc0b01842147000c2e39fc0b01547a0b202f001ceaa87a01b8b90000000056c42c3900000000c0857a19eaaf7a18028100ffffffe18f79044484d884b2b90000000056c180872e06ebaf2a2f00188aaf0024730180874481e78980847811e8ad7804ca84781680857a0180812203ee89e8ab7801c2857a02c6857a1682832602ee8beaaa7a01c6847802c4847816e58984832609e8ab82822409ee8ac4857a02c6858483e98a82824cd700fc484142418081214000104fef002c4e75",
    "kind": "text",
    "name": ".text.sw_words",
-   "size": 274
+   "size": 306
   },
   {
    "align": 2,
-   "hex": "4fefffec2f0e2f022c6f00204ab900000000671e7001740c220ee3a881b900000000203900000000b48e66107217b280641a241f2c5f4fef00144e75741fb480640a0681fffffff1e48966e65280486f000823c0000000004eb900000000588f2079000000004a88671e43f9000000002f51001043f9000000002f51001443f9000000002f510018720c203900000000240ee3a8223900000000484142418081223900000000e189028100000f008081222f00248082740de5a973c1808172ff2f400008203900000000b280660a4a8867522039000000002f40000c2039000000004a8067042f40001474ff700523c20000000042b9000000004deefff4b08e652a41f90000000071b0e800486f00082f004878002c4eb9000000004fef000c6000ff104eb90000000060ac700460dc",
+   "hex": "4fefffec2f0e2f022c6f00204ab900000000671e7001740c220ee3a881b900000000203900000000b48e66107217b280641c241f2c5f4fef00144e75741fb480640c0681fffffff27404b48165e45280486f000823c0000000004eb900000000588f2079000000004a88671e43f9000000002f51001043f9000000002f51001443f9000000002f51001820390000000008000000670a43f9000000002f51001008000001670a43f9000000002f510014720c203900000000240ee3a8223900000000484142418081223900000000e189028100000f008081222f00248082740de5a973c1808172ff2f400008203900000000b280660a4a8867522039000000002f40000c2039000000004a8067042f40001474ff700723c20000000042b9000000004deefff4b08e652a41f90000000071b0e800486f00082f004878002c4eb9000000004fef000c6000fee84eb90000000060ac700460dc",
    "kind": "text",
    "name": ".text.sw_ev",
+   "size": 344
+  },
+  {
+   "align": 2,
+   "hex": "2f032f02226f000c2239fc0b0140761820390000000024390000000048414241e188e7aa02810001000071c08082808123c0000000002039fc0b017023c0000000007013b089662270032f2f00102f0923c0000000004eb900000000508f42b900000000241f261f4e75700160dc",
+   "kind": "text",
+   "name": ".text.sw_park_ev",
+   "size": 110
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffe8486effe842b9000000004eb90000000042b90000000042b90000000042b90000000041eeffe823c00000000042b90000000042b90000000023d00000000041ee000842b90000000042b90000000042b90000000023d00000000041ee000c42b90000000042b90000000042b90000000023d00000000041ee001042b90000000042b90000000023d00000000041f900000000202e001423d00000000041f90000000023d00000000023c0000000007001486effec23c0000000004eb90000000070f5c0aefffc41eefff423d00000000041eefff823d00000000023c0000000002039fc0b014c23c0000000002039fc0b008442b900000000028000ffffff23c000000000202e0014e5882f00487800014eb9000000004fef00104aae00146708700881b9000000004e5e4e75",
+   "kind": "text",
+   "name": ".text.sw_begin",
    "size": 304
   },
   {
    "align": 2,
-   "hex": "4e56ffe440c046fc270022390000000042b9000000002d41ffe446c042b900000000486effe84eb900000000588f222effe4538141eeffe823c000000000700123d00000000023c100000000b0aeffe4670000c820390000000023c00000000020390000000022390000000041f90000000042b9000000004a8057c023d00000000041f90000000042b90000000023d000000000486effec42b90000000042b90000000042b90000000042b900000000710042b90000000042b90000000042b9000000009280700123c10000000023c0000000004eb90000000070fdc0aefffc41eefff423d00000000041eefff823d00000000023c0000000002039fc0b014c42a723c000000000487800014eb9000000004fef000c4e5e4e7570026000ff3c",
+   "hex": "40c046fc270020790000000042b90000000046c02039000000002239000000004a8057c0710092807001b088671c20390000000042a72f012f004868ffff4eb9000000004fef00104e75700260e6",
    "kind": "text",
    "name": ".text.sw_pend_poll.part.0",
-   "size": 288
+   "size": 78
   },
   {
    "align": 2,
@@ -4892,17 +6110,17 @@
   },
   {
    "align": 1,
-   "hex": "75622e7068792e726573746f72652e6e6f0075622e7273746172742e6769766575700075622e666f726365642e72737461727400",
+   "hex": "75622e7068792e726573746f72652e6e6f0075622e7273746172742e6769766575700075622e666f726365642e7273746172740075622e7265686f6f6b0075622e72657365742e6361700075622e72657365742e74616b6500",
    "kind": "data",
    "name": ".rodata.usb_bulk_tick.str1.1",
-   "size": 52
+   "size": 89
   },
   {
    "align": 2,
-   "hex": "4e56ffc448d700fc4ab90000000067064eb9000000004ab900000000670000aa40c146fc27002439000000002039fc0b014046c14ab90000000067767201c2800800000066067003b082656642aeffe842aeffec4a81670000a6486effe842a742a74eb9000000004fef000c4a80660000aa7249b2aeffe8661e486effec2f3900000000487800014eb9000000004fef000c4a806600008452b90000000042a74878000742b9000000004eb900000000508f4ab900000000660e5382783bb882640642b9000000004ab9000000006700013a40c246fc27002039fc0b014008000000660e2a3900000000bab900000000677042b90000000046c26000010e486effec2f3900000000487800014eb9000000004fef000c4a806784203900000000528023c0000000007631b68064844878000142b9000000004878000752b9000000004eb9000000002f39000000004879000000004eb9000000004fef00106000ff52486effe44eb90000000026002239fc0b01a4202effe4588fb0b90000000066060801000b661023c00000000023c3000000006000ff62223900000000783b5381b8816400ff524ab9000000006600ff482f002f032f39000000004eb9000000004fef000c0c8000000f9f6300ff2a2039000000007a0223c300000000ba806400029c2f0048790000000042b9000000004eb90000000046c242a74878000f4eb9000000004fef00104ab90000000067327001b0b900000000660002f24ab900000000660002e84eb90000000072f8b280660002d440c246fc27004eb90000000046c24ab9000000006700015a4eb900000000486effec24004eb900000000588f7008c0b9000000004a8067000b32282efffc2604e08b207900000000727f424448442a2efff4c681b1f9000000006700073c41f90000000023d0000000002039000000004a80660006f8200241f90000000023d00000000042a723c000000000487800044eb900000000508f700108050010660006fe720123c1000000002a3900000000bab900000000674c41f90000000023d0000000004ab9000000006608700123c0000000002039000000004a80660006f6200241f90000000023d00000000042a723c000000000487800094eb900000000508f70014ab90000000066147240c2aefff44a8167000a62720223c1000000007203c8814a8466087a0123c5000000002239000000000801000a670006ee4ab900000000670006ba4a84670006b442a74878000b4eb90000000042a7487800104eb90000000042b9000000004fef00104ab90000000067244ab900000000661c40c246fc27002839000000004a8467000790721023c10000000046c24ab900000000670009e64eb90000000024004ab9000000006f5c4a80660009a6243900000000528223c20000000076784ab9000000006724b6b900000000661c2f032f022f39000000004eb9000000004fef000c0c80000000f9631a720123c10000000023c20000000023c3000000004eb90000000040c246fc27004ab90000000067064eb90000000020390000000042b90000000046c24a80670009524cee00fcffc44e5e4ef900000000528023c00000000052b90000000046c22f39000000004878000e4eb900000000486effec487800614878000142aeffe84eb9000000004fef00144a80662e260e74140683ffffffe82f0342a742a74eb9000000004fef000c4a8066107020c0aeffe84a80670653824a8266dc2f39000000004879000000004eb9000000004eb900000000508f6000fd044a806600fd38486effe052b9000000004eb900000000280040c646fc2700588f4ab9000000006600027e2a39000000004eb9000000002d40ffdc2039fc0b01b82239fc0b01b080810280000300004a80660e71b90000000055804a806600025274012e2effe0beb900000000671823c70000000023c40000000042b90000000042b9000000004ab900000000670c42b90000000023c4000000007001b0b900000000670002227202b2856700021a4eb9000000002639000000004a8367342639000000004a83672a2f072f042f39000000004eb9000000004fef000cb0b900000000650003944aaeffdc670003942602d68342aeffdc46c64ab90000000067064eb9000000004ab900000000671a42a74878001242b9000000004eb90000000042b900000000508f4a83671e4ab90000000066162f0374014878000223c2000000004eb900000000508f4aaeffdc6700fbecbaaeffdc6700fbe42f2effdc4eb90000000042b9000000004eb900000000486effec23c0000000004eb90000000041eefff4700123d00000000041eefff823d00000000041eefffc23c00000000023d00000000040c146fc2700203900000000508f5380741db480650002ca763c780123c30000000023c30000000023c40000000042b90000000042b9000000002439fc0b01407a0146827001c48546c142b90000000023c0000000004a80670685b9000000004a826754486effe442a742a742aeffe442aeffe84eb9000000004fef000c4a8066000266486effe848780049487800014eb9000000004fef000c4a806600024a41eeffe4700123d00000000023c00000000023c20000000042a7487800034eb900000000508f4ab900000000670e42a7487800054eb900000000508f2079000000004a8867104868ffff487800064eb900000000508f42b9000000006000fa982a39000000006000fd821439000000007602b7824a0257c2750244826000fd9e202effdc80b900000000661042b90000000042b9000000006000fdd44ab900000000663c4ab900000000670000c842b900000000760223c3000000007202b2b900000000661ab2b900000000670623c10000000042b90000000042b9000000004ab9000000006700fd864ab900000000660e760123c30000000023c4000000002f072f042f39000000004eb9000000004fef000c223900000000b2806200fd504aaeffdc6700fd484a82670c06810000012cb2806200fd382639000000007001b0b900000000660000aab6856600fd1a42b900000000760223c00000000042b900000000b685660000b42d43ffdc42836000fd3e2f072f042f39000000004eb9000000004fef000c0c800000752f630c700223c0000000006000ff222239fc0b01844a016a420c80000007cf633a4ab9000000006612720123c10000000023c4000000006000fef62f072f042f39000000004eb9000000004fef000c0c80000001f36300fed860a842b9000000006000fecc720123c10000000042b90000000042b90000000042b90000000042b9000000004a836600ff4e6000fc544eb90000000023c30000000023c3000000006000ff3a42aeffdc6000ff3676016000fc72428042826000fd6252b90000000074026000fdc0223c000005dcb2b9000000006600f8fc487805dc2f0041f9000000002f104eb9000000004fef000c6000f8e242806000f8fe4ab9000000006700f9042239000000000281000001004a816600f8f242a74878000823c2000000004eb900000000508f70016000f8d8223c000005dcb2b9000000006600f8fe487805dc2f0041f9000000002f104eb9000000004fef000c6000f8e4220292b9000000000c81000007cf634c48780001487800104eb90000000042b900000000508f6000f9480281000005000c810000010066242239000000004a81671a4a8367162f014878000a23c2000000004eb900000000508f70012239000000000281000005000c810000010066404ab9000000006638220292b9000000000c8100000bb7632842a770014878000d23c0000000004eb900000000508f0c820000270f634a42a7487800116000ff6a0c820000270f62ee4a806634223900000000b2aefff4661a243900000000b4aefff8660e70fdc0aefffcb0b900000000670e42a74878000c4eb900000000508f70fd41eefff4c0aefffc23d00000000041eefff823d00000000023c0000000002039fc0b014c23c0000000006000f8524ab900000000675a223900000000428041f900000000b280665271b9000000007601b680676071b900000000b68067562039000000004a80665841f900000000b0816600017273b9000000007602b681670c73b900000000b681660001707808602642b9000000006000f81077b0080057834a83660c700123c0000000006000f7fa52806090780223c4000000006000f7ea7a0123c5000000004eb9000000004878000241f9000000004e904878000641f9000000004e904eb900000000508f203c00040004428123c0fc0b01bc20390000000041f900000000b081660000c242b90000000073b90000000042b90000000053814a816708420513c50000000073b90000000053814a816708420513c50000000042b90000000042b9000000002239fc0b01b42a39fc0b01b82639fc0b01b0828582830281000400044a816700008c2639fc0b01b42239fc0b01b82039fc0b01b00280000400040281000400044a8056c04a8156c17100730144804481d281e5888081220376010281000400044a8156c17301448180817204e188828023c10000000023c3000000006000f6dc77b0180057834a83670642031183180052816000ff2677b0080053834a83660670086000feb452806000fe7622390000000042b90000000042b90000000042b90000000042b90000000042b90000000041f900000000b084663c420042b90000000042b90000000042b90000000013c00000000013c00000000042b90000000042b90000000046c22f014eb900000000588f6000f648420511854800528460b6263c000005dc6000f6640c820000270f6300fd4a6000fd304a836600f5a47a0323c5000000006000f5984cee00fcffc44e5e4e75",
+   "hex": "4e56ffb448d704fc4ab90000000067064eb9000000004ab9000000006700022840c046fc27002639000000002839fc0b01407201c88146c04ab900000000670001724a846600023a200374385980b4806500022e486effd442a74878000442a742aeffd445f90000000052b9000000004e924fef00104a8066000138202effd47a49ba806700009023c000000000700123c000000000486effd84878004948780004487800014e924fef00104a80660001022439000000007a0123c5000000004a82660000d82c0e428542aeffe842aeffe442aeffe042aeffdc0686ffffffdc2f0642a72f0542a74e9252854fef00107204b285673e58864a8067e4203900000000528023c0000000007431b4806400008c740160224ab9000000006600ff787241740123c10000000023c2000000006000ff644a8066c47a0123c5000000002a0e0685ffffffec2f054eb9000000002f0520390000000048780004720d4878002ce3aa42aefff0484042408480701480822d40ffec202effe0e18880aeffdc2d40fff4202effe8e18880aeffe42d40fff84eb9000000004fef00104878000242b900000000487800064eb900000000508f4ab90000000067764a8466067203b283656c42aeffdc42aeffec45f9000000004a84670000bc486effdc42a74878000442a74e924fef00104a80660000c27449b4aeffdc661e486effec2f390000000048780004487800014e924fef00104a806600009c52b90000000042a74878000742b9000000004eb900000000508f4ab900000000660e53837a3bba83640642b90000000045f9000000004ab9000000006700015040c246fc27002039fc0b014008000000660c207900000000b1d26700008842b90000000046c2600001264878000342b900000000487800136000ff1a486effec2f390000000048780004487800014e924fef00104a806700ff6e203900000000528023c0000000007831b8806400ff6c4878000142b9000000004878000752b9000000004eb9000000002f39000000004879000000004eb9000000004fef00106000ff38486effec4eb90000000026002239fc0b01a4202effec588fb0b90000000066060801000b661023c00000000023c3000000006000ff4c223900000000783b5381b8816400ff3c4ab9000000006600ff322f002f032f39000000004eb9000000004fef000c0c8000000f9f6300ff142039000000007a0223c300000000ba80640002a22f0048790000000042b9000000004eb90000000046c242a74878000f41f9000000004e904fef00104ab90000000067327001b0b900000000660002aa4ab900000000660002a04eb90000000072f8b2806600028c40c246fc27004eb90000000046c220124ab90000000066000686720123c10000000023c0000000004ab9000000006700015a4eb900000000486effec24004eb900000000588f7008c0b9000000004a80670007f0282efffc2604e08b223900000000707f424448442a2efff4c680b2b900000000670006b041f90000000023d0000000002039000000004a806600066e200243f90000000023d10000000042a723c000000000487800044eb900000000508f70010805001066000672720123c1000000002a3900000000bab900000000674c41f90000000023d0000000004ab9000000006608700123c0000000002039000000004a806600066a200243f90000000023d10000000042a723c000000000487800094eb900000000508f70014ab90000000066147240c2aefff44a8167000ef6720223c1000000007203c8814a8466087a0123c5000000002239000000000801000a670006624ab9000000006700062e4a846700062842a74878000b4eb90000000042a7487800104eb90000000042b9000000004fef00104ab90000000067242039fc0b014008000000671840c246fc270042b9000000004ab9000000006600076a46c24ab90000000067384ab900000000672a207900000000b1f900000000661c227900000000b3f900000000660e2039fc0b014008000000670007c442b9000000004ab90000000067000ad84ab90000000067000ace20390000000022390000000080b900000000028100000400808166000ab07801b8b900000000640008ea42a723c4000000004878000f4eb900000000508f60000a8c528023c00000000052b90000000046c22f39000000004878000e43f9000000004e912f39000000004879000000004eb9000000004eb9000000006000fd484a806600fd80486effdc52b9000000004eb900000000240040c746fc2700588f4ab9000000006600021a2a124eb9000000002d40ffd04eb900000000282effdc2c00b8b900000000671823c40000000023c20000000042b90000000042b9000000004ab900000000670c42b90000000023c2000000007601b6b900000000670001cc7002b085670001c44eb9000000002639000000004a8367342639000000004a83672a2f042f022f39000000004eb9000000004fef000cb0b9000000006500033e4aaeffd06700033e2606d68342aeffd046c74ab90000000067064eb9000000004ab900000000671a42a74878001242b9000000004eb90000000042b900000000508f4a83671e4ab90000000066162f0374014878000223c2000000004eb900000000508f4aaeffd06700fc58baaeffd06700fc502f2effd04eb90000000042b9000000004eb900000000486effec23c0000000004eb90000000041eefff4700123d00000000043eefff841eefffc23d10000000023c00000000023d00000000040c246fc2700721d508f2039000000005380b28065000274763c780123c30000000023c30000000023c40000000042b90000000042b9000000002039fc0b01407a0146807201c08546c242b90000000023c1000000004a81670681b90000000042a7487800034eb900000000508f4ab900000000670e42a7487800054eb900000000508f2079000000004a8867284868ffff487800064eb900000000508f7002b0b900000000660e42a7487800134eb900000000508f42b9000000006000fb442a39000000006000fde2202effd080b900000000661042b90000000042b9000000006000fe2a4ab900000000663c4ab900000000670000c842b900000000720223c1000000007202b2b900000000661ab2b900000000670623c10000000042b90000000042b9000000004ab9000000006700fddc4ab900000000660e760123c30000000023c2000000002f042f022f39000000004eb9000000004fef000c223900000000b2806200fda64aaeffd06700fd9e4a86670c06810000012cb2806200fd8e2639000000007001b0b900000000660000aab6856600fd7042b900000000760223c00000000042b900000000b685660000b42d43ffd042836000fd942f042f022f39000000004eb9000000004fef000c0c800000752f630c700223c0000000006000ff222239fc0b01844a016a420c80000007cf633a4ab9000000006612720123c10000000023c2000000006000fef62f042f022f39000000004eb9000000004fef000c0c80000001f36300fed860a842b9000000006000fecc720123c10000000042b90000000042b90000000042b90000000042b9000000004a836600ff4e6000fcaa4eb90000000023c30000000023c3000000006000ff3a42aeffd06000ff3676016000fcc8428142806000fdb8b0b9000000006700f98223c0000000004ab9000000006600f9724ab9000000006600f9684ab9000000006600f95e4ab9000000006600f9544878000174022f39000000002f00b48056c0710044802f004eb9000000004fef00106000f92e327c05dcb3f9000000006600f988487805dc2f0041f9000000002f104eb9000000004fef000c6000f96e42806000f98a4ab9000000006700f9902239000000000281000001004a816600f97e42a74878000823c2000000004eb900000000508f70016000f964223c000005dcb2b9000000006600f98a487805dc2f0041f9000000002f104eb9000000004fef000c6000f970220292b9000000000c81000007cf634c48780001487800104eb90000000042b900000000508f6000f9d40281000005000c810000010066242239000000004a81671a4a8367162f014878000a23c2000000004eb900000000508f700122390000000008010008674c7602c6aefffc4a836708760123c30000000002810000040082b900000000662c220292b9000000000c8100000bb7631c2f390000000078014878000d23c4000000004eb900000000508f7001223900000000b282624894810c820000270f633e42a7487800114eb900000000508f4ab900000000671e4ab900000000661642a77a014878000f23c5000000004eb900000000508f42b9000000006000f8f84a806634206efff4b1f900000000661a227900000000b3eefff8660e70f5c0aefffcb0b900000000670e42a74878000c4eb900000000508f72f541eefff4202efffc43eefff823d000000000c28023d10000000023c1000000002239fc0b014c23c1000000002239fc0b0084e6887401028100ffffffc48023c10000000023c2000000006000f870263c000000007a7cb6b90000000056c0283c00000000b8b90000000056c1207900000000d1fc00000000710073014480d08044818081b1f90000000056c173014481e7898081bab900000000674072108081767c283c000000002a3c0000000023c80000000023c30000000023c40000000023c50000000046c22f004879000000004eb900000000508f6000f80e4a8066c06000f8044eb900000000207900000000b1c06200f834220074019288b4b900000000660000e60c81000005db6300f81a2039fc0b01a402800000080080b9000000006600f8042039fc0b017024000282400000000800001e6734760342b90000000023c00000000042b90000000023c30000000048780002487800154eb90000000042b900000000508f6000f7bc283c800000002a3c0000000023c4fc0b01702c3c00004e2020454e9026002839fc0b01704a846c0005d44a83672022454e91487805dc2f002f034eb9000000004fef000c2400700eb082650005b453864a8666ca4a83660005a823c200000000740342b90000000023c40000000023c200000000487800016000ff700c81000007d0630a4ab9000000006700f7282239fc0b01a40801000b6700f7204ab9000000006612760123c30000000023c0000000006000f70690b9000000000c80000003e76300f6f64ab9000000006600f6ec42b9000000004eb9000000006000f6dc4ab900000000660001b27a01bab900000000643a42a74878000f23c5000000004eb900000000508f4ab9000000006600018a2f390000000023c5000000004879000000004eb9000000006000f6de40c246fc27002039fc0b014008000000670002642039fc0b01a40800000b670002564ab9000000006600024c4ab900000000660002424ab900000000660002384ab9000000006600022e207900000000b1d2660002224ab900000000660002184eb9000000004a806600020c4eb9000000004a806700020045f9000000007002b0b900000000670001bc486effec4eb90000000043f900000000720141eeffec23d10000000023c10000000023c00000000023d00000000023c10000000046c220390000000052802f004878000e23c0000000004e9252b90000000040c246fc2700700123c0000000004eb90000000042b90000000042b90000000046c27201760123c100000000243cfffff2ff4eb900000000c5b90000000042b90000000042b90000000041f90000000043f90000000023c00000000042b90000000042b90000000042b90000000023c30000000023c30000000023c0000000004fef000c23d00000000023d1000000004ab90000000067244ab900000000661c40c246fc27002639000000004a83670000f0761023c30000000046c24ab900000000670003844eb90000000024004ab9000000006f5c4a80660002fc243900000000528223c20000000076784ab9000000006724b6b900000000661c2f032f022f39000000004eb9000000004fef000c0c80000000f9631a700123c00000000023c20000000023c3000000004eb90000000040c246fc27004ab90000000067064eb90000000020390000000042b90000000046c24a80670002f04cee04fcffb44e5e4ef90000000046c2700142a74878000f23c0000000004e92508f4ab9000000006600ff0c720142a723c1000000004879000000006000fd8246c26000fef24ab9000000006758223900000000428041f900000000b280665045f90000000078017192b880675c71b900000000b88067522039000000004a80665441f900000000b0816600016673927802b881670c73b900000000b881660001687a08602642b9000000006000feb279b0080057844a84660c700123c0000000006000fe9c528060927a0223c5000000006000fe8c700123c0000000004eb900000000487800024eb900000000487800064eb9000000004eb900000000508f223c0004000423c1fc0b01bc203900000000428141f900000000b081660000be42b900000000739242b90000000053814a816708420113c10000000073b90000000053814a816708420513c50000000042b90000000042b9000000002239fc0b01b42a39fc0b01b82839fc0b01b0828582840281000400044a816700008c2639fc0b01b42039fc0b01b82239fc0b01b00280000400040281000400044a8056c04a8156c17100730144804481e589d0808081220376010281000400044a8156c17301448180817204e188828023c10000000023c3000000006000fd8679b0180057844a84670642041184180052816000ff2a79b0080053844a84660670086000febc52806000fe8222390000000042b90000000042b90000000042b90000000042b90000000042b90000000041f900000000b083663c420542b90000000042b90000000042b90000000013c50000000013c50000000042b90000000042b90000000046c22f014eb900000000588f6000fcf2420411843800528360b6263c000005dc6000fd0e4a836600f1107a0323c5000000006000f1044a83671e20454e90487805dc2f002f034eb9000000004fef000c24004a846d00fa3e700223c0000000004eb90000000042b90000000023c40000000023c200000000720323c00000000023c10000000042a76000f99a4cee04fcffb44e5e4e75",
    "kind": "text",
    "name": ".text.usb_bulk_tick",
-   "size": 3530
+   "size": 5224
   },
   {
    "align": 2,
@@ -5039,10 +6257,38 @@
   },
   {
    "align": 1,
-   "hex": "060204010402",
+   "hex": "0602040104020402",
    "kind": "data",
-   "name": ".rodata.CSWTCH.309",
-   "size": 6
+   "name": ".rodata.CSWTCH.371",
+   "size": 8
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.take_noted.0",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.cap_noted.1",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.last_port.2",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.last_set.3",
+   "size": 4
   },
   {
    "align": 2,
@@ -5084,6 +6330,97 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss.hk_set",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.wd_wk_bsv_at",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.wd_wk_bsv",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.wd_wk_rec",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.wd_wk_no",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.wd_wk_at",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.wd_wk",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.wd_rehook",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.usb_bulk_enum_recoveries",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.pid_tries",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.pid_done",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.park_saved",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.park_tries",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.park_retry",
    "size": 4
   },
   {
@@ -5167,6 +6504,27 @@
    "align": 2,
    "hex": "",
    "kind": "bss",
+   "name": ".bss.sw_x_a3",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.sw_x_a2",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.sw_x_set",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
    "name": ".bss.sw_ov_ps",
    "size": 4
   },
@@ -5189,7 +6547,7 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss.sw",
-   "size": 100
+   "size": 128
   },
   {
    "align": 1,
@@ -5703,7 +7061,7 @@
    "size": 101
   }
  ],
- "source_sha256": "6f7029f5b719fcae1f932b01f8ff172f35b76fa249b2cc3907fc62b0291086bc",
+ "source_sha256": "011bd4683cf460bb166fa03c0986fb061a20a7d0a79300444f414534657c34d1",
  "symbols": [
   {
    "global": false,
@@ -5715,6 +7073,12 @@
    "global": false,
    "name": ".sec..bss.blk_raw",
    "section": ".bss.blk_raw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.cap_noted.1",
+   "section": ".bss.cap_noted.1",
    "value": 0
   },
   {
@@ -5791,6 +7155,18 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.last_port.2",
+   "section": ".bss.last_port.2",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.last_set.3",
+   "section": ".bss.last_set.3",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.live",
    "section": ".bss.live",
    "value": 0
@@ -5827,6 +7203,24 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.park_retry",
+   "section": ".bss.park_retry",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.park_saved",
+   "section": ".bss.park_saved",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.park_tries",
+   "section": ".bss.park_tries",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.phy_parked",
    "section": ".bss.phy_parked",
    "value": 0
@@ -5841,6 +7235,18 @@
    "global": false,
    "name": ".sec..bss.phy_tries",
    "section": ".bss.phy_tries",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.pid_done",
+   "section": ".bss.pid_done",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.pid_tries",
+   "section": ".bss.pid_tries",
    "value": 0
   },
   {
@@ -6007,6 +7413,30 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.sw_x_a2",
+   "section": ".bss.sw_x_a2",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.sw_x_a3",
+   "section": ".bss.sw_x_a3",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.sw_x_set",
+   "section": ".bss.sw_x_set",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.take_noted.0",
+   "section": ".bss.take_noted.0",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.taken",
    "section": ".bss.taken",
    "value": 0
@@ -6145,6 +7575,12 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.usb_bulk_enum_recoveries",
+   "section": ".bss.usb_bulk_enum_recoveries",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..bss.usb_bulk_forced_restarts",
    "section": ".bss.usb_bulk_forced_restarts",
    "value": 0
@@ -6235,6 +7671,48 @@
   },
   {
    "global": false,
+   "name": ".sec..bss.wd_rehook",
+   "section": ".bss.wd_rehook",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.wd_wk",
+   "section": ".bss.wd_wk",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.wd_wk_at",
+   "section": ".bss.wd_wk_at",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.wd_wk_bsv",
+   "section": ".bss.wd_wk_bsv",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.wd_wk_bsv_at",
+   "section": ".bss.wd_wk_bsv_at",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.wd_wk_no",
+   "section": ".bss.wd_wk_no",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.wd_wk_rec",
+   "section": ".bss.wd_wk_rec",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..data.sw_fc",
    "section": ".data.sw_fc",
    "value": 0
@@ -6247,8 +7725,8 @@
   },
   {
    "global": false,
-   "name": ".sec..rodata.CSWTCH.309",
-   "section": ".rodata.CSWTCH.309",
+   "name": ".sec..rodata.CSWTCH.371",
+   "section": ".rodata.CSWTCH.371",
    "value": 0
   },
   {
@@ -6319,6 +7797,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text.sw_begin",
+   "section": ".text.sw_begin",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text.sw_ev",
    "section": ".text.sw_ev",
    "value": 0
@@ -6333,6 +7817,12 @@
    "global": false,
    "name": ".sec..text.sw_ms",
    "section": ".text.sw_ms",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.sw_park_ev",
+   "section": ".text.sw_park_ev",
    "value": 0
   },
   {
@@ -6379,6 +7869,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text.tx_in_flight",
+   "section": ".text.tx_in_flight",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text.tx_index",
    "section": ".text.tx_index",
    "value": 0
@@ -6391,8 +7887,8 @@
   },
   {
    "global": false,
-   "name": ".sec..text.ulpi_xfer.constprop.0",
-   "section": ".text.ulpi_xfer.constprop.0",
+   "name": ".sec..text.ulpi_xfer",
+   "section": ".text.ulpi_xfer",
    "value": 0
   },
   {
@@ -6493,8 +7989,8 @@
   },
   {
    "global": false,
-   "name": "CSWTCH.309",
-   "section": ".rodata.CSWTCH.309",
+   "name": "CSWTCH.371",
+   "section": ".rodata.CSWTCH.371",
    "value": 0
   },
   {
@@ -6519,6 +8015,12 @@
    "global": false,
    "name": "bulk_interface",
    "section": ".rodata.bulk_interface",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "cap_noted.1",
+   "section": ".bss.cap_noted.1",
    "value": 0
   },
   {
@@ -6691,6 +8193,18 @@
   },
   {
    "global": false,
+   "name": "last_port.2",
+   "section": ".bss.last_port.2",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "last_set.3",
+   "section": ".bss.last_set.3",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "live",
    "section": ".bss.live",
    "value": 0
@@ -6727,6 +8241,24 @@
   },
   {
    "global": false,
+   "name": "park_retry",
+   "section": ".bss.park_retry",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "park_saved",
+   "section": ".bss.park_saved",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "park_tries",
+   "section": ".bss.park_tries",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "phy_parked",
    "section": ".bss.phy_parked",
    "value": 0
@@ -6741,6 +8273,18 @@
    "global": false,
    "name": "phy_tries",
    "section": ".bss.phy_tries",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "pid_done",
+   "section": ".bss.pid_done",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "pid_tries",
+   "section": ".bss.pid_tries",
    "value": 0
   },
   {
@@ -6877,6 +8421,12 @@
   },
   {
    "global": false,
+   "name": "sw_begin",
+   "section": ".text.sw_begin",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "sw_con_at",
    "section": ".bss.sw_con_at",
    "value": 0
@@ -6961,6 +8511,12 @@
   },
   {
    "global": false,
+   "name": "sw_park_ev",
+   "section": ".text.sw_park_ev",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "sw_pend",
    "section": ".bss.sw_pend",
    "value": 0
@@ -6981,6 +8537,30 @@
    "global": false,
    "name": "sw_words",
    "section": ".text.sw_words",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "sw_x_a2",
+   "section": ".bss.sw_x_a2",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "sw_x_a3",
+   "section": ".bss.sw_x_a3",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "sw_x_set",
+   "section": ".bss.sw_x_set",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "take_noted.0",
+   "section": ".bss.take_noted.0",
    "value": 0
   },
   {
@@ -7135,6 +8715,12 @@
   },
   {
    "global": false,
+   "name": "tx_in_flight",
+   "section": ".text.tx_in_flight",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "tx_index",
    "section": ".text.tx_index",
    "value": 0
@@ -7159,8 +8745,8 @@
   },
   {
    "global": false,
-   "name": "ulpi_xfer.constprop.0",
-   "section": ".text.ulpi_xfer.constprop.0",
+   "name": "ulpi_xfer",
+   "section": ".text.ulpi_xfer",
    "value": 0
   },
   {
@@ -7203,6 +8789,12 @@
    "global": true,
    "name": "usb_bulk_enable",
    "section": ".text.usb_bulk_enable",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "usb_bulk_enum_recoveries",
+   "section": ".bss.usb_bulk_enum_recoveries",
    "value": 0
   },
   {
@@ -7423,6 +9015,12 @@
   },
   {
    "global": true,
+   "name": "usb_fw_reset_stop",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "usb_fw_restart",
    "section": null,
    "value": 0
@@ -7456,14 +9054,56 @@
    "name": "wake",
    "section": ".text.wake",
    "value": 0
+  },
+  {
+   "global": false,
+   "name": "wd_rehook",
+   "section": ".bss.wd_rehook",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "wd_wk",
+   "section": ".bss.wd_wk",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "wd_wk_at",
+   "section": ".bss.wd_wk_at",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "wd_wk_bsv",
+   "section": ".bss.wd_wk_bsv",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "wd_wk_bsv_at",
+   "section": ".bss.wd_wk_bsv_at",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "wd_wk_no",
+   "section": ".bss.wd_wk_no",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "wd_wk_rec",
+   "section": ".bss.wd_wk_rec",
+   "value": 0
   }
  ],
  "toolchain": {
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "2556",
-  "isa_check": "b4b15f65970234e531e17c65db1b235b418fce33e70f7aa46b860e6e537bee5e",
+  "instructions_redecoded": "3078",
+  "isa_check": "b8a87ad079e246f85dd0f198b16e8ddc29cd32a0be8f942120c07ff0acbd904a",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

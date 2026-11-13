@@ -46,7 +46,7 @@ for (const device of DEVICES) {
     const kit = cardRig(device, 'usb-bulk', {
       dsp: 'zero',
       roots: [...RT, 'core/usb-bulk'],
-      symbols: ['DKRT_MAILBOX', 'usb_bulk_connect', 'usb_bulk_disconnect', 'usb_bulk_switches', 'usb_bulk_switch_gap_ms', 'usb_bulk_last_area', 'usb_bulk_last_bytes', 'usb_bulk_last_slots', 'usb_bulk_ring_off', 'usb_bulk_tier_cap', 'usb_bulk_free_why', 'usb_bulk_hold_ticks', 'usb_bulk_phy_late', 'usb_bulk_phy_refused', 'usb_bulk_forced_restarts', 'usb_bulk_phy_why'],
+      symbols: ['DKRT_MAILBOX', 'usb_bulk_connect', 'usb_bulk_disconnect', 'usb_bulk_switches', 'usb_bulk_switch_gap_ms', 'usb_bulk_last_area', 'usb_bulk_last_bytes', 'usb_bulk_last_slots', 'usb_bulk_ring_off', 'usb_bulk_tier_cap', 'usb_bulk_free_why', 'usb_bulk_hold_ticks', 'usb_bulk_phy_late', 'usb_bulk_phy_refused', 'usb_bulk_forced_restarts', 'usb_bulk_phy_why', 'usb_bulk_enum_recoveries'],
       initial: () => ({ selection: [] }),
       project: true,
       uploads: true,
@@ -691,7 +691,7 @@ for (const device of DEVICES) {
 
     test('USB_SW events: take-over and release log the switch timeline up to the bus reset, and ENUM_LATE when no host addresses the device (no host model in the emulator)', async () => {
       const USB_SW = LOG_KIND.USB_SW;
-      const PHASE = { REQ: 1, FW_SWITCH: 3, HOLD_BEGIN: 5, PHY_PARK: 6, PHY_RESTORE: 7, RS_UP: 8, CONNECT_CB: 9, ADDRESSED: 10, ENUM_LATE: 13, DONE: 16 };
+      const PHASE = { REQ: 1, FW_SWITCH: 3, HOLD_BEGIN: 5, PHY_PARK: 6, RS_UP: 8, CONNECT_CB: 9, ADDRESSED: 10, ENUM_LATE: 13, RECOVERY: 14, GIVEUP: 15, DONE: 16, PHY_BUSY: 19 };
       const rt = await kit.load('echo-sw-events', { modules: ['test/usb-echo', 'digikit/debug'], selection: [...SELECTION, 'modules/debug.dkm'] });
       await enabled(rt);
       const { setPort, port, takeover, run } = takeoverKit(rt);
@@ -718,11 +718,6 @@ for (const device of DEVICES) {
         }
         throw new Error(`no USB_SW phase ${phase} dir ${dir} in ${emulatedMs} emulated ms; last seen (phase | dir << 12): ${seen.slice(-8).join(', ')}`);
       };
-      /** No host model in the emulator: nobody sets an address, so the switch ends in ENUM_LATE about 3.2 s after RS_UP. */
-      const lateAfterRestart = async (dir: number) => {
-        const up = await next(PHASE.RS_UP, dir);
-        return { up, late: await next(PHASE.ENUM_LATE, dir, 6000) };
-      };
       try {
         await setPort(5);
         await run(4500); // the boot's enable is a switch: let its guard pass
@@ -732,8 +727,6 @@ for (const device of DEVICES) {
         expect((req.args[0]! >>> 8) & 0xf, 'REQ names the target port').toBe(2);
         await next(PHASE.FW_SWITCH, 0);
         await next(PHASE.HOLD_BEGIN, 0);
-        expect(((await next(PHASE.PHY_PARK, 0)).args[0]! >>> 13) & 7, 'the PHY was parked').toBe(0);
-        await next(PHASE.PHY_RESTORE, 0);
         // the firmware's own restart sets RS; the connect callback comes after RS_UP (take-over only)
         const up = await next(PHASE.RS_UP, 0);
         await rpc(rt.session, 'usb.bulk.in', { connect: connect() });
@@ -742,6 +735,10 @@ for (const device of DEVICES) {
         expect(late.args[1]! - up.args[1]!, 'ENUM_LATE comes 3.0 to 3.5 s after RS_UP').toBeGreaterThanOrEqual(3000);
         expect(late.args[1]! - up.args[1]!).toBeLessThanOrEqual(3500);
 
+        // a failed take-over gets no controller reset (it would wipe the dTD pool of the bulk endpoint): GIVEUP directly
+        await next(PHASE.GIVEUP, 0, 2000);
+        expect(await word(rt, planSymbol(kit.plan, 'usb_bulk_enum_recoveries')), 'no recovery for a take-over').toBe(0);
+
         // the release: the port 5 connect is the firmware's, so no CONNECT_CB
         await run(4500);
         expect(await takeover(1), 'giveback').toBe(0);
@@ -749,9 +746,27 @@ for (const device of DEVICES) {
         expect((rel.args[0]! >>> 8) & 0xf, 'REQ names the original port').toBe(5);
         await next(PHASE.FW_SWITCH, 1);
         await next(PHASE.HOLD_BEGIN, 1);
-        await next(PHASE.PHY_RESTORE, 1);
-        await lateAfterRestart(1);
+        await next(PHASE.RS_UP, 1);
+        await next(PHASE.ENUM_LATE, 1, 6000);
+        // the watchdog: two recoveries (the firmware's stop with controller reset; the emulator models USBCMD.RST), each followed by RS_UP and a new ENUM_LATE, then GIVEUP. The emulator's PHY viewport completes at once, so PHY_BUSY cannot be produced here.
+        for (const n of [1, 2]) {
+          const rec = await next(PHASE.RECOVERY, 1, 4000);
+          expect((rec.args[0]! >>> 13) & 7, `recovery try ${n}`).toBe(n);
+          await next(PHASE.RS_UP, 1, 6000);
+          await next(PHASE.ENUM_LATE, 1, 6000);
+        }
+        await next(PHASE.GIVEUP, 1, 2000);
+        expect(await word(rt, planSymbol(kit.plan, 'usb_bulk_enum_recoveries')), 'two recoveries').toBe(2);
+        expect(
+          seen.filter((s) => (s & 0xff) === PHASE.PHY_BUSY),
+          'the PHY never refused in the emulator',
+        ).toEqual([]);
         expect(await port(), 'back in USB AUDIO/MIDI').toBe(5);
+        // the PHY park is compiled out (UB_ULPI_DETACH 0): its events never occur
+        expect(
+          seen.filter((s) => (s & 0xff) === PHASE.PHY_PARK),
+          'no PHY_PARK',
+        ).toEqual([]);
 
         for (const phase of [PHASE.ADDRESSED, PHASE.DONE]) {
           expect(

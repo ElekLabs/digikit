@@ -2734,6 +2734,16 @@ mark = "D"
 rule = "fw/usb:cf_func"
 
 [[anchor]]
+name = "cf.usb.fn.reset_stop"
+cpu = "cf"
+kind = "code"
+addr = 0x40006ada
+len = 4
+sha256 = "b3d4dda98cfad4bc888d55279cb9b3523b382d9cc430bf0d8c90586e4c438927"
+mark = "D"
+rule = "fw/usb:cf_func"
+
+[[anchor]]
 name = "cf.usb.fn.restart"
 cpu = "cf"
 kind = "code"

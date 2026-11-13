@@ -10,12 +10,15 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store ls [PREFIX]
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store put LOCAL REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store rm REMOTE
-//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] [--bulk-bin PATH] [--gap MS] [--wait MS] takeover-cycle N
-//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] [--bulk-bin PATH] [--gap MS] [--wait MS] [--card-log] [--continue] takeover-cycle N
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]|summary [DIR]]
 //
 // `log card` prints the card log state of the debug module (the log written to data/digikit/debug on the card, kept across restarts); `on` / `off` switch it;
-// `get` reads both card log files and writes each raw (.bin) and decoded (.txt) to DIR (default out/runs/cardlog/<YYYYmmdd-HHMMSS>/), the previous boot first.
+// `get` reads the card log files and writes each raw (.bin) and decoded (.txt) to DIR (default out/runs/cardlog/<YYYYmmdd-HHMMSS>/), the older boot first.
+// `summary [DIR]` prints one line per USB switch from the saved .bin files in DIR (default: the newest folder of out/runs/cardlog); it works offline.
 // `takeover-cycle --card-log` switches the card log on before the first cycle.
+// `takeover-cycle --continue` does not stop at a failed cycle: it waits for the device (polls INFO every 2 s; asks for a replug, after 60 s for a power cycle),
+// reads the card log into the run folder, prints its summary and goes on with the next cycle. At the end it prints the totals.
 //
 // `takeover-cycle N` is a hardware experiment for the USB take-over (docs/findings/123-usb-takeover.md): N times TAKEOVER, bulk INFO, RELEASE, and per switch it reads
 // the macOS USB object ids of the Elektron device (`ioreg`, vendor 0x1935) to see whether the host saw the device leave and return. It stops at the first cycle
@@ -33,7 +36,7 @@
 // and 19 (receive ring slots): the hardware A/B of docs/findings/126-usb-fast-transfer-ceilings.md.
 // link and MB/s of every file and of the run: the repeatable bench (docs/plans/usb-fast.md step 6): run it once with --bulk off and once with auto.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -42,7 +45,12 @@ import {
   ProcessBulkLink,
   chooseBulk,
   eventLine,
+  parseCardLog,
+  phyIdLine,
+  phyIds,
   runtimeEvent,
+  summarizeCardLog,
+  switchLine,
 } from '../../packages/dk-session/src/index.ts';
 import { ProcessTransport } from '../../packages/dk-session/src/process-transport.ts';
 import { Sample, prepareUpload } from '../../packages/dk-session/src/dksample.ts';
@@ -54,7 +62,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | log card [on|off|get [--out DIR]] | takeover-cycle N [--gap MS] [--wait MS] [--card-log]; --takeover: take USB over for a bulk run in USB AUDIO/MIDI (experimental, off by default)';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | log card [on|off|get [--out DIR]|summary [DIR]] | takeover-cycle N [--gap MS] [--wait MS] [--card-log] [--continue]; --takeover: take USB over for a bulk run in USB AUDIO/MIDI (experimental, off by default)';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -89,6 +97,7 @@ for (let i = 0; i < args.length; i++) {
     opts[a.slice(2)] = args[++i];
   } else if (a === '--takeover') opts.takeover = true;
   else if (a === '--card-log') opts['card-log'] = true;
+  else if (a === '--continue') opts.continue = true;
   else words.push(a);
 }
 
@@ -290,14 +299,55 @@ function cardLogText(s) {
   return `${s.state} (switch ${s.on ? 'on' : 'off'}), file cardlog-${s.file}.bin, ${s.writes} writes, ${since}, last status ${s.lastStatus}`;
 }
 
-/** `log card get`: both card log files, raw and decoded, to DIR. */
-async function cardLogGet(session) {
-  const files = await session.readCardLog();
-  if (files.length === 0) return console.log('no card log file on the card');
+/** The default run folder name, in local time: out/runs/cardlog/<YYYYmmdd-HHMMSS>. */
+function cardLogStampDir() {
   const now = new Date();
   const p2 = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}`;
-  const dir = path.resolve(opts.out ?? path.join(root, 'out/runs/cardlog', stamp));
+  return path.join(root, 'out/runs/cardlog', stamp);
+}
+
+/** The parsed card log files of the saved .bin files in `dir` (a file that does not parse is skipped). */
+function readCardLogDir(dir) {
+  const files = [];
+  for (const name of readdirSync(dir).filter((n) => n.endsWith('.bin')))
+    try {
+      files.push(parseCardLog(Uint8Array.from(readFileSync(path.join(dir, name)))));
+    } catch (e) {
+      console.error(`wb: skipped ${name}: ${e instanceof Error ? e.message : e}`);
+    }
+  return files;
+}
+
+/** `log card summary [DIR]`: one line per USB switch of the saved files; DIR defaults to the newest folder of out/runs/cardlog. */
+function cardLogSummary(dirArg) {
+  let dir = dirArg && path.resolve(dirArg);
+  if (!dir) {
+    const base = path.join(root, 'out/runs/cardlog');
+    const names = existsSync(base) ? readdirSync(base).filter((n) => statSync(path.join(base, n)).isDirectory()) : [];
+    if (names.length === 0) fail(`no card log folder in ${base} (run: log card get)`, 1);
+    dir = path.join(base, names.sort().at(-1));
+  }
+  if (!existsSync(dir)) fail(`no folder ${dir}`, 1);
+  console.log(`# ${dir}`);
+  printSwitches(readCardLogDir(dir));
+}
+
+function printSwitches(files) {
+  for (const p of phyIds(files)) console.log(phyIdLine(p));
+  const switches = summarizeCardLog(files);
+  if (switches.length === 0) return console.log('no USB switch in the card log');
+  for (const s of switches) console.log(switchLine(s));
+}
+
+/** `log card get`: the card log files, raw and decoded, to `outDir` (else --out, else a new folder in out/runs/cardlog). Returns the files. */
+async function cardLogGet(session, outDir) {
+  const files = await session.readCardLog();
+  if (files.length === 0) {
+    console.log('no card log file on the card');
+    return files;
+  }
+  const dir = path.resolve(outDir ?? opts.out ?? cardLogStampDir());
   mkdirSync(dir, { recursive: true });
   for (const f of files) {
     const name = `boot${f.bootSeq}-cardlog-${f.file}${f.kind === 'incident' ? '-inc' : ''}`;
@@ -310,6 +360,7 @@ async function cardLogGet(session) {
     console.log(path.join(dir, `${name}.bin`));
     console.log(path.join(dir, `${name}.txt`));
   }
+  return files;
 }
 
 // ---- takeover-cycle: the hardware experiment of the USB take-over -------------------------------------------------------------------------------
@@ -417,6 +468,20 @@ async function takeoverCycle(count) {
     if (!(await holder.link.session.usbFastWrongMode()))
       fail('the device is not in USB AUDIO/MIDI (or usb-fast is not loaded): there is nothing to take over');
     if (opts['card-log']) console.log(`card log: ${cardLogText(await holder.link.session.setCardLog(true))}`);
+    // --continue: the totals, the run folder of the card logs, and the newest boot seen so far (a higher one after a failure means the device restarted)
+    const tot = { cycles: 0, ok: 0, failed: 0, replug: 0, power: 0, none: 0 };
+    const runDir = opts.out ? path.resolve(opts.out) : cardLogStampDir();
+    let lastBoot = -1;
+    const fetchCardLog = async (session) => {
+      try {
+        return await cardLogGet(session, runDir);
+      } catch (e) {
+        console.log(`card log not read: ${e instanceof Error ? e.message : e}`);
+        return [];
+      }
+    };
+    if (opts.continue)
+      lastBoot = Math.max(-1, ...(await holder.link.session.readCardLog().catch(() => [])).map((f) => f.bootSeq));
     console.log(
       'cycle | takeover: gone back newids midi ident | bulk info | release: gone back newids midi ident rtinfo | verdict',
     );
@@ -501,13 +566,56 @@ async function takeoverCycle(count) {
       console.log(
         `${String(n).padStart(5)} |           ${ms(row.to.gone)} ${ms(row.to.back)} ${yn(row.to.back !== null && row.to.back !== undefined)}      ${yn(row.to.midi)}    ${yn(row.to.ident)}   | ${infoMs === null ? 'no' : `${infoMs} ms`.padEnd(7)}   |         ${ms(row.rel.gone)} ${ms(row.rel.back)} ${yn(row.rel.back !== null && row.rel.back !== undefined)}      ${yn(row.rel.midi)}    ${yn(row.rel.ident)}   ${yn(row.rel.rt)}      | ${verdict} (${((Date.now() - releaseSent) / 1000).toFixed(1)} s release)`,
       );
+      tot.cycles++;
       if (verdict !== 'ok') {
         status = 1;
         // a take-over that never produced a link released over a link that was closed: send RELEASE again on the one we hold now
         if (!choice) await holder.link.session.usbFastRelease().catch(() => {});
-        break;
-      }
+        if (!opts.continue) break;
+        tot.failed++;
+        // wait for the device: INFO every 2 s; a replug first, a power cycle after 60 s
+        await Promise.resolve(holder.link.close()).catch(() => {});
+        const t0 = Date.now();
+        let replugAsked = false;
+        let powerAsked = false;
+        for (;;) {
+          const link = connect(2000);
+          try {
+            await link.session.info();
+            holder.link = link;
+            break;
+          } catch {
+            await link.close().catch(() => {});
+          }
+          if (!replugAsked) console.log('replug the USB cable now');
+          replugAsked = true;
+          if (!powerAsked && Date.now() - t0 >= 60000) {
+            console.log('power cycle the device now');
+            powerAsked = true;
+          }
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+        const files = await fetchCardLog(holder.link.session);
+        const boot = Math.max(-1, ...files.map((f) => f.bootSeq));
+        const restarted = powerAsked || boot > lastBoot;
+        if (boot > lastBoot) lastBoot = boot;
+        if (!replugAsked) tot.none++;
+        else if (restarted) tot.power++;
+        else tot.replug++;
+        console.log(
+          `device back after ${((Date.now() - t0) / 1000).toFixed(1)} s: ${!replugAsked ? 'no action needed' : restarted ? 'power cycle (the device restarted)' : 'replug'}`,
+        );
+        if (files.length) printSwitches(files);
+      } else tot.ok++;
       await new Promise((r) => setTimeout(r, gap));
+    }
+    if (opts.continue) {
+      const files = await fetchCardLog(holder.link.session);
+      const all = existsSync(runDir) ? readCardLogDir(runDir) : files;
+      const heals = summarizeCardLog(all).filter((s) => s.selfHealed).length;
+      console.log(
+        `totals: cycles ${tot.cycles}, ok ${tot.ok}, failed ${tot.failed}, recovered by replug ${tot.replug}, needed power cycle ${tot.power}, no action needed ${tot.none}, device self-heals (RECOVERY then DONE) ${heals}`,
+      );
     }
   } finally {
     await cleanup();
@@ -662,13 +770,16 @@ if (cmd === 'ports') {
     }
   });
 } else if (cmd === 'log' && sub === 'card') {
-  await withSession(async (session) => {
-    const [what] = rest;
-    if (what === 'on' || what === 'off') console.log(cardLogText(await session.setCardLog(what === 'on')));
-    else if (what === 'get') await cardLogGet(session);
-    else if (what === undefined) console.log(cardLogText(await session.cardLog()));
-    else fail(usage);
-  });
+  if (rest[0] === 'summary') cardLogSummary(rest[1]);
+  else {
+    await withSession(async (session) => {
+      const [what] = rest;
+      if (what === 'on' || what === 'off') console.log(cardLogText(await session.setCardLog(what === 'on')));
+      else if (what === 'get') await cardLogGet(session);
+      else if (what === undefined) console.log(cardLogText(await session.cardLog()));
+      else fail(usage);
+    });
+  }
 } else if (cmd === 'store' && sub === 'ls') {
   await withSession(async (session) => {
     for (const e of await session.list(rest[0] || undefined)) console.log(`${e.path}\t${e.size}`);
