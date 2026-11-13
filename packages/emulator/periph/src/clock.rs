@@ -6,8 +6,9 @@
 //! firmware behaviour depends on the rate. Timers, SSI pacing and scenario instruction
 //! counts follow it; the bus clock (`pit::F_BUS`) does not.
 //!
-//! A device may set its own default (`[emulator] instructions_per_second`: core clock over the busy CPI of its main program) with
-//! [`set_device_default`]. Precedence: `DIGI_CF_IPS`, the device default, [`BASE_IPS`]. A rate other than [`BASE_IPS`] is not the rate
+//! A device may set its own default (`[emulator] instructions_per_second`: core clock over the busy CPI of its main program).
+//! [`resolve_ips`] picks the rate once per emulator (`DIGI_CF_IPS`, the device default, [`BASE_IPS`]); the emulator keeps it and hands it
+//! to the timers, the wire times, the frame periods and the controller, so two emulators in one process keep their own rates. A rate other than [`BASE_IPS`] is not the rate
 //! of the ready snapshots: they are rescaled while they load (`Emulator::load_state`).
 
 /// Instructions per emulated second when `DIGI_CF_IPS` is unset (and the rate every
@@ -28,14 +29,6 @@ pub fn parse_ips(text: &str) -> Result<u64, String> {
     Ok(value)
 }
 
-/// The loaded device's default rate (0: none). One device runs per process.
-static DEVICE_DEFAULT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// Sets the loaded device's default rate (`None`: the base rate). Call before the first guest instruction.
-pub fn set_device_default(ips: Option<u64>) {
-    DEVICE_DEFAULT.store(ips.unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
-}
-
 /// The `DIGI_CF_IPS` override, read once (native builds only). Panics on an invalid value so a typo cannot silently run the default
 /// rate.
 fn env_ips() -> Option<u64> {
@@ -54,12 +47,10 @@ fn env_ips() -> Option<u64> {
     }
 }
 
-/// Instructions per emulated second: `DIGI_CF_IPS`, else the device default, else [`BASE_IPS`].
-pub fn cf_ips() -> u64 {
-    pick_ips(
-        env_ips(),
-        DEVICE_DEFAULT.load(std::sync::atomic::Ordering::Relaxed),
-    )
+/// The instruction rate of one emulator: `DIGI_CF_IPS`, else the device's default (`[emulator] instructions_per_second`), else
+/// [`BASE_IPS`]. Resolved once when the emulator is created and stored in it; nothing reads a process-wide rate.
+pub fn resolve_ips(device: Option<u64>) -> u64 {
+    pick_ips(env_ips(), device.unwrap_or(0))
 }
 
 fn pick_ips(env: Option<u64>, device: u64) -> u64 {
@@ -106,6 +97,15 @@ mod tests {
         assert_eq!(pick_ips(None, 0), BASE_IPS);
         assert_eq!(pick_ips(None, 189_928_000), 189_928_000);
         assert_eq!(pick_ips(Some(66_000_000), 189_928_000), 66_000_000);
+    }
+
+    #[test]
+    fn resolve_keeps_device_rates_apart() {
+        // no process-wide state: the same call with two devices gives each its own rate
+        let (a, b) = (resolve_ips(Some(189_928_000)), resolve_ips(None));
+        if env_ips().is_none() {
+            assert_eq!((a, b), (189_928_000, BASE_IPS));
+        }
     }
 
     #[test]
