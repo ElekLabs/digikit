@@ -11,6 +11,7 @@ Own tests may build or launch an emulator. A service/raw module with no Python t
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -26,6 +27,112 @@ from tools.patchkit import modroots, pk_conform  # noqa: E402
 
 CONFORMANCE = "tests/modules/test_machine_conformance.py"
 FX_CONFORMANCE = "tests/modules/test_fx_conformance.py"
+
+
+USES_KEYS = ("machine_rows", "param_rows", "page_rows")
+
+
+def write_uses(toml_path: Path, uses: dict[str, int]) -> bool:
+    """Write the `[uses]` table of a module.toml like a lock file (docs/plans/sdk.md 6.1): USES has the three counts of USES_KEYS, committed
+    rows read from the emulated device. The file changes only when a count differs, and then only the `[uses]` lines: other text,
+    comments and the order of the tables stay. Returns True when the file was written."""
+    want = [f"{k} = {int(uses[k])}" for k in USES_KEYS]
+    text = toml_path.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == "[uses]"), None)
+    if start is None:
+        new = text.rstrip("\n") + "\n\n[uses]\n" + "\n".join(want) + "\n"
+    else:
+        end = start + 1
+        while end < len(lines) and not lines[end].lstrip().startswith("["):
+            end += 1
+        body = lines[start + 1 : end]
+        have = {
+            m.group(1): m.group(2)
+            for ln in body
+            if (m := re.match(r"\s*(\w+)\s*=\s*(\d+)\s*(?:#.*)?$", ln))
+        }
+        if all(have.get(k) == str(int(uses[k])) for k in USES_KEYS):
+            return False
+        # keep comments and blank lines of the table; the count lines take their place, missing ones follow the last count
+        out, seen = [], set()
+        for ln in body:
+            m = re.match(r"\s*(\w+)\s*=", ln)
+            if m and m.group(1) in USES_KEYS:
+                seen.add(m.group(1))
+                out.append(f"{m.group(1)} = {int(uses[m.group(1)])}")
+            else:
+                out.append(ln)
+        missing = [w for w in want if w.split(" ")[0] not in seen]
+        trail = 0
+        while out and out[-1].strip() == "":
+            out.pop()
+            trail += 1
+        out += missing + [""] * trail
+        new = "\n".join(lines[: start + 1] + out + lines[end:])
+    if new == text:
+        return False
+    toml_path.write_text(new, encoding="utf-8")
+    return True
+
+
+def _daemon(device: str) -> str:
+    """The plain emulator daemon of DEVICE: `DIGI_EMUD_<DEV>`, else resolved as `run_device_targets` does."""
+    given = os.environ.get(f"DIGI_EMUD_{device.upper()}")
+    if given:
+        return given
+    from tools.devtools import benchlock
+    from tools.patchkit import pk_harness
+
+    version = {"dt2": "1.17", "dn2": "1.12"}[device]
+    with benchlock.hold("shared", f"module:check daemon resolution {device}"):
+        syx, _ready = pk_harness.firmware_inputs(pk_harness.Cell(device, version))
+        return str(pk_harness.daemon_binary(device, syx, pgo=None))
+
+
+def commit_stage(mid: str, devices: list[str]) -> bool:
+    """For a module of api major 3: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
+    `patchkit records`), write `[uses]` into its module.toml and `build/gen/gallery.json` from them (docs/plans/sdk.md 6.1 and 6.4). The
+    conformance suite that runs next reads that gallery.json. A module of api major 2 declares in `.dk.desc` and is left alone: returns False."""
+    from tools.patchkit import patchkit, pk_committed, pk_device
+
+    moddir = modroots.module_dir(mid)
+    per: dict[str, dict] = {}
+    with tempfile.TemporaryDirectory(prefix="pk-commit-") as tmp:
+        for dev in devices:
+            out = Path(tmp) / f"{mid.rsplit('/', 1)[-1]}-{dev}.dkm"
+            r = patchkit.run(
+                ["pack", mid, "--device", dev, "-o", str(out)], capture=True
+            )
+            if r.returncode:
+                continue  # not packed for this device (ports); the size lines say why
+            if out.read_bytes()[0x38] != 3:
+                return False
+            per[dev] = pk_committed.committed(
+                mid, dev, out, str(patchkit.binary()), _daemon(dev)
+            )
+    if not per:
+        return False
+    manifest = tomllib.loads((moddir / "module.toml").read_text(encoding="utf-8"))
+    ids = [m["id"] for m in manifest.get("machine", [])]
+    counts = pk_committed.uses(per)
+    changed = write_uses(moddir / "module.toml", counts)
+    models = {d: pk_device.load(d)["modules"]["knobs"] for d in per}
+    text = (
+        json.dumps(
+            pk_committed.gallery(mid, ids, per, models), indent=2, sort_keys=True
+        )
+        + "\n"
+    )
+    gallery = moddir / "build/gen/gallery.json"
+    if not gallery.is_file() or gallery.read_text(encoding="utf-8") != text:
+        gallery.parent.mkdir(parents=True, exist_ok=True)
+        gallery.write_text(text, encoding="utf-8")
+    print(
+        f"{mid}: committed rows {counts}; module.toml [uses] {'written' if changed else 'unchanged'}",
+        flush=True,
+    )
+    return True
 
 
 def resolve(name: str) -> str:
@@ -259,6 +366,7 @@ def main() -> int:
     )
     a = ap.parse_args()
     mid = resolve(a.name)
+    commit_stage(mid, [a.device] if a.device else list(pk_conform.DEVICES))
     paths, env = plan(mid, a.device)
     targets = own_device_targets(mid)
     kind = (
