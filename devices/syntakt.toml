@@ -10,6 +10,8 @@ name = "Syntakt"
 short = "st"
 # The device byte of the firmware SysEx framing (docs/findings/01). The OS stream byte is 0x11.
 syx_id = 0x16
+# Glob of the user manual's extracted pages under out/refs/ (tools/coldfire/atlas.py); optional.
+manual = "Syntakt-User-Manual*"
 
 [[firmware]]
 version = "1.42"
