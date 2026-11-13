@@ -7,10 +7,11 @@ use std::time::Instant;
 use elektron_native_boot::pcm_play::{Mode, PcmPlayer, Recovery, SOURCE_RATE};
 use serde_json::{Value, json};
 
-/// Queued audio at which free running waits.
-const PACE_SECONDS: f64 = 0.05;
-/// Refill threshold after an underrun (the output ring is about one second).
+/// Refill threshold after an underrun (the output ring is about one second): playback resumes once this much is queued.
 const REFILL_SECONDS: f64 = 0.5;
+/// Queued audio at which free running waits. It must lie above the refill threshold: after an underrun the player stays silent until
+/// `REFILL_SECONDS` are queued, and a controller that stopped stepping below that would never produce them (the workbench stood still).
+const PACE_SECONDS: f64 = REFILL_SECONDS + 0.1;
 
 pub struct CfAudio {
     player: Option<PcmPlayer>,
