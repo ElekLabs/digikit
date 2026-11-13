@@ -21,6 +21,7 @@ pub(crate) const UART8_UDR: u32 = 0xec07_000c;
 pub(crate) const TX35_VECTOR: u8 = 155;
 pub(crate) const INTC1_BASE: u32 = 0xfc04_c000;
 pub(crate) const DSPI0_SR: u32 = 0xfc05_c02c;
+pub(crate) const DSPI1_SR: u32 = 0xfc03_c02c;
 pub(crate) const DSPI2_SR: u32 = 0xec03_802c;
 pub(crate) const ESDHC_CMDARG: u32 = 0xfc0c_c008;
 pub(crate) const ESDHC_XFERTYP: u32 = 0xfc0c_c00c;

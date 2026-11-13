@@ -110,7 +110,7 @@ Protocol, read from section 6 and 7 and checked in the run:
 - MAIN side: the audio frame handler is the eDMA channel 54 major-loop interrupt (vector 174 = INTC1 source 46, handler 0x400a2058). It
   toggles the doorbell when 0x43bdd824 is set (set by the IRQ4 handler at status 6), then forces INTC1 source 63 (INTFRCH1 bit 31) to
   run the engine tick (vector 191, handler 0x400a38ce, 7550 bytes). The tick writes the parameter block into the window and programs
-  MAIN's own eDMA ch 47 (window + 0x1b0 to 0x80003d50, same TCD shape) with SSRT, then polls DONE. Its other waits: DSPI3 SR bit 28 (0xFC03C02C)
+  MAIN's own eDMA ch 47 (window + 0x1b0 to 0x80003d50, same TCD shape) with SSRT, then polls DONE. Its other waits: DSPI1 SR bit 28 (0xFC03C02C)
   and the scatter/gather chain of ch 30 (CSR bit 4 clears).
 
 What replaces hardware (data transport and CPU-side peripherals only; no FPGA logic, the bitstream is never loaded or read):
@@ -118,11 +118,23 @@ What replaces hardware (data transport and CPU-side peripherals only; no FPGA lo
 - The mailbox model still streams the images and raises IRQ4 #1 at the end of the stream: that is stage 1's toggle. Stage 1 itself does not
   run. It is equivalent because its only effects are the DDR (zero in the model), the toggle, and the wait for the first doorbell edge; the
   program starts at MAIN's first doorbell edge after the stream (SP in SRAM, the stack word the entry copies is 0).
-- Stubbed status bits: GPIO 0xEC09401C bit 0 (INIT), 0xEC09401D bit 7 (DONE), DSPI 0xFC03C02C bits 31 and 28.
-- The frame source is host timed: one eDMA ch 54 interrupt per 88,000 MAIN ticks (1500 a second at 132 MHz), at most one pending. The peer
-  and MAIN share the tick rate (132 MHz, one instruction per tick).
+- Stubbed status bits: GPIO 0xEC09401C bit 0 (INIT), 0xEC09401D bit 7 (DONE), DSPI1 (0xFC03C000, RM Table 40-2) SR bits 31 and 28. DSPI2's
+  forced TCF|EOQF applies only while the guest runs it as a master: EOQF does not work in slave mode (RM p.1189), and MAIN's DSPI2 is a
+  slave here. The DSPI MCR resets to 0x4001, a slave (p.1181). DSPI1's flags stay forced: MAIN's first boot code polls its EOQF before any
+  MCR write, and the board's boot stage that sets it before is not modelled.
+- The peer's INTC0 resets with every source masked (IMRH/IMRL all ones, no mask-all bit: IMRL bit 0 is source 0, not used) and level masks
+  0xF; SIMR/CIMR take the source in bits 5:0 and SALL/CALL in bit 6 (RM 17.2, p.338-345).
+- The frame source is host timed: one eDMA ch 54 interrupt per frame, at most one pending. The converter runs from its own 48 kHz clock
+  (SSI1 is a slave), a frame is 32 samples, so the frame rate is 1500 Hz of emulated time. The period in MAIN ticks is derived:
+  `ips * frame_samples / sample_rate` (`[emulator.peer_audio] sample_rate, frame_samples`, `periph::clock::frame_ticks`): 126,619 ticks at
+  the device's 189,928,000 instructions a second. The peer and MAIN share the tick rate.
+- Instruction rate: the base model runs one instruction per 132 MHz bus tick (CPI 2.0 against the 264 MHz core). MAIN's measured busy CPI is
+  about 1.39 (`devices/cycle-factors.json`), so the device sets `[emulator] instructions_per_second = 189_928_000` (264 MHz / 1.39). It is
+  the default of `DIGI_CF_IPS`; an explicit `DIGI_CF_IPS` wins (`periph::clock::cf_ips`). PIT, DTIM, DTCN, the MIDI wire time, the USB frame
+  and the controller's pacing all read that one rate. MAIN needs about 117,000 instructions a frame: that did not fit in 88,000 and does fit
+  in 126,619.
 - MAIN's eDMA: software start (SSRT) of a channel runs its whole transfer; a TCD started with E_SG reloads the descriptor chain at once
-  (the ring data of ch 30 is not moved); DSPI3 SR (0xFC03C02C) reads 0x90000000. Vector 191 forced by the guest is delivered. All of this
+  (the ring data of ch 30 is not moved); DSPI1 SR (0xFC03C02C) reads 0x90000000. Vector 191 forced by the guest is delivered. All of this
   is on only for `peer = "coldfire"`.
 - The 64 MB byte-clear loop (`clr.b (a0)+; cmp.l a0,d0; bne`) is replaced by one fill (all but the last iteration), counted as 3
   instructions per byte.
@@ -165,9 +177,12 @@ MAIN mixes the 8 voices of the peer itself; the emulator reads MAIN's output, so
 - Proof (`syntakt-digital.wav`, 3.9 s, headless): trig 1 and PLAY give peak 0.185 and RMS 0.049; the same run without keys gives exact
   zero (2.9 s). The note is a kick: the spectrum of the loudest window peaks at 70 Hz and the envelope repeats every 1.75 s (16 steps at
   135 BPM). Real time: 0.30 of real time for the whole emulator on this host (3.9 s of audio in 12.9 s after the boot); the peer core runs about
-  80 M instructions a second against 132 M needed at 88,000 a frame.
-- The frame period stays 88,000 MAIN ticks. MAIN's own tick work does not fit in it at the 132 MHz tick model (it takes about 87 percent of
-  the frames), so frames come slower than real time. Each tick still gets one 32-sample block from the peer, so the PCM has no gaps or skipped blocks.
+  80 M instructions a second on the host, against about 190 M a second that it needs at 87,000 instructions in each 126,619-tick frame
+  (1500 frames a second at 189.928 M ticks a second).
+- At the 132 MHz one-instruction-a-tick model the period was 88,000 ticks and MAIN's own tick work did not fit in it (73 frame resyncs in
+  400 M ticks, frames slower than real time). With the device's instruction rate (above) the same run, trig 1 and PLAY (`tap:1`, `wait:200M`,
+  `tap:37`, `wait:200M`, headless cold boot) gives 3,475 frames in 440 M ticks (nominal 3,475.1), no resync inside the window (30 during
+  the boot), a WAV of 111,200 frames (2.3167 s, as many seconds as 440 M ticks at 189.928 M) and the same WAV hash in two runs. **[D]**
 - **[O]** Other output words (cue, FX out) and the later stages of the tick, the level knob path, snapshot of the peer.
 
 ## Hardware (hearsay)

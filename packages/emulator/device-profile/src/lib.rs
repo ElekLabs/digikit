@@ -63,6 +63,9 @@ pub struct DeviceProfile {
     pub peer_audio: Option<PeerAudio>,
     /// `[emulator] led_protocol`: how the panel UART carries LED state. `Indexed` when absent.
     pub led_protocol: LedProtocol,
+    /// `[emulator] instructions_per_second`: the device's default instruction rate of the emulated ColdFire core (core clock over the
+    /// busy CPI of its MAIN). `None`: the emulator's base rate (one instruction per bus tick). `DIGI_CF_IPS` overrides it.
+    pub instructions_per_second: Option<u64>,
 }
 
 /// What the emulated NOR holds at the calibration record offset. `Synthetic` is a record built from the format alone: valid, tables zero.
@@ -93,6 +96,10 @@ pub struct PeerAudio {
     pub dma_channel: u8,
     pub slots: [u8; 2],
     pub bits: u8,
+    /// The converter's sample rate in Hz (set by its own clock, not by the CPU).
+    pub sample_rate: u32,
+    /// Samples per audio frame (the DMA half-ring): the frame rate is `sample_rate / frame_samples`.
+    pub frame_samples: u32,
 }
 
 /// The panel LED records on UART8. `Indexed`: `b9 idx val` and `b5 idx r g b`. `PackedStates`: `b5` and `b0..b3`
@@ -308,6 +315,7 @@ struct SourceEmulator {
     peer_audio: Option<PeerAudio>,
     #[serde(default)]
     led_protocol: LedProtocol,
+    instructions_per_second: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -437,6 +445,7 @@ impl Registry {
                 peer: None,
                 peer_audio: None,
                 led_protocol: LedProtocol::default(),
+                instructions_per_second: None,
             });
             if emulator.peer_audio.is_some() && emulator.peer != Some(PeerModel::Coldfire) {
                 return invalid(source, "[emulator] peer_audio needs peer = \"coldfire\"");
@@ -444,11 +453,23 @@ impl Registry {
             if let Some(a) = &emulator.peer_audio
                 && (!(32..64).contains(&a.dma_channel)
                     || a.slots.iter().any(|&s| s >= 16)
-                    || !(8..=32).contains(&a.bits))
+                    || !(8..=32).contains(&a.bits)
+                    || !(8_000..=384_000).contains(&a.sample_rate)
+                    || a.frame_samples == 0
+                    || a.frame_samples > a.sample_rate)
             {
                 return invalid(
                     source,
-                    "[emulator.peer_audio] dma_channel 32..=63, slots below 16, bits 8..=32",
+                    "[emulator.peer_audio] dma_channel 32..=63, slots below 16, bits 8..=32, sample_rate 8000..=384000, frame_samples 1..=sample_rate",
+                );
+            }
+            if emulator
+                .instructions_per_second
+                .is_some_and(|n| !(1_000_000..=4_000_000_000).contains(&n))
+            {
+                return invalid(
+                    source,
+                    "[emulator] instructions_per_second between 1000000 and 4000000000",
                 );
             }
             let free_running_dtcn = emulator.free_running_dtcn;
@@ -481,6 +502,7 @@ impl Registry {
                 peer: emulator.peer,
                 peer_audio: emulator.peer_audio,
                 led_protocol: emulator.led_protocol,
+                instructions_per_second: emulator.instructions_per_second,
             });
         }
         Ok(Self { devices })
@@ -792,7 +814,7 @@ mod tests {
         let bad = "[device]\nname = \"X\"\nshort = \"x\"\n[capabilities]\ndsp = \"sharc\"\nseal = \"hmac\"\nsample_pool = \"none\"\ncard = \"none\"\nextra = 1\n";
         assert!(Registry::parse(&[("x.toml", bad)]).is_err());
         // peer_audio belongs to a coldfire peer and names a channel of the second eDMA half.
-        let audio = "[device]\nname = \"X\"\nshort = \"x\"\n[emulator]\n[emulator.peer_audio]\ndma_channel = 54\nslots = [5, 3]\nbits = 24\n";
+        let audio = "[device]\nname = \"X\"\nshort = \"x\"\n[emulator]\n[emulator.peer_audio]\ndma_channel = 54\nslots = [5, 3]\nbits = 24\nsample_rate = 48000\nframe_samples = 32\n";
         assert!(Registry::parse(&[("x.toml", audio)]).is_err());
         let ok = format!(
             "{}\n",
@@ -801,6 +823,24 @@ mod tests {
         assert!(Registry::parse(&[("x.toml", &ok)]).is_ok());
         let low = ok.replace("54", "12");
         assert!(Registry::parse(&[("x.toml", &low)]).is_err());
+        // The instruction rate is optional and bounded.
+        let rate = ok.replace(
+            "[emulator]\n",
+            "[emulator]\ninstructions_per_second = 189928000\n",
+        );
+        let parsed = Registry::parse(&[("x.toml", &rate)]).unwrap();
+        assert_eq!(
+            parsed.devices()[0].instructions_per_second,
+            Some(189_928_000)
+        );
+        assert_eq!(
+            Registry::parse(&[("x.toml", &ok)]).unwrap().devices()[0].instructions_per_second,
+            None
+        );
+        let slow = rate.replace("189928000", "5");
+        assert!(Registry::parse(&[("x.toml", &slow)]).is_err());
+        let zero = ok.replace("frame_samples = 32", "frame_samples = 0");
+        assert!(Registry::parse(&[("x.toml", &zero)]).is_err());
     }
 
     #[test]
@@ -881,6 +921,8 @@ mod tests {
                             slots[1].as_integer().unwrap() as u8
                         ],
                         bits: a["bits"].as_integer().unwrap() as u8,
+                        sample_rate: a["sample_rate"].as_integer().unwrap() as u32,
+                        frame_samples: a["frame_samples"].as_integer().unwrap() as u32,
                     }),
                     "{file}"
                 );
