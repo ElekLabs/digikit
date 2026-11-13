@@ -73,7 +73,7 @@ def image_key(syx) -> str:
     Identified by content hash through devices/*.toml. A file that is not
     there is keyed by the filename hint in the device files, so paths can be
     computed before the image is present. An image no device file knows (for
-    example another product) is keyed by its file stem.
+    example another product) is keyed by its file stem. A device directory with an error raises.
     """
     from tools.firmware import device
 
@@ -87,7 +87,8 @@ def image_key(syx) -> str:
                 if f.filename == name:
                     return "%s-%s" % (d.short, f.version)
         return pathlib.Path(syx).stem
-    except SystemExit:
+    except device.UnknownFirmware:
+        # only "no device file lists this hash": an error in the device files themselves raises
         return pathlib.Path(syx).stem
     return "%s-%s" % (dev.short, fw.version)
 

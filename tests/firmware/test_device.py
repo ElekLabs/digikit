@@ -92,9 +92,31 @@ class ParseTest(unittest.TestCase):
 
     def test_missing_section_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
-            path = write_device(d, '[device]\nname = "X"\n')
+            path = write_device(d, "[panel]\nencoders = 1\n")
             with self.assertRaises(device.DeviceError):
                 device.load(path)
+
+    def test_identity_only_file_has_no_panel(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_device(d, '[device]\nname = "X"\nshort = "x"\n')
+            dev = device.load(path)
+        self.assertFalse(dev.has_panel)
+        self.assertEqual(dev.capabilities, {})
+
+    def test_capabilities_and_acceptance_are_exposed_and_looked_up_by_short(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_device(
+                d,
+                SYNTHETIC
+                + '\n[capabilities]\ndsp = "sharc"\n\n[acceptance]\nfirmware = "9.9Z"\n',
+            )
+            dev = device.by_short("td", d)
+            self.assertEqual(dev.capabilities["dsp"], "sharc")
+            self.assertEqual(dev.acceptance["firmware"], "9.9Z")
+            self.assertTrue(dev.has_panel)
+            with self.assertRaises(device.DeviceError) as e:
+                device.by_short("nope", d)
+            self.assertIn("td", str(e.exception))
 
 
 class WireMappingTest(unittest.TestCase):
@@ -160,6 +182,16 @@ class ShippedDeviceFilesTest(unittest.TestCase):
     def setUp(self):
         self.devices = device.load_all(DEVICES)
 
+    def test_every_device_states_its_capabilities(self):
+        for dev in self.devices:
+            for key in ("dsp", "seal", "sample_pool", "card"):
+                self.assertIn(key, dev.capabilities, dev.name)
+            self.assertIn("firmware", dev.acceptance, dev.name)
+            self.assertTrue(
+                any(f.version == dev.acceptance["firmware"] for f in dev.firmwares),
+                dev.name,
+            )
+
     def test_every_button_code_round_trips(self):
         for dev in self.devices:
             for code in dev.button_codes():
@@ -168,6 +200,43 @@ class ShippedDeviceFilesTest(unittest.TestCase):
                 self.assertEqual(
                     dev.code_at(*pos), code, "%s code %d" % (dev.name, code)
                 )
+
+
+class ImageKeyTest(unittest.TestCase):
+    def test_a_broken_device_directory_raises_instead_of_keying_by_stem(self):
+        import pathlib
+        from unittest import mock
+
+        from tools.firmware import config
+
+        with tempfile.TemporaryDirectory() as d:
+            os.mkdir(os.path.join(d, "devices"))
+            write_device(
+                os.path.join(d, "devices"), '[device]\nshort = "x"\n'
+            )  # no name
+            fw = os.path.join(d, "a.syx")
+            with open(fw, "wb") as fh:
+                fh.write(b"x")
+            with (
+                mock.patch.object(config, "REPO", pathlib.Path(d)),
+                self.assertRaises(device.DeviceError),
+            ):
+                config.image_key(fw)
+
+    def test_an_unknown_image_is_keyed_by_its_stem(self):
+        import pathlib
+        from unittest import mock
+
+        from tools.firmware import config
+
+        with tempfile.TemporaryDirectory() as d:
+            os.mkdir(os.path.join(d, "devices"))
+            write_device(os.path.join(d, "devices"))
+            fw = os.path.join(d, "a.syx")
+            with open(fw, "wb") as fh:
+                fh.write(b"x")
+            with mock.patch.object(config, "REPO", pathlib.Path(d)):
+                self.assertEqual(config.image_key(fw), "a")
 
 
 if __name__ == "__main__":

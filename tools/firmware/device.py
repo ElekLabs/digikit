@@ -37,6 +37,10 @@ class DeviceError(SystemExit):
     """No device matched, or a device file is malformed. The message says how."""
 
 
+class UnknownFirmware(DeviceError):
+    """The device files are fine; none of them lists this firmware's hash."""
+
+
 class Firmware:
     """One known firmware release of a device."""
 
@@ -76,6 +80,10 @@ class Device:
         exceptions,
         groups,
         path=None,
+        capabilities=None,
+        container=None,
+        acceptance=None,
+        has_panel=True,
     ):
         self.name = name
         self.short = short
@@ -85,6 +93,12 @@ class Device:
         self.exceptions = dict(exceptions)
         self.groups = tuple(groups)
         self.path = path
+        # [capabilities], [container], [acceptance] of the device file (docs/design/device-data.md); empty when the table is absent.
+        self.capabilities = dict(capabilities or {})
+        self.container = dict(container or {})
+        self.acceptance = dict(acceptance or {})
+        # False: the file has no [panel], so the wire mapping above is only a default and means nothing.
+        self.has_panel = has_panel
 
     def __repr__(self):
         return "<Device %s>" % self.name
@@ -149,7 +163,8 @@ def _read(path):
 
 def _from_raw(raw, path):
     dev = _require(raw, "device", path)
-    panel = _require(raw, "panel", path)
+    # [panel] is optional: an identity-only device file has none
+    panel = raw.get("panel", {})
     firmwares = [
         Firmware(f.get("version"), _require(f, "sha256", path), f.get("filename"))
         for f in raw.get("firmware", ())
@@ -180,6 +195,10 @@ def _from_raw(raw, path):
         exceptions=exceptions,
         groups=groups,
         path=path,
+        capabilities=raw.get("capabilities"),
+        container=raw.get("container"),
+        acceptance=raw.get("acceptance"),
+        has_panel="panel" in raw,
     )
 
 
@@ -205,6 +224,17 @@ def load_all(dirpath=None):
     return sorted(out, key=lambda d: d.name)
 
 
+def by_short(short, dirpath=None):
+    """-> the Device whose `[device] short` is `short` (for example "dt2"); refuses, listing the known ones."""
+    devices = load_all(dirpath)
+    for d in devices:
+        if d.short == short:
+            return d
+    raise DeviceError(
+        "No device %r (known: %s)" % (short, ", ".join(d.short for d in devices))
+    )
+
+
 def sha256_of(path):
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -225,7 +255,7 @@ def identify(firmware_path, dirpath=None):
         fw = device.firmware_for_sha256(sha)
         if fw is not None:
             return device, fw
-    raise DeviceError(
+    raise UnknownFirmware(
         "No device file matches %s\n\n"
         "  sha256 %s\n\n"
         "Known releases are listed in %s/. This is either a firmware version\n"

@@ -102,7 +102,7 @@ pub fn fmt_type(t: u32) -> String {
 /// The id digikit gives a device (`[digikit] id` of the device file).
 pub fn device_id(dev: &str) -> Result<u32> {
     crate::devdata::by_short(dev)
-        .map(|d| d.digikit_id)
+        .and_then(|d| d.digikit_id)
         .ok_or_else(|| err!("no run-time registry for device {dev:?}"))
 }
 

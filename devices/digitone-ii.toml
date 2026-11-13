@@ -68,6 +68,31 @@ port = true
 dsp = { image = "dn2-1.12", idle_start = 0xb88a49, idle_end = 0xb88abb, idle_head = 0xb88aab, sample_link = "lp0" }
 
 
+# What this device can do. Every device file has this table; a table that is present must agree with it
+# (`devdata.rs` `validate`, docs/design/device-data.md "Device levels"). dsp: "sharc" | "none"; seal: the container seal
+# ("hmac", key in `SEALS` of packages/patchkit/src/syx.rs); sample_pool: how run-time samples get memory ("stock" borrows the
+# stock sample slots, "ddr" reserves a DDR range, "none"); card: "path-fs" (a folder filesystem on the card), "slots" (card
+# slots only), "none", "unknown".
+[capabilities]
+dsp = "sharc"
+seal = "hmac"
+sample_pool = "ddr"
+card = "slots"
+
+# Container section roles (packages/patchkit/src/firmware.rs, syx.rs `store_for_section`). `readonly` sections are never
+# changed (bootstrap, updater, boot data). The transport id of the framing is `[device] syx_id`.
+[container]
+main = 3
+dsp = 7
+readonly = [2, 4, 8]
+
+# The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
+# part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
+[acceptance]
+firmware = "1.12"
+ready_dir = "out/ready-fix-dn2-112"
+sample_card = false
+
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
 # constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: a fact it uses as a
 # constant must be the same in every device file, and `patchkit gen` refuses a difference. Register offsets inside a peripheral
