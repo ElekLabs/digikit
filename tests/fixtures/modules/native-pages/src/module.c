@@ -1,23 +1,19 @@
 /* Neutral replacement pair. A's click action follows its new binding; E/H are
  * saved words, G on page one is local, and LEVEL stays independent. */
-#include <dk/machine/machine.h>
+#include <stddef.h>
+#include <dk/gen/machine.h>
+#include <dk/page/page.h>
 #include <dk/core/module.h>
 #include <dk/platform/host.h>
-DK_MACHINE(twin, .name = "TWIN", .short_name = "TWN", .render = "_np_render",
-           .note_on = "_np_note_on", .desc = "_np_desc");
-DK_PARAM(twin, 0, twin_smp, "Sample", "SMP", 0, 15, 0);
-DK_PARAM(twin, 1, twin_start, "Start", "START", 0, 127, 16);
-DK_PARAM(twin, 2, twin_end, "End", "END", 0, 127, 112);
-DK_PAGE(twin, "TWN", "Twin", DK_KNOB(0), DK_KNOB(1), DK_KNOB(2));
-DK_PARAM_ACTION(twin, 0, twin_click);
-DK_NATIVE_PAGE_V2(twin, 0, "TWIN ZERO", twin_zero, twin_event, DK_PAGE_PARAM(0, 0),
-                  DK_PAGE_PARAM(1, 4), DK_PAGE_PARAM(2, 7));
-DK_NATIVE_PAGE_V2(twin, 1, "TWIN ONE", twin_one, twin_event, DK_PAGE_PARAM(1, 4),
-                  DK_PAGE_LOCAL(0, 6), DK_PAGE_PARAM(2, 7));
+#include "module_ids.h"
+static void twin_zero(void *arg, const dk_page_frame *f);
+static void twin_one(void *arg, const dk_page_frame *f);
+static void twin_event(void *arg, const dk_page_event *e);
 static uint32_t draws[2], clicks, last_page;
 static int32_t seen[4], zoom;
-void twin_click(uint32_t track)
+static void twin_click(void *arg, uint32_t track)
 {
+    (void)arg;
     if (track < 16)
         clicks++;
 }
@@ -42,7 +38,23 @@ static int32_t status(uint32_t cmd, uint32_t seq, const void *request, uint32_t 
 }
 static int32_t init(dk_module_ctx *ctx)
 {
-    (void)ctx;
+    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_TWIN, "TWIN", "TWN");
+    dk_page *knobs = dk_machine_add_page(m, "Twin", "TWN");
+    dk_param *smp = dk_page_add_param(knobs, "Sample", "SMP", 0);
+    dk_param_range(smp, 0, 15);
+    dk_param *start = dk_page_add_param(knobs, "Start", "START", 16);
+    dk_param *end = dk_page_add_param(knobs, "End", "END", 112);
+    dk_param_on_click(smp, twin_click, NULL);
+    dk_page *zero = dk_machine_add_page(m, "TWIN ZERO", "TWN");
+    dk_page_canvas(zero, 0, twin_zero, twin_event, NULL);
+    dk_page_bind(zero, smp, 0);
+    dk_page_bind(zero, start, 4);
+    dk_page_bind(zero, end, 7);
+    dk_page *one = dk_machine_add_page(m, "TWIN ONE", "TWN");
+    dk_page_canvas(one, 0, twin_one, twin_event, NULL);
+    dk_page_bind(one, start, 4);
+    dk_page_bind_local(one, 0, 6);
+    dk_page_bind(one, end, 7);
     return dk_host_register(0x3f, 1, status);
 }
 const dk_module_def dk_module = {.init = init};
@@ -56,7 +68,7 @@ static void number(const dk_page_canvas_v1 *c, int x, int y, unsigned value)
     } while (value);
     c->text(x, y, at);
 }
-static void draw(const dk_page_frame_v1 *f, unsigned page)
+static void draw(const dk_page_frame *f, unsigned page)
 {
     if (f->version != 1 || f->size < sizeof(*f) || f->track >= 16 || f->word_count < 3)
         return;
@@ -78,16 +90,19 @@ static void draw(const dk_page_frame_v1 *f, unsigned page)
     number(c, 50, 51, (unsigned)zoom);
     number(c, 76, 51, (unsigned)seen[2] >> 8);
 }
-void twin_zero(const dk_page_frame_v1 *f)
+static void twin_zero(void *arg, const dk_page_frame *f)
 {
+    (void)arg;
     draw(f, 0);
 }
-void twin_one(const dk_page_frame_v1 *f)
+static void twin_one(void *arg, const dk_page_frame *f)
 {
+    (void)arg;
     draw(f, 1);
 }
-void twin_event(const dk_page_event_v1 *e)
+static void twin_event(void *arg, const dk_page_event *e)
 {
+    (void)arg;
     if (e->version == 1 && e->size >= sizeof(*e) && e->track < 16 && e->control == 0)
         zoom += e->delta;
 }

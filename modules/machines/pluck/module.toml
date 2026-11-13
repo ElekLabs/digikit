@@ -16,10 +16,13 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# A machine loaded at run time (docs/findings/32-runtime-dsp-machines.md). `patchkit pack digikit/pluck --device dt2 -o ...dkm` reads the
-# declaration in src/module.c (DK_MACHINE, DK_PARAM, DK_PAGE) into the `register` records and links the DSP object into the `.dkm` DSP
-# section; the digikit runtime sends the code to the DSP and publishes the voice row (type 18 on the Digitakt II, 17 on the Digitone II)
-# and the machine row.
+# A machine loaded at run time (docs/findings/32-runtime-dsp-machines.md). `patchkit pack digikit/pluck --device dt2 -o ...dkm` links the DSP
+# object into the `.dkm` DSP section; the machine is declared by builder calls in init (src/module.c). The digikit runtime sends the code
+# to the DSP and publishes the voice row (type 18 on the Digitakt II, 17 on the Digitone II) and the machine row.
+[[machine]]
+id = "pluck"
+dsp = "pk"
+
 # The patched-in twin test/patched-pluck (tests/fixtures/modules) has its own copy of this DSP source. The equiv-dyn-pluck scenario
 # compares the two, so a change of the sound here needs the same change in the copy.
 [[object]]
@@ -31,3 +34,15 @@ place = "cf.expansion"
 path = "build/pluck-dsp.dko.json"
 sources = ["src/dsp/pluck.s"]
 place = "dsp.l2"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 4
+page_rows = 0
+record_bytes = 444
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 4
+page_rows = 1
+record_bytes = 540

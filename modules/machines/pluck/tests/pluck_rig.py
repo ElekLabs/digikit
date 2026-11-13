@@ -48,10 +48,10 @@ class PluckRig(MachineRig):
         self.set_params(
             {
                 "tune": int(tune * 256),
-                "pluck_decay": decay,
-                "pluck_pick": pick,
-                "pluck_bright": bright,
-                "pluck_color": color,
+                "decay": decay,
+                "pick_position": pick,
+                "brightness": bright,
+                "excitation_colour": color,
             }
         )
         self.rec_word(2 * track, 0x1B8, 1)  # the arm routine: ACTIVE = 1, mark cleared

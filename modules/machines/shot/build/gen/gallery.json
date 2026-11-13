@@ -7,24 +7,24 @@
           "knobs": [
             null,
             {
-              "param": "shot_smp",
+              "param": "sample",
               "slot": 26
             },
             {
-              "param": "shot_start",
+              "param": "start",
               "slot": 27
             },
             null,
             {
-              "param": "shot_end",
+              "param": "end",
               "slot": 29
             },
             {
-              "param": "shot_play",
+              "param": "play",
               "slot": 30
             },
             {
-              "param": "shot_pitch",
+              "param": "pitch",
               "slot": 31
             }
           ],
@@ -47,24 +47,24 @@
               "stock": 202
             },
             {
-              "param": "shot_smp",
+              "param": "sample",
               "slot": 1
             },
             {
-              "param": "shot_start",
+              "param": "start",
               "slot": 2
             },
             null,
             {
-              "param": "shot_end",
+              "param": "end",
               "slot": 4
             },
             {
-              "param": "shot_play",
+              "param": "play",
               "slot": 5
             },
             {
-              "param": "shot_pitch",
+              "param": "pitch",
               "slot": 6
             },
             {
@@ -91,7 +91,7 @@
     "dn2": [
       {
         "default": 0,
-        "id": "shot_smp",
+        "id": "sample",
         "latched_word": 0,
         "max": 3840,
         "min": 0,
@@ -102,7 +102,7 @@
       },
       {
         "default": 0,
-        "id": "shot_start",
+        "id": "start",
         "max": 32512,
         "min": 0,
         "name": "Start",
@@ -112,7 +112,7 @@
       },
       {
         "default": 32512,
-        "id": "shot_end",
+        "id": "end",
         "max": 32512,
         "min": 0,
         "name": "End",
@@ -122,7 +122,7 @@
       },
       {
         "default": 768,
-        "id": "shot_play",
+        "id": "play",
         "max": 768,
         "min": 0,
         "name": "Play",
@@ -132,7 +132,7 @@
       },
       {
         "default": 16384,
-        "id": "shot_pitch",
+        "id": "pitch",
         "max": 32512,
         "min": 0,
         "name": "Pitch",
@@ -144,7 +144,7 @@
     "dt2": [
       {
         "default": 0,
-        "id": "shot_smp",
+        "id": "sample",
         "latched_word": 0,
         "max": 3840,
         "min": 0,
@@ -155,7 +155,7 @@
       },
       {
         "default": 0,
-        "id": "shot_start",
+        "id": "start",
         "max": 32512,
         "min": 0,
         "name": "Start",
@@ -165,7 +165,7 @@
       },
       {
         "default": 32512,
-        "id": "shot_end",
+        "id": "end",
         "max": 32512,
         "min": 0,
         "name": "End",
@@ -175,7 +175,7 @@
       },
       {
         "default": 768,
-        "id": "shot_play",
+        "id": "play",
         "max": 768,
         "min": 0,
         "name": "Play",
@@ -185,7 +185,7 @@
       },
       {
         "default": 16384,
-        "id": "shot_pitch",
+        "id": "pitch",
         "max": 32512,
         "min": 0,
         "name": "Pitch",

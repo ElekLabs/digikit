@@ -7,20 +7,20 @@
           "knobs": [
             null,
             {
-              "param": "pd_amount",
+              "param": "distortion",
               "slot": 26
             },
             {
-              "param": "pd_curve",
+              "param": "curve",
               "slot": 27
             },
             null,
             {
-              "param": "pd_detune",
+              "param": "detune",
               "slot": 29
             },
             {
-              "param": "pd_fold",
+              "param": "fold",
               "slot": 30
             }
           ],
@@ -28,8 +28,8 @@
           "name": "Phase Dist",
           "own_dsp": true,
           "page": {
-            "name": "PHASE DIST",
-            "title": "Phase Dist"
+            "name": "PD",
+            "title": "PHASE DIST"
           },
           "position": null,
           "short": "PD",
@@ -43,20 +43,20 @@
               "stock": 202
             },
             {
-              "param": "pd_amount",
+              "param": "distortion",
               "slot": 1
             },
             {
-              "param": "pd_curve",
+              "param": "curve",
               "slot": 2
             },
             null,
             {
-              "param": "pd_detune",
+              "param": "detune",
               "slot": 4
             },
             {
-              "param": "pd_fold",
+              "param": "fold",
               "slot": 5
             },
             null,
@@ -84,7 +84,7 @@
     "dn2": [
       {
         "default": 0,
-        "id": "pd_amount",
+        "id": "distortion",
         "max": 32512,
         "min": 0,
         "name": "Distortion",
@@ -94,7 +94,7 @@
       },
       {
         "default": 0,
-        "id": "pd_curve",
+        "id": "curve",
         "max": 32512,
         "min": 0,
         "name": "Curve",
@@ -104,7 +104,7 @@
       },
       {
         "default": 10240,
-        "id": "pd_detune",
+        "id": "detune",
         "max": 32512,
         "min": 0,
         "name": "Detune",
@@ -114,7 +114,7 @@
       },
       {
         "default": 0,
-        "id": "pd_fold",
+        "id": "fold",
         "max": 32512,
         "min": 0,
         "name": "Fold",
@@ -126,7 +126,7 @@
     "dt2": [
       {
         "default": 0,
-        "id": "pd_amount",
+        "id": "distortion",
         "max": 32512,
         "min": 0,
         "name": "Distortion",
@@ -136,7 +136,7 @@
       },
       {
         "default": 0,
-        "id": "pd_curve",
+        "id": "curve",
         "max": 32512,
         "min": 0,
         "name": "Curve",
@@ -146,7 +146,7 @@
       },
       {
         "default": 10240,
-        "id": "pd_detune",
+        "id": "detune",
         "max": 32512,
         "min": 0,
         "name": "Detune",
@@ -156,7 +156,7 @@
       },
       {
         "default": 0,
-        "id": "pd_fold",
+        "id": "fold",
         "max": 32512,
         "min": 0,
         "name": "Fold",

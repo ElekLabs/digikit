@@ -662,7 +662,8 @@ export interface DkModule {
   index: number;
   name: string;
   version: number;
-  contracts: [number, number][];
+  /** The runtime version the module needs (header word 0x30 without the trace flag), packed major << 16 | minor << 8 | patch; 0: none. */
+  needs: number;
   cf_base: number;
   cf_size: number;
   dsp_off: number;
@@ -1051,7 +1052,7 @@ export class DkSession {
     await this.ok(GCMD.ABORT, 'abort');
   }
 
-  /** The loaded modules with their ranges, contracts and faults (MODULES, runtime 0.2.0, capability MODULES), every page. */
+  /** The loaded modules with their ranges, needed runtime versions and faults (MODULES, runtime 0.2.0, capability MODULES), every page. */
   async modules(): Promise<DkModule[]> {
     const out: DkModule[] = [];
     let start = 0;
@@ -1067,7 +1068,7 @@ export class DkSession {
           index: b[at]!,
           name,
           version: u32(b, at + 33),
-          contracts: [0, 1, 2, 3].map((k) => [b[at + 37 + 2 * k], b[at + 38 + 2 * k]] as [number, number]),
+          needs: u32(b, at + 37),
           cf_base: u32(b, at + 45),
           cf_size: u32(b, at + 49),
           dsp_off: u32(b, at + 53),

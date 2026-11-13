@@ -367,7 +367,7 @@ def cmd_patch(args: list[str]) -> int:
 
 
 def cmd_pack(args: list[str]) -> int:
-    """`pack MODULE [--device dt2|dn2] [-o OUT.dkm] [--name N] [--runtime-min V]`: a run-time module as a .dkm."""
+    """`pack MODULE [--device dt2|dn2] [-o OUT.dkm] [--name N]`: a run-time module as a .dkm."""
     module = next(
         (
             a
@@ -393,7 +393,7 @@ def cmd_pack(args: list[str]) -> int:
     return r.returncode
 
 
-VALUE_FLAGS = ("-o", "--device", "--name", "--runtime-min")
+VALUE_FLAGS = ("-o", "--device", "--name")
 
 
 def cmd_inject(args: list[str]) -> int:

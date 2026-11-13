@@ -16,6 +16,7 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
 mod arena;
+pub mod collect;
 mod assign;
 pub mod boot;
 pub mod card;
@@ -33,8 +34,6 @@ pub mod paramapi;
 pub mod registry;
 pub mod scan;
 pub mod settings;
-mod sample;
-mod sample_source;
 mod tracks;
 mod files;
 mod hash32;
@@ -121,9 +120,18 @@ pub static mut DKRT_PATHS: [[u8; 64]; MAX_MODULES] = [[0; 64]; MAX_MODULES];
 /// The address of each module record's `menu` (0: none), apart from `State` for the same reason.
 #[no_mangle]
 pub static mut DKRT_MENUS: [u32; MAX_MODULES] = [0; MAX_MODULES];
-/// The contract versions each module record declared: api, machine, fx, service as (major, minor) bytes (`MODULES` reports them).
+/// Bit 31 of the `.dkm` header word at 0x30: the module was built with `DK_TRACE`; the other bits are the runtime version it needs.
+pub const FLAG_TRACE: u32 = 1 << 31;
+/// Whether this runtime loads a module that needs runtime version `needs` (the header word at 0x30, packed major << 16 | minor << 8 | patch,
+/// the newest `since` of the imports it links; 0: it links none). 0.x semver: another major or minor than the runtime's refuses, and so does
+/// a higher patch (a patch only adds). The trace flag is not part of the version.
+pub fn runtime_accepts(needs: u32) -> bool {
+    let needs = needs & !FLAG_TRACE;
+    needs == 0 || (needs >> 8 == RUNTIME_VERSION >> 8 && needs & 255 <= RUNTIME_VERSION & 255)
+}
+/// The runtime version each module record needs (`MODULES` reports it).
 #[no_mangle]
-pub static mut DKRT_CONTRACTS: [[u8; 8]; MAX_MODULES] = [[0; 8]; MAX_MODULES];
+pub static mut DKRT_MODULE_RUNTIME: [u32; MAX_MODULES] = [0; MAX_MODULES];
 #[no_mangle]
 pub static mut DKRT_MAILBOX: Mailbox = Mailbox {
     cmd: 0,
@@ -393,6 +401,21 @@ import_table! {
     ("dk_intro_take", imp_intro_take),
     ("dk_param_get", imp_param_get),
     ("dk_param_set", imp_param_set),
+    ("dk_module_ctx_add_machine", collect::dk_module_ctx_add_machine),
+    ("dk_module_ctx_add_fx", collect::dk_module_ctx_add_fx),
+    ("dk_machine_add_page", collect::dk_machine_add_page),
+    ("dk_fx_add_page", collect::dk_fx_add_page),
+    ("dk_page_add_param", collect::dk_page_add_param),
+    ("dk_page_add_fx_param", collect::dk_page_add_fx_param),
+    ("dk_param_range", collect::dk_param_range),
+    ("dk_param_glyph", collect::dk_param_glyph),
+    ("dk_param_latched", collect::dk_param_latched),
+    ("dk_param_on_click", collect::dk_param_on_click),
+    ("dk_page_canvas", collect::dk_page_canvas),
+    ("dk_page_bind", collect::dk_page_bind),
+    ("dk_page_bind_local", collect::dk_page_bind_local),
+    ("dk_fx_routes", collect::dk_fx_routes),
+    ("dk_fx_mix", collect::dk_fx_mix),
     ("dk_sample_pool_open", entry::dk_sample_pool_open),
     ("dk_sample_pool_add", entry::dk_sample_pool_add),
     ("dk_sample_pool_clear", entry::dk_sample_pool_clear),
@@ -402,9 +425,6 @@ import_table! {
     ("dk_sample_pool_set", entry::dk_sample_pool_set),
     ("dk_sample_pool_peaks", entry::dk_sample_pool_peaks),
     ("dk_sample_pool_peaks_window", entry::dk_sample_pool_peaks_window),
-    ("dk_sample_bank_open", entry::dk_sample_bank_open),
-    ("dk_sample_bank_load", entry::dk_sample_bank_load),
-    ("dk_sample_bank_status", entry::dk_sample_bank_status),
     ("dk_debug_peek", debug_peek),
     ("dk_debug_track_type", debug_track_type),
     ("dk_debug_selected_params", debug_selected_params),
@@ -450,6 +470,21 @@ const _: dkrt_sdk::api::DkHash32FinishFn = imp_hash32_finish;
 const _: dkrt_sdk::api::DkIntroTakeFn = imp_intro_take;
 const _: dkrt_sdk::api::DkParamGetFn = imp_param_get;
 const _: dkrt_sdk::api::DkParamSetFn = imp_param_set;
+const _: dkrt_sdk::api::DkModuleCtxAddMachineFn = collect::dk_module_ctx_add_machine;
+const _: dkrt_sdk::api::DkModuleCtxAddFxFn = collect::dk_module_ctx_add_fx;
+const _: dkrt_sdk::api::DkMachineAddPageFn = collect::dk_machine_add_page;
+const _: dkrt_sdk::api::DkFxAddPageFn = collect::dk_fx_add_page;
+const _: dkrt_sdk::api::DkPageAddParamFn = collect::dk_page_add_param;
+const _: dkrt_sdk::api::DkPageAddFxParamFn = collect::dk_page_add_fx_param;
+const _: dkrt_sdk::api::DkParamRangeFn = collect::dk_param_range;
+const _: dkrt_sdk::api::DkParamGlyphFn = collect::dk_param_glyph;
+const _: dkrt_sdk::api::DkParamLatchedFn = collect::dk_param_latched;
+const _: dkrt_sdk::api::DkParamOnClickFn = collect::dk_param_on_click;
+const _: dkrt_sdk::api::DkPageCanvasFn = collect::dk_page_canvas;
+const _: dkrt_sdk::api::DkPageBindFn = collect::dk_page_bind;
+const _: dkrt_sdk::api::DkPageBindLocalFn = collect::dk_page_bind_local;
+const _: dkrt_sdk::api::DkFxRoutesFn = collect::dk_fx_routes;
+const _: dkrt_sdk::api::DkFxMixFn = collect::dk_fx_mix;
 const _: dkrt_sdk::api::DkSamplePoolOpenFn = entry::dk_sample_pool_open;
 const _: dkrt_sdk::api::DkSamplePoolAddFn = entry::dk_sample_pool_add;
 const _: dkrt_sdk::api::DkSamplePoolClearFn = entry::dk_sample_pool_clear;
@@ -459,9 +494,6 @@ const _: dkrt_sdk::api::DkSamplePoolPathFn = entry::dk_sample_pool_path;
 const _: dkrt_sdk::api::DkSamplePoolSetFn = entry::dk_sample_pool_set;
 const _: dkrt_sdk::api::DkSamplePoolPeaksFn = entry::dk_sample_pool_peaks;
 const _: dkrt_sdk::api::DkSamplePoolPeaksWindowFn = entry::dk_sample_pool_peaks_window;
-const _: dkrt_sdk::api::DkSampleBankOpenFn = entry::dk_sample_bank_open;
-const _: dkrt_sdk::api::DkSampleBankLoadFn = entry::dk_sample_bank_load;
-const _: dkrt_sdk::api::DkSampleBankStatusFn = entry::dk_sample_bank_status;
 const _: dkrt_sdk::api::DkDebugPeekFn = debug_peek;
 const _: dkrt_sdk::api::DkDebugTrackTypeFn = debug_track_type;
 const _: dkrt_sdk::api::DkDebugSelectedParamsFn = debug_selected_params;
@@ -1153,7 +1185,6 @@ pub unsafe extern "C" fn dkrt_tick() {
     store_writer::tick();
     crash::install();
     dsp::step();
-    sample::tick();
     worker::tick();
     io::tick();
     tracks::tick();

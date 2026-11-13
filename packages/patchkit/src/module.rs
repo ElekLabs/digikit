@@ -44,11 +44,18 @@ pub struct Manifest {
     pub native_page: Vec<crate::typed::NativePageDef>,
     #[serde(skip)]
     pub voice: Vec<crate::typed::VoiceDef>,
-    /// Removed forms (`[[fx]]`, `[[machine]]`, `[[param]]`, `[[page]]`, `[[voice]]`): kept only to refuse them with a clear error.
-    #[serde(default)]
-    fx: Option<toml::Value>,
+    /// `[[machine]] id = "..."`: the machines the module declares in C (DK_MACHINE); the id is all the manifest says of one. Their keys go in the
+    /// `.dkm` keys table (`dkneeds::keys`).
     #[serde(default, rename = "machine")]
-    machine_old: Option<toml::Value>,
+    pub machines: Vec<IdRef>,
+    /// `[[fx]] id = "..."`: the same for effects (DK_FX).
+    #[serde(default, rename = "fx")]
+    pub fxs: Vec<IdRef>,
+    /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
+    /// builds different rows per device (DT2 has no page rows).
+    #[serde(default)]
+    pub uses: UsesByDevice,
+    /// Removed forms (`[[param]]`, `[[page]]`, `[[voice]]`): kept only to refuse them with a clear error.
     #[serde(default, rename = "param")]
     param_old: Option<toml::Value>,
     #[serde(default, rename = "page")]
@@ -75,13 +82,36 @@ impl Manifest {
                 self.module.id
             ));
         }
-        if self.fx.is_some() {
-            return Err(err!(
-                "[[fx]] is no longer read: declare effects with DK_FX in C (sdk/include/dk/fx/fx.h)"
-            ));
+        for (table, ids) in [("machine", &self.machines), ("fx", &self.fxs)] {
+            let mut seen = std::collections::BTreeSet::new();
+            for r in ids {
+                let ok = !r.id.is_empty()
+                    && r.id.bytes().all(|c| {
+                        c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'_'
+                    });
+                if !ok {
+                    return Err(err!(
+                        "[[{table}]] id {:?}: use lowercase ascii letters, digits, `-` and `_`",
+                        r.id
+                    ));
+                }
+                if !seen.insert(r.id.as_str()) {
+                    return Err(err!("[[{table}]] id {:?} is declared twice", r.id));
+                }
+                if let Some(d) = &r.dsp {
+                    let ok = !d.is_empty()
+                        && d.bytes()
+                            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_');
+                    if !ok {
+                        return Err(err!(
+                            "[[{table}]] id {:?}: dsp {d:?}: use lowercase ascii letters, digits and `_`",
+                            r.id
+                        ));
+                    }
+                }
+            }
         }
         for (name, old) in [
-            ("machine", &self.machine_old),
             ("param", &self.param_old),
             ("page", &self.page_old),
             ("voice", &self.voice_old),
@@ -94,6 +124,64 @@ impl Manifest {
         }
         Ok(())
     }
+}
+
+/// An entry of `[[machine]]` or `[[fx]]`: the id and an optional DSP symbol prefix (any other key is refused).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct IdRef {
+    pub id: String,
+    /// The prefix of the DSP entry symbols (`_<prefix>_render`, ...) when it is not the id: for DSP code that exists already. It never changes the id,
+    /// which the keys hash and `module_ids.h` names its constant from.
+    #[serde(default)]
+    pub dsp: Option<String>,
+}
+
+impl IdRef {
+    /// The prefix of this entry's DSP symbols and where it came from: `dsp` of module.toml, else the id with `-` as `_`.
+    pub fn dsp_prefix(&self) -> (String, &'static str) {
+        match &self.dsp {
+            Some(p) => (p.clone(), "`dsp` of its [[machine]]/[[fx]] in module.toml"),
+            None => (self.id.replace('-', "_"), "its id"),
+        }
+    }
+}
+
+/// `[uses.<device>]`: one table per device (short names as in `devices/*.toml`); a module has only the tables of the devices it builds for.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct UsesByDevice {
+    #[serde(default)]
+    pub dt2: Option<Uses>,
+    #[serde(default)]
+    pub dn2: Option<Uses>,
+}
+
+impl UsesByDevice {
+    /// The counts for DEVICE (`dt2`, `dn2`); all 0 when the module has no table for it.
+    pub fn for_device(&self, device: &str) -> Uses {
+        match device {
+            "dt2" => self.dt2,
+            "dn2" => self.dn2,
+            _ => None,
+        }
+        .unwrap_or_default()
+    }
+}
+
+/// One device's registry rows a module takes, all default 0.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Uses {
+    #[serde(default)]
+    pub machine_rows: u16,
+    #[serde(default)]
+    pub param_rows: u16,
+    #[serde(default)]
+    pub page_rows: u16,
+    /// Payload bytes of the record block `init` commits (the `module_commit` event's `records_size`): the keys table's `record_bytes`.
+    #[serde(default)]
+    pub record_bytes: u16,
 }
 
 /// One generated file of device data: `kind` is `rust` (constants every device agrees on, one file), `gas-shared` (the same as `.equ` lines), `gas` (a ColdFire assembler
@@ -1155,5 +1243,78 @@ place = "cf.expansion"
         );
         assert!(!cache.exists());
         std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod manifest_tests {
+    use super::*;
+
+    const HEAD: &str = "[module]\nid = \"test/m\"\nversion = \"0.1.0\"\nname = \"M\"\ncategory = \"test\"\ntype = \"machine\"\nauthor = \"digikit\"\nstatus = \"experimental\"\nsummary = \"s\"\n";
+
+    fn load(extra: &str) -> Result<Manifest> {
+        let m: Manifest = toml::from_str(&format!("{HEAD}{extra}"))?;
+        m.validate_header()?;
+        Ok(m)
+    }
+
+    #[test]
+    fn machine_fx_and_uses_are_read() {
+        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses.dt2]\nmachine_rows = 2\npage_rows = 3\nrecord_bytes = 700\n[uses.dn2]\nmachine_rows = 2\npage_rows = 4\n").unwrap();
+        let ids = |v: &[IdRef]| v.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&m.machines), ["analog", "b-2_x"]);
+        assert_eq!(ids(&m.fxs), ["fshift"]);
+        assert_eq!(
+            m.uses.for_device("dt2"),
+            Uses {
+                machine_rows: 2,
+                param_rows: 0,
+                page_rows: 3,
+                record_bytes: 700
+            }
+        );
+        assert_eq!(m.uses.for_device("dn2").page_rows, 4);
+        let m = load("[uses.dn2]\nparam_rows = 1\n").unwrap();
+        assert_eq!(m.uses.dt2, None);
+        assert_eq!(m.uses.for_device("dt2"), Uses::default());
+    }
+
+    #[test]
+    fn a_dsp_prefix_is_optional_and_checked() {
+        let m = load("[[machine]]\nid = \"sine\"\ndsp = \"sn\"\n[[fx]]\nid = \"a-b\"\n").unwrap();
+        assert_eq!(m.machines[0].dsp_prefix().0, "sn");
+        assert_eq!(m.fxs[0].dsp_prefix().0, "a_b");
+        for bad in ["Sn", "s-n", "", "s n"] {
+            let e = load(&format!("[[machine]]\nid = \"a\"\ndsp = \"{bad}\"\n")).unwrap_err();
+            assert!(e.to_string().contains("dsp"), "{bad}: {e}");
+        }
+    }
+
+    #[test]
+    fn no_tables_parse_as_before() {
+        let m = load("").unwrap();
+        assert!(m.machines.is_empty() && m.fxs.is_empty());
+        assert_eq!(m.uses, UsesByDevice::default());
+    }
+
+    #[test]
+    fn duplicate_and_bad_ids_are_refused() {
+        let e = load("[[fx]]\nid = \"a\"\n[[fx]]\nid = \"a\"\n").unwrap_err();
+        assert!(e.to_string().contains("twice"), "{e}");
+        let e = load("[[machine]]\nid = \"Analog\"\n").unwrap_err();
+        assert!(e.to_string().contains("lowercase"), "{e}");
+    }
+
+    #[test]
+    fn other_keys_are_refused() {
+        let e = load("[[machine]]\nid = \"a\"\nname = \"A\"\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load("[uses.dn2]\nvoices = 1\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        // one table for all devices, and a device that does not exist
+        let e = load("[uses]\nmachine_rows = 1\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load("[uses.dt3]\nmachine_rows = 1\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
     }
 }

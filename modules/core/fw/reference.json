@@ -503,42 +503,6 @@
     },
     {
       "at": {
-        "dn2-1.12": [
-          {
-            "addr": "0x400cfb0e",
-            "len": 4
-          }
-        ]
-      },
-      "bindings": {
-        "c": "dk_fw_link_bulk_send",
-        "rust": "dkfw::link::bulk_send"
-      },
-      "cpu": "cf",
-      "devices": [
-        "dn2"
-      ],
-      "doc": "DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait. Emulator-only diagnostic use, format 1 sends numeric source words least-significant byte first.",
-      "file": "devices/fw/link.toml",
-      "kind": "fn",
-      "mark": "D",
-      "name": "cf.link.fn.bulk_send",
-      "rule": {
-        "dn2": {
-          "kind": "cf_func",
-          "len": 4,
-          "offset": 0
-        }
-      },
-      "sig": "void (u32 tag, const u32 *source, u32 format)",
-      "subsystem": "link",
-      "users": [
-        "core/dsp-lp0-proof"
-      ],
-      "was": []
-    },
-    {
-      "at": {
         "dn2-1.11": [
           {
             "addr": "0x400cf7be",
@@ -620,7 +584,6 @@
       "sig": "u8 *(u8 *destination, const u8 *source, u32 length)",
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -771,7 +734,6 @@
       "site": "cf.link.site.boot_wire_size",
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -817,7 +779,6 @@
       "site": "cf.link.site.reply_copy",
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -950,7 +911,6 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -982,7 +942,6 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -15065,7 +15024,6 @@
       },
       "subsystem": "cache",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -15105,7 +15063,6 @@
       "site": "dsp.cache.site.cache_enable",
       "subsystem": "cache",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -15138,7 +15095,6 @@
       },
       "subsystem": "cache",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -15872,7 +15828,6 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -15905,7 +15860,6 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -15938,7 +15892,6 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -16073,7 +16026,6 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -16104,7 +16056,6 @@
       },
       "subsystem": "link",
       "users": [
-        "core/dsp-lp0-proof",
         "core/sample-pool"
       ],
       "was": []
@@ -19621,7 +19572,7 @@
       "name": "input"
     },
     {
-      "count": 14,
+      "count": 13,
       "cpu": "cf",
       "file": "devices/fw/link.toml",
       "meaning": "the ColdFire side of the DSP link: block interrupt, frame call, records",

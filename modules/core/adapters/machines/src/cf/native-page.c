@@ -18,6 +18,7 @@ typedef struct text_rep {
 } text_rep;
 typedef struct native_page {
     uint32_t draw, event, flags;
+    uint32_t arg, with_arg; /* api major 3: the callbacks take arg first */
     uint32_t bindings[8][3];
     uint32_t word_count, word_codes[8];
     text_rep name;
@@ -73,7 +74,8 @@ static native_page *selected(uint8_t *view)
  * Copies are adapter-owned; removal clears callbacks before the runtime frees code. */
 static int32_t register_page(uint32_t type, uint32_t index, uint32_t mode, uint32_t flags,
                              const char *title, uint32_t draw, uint32_t event,
-                             const uint32_t *bindings, const uint32_t *words, uint32_t word_count)
+                             const uint32_t *bindings, const uint32_t *words, uint32_t word_count,
+                             uint32_t arg, uint32_t with_arg)
 {
     if (flags & ~(DK_PAGE_STOCK_OVERLAY | DK_PAGE_WIDE_CANVAS) || (flags && mode != 2) ||
         (flags & DK_PAGE_STOCK_OVERLAY && index != 0) ||
@@ -107,6 +109,8 @@ static int32_t register_page(uint32_t type, uint32_t index, uint32_t mode, uint3
         page->word_codes[i] = words[i];
     page->event = event;
     page->flags = flags;
+    page->arg = arg;
+    page->with_arg = with_arg;
     modes[type] = (uint8_t)mode;
     page->draw = draw; /* publication last */
     armed++;
@@ -114,16 +118,20 @@ static int32_t register_page(uint32_t type, uint32_t index, uint32_t mode, uint3
 }
 
 int32_t mf_native_register(uint32_t type, const char *title, uint32_t draw, uint32_t event,
-                           const uint32_t *bindings, const uint32_t *words, uint32_t word_count)
+                           const uint32_t *bindings, const uint32_t *words, uint32_t word_count,
+                           uint32_t arg, uint32_t with_arg)
 {
-    return register_page(type, 1, 1, 0, title, draw, event, bindings, words, word_count);
+    return register_page(type, 1, 1, 0, title, draw, event, bindings, words, word_count, arg,
+                         with_arg);
 }
 
 int32_t mf_native_register_v2(uint32_t type, uint32_t index, uint32_t flags, const char *title,
                               uint32_t draw, uint32_t event, const uint32_t *bindings,
-                              const uint32_t *words, uint32_t word_count)
+                              const uint32_t *words, uint32_t word_count, uint32_t arg,
+                              uint32_t with_arg)
 {
-    return register_page(type, index, 2, flags, title, draw, event, bindings, words, word_count);
+    return register_page(type, index, 2, flags, title, draw, event, bindings, words, word_count,
+                         arg, with_arg);
 }
 
 void mf_native_remove(uint32_t type)
@@ -232,7 +240,7 @@ static void paint(uint8_t *view, uint8_t *canvas, native_page *page, uint32_t tr
         pixels1[2 * x] = UINT32_MAX;
         pixels1[2 * x + 1] = UINT32_MAX << (64 - HEIGHT);
     }
-    dk_page_frame_v1 frame;
+    dk_page_frame frame;
     frame.version = 1;
     frame.size = sizeof(frame);
     frame.track = track;
@@ -253,7 +261,10 @@ static void paint(uint8_t *view, uint8_t *canvas, native_page *page, uint32_t tr
     for (unsigned i = 0; i < 8; i++)
         frame.word_values[i] = i < page->word_count ? value(view, page->word_codes[i], -1) : 0;
     drawing = &clipped;
-    ((void (*)(const dk_page_frame_v1 *))page->draw)(&frame);
+    if (page->with_arg)
+        ((void (*)(uint32_t, const dk_page_frame *))page->draw)(page->arg, &frame);
+    else
+        ((void (*)(const dk_page_frame *))page->draw)(&frame);
     drawing = 0;
     if (overlay) {
         for (unsigned i = 0; i < width * 2; i++)
@@ -303,13 +314,16 @@ uint32_t mf_native_turn(uint8_t *view, const uint8_t *event)
         if (binding[0] && binding[2] == encoder) {
             if (binding[0] == 1)
                 return 0; /* exactly one native PARAM edit */
-            dk_page_event_v1 local = {1,
-                                      sizeof(local),
-                                      dk_fw_page_view_track(*(uint8_t **)(view + 0x74)),
-                                      binding[1],
-                                      *(const int32_t *)(event + 0x10),
-                                      event[0x14] != 0};
-            ((void (*)(const dk_page_event_v1 *))page->event)(&local);
+            dk_page_event local = {1,
+                                   sizeof(local),
+                                   dk_fw_page_view_track(*(uint8_t **)(view + 0x74)),
+                                   binding[1],
+                                   *(const int32_t *)(event + 0x10),
+                                   event[0x14] != 0};
+            if (page->with_arg)
+                ((void (*)(uint32_t, const dk_page_event *))page->event)(page->arg, &local);
+            else
+                ((void (*)(const dk_page_event *))page->event)(&local);
             dk_fw_view_invalidate(view);
             return 1;
         }

@@ -434,7 +434,7 @@ def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
         path = prepared["selected"][0]
         source = candidate / "plus_drive/digikit" / path
         data = source.read_bytes()
-        header = dktransfer.header_info(data[: dkupload.HEADER_BYTES])
+        header = dktransfer.header_info(data)
         if header is None:
             raise H.HarnessError("preview pack has no DKM header")
         dkrun.upload_if_changed(up, path, data)

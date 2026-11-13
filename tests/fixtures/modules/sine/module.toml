@@ -18,7 +18,24 @@ conflicts = []
 
 # `patchkit pack test/sine --device dt2|dn2 -o sine.dkm` makes the .dkm; the digikit runtime sends the DSP object to the DSP and
 # publishes the voice row and the machine row.
-# The machine declaration (DK_MACHINE, DK_PARAM and DK_PAGE in src/module.c). It holds only .dk.desc records.
+# The machine is declared by builder calls in init (src/module.c). The id `sine` is what the keys hash; the DSP symbols of src/dsp/sine.s start with `sn`
+# (shared with other fixtures), so `dsp` names the prefix. `[uses.<device>]` is written by `mise run module:check`.
+[[machine]]
+id = "sine"
+dsp = "sn"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 1
+page_rows = 0
+record_bytes = 204
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 1
+page_rows = 1
+record_bytes = 300
+
 [[object]]
 path = "build/sine-cf.dko.json"
 sources = ["src/module.c"]

@@ -76,8 +76,8 @@ def test_dsp_section_is_deterministic_and_relocates_like_the_reference(tmp_path)
         f"voice type h{h:06x} entry +0x0 note_on +0x14a state 16x8 clear 8" in info
         and "imports _dv_exp2" in info
     )
-    # the guard's ranges: LEVEL (knob 1) declares 0 .. 0x7f00; TUNE and LEV are stock rows (undeclared)
-    assert "ranges [0, 7f000000, 0, 0, 0, 0, 0, 0]" in info
+    # the guard's ranges: since S3 a parameter is declared by a builder call that carries no range, so every knob is undeclared (0)
+    assert "ranges [0, 0, 0, 0, 0, 0, 0, 0]" in info
     assert (
         f"runtime   >= {'.'.join(map(str, RUNTIME_VERSION))}" in info
     )  # DSP sections of version 2 (voices with knob ranges) need runtime 5

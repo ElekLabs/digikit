@@ -7,8 +7,6 @@
 #include <stddef.h>
 
 /* cf.link.fn.block_isr: no sig yet */
-/* DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait. Emulator-only diagnostic use, format 1 sends numeric source words least-significant byte first. */
-void dk_fw_link_bulk_send(uint32_t tag, const uint32_t *source, uint32_t format) __asm__("cf.link.fn.bulk_send");
 /* cf.link.fn.frame: no sig yet */
 /* Original DN2 reply memcpy, returning destination in D0; retained by the private extension wrapper. */
 uint8_t * dk_fw_link_reply_copy(uint8_t *destination, const uint8_t *source, uint32_t length) __asm__("cf.link.fn.reply_copy");

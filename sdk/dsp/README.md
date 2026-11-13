@@ -88,8 +88,7 @@ and `selcc`-compiled C call it the same way. `contract/call.inc` has the macros 
 `DK_CALL` uses the CJUMP ABI; the machine adapter enters a module with JUMP and a different return contract.
 A module calling a block routine must preserve its adapter-return registers I12/I13 and restore its exact entry I7.
 Entry I7 is an exclusive stack boundary: reserve space below it before constructing the CJUMP frame, so no store
-overwrites the adapter's context. The [sample-proof fixture](../../tests/fixtures/modules/sample-proof/README.md)
-contains a tested bridge for both adapters; this fixture does not define a general module-call API.
+overwrites the adapter's context. This does not define a general module-call API.
 
 | File | Routine | Instructions per sample | Per call (32 samples, with `DK_CALL`) | Notes |
 | --- | --- | --- | --- | --- |

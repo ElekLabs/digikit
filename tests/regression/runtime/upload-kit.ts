@@ -39,29 +39,27 @@ export function runtimeVersion(): number {
   return (major! << 16) | (minor! << 8) | patch!;
 }
 
-/** The api contract [major, minor] of sdk/sdk.toml: what a module that links the newest imports writes into its header. */
-export function apiContract(): [number, number] {
-  const toml = parse(fs.readFileSync(path.join(repoRoot(), 'sdk/sdk.toml'), 'utf8')) as {
-    contract: { api: [number, number] };
-  };
-  return toml.contract.api;
-}
+/** The packed runtime version a `since` string ("0.7.0") of sdk/sdk.toml stands for. */
+const packVersion = (v: string): number => {
+  const [major, minor, patch] = v.split('.').map(Number);
+  return (major! << 16) | (minor! << 8) | patch!;
+};
 
-/** The newest `since` (api minor) among the imports of sdk/sdk.toml that the `.dkm` `file` links: the minor the packer writes into its header. */
-export function linkedApiMinor(file: Buffer): number {
+/** The newest `since` among the imports of sdk/sdk.toml that the `.dkm` `file` links, packed: the runtime version the packer writes into its header (0x30). */
+export function linkedRuntimeNeed(file: Buffer): number {
   const toml = parse(fs.readFileSync(path.join(repoRoot(), 'sdk/sdk.toml'), 'utf8')) as {
-    import: { name: string; since?: number }[];
+    import: { name: string; since?: string }[];
   };
-  const since = new Map(toml.import.map((i) => [i.name, i.since ?? 0]));
+  const since = new Map(toml.import.map((i) => [i.name, i.since ? packVersion(i.since) : 0]));
   const off = file.readUInt32BE(0x78);
   const n = file.readUInt32BE(0x7c);
-  let minor = 0;
+  let need = 0;
   for (let i = 0; i < n; i++) {
     const rec = file.subarray(off + i * 32, off + i * 32 + 32);
     const name = rec.toString('latin1', 0, rec.indexOf(0));
-    minor = Math.max(minor, since.get(name) ?? 0);
+    need = Math.max(need, since.get(name) ?? 0);
   }
-  return minor;
+  return need;
 }
 
 // ---- files, the device's LIST and the card ------------------------------------------------------------------------------------------

@@ -1,0 +1,162 @@
+{
+  "effects": [
+    {
+      "id": "cfx",
+      "knobs": [
+        {
+          "default": 0.5,
+          "display": 0,
+          "max": 1.2699999809265137,
+          "min": 0,
+          "name": "Gain",
+          "short": "GAIN"
+        }
+      ],
+      "mix": 127,
+      "tab": "CFX",
+      "title": "Commit FX"
+    }
+  ],
+  "machines": [
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [
+            null,
+            {
+              "param": "tone",
+              "slot": 26
+            },
+            {
+              "param": "mode",
+              "slot": 27
+            },
+            null,
+            {
+              "param": "go",
+              "slot": 29
+            }
+          ],
+          "level": 10,
+          "name": "Commit",
+          "own_dsp": true,
+          "page": {
+            "name": "CMT",
+            "title": "Commit"
+          },
+          "position": null,
+          "short": "CMT",
+          "type": null
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            {
+              "param": "tone",
+              "slot": 1
+            },
+            {
+              "param": "mode",
+              "slot": 2
+            },
+            null,
+            {
+              "param": "go",
+              "slot": 4
+            },
+            null,
+            null,
+            {
+              "slot": 7,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "Commit",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "CMT",
+          "type": null
+        }
+      },
+      "id": "cmach",
+      "name": "Commit",
+      "short": "CMT"
+    }
+  ],
+  "module": "test/commit-demo",
+  "params": {
+    "dn2": [
+      {
+        "default": 16384,
+        "id": "tone",
+        "max": 32512,
+        "min": 0,
+        "name": "Tone",
+        "short": "TONE",
+        "slot": 26,
+        "template": 213
+      },
+      {
+        "default": 0,
+        "id": "mode",
+        "latched_word": 1,
+        "max": 768,
+        "min": 0,
+        "name": "Mode",
+        "short": "MODE",
+        "slot": 27,
+        "template": 213
+      },
+      {
+        "default": 0,
+        "id": "go",
+        "max": 32512,
+        "min": 0,
+        "name": "Go",
+        "short": "GO",
+        "slot": 29,
+        "template": 213
+      }
+    ],
+    "dt2": [
+      {
+        "default": 16384,
+        "id": "tone",
+        "max": 32512,
+        "min": 0,
+        "name": "Tone",
+        "short": "TONE",
+        "slot": 1,
+        "template": 204
+      },
+      {
+        "default": 0,
+        "id": "mode",
+        "latched_word": 1,
+        "max": 768,
+        "min": 0,
+        "name": "Mode",
+        "short": "MODE",
+        "slot": 2,
+        "template": 204
+      },
+      {
+        "default": 0,
+        "id": "go",
+        "max": 32512,
+        "min": 0,
+        "name": "Go",
+        "short": "GO",
+        "slot": 4,
+        "template": 204
+      }
+    ]
+  }
+}

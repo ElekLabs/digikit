@@ -1,6 +1,6 @@
 """digikit/shot on the concrete SHARC+ core through core/dsp-voice (the real adapter), against a float32 model of the stereo PCM16 reader.
 
-The pool table (`_shot_rec` records and `_shot_ctl` control sets, one of each for every pool index) is written the way the runtime does: PCM
+The pool table (`_shot_sample_rec` records and `_shot_sample_ctl` control sets, one of each for every pool index) is written the way the runtime does: PCM
 planes in free L2, the record published with `ready` last. The SMP parameter (word 0, index << 8) picks the record of a note. Checks: SMP
 picks the record (two values, two records; an empty or out-of-range entry is silent); start, end, play (reverse and loop modes) and pitch; L and R differ for a
 stereo sample; a mono sample plays centred; the voice ends after the sample; a stale token or a closed entry is silent with no PCM read;
@@ -56,8 +56,8 @@ class Shot:
         self.left = LEFT[:frames]
         self.right = self.left if channels == 1 else RIGHT[:frames]
         d = self.rig.built.data
-        self.rec = nw(d["_shot_rec"]) + 8 * index
-        self.ctl = nw(d["_shot_ctl"]) + 4 * index
+        self.rec = nw(d["_shot_sample_rec"]) + 8 * index
+        self.ctl = nw(d["_shot_sample_ctl"]) + 4 * index
         self.state = nw(self.rig.built.state)
         poke = self.rig.sess.poke
         for k, w in enumerate(pack(self.left)):
@@ -88,11 +88,11 @@ class Shot:
         r = self.rig
         r.set_params(
             {
-                "shot_smp": self.index << 8,
-                "shot_start": 0,
-                "shot_end": 0x7F00,
-                "shot_play": FWD,
-                "shot_pitch": 0x4000,
+                "sample": self.index << 8,
+                "start": 0,
+                "end": 0x7F00,
+                "play": FWD,
+                "pitch": 0x4000,
                 **(params or {}),
             }
         )
@@ -195,20 +195,20 @@ def expected_rate(note, pitch_word, src_rate=RATE_HZ, reverse=False):
 
 def check(s, note=60, blocks=8, **params):
     p = {
-        "shot_start": 0,
-        "shot_end": 0x7F00,
-        "shot_play": FWD,
-        "shot_pitch": 0x4000,
+        "start": 0,
+        "end": 0x7F00,
+        "play": FWD,
+        "pitch": 0x4000,
         **params,
     }
     got_l, got_r = s.play(note, blocks, params)
-    reverse = p["shot_play"] >> 8 <= 1
-    loop = p["shot_play"] >> 8 in (1, 2)
-    start = frames_of(p["shot_start"], s.frames)
-    end = frames_of(p["shot_end"], s.frames)
+    reverse = p["play"] >> 8 <= 1
+    loop = p["play"] >> 8 in (1, 2)
+    start = frames_of(p["start"], s.frames)
+    end = frames_of(p["end"], s.frames)
     cur = s.cursor()
     rate = cur[4] - (1 << 32) if cur[4] >= 1 << 31 else cur[4]
-    want = expected_rate(note, p["shot_pitch"], s.src_rate, reverse)
+    want = expected_rate(note, p["pitch"], s.src_rate, reverse)
     assert abs(rate - want) <= max(2, abs(want) >> 17), (
         rate,
         want,
@@ -238,10 +238,10 @@ def test_default_params_play_the_whole_sample_with_distinct_channels(device):
 @pytest.mark.parametrize(
     "params",
     [
-        {"shot_start": 40 * 256, "shot_end": 100 * 256},
-        {"shot_start": 0, "shot_end": 50 * 256},
-        {"shot_start": 0, "shot_end": 90 * 256, "shot_play": REV},
-        {"shot_start": 20 * 256, "shot_end": 127 * 256, "shot_play": REV},
+        {"start": 40 * 256, "end": 100 * 256},
+        {"start": 0, "end": 50 * 256},
+        {"start": 0, "end": 90 * 256, "play": REV},
+        {"start": 20 * 256, "end": 127 * 256, "play": REV},
     ],
     ids=["window", "end-only", "reverse", "reverse-start"],
 )
@@ -261,7 +261,7 @@ def test_start_end_and_play_select_the_frames(params):
 )
 def test_pitch_is_the_note_plus_the_pitch_parameter(note, pitch):
     s = Shot("dt2")
-    gl, gr, wl, wr, (_, _, rate) = check(s, note=note, shot_pitch=pitch)
+    gl, gr, wl, wr, (_, _, rate) = check(s, note=note, pitch=pitch)
     assert np.array_equal(gl, wl) and np.array_equal(gr, wr)
     semis = (note - 60) + (pitch - 0x4000) * 3 / 2048
     assert abs(rate / 65536 / 2 ** (semis / 12) - 1) < 3e-5
@@ -298,7 +298,7 @@ def test_two_smp_values_pick_two_records(device):
     for k, w in enumerate(pack(pcm(4))):
         poke(other_r + k, w)
     d = s.rig.built.data
-    rec5 = nw(d["_shot_rec"]) + 8 * 5
+    rec5 = nw(d["_shot_sample_rec"]) + 8 * 5
     s.publish(token=TOKEN + 1, rec=rec5, plane_l=other_l, plane_r=other_r)
     first, _ = s.play(blocks=8)  # SMP 2
     assert np.array_equal(first, model(s.left, 0, FRAMES, 65536, False, 8))
@@ -311,14 +311,14 @@ def test_two_smp_values_pick_two_records(device):
 @pytest.mark.parametrize("device", DEVICES)
 def test_smp_is_latched_but_other_parameter_words_remain_live(device):
     s = Shot(device, index=2)
-    s.start(params={"shot_play": FWD_L})
+    s.start(params={"play": FWD_L})
     s.step(1)
     changed = {
-        "shot_smp": 5 << 8,
-        "shot_start": 12 << 8,
-        "shot_end": 100 << 8,
-        "shot_play": REV_L,
-        "shot_pitch": 72 << 8,
+        "sample": 5 << 8,
+        "start": 12 << 8,
+        "end": 100 << 8,
+        "play": REV_L,
+        "pitch": 72 << 8,
     }
     s.step(1, changed)
     r = s.rig
@@ -326,9 +326,7 @@ def test_smp_is_latched_but_other_parameter_words_remain_live(device):
     called = nw(r.built.data["_dv_call_params"])
     assert r.sess.peek(live) == 5 << 8
     assert r.sess.peek(called) == 2 << 8
-    for word, pid in enumerate(
-        ("shot_start", "shot_end", "shot_play", "shot_pitch"), 1
-    ):
+    for word, pid in enumerate(("start", "end", "play", "pitch"), 1):
         assert r.sess.peek(called + word) == changed[pid]
     # Entry 5 is empty: a new trigger must now use it and finish silently.
     s.index = 5
@@ -452,12 +450,12 @@ def run_live(first, first_blocks, later, later_blocks, expect):
 
 def test_a_live_play_flip_to_reverse_turns_at_the_current_cursor():
     expect = {0: (False, 0, FRAMES), 3: (True, 0, FRAMES)}
-    left, cursor, _ = run_live({}, 3, {"shot_play": REV}, 8, expect)
+    left, cursor, _ = run_live({}, 3, {"play": REV}, 8, expect)
     assert cursor[2] == 96  # forward: 3 blocks of 32 frames
     s2 = Shot("dt2")
     s2.start()
     s2.step(3)
-    s2.step(1, {"shot_play": REV})
+    s2.step(1, {"play": REV})
     assert s2.cursor()[2] == 64 and s2.cursor()[3] == 0  # back from 96, no reset
     assert np.any(left[96:128])
 
@@ -466,9 +464,9 @@ def loop_run(mode, blocks, first=None):
     """Play a looped region of the sample (frames 40 .. 100, 60 frames) for `blocks` blocks at the unison rate."""
     reverse = mode == REV_L
     params = {
-        "shot_start": word_of(40),
-        "shot_end": word_of(100),
-        "shot_play": mode,
+        "start": word_of(40),
+        "end": word_of(100),
+        "play": mode,
         **(first or {}),
     }
     s = Shot("dt2")
@@ -491,12 +489,12 @@ def test_a_loop_mode_repeats_the_region_seamlessly(mode):
 
 
 def test_a_live_switch_from_a_loop_to_fwd_ends_at_end_with_the_ramp():
-    first = {"shot_play": FWD_L}
+    first = {"play": FWD_L}
     s = Shot("dt2")
-    params = {"shot_start": word_of(40), "shot_end": word_of(100), **first}
+    params = {"start": word_of(40), "end": word_of(100), **first}
     s.start(params=params)
     ll, _ = s.step(3)  # 96 frames: wrapped once, the cursor is at 76
-    gl, _ = s.step(3, {"shot_play": FWD})  # forward [0, 100): ends at frame 100
+    gl, _ = s.step(3, {"play": FWD})  # forward [0, 100): ends at frame 100
     left = np.concatenate([ll, gl])
     expect = {0: (False, 40, 100, True), 3: (False, 40, 100, False)}
     want = model(s.left, 40, 100, 65536, False, 6, expect, loop=True)
@@ -507,7 +505,7 @@ def test_a_live_switch_from_a_loop_to_fwd_ends_at_end_with_the_ramp():
 
 def test_a_live_end_moved_behind_the_cursor_fades_the_block_and_ends_the_voice():
     expect = {0: (False, 0, FRAMES), 3: (False, 0, 50)}
-    left, _, s = run_live({}, 3, {"shot_end": word_of(50)}, 4, expect)
+    left, _, s = run_live({}, 3, {"end": word_of(50)}, 4, expect)
     assert np.any(left[96:128])  # the block still plays real audio, faded by the ramp
     assert not np.any(left[128:])
     done = s.rig.read_rec_word(s.rig.voice, 0x1B8) & 0xFF
@@ -515,31 +513,31 @@ def test_a_live_end_moved_behind_the_cursor_fades_the_block_and_ends_the_voice()
 
 
 def test_a_live_end_moved_above_the_cursor_continues_to_the_new_end():
-    first = {"shot_end": word_of(100)}
+    first = {"end": word_of(100)}
     expect = {0: (False, 0, 100), 2: (False, 0, FRAMES)}
-    left, _, _ = run_live(first, 2, {"shot_end": 0x7F00}, 6, expect)
+    left, _, _ = run_live(first, 2, {"end": 0x7F00}, 6, expect)
     assert np.any(left[100:190])  # past the first END
 
 
 def test_a_live_start_above_the_cursor_does_not_change_forward_play():
     expect = {0: (False, 0, FRAMES), 3: (False, word_of(150), FRAMES)}
-    left, _, s = run_live({}, 3, {"shot_start": word_of(150)}, 5, expect)
+    left, _, s = run_live({}, 3, {"start": word_of(150)}, 5, expect)
     assert np.array_equal(left, model(s.left, 0, FRAMES, 65536, False, 8))
 
 
 def test_a_live_start_above_the_cursor_ends_reverse_play_with_the_ramp():
-    first = {"shot_play": REV}
+    first = {"play": REV}
     expect = {0: (True, 0, FRAMES), 2: (True, word_of(150), FRAMES)}
-    left, cursor, s = run_live(first, 2, {"shot_start": word_of(150)}, 3, expect)
+    left, cursor, s = run_live(first, 2, {"start": word_of(150)}, 3, expect)
     assert cursor[2] == 135 < 150
     assert np.any(left[64:96]) and not np.any(left[96:])
     assert s.rig.read_rec_word(s.rig.voice, 0x1B8) & 0xFF == 0
 
 
 def test_a_live_end_at_or_below_start_in_reverse_ends_the_voice_with_the_ramp():
-    first = {"shot_play": REV, "shot_start": word_of(20)}
+    first = {"play": REV, "start": word_of(20)}
     expect = {0: (True, 20, FRAMES), 2: (True, 120, 100)}
-    later = {"shot_start": word_of(120), "shot_end": word_of(100)}
+    later = {"start": word_of(120), "end": word_of(100)}
     left, _, s = run_live(first, 2, later, 3, expect)
     assert np.any(left[64:96]) and not np.any(left[96:])
     assert s.rig.read_rec_word(s.rig.voice, 0x1B8) & 0xFF == 0

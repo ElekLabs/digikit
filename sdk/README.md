@@ -8,13 +8,13 @@ and the device profiles (`devices/*.toml`).
 
 | Path | What | Edit |
 | --- | --- | --- |
-| `sdk.toml` | The contract spec: versions, the imports with their `service`, `since` and `context`, machine and effect layouts, log kinds, protocol numbers, limits, settings. | yes |
+| `sdk.toml` | The contract spec: the runtime version, the imports with their `service`, `since` and `context`, machine and effect layouts, log kinds, protocol numbers, limits, settings. | yes |
 | `include/dk/core/` | The module contract: `<dk/core/module.h>` (`dk_module_def`, `dk_module_ctx` and the prototypes of every import), `<dk/core/log.h>`, `<dk/core/mem.h>`, `<dk/core/time.h>` (the runtime services), `<dk/core/trace.h>` (trace marks), `<dk/core/bytes.h>` (big-endian 32-bit access, header only), `<dk/core/text.h>` (bounded text: length, copy, equal, append, concatenate, number text, truncation, size and time text), `<dk/core/path.h>` (join, parent, leaf) and `<dk/core/status.h>` (the `DK_E_*` status codes; generated, do not edit). No device access. | `module.h`, `log.h`, `mem.h`, `time.h`, `trace.h`, `bytes.h`, `text.h`, `path.h` yes; `status.h` no |
-| `include/dk/platform/` | What the device provides, one header per service group: `ui.h` (menus, lists and dialogs on the screen), `param.h` (read and write a machine parameter from a `DK_PARAM_ACTION` callback), `settings.h`, `files.h` (file listing and writing), `io.h`, `job.h` (background jobs), `hash32.h`, `usb_bulk.h`, `intro.h`, `data.h`. | yes |
-| `include/dk/page/` | Pages: `page.h` (`DK_PAGE` and `DK_KNOB`, shared by fx and machine) and `widgets.h` (small page widgets). | yes |
-| `include/dk/machine/`, `include/dk/fx/` | The machine contract (`machine.h`) and the effect contract (`fx.h`). | yes |
+| `include/dk/platform/` | What the device provides, one header per service group: `ui.h` (menus, lists and dialogs on the screen), `param.h` (read and write a machine parameter from a `dk_param_on_click` callback), `settings.h`, `files.h` (file listing and writing), `io.h`, `job.h` (background jobs), `hash32.h`, `usb_bulk.h`, `intro.h`, `data.h`. | yes |
+| `include/dk/page/` | Pages: `page.h` (the frame and event of a canvas page, the page flags) and `widgets.h` (small page widgets). | yes |
+| `patched-in/include/dk/` | The declaration macros (`DK_MACHINE`, `DK_FX`, `DK_PARAM`, `DK_PAGE`, `DK_SAMPLE_TRACKS`) and their record layouts (`gen/desc.h`) for patched-in modules only; patchkit adds this directory to the include path of builds with `dynamic = false`. | yes |
 | `include/dk/chooser/` | The slot list chooser (`chooser.h`) and its pure functions of row sort order and pool row text (`logic.h`). | yes |
-| `include/dk/sample/` | Sample components: `bank.h` (module-owned mono float sample banks; S3 deletes it), `pool.h` (per-module stereo sample pool), `view.h` (waveform drawing for native pages) and `picker.h` (on-device sample picker for a 16-entry pool). | yes |
+| `include/dk/sample/` | Sample components: `pool.h` (per-module stereo sample pool), `view.h` (waveform drawing for native pages) and `picker.h` (on-device sample picker for a 16-entry pool). | yes |
 | `include/dk/gen/` | C layouts and constants generated from `sdk.toml` (including `imports.h`, the prototypes of the service imports, and `sample.h`, the word layout of a sample pool entry). Included by the headers above, not by modules. | no |
 | `src/` | Compiled SDK sources, in the folders of `include/dk/`: `chooser/chooser.c`, `chooser/logic.c`, `core/text.c`, `core/path.c`, `sample/picker.c`. The packer builds them into one SDK library and links the functions a module calls (`--gc-sections` drops the rest); a module does not list them in its `module.toml`. | yes |
 | `dsp/` | SHARC+ code by concept (`osc/`, `filter/`, `dynamics/`, `delay/`, `util/`, `sample/`). See [dsp/README.md](dsp/README.md). `dsp/contract/` is on the SHARC+ include path and holds the call convention (`call.inc`), the includes generated from `sdk.toml` (`dk_fx.inc`, `dk_machine.inc`, `dk_sample_pool.inc`) and the hand-written `dk_trace.inc` (see Tracing). | yes |
@@ -70,9 +70,9 @@ const dk_module_def dk_module = {.init = init};  /* init, fini, tick, menu: all 
 
 - `tick(ctx)` runs once per UI pass for every loaded module. `menu(ctx, menu)` adds the rows of the module's SETTINGS... menu.
 - The type is `dk_module_def` and the constant is `dk_module` (the packer looks the symbol up). `ctx` is only the module context; the user-data pointer of a callback is `arg`, and callback types end in `_fn` (`dk_io_step_fn`). The naming rules are in docs/plans/sdk.md section 10.
-- Each import has a `service` (`runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`), a `since` (the api minor
-  that added it) and a `context` (`init`, `ui`, `io-step`, `any`, `isr`). The generated header repeats the last two in the comment of each
-  prototype. `patchkit pack` writes the newest `since` a module links as the api minor it needs and prints the services it needs
+- Each import has a `service` (`runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`), a `since` (the runtime version
+  that added it, "0.7.0") and a `context` (`init`, `ui`, `io-step`, `any`, `isr`). The generated header repeats the last two in the comment of each
+  prototype. `patchkit pack` writes the newest `since` a module links as the runtime version it needs and prints the services it needs
   (`services <file>: ...`).
 - A service that another module provides (`ui`, `input`, `usb_bulk`, `dsp_link`) may be absent: its `_open` returns `DK_E_MISSING`, the other
   calls return the same code or do nothing, and the module still loads. Without `dk_ui_open` returning `DK_OK` a module does not call
@@ -80,7 +80,7 @@ const dk_module_def dk_module = {.init = init};  /* init, fini, tick, menu: all 
 - The headers of the services are `core/log.h`, `core/mem.h`, `core/time.h`, `platform/host.h`, `settings.h`, `files.h` (listing and writing),
   `io.h`, `hash32.h`, `intro.h`, `param.h`, `samples.h`, `ui.h`, `input.h`, `usb_bulk.h`, `dsp_link.h` and `debug.h`.
 
-A `.dkm` of the old contract (api major 1) is refused by the runtime with `E_CONTRACT`; the packer refuses an object that exports `dkm_init`, `dkm_fini`, `dkm_menu` or `dkm_slot_<n>`.
+A `.dkm` that needs another runtime major or minor, or a higher patch, than the runtime is refused with `E_CONTRACT`; the packer refuses an object that exports `dkm_init`, `dkm_fini`, `dkm_menu` or `dkm_slot_<n>`.
 
 ## Include paths
 
@@ -93,46 +93,56 @@ A header in the module's `src/` is shared by C and SHARC+ sources. Use only deci
 
 ## Declaring an effect
 
-An effect declares itself, its parameters and its page in a C file of the module, with `DK_FX`, `DK_FX_PARAM` and `DK_PAGE`
-from `<dk/fx/fx.h>`. This is `modules/fx/freqshift/src/module.c`:
+An effect is built in `init` with the builder calls of `<dk/gen/imports.h>` (`dk_module_ctx_add_fx`, `dk_fx_routes`, `dk_fx_add_page`, `dk_page_add_fx_param`).
+The effect id goes in `module.toml` as `[[fx]]`; `patchkit gen` writes `build/gen/module_ids.h` with `DK_FX_ID_<ID>`, the index of the id in the `[[fx]]` list (the packer computes the keys from the packed name). This is `modules/fx/freqshift/src/module.c`:
 
 ```c
-#include <dk/fx/fx.h>
-#include "freqshift.h"
+#include <dk/core/module.h>
+#include <dk/gen/page_consts.h>
+#include "module_ids.h"
 
-DK_FX(fshift, .process = "_fs_process", .desc = "_fs_desc",
-      .mix = 127, .route = DK_ROUTE_SEND, .routes = DK_ROUTE_SEND | DK_ROUTE_MASTER);
-DK_FX_PARAM(fshift, FSHIFT_SHIFT_WORD, "Freq Shift", "SHIFT", DK_BIPOLAR, -64, 63, 0);
-DK_PAGE(fshift, "FSH", "Freq Shifter", DK_KNOB_AT(FSHIFT_SHIFT_WORD, 0));
+static int32_t init(dk_module_ctx *ctx)
+{
+    dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_FSHIFT, "Freq Shifter", "FSH");
+    dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);
+    dk_page *p = dk_fx_add_page(fx, "Freq Shifter", "FSH");
+    dk_page_add_fx_param(p, "Freq Shift", "SHIFT", DK_BIPOLAR, -64.0f, 63.0f, 0.0f);
+    return DK_OK;
+}
+
+const dk_module_def dk_module = {.init = init};
 ```
 
-List the file as an `[[object]]` in `module.toml`. `patchkit pack` reads the records; the device never sees them.
-`patchkit desc MODULE_ID` prints them. The fields and rules are in
-[docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), section 5.4.
+List the file as an `[[object]]` in `module.toml`. The declaration macros (`DK_FX`, `DK_PAGE`, ...) are for patched-in modules only and are not in the public SDK
+(`sdk/patched-in/include`). The guide ([docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)) is rewritten for the builders in S4.
 
 ## Declaring a machine
 
-A machine is declared the same way, with `DK_MACHINE`, `DK_PARAM` and `DK_PAGE` from `<dk/machine/machine.h>`.
-This is `modules/machines/pluck/src/module.c`:
+A machine is built the same way (`dk_module_ctx_add_machine`, `dk_machine_add_page`, `dk_page_add_param`, `dk_param_range`, `dk_param_glyph`, ...), with `[[machine]]` in
+`module.toml` and `DK_MACHINE_ID_<ID>` (the index of the id in the `[[machine]]` list) from `module_ids.h`. This is `modules/machines/analog/src/module.c`:
 
 ```c
-#include <dk/machine/machine.h>
+#include <dk/core/module.h>
+#include "module_ids.h"
 
-DK_MACHINE(pluck, .name = "Pluck", .short_name = "PLK", .render = "_pk_render",
-           .note_on = "_pk_note_on", .desc = "_pk_desc");
-DK_PARAM(pluck, 0, pluck_decay, "Decay", "DECAY", 0, 127, 64);
-DK_PARAM(pluck, 1, pluck_pick, "Pick position", "PICK", 0, 127, 32);
-DK_PARAM(pluck, 2, pluck_bright, "Brightness", "BRIGHT", 0, 127, 80);
-DK_PARAM(pluck, 3, pluck_color, "Excitation colour", "COLOR", 0, 127, 40);
-DK_PAGE(pluck, "PLUCK", "Pluck", DK_KNOB(0), DK_KNOB(1), DK_KNOB(2), DK_KNOB(3));
+static int32_t init(dk_module_ctx *ctx)
+{
+    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_ANALOG, "Analog", "ANA");
+    dk_page *p = dk_machine_add_page(m, "Analog", "ANALOG");
+    dk_page_add_param(p, "Detune", "DET", 40);
+    dk_page_add_param(p, "Wave", "WAVE", 0);
+    dk_page_add_param(p, "Sub", "SUB", 0);
+    dk_page_add_param(p, "Fold", "FOLD", 0);
+    return DK_OK;
+}
+
+const dk_module_def dk_module = {.init = init};
 ```
 
-Parameter values are knob units 0 to 127. The stored word is the value times 256. The DSP symbols are required: a machine has no data-only form.
-A machine has at most 6 parameters on the Digitakt II and 4 on the Digitone II, in word order, and one page with `DK_KNOB` only. The adapter
-places word w on a fixed knob.
-The rules are in [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), sections 5.2 and 5.3.
+Parameter values are knob units 0 to 127 (`dk_param_range` changes the range). The DSP symbols (`_<id>_render`, `_<id>_note_on`, optional `_<id>_desc`) are found by name: a machine has no
+data-only form. `[uses.<device>]` in `module.toml` (written by `module:check`) says how many machine, parameter and page rows `init` takes.
 
-`DK_PARAM_GLYPH(machine, word, GLYPH)` (in `<dk/page/page.h>`) sets the knob look of a parameter. Without it the glyph is `DK_GLYPH_ENCODER`:
+`dk_param_glyph(param, GLYPH)` sets the knob look of a parameter (the constants are in `<dk/gen/page_consts.h>`). Without it the glyph is `DK_GLYPH_ENCODER`:
 
 | Glyph | Range |
 | --- | --- |
