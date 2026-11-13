@@ -205,9 +205,9 @@ fn a_digitakt_machine_lowers_to_the_records_the_packer_wrote() {
     let b = analog();
     let k = keys(&[KEY], &[], (1, 3, 0));
     let mut plan = Plan::new();
-    let size = lower(&b, &DT2, &k, 0x1000, core::ptr::null_mut(), 0, &mut plan).unwrap();
+    let size = lower(&b, &DT2, &k, &[true; MAX_M], 0x1000, core::ptr::null_mut(), 0, &mut plan).unwrap();
     let mut buf = std::vec![0u8; size];
-    assert_eq!(lower(&b, &DT2, &k, 0x1000, buf.as_mut_ptr(), size, &mut plan), Ok(size));
+    assert_eq!(lower(&b, &DT2, &k, &[true; MAX_M], 0x1000, buf.as_mut_ptr(), size, &mut plan), Ok(size));
     assert_eq!(rd(&buf, 0), 0x444b_5247);
     assert_eq!(rd(&buf, 8), 1, "device");
     assert_eq!(rd(&buf, 12), 4, "3 params and 1 machine, no page row on a machine-row device");
@@ -249,9 +249,9 @@ fn a_digitone_machine_with_canvas_pages_lowers_pages_and_native_records() {
     assert_eq!(b.err, 0);
     let k = keys(&[KEY], &[], (1, 2, 1));
     let mut plan = Plan::new();
-    let size = lower(&b, &DN2, &k, 0x1000, core::ptr::null_mut(), 0, &mut plan).unwrap();
+    let size = lower(&b, &DN2, &k, &[true; MAX_M], 0x1000, core::ptr::null_mut(), 0, &mut plan).unwrap();
     let mut buf = std::vec![0u8; size];
-    lower(&b, &DN2, &k, 0x1000, buf.as_mut_ptr(), size, &mut plan).unwrap();
+    lower(&b, &DN2, &k, &[true; MAX_M], 0x1000, buf.as_mut_ptr(), size, &mut plan).unwrap();
     // 2 params, 1 machine, 1 page, 1 action, 2 native pages (v2)
     assert_eq!(rd(&buf, 12), 7);
     assert_eq!(size, 16 + 2 * 0x50 + 0x6c + 0x60 + 0x10 + 2 * 0x98);
@@ -284,9 +284,9 @@ fn one_canvas_page_without_flags_is_a_v1_page() {
     b.page_bind_local(g, 3, 5);
     let k = keys(&[KEY], &[], (1, 3, 1));
     let mut plan = Plan::new();
-    let size = lower(&b, &DN2, &k, 0, core::ptr::null_mut(), 0, &mut plan).unwrap();
+    let size = lower(&b, &DN2, &k, &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan).unwrap();
     let mut buf = std::vec![0u8; size];
-    lower(&b, &DN2, &k, 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
+    lower(&b, &DN2, &k, &[true; MAX_M], 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
     let n = size - 0x90;
     assert_eq!((rd(&buf, n), rd(&buf, n + 8)), (6, 1), "kind 6, version 1");
     assert_eq!((rd(&buf, n + 8 + 40), rd(&buf, n + 8 + 44), rd(&buf, n + 8 + 48)), (2, 3, 5));
@@ -301,9 +301,9 @@ fn a_flagged_canvas_page_alone_is_an_incomplete_v2_pair_that_the_registry_refuse
     b.page_bind_local(g, 0, 0);
     let k = keys(&[KEY], &[], (1, 3, 1));
     let mut plan = Plan::new();
-    let size = lower(&b, &DN2, &k, 0, core::ptr::null_mut(), 0, &mut plan).unwrap();
+    let size = lower(&b, &DN2, &k, &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan).unwrap();
     let mut buf = std::vec![0u8; size];
-    lower(&b, &DN2, &k, 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
+    lower(&b, &DN2, &k, &[true; MAX_M], 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
     let n = size - 0x98;
     assert_eq!(rd(&buf, n), 7);
     let mut set = crate::nativepage::PageSet::<8>::new();
@@ -320,10 +320,10 @@ fn an_effect_with_a_page_lowers_to_an_effect_record_in_keys_order() {
     f.page_add_fx_param(pg, c(b"Freq Shift\0"), c(b"SHIFT\0"), DK_BIPOLAR, -64.0, 63.0, 0.0);
     let k = keys(&[], &[0x77, FXID], (0, 0, 0));
     let mut plan = Plan::new();
-    let size = lower(&f, &DT2, &k, 0, core::ptr::null_mut(), 0, &mut plan).unwrap();
+    let size = lower(&f, &DT2, &k, &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan).unwrap();
     assert_eq!(size, 16 + 0x1a4);
     let mut buf = std::vec![0u8; size];
-    lower(&f, &DT2, &k, 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
+    lower(&f, &DT2, &k, &[true; MAX_M], 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
     let e = 16;
     assert_eq!((rd(&buf, e), rd(&buf, e + 8), rd(&buf, e + 12), rd(&buf, e + 16), rd(&buf, e + 20)), (4, 1, 127, 1, FXID));
     assert_eq!(&buf[e + 24..e + 27], b"FSH");
@@ -345,9 +345,9 @@ fn a_param_beyond_the_devices_knob_positions_or_outside_its_glyph_range_is_refus
     let k = keys(&[KEY], &[], (1, 7, 1));
     let mut plan = Plan::new();
     // the Digitakt has six knob positions for words, the Digitone eight
-    assert_eq!(lower(&b, &DT2, &k, 0, core::ptr::null_mut(), 0, &mut plan), Err(E_FORMAT));
-    assert!(lower(&b, &DN2, &k, 0, core::ptr::null_mut(), 0, &mut plan).is_ok());
+    assert_eq!(lower(&b, &DT2, &k, &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan), Err(E_FORMAT));
+    assert!(lower(&b, &DN2, &k, &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan).is_ok());
     let mut b = analog();
     b.params[0].glyph = 3; // on/off wants 0 to 1, the param has 0 to 127
-    assert_eq!(lower(&b, &DN2, &keys(&[KEY], &[], (1, 3, 1)), 0, core::ptr::null_mut(), 0, &mut plan), Err(E_FORMAT));
+    assert_eq!(lower(&b, &DN2, &keys(&[KEY], &[], (1, 3, 1)), &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan), Err(E_FORMAT));
 }

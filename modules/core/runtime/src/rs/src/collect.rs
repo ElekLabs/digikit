@@ -658,7 +658,8 @@ fn knob_page(c: &Collect, m: usize) -> Result<Option<usize>, i32> {
 
 /// Lower the collection to the `register` section. With `buf` null only the size is computed. `base` and `image_size` turn callback addresses into image offsets.
 /// Returns the size in bytes; the errors are refusals of the commit.
-pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, base: u32, buf: *mut u8, cap: usize, plan: &mut Plan) -> Result<usize, i32> {
+/// `voice[m]`: the DSP section has a voice for machine `m` (only then may it render with its own DSP routine).
+pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], base: u32, buf: *mut u8, cap: usize, plan: &mut Plan) -> Result<usize, i32> {
     if c.err != 0 {
         return Err(c.err);
     }
@@ -735,12 +736,11 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, base: u32, buf: *mut u8,
                 i += 1;
             }
         }
-        // the machine's own DSP routine: a page device whose voice exists (the caller clears it when the DSP section has no voice for the key)
         o.head(KIND_MACHINE, LEN_MACHINE);
         o.p32(mc.key);
         o.p32(p.clone_of);
         o.p32(POS_END);
-        o.p32(p.own_dsp as u32);
+        o.p32((p.own_dsp && voice[m]) as u32);
         o.p32(p.level);
         let mut j = 0;
         while j < KNOBS {

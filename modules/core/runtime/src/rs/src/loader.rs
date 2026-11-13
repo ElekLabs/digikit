@@ -533,7 +533,13 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
             return r;
         }
         let mut plan = col::Plan::new();
-        size = match col::lower(c, &p, keys, base, core::ptr::null_mut(), 0, &mut plan) {
+        let mut voice = [false; limits::MACHINE_ROWS];
+        let mut m = 0;
+        while m < c.nm {
+            voice[m] = dsp::voice_row(rec, crate::assign::resolve(c.machines[m].key)).is_some();
+            m += 1;
+        }
+        size = match col::lower(c, &p, keys, &voice, base, core::ptr::null_mut(), 0, &mut plan) {
             Ok(n) => n,
             Err(e) => return e,
         };
@@ -541,7 +547,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         if block.is_null() {
             return E_NOMEM;
         }
-        if let Err(e) = col::lower(c, &p, keys, base, block, size, &mut plan) {
+        if let Err(e) = col::lower(c, &p, keys, &voice, base, block, size, &mut plan) {
             arena::free(block);
             return e;
         }
