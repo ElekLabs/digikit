@@ -398,7 +398,10 @@ export default function Console() {
       await boot(
         (r) =>
           r.loadPath
-            ? r.loadPath(path, { runtime: bootRuntime() && runtimeHere(), dsp: dspFor(knownDevice()) })
+            ? // The file at `path` may belong to another device than the running one: send the choices as they are; the
+              // controller applies them by the loaded firmware's device data (runtime only on a runtime target, dsp only
+              // where the device offers the choice).
+              r.loadPath(path, { runtime: bootRuntime(), dsp: bootDsp() })
             : Promise.reject(new Error('no reload')),
         source()?.name ?? path,
       );
