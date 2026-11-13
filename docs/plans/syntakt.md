@@ -73,8 +73,11 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 First milestone: stock 1.42 patched with core/runtime + core/expansion, then digikit/debug loaded and its event log
 read over USB MIDI.
 
-- [ ] Static patch dry run on 1.42 as soon as the anchors exist (byte-level, before any emulator run).
-- [ ] Patchkit: no-seal path, optional DSP section, refuse sections 1, 2, 4, 6, 7, 8 explicitly.
+- [x] Static patch dry run of core/expansion on 1.42, byte-level, nothing run ([finding 129](../findings/129-syntakt-patch-dry-run.md)):
+      only section 3 differs; `tools/patchkit/image_report.py` is the second reader. core/runtime is not in it yet (next item).
+- [x] Patchkit: no-seal path, optional DSP section, refuse sections 1, 2, 4, 6, 7, 8 explicitly (from `[container]`, not names).
+- [ ] Runtime target on st (blocks the dry run with core/runtime and digikit/debug): `patchkit gen` needs DSP facts that a device
+      without a DSP may not have, and the runtime's shared constants have no Syntakt value (finding 129 "Runtime target").
 - [x] Runtime anchor proposals on 1.42 [D] (scratchpad st-1.42-anchors.tsv): 111 anchors, 73 high, 22 med/med-high,
       3 low, 15 miss. Misses: DSP link ISR (no SHARC; health loses the DSP measurement), source page hooks,
       7 storage path/directory functions (file layer rewritten), compact_set_rect, shared_ptr_as_view, popup_make.
@@ -82,8 +85,8 @@ read over USB MIDI.
       tool's two rejections are false positives); `cf.expansion` 0x47e8b000..0x47fe0000 (static evidence only).
 - [x] Anchor rules on 1.42: 25 `rule.st` entries (runtime 12, menu 5, ui 3, input 2, health 2); 90 of 93
       st-applicable anchors resolve; DT2/DN2 unchanged (`rule.<short>` is resolved generically).
-- [ ] Port resolve for st: skip shared rules that miss on a device when no module the device builds needs them
-      (17 miss/low anchors still carry shared rules); no DSP stream; regions in the Syntakt device data.
+- [x] Port resolve for st (`devices/ports/st-1.42.toml`, 107 anchors): SHARC rules and hooks are skipped on a device without a DSP;
+      the 9 shared ColdFire rules that miss list their devices; the two regions are kept by hand in the device file.
 - [ ] Debug module on st: `ports`/`[targets]` add st-1.42; PEEK ranges and `sound_words` from the device file;
       `dk_time_blocks` has no SHARC block source (report unsupported); Sound layout and machine ids unchecked.
 - [ ] Runtime services without a Syntakt equivalent return "unsupported" (e.g. `dk_debug_track_type` -> -2, which
