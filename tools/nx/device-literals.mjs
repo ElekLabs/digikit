@@ -39,11 +39,14 @@ const END = '(?![a-z0-9])';
 
 /** The literals of the registry: each short id and the first word of each name, bounded by non-alphanumerics (in text and in paths). */
 export function literalPatterns(registry) {
-  // an id of two characters is an ordinary token in code and text (`st`): such a device is found by its name word only
+  // An id of two characters is an ordinary token in code and text (`st`). Such an id counts only as a quoted string
+  // (`"st"`, `'st'`, `` `st` ``), the form a device-name branch takes; in paths the device is found by its name word.
   const ids = registry.devices.filter((d) => d.id.length >= 3).map((d) => escape(d.id));
+  const short = registry.devices.filter((d) => d.id.length < 3).map((d) => escape(d.id));
   const words = [...new Set(registry.devices.map((d) => escape(d.name.split(/\s+/)[0].toLowerCase())))];
-  const one = new RegExp(`${BOUND}(?:${[...ids, ...words].join('|')})${END}`, 'i');
-  return { text: new RegExp(one.source, 'gi'), path: one };
+  const bare = `${BOUND}(?:${[...ids, ...words].join('|')})${END}`;
+  const quoted = short.length ? `|(?<=["'\`])(?:${short.join('|')})(?=["'\`])` : '';
+  return { text: new RegExp(bare + quoted, 'gi'), path: new RegExp(bare, 'i') };
 }
 
 const hits = (line, re) => line.match(re)?.length ?? 0;
