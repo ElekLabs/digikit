@@ -25,7 +25,7 @@ dsp = "va"
 [uses.dt2]
 machine_rows = 1
 param_rows = 4
-page_rows = 1
+page_rows = 0
 
 [uses.dn2]
 machine_rows = 1
