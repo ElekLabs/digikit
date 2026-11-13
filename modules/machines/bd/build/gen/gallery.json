@@ -28,8 +28,8 @@
           "name": "Bass Drum",
           "own_dsp": true,
           "page": {
-            "name": "BASS DRUM",
-            "title": "Bass Drum"
+            "name": "BD",
+            "title": "BASS DRUM"
           },
           "position": null,
           "short": "BD",

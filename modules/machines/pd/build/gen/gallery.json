@@ -28,8 +28,8 @@
           "name": "Phase Dist",
           "own_dsp": true,
           "page": {
-            "name": "PHASE DIST",
-            "title": "Phase Dist"
+            "name": "PD",
+            "title": "PHASE DIST"
           },
           "position": null,
           "short": "PD",
