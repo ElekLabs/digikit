@@ -77,6 +77,18 @@ describe('parse', () => {
     expect(() => parse({ 'x.toml': identity('x', fw + acc('2.0')) })).toThrow(/not a \[\[firmware\]\] version/);
   });
 
+  test('the file stem is kept, and the boot fields of a firmware go together', () => {
+    const h = 'a'.repeat(64);
+    const boot = `main_sha256 = "${h}"\nboot_contract = "c"\nsymbol_profile = "s"\n`;
+    const fw = `[[firmware]]\nversion = "1.0"\nsha256 = "AB"\n${boot}`;
+    const rec = parse({ 'dev-one.toml': identity('x', fw) }).get('x');
+    expect(rec.stem).toBe('dev-one');
+    expect(rec.firmware[0]?.boot).toEqual({ mainSha256: h, contract: 'c', symbolProfile: 's' });
+    expect(() =>
+      parse({ 'x.toml': identity('x', `[[firmware]]\nversion = "1"\nsha256 = "AB"\nboot_contract = "c"\n`) }),
+    ).toThrow(/go together/);
+  });
+
   test('a TOML syntax error names the file', () => {
     expect(() => parse({ 'broken.toml': '[device\n' })).toThrow(/devices\/broken\.toml/);
   });

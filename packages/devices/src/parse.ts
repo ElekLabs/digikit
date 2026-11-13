@@ -34,6 +34,8 @@ export interface Firmware {
   sha256: string;
   filename?: string;
   port: boolean;
+  /** The MAIN OS section hash and the contracts the boot oracle runs under; all three or none. */
+  boot?: { mainSha256: string; contract: string; symbolProfile: string };
 }
 
 /** `identity`: `[device]` + `[capabilities]`; `patchable`: also `[patch]`; `runtime`: also `[digikit]`. */
@@ -41,6 +43,8 @@ export type Level = 'identity' | 'patchable' | 'runtime';
 
 export interface DeviceRecord {
   id: Device;
+  /** The file name stem of the device file (`digitakt-ii`): it pairs the device with `<stem>-leds.toml` and with a faceplate file. */
+  stem: string;
   name: string;
   level: Level;
   /** `[device] syx_id`, the transport id of the firmware framing. */
@@ -122,6 +126,16 @@ function firmware(file: string, t: unknown): Firmware[] {
       port: w.port === true,
     };
     if (typeof w.filename === 'string') out.filename = w.filename;
+    const bootKeys = [w.main_sha256, w.boot_contract, w.symbol_profile];
+    if (bootKeys.some((v) => v !== undefined)) {
+      if (!bootKeys.every(isString))
+        throw new Error(`devices/${file}: [[firmware]] main_sha256, boot_contract and symbol_profile go together`);
+      out.boot = {
+        mainSha256: (w.main_sha256 as string).toLowerCase(),
+        contract: w.boot_contract as string,
+        symbolProfile: w.symbol_profile as string,
+      };
+    }
     return out;
   });
 }
@@ -156,6 +170,7 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
     const fw = firmware(file, doc.firmware);
     const rec: DeviceRecord = {
       id,
+      stem: file.replace(/\.toml$/, ''),
       name: need(file, '[device] name', d.name, isString),
       level: doc.digikit !== undefined ? 'runtime' : doc.patch !== undefined ? 'patchable' : 'identity',
       capabilities: caps,
