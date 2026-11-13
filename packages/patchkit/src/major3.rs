@@ -1,0 +1,410 @@
+//! The sections of a module of api major 3 (docs/plans/sdk.md 6.1, 6.3): no `.dk.desc` records. The keys table comes from `module.toml`
+//! (`[[machine]]`, `[[fx]]`, `[uses]`) and the DSP entry points are found by name in the DSP object.
+//!
+//! The names are the toolchain's symbols, with its leading underscore, and `-` of an id becomes `_`:
+//! machine `x`: `_x_render`, `_x_note_on` (global text), optional `_x_desc` (global data, a `dk_machine_desc`: state bytes, stereo, gate);
+//! effect `y`: `_y_process` (global text), `_y_desc` (global data, a `dk_fx_desc`);
+//! sample pool of machine `x`: `_x_sample_rec` and `_x_sample_ctl` (both or none; one machine of a module has the pool).
+
+use crate::dkmdsp::{self, FxSpec, VoiceSpec};
+use crate::dko::Dko;
+use crate::error::*;
+use crate::module::Module;
+use crate::typed::SampleTracksDef;
+use std::collections::BTreeMap;
+
+/// Does `m` declare machines or effects with `[[machine]]`/`[[fx]]` and no `.dk.desc` records? Such a module is of api major 3. A module
+/// with neither table (a tool or a service) keeps the register-table format until the contract moves for every module.
+pub fn is_new_style(m: &Module) -> Result<bool> {
+    let mf = &m.manifest;
+    let tables = !mf.machines.is_empty() || !mf.fxs.is_empty();
+    let decls = !mf.machine.is_empty()
+        || !mf.param.is_empty()
+        || !mf.page.is_empty()
+        || !mf.native_page.is_empty()
+        || !mf.voice.is_empty()
+        || mf.sample_bank.is_some()
+        || mf.sample_tracks.is_some()
+        || !crate::desc::module_fx(m)?.is_empty();
+    if tables && decls {
+        return Err(err!(
+            "{}: has `.dk.desc` declarations (DK_MACHINE, DK_FX, ...) and [[machine]]/[[fx]] tables in module.toml; use the builder calls in init (api major 3) or the declarations, not both",
+            mf.module.id
+        ));
+    }
+    Ok(tables)
+}
+
+/// A C identifier from an id (`-` is not allowed in one).
+fn ident(id: &str) -> String {
+    id.replace('-', "_")
+}
+
+#[derive(Debug)]
+pub struct Sections {
+    /// The keys table of the header (`dkneeds::keys`).
+    pub keys: Vec<u8>,
+    pub dsp: Vec<u8>,
+    /// A stereo machine (a desc with `DESC_STEREO`): machine contract 1.2.
+    pub stereo: bool,
+    /// A machine that reads `gate`: machine contract 1.6.
+    pub gate: bool,
+}
+
+fn defined(obj: &Dko, name: &str, kind: &str) -> bool {
+    obj.symbols.iter().any(|s| {
+        s.name == name
+            && s.global
+            && s.section.as_ref().is_some_and(|sec| {
+                obj.sections
+                    .iter()
+                    .any(|x| &x.name == sec && x.kind == kind)
+            })
+    })
+}
+
+fn require(obj: &Dko, module: &str, what: &str, name: &str, kind: &str) -> Result<()> {
+    if defined(obj, name, kind) {
+        Ok(())
+    } else {
+        Err(err!(
+            "{module}: {what} needs the DSP symbol {name} (global {kind} of the DSP object), which is not defined"
+        ))
+    }
+}
+
+/// The contract word of a `dk_machine_desc` in the linked DSP object: stereo.
+fn desc_flags(obj: &Dko, desc: &str) -> Result<bool> {
+    let mut imports = std::collections::BTreeSet::new();
+    for r in &obj.relocs {
+        if !obj
+            .symbols
+            .iter()
+            .any(|s| s.name == r.symbol && s.section.is_some())
+        {
+            imports.insert(r.symbol.clone());
+        }
+    }
+    let externs: BTreeMap<String, u64> = imports.into_iter().map(|n| (n, 0)).collect();
+    let linked = crate::link::link(obj, crate::dsp::L2_BYTE_BASE as u64, &externs)?;
+    let at = linked
+        .symbols
+        .get(desc)
+        .and_then(|a| a.checked_sub(crate::dsp::L2_BYTE_BASE as u64))
+        .ok_or_else(|| err!("{desc}: not in the DSP image"))? as usize;
+    let b = linked
+        .image
+        .get(at + 4..at + 8)
+        .ok_or_else(|| err!("{desc}: shorter than a machine descriptor"))?;
+    let w = u32::from_le_bytes(b.try_into().unwrap());
+    Ok(w & dkmdsp::DESC_STEREO != 0)
+}
+
+/// The keys table and the DSP section of a new-style module for `device`; `dsp_obj` is its DSP object (none: refused, a machine or an effect
+/// needs one).
+pub fn sections(m: &Module, device: &str, dsp_obj: Option<&Dko>) -> Result<Sections> {
+    let mf = &m.manifest;
+    let id = &mf.module.id;
+    let obj = dsp_obj
+        .ok_or_else(|| err!("{id}: a machine or an effect needs a DSP object for {device}"))?;
+    let mut voices = vec![];
+    let mut fxs = vec![];
+    let mut stereo = false;
+    let mut tracks: Option<SampleTracksDef> = None;
+    for x in &mf.machines {
+        let c = ident(&x.id);
+        let what = format!("machine {:?}", x.id);
+        let render = format!("_{c}_render");
+        let note_on = format!("_{c}_note_on");
+        require(obj, id, &what, &render, "text")?;
+        require(obj, id, &what, &note_on, "text")?;
+        let desc = format!("_{c}_desc");
+        let desc = defined(obj, &desc, "data").then_some(desc);
+        let mut st = false;
+        if let Some(d) = &desc {
+            st = desc_flags(obj, d)?;
+            stereo |= st;
+        }
+        voices.push(VoiceSpec {
+            type_no: crate::register::machine_key(id, &x.id),
+            render,
+            note_on: Some(note_on),
+            desc,
+            stereo: st,
+            latched: 0,
+            ranges: [0; 8],
+        });
+        let (rec, ctl) = (format!("_{c}_sample_rec"), format!("_{c}_sample_ctl"));
+        if defined(obj, &rec, "bss")
+            || defined(obj, &rec, "data")
+            || defined(obj, &ctl, "bss")
+            || defined(obj, &ctl, "data")
+        {
+            let kind = |n: &str| {
+                if defined(obj, n, "bss") {
+                    "bss"
+                } else {
+                    "data"
+                }
+            };
+            require(
+                obj,
+                id,
+                &format!("the sample pool of {what}"),
+                &rec,
+                kind(&rec),
+            )?;
+            require(
+                obj,
+                id,
+                &format!("the sample pool of {what}"),
+                &ctl,
+                kind(&ctl),
+            )?;
+            if tracks.is_some() {
+                return Err(err!("{id}: only one machine of a module has a sample pool"));
+            }
+            // `local_id` named a table of the module; a module has one table (`dk_sample_pool_open` takes the lowest id), so it is 0
+            tracks = Some(SampleTracksDef {
+                local_id: 0,
+                records: rec,
+                control: ctl,
+            });
+        }
+    }
+    for y in &mf.fxs {
+        let c = ident(&y.id);
+        let what = format!("effect {:?}", y.id);
+        let process = format!("_{c}_process");
+        let desc = format!("_{c}_desc");
+        require(obj, id, &what, &process, "text")?;
+        require(obj, id, &what, &desc, "data")?;
+        // the routes and the defaults come from `dk_fx_routes` and the page parameters at commit; the section needs a valid pair here
+        fxs.push(FxSpec {
+            process,
+            desc,
+            defaults: vec![],
+            routes: dkmdsp::ROUTE_MASTER | dkmdsp::ROUTE_SEND,
+            route: dkmdsp::ROUTE_MASTER,
+        });
+    }
+    let (dsp, gate) = dkmdsp::pack_with_gate(
+        obj,
+        crate::register::device_id(device)?,
+        &voices,
+        &fxs,
+        None,
+        tracks.as_ref(),
+    )?;
+    let u = mf.uses;
+    let mk: Vec<u32> = mf
+        .machines
+        .iter()
+        .map(|x| crate::register::machine_key(id, &x.id))
+        .collect();
+    let fk: Vec<u32> = mf
+        .fxs
+        .iter()
+        .map(|y| crate::register::effect_id(id, &y.id))
+        .collect();
+    let mut keys = vec![0u8; dkneeds::keys::keys_size(mk.len(), fk.len())];
+    dkneeds::keys::write_keys(
+        (u.machine_rows, u.param_rows, u.page_rows),
+        &mk,
+        &fk,
+        &mut keys,
+    )
+    .map_err(|e| err!("{id}: keys table: {e:?}"))?;
+    Ok(Sections {
+        keys,
+        dsp,
+        stereo,
+        gate,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dko::{DkoSection, DkoSymbol};
+
+    const HEAD: &str = "[module]\nid = \"test/m\"\nversion = \"0.1.0\"\nname = \"M\"\ncategory = \"test\"\ntype = \"machine\"\nauthor = \"digikit\"\nstatus = \"experimental\"\nsummary = \"s\"\n";
+
+    fn module(extra: &str) -> Module {
+        let manifest: crate::module::Manifest = toml::from_str(&format!("{HEAD}{extra}")).unwrap();
+        Module {
+            manifest,
+            objects: vec![],
+            alloc: Default::default(),
+            digest: String::new(),
+            dir: Default::default(),
+        }
+    }
+
+    fn sym(name: &str, section: &str, value: u64) -> DkoSymbol {
+        DkoSymbol {
+            name: name.into(),
+            section: Some(section.into()),
+            value,
+            global: true,
+        }
+    }
+
+    /// A DSP object with the given global text symbols (one parcel apart), a data section holding a machine desc with `contract` and
+    /// the given global data symbols, and bss.
+    fn dsp_object(text: &[&str], data: &[&str], bss: &[&str], contract: u32) -> Dko {
+        let words = [dkmdsp::DESC_MAGIC, contract, 1, 1, 8, 8, 100, 100, 0, 0];
+        let desc: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+        let mut symbols = vec![];
+        for (i, n) in text.iter().enumerate() {
+            symbols.push(sym(n, "t", 3 * i as u64));
+        }
+        for n in data {
+            symbols.push(sym(n, "d", 0));
+        }
+        for (i, n) in bss.iter().enumerate() {
+            symbols.push(sym(n, "b", 64 * i as u64));
+        }
+        Dko {
+            format: crate::dko::FORMAT,
+            arch: "sharc".into(),
+            source_sha256: "0".repeat(64),
+            toolchain: Default::default(),
+            sections: vec![
+                DkoSection {
+                    name: "t".into(),
+                    kind: "text".into(),
+                    align: 8,
+                    size: 48,
+                    hex: hex(&[0u8; 48]),
+                },
+                DkoSection {
+                    name: "d".into(),
+                    kind: "data".into(),
+                    align: 4,
+                    size: desc.len() as u32,
+                    hex: hex(&desc),
+                },
+                DkoSection {
+                    name: "b".into(),
+                    kind: "bss".into(),
+                    align: 4,
+                    size: 256,
+                    hex: String::new(),
+                },
+            ],
+            symbols,
+            relocs: vec![],
+        }
+    }
+
+    const MACHINE: &str =
+        "[[machine]]\nid = \"foo\"\n[uses]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\n";
+
+    #[test]
+    fn a_module_with_tables_and_no_declarations_is_new_style() {
+        assert!(is_new_style(&module(MACHINE)).unwrap());
+        assert!(!is_new_style(&module("")).unwrap());
+        let mut m = module(MACHINE);
+        m.manifest.sample_tracks = Some(SampleTracksDef {
+            local_id: 0,
+            records: "r".into(),
+            control: "c".into(),
+        });
+        let e = is_new_style(&m).unwrap_err().to_string();
+        assert!(e.contains("not both"), "{e}");
+    }
+
+    #[test]
+    fn the_keys_table_and_the_dsp_entries_come_from_the_manifest_and_the_names() {
+        let m = module(&format!("{MACHINE}[[fx]]\nid = \"bar-x\"\n"));
+        let obj = dsp_object(
+            &["_foo_render", "_foo_note_on", "_bar_x_process"],
+            &["_foo_desc", "_bar_x_desc"],
+            &[],
+            dkmdsp::DESC_CONTRACT | dkmdsp::DESC_STEREO,
+        );
+        // the effect's desc must be a dk_fx_desc: the machine desc is not
+        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        assert!(e.contains("dk_fx_desc") || e.contains("DKFX"), "{e}");
+        let m = module(MACHINE);
+        let s = sections(&m, "dn2", Some(&obj)).unwrap();
+        assert!(s.stereo);
+        let k = dkneeds::keys::Keys::parse(&s.keys).unwrap();
+        assert_eq!((k.machine_rows(), k.param_rows(), k.page_rows()), (1, 4, 1));
+        assert!(
+            k.machine_keys()
+                .eq([crate::register::machine_key("test/m", "foo")])
+        );
+        assert_eq!(k.n_fx(), 0);
+        let d = dkmdsp::DspSection::parse(&s.dsp).unwrap();
+        assert_eq!(d.voices.len(), 1);
+        assert_eq!(
+            d.voices[0].type_no,
+            crate::register::machine_key("test/m", "foo")
+        );
+    }
+
+    #[test]
+    fn the_packed_file_is_api_major_3_with_the_keys_table() {
+        let m = module(MACHINE);
+        let obj = dsp_object(&["_foo_render", "_foo_note_on"], &[], &[], 0);
+        let s = sections(&m, "dn2", Some(&obj)).unwrap();
+        let o = crate::dkm::Options {
+            name: "test/m".into(),
+            version: 0x010203,
+            runtime_min: 1,
+            trace: false,
+            stereo: s.stereo,
+            gate: false,
+        };
+        let f = crate::dkm::pack_keys(None, &s.keys, &s.dsp, &o).unwrap();
+        assert_eq!(f[crate::dkm::H_CONTRACT], 3);
+        // the machine contract is set (a machine key in the table), no service
+        assert_eq!(f[crate::dkm::H_CONTRACT + 2], 1);
+        assert_eq!(f[crate::dkm::H_CONTRACT + 6], 0);
+        let off = u32::from_be_bytes(f[0x90..0x94].try_into().unwrap()) as usize;
+        let size = u32::from_be_bytes(f[0x94..0x98].try_into().unwrap()) as usize;
+        assert_eq!(&f[off..off + size], &s.keys[..]);
+        let n = crate::dkm::needs(&f).unwrap();
+        assert_eq!((n.machine_rows, n.param_rows, n.page_rows), (1, 4, 1));
+        assert_eq!(n.voice_rows, 1);
+        crate::dkm::Dkm::parse(&f).unwrap();
+        // a table that is not a keys table is refused
+        assert!(crate::dkm::pack_keys(None, &[1, 2, 3], &s.dsp, &o).is_err());
+    }
+
+    #[test]
+    fn a_missing_entry_symbol_is_refused_by_name() {
+        let m = module(MACHINE);
+        let obj = dsp_object(&["_foo_render"], &[], &[], 0);
+        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        assert!(e.contains("_foo_note_on"), "{e}");
+        let obj = dsp_object(&["_foo_note_on"], &[], &[], 0);
+        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        assert!(e.contains("_foo_render"), "{e}");
+        let e = sections(&m, "dn2", None).unwrap_err().to_string();
+        assert!(e.contains("DSP object"), "{e}");
+        let fx = module("[[fx]]\nid = \"bar\"\n");
+        let obj = dsp_object(&["_bar_process"], &[], &[], 0);
+        let e = sections(&fx, "dn2", Some(&obj)).unwrap_err().to_string();
+        assert!(e.contains("_bar_desc"), "{e}");
+        let obj = dsp_object(&[], &["_bar_desc"], &[], 0);
+        let e = sections(&fx, "dn2", Some(&obj)).unwrap_err().to_string();
+        assert!(e.contains("_bar_process"), "{e}");
+    }
+
+    #[test]
+    fn a_sample_pool_needs_both_symbols() {
+        let m = module(MACHINE);
+        let obj = dsp_object(
+            &["_foo_render", "_foo_note_on"],
+            &[],
+            &["_foo_sample_rec"],
+            0,
+        );
+        let e = sections(&m, "dn2", Some(&obj)).unwrap_err().to_string();
+        assert!(e.contains("_foo_sample_ctl"), "{e}");
+    }
+}

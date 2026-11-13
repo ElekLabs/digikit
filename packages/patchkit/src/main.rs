@@ -792,7 +792,52 @@ plan.json {}",
             };
             // a run-time module: its typed sections, lowered for one device, are the `register` records
             let mut dsp: Vec<u8> = vec![];
-            let reg = if dynamic {
+            // api major 3: no `.dk.desc` records, `[[machine]]`/`[[fx]]` in module.toml; the table at 0x90 is the keys table
+            let major3 = dynamic && patchkit::major3::is_new_style(m)?;
+            if major3 && ui_preview {
+                return Err(Error(format!(
+                    "{id}: --ui-preview needs a module with declarations"
+                )));
+            }
+            let reg = if major3 {
+                let dev = flag(rest, "--device").ok_or_else(|| {
+                    Error(format!(
+                        "a run-time module needs --device {}",
+                        patchkit::devdata::short_list()
+                    ))
+                })?;
+                let ports = &m.manifest.module.ports;
+                if !ports.is_empty()
+                    && !ports
+                        .iter()
+                        .any(|p| p.split('-').next() == Some(dev.as_str()))
+                {
+                    return Err(Error(format!(
+                        "{id} is not built for {dev}: its ports are {}",
+                        ports.join(", ")
+                    )));
+                }
+                let sharc: Vec<_> = m
+                    .objects
+                    .iter()
+                    .zip(&m.manifest.object)
+                    .filter(|(o, r)| {
+                        o.arch == "sharc"
+                            && (r.devices.is_empty() || r.devices.iter().any(|d| *d == dev))
+                    })
+                    .collect();
+                if sharc.len() > 1 {
+                    return Err(Error(format!(
+                        "{id} has {} DSP objects for {dev}; a .dkm packs one",
+                        sharc.len()
+                    )));
+                }
+                let s = patchkit::major3::sections(m, &dev, sharc.first().map(|(o, _)| *o))?;
+                opts.stereo = s.stereo;
+                opts.gate = s.gate;
+                dsp = s.dsp;
+                s.keys
+            } else if dynamic {
                 let dev = flag(rest, "--device").ok_or_else(|| {
                     Error(format!(
                         "a run-time module needs --device {}",
@@ -945,7 +990,12 @@ plan.json {}",
                 .first()
                 .filter(|_| !ui_preview)
                 .and_then(|c| patchkit::desc::strip(c.0));
-            let file = patchkit::dkm::pack_full(cf_obj.as_ref(), &reg, &dsp, &opts)?;
+            let file = if major3 {
+                // the object keeps its sections: there is no `.dk.desc` record to strip
+                patchkit::dkm::pack_keys(cf.first().map(|c| c.0), &reg, &dsp, &opts)?
+            } else {
+                patchkit::dkm::pack_full(cf_obj.as_ref(), &reg, &dsp, &opts)?
+            };
             write(&out, &file)?;
             let d = patchkit::dkm::Dkm::parse(&file)?;
             println!(
@@ -1175,7 +1225,20 @@ plan.json {}",
                     );
                 }
             }
-            if !d.register.is_empty() {
+            if !d.register.is_empty()
+                && raw[patchkit::dkm::H_CONTRACT] >= patchkit::dkm::API_KEYS_MAJOR
+            {
+                let k = dkneeds::keys::Keys::parse(&d.register)
+                    .map_err(|e| Error(format!("keys table: {e:?}")))?;
+                println!(
+                    "  keys: {} machine rows, {} param rows, {} page rows; machines {:x?}, effects {:x?}",
+                    k.machine_rows(),
+                    k.param_rows(),
+                    k.page_rows(),
+                    k.machine_keys().collect::<Vec<_>>(),
+                    k.fx_keys().collect::<Vec<_>>()
+                );
+            } else if !d.register.is_empty() {
                 let r = patchkit::register::Register::parse(&d.register)?;
                 println!(
                     "  device {} ({} params, {} machines, {} pages)",

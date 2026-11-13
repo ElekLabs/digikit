@@ -36,6 +36,7 @@ pub mod expr;
 pub mod fit;
 pub mod link;
 pub mod live;
+pub mod major3;
 pub mod modgen;
 pub mod module;
 pub mod port;
