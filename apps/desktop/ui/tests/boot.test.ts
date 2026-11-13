@@ -1,18 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { booting, bootingScreen, bootingStatus, deviceFromName, loadFailure } from '../src/boot-core';
+import { deviceOfSyx } from '../../../web/src/patch/identify';
+import { registry } from '../../../web/src/data/device-profiles';
+import { booting, bootingScreen, bootingStatus, loadFailure } from '../src/boot-core';
+
+const [first, second] = registry.runtimeIds as [string, string];
+const framed = (id: number) => new Uint8Array([0xf0, 0x00, 0x20, 0x3c, id, 0x00, 0x7f, 0xf7]);
 
 describe('loading state', () => {
-  it('knows the device from the file name', () => {
-    expect(deviceFromName('Digitakt_II_OS1.17.syx')).toBe('dt2');
-    expect(deviceFromName('Digitone_II_OS1.12.syx')).toBe('dn2');
-    expect(deviceFromName('image.syx')).toBeUndefined();
+  it('knows the device from the device byte of the framing, not from a name', () => {
+    expect(deviceOfSyx(framed(registry.get(first).syxId!))).toBe(first);
+    expect(deviceOfSyx(framed(registry.get(second).syxId!))).toBe(second);
+    expect(deviceOfSyx(framed(0x00))).toBeUndefined();
+    expect(deviceOfSyx(new Uint8Array([1, 2, 3]))).toBeUndefined();
+    expect(deviceOfSyx(new Uint8Array([0xf0, 0x00, 0x21, 0x3c, registry.get(first).syxId!]))).toBeUndefined();
   });
   it('names the device, else the file, else nothing', () => {
-    expect(bootingStatus(booting('Digitakt_II_OS1.17.syx'))).toBe('Booting Digitakt II…');
+    const name = registry.get(first).name;
+    expect(bootingStatus(booting('image.syx', first))).toBe(`Booting ${name}…`);
     expect(bootingStatus(booting('image.syx'))).toBe('Booting image.syx…');
     expect(bootingStatus(booting(''))).toBe('Booting…');
-    expect(bootingScreen(booting('Digitakt_II_OS1.17.syx'))).toBe(
-      'Booting Digitakt II… the first boot of a firmware can take a minute',
+    expect(bootingScreen(booting('image.syx', first))).toBe(
+      `Booting ${name}… the first boot of a firmware can take a minute`,
     );
   });
   it('puts the error in the failure line', () => {

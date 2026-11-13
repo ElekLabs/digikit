@@ -24,7 +24,7 @@ import {
   setSampleEntries,
 } from './samples-state';
 
-/** What the device profile says about the device with this id (`dt2`): its name and the backend of its samples. */
+/** What the device profile says about the device with this id: its name and the backend of its samples. */
 const storages = new Map<string, Promise<{ name: string; samples: string }>>();
 export function deviceStorage(device: string): Promise<{ name: string; samples: string }> {
   let p = storages.get(device);
