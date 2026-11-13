@@ -111,6 +111,9 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-24, 'E_PARAM_FULL', 'no free reserved parameter row'],
   [-25, 'E_PAGE_FULL', 'no free reserved page row (Digitone II)'],
   [-26, 'E_TYPE_IN_USE', 'reserved (hot reload is archived); never returned'],
+  [-27, 'E_DECL_ID', 'a builder call names a machine or effect id that the keys table of the header lacks'],
+  [-28, 'E_DECL_USES', 'init declared more machine, param or page rows than the [uses] counts of the header say'],
+  [-29, 'E_FX_ID_DUP', 'an effect id of the module is already loaded (or twice in the module)'],
   [-30, 'E_NO_DSP', 'DSP code in the file, no DSP loader in the image'],
   [-31, 'E_DSP_FORMAT', 'the DSP section is malformed'],
   [-32, 'E_DSP_IMPORT', 'a DSP symbol is not exported by the image'],
@@ -130,6 +133,7 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-48, 'E_CONTRACT', 'the module was built for another SDK contract'],
   [-49, 'E_TABLE', "the runtime's tables failed their check"],
   [-73, 'E_MISSING', 'the service is not in the image (the module that provides it is not loaded)'],
+  [-74, 'E_DECL_FULL', 'init made more builder calls than the record limit allows'],
 ];
 
 export const CAP = {
@@ -227,6 +231,7 @@ export const LOG_KIND = {
   INPUT_TAKEN: 41,
   PARAM_CHANGE: 42,
   MOD_NEEDS: 43,
+  MODULE_COMMIT: 44,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -274,6 +279,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   41: ['INPUT_TAKEN', ['what', 'control', 'delta', '-', '-']],
   42: ['PARAM_CHANGE', ['track', 'index', 'old', 'new', '-']],
   43: ['MOD_NEEDS', ['index', 'name0', 'name1', 'name2', '-']],
+  44: ['MODULE_COMMIT', ['index', 'rows', 'records_addr', 'records_size', '-']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

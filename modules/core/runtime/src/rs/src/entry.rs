@@ -90,6 +90,11 @@ unsafe fn ctx_rec(ctx: *mut u8) -> Option<usize> {
     }
 }
 
+/// Is `ctx` the live context of a loaded module (the builder calls take it)?
+pub unsafe fn is_ctx(ctx: *mut u8) -> bool {
+    ctx_rec(ctx).is_some()
+}
+
 /// The record of the module that is running when it passes its own context (an `open` call), else None.
 unsafe fn own_rec(ctx: *mut u8) -> Option<usize> {
     let rec = ctx_rec(ctx)?;

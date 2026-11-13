@@ -7,7 +7,7 @@ use crate::{
     arena, cstr_eq, cstr_len, flush, import_addr, rd32, st, store, wr32, Module,
     MAX_MODULES,
 };
-use core::ptr::addr_of_mut;
+use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
 
 const MAGIC: u32 = 0x444b_4d46; // "DKMF"
@@ -63,6 +63,22 @@ pub unsafe fn machine_keys(path: *const u8, out: &mut [u32; 8]) -> usize {
         return 0;
     }
     let (off, len) = (rd32(f.add(H_REG_OFF)), rd32(f.add(H_REG_SIZE)));
+    if *f.add(H_CONTRACT) == 3 {
+        // api major 3: the keys table of the header (the pair at 0x90 is keys_off, keys_size)
+        if !in_file(off, len, size) {
+            return 0;
+        }
+        let k = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(f.add(off as usize), len as usize)) {
+            Ok(k) => k,
+            Err(_) => return 0,
+        };
+        let mut n = 0;
+        while n < k.nm && n < 8 {
+            out[n] = k.mk[n];
+            n += 1;
+        }
+        return n;
+    }
     if len < 16 || !in_file(off, len, size) {
         return 0;
     }
@@ -156,7 +172,9 @@ unsafe fn load_inner(path: *const u8) -> i32 {
     while c < 4 {
         let major = *f.add(H_CONTRACT + 2 * c);
         let minor = *f.add(H_CONTRACT + 2 * c + 1);
-        if major != 0 && (major != rt[c].0 || minor > rt[c].1) {
+        // transition (S3, until the contract is [3, 13] at integration): a module of api major 3 declares through builder calls and has the keys table
+        let major3 = c == 0 && major == 3 && rt[0].0 == 2;
+        if major != 0 && ((major != rt[c].0 && !major3) || minor > rt[c].1) {
             return E_CONTRACT;
         }
         c += 1;
@@ -248,10 +266,21 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         return E_FORMAT;
     }
     let reg = f.add(reg_off as usize);
-    let r = crate::registry::check(reg, reg_size, image_size);
-    if r != OK {
-        return r;
+    let major3 = *f.add(H_CONTRACT) == 3;
+    // api major 3: the table is the keys table; the records come from the builder calls of `init` (complete3)
+    let mut keys = crate::collect::KeysCopy::empty();
+    if major3 {
+        keys = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(reg, reg_size as usize)) {
+            Ok(k) => k,
+            Err(e) => return e,
+        };
+    } else {
+        let r = crate::registry::check(reg, reg_size, image_size);
+        if r != OK {
+            return r;
+        }
     }
+    let keys_ref = if major3 { Some(&keys) } else { None };
     // the DSP section, if any
     let (dsp_off, dsp_size) = (rd32(f.add(H_DSP_OFF)), rd32(f.add(H_DSP_SIZE)));
     let mut job = dsp::Job::empty();
@@ -343,7 +372,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         // the CF part goes live now (rows in place before the machine view is built); the DSP code and the voice rows follow
         // when the frames flow
         m.used = 1;
-        let r = complete(rec, reg, reg_size, initaddr, tickaddr);
+        let r = complete(rec, reg, reg_size, initaddr, tickaddr, keys_ref, image_size);
         if r != OK {
             if dsp::retained() { return E_BUSY; }
             dsp::cancel(rec);
@@ -366,7 +395,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
         });
         return LOADING;
     }
-    let r = complete(rec, reg, reg_size, initaddr, tickaddr);
+    let r = complete(rec, reg, reg_size, initaddr, tickaddr, keys_ref, image_size);
     if r != OK {
         if dsp::retained() || !crate::files::retire(rec) || !retire_sdk(rec) { return E_BUSY; }
         arena::free(mem);
@@ -378,7 +407,10 @@ unsafe fn load_inner(path: *const u8) -> i32 {
 
 /// The end of a load, shared by the immediate and the DSP path (both run in the boot hook): the registry rows (the machine is listed from here), `init`, the
 /// tick. On an error everything it did is undone (the DSP part too) and the caller frees the module's memory.
-unsafe fn complete(rec: usize, reg: *const u8, reg_size: u32, init: u32, tick: u32) -> i32 {
+unsafe fn complete(rec: usize, reg: *const u8, reg_size: u32, init: u32, tick: u32, keys: Option<&crate::collect::KeysCopy>, image_size: u32) -> i32 {
+    if let Some(k) = keys {
+        return complete3(rec, k, init, tick, image_size);
+    }
     let s = st();
     let owner = rec as u8 + 1;
     crate::files::init_begin(rec);
@@ -419,6 +451,158 @@ unsafe fn complete(rec: usize, reg: *const u8, reg_size: u32, init: u32, tick: u
     crate::files::ready(rec);
     // fully loaded: a boot animation the module asked for in `init` goes live now (never before: a rolled-back module is not reachable)
     crate::intro::commit(rec);
+    OK
+}
+
+/// `complete` for a module of api major 3 (docs/plans/sdk.md 6.3): `init` runs first and its builder calls are collected; then the commit checks them, fills the
+/// voice rows' ranges, writes the registry rows and keeps the record block. Anything that fails undoes what `init` did and writes no row.
+unsafe fn complete3(rec: usize, keys: &crate::collect::KeysCopy, init: u32, tick: u32, image_size: u32) -> i32 {
+    let s = st();
+    let owner = rec as u8 + 1;
+    crate::files::init_begin(rec);
+    let block = arena::alloc(core::mem::size_of::<crate::collect::Collect>() as u32);
+    let fail = |r: i32| -> i32 {
+        crate::intro::discard(rec);
+        let held = !crate::files::retire(rec) | !retire_sdk(rec);
+        crate::upload::release_cmds(owner);
+        crate::registry::remove(owner);
+        if !dsp::release(rec) || held {
+            return E_BUSY;
+        }
+        r
+    };
+    if block.is_null() {
+        return fail(E_NOMEM);
+    }
+    crate::collect::begin(block as *mut crate::collect::Collect);
+    if init != 0 {
+        let call: unsafe extern "C" fn(*const Ctx) -> i32 = core::mem::transmute(init as usize);
+        let ctx = crate::entry::ctx_addr(rec) as usize as *const Ctx;
+        CALLED_NEED = [0; NEEDS_LEN];
+        let r = crate::dlog::call_init(rec as usize, call, ctx);
+        if r != 0 {
+            crate::collect::end();
+            arena::free(block);
+            let missing = r == E_MISSING && CALLED_NEED[0] != 0;
+            if missing && MISSING[0] == 0 {
+                MISSING = CALLED_NEED;
+            }
+            let e = fail(if missing { E_IMPORT } else { E_INIT });
+            return if e == E_BUSY { e } else if missing { E_IMPORT } else { E_INIT };
+        }
+    }
+    crate::collect::end();
+    let r = commit(rec, &*(block as *const crate::collect::Collect), keys, image_size);
+    arena::free(block);
+    if r != OK {
+        return fail(r);
+    }
+    if tick != 0 {
+        crate::entry::publish_tick(rec, tick);
+    }
+    let m: &mut Module = &mut s.modules[rec];
+    m.used = 1;
+    s.loads = s.loads.wrapping_add(1);
+    crate::files::ready(rec);
+    crate::intro::commit(rec);
+    OK
+}
+
+/// The commit of 6.3 steps 1 to 3: check, fill the voice rows, apply the records; the record block stays in the arena.
+unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect::KeysCopy, image_size: u32) -> i32 {
+    use crate::collect as col;
+    let owner = rec as u8 + 1;
+    let base = st().modules[rec].base;
+    let declared = c.nm + c.nf + c.nparam + c.np != 0;
+    let mut block: *mut u8 = core::ptr::null_mut();
+    let mut size = 0usize;
+    let mut rows = (0u32, 0u32, 0u32);
+    if declared {
+        let p = match crate::registry::profile() {
+            Some(p) => p,
+            None => return E_NO_REGISTRY,
+        };
+        let free = match crate::registry::free_rows() {
+            Some(f) => f,
+            None => return E_NO_REGISTRY,
+        };
+        let mut loaded = [0u32; MAX_MODULES * col::MAX_RECORDS];
+        let n = col::loaded_fx_ids(rec, &mut loaded);
+        let r = col::check_commit(c, &p, keys, &loaded[..n], &free);
+        if r != OK {
+            return r;
+        }
+        let mut plan = col::Plan::new();
+        let mut voice = [false; limits::MACHINE_ROWS];
+        let mut m = 0;
+        while m < c.nm {
+            voice[m] = dsp::voice_row(rec, crate::assign::resolve(c.machines[m].key)).is_some();
+            m += 1;
+        }
+        size = match col::lower(c, &p, keys, &voice, base, core::ptr::null_mut(), 0, &mut plan) {
+            Ok(n) => n,
+            Err(e) => return e,
+        };
+        block = arena::alloc(size as u32);
+        if block.is_null() {
+            return E_NOMEM;
+        }
+        if let Err(e) = col::lower(c, &p, keys, &voice, base, block, size, &mut plan) {
+            arena::free(block);
+            return e;
+        }
+        let r = crate::registry::check(block, size as u32, image_size);
+        if r != OK {
+            arena::free(block);
+            return r;
+        }
+        // the ranges and latch mask of each machine's voice row, the routes and defaults of each effect's row
+        let mut m = 0;
+        while m < c.nm {
+            let t = crate::assign::resolve(c.machines[m].key);
+            if let Some(row) = dsp::voice_row(rec, t) {
+                let (rng, latched) = col::voice_declared(c, &plan, m);
+                let r = dsp::set_declared(row, rng, latched);
+                if r != OK {
+                    arena::free(block);
+                    return r;
+                }
+            }
+            m += 1;
+        }
+        let mut f = 0;
+        while f < c.nf {
+            let fx = &c.fxs[f];
+            let ord = match col::fx_ordinal(keys, fx.id) {
+                Ok(o) => o,
+                Err(e) => {
+                    arena::free(block);
+                    return e;
+                }
+            };
+            let flags = if fx.routes_set { Some(col::fx_flags(fx.allowed, fx.def)) } else { None };
+            let par = if fx.page >= 0 { Some(col::fx_defaults(c, f)) } else { None };
+            if (flags.is_some() || par.is_some()) && !dsp::fx_set_declared(rec, ord, flags, par) {
+                arena::free(block);
+                return E_FORMAT; // no such effect in the module's DSP section
+            }
+            f += 1;
+        }
+        crate::registry::set_args(Some(col::apply_args(c, &plan)));
+        let r = crate::registry::apply(owner, block, size as u32, base);
+        crate::registry::set_args(None);
+        if r != OK {
+            arena::free(block);
+            return r;
+        }
+        rows = col::counts_of(c, &p);
+    }
+    col::keep(rec, block as u32, size as u32, keys);
+    crate::dlog::ev(
+        logk::MODULE_COMMIT,
+        crate::dlog::INFO,
+        [read_volatile(addr_of!(BOOT_IDX)), rows.0 | rows.1 << 8 | rows.2 << 16, block as u32, size as u32, 0],
+    );
     OK
 }
 
@@ -517,6 +701,10 @@ unsafe fn unload_rec_inner(rec: usize) -> i32 {
     // the machine row first, then the DSP voice rows, then the range in the DSP area
     #[cfg(test)] crate::cleanup_tests::registry_remove(rec as u8 + 1);
     #[cfg(not(test))] crate::registry::remove(rec as u8 + 1);
+    let committed = crate::collect::release(rec);
+    if committed != 0 {
+        arena::free(committed as *mut u8);
+    }
     dsp::release_range(rec);
     arena::free(m.base as *mut u8);
     m.used = 0;

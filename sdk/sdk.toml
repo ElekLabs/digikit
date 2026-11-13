@@ -1578,6 +1578,15 @@ id = 43
 name = "MOD_NEEDS"
 args = ["index", "name0", "name1", "name2", "-"]
 
+# a module of api major 3 was committed (its builder calls checked and its rows written; info level, kept at boot): the selection index (0xffffffff: not a boot load),
+# `rows` = machine_rows | param_rows << 8 | page_rows << 16 (the rows the module's own declarations use: what `module:check` writes to `[uses]`), the RAM address and the byte
+# size of the module's committed record block (the `register` section format of docs/design/digikit-registry.md, header and records, big-endian; it stays in the module's
+# arena share while the module is loaded).
+[[log.kind]]
+id = 44
+name = "MODULE_COMMIT"
+args = ["index", "rows", "records_addr", "records_size", "-"]
+
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 
@@ -1799,6 +1808,10 @@ E_TYPE_USED = { code = -23, text = "the type number is in use" }
 E_PARAM_FULL = { code = -24, text = "no free reserved parameter row" }
 E_PAGE_FULL = { code = -25, text = "no free reserved page row (Digitone II)" }
 E_TYPE_IN_USE = { code = -26, text = "reserved (hot reload is archived); never returned" }
+E_DECL_ID = { code = -27, text = "a builder call names a machine or effect id that the keys table of the header lacks" }
+E_DECL_USES = { code = -28, text = "init declared more machine, param or page rows than the [uses] counts of the header say" }
+E_FX_ID_DUP = { code = -29, text = "an effect id of the module is already loaded (or twice in the module)" }
+E_DECL_FULL = { code = -74, text = "init made more builder calls than the record limit allows" }
 E_NO_DSP = { code = -30, text = "DSP code in the file, no DSP loader in the image" }
 E_DSP_FORMAT = { code = -31, text = "the DSP section is malformed" }
 E_DSP_IMPORT = { code = -32, text = "a DSP symbol is not exported by the image" }
