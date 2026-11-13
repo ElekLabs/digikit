@@ -1140,6 +1140,20 @@ impl Emulator {
         self.peer_cpu.as_deref().filter(|_| self.peer_started)
     }
 
+    /// Whether this device has a second CPU that runs a program (`[emulator] peer = "coldfire"`) and no responder stands in for it yet.
+    pub fn has_peer_cpu(&self) -> bool {
+        self.peer_cpu.is_some()
+    }
+
+    /// Replaces the peer CPU with the mailbox responder (`[emulator] peer = "mailbox-responder"`): no peer program, no peer audio,
+    /// the fast path for the UI. Call on a fresh runtime, before it runs or restores a state.
+    pub fn use_peer_responder(&mut self) {
+        self.peer_cpu = None;
+        self.peer_audio = None;
+        self.peer_started = false;
+        self.bus.board.use_peer_responder();
+    }
+
     /// Whether this device's audio comes from its peer CPU (`[emulator.peer_audio]` with a running peer core).
     pub fn has_peer_audio(&self) -> bool {
         self.peer_audio.is_some() && self.peer_cpu.is_some()

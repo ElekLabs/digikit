@@ -499,6 +499,15 @@ impl Board {
         Ok(())
     }
 
+    /// Switches the peer window to the mailbox responder (no peer program runs): hello, 0xA5A5, IRQ4 and the image stream answer
+    /// MAIN's handshake. Call before guest execution, on a board that `enable_peer(true)` set up.
+    pub fn use_peer_responder(&mut self) {
+        if let Some(peer) = self.peer.as_mut() {
+            peer.cpu_mode = false;
+        }
+        self.sg_reload = false;
+    }
+
     pub fn peer(&self) -> Option<&MailboxPeer> {
         self.peer.as_ref()
     }

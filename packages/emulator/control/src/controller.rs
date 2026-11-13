@@ -425,6 +425,10 @@ pub struct Config {
     /// The repository root that `firmware.load {runtime: true}` reads the module library and device files from
     /// (default: `$DIGI_REPO_ROOT`, else the working directory's repository; see `runtime_patch::find_root`).
     pub repo_root: Option<PathBuf>,
+    /// The DSP choice the launcher asked for (`--no-dsp`, `--dsp-on`); the loads that do not name one use it (`firmware.load {dsp}`),
+    /// None meaning on. On: coupled DSP audio when its inputs are set, a peer CPU that runs its program. Off: no DSP session, and the
+    /// mailbox responder for a peer CPU. A webview reads it as `status.dsp_flag` and adopts it instead of its own saved choice.
+    pub dsp: Option<bool>,
 }
 
 /// A +Drive folder and what to do with the firmware's changes to its card.
@@ -453,6 +457,7 @@ impl Config {
             mirror_dir: None,
             device_folders: None,
             repo_root: None,
+            dsp: None,
         }
     }
 }
@@ -768,6 +773,10 @@ struct Actor {
     /// `card.reset_overlay` set the saved overlay aside: this session's card writes are not saved or exported at quit. A new
     /// runtime (the reload that follows) clears it.
     overlay_set_aside: bool,
+    /// The DSP choice in force (`Config::dsp`, then the last `firmware.load {dsp}`): false boots ColdFire only, with the responder for a peer CPU.
+    dsp: bool,
+    /// `Config::dsp`, kept for `status.dsp_flag`.
+    dsp_flag: Option<bool>,
     /// Soft resets in a row before the boot got ready (a bound for boot loops).
     boot_resets: u32,
     /// CPU exceptions run the guest's handler (RPC `cpu.exceptions`), for every runtime installed from now on.
@@ -823,7 +832,7 @@ impl Actor {
             rx,
             audio_default: config.audio.clone(),
             audio_alt: config.audio_alt,
-            audio: config.audio,
+            audio: config.audio.filter(|_| config.dsp != Some(false)),
             run_dir: config.run_dir,
             events: config.events,
             on_quit: config.on_quit,
@@ -888,6 +897,8 @@ impl Actor {
             boot_resets: 0,
             deliver_exceptions: false,
             reset_ram: None,
+            dsp: config.dsp.unwrap_or(true),
+            dsp_flag: config.dsp,
         }
     }
 
@@ -1278,6 +1289,10 @@ impl Actor {
 
     fn install(&mut self, mut runtime: Runtime, error: Option<ReadError>) {
         runtime.set_deliver_exceptions(self.deliver_exceptions);
+        // DSP off on a device with a second CPU that runs a program: the mailbox responder answers instead (no peer audio, fast UI).
+        if !self.dsp && runtime.has_peer_cpu() {
+            runtime.use_peer_responder();
+        }
         self.runtime = Some(runtime);
         self.overlay_set_aside = false;
         self.read_error = error;
@@ -2212,7 +2227,7 @@ impl Actor {
         let frame = runtime.current_frame().map(|(revision, _)| revision);
         Ok(json!({
             "controller_cpu_ns": elektron_native_boot::thread_cpu_ns(),
-            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "job": job, "boot": boot,
+            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "dsp_enabled": self.dsp, "dsp_flag": self.dsp_flag, "job": job, "boot": boot,
             "scheduled_inputs": scheduled, "frame_revision": frame,
             "heartbeat": {"mainloop_hits": cf["mainloop_hits"], "stalled": self.health.stalled(),
                           "stall_count": self.health.stall_count, "stall_ms": self.health.stall_ms,
@@ -3460,6 +3475,15 @@ impl Actor {
         // `replace`: load as the first firmware (nothing of the running one is reused, and a different device is fine): the webview's
         // Open and Reload. Without it the image is a variant of the running one (injection).
         let replace = p.opt_bool("replace")?.unwrap_or(false);
+        // `dsp`: the DSP choice of this load and the loads after it (true when the controller started without `--no-dsp`).
+        if let Some(dsp) = p.opt_bool("dsp")? {
+            if dsp != self.dsp && !replace {
+                return Err(RpcError::bad_params(
+                    "dsp changes with replace: true (a load that starts the firmware over)",
+                ));
+            }
+            self.dsp = dsp;
+        }
         let mut stock_base: Option<Vec<u8>> = None;
         let mut runtime_report = None;
         if runtime_requested {
@@ -3567,7 +3591,11 @@ impl Actor {
         if replace {
             // As `ui_load` always did: forget the running firmware, its card job and its audio setup.
             self.cancel_card();
-            self.audio = self.audio_for_base(base_param.as_deref().unwrap_or(&new.sha256));
+            self.audio = if self.dsp {
+                self.audio_for_base(base_param.as_deref().unwrap_or(&new.sha256))
+            } else {
+                None
+            };
             self.card_last = json!({"state": "idle"});
             self.read_error = None;
             self.runtime = None;

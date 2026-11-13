@@ -68,7 +68,8 @@ mise run workbench                # build once and run (`mise run workbench -- -
 mise run wasm:dksample            # only public/dksample.wasm (the workbench runs it first; 0.3 s when unchanged)
 mise run workbench -- --cf-only --plus-drive DIR firmware/Digitakt_II_OS1.17.syx   # a +Drive folder (default: plus_drive/<device>/; --samples is the same option)
 mise run workbench -- --dsp-patch FILE  # overlay a DSP patch (DN2 audio)
-mise run workbench -- --cf-only   # ColdFire only: no DSP, no audio
+mise run workbench -- --cf-only   # ColdFire only: no DSP, no audio (a build without the DSP core)
+mise run workbench -- --no-dsp    # start with the "DSP" tick off: ColdFire only, a peer CPU is replaced by the mailbox responder; the tick turns it on again
 ```
 
 With the DN2 ready inputs present, `mise run workbench` plays DN2 audio. Without them it
