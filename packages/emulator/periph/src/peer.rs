@@ -123,11 +123,16 @@ pub struct MailboxPeer {
     /// Peer CPU mode: the next audio frame is due at this MAIN tick; `frame_pending` while its interrupt waits for MAIN to take it.
     next_frame: u64,
     frame_pending: bool,
+    /// The vector of the audio frame interrupt (INTC1: 120 + the eDMA channel), 174 unless the device names its audio channel.
+    pub frame_vector: u16,
 }
 
 impl MailboxPeer {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            frame_vector: 174,
+            ..Self::default()
+        }
     }
 
     /// A new transfer starts on channel 29 (the stage-1 loader of the peer begins at a frame marker again).

@@ -1,4 +1,4 @@
-//! Runs the Syntakt peer program (section 7) alone against a plain 128 KB window and prints what it touched: bounded by an
+//! Runs the peer program (section 7) alone against a plain 128 KB window and prints what it touched: bounded by an
 //! instruction count. Usage: peer_probe SECTION7.bin [INSNS] [FRAME_EVERY]
 use machine::peer_cpu::{PeerCpu, Window};
 

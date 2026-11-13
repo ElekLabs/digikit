@@ -592,6 +592,11 @@ impl Board {
         }
     }
 
+    /// One 32-bit word of guest RAM (host side; no MMIO, no access record).
+    pub fn peer_ram_word(&self, addr: u32) -> Option<u32> {
+        self.ram_read(addr, 4)
+    }
+
     /// Reads the peer window at `offset` (host side; no MMIO, no access record).
     pub fn peer_window_load(&self, offset: u32, size: u8) -> Option<u32> {
         self.ram_read(peer::WINDOW_BASE + offset, size)

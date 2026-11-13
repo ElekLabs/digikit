@@ -1051,7 +1051,6 @@ pub(crate) fn service_timers<const TRACE: bool>(
 const EPORT_EPIER: u32 = 0xfc09_0003;
 const PEER_IRQ4_VECTOR: u16 = 68;
 const PEER_EDMA29_VECTOR: u16 = 149;
-const PEER_FRAME_VECTOR: u16 = 174;
 
 /// The mailbox peer's due interrupt (`periph::peer`), delivered like a hardware source: ICR level above the CPU IPL, source unmasked in
 /// IMR, IRQ4 enabled in EPIER, handler installed. The hello block goes into the window just before. -> whether it was delivered; when
@@ -1082,7 +1081,7 @@ fn offer_peer_irq<const TRACE: bool>(
     let vector = match irq {
         PeerIrq::Eport4 => PEER_IRQ4_VECTOR,
         PeerIrq::Edma29 => PEER_EDMA29_VECTOR,
-        PeerIrq::Frame => PEER_FRAME_VECTOR,
+        PeerIrq::Frame => bus.board.peer().map_or(174, |peer| peer.frame_vector),
     };
     let Some(level) = bus
         .board

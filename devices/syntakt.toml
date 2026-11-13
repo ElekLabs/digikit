@@ -79,6 +79,13 @@ calibration_record = "synthetic"
 peer = "coldfire"
 # led_protocol: the panel UART carries packed 2-bit LED states and palette records, not `b9 idx val` (finding 70 "Panel sweep").
 led_protocol = "packed-states"
+# peer_audio: MAIN mixes the peer's digital voices itself (finding 128 "Audio"). The eDMA channel 54 TCD names the converter ring (0x80000000,
+# 64 frames of 8 words), its half-way interrupt is the 1500 Hz audio frame, and the engine tick fills the second half: left in word 5, right in
+# word 3, each a 24-bit signed sample in a 32-bit word.
+[emulator.peer_audio]
+dma_channel = 54
+slots = [5, 3]
+bits = 24
 
 # Panel, measured on the emulated OS 1.42 (finding 70 "Panel sweep"). The wire carries (channel, bit); code = channel * 8 + bit + 1 for the six
 # linear channels, as on the other devices. Unlike them, the firmware's decoder table (0x401d7a48, 32 bytes per channel) is not the identity:

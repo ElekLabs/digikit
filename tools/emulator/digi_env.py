@@ -242,6 +242,19 @@ def device_for_syx(path: pathlib.Path) -> str | None:
     return info[0] if info else None
 
 
+def peer_audio_for_syx(path: pathlib.Path) -> bool:
+    """Whether the firmware file belongs to a device whose audio comes from its peer CPU (`[emulator.peer_audio]` in devices/*.toml)."""
+    try:
+        digest = hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return False
+    for toml_path in sorted((ROOT / "devices").glob("*.toml")):
+        doc = tomllib.loads(toml_path.read_text())
+        if any(f.get("sha256") == digest for f in doc.get("firmware", [])):
+            return "peer_audio" in doc.get("emulator", {})
+    return False
+
+
 def firmware_for(device: str, environ: Environ | None = None) -> pathlib.Path:
     """The .syx of a device: DIGI_EMU_SYX_<DEVICE>, else the firmware/ default
     (DN2 also honours DIGI_EMU_SYX and DIGI_COUPLED_SYX, see `firmware`)."""

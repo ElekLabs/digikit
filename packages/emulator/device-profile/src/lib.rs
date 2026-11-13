@@ -57,6 +57,8 @@ pub struct DeviceProfile {
     pub calibration_record: Option<CalibrationRecord>,
     /// `[emulator] peer`: the model that stands in for the second CPU's mailbox, when the device has one.
     pub peer: Option<PeerModel>,
+    /// `[emulator.peer_audio]`: where MAIN's own mixed output of the peer's voices is found, when the device has audio from its peer.
+    pub peer_audio: Option<PeerAudio>,
     /// `[emulator] led_protocol`: how the panel UART carries LED state. `Indexed` when absent.
     pub led_protocol: LedProtocol,
 }
@@ -77,6 +79,18 @@ pub enum CalibrationRecord {
 pub enum PeerModel {
     MailboxResponder,
     Coldfire,
+}
+
+/// `[emulator.peer_audio]`: MAIN mixes the peer's voices itself and streams the result to the converter by eDMA. The channel's TCD names the
+/// ring (`SADDR`, `NBYTES` bytes a frame, `BITER` frames), its half-way interrupt is the audio frame (vector 120 + channel: INTC1), the second
+/// half is the one the engine tick fills, and each frame is `NBYTES / 4` words with the left and right sample in `slots`, right-aligned
+/// signed in `bits` bits (the scale is `2^-(bits - 1)`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PeerAudio {
+    pub dma_channel: u8,
+    pub slots: [u8; 2],
+    pub bits: u8,
 }
 
 /// The panel LED records on UART8. `Indexed`: `b9 idx val` and `b5 idx r g b`. `PackedStates`: `b5` and `b0..b3`
@@ -289,6 +303,7 @@ struct SourceEmulator {
     board_revision: Option<u8>,
     calibration_record: Option<CalibrationRecord>,
     peer: Option<PeerModel>,
+    peer_audio: Option<PeerAudio>,
     #[serde(default)]
     led_protocol: LedProtocol,
 }
@@ -418,8 +433,22 @@ impl Registry {
                 board_revision: None,
                 calibration_record: None,
                 peer: None,
+                peer_audio: None,
                 led_protocol: LedProtocol::default(),
             });
+            if emulator.peer_audio.is_some() && emulator.peer != Some(PeerModel::Coldfire) {
+                return invalid(source, "[emulator] peer_audio needs peer = \"coldfire\"");
+            }
+            if let Some(a) = &emulator.peer_audio
+                && (!(32..64).contains(&a.dma_channel)
+                    || a.slots.iter().any(|&s| s >= 16)
+                    || !(8..=32).contains(&a.bits))
+            {
+                return invalid(
+                    source,
+                    "[emulator.peer_audio] dma_channel 32..=63, slots below 16, bits 8..=32",
+                );
+            }
             let free_running_dtcn = emulator.free_running_dtcn;
             if free_running_dtcn.iter().any(|&c| c > 3) || {
                 let mut seen = free_running_dtcn.clone();
@@ -448,6 +477,7 @@ impl Registry {
                 board_revision: emulator.board_revision,
                 calibration_record: emulator.calibration_record,
                 peer: emulator.peer,
+                peer_audio: emulator.peer_audio,
                 led_protocol: emulator.led_protocol,
             });
         }
@@ -759,6 +789,16 @@ mod tests {
         assert_eq!((container.cf2, container.fpga), (Some(7), Some(1)));
         let bad = "[device]\nname = \"X\"\nshort = \"x\"\n[capabilities]\ndsp = \"sharc\"\nseal = \"hmac\"\nsample_pool = \"none\"\ncard = \"none\"\nextra = 1\n";
         assert!(Registry::parse(&[("x.toml", bad)]).is_err());
+        // peer_audio belongs to a coldfire peer and names a channel of the second eDMA half.
+        let audio = "[device]\nname = \"X\"\nshort = \"x\"\n[emulator]\n[emulator.peer_audio]\ndma_channel = 54\nslots = [5, 3]\nbits = 24\n";
+        assert!(Registry::parse(&[("x.toml", audio)]).is_err());
+        let ok = format!(
+            "{}\n",
+            audio.replace("[emulator]\n", "[emulator]\npeer = \"coldfire\"\n")
+        );
+        assert!(Registry::parse(&[("x.toml", &ok)]).is_ok());
+        let low = ok.replace("54", "12");
+        assert!(Registry::parse(&[("x.toml", &low)]).is_err());
     }
 
     #[test]
@@ -801,11 +841,20 @@ mod tests {
         let twin = twin[0];
         assert_eq!(twin.calibration_record, Some(CalibrationRecord::Synthetic));
         assert_eq!(twin.peer, Some(PeerModel::Coldfire));
+        assert_eq!(
+            twin.peer_audio,
+            Some(PeerAudio {
+                dma_channel: 54,
+                slots: [5, 3],
+                bits: 24
+            })
+        );
         assert_eq!(twin.led_protocol, LedProtocol::PackedStates);
         assert!(twin.board_revision.is_some());
         for d in registry.devices().iter().filter(|d| d.short != twin.short) {
             assert_eq!(d.calibration_record, None);
             assert_eq!(d.peer, None);
+            assert_eq!(d.peer_audio, None);
             assert_eq!(d.led_protocol, LedProtocol::Indexed);
             assert_eq!(d.board_revision, None);
         }
