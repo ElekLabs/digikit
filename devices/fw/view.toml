@@ -7,7 +7,9 @@ name = "cf.view.fn.brain.instance"
 was = ["cf.menu.fn.brain", "cf.view.fn.brain"]
 cpu = "cf"
 sig = "u8 *()"
-rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x46, len = 4 }
+rule.dt2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x46, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x46, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "6160202d919e6585ec40c9aed1372118", offset = 0x62, len = 4, mark = "O" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "The Brain singleton."
@@ -17,7 +19,9 @@ name = "cf.view.fn.brain.push"
 was = ["cf.menu.fn.push", "cf.view.fn.push_ctx"]
 cpu = "cf"
 sig = "void (u8 *menu, const shared_ptr *sp)"
-rule = { kind = "cf_func", hash = "5e689a4fa65d49640663c7bce736d9ea", offset = 0x0, len = 4 }
+rule.dt2 = { kind = "cf_func", hash = "5e689a4fa65d49640663c7bce736d9ea", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "5e689a4fa65d49640663c7bce736d9ea", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "1fbd3d843f66c74c34aa322782cecb89", offset = 0x0, len = 4, mark = "D" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "The Brain-level push `(menu, &shared_ptr<View>)` (finding 71 section 2); `menu` is the object that opens the view."
@@ -27,7 +31,9 @@ name = "cf.view.fn.brain.view_manager"
 was = ["cf.menu.fn.mgr_of", "cf.view.fn.mgr_of"]
 cpu = "cf"
 sig = "u8 *(u8 *brain)"
-rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x4e, len = 4 }
+rule.dt2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x4e, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x4e, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "6160202d919e6585ec40c9aed1372118", offset = 0x6a, len = 4, mark = "D" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "The view manager of a Brain (Brain + 0x40)."
@@ -47,7 +53,9 @@ name = "cf.view.fn.view_controller_push"
 was = ["cf.menu.fn.view_add", "cf.view.fn.push"]
 cpu = "cf"
 sig = "u32 (u8 *mgr, const shared_ptr *sp, u32 exclusive)"
-rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x60, len = 4 }
+rule.dt2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x60, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x60, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "6160202d919e6585ec40c9aed1372118", offset = 0x76, len = 4, mark = "D" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "`ViewController::push(mgr, shared_ptr<View> *, exclusive)`."
@@ -56,7 +64,9 @@ doc = "`ViewController::push(mgr, shared_ptr<View> *, exclusive)`."
 name = "cf.view.site.ui_loop"
 was = ["dkrt.hook.ui_loop"]
 cpu = "cf"
-rule = { kind = "cf_words", as = "code", words = ["*", "*", 0x40001928, 0x588f7229, 0x24407192, 0xb28065e8], offset = 0x6, len = 6 }
+rule.dt2 = { kind = "cf_words", as = "code", words = ["*", "*", 0x40001928, 0x588f7229, 0x24407192, 0xb28065e8], offset = 0x6, len = 6 }
+rule.dn2 = { kind = "cf_words", as = "code", words = ["*", "*", 0x40001928, 0x588f7229, 0x24407192, 0xb28065e8], offset = 0x6, len = 6 }
+rule.st = { kind = "cf_func", hash = "79e8b624e678d28f4d2a312510ee44f1", offset = 0x702, len = 6, mark = "D" }
 mark = "D"
 users = ["core/runtime"]
 doc = "The `jsr` at the top of the UI task's event loop that pops the next event; core/runtime retargets it to run its per-pass tick."
@@ -66,7 +76,9 @@ name = "cf.view.site.ui_loop.queue_lit"
 was = ["cf.view.site.ui_queue_lit", "dkrt.ui.queue_lit"]
 bind = "static"
 cpu = "cf"
-rule = { kind = "cf_words", as = "code", words = ["*", "*", 0x40001928, 0x588f7229, 0x24407192, 0xb28065e8], offset = 0x2, len = 4 }
+rule.dt2 = { kind = "cf_words", as = "code", words = ["*", "*", 0x40001928, 0x588f7229, 0x24407192, 0xb28065e8], offset = 0x2, len = 4 }
+rule.dn2 = { kind = "cf_words", as = "code", words = ["*", "*", 0x40001928, 0x588f7229, 0x24407192, 0xb28065e8], offset = 0x2, len = 4 }
+rule.st = { kind = "cf_func", hash = "79e8b624e678d28f4d2a312510ee44f1", offset = 0x6fe, len = 4, mark = "D" }
 mark = "D"
 users = ["core/runtime"]
 doc = "The literal queue address of the UI loop's `pea <queue>` (the boot hook peeks the queue for a held safe-mode key)."
