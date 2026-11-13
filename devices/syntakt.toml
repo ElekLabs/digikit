@@ -79,15 +79,23 @@ calibration_record = "synthetic"
 # model only streams the image and stands in for the stage-1 loader (finding 128 "Peer CPU model"). "mailbox-responder": no peer code; hello,
 # 0xA5A5, IRQ4 and the DSPI2 image stream answer MAIN's handshake (finding 70 "Mailbox responder"), the fallback.
 peer = "coldfire"
+# instructions_per_second: the core clock 264 MHz over the busy CPI of MAIN, 1.39 (devices/cycle-factors.json). The other devices run the
+# base rate of one instruction per 132 MHz bus tick (CPI 2.0), which is too slow for the Syntakt's MAIN: its frame needs about 117,000
+# instructions in 1/1500 s (finding 128). `DIGI_CF_IPS` overrides it.
+instructions_per_second = 189_928_000
 # led_protocol: the panel UART carries packed 2-bit LED states and palette records, not `b9 idx val` (finding 70 "Panel sweep").
 led_protocol = "packed-states"
 # peer_audio: MAIN mixes the peer's digital voices itself (finding 128 "Audio"). The eDMA channel 54 TCD names the converter ring (0x80000000,
 # 64 frames of 8 words), its half-way interrupt is the 1500 Hz audio frame, and the engine tick fills the second half: left in word 5, right in
 # word 3, each a 24-bit signed sample in a 32-bit word.
+# sample_rate and frame_samples: the converter runs at 48 kHz from its own clock (SSI1 is a slave) and the half-ring is 32 samples, so a frame
+# is 1500 Hz of emulated time whatever the instruction rate.
 [emulator.peer_audio]
 dma_channel = 54
 slots = [5, 3]
 bits = 24
+sample_rate = 48000
+frame_samples = 32
 
 # Panel, measured on the emulated OS 1.42 (finding 70 "Panel sweep"). The wire carries (channel, bit); code = channel * 8 + bit + 1 for the six
 # linear channels, as on the other devices. Unlike them, the firmware's decoder table (0x401d7a48, 32 bytes per channel) is not the identity:

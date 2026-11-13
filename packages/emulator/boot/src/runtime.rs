@@ -97,7 +97,10 @@ fn capture_peer_audio(
     let Some(audio) = audio else {
         return;
     };
-    if *frames != 0 && now.saturating_sub(*clock) < periph::peer::FRAME_TICKS / 2 {
+    let period = board
+        .peer()
+        .map_or(periph::peer::FRAME_TICKS, |peer| peer.frame_ticks());
+    if *frames != 0 && now.saturating_sub(*clock) < period / 2 {
         return;
     }
     *clock = now;
@@ -727,6 +730,8 @@ impl Emulator {
                     .map_err(|e| format!("empty +Drive card identity: {e:?}"))?
             }
         };
+        // The device's instruction rate (before anything reads `cf_ips`).
+        periph::clock::set_device_default(device.instructions_per_second);
         let mut board = Board::new(card, semaphores, CompletionPolicy::Oracle);
         // The DMA timer counters that run at the bus clock (`Board::enable_dtcn_channels`): the device's
         // `[emulator] free_running_dtcn`, or every channel of `DIGI_DTCN0` (`bus` / `off`) for channel 0.
@@ -782,6 +787,11 @@ impl Emulator {
             // The audio frame is the half-way interrupt of the audio channel: INTC1, vector 120 + channel.
             if let (Some(audio), Some(peer)) = (&device.peer_audio, board.peer_mut()) {
                 peer.frame_vector = 120 + u16::from(audio.dma_channel);
+                peer.set_frame_ticks(periph::clock::frame_ticks(
+                    periph::clock::cf_ips(),
+                    audio.sample_rate,
+                    audio.frame_samples,
+                ));
             }
         }
         map_image(&mut board, &main);
@@ -3283,7 +3293,7 @@ impl Emulator {
                 .ok_or("this image has no USB MIDI callback this emulator knows")?;
             self.midi.usb.rx_cb = rx;
             self.midi.usb.tx_fn = tx;
-            self.midi.usb.period = USB_PERIOD;
+            self.midi.usb.period = periph::clock::scale_instr(USB_PERIOD, periph::clock::cf_ips());
             self.midi.usb.enabled = true;
             self.rebuild_watch();
         }
@@ -4981,6 +4991,8 @@ mod tests {
             dma_channel: 54,
             slots: [5, 3],
             bits: 24,
+            sample_rate: 48_000,
+            frame_samples: 32,
         };
         let (mut clock, mut pcm, mut frames) = (0u64, std::collections::VecDeque::new(), 0u64);
         capture_peer_audio(
