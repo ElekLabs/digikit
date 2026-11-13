@@ -1,7 +1,8 @@
 # Syntakt OS 1.42: container, CPUs and the peer link
 
-All claims are **[D]** unless marked **[O]**. Plan:
-[firmware-decls-and-sdk](../plans/firmware-decls-and-sdk.md).
+All claims are **[D]** (read once) unless marked **[V]** (checked by two
+independent checks) or **[O]** (open). The second CPU (section 7) is in
+[finding 128](128-syntakt-peer-cpu.md). Plan: [syntakt](../plans/syntakt.md).
 
 ## Container
 
@@ -19,8 +20,8 @@ All claims are **[D]** unless marked **[O]**. Plan:
 | 1 | absent on DT2/DN2. 0xFF padding, then `aa 99 ...`, bitstream-like | 49,252 packed, 149,516 |
 | 3 | MAIN at 0x40000400, same startup words as DT2 | 1,442,812 packed, 3,442,576 |
 | 4 | UPDATER at 0x80000400 | 32,768 raw |
-| 6 | absent on DT2/DN2. A 5-entry `trapf; jmp 0x8000xxxx` table plus SPI helper code. Load address probably 0x80000000 **[O]** | 1,744 raw |
-| 7 | DT2/DN2: packed SHARC loader stream. Here: a ColdFire program, see below | 383,760 raw |
+| 6 | absent on DT2/DN2. The stage-1 loader of the peer CPU, at SRAM 0x80000000 (finding 128) | 1,744 raw |
+| 7 | DT2/DN2: packed SHARC loader stream. Here: the ColdFire program of the peer CPU (finding 128) | 383,760 raw |
 | 8 | byte-identical to DT2/DN2 section 8 | |
 
 - The packing codec is the same as on DT2/DN2.
@@ -37,15 +38,10 @@ All claims are **[D]** unless marked **[O]**. Plan:
 
 - MAIN is MCF5441x ColdFire code with the same reset path as DT2: reset entry
   0x400004e8, SP 0x48000000, flags word read from 4(sp).
-- Section 7 is a standalone ColdFire program linked at 0x40000400. The first
-  long, 0x40001070, is the entry. The code there has the same reset prologue
-  as MAIN. 43 of 46 absolute `jsr`/`jmp` targets land right after an `rts` at
-  that base.
-- It drives a register block at 0xFC05C000 with a DSPI-like layout (+0x2C
-  status, +0x34 push, +0x38 pop; identity **[O]**), plus EPORT and GPIO.
-- MAIN has no reference to 0x40001070 and no copy of section 7.
-- Which CPU runs section 7 and how it is loaded: **[O]**. It is consistent
-  with a second ColdFire that runs the digital machines **[O]**.
+- The Syntakt has no SHARC. Sections 6 and 7 belong to a second ColdFire CPU
+  (the peer): section 6 is its loader and section 7 its sound engine. Facts
+  are in [finding 128](128-syntakt-peer-cpu.md).
+- MAIN has no reference to section 7 and no copy of it.
 
 ## FPGA
 
@@ -88,41 +84,44 @@ All claims are **[D]** unless marked **[O]**. Plan:
 - Peer state names at 0x4025303e-0x402530df: STATE_LOAD_OS, INIT, BOOT,
   RUNNING, UPLOAD_SAMPLES; FAILURE_TIMEOUT, BUFSIZE, CF_MEM, DSP_MEM;
   BOOT_SUCCESS.
-- Whether the peer is the section 7 ColdFire: **[O]**. The exact reply
+- The peer is the section 7 ColdFire **[V]** (finding 128). The exact reply
   sequence: **[O]**.
 - To boot in the emulator, stub: the hello magic and 0xA5A5 on the window,
   IRQ4, and DSPI2 eDMA channel 29 data.
 
 ## Anchors on 1.42
 
-Dry run of every cf `[[anchor_rule]]` (172 rules, 128 names) against an
-in-memory registered `st-1.42`: 27 hit (15.7%), 145 miss, 0 ambiguous.
-Controls with the same harness: DT2 1.17 111/111, DN2 1.12 101/101.
+Two counts, with different scope:
 
-| Kind | Hit | Miss |
+- Dry run of the cf `[[anchor_rule]]` set in `devices/fw` against an in-memory
+  `st-1.42` (`port_resolve.resolve_cf_anchor` per rule, `regions.IMAGES` entry
+  added in memory only): 81 of 106 rules hit, 25 miss. Rules that name
+  devices other than `st` are skipped. Controls with the same harness: DT2
+  1.17 225/225, DN2 1.12 180/180.
+- Anchor proposals for the in-scope runtime modules (111 anchors): 65 hit by a
+  unique strict hash whose callees and strings also match, 15 miss, the rest
+  are per-device rules or regions.
+
+| Subsystem | Hit | Rules |
 | --- | --- | --- |
-| cf_func | 22 | 115 |
-| cf_ptr | 0 | 19 |
-| cf_words | 2 | 5 |
-| cf_params_* | 0 | 6 |
-| cf_reset_* | 3 | 0 |
+| rtos | 14 | 14 |
+| menu | 21 | 24 |
+| storage | 6 | 6 |
+| usb | 9 | 12 |
+| draw, midi, text, page, project | 5, 4, 3, 1, 1 | same |
+| mem | 5 | 6 |
+| string | 4 | 7 |
+| window | 4 | 8 |
+| input | 2 | 4 |
+| view | 2 | 9 |
+| param | 0 | 2 |
 
-| Module | Hit | Miss |
-| --- | --- | --- |
-| core/expansion | 3 | 0 |
-| core/runtime | 9 | 15 |
-| core/digikit-menu | 6 | 11 |
-| core/health | 4 | 8 |
-| core/machines | 2 | 67 |
-| core/input | 1 | 2 |
-| core/fxpages | 1 | 23 |
-| core/dsp-link | 0 | 8 |
-| core/dynreg | 0 | 2 |
-| core/params | 0 | 8 |
-| master-drive | 0 | 1 |
-
-- A hit only means the hash is unique on 1.42. 17 of the 25 hits that also hit
-  on DT2 have identical bytes at the anchor. Semantic sameness: **[O]**.
+- Misses are mostly the view, window, string (`shared_ptr`) and usb functions.
+  The DSP link has no equivalent: there is no SHARC.
+- A hit only means the hash is unique on 1.42. Semantic sameness: **[O]**.
+- An earlier count of 27 hits of 172 rules is not reproducible: the rule set
+  has grown (DT2 control: 225 rules) and the harness is not kept. It is
+  replaced by the two counts above **[O]** for the exact cause.
 - `cfmatch match dt2-1.17-emac st-1.42-emac` (no `--write`) pairs 9,966
   functions: 67.0% of DT2 and 76.2% of Syntakt. Methods: strict 2,947, loose
   580, strings 200, vtable 2,280, callee 1,200, caller 375, gap 2,372.
@@ -173,13 +172,22 @@ Controls with the same harness: DT2 1.17 111/111, DN2 1.12 101/101.
 - `ghidradump` and `ghidraapply` need pyghidra, which the project venv does
   not include. The run used
   `uv run --offline --with pyghidra==3.1.0 --with jpype1==1.5.2`.
-- Section 7 is not imported yet. `ghidra.sh` base 0x40000400 fits it.
-- There is no a Syntakt device file in devices/ (not yet written) yet. `port_resolve`,
+- Peer image `st-1.42-peer` (section 7): Ghidra project
+  `out/ghidra-projects/st-1.42-peer-emac`, dump `out/ghidra/st-1.42-peer-emac`,
+  cfdb `out/cfdb/st-1.42-peer-emac.sqlite`. Build it with
+  `uv run python -m tools.coldfire.imagepipe st-1.42-peer out/sections/st-1.42/section_7_BLOB.bin --base 0x40000400 --code 0x40000400 0x4005df10`.
+  The tool runs the pipeline above for any raw ColdFire section. It skips a
+  step whose output exists, runs `apply` only after an import in the same call,
+  and `--dry-run` prints the commands. `--steps` runs named steps again.
+- `atlas build st-1.42` works. The firmware has no DT2/DN2 parameter table
+  reader, so the `params` table is empty and the atlas meta row `params` says
+  `absent`. The descriptor chain is found (82 rows, SYN machines).
+- There is no Syntakt device file in `devices/` yet. `port_resolve`,
   `tools/coldfire/regions.py` `IMAGES` and `cf.load` need a registered name.
 
 ## Open questions
 
-- Who runs and loads section 7.
+- Who writes the peer's NOR (finding 128).
 - The mailbox reply semantics.
 - Which bootstrap code streams section 1.
 - Whether 0xFC05C000 is a DSPI.
@@ -189,7 +197,7 @@ Controls with the same harness: DT2 1.17 111/111, DN2 1.12 101/101.
 ## Scope
 
 - Support is limited to the ColdFire images.
-- Section 1 and the bootstrap are never modified.
+- Sections 1, 6 and 7 and the bootstrap are never written.
 - The FPGA is never emulated or reconfigured (risk to the analog circuitry).
   The emulator may stub the FPGA status and the peer interface only.
-- Plan: [firmware-decls-and-sdk](../plans/firmware-decls-and-sdk.md).
+- Plan: [syntakt](../plans/syntakt.md).
