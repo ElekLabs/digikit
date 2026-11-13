@@ -74,7 +74,12 @@ read over USB MIDI.
       7 storage path/directory functions (file layer rewritten), compact_set_rect, shared_ptr_as_view, popup_make.
 - [x] Region proposals [D]: `cf.flash_cave` 0x40339730..0x4033a000 (after the 136-entry init table; the cave
       tool's two rejections are false positives); `cf.expansion` 0x47e8b000..0x47fe0000 (static evidence only).
-- [ ] Anchor rules on 1.42: about 50 rules hit as written; the rest need `rule.st` entries (after registry S0/S6).
+- [x] Anchor rules on 1.42: 25 `rule.st` entries (runtime 12, menu 5, ui 3, input 2, health 2); 90 of 93
+      st-applicable anchors resolve; DT2/DN2 unchanged (`rule.<short>` is resolved generically).
+- [ ] Port resolve for st: skip shared rules that miss on a device when no module the device builds needs them
+      (17 miss/low anchors still carry shared rules); no DSP stream; regions in the Syntakt device data.
+- [ ] Debug module on st: `ports`/`[targets]` add st-1.42; PEEK ranges and `sound_words` from the device file;
+      `dk_time_blocks` has no SHARC block source (report unsupported); Sound layout and machine ids unchecked.
 - [ ] Runtime services without a Syntakt equivalent return "unsupported" (e.g. `dk_debug_track_type` -> -2, which
       digikit/debug already handles).
 - [ ] Modules declare their devices; tool and UI modules run on `st`.
