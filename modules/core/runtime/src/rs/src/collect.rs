@@ -94,6 +94,8 @@ pub struct CPage {
     pub fx: bool,
     pub owner: u8,
     pub name: [u8; TEXT],
+    /// the tab label of the page record (`short_name` of `dk_machine_add_page`)
+    pub short: [u8; TEXT],
     pub canvas: bool,
     pub flags: u32,
     pub draw: u32,
@@ -127,7 +129,7 @@ pub struct CParam {
 
 const M0: CMachine = CMachine { key: 0, name: [0; TEXT], short: [0; TEXT] };
 const F0: CFx = CFx { id: 0, name: [0; TEXT], short: [0; TEXT], routes_set: false, allowed: 0, def: 0, mix: 127, page: -1 };
-const G0: CPage = CPage { fx: false, owner: 0, name: [0; TEXT], canvas: false, flags: 0, draw: 0, event: 0, arg: 0, nbind: 0, binds: [[0; 3]; 8], nparam: 0 };
+const G0: CPage = CPage { fx: false, owner: 0, name: [0; TEXT], short: [0; TEXT], canvas: false, flags: 0, draw: 0, event: 0, arg: 0, nbind: 0, binds: [[0; 3]; 8], nparam: 0 };
 const P0: CParam = CParam {
     page: 0, fx: false, name: [0; 32], short: [0; 16], min: 0, max: 127 * 256, def: 0, glyph: 0, latched: false, click: 0, click_arg: 0, kind: 0, fmin: 0, fmax: 0, fdef: 0,
 };
@@ -208,7 +210,7 @@ impl Collect {
         &mut self.fxs[i] as *mut CFx as *mut u8
     }
 
-    fn add_page(&mut self, fx: bool, owner: usize, name: *const u8) -> *mut u8 {
+    fn add_page(&mut self, fx: bool, owner: usize, name: *const u8, short: *const u8) -> *mut u8 {
         if self.np >= MAX_PG || !self.room() {
             self.fail(E_DECL_FULL);
             return placeholder();
@@ -218,7 +220,13 @@ impl Collect {
         g.fx = fx;
         g.owner = owner as u8;
         let mut e = 0;
-        unsafe { put_text(&mut g.name, name, &mut e) };
+        unsafe {
+            put_text(&mut g.name, name, &mut e);
+            put_text(&mut g.short, short, &mut e);
+        }
+        if fx && len_of(&g.short) > FX_SHORT {
+            e = E_FORMAT; // the effect record's tab label holds 3 characters: refused, not cut
+        }
         self.fail(e);
         if fx {
             if self.fxs[owner].page >= 0 {
@@ -232,16 +240,16 @@ impl Collect {
         &mut self.pages[i] as *mut CPage as *mut u8
     }
 
-    pub fn machine_add_page(&mut self, m: *mut u8, name: *const u8) -> *mut u8 {
+    pub fn machine_add_page(&mut self, m: *mut u8, name: *const u8, short: *const u8) -> *mut u8 {
         match find(&self.machines, m) {
-            Some(i) => self.add_page(false, i, name),
+            Some(i) => self.add_page(false, i, name, short),
             None => placeholder(),
         }
     }
 
-    pub fn fx_add_page(&mut self, f: *mut u8, name: *const u8) -> *mut u8 {
+    pub fn fx_add_page(&mut self, f: *mut u8, name: *const u8, short: *const u8) -> *mut u8 {
         match find(&self.fxs, f) {
-            Some(i) => self.add_page(true, i, name),
+            Some(i) => self.add_page(true, i, name, short),
             None => placeholder(),
         }
     }
@@ -457,15 +465,15 @@ pub unsafe extern "C" fn dk_module_ctx_add_fx(ctx: *mut u8, id: u32, name: *cons
         _ => placeholder(),
     }
 }
-pub unsafe extern "C" fn dk_machine_add_page(m: *mut u8, name: *const u8) -> *mut u8 {
+pub unsafe extern "C" fn dk_machine_add_page(m: *mut u8, name: *const u8, short_name: *const u8) -> *mut u8 {
     match active() {
-        Some(c) => c.machine_add_page(m, name),
+        Some(c) => c.machine_add_page(m, name, short_name),
         None => placeholder(),
     }
 }
-pub unsafe extern "C" fn dk_fx_add_page(f: *mut u8, name: *const u8) -> *mut u8 {
+pub unsafe extern "C" fn dk_fx_add_page(f: *mut u8, name: *const u8, short_name: *const u8) -> *mut u8 {
     match active() {
-        Some(c) => c.fx_add_page(f, name),
+        Some(c) => c.fx_add_page(f, name, short_name),
         None => placeholder(),
     }
 }
@@ -782,17 +790,20 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                 i += 1;
             }
             let mc = &c.machines[m];
-            let name: &[u8] = match kp {
-                Some(g) => &c.pages[g].name,
-                None => &mc.name,
-            };
+            // the page's own name and short name; a machine without a knob page gets its name in capitals as both
             let mut upper = [0u8; TEXT];
-            let n = len_of(name);
-            let mut j = 0;
-            while j < n {
-                upper[j] = if name[j].is_ascii_lowercase() { name[j] - 32 } else { name[j] };
-                j += 1;
-            }
+            let (name, tab): (&[u8], &[u8]) = match kp {
+                Some(g) => (&c.pages[g].name, &c.pages[g].short),
+                None => {
+                    let n = len_of(&mc.name);
+                    let mut j = 0;
+                    while j < n {
+                        upper[j] = mc.name[j].to_ascii_uppercase();
+                        j += 1;
+                    }
+                    (&mc.name, &upper)
+                }
+            };
             o.head(KIND_PAGE, LEN_PAGE);
             o.p32(mc.key);
             let mut j = 0;
@@ -801,7 +812,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                 j += 1;
             }
             o.p32(p.level);
-            o.text(&upper, TEXT);
+            o.text(tab, TEXT);
             o.text(name, TEXT);
             m += 1;
         }
@@ -838,9 +849,10 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             o.p32(n as u32);
             o.p32(fx.id);
             let mut tab = [0u8; 8];
+            let label = if len_of(&g.short) > 0 { &g.short } else { &fx.short };
             let mut j = 0;
-            while j < FX_SHORT && j < len_of(&fx.short) {
-                tab[j] = fx.short[j];
+            while j < FX_SHORT && j < len_of(label) {
+                tab[j] = label[j];
                 j += 1;
             }
             o.text(&tab, 8);

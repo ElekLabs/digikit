@@ -108,9 +108,50 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
     """For a module of api major 3: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
     `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from them (docs/plans/sdk.md 6.1 and 6.4). The
     conformance suite that runs next reads that gallery.json. A module of api major 2 declares in `.dk.desc` and is left alone: returns False."""
-    from tools.patchkit import patchkit, pk_committed, pk_device
-
     moddir = modroots.module_dir(mid)
+    manifest_path = moddir / "module.toml"
+    original = manifest_path.read_text(encoding="utf-8")
+    if "[[machine]]" not in original and "[[fx]]" not in original:
+        return False  # declares nothing through builder calls: no rows to measure
+    # The measuring build takes the device limits as its `[uses]`: the loader refuses a module whose tables are absent, zero or lower than what its
+    # init declares, so a new or changed module could not be measured with its own numbers. The measured rows replace them below.
+    write_uses(manifest_path, {d: seed_uses(d) for d in devices})
+    try:
+        per = _measure(mid, devices)
+    except BaseException:
+        manifest_path.write_text(original, encoding="utf-8")
+        raise
+    if not per:
+        manifest_path.write_text(original, encoding="utf-8")
+        return False
+    kept = tomllib.loads(original).get("uses", {})
+    write_uses(
+        manifest_path,
+        {
+            d: {k: int(kept[d].get(k, 0)) for k in USES_KEYS}
+            for d in devices
+            if d not in per and d in kept
+        },
+    )
+    return _write_measured(mid, moddir, per)
+
+
+def seed_uses(dev: str) -> dict[str, int]:
+    """The `[uses.<dev>]` a module takes while it is measured: every row the device has."""
+    from tools.patchkit import pk_device
+
+    lim = pk_device.limits(dev)
+    return {
+        "machine_rows": lim.machine_rows,
+        "param_rows": lim.param_rows,
+        "page_rows": lim.page_rows,
+    }
+
+
+def _measure(mid: str, devices: list[str]) -> dict[str, dict]:
+    """Pack MID for each device and read the rows its init committed on the emulated device. {} when no device packs it or it is of api major 2."""
+    from tools.patchkit import patchkit, pk_committed
+
     per: dict[str, dict] = {}
     with tempfile.TemporaryDirectory(prefix="pk-commit-") as tmp:
         for dev in devices:
@@ -121,12 +162,17 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
             if r.returncode:
                 continue  # not packed for this device (ports); the size lines say why
             if out.read_bytes()[0x38] != 3:
-                return False
+                return {}
             per[dev] = pk_committed.committed(
                 mid, dev, out, str(patchkit.binary()), _daemon(dev)
             )
-    if not per:
-        return False
+    return per
+
+
+def _write_measured(mid: str, moddir: Path, per: dict[str, dict]) -> bool:
+    """Write the measured `[uses.<device>]` and `build/gen/gallery.json` of MID."""
+    from tools.patchkit import pk_committed, pk_device
+
     manifest = tomllib.loads((moddir / "module.toml").read_text(encoding="utf-8"))
     ids = [m["id"] for m in manifest.get("machine", [])]
     counts = pk_committed.uses(per)

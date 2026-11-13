@@ -283,8 +283,8 @@ adds pages, and a page adds params.
 | --- | --- |
 | `dk_machine *dk_module_ctx_add_machine(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name)` | Add a machine; `id` is `DK_MACHINE_ID_<ID>` |
 | `dk_fx *dk_module_ctx_add_fx(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name)` | Add an effect; `id` is `DK_FX_ID_<ID>` |
-| `dk_page *dk_machine_add_page(dk_machine *m, const char *name)` | Add a page to a machine |
-| `dk_page *dk_fx_add_page(dk_fx *fx, const char *name)` | Add a page to an effect |
+| `dk_page *dk_machine_add_page(dk_machine *m, const char *name, const char *short_name)` | Add a page to a machine; `short_name` is its tab label |
+| `dk_page *dk_fx_add_page(dk_fx *fx, const char *name, const char *short_name)` | Add a page to an effect; `short_name` is its tab label (at most 3 characters) |
 | `dk_param *dk_page_add_param(dk_page *p, const char *name, const char *short_name, int32_t def)` | Add a machine param; it goes on the next knob of the page |
 | `dk_param *dk_page_add_fx_param(dk_page *p, const char *name, const char *short_name, kind, float min, float max, float def)` | Add an effect param |
 
@@ -295,7 +295,7 @@ static int32_t analog_init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_ANALOG, "Analog", "ANLG");   /* DSP: analog_render, analog_note_on */
 
-    dk_page *p = dk_machine_add_page(m, "Analog");
+    dk_page *p = dk_machine_add_page(m, "Analog", "ANALOG");
     dk_page_add_param(p, "Tone",  "TONE",  64);
     dk_page_add_param(p, "Decay", "DECAY", 80);
     dk_page_add_param(p, "Pitch", "PITCH", 0);
@@ -306,7 +306,7 @@ static int32_t analog_init(dk_module_ctx *ctx)
 const dk_module_def dk_module = { .init = analog_init };
 ```
 
-On a device that keeps a machine's knobs in page rows (Digitone II), the machine's knob page gets a page row with the name in capitals and the title as given: `dk_machine_add_page(m, "Analog")` gives name `ANALOG`, title `Analog`, as the machine's default page has today.
+On a device that keeps a machine's knobs in page rows (Digitone II), the machine's knob page gets a page row with exactly the given names: `dk_machine_add_page(m, "Analog", "ANALOG")` gives tab label `ANALOG` and title `Analog`. The runtime does not change the case.
 
 Optional properties are setters with sensible defaults (range 0 to 127, no glyph, not latched). The setters keep their names:
 `dk_param_range`, `dk_param_glyph`, `dk_param_latched`, `dk_param_on_click`, `dk_page_canvas`,
@@ -322,7 +322,7 @@ dk_param *smp = dk_page_add_param(p, "Sample", "SMP", 0);
 dk_param_range(smp, 0, 15);
 dk_param_on_click(smp, smp_click);               /* a dk_param_click_fn; the compiler checks the type */
 
-dk_page *wave = dk_machine_add_page(m, "Shot wave");
+dk_page *wave = dk_machine_add_page(m, "Shot wave", "SHT");
 dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event);
 ```
 
@@ -334,7 +334,7 @@ and two canvas pages (today `DK_PAGE_PARAM` and `DK_PAGE_LOCAL` in `modules/mach
 ```c
 dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_SHOT, "Shot", "SHOT");
 
-dk_page *knobs = dk_machine_add_page(m, "SHOT");              /* knob page: params go on knobs 1 to 5 */
+dk_page *knobs = dk_machine_add_page(m, "SHOT", "SHT");         /* knob page: params go on knobs 1 to 5 */
 dk_param *smp   = dk_page_add_param(knobs, "Sample", "SMP",   0);
 dk_param *start = dk_page_add_param(knobs, "Start",  "START", 0);
 dk_param *end   = dk_page_add_param(knobs, "End",    "END",   127);
@@ -342,7 +342,7 @@ dk_param *play  = dk_page_add_param(knobs, "Play",   "PLAY",  0);
 dk_param *pitch = dk_page_add_param(knobs, "Pitch",  "PITCH", 64);
 dk_param_on_click(smp, smp_click);
 
-dk_page *ctl = dk_machine_add_page(m, "SHOT");                /* canvas page over the stock page */
+dk_page *ctl = dk_machine_add_page(m, "SHOT", "SHT");           /* canvas page over the stock page */
 dk_page_canvas(ctl, DK_PAGE_STOCK_OVERLAY, controls_draw, range_event);
 dk_page_bind(ctl, pitch, 0);
 dk_page_bind(ctl, play,  1);
@@ -350,7 +350,7 @@ dk_page_bind(ctl, smp,   3);
 dk_page_bind(ctl, start, 4);
 dk_page_bind(ctl, end,   7);
 
-dk_page *wave = dk_machine_add_page(m, "SHOT WAVE");         /* wide canvas */
+dk_page *wave = dk_machine_add_page(m, "SHOT WAVE", "SHT");    /* wide canvas */
 dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event);
 dk_page_bind(wave, start, 4);
 dk_page_bind_local(wave, 0, 6);
@@ -362,7 +362,7 @@ An FX:
 ```c
 dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_FSHIFT, "Freq shift", "FSH");    /* short name: at most 3 characters; DSP: fshift_process */
 dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);              /* allowed, default */
-dk_page *p = dk_fx_add_page(fx, "Freq shift");
+dk_page *p = dk_fx_add_page(fx, "Freq shift", "FSH");
 dk_page_add_fx_param(p, "Shift", "SHFT", DK_BIPOLAR, -1.0f, 1.0f, 0.0f);
 ```
 

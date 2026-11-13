@@ -37,18 +37,18 @@ static int32_t status(uint32_t cmd, uint32_t seq, const void *request, uint32_t 
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_TWIN, "TWIN", "TWN");
-    dk_page *knobs = dk_machine_add_page(m, "Twin");
+    dk_page *knobs = dk_machine_add_page(m, "Twin", "TWN");
     dk_param *smp = dk_page_add_param(knobs, "Sample", "SMP", 0);
     dk_param_range(smp, 0, 15);
     dk_param *start = dk_page_add_param(knobs, "Start", "START", 16);
     dk_param *end = dk_page_add_param(knobs, "End", "END", 112);
     dk_param_on_click(smp, twin_click, NULL);
-    dk_page *zero = dk_machine_add_page(m, "TWIN ZERO");
+    dk_page *zero = dk_machine_add_page(m, "TWIN ZERO", "TWN");
     dk_page_canvas(zero, 0, twin_zero, twin_event, NULL);
     dk_page_bind(zero, smp, 0);
     dk_page_bind(zero, start, 4);
     dk_page_bind(zero, end, 7);
-    dk_page *one = dk_machine_add_page(m, "TWIN ONE");
+    dk_page *one = dk_machine_add_page(m, "TWIN ONE", "TWN");
     dk_page_canvas(one, 0, twin_one, twin_event, NULL);
     dk_page_bind(one, start, 4);
     dk_page_bind_local(one, 0, 6);

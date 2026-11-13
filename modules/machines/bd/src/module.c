@@ -8,7 +8,7 @@
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_BD, "Bass Drum", "BD");
-    dk_page *p = dk_machine_add_page(m, "Bass Drum");
+    dk_page *p = dk_machine_add_page(m, "Bass Drum", "BD");
     dk_page_add_param(p, "Bend", "BEND", 64);
     dk_page_add_param(p, "FM Index", "INDEX", 32);
     dk_page_add_param(p, "Ratio", "RATIO", 0);

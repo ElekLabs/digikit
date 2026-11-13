@@ -4,7 +4,7 @@
 //   node tools/devtools/commit_records.ts --device dn2|dt2 --module ID --dkm FILE.dkm --patchkit BIN [--binary DIGI_EMUD]
 //        [--debug-dkm FILE.dkm] [--emulated-ms 60000]
 //
-// Prints one JSON object on stdout: { module, commit: {index, machineRows, paramRows, pageRows, addr, size}, records: {counts, params, ...} }.
+// Prints one JSON object on stdout: { module, latched: [mask per machine], commit: {index, machineRows, paramRows, pageRows, addr, size}, records: {counts, params, ...} }.
 // `module:check` (tools/patchkit/pk_modcheck.py) writes `[uses]` and the gallery params from it; conformance reads its cases from it.
 // The event's encoding is isolated in `decodeCommitEvent` (packages/test-support/src/commit-records.ts). Not run end to end yet: it needs
 // a module of api major 3 and the runtime's `MODULE_COMMIT` event.
@@ -87,7 +87,15 @@ try {
     emulatedMs: Number(values['emulated-ms']),
   });
   const result = await committedRecords(event, (addr) => s.client.memPeek(addr), values.patchkit);
-  console.log(JSON.stringify({ module: values.module, ...result }, null, 2));
+  // the latch masks of the module's machines (the record block has no latched flag): one MODULE_LATCH event per machine that latches,
+  // logged before the commit event; `latched[n]` is machine n's mask, bit w for its parameter word w
+  const latchKind = (LOG_KIND as Record<string, number>).MODULE_LATCH;
+  if (latchKind === undefined) throw new Error('the runtime has no MODULE_LATCH log kind');
+  const latched: number[] = Array.from({ length: result.commit.machineRows }, () => 0);
+  for (const e of await dk.readLog()) {
+    if (e.kind === latchKind && e.args[0] === index && e.args[1]! < latched.length) latched[e.args[1]!] = e.args[2]!;
+  }
+  console.log(JSON.stringify({ module: values.module, latched, ...result }, null, 2));
 } finally {
   await session?.close();
   fs.rmSync(runDir, { recursive: true, force: true });

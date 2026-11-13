@@ -232,6 +232,7 @@ export const LOG_KIND = {
   PARAM_CHANGE: 42,
   MOD_NEEDS: 43,
   MODULE_COMMIT: 44,
+  MODULE_LATCH: 45,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -280,6 +281,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   42: ['PARAM_CHANGE', ['track', 'index', 'old', 'new', '-']],
   43: ['MOD_NEEDS', ['index', 'name0', 'name1', 'name2', '-']],
   44: ['MODULE_COMMIT', ['index', 'rows', 'records_addr', 'records_size', '-']],
+  45: ['MODULE_LATCH', ['index', 'machine', 'latched', '-', '-']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */
