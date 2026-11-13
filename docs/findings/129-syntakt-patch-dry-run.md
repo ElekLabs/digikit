@@ -15,7 +15,7 @@ All claims are **[D]** (read once) unless marked. Nothing was run on a device or
 | Section 3 (MAIN OS) | 3,442,576 -> 3,442,656 bytes: the 8-byte reset hook at 0x4000053e, the loader (54 bytes) in the cave, and the 80-byte segment chain after the image end |
 | Hook site | stock bytes `4eba ff1c 4eba ff6e` equal the plan's and the port anchor `cf.rtos.fn.reset.init_calls` hash |
 | `cf.flash_cave` 0x40339730..0x4033a000 | zero in stock, ends at the reset clear start 0x4033a000; the loader uses 56 of 2256 bytes |
-| `cf.expansion` 0x47e8b000..0x47fe0000 | above the image end 0x40348b90 and the bss end 0x45566490; the record (64 bytes) is at its start |
+| `cf.expansion` 0x47e8b000..0x47fe0000 | above the image end 0x40348b90 and the bss end 0x45566490; the record (64 bytes) is at its start. **This region is inside the 4 MiB delay ring 0x47c00000..0x48000000 and is not usable at run time; the corrected region is in [finding 130](130-syntakt-runtime-facts.md).** The byte check of the dry run is unchanged. |
 | Checksums | 19,811 packet checksums and counters, framing counts, content checksum 0x65ca2f7e over 2,000,880 bytes: both readers agree. There is no trailer slot (finding 70) |
 | Unchanged rebuild | `patchkit rebuild` of the stock file gives the stock file byte for byte **[V]** |
 

@@ -27,11 +27,11 @@ softfloat_abi = false
 port = true
 # Regions of the port that the analysis (tools/coldfire/regions.py) cannot find on this image, kept by hand from static evidence **[D]**
 # (docs/findings/70-syntakt-1-42.md "Regions"). cf_flash_cave: the zero run (2256 bytes) that ends at the reset clear start 0x4033a000, after
-# the 136-entry init table; the analysis rejects it only because that table's end is a pointer target. cf_expansion: the top-of-RAM gap
-# above the DMA arena (the DMA-arena heuristic finds no cluster here): it starts above the bss end 0x45566490 and below the stack
-# reserve; the lower part of the full gap (0x45580000 and up) is left unused.
+# the 136-entry init table; the analysis rejects it only because that table's end is a pointer target. cf_expansion: above the peer
+# image buffer end 0x478af2cb (+64 KiB) and 64 KiB below the 4 MiB ring 0x47c00000..0x48000000 that MAIN clears at boot (FUN_400966e0,
+# through the uncached alias 0x4fc00000) and writes every frame (docs/findings/130-syntakt-runtime-facts.md).
 cf_flash_cave = [0x40339730, 0x4033a000]
-cf_expansion = [0x47e8b000, 0x47fe0000]
+cf_expansion = [0x478c0000, 0x47bf0000]
 
 # No SHARC and no seal (finding 70 "Container": no HMAC trailer). Section 7 is the peer CPU's ColdFire program (finding 128).
 [capabilities]
