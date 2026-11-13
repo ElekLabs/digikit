@@ -101,7 +101,7 @@ read over USB MIDI.
       3 low, 15 miss. Misses: DSP link ISR (no SHARC; health loses the DSP measurement), source page hooks,
       7 storage path/directory functions (file layer rewritten), compact_set_rect, shared_ptr_as_view, popup_make.
 - [x] Region proposals [D]: `cf.flash_cave` 0x40339730..0x4033a000 (after the 136-entry init table; the cave
-      tool's two rejections are false positives); `cf.expansion` 0x47e8b000..0x47fe0000 (static evidence only).
+      tool's two rejections are false positives); `cf.expansion` 0x478c0000..0x47bf0000 (finding 130: below the 4 MiB ring MAIN clears at boot).
 - [x] Anchor rules on 1.42: 25 `rule.st` entries (runtime 12, menu 5, ui 3, input 2, health 2); 90 of 93
       st-applicable anchors resolve; DT2/DN2 unchanged (`rule.<short>` is resolved generically).
 - [x] Port resolve for st (`devices/ports/st-1.42.toml`, 107 anchors): SHARC rules and hooks are skipped on a device without a DSP;

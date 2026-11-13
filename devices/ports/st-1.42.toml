@@ -22,8 +22,8 @@ mark = "D"
 [[region]]
 name = "cf.expansion"
 cpu = "cf"
-start = 0x47e8b000
-end = 0x47fe0000
+start = 0x478c0000
+end = 0x47bf0000
 excludes = []
 mark = "D"
 
