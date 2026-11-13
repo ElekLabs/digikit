@@ -3849,7 +3849,9 @@ fn resolve_uart(main: &[u8]) -> Result<(u32, u32, u32, u32, u32, u32), String> {
     }
     let rx_prefix = hex("46fc27004feffff048d70303702213c0fc04401c701a13c0fc04c01c46fc2300");
     let rx_isr = unique(main, &rx_prefix, &vec![false; rx_prefix.len()])?;
-    let vector_store = hex("243c40001f1a720323c240000268");
+    let mut vector_store = vec![0x24, 0x3c];
+    vector_store.extend_from_slice(&rx_isr.to_be_bytes());
+    vector_store.extend_from_slice(&hex("720323c240000268"));
     if main.get(at + 0x136..at + 0x136 + vector_store.len()) != Some(vector_store.as_slice()) {
         return Err("UART RX vector store verification failed".into());
     }

@@ -102,14 +102,10 @@ pub(crate) fn hex(bytes: &str) -> Vec<u8> {
 
 pub(crate) fn data_mask(sig: &[u8], wild: Option<usize>) -> Vec<bool> {
     let mut mask = vec![false; sig.len()];
-    let mut at = 0;
-    while at + 4 <= sig.len() {
+    for at in 0..sig.len().saturating_sub(3) {
         let value = u32::from_be_bytes(sig[at..at + 4].try_into().unwrap());
         if (MAIN_LOAD..0x4800_0000).contains(&value) {
             mask[at..at + 4].fill(true);
-            at += 4;
-        } else {
-            at += 1;
         }
     }
     if let Some(i) = wild {
@@ -216,20 +212,7 @@ pub(crate) fn unique_signature_data(
     signature: &[u8],
     wildcard: Option<usize>,
 ) -> Option<u32> {
-    let mut masked = vec![false; signature.len()];
-    let mut at = 0;
-    while at + 4 <= signature.len() {
-        let value = u32::from_be_bytes(signature[at..at + 4].try_into().expect("abs32"));
-        if (MAIN_LOAD..0x4800_0000).contains(&value) {
-            masked[at..at + 4].fill(true);
-            at += 4;
-        } else {
-            at += 1;
-        }
-    }
-    if let Some(index) = wildcard {
-        masked[index] = true;
-    }
+    let masked = data_mask(signature, wildcard);
     let matches: Vec<_> = image
         .windows(signature.len())
         .enumerate()
