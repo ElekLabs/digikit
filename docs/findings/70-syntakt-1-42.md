@@ -157,6 +157,18 @@ Two counts, with different scope:
   - The first encoder message after a page or parameter change only shows the
     value. Each later one moves by delta/6 positions.
 
+## Cold boot in the Rust emulator [D]
+
+- `boot_gate firmware/Syntakt_OS1.42.syx --max N --after M --frame OUT.pbm` (release build of the
+  `elektron-native-boot` example). The device file `devices/syntakt.toml` gives the free-running
+  DTCN2 (`[emulator] free_running_dtcn = [2]`); no other model change was needed.
+- 600 M instructions: black screen, the boot thread has finished and spins at 0x4008288e.
+  The main screen is reached at 609,984,465 instructions (about 5 s of host time): project
+  A01 "ADRIANA" at 135.0 BPM with the dialog "RUN WARM-UP CALIBRATION, ARE YOU SURE?" on top.
+  Why that dialog shows: **[O]**.
+- Through 1.21 G instructions the display stays the same and "DSP BOOT FAILURE" has not appeared
+  (the peer mailbox is not modelled: unmapped pages read as zero). When it shows: **[O]**.
+
 ## Analysis databases
 
 - Ghidra project: `out/ghidra-projects/st-1.42-emac` (language
