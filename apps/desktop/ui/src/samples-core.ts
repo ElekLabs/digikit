@@ -210,6 +210,10 @@ export function kindTag(kind: Upload['kind']): RowTag | undefined {
 /** What a row of the device list shows for its upload: the shape of the Modules page (`RowStatus`), plus waiting and the tooltip. */
 export type SampleStatus = (RowStatus | { kind: 'waiting' } | { kind: 'same' } | { kind: 'cancelled' }) & {
   message: string;
+  sent?: number;
+  bytes?: number;
+  /** Empty while sending; the device path during a check, for the delayed hint. */
+  checking?: string;
 };
 export function uploadStatus(u: Upload | undefined): SampleStatus | undefined {
   if (!u) return undefined;
@@ -218,11 +222,9 @@ export function uploadStatus(u: Upload | undefined): SampleStatus | undefined {
     case 'waiting':
       return { kind: 'waiting', message };
     case 'uploading':
-      return u.sent < u.bytes
-        ? { kind: 'uploading', sent: u.sent, bytes: u.bytes, message }
-        : { kind: 'verifying', message };
+      return { kind: 'uploading', sent: u.sent, bytes: u.bytes, message, checking: '' };
     case 'verifying':
-      return { kind: 'verifying', message };
+      return { kind: 'verifying', sent: u.bytes, bytes: u.bytes, message, checking: joinPath(u.folder, u.name) };
     case 'ok':
       return { kind: 'ok', message };
     case 'same':
@@ -273,14 +275,14 @@ export function samplesBar(
     else if (u.state === 'cancelled') cancelled++;
   }
   const n = mine.length;
-  const current = mine.find(([, u]) => u.state === 'uploading' || u.state === 'verifying')?.[1];
+  // Keep one job label across sending, checking and preparation of the next file.
+  const current = mine.find(([, u]) => u.state === 'waiting' || u.state === 'uploading' || u.state === 'verifying');
   const plural = (k: number) => `${k} file${k === 1 ? '' : 's'}`;
   let message: string;
-  if (running)
-    message = current
-      ? `${current.state === 'verifying' ? 'Verifying' : 'Uploading'} ${current.name} (${ok + same + failed + cancelled + 1} of ${n})${viaSuffix(link)}`
-      : 'Preparing…';
-  else if (failed)
+  if (running) {
+    const file = current?.[1] ?? mine[n - 1]![1];
+    message = `Transferring ${Math.min(n, ok + same + failed + cancelled + 1)} of ${n} · ${file.source}${viaSuffix(link)}`;
+  } else if (failed)
     message = `${ok} of ${n} uploaded, ${same ? `${same} already on the device, ` : ''}${failed} failed.`;
   else if (cancelled) message = `Cancelled: ${cancelledCounts(ok, n, same)}.`;
   else if (same === n)
@@ -300,6 +302,7 @@ export function samplesBar(
     message,
     sent,
     total,
+    checking: running && current?.[1].state === 'verifying' ? current[0] : '',
   };
 }
 
@@ -393,9 +396,16 @@ export function folderStatus(uploads: Uploads, folder: string): SampleStatus | u
       (a, u) => a + (u.state === 'ok' || u.state === 'same' || u.state === 'verifying' ? u.bytes : u.sent),
       0,
     );
-    return open.every((u) => u.state === 'waiting')
+    const checking = open.find((u) => u.state === 'verifying');
+    return inside.every((u) => u.state === 'waiting')
       ? { kind: 'waiting', message: '' }
-      : { kind: 'uploading', sent, bytes, message: '' };
+      : {
+          kind: 'uploading',
+          sent,
+          bytes,
+          message: '',
+          checking: checking ? joinPath(checking.folder, checking.name) : '',
+        };
   }
   const bad = inside.filter((u) => u.state === 'failed');
   if (bad.length) return { kind: 'failed', message: `${bad.length} of ${inside.length} files failed` };

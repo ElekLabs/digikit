@@ -7,7 +7,7 @@
 // the same on every device. A WAV is converted to the native sample file before it goes; a native sample goes as it is; any other file is
 // uploaded unchanged. Each upload is verified against the bytes sent. The page speaks the protocol in TypeScript over the selected target; the
 // local files come through the native `local_*` commands (local.rs); no process is started.
-import { For, Show, createSignal, type JSX } from 'solid-js';
+import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { errorLine, formatBytes, isCancelled } from '@web/modules/backend';
 import { openDeviceSamples, labelOf, listLocalAt, pickFolder, readLocalFile } from './samples-backend';
 import {
@@ -262,7 +262,8 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
       await (await openDeviceSamples()).backend.mkdir(joinPath(sampleFolder(), name));
     });
   };
-  const rows = () => sampleRows(sampleFolder(), sampleEntries() ?? [], uploads());
+  const rows = createMemo(() => sampleRows(sampleFolder(), sampleEntries() ?? [], uploads()));
+  const rowsByPath = createMemo(() => new Map(rows().map((r) => [r.path, r])));
   const nDelete = () => deleteRows(rows(), sampleTicks()).length;
   const removeSelected = () =>
     run('Deleting', async (): Promise<void | CancelledRun> => {
@@ -525,30 +526,35 @@ export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
         <Show when={sampleEntries()} fallback={<p class="empty">{busy() ? `${busy()}…` : 'No listing yet.'}</p>}>
           <Show when={rows().length} fallback={<p class="empty">This folder is empty.</p>}>
             <ul class="rows">
-              <For each={rows()}>
-                {(r) => (
-                  <ListRow
-                    rowKey={r.pending ? undefined : r.path}
-                    selected={sampleTicks().has(r.path)}
-                    onSelect={r.pending ? undefined : (e) => dsel.click(r.path, e)}
-                    check={{
-                      label: `Delete ${r.name}`,
-                      checked: sampleTicks().has(r.path),
-                      disabled: writing(busy()) || r.pending,
-                      onChange: () => dsel.tick(r.path),
-                    }}
-                    name={r.name}
-                    title={r.path}
-                    folder={
-                      r.kind === 'folder'
-                        ? { disabled: writing(busy()) || r.pending, onOpen: () => open(r.path) }
-                        : undefined
-                    }
-                    dropPath={r.kind === 'folder' && !r.pending ? r.path : undefined}
-                    size={r.kind === 'file' ? formatBytes(r.size) : ''}
-                    status={r.status}
-                  />
-                )}
+              <For each={rows().map((r) => r.path)}>
+                {(path) => {
+                  // Keep the DOM row and its checking timer across progress objects. Retain its last row during removal.
+                  const initial = rowsByPath().get(path)!;
+                  const r = () => rowsByPath().get(path) ?? initial;
+                  return (
+                    <ListRow
+                      rowKey={r().pending ? undefined : r().path}
+                      selected={sampleTicks().has(r().path)}
+                      onSelect={r().pending ? undefined : (e) => dsel.click(r().path, e)}
+                      check={{
+                        label: `Delete ${r().name}`,
+                        checked: sampleTicks().has(r().path),
+                        disabled: writing(busy()) || r().pending,
+                        onChange: () => dsel.tick(r().path),
+                      }}
+                      name={r().name}
+                      title={r().path}
+                      folder={
+                        r().kind === 'folder'
+                          ? { disabled: writing(busy()) || r().pending, onOpen: () => open(r().path) }
+                          : undefined
+                      }
+                      dropPath={r().kind === 'folder' && !r().pending ? r().path : undefined}
+                      size={r().kind === 'file' ? formatBytes(r().size) : ''}
+                      status={r().status}
+                    />
+                  );
+                }}
               </For>
             </ul>
           </Show>

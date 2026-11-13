@@ -110,7 +110,7 @@ const backend: SamplesBackend = {
     sampleTree.set(f, [...list, { name: file.name, kind: 'file', size: total }]);
   },
   async verify(_folder, file) {
-    await delay(200);
+    await delay(sim.verify);
     const size = file.stored.length;
     return {
       ok: true,
