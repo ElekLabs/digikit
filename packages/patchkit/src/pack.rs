@@ -1,7 +1,7 @@
 //! Pack one run-time module as a .dkm: the build of its stale objects, the CF object, and for a run-time (dynamic) module its DSP sections for one device. The CLI `pack` and the desktop app's module library call it.
 
 use crate::error::*;
-use crate::module::Library;
+use crate::module::{Library, Module, ModuleKind};
 
 /// What `pack_module` takes besides the library and the module id.
 #[derive(Debug, Default, Clone)]
@@ -40,6 +40,18 @@ impl Packed {
             ),
         })
     }
+}
+
+/// A raw, non-dynamic module whose ColdFire object defines no `dk_module`: it can only be patched into an image (patchkit
+/// fixtures such as test/cf-demo), never loaded as a `.dkm`.
+pub fn patch_only(m: &Module) -> bool {
+    !m.manifest.module.dynamic
+        && matches!(m.manifest.module.kind, ModuleKind::Raw)
+        && m.objects.iter().find(|o| o.arch == "cf").is_some_and(|o| {
+            !o.symbols
+                .iter()
+                .any(|s| s.name == "dk_module" && s.section.is_some())
+        })
 }
 
 /// Packs the objects of module `id` as they are in memory in `lib`.

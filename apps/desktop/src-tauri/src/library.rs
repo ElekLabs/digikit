@@ -104,8 +104,49 @@ pub struct LibBuildReport {
 /// One build at a time: the Transfer page, the memory panel and the default modules may ask together.
 static BUILD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// Write one packed module into the device folder when its bytes changed, and count it; a failure goes to `report.failed`.
+fn record(
+    dir: &Path,
+    id: &str,
+    packed: Result<patchkit::pack::Packed, String>,
+    report: &mut LibBuildReport,
+    kept: &mut std::collections::BTreeSet<String>,
+) {
+    let packed = match packed {
+        Ok(p) => p,
+        Err(error) => {
+            report.failed.push(LibFailure {
+                id: id.to_string(),
+                error,
+            });
+            return;
+        }
+    };
+    let rel = format!("{id}.dkm");
+    let path = dir.join(&rel);
+    if std::fs::read(&path).ok().as_deref() != Some(packed.bytes.as_slice()) {
+        let written = match path.parent() {
+            Some(parent) => std::fs::create_dir_all(parent),
+            None => Ok(()),
+        }
+        .and_then(|()| std::fs::write(&path, &packed.bytes));
+        if let Err(e) = written {
+            report.failed.push(LibFailure {
+                id: id.to_string(),
+                error: format!("{}: {e}", path.display()),
+            });
+            return;
+        }
+        report.changed.push(id.to_string());
+    }
+    report.packed += 1;
+    kept.insert(rel);
+}
+
 /// Build and pack every run-time module that builds for `device` into its library folder. A `.dkm` is written only when its bytes
-/// changed; a `.dkm` whose module did not pack this time is deleted. One module's failure does not stop the others.
+/// changed; a `.dkm` whose module did not pack this time is deleted. The build loads one library for all candidates; when that load
+/// fails (a module's build failed) each module loads on its own, so one failure does not stop the others.
+/// A patch-only module (`patchkit::pack::patch_only`) is skipped.
 fn build(root: &Path, device: &str) -> Result<LibBuildReport, String> {
     let _one = BUILD_LOCK.lock().map_err(|e| e.to_string())?;
     let started = std::time::Instant::now();
@@ -123,53 +164,46 @@ fn build(root: &Path, device: &str) -> Result<LibBuildReport, String> {
         .collect();
     let mut report = LibBuildReport::default();
     let mut kept = std::collections::BTreeSet::new();
-    for id in &ids {
-        let packed = patchkit::module::selected_library(
-            root,
-            &source,
-            false,
-            std::slice::from_ref(id),
-            std::slice::from_ref(id),
-        )
-        .and_then(|lib| {
-            patchkit::pack::pack_module(
-                &lib,
-                id,
-                &patchkit::pack::PackOptions {
-                    device: Some(device.to_string()),
-                    ..Default::default()
-                },
-            )
-        });
-        let packed = match packed {
-            Ok(p) => p,
-            Err(e) => {
-                report.failed.push(LibFailure {
-                    id: id.clone(),
-                    error: e.to_string(),
-                });
-                continue;
+    let opts = patchkit::pack::PackOptions {
+        device: Some(device.to_string()),
+        ..Default::default()
+    };
+    match patchkit::module::selected_library(root, &source, false, &ids, &ids) {
+        Ok(lib) => {
+            for id in &ids {
+                if lib.get(id).is_some_and(patchkit::pack::patch_only) {
+                    continue;
+                }
+                let packed =
+                    patchkit::pack::pack_module(&lib, id, &opts).map_err(|e| e.to_string());
+                record(&dir, id, packed, &mut report, &mut kept);
             }
-        };
-        let rel = format!("{id}.dkm");
-        let path = dir.join(&rel);
-        if std::fs::read(&path).ok().as_deref() != Some(packed.bytes.as_slice()) {
-            let written = match path.parent() {
-                Some(parent) => std::fs::create_dir_all(parent),
-                None => Ok(()),
-            }
-            .and_then(|()| std::fs::write(&path, &packed.bytes));
-            if let Err(e) = written {
-                report.failed.push(LibFailure {
-                    id: id.clone(),
-                    error: format!("{}: {e}", path.display()),
-                });
-                continue;
-            }
-            report.changed.push(id.clone());
         }
-        report.packed += 1;
-        kept.insert(rel);
+        Err(_) => {
+            for id in &ids {
+                let packed = patchkit::module::selected_library(
+                    root,
+                    &source,
+                    false,
+                    std::slice::from_ref(id),
+                    std::slice::from_ref(id),
+                )
+                .map_err(|e| e.to_string())
+                .and_then(|lib| {
+                    if lib.get(id).is_some_and(patchkit::pack::patch_only) {
+                        return Ok(None);
+                    }
+                    patchkit::pack::pack_module(&lib, id, &opts)
+                        .map(Some)
+                        .map_err(|e| e.to_string())
+                });
+                match packed {
+                    Ok(None) => {}
+                    Ok(Some(p)) => record(&dir, id, Ok(p), &mut report, &mut kept),
+                    Err(e) => record(&dir, id, Err(e), &mut report, &mut kept),
+                }
+            }
+        }
     }
     for file in scan(root, device)? {
         if !kept.contains(&file.path) {
