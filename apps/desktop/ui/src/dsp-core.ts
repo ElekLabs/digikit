@@ -24,3 +24,30 @@ export const startupDsp = (saved: boolean, running: DspState | undefined): boole
 /** The Metrics line. */
 export const dspLine = (running: DspState | undefined): string =>
   running === undefined ? '—' : running.enabled ? 'DSP on' : 'DSP off';
+
+/** The saved "DSP" choice: on unless the user turned it off. A storage that cannot be read gives "on". */
+export const DSP_KEY = 'digikit.bootDsp';
+export const readDspChoice = (storage: Pick<Storage, 'getItem'>): boolean => {
+  try {
+    return storage.getItem(DSP_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+};
+/** Keep the choice. Only a click on the tick calls this: the launcher's one-time flag lasts for the session and is never saved. */
+export const writeDspChoice = (storage: Pick<Storage, 'setItem'>, on: boolean): void => {
+  try {
+    storage.setItem(DSP_KEY, on ? 'on' : 'off');
+  } catch {
+    /* the choice lasts until the window closes */
+  }
+};
+
+/**
+ * The `dsp` option of a load: the tick when the image's device offers the choice (`undefined` device: unknown, the tick applies),
+ * else left out so the controller keeps its own rule for that device.
+ */
+export const dspOption = (
+  device: Pick<DeviceRecord, 'capabilities' | 'container'> | undefined,
+  tick: boolean,
+): boolean | undefined => (device === undefined || hasDspChoice(device) ? tick : undefined);

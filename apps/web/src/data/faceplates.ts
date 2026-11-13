@@ -126,5 +126,8 @@ export const panels: Readonly<Record<string, Panel>> = (() => {
 /** The devices that have a faceplate, in registry order. */
 export const faceplateIds: readonly string[] = Object.keys(panels);
 
-/** The faceplate shown before any device is known: the last one in registry order. */
-export const defaultFaceplate: string = faceplateIds[faceplateIds.length - 1] ?? '';
+/** The devices that have a faceplate and a digikit runtime: the faceplates the public site offers (it runs the firmware with the runtime). */
+export const runtimeFaceplateIds: readonly string[] = faceplateIds.filter((id) => registry.runtimeIds.includes(id));
+
+/** The faceplate shown before any device is known: the first runtime device with a faceplate, else the first faceplate ('' when none). */
+export const defaultFaceplate: string = runtimeFaceplateIds[0] ?? faceplateIds[0] ?? '';

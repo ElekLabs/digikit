@@ -30,7 +30,7 @@ const call = <T,>(method: string, params: Record<string, unknown> = {}) =>
   invoke<T>('emu_call', { method, params, session: null });
 /** The device's name as the faceplate gives it. */
 const deviceName = (id: string | undefined) =>
-  id && id in panels ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
+  id && Object.hasOwn(panels, id) ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
 
 /** `reload`: start the loaded firmware again (the Restart button's path), which builds the card from the folder in use. */
 export default function CardPanel(props: {

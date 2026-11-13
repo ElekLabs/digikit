@@ -95,7 +95,7 @@ export default function RemotePage(props: { fallbackDevice: DeviceId }): JSX.Ele
           infoKey = key;
           infoAt = Date.now();
           const d = deviceOfPort(info.port);
-          if (d && d !== device() && d in panels) setDevice(d);
+          if (d && d !== device() && Object.hasOwn(panels, d)) setDevice(d);
         }
         const loaded = missing ? await s.modules().catch(() => undefined) : undefined;
         if (remoteStateWanted(missing, loaded)) {

@@ -1,5 +1,5 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { faceplateIds, panels, type Panel as PanelData } from '../data/faceplates';
+import { runtimeFaceplateIds, panels, type Panel as PanelData } from '../data/faceplates';
 import { deviceProfiles, localReadyFirmwareSha256, type DeviceId } from '../data/device-profiles';
 import { browserRuntime, type EmulatorRuntime, type RuntimeUpdate } from '../runtime/runtime';
 import { parseLeds } from '../runtime/leds';
@@ -33,7 +33,7 @@ export default function Faceplate(props: { runtime?: EmulatorRuntime } = {}) {
 
 function Panel(props: { runtime?: EmulatorRuntime }) {
   const dev = devEnabled();
-  const [device, setDevice] = createSignal<DeviceId>(faceplateIds[0] ?? '');
+  const [device, setDevice] = createSignal<DeviceId>(runtimeFaceplateIds[0] ?? '');
   // `?leds=<128 hex digits>` shows a fixed LED state without a running emulator (a styling aid; a loaded firmware replaces it).
   onMount(() => {
     const preview = dev ? new URLSearchParams(location.search).get('leds') : null;
@@ -82,7 +82,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
       setLoaded(true);
       setPaused(false);
     }
-    if (s.device in panels) setDevice(s.device);
+    if (Object.hasOwn(panels, s.device)) setDevice(s.device);
     setRunning({ device: s.device, version: s.version });
     const display =
       s.frame_revision === 0
@@ -197,7 +197,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
           setStatus('Nothing to boot: open the patch page and press Boot in emulator.');
           return;
         }
-        if (item.device && item.device in panels) setDevice(item.device);
+        if (item.device && Object.hasOwn(panels, item.device)) setDevice(item.device);
         void choose(new File([item.bytes], item.name));
       })
       .catch((error) =>
@@ -277,7 +277,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
             <p>Pick your device, then choose its firmware file: stock, or patched with digikit. Nothing is uploaded.</p>
           </header>
           <div class="devices">
-            <For each={faceplateIds}>
+            <For each={runtimeFaceplateIds}>
               {(d) => (
                 <button
                   type="button"

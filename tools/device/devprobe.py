@@ -445,7 +445,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--device", choices=sorted(LEDS), default=next(iter(LEDS)))
+    ap.add_argument("--device", choices=sorted(LEDS), required=True)
     ap.add_argument("--port", help="MIDI port substring (default by device)")
     ap.add_argument("--audio", help="audio device name substring (default by device)")
     ap.add_argument("--steps", default="trig1*10@500")

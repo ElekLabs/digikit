@@ -6,11 +6,26 @@ const registry = {
   devices: [
     { id: 'dt2', name: 'Digitakt II' },
     { id: 'dn2', name: 'Digitone II' },
+    { id: 'st', name: 'Syntakt' },
   ],
 };
 const p = literalPatterns(registry);
 
 describe('countLiterals', () => {
+  test('a two-letter id counts as a string or at the start of a string token, not as a plain word', () => {
+    expect(countLiterals('a.ts', "if (d === 'st') {}", p.text)).toBe(1);
+    expect(countLiterals('a.ts', 'const k = "st-1.42"; const j = `st-${v}`; const i = "st_x";', p.text)).toBe(3);
+    expect(countLiterals('a.ts', 'const k = `st${v}`;', p.text)).toBe(1);
+    expect(countLiterals('a.ts', 'const first = list[0]; // st of the list; "first-st" "post-1" "stx"', p.text)).toBe(
+      0,
+    );
+  });
+
+  test('the name word of a two-letter device counts anywhere bounded', () => {
+    expect(countLiterals('a.ts', 'the Syntakt panel', p.text)).toBe(1);
+    expect(countLiterals('a.ts', 'syntakts', p.text)).toBe(0);
+  });
+
   test('counts ids at word edges and device names anywhere bounded', () => {
     expect(countLiterals('a.ts', "if (dev === 'dt2') use('Digitone II')", p.text)).toBe(2);
     expect(countLiterals('a.ts', 'const adt2x = 1; // dt2_foo', p.text)).toBe(1);

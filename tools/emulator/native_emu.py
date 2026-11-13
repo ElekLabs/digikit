@@ -287,17 +287,29 @@ def ready_for(
     }
 
 
-def target_dir_for(gen: pathlib.Path | None, second: str | None = None) -> str:
-    """The shared cargo target dir for a generated core (tools/emulator/native_target.py); a second core (SHARC_GEN_DIR_2) is part of the key."""
+def target_dir_for(
+    gen: pathlib.Path | None, second: str | None = None, variant: str = ""
+) -> str:
+    """The shared cargo target dir for a generated core (tools/emulator/native_target.py); a second core (SHARC_GEN_DIR_2) is part of the key.
+    A build with other cargo features needs its own `variant` (it cannot reuse the compiled crates of the plain build)."""
     from tools.emulator import native_target
 
     # "" means no generated core, whatever SHARC_GEN_DIR says.
-    return str(native_target.target_dir(gen if gen is not None else "", second=second))
+    return str(
+        native_target.target_dir(
+            gen if gen is not None else "", variant=variant, second=second
+        )
+    )
 
 
 def coupled_features() -> str:
     """The cargo feature of a coupled build: `second-core` when SHARC_GEN_DIR_2 names a second generated core."""
     return "second-core" if os.environ.get("SHARC_GEN_DIR_2") else "coupled-audio"
+
+
+def has_peer_audio(data: device_data.Device) -> bool:
+    """The device's MAIN mixes the voices of a peer CPU (`[emulator.peer_audio]` in its device file)."""
+    return "peer_audio" in data.emulator
 
 
 def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
@@ -329,9 +341,12 @@ def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
             )
     else:
         # A device whose audio comes from its peer CPU needs the audio output in a ColdFire-only build (no generated core).
-        if digi_env.peer_audio_for_syx(syx_from_args(args)):
+        # It has its own target dir: switching devices does not rebuild the shared nogen one.
+        variant = ""
+        if has_peer_audio(launch_device(syx_from_args(args))):
             command.extend(["--features", "cf-audio"])
-        command.extend(["--target-dir", target_dir_for(None)])
+            variant = "cf-audio"
+        command.extend(["--target-dir", target_dir_for(None, variant=variant)])
     return [*command, "--", *args]
 
 
@@ -853,8 +868,8 @@ def main(args: list[str] | None = None) -> None:
     if build_only:
         print(binary)
         return
-    if not daemon:
-        # Devices whose MAIN mixes the voices of a peer CPU play them (`[emulator.peer_audio]`); the other devices ignore it.
+    # Devices whose MAIN mixes the voices of a peer CPU play them (`[emulator.peer_audio]`); the other devices ignore it.
+    if not daemon and has_peer_audio(data):
         env.setdefault("DIGI_EMU_PEER_AUDIO", "0" if force_cf else "1")
     if not daemon and data.has_dsp():
         env.update(pgo_env())
