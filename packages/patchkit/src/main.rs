@@ -42,6 +42,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
   dkm-info FILE.dkm                      check a .dkm and list what it holds
   fit     --json -                       the fit rule (dkrt-fit): {caps, needs, empty?} on stdin -> {each, set, line}; exit 1 on a bad request
+  records --json [--dkm] FILE|-          the decoded records (counts, params, machines, pages, effects) of a committed record block, or with --dkm of a major-2 file's register table
   needs   [--json] FILE.dkm...           what a load of each file takes (arena, DSP area, rows), inferred from its contents; `-` reads stdin;
                                          --json: one object, file -> the needs or {\"error\": text}; exit 1 when a file has none
   dkm-dsp-image FILE BASE [NAME=VALUE..]  the relocated DSP image of a .dkm at the L2 byte address BASE (hex)
@@ -1043,6 +1044,7 @@ plan.json {}",
             let models = patchkit::typed::Models::from_dir(&a.root.join("devices"))?;
             write(&out, &patchkit::dkmsynth::synth(&spec, &dev, &models)?)?;
         }
+        "records" => patchkit::records_cli::run(rest)?,
         "needs" => {
             let json = rest.iter().any(|a| a == "--json");
             let files: Vec<&String> = rest.iter().filter(|a| *a != "--json").collect();

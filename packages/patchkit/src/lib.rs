@@ -42,6 +42,7 @@ pub mod port;
 pub mod preflight;
 pub mod prim;
 pub mod record;
+pub mod records_cli;
 pub mod register;
 pub mod sdkgen;
 pub mod typed;
