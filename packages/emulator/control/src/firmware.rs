@@ -2,33 +2,67 @@
 //! which of them changed against the running one, and the DSP patch that
 //! turns the running DSP image into the new one. Portable: no I/O.
 
+use dt2_firmware_loader as container;
 use std::collections::BTreeMap;
 
 use elektron_native_boot::dsp_patch::DspPatch;
 use elektron_native_boot::dsp_stream::{self, LoadedMemory};
 use sha2::{Digest, Sha256};
 
-/// The MAIN OS section (ColdFire).
+/// The MAIN OS section (ColdFire) of an image the registry does not know.
 pub const SECTION_MAIN: u32 = 3;
-/// The DSP boot stream (on a device without a SHARC: the peer ColdFire's image).
+/// The DSP boot stream of an image the registry does not know.
 pub const SECTION_DSP: u32 = 7;
 
-/// Whether section 7 of `syx` is a DSP stream. Only a firmware the registry
-/// knows (by file or by MAIN) with a supported boot and no DSP profile says no;
-/// anything else (patched, unknown) is treated as a DSP firmware.
-fn expects_dsp(syx: &[u8]) -> bool {
-    let Ok(registry) = plusdrive_format::device_profile::Registry::load() else {
-        return true;
+/// Which sections of a container are MAIN and the DSP boot stream (`[container]`, `[capabilities] dsp`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Roles {
+    pub main: u32,
+    /// None on a device without a SHARC: section 7 is then no DSP stream (a device with a second ColdFire has its program there).
+    pub dsp: Option<u32>,
+}
+
+impl Roles {
+    /// What an unknown or patched image gets: a device with a DSP in the usual sections.
+    const UNKNOWN: Roles = Roles {
+        main: SECTION_MAIN,
+        dsp: Some(SECTION_DSP),
     };
-    let known = match registry.identify(&sha256_hex(syx)) {
-        Ok((_, firmware)) => Some(firmware),
-        Err(_) => dt2_firmware_loader::parse(syx)
+
+    fn of_device(device: &plusdrive_format::device_profile::DeviceProfile) -> Roles {
+        let (Some(caps), Some(container)) = (&device.capabilities, &device.container) else {
+            return Roles::UNKNOWN;
+        };
+        Roles {
+            main: container.main,
+            dsp: if caps.dsp == "none" {
+                None
+            } else {
+                container.dsp
+            },
+        }
+    }
+
+    /// The roles of the image `syx`: from the registry when it knows the file (by digest) or its MAIN (a patched build); else the defaults.
+    pub fn of(syx: &[u8]) -> Roles {
+        let Ok(registry) = plusdrive_format::device_profile::Registry::load() else {
+            return Roles::UNKNOWN;
+        };
+        if let Ok((device, _)) = registry.identify(&sha256_hex(syx)) {
+            return Roles::of_device(device);
+        }
+        container::parse(syx)
             .ok()
-            .and_then(|f| f.sections.into_iter().find(|s| s.id == SECTION_MAIN))
-            .and_then(|main| registry.boot_by_main(&main.bytes))
-            .map(|(_, firmware, _)| firmware),
-    };
-    !known.is_some_and(|f| f.boot.is_some() && f.dsp.is_none())
+            .and_then(|f| {
+                // MAIN of every device is tried: a patched image keeps its MAIN's digest only when it is stock
+                f.sections.into_iter().find_map(|s| {
+                    registry
+                        .boot_by_main(&s.bytes)
+                        .map(|(device, _, _)| Roles::of_device(device))
+                })
+            })
+            .unwrap_or(Roles::UNKNOWN)
+    }
 }
 
 /// Whether the stock firmware with this file digest has a DSP (true for an unknown digest).
@@ -38,7 +72,7 @@ pub fn stock_has_dsp(syx_sha256: &str) -> bool {
         .and_then(|r| {
             r.identify(syx_sha256)
                 .ok()
-                .map(|(_, f)| !(f.boot.is_some() && f.dsp.is_none()))
+                .map(|(device, _)| Roles::of_device(device).dsp.is_some())
         })
         .unwrap_or(true)
 }
@@ -56,18 +90,20 @@ pub struct Analysis {
     pub sections: BTreeMap<u32, (String, usize)>,
     /// Decoded DSP boot stream (section 7), if the firmware has one.
     pub dsp: Option<Vec<u8>>,
+    /// Which sections are MAIN and the DSP stream.
+    pub roles: Roles,
 }
 
 impl Analysis {
     pub fn of(syx: &[u8]) -> Result<Self, String> {
-        Self::with_dsp(syx, expects_dsp(syx))
+        Self::with_roles(syx, Roles::of(syx))
     }
 
-    /// As `of`. With `has_dsp` false, section 7 is not a DSP stream (a device
-    /// without a SHARC): it is digested like any section and not checked or kept.
-    pub fn with_dsp(syx: &[u8], has_dsp: bool) -> Result<Self, String> {
+    /// As `of`, with the section roles given. Without a DSP role, no section is a DSP stream (a
+    /// device without a SHARC): every section is digested and none is checked or kept as DSP.
+    pub fn with_roles(syx: &[u8], roles: Roles) -> Result<Self, String> {
         let firmware =
-            dt2_firmware_loader::parse(syx).map_err(|e| format!("parse SYX/ELE3: {e}"))?;
+            container::parse(syx).map_err(|e| format!("parse SYX/ELE3: {e}"))?;
         let mut sections = BTreeMap::new();
         let mut dsp = None;
         for section in &firmware.sections {
@@ -75,7 +111,7 @@ impl Analysis {
                 section.id,
                 (sha256_hex(&section.bytes), section.bytes.len()),
             );
-            if has_dsp && section.id == SECTION_DSP {
+            if roles.dsp == Some(section.id) {
                 // The emulator flattens the stream and never runs the boot ROM: refuse here what the ROM would.
                 patchkit::bootrom::require(&section.bytes).map_err(|e| e.to_string())?;
                 dsp = Some(section.bytes.clone());
@@ -85,12 +121,13 @@ impl Analysis {
             sha256: sha256_hex(syx),
             sections,
             dsp,
+            roles,
         })
     }
 
     pub fn main_sha256(&self) -> Option<&str> {
         self.sections
-            .get(&SECTION_MAIN)
+            .get(&self.roles.main)
             .map(|(sha, _)| sha.as_str())
     }
 
@@ -144,6 +181,7 @@ mod tests {
             sha256: "a".into(),
             sections: BTreeMap::from([(3, ("m".into(), 1)), (7, ("d1".into(), 2))]),
             dsp: None,
+            roles: Roles::UNKNOWN,
         };
         let b = Analysis {
             sha256: "b".into(),
@@ -153,6 +191,7 @@ mod tests {
                 (8, ("x".into(), 1)),
             ]),
             dsp: None,
+            roles: Roles::UNKNOWN,
         };
         assert_eq!(a.changed_sections(&b), vec![7, 8]);
         assert_eq!(a.changed_sections(&a), Vec::<u32>::new());

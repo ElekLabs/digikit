@@ -3625,7 +3625,7 @@ impl Actor {
             let base_sha = loaded.base_sha.clone();
             let changed = running.changed_sections(&new);
             report["sections_changed"] = json!(changed);
-            let main_changed = changed.contains(&firmware::SECTION_MAIN);
+            let main_changed = changed.contains(&new.roles.main);
             report["main_changed"] = main_changed.into();
             if !main_changed && !force {
                 if initial_buttons.is_some() {
@@ -3801,7 +3801,8 @@ impl Actor {
     ) -> Result<bool, RpcError> {
         let dsp_changed = running
             .changed_sections(&new)
-            .contains(&firmware::SECTION_DSP);
+            .iter()
+            .any(|id| Some(*id) == new.roles.dsp);
         report["start_used"] = "none".into();
         if dsp_changed {
             let has_audio = self.runtime.as_ref().is_some_and(Runtime::has_audio);
