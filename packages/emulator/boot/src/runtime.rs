@@ -618,10 +618,15 @@ impl Emulator {
             }
         };
         let mut board = Board::new(card, semaphores, CompletionPolicy::Oracle);
-        // DMA timer 0's counter runs at the bus clock (`Board::enable_dtcn0`), see `dtcn0_on`.
-        if dtcn0_on(&device.short, std::env::var("DIGI_DTCN0").ok().as_deref())? {
-            board.enable_dtcn0();
-        }
+        // The DMA timer counters that run at the bus clock (`Board::enable_dtcn_channels`).
+        // The mask comes from `dtcn0_on` for now (DN2: channel 0 only). It will come from device
+        // data (the registry branch adds it), so a device whose firmware polls another channel
+        // (Syntakt MAIN polls DTCN2) lists it there.
+        let dtcn_mask = u8::from(dtcn0_on(
+            &device.short,
+            std::env::var("DIGI_DTCN0").ok().as_deref(),
+        )?);
+        board.enable_dtcn_channels(dtcn_mask);
         board
             .enable_sd_gate(false)
             .map_err(|e| format!("SdGateEnable({e:?})"))?;
@@ -2896,7 +2901,7 @@ impl Emulator {
     fn enable_usb(&mut self) -> Result<(), String> {
         use crate::midi::{USB_PERIOD, resolve_usb};
         if !self.midi.usb.enabled {
-            let (rx, tx) = resolve_usb(&self.main, MAIN_LOAD)
+            let (rx, tx) = resolve_usb(&self.main)
                 .ok_or("this image has no USB MIDI callback this emulator knows")?;
             self.midi.usb.rx_cb = rx;
             self.midi.usb.tx_fn = tx;
@@ -2920,13 +2925,12 @@ impl Emulator {
         connect: Option<u32>,
         zlp: Option<bool>,
     ) -> Result<usize, String> {
-        use crate::midi::{QUEUE_TD_ENTRY, UsbItem, resolve_queue_td};
+        use crate::midi::{UsbItem, resolve_queue_td};
         self.enable_usb()?;
         if self.midi.usb.bulk_queue_fn == 0 {
-            if !resolve_queue_td(&self.main, MAIN_LOAD) {
-                return Err("this image has no USB queue function this emulator knows".into());
-            }
-            self.midi.usb.bulk_queue_fn = QUEUE_TD_ENTRY;
+            let queue_td = resolve_queue_td(&self.main)
+                .ok_or("this image has no USB queue function this emulator knows")?;
+            self.midi.usb.bulk_queue_fn = queue_td;
             self.rebuild_watch();
         }
         self.midi.usb.period = period.unwrap_or(BULK_PERIOD);
@@ -3757,11 +3761,7 @@ fn supported_firmware(registry: &device_profile::Registry) -> String {
 }
 
 fn verified_task_create(main: &[u8]) -> Result<u32, String> {
-    let task_create = 0x4000_12c8;
-    main.get((task_create - MAIN_LOAD) as usize..)
-        .is_some_and(|bytes| bytes.starts_with(&[0x20, 0x2f, 0, 0x0c, 0x72, 0xfc, 0xc2, 0xaf]))
-        .then_some(task_create)
-        .ok_or("task_create prefix verification failed".into())
+    resolve_task_create(main)
 }
 
 fn resolve_intro_callback_return(main: &[u8]) -> Result<u32, String> {
@@ -3812,11 +3812,9 @@ fn resolve_intro_marks(main: &[u8]) -> Result<(u32, u32), String> {
 fn resolve_uart(main: &[u8]) -> Result<(u32, u32, u32, u32, u32, u32), String> {
     let wait_sig = hex("24394094cd90d48022794094cd8828394094cd9493c43239fc0454743639fc04");
     let uart_wait = unique(main, &wait_sig, &data_mask(&wait_sig, None))?;
-    let init = 0x4000_243e;
+    let init = resolve_uart_init(main)?;
     let at = (init - MAIN_LOAD) as usize;
-    let prefix = hex("2f02740f41f9ec09404b1210202f000843f9ec07000042b9");
-    if main.get(at..at + prefix.len()) != Some(prefix.as_slice())
-        || main.get(at + 0x16..at + 0x18) != Some(&[0x42, 0xb9])
+    if main.get(at + 0x16..at + 0x18) != Some(&[0x42, 0xb9])
         || main
             .get(at + 0x19a..)
             .is_none_or(|bytes| !bytes.starts_with(&[0x20, 0x3c]))
@@ -4706,6 +4704,127 @@ mod tests {
             assert!(!emu.fused_loops.is_empty(), "{file}: fused loops");
             assert!(!emu.idle_spins.is_empty(), "{file}: idle spins");
         }
+    }
+
+    fn main_of(file: &str) -> Option<Vec<u8>> {
+        let syx = std::fs::read(format!("../../../firmware/{file}")).ok()?;
+        let firmware = parse(&syx).unwrap();
+        firmware
+            .sections
+            .into_iter()
+            .find(|s| s.id == 3)
+            .map(|s| s.bytes)
+    }
+
+    /// The five addresses that were fixed to DT2 resolve by signature on every supported MAIN.
+    #[test]
+    fn device_specific_boot_addresses_resolve_by_signature() {
+        use crate::midi::{resolve_queue_td, resolve_usb_reg, resolve_usb_tx};
+        // task_create, uart8_init, usb queue_td, usb tx, usb register
+        let dt2 = [
+            0x4000_12c8,
+            0x4000_243e,
+            0x4000_5a86,
+            0x4000_4734,
+            0x4000_434a,
+        ];
+        let syntakt = [
+            0x4000_1640,
+            0x4000_2782,
+            0x4000_5d72,
+            0x4000_4a20,
+            0x4000_4636,
+        ];
+        for (file, expected) in [
+            ("Digitakt_II_OS1.17.syx", Some(dt2)),
+            ("Digitone_II_OS1.12.syx", Some(dt2)),
+            ("Digitone_II_OS1.11.syx", Some(dt2)),
+            ("Syntakt_OS1.42.syx", Some(syntakt)),
+        ] {
+            let Some(main) = main_of(file) else { continue };
+            let found = [
+                resolve_task_create(&main).ok(),
+                resolve_uart_init(&main).ok(),
+                resolve_queue_td(&main),
+                resolve_usb_tx(&main),
+                resolve_usb_reg(&main),
+            ];
+            let expected = expected.map(|e| e.map(Some));
+            assert_eq!(Some(found), expected, "{file}");
+        }
+    }
+
+    /// Every boot signature resolves on the bytes of a MAIN without a profile; Syntakt has no
+    /// filesystem worker.
+    #[test]
+    fn boot_signatures_resolve_on_syntakt_main() {
+        let Some(main) = main_of("Syntakt_OS1.42.syx") else {
+            return;
+        };
+        let mut failed: Vec<String> = Vec::new();
+        let mut check = |name: &str, ok: bool| {
+            if !ok {
+                failed.push(name.to_owned());
+            }
+        };
+        check("task_create", resolve_task_create(&main).is_ok());
+        check(
+            "mainloop",
+            unique_signature_data(&main, MAINLOOP_SIG, Some(15)).is_some(),
+        );
+        let panel_diff = unique(&main, PANEL_DIFF_SIG, &data_mask(PANEL_DIFF_SIG, None));
+        check("panel_diff", panel_diff.is_ok());
+        check(
+            "panel operands",
+            panel_diff
+                .as_ref()
+                .is_ok_and(|p| operand_pair(&main, *p).is_ok()),
+        );
+        check(
+            "job_pump",
+            unique_signature(&main, JOB_PUMP_SIG, None).is_some(),
+        );
+        check(
+            "flash_read",
+            unique(&main, FLASH_READ_SIG, &vec![false; FLASH_READ_SIG.len()]).is_ok(),
+        );
+        check(
+            "flash_erase",
+            unique(&main, FLASH_ERASE_SIG, &data_mask(FLASH_ERASE_SIG, None)).is_ok(),
+        );
+        check(
+            "flash_program",
+            unique(
+                &main,
+                FLASH_PROGRAM_SIG,
+                &data_mask(FLASH_PROGRAM_SIG, None),
+            )
+            .is_ok(),
+        );
+        check("fs_worker", resolve_fs_worker(&main).is_ok());
+        check("sd_semaphores", resolve_sd_semaphores(&main).is_ok());
+        check("intro_marks", resolve_intro_marks(&main).is_ok());
+        check(
+            "intro_callback_return",
+            resolve_intro_callback_return(&main).is_ok(),
+        );
+        let display = hex("701041f9fc08c000245f13c1fc050050722313c0fc05001d");
+        check(
+            "display_start",
+            unique(&main, &display, &data_mask(&display, None)).is_ok(),
+        );
+        check("uart", resolve_uart(&main).is_ok());
+        check(
+            "set_pixel",
+            unique(
+                &main,
+                &hex(SET_PIXEL_SIG),
+                &vec![false; SET_PIXEL_SIG.len() / 2],
+            )
+            .is_ok(),
+        );
+        check("context_switch", resolve_context_switch(&main).is_ok());
+        assert_eq!(failed, vec!["fs_worker".to_owned()]);
     }
 
     #[test]

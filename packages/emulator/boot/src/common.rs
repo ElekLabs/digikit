@@ -114,6 +114,26 @@ pub(crate) fn data_mask(sig: &[u8], wild: Option<usize>) -> Vec<bool> {
     mask
 }
 
+/// `task_create`: loads its stack-passed arguments first. Unique on DT2, DN2 and Syntakt MAIN images.
+const TASK_CREATE_SIG: &[u8] = &[0x20, 0x2f, 0x00, 0x0c, 0x72, 0xfc, 0xc2, 0xaf];
+/// The UART8 initializer: saves d2, sets d2 = 15, then addresses the UART and GPIO blocks.
+const UART_INIT_SIG: &[u8] = &[
+    0x2f, 0x02, 0x74, 0x0f, 0x41, 0xf9, 0xec, 0x09, 0x40, 0x4b, 0x12, 0x10, 0x20, 0x2f, 0x00, 0x08,
+    0x43, 0xf9, 0xec, 0x07, 0x00, 0x00, 0x42, 0xb9,
+];
+
+/// Address of `task_create` in a MAIN image.
+pub(crate) fn resolve_task_create(image: &[u8]) -> Result<u32, String> {
+    unique(image, TASK_CREATE_SIG, &data_mask(TASK_CREATE_SIG, None))
+        .map_err(|e| format!("task_create: {e}"))
+}
+
+/// Address of the UART8 initializer in a MAIN image.
+pub(crate) fn resolve_uart_init(image: &[u8]) -> Result<u32, String> {
+    unique(image, UART_INIT_SIG, &data_mask(UART_INIT_SIG, None))
+        .map_err(|e| format!("uart8_init: {e}"))
+}
+
 pub(crate) fn resolve_sd_semaphores(image: &[u8]) -> Result<(u32, SemaphoreAddresses), String> {
     let bringup = unique(image, SD_BRINGUP_SIG, &data_mask(SD_BRINGUP_SIG, None))?;
     let offset = usize::try_from(bringup - MAIN_LOAD).map_err(|_| "sd bringup below MAIN")?;
