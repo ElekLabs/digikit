@@ -533,7 +533,7 @@ Items 7, 9 and 10 link services into the image as a temporary step, so each boun
 | 7 | Generic records, service registry, `samples` linked in, storage interface, files memory | 4, 5, 9 | 4-5 days | High: first real proof of the model | Medium |
 | 8 | Spike, whole path | 11.2 | 3-4 days | High: decides item 12 and the small-image goal | Medium for ColdFire; unknown for SHARC |
 | **Stop** | Report to Em; review the model against what was learned | | | | |
-| 9 | `fx` linked in, with neutral adapter functions | 3.2, 10 | 4-5 days | High | Medium |
+| 9 | `fx` linked in, with neutral adapter functions. Check that each service object is a separate input of the device tests (`tools/nx/device-inputs.mjs`), so a service edit selects only the tests that load it. | 3.2, 10 | 4-5 days | High | Medium |
 | 10 | `machines` linked in, with neutral adapter functions; layer check final | 3.2, 10 | 4-5 days | High: done criterion 1 | Medium |
 | 11 | Boot plan with one verdict per module; module states; refusal fixtures | 5, 8 | 2-3 days | High: users see why | Medium-high |
 | 12 | Services as `.dks`, hooks at boot, workbench binding and install | 5 | 6-8 days | High: small runtime; done criteria 5 and 6 | Medium |
@@ -592,6 +592,8 @@ Base documents to rewrite when each item lands. These decisions are amended: `do
 ## 18. Rationale
 
 Why modules live in memory we own. Modules are copied into the runtime's arena inside `cf.expansion` (1.33 MiB on DT2, about 25 MiB on DN2), memory the firmware does not use. The firmware reaches them only through hooks and rows. Changing the module set needs no reflash, a bad module cannot damage the image, and safe mode skips it. Most limits are our own constants in `devices/*.toml [limits]`. Hard ceilings are the firmware's machine-table sizes and DSP cycles.
+
+Why services are separate from the runtime, also for tests. Today every device test loads the runtime, so a runtime edit selects almost every device test. When a service is its own object, a test's inputs are the runtime and the services it loads: an edit to `fx` reruns only the tests that load `fx`, and the others replay from the cache. A small runtime changes rarely. A service talks to the rest only through `sdk.toml`, so host tests can drive it with fake imports, and its pure checks become unit tests.
 
 Ideas not adopted:
 

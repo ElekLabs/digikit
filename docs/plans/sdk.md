@@ -3,7 +3,7 @@
 Date: 2026-11-12. Base: `main` at 25378434. Targets: DT2 OS 1.17, DN2 OS 1.12.
 
 Status: **design agreed with Em on 2026-11-12, S2 detail (sections 5, 5.1, S2a, S2b) agreed the same day. S1 (restructure) shipped
-(PR 416); S2a (C hygiene) and S2b (entry point and imports, the old contract deleted) are built on `lane/sdk-design`; S3 to S5 not built.**
+(PR 416); S2a (C hygiene, PR 424) and S2b (entry point and imports, the old contract deleted, PRs 426 and 433) shipped; S3 to S5 not built.**
 
 This plan replaces sections 7.1 (Cleanup) and 7.2 (Contract) of [runtime-and-services.md](runtime-and-services.md), that is the SDK
 parts of its items 1 and 5. The order of its steps is in [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md). It links to
@@ -452,7 +452,7 @@ Rule: every built `.dkm` stays byte-identical. What shipped:
 - `sdk/project.json`: `sdk:check-generated` names the generator's inputs and outputs only; `sdk/src`, `sdk/dsp` (except the generated
   includes) and `sdk/templates` select no SDK task.
 
-### S2a C hygiene
+### S2a C hygiene: done
 
 - A repository `.clang-format` that matches the dominant style today: 4-space indent, function braces on their own line, control braces
   on the same line, `*` next to the name, 100 columns. Reformat all C in one whitespace-only commit; `sdk:hashes compare --force` proves it

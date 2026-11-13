@@ -28,8 +28,8 @@ Status: `todo`, `active`, `done`, `parked`.
 | Phase | Item | What | Depends on | Status | Branch / PR |
 | --- | --- | --- | --- | --- | --- |
 | 1 | S1 | SDK restructure, byte-identical, with hash task | - | done | PR 416 |
-| 1 | S2a | SDK C hygiene: clang-format, `-std=c11`, helpers into `core/`, SDK sources linked automatically | S1 | done | lane/sdk-design |
-| 1 | S2b | SDK entry point (`dk_module`, `dk_module_ctx`) and named imports by service; tools and fixtures migrated; the Api table, `dkm_init` and the slots deleted | S2a | done | lane/sdk-design |
+| 1 | S2a | SDK C hygiene: clang-format, `-std=c11`, helpers into `core/`, SDK sources linked automatically | S1 | done | PR 424 |
+| 1 | S2b | SDK entry point (`dk_module`, `dk_module_ctx`) and named imports by service; tools and fixtures migrated; the Api table, `dkm_init` and the slots deleted | S2a | done | PRs 426, 433 |
 | 1 | S3 | SDK builders in `init` and the runtime commit path; machines, FX and fixtures migrated | S2b | todo | |
 | 1 | S4 | SDK templates and docs | S3 | todo | |
 | 1 | P7 | Clock audit (static) | - | done | finding 125 |
