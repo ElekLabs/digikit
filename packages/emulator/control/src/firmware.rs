@@ -43,12 +43,19 @@ impl Roles {
         }
     }
 
-    /// The roles of the image `syx`: from the registry when it knows the file (by digest) or its MAIN (a patched build); else the defaults.
+    /// The roles of the image `syx`: from the registry when it knows the file (by digest), the stock base named in its patch record, or its MAIN (a build
+    /// with another DSP stream); else the defaults.
     pub fn of(syx: &[u8]) -> Roles {
         let Ok(registry) = plusdrive_format::device_profile::Registry::load() else {
             return Roles::UNKNOWN;
         };
         if let Ok((device, _)) = registry.identify(&sha256_hex(syx)) {
+            return Roles::of_device(device);
+        }
+        // a digikit-patched image names its stock base in its patch record (its MAIN is not stock, so the MAIN lookup below cannot find it)
+        if let Ok(Some(record)) = patchkit::verify::patch_record(syx)
+            && let Ok((device, _)) = registry.identify(&record.base_sha256)
+        {
             return Roles::of_device(device);
         }
         container::parse(syx)
