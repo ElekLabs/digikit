@@ -279,7 +279,8 @@ export class BulkSession {
   constructor(link: BulkLink, o: BulkOptions = {}) {
     this.link = link;
     this.o = {
-      timeoutMs: o.timeoutMs ?? 5000,
+      // the device's file calls wait up to ~3 s on the store lock and retry 3 times (DATA, END, ABORT ~9 s; BEGIN longer)
+      timeoutMs: o.timeoutMs ?? 15000,
       resyncMs: o.resyncMs ?? 500,
       window: o.window ?? 0,
       chunk: o.chunk ?? BULK_DATA_MAX,
@@ -344,8 +345,8 @@ export class BulkSession {
   }
 
   /** The reply to request `want`; replies to other requests (late ones) are dropped and logged. */
-  private async reply(cmd: number, want: number, signal?: AbortSignal): Promise<BulkReply> {
-    const end = Date.now() + this.o.timeoutMs;
+  private async reply(cmd: number, want: number, signal?: AbortSignal, waitMs = this.o.timeoutMs): Promise<BulkReply> {
+    const end = Date.now() + waitMs;
     for (;;) {
       // a stream of replies that never match is a timeout too
       const f = await this.frame(Math.max(1, end - Date.now()), `bulk command ${cmd.toString(16)}`, signal);
@@ -392,10 +393,11 @@ export class BulkSession {
     body: Uint8Array | undefined,
     flags: number,
     retries: number,
+    waitMs?: number,
   ): Promise<Uint8Array> {
     await this.resync();
     for (let tries = 0; ; tries++) {
-      const r = await this.reply(cmd, await this.send(cmd, body, flags));
+      const r = await this.reply(cmd, await this.send(cmd, body, flags), undefined, waitMs);
       if (r.status === 0) return r.body;
       if (r.status !== E_BUSY || tries >= retries) throw new BulkDeviceError(cmd, r.status);
       await sleep(this.o.busyWaitMs);
@@ -405,8 +407,9 @@ export class BulkSession {
     return this.callWith(cmd, body, flags, this.o.busyRetries);
   }
 
-  async info(): Promise<BulkInfo> {
-    const b = await this.call(BULK_CMD.INFO);
+  /** `waitMs`: the wait for the reply, instead of `timeoutMs` (the selection probe of an OUT-only candidate). */
+  async info(waitMs?: number): Promise<BulkInfo> {
+    const b = await this.callWith(BULK_CMD.INFO, undefined, 0, this.o.busyRetries, waitMs);
     if (b.length < 12 + BULK_NONCE_LEN)
       throw new DkError({ error: `bulk INFO body of ${b.length} bytes`, kind: 'protocol' });
     const v = new DataView(b.buffer, b.byteOffset, b.length);

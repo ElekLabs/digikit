@@ -1277,15 +1277,6 @@ export class DkSession {
     await this.ok(SERVICE_CMD.USB_FAST_NONCE, 'usb-fast nonce', nonce);
   }
 
-  /** USB_FAST_TAKEOVER (docs/plans/usb-fast-takeover.md): ask core/usb-bulk to switch USB AUDIO/MIDI to USB MIDI about 50 ms after the reply; also the renew. E_STATE: Overbridge. */
-  async usbFastTakeOver(): Promise<void> {
-    await this.ok(SERVICE_CMD.USB_FAST_TAKEOVER, 'usb-fast take-over');
-  }
-  /** USB_FAST_RELEASE: give the USB mode back (about 50 ms after the reply). OK when nothing is taken over. */
-  async usbFastRelease(): Promise<void> {
-    await this.ok(SERVICE_CMD.USB_FAST_RELEASE, 'usb-fast release');
-  }
-
   /** USB_FAST 'R' (command 0x37, body 'R'): the reply frames usb-fast queued while the bulk link is OUT only (USB AUDIO/MIDI): zero or more whole frames, oldest first; empty: none pending. */
   async usbFastReplies(): Promise<Uint8Array> {
     // quick: one try with a short timeout, no retries (a retry after a lost reply would lose the frames the device already took out of its queue)
@@ -1294,7 +1285,7 @@ export class DkSession {
 
   /**
    * True when usb-fast reports that the device is not in USB MIDI mode (the wrong-mode bit of `usb_bulk_state`, word 8 of its STATUS reply, command 0x37, a
-   * debug aid of the module). False in USB MIDI mode, and when usb-fast is not loaded or does not answer: then a take-over would not help.
+   * debug aid of the module). False in USB MIDI mode, and when usb-fast is not loaded or does not answer: then no route would help.
    */
   async usbFastWrongMode(): Promise<boolean> {
     try {

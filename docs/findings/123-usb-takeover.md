@@ -1,6 +1,6 @@
 # USB take-over: why it is not reliable, and the bulk OUT endpoint that replaces it
 
-Plan: [usb-fast-audio-bulk.md](../plans/usb-fast-audio-bulk.md). Earlier plan: [usb-fast-takeover.md](../plans/usb-fast-takeover.md). Code: `modules/core/adapters/usb-bulk` (`usb_bulk_takeover`, `usb_bulk_giveback`, card-log events `USB_SW`), `modules/tools/usb-fast`. Static facts from DT2 1.17 and DN2 1.12; hardware facts from one DT2 unit, 2026-11-12 and 2026-11-13. Marks: **[D]** measured on one unit or read once by one agent, **[O]** open. Nothing here is **[V]**: no second agent has checked it against the image bytes.
+Plan: [usb-fast-audio-bulk.md](../plans/usb-fast-audio-bulk.md). The take-over code, its workbench commands and the `USB_SW` log events were deleted after these results; git history keeps them. Current code: `modules/core/adapters/usb-bulk`, `modules/core/adapters/usb-bulk-audio`, `modules/tools/usb-fast`. Static facts from DT2 1.17 and DN2 1.12; hardware facts from one DT2 unit, 2026-11-12 and 2026-11-13. Marks: **[D]** measured on one unit or read once by one agent, **[O]** open. Nothing here is **[V]**: no second agent has checked it against the image bytes.
 
 ## Conclusion
 
@@ -29,7 +29,7 @@ The USB controller has 4 endpoints (RM DCCPARAMS DEN = 4). USB AUDIO/MIDI uses E
 
 ## Hardware facts: the failure (DT2, card-log timelines)
 
-Source: the card log (`USB_SW` events) of `wb.mjs takeover-cycle` runs. **[D]**
+Source: the card log (`USB_SW` events) of repeated take-over and release cycles driven by the workbench (both since deleted). **[D]**
 
 - A failed switch looks the same every time. After RS is set again, PORTSC shows line state SE0 (`0xa0000005`; good switches show J, `0x...805` or `0x...885`). No SOF arrives. The host never addresses the device (no ADDRESSED). The ULPI function control stays `0x41` and never reaches `0x49` in the failing park case. ULPI_VIEWPORT runs hang with SS set. After a controller reset BSV reads 0 and the controller never restarts.
 - The device keeps running and its firmware is healthy; only the USB side is dead. Audio was idle in all recorded failures.

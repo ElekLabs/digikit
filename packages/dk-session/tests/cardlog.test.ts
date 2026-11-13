@@ -1,19 +1,7 @@
-// The card log: LOGCFG op 2 and 3 against a fake debug module, the file decoder on a hand-built file, and the USB_SW event text.
+// The card log: LOGCFG op 2 and 3 against a fake debug module, and the file decoder on a hand-built file.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  DkError,
-  DkSession,
-  decode8in7,
-  encode8in7,
-  parseCardLog,
-  runtimeEvent,
-  eventLine,
-  summarizeCardLog,
-  switchLine,
-  type CardLogFile,
-  type DkLogEvent,
-} from '@digi/dk-session';
+import { DkError, DkSession, decode8in7, encode8in7, parseCardLog } from '@digi/dk-session';
 import { LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 const concat = (...p: Uint8Array[]) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
@@ -87,7 +75,7 @@ test('parseCardLog decodes the header and the valid events of a 16448 byte file'
     const at = 64 + 32 * i;
     v.setUint32(at, seq);
     v.setUint32(at + 4, seq * 150);
-    v.setUint16(at + 8, LOG_KIND.USB_SW);
+    v.setUint16(at + 8, LOG_KIND.MOD_NEEDS);
     v.setUint16(at + 10, 4);
     v.setUint32(at + 12, seq);
     v.setUint32(at + 28, 0xdead0000 + seq);
@@ -102,7 +90,7 @@ test('parseCardLog decodes the header and the valid events of a 16448 byte file'
   assert.deepEqual(f.events[1], {
     seq: 11,
     time: 1650,
-    kind: LOG_KIND.USB_SW,
+    kind: LOG_KIND.MOD_NEEDS,
     flags: 4,
     args: [11, 0, 0, 0, 0xdead000b],
   });
@@ -115,108 +103,4 @@ test('parseCardLog decodes the header and the valid events of a 16448 byte file'
     () => parseCardLog(buf),
     (e) => e instanceof DkError,
   );
-});
-
-test('a USB_SW event reads as phase, direction, switch number and register bits', () => {
-  const phase = 11 | (2 << 8) | (1 << 12) | (1 << 13) | (5 << 16); // CONFIGURED, port 2, release, detail 1, switch 5
-  const sts = (1 << 6) | (1 << 16) | (0x2a << 24); // URI, RS, ULPI 0x2a
-  const otg = 1 | 4 | 8 | (3 << 8) | (1 << 16) | (1 << 21) | (9 << 24); // BSV, audio, addr 3, EP1RX, EP3TX, 9 connects
-  const d = runtimeEvent({ seq: 1, time: 0, kind: LOG_KIND.USB_SW, flags: 4, args: [phase, 120, sts, 0x1005, otg] });
-  assert.deepEqual(d.fields, {
-    phase: 'CONFIGURED',
-    dir: 'release',
-    port: 2,
-    detail: 1,
-    switch_no: 5,
-    ms: 120,
-    rs: 1,
-    uri: 1,
-    pci: 0,
-    sli: 0,
-    ulpi: 0x2a,
-    portsc: '0x00001005',
-    bsv: 1,
-    sof: 0,
-    audio: 1,
-    clk: 1,
-    addr: 3,
-    eps: 'EP1RX,EP3TX',
-    connects: 9,
-  });
-  assert.match(eventLine(d), /USB_SW/);
-  const a = runtimeEvent({ seq: 2, time: 0, kind: LOG_KIND.USB_SW, flags: 4, args: [10 | (2 << 13), 0, 0, 0, 0] });
-  assert.equal(a.fields.reset, 'uri');
-});
-
-test('a PHY_BUSY event shows the reason, the tries and the ULPI viewport bits', () => {
-  const phase = 19 | (2 << 8) | (3 << 16); // PHY_BUSY, port 2, take-over, switch 3
-  const sts = 4 | (2 << 8) | (1 << 16); // why 4, 2 tries, RS
-  const vp = (1 << 30) | (1 << 27) | (2 << 24) | (0x04 << 16) | 0x1234; // RUN, SS, port 2, addr 0x04, data 0x1234
-  const d = runtimeEvent({ seq: 1, time: 0, kind: LOG_KIND.USB_SW, flags: 4, args: [phase, 50, sts, vp, 0] });
-  assert.equal(d.fields.phase, 'PHY_BUSY');
-  assert.equal(d.fields.why, 4);
-  assert.equal(d.fields.tries, 2);
-  assert.equal(d.fields.rs, 1);
-  assert.equal(d.fields.viewport, '0x4a041234');
-  assert.deepEqual([d.fields.run, d.fields.rw, d.fields.ss, d.fields.ulpiwu], [1, 0, 1, 0]);
-  assert.deepEqual([d.fields.vport, d.fields.vaddr, d.fields.vdata], [2, '0x04', '0x1234']);
-});
-
-test('a PHY_WAKE event shows the result and the viewport bits', () => {
-  const phase = 21 | (1 << 13) | (4 << 16); // PHY_WAKE, detail 1 (timeout), switch 4
-  const d = runtimeEvent({ seq: 1, time: 0, kind: LOG_KIND.USB_SW, flags: 4, args: [phase, 3000, 0x80000000, 15, 0] });
-  assert.equal(d.fields.phase, 'PHY_WAKE');
-  assert.equal(d.fields.result, 'timeout');
-  assert.equal(d.fields.viewport, '0x80000000');
-  assert.deepEqual([d.fields.wu, d.fields.run, d.fields.polled_ms, d.fields.clk], [1, 0, 15, 0]);
-  assert.equal(d.fields.portsc, undefined);
-});
-
-test('summarizeCardLog gives one row per switch and counts overlapping events once', () => {
-  let seq = 0;
-  const ev = (sw: number, phase: number, detail = 0, ms = 0, portsc = 0, audio = 0, clk = 0): DkLogEvent => ({
-    seq: ++seq,
-    time: seq,
-    kind: LOG_KIND.USB_SW,
-    flags: 4,
-    args: [phase | (2 << 8) | (detail << 13) | (sw << 16), ms, 0, portsc, (audio << 2) | (clk << 3)],
-  });
-  const [REQ, PARK, RS_UP, ADDRESSED, ENUM_LATE, RECOVERY, GIVEUP, DONE, WAKE] = [1, 6, 8, 10, 13, 14, 15, 16, 21];
-  const events = [
-    ev(1, REQ),
-    ev(1, PARK, 0),
-    ev(1, RS_UP, 0, 2066, 0xa0000805),
-    ev(1, ADDRESSED, 3, 2200),
-    ev(1, DONE, 0, 2210),
-    ev(2, REQ, 0, 0, 0, 1),
-    ev(2, PARK, 1),
-    ev(2, RS_UP, 0, 2066, 0xa0000005),
-    ev(2, ENUM_LATE, 0, 5066),
-    ev(2, RECOVERY, 1, 5100),
-    ev(2, ADDRESSED, 1, 8000),
-    ev(2, DONE, 0, 8010),
-    ev(3, REQ),
-    ev(3, RS_UP, 0, 2000, 0xa0000005, 0, 1),
-    ev(3, WAKE, 1, 4000),
-    ev(3, ENUM_LATE, 0, 5000),
-    ev(3, GIVEUP, 0, 9000),
-  ];
-  const file = (kind: 'rolling' | 'incident', evs: DkLogEvent[]) =>
-    ({ bootSeq: 5, kind, file: 'a', events: evs }) as unknown as CardLogFile;
-  // the incident file repeats the last ten events of the rolling file
-  const s = summarizeCardLog([file('rolling', events), file('incident', events.slice(6))]);
-  assert.equal(s.length, 3);
-  assert.deepEqual(
-    s.map((x) => [x.switchNo, x.park, x.lineState, x.doneMs, x.stoppedAt, x.enumLate, x.recoveries, x.selfHealed]),
-    [
-      [1, 'ok', 'J', 2210, null, false, 0, false],
-      [2, 'refused', 'SE0', 8010, null, true, 1, true],
-      [3, '-', 'SE0', null, 'GIVEUP', true, 0, false],
-    ],
-  );
-  assert.equal(s[0]!.reset, 'addr0');
-  assert.equal(s[1]!.audio, true);
-  assert.equal(s[2]!.giveUp, true);
-  assert.deepEqual([s[2]!.clk, s[2]!.clkEnd, s[2]!.wake], [1, 0, 'timeout']);
-  assert.match(switchLine(s[2]!), /clk=1 .*clk_end=0 .*wake=timeout/);
 });

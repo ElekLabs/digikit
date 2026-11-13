@@ -89,7 +89,7 @@ for (const device of DEVICES) {
     const rig: CardRig = cardRig(device, 'usb-fast', {
       dsp: 'zero',
       roots: [...RT, 'core/usb-bulk', 'core/usb-bulk-audio', 'core/sdhc-large', ...(dt2 ? ['core/plusdrive-write'] : [])],
-      symbols: ['DKRT_MAILBOX', 'usb_bulk_switches', 'DKRT_SESSION_IDLE', 'DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR', 'DKRT_UPLOAD_WRITES', 'DKRT_UPLOAD_FLIP', ...(dt2 ? ['DKRT_PD_CUT'] : [])],
+      symbols: ['DKRT_MAILBOX', 'DKRT_SESSION_IDLE', 'DKRT_UPLOAD_CUT', 'DKRT_UPLOAD_TEAR', 'DKRT_UPLOAD_WRITES', 'DKRT_UPLOAD_FLIP', 'usb_bulk_restarts', ...(dt2 ? ['DKRT_PD_CUT'] : [])],
       project: true,
       uploads: true,
       relaxFs: true,
@@ -169,29 +169,38 @@ for (const device of DEVICES) {
       expect(choice, `${dbg} a bulk link is negotiated (${JSON.stringify(options)}, connect ${++connects}: ${notes.join('; ')})`).toBeDefined();
       return choice!;
     };
-    /** The firmware's active USB port and the stored USB CONFIG byte, by their anchors. */
+    /** The firmware's active USB port and its port table, by their anchors. */
     const usbAnchors = () => {
       const anchor = (name: string) => {
         const a = (portFile(device, FIRMWARE[device]).anchor ?? []).filter((x) => x.name === name);
         expect(a.length, name).toBe(1);
         return a[0]!.addr as number;
       };
-      return { port: anchor('cf.usb.value.active_port'), mode: anchor('cf.usb.value.config_mode'), table: anchor('cf.usb.data.port_table') };
+      return { port: anchor('cf.usb.value.active_port'), table: anchor('cf.usb.data.port_table') };
     };
-    /** A menu-style change of the mode: the active port and the firmware's pointer to its table entry (the word below the port). */
+    /** A menu-style change of the mode: the active port and the firmware's pointer to its table entry (the word below the port), then the bus reset of the new
+     * enumeration (the connect callback of the new port's entry, when the guest has one), as the host sees a device that leaves and comes back. */
     const setPort = async (value: number) => {
       const a = usbAnchors();
       await rpc(rig.session, 'mem.cf.poke', { addr: a.port - 4, value: a.table + value * 0x28 });
       await rpc(rig.session, 'mem.cf.poke', { addr: a.port, value });
+      if (value !== 2 && value !== 5) return;
+      const connect = await (value === 5 ? EmuOutOnlyLink : EmuBulkLink).connectCallback(call);
+      if (connect !== undefined) await rpc(rig.session, 'usb.bulk.in', { connect });
     };
     /** Boot, put the device in the mode's USB port (the boot is in USB MIDI) and negotiate the link. */
     const boot = async (mode: Mode = PAIR, name = 'uf-base') => {
       const dk = await rig.pausedBoot(await baseCard(name));
+      let restarts = 0;
       if (mode.port !== 2) {
         await advance(rig.session, 2500); // the boot's enable first
+        restarts = await word(rig.session, planSymbol(rig.plan, 'usb_bulk_restarts'));
         await setPort(mode.port);
       }
-      return { dk, bulk: await connect(dk, { mode }) };
+      const bulk = await connect(dk, { mode });
+      // an OUT-only session starts with no stop and restart of the firmware's USB (the boot's enable in USB MIDI mode did its one)
+      if (mode.outOnly) expect(await word(rig.session, planSymbol(rig.plan, 'usb_bulk_restarts')), 'the OUT-only session does not restart the USB').toBe(restarts);
+      return { dk, bulk };
     };
     const elapsed = async () => Number((await rig.session.status()).elapsed);
 
@@ -650,9 +659,10 @@ for (const device of DEVICES) {
     test('the staging buffer: sizes around its edges, abort and bus reset across a flush, and a small or no buffer, all with the device hash equal to the host hash', async () => {
       const { dk, bulk } = await boot();
       const MIB = 1 << 20;
-      // STATUS 'A' exists only in a module built with UF_KNOBS 1 (src/c/uf.h); the default build answers the plain status (72 bytes): then the sizes run with the buffer
+      // STATUS 'A' exists only in a module built with UF_KNOBS 1 (src/c/uf.h); the default build answers an unknown tag with E_MSG: then the sizes run with the buffer
       // the module chooses, and the forced small and no-buffer cases are skipped
-      const knobs = (await dk.request(0x37, Uint8Array.from([0x41]))).body.length === 4;
+      const probe = await dk.request(0x37, Uint8Array.from([0x41]));
+      const knobs = probe.status === 0 && probe.body.length === 4;
       // 0 and 1, a sector short, 64 KiB, one byte under, at and over one buffer, and three buffers with a tail
       const sizes = [0, 1, 511, 65_536, MIB - 1, MIB, MIB + 512, 3 * MIB + 777];
       const obtained: Record<string, number> = {};
@@ -734,8 +744,8 @@ for (const device of DEVICES) {
       const { dk } = await boot();
       const before = (await state(dk, 'bn0')).files;
       const b = await dk.request(0x37, Uint8Array.from([0x42, 0x3f, 1])); // 'B', all tests, 1 MiB
-      if (b.body.length !== 4) {
-        console.log('storage bench skipped: the module is built without UF_BENCH (STATUS answers the 64-byte status)');
+      if (b.status !== 0 || b.body.length !== 4) {
+        console.log('storage bench skipped: the module is built without UF_BENCH (STATUS answers E_MSG for the tag)');
         return;
       }
       expect(Buffer.from(b.body).readUInt32BE(0), 'started').toBe(1);
@@ -756,41 +766,7 @@ for (const device of DEVICES) {
       await rig.session.expectNoFault('usb-fast storage bench');
     }, 1_800_000);
 
-    test('take-over: TAKEOVER over SysEx switches USB AUDIO/MIDI to USB MIDI with one mode switch, the bulk link works, RELEASE gives the mode back, the stored mode is never written', async () => {
-      const { dk } = await boot();
-      const a = usbAnchors();
-      const switches = () => word(rig.session, planSymbol(rig.plan, 'usb_bulk_switches'));
-      const port = () => word(rig.session, a.port);
-      const stored = (await word(rig.session, a.mode)) >>> 24;
-      try {
-        await advance(rig.session, 2500); // the boot's enable is a switch: its guard first
-        await setPort(5); // the user's USB CONFIG is USB AUDIO/MIDI
-        const s0 = await switches();
-        expect((await dk.request(0x1e)).status, 'TAKEOVER').toBe(0);
-        for (let t = 0; t < 4000 && (await port()) !== 2; t += 100) await advance(rig.session, 100);
-        expect(await port(), 'switched to USB MIDI').toBe(2);
-        await advance(rig.session, 2500);
-        expect(await switches(), 'one mode switch, no second stop and restart').toBe(s0 + 1);
-        // the bus reset after the new enumeration (the emulator does not model it): the adapter's connect callback
-        await rpc(rig.session, 'usb.bulk.in', { connect: await EmuBulkLink.connectCallback(call) });
-        await advance(rig.session, 50);
-        const bulk = await connect(dk);
-        const f = pattern(70_000, 4);
-        expect(await bulk.session.put(SAMPLES, rp('takeover.bin'), f, { expected: hashU32(f, dt2) }), 'the bulk link works after the take-over').toBe(hashU32(f, dt2));
-        expect((await dk.request(0x1e)).status, 'the renew').toBe(0);
-        expect((await dk.request(0x1f)).status, 'RELEASE').toBe(0);
-        for (let t = 0; t < 4000 && (await port()) !== 5; t += 100) await advance(rig.session, 100);
-        expect(await port(), 'the mode is back').toBe(5);
-        expect((await word(rig.session, a.mode)) >>> 24, 'the stored USB CONFIG is unchanged').toBe(stored);
-        await setPort(6); // Overbridge: refused
-        expect((await dk.request(0x1e)).status, 'refused in Overbridge').toBe(-53);
-        await rig.session.expectNoFault('usb-fast take-over');
-      } finally {
-        await setPort(2);
-      }
-    }, 1_800_000);
-
-    test.each(MODES)('$label: the staging buffer is freed when the runtime expires the session (the host is gone)', async (mode) => {
+    test.each(MODES)('$label: the runtime expires the session when the host is gone: OUT-only frees the bulk session, the pair answers E_STATE at the next write and frees the staging buffer', async (mode) => {
       const { dk, bulk } = await boot(mode);
       const link = bulk.link;
       const status = async () => {
@@ -804,7 +780,7 @@ for (const device of DEVICES) {
       expect((await replies(link, 1))[0]!.status).toBe(0);
       expect((await status()).cap, 'a staging buffer is held').toBeGreaterThan(0);
       for (let t = 0; t < 23_000; t += 1000) await advance(rig.session, 1000);
-      expect(await status(), 'freed, one session dropped').toEqual({ cap: 0, expired: 1 });
+      if (mode.outOnly) expect(await status(), 'freed, one session dropped').toEqual({ cap: 0, expired: 1 });
       if (mode.outOnly) {
         // OUT-only: the module also frees the receive ring at expiry, so a DATA frame is NAKed and nothing is queued for the 'R' poll; the next nonce starts a session again
         const b = Buffer.from((await dk.request(0x37)).body);
@@ -813,8 +789,12 @@ for (const device of DEVICES) {
         const again = await connect(dk, { mode });
         expect((await again.session.info()).flags & 1, 'a new session: INFO answers over SysEx').toBe(1);
       } else {
+        // the DATA is buffered (accepted); the tail flush of END reaches the runtime, which answers E_STATE: the file is dropped and the buffer freed
         await link.send(dataFrame(3, 65_536, f.subarray(65_536, 131_072)));
+        expect((await replies(link, 1))[0]!.status, 'the DATA is accepted').toBe(0);
+        await link.send(req(BULK_CMD.END, 4));
         expect((await replies(link, 1))[0]!.status, 'the host sees the session gone').toBe(BULK_STATUS.E_STATE);
+        expect((await status()).cap, 'the staging buffer is freed').toBe(0);
       }
       await rig.session.expectNoFault('usb-fast session expiry');
     }, 1_800_000);
@@ -901,6 +881,25 @@ for (const device of DEVICES) {
       unchanged(before, s.files, ['ring.bin', 'old-host.bin', 'ring-reset.bin', 'ring-off.bin', 'ring-on.bin']);
       await rig.session.expectNoFault('usb-fast receive ring');
     }, 3_600_000);
+
+    test('a device in USB AUDIO/MIDI holds no bulk session until a nonce; the switch to USB MIDI brings the bulk pair up on a timer of the module', async () => {
+      // The harness boots in USB MIDI, so the boot's enable happens first (the job's first step runs at init); the switch to port 5 then ends that session.
+      const dk = await rig.pausedBoot(await baseCard());
+      await advance(rig.session, 2500);
+      await setPort(5);
+      await advance(rig.session, 3000);
+      const status = async () => {
+        const b = Buffer.from((await dk.request(0x37)).body);
+        return { enabled: (b.readUInt32BE(28) & 4) !== 0, ring: b.readUInt32BE(76) };
+      };
+      expect(await status(), 'USB AUDIO/MIDI without a nonce: no session, no ring').toEqual({ enabled: false, ring: 0 });
+      await setPort(2);
+      await advance(rig.session, 1500);
+      expect((await status()).enabled, 'USB MIDI again: the job enabled the bulk session').toBe(true);
+      const bulk = await connect(dk, { mode: PAIR });
+      expect((await bulk.session.info()).flags & 1, 'the pair answers INFO on its own endpoint').toBe(0);
+      await rig.session.expectNoFault('usb-fast mode switch');
+    }, 1_800_000);
 
     test('bench: MB/s in emulated time, bulk against SysEx', async () => {
       const { dk } = await boot();

@@ -46,8 +46,6 @@ export const CMD = {
 
 /** The commands of run-time service modules (`[protocol.service]`). */
 export const SERVICE_CMD = {
-  USB_FAST_TAKEOVER: 0x1e,
-  USB_FAST_RELEASE: 0x1f,
   LOG: 0x20,
   PEEK: 0x21,
   LOGCFG: 0x22,
@@ -162,7 +160,6 @@ export const RANGES = {
   remote_state: [0x3e, 0x3f],
   usb_echo_test: [0x2c, 0x2f],
   usb_fast: [0x36, 0x37],
-  usb_fast_takeover: [0x1e, 0x1f],
 } as const;
 
 export const CAPACITY_KINDS = {
@@ -227,7 +224,6 @@ export const LOG_KIND = {
   INPUT_TAKEN: 41,
   PARAM_CHANGE: 42,
   MOD_NEEDS: 43,
-  USB_SW: 44,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -275,7 +271,6 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   41: ['INPUT_TAKEN', ['what', 'control', 'delta', '-', '-']],
   42: ['PARAM_CHANGE', ['track', 'index', 'old', 'new', '-']],
   43: ['MOD_NEEDS', ['index', 'name0', 'name1', 'name2', '-']],
-  44: ['USB_SW', ['phase', 'ms', 'sts_cmd', 'portsc', 'otg']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

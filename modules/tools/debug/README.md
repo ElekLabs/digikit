@@ -16,7 +16,7 @@ starts with the boot. Without the module the runtime keeps only that small ring,
 
 ## Card log
 
-The module can write its ring to the store, so a log survives a crash or a USB take-over that loses the host. It is off by default. The setting `cardlog`
+The module can write its ring to the store, so a log survives a crash or a power cycle while the host cannot reach the device. It is off by default. The setting `cardlog`
 (8 bytes: version 2, on, last file, 0, u32 boot number; another version means the defaults) is read in `init` (`dk_settings_get`), so it is kept across restarts. Turn it on with the menu (the module's `menu` function: DIGIKIT > MODULES > SETTINGS... of the debug module: row
 CARD LOG, and a STATUS row: OFF, ON n WR, FULL, ERR code) or with LOGCFG op 3. The module needs the files client and an I/O job (`dk_files_open`, `dk_io_post`); without them the card log is
 unavailable (op 2 answers with an error status, the STATUS row shows N/A).
