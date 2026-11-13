@@ -146,7 +146,9 @@ read over USB MIDI.
 - [x] Audio out: MAIN mixes the voices itself; the emulator reads MAIN's converter ring (eDMA ch 54, 24-bit words, 32 frames per audio frame, 48 kHz)
       from device data (`[emulator.peer_audio]`) and feeds the DSP session's output path (`cf_audio`). Analog tracks stay silent. WAV proof:
       finding 128 "Audio". The launcher builds `cf-audio` for such a device and sets `DIGI_EMU_PEER_AUDIO=1`; the real workbench is not checked yet.
-- [ ] Peer state in snapshots; the real frame period; other output words (cue, FX out).
+- [x] Instruction rate per device (`[emulator] instructions_per_second`, default of `DIGI_CF_IPS`) and the frame period derived from it and the
+      converter's sample rate and frame size (finding 128 "Peer CPU model"): no frame overrun.
+- [ ] Peer state in snapshots; other output words (cue, FX out); one instruction rate for all devices.
 
 ### R Review before merge
 

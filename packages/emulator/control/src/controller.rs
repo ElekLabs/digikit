@@ -45,8 +45,10 @@ use crate::{
 pub const MAX_SYX: usize = 32 * 1024 * 1024;
 /// Guest instructions NO is held when the controller closes the boot modal.
 const NO_HOLD: u64 = 2_000_000;
-/// Guest instructions per emulated second (the ColdFire oracle clock).
-const CF_IPS: f64 = 132_000_000.0;
+/// Guest instructions per emulated second (the device's rate, or `DIGI_CF_IPS`).
+fn cf_ips() -> f64 {
+    elektron_native_boot::clock::cf_ips() as f64
+}
 /// How far a paced runtime may lag the wall clock before its stretch starts again, in seconds.
 const PACE_SLACK_S: f64 = 0.05;
 
@@ -54,7 +56,7 @@ const PACE_SLACK_S: f64 = 0.05;
 /// (`None`: its count went back) is ahead of the clock (`Some(true)`: wait), on time or a little behind (`Some(false)`: step), or
 /// lagging by more than the slack (`None`: start the stretch again).
 fn pace_ahead(wall_s: f64, executed: Option<u64>) -> Option<bool> {
-    let seconds = executed? as f64 / CF_IPS;
+    let seconds = executed? as f64 / cf_ips();
     if seconds + PACE_SLACK_S < wall_s {
         None
     } else {
@@ -5316,11 +5318,11 @@ mod card_key_tests {
 
 #[cfg(test)]
 mod pace_tests {
-    use super::{CF_IPS, pace_ahead};
+    use super::{cf_ips, pace_ahead};
 
     #[test]
     fn pacing_waits_when_ahead_steps_when_on_time_and_restarts_when_lagging() {
-        let seconds = |s: f64| Some((s * CF_IPS) as u64);
+        let seconds = |s: f64| Some((s * cf_ips()) as u64);
         assert_eq!(pace_ahead(1.0, seconds(1.5)), Some(true));
         assert_eq!(pace_ahead(1.0, seconds(1.0)), Some(false));
         assert_eq!(pace_ahead(1.0, seconds(0.97)), Some(false));

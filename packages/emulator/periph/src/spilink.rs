@@ -53,6 +53,8 @@ use crate::edma;
 use crate::regfile::RegFile;
 use crate::ssi::Ssi0Dma;
 
+/// DSPIx_MCR reset value (RM p.1181): MSTR = 0, MDIS = 1, HALT = 1.
+pub const DSPI_MCR_RESET: u32 = 0x0000_4001;
 pub const DSPI1_SLOT: u32 = dspi::DSPI1_BASE;
 pub const DSPI2_SLOT: u32 = dspi::DSPI2_BASE;
 pub const DSP_SLOT: u32 = dsp::BASE;
@@ -83,10 +85,15 @@ pub struct DmaLink {
 
 impl Default for DmaLink {
     fn default() -> Self {
+        // DSPIx_MCR resets to 0x0000_4001: slave mode, module disabled, halted (RM Table 40-3 p.1180, Figure 40-2 p.1181).
+        let mut dspi2_regs = RegFile::new();
+        let mut dspi1_regs = RegFile::new();
+        dspi2_regs.set_u32_at(0, DSPI_MCR_RESET);
+        dspi1_regs.set_u32_at(0, DSPI_MCR_RESET);
         Self {
             edma_regs: RegFile::new(),
-            dspi2_regs: RegFile::new(),
-            dspi1_regs: RegFile::new(),
+            dspi2_regs,
+            dspi1_regs,
             dsp_regs: RegFile::new(),
             tx35: edma::TxChannel::new(35, 155),
             dspi2: dspi::Dspi2Link::new(dspi::TX_CHAN, dspi::RX_CHAN, true),

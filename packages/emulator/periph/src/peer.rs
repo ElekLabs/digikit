@@ -49,7 +49,8 @@ pub enum PeerIrq {
     Frame,
 }
 
-/// MAIN ticks between audio frames: 32 samples at 48 kHz is 1500 frames a second, at the 132 MHz tick rate.
+/// MAIN ticks between audio frames at the base rate: 32 samples at 48 kHz is 1500 frames a second, at 132 M ticks a second. A device with
+/// another instruction rate sets its own period (`MailboxPeer::set_frame_ticks`, `clock::frame_ticks`).
 pub const FRAME_TICKS: u64 = 132_000_000 / 1500;
 
 /// Reads `0xAA | length (4 bytes, big endian) | payload` out of the byte stream (what the stage-1 loader of the peer does).
@@ -123,19 +124,32 @@ pub struct MailboxPeer {
     /// Peer CPU mode: the next audio frame is due at this MAIN tick; `frame_pending` while its interrupt waits for MAIN to take it.
     next_frame: u64,
     frame_pending: bool,
-    /// Times the frame deadline lagged by a period or more and was moved to `now + FRAME_TICKS` (a restore, or MAIN masked the frame
+    /// Times the frame deadline lagged by a period or more and was moved to `now + frame_ticks` (a restore, or MAIN masked the frame
     /// interrupt for a long stretch) instead of firing the missed frames back to back.
     pub frame_resyncs: u64,
     /// The vector of the audio frame interrupt (INTC1: 120 + the eDMA channel), 174 unless the device names its audio channel.
     pub frame_vector: u16,
+    /// MAIN ticks between audio frames ([`FRAME_TICKS`] unless the device sets another).
+    frame_ticks: u64,
 }
 
 impl MailboxPeer {
     pub fn new() -> Self {
         Self {
             frame_vector: 174,
+            frame_ticks: FRAME_TICKS,
             ..Self::default()
         }
+    }
+
+    /// Sets the audio frame period in MAIN ticks (the converter's frame rate at this machine's instruction rate).
+    pub fn set_frame_ticks(&mut self, ticks: u64) {
+        self.frame_ticks = ticks.max(1);
+    }
+
+    /// MAIN ticks between audio frames.
+    pub fn frame_ticks(&self) -> u64 {
+        self.frame_ticks
     }
 
     /// A new transfer starts on channel 29 (the stage-1 loader of the peer begins at a frame marker again).
@@ -242,17 +256,17 @@ impl MailboxPeer {
             .chain(self.frame_pending.then_some(PeerIrq::Frame))
     }
 
-    /// Peer CPU mode: the audio frame source. The frame interrupt becomes pending at exact multiples of `FRAME_TICKS` of MAIN time (at
+    /// Peer CPU mode: the audio frame source. The frame interrupt becomes pending at exact multiples of `frame_ticks` of MAIN time (at
     /// most one waits). The next deadline moves by one period from the last one, not from `now`: the frame rate does not depend on how
     /// late the caller looked. The run loop stops at `next_deadline` so it never looks late. When the deadline is still due after the
     /// step (the caller looked a period or more late: a snapshot restored at a later tick, a long masked stretch), the missed frames are
-    /// dropped: the deadline moves to `now + FRAME_TICKS` and `frame_resyncs` counts it.
+    /// dropped: the deadline moves to `now + frame_ticks` and `frame_resyncs` counts it.
     pub fn frame_source(&mut self, now: u64) {
         if self.cpu_mode && now >= self.next_frame {
             self.frame_pending = true;
-            self.next_frame += FRAME_TICKS;
+            self.next_frame += self.frame_ticks;
             if now >= self.next_frame {
-                self.next_frame = now + FRAME_TICKS;
+                self.next_frame = now + self.frame_ticks;
                 self.frame_resyncs += 1;
             }
         }

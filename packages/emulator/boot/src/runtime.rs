@@ -97,7 +97,10 @@ fn capture_peer_audio(
     let Some(audio) = audio else {
         return;
     };
-    if *frames != 0 && now.saturating_sub(*clock) < periph::peer::FRAME_TICKS / 2 {
+    let period = board
+        .peer()
+        .map_or(periph::peer::FRAME_TICKS, |peer| peer.frame_ticks());
+    if *frames != 0 && now.saturating_sub(*clock) < period / 2 {
         return;
     }
     *clock = now;
@@ -727,6 +730,8 @@ impl Emulator {
                     .map_err(|e| format!("empty +Drive card identity: {e:?}"))?
             }
         };
+        // The device's instruction rate (before anything reads `cf_ips`).
+        periph::clock::set_device_default(device.instructions_per_second);
         let mut board = Board::new(card, semaphores, CompletionPolicy::Oracle);
         // The DMA timer counters that run at the bus clock (`Board::enable_dtcn_channels`): the device's
         // `[emulator] free_running_dtcn`, or every channel of `DIGI_DTCN0` (`bus` / `off`) for channel 0.
@@ -756,10 +761,10 @@ impl Emulator {
         forced.insert(UART8_USR, 0x0d00_0000);
         forced.insert(DSPI0_SR, 0x1000_00f0);
         forced.insert(DSPI2_SR, 0x9000_0000);
-        // Peer CPU board: the engine tick MAIN runs every audio frame pushes words to DSPI3 (0xFC03C000, a serial link to the board's
+        // Peer CPU board: the engine tick MAIN runs every audio frame pushes words to DSPI1 (0xFC03C000, a serial link to the board's
         // converter logic) and polls SR for the end of the queue (`FUN_4010222a`, bit 28). The transfer is not modelled: it is complete.
         if device.peer == Some(device_profile::PeerModel::Coldfire) {
-            forced.insert(0xfc03_c02c, 0x9000_0000);
+            forced.insert(DSPI1_SR, 0x9000_0000);
         }
         // `[emulator] board_revision`: the PCB revision byte at FlexBus CS1 address 0.
         if let Some(revision) = device.board_revision {
@@ -773,6 +778,10 @@ impl Emulator {
         board
             .install_forced_mmio(forced)
             .expect("install forced status hooks");
+        // TCF and EOQF are a master's flags: EOQF does not function in slave mode (RM p.1189), so a DSPI2 that the guest runs as a
+        // slave (MCR MSTR = 0) shows its own register. DSPI1 is not gated: MAIN's earliest boot code polls its EOQF before any MCR write,
+        // with the MCR state the board's boot stage leaves, which this model does not have.
+        board.install_forced_master_only(&[DSPI2_SR]);
         board.enable_oracle_sdram_faults();
         // `[emulator] peer`: the second CPU's mailbox (window, image stream, doorbell, IRQ4).
         if let Some(model) = device.peer {
@@ -782,6 +791,11 @@ impl Emulator {
             // The audio frame is the half-way interrupt of the audio channel: INTC1, vector 120 + channel.
             if let (Some(audio), Some(peer)) = (&device.peer_audio, board.peer_mut()) {
                 peer.frame_vector = 120 + u16::from(audio.dma_channel);
+                peer.set_frame_ticks(periph::clock::frame_ticks(
+                    periph::clock::cf_ips(),
+                    audio.sample_rate,
+                    audio.frame_samples,
+                ));
             }
         }
         map_image(&mut board, &main);
@@ -3283,7 +3297,7 @@ impl Emulator {
                 .ok_or("this image has no USB MIDI callback this emulator knows")?;
             self.midi.usb.rx_cb = rx;
             self.midi.usb.tx_fn = tx;
-            self.midi.usb.period = USB_PERIOD;
+            self.midi.usb.period = periph::clock::scale_instr(USB_PERIOD, periph::clock::cf_ips());
             self.midi.usb.enabled = true;
             self.rebuild_watch();
         }
@@ -4981,6 +4995,8 @@ mod tests {
             dma_channel: 54,
             slots: [5, 3],
             bits: 24,
+            sample_rate: 48_000,
+            frame_samples: 32,
         };
         let (mut clock, mut pcm, mut frames) = (0u64, std::collections::VecDeque::new(), 0u64);
         capture_peer_audio(

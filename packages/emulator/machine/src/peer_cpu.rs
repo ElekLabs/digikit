@@ -11,6 +11,7 @@
 use std::collections::BTreeMap;
 
 use coldfire::{Bus, BusError, Cpu, Stop};
+use periph::edma;
 
 /// Size of the shared window (FlexBus CS0 mask 0x10001).
 pub const WINDOW_BYTES: u32 = 0x2_0000;
@@ -82,6 +83,8 @@ pub struct PeerMem {
     seen: BTreeMap<(u32, bool), u32>,
     /// Accesses to addresses nothing maps (reads give 0, writes are dropped).
     pub faults: Vec<IoAccess>,
+    /// All such accesses (`faults` keeps the first 64).
+    fault_total: u64,
     /// The PC of the instruction being executed (for the log).
     pub pc: u32,
     /// Peer instruction count (copy of the core's, for time-based registers).
@@ -101,15 +104,23 @@ pub struct PeerMem {
 
 impl PeerMem {
     fn new() -> Self {
+        // INTC reset values (RM 17.2.2, 17.2.7, 17.2.8, p.338, p.342-343): every source masked, level masks 0xF.
+        let mut io = BTreeMap::new();
+        for a in INTC0 + 8..INTC0 + 16 {
+            io.insert(a, 0xff);
+        }
+        io.insert(INTC0 + 0x1e, 0x0f);
+        io.insert(INTC0 + 0x1f, 0x0f);
         Self {
             sdram: vec![0; SDRAM_BYTES],
             sram: vec![0; SRAM_BYTES],
-            io: BTreeMap::new(),
+            io,
             inputs: BTreeMap::new(),
             log: Vec::new(),
             log_limit: 0,
             seen: BTreeMap::new(),
             faults: Vec::new(),
+            fault_total: 0,
             pc: 0,
             icount: 0,
             dma_start: Vec::new(),
@@ -241,15 +252,15 @@ impl PeerMem {
                 continue;
             }
             if a == INTC0 + 0x1c || a == INTC0 + 0x1d {
-                let src = u32::from(b & 0x7f);
+                // SIMR/CIMR (RM 17.2.5, 17.2.6, p.341-342): bits 5:0 name the source, bit 6 (SALL/CALL) acts on every source and ignores
+                // the field. Bit 7 is reserved. Reads give zero (`io_read`).
                 let set = a == INTC0 + 0x1c;
-                if src == 0x40 {
-                    let (h, l) = (INTC0 + 8..INTC0 + 12, INTC0 + 12..INTC0 + 16);
-                    for r in h.chain(l) {
+                if b & 0x40 != 0 {
+                    for r in INTC0 + 8..INTC0 + 16 {
                         self.io.insert(r, if set { 0xff } else { 0 });
                     }
                 } else {
-                    let (byte, bit) = intc_mask_bit(src);
+                    let (byte, bit) = intc_mask_bit(u32::from(b & 0x3f));
                     let old = self.io.get(&byte).copied().unwrap_or(0);
                     self.io
                         .insert(byte, if set { old | bit } else { old & !bit });
@@ -269,6 +280,17 @@ impl PeerMem {
         self.io.get(&addr).copied().unwrap_or(0)
     }
 
+    /// `n` register bytes at `addr` as one big-endian value.
+    fn io_get(&self, addr: u32, n: u32) -> u32 {
+        (0..n).fold(0, |v, i| v << 8 | u32::from(self.io_byte(addr + i)))
+    }
+
+    fn io_set(&mut self, addr: u32, n: u32, value: u32) {
+        for i in 0..n {
+            self.io.insert(addr + i, (value >> (8 * (n - 1 - i))) as u8);
+        }
+    }
+
     /// DTIM0 capture event (DTER bit 0): MAIN's doorbell edge reaches the peer's DTIN0 input through the bridge. The handler reads and clears it.
     pub fn dtim0_event(&mut self) {
         let a = DTIM0 + 3;
@@ -285,10 +307,9 @@ impl PeerMem {
         let src = FRAME_VECTOR - 64;
         let icr = self.io_byte(INTC0 + 0x40 + src);
         let level = icr & 7;
-        // the source's own mask bit, or IMRL bit 0 (mask all)
+        // the source's own mask bit (IMRL bit 0 is source 0, not used: there is no mask-all bit, RM Table 17-15 p.345)
         let (byte, bit) = intc_mask_bit(src);
-        let (all_byte, all_bit) = intc_mask_bit(0);
-        let masked = self.io_byte(byte) & bit != 0 || self.io_byte(all_byte) & all_bit != 0;
+        let masked = self.io_byte(byte) & bit != 0;
         (level != 0 && !masked).then_some(level)
     }
 
@@ -297,8 +318,7 @@ impl PeerMem {
     }
 }
 
-/// The IMRH/IMRL byte and bit that mask INTC0 source number `source` (0..=63, not a vector; sources 32..=63 are in IMRH, IMRL bit 0 is
-/// mask-all).
+/// The IMRH/IMRL byte and bit that mask INTC0 source number `source` (0..=63, not a vector; sources 32..=63 are in IMRH).
 fn intc_mask_bit(source: u32) -> (u32, u8) {
     let reg = if source >= 32 { INTC0 + 8 } else { INTC0 + 12 };
     (reg + (3 - (source & 31) / 8), 1u8 << (source & 7))
@@ -347,6 +367,7 @@ impl<W: Window> PeerBus<'_, W> {
     }
 
     fn fault(&mut self, addr: u32, size: u8, write: bool, value: u32) {
+        self.mem.fault_total += 1;
         if self.mem.faults.len() < 64 {
             self.mem.faults.push(IoAccess {
                 pc: self.mem.pc,
@@ -358,69 +379,116 @@ impl<W: Window> PeerBus<'_, W> {
         }
     }
 
-    /// Software-started eDMA channels run their whole transfer at once (the model has no bus contention): reads TCD, copies
-    /// `nbytes * citer` bytes, then sets DONE and clears START.
+    /// Software-started eDMA channels run their whole transfer at once (the model has no bus contention): `periph::edma::software_start`
+    /// reads the TCD fields from the register bytes and moves the data; the writeback, the interrupt bit (INTH/INTL), the ERQ clear for
+    /// D_REQ, the next descriptor for E_SG and an error record (ES, ERRH/ERRL) are written back here. An access that nothing maps is a
+    /// bus error.
     fn service_dma(&mut self) {
         while let Some(ch) = self.mem.dma_start.pop() {
             let tcd = EDMA_BASE + 0x1000 + 0x20 * ch as u32;
-            let g32 = |m: &PeerMem, o: u32| {
-                (0..4).fold(0u32, |v, i| v << 8 | u32::from(m.io_byte(tcd + o + i)))
-            };
-            let g16 = |m: &PeerMem, o: u32| {
-                (0..2).fold(0u32, |v, i| v << 8 | u32::from(m.io_byte(tcd + o + i)))
-            };
-            let (mut src, mut dst) = (g32(self.mem, 0), g32(self.mem, 0x10));
-            let (soff, doff) = (
-                g16(self.mem, 6) as u16 as i16,
-                g16(self.mem, 0x16) as u16 as i16,
-            );
-            let attr = g16(self.mem, 4);
-            // Transfer sizes are coded 0..5 for 1, 2, 4, 8, 16 and 32 bytes (RM 19.4.17).
-            let (ssize, dsize) = (1u32 << ((attr >> 8) & 7).min(5), 1u32 << (attr & 7).min(5));
-            let nbytes = g32(self.mem, 8);
-            // With channel linking enabled (bit 15) the iteration count has 9 bits; the link makes every minor loop request the next one,
-            // so the whole major loop runs from one start.
-            let count = |raw: u32| {
-                if raw & 0x8000 != 0 {
-                    raw & 0x1ff
-                } else {
-                    raw & 0x7fff
+            let t = {
+                let m = &*self.mem;
+                edma::SoftTcd {
+                    saddr: m.io_get(tcd, 4),
+                    attr: m.io_get(tcd + 4, 2) as u16,
+                    soff: m.io_get(tcd + 6, 2) as u16 as i16,
+                    nbytes: m.io_get(tcd + 8, 4),
+                    slast: m.io_get(tcd + 0xc, 4) as i32,
+                    daddr: m.io_get(tcd + 0x10, 4),
+                    citer: m.io_get(tcd + 0x14, 2) as u16,
+                    doff: m.io_get(tcd + 0x16, 2) as u16 as i16,
+                    dlast_sga: m.io_get(tcd + 0x18, 4),
+                    biter: m.io_get(tcd + 0x1c, 2) as u16,
+                    csr: m.io_get(tcd + 0x1e, 2) as u16,
                 }
             };
-            let mut citer = count(g16(self.mem, 0x14));
-            let biter = g16(self.mem, 0x1c);
-            let slast = g32(self.mem, 0xc) as i32;
-            let dlast = g32(self.mem, 0x18) as i32;
-            if nbytes == 0 || citer == 0 || ssize != dsize || !nbytes.is_multiple_of(ssize) {
-                continue;
-            }
-            while citer > 0 {
-                for _ in 0..nbytes / ssize {
-                    for k in 0..ssize {
-                        let v = self.read(src.wrapping_add(k), 1);
-                        self.write(dst.wrapping_add(k), 1, v);
+            let mut bus = SoftBus {
+                bus: self,
+                written: 0,
+            };
+            let outcome = edma::software_start(&t, &mut bus);
+            let written = bus.written;
+            let m = &mut *self.mem;
+            m.dma_bytes += written;
+            let csr_now = m.io_get(tcd + 0x1e, 2);
+            let record = |m: &mut PeerMem, es: u32| {
+                m.io_set(EDMA_BASE + 4, 4, edma::es::VLD | (ch as u32) << 8 | es);
+                let reg = EDMA_BASE + if ch >= 32 { 0x28 } else { 0x2c };
+                let old = m.io_get(reg, 4);
+                m.io_set(reg, 4, old | 1 << (ch % 32));
+            };
+            match outcome {
+                edma::SoftOutcome::Fault {
+                    es,
+                    saddr,
+                    daddr,
+                    citer,
+                } => {
+                    m.io_set(tcd, 4, saddr);
+                    m.io_set(tcd + 0x10, 4, daddr);
+                    m.io_set(tcd + 0x14, 2, u32::from(citer));
+                    m.io_set(tcd + 0x1e, 2, csr_now & !1);
+                    record(m, es);
+                }
+                edma::SoftOutcome::Done {
+                    saddr,
+                    daddr,
+                    citer,
+                    csr,
+                    next,
+                    interrupt,
+                    clear_request,
+                    es,
+                } => {
+                    if let Some(raw) = next {
+                        for (i, byte) in raw.iter().enumerate() {
+                            m.io.insert(tcd + i as u32, *byte);
+                        }
+                        let loaded = m.io_get(tcd + 0x1e, 2);
+                        m.io_set(tcd + 0x1e, 2, loaded & !1);
+                    } else {
+                        m.io_set(tcd, 4, saddr);
+                        m.io_set(tcd + 0x10, 4, daddr);
+                        m.io_set(tcd + 0x14, 2, u32::from(citer));
+                        m.io_set(tcd + 0x1e, 2, u32::from(csr));
                     }
-                    src = src.wrapping_add_signed(i32::from(soff));
-                    dst = dst.wrapping_add_signed(i32::from(doff));
+                    // INTH/INTL at +0x20/+0x24 and ERQH/ERQL at +0x08/+0x0c, one bit per channel.
+                    if interrupt {
+                        let reg = EDMA_BASE + if ch >= 32 { 0x20 } else { 0x24 };
+                        let old = m.io_get(reg, 4);
+                        m.io_set(reg, 4, old | 1 << (ch % 32));
+                    }
+                    if clear_request {
+                        let reg = EDMA_BASE + if ch >= 32 { 0x08 } else { 0x0c };
+                        let old = m.io_get(reg, 4);
+                        m.io_set(reg, 4, old & !(1 << (ch % 32)));
+                    }
+                    if es != 0 {
+                        record(m, es);
+                    }
                 }
-                self.mem.dma_bytes += u64::from(nbytes);
-                citer -= 1;
             }
-            src = src.wrapping_add_signed(slast);
-            dst = dst.wrapping_add_signed(dlast);
-            let put = |m: &mut PeerMem, o: u32, v: u32, n: u32| {
-                for i in 0..n {
-                    m.io.insert(tcd + o + i, (v >> (8 * (n - 1 - i))) as u8);
-                }
-            };
-            put(self.mem, 0, src, 4);
-            put(self.mem, 0x10, dst, 4);
-            put(self.mem, 0x14, biter, 2);
-            // CSR is a 16-bit register at +0x1e: its low byte (+0x1f) holds START (bit 0) and DONE (bit 7).
-            let csr = (g16(self.mem, 0x1e) as u8 & !1) | 0x80;
-            put(self.mem, 0x1f, u32::from(csr), 1);
-            // The channel's interrupt bit (INTL/INTH), when INT_MAJOR is set.
         }
+    }
+}
+
+/// The peer's memory for a software-started eDMA transfer: a byte that nothing maps (the bus recorded a fault for it) is a bus error.
+struct SoftBus<'a, 'b, W: Window> {
+    bus: &'a mut PeerBus<'b, W>,
+    written: u64,
+}
+
+impl<W: Window> edma::SoftBus for SoftBus<'_, '_, W> {
+    fn read_byte(&mut self, addr: u32) -> Option<u8> {
+        let before = self.bus.mem.fault_total;
+        let v = self.bus.read(addr, 1) as u8;
+        (self.bus.mem.fault_total == before).then_some(v)
+    }
+    fn write_byte(&mut self, addr: u32, value: u8) -> bool {
+        let before = self.bus.mem.fault_total;
+        self.bus.write(addr, 1, u32::from(value));
+        self.written += 1;
+        self.bus.mem.fault_total == before
     }
 }
 
@@ -739,6 +807,62 @@ mod tests {
         assert_eq!(peer.mem.io_peek(ch47 + 0x14, 2), [0x80, 0x08]);
     }
 
+    /// A program that sets up channel 47 as 4 bytes from SRAM to `dst` with CSR `csr` and starts it.
+    fn start_ch47(dst: u32, csr: u16, attr: u16) -> PeerCpu {
+        let ch47 = 0xFC04_55E0;
+        let mut code = vec![];
+        code.extend(movel_imm_abs(SRAM_BASE + 0x100, ch47));
+        code.extend(movew_imm_abs(attr, ch47 + 4));
+        code.extend(movew_imm_abs(4, ch47 + 6));
+        code.extend(movel_imm_abs(4, ch47 + 8));
+        code.extend(movel_imm_abs(dst, ch47 + 0x10));
+        code.extend(movew_imm_abs(1, ch47 + 0x14));
+        code.extend(movew_imm_abs(4, ch47 + 0x16));
+        code.extend(movew_imm_abs(1, ch47 + 0x1c));
+        code.extend(movew_imm_abs(csr, ch47 + 0x1e));
+        code.extend(moveb_imm_abs(47, EDMA_SSRT));
+        code.extend_from_slice(&[0x60, 0xfe]);
+        let mut peer = PeerCpu::new();
+        peer.start(&image(&code)).unwrap();
+        // ERQH has channel 47 and 46 set.
+        peer.mem.io_set(EDMA_BASE + 8, 4, 3 << 14);
+        let mut window = vec![0u8; WINDOW_BYTES as usize];
+        peer.run(&mut window, 60).unwrap();
+        peer
+    }
+
+    #[test]
+    fn a_software_started_transfer_sets_its_interrupt_bit_and_clears_its_request_on_d_req() {
+        let peer = start_ch47(0x100, 2 | 8, 0x0202);
+        assert_eq!(peer.mem.io_get(EDMA_BASE + 0x20, 4), 1 << 15, "INTH bit 15");
+        assert_eq!(
+            peer.mem.io_get(EDMA_BASE + 8, 4),
+            1 << 14,
+            "ERQH bit 15 clear"
+        );
+        let peer = start_ch47(0x100, 0, 0x0202);
+        assert_eq!(peer.mem.io_get(EDMA_BASE + 0x20, 4), 0);
+        assert_eq!(peer.mem.io_get(EDMA_BASE + 8, 4), 3 << 14);
+    }
+
+    #[test]
+    fn a_software_started_transfer_to_unmapped_memory_is_a_bus_error_and_a_bad_size_a_recorded_one()
+    {
+        let peer = start_ch47(0x7000_0000, 0, 0x0202);
+        assert_eq!(
+            peer.mem.io_get(EDMA_BASE + 4, 4),
+            edma::es::VLD | 47 << 8 | edma::es::DBE
+        );
+        assert_eq!(peer.mem.io_get(EDMA_BASE + 0x28, 4), 1 << 15);
+        assert_eq!(peer.mem.io_get(0xFC04_55E0 + 0x10, 4), 0x7000_0000);
+        assert_eq!(peer.mem.io_get(0xFC04_55E0 + 0x1e, 2) & 0x81, 0, "no DONE");
+        let peer = start_ch47(0x100, 0, 0x0302);
+        assert_eq!(
+            peer.mem.io_get(EDMA_BASE + 4, 4),
+            edma::es::VLD | 47 << 8 | edma::es::SAE
+        );
+    }
+
     #[test]
     fn the_frame_source_mask_is_the_same_bit_for_the_writer_and_the_reader() {
         let mut mem = PeerMem::new();
@@ -751,6 +875,44 @@ mod tests {
         assert_eq!(mem.frame_level(), Some(3), "unmasked through IMRH");
         mem.io_write(INTC0 + 8, 4, 0x0000_0001); // IMRH: only source 32 masked
         assert_eq!(mem.frame_level(), None);
+    }
+
+    #[test]
+    fn the_interrupt_controller_resets_masked_and_simr_cimr_follow_the_manual() {
+        let mem = PeerMem::new();
+        assert_eq!(
+            mem.io_get(INTC0 + 8, 4),
+            0xffff_ffff,
+            "IMRH resets to all ones"
+        );
+        assert_eq!(mem.io_get(INTC0 + 12, 4), 0xffff_ffff, "IMRL too");
+        assert_eq!(
+            mem.io_get(INTC0 + 0x1e, 2),
+            0x0f0f,
+            "CLMASK and SLMASK reset to 0xF"
+        );
+        let mut mem = PeerMem::new();
+        mem.io_write(INTC0 + 0x40 + 32, 1, 3);
+        // IMRL bit 0 is source 0 (not used), not a mask-all bit: it does not hide source 32.
+        mem.io_write(INTC0 + 8, 4, 0);
+        mem.io_write(INTC0 + 12, 4, 0xffff_ffff);
+        assert_eq!(mem.frame_level(), Some(3));
+        // CIMR/SIMR: bit 6 acts on every source and ignores the field (0x7f is not source 63).
+        mem.io_write(INTC0 + 0x1c, 1, 0x7f);
+        assert_eq!(
+            (mem.io_get(INTC0 + 8, 4), mem.io_get(INTC0 + 12, 4)),
+            (0xffff_ffff, 0xffff_ffff),
+            "SALL sets both registers"
+        );
+        assert_eq!(mem.frame_level(), None);
+        mem.io_write(INTC0 + 0x1d, 1, 0x45);
+        assert_eq!(mem.io_get(INTC0 + 8, 4), 0);
+        assert_eq!(mem.io_get(INTC0 + 12, 4), 0);
+        mem.io_write(INTC0 + 0x1c, 1, 0x3f); // source 63 only (bit 7 is reserved)
+        assert_eq!(mem.io_get(INTC0 + 8, 4), 0x8000_0000);
+        assert_eq!(mem.io_get(INTC0 + 12, 4), 0);
+        // The registers read zero.
+        assert_eq!(mem.io_get(INTC0 + 0x1c, 2), 0);
     }
 
     #[test]
