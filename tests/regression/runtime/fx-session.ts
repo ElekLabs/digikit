@@ -22,9 +22,14 @@ import { FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { pollEmulated } from './waits.ts';
-import { prepareRuntimePlanModulesOffline } from './runtime-plan-modules.ts';
 import { advance, analysisJson, bounded, evidence, options, pickSine, word } from './fx-live.ts';
-import { planSymbol, validateRuntimePlan, type PreparedRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
+import {
+  planSymbol,
+  prepareRuntimePlanListedOffline,
+  validateRuntimePlan,
+  type PreparedRuntimePlan,
+  type RuntimePlan,
+} from './runtime-plan.ts';
 import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
 
 const exec = promisify(execFile);
@@ -253,7 +258,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
       env: async () => {
         artifacts = fs.mkdtempSync(path.join(os.tmpdir(), `digi-fx-${name}-${device}-`));
         console.info('FX route safety artifacts:', artifacts);
-        prepared = await prepareRuntimePlanModulesOffline(
+        prepared = await prepareRuntimePlanListedOffline(
           { device, firmware: FIRMWARE[device] },
           artifacts,
           artifacts,

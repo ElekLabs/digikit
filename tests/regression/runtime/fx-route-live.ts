@@ -1,8 +1,9 @@
 import type { Device } from '@digi/test-support';
 import { withPreparedFxSession, type PreparedFxSessionOptions } from './fx-session.ts';
-import { FX, GAIN, RT as RUNTIME_ROOTS, SEND, SINE } from './fixtures.ts';
+import { FX, GAIN, SEND, SINE } from './fixtures.ts';
+import { rootsOf } from './image-roots.ts';
 
-const RT = [...RUNTIME_ROOTS, 'core/dynfx'];
+const RT = rootsOf('rt-dynfx');
 export const SENDONLY = 'test/dyn-fx-gain-sendonly';
 export const SEND3 = `${SEND}-3`;
 

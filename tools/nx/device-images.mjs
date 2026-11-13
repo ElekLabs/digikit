@@ -2,7 +2,7 @@
 // acceptance stock firmware (CELLS of device-inputs.mjs) with each patch set of its device profile (devices/*.toml). This is the
 // code path the daemon takes at boot (patchkit Library, Registry and apply::apply). The device tasks of a merge key hash this file
 // and not the patchkit binary: a patchkit edit that leaves every packed image byte alone changes no key. A missing firmware
-// file writes no line for it (the tasks hash the firmware itself in device-inputs.mjs).
+// file writes no line for it. Lines `roots:<id>` are the static `--modules` sets of tests/regression/runtime/image-roots.json (the tasks hash the firmware itself in device-inputs.mjs).
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
@@ -23,10 +23,25 @@ const setsOf = new Map(
 );
 const scratch = mkdtempSync(join(tmpdir(), 'digi-images-'));
 const run = promisify(execFile);
-const jobs = CELLS.filter((cell) => existsSync(join(root, cell.syx))).flatMap((cell) =>
-  (setsOf.get(cell.dev) ?? []).map((set) => ({ cell, set })),
-);
-// The jobs only read; four at a time keep the machine usable. Lines keep the order of CELLS and the sets.
+// Static module root lists (`apply --modules`) that tests use: tests/regression/runtime/image-roots.json, also read by runtime-plan.ts.
+// Their image, plan and address map are kept under dist/bytes/images/<device>/<id>.* for the tests to copy.
+const { sets: rootSets } = JSON.parse(readFileSync(join(root, 'tests/regression/runtime/image-roots.json'), 'utf8'));
+const cells = CELLS.filter((cell) => existsSync(join(root, cell.syx)));
+const jobs = cells.flatMap((cell) => [
+  ...(setsOf.get(cell.dev) ?? []).map((set) => ({ cell, label: set, select: ['--set', set] })),
+  ...rootSets
+    .filter((set) => !set.devices || set.devices.includes(cell.dev))
+    .map((set) => ({
+      cell,
+      label: `roots:${set.id}`,
+      select: ['--modules', set.roots.join(',')],
+      keep: join(root, 'dist/bytes/images', cell.dev, set.id),
+    })),
+]);
+rmSync(join(root, 'dist/bytes/images'), { recursive: true, force: true });
+for (const dev of new Set(cells.map((cell) => cell.dev)))
+  mkdirSync(join(root, 'dist/bytes/images', dev), { recursive: true });
+// The jobs only read; four at a time keep the machine usable. Lines keep the order of the jobs.
 const lines = Array.from({ length: jobs.length }, () => '');
 let next = 0;
 try {
@@ -34,10 +49,11 @@ try {
     Array.from({ length: 4 }, async () => {
       while (next < jobs.length) {
         const index = next++;
-        const { cell, set } = jobs[index];
-        const out = join(scratch, `${cell.dev}-${set}.syx`);
-        const plan = out.replace(/\.syx$/, '.plan.json');
-        const addrmap = out.replace(/\.syx$/, '.addrmap.json');
+        const { cell, label, select, keep } = jobs[index];
+        const base = keep ?? join(scratch, `${cell.dev}-${label.replace(':', '-')}`);
+        const out = `${base}.syx`;
+        const plan = `${base}.plan.json`;
+        const addrmap = `${base}.addrmap.json`;
         // the plan and the address map are what tests/regression/runtime/runtime-plan.ts reads (offline image preparation)
         const args = [
           '--root',
@@ -45,8 +61,7 @@ try {
           'apply',
           '--firmware',
           cell.syx,
-          '--set',
-          set,
+          ...select,
           '-o',
           out,
           '--plan',
@@ -56,7 +71,7 @@ try {
         ];
         await run(pk, args, { cwd: root });
         const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
-        lines[index] = `${cell.dev}-${cell.ver} ${set} image ${sha(out)} plan ${sha(plan)} addrmap ${sha(addrmap)}`;
+        lines[index] = `${cell.dev}-${cell.ver} ${label} image ${sha(out)} plan ${sha(plan)} addrmap ${sha(addrmap)}`;
       }
     }),
   );

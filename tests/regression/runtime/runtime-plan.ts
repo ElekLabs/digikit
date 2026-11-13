@@ -2,11 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   validatePreparedRuntimeImage,
+  repoRoot,
   resolveInputs,
   type Session,
   type SessionOptions,
   type PreparedRuntimeImage,
 } from '@digi/test-support';
+import { rootSets } from './image-roots.ts';
 import { patchkit } from './patchkit-exec.ts';
 
 export interface RuntimePlan {
@@ -96,9 +98,58 @@ export function prepareRuntimePlanOffline(
   return prepareOfflineWith(patchkit, options, directory, artifacts, symbols);
 }
 
+/** What the offline preparation needs of the patch step: `patchkit apply ...`, or the copy of an image made ahead. */
+export type PatchExec = (args: string[], opts: { timeout?: number }) => Promise<{ stdout: string; stderr: string }>;
+
+/** The static `--modules` lists (image-roots.json) that patchkit:device-images patched ahead into dist/bytes/images/<device>/<id>.*. */
+function listedRoots(device: string, modules: string[]): string {
+  const found = rootSets().find(
+    (set) => set.roots.join(',') === modules.join(',') && (!set.devices || set.devices.includes(device)),
+  );
+  if (!found)
+    throw new Error(
+      `module roots ${modules.join(',')} on ${device} are not in tests/regression/runtime/image-roots.json: add the list, or use runtime-plan-modules.ts for a list built at test time`,
+    );
+  return found.id;
+}
+
+/** The copy of the image, plan and address map made ahead for the listed roots: no patchkit runs. A missing file fails. */
+const copyListed =
+  (device: string): PatchExec =>
+  async (args) => {
+    const at = (flag: string) => args[args.indexOf(flag) + 1]!;
+    const id = listedRoots(device, at('--modules').split(','));
+    const from = path.join(repoRoot(), 'dist/bytes/images', device, id);
+    const planFile = at('--plan');
+    const copies: [string, string][] = [
+      [`${from}.syx`, at('-o')],
+      [`${from}.plan.json`, planFile],
+      [`${from}.addrmap.json`, at('--addrmap')],
+    ];
+    for (const [source, target] of copies) {
+      if (!fs.existsSync(source)) throw new Error(`missing ${source}: run nx run patchkit:device-images`);
+      fs.copyFileSync(source, target);
+    }
+    return { stdout: `listed roots ${id}: copied from ${from}.*`, stderr: '' };
+  };
+
+/**
+ * Offline plan preparation for a static list of module roots from image-roots.json: the image, plan and address map were made ahead
+ * (hashed in dist/bytes/images.sha256), so this file does not count as running patchkit live. A list that is not in the file fails.
+ */
+export function prepareRuntimePlanListedOffline(
+  options: Pick<SessionOptions, 'device' | 'firmware' | 'runtime'>,
+  directory: string,
+  artifacts: string,
+  symbols: string[],
+  selection: { modules: string[] },
+): Promise<PreparedRuntimePlan> {
+  return prepareOfflineWith(copyListed(options.device), options, directory, artifacts, symbols, selection);
+}
+
 /** The shared body: `exec` is the patchkit helper of the caller (runtime-plan-modules.ts passes the one that counts as live). */
 export async function prepareOfflineWith(
-  exec: typeof patchkit,
+  exec: PatchExec,
   options: Pick<SessionOptions, 'device' | 'firmware' | 'runtime'>,
   directory: string,
   artifacts: string,

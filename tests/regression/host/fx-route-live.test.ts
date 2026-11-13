@@ -22,7 +22,10 @@ vi.mock('node:child_process', () => ({
   execFile: Object.assign(vi.fn(), { [Symbol.for('nodejs.util.promisify.custom')]: fake.exec }),
 }));
 vi.mock('../support.ts', () => ({ withReusablePatchedSession: fake.fixture, expectNoGuardHits: fake.noGuardHits }));
-vi.mock('../runtime/runtime-plan-modules.ts', () => ({ prepareRuntimePlanModulesOffline: fake.prepare }));
+vi.mock('../runtime/runtime-plan.ts', async (original) => ({
+  ...(await original<object>()),
+  prepareRuntimePlanListedOffline: fake.prepare,
+}));
 vi.mock('../runtime/write-safety.ts', () => ({ runtimeWatchEnv: fake.watchEnv, runtimeSafety: fake.safety }));
 vi.mock('../runtime/fx-live.ts', async (original) => ({
   ...(await original<object>()),

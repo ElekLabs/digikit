@@ -400,6 +400,7 @@ patchkit keeps `dist/patchkit/patchkit` in its key (merge and narrow). The rule 
 (`patchModules`). Only `runtime-plan.ts` is exempt: its `apply --set` result is in `images.sha256`.
 `fx-live.ts` reads the `needs` of the gain pack from `dist/bytes/pack-verdicts.json` (`patchkit:pack-verdicts`, packs listed in
 `tests/regression/runtime/needs-packs.json`; `pack-needs.ts`, no patchkit; a missing entry fails): the key of a test that imports it hashes that file.
+The static `--modules` root lists (`tests/regression/runtime/image-roots.json`: `rootsOf` in `image-roots.ts` gives `RT`, `COUPLED_ROOTS`, `IB` and the fx sets) are patched by `patchkit:device-images` too (lines `roots:<id>` in `images.sha256`; image, plan and address map kept in `dist/bytes/images/<device>/<id>.*`). `card-rig.ts` and `fx-session.ts` copy them through `prepareRuntimePlanListedOffline` (no patchkit; a list not in the file fails). A list built at test time uses `runtime-plan-modules.ts` and stays live.
 `test-device-all` (a real run for every test, merge tests included), the non-twin targets (`test-device-full`) and `test-conformance`
 keep the full key: the patchkit binary and `dist/daemons.json`. A merge key lists a shared file of `SHARED_READS` (`sdk/sdk.toml`, `types.toml`, core `module.toml`) only when a
 helper in its closure reads it (`upload-kit.ts`, `synth.ts`, `memaudit-kit.ts`) or the test runs patchkit; the full key lists all of them.

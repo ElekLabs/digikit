@@ -1,10 +1,11 @@
 import { expect } from 'vitest';
 import { bootInfo, E_LOADING } from '@digi/regression/runtime/card-kit.ts';
-import { CARD_SYMBOLS, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { word } from '@digi/regression/runtime/fx-live.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { LOADED, type Geometry, type Want } from '@digi/regression/runtime/synth.ts';
+import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 
 /** One module of a card in boot order: its file, the name it reports and the result the loader must give. */
 export interface Entry {
@@ -94,4 +95,4 @@ export async function expectBoot(
 }
 
 /** Core adapters needed by loaded modules that import from them or take rows. */
-export const COUPLED_ROOTS = [...RT, 'core/input', 'core/dynfx', 'core/fxpages'];
+export const COUPLED_ROOTS = rootsOf('coupled');

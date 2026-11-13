@@ -78,9 +78,13 @@ const CRATE_TARGETS = {
       parallelism: true,
       description:
         'Writes dist/bytes/images.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set.',
-      inputs: ['{workspaceRoot}/tools/nx/device-images.mjs', { dependentTasksOutputFiles: '**/*', transitive: true }],
+      inputs: [
+        '{workspaceRoot}/tools/nx/device-images.mjs',
+        '{workspaceRoot}/tests/regression/runtime/image-roots.json',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
       dependsOn: ['cli', { target: 'build-objects', projects: ['tag:acceptance-image'] }],
-      outputs: ['{workspaceRoot}/dist/bytes/images.sha256'],
+      outputs: ['{workspaceRoot}/dist/bytes/images.sha256', '{workspaceRoot}/dist/bytes/images'],
       options: { command: 'node tools/nx/device-images.mjs', cwd: '.' },
     },
   },
