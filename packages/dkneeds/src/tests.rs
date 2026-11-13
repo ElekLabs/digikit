@@ -534,3 +534,27 @@ fn sample_bank_v5_counts_owned_bss_and_rejects_bad_records() {
     dsp[image_off] = 1;
     assert_eq!(of(&dkm(4, 0, &[], &dsp)), Err(Error::Dsp));
 }
+
+#[test]
+fn a_file_of_api_major_3_reads_its_rows_from_the_keys_table() {
+    let mut t = [0u8; 64];
+    let size = keys::write_keys((2, 9, 3), &[0x11, 0x22], &[0x33], &mut t).unwrap();
+    let mut f = dkm(4, 0, &t[..size], &[]);
+    // major 2 reads the table as register records and refuses it; major 3 reads the counts
+    assert_eq!(of(&f), Err(Error::Register));
+    f[H_CONTRACT as usize] = API_KEYS_MAJOR as u8;
+    let n = of(&f).unwrap();
+    assert_eq!((n.machine_rows, n.param_rows, n.page_rows), (2, 9, 3));
+    // a module with no machine and no effect has no table
+    let mut g = dkm(4, 0, &[], &[]);
+    g[H_CONTRACT as usize] = API_KEYS_MAJOR as u8;
+    assert_eq!(of(&g).unwrap().machine_rows, 0);
+    // a table whose size is not the counts' size, or with the reserved field set, is refused
+    let mut bad = dkm(4, 0, &t[..size - 4], &[]);
+    bad[H_CONTRACT as usize] = API_KEYS_MAJOR as u8;
+    assert_eq!(of(&bad), Err(Error::Register));
+    t[keys::K_RESERVED + 1] = 1;
+    let mut bad = dkm(4, 0, &t[..size], &[]);
+    bad[H_CONTRACT as usize] = API_KEYS_MAJOR as u8;
+    assert_eq!(of(&bad), Err(Error::Register));
+}

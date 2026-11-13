@@ -39,6 +39,9 @@ pub const H_MENU: u32 = 0x88;
 pub const H_TICK: u32 = 0x8c;
 pub const H_REG_OFF: u32 = 0x90;
 pub const H_REG_SIZE: u32 = 0x94;
+/// The api contract is the first pair at `H_CONTRACT`; a file of api major 3 has a keys table at `H_REG_OFF` (`keys.rs`), not a register table.
+pub const H_CONTRACT: u32 = 0x38;
+pub const API_KEYS_MAJOR: u32 = 3;
 pub const H_DSP_OFF: u32 = 0x98;
 pub const H_DSP_SIZE: u32 = 0x9c;
 
@@ -234,7 +237,11 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
         return Err(Error::Sizes);
     }
     if reg_size != 0 {
-        registry(src, reg_off, reg_size, &mut n)?;
+        if word(src, H_CONTRACT)? >> 24 >= API_KEYS_MAJOR {
+            keys_table(src, reg_off, reg_size, &mut n)?;
+        } else {
+            registry(src, reg_off, reg_size, &mut n)?;
+        }
     }
     let (dsp_off, dsp_size) = (word(src, H_DSP_OFF)?, word(src, H_DSP_SIZE)?);
     if !inside(dsp_off, dsp_size, size) {
@@ -244,6 +251,28 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
         dsp(src, dsp_off, dsp_size, &mut n)?;
     }
     Ok(n)
+}
+
+/// The keys table of a file of api major 3 (`keys.rs`): the `[uses]` row counts the packer wrote.
+fn keys_table<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), Error> {
+    // only the 12 byte head is read; the size must be the one its counts give (the check of `Keys::parse`)
+    let mut b = [0u8; keys::K_KEYS];
+    if (size as usize) < b.len() || !src.read(off, &mut b) {
+        return Err(Error::Register);
+    }
+    let w = |at: usize| u16::from_be_bytes([b[at], b[at + 1]]);
+    let (nm, nf) = (w(keys::K_N_MACHINES) as usize, w(keys::K_N_FX) as usize);
+    if w(keys::K_RESERVED) != 0
+        || nm > MAX_RECORDS as usize
+        || nf > MAX_RECORDS as usize
+        || keys::keys_size(nm, nf) != size as usize
+    {
+        return Err(Error::Register);
+    }
+    n.machine_rows = w(keys::K_MACHINE_ROWS) as u32;
+    n.param_rows = w(keys::K_PARAM_ROWS) as u32;
+    n.page_rows = w(keys::K_PAGE_ROWS) as u32;
+    Ok(())
 }
 
 /// The records of the `register` table at `off` (`size` bytes): the rows each kind takes. The walk is the loader's (`registry::check`): every

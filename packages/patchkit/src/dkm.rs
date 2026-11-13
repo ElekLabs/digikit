@@ -58,6 +58,9 @@ pub const H_RUNTIME: usize = 0x30;
 pub const H_VERSION: usize = 0x34;
 /// 0x38..0x40: contract versions built against, (major, minor) of api, machine, fx, service; major 0 = not implemented.
 pub const H_CONTRACT: usize = 0x38;
+/// The api major of a module that declares through builder calls and has a keys table at the 0x90 pair (docs/plans/sdk.md 6.3). The sdk contract
+/// moves to it for every module at integration; until then a module without register records and with `[[machine]]` or `[[fx]]` has it.
+pub const API_KEYS_MAJOR: u8 = dkneeds::API_KEYS_MAJOR as u8;
 pub const H_NAME: usize = 0x40;
 pub const H_IMAGE_OFF: usize = 0x60;
 pub const H_IMAGE_SIZE: usize = 0x64;
@@ -289,7 +292,13 @@ pub fn pack_full_max(
     o: &Options,
     max_file: usize,
 ) -> Result<Vec<u8>> {
-    pack_inner(obj, obj.is_none(), reg, dsp, o, max_file)
+    pack_inner(obj, obj.is_none(), reg, dsp, o, max_file, false)
+}
+
+/// Pack a module of api major 3: the table at the header's 0x90 pair is the keys table (`dkneeds::keys`, from `dkneeds::keys::write_keys`), not
+/// register records. The module declares its machines, pages and parameters with builder calls in `init`.
+pub fn pack_keys(obj: Option<&Dko>, keys: &[u8], dsp: &[u8], o: &Options) -> Result<Vec<u8>> {
+    pack_inner(obj, obj.is_none(), keys, dsp, o, max_file(), true)
 }
 
 /// [`pack_full_max`] for an object that is only data: its `.text` starts with the stub (`moveq #0,d0; rts`) that is `init`, there is no `dk_module`, and
@@ -301,7 +310,7 @@ pub fn pack_data_only_max(
     o: &Options,
     max_file: usize,
 ) -> Result<Vec<u8>> {
-    pack_inner(Some(obj), true, reg, dsp, o, max_file)
+    pack_inner(Some(obj), true, reg, dsp, o, max_file, false)
 }
 
 fn pack_inner(
@@ -311,6 +320,7 @@ fn pack_inner(
     dsp: &[u8],
     o: &Options,
     max_file: usize,
+    keys: bool,
 ) -> Result<Vec<u8>> {
     if let Some(obj) = obj {
         obj.require_isa_checked()?;
@@ -493,20 +503,35 @@ fn pack_inner(
             .take(word(0x30) as usize)
             .any(|v| u32::from_be_bytes(v[56..60].try_into().unwrap()) != 0)
     });
+    // a keys table lists the machines; register records are read for a machine record. Canvas pages and latching come from builder calls in
+    // `init`, so the api minor (the newest import) covers them and the machine minor is only mono, stereo or gate.
+    let has_machine = if keys {
+        dkneeds::keys::Keys::parse(reg).is_ok_and(|k| k.n_machines() > 0)
+    } else {
+        has_machine_record(reg)
+    };
+    if keys && !reg.is_empty() {
+        dkneeds::keys::Keys::parse(reg).map_err(|e| err!("keys table: {e:?}"))?;
+    }
     let pairs = [
-        (sdk.api.0, api_minor(imports.iter().copied()).min(sdk.api.1)),
-        if (dsp.is_empty() || fx_only) && !has_machine_record(reg) {
+        (
+            if keys { API_KEYS_MAJOR } else { sdk.api.0 },
+            api_minor(imports.iter().copied()).min(sdk.api.1),
+        ),
+        if (dsp.is_empty() || fx_only) && !has_machine {
             none
         } else if o.gate {
             (sdk.machine.0, sdk.machine.1.min(MACHINE_GATE_MINOR))
-        } else if !reg.is_empty()
+        } else if !keys
+            && !reg.is_empty()
             && crate::register::Register::parse(reg)?
                 .native_pages
                 .iter()
                 .any(|p| p.version == 2)
         {
             (sdk.machine.0, sdk.machine.1.min(MACHINE_NATIVE_PAGES_MINOR))
-        } else if !reg.is_empty()
+        } else if !keys
+            && !reg.is_empty()
             && !crate::register::Register::parse(reg)?
                 .native_pages
                 .is_empty()
