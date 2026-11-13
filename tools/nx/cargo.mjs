@@ -52,6 +52,17 @@ const CRATE_TARGETS = {
       outputs: ['{workspaceRoot}/dist/bytes/core-objects.sha256'],
       options: { command: 'node tools/nx/device-bytes.mjs', cwd: '.' },
     },
+    'device-images': {
+      executor: 'nx:run-commands',
+      cache: false, // a few seconds: the file it writes is part of the merge key of the device tasks
+      parallelism: true,
+      description:
+        'Writes dist/bytes/images.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set.',
+      inputs: ['{workspaceRoot}/tools/nx/device-images.mjs', { dependentTasksOutputFiles: '**/*', transitive: true }],
+      dependsOn: ['cli', { target: 'build-objects', projects: ['tag:acceptance-image'] }],
+      outputs: ['{workspaceRoot}/dist/bytes/images.sha256'],
+      options: { command: 'node tools/nx/device-images.mjs', cwd: '.' },
+    },
   },
   dksample: {
     wasm: {
@@ -71,7 +82,7 @@ const GATE = {
       executor: 'nx:run-commands',
       cache: false,
       parallelism: true, // no gate task is exclusive; an exclusive task scheduled mid-run makes Nx wait for every running task
-      outputs: ['{workspaceRoot}/dist/daemons.json'],
+      outputs: ['{workspaceRoot}/dist/daemons.json', '{workspaceRoot}/dist/bytes/daemon-test.key'],
       inputs: [
         // The sources the daemon is built from: SOURCE_GLOBS of tools/devtools/emud_key.py. The store keys the binary by
         // content; these inputs make a source edit select this task, and so every task that consumes dist/daemons.json.
@@ -93,6 +104,7 @@ const GATE = {
         '{workspaceRoot}/tools/patchkit/toolchain/**/*',
         '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
         '{workspaceRoot}/tools/devtools/emud_key.py',
+        '{workspaceRoot}/tools/devtools/daemon_test_key.py',
         '{workspaceRoot}/tools/devtools/verify_build.py',
         '{workspaceRoot}/tools/devtools/stablebin.py',
         '{workspaceRoot}/tools/emulator/digi_env.py',
@@ -105,6 +117,8 @@ const GATE = {
         commands: [
           'mkdir -p dist',
           'CARGO_BUILD_JOBS=${DIGI_JOBS:-4} uv run python -m tools.devtools.verify_build daemons --env-out dist/daemons.json',
+          // the daemon part of a merge key: the store key without the sources that only patchkit reads
+          'mkdir -p dist/bytes && uv run python -m tools.devtools.daemon_test_key',
         ],
         parallel: false,
         cwd: '.',
