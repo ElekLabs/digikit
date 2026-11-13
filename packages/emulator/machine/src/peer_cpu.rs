@@ -468,6 +468,18 @@ pub struct PeerCpu {
     clear_pc: Option<u32>,
     /// Instructions inside the frame handler by 64-byte code bucket (`DIGI_PEER_PROFILE=1`), for finding where its time goes.
     pub isr_profile: Option<BTreeMap<u32, u64>>,
+    /// Native kernels (`coldfire::cpu::native`): `Off`, `On` (default when the build has kernels), or `Check` (every kernel run is compared with
+    /// the interpreter from the same state, `DIGI_PEER_NATIVE=check`; a difference stops the peer).
+    native: NativeMode,
+    /// Kernel runs the check compared, and instructions in them.
+    pub native_checked: (u64, u64),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NativeMode {
+    Off,
+    On,
+    Check,
 }
 
 impl Default for PeerCpu {
@@ -497,7 +509,32 @@ impl PeerCpu {
             isr: None,
             clear_pc: None,
             isr_profile: Self::profile_requested().then(BTreeMap::new),
+            native: Self::native_mode(),
+            native_checked: (0, 0),
         }
+    }
+
+    /// `DIGI_PEER_NATIVE`: `0` off, `check` compare with the interpreter, else on. The profile needs every instruction, so it turns kernels off.
+    fn native_mode() -> NativeMode {
+        #[cfg(target_arch = "wasm32")]
+        {
+            NativeMode::Off
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            match std::env::var("DIGI_PEER_NATIVE").as_deref() {
+                Ok("0") => NativeMode::Off,
+                Ok("check") => NativeMode::Check,
+                _ if Self::profile_requested() => NativeMode::Off,
+                _ => NativeMode::On,
+            }
+        }
+    }
+
+    /// What the native kernels did: runs, instructions in them, and the instructions the check compared.
+    pub fn native_report(&self) -> (u64, u64, u64) {
+        let s = self.cpu.native_stats();
+        (s.runs, s.insns, self.native_checked.1)
     }
 
     fn profile_requested() -> bool {
@@ -518,6 +555,9 @@ impl PeerCpu {
         self.mem.sdram[o..o + program.len()].copy_from_slice(program);
         let entry = u32::from_be_bytes(program[0..4].try_into().expect("image has an entry long"));
         self.cpu = Cpu::new();
+        if self.native != NativeMode::Off {
+            self.cpu.native_install();
+        }
         self.clear_pc = None;
         self.cpu.pc = entry;
         self.cpu.a[7] = SRAM_BASE + SRAM_BYTES as u32 - 0x40;
@@ -567,6 +607,37 @@ impl PeerCpu {
             }
             self.mem.pc = self.cpu.pc;
             self.mem.icount = self.cpu.icount;
+            if self.cpu.native_wants() {
+                let mut bus = PeerBus {
+                    mem: &mut self.mem,
+                    window,
+                };
+                let budget = end - self.cpu.icount;
+                if self.native == NativeMode::Check {
+                    match self.cpu.check_native(&mut bus, budget) {
+                        Ok(Some(n)) => {
+                            self.native_checked.0 += 1;
+                            self.native_checked.1 += n;
+                            continue;
+                        }
+                        Ok(None) => {}
+                        Err(why) => {
+                            return Err(PeerStop::Unimplemented(format!(
+                                "native kernel differs: {why}"
+                            )));
+                        }
+                    }
+                } else {
+                    match self.cpu.run_native(&mut bus, budget) {
+                        Some(Ok(())) => continue,
+                        Some(Err(Stop::Halted)) => return Err(PeerStop::Halted),
+                        Some(Err(Stop::Unimplemented(f))) => {
+                            return Err(PeerStop::Unimplemented(format!("{f:?}")));
+                        }
+                        None => {}
+                    }
+                }
+            }
             if self.isr.is_some()
                 && let Some(profile) = self.isr_profile.as_mut()
             {

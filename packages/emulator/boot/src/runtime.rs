@@ -52,6 +52,11 @@ pub struct PeerCpuReport {
     pub faults: usize,
     /// Host wall time spent running the peer core, in nanoseconds (0 in the browser build).
     pub wall_ns: u64,
+    /// Native kernel runs, the instructions in them (the peer's `icount` counts them too), and the instructions a `DIGI_PEER_NATIVE=check` run
+    /// compared with the interpreter.
+    pub native_runs: u64,
+    pub native_insns: u64,
+    pub native_checked_insns: u64,
     /// The first accesses outside the peer's map: "pc address size R/W".
     pub first_faults: Vec<String>,
     /// With `DIGI_PEER_PROFILE=1`: the busiest 64-byte code buckets of the frame handler, "address count".
@@ -1103,6 +1108,9 @@ impl Emulator {
                     dma_bytes: p.mem.dma_bytes,
                     faults: p.mem.faults.len(),
                     wall_ns: self.peer_wall_ns,
+                    native_runs: p.native_report().0,
+                    native_insns: p.native_report().1,
+                    native_checked_insns: p.native_report().2,
                     isr_profile: p
                         .isr_profile
                         .as_ref()
