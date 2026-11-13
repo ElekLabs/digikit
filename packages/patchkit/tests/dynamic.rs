@@ -43,31 +43,35 @@ fn a_dynamic_module_is_not_lowered_and_not_patched() {
     }
 }
 
+// test/sample-proof is the one machine fixture of api major 2 left: the `.dk.desc` lowering has no other user, package F deletes these two tests.
 #[test]
 fn the_register_records_are_the_lowered_typed_sections() {
     let Some(lib) = library() else {
         return;
     };
-    let m = lib.get("test/sine").unwrap();
+    let m = lib.get("test/sample-proof").unwrap();
     let models = Models::from_dir(&root().join("devices")).unwrap();
     let res = resolve(&m.manifest, &models).unwrap();
     // one DSP body for both devices
     let dev = |d: &str| res.iter().find(|r| r.dev == d).unwrap();
     assert_eq!(res.len(), 2);
-    let reg = Register::lower(dev("dt2"), "test/sine").unwrap();
+    let reg = Register::lower(dev("dt2"), "test/sample-proof").unwrap();
     assert_eq!(reg.device, 1);
     assert_eq!(reg.machines.len(), 1);
     let mach = &reg.machines[0];
     assert_eq!(
         (mach.type_no, mach.clone_of, mach.position, mach.level),
-        (machine_key("test/sine", "sine"), 0, 255, 10)
+        (machine_key("test/sample-proof", "sample_proof"), 0, 255, 10)
     );
-    // knobs on the Digitakt: SAMPLE's tune and level rows, the module's parameter (index 0) at the first free position
-    assert_eq!(mach.knobs, [0xca, KNOB_PARAM, 0, 0, 0, 0, 0, 0xd1]);
+    // knobs on the Digitakt: SAMPLE's tune and level rows, the module's parameters (index 0 to 2) at the first free positions
+    assert_eq!(
+        mach.knobs,
+        [0xca, KNOB_PARAM, KNOB_PARAM | 1, 0, KNOB_PARAM | 2, 0, 0, 0xd1]
+    );
     let p = &reg.params[0];
     assert_eq!((p.template, p.slot, p.min, p.max), (0xcc, 1, 0, 0x7f00));
     // the Digitone: a page holds the parameter, the machine row none
-    let reg2 = Register::lower(dev("dn2"), "test/sine").unwrap();
+    let reg2 = Register::lower(dev("dn2"), "test/sample-proof").unwrap();
     assert_eq!((reg2.device, reg2.machines[0].own_dsp), (2, 1));
     assert_eq!(reg2.machines[0].knobs, [0; 8]);
     assert_eq!(reg2.pages.len(), 1);
@@ -76,7 +80,7 @@ fn the_register_records_are_the_lowered_typed_sections() {
     assert_eq!((reg2.params[0].template, reg2.params[0].slot), (0xd5, 26));
     // the file: a stub image, the records, and the same bytes every time
     let opts = dkm::Options {
-        name: "test/sine".into(),
+        name: "test/sample-proof".into(),
         version: 0x000100,
         runtime_min: 1,
         trace: false,
@@ -168,11 +172,11 @@ fn a_machine_key_has_no_type_byte() {
         return;
     };
     let models = Models::from_dir(&root().join("devices")).unwrap();
-    let m = lib.get("test/sine").unwrap();
+    let m = lib.get("test/sample-proof").unwrap();
     let res = resolve(&m.manifest, &models).unwrap();
     let r = res.iter().find(|r| r.dev == "dt2").unwrap();
     assert_eq!(
-        Register::lower(r, "test/sine").unwrap().machines[0].type_no,
-        machine_hash("test/sine", "sine") << 8
+        Register::lower(r, "test/sample-proof").unwrap().machines[0].type_no,
+        machine_hash("test/sample-proof", "sample_proof") << 8
     );
 }

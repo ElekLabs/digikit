@@ -31,3 +31,8 @@ path = "build/dyn-dsp-hang-dsp.dko.json"
 sources = ["src/dsp/hang.s"]
 place = "dsp.l2"
 devices = ["dt2"]
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 0
+page_rows = 0

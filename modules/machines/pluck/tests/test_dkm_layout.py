@@ -29,5 +29,5 @@ def test_dsp_section_layout(tmp_path):
         in info
         and "imports _dv_exp2" in info
     )
-    # the guard's ranges: DECAY, PICK, BRIGHT, COLOR (knobs 1, 2, 4, 5) declare 0 .. 0x7f00; TUNE and LEV are stock rows (undeclared)
-    assert "ranges [0, 7f000000, 7f000000, 0, 7f000000, 7f000000, 0, 0]" in info
+    # the guard's ranges are not in the file: the parameter ranges are builder calls in init, so the file carries none
+    assert "ranges [0, 0, 0, 0, 0, 0, 0, 0]" in info

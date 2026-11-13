@@ -32,3 +32,13 @@ path = "build/sharc-probe-dsp.dko.json"
 sources = ["src/dsp/sharc_probe.s"]
 place = "dsp.l2"
 devices = ["dt2", "dn2"]
+
+[uses.dt2]
+machine_rows = 0
+param_rows = 0
+page_rows = 0
+
+[uses.dn2]
+machine_rows = 0
+param_rows = 0
+page_rows = 0

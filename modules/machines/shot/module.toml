@@ -30,3 +30,13 @@ place = "cf.expansion"
 path = "build/shot-dsp.dko.json"
 sources = ["src/dsp/shot.s"]
 place = "dsp.l2"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 5
+page_rows = 0
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 5
+page_rows = 1

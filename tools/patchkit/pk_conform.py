@@ -162,10 +162,30 @@ def fx_records(mid: str) -> list[dict]:
 
 
 def _fx_records(mid: str, man: dict) -> list[dict]:
-    """The effects of an effect module: the records `patchkit desc` finds. Only `type = "fx"` modules, so `desc` does not run for every module."""
-    if man.get("module", {}).get("type") == "fx":
+    """The effects of an effect module: for a module of api major 3 (`[[fx]]` in module.toml) the DSP entry names (`_<prefix>_process`,
+    `_<prefix>_desc`; the prefix is the id, or `dsp`) and the knob ranges of the committed rows (build/gen/gallery.json, written by `module:check`);
+    otherwise the records `patchkit desc` finds. Only `type = "fx"` modules, so `desc` does not run for every module."""
+    if man.get("module", {}).get("type") != "fx":
+        return []
+    if not man.get("fx"):
         return fx_records(mid)
-    return []
+    path = modroots.module_dir(mid) / "build/gen/gallery.json"
+    if not path.is_file():
+        raise ConformError(f"{mid}: no build/gen/gallery.json: run `module:check`")
+    effects = json.loads(path.read_text(encoding="utf-8")).get("effects") or []
+    out = []
+    for n, f in enumerate(man["fx"]):
+        p = f.get("dsp") or f["id"].replace("-", "_")
+        knobs = effects[n]["knobs"] if n < len(effects) else []
+        out.append(
+            {
+                "id": f["id"],
+                "process": f"_{p}_process",
+                "desc": f"_{p}_desc",
+                "knob": [{"min": k["min"], "max": k["max"]} for k in knobs],
+            }
+        )
+    return out
 
 
 def _voices(mid: str, man: dict) -> list[dict]:

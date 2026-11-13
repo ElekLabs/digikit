@@ -30,3 +30,8 @@ place = "cf.expansion"
 path = "build/dyn-params-dsp.dko.json"
 sources = ["../sine/src/dsp/sine.s"]
 place = "dsp.l2"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 4
+page_rows = 0

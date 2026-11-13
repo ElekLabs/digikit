@@ -670,10 +670,10 @@ fn an_unknown_backend_or_a_bad_panel_exception_is_refused() {
 }
 
 /// `patchkit gen` loads a content module's objects for its gallery.json: a run-time module declares its machines in its objects, so a
-/// library without them generates nothing and `gen --check` could not see a stale file (test/dyn-params is a fixture with a gallery).
+/// library without them generates nothing and `gen --check` could not see a stale file (test/sample-proof is the one machine fixture of api major 2 left: package F deletes this test with the `.dk.desc` path).
 #[test]
 fn a_content_modules_gallery_needs_its_objects() {
-    let id = vec!["test/dyn-params".to_string()];
+    let id = vec!["test/sample-proof".to_string()];
     let models = Models::from_dir(&root().join("devices")).unwrap();
     // the fixture root read without a build: its objects are files of the module folder, which has none (the object cache is not read)
     let light = Library::scan_in(None, &root().join("tests/fixtures/modules"), true).unwrap();

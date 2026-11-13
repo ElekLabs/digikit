@@ -30,16 +30,17 @@ def test_committed_objects_are_current_and_plain_coldfire():
 
 
 def test_pack_lowers_the_typed_sections_deterministically(tmp_path):
+    # test/sample-proof is the one machine fixture of api major 2 left, so it is the `.dk.desc` lowering's last user: package F deletes both
     tools = pk_dkrt.Tools()
     a, b = tmp_path / "a.dkm", tmp_path / "b.dkm"
     for out in (a, b):
-        tools.patchkit_run("pack", "test/dyn-params", "--device", "dt2", "-o", out)
+        tools.patchkit_run("pack", "test/sample-proof", "--device", "dt2", "-o", out)
     assert a.read_bytes() == b.read_bytes()
     info = tools.patchkit_run("dkm-info", a)
-    assert "device 1 (4 params, 1 machines, 0 pages)" in info
+    assert "device 1 (3 params, 1 machines, 0 pages)" in info
     # the type field is the machine key: the hash of "<module id>:<machine id>" (D7); the runtime assigns the number at load
     assert (
-        f'machine type h{machine_hash("test/dyn-params", "dynp"):06x} "DynP" "DYP"'
+        f'machine type h{machine_hash("test/sample-proof", "sample_proof"):06x} "Sample proof" "SMP"'
         in info
     )
     # a run-time module needs its device, and a machine module that is not dynamic cannot be packed without code
@@ -48,21 +49,21 @@ def test_pack_lowers_the_typed_sections_deterministically(tmp_path):
         "--root",
         ROOT,
         "pack",
-        "test/dyn-params",
+        "test/sample-proof",
         "-o",
         tmp_path / "x.dkm",
     )
     assert r.returncode != 0 and "--device" in r.stderr
-    # the Digitone II module: machine (own_dsp), four parameters and one page, packed deterministically
+    # the Digitone II module: machine (own_dsp), three parameters and one page, packed deterministically
     c, d = tmp_path / "c.dkm", tmp_path / "d.dkm"
     for out in (c, d):
-        tools.patchkit_run("pack", "test/dyn-dn2", "--device", "dn2", "-o", out)
+        tools.patchkit_run("pack", "test/sample-proof", "--device", "dn2", "-o", out)
     assert c.read_bytes() == d.read_bytes()
     info = tools.patchkit_run("dkm-info", c)
-    assert "device 2 (4 params, 1 machines, 1 pages)" in info
-    h = f"h{machine_hash('test/dyn-dn2', 'dyn_pluck'):06x}"
-    assert f'machine type {h} "DynSyn" "DSY" clone_of 0 level 10 own_dsp 1' in info
-    assert f'page of type {h} "DYN" "Dyn Synth"' in info
+    assert "device 2 (3 params, 1 machines, 1 pages)" in info
+    h = f"h{machine_hash('test/sample-proof', 'sample_proof'):06x}"
+    assert f'machine type {h} "Sample proof" "SMP" clone_of 0 level 10 own_dsp 1' in info
+    assert f'page of type {h} "SAMPLE" "Sample proof"' in info
     # a Digitakt II module has no page, and a Digitone II one is refused on the Digitakt
     r = tools.run(
         tools.patchkit,

@@ -7,20 +7,20 @@
           "knobs": [
             null,
             {
-              "param": "pluck_decay",
+              "param": "decay",
               "slot": 26
             },
             {
-              "param": "pluck_pick",
+              "param": "pick_position",
               "slot": 27
             },
             null,
             {
-              "param": "pluck_bright",
+              "param": "brightness",
               "slot": 29
             },
             {
-              "param": "pluck_color",
+              "param": "excitation_colour",
               "slot": 30
             }
           ],
@@ -43,20 +43,20 @@
               "stock": 202
             },
             {
-              "param": "pluck_decay",
+              "param": "decay",
               "slot": 1
             },
             {
-              "param": "pluck_pick",
+              "param": "pick_position",
               "slot": 2
             },
             null,
             {
-              "param": "pluck_bright",
+              "param": "brightness",
               "slot": 4
             },
             {
-              "param": "pluck_color",
+              "param": "excitation_colour",
               "slot": 5
             },
             null,
@@ -84,7 +84,7 @@
     "dn2": [
       {
         "default": 16384,
-        "id": "pluck_decay",
+        "id": "decay",
         "max": 32512,
         "min": 0,
         "name": "Decay",
@@ -94,7 +94,7 @@
       },
       {
         "default": 8192,
-        "id": "pluck_pick",
+        "id": "pick_position",
         "max": 32512,
         "min": 0,
         "name": "Pick position",
@@ -104,7 +104,7 @@
       },
       {
         "default": 20480,
-        "id": "pluck_bright",
+        "id": "brightness",
         "max": 32512,
         "min": 0,
         "name": "Brightness",
@@ -114,7 +114,7 @@
       },
       {
         "default": 10240,
-        "id": "pluck_color",
+        "id": "excitation_colour",
         "max": 32512,
         "min": 0,
         "name": "Excitation colour",
@@ -126,7 +126,7 @@
     "dt2": [
       {
         "default": 16384,
-        "id": "pluck_decay",
+        "id": "decay",
         "max": 32512,
         "min": 0,
         "name": "Decay",
@@ -136,7 +136,7 @@
       },
       {
         "default": 8192,
-        "id": "pluck_pick",
+        "id": "pick_position",
         "max": 32512,
         "min": 0,
         "name": "Pick position",
@@ -146,7 +146,7 @@
       },
       {
         "default": 20480,
-        "id": "pluck_bright",
+        "id": "brightness",
         "max": 32512,
         "min": 0,
         "name": "Brightness",
@@ -156,7 +156,7 @@
       },
       {
         "default": 10240,
-        "id": "pluck_color",
+        "id": "excitation_colour",
         "max": 32512,
         "min": 0,
         "name": "Excitation colour",

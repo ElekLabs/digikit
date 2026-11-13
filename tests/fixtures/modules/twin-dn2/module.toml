@@ -15,11 +15,7 @@ conflicts = []
 "dn2-1.12" = "experimental"
 
 # Static twin of test/dyn-dn2 (the same declaration in src/module.c, patched in at build time): tests/digikit compares the rows.
-# The DSP is test/sine's, read from its folder; its symbols start with `sn`, so `dsp` names the prefix.
-[[machine]]
-id = "dyn_pluck"
-dsp = "sn"
-
+# The DSP is test/sine's, read from its folder.
 [[object]]
 path = "build/twin-dn2-cf.dko.json"
 sources = ["src/module.c"]

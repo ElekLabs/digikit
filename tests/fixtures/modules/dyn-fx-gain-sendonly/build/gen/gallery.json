@@ -1,0 +1,8 @@
+{
+  "machines": [],
+  "module": "test/dyn-fx-gain-sendonly",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "machines": [],
+  "module": "test/dyn-fx-nan",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}

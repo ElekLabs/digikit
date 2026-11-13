@@ -1,0 +1,8 @@
+{
+  "machines": [],
+  "module": "test/trace-demo",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}

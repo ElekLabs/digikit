@@ -86,9 +86,11 @@ def gallery(
     machine_ids: list[str],
     per_device: dict[str, dict[str, Any]],
     models: dict[str, dict[str, int]],
+    fx_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """`build/gen/gallery.json` of a module from its committed rows. MACHINE_IDS are the `[[machine]]` ids of module.toml, in the order of the
-    machine rows; MODELS gives per device the knob (`slot_base`, `count` and `to`, devices/*.toml `[modules.knobs]`)."""
+    machine rows; MODELS gives per device the knob (`slot_base`, `count` and `to`, devices/*.toml `[modules.knobs]`). FX_IDS are the `[[fx]]`
+    ids in the order of the effect records; the effects of the first device (a record is the same on both) are listed under `effects`."""
     machines: list[dict[str, Any]] = []
     params_out: dict[str, list[dict[str, Any]]] = {}
     for dev, data in per_device.items():
@@ -142,4 +144,20 @@ def gallery(
                 if page
                 else None,
             }
-    return {"module": module, "machines": machines, "params": params_out}
+    out: dict[str, Any] = {"module": module, "machines": machines, "params": params_out}
+    first = next(iter(per_device.values()), None)
+    if first and first["records"]["effects"]:
+        out["effects"] = [
+            {
+                "id": (fx_ids or [])[n] if n < len(fx_ids or []) else f"fx{n}",
+                "tab": e["tab"],
+                "title": e["title"],
+                "mix": e["mix"],
+                "knobs": [
+                    {k: q[k] for k in ("name", "short", "min", "max", "default", "display")}
+                    for q in e["knobs"]
+                ],
+            }
+            for n, e in enumerate(first["records"]["effects"])
+        ]
+    return out

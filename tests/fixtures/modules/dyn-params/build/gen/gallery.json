@@ -2,39 +2,6 @@
   "machines": [
     {
       "devices": {
-        "dn2": {
-          "clone_of": 0,
-          "knobs": [
-            null,
-            {
-              "param": "p0",
-              "slot": 26
-            },
-            {
-              "param": "p1",
-              "slot": 27
-            },
-            null,
-            {
-              "param": "p2",
-              "slot": 29
-            },
-            {
-              "param": "p4",
-              "slot": 30
-            }
-          ],
-          "level": 10,
-          "name": "DynP",
-          "own_dsp": true,
-          "page": {
-            "name": "DYNP",
-            "title": "DynP"
-          },
-          "position": null,
-          "short": "DYP",
-          "type": null
-        },
         "dt2": {
           "clone_of": 0,
           "knobs": [
@@ -43,20 +10,20 @@
               "stock": 202
             },
             {
-              "param": "p0",
+              "param": "param_0",
               "slot": 1
             },
             {
-              "param": "p1",
+              "param": "param_1",
               "slot": 2
             },
             null,
             {
-              "param": "p2",
+              "param": "param_2",
               "slot": 4
             },
             {
-              "param": "p4",
+              "param": "param_4",
               "slot": 5
             },
             null,
@@ -81,52 +48,10 @@
   ],
   "module": "test/dyn-params",
   "params": {
-    "dn2": [
-      {
-        "default": 4096,
-        "id": "p0",
-        "max": 32512,
-        "min": 0,
-        "name": "Param 0",
-        "short": "P0",
-        "slot": 26,
-        "template": 213
-      },
-      {
-        "default": 4369,
-        "id": "p1",
-        "max": 32256,
-        "min": 1,
-        "name": "Param 1",
-        "short": "P1",
-        "slot": 27,
-        "template": 213
-      },
-      {
-        "default": 4642,
-        "id": "p2",
-        "max": 32000,
-        "min": 2,
-        "name": "Param 2",
-        "short": "P2",
-        "slot": 29,
-        "template": 213
-      },
-      {
-        "default": 5188,
-        "id": "p4",
-        "max": 31488,
-        "min": 4,
-        "name": "Param 4",
-        "short": "P4",
-        "slot": 30,
-        "template": 213
-      }
-    ],
     "dt2": [
       {
         "default": 4096,
-        "id": "p0",
+        "id": "param_0",
         "max": 32512,
         "min": 0,
         "name": "Param 0",
@@ -135,30 +60,30 @@
         "template": 204
       },
       {
-        "default": 4369,
-        "id": "p1",
+        "default": 4352,
+        "id": "param_1",
         "max": 32256,
-        "min": 1,
+        "min": 256,
         "name": "Param 1",
         "short": "P1",
         "slot": 2,
         "template": 204
       },
       {
-        "default": 4642,
-        "id": "p2",
+        "default": 4608,
+        "id": "param_2",
         "max": 32000,
-        "min": 2,
+        "min": 512,
         "name": "Param 2",
         "short": "P2",
         "slot": 4,
         "template": 204
       },
       {
-        "default": 5188,
-        "id": "p4",
+        "default": 5120,
+        "id": "param_4",
         "max": 31488,
-        "min": 4,
+        "min": 1024,
         "name": "Param 4",
         "short": "P4",
         "slot": 5,

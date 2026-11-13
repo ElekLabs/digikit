@@ -2,20 +2,6 @@
   "machines": [
     {
       "devices": {
-        "dn2": {
-          "clone_of": 0,
-          "knobs": [],
-          "level": 10,
-          "name": "Hang",
-          "own_dsp": true,
-          "page": {
-            "name": "HANG",
-            "title": "Hang"
-          },
-          "position": null,
-          "short": "HNG",
-          "type": null
-        },
         "dt2": {
           "clone_of": 0,
           "knobs": [
@@ -50,7 +36,6 @@
   ],
   "module": "test/dyn-dsp-hang",
   "params": {
-    "dn2": [],
     "dt2": []
   }
 }

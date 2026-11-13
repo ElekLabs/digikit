@@ -1,0 +1,8 @@
+{
+  "machines": [],
+  "module": "test/dyn-fx-gain",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}
