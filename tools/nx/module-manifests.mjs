@@ -13,6 +13,8 @@ export const packDevices = (m) => {
 export const isUploadable = (root, m) => root.startsWith('modules/') && !!(m.dynamic || m.host || m.type === 'service');
 const leaf = (id) => id.split('/').at(-1);
 export const dkm = (dev, id) => `dist/modules/${dev}/${leaf(id)}.dkm`;
+// The module's address map (docs/ADDRMAP.md), written by `patchkit pack --addrmap` next to the .dkm.
+export const dkmMap = (dev, id) => dkm(dev, id).replace(/\.dkm$/, '.addrmap.json');
 export const records = (root) => {
   const file = join(root, 'project.json');
   return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')).metadata?.runtimeAcceptance ?? []) : [];

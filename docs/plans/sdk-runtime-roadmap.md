@@ -33,7 +33,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | 1 | S3 | SDK builders in `init` and the runtime commit path; machines, FX and fixtures migrated | S2b | todo | |
 | 1 | S4 | SDK templates and docs | S3 | todo | |
 | 1 | P7 | Clock audit (static) | - | done | finding 125 |
-| 1 | P1 | Address map v1, emulator only (own lane) | - | todo | |
+| 1 | P1 | Address map v1, emulator only (own lane) | - | done | lane prof/p1-addrmap |
 | 2 | R4 | Spike, static part: can SHARC hooks move into a `.dks` | S4 | todo | |
 | Stop | | Review the R4 answer with Em: it decides the owner of DSP dispatch and where `DK_SPAN` lives | R4 | | |
 | 2 | P2 | Shared Rust library, `wb:cli` profile and addrmap commands, JSON output | P1 | todo | |

@@ -11,6 +11,7 @@ import {
   packDevices,
   isUploadable,
   dkm,
+  dkmMap,
   manifestClosure,
   manifestArgs,
 } from './module-manifests.mjs';
@@ -159,11 +160,14 @@ export const createNodesV2 = [
           cache: false,
           inputs: packInputs(manifests),
           dependsOn: ['patchkit:cli'],
-          outputs: devices.map((d) => `{workspaceRoot}/${dkm(d, m.id)}`),
+          outputs: devices.flatMap((d) => [`{workspaceRoot}/${dkm(d, m.id)}`, `{workspaceRoot}/${dkmMap(d, m.id)}`]),
           options: {
             commands: [
               'mkdir -p dist/modules/dt2 dist/modules/dn2',
-              ...devices.map((d) => `${PK} pack ${m.id} ${manifestArgs(manifests)} --device ${d} -o ${dkm(d, m.id)}`),
+              ...devices.map(
+                (d) =>
+                  `${PK} pack ${m.id} ${manifestArgs(manifests)} --device ${d} --addrmap ${dkmMap(d, m.id)} -o ${dkm(d, m.id)}`,
+              ),
             ],
             parallel: false,
             cwd: '.',

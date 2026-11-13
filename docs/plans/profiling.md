@@ -49,6 +49,8 @@ Host-side only. The daemon and the device never read the firmware databases.
 
 ### 3.1 Layers
 
+Built (item 1, emulator only): format, lookup and consumers are in [ADDRMAP.md](../ADDRMAP.md); this section keeps the design.
+
 | Layer | Source | Availability |
 | --- | --- | --- |
 | Our code | Runtime build symbols (`patchkit cf-link --json` emits symbols and `text_ranges`, `packages/patchkit/src/build_cli.rs:212-216`); module `.dko` symbols kept as a sidecar in `out/` | Always. We build it, so the site and browser users can have it |
@@ -272,7 +274,7 @@ Item numbers are ids, not an order. The order lives in [sdk-runtime-roadmap.md](
 
 | # | Item | Track | Agent time | Depends on |
 | --- | --- | --- | --- | --- |
-| 1 | Address map v1, emulator only: `.dko` symbols kept, map export, names in emulator tools and crash records | B | 1-2 days | Nothing. Runs in parallel with runtime-and-services item 4 |
+| 1 | Address map v1, emulator only: `.dko` symbols kept, map export, names in emulator tools and crash records. **Done** (docs/ADDRMAP.md) | B | 1-2 days | Nothing. Runs in parallel with runtime-and-services item 4 |
 | 2 | Shared Rust library and `wb:cli` profile and addrmap commands with JSON output | B | 1-2 days | 1 |
 | 3 | sharcdb tables for module DSP sections | B | 1 day | 1; the [O] in 3.3 |
 | 4 | Per-module cost, machine budget check, fast-tier refusals per module | B | 1-2 days | 1, 3 |
@@ -288,7 +290,7 @@ Before each item over a day: state payoff and confidence, and stop when they are
 ## 14. Open items
 
 - [O] Does the sharcdb builder accept a relocatable module DSP section?
-- [O] Load addresses: a new event field or a PEEK of the runtime's module table?
+- Answered by item 1 (emulator): load addresses come from a PEEK of the runtime's module table `DKRT_STATE` (`mem.cf.peek`); no event field. On a device the same table is read by the debug module's PEEK (`dklog crash --image`); not run on hardware [O].
 - [O] Host transport for the DSP stats window: `dkrt_peek_range` or a new command?
 - [O] The device transport (`dklog`, `dkupload`) has not run on hardware.
 - Answered by the clock audit ([finding 125](../findings/125-dsp-cycle-counter-consumers.md), [D]): EMUCLK reads only report. One reader per image, the SHARC block handler; its low-word cycle delta feeds the HEALTH page through `core/health`. Nothing branches on it.
