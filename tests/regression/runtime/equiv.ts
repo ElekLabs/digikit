@@ -23,6 +23,7 @@ export interface Equiv {
   /** DT2: the run-time machine to put on track 1 (its type is read from the runtime). DN2: the sound proves the choice. */
   play?: { module: string; machine: string };
   /** The list position of the played machine (DN2: the run-time machines follow MIDI; DT2: where the type is chosen). */
+  hint?: number;
   /** Daemon environment of the run-time boot. */
   envRun?: Record<string, string>;
   trigFrame: number;

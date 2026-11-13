@@ -594,9 +594,7 @@ def run_equiv(c: Ctx) -> None:
         ):  # DN2: the machine list position (finding 33); the sound proves the type
             rig.select(t[hint_key] if hint_key in t else t["hint"])
 
-    def base_boot() -> (
-        None
-    ):  # the tables of a boot with no module
+    def base_boot() -> None:  # the tables of a boot with no module
         with c.rig(run_img, empty, "none") as rig:
             out["ref"] = decode_tables(rig)
             c.report["boot_none"] = rig.boot_info()
@@ -642,7 +640,7 @@ def run_equiv(c: Ctx) -> None:
                     )
                 select(rig, "hint_run")
                 out["run_pcm"] = rig.note(c.work / "run.wav", trig)
-                out["run_rig_checks"] = rig  # pcm_check reports through a rig
+                out["run_rig_checks"] = rig  # pcm_pin reports through a rig
             c.done(rig)
 
     c.parallel(run_boot, base_boot)

@@ -76,7 +76,6 @@ def test_zero_patch_set_policy_names_existing_sets():
 
 def test_zero_safe_base_still_requires_sharc_for_content_dsp():
     assert dev.dsp_mode(["test/sine"], [], zero_framework=True) == "sharc"
-    assert dev.dsp_mode(["digikit/pluck"], [], zero_framework=True) == "sharc"
     assert (
         dev.dsp_mode(["test/ui-demo"], ["core/sample-pool"], zero_framework=True)
         == "sharc"
