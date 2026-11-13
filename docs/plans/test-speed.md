@@ -166,6 +166,8 @@ Highest payoff first. Each step states its proof.
     symptom class (from `tools/nx/retry.mjs`, or `other`), its log path, and whether a retry ran and passed (read from `retries.jsonl`). Tools and
     agents then read the result instead of the console. Proof: a host test on a fake trace dir and Nx history rows.
 
+16. [ ] **Key device tests on the bytes they load.** Device test targets are keyed on the source of the tools that build their inputs (patchkit's Rust code among them), so a patchkit refactor that changes no packed byte reselects nearly the whole device suite: S3b patched-in deletion changed 0 bytes of 102 `.dkm`, 47 core objects and 2 images (`mise run sdk:hashes`), yet the affected gate selected about 360 device tasks. Key each device target on the packed `.dkm` files, the patched image and the emulator binary it loads (an Nx input from dependency outputs or a runtime input; `tools/nx/device-bytes.mjs` does part of this), so an unchanged byte set replays from the cache. Biggest single saving per gate for tool refactors.
+
 ## Later (deferred, 2026-11-10)
 
 Measured payoff is given where known.
