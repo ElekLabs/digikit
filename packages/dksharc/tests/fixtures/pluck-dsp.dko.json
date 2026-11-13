@@ -1,0 +1,199 @@
+{
+  "arch": "sharc",
+  "format": 1,
+  "relocs": [
+    {
+      "addend": 0,
+      "offset": 43,
+      "section": "seg_pmco",
+      "symbol": "_dv_exp2",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 55,
+      "section": "seg_pmco",
+      "symbol": "_dv_exp2",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 231,
+      "section": "seg_pmco",
+      "symbol": "_dv_exp2",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 245,
+      "section": "seg_pmco",
+      "symbol": "_dv_exp2",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 255,
+      "section": "seg_pmco",
+      "symbol": "_pk_coef",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 353,
+      "section": "seg_pmco",
+      "symbol": "_pk_rng",
+      "type": "sharc.abs32"
+    },
+    {
+      "addend": 0,
+      "offset": 407,
+      "section": "seg_pmco",
+      "symbol": "_pk_rng",
+      "type": "sharc.abs32"
+    },
+    {
+      "addend": 0,
+      "offset": 435,
+      "section": "seg_pmco",
+      "symbol": "_pk_nocomb",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 492,
+      "section": "seg_pmco",
+      "symbol": "_pk_fresh",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 495,
+      "section": "seg_pmco",
+      "symbol": "_pk_coef",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 498,
+      "section": "seg_pmco",
+      "symbol": "_pk_run",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 636,
+      "section": "seg_pmco",
+      "symbol": "_pk_loud",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 643,
+      "section": "seg_pmco",
+      "symbol": "_pk_counted",
+      "type": "sharc.abs24"
+    },
+    {
+      "addend": 0,
+      "offset": 653,
+      "section": "seg_pmco",
+      "symbol": "_pk_return",
+      "type": "sharc.abs24"
+    }
+  ],
+  "sections": [
+    {
+      "align": 8,
+      "hex": "fe70bf080892000008970600089201000897070008920200089708000892030008970900be703f090894010008970a00089400008c0100aa010faa39abaaa1cf010f334133338e01a11a810f00008e01a12a8a01a010be0600000000010f3239629a9301010b089790058a01a020be0600000000010fb745e3779301010c9301bb00010f1d42e6e99301010d089608008c0100a0010f0138040201cf010f803f00008e01011088011020020f003f00009301020e08970d0788011e2f08978c079301ef008801ee11020f803f00008801212101cf0dcf010f2a3eabaa01cf8801e0208801c029010f204062108e019129010f7f45d7b78e019119010f003f0000880191208c0100d0810f020086010120810ffa0f8601011008970b008c0100a18801912093010001020f803f00008801212110cf1dcf020faa3dabaa12cf01c9010f803f000001c9020f16bc354b20cf030f913c9a8523c820cf030ffdbcca8b23c820cf030f7e3d049723c820cf030f00be770623c820cf030f803e4a0223c820cf030fffbeedff23c820cf030f13b4c9de23c8010f663f66668e012112010f66bf66668e01212208970e01089606008c0100a0010f0138040201cf010f803f00008e010110010f0ac1713d01cfbe0600000000010fa041000001cf0ccf010f5939b5b401cf8a010020be060000000008970f003e0a000000007e70bf09be0600000000800f01000897050008960b008c0100a1089607008c0100a0020f0138040202cf020f803f00008e010210020f003f000002cf01cf02c88c0100d008971100089609008c0100a0020f0138040202cf020f803f00008e010210020f663f66669301020d08979206020f803f000088012d2e8801dd1002c8020f003f000002cf08968a008c0110a1020f0138040212cf9301010f089793073f71bf81800f800030c008960b003e0200004002860f004064c1810f040061c1800136177f703f890910000000008a0fefff8b0fe1ff8c0f0000880f000000c5000d000027003e020000190d3e01040091293e0120009a013e01040091293e02000019053e01040091293e010d009ba13e0113001e013e011300cd023e010800121c3e011300cf023e0108008218be55008100000911000000000896100182cf08960b0000c57f70bf887f703f89000d00000900be53000100003e0108002822be55008100000896110244c200060000000008960b0000c504c1810ffc3f800131123f703f093e020000140221c13f70bf08000d00000c007e5500000000fe53800000003e0108000120fe5500800000800f000008970000089702000897030008970400800f504b08970100800f00003f083f687e70bf090896050000c2200600000000be06000000003e0600000000800f000008970500be70bf08089203003e703f083f71bf81800f800030c0840f0400820fff3f0896800708960b003e02000000028001f02ee2cc8001e42112cc800131113e70bf885a93089683050896040608968c0208960d0308968e0308968f048d0f0000000c002045003e0100003e113e70808800007e53000000003e0100004e1e3e010400e20e3e01130005013e011300a6083e010a00001a3e01080018113e0108001c283e01130087083e0108008b183e010a00101b3e010a00801c3e01130089083e0100003f113e70008900007e55008400003e0100004f1f3e010400f20f3e010b0080003e010e00d02dbe5100840000089780070897830508970406000f8037000008968200d0cb220600000000820f0100800121113e0600000000810f000008978200820f080012c3020600000000800f01003f083f68800f00003f083f68",
+      "kind": "text",
+      "name": "seg_pmco",
+      "size": 1328
+    },
+    {
+      "align": 8,
+      "hex": "91f44525414d4b44010000000400000010000000804000008040000098080000282300000200000000000000",
+      "kind": "data",
+      "name": "seg_dmda",
+      "size": 44
+    }
+  ],
+  "source_sha256": "1f9cf5e0dfa669be0c9b83fc783fd3bf7b6fe7fee94f71996d110eb27acb7788",
+  "symbols": [
+    {
+      "global": false,
+      "name": "_pk_coef",
+      "section": "seg_pmco",
+      "value": 0
+    },
+    {
+      "global": false,
+      "name": "_pk_counted",
+      "section": "seg_pmco",
+      "value": 648
+    },
+    {
+      "global": false,
+      "name": "_pk_fresh",
+      "section": "seg_pmco",
+      "value": 501
+    },
+    {
+      "global": false,
+      "name": "_pk_loud",
+      "section": "seg_pmco",
+      "value": 646
+    },
+    {
+      "global": false,
+      "name": "_pk_nocomb",
+      "section": "seg_pmco",
+      "value": 469
+    },
+    {
+      "global": true,
+      "name": "_pk_note_on",
+      "section": "seg_pmco",
+      "value": 253
+    },
+    {
+      "global": true,
+      "name": "_pk_render",
+      "section": "seg_pmco",
+      "value": 487
+    },
+    {
+      "global": false,
+      "name": "_pk_return",
+      "section": "seg_pmco",
+      "value": 660
+    },
+    {
+      "global": false,
+      "name": "_pk_run",
+      "section": "seg_pmco",
+      "value": 505
+    },
+    {
+      "global": true,
+      "name": "_pk_desc",
+      "section": "seg_dmda",
+      "value": 4
+    },
+    {
+      "global": false,
+      "name": "_pk_rng",
+      "section": "seg_dmda",
+      "value": 0
+    },
+    {
+      "global": true,
+      "name": "_dv_exp2",
+      "section": null,
+      "value": 0
+    }
+  ],
+  "toolchain": {
+    "instructions_redecoded": "306",
+    "selache_rev": "02d6d785b8e3a125ab237a00bb89503aff835f5d"
+  }
+}

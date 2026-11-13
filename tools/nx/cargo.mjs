@@ -159,6 +159,7 @@ export const HERMETIC = {
   'emmc-card': [],
   dkaddrmap: [],
   dkneeds: [],
+  dksharc: [],
   'dkrt-sdk': ['{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json'],
   'dkrt-fit': ['{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json'],
   'device-profile': ['{workspaceRoot}/devices/digitakt-ii.toml', '{workspaceRoot}/devices/digitone-ii.toml'],
