@@ -98,7 +98,8 @@ fn anchor_value(a: &Anchor) -> u64 {
 
 /// Memory of both CPUs as the firmware loads it.
 struct Mem {
-    stream: Stream,
+    /// The DSP boot stream; `None` on a device without a DSP.
+    stream: Option<Stream>,
     main: Vec<u8>,
     main_base: u64,
     stream_dirty: bool,
@@ -109,6 +110,8 @@ impl Mem {
     fn read(&self, cpu: &str, addr: u64, len: u64) -> Result<Vec<u8>> {
         if cpu == SHARC {
             self.stream
+                .as_ref()
+                .ok_or_else(|| err!("DSP {addr:#x}+{len}: the device has no DSP"))?
                 .read(addr as u32, len as usize)
                 .ok_or_else(|| err!("DSP {addr:#x}+{len}: not loaded by the boot stream"))
         } else {
@@ -124,7 +127,10 @@ impl Mem {
     fn write(&mut self, cpu: &str, addr: u64, data: &[u8]) -> Result<()> {
         if cpu == SHARC {
             self.stream_dirty = true;
-            self.stream.write(addr as u32, data)
+            self.stream
+                .as_mut()
+                .ok_or_else(|| err!("DSP {addr:#x}: the device has no DSP"))?
+                .write(addr as u32, data)
         } else {
             self.read(cpu, addr, data.len() as u64)?;
             let o = (addr - self.main_base) as usize;
@@ -721,21 +727,26 @@ pub fn apply_with(
     })?;
     let dev = port.port.device.clone();
     let main_sec = fw
-        .section(3)
+        .main()
         .ok_or_else(|| err!("image has no MAIN OS section"))?;
-    let dsp_sec = fw
-        .section(7)
-        .ok_or_else(|| err!("image has no DSP section"))?;
-    if sha256_hex(&main_sec.data) != port.port.main_sha256
-        || sha256_hex(&dsp_sec.data) != port.port.dsp_sha256
-    {
+    // the DSP section is the device's `[container] dsp`; a device without a DSP has none and its port no `dsp_sha256`
+    let dsp_sec = match fw.device.dsp_section() {
+        Some(_) => Some(fw.dsp().ok_or_else(|| err!("image has no DSP section"))?),
+        None => None,
+    };
+    let dsp_ok = match (dsp_sec, &port.port.dsp_sha256) {
+        (Some(d), Some(h)) => sha256_hex(&d.data) == *h,
+        (None, None) => true,
+        _ => false,
+    };
+    if sha256_hex(&main_sec.data) != port.port.main_sha256 || !dsp_ok {
         return Err(err!(
             "port {} does not match the sections of this image",
             port.id()
         ));
     }
     let mut mem = Mem {
-        stream: Stream::parse(dsp_sec.data.clone())?,
+        stream: dsp_sec.map(|d| Stream::parse(d.data.clone())).transpose()?,
         main: main_sec.data.clone(),
         main_base: main_sec.dest as u64,
         stream_dirty: false,
@@ -1422,7 +1433,7 @@ pub fn apply_with(
             .get_mut("dsp.l2")
             .ok_or_else(|| {
                 err!(
-                    "port {} has no dsp.l2 region for the patch record",
+                    "port {} has no dsp.l2 region for the patch record (no module uses cf.expansion)",
                     port.id()
                 )
             })?
@@ -1488,7 +1499,10 @@ pub fn apply_with(
     for c in &chunks {
         match (c.cpu, c.region.as_str()) {
             (SHARC, _) => {
-                mem.stream.append_block(c.addr as u32, &c.image)?;
+                mem.stream
+                    .as_mut()
+                    .ok_or_else(|| err!("{}: the device has no DSP", c.addr))?
+                    .append_block(c.addr as u32, &c.image)?;
                 mem.stream_dirty = true;
             }
             (_, "cf.flash_cave") => {
@@ -1524,7 +1538,10 @@ pub fn apply_with(
     }
     if opts.record {
         if rec_region == "dsp.l2" {
-            mem.stream.append_block(rec_addr as u32, &rec_bytes)?;
+            mem.stream
+                .as_mut()
+                .ok_or_else(|| err!("the device has no DSP"))?
+                .append_block(rec_addr as u32, &rec_bytes)?;
             mem.stream_dirty = true;
         }
         writes.push(PlanWrite {
@@ -1578,7 +1595,11 @@ pub fn apply_with(
             if crate::imageid::locate(&mem.main)? != Some(at) {
                 return Err(err!("the image id marker is not unique in MAIN OS"));
             }
-            let id = crate::imageid::compute(&unhex(&fw.syx_sha256)?, &mem.main, &mem.stream.blob);
+            let id = crate::imageid::compute(
+                &unhex(&fw.syx_sha256)?,
+                &mem.main,
+                mem.stream.as_ref().map_or(&[][..], |s| &s.blob),
+            );
             mem.main[at..at + 8].copy_from_slice(&id);
             image_id = Some(id);
         }
@@ -1587,15 +1608,18 @@ pub fn apply_with(
     // Limits, repack, build.
     let lim = &port.limits;
     if mem.stream_dirty {
-        if mem.stream.blob.len() as u64 > lim.dsp_depacked_max {
+        let (Some(stream), Some(dsp_id)) = (&mem.stream, fw.device.dsp_section()) else {
+            return Err(err!("a DSP patch on a device without a DSP"));
+        };
+        if stream.blob.len() as u64 > lim.dsp_depacked_max {
             return Err(err!(
                 "DSP stream is {} bytes, over the {} the ColdFire boot routine sends",
-                mem.stream.blob.len(),
+                stream.blob.len(),
                 lim.dsp_depacked_max
             ));
         }
-        fw.replace(7, mem.stream.blob.clone())?;
-        let stored = fw.section(7).unwrap().stored.len() as u64;
+        fw.replace(dsp_id, stream.blob.clone())?;
+        let stored = fw.section(dsp_id).unwrap().stored.len() as u64;
         if stored > lim.dsp_stored_max {
             return Err(err!(
                 "packed DSP section is {stored} bytes, over the {} limit",
@@ -1611,7 +1635,7 @@ pub fn apply_with(
                 lim.main_staged_max
             ));
         }
-        fw.replace(3, mem.main.clone())?;
+        fw.replace(fw.device.main_section(), mem.main.clone())?;
     }
     let syx = fw.build(Some(lim.container_max as usize))?;
     let regions = allocs

@@ -27,12 +27,15 @@ independent checks) or **[O]** (open). The second CPU (section 7) is in
 - The packing codec is the same as on DT2/DN2.
 - The content checksum of DT2/DN2 reproduces the stored value over the first
   2,029,392 bytes. The last 94 decoded bytes are zero padding.
-- There is no HMAC trailer. The last 32 bytes are zero. The sha256 constants
-  are absent from sections 2, 3 and 4.
+- There is no HMAC trailer slot. The container (2,029,392 bytes, the value in
+  its length word) ends at the end of section 8 rounded up to 16; DT2/DN2 add
+  32 bytes after that. The sha256 constants are absent from sections 2, 3
+  and 4.
 - The per-packet checksum constant K = 0x11 verifies on all 20,094 data
   messages.
-- Consequence: `Device::from_id` in `packages/patchkit/src/syx.rs` needs a
-  no-seal path for the Syntakt. There is no key to derive.
+- patchkit follows `[capabilities] seal = "none"`: it builds the container
+  without a trailer slot, and `patchkit rebuild` of the stock file reproduces
+  it byte for byte **[V]** (sha256 equal). No key is derived.
 
 ## Images and CPUs
 

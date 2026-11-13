@@ -23,14 +23,19 @@ pub struct PortInfo {
     pub version: String,
     pub syx_sha256: String,
     pub main_sha256: String,
-    pub dsp_sha256: String,
+    /// The DSP section's hash; absent in the port of a device without a DSP.
+    #[serde(default)]
+    pub dsp_sha256: Option<String>,
     pub resolved_by: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Limits {
     pub container_max: u64,
+    /// 0 on a device without a DSP.
+    #[serde(default)]
     pub dsp_stored_max: u64,
+    #[serde(default)]
     pub dsp_depacked_max: u64,
     pub main_staged_max: u64,
 }
