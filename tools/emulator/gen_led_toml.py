@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# device-literals: allow
 """Write devices/digitakt-ii-leds.toml, devices/digitone-ii-leds.toml and devices/syntakt-leds.toml (panel key -> LED index map).
 
     uv run python -m tools.emulator.gen_led_toml
