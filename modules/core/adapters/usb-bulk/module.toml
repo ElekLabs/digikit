@@ -7,7 +7,7 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "A vendor bulk interface (EP2 OUT and IN) in USB MIDI mode for modules: usb_bulk_enable, usb_bulk_take, usb_bulk_release, usb_bulk_send, usb_bulk_state"
+summary = "A vendor bulk interface (EP2 OUT and IN) in USB MIDI mode for modules: dk_usb_bulk_enable, dk_usb_bulk_take, dk_usb_bulk_release, dk_usb_bulk_send, dk_usb_bulk_state"
 requires = ["core/runtime"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12"]
@@ -17,11 +17,12 @@ ports = ["dt2-1.17", "dn2-1.12"]
 "dn2-1.12" = "experimental"
 
 # The firmware's USB engine is not patched (docs/plans/usb-fast.md section 4, docs/findings/42-usb-transfer-routes.md section 4): entry 2 of its RAM port
-# table (USB MIDI) gets a longer configuration descriptor and our connect and disconnect callbacks when a module calls usb_bulk_enable, and the firmware's
-# own stop and restart pair re-enumerates. In USB AUDIO/MIDI the receive ring runs on EP2 OUT when core/usb-bulk-audio extended entry 5 (interface 5, EP2 OUT bulk) and
-# calls usb_bulk_port5_attach, usb_bulk_port5_connect and usb_bulk_port5_disconnect (exported here, resolved by patchkit as symbols of this module). The code is the same on both devices
+# table (USB MIDI) gets a longer configuration descriptor and our connect and disconnect callbacks when a module calls dk_usb_bulk_enable, and the firmware's
+# own stop and restart pair re-enumerates. Without a module that calls it, nothing is written and USB is stock. In USB AUDIO/MIDI the receive ring runs on EP2 OUT
+# when core/usb-bulk-audio extended entry 5 (interface 5, EP2 OUT bulk) and calls usb_bulk_port5_attach, usb_bulk_port5_connect and usb_bulk_port5_disconnect
+# (include/usb_bulk_port5.h; symbols of this module, resolved by patchkit across the two objects). The code is the same on both devices
 # (the engine is identical code at the same addresses); the anchors give the data address and the engine entries.
-# The module imports usb_bulk_* are the `[[import]] requires = "core/usb-bulk"` entries of sdk/sdk.toml; the runtime lists them as optional.
+# The module imports dk_usb_bulk_* are the `[[import]] requires = "core/usb-bulk"` entries of sdk/sdk.toml; the runtime lists them as optional.
 
 # DDR's cached window and its uncached alias (the DMA buffers are used through the alias).
 [[gen]]
@@ -45,7 +46,6 @@ usb_fw_td_alloc = "cf.usb.fn.td_alloc"
 usb_fw_mem_new = "cf.mem.fn.new"
 usb_fw_mem_free = "cf.mem.fn.free"
 usb_fw_stop = "cf.usb.fn.stop"
-usb_fw_reset_stop = "cf.usb.fn.reset_stop"
 usb_fw_restart = "cf.usb.fn.restart"
 usb_fw_mode_switch = "cf.usb.fn.mode_switch"
 usb_restart_delay = "cf.usb.value.restart_delay"

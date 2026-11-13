@@ -1,5 +1,5 @@
 //! Run-time switches of the speed levers (docs/plans/usb-fast.md). One RAM word, never persisted, all levers on at boot. The host sets bits through the
-//! usb-fast service (STATUS body 'S' bit 0|2); a module through the SDK `speed_flags`, an adapter reads the word with `dkrt_speed_flags`. The bits are
+//! usb-fast service (STATUS body 'S' bit 0|2); a module through `dk_debug_speed_flags`, an adapter reads the word with `dkrt_speed_flags`. The bits are
 //! fixed across the lanes that implement the levers.
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 

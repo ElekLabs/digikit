@@ -15,6 +15,7 @@ def test_native_frame_level_and_lifetime_bounds(tmp_path):
 #include <assert.h>
 #include <string.h>
 #include "tests/fixtures/modules/native-page/src/module.c"
+int32_t dk_host_register(uint32_t a, uint32_t b, dk_host_cmd_fn *f) { (void)a; (void)b; (void)f; return 0; }
 static void text(int32_t x, int32_t y, const char *s) { (void)x; (void)y; (void)s; }
 static void rect(int32_t a, int32_t b, int32_t c, int32_t d, int32_t color) {
     (void)a; (void)b; (void)c; (void)d; (void)color;

@@ -15,7 +15,7 @@ The guide is `docs/MODULE-AUTHORING.md`. Read the section you need there; this f
 | --- | --- | --- |
 | `machine` | A SHARC+ voice: `render`, `note_on`, `desc` (guide 5.2, 7.1) | `sdk/templates/machine`; a real one: `modules/machines/pluck` |
 | `fx` | A SHARC+ master or send effect with its own page: `process`, `desc` (guide 5.4, 7.2) | `sdk/templates/fx`; a real one: `modules/fx/freqshift` |
-| `tool` | ColdFire C: `dkm_init`, `dkm_fini`, `dkm_slot_N` (guide 5.5, 7.3) | `sdk/templates/tool` |
+| `tool` | ColdFire C: the constant `dk_module` with `init`, `fini`, `tick`, `menu` and the named imports of `<dk/gen/imports.h>` (guide 5.5, 7.3) | `sdk/templates/tool` |
 | `raw` | No contract, only the generic load checks | `tests/fixtures/modules/c-demo` |
 
 `framework` is the internal type of the `core/*` modules. Changes to `core/*` are firmware work and need Em.
@@ -61,7 +61,7 @@ Each task takes `-- --help`.
 
 Opt-in marks that compile to nothing without `--trace` (same objects, byte-identical `.dkm`). Full text: `sdk/README.md`, "Tracing".
 
-- C: `#include <dk/core/trace.h>`, `DK_TRACE_INIT(api);` once per source file in `dkm_init`, then `DK_TRACE_LOG("msg", value);` (calls `api->log`).
+- C: `#include <dk/core/trace.h>`, then `DK_TRACE_LOG("msg", value);` (calls `dk_log` at the trace level).
 - SHARC+: `#include "dk_trace.inc"`, then `DK_STEP(3, R0);` stores 3 in `_dk_step` using the scratch register you name (free at that point).
 - Build: `module:pack -- ID --device dt2 --trace`, `module:check -- ID --trace` (size lines), `dk:dev -- ID --store ID --trace`. `--trace` defines
   `DK_TRACE` for C and SHARC+ sources and sets the trace bit in the `.dkm` header (`patchkit dkm-info` shows it).

@@ -2,7 +2,7 @@ import { defineMemaudit, type AuditSet } from '@digi/regression/runtime/memaudit
 
 /**
  * The ColdFire memory audit (ported from the Python scenarios memaudit-{dt2,dn2}, -stray and -full; mapping in docs/plans/ledgers/debug-card-safe.md).
- * test/dyn-demo's slot function runs on every UI pass; test/c-demo is loaded and not called.
+ * test/dyn-demo's tick function runs on every UI pass; test/c-demo is loaded and not called.
  */
 
 /** The clean sets: the guard must report no store; a run-time machine of the set is on track 1. */
@@ -22,7 +22,7 @@ defineMemaudit((device): AuditSet =>
       },
 );
 
-/** Negative control: test/dyn-demo-stray stores one word 128 KiB above its counter, in the arena and outside its block, on its first slot call. */
+/** Negative control: test/dyn-demo-stray stores one word 128 KiB above its counter, in the arena and outside its block, on its 500th tick. */
 defineMemaudit(() => ({
   title: 'stray store',
   modules: ['test/c-demo', 'test/dyn-demo-stray'],

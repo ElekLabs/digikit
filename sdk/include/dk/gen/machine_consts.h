@@ -22,6 +22,8 @@
 /* 'DKMA', the first word of dk_machine_desc. */
 #define DK_MAGIC 0x444b4d41u
 
+#undef DK_OK
+
 typedef enum {
     /* Returned by render: block written, voice continues. */
     DK_OK = 0,

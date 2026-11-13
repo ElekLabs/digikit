@@ -52,16 +52,13 @@ pub unsafe fn remove(rec: usize) {
 pub unsafe fn has_bank(rec: usize) -> bool {
     BANKS[rec].capacity != 0
 }
-pub unsafe fn bank(id: u32) -> i32 {
-    let owner = crate::dlog::current_source();
-    if owner == 0 {
-        return E_NOT_FOUND;
-    }
-    let rec = owner as usize - 1;
+/// `dk_sample_bank_open`: the handle (record index + 1) of the bank module record `rec` declared; `E_CONTRACT` when the module has a sample pool too,
+/// `E_NOT_FOUND` when it has no bank.
+pub unsafe fn open(rec: usize) -> i32 {
     if crate::tracks::has(rec) {
         return dkrt_sdk::E_CONTRACT;
     }
-    if BANKS[rec].capacity == 0 || BANKS[rec].id != id {
+    if BANKS[rec].capacity == 0 {
         return E_NOT_FOUND;
     }
     rec as i32 + 1

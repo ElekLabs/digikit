@@ -599,7 +599,7 @@ def test_tick_callback_gets_the_reply_record_and_can_be_cleared(machine, built):
         {stub: code, seen: bytes(4)},
         [
             tick,  # no callback: nothing stored
-            call(built, "dl_set_tick_cb", [stub]),
+            call(built, "dk_dsp_link_set_tick", [0, stub]),
             tick,  # the callback sees the record
             call(
                 built, "dl_tick_cb_drop", [stub + 0x100, stub + 0x200]
@@ -607,7 +607,7 @@ def test_tick_callback_gets_the_reply_record_and_can_be_cleared(machine, built):
             call(
                 built, "dl_tick_cb_drop", [stub, stub + 4]
             ),  # the callback's first byte is in range: dropped
-            call(built, "dl_set_tick_cb", [stub]),
+            call(built, "dk_dsp_link_set_tick", [0, stub]),
             call(
                 built, "dl_tick_cb_drop", [stub - 0x100, stub]
             ),  # [lo, hi): the end is excluded
@@ -622,7 +622,7 @@ def test_tick_callback_gets_the_reply_record_and_can_be_cleared(machine, built):
         built,
         {stub: code, seen: bytes(4)},
         [
-            call(built, "dl_set_tick_cb", [stub]),
+            call(built, "dk_dsp_link_set_tick", [0, stub]),
             call(built, "dl_tick_cb_drop", [stub, stub + 4]),
             tick,
         ],

@@ -11,8 +11,7 @@ fn root() -> PathBuf {
 }
 
 /// A repository root of its own whose only fixture module is `test/trace-demo` without its trace marks: the lines of the macros are
-/// dropped, `DK_TRACE_INIT(api)` becomes `(void)api` (the parameter is used either way). The module keeps its id (the id feeds the
-/// registry records), so it cannot sit next to the real fixture. `modules`, `devices`, `sdk` and the toolchain are the repository's.
+/// dropped. The module keeps its id (the id feeds the registry records), so it cannot sit next to the real fixture. `modules`, `devices`, `sdk` and the toolchain are the repository's.
 fn stripped_root(dir: &Path) {
     use std::os::unix::fs::symlink;
     let real = root();
@@ -35,7 +34,6 @@ fn stripped_root(dir: &Path) {
                         || l.contains("dk_trace.inc")
                         || l.contains("<dk/core/trace.h>"))
                 })
-                .map(|l| l.replace("DK_TRACE_INIT(api);", "(void)api;"))
                 .collect::<Vec<_>>()
                 .join("\n")
                 + "\n"

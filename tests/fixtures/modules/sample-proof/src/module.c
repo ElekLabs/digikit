@@ -1,6 +1,7 @@
 /* Test-only service: upload first, then 0x3e queues the fixed source path;
-   0x3f returns one signed BE32 status word. No file IO in the MIDI callback. */
-#include <dk/core/api.h>
+   0x3f returns one signed BE32 status word. No file IO in the MIDI callback. It uses the sample bank (dk_sample_bank_*), which S3 deletes. */
+#include <dk/core/module.h>
+#include <dk/platform/host.h>
 #include <dk/machine/machine.h>
 #include <dk/sample/bank.h>
 
@@ -14,22 +15,23 @@ DK_PARAM(sample_proof, 2, reverse, "Reverse", "REV", 0, 127, 0);
 DK_PAGE(sample_proof, "SAMPLE", "Sample proof", DK_KNOB(0), DK_KNOB(1), DK_KNOB(2));
 DK_SAMPLE_BANK(0, _sp_bank, _sp_view, 8192);
 
-static const dk_api *runtime;
-static uint32_t bank;
+static dk_module_ctx *module_ctx;
+static dk_sample_bank *bank;
 
-static int32_t command(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *out)
+static int32_t command(uint32_t cmd, uint32_t seq, const void *body, uint32_t len, void *reply)
 {
+    uint8_t *out = reply;
     int32_t result;
     (void)seq;
     (void)body;
     if (len != 0)
         return DK_SAMPLE_E_FORMAT;
     if (cmd == 0x3e) {
-        const uint8_t *path =
-            (const uint8_t *)(runtime->device == 1 ? "/proof/test" : "samples/proof/test");
-        return runtime->sample_load(bank, path);
+        const char *path =
+            dk_module_ctx_device(module_ctx) == 1 ? "/proof/test" : "samples/proof/test";
+        return dk_sample_bank_load(bank, path);
     }
-    result = runtime->sample_status(bank);
+    result = dk_sample_bank_status(bank);
     out[0] = (uint8_t)((uint32_t)result >> 24);
     out[1] = (uint8_t)((uint32_t)result >> 16);
     out[2] = (uint8_t)((uint32_t)result >> 8);
@@ -37,17 +39,13 @@ static int32_t command(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t
     return 4;
 }
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
-    int32_t handle;
-    if (api->version != 1 ||
-        api->size < offsetof(dk_api, sample_status) + sizeof(api->sample_status) ||
-        !api->sample_bank || !api->sample_load || !api->sample_status)
-        return DK_SAMPLE_E_CONTRACT;
-    runtime = api;
-    handle = api->sample_bank(0);
-    if (handle <= 0)
-        return handle < 0 ? handle : DK_SAMPLE_E_CONTRACT;
-    bank = (uint32_t)handle;
-    return api->register_cmds(0x3e, 2, command);
+    int32_t r = dk_sample_bank_open(ctx, &bank);
+    if (r != DK_OK)
+        return r;
+    module_ctx = ctx;
+    return dk_host_register(0x3e, 2, command);
 }
+
+const dk_module_def dk_module = {.init = init};

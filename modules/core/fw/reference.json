@@ -13736,50 +13736,6 @@
       "at": {
         "dn2-1.12": [
           {
-            "addr": "0x40006ada",
-            "len": 4
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x40006ada",
-            "len": 4
-          }
-        ]
-      },
-      "bindings": {
-        "c": "dk_fw_usb_reset_stop",
-        "rust": "dkfw::usb::reset_stop"
-      },
-      "cpu": "cf",
-      "doc": "Stop the USB device with restart type 2 (`FUN_40006ada`, 0x40006ada): clears the running flag, USBCMD.RS and USBINTR, calls the port's disconnect callback, sets type 2 and a 30-tick delay. When the delay ends the firmware tick sets USBCMD.RST (no timeout), runs the full init and starts the device if OTGSC.BSV; the firmware viewport watchdog uses the same path. Call with interrupts masked; never call `cf.usb.fn.restart` afterwards (it sets type 1, a plain restart).",
-      "file": "devices/fw/usb.toml",
-      "kind": "fn",
-      "mark": "D",
-      "name": "cf.usb.fn.reset_stop",
-      "rule": {
-        "dn2": {
-          "kind": "cf_func",
-          "len": 4,
-          "offset": 0
-        },
-        "dt2": {
-          "kind": "cf_func",
-          "len": 4,
-          "offset": 0
-        }
-      },
-      "sig": "void ()",
-      "subsystem": "usb",
-      "users": [
-        "core/usb-bulk"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.12": [
-          {
             "addr": "0x40006bc6",
             "len": 4
           }
@@ -19850,7 +19806,7 @@
       "name": "text"
     },
     {
-      "count": 15,
+      "count": 14,
       "cpu": "cf",
       "file": "devices/fw/usb.toml",
       "meaning": "the USB device engine: port table, connect and disconnect callbacks, endpoint queues, mode switch",

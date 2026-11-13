@@ -18,8 +18,8 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# A run-time module (`.dkm`, `patchkit pack digikit/probe --device dt2`), built from C. dkm_init sets the per-block callback of core/dsp-link
-# (`dl_set_tick_cb`) and registers the probe range of sdk/sdk.toml with Api.register_cmds.
+# A run-time module (`.dkm`, `patchkit pack digikit/probe --device dt2`), built from C. `init` sets the per-block callback of core/dsp-link
+# (`dk_dsp_link_set_tick`) and registers the probe range of sdk/sdk.toml with `dk_host_register`.
 [[object]]
 path = "build/probe.dko.json"
 sources = ["src/c/probe.c"]

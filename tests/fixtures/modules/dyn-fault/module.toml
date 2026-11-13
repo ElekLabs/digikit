@@ -14,7 +14,7 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# C, packed like test/c-demo. `dkm_init` writes SOFTRST, as the firmware's exception path does when a module faults: the boot
+# C, packed like test/c-demo. `init` writes SOFTRST, as the firmware's exception path does when a module faults: the boot
 # counter of the digikit runtime rises with every such boot and the third one starts in safe mode.
 [[object]]
 path = "build/dyn-fault.dko.json"

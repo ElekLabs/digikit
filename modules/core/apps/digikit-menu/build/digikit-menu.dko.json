@@ -216,7 +216,7 @@
    "addend": 0,
    "offset": 26,
    "section": ".text.open_health",
-   "symbol": "dk_ui_open",
+   "symbol": "dk_ui_menu_open",
    "type": "cf.32"
   },
   {
@@ -244,7 +244,7 @@
    "addend": 0,
    "offset": 22,
    "section": ".text.panel_info",
-   "symbol": "dk_ui_open",
+   "symbol": "dk_ui_menu_open",
    "type": "cf.32"
   },
   {
@@ -279,7 +279,7 @@
    "addend": 0,
    "offset": 68,
    "section": ".text.prow",
-   "symbol": "dk_ui_action",
+   "symbol": "dk_ui_menu_add_action",
    "type": "cf.32"
   },
   {
@@ -473,7 +473,7 @@
   },
   {
    "addend": 0,
-   "offset": 56,
+   "offset": 62,
    "section": ".text.say",
    "symbol": ".sec..bss.DK_POPUPS",
    "type": "cf.32"
@@ -501,7 +501,14 @@
   },
   {
    "addend": 0,
-   "offset": 62,
+   "offset": 56,
+   "section": ".text.say",
+   "symbol": ".sec..bss.g_ui",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
    "section": ".text.say",
    "symbol": "dk_ui_confirm",
    "type": "cf.32"
@@ -573,7 +580,7 @@
    "addend": 0,
    "offset": 76,
    "section": ".text.hrow",
-   "symbol": "dk_ui_text",
+   "symbol": "dk_ui_menu_add_text",
    "type": "cf.32"
   },
   {
@@ -608,7 +615,7 @@
    "addend": 0,
    "offset": 76,
    "section": ".text.arow",
-   "symbol": "dk_ui_text",
+   "symbol": "dk_ui_menu_add_text",
    "type": "cf.32"
   },
   {
@@ -762,6 +769,13 @@
    "addend": 0,
    "offset": 230,
    "section": ".text.panel_route",
+   "symbol": ".sec..bss.g_ui",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 236,
+   "section": ".text.panel_route",
    "symbol": "dk_ui_choice",
    "type": "cf.32"
   },
@@ -832,7 +846,7 @@
    "addend": 0,
    "offset": 32,
    "section": ".text.dk_poll",
-   "symbol": "dk_ui_is_open",
+   "symbol": "dk_ui_menu_is_open",
    "type": "cf.32"
   },
   {
@@ -874,7 +888,7 @@
    "addend": 0,
    "offset": 108,
    "section": ".text.dk_poll",
-   "symbol": "dk_ui_refresh",
+   "symbol": "dk_ui_menu_refresh",
    "type": "cf.32"
   },
   {
@@ -913,14 +927,14 @@
    "type": "cf.32"
   },
   {
-   "addend": 120,
+   "addend": 116,
    "offset": 30,
    "section": ".text.fill_settings",
    "symbol": ".sec..bss.mod.3",
    "type": "cf.32"
   },
   {
-   "addend": 124,
+   "addend": 120,
    "offset": 40,
    "section": ".text.fill_settings",
    "symbol": ".sec..bss.mod.3",
@@ -1042,14 +1056,21 @@
    "addend": 0,
    "offset": 234,
    "section": ".text.panel_settings",
+   "symbol": ".sec..bss.g_ui",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 240,
+   "section": ".text.panel_settings",
    "symbol": "dk_ui_menu_new",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 262,
+   "offset": 268,
    "section": ".text.panel_settings",
-   "symbol": "dk_ui_open",
+   "symbol": "dk_ui_menu_open",
    "type": "cf.32"
   },
   {
@@ -1084,7 +1105,7 @@
    "addend": 0,
    "offset": 52,
    "section": ".text.show_tick",
-   "symbol": "dk_ui_check",
+   "symbol": "dk_ui_menu_check",
    "type": "cf.32"
   },
   {
@@ -1112,7 +1133,7 @@
    "addend": 0,
    "offset": 98,
    "section": ".text.show_tick",
-   "symbol": "dk_ui_refresh",
+   "symbol": "dk_ui_menu_refresh",
    "type": "cf.32"
   },
   {
@@ -1175,7 +1196,7 @@
    "addend": 0,
    "offset": 14,
    "section": ".text.fill_main",
-   "symbol": "dk_ui_action",
+   "symbol": "dk_ui_menu_add_action",
    "type": "cf.32"
   },
   {
@@ -1224,7 +1245,7 @@
    "addend": 0,
    "offset": 94,
    "section": ".text.fill_main",
-   "symbol": "dk_ui_submenu",
+   "symbol": "dk_ui_menu_add_submenu",
    "type": "cf.32"
   },
   {
@@ -1273,7 +1294,7 @@
    "addend": 0,
    "offset": 154,
    "section": ".text.fill_main",
-   "symbol": "dk_ui_submenu",
+   "symbol": "dk_ui_menu_add_submenu",
    "type": "cf.32"
   },
   {
@@ -1504,7 +1525,7 @@
    "addend": 0,
    "offset": 316,
    "section": ".text.modules_panel",
-   "symbol": "dk_ui_text",
+   "symbol": "dk_ui_menu_add_text",
    "type": "cf.32"
   },
   {
@@ -1910,7 +1931,7 @@
    "addend": 0,
    "offset": 626,
    "section": ".text.apply_answer",
-   "symbol": "dk_ui_close",
+   "symbol": "dk_ui_menu_close",
    "type": "cf.32"
   },
   {
@@ -2617,7 +2638,7 @@
    "addend": 0,
    "offset": 290,
    "section": ".text.fill_mem",
-   "symbol": "dk_ui_text",
+   "symbol": "dk_ui_menu_add_text",
    "type": "cf.32"
   },
   {
@@ -3195,7 +3216,7 @@
    "type": "cf.32"
   },
   {
-   "addend": 48,
+   "addend": 44,
    "offset": 278,
    "section": ".text.open_modules",
    "symbol": ".sec..bss.mod.7",
@@ -3226,7 +3247,7 @@
    "addend": 0,
    "offset": 390,
    "section": ".text.open_modules",
-   "symbol": "dk_ui_select",
+   "symbol": "dk_ui_menu_select",
    "type": "cf.32"
   },
   {
@@ -3240,7 +3261,7 @@
    "addend": 0,
    "offset": 416,
    "section": ".text.open_modules",
-   "symbol": "dk_ui_open",
+   "symbol": "dk_ui_menu_open",
    "type": "cf.32"
   },
   {
@@ -3252,49 +3273,63 @@
   },
   {
    "addend": 0,
-   "offset": 48,
+   "offset": 50,
+   "section": ".text.open_main",
+   "symbol": ".sec..bss.g_ui",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 70,
    "section": ".text.open_main",
    "symbol": ".sec..bss.g_about",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 62,
+   "offset": 90,
    "section": ".text.open_main",
    "symbol": ".sec..bss.DK_HEALTH_MENU",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 76,
+   "offset": 110,
    "section": ".text.open_main",
    "symbol": ".sec..bss.g_mem",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 90,
+   "offset": 122,
+   "section": ".text.open_main",
+   "symbol": ".sec..rodata.modules_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 134,
    "section": ".text.open_main",
    "symbol": ".sec..bss.g_info",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 104,
+   "offset": 154,
    "section": ".text.open_main",
    "symbol": ".sec..bss.g_modules",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 116,
+   "offset": 166,
    "section": ".text.open_main",
    "symbol": ".sec..bss.g_main",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 164,
+   "offset": 214,
    "section": ".text.open_main",
    "symbol": ".sec..bss.g_safe_shown",
    "type": "cf.32"
@@ -3322,77 +3357,112 @@
   },
   {
    "addend": 0,
-   "offset": 28,
+   "offset": 30,
+   "section": ".text.open_main",
+   "symbol": "dk_ui_core_handle",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
    "section": ".text.open_main",
    "symbol": ".sec..rodata.about_desc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 34,
+   "offset": 42,
    "section": ".text.open_main",
    "symbol": "dk_ui_menu_new",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 42,
+   "offset": 58,
    "section": ".text.open_main",
    "symbol": ".sec..rodata.health_desc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 56,
+   "offset": 64,
+   "section": ".text.open_main",
+   "symbol": ".sec..bss.g_ui",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 78,
    "section": ".text.open_main",
    "symbol": ".sec..rodata.mem_desc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 70,
-   "section": ".text.open_main",
-   "symbol": ".sec..rodata.info_desc",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 84,
    "section": ".text.open_main",
-   "symbol": ".sec..rodata.modules_desc",
+   "symbol": ".sec..bss.g_ui",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 98,
    "section": ".text.open_main",
-   "symbol": ".sec..rodata.main_desc",
+   "symbol": ".sec..rodata.info_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 104,
+   "section": ".text.open_main",
+   "symbol": ".sec..bss.g_ui",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 128,
    "section": ".text.open_main",
-   "symbol": "dk_ui_open",
+   "symbol": ".sec..bss.g_ui",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 142,
+   "section": ".text.open_main",
+   "symbol": ".sec..rodata.main_desc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 148,
+   "section": ".text.open_main",
+   "symbol": ".sec..bss.g_ui",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 178,
+   "section": ".text.open_main",
+   "symbol": "dk_ui_menu_open",
    "type": "cf.32"
   },
   {
    "addend": 8,
-   "offset": 136,
+   "offset": 186,
    "section": ".text.open_main",
    "symbol": ".sec..bss.g_boot",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 144,
+   "offset": 194,
    "section": ".text.open_main",
    "symbol": ".sec..bss.g_safe_shown",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 170,
+   "offset": 220,
    "section": ".text.open_main",
    "symbol": ".sec..text.safe_notice",
    "type": "cf.32"
@@ -3772,7 +3842,7 @@
    "addend": 0,
    "offset": 272,
    "section": ".text.fill_modules",
-   "symbol": "dk_ui_text",
+   "symbol": "dk_ui_menu_add_text",
    "type": "cf.32"
   },
   {
@@ -3793,7 +3863,7 @@
    "addend": 0,
    "offset": 294,
    "section": ".text.fill_modules",
-   "symbol": "dk_ui_text",
+   "symbol": "dk_ui_menu_add_text",
    "type": "cf.32"
   },
   {
@@ -3807,7 +3877,7 @@
    "addend": 0,
    "offset": 316,
    "section": ".text.fill_modules",
-   "symbol": "dk_ui_check",
+   "symbol": "dk_ui_menu_check",
    "type": "cf.32"
   },
   {
@@ -4017,7 +4087,7 @@
    "addend": 0,
    "offset": 44,
    "section": ".text.modules_check",
-   "symbol": "dk_ui_check",
+   "symbol": "dk_ui_menu_check",
    "type": "cf.32"
   },
   {
@@ -4171,14 +4241,14 @@
    "addend": 0,
    "offset": 54,
    "section": ".text.fill_info",
-   "symbol": "dk_ui_text",
+   "symbol": "dk_ui_menu_add_text",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 78,
    "section": ".text.fill_info",
-   "symbol": "dk_ui_text",
+   "symbol": "dk_ui_menu_add_text",
    "type": "cf.32"
   },
   {
@@ -5249,10 +5319,10 @@
   },
   {
    "align": 2,
-   "hex": "2f0a2f2f00084878003048790000000045f9000000004e922f2f0018487800304879000000004e9242a72f2f002c2f2f002c2f2f002c52b9000000004eb9000000004fef0028245f4e75",
+   "hex": "2f0a2f2f00084878003048790000000045f9000000004e922f2f0018487800304879000000004e9242a72f2f002c2f2f002c2f2f002c2f390000000052b9000000004eb9000000004fef002c245f4e75",
    "kind": "text",
    "name": ".text.say",
-   "size": 74
+   "size": 80
   },
   {
    "align": 2,
@@ -5284,10 +5354,10 @@
   },
   {
    "align": 2,
-   "hex": "4feffff0202f001848d7041c4a806d0000deb0b9000000006c0000d441f900000000733008004a816d0000c423c000000000703c4c01080042b9000000002040d1fc00000000261008030001674445f90000000071b2180055804a806718227900000000428091c8b3c06600008cb1f900000000641c7402203c00000000720123c00000000023c10000000013c20000000008030000672c7401203900000000283c0000000041f9000000002200528121840c0041f90000000023c100000000118208002039000000004a80672042a74879000000002f004879000000004879000000004eb9000000004fef00144cd7041c4fef00104e75b081670c75b2080055824a826602528852806000ff5c",
+   "hex": "4feffff0202f001848d7041c4a806d0000e4b0b9000000006c0000da41f900000000733008004a816d0000ca23c000000000703c4c01080042b9000000002040d1fc00000000261008030001674445f90000000071b2180055804a806718227900000000428091c8b3c066000092b1f900000000641c7402203c00000000720123c00000000023c10000000013c20000000008030000672c7401203900000000283c0000000041f9000000002200528121840c0041f90000000023c100000000118208002039000000004a80672642a74879000000002f004879000000004879000000002f39000000004eb9000000004fef00184cd7041c4fef00104e75b081670c75b2080055824a826602528852806000ff56",
    "kind": "text",
    "name": ".text.panel_route",
-   "size": 270
+   "size": 276
   },
   {
    "align": 2,
@@ -5305,14 +5375,14 @@
   },
   {
    "align": 2,
-   "hex": "2f02242f00084879000000002f2f00104eb900000000508f4a80662a2279000000004a8967202039000000004a80670c2f42000c2f400008241f4ed142af000c2f42000860f2241f4e75",
+   "hex": "598f2eaf00084879000000002f2f00104eb900000000508f4a80661c2279000000004a89671241f9000000002f57000c2f500008588f4ed1588f4e75",
    "kind": "text",
    "name": ".text.fill_settings",
-   "size": 74
+   "size": 60
   },
   {
    "align": 2,
-   "hex": "4fefffe8202f001c48d71c1c246f00204a806c0c70ff4cd71c1c4fef00184e75b0b9000000006cec727442824c010800280a06840000003026000683000000002f0a2f024eb900000000508f4a8066c44878003f2f042f034eb9000000004fef000c4a8067104aaa007867a84aaa007066a2200260a052827010b08266c26094",
+   "hex": "4fefffe8202f001c48d71c1c246f00204a806c0c70ff4cd71c1c4fef00184e75b0b9000000006cec727442824c010800280a06840000002c26000683000000002f0a2f024eb900000000508f4a8066c44878003f2f042f034eb9000000004fef000c4a8067104aaa007467a84aaa006c66a2200260a052827010b08266c26094",
    "kind": "text",
    "name": ".text.settings_module",
    "size": 128
@@ -5326,10 +5396,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffec48d70c1c4879000000002f2f00204eb900000000508f240070ffb082670000e847f90000000020332c004a80660000c64280428341f90000000012300800671273815280782fb881660226007220b28066e871c248790000000048780020eb882440d5fc000000002f0a4eb9000000004fef000c20434281d1fc0000000010301800672226000683ffffff9f77837819b88365060680ffffffe0158018005281701fb08166d8702478044c02080041f900000000223c0000000021810800d1c0203c000000002140000c214a000430022144000821420010c0fc00240680000000002f004eb900000000588f27802c004a8067124cd70c1c2f4000184fef00144ef9000000004cd70c1c4fef00144e75",
+   "hex": "4fefffec48d70c1c4879000000002f2f00204eb900000000508f240070ffb082670000ee47f90000000020332c004a80660000cc4280428341f90000000012300800671273815280782fb881660226007220b28066e871c248790000000048780020eb882440d5fc000000002f0a4eb9000000004fef000c20434281d1fc0000000010301800672226000683ffffff9f77837819b88365060680ffffffe0158018005281701fb08166d8702478044c02080041f900000000223c0000000021810800d1c0203c000000002140000c214a000430022144000821420010c0fc00240680000000002f002f39000000004eb900000000508f27802c004a8067124cd70c1c2f4000184fef00144ef9000000004cd70c1c4fef00144e75",
    "kind": "text",
    "name": ".text.panel_settings",
-   "size": 276
+   "size": 282
   },
   {
    "align": 2,
@@ -5424,7 +5494,7 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff48222e000c2f0a2f0242b90000000092b900000000242e00082d41ff484a816d00011eb2b9000000006c00011441f9000000004a30180067000112203c000000002f2eff484879000000002f002f0245f9000000004e924fef0010222eff4841f9000000004a3018006d162f014879000000004879000000002f024e924fef0010486eff802f2eff484eb900000000508f52804a8067182f2eff484879000000004879000000002f024e924fef00102f2eff484879000000004879000000002f024e922f2eff484eb9000000004fef00142d40ff484a806766420048790000000045eeff4c2f0a42aeff7c1d40ff4c4eb9000000002f2eff482f0a4eb9000000004fef00102039000000007203b28065222200528123c10000000072184c0108002f0a0680000000002f004eb900000000508f2f0a2f024eb900000000508f242eff40246eff444e5e4e75203c000000006000feee",
+   "hex": "4e56ff4c222e000c2f0a2f0242b90000000092b900000000242e00082d41ff4c4a816d00011eb2b9000000006c00011441f9000000004a30180067000112203c000000002f2eff4c4879000000002f002f0245f9000000004e924fef0010222eff4c41f9000000004a3018006d162f014879000000004879000000002f024e924fef0010486eff842f2eff4c4eb900000000508f52804a8067182f2eff4c4879000000004879000000002f024e924fef00102f2eff4c4879000000004879000000002f024e922f2eff4c4eb9000000004fef00142d40ff4c4a806766420048790000000045eeff502f0a42aeff801d40ff504eb9000000002f2eff4c2f0a4eb9000000004fef00102039000000007203b28065222200528123c10000000072184c0108002f0a0680000000002f004eb900000000508f2f0a2f024eb900000000508f242eff44246eff484e5e4e75203c000000006000feee",
    "kind": "text",
    "name": ".text.modules_panel",
    "size": 344
@@ -5578,10 +5648,10 @@
   },
   {
    "align": 2,
-   "hex": "2f0a4879000000004eb900000000588f2039000000004a80666248790000000045f9000000004e9248790000000023c0000000004e9248790000000023c0000000004e9248790000000023c0000000004e9248790000000023c0000000004e9248790000000023c0000000004e924fef001823c0000000004a8067322f004eb900000000588f4ab90000000067204ab900000000661842af000c700142af0008245f23c0000000004ef900000000245f4e75",
+   "hex": "2f0a4879000000004eb900000000588f2039000000004a80660000944eb90000000048790000000045f9000000002f0023c0000000004e924879000000002f390000000023c0000000004e924879000000002f390000000023c0000000004e924879000000002f390000000023c0000000004e924fef001c2ebc000000002f390000000023c0000000004e924879000000002f390000000023c0000000004e924fef001023c0000000004a8067322f004eb900000000588f4ab90000000067204ab900000000661842af000c700142af0008245f23c0000000004ef900000000245f4e75",
    "kind": "text",
    "name": ".text.open_main",
-   "size": 178
+   "size": 228
   },
   {
    "align": 2,
@@ -5728,14 +5798,14 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss.mod.3",
-   "size": 128
+   "size": 124
   },
   {
    "align": 2,
    "hex": "",
    "kind": "bss",
    "name": ".bss.mod.4",
-   "size": 128
+   "size": 124
   },
   {
    "align": 2,
@@ -5756,7 +5826,7 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss.mod.7",
-   "size": 128
+   "size": 124
   },
   {
    "align": 2,
@@ -5876,6 +5946,13 @@
    "kind": "bss",
    "name": ".bss.g_set",
    "size": 64
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_ui",
+   "size": 4
   },
   {
    "align": 2,
@@ -6284,7 +6361,7 @@
    "size": 4
   }
  ],
- "source_sha256": "d2a710139ebf8829086c2b15318e752cb51a7894bd32448ac6d081f92055a773",
+ "source_sha256": "eddcdcc27d4fa43b19276913d2508c52636937a7bf31cc26f8b75e4be88c64bb",
  "symbols": [
   {
    "global": false,
@@ -6656,6 +6733,12 @@
    "global": false,
    "name": ".sec..bss.g_set_title",
    "section": ".bss.g_set_title",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_ui",
+   "section": ".bss.g_ui",
    "value": 0
   },
   {
@@ -7488,25 +7571,7 @@
   },
   {
    "global": true,
-   "name": "dk_ui_action",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dk_ui_check",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
    "name": "dk_ui_choice",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dk_ui_close",
    "section": null,
    "value": 0
   },
@@ -7518,7 +7583,43 @@
   },
   {
    "global": true,
-   "name": "dk_ui_is_open",
+   "name": "dk_ui_core_handle",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_add_action",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_add_submenu",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_add_text",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_check",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_close",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_is_open",
    "section": null,
    "value": 0
   },
@@ -7530,37 +7631,25 @@
   },
   {
    "global": true,
-   "name": "dk_ui_open",
+   "name": "dk_ui_menu_open",
    "section": null,
    "value": 0
   },
   {
    "global": true,
-   "name": "dk_ui_refresh",
+   "name": "dk_ui_menu_refresh",
    "section": null,
    "value": 0
   },
   {
    "global": true,
-   "name": "dk_ui_select",
+   "name": "dk_ui_menu_select",
    "section": null,
    "value": 0
   },
   {
    "global": true,
    "name": "dk_ui_stock_row",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dk_ui_submenu",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dk_ui_text",
    "section": null,
    "value": 0
   },
@@ -7904,6 +7993,12 @@
    "global": false,
    "name": "g_set_title",
    "section": ".bss.g_set_title",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_ui",
+   "section": ".bss.g_ui",
    "value": 0
   },
   {
@@ -8277,8 +8372,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "3377",
-  "isa_check": "0f1840820087099ed41857fcc521ae1230032845421f30f241e3d6a40f3d7da9",
+  "instructions_redecoded": "3384",
+  "isa_check": "9ff77e9fbb112b3b4a0a9a447cd56ee3a5bd5d235535876f913c80b2ab46963d",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

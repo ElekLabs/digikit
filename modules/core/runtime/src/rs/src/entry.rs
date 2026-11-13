@@ -1,15 +1,13 @@
 //! The module entry point and the service imports of docs/plans/sdk.md section 5.
 //!
-//! A module that defines `dk_module` (header size 0xa8) gets `init(ctx)`, `fini(ctx)`, `tick(ctx)` and `menu(ctx, menu)`, with a `dk_module_ctx`: a pointer to
-//! its record in `DKRT_CTXS`. `tick` runs once per pass of the UI task for every loaded module, in `dkrt_tick`. The Api table and the slots stay for the
-//! modules of the old entry (`dkm_init(api)`) until S2b-2.
+//! A module defines `dk_module`; the packer writes `init`, `fini`, `tick` and `menu` into the `.dkm` header, and the runtime calls them with a `dk_module_ctx`: a
+//! pointer to the module's record in `DKRT_CTXS`. `tick` runs once per pass of the UI task for every loaded module, in `dkrt_tick`.
 //!
-//! The service imports (`[[import]]` with `service` in sdk/sdk.toml) that name a handle live here: the runtime hands out the handle of a service in
-//! `init` (`dk_settings_open`, `dk_files_open`, `dk_sample_pool_open`) and each call takes the handle where the Api table took a client number. The
-//! handle is that number as a pointer: it wraps the client the existing code (`settings.rs`, `files.rs`, `tracks.rs`) keeps. The imports that need no
-//! handle point at the same functions as the Api table (`lib.rs`).
+//! The service imports (`[[import]]` with `service` in sdk/sdk.toml) that name a handle live here: the runtime hands out the handle of a service in `init`
+//! (`dk_settings_open`, `dk_files_open`, `dk_sample_pool_open`) and each call takes the handle. The handle is the client number the existing code
+//! (`settings.rs`, `files.rs`, `tracks.rs`) keeps, as a pointer. The imports that need no handle point at the functions of `lib.rs`.
 
-use crate::{dlog, files, peakwin, settings, store, store_writer, tracks, MAX_MODULES};
+use crate::{dlog, files, peakwin, sample, settings, store, store_writer, tracks, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
@@ -57,12 +55,17 @@ pub unsafe fn stop_tick(rec: usize) {
     write_volatile(addr_of_mut!(DKRT_TICKS[rec]), 0);
 }
 
-/// Is record `rec` a module of the new entry?
+/// Does record `rec` have a tick?
+pub fn has_tick(rec: usize) -> bool {
+    rec < MAX_MODULES && unsafe { read_volatile(addr_of!(DKRT_TICKS[rec])) != 0 }
+}
+
+/// Is record `rec` a loaded module (it has a live context)?
 pub unsafe fn is_entry(rec: usize) -> bool {
     rec < MAX_MODULES && read_volatile(addr_of!(DKRT_CTXS[rec].magic)) == CTX_MAGIC
 }
 
-/// The context of record `rec` as a pointer (0 for a module of the old entry), for `dkrt_module`.
+/// The context of record `rec` as a pointer (0 when the record is not loaded), for `dkrt_module`.
 pub unsafe fn ctx_addr(rec: usize) -> u32 {
     if is_entry(rec) {
         addr_of!(DKRT_CTXS[rec]) as usize as u32
@@ -104,9 +107,11 @@ pub unsafe fn tick_all() {
         let t = read_volatile(addr_of!(DKRT_TICKS[rec]));
         if t != 0 {
             let call: unsafe extern "C" fn(*const Ctx) = core::mem::transmute(t as usize);
-            let prev = dlog::enter_module(rec);
+            let prev = dlog::enter_module(rec, dlog::PHASE_TICK);
             call(addr_of!(DKRT_CTXS[rec]));
             dlog::leave_module(prev);
+            let s = crate::st();
+            s.tick_calls = s.tick_calls.wrapping_add(1);
         }
         rec += 1;
     }
@@ -267,6 +272,26 @@ pub unsafe extern "C" fn dk_sample_pool_peaks_window(
     peakwin::window(client(p), index, token, first, frames, columns, out, capacity)
 }
 
+// ---- the sample bank (temporary: S3 deletes the bank with these three calls) -----------------------------------------------------
+
+pub unsafe extern "C" fn dk_sample_bank_open(ctx: *mut u8, out: *mut *mut u8) -> i32 {
+    if out.is_null() {
+        return E_CONTRACT;
+    }
+    match own_rec(ctx) {
+        Some(rec) => give(out, sample::open(rec)),
+        None => E_CONTRACT,
+    }
+}
+
+pub unsafe extern "C" fn dk_sample_bank_load(b: *mut u8, path: *const u8) -> i32 {
+    sample::load(client(b), path)
+}
+
+pub unsafe extern "C" fn dk_sample_bank_status(b: *mut u8) -> i32 {
+    sample::status(client(b))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,6 +337,7 @@ mod tests {
             assert_eq!(dk_settings_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert_eq!(dk_files_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert_eq!(dk_sample_pool_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
+            assert_eq!(dk_sample_bank_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert!(out.is_null());
         }
     }

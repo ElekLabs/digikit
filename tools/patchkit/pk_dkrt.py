@@ -6,11 +6,11 @@
 `proof` is the loader gate on one image (docs/findings/29-runtime-v0.md, converted to boot-time loading in finding 37 when hot reload
 was archived): it patches core/runtime into the stock firmware, packs test/dyn-demo (and four broken variants) into `.dkm` files,
 builds a +Drive card with them in the module store and a selection record that names, in order, a file with a bad sha256, a file
-with an import the runtime does not have, a file that is not there, the good module with api major 2, the good module with api
+with an import the runtime does not have, a file that is not there, the good module with api major 1, the good module with api
 minor 255 (both E_CONTRACT), the good module, and the good module again. The boot hook loads
 the selection (through packages/emulator/boot/examples/cf_script.rs); the proof reads the boot report (the five refusals, the load,
 the duplicate refused), the module's counter rising while the UI task runs, and checks that the refused files left nothing behind
-(arena, slots, module records). After the boot a `dkrt_load` (mailbox and direct call) answers `E_BOOT_ONLY` and a command 2 (the
+(arena, tick table, module records). After the boot a `dkrt_load` (mailbox and direct call) answers `E_BOOT_ONLY` and a command 2 (the
 old unload) is refused as unknown. The write-watch on `cf.expansion` (the runtime's code and the arena allowed as writers) and
 the flush check run through all of it. Prints one JSON report; exit status 0 when every check holds.
 
@@ -52,7 +52,7 @@ OK, E_NOT_FOUND, E_BAD_STORE, E_READ, E_SHA, E_FORMAT, E_RUNTIME, E_IMPORT = (
     -6,
     -7,
 )
-E_NOMEM, E_INIT, E_LOADED, E_SLOT = -8, -9, -10, -11
+E_NOMEM, E_INIT, E_LOADED = -8, -9, -10
 E_FORMAT_CMD, E_BOOT_ONLY, E_CONTRACT = -5, -45, -48
 SEL_MAGIC, SEL_VERSION, SEL_PATH = 0x444B534C, 1, 56
 # the selection record's paths (sdk/sdk.toml [limits.max])
@@ -60,13 +60,13 @@ SEL_MAX = pk_device.contract_max()["sel_max"]
 BOOT_FIELDS = 10  # DkrtBootInfo words before `results`
 ARENA_BYTES = pk_device.shared_limits().arena_bytes  # devices/*.toml [limits]
 MAX_MODULES = pk_device.shared_limits().modules
-SLOTS, LOG_ENTRIES = 8, 16
+LOG_ENTRIES = 16
 # offsets in State (repr(C); sizes in the comments of lib.rs)
-ST_TICKS, ST_LAST, ST_LOADS, ST_SLOT_CALLS, ST_FREE = 8, 12, 16, 20, 24
+ST_TICKS, ST_LAST, ST_LOADS, ST_TICK_CALLS, ST_FREE = 8, 12, 16, 20, 24
 ST_ARENA_LO, ST_ARENA_HI, ST_LOG_NEXT = 28, 32, 36
-ST_SLOTS, ST_ENTERED, ST_MODULES, ST_LOG = 40, 72, 104, 808
-MODULE_SIZE = 88
-STATE_BYTES = 1256
+ST_MODULES, ST_LOG = 40, 456
+MODULE_SIZE = 52
+STATE_BYTES = 904
 MB_CMD, MB_SEQ, MB_RESULT, MB_ARG = 0, 4, 8, 12
 DEVICE_SYX = config.DEVICE_SYX  # re-exported for pk_dkrt_boot, pk_cdemo and the tests
 RUN = 25_000_000  # instructions between samples: the UI task's event loop passes about every 4 million
@@ -146,7 +146,7 @@ def pack(tools: Tools, module: str, out: Path, *extra: object) -> None:
 
 def broken_variants(work: Path, tools: Tools, module: str, folder: Path) -> None:
     """From a module's object: `bad-sha.dkm` (one byte of the image changed after packing) and `bad-import.dkm`
-    (a relocation against a name the runtime does not provide), and `contract-major.dkm` / `contract-minor.dkm` (api major 2; api
+    (a relocation against a name the runtime does not provide), and `contract-major.dkm` / `contract-minor.dkm` (api major 1; api
     minor 255, the file sha256 recomputed)."""
     man = (modroots.module_dir(module) / "module.toml").read_text()
     obj_path = next(
@@ -204,7 +204,7 @@ def broken_variants(work: Path, tools: Tools, module: str, folder: Path) -> None
     # the api contract of the header (bytes 0x38 major, 0x39 minor) changed, the file sha256 made right again;
     # minor 0xFF is above any runtime's, so the file stays too new when the SDK's api minor grows
     for name, offset, value in (
-        ("contract-major", 0x38, 2),
+        ("contract-major", 0x38, 1),
         ("contract-minor", 0x39, 0xFF),
     ):
         forged = bytearray(good.read_bytes())
@@ -408,6 +408,7 @@ def proof(
         run(30_000_000, "settle"),
         peek("boot", boot, 4 * (BOOT_FIELDS + SEL_MAX)),
         peek("state0", st, STATE_BYTES),
+        peek("ticks0", sym["DKRT_TICKS"], 4 * MAX_MODULES),
         peek("c1", counter_ptr, 16, ptr=True),
         run(RUN, "r1"),
         peek("c2", counter_ptr, 16, ptr=True),
@@ -457,10 +458,10 @@ def proof(
         E_CONTRACT,
         E_CONTRACT,
         OK,
-        E_SLOT,
-    ]  # the duplicate meets the taken slot before the name check
+        E_LOADED,
+    ]  # the duplicate meets the loaded name
     check(
-        "boot report: five refusals, the load, the duplicate refused (slot taken)",
+        "boot report: five refusals, the load, the duplicate refused (name loaded)",
         results == want,
         f"{results}, want {want}",
     )
@@ -469,12 +470,11 @@ def proof(
     m0 = ST_MODULES
     base = be32(s0, m0 + 40)
     check("module record", be32(s0, m0) == 1 and cstr(s0[m0 + 4 : m0 + 36]) == "test/dyn-demo"
-          and be32(s0, ST_SLOTS) != 0 and be32(s0, ST_SLOTS) > base,
-          f"base {base:#x} slot0 {be32(s0, ST_SLOTS):#x}")  # fmt: skip
-    check("refused files left nothing behind: the first arena block is the module's, one module, one slot, one load",
+          and be32(raw("ticks0"), 0) >= base, f"base {base:#x} tick {be32(raw('ticks0'), 0):#x}")  # fmt: skip
+    check("refused files left nothing behind: the first arena block is the module's, one module, one tick, one load",
           base == arena_lo + 16
           and all(be32(s0, ST_MODULES + i * MODULE_SIZE) == 0 for i in range(1, MAX_MODULES))
-          and all(be32(s0, ST_SLOTS + 4 * i) == 0 for i in range(1, SLOTS)) and be32(s0, ST_LOADS) == 1,
+          and all(be32(raw("ticks0"), 4 * i) == 0 for i in range(1, MAX_MODULES)) and be32(s0, ST_LOADS) == 1,
           f"base {base:#x} (arena {arena_lo:#x}), loads {be32(s0, ST_LOADS)}")  # fmt: skip
     cs = [raw(f"c{i}") for i in range(1, 5)]
     n = [be32(c, 4) for c in cs]

@@ -17,7 +17,7 @@ import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 
 /**
  * The module settings API (api 1.9, <dk/platform/settings.h>). The fixtures test/settings-a and test/settings-b are one source: a service command queues a put, get
- * or remove request, slot 0 runs it in the UI task, and `dkm_init` reads the key "boot". Keys are stored as `<module name>/<key>`.
+ * or remove request, `tick` runs it in the UI task, and `init` reads the key "boot". Keys are stored as `<module name>/<key>`.
  */
 
 const A = 'test/settings-a';
@@ -43,7 +43,7 @@ for (const device of DEVICES) {
     });
     const spec = { modules: ['test/settings-a', 'test/settings-b'], selection: SELECTION };
 
-    /** One request of a fixture module: queued by the service command, run by slot 0, then read back. */
+    /** One request of a fixture module: queued by the service command, run by `tick`, then read back. */
     async function call(
       rt: PatchedSession,
       module: typeof A | typeof B,
@@ -54,21 +54,21 @@ for (const device of DEVICES) {
       const usb = <T>(run: (dk: DkSession) => Promise<T>) => kit.usb(rt, run);
       const body = Buffer.concat([Buffer.from([op, key.length]), text(key), value]);
       expect((await usb((dk) => dk.request(CMD[module], body))).status, 'the request is queued').toBe(0);
-      await advance(rt.session, 200); // slot 0 runs about 120 times a second
+      await advance(rt.session, 200); // tick runs about 120 times a second
       const r = await usb((dk) => dk.request(CMD[module] + 1));
       const b = Buffer.from(r.body);
-      expect(b[0], 'slot 0 ran the request').toBe(0);
+      expect(b[0], 'tick ran the request').toBe(0);
       const rc = b.readInt32BE(1);
       return { rc, initRc: b.readInt32BE(5), init: b.subarray(9, 25), val: b.subarray(25, 25 + Math.max(rc, 0)) };
     }
     const record = async (rt: PatchedSession) =>
       settingsMap(decodeSettings((await kit.usb(rt, settingsRecord)).raw));
 
-    test('a value put through the API is on the card after a restart and is read in dkm_init', async () => {
+    test('a value put through the API is on the card after a restart and is read in init', async () => {
       const rt = await kit.load('persist', spec);
       expect((await bootInfo(rt.session, kit.plan)).results, 'both modules load').toEqual([0, 0]);
       const first = await call(rt, A, GET, 'boot');
-      expect([first.initRc, first.rc], 'nothing is saved yet: dkm_init and get answer E_SET_NOKEY').toEqual([
+      expect([first.initRc, first.rc], 'nothing is saved yet: init and get answer E_SET_NOKEY').toEqual([
         E_SET_NOKEY,
         E_SET_NOKEY,
       ]);
@@ -78,7 +78,7 @@ for (const device of DEVICES) {
       await advance(rt.session, DELAY_MS + 500);
       const reboot = await kit.restart(rt);
       const again = await call(reboot, A, GET, 'boot');
-      expect(again.initRc, 'dkm_init read 3 bytes').toBe(3);
+      expect(again.initRc, 'init read 3 bytes').toBe(3);
       expect(again.init.subarray(0, 3), 'the value of the earlier boot').toEqual(text('xyz'));
       expect(await record(reboot), 'the record is as it was').toEqual({ [`${A}/boot`]: hex('xyz') });
       kit.allowStoreWrites(await kit.storeWrites());

@@ -120,6 +120,20 @@
    "section": ".text.sdhc_large_ctl",
    "symbol": "sl_cnt",
    "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text.dk_sdhc_large_open",
+   "symbol": ".sec..bss.sl_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.dk_sdhc_large_ctl",
+   "symbol": ".sec..text.sdhc_large_ctl",
+   "type": "cf.32"
   }
  ],
  "sections": [
@@ -150,14 +164,59 @@
    "kind": "text",
    "name": ".text.sdhc_large_ctl",
    "size": 72
+  },
+  {
+   "align": 2,
+   "hex": "206f00084aaf0004660470d04e754a8867f820bc00000000428060f0",
+   "kind": "text",
+   "name": ".text.dk_sdhc_large_open",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "202f00082f6f000c00082f4000044ef900000000",
+   "kind": "text",
+   "name": ".text.dk_sdhc_large_ctl",
+   "size": 20
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.sl_token",
+   "size": 4
   }
  ],
- "source_sha256": "4e705c39e214d54acb21fd31e8a974df1a499056bf114ede191d976906c6521e",
+ "source_sha256": "69fbb6ec50d3af60ca4826eba9dcee6586f020d2ef5e9bae1d53fe145016dfe3",
  "symbols": [
   {
    "global": false,
    "name": ".sec..bss",
    "section": ".bss",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.sl_token",
+   "section": ".bss.sl_token",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.sdhc_large_ctl",
+   "section": ".text.sdhc_large_ctl",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_sdhc_large_ctl",
+   "section": ".text.dk_sdhc_large_ctl",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_sdhc_large_open",
+   "section": ".text.dk_sdhc_large_open",
    "value": 0
   },
   {
@@ -239,6 +298,12 @@
    "value": 0
   },
   {
+   "global": false,
+   "name": "sl_token",
+   "section": ".bss.sl_token",
+   "value": 0
+  },
+  {
    "global": true,
    "name": "sl_wr_chunk",
    "section": null,
@@ -255,8 +320,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "79",
-  "isa_check": "0fddf1f169fc583d20f7da8e314986236d8435697787ca8e0e1584386fcf2c28",
+  "instructions_redecoded": "93",
+  "isa_check": "ebef9eb4cd9b86698c8b172e777cec61c2a1291ea45d1892f3f814096de1c552",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

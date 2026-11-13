@@ -5,7 +5,7 @@
 //! is called exactly once in the UI task with the final status, or `JOB_E_CANCELLED` after a cancel. A module that is being
 //! unloaded gets no `done` (see `retire`).
 //!
-//! Task rules: `step` runs in the worker task. It computes on its own memory and calls no `dk_api` function. `done` runs in the
+//! Task rules: `step` runs in the worker task. It computes on its own memory and calls no import. `done` runs in the
 //! UI task and may call the API.
 //!
 //! The stock worker is shared with the stock sample loads, so one job is in flight at a time and the worker runs steps of
@@ -16,7 +16,7 @@
 use core::ffi::c_void;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use core::sync::atomic::{compiler_fence, Ordering};
-use dkrt_sdk::api::{JobDone, JobStep};
+use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 use dkrt_sdk::*;
 
 pub const JOB_MORE: i32 = 1;
@@ -36,8 +36,8 @@ struct Job {
     id: u32,
     /// Source index of the posting module (record index + 1); 0: the runtime or an adapter.
     owner: u8,
-    step: Option<JobStep>,
-    done: Option<JobDone>,
+    step: Option<JobStepFn>,
+    done: Option<JobDoneFn>,
     ctx: *mut u8,
     state: u8,
     cancelled: bool,
@@ -71,7 +71,7 @@ const FLIGHT_NONE: u32 = 0;
 const FLIGHT_RUN: u32 = 1;
 const FLIGHT_END: u32 = 2;
 static mut FLIGHT_STATE: u32 = FLIGHT_NONE;
-static mut FLIGHT_STEP: Option<JobStep> = None;
+static mut FLIGHT_STEP: Option<JobStepFn> = None;
 static mut FLIGHT_CTX: *mut u8 = core::ptr::null_mut();
 static mut FLIGHT_IDX: usize = 0;
 static mut FLIGHT_CANCEL: u32 = 0;
@@ -183,7 +183,7 @@ unsafe fn deliver(job: Job, status: i32) {
     }
     if let Some(done) = job.done {
         if job.owner != 0 {
-            let prev = crate::dlog::enter_module(job.owner as usize - 1);
+            let prev = crate::dlog::enter_module(job.owner as usize - 1, crate::dlog::PHASE_CALLBACK);
             done(job.ctx, status);
             crate::dlog::leave_module(prev);
         } else {
@@ -200,7 +200,7 @@ fn next_seq() -> u32 {
 }
 
 /// Add a job. Returns its id (> 0), `E_CONTRACT` for a null step, `E_BUSY` when all entries are in use.
-pub unsafe fn post(owner: u8, step: Option<JobStep>, done: Option<JobDone>, ctx: *mut u8) -> i32 {
+pub unsafe fn post(owner: u8, step: Option<JobStepFn>, done: Option<JobDoneFn>, ctx: *mut u8) -> i32 {
     if step.is_none() {
         return E_CONTRACT;
     }
@@ -231,14 +231,14 @@ pub unsafe fn post(owner: u8, step: Option<JobStep>, done: Option<JobDone>, ctx:
     })
 }
 
-/// Adapter entry (owner 0): queue a job on the background worker. `step` and `done` are function addresses (`JobStep`, `JobDone`);
+/// Adapter entry (owner 0): queue a job on the background worker. `step` and `done` are function addresses (`JobStepFn`, `JobDoneFn`);
 /// `done` may be 0. Returns a job id > 0, `E_CONTRACT` for a null step, `E_BUSY` when the queue is full. Task context: UI task.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_job_post(step: usize, done: usize, ctx: *mut u8) -> i32 {
     post(
         0,
-        core::mem::transmute::<usize, Option<JobStep>>(step),
-        core::mem::transmute::<usize, Option<JobDone>>(done),
+        core::mem::transmute::<usize, Option<JobStepFn>>(step),
+        core::mem::transmute::<usize, Option<JobDoneFn>>(done),
         ctx,
     )
 }

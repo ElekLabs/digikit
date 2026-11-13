@@ -5,9 +5,9 @@
  * previous mask of every channel in firmware RAM, which chords, repeat and the key-down query read. This module calls those two decoders, so a key
  * pressed here is exactly a key the panel reported, and nothing in the firmware's event path is bypassed.
  *
- * Interface for modules (C ABI, named imports of the runtime's table; 0 is ok, negative an error):
- *   int input_key(u32 code, u32 down);     a key code (the device file, [panel]) pressed or released
- *   int input_turn(u32 encoder, int delta); encoder 1..9, delta in detents (split into parts of at most 127)
+ * Interface for modules (the service `input`, <dk/platform/input.h>; 0 is ok, negative an error):
+ *   int dk_input_key(dk_input *inp, u32 code, u32 down);     a key code (the device file, [panel]) pressed or released
+ *   int dk_input_turn(dk_input *inp, u32 encoder, int delta); encoder 1..9, delta in detents (split into parts of at most 127)
  *
  * Device facts (the code layout, the backend) come from the device file through `input_cfg` (device.s). A backend is one set of the two functions; the
  * profile names it ([input] backend), and a device with another path to its events adds a backend here.
@@ -146,14 +146,14 @@ static int panel_turn(u32 encoder, int delta)
 
 /* ---- the interface ---- */
 
-int input_key(u32 code, u32 down)
+static int key_press(u32 code, u32 down)
 {
     if (input_cfg[CFG_BACKEND] == BACKEND_PANEL_UART)
         return panel_key(code, down);
     return IN_NO_BACKEND;
 }
 
-int input_turn(u32 encoder, int delta)
+static int encoder_turn(u32 encoder, int delta)
 {
     if (input_cfg[CFG_BACKEND] == BACKEND_PANEL_UART)
         return panel_turn(encoder, delta);
@@ -175,11 +175,11 @@ int32_t dk_input_open(dk_module_ctx *ctx, dk_input **out)
 int32_t dk_input_key(dk_input *inp, uint32_t code, uint32_t down)
 {
     (void)inp;
-    return input_key(code, down);
+    return key_press(code, down);
 }
 
 int32_t dk_input_turn(dk_input *inp, uint32_t encoder, int32_t delta)
 {
     (void)inp;
-    return input_turn(encoder, delta);
+    return encoder_turn(encoder, delta);
 }

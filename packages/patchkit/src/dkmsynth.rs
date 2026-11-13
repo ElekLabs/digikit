@@ -2,7 +2,7 @@
 //! chosen number of machines, parameters, pages, DSP bytes and voices, made from a small TOML spec instead of a fixture folder.
 //!
 //! The file is made by the same packer as a real module (`dkm::pack_full_max`, `register::Register::encode`, `dkmdsp::DspSection::encode`),
-//! so the format has one source. The ColdFire code is `moveq #0,d0; rts` (`dkm_init`); everything else is data (`pad`, `fill`) or `bss`,
+//! so the format has one source. The ColdFire code is `moveq #0,d0; rts` (the stub is `init`); everything else is data (`pad`, `fill`) or `bss`,
 //! which the file does not store. The DSP image is `fill` bytes (zero words are SHARC+ NOPs) and is never run: a voice names a type and an
 //! entry at byte 0, and the capacity tests do not play it.
 //!
@@ -137,7 +137,7 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models) -> Result<Vec<u8>> {
         toolchain: Default::default(),
         sections,
         symbols: vec![DkoSymbol {
-            name: "dkm_init".into(),
+            name: "dk_init_stub".into(),
             section: Some(".text".into()),
             value: 0,
             global: true,
@@ -258,14 +258,13 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models) -> Result<Vec<u8>> {
         trace: false,
         stereo: false,
         gate: false,
-        api_minor: 0,
     };
     let max = if spec.oversize {
         usize::MAX
     } else {
         dkm::max_file()
     };
-    dkm::pack_full_max(Some(&obj), &reg_bytes, &dsp_bytes, &opts, max)
+    dkm::pack_data_only_max(&obj, &reg_bytes, &dsp_bytes, &opts, max)
 }
 
 #[cfg(test)]

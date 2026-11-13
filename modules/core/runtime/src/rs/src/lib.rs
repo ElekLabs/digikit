@@ -2,8 +2,8 @@
 //!
 //! What it does (docs/plans/digikit-runtime.md, docs/design/digikit-runtime.md): reads `.dkm` module files from the card
 //! module store with the firmware's own block read, checks them, copies and relocates them into a private arena, flushes
-//! the caches, calls `init`, binds the module's slots. A hook in the UI task's event loop (`dkrt_tick`) polls a mailbox
-//! for host commands (the selection, the restart) and calls slot 0.
+//! the caches and calls `init`. A hook in the UI task's event loop (`dkrt_tick`) polls a mailbox for host commands (the selection, the restart)
+//! and calls the `tick` of every loaded module.
 //!
 //! Rules: task context only (never from an interrupt); no `core::fmt`; every `extern "C"` function takes and returns
 //! integers or pointers. Built with rustc_codegen_gcc for -mcpu=54418 (finding 26).
@@ -86,8 +86,6 @@ pub struct Module {
     pub base: u32,
     pub size: u32,
     pub fini: u32,
-    pub slot_mask: u32,
-    pub slot_fn: [u32; SLOTS],
 }
 
 #[repr(C)]
@@ -105,16 +103,12 @@ pub struct State {
     pub ticks: u32,
     pub last_result: i32,
     pub loads: u32,
-    pub slot_calls: u32,
+    pub tick_calls: u32,
     /// Head of the arena free list (address of the first free block, 0 = none).
     pub free_head: u32,
     pub arena_lo: u32,
     pub arena_hi: u32,
     pub log_next: u32,
-    /// Function pointers bound to slots (0 = empty); one aligned 32-bit store publishes or clears one.
-    pub slots: [u32; SLOTS],
-    /// Tasks currently inside a slot function.
-    pub entered: [u32; SLOTS],
     pub modules: [Module; MAX_MODULES],
     pub log: [LogEntry; LOG_ENTRIES],
 }
@@ -124,7 +118,7 @@ pub static mut DKRT_STATE: State = unsafe { core::mem::zeroed() };
 /// The store path each module record was loaded from (kept apart from `State`, whose layout the proof tools peek).
 #[no_mangle]
 pub static mut DKRT_PATHS: [[u8; 64]; MAX_MODULES] = [[0; 64]; MAX_MODULES];
-/// The address of each module record's `dkm_menu` (0: none), apart from `State` for the same reason.
+/// The address of each module record's `menu` (0: none), apart from `State` for the same reason.
 #[no_mangle]
 pub static mut DKRT_MENUS: [u32; MAX_MODULES] = [0; MAX_MODULES];
 /// The contract versions each module record declared: api, machine, fx, service as (major, minor) bytes (`MODULES` reports them).
@@ -356,30 +350,23 @@ macro_rules! import_table {
 }
 
 import_table! {
-    ("fw_block_read", dkfw::storage::block_read),
-    ("fw_alloc", dkfw::mem::new),
-    ("fw_free", dkfw::mem::free),
     ("memcpy", memcpy),
     ("memset", memset),
     ("memcmp", memcmp),
     ("__muldi3", __muldi3),
     ("__udivdi3", __udivdi3),
     ("__umoddi3", __umoddi3),
-    // the 1500 Hz block clock (`dkrt_blocks`), for a module that wants to measure time
-    ("dkrt_blocks", dkrt_blocks),
-    ("dkrt_log_sink_set", dlog::dkrt_log_sink_set),
-    ("dkrt_log_ev", dlog::dkrt_log_ev),
-    ("dkrt_peek_range", dkrt_peek_range),
-    ("dkrt_track_type", dkrt_track_type),
-    ("dkrt_selected_params", dkrt_selected_params),
     // the service imports (docs/plans/sdk.md section 5.1)
-    ("dk_alloc", api_alloc),
-    ("dk_free", api_free),
-    ("dk_log", api_log_lv),
-    ("dk_log_event", dlog::dkrt_log_ev),
+    ("dk_alloc", imp_alloc),
+    ("dk_free", imp_free),
+    ("dk_log", imp_log),
+    ("dk_log_event", dlog::dk_log_event),
     ("dk_time_blocks", dkrt_blocks),
+    ("dk_fw_alloc", dkfw::mem::new),
+    ("dk_fw_free", dkfw::mem::free),
+    ("dk_fw_block_read", dkfw::storage::block_read),
     ("dk_files_read", entry::dk_files_read),
-    ("dk_host_register", api_register_cmds),
+    ("dk_host_register", imp_host_register),
     ("dk_module_ctx_device", entry::dk_module_ctx_device),
     ("dk_module_ctx_runtime_version", entry::dk_module_ctx_runtime_version),
     ("dk_settings_open", entry::dk_settings_open),
@@ -395,17 +382,17 @@ import_table! {
     ("dk_files_close", entry::dk_files_close),
     ("dk_files_abort", entry::dk_files_abort),
     ("dk_files_delete", entry::dk_files_delete),
-    ("dk_io_post", api_io_post),
-    ("dk_io_cancel", api_io_cancel),
-    ("dk_io_wake", api_io_wake),
-    ("dk_job_post", api_job_post),
-    ("dk_job_cancel", api_job_cancel),
-    ("dk_hash32_init", api_hash32_init),
-    ("dk_hash32_update", api_hash32_update),
-    ("dk_hash32_finish", api_hash32_finish),
-    ("dk_intro_take", api_intro_take),
-    ("dk_param_get", api_param_get),
-    ("dk_param_set", api_param_set),
+    ("dk_io_post", imp_io_post),
+    ("dk_io_cancel", imp_io_cancel),
+    ("dk_io_wake", imp_io_wake),
+    ("dk_job_post", imp_job_post),
+    ("dk_job_cancel", imp_job_cancel),
+    ("dk_hash32_init", imp_hash32_init),
+    ("dk_hash32_update", imp_hash32_update),
+    ("dk_hash32_finish", imp_hash32_finish),
+    ("dk_intro_take", imp_intro_take),
+    ("dk_param_get", imp_param_get),
+    ("dk_param_set", imp_param_set),
     ("dk_sample_pool_open", entry::dk_sample_pool_open),
     ("dk_sample_pool_add", entry::dk_sample_pool_add),
     ("dk_sample_pool_clear", entry::dk_sample_pool_clear),
@@ -415,27 +402,28 @@ import_table! {
     ("dk_sample_pool_set", entry::dk_sample_pool_set),
     ("dk_sample_pool_peaks", entry::dk_sample_pool_peaks),
     ("dk_sample_pool_peaks_window", entry::dk_sample_pool_peaks_window),
-    ("dk_debug_peek", dkrt_peek_range),
-    ("dk_debug_track_type", dkrt_track_type),
-    ("dk_debug_selected_params", dkrt_selected_params),
-    ("dk_debug_log_sink_set", dlog::dkrt_log_sink_set),
+    ("dk_sample_bank_open", entry::dk_sample_bank_open),
+    ("dk_sample_bank_load", entry::dk_sample_bank_load),
+    ("dk_sample_bank_status", entry::dk_sample_bank_status),
+    ("dk_debug_peek", debug_peek),
+    ("dk_debug_track_type", debug_track_type),
+    ("dk_debug_selected_params", debug_selected_params),
+    ("dk_debug_log_sink_set", dlog::dk_debug_log_sink_set),
+    ("dk_debug_speed_flags", debug_speed_flags),
 }
 
 const _: () = assert!(names_match(&NAMES, &dkrt_sdk::api::BUILTIN_NAMES), "IMPORTS names differ from [[import]] of sdk/sdk.toml");
-const _: dkrt_sdk::api::DkrtBlocksFn = dkrt_blocks;
-const _: dkrt_sdk::api::DkrtLogSinkSetFn = dlog::dkrt_log_sink_set;
-const _: dkrt_sdk::api::DkrtLogEvFn = dlog::dkrt_log_ev;
-const _: dkrt_sdk::api::DkrtPeekRangeFn = dkrt_peek_range;
-const _: dkrt_sdk::api::DkrtTrackTypeFn = dkrt_track_type;
-const _: dkrt_sdk::api::DkrtSelectedParamsFn = dkrt_selected_params;
 // the service imports have the types sdk/sdk.toml gives them
-const _: dkrt_sdk::api::DkAllocFn = api_alloc;
-const _: dkrt_sdk::api::DkFreeFn = api_free;
-const _: dkrt_sdk::api::DkLogFn = api_log_lv;
-const _: dkrt_sdk::api::DkLogEventFn = dlog::dkrt_log_ev;
+const _: dkrt_sdk::api::DkAllocFn = imp_alloc;
+const _: dkrt_sdk::api::DkFreeFn = imp_free;
+const _: dkrt_sdk::api::DkLogFn = imp_log;
+const _: dkrt_sdk::api::DkLogEventFn = dlog::dk_log_event;
 const _: dkrt_sdk::api::DkTimeBlocksFn = dkrt_blocks;
+const _: dkrt_sdk::api::DkFwAllocFn = dkfw::mem::new;
+const _: dkrt_sdk::api::DkFwFreeFn = dkfw::mem::free;
+const _: dkrt_sdk::api::DkFwBlockReadFn = dkfw::storage::block_read;
 const _: dkrt_sdk::api::DkFilesReadFn = entry::dk_files_read;
-const _: dkrt_sdk::api::DkHostRegisterFn = api_register_cmds;
+const _: dkrt_sdk::api::DkHostRegisterFn = imp_host_register;
 const _: dkrt_sdk::api::DkModuleCtxDeviceFn = entry::dk_module_ctx_device;
 const _: dkrt_sdk::api::DkModuleCtxRuntimeVersionFn = entry::dk_module_ctx_runtime_version;
 const _: dkrt_sdk::api::DkSettingsOpenFn = entry::dk_settings_open;
@@ -451,17 +439,17 @@ const _: dkrt_sdk::api::DkFilesWriteFn = entry::dk_files_write;
 const _: dkrt_sdk::api::DkFilesCloseFn = entry::dk_files_close;
 const _: dkrt_sdk::api::DkFilesAbortFn = entry::dk_files_abort;
 const _: dkrt_sdk::api::DkFilesDeleteFn = entry::dk_files_delete;
-const _: dkrt_sdk::api::DkIoPostFn = api_io_post;
-const _: dkrt_sdk::api::DkIoCancelFn = api_io_cancel;
-const _: dkrt_sdk::api::DkIoWakeFn = api_io_wake;
-const _: dkrt_sdk::api::DkJobPostFn = api_job_post;
-const _: dkrt_sdk::api::DkJobCancelFn = api_job_cancel;
-const _: dkrt_sdk::api::DkHash32InitFn = api_hash32_init;
-const _: dkrt_sdk::api::DkHash32UpdateFn = api_hash32_update;
-const _: dkrt_sdk::api::DkHash32FinishFn = api_hash32_finish;
-const _: dkrt_sdk::api::DkIntroTakeFn = api_intro_take;
-const _: dkrt_sdk::api::DkParamGetFn = api_param_get;
-const _: dkrt_sdk::api::DkParamSetFn = api_param_set;
+const _: dkrt_sdk::api::DkIoPostFn = imp_io_post;
+const _: dkrt_sdk::api::DkIoCancelFn = imp_io_cancel;
+const _: dkrt_sdk::api::DkIoWakeFn = imp_io_wake;
+const _: dkrt_sdk::api::DkJobPostFn = imp_job_post;
+const _: dkrt_sdk::api::DkJobCancelFn = imp_job_cancel;
+const _: dkrt_sdk::api::DkHash32InitFn = imp_hash32_init;
+const _: dkrt_sdk::api::DkHash32UpdateFn = imp_hash32_update;
+const _: dkrt_sdk::api::DkHash32FinishFn = imp_hash32_finish;
+const _: dkrt_sdk::api::DkIntroTakeFn = imp_intro_take;
+const _: dkrt_sdk::api::DkParamGetFn = imp_param_get;
+const _: dkrt_sdk::api::DkParamSetFn = imp_param_set;
 const _: dkrt_sdk::api::DkSamplePoolOpenFn = entry::dk_sample_pool_open;
 const _: dkrt_sdk::api::DkSamplePoolAddFn = entry::dk_sample_pool_add;
 const _: dkrt_sdk::api::DkSamplePoolClearFn = entry::dk_sample_pool_clear;
@@ -471,10 +459,14 @@ const _: dkrt_sdk::api::DkSamplePoolPathFn = entry::dk_sample_pool_path;
 const _: dkrt_sdk::api::DkSamplePoolSetFn = entry::dk_sample_pool_set;
 const _: dkrt_sdk::api::DkSamplePoolPeaksFn = entry::dk_sample_pool_peaks;
 const _: dkrt_sdk::api::DkSamplePoolPeaksWindowFn = entry::dk_sample_pool_peaks_window;
-const _: dkrt_sdk::api::DkDebugPeekFn = dkrt_peek_range;
-const _: dkrt_sdk::api::DkDebugTrackTypeFn = dkrt_track_type;
-const _: dkrt_sdk::api::DkDebugSelectedParamsFn = dkrt_selected_params;
-const _: dkrt_sdk::api::DkDebugLogSinkSetFn = dlog::dkrt_log_sink_set;
+const _: dkrt_sdk::api::DkSampleBankOpenFn = entry::dk_sample_bank_open;
+const _: dkrt_sdk::api::DkSampleBankLoadFn = entry::dk_sample_bank_load;
+const _: dkrt_sdk::api::DkSampleBankStatusFn = entry::dk_sample_bank_status;
+const _: dkrt_sdk::api::DkDebugPeekFn = debug_peek;
+const _: dkrt_sdk::api::DkDebugTrackTypeFn = debug_track_type;
+const _: dkrt_sdk::api::DkDebugSelectedParamsFn = debug_selected_params;
+const _: dkrt_sdk::api::DkDebugLogSinkSetFn = dlog::dk_debug_log_sink_set;
+const _: dkrt_sdk::api::DkDebugSpeedFlagsFn = debug_speed_flags;
 
 extern "C" {
     /// Per-device data from the device file (`[digikit] peek`), defined by `src/cf/<dev>/device.s`: the number of ranges and `lo, hi` pairs.
@@ -484,8 +476,13 @@ extern "C" {
     static dkrt_sound_words: u32;
 }
 
-/// Import `dkrt_peek_range`: how many RAM ranges the device file allows PEEK to read; for `i` below that, range `i` as `lo, hi` into `out`.
-unsafe extern "C" fn dkrt_peek_range(i: u32, out: *mut u32) -> u32 {
+/// Import `dk_debug_speed_flags`: the run-time switches of the speed levers (`speed::update`).
+unsafe extern "C" fn debug_speed_flags(clear: u32, set: u32) -> u32 {
+    speed::update(clear, set)
+}
+
+/// Import `dk_debug_peek`: how many RAM ranges the device file allows PEEK to read; for `i` below that, range `i` as `lo, hi` into `out`.
+unsafe extern "C" fn debug_peek(i: u32, out: *mut u32) -> u32 {
     let n = read_volatile(addr_of!(dkrt_peek_n)).min(4);
     if i < n {
         let t = addr_of!(dkrt_peek_ranges) as *const u32;
@@ -495,9 +492,9 @@ unsafe extern "C" fn dkrt_peek_range(i: u32, out: *mut u32) -> u32 {
     n
 }
 
-/// Import `dkrt_track_type`: the machine type of a track of the active kit, from the firmware's own accessors (read-only); -1 past track 15 or when the
+/// Import `dk_debug_track_type`: the machine type of a track of the active kit, from the firmware's own accessors (read-only); -1 past track 15 or when the
 /// firmware has no type for it, -2 when there is no project yet.
-unsafe extern "C" fn dkrt_track_type(track: u32) -> i32 {
+unsafe extern "C" fn debug_track_type(track: u32) -> i32 {
     // `Project *f(void)`, `Kit *f(Project *)` (the active kit), `int f(Kit *, int track)` (-1: no such track)
     let p = dkfw::project::singleton();
     if p == 0 {
@@ -513,10 +510,10 @@ unsafe extern "C" fn dkrt_track_type(track: u32) -> i32 {
 const SOUND_VT_RECORD: u32 = 0x28;
 const SOUND_WORDS_AT: u32 = 0x14;
 
-/// Import `dkrt_selected_params`: the selected track (`view_track` of the project's settings) and the first `n` words of its Sound array, through the firmware's
+/// Import `dk_debug_selected_params`: the selected track (`view_track` of the project's settings) and the first `n` words of its Sound array, through the firmware's
 /// own accessors, plain reads. The words are big-endian s16 at a byte address that may be odd on the Digitone II (stride 0x48b), so they are read byte by byte.
 /// -2: no project yet; -3: the track has no record (a kit is loading): `out` is not written.
-unsafe extern "C" fn dkrt_selected_params(out: *mut i16, n: u32) -> i32 {
+unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> i32 {
     let p = dkfw::project::singleton();
     if p == 0 {
         return -2;
@@ -566,8 +563,8 @@ pub unsafe fn import_addr(name: *const u8) -> u32 {
     0
 }
 
-/// The module whose absence leaves the import `name` (NUL-terminated) without an address, without the `core/` prefix ("usb-bulk" for
-/// `usb_bulk_enable`); None when the table has no such import, or it has an address or a stub.
+/// The module whose absence leaves the import `name` (NUL-terminated) without an address, without the `core/` prefix ("usb-bulk" for an import of core/usb-bulk
+/// that has no stub); None when the table has no such import, or it has an address or a stub. Every import of another module has a stub today.
 pub unsafe fn import_needs(name: *const u8) -> Option<&'static str> {
     let t = optional::table();
     let mut i = 0;
@@ -600,127 +597,31 @@ unsafe fn cstr_eq_str(a: *const u8, b: &str) -> bool {
     *a.add(b.len()) == 0
 }
 
-// ---- the API table ---------------------------------------------------------------------------------------------------
+// ---- the imports that are plain functions ----------------------------------------------------------------------------------
 
-unsafe extern "C" fn api_import(name: *const u8) -> u32 {
-    import_addr(name)
-}
-unsafe extern "C" fn api_alloc(size: u32) -> *mut u8 {
+unsafe extern "C" fn imp_alloc(size: u32) -> *mut u8 {
     arena::alloc(size)
 }
-unsafe extern "C" fn api_free(p: *mut u8) {
+unsafe extern "C" fn imp_free(p: *mut u8) {
     arena::free(p);
 }
-unsafe extern "C" fn api_store_read(path: *const u8, dst: *mut u8, cap: u32) -> i32 {
-    store::read_file(path, dst, cap)
-}
-unsafe extern "C" fn api_log(msg: *const u8, value: u32) {
-    log(msg, value);
-}
-unsafe extern "C" fn api_log_lv(level: u32, msg: *const u8, value: u32) {
+unsafe extern "C" fn imp_log(level: u32, msg: *const u8, value: u32) {
     log_at(level, msg, value);
 }
-unsafe extern "C" fn api_register_cmds(first: u32, count: u32, handler: Option<dkrt_sdk::api::ServiceCmd>) -> i32 {
-    upload::register_cmds(first, count, handler)
+unsafe extern "C" fn imp_host_register(first: u32, count: u32, handler: Option<dkrt_sdk::HostCmdFn>) -> i32 {
+    upload::host_register(first, count, handler)
 }
-
-unsafe extern "C" fn api_sample_bank(id: u32) -> i32 { sample::bank(id) }
-unsafe extern "C" fn api_sample_load(handle: u32, path: *const u8) -> i32 { sample::load(handle, path) }
-unsafe extern "C" fn api_sample_status(handle: u32) -> i32 { sample::status(handle) }
-unsafe extern "C" fn api_sample_tracks(id: u32) -> i32 { tracks::tracks(id) }
-unsafe extern "C" fn api_sample_pool_add(handle: u32, path: *const u8) -> i32 { tracks::pool_add(handle, path) }
-unsafe extern "C" fn api_sample_pool_set(handle: u32, index: u32, path: *const u8) -> i32 { tracks::pool_set(handle, index, path) }
-unsafe extern "C" fn api_sample_pool_clear(handle: u32, track: u32) -> i32 { tracks::pool_clear(handle, track) }
-unsafe extern "C" fn api_sample_pool_status(handle: u32, track: u32) -> i32 { tracks::status(handle, track) }
-unsafe extern "C" fn api_sample_pool_info(handle: u32, track: u32, out: *mut u8) -> i32 { tracks::info(handle, track, out) }
-unsafe extern "C" fn api_sample_pool_peaks(handle: u32, track: u32, token: u32, out: *mut u8, capacity: u32) -> i32 { tracks::peaks(handle, track, token, out, capacity) }
-unsafe extern "C" fn api_sample_pool_path(handle: u32, track: u32, buf: *mut u8, cap: u32) -> i32 { tracks::path(handle, track, buf, cap) }
-unsafe extern "C" fn api_param_get(track: u32, word: u32) -> i32 { pageclick::param_get(track, word) }
-unsafe extern "C" fn api_param_set(track: u32, word: u32, raw: i32) -> i32 { pageclick::param_set(track, word, raw) }
-unsafe extern "C" fn api_files_client() -> i32 { files::client() }
-unsafe extern "C" fn api_files_list(client: u32, root: u32, path: *const u8, notify: Option<dkrt_sdk::api::FileEvent>, context: *mut u8) -> i32 { files::list(client, root, path, notify, context) }
-unsafe extern "C" fn api_files_poll(client: u32, ticket: u32, out: *mut u8, cap: u32) -> i32 { files::poll(client, ticket, out, cap) }
-unsafe extern "C" fn api_files_cancel(client: u32, ticket: u32) -> i32 { files::cancel(client, ticket) }
-unsafe extern "C" fn api_job_post(step: Option<dkrt_sdk::api::JobStep>, done: Option<dkrt_sdk::api::JobDone>, ctx: *mut u8) -> i32 { worker::post(dlog::current_source(), step, done, ctx) }
-unsafe extern "C" fn api_job_cancel(id: u32) -> i32 { worker::cancel(dlog::current_source(), id) }
-unsafe extern "C" fn api_sample_pool_peaks_window(handle: u32, track: u32, token: u32, first: u32, frames: u32, columns: u32, out: *mut u8, capacity: u32) -> i32 { peakwin::window(handle, track, token, first, frames, columns, out, capacity) }
-unsafe extern "C" fn api_settings_client() -> i32 { settings::module_client() }
-unsafe extern "C" fn api_settings_get(client: u32, key: *const u8, out: *mut u8, cap: u32) -> i32 { settings::module_get(client, key, out, cap) }
-unsafe extern "C" fn api_settings_put(client: u32, key: *const u8, value: *const u8, len: u32) -> i32 { settings::module_put(client, key, value, len) }
-unsafe extern "C" fn api_settings_remove(client: u32, key: *const u8) -> i32 { settings::module_remove(client, key) }
-unsafe extern "C" fn api_intro_take(frame: Option<dkrt_sdk::api::IntroFrame>, done: Option<dkrt_sdk::api::IntroDone>, ctx: *mut u8, ticks: u32) -> i32 { intro::take(frame, done, ctx, ticks) }
-
-unsafe extern "C" fn api_file_create(root: u32, path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32 { store_writer::sdk_create(root, path, size, hash4, flags) }
-unsafe extern "C" fn api_file_write(h: i32, offset: u32, buf: *const u8, len: u32) -> i32 { store_writer::sdk_write(h, offset, buf, len) }
-unsafe extern "C" fn api_file_close(h: i32, hash_out: *mut u8) -> i32 { store_writer::sdk_close(h, hash_out) }
-unsafe extern "C" fn api_file_abort(h: i32) -> i32 { store_writer::sdk_abort(h) }
-unsafe extern "C" fn api_file_delete(root: u32, path: *const u8) -> i32 { store_writer::sdk_delete(root, path) }
-unsafe extern "C" fn api_io_post(step: Option<dkrt_sdk::api::IoStep>, done: Option<dkrt_sdk::api::IoDone>, ctx: *mut u8) -> i32 { io::post(dlog::current_source(), step, done, ctx) }
-unsafe extern "C" fn api_io_cancel(id: i32) -> i32 { io::cancel(dlog::current_source(), id) }
-unsafe extern "C" fn api_io_wake(id: i32) { io::wake(id) }
-unsafe extern "C" fn api_hash32_init(state: *mut u8) { core::ptr::write(state as *mut hash32::Hash32, hash32::Hash32::new()) }
-unsafe extern "C" fn api_hash32_update(state: *mut u8, p: *const u8, n: u32) { (*(state as *mut hash32::Hash32)).update(p, n) }
-unsafe extern "C" fn api_hash32_finish(state: *mut u8) -> u32 { core::ptr::read(state as *const hash32::Hash32).finish() | 1 }
-unsafe extern "C" fn api_speed_flags(clear: u32, set: u32) -> u32 { speed::update(clear, set) }
-
-/// The table is built at first use: pointers to the helpers are not constants.
-#[no_mangle]
-pub static mut dkrt_api: Api = Api {
-    version: API_VERSION,
-    size: core::mem::size_of::<Api>() as u32,
-    device: 0,
-    runtime: RUNTIME_VERSION,
-    import: api_import,
-    alloc: api_alloc,
-    free: api_free,
-    store_read: api_store_read,
-    log: api_log,
-    memcpy: 0,
-    memset: 0,
-    memcmp: 0,
-    muldi3: 0,
-    udivdi3: 0,
-    umoddi3: 0,
-    log_lv: api_log_lv,
-    register_cmds: api_register_cmds,
-    sample_bank: api_sample_bank,
-    sample_load: api_sample_load,
-    sample_status: api_sample_status,
-    files_client: api_files_client,
-    files_list: api_files_list,
-    files_poll: api_files_poll,
-    files_cancel: api_files_cancel,
-    sample_tracks: api_sample_tracks,
-    sample_pool_add: api_sample_pool_add,
-    sample_pool_clear: api_sample_pool_clear,
-    sample_pool_status: api_sample_pool_status,
-    sample_pool_info: api_sample_pool_info,
-    sample_pool_path: api_sample_pool_path,
-    param_get: api_param_get,
-    param_set: api_param_set,
-    sample_pool_set: api_sample_pool_set,
-    sample_pool_peaks: api_sample_pool_peaks,
-    job_post: api_job_post,
-    job_cancel: api_job_cancel,
-    sample_pool_peaks_window: api_sample_pool_peaks_window,
-    settings_client: api_settings_client,
-    settings_get: api_settings_get,
-    settings_put: api_settings_put,
-    settings_remove: api_settings_remove,
-    intro_take: api_intro_take,
-    file_create: api_file_create,
-    file_write: api_file_write,
-    file_close: api_file_close,
-    file_abort: api_file_abort,
-    file_delete: api_file_delete,
-    io_post: api_io_post,
-    io_cancel: api_io_cancel,
-    io_wake: api_io_wake,
-    hash32_init: api_hash32_init,
-    hash32_update: api_hash32_update,
-    hash32_finish: api_hash32_finish,
-    speed_flags: api_speed_flags,
-};
+unsafe extern "C" fn imp_param_get(track: u32, word: u32) -> i32 { pageclick::param_get(track, word) }
+unsafe extern "C" fn imp_param_set(track: u32, word: u32, raw: i32) -> i32 { pageclick::param_set(track, word, raw) }
+unsafe extern "C" fn imp_job_post(step: Option<dkrt_sdk::api::JobStepFn>, done: Option<dkrt_sdk::api::JobDoneFn>, arg: *mut u8) -> i32 { worker::post(dlog::current_source(), step, done, arg) }
+unsafe extern "C" fn imp_job_cancel(id: u32) -> i32 { worker::cancel(dlog::current_source(), id) }
+unsafe extern "C" fn imp_intro_take(frame: Option<dkrt_sdk::api::IntroFrameFn>, done: Option<dkrt_sdk::api::IntroDoneFn>, arg: *mut u8, ticks: u32) -> i32 { intro::take(frame, done, arg, ticks) }
+unsafe extern "C" fn imp_io_post(step: Option<dkrt_sdk::api::IoStepFn>, done: Option<dkrt_sdk::api::IoDoneFn>, arg: *mut u8) -> i32 { io::post(dlog::current_source(), step, done, arg) }
+unsafe extern "C" fn imp_io_cancel(id: i32) -> i32 { io::cancel(dlog::current_source(), id) }
+unsafe extern "C" fn imp_io_wake(id: i32) { io::wake(id) }
+unsafe extern "C" fn imp_hash32_init(state: *mut u8) { core::ptr::write(state as *mut hash32::Hash32, hash32::Hash32::new()) }
+unsafe extern "C" fn imp_hash32_update(state: *mut u8, p: *const u8, n: u32) { (*(state as *mut hash32::Hash32)).update(p, n) }
+unsafe extern "C" fn imp_hash32_finish(state: *mut u8) -> u32 { core::ptr::read(state as *const hash32::Hash32).finish() | 1 }
 
 pub unsafe fn log(msg: *const u8, value: u32) {
     log_at(logk::L_INFO as u32, msg, value);
@@ -749,21 +650,13 @@ pub unsafe fn log_at(level: u32, msg: *const u8, value: u32) {
     );
 }
 
-/// First-use setup: arena free list, API table fields, magic.
+/// First-use setup: arena free list, magic.
 pub unsafe fn init_once() {
     let s = st();
     if s.magic == STATE_MAGIC {
         return;
     }
     arena::init();
-    let a = &mut *addr_of_mut!(dkrt_api);
-    a.device = device();
-    a.memcpy = import_addr(b"memcpy\0".as_ptr()) as usize;
-    a.memset = import_addr(b"memset\0".as_ptr()) as usize;
-    a.memcmp = import_addr(b"memcmp\0".as_ptr()) as usize;
-    a.muldi3 = import_addr(b"__muldi3\0".as_ptr()) as usize;
-    a.udivdi3 = import_addr(b"__udivdi3\0".as_ptr()) as usize;
-    a.umoddi3 = import_addr(b"__umoddi3\0".as_ptr()) as usize;
     s.runtime = RUNTIME_VERSION;
     s.magic = STATE_MAGIC;
 }
@@ -1025,7 +918,7 @@ pub unsafe extern "C" fn dkrt_status(out: *mut DkrtStatus) {
     o.ticks = s.ticks;
     o.last_result = s.last_result;
     o.loads = s.loads;
-    o.slot_calls = s.slot_calls;
+    o.tick_calls = s.tick_calls;
     o.state = dsp::state();
     o.dsp_size = dsp::area_bytes();
     let (dfree, dlargest) = dsp::area_stats();
@@ -1149,7 +1042,6 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
                 o.version = m.version;
                 o.base = m.base;
                 o.size = m.size;
-                o.slots = m.slot_mask;
                 o.path = (*addr_of!(DKRT_PATHS))[i];
                 o.state = if m.used == 2 { MOD_LOADING } else { MOD_LOADED };
                 o.dsp_size = dsp::ds().mod_len[i];
@@ -1249,7 +1141,7 @@ pub unsafe extern "C" fn dkrt_restart() -> i32 {
 }
 
 /// Called from the UI task's event loop (`dkrt_loop_hook`, src/cf/tramp.s) once per pass, before it waits for the next
-/// event. Registers d0, d1, a0, a1 are saved by the hook. Polls the mailbox, then calls slot 0.
+/// event. Registers d0, d1, a0, a1 are saved by the hook. Polls the mailbox, then calls the tick of every module.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_tick() {
     init_once();
@@ -1296,24 +1188,7 @@ pub unsafe extern "C" fn dkrt_tick() {
         write_volatile(addr_of_mut!(mb.seq), mb.seq.wrapping_add(1));
         write_volatile(addr_of_mut!(mb.cmd), 0);
     }
-    let f = read_volatile(addr_of!(s.slots[0]));
-    if f != 0 {
-        write_volatile(addr_of_mut!(s.entered[0]), s.entered[0] + 1);
-        let call: unsafe extern "C" fn(*const Api) = core::mem::transmute(f as usize);
-        // the module that owns slot 0 is the source of what it logs
-        let mut owner = 0;
-        while owner < MAX_MODULES && !(s.modules[owner].used != 0 && s.modules[owner].slot_mask & 1 != 0) {
-            owner += 1;
-        }
-        let prev = if owner < MAX_MODULES { dlog::enter_module(owner) } else { 0 };
-        call(addr_of!(dkrt_api));
-        if owner < MAX_MODULES {
-            dlog::leave_module(prev);
-        }
-        write_volatile(addr_of_mut!(s.entered[0]), s.entered[0] - 1);
-        s.slot_calls = s.slot_calls.wrapping_add(1);
-    }
-    // the tick of every module of the new entry (`dk_module.tick`)
+    // the tick of every loaded module (`dk_module.tick`)
     entry::tick_all();
     let p = read_volatile(addr_of!(DKRT_POLL));
     if p != 0 {

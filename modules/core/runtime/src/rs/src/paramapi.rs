@@ -1,4 +1,4 @@
-//! Read and write a digikit parameter from the flow of a click (`Api.param_get`, `Api.param_set`; docs/design/ui-rules.md).
+//! Read and write a digikit parameter from the flow of a click (`dk_param_get`, `dk_param_set`; docs/design/ui-rules.md).
 //!
 //! The firmware access goes through the `Fw` trait, so the rules are host-tested with a fake page: the call must come from the flow a click
 //! started (the callback, or a list it opened: `Held`), the word must belong to the module whose callback runs, the track must be 0 to 15, and

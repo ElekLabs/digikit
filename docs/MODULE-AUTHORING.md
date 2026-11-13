@@ -15,7 +15,7 @@ There are three kinds of content module. The kind is `[module] type` in `module.
 | --- | --- | --- | --- | --- |
 | `machine` | A new sound source. It renders one voice. | SHARC+ assembly, declared in C | `render`, `note_on`, `desc` | `sdk/templates/machine` |
 | `fx` | An effect on the master block or on a send bus. It has its own FX page. | SHARC+ assembly, declared in C | `process`, `desc` | `sdk/templates/fx` |
-| `tool` | ColdFire code. It adds commands, reads the store or reacts to the UI loop. | C | `dkm_init`, `dkm_fini`, `dkm_slot_N` | `sdk/templates/tool` |
+| `tool` | ColdFire code. It adds commands, reads the store or reacts to the UI loop. | C | `dk_module` (`init`, `fini`, `tick`, `menu`) | `sdk/templates/tool` |
 
 Two more types exist. `raw` is code with no contract and only the generic load checks. The menu shows it as unchecked. `framework` is
 the internal type of the `core/*` modules.
@@ -73,7 +73,7 @@ The command copies the template, replaces the names and builds it. You start fro
 | --- | --- | --- |
 | `machine` | `modules/machines/NAME` | `module.toml`, `README.md`, `src/module.c` (the declaration), `src/dsp/NAME.s` (a sine voice with one level parameter) |
 | `fx` | `modules/fx/NAME` | `module.toml`, `README.md`, `src/module.c` (the declaration), `src/dsp/NAME.s` (a gain effect with one knob and a page) |
-| `tool` | `modules/tools/NAME` | `module.toml`, `README.md`, `src/c/NAME.c` (`dkm_init` logs a line, `dkm_fini` is empty) |
+| `tool` | `modules/tools/NAME` | `module.toml`, `README.md`, `src/c/NAME.c` (`init` logs a line, `fini` is empty) |
 
 The command ends with the next commands: `module:check`, `module:pack` and `dk:run -- AUTHOR/NAME --emu --seconds 10` (section 8).
 `dk:run --emu` needs a running emulator: start `mise run workbench` in another shell first.
@@ -350,31 +350,31 @@ Patching a stock machine will become a separate module type. It is not part of t
 
 ### 5.8 Module settings
 
-A run-time module keeps its own values with the settings API of `<dk/platform/settings.h>` (API 1.9): `dk_settings_client` (only in `dkm_init`, gives the handle),
-`dk_settings_get`, `dk_settings_put` and `dk_settings_remove`. A module on a runtime older than API 1.9 must check `api->size` before it calls them.
+A run-time module keeps its own values with the settings imports of `<dk/platform/settings.h>`: `dk_settings_open(ctx, &settings)` (only in `init`, gives the handle),
+`dk_settings_get`, `dk_settings_put` and `dk_settings_remove`.
 
 - The runtime stores the key as `<module name>/<key>`. A module reaches its own keys only; the prefix stops mistakes, not hostile code.
 - The module name and the key together are at most 47 printable ASCII characters (no space). A key may not be empty, hold `/` or hold `..`: such a key
   returns `E_SET_KEY` and nothing is written.
 - A value is 0 to 1024 bytes. All modules and the runtime share one 8 KiB record; a full record returns `E_SET_FULL`, an off settings store `E_SET_OFF`.
 - Writes reach the card 2 s after the last change, and before a restart.
-- `get` works in `dkm_init` and in the UI task. `put` and `remove` are for the UI task only (a `DK_MENU` row, slot 0): not from a service command handler.
+- `get` works in `init` and in the UI task. `put` and `remove` are for the UI task only (`init`, `tick` or a menu row callback): not from a host command handler.
 - The module owns the layout and the version of its values: write a version byte first and read older values or reset them. The runtime never interprets them.
-- The settings popup is the module's `DK_MENU` with the `dk_ui_*` rows: a row changes a value and its callback calls `dk_settings_put`; `dkm_init` reads it at the next boot.
+- The settings popup is the module's `menu` function with the `dk_ui_menu_add_*` rows: a row changes a value and its callback calls `dk_settings_put`; `init` reads it at the next boot.
 
-### 5.9 Module files and `intro_take`
+### 5.9 Module files and `dk_intro_take`
 
 A module's own files live under `data/<module id>/` in the store, not next to the `.dkm`: the `modules/` list holds at most 32 entries. `dk_data_path` (`<dk/platform/data.h>`)
-builds the path and refuses a name that is empty or holds `/` or `..`. Read a file with `store_read` in `dkm_init`, or list the folder with the `files_*` calls (root
-`DK_FILES_STORE`). Only the host writes these files for now. `store_read` runs one at a time and in `dkm_init` only.
+builds the path and refuses a name that is empty or holds `/` or `..`. Read a file with `dk_files_read` in `init`, or list the folder with the `dk_files_*` calls (root
+`DK_FILES_STORE`). Only the host writes these files for now. `dk_files_read` runs one at a time and in `init` only.
 
-`dk_intro_take` (`<dk/platform/intro.h>`, API 1.9) replaces the boot animation. It runs after the REC, safe-mode and boot-counter checks and does no storage I/O: read the frames
-in `dkm_init`, then call it.
+`dk_intro_take` (`<dk/platform/intro.h>`) replaces the boot animation. It runs after the REC, safe-mode and boot-counter checks and does no storage I/O: read the frames
+in `init`, then call it.
 
 - `frame(tick, ctx)` returns the 1024-byte native bitmap of tick 0 .. `ticks`-1 (30 a second), or NULL to end the animation. It runs on the intro task (priority 7, more urgent than the main-OS task, priority 6): it must return quickly, because it blocks every lower-priority task, and a callback that never returns starves the main OS until power-off. It must not block and
-  must not call any `dk_api` function. The last frame stays on the screen.
+  must not call any import. The last frame stays on the screen.
 - `done(ctx)` (may be NULL) runs once in the UI task at the first UI pass. Free the buffer there, never in `frame`.
-- `ticks` is 1 to 300. Errors: `E_NOT_FOUND` (outside `dkm_init`), `E_CONTRACT` (no frame, bad ticks), `E_BUSY` (taken already), `E_BOOT_ONLY` (the intro is over). After an error the stock intro runs.
+- `ticks` is 1 to 300. Errors: `E_NOT_FOUND` (outside `init`), `E_CONTRACT` (no frame, bad ticks), `E_BUSY` (taken already), `E_BOOT_ONLY` (the intro is over). After an error the stock intro runs.
 - A fault in `frame` reaches the firmware's handler. The boot counter stays raised, so repeated failed boots end in safe mode.
 - In a safe boot no module loads, so `dk_intro_take` is never called. The runtime itself replaces the stock intro with a fixed safe-mode screen for 4 s: `SAFE MODE`, the reason (`REC HELD`, `2 FAILED BOOTS`, `SAFE ONCE`, `DSP FAULT`, `CRASH` or `SELECTION UNREADABLE`) and `NO MODULES LOADED`.
 
@@ -392,7 +392,7 @@ The generated files are in `sdk/include/dk/gen/`, `sdk/dsp/contract/` and `sdk/i
 
 | File | What it holds | Who includes it |
 | --- | --- | --- |
-| `<dk/core/api.h>` | The `dk_api` table, the import names and the entry points of a `.dkm`. | Service modules in C. |
+| `<dk/core/module.h>` | `dk_module_def`, the constant `dk_module`, `dk_module_ctx` and the prototypes of every import (generated `<dk/gen/imports.h>`). | Every module in C. |
 | `<dk/core/bytes.h>` | `dk_bytes_put32`, `dk_bytes_get32`: big-endian 32-bit fields of protocols and files. Header only. | Modules that read or write wire fields. |
 | `<dk/core/text.h>` | Bounded text without a C library: `dk_text_len`, `dk_text_copy`, `dk_text_equal`, `dk_text_append`, `dk_text_cat`, `dk_text_utoa`, `dk_text_itoa`, `dk_text_trunc`, `dk_text_size`, `dk_text_secs`. Every writer takes the buffer size and ends with a NUL. The packer links the source (`sdk/src/core/text.c`) when a module calls one. | Modules that build row text or names. |
 | `<dk/core/path.h>` | `dk_path_join` (refuses over 255 bytes), `dk_path_parent`, `dk_path_leaf`. The packer links `sdk/src/core/path.c`. | Modules that handle file paths. |
@@ -530,15 +530,15 @@ The template `src/dsp/NAME.s` shows all of this in about 90 lines. Read it first
 - The instruction budget of the conformance suite is `pk_conform.fx_budget()` (about 31,000 for the effect today, 900 for the adapter). Read it
   from the report (`-rA`).
 
-### 7.3 Service (`<dk/core/module.h>`, and the old `<dk/core/api.h>`)
+### 7.3 Service (`<dk/core/module.h>`)
 
-#### The entry point (the way for new modules)
+#### The entry point
 
 A service module defines one constant, `dk_module` (`<dk/core/module.h>`; docs/plans/sdk.md section 5). `patchkit pack` finds it by its
 symbol and writes its four function pointers into the `.dkm` header. All four are optional.
 
 ```c
-#include <dk/core/module.h>              /* first */
+#include <dk/core/module.h>
 #include <dk/core/log.h>
 #include <dk/platform/settings.h>
 
@@ -563,62 +563,34 @@ const dk_module_def dk_module = {.init = init, .tick = tick};
 | `int32_t init(dk_module_ctx *ctx)` | Once after load. Opens the services, registers host commands. `DK_OK` (0), or the load fails and the module unloads. |
 | `void fini(dk_module_ctx *ctx)` | When the module is unloaded. |
 | `void tick(dk_module_ctx *ctx)` | Once per UI pass (about 120 Hz), for every loaded module that has one. Keep it short; no waiting. |
-| `void menu(dk_module_ctx *ctx, dk_ui_menu *menu)` | Optional: the module's settings, as `dkm_menu` is today. The DIGIKIT menu shows SETTINGS... and calls it when the user opens it. |
+| `void menu(dk_module_ctx *ctx, dk_ui_menu *menu)` | Optional: the module's settings. The DIGIKIT menu shows SETTINGS... in the side panel of the loaded module and calls it when the user opens it; it adds the rows (`dk_ui_menu_add_text`, `dk_ui_menu_add_action`, ...). The menu is built once and kept, and no module is unloaded at run time, so the `arg` and callbacks of a menu must point at the module's own memory, never at the stack. |
 
 The type is `dk_module_def`; the constant keeps the name `dk_module`, which the packer looks up. `ctx` is only the module context; the user-data pointer of a callback is `arg`. The device is reached through named imports grouped by service
 (`<dk/gen/imports.h>`, generated from `sdk/sdk.toml`; the comment of each prototype gives its context and the api minor that added it):
 
 - Without a handle: `dk_alloc`, `dk_free`, `dk_log`, `dk_log_event`, `dk_time_blocks`, `dk_host_register`, `dk_module_ctx_device`,
   `dk_module_ctx_runtime_version`, `dk_hash32_*`, `dk_io_*`, `dk_job_*`, `dk_intro_take`, `dk_param_get/set`, `dk_debug_*`.
-- With a handle opened in `init`: `dk_settings_open`, `dk_files_open` (one handle for listing, `dk_files_read` and for `dk_files_create`, `_write`, `_close`, `_abort` and `_delete`), `dk_sample_pool_open`, `dk_ui_service_open` (`dk_ui_open` from S2b-2), `dk_input_open`,
+- With a handle opened in `init`: `dk_settings_open`, `dk_files_open` (one handle for listing, `dk_files_read` and for `dk_files_create`, `_write`, `_close`, `_abort` and `_delete`), `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`,
   `dk_usb_bulk_open`, `dk_dsp_link_open`. The service functions take the handle first (`dk_settings_get(s, key, out, cap)`).
 - A service that another module provides (`core/ui`, `core/input`, `core/usb-bulk`, `core/dsp-link`) may be absent. Its `_open` returns
   `DK_E_MISSING` and leaves the handle NULL; the module loads and decides whether it can run without. The other calls of an absent service
-  return `DK_E_MISSING` or do nothing. Today a missing provider still fails the load of a module that uses the old entry.
-- `patchkit pack` takes the runtime minor of the file from the newest `since` of the imports it links (1.11 or more) and prints the
-  services it needs (`services <file>: usb_bulk (dk_usb_bulk_open); runtime (...)`). It refuses a module that defines `dk_module` and also
-  `dkm_init`, `dkm_fini`, `dkm_menu` or a slot.
-- The include order matters while the old entry exists: include `<dk/core/module.h>` first. It stops the build if `<dk/platform/settings.h>` or
-  `<dk/platform/intro.h>` already defined their old wrappers.
+  return `DK_E_MISSING` or do nothing. A module that cannot run without the service returns the code from `init`: the load fails with `E_IMPORT` and
+  DIGIKIT shows the provider as the module's need (as for an import that no module in the image provides). A module that tolerates its absence returns `DK_OK` and records nothing.
+- `patchkit pack` writes the newest `since` of the imports a module links as the api minor it needs and prints the services it needs
+  (`services <file>: usb_bulk (dk_usb_bulk_open); runtime (...)`). It refuses an object that has no `dk_module`, and one that still exports `dkm_init`, `dkm_fini`,
+  `dkm_menu` or a `dkm_slot_<n>`: the old entry and its Api table are gone.
+- A `.dkm` of the old contract (api major 1) is refused with `E_CONTRACT`: build it again against the SDK.
 
-The test fixture `tests/fixtures/modules/entry-demo` uses only this contract. The old entry below goes away in S2b-2; the templates still show it.
-
-#### The old entry (`<dk/core/api.h>`; goes away in S2b-2)
-
-A service is C code for the ColdFire CPU. The runtime calls these symbols of your object:
-
-| Symbol | When it runs |
-| --- | --- |
-| `int32_t dkm_init(const dk_api *api)` | Once after load. Return 0. Any other value unloads the module. |
-| `void dkm_fini(const dk_api *api)` | When the module is unloaded. |
-| `void dkm_menu(dk_ui_menu *m, void *ctx)` | Optional: the module's settings. `DK_MENU(fill)` of `<dk/platform/ui.h>` defines it. The DIGIKIT menu shows SETTINGS... in the side panel of the loaded module and runs `dkm_menu` only when the user opens it; `fill` adds the rows (`dk_ui_text`, `dk_ui_action`, ...). The menu is built once and kept, and no module is unloaded at run time, so the `ctx` and callbacks of a menu must point at the module's own memory, never at the stack. |
-| `void dkm_slot_N(const dk_api *api)` | `N` is 0 to 7. You bind a slot by exporting its symbol. Slot 0 runs once per pass of the UI event loop, about 120 Hz. A taken slot gives `E_SLOT`. |
-
-Export at least one of them.
-
-The `dk_api` table that `dkm_init` receives. Fields are only appended, each is 4 bytes. Check `size` before you use a late field.
-
-| Field | Purpose |
-| --- | --- |
-| `version`, `size`, `device`, `runtime` | Table layout version, table size, the device id, the packed runtime version. |
-| `import(name)` | Address of a firmware function or runtime helper by name. 0 when the image has none. |
-| `alloc(size)`, `free(p)` | A 16-byte aligned block from the module arena, and its release. `alloc` returns null when full. |
-| `store_read(path, dst, cap)` | Read a store file. Returns its size, or a negative code. One call at a time, in `dkm_init` only. |
-| `log(msg, value)` | Append to the runtime log. API 1.0. |
-| `log_lv(level, msg, value)` | The same with a level. API 1.1. |
-| `register_cmds(first, count, handler)` | Register SysEx commands. API 1.2. |
-| `sample_bank(local_id)`, `sample_load(handle, path)`, `sample_status(handle)` | Resolve, load and query a module-owned sample bank. API 1.3; see the bounded proof contract below. |
-| `files_client()`, `files_list(client, root, path, notify, context)`, `files_poll(client, ticket, out, capacity)`, `files_cancel(client, ticket)` | Read-only file/directory listing. API 1.4, runtime 0.5.4; see below. |
-| `memcpy_addr`, `memset_addr`, `memcmp_addr`, `muldi3_addr`, `udivdi3_addr`, `umoddi3_addr` | Addresses of the runtime's helpers. The compiler calls the 64-bit ones by itself. |
+The templates and `tests/fixtures/modules/entry-demo` show the entry point. The crash record names what the module code was doing (`init`, `tick`, `fini` or a callback) when the CPU faulted: `dklog crash` prints it.
 
 For the bounded sample-bank proof, include `<dk/sample/bank.h>` and declare
 `DK_SAMPLE_BANK(LOCAL_ID, BANK, DESCRIPTOR, CAPACITY)` in the module's C declaration. Exactly one bank is supported:
 reserve 1–8,192 mono float32 frames in the module's own DSP BSS and a four-word initialized zero descriptor
-(READY, normal-word source pointer, frame count, sample rate). Check the API 1.3 table `size` covers the appended
-sample functions before calling them. Resolve the positive opaque handle with `sample_bank(local_id)` during init.
+(READY, normal-word source pointer, frame count, sample rate). Open the positive opaque handle with `dk_sample_bank_open(ctx, &bank)` in `init`.
+The bank imports (`dk_sample_bank_open`, `dk_sample_bank_load`, `dk_sample_bank_status`) are temporary: S3 deletes the bank with them.
 
-Call `sample_load(handle, path)` from init or a service callback. It copies the NUL-terminated path and queues work
-for the UI task; the callback performs no file I/O. `sample_status(handle)` returns UNUSED=0, QUEUED=1, LOADING=2,
+Call `dk_sample_bank_load(bank, path)` from `init` or a host command handler. It copies the NUL-terminated path and queues work
+for the UI task; the handler performs no file I/O. `dk_sample_bank_status(bank)` returns UNUSED=0, QUEUED=1, LOADING=2,
 READY=3, or a negative `DK_SAMPLE_E_*` error. Only an unused bank accepts a load. Input must be a complete canonical
 mono 48 kHz PCM16 native sample, nonempty and at most 8,192 frames. DT2 uses an absolute +Drive path (`/...`), opens
 read-only and requires no concurrent Transfer writes during acquisition. DN2 uses `samples/...` in the digikit store
@@ -630,61 +602,58 @@ The [sample-proof fixture](../tests/fixtures/modules/sample-proof/README.md) dem
 calls and tested DSP bridge. Transferred-file playback acceptance passes in the emulator on DT2 OS 1.17 and
 DN2 OS 1.12. Hardware behavior and product capacity/replacement/selection remain unproved; this is not a product sampler.
 
-A stereo or mono sample pool (API 1.5, [design](design/sample-api-1.5.md)) uses `<dk/sample/pool.h>` and
+A stereo or mono sample pool ([design](design/sample-api-1.5.md)) uses `<dk/sample/pool.h>` and
 `DK_SAMPLE_TRACKS(LOCAL_ID, RECORDS, CONTROL)` instead of a bank (a module has one family): 16 `dk_sample_pool_entry` records (512 bytes), one for each
 pool entry, and 16 control sets (256 bytes) in the DSP data (`.PKDATA`, zero, no relocations in them). `pack` writes them as the kind 2 record of
-the DSP section and declares API 1.5; a module without a table declares 1.4. `sample_tracks(local_id)` gives the handle in init;
-`sample_pool_add(handle, path)` queues a PCM16 native file (mono or stereo, 48 kHz) from a service or UI callback and returns its pool index
+the DSP section. `dk_sample_pool_open(ctx, &pool)` gives the handle in `init`;
+`dk_sample_pool_add(pool, path)` queues a PCM16 native file (mono or stereo, 48 kHz) from a host command handler or a UI callback and returns its pool index
 0 to 15: the first free entry, or the entry that already holds the path (`DK_SAMPLE_E_POOL` when all 16 are in use). The path is the
 root-relative path of a `DK_FILES_SAMPLES` listing row (`KICKS/K1`); the runtime adds the device root (DT2 `/`, DN2 `samples/`), and a DT2 path
-that already starts with `/` stays as it is. `sample_pool_set(handle, index, path)` (API 1.6) loads a file into that entry and replaces what was there (the old file is released; a file another entry holds is shared). `sample_pool_clear(handle, index)` leaves a hole: indexes are stable, nothing moves. A machine picks
+that already starts with `/` stays as it is. `dk_sample_pool_set(pool, index, path)` loads a file into that entry and replaces what was there (the old file is released; a file another entry holds is shared). `dk_sample_pool_clear(pool, index)` leaves a hole: indexes are stable, nothing moves. A machine picks
 the entry of a note in its DSP, usually from a parameter (SHOT: SMP, word 0, `word >> 8`); an entry that is not READY is silent.
-`sample_pool_path(handle, index, buf, cap)` (API 1.6) gives the path back in the same form, in every state but UNUSED. The pool list is kept per
-project. The runtime closes an entry's old generation before it publishes a new record. A module that only calls these entries has no table and
-must check the table `size` before it calls them. `pack` declares the lowest Api minor that has what a module needs; a module that calls a newer
-entry without checking `size` lists it in `[module] uses_api = ["sample_pool_path"]` and is then refused by a runtime that lacks it.
+`dk_sample_pool_path(pool, index, buf, cap)` gives the path back in the same form, in every state but UNUSED. The pool list is kept per
+project. The runtime closes an entry's old generation before it publishes a new record.
 
-A sampler machine can add the on-device sample picker with `<dk/sample/picker.h>`: include the header and call `dk_sample_picker_init(api, handle)` in `dkm_init` and `dk_sample_picker_fini()` in
-`dkm_fini`, and call `dk_sample_picker_open_pool(current, pick, ctx)` from the click action of the SMP parameter. The picker shows the 16
-slots; YES on a slot opens the file browser for that slot, and YES on a file loads it there (`sample_pool_set`). `pick(ctx, index)` runs after a file was loaded, and the machine sets its SMP value to `index`.
-`modules/machines/shot` is the example (design: [sample picker](design/sample-picker.md)). The picker needs no manifest field: it checks the Api
-`size` before it calls `sample_pool_path`, and without `core/ui` it does nothing.
+A sampler machine can add the on-device sample picker with `<dk/sample/picker.h>`: include the header and call `dk_sample_picker_init(pool, files, ui)` in `init` (with the handles from `dk_sample_pool_open`, `dk_files_open` and `dk_ui_open`) and `dk_sample_picker_fini()` in
+`fini`, and call `dk_sample_picker_open_pool(current, pick, arg)` from the click action of the SMP parameter. The picker shows the 16
+slots; YES on a slot opens the file browser for that slot, and YES on a file loads it there (`dk_sample_pool_set`). `pick(arg, index)` runs after a file was loaded, and the machine sets its SMP value to `index`.
+`modules/machines/shot` is the example (design: [sample picker](design/sample-picker.md)). Without `core/ui` the picker does nothing.
 
-For reusable browsing, include `<dk/platform/files.h>` and acquire a positive `files_client()` handle during init.
-`files_list` copies a canonical root-relative NUL-terminated path and returns a positive request ticket;
+For reusable browsing, include `<dk/platform/files.h>` and open the `dk_files` handle in `init` (`dk_chooser_*` of `<dk/chooser/chooser.h>` is the ready-made list).
+`dk_files_list(files, root, path, notify, arg)` copies a canonical root-relative NUL-terminated path and returns a positive request ticket;
 empty path lists the root. `DK_FILES_SAMPLES` maps to DT2 +Drive or DN2 store `samples/`, and
 `DK_FILES_STORE` lists the runtime store on either device. A new request supersedes the previous one.
 The public path holds at most 255 bytes; provider limits are smaller (DT2 sample paths 254 bytes,
 store paths 159 bytes, DN2 nonempty sample paths 151 bytes after the virtual prefix).
 
-`files_poll` performs no storage I/O: it returns pending (0), a copied `dk_file_entry` (1), end (2),
+`dk_files_poll(files, ticket, out, capacity)` performs no storage I/O: it returns pending (0), a copied `dk_file_entry` (1), end (2),
 or a negative error. Pass space for the whole 304-byte record; only return 1 changes the output.
 Rows retain the full path and file/directory kind. Check validity flags before using size or hash.
 Size is physical source bytes: DT2 includes the 16-byte trailer omitted by stock ReadDir.
 Hashes are typed stored metadata: SHA-256 or DT2's odd 32-bit hash in the first four bytes, big endian.
 Listing neither pins contents nor validates a sample; revalidate the selected source when loading it.
 
-An optional callback receives `(client, ticket, state, context)` in the UI task without owning slot 0.
+An optional callback receives `(client, ticket, state, arg)` in the UI task.
 It is a deferred, coalesced readiness hint: poll the supplied ticket and tolerate a stale-ticket error.
-Keep callback context in module memory, never on the stack. Cancel or request another folder without
+Keep `arg` in module memory, never on the stack. Cancel or request another folder without
 waiting for old work; late results are discarded. Fill/action callbacks should queue or poll, not read
 storage. See the [listing design](design/sdk-files.md) and
 the [public boundary fixture](../tests/fixtures/modules/files-proof/src/files-proof.c).
 
-Names a module may import (from `[[import]]` in `sdk/sdk.toml`):
+Names a module may import (from `[[import]]` in `sdk/sdk.toml`; every one is documented in `<dk/gen/imports.h>`):
 
 | Name | Purpose |
 | --- | --- |
-| `fw_block_read`, `fw_alloc`, `fw_free` | The firmware's eMMC block read and allocator. |
-| `memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` | Runtime helpers. |
-| `input_key`, `input_turn` | Press a key or turn an encoder. They need `core/input`. Without it the import is not found. |
-| `dk_ui_*` | The calls of `<dk/platform/ui.h>`: menus, lists, rows and dialogs. They need `core/ui`. Without it the module still loads and each call returns its failure value (`dk_ui_menu_new` 0, the int calls -1, `dk_ui_has`, `dk_ui_is_open` and `dk_ui_checked` 0, the void calls nothing). `dk_ui_tick(fn, ctx, period_ms)` is a timer in the UI task (`DK_UI_CAP_TICK`): redraw a screen while a load runs; 0 stops it. |
-| `dkrt_blocks` | The 1500 Hz block clock. |
-| `dl_set_tick_cb` | Sets one per-block callback in the block interrupt (`core/dsp-link`; a stub without it): `void cb(const volatile u16 *rec)` gets the previous DSP reply record. Short C only; clear it in `dkm_fini`. |
+| `dk_fw_alloc`, `dk_fw_free`, `dk_fw_block_read` | The firmware's allocator (a large buffer, 32 MiB pool) and eMMC block read (`<dk/core/mem.h>`). |
+| `memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` | Runtime helpers that the compiler calls by itself. |
+| `dk_input_*` | Press a key or turn an encoder (`dk_input_open` first). They need `core/input`; without it `dk_input_open` returns `DK_E_MISSING`. |
+| `dk_ui_*` | The calls of `<dk/platform/ui.h>`: menus, lists, rows and dialogs. They need `core/ui`. Without it the module still loads, `dk_ui_open` returns `DK_E_MISSING` and each call returns its failure value (`dk_ui_menu_new` NULL, the int calls -1, `dk_ui_menu_is_open` and `dk_ui_menu_checked` 0, the void calls nothing). `dk_ui_tick(ui, fn, arg, period_ms)` is a timer in the UI task: redraw a screen while a load runs; 0 stops it. |
+| `dk_time_blocks` | The 1500 Hz block clock. |
+| `dk_dsp_link_*` | Sets one per-block callback in the block interrupt (`core/dsp-link`; `dk_dsp_link_open` returns `DK_E_MISSING` without it): `void cb(const volatile u16 *rec)` gets the previous DSP reply record. Short C only; clear it in `fini`. |
 
-A load fails with `E_IMPORT` when a name is not in the runtime's table.
+A load fails with `E_IMPORT` when a name is not in the runtime's table, or when `init` returns `DK_E_MISSING` because a provider the module needs is absent.
 
-`register_cmds` adds SysEx commands. Call it from `dkm_init`. The range is released after `dkm_fini`. The range must lie inside a range reserved in
+`dk_host_register(first, count, fn)` adds SysEx commands. Call it from `init`. The range is released after `fini`. The range must lie inside a range reserved in
 `sdk/sdk.toml` under `[protocol.ranges]`. Three ranges exist today; `digikit/remote` uses the first two and the probe module (`digikit/probe`) the third:
 
 | Range | Numbers |
@@ -765,7 +734,7 @@ Trace marks (`DK_TRACE_LOG`, `DK_STEP`) are switched on with `--trace` on `modul
 
   | Contract | Version | Covers |
   | --- | --- | --- |
-  | `api` | `[1, 5]` | The `dk_api` table. Every module has it, `raw` included. `pack` declares 1.5 only for a module with a pool table, else 1.4. |
+  | `api` | `[2, 11]` | The entry point `dk_module` and the imports of `<dk/gen/imports.h>`. Every module has it, `raw` included. `pack` writes the newest `since` among the imports a module links as the minor. Major 1 (the Api table, `dkm_init`, the slots) is gone. |
   | `machine` | `[1, 6]` | `<dk/machine/machine.h>`; minor 1: `track`; minor 2: stereo machines; minor 6: `gate`, a machine that reads it sets `DK_MACHINE_GATE` and needs runtime 0.5.6 |
   | `fx` | `[1, 0]` | `<dk/fx/fx.h>` |
   | `service` | `[1, 0]` | Service modules |
@@ -773,7 +742,7 @@ Trace marks (`DK_TRACE_LOG`, `DK_STEP`) are switched on with `--trace` on `modul
 - `pack` writes the contracts a module uses into the `.dkm` header.
 - The runtime refuses a module when the major version of a declared contract differs, or when its minor version is above the runtime's. The error is
   `E_CONTRACT` (-48): rebuild the module.
-- An added `dk_api` function is a minor bump. A changed or removed one is a major bump.
+- An added import is a minor bump (its `since`). A changed or removed one is a major bump.
 - `[module] version` is yours. Change it for every release. The export file name carries it.
 - A run-time machine has no fixed type number. The runtime assigns one at load, and the card remembers it under the global id
   `<module id>:<machine id>`. Never write the number into code or a test.
@@ -795,7 +764,7 @@ allows a known id. Without `--dir` it uses the first folder of `PATCHKIT_MODULES
 
 ## 11. Logging
 
-- ColdFire code logs with `api->log(msg, value)` (level info; 24 characters of the message are kept) or `api->log_lv(level, msg, value)`.
+- ColdFire code logs with `dk_log(level, msg, value)` (`<dk/core/log.h>`; 24 characters of the message are kept). `DK_TRACE_LOG(msg, value)` of `<dk/core/trace.h>` is `dk_log` at the trace level and exists only in a `--trace` build.
   Levels: 0 error, 1 warn, 2 info, 3 debug, 4 trace.
 - A DSP routine has no log call. The runtime logs its faults (`MACHINE_FAULT`, `MACHINE_DISABLED`) and a stopped DSP.
 - Each event carries its level and its source, the runtime or a module. With DEBUG off in the menu, only errors are kept.
@@ -816,7 +785,7 @@ allows a known id. Without `--dir` it uses the first folder of `PATCHKIT_MODULES
 | Question | Where |
 | --- | --- |
 | Version numbers, imports, log kinds, protocol numbers | `sdk/sdk.toml` |
-| Machine, effect and service contracts | `<dk/machine/machine.h>`, `<dk/fx/fx.h>`, `<dk/page/page.h>`, `<dk/core/api.h>` |
+| Machine, effect and service contracts | `<dk/machine/machine.h>`, `<dk/fx/fx.h>`, `<dk/page/page.h>`, `<dk/core/module.h>` |
 | What differs between the devices | `devices/digitakt-ii.toml`, `devices/digitone-ii.toml`, `.agents/skills/digikit-module/references/devices.md` |
 | Knob and parameter rules | Sections 5.2, 5.3 and 5.7, `docs/findings/02-machines-and-parameters.md` |
 | DSP recipes and assembler traps | `.agents/skills/digikit-module/references/dsp-recipes.md`, `selas-pitfalls.md` |

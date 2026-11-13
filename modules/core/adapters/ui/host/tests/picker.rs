@@ -1,4 +1,4 @@
-//! The sample picker (sdk/src/sample/picker.c) on the fake <dk/platform/ui.h> and a fake dk_api: the SMP pool list, the browser, the INFO page, keys
+//! The sample picker (sdk/src/sample/picker.c) on the fake <dk/platform/ui.h> and fakes of the listing and pool imports: the SMP pool list, the browser, the INFO page, keys
 //! and texts. The pure functions (sdk/src/chooser/logic.c, core/text.c, core/path.c) have their own tests at the end.
 use dkui_host::driver::*;
 use dkui_host::*;
@@ -9,7 +9,7 @@ extern "C" {
     fn pf_init(handle: u32) -> c_int;
     fn pf_open_pool(current: c_int, with_pick: c_int);
     fn pf_fini();
-    fn pf_api_without_set();
+    fn pf_init_with(pool: c_int, files: c_int, ui: c_int) -> c_int;
     fn pf_add(path: *const c_char, dir: c_int, size: u32);
     fn pf_finish();
     fn pf_partial();
@@ -19,7 +19,6 @@ extern "C" {
     fn pf_list_calls() -> c_int;
     fn pf_cancels() -> c_int;
     fn pf_list_dir() -> *const c_char;
-    fn pf_client_calls() -> c_int;
     fn pf_track(t: c_int, status: c_int, path: *const c_char, frames: u32, rate: u32, ch: u32);
     fn pf_status(t: c_int, status: c_int);
     fn pf_set_result(rc: c_int);
@@ -133,7 +132,7 @@ fn nothing_opens_without_a_handle_a_client_or_lists() {
     let _g = session();
     unsafe {
         pf_reset();
-        assert_eq!(pf_init(0), -1, "no pool handle");
+        assert_eq!(pf_init(0), -73, "no pool handle");
         pf_open_pool(0, 1);
     }
     assert_eq!(depth(), 0);
@@ -147,27 +146,16 @@ fn nothing_opens_without_a_handle_a_client_or_lists() {
 }
 
 #[test]
-fn a_runtime_without_the_listing_api_cannot_open_the_pool() {
+fn a_missing_pool_listing_or_ui_handle_cannot_open_the_pool() {
     let _g = session();
-    unsafe {
-        pf_reset();
-        // an Api table that ends before files_client (API 1.3)
-        extern "C" {
-            fn pf_short_api();
+    for (pool, files, ui) in [(0, 1, 1), (1, 0, 1), (1, 1, 0)] {
+        unsafe {
+            pf_reset();
+            assert_eq!(pf_init_with(pool, files, ui), -73);
+            pf_open_pool(0, 1);
         }
-        pf_short_api();
-        assert_eq!(pf_init(1), -1);
-        pf_open_pool(0, 1);
+        assert_eq!(depth(), 0);
     }
-    assert_eq!(depth(), 0);
-}
-
-#[test]
-fn the_listing_client_is_acquired_once_in_init() {
-    let _g = start();
-    assert_eq!(unsafe { pf_client_calls() }, 1);
-    press_yes(0);
-    assert_eq!(unsafe { pf_client_calls() }, 1);
 }
 
 #[test]
@@ -195,18 +183,6 @@ fn the_pool_list_is_sixteen_slots_numbered_like_the_knob() {
     assert_eq!(r[15], "15 -");
     assert_eq!(cursor(), 1, "the cursor starts on the current slot");
     assert!(r.iter().all(|x| x.len() <= 23));
-}
-
-#[test]
-fn a_runtime_without_sample_pool_set_cannot_open_the_pool() {
-    let _g = session();
-    unsafe {
-        pf_reset();
-        pf_api_without_set();
-        assert_eq!(pf_init(1), -1);
-        pf_open_pool(0, 1);
-    }
-    assert_eq!(depth(), 0);
 }
 
 #[test]
@@ -907,17 +883,17 @@ fn a_chooser_that_cannot_run_does_not_open() {
     let _g = session();
     unsafe {
         pf_reset();
-        assert_eq!(cf_open(0, 0), -1, "init was not called");
+        assert_eq!(cf_open(0, 0), -53, "init was not called");
     }
     assert_eq!(depth(), 0);
     unsafe {
         assert_eq!(cf_init(), 0);
-        assert_eq!(cf_open_without_fill(), -1, "no fill callback");
+        assert_eq!(cf_open_without_fill(), -48, "no fill callback");
     }
     assert_eq!(depth(), 0);
     unsafe {
         set_cap(CAP_LIST, false);
-        assert_eq!(cf_open(0, 0), -1, "no lists");
+        assert_eq!(cf_open(0, 0), -8, "no lists");
     }
     assert_eq!(depth(), 0);
 }

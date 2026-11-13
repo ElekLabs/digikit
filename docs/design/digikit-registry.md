@@ -55,7 +55,7 @@ device's knob model), for a module with `dynamic = true`. Big endian; format and
   inside), `name` the long name shown while the knob turns (1 to 23 characters), `short` the label under the knob (1 to 6). At most 4 per file, one for each effect; a file with one
   needs `core/fxpages` (`E_NO_REGISTRY` otherwise). The packer writes it from a `DK_FX` record with `tab` (`sdk/include/dk/fx/fx.h`; formerly `[[fx]]`) (`docs/design/module-sdk.md`, "Define an effect with its own page").
 - Not carried yet: DSP code and `[[voice]]` records. The packer refuses a voice; the runtime refuses any record it does not know (`E_FORMAT`).
-- `patchkit pack` of a module without code writes a four-byte image (`moveq #0,d0; rts` as `dkm_init`) so that the loader's rules stay as they are.
+- `patchkit pack` of a module without code writes a four-byte image (`moveq #0,d0; rts` as `init`) so that the loader's rules stay as they are.
 
 ## Machine keys and sticky type numbers (D7)
 

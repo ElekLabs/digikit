@@ -1,4 +1,9 @@
-/* core/sdhc-large: the calls of the module (sdk/sdk.toml: sdhc_large_range, sdhc_large_ctl). The limit logic and its data are in sdhc.s. */
+/* core/sdhc-large: the calls of the module. `sdhc_large_range` and `sdhc_large_ctl` are the runtime's (modules/core/runtime/include/dkrt_sdhc.h);
+   `dk_sdhc_large_open` and `dk_sdhc_large_ctl` are the SDK's (sdk/sdk.toml, <dk/platform/sdhc_large.h>). The limit logic and its data are in sdhc.s. */
+#include <stdint.h>
+
+typedef struct dk_module_ctx dk_module_ctx;
+typedef struct dk_sdhc_large dk_sdhc_large;
 
 /* the code is placed as it is: no jump tables (data in the code) */
 #pragma GCC optimize("no-jump-tables")
@@ -29,4 +34,22 @@ u32 sdhc_large_ctl(u32 key, u32 val)
     if (key == 1u && val < 4u)
         return sl_cnt[val];
     return 0;
+}
+
+/* ---- the service imports of <dk/gen/imports.h> (docs/plans/sdk.md section 5.1) ---- */
+
+static int sl_token; /* the dk_sdhc_large handle: only a token */
+
+int32_t dk_sdhc_large_open(dk_module_ctx *ctx, dk_sdhc_large **out)
+{
+    if (!ctx || !out)
+        return -48; /* DK_E_CONTRACT */
+    *out = (dk_sdhc_large *)&sl_token;
+    return 0;
+}
+
+uint32_t dk_sdhc_large_ctl(dk_sdhc_large *sl, uint32_t key, uint32_t val)
+{
+    (void)sl;
+    return sdhc_large_ctl(key, val);
 }

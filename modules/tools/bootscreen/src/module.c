@@ -1,16 +1,18 @@
 /* tools/bootscreen: a custom boot animation as a normal module.
  *
- * The module runs after the runtime's REC, safe-mode and boot-counter checks. `dkm_init` reads the setting `active` (a file name), reads
+ * The module runs after the runtime's REC, safe-mode and boot-counter checks. `init` reads the setting `active` (a file name), reads
  * `data/tools/bootscreen/<name>` (a DKBS file, packages/dkbs), checks the whole file, and gives the firmware's intro one frame per tick
- * (`intro_take`, <dk/platform/intro.h>). Any failure returns with no change: the stock intro runs. The module logs one line per outcome, from init only.
+ * (`dk_intro_take`, <dk/platform/intro.h>). Any failure returns with no change: the stock intro runs. The module logs one line per outcome, from init only.
  *
- * `frame` runs on the intro task: it decodes one tick into the work buffer and calls no dk_api function. `done` runs once in the UI task
+ * `frame` runs on the intro task: it decodes one tick into the work buffer and calls no import. `done` runs once in the UI task
  * at the first UI pass and frees the buffer.
  *
- * DK_MENU: the row SCREEN shows the active name (or STOCK) at the right; it opens a list of STOCK and the files of `data/tools/bootscreen/`,
+ * `menu`: the row SCREEN shows the active name (or STOCK) at the right; it opens a list of STOCK and the files of `data/tools/bootscreen/`,
  * with a check mark on the active one. YES on a row chooses it. The choice is a setting: it takes effect at the next restart, and the page
  * says so while the setting differs from the one the boot used. */
-#include <dk/core/api.h>
+#include <dk/core/module.h>
+#include <dk/core/log.h>
+#include <dk/core/mem.h>
 #include <dk/platform/data.h>
 #include <dk/platform/files.h>
 #include <dk/platform/intro.h>
@@ -29,52 +31,48 @@
 #define ROW_COLS 20u   /* characters of the settings row: the full-width page holds about 21 */
 #define VALUE_COLS 13u /* the value, after the label SCREEN and one space */
 
-static const dk_api *g_api;
-static int32_t g_settings;
-static int32_t g_files;
+static dk_settings *g_settings;
+static dk_files *g_files;
+static dk_ui *g_ui;
 static uint8_t *g_buffer; /* DKBS_FILE_MAX bytes of file, then DKBS_FRAME bytes of work */
 static Dkbs g_dkbs;
 static char g_booted
     [NAME_MAX_BYTES]; /* the setting at boot: a different current value waits for the restart */
 static void say(const char *msg, uint32_t value)
 {
-    g_api->log((const uint8_t *)msg, value);
+    dk_log(DK_LOG_INFO, msg, value);
 }
 
 /* ---- the intro ------------------------------------------------------------------------------------------------------------------ */
 
 /* Intro task: the tick must follow the decoder's tick, else the animation ends. */
-static const uint8_t *frame(uint32_t tick, void *ctx)
+static const uint8_t *frame(uint32_t tick, void *arg)
 {
-    Dkbs *s = (Dkbs *)ctx;
+    Dkbs *s = (Dkbs *)arg;
     if (tick != s->tick)
         return 0;
     return dkbs_next(s);
 }
 
 /* Frees the file buffer. It is the intro's `done` (UI task, first pass: the intro is over) and the cleanup of a failed init. */
-static void done(void *ctx)
+static void done(void *arg)
 {
-    (void)ctx;
+    (void)arg;
     if (g_buffer) {
-        g_api->free(g_buffer);
+        dk_free(g_buffer);
         g_buffer = 0;
     }
 }
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
     char name[NAME_MAX_BYTES], path[PATH_MAX_BYTES];
     int32_t n, size;
-    g_api = api;
-    if (!DK_API_HAS(api, settings_client) || !DK_API_HAS(api, files_client) ||
-        !DK_API_HAS(api, intro_take))
-        return 0;
-    g_files = api->files_client();
-    g_settings = api->settings_client();
-    if (g_settings <= 0)
-        return 0;
-    n = api->settings_get((uint32_t)g_settings, "active", name, NAME_MAX_BYTES - 1u);
+    if (dk_settings_open(ctx, &g_settings) != DK_OK || dk_files_open(ctx, &g_files) != DK_OK)
+        return DK_OK;
+    if (dk_ui_open(ctx, &g_ui) != DK_OK)
+        g_ui = 0;
+    n = dk_settings_get(g_settings, "active", name, NAME_MAX_BYTES - 1u);
     if (n > 0) {
         name[n] = 0;
         dk_text_copy(g_booted, NAME_MAX_BYTES, name);
@@ -88,12 +86,12 @@ int32_t dkm_init(const dk_api *api)
         say("bootscreen: bad name", 0);
         return 0;
     }
-    g_buffer = api->alloc(DKBS_FILE_MAX + DKBS_FRAME);
+    g_buffer = dk_alloc(DKBS_FILE_MAX + DKBS_FRAME);
     if (!g_buffer) {
         say("bootscreen: no memory", 0);
         return 0;
     }
-    size = api->store_read((const uint8_t *)path, g_buffer, DKBS_FILE_MAX);
+    size = dk_files_read(g_files, path, g_buffer, DKBS_FILE_MAX);
     if (size <= 0) {
         say("bootscreen: no file", (uint32_t)size);
         done(0);
@@ -104,14 +102,14 @@ int32_t dkm_init(const dk_api *api)
         done(0);
         return 0;
     }
-    n = dk_intro_take(api, frame, done, &g_dkbs, g_dkbs.total_ticks);
+    n = dk_intro_take(frame, done, &g_dkbs, g_dkbs.total_ticks);
     if (n < 0) {
         say("bootscreen: refused", (uint32_t)n);
         done(0);
         return 0;
     }
     say("bootscreen: taken", g_dkbs.total_ticks);
-    return 0;
+    return DK_OK;
 }
 
 /* ---- the menu ------------------------------------------------------------------------------------------------------------------- */
@@ -128,9 +126,7 @@ static dk_ui_menu *g_page, *g_list;
 /* The active name into `out`; "" when there is none. */
 static void active(char *out)
 {
-    int32_t n = g_settings > 0
-                    ? g_api->settings_get((uint32_t)g_settings, "active", out, NAME_MAX_BYTES - 1u)
-                    : -1;
+    int32_t n = g_settings ? dk_settings_get(g_settings, "active", out, NAME_MAX_BYTES - 1u) : -1;
     out[n > 0 ? n : 0] = 0;
 }
 
@@ -150,58 +146,58 @@ static int active_row(void)
     return -1;
 }
 
-static void list_fill(dk_ui_menu *m, void *ctx)
+static void list_fill(dk_ui_menu *m, void *arg)
 {
     uint32_t i, rows = list.count + list.more + 1u;
     int on = active_row();
-    (void)ctx;
+    (void)arg;
     dk_text_copy(list.shown[0], DK_UI_ROW, "STOCK");
-    dk_ui_text(m, list.shown[0]);
+    dk_ui_menu_add_text(m, list.shown[0]);
     for (i = 0; i < list.count; i++) {
         dk_text_copy(list.shown[i + 1u], DK_UI_ROW,
                      list.full[i]); /* display only: the full name is stored */
-        dk_ui_text(m, list.shown[i + 1u]);
+        dk_ui_menu_add_text(m, list.shown[i + 1u]);
     }
     if (list.more) {
         dk_text_copy(list.shown[list.count + 1u], DK_UI_ROW, "MORE ON CARD");
-        dk_ui_text(m, list.shown[list.count + 1u]);
+        dk_ui_menu_add_text(m, list.shown[list.count + 1u]);
     }
     for (i = 0; i < rows; i++)
-        dk_ui_check(m, (int)i, (int)i == on);
+        dk_ui_menu_check(m, (int)i, (int)i == on);
 }
 
 /* YES on a row chooses it: the check mark moves there (the list toggled it already) and the setting is saved. */
-static void list_check(void *ctx, int row, int on)
+static void list_check(void *arg, int32_t row, int32_t on)
 {
     uint32_t i, rows = list.count + list.more + 1u;
     int32_t rc;
-    (void)ctx;
+    (void)arg;
     (void)on;
     if (row < 0 || (uint32_t)row >= rows)
         return;
     if ((uint32_t)row > list.count) {
-        dk_ui_check(g_list, row, 0);
-        dk_ui_toast("MORE ON CARD");
+        dk_ui_menu_check(g_list, row, 0);
+        dk_ui_toast(g_ui, "MORE ON CARD");
         return;
     }
     if (row == 0)
-        rc = g_api->settings_remove((uint32_t)g_settings, "active");
+        rc = dk_settings_remove(g_settings, "active");
     else
-        rc = g_api->settings_put((uint32_t)g_settings, "active", list.full[row - 1],
-                                 dk_text_len(list.full[row - 1]));
+        rc = dk_settings_put(g_settings, "active", list.full[row - 1],
+                             dk_text_len(list.full[row - 1]));
     if (rc < 0) {
         int back = active_row();
         for (i = 0; i < rows; i++)
-            dk_ui_check(g_list, (int)i, (int)i == back);
-        dk_ui_toast("NOT SAVED");
+            dk_ui_menu_check(g_list, (int)i, (int)i == back);
+        dk_ui_toast(g_ui, "NOT SAVED");
         return;
     }
     for (i = 0; i < rows; i++)
-        dk_ui_check(g_list, (int)i, (int)i == row);
+        dk_ui_menu_check(g_list, (int)i, (int)i == row);
     /* A toast shows on the main screen only; the settings page has the same note as a row. */
-    dk_ui_toast("ON NEXT RESTART");
+    dk_ui_toast(g_ui, "ON NEXT RESTART");
     if (g_page)
-        dk_ui_refresh(g_page);
+        dk_ui_menu_refresh(g_page);
 }
 
 static const dk_ui_menu_desc list_desc = {.name = "BootscreenChooser",
@@ -214,23 +210,22 @@ static void show_choice(void)
 {
     int on = active_row();
     if (!g_list)
-        g_list = dk_ui_menu_new(&list_desc);
+        g_list = dk_ui_menu_new(g_ui, &list_desc);
     if (!g_list) {
-        dk_ui_toast("LIST FAILED");
+        dk_ui_toast(g_ui, "LIST FAILED");
         return;
     }
-    dk_ui_select(g_list, on < 0 ? 0 : on);
-    if (dk_ui_open(g_list) < 0)
-        dk_ui_toast("LIST FAILED");
+    dk_ui_menu_select(g_list, on < 0 ? 0 : on);
+    if (dk_ui_menu_open(g_list) < 0)
+        dk_ui_toast(g_ui, "LIST FAILED");
 }
 
-static void poll(void *ctx)
+static void poll(void *arg)
 {
     uint32_t k;
-    (void)ctx;
+    (void)arg;
     for (k = 0; k < POLLS_PER_TICK; k++) {
-        int32_t r =
-            g_api->files_poll((uint32_t)g_files, list.ticket, (uint8_t *)&entry, sizeof entry);
+        int32_t r = dk_files_poll(g_files, list.ticket, &entry, sizeof entry);
         if (r == DK_FILES_PENDING)
             return;
         if (r == DK_FILES_ROW) {
@@ -243,34 +238,33 @@ static void poll(void *ctx)
             }
             continue;
         }
-        dk_ui_tick(poll, 0, 0);
+        dk_ui_tick(g_ui, poll, 0, 0);
         if (r == DK_FILES_END)
             show_choice();
         else
-            dk_ui_toast("LIST FAILED");
+            dk_ui_toast(g_ui, "LIST FAILED");
         return;
     }
 }
 
-static void open_chooser(void *ctx, int arg)
+static void open_chooser(void *arg, int32_t value)
 {
     int32_t t;
-    (void)ctx;
     (void)arg;
-    if (g_files <= 0 || g_settings <= 0 || !dk_ui_has(DK_UI_CAP_LIST)) {
-        dk_ui_toast("LIST UNAVAILABLE");
+    (void)value;
+    if (!g_files || !g_settings || !g_ui) {
+        dk_ui_toast(g_ui, "LIST UNAVAILABLE");
         return;
     }
     list.count = 0;
     list.more = 0;
-    t = g_api->files_list((uint32_t)g_files, DK_FILES_STORE,
-                          (const uint8_t *)"data/tools/bootscreen", 0, 0);
+    t = dk_files_list(g_files, DK_FILES_STORE, "data/tools/bootscreen", 0, 0);
     if (t <= 0) {
-        dk_ui_toast("LIST FAILED");
+        dk_ui_toast(g_ui, "LIST FAILED");
         return;
     }
     list.ticket = (uint32_t)t;
-    dk_ui_tick(poll, 0, LIST_PERIOD_MS);
+    dk_ui_tick(g_ui, poll, 0, LIST_PERIOD_MS);
 }
 
 /* The shown value: the name without ".dkbs"; a longer one keeps its start and its end around a '~' (dk_text_trunc, as the module list does). */
@@ -287,7 +281,7 @@ static void value_text(char *out, const char *name)
 }
 
 /* One row of ROW_COLS characters: the label at the left, the value at the right. The page title already names the module. */
-static void fill(dk_ui_menu *m, void *ctx)
+static void menu(dk_module_ctx *ctx, dk_ui_menu *m)
 {
     char name[NAME_MAX_BYTES], value[VALUE_COLS + 1u], text[DK_UI_ROW];
     uint32_t n, v;
@@ -300,8 +294,9 @@ static void fill(dk_ui_menu *m, void *ctx)
     for (n = dk_text_len(text); n + v < ROW_COLS; n++)
         text[n] = ' ';
     dk_text_copy(text + n, DK_UI_ROW - n, value);
-    dk_ui_action(m, text, open_chooser, 0, 0);
+    dk_ui_menu_add_action(m, text, open_chooser, 0, 0);
     if (!dk_text_equal(name, g_booted))
-        dk_ui_text(m, "ON NEXT RESTART");
+        dk_ui_menu_add_text(m, "ON NEXT RESTART");
 }
-DK_MENU(fill)
+
+const dk_module_def dk_module = {.init = init, .menu = menu};

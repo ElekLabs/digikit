@@ -8,6 +8,8 @@
  * ua_prepare runs in the boot thread before the firmware's USB start, and again from the firmware tick (interrupt context) after a controller reset. It is idempotent, ISR-safe and
  * makes no runtime calls (the runtime may not exist yet). The connect and disconnect wrappers run in the USB interrupt. */
 
+#include "../../../usb-bulk/include/usb_bulk_port5.h"
+
 typedef unsigned int u32;
 typedef unsigned char u8;
 
@@ -22,9 +24,6 @@ extern u8 usb_port_table[];
 extern const u32 usb_alias_delta;
 extern const u32 usb_ddr_base; /* the cached DDR window: base and size */
 extern const u32 usb_ddr_bytes;
-extern void usb_bulk_port5_attach(void);
-extern void usb_bulk_port5_connect(void);
-extern void usb_bulk_port5_disconnect(void);
 
 /* usb_bulk_audio_state: 0 not prepared, 1 prepared, 2 refused (entry 5 is not the expected one, or the buffer lies outside the cached DDR window) */
 volatile u32 usb_bulk_audio_state;

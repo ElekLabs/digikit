@@ -4,7 +4,7 @@ The device adapter behind `<dk/platform/ui.h>` (`sdk/include/dk/platform/ui.h`):
 (action, submenu, text, toggle, value), confirm and choice dialogs and toasts. C, one source for the Digitone II and the Digitakt II; every firmware
 call is a generated anchor (`modules/core/fw/include/dk_fw_*.h`). The host fake of the same API, with its tests, is in `host/`; it also compiles the menu of `core/digikit-menu` against a fake runtime (`host/tests/menu.rs`).
 
-- The `dk_ui_*` functions are plain global symbols. A content module calls them as imports (`[[import]]` of `sdk/sdk.toml`, `requires = "core/ui"`): the runtime's loader links them by name, and hands out a stub that returns the failure value when this module is not in the image (docs/ARCHITECTURE.md). `host/tests/remote.rs` runs `digikit/remote`'s settings page on the host fake.
+- The `dk_ui_*` functions are plain global symbols (`dk_ui_open(ctx, &ui)` gives a module its handle; `dk_ui_menu_*` work on a menu; `dk_ui_menu_new`, `dk_ui_confirm`, `dk_ui_choice`, `dk_ui_toast` and `dk_ui_tick` take the handle first). A content module calls them as imports (`[[import]]` of `sdk/sdk.toml`, `requires = "core/ui"`): the runtime's loader links them by name, and hands out a stub that returns the failure value when this module is not in the image (docs/ARCHITECTURE.md). `host/tests/remote.rs` runs `digikit/remote`'s settings page on the host fake.
 - A plain menu and a text page are the firmware's `VerticalMenuView`; a `DK_UI_LIST` is a `MenuWithPopoutSideBarsView` (the PRESET MANAGER's
   base) with the right panel as the side panel. Each is built once and kept for the session through a `shared_ptr` this module owns, so the
   firmware never frees it.
@@ -15,9 +15,9 @@ call is a generated anchor (`modules/core/fw/include/dk_fw_*.h`). The host fake 
   empty text of a list; key (slot 2) of a list adds RIGHT (side panel), YES (check mark) and the `back` callback, and sends the rest to the
   stock handler.
 - Dialogs are `make_shared` blocks built by hand and pushed on the Brain's view manager; the firmware frees them. One at a time.
-- `dk_ui_stock_row(stock_menu, text, fn, ctx)` is for other core modules (`include/dk_ui_core.h`, not part of the SDK): a row among the rows of a stock menu (SETTINGS), with its icon. `core/digikit-menu` and `test/ui-demo` use it.
+- `dk_ui_stock_row(stock_menu, text, fn, arg)` and `dk_ui_core_handle()` (the `dk_ui` handle, for a core module that has no `dk_module_ctx`) are for other core modules (`include/dk_ui_core.h`, not part of the SDK): a row among the rows of a stock menu (SETTINGS), with its icon. `core/digikit-menu` and `test/ui-demo` use it.
 - The one firmware hook of the module is the end of the SETTINGS item list rebuild (`cf.menu.hook.settings_list.tail`, `src/shim.s` `dk_hook`). It calls the optional symbol `dk_app_settings_rows(settings_menu)` (`include/dk_ui_core.h`) that an app implements: patchkit resolves it to 0 when no app is in the image, and the hook then does nothing. `core/digikit-menu` and `test/ui-demo` implement it (they conflict: one DIGIKIT row). The layers are in [docs/ARCHITECTURE.md](../../../../docs/ARCHITECTURE.md).
-- `dk_ui_tick(fn, ctx, period_ms)` is a table of four timers (`src/tick.h`, no firmware, tested in `host/tests/tick.rs`) behind one function on the runtime's `dkrt_poll_add` list; it is on the list only while a timer runs. The block clock times the periods (the UI-loop pass when there is none).
+- `dk_ui_tick(ui, fn, arg, period_ms)` is a table of four timers (`src/tick.h`, no firmware, tested in `host/tests/tick.rs`) behind one function on the runtime's `dkrt_poll_add` list; it is on the list only while a timer runs. The block clock times the periods (the UI-loop pass when there is none).
 - An empty list paints the same inverted title bar as a list with rows, then its `empty` text. A text page opens at its first row; a menu or list keeps its selected row.
 
 Proof and demo: `tests/fixtures/modules/ui-demo`, driven by `uv run python -m tools.patchkit.pk_uidemo shots|leak --device dt2|dn2`.

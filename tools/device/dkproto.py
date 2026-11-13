@@ -19,7 +19,6 @@ MAX_STATE_BYTES = 16777216
 GRANULE = 64
 DSP_SLACK = 8
 ARENA_HDR = 16
-SLOTS = 8
 MAX_VOICES = 8
 MAX_FX = 4
 
@@ -121,11 +120,10 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -4: ("E_SHA", "store file hash or .dkm sha256 does not match"),
     -5: ("E_FORMAT", "bad magic, version, bounds or alignment of the .dkm"),
     -6: ("E_RUNTIME", "the module needs a newer runtime"),
-    -7: ("E_IMPORT", "an import name is not in the runtime's table"),
+    -7: ("E_IMPORT", "an import is unknown, or a provider the module needs is absent"),
     -8: ("E_NOMEM", "arena full"),
     -9: ("E_INIT", "init returned non-zero"),
     -10: ("E_LOADED", "a module of that name is loaded"),
-    -11: ("E_SLOT", "a slot it binds is taken"),
     -12: (
         "E_BUSY",
         "a task is still inside the module, or the store is in use (try again)",
@@ -135,10 +133,10 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -15: ("E_LOST", "the sample backing was lost and the reload failed"),
     -16: ("E_POOL", "the sample pool is full"),
     -17: ("E_CHANGED", "the sample file differs from the selection snapshot"),
-    -18: ("E_EXISTS", "the file exists already (file_create does not overwrite)"),
+    -18: ("E_EXISTS", "the file exists already (dk_files_create does not overwrite)"),
     -19: (
         "E_CONTEXT",
-        "the call is not allowed in this context (file_* run in an I/O step)",
+        "the call is not allowed in this context (dk_files_* writes run in an I/O step)",
     ),
     -20: ("E_NO_REGISTRY", "register records, but the image has no registry"),
     -21: ("E_REG_DEVICE", "the records are for another device"),

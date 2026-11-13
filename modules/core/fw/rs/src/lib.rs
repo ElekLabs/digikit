@@ -997,12 +997,6 @@ pub mod usb {
     }
 
     unsafe extern "C" {
-        /// Stop the USB device with restart type 2 (`FUN_40006ada`, 0x40006ada): clears the running flag, USBCMD.RS and USBINTR, calls the port's disconnect callback, sets type 2 and a 30-tick delay. When the delay ends the firmware tick sets USBCMD.RST (no timeout), runs the full init and starts the device if OTGSC.BSV; the firmware viewport watchdog uses the same path. Call with interrupts masked; never call `cf.usb.fn.restart` afterwards (it sets type 1, a plain restart).
-        #[link_name = "cf.usb.fn.reset_stop"]
-        pub fn reset_stop();
-    }
-
-    unsafe extern "C" {
         /// Start the USB device again when the stop delay has ended (`FUN_40006bc6`, 0x40006bc6); the second half of a re-enumeration.
         #[link_name = "cf.usb.fn.restart"]
         pub fn restart();

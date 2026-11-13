@@ -10,14 +10,15 @@
  *   0x3b  purge:  u8 flag; the stock purge of unused samples; reply i32 result, u32 task of the command
  * All numbers are big endian. The task id is the word the firmware keeps for the running task (0x47db3f64). */
 
-#include <dk/core/api.h>
 #include <dk/core/bytes.h>
+#include <dk/core/module.h>
+#include <dk/platform/host.h>
 
 typedef uint32_t u32;
 typedef int32_t i32;
 typedef uint8_t u8;
 
-/* DT2 1.17 addresses (finding 81). The module is a test fixture for one image: dkm_init refuses to load when the first
+/* DT2 1.17 addresses (finding 81). The module is a test fixture for one image: init refuses to load when the first
  * four bytes of a function differ, so another image fails at load and never calls into the wrong code. */
 typedef struct {
     u32 addr;
@@ -143,9 +144,11 @@ static int32_t load_cmd(const u8 *body, u32 len, u8 *out)
     return 0;
 }
 
-__attribute__((optimize("no-jump-tables"))) static int32_t command(u32 cmd, u32 seq, const u8 *body,
-                                                                   u32 len, u8 *out)
+__attribute__((optimize("no-jump-tables"))) static int32_t
+command(u32 cmd, u32 seq, const void *request, u32 len, void *reply)
 {
+    const u8 *body = request;
+    u8 *out = reply;
     (void)seq;
     if (cmd == 0x38)
         return load_cmd(body, len, out);
@@ -182,18 +185,14 @@ __attribute__((optimize("no-jump-tables"))) static int32_t command(u32 cmd, u32 
     return -50;
 }
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
     u32 i;
-    if (api->size < sizeof(dk_api))
-        return -48;
+    (void)ctx;
     for (i = 0; i < sizeof FNS / sizeof FNS[0]; i++)
         if (*(const u32 *)FNS[i].addr != FNS[i].head)
             return -1;
-    return api->register_cmds(0x38, 4, command);
+    return dk_host_register(0x38, 4, command);
 }
 
-void dkm_fini(const dk_api *api)
-{
-    (void)api;
-}
+const dk_module_def dk_module = {.init = init};

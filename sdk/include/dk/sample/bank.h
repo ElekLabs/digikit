@@ -1,4 +1,6 @@
-/* Module-owned mono float sample banks. API contract 1.3. */
+/* Module-owned mono float sample banks. Temporary: S3 deletes the bank with dk_sample_bank_open, dk_sample_bank_load and dk_sample_bank_status
+   (docs/plans/sdk.md). `dk_sample_bank_open(ctx, &bank)` in `init` gives the handle; `dk_sample_bank_load(bank, path)` queues the one load and
+   `dk_sample_bank_status(bank)` gives the state below. */
 #ifndef DK_SAMPLE_BANK_H
 #define DK_SAMPLE_BANK_H
 #include <dk/core/status.h>
@@ -25,8 +27,8 @@
 /* The DSP descriptor is four initially zero 32-bit words: READY (0/1),
    normal-word source pointer, frame count, sample rate. Runtime publishes
    READY last. Reserve CAPACITY mono float frames in the module's own BSS.
-   Exactly one bank is supported. Resolve its handle in init; queue its single
-   load from init or a service callback (the runtime copies the path);
+   Exactly one bank is supported. Open its handle in init; queue its single
+   load from init or a host command handler (the runtime copies the path);
    the destination remains owned until restart once delivery begins. */
 #define DK_SAMPLE_BANK(LOCAL_ID, BANK, DESCRIPTOR, CAPACITY)                                       \
     static const dk_desc_sample_bank DK_CAT(dk_sample_bank_, __LINE__)                             \

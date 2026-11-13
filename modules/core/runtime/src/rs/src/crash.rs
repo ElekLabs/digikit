@@ -37,7 +37,7 @@ const W_SR: usize = 4;
 const W_PC: usize = 5;
 const W_A7: usize = 6;
 const W_STABLE: usize = 7;
-const W_ENTERED: usize = 8; // bit n: a task is inside slot n
+const W_PHASE: usize = 8; // what the module code was doing: `dlog::PHASE_*` (init, tick, fini, a callback; 0: none)
 const W_MODULE: usize = 9; // index of the module whose code holds the PC, u32::MAX: none
 const W_FRAME0: usize = 10; // the first frame word as the CPU pushed it
 const W_FAULTS: usize = 11; // exceptions seen since the handler was installed (a fault inside the handler)
@@ -181,18 +181,10 @@ pub unsafe extern "C" fn dkrt_exc(frame: *const u32, saved: *const u32) -> ! {
     }
     write_volatile(r.add(W_REGS + 15), a7);
     copy_stack(r, a7);
-    // the state of the runtime: boot stable, tasks in slots, the module that holds the PC
+    // the state of the runtime: boot stable, what module code was running, the module that holds the PC
     let s = st();
     write_volatile(r.add(W_STABLE), crate::boot::info().stable);
-    let mut mask = 0u32;
-    i = 0;
-    while i < SLOTS {
-        if read_volatile(addr_of!(s.entered[i])) != 0 {
-            mask |= 1 << i;
-        }
-        i += 1;
-    }
-    write_volatile(r.add(W_ENTERED), mask);
+    write_volatile(r.add(W_PHASE), u32::from(dlog::current_phase()));
     write_volatile(r.add(W_MODULE), u32::MAX);
     i = 0;
     while i < 4 {
@@ -475,7 +467,7 @@ pub unsafe fn at_boot() -> bool {
     c.module = v[W_MODULE];
     c.stable = v[W_STABLE];
     dlog::ev(logk::CRASH_FOUND, e, [v[W_PC], v[W_VEC], v[W_SR], v[W_A7], v[W_TIME]]);
-    dlog::ev(logk::CRASH_MOD, e, [v[W_MODULE], v[W_ENTERED] | v[W_STABLE] << 16, v[W_NAME], v[W_NAME + 1], v[W_NAME + 2]]);
+    dlog::ev(logk::CRASH_MOD, e, [v[W_MODULE], v[W_PHASE] | v[W_STABLE] << 16, v[W_NAME], v[W_NAME + 1], v[W_NAME + 2]]);
     dlog::ev(logk::CRASH_MOD, e, [0x100, v[W_FRAME0], v[W_FAULTS], v[W_NAME + 3], 0]);
     dlog::ev(logk::FAULT_FOUND, e, [kind, 0, 0, f.at, module_idx]);
     log_detail(&v);

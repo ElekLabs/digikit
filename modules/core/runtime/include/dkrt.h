@@ -109,19 +109,18 @@
 #define DKRT_E_SHA (-4)                  /* store file hash or .dkm sha256 does not match */
 #define DKRT_E_FORMAT (-5)               /* bad magic, version, bounds or alignment of the .dkm */
 #define DKRT_E_RUNTIME (-6)              /* the module needs a newer runtime */
-#define DKRT_E_IMPORT (-7)               /* an import name is not in the runtime's table */
+#define DKRT_E_IMPORT (-7)               /* an import is unknown, or a provider the module needs is absent */
 #define DKRT_E_NOMEM (-8)                /* arena full */
 #define DKRT_E_INIT (-9)                 /* init returned non-zero */
 #define DKRT_E_LOADED (-10)              /* a module of that name is loaded */
-#define DKRT_E_SLOT (-11)                /* a slot it binds is taken */
 #define DKRT_E_BUSY (-12)                /* a task is still inside the module, or the store is in use (try again) */
 #define DKRT_E_TOO_BIG (-13)             /* larger than the staging buffer */
 #define DKRT_E_TABLE_FULL (-14)          /* no free module record */
 #define DKRT_E_LOST (-15)                /* the sample backing was lost and the reload failed */
 #define DKRT_E_POOL (-16)                /* the sample pool is full */
 #define DKRT_E_CHANGED (-17)             /* the sample file differs from the selection snapshot */
-#define DKRT_E_EXISTS (-18)              /* the file exists already (file_create does not overwrite) */
-#define DKRT_E_CONTEXT (-19)             /* the call is not allowed in this context (file_* run in an I/O step) */
+#define DKRT_E_EXISTS (-18)              /* the file exists already (dk_files_create does not overwrite) */
+#define DKRT_E_CONTEXT (-19)             /* the call is not allowed in this context (dk_files_* writes run in an I/O step) */
 #define DKRT_E_NO_REGISTRY (-20)         /* register records, but the image has no registry */
 #define DKRT_E_REG_DEVICE (-21)          /* the records are for another device */
 #define DKRT_E_TYPE_RANGE (-22)          /* machine type outside the range, or bad clone_of */
@@ -178,7 +177,7 @@ typedef struct DkrtStatus {
     uint32_t ticks;                              /* UI-loop passes seen */
     int32_t last_result;                         /* result of the last load */
     uint32_t loads;
-    uint32_t slot_calls;
+    uint32_t tick_calls;                         /* calls of module ticks */
     uint32_t state;                              /* STATE_IDLE or STATE_LOADING (a module's DSP code is being sent) */
     uint32_t dsp_size;                           /* bytes of the DSP area (0: the image has none) */
     uint32_t dsp_free;                           /* bytes of it free */
@@ -244,12 +243,11 @@ typedef struct DkrtModule {
     uint32_t version;
     uint32_t base;
     uint32_t size;
-    uint32_t slots;                              /* bit n = slot n bound */
     uint8_t path[64];                            /* store path the module was loaded from (NUL-terminated, at most 63 bytes kept), for example modules/dyn-demo.dkm */
     uint32_t state;                              /* MOD_LOADED or MOD_LOADING */
     uint32_t dsp_size;                           /* bytes of the module's range in the DSP area (0: none) */
-    uint32_t menu;                               /* address of the module's settings entry point (0: none): dkm_menu(dk_ui_menu *, void *), or menu(dk_module_ctx *, dk_ui_menu *) when ctx is not 0 */
-    uint32_t ctx;                                /* the module's dk_module_ctx (a module of the new entry, dk_module); 0 for a module of the old entry */
+    uint32_t menu;                               /* address of the module's settings entry point (0: none): menu(dk_module_ctx *ctx, dk_ui_menu *menu) */
+    uint32_t ctx;                                /* the module's dk_module_ctx, the first argument of its init, fini, tick and menu */
 } DkrtModule;
 
 /* dkrt_fx result: one effect with a page (FX routing, finding 62 to 65). Routes are bit masks: 1 master, 2 send. */
@@ -365,7 +363,7 @@ _Static_assert(offsetof(DkrtStatus, modules) == 28, "DkrtStatus.modules");
 _Static_assert(offsetof(DkrtStatus, ticks) == 32, "DkrtStatus.ticks");
 _Static_assert(offsetof(DkrtStatus, last_result) == 36, "DkrtStatus.last_result");
 _Static_assert(offsetof(DkrtStatus, loads) == 40, "DkrtStatus.loads");
-_Static_assert(offsetof(DkrtStatus, slot_calls) == 44, "DkrtStatus.slot_calls");
+_Static_assert(offsetof(DkrtStatus, tick_calls) == 44, "DkrtStatus.tick_calls");
 _Static_assert(offsetof(DkrtStatus, state) == 48, "DkrtStatus.state");
 _Static_assert(offsetof(DkrtStatus, dsp_size) == 52, "DkrtStatus.dsp_size");
 _Static_assert(offsetof(DkrtStatus, dsp_free) == 56, "DkrtStatus.dsp_free");
@@ -411,17 +409,16 @@ _Static_assert(sizeof(DkrtStoreFile) == 40, "DkrtStoreFile size");
 _Static_assert(offsetof(DkrtStoreFile, first) == 0, "DkrtStoreFile.first");
 _Static_assert(offsetof(DkrtStoreFile, size) == 4, "DkrtStoreFile.size");
 _Static_assert(offsetof(DkrtStoreFile, sha) == 8, "DkrtStoreFile.sha");
-_Static_assert(sizeof(DkrtModule) == 128, "DkrtModule size");
+_Static_assert(sizeof(DkrtModule) == 124, "DkrtModule size");
 _Static_assert(offsetof(DkrtModule, name) == 0, "DkrtModule.name");
 _Static_assert(offsetof(DkrtModule, version) == 32, "DkrtModule.version");
 _Static_assert(offsetof(DkrtModule, base) == 36, "DkrtModule.base");
 _Static_assert(offsetof(DkrtModule, size) == 40, "DkrtModule.size");
-_Static_assert(offsetof(DkrtModule, slots) == 44, "DkrtModule.slots");
-_Static_assert(offsetof(DkrtModule, path) == 48, "DkrtModule.path");
-_Static_assert(offsetof(DkrtModule, state) == 112, "DkrtModule.state");
-_Static_assert(offsetof(DkrtModule, dsp_size) == 116, "DkrtModule.dsp_size");
-_Static_assert(offsetof(DkrtModule, menu) == 120, "DkrtModule.menu");
-_Static_assert(offsetof(DkrtModule, ctx) == 124, "DkrtModule.ctx");
+_Static_assert(offsetof(DkrtModule, path) == 44, "DkrtModule.path");
+_Static_assert(offsetof(DkrtModule, state) == 108, "DkrtModule.state");
+_Static_assert(offsetof(DkrtModule, dsp_size) == 112, "DkrtModule.dsp_size");
+_Static_assert(offsetof(DkrtModule, menu) == 116, "DkrtModule.menu");
+_Static_assert(offsetof(DkrtModule, ctx) == 120, "DkrtModule.ctx");
 _Static_assert(sizeof(DkrtFx) == 60, "DkrtFx size");
 _Static_assert(offsetof(DkrtFx, row) == 0, "DkrtFx.row");
 _Static_assert(offsetof(DkrtFx, allowed) == 4, "DkrtFx.allowed");

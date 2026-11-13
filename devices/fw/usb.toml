@@ -110,15 +110,6 @@ users = ["core/usb-bulk"]
 doc = "Stop the USB device (`FUN_40006bac`, 0x40006bac): clears USBCMD.RS, calls the port's disconnect callback and starts a 30-tick delay; the first half of a re-enumeration."
 
 [[fn]]
-name = "cf.usb.fn.reset_stop"
-cpu = "cf"
-sig = "void ()"
-rule = { kind = "cf_func", hash = "e785a0654a010787effedaefb48ae657", offset = 0x0, len = 4 }
-mark = "D"
-users = ["core/usb-bulk"]
-doc = "Stop the USB device with restart type 2 (`FUN_40006ada`, 0x40006ada): clears the running flag, USBCMD.RS and USBINTR, calls the port's disconnect callback, sets type 2 and a 30-tick delay. When the delay ends the firmware tick sets USBCMD.RST (no timeout), runs the full init and starts the device if OTGSC.BSV; the firmware viewport watchdog uses the same path. Call with interrupts masked; never call `cf.usb.fn.restart` afterwards (it sets type 1, a plain restart)."
-
-[[fn]]
 name = "cf.usb.fn.restart"
 cpu = "cf"
 sig = "void ()"

@@ -4,10 +4,11 @@
 //!
 //! The runtime keeps a small ring (`RING` events) for the crash record's tail and for a debug module that loads later: every event until the first UI
 //! frame, then boot and error events. A replay to a new sink keeps the runtime's sequence numbers, so a gap (the ring overflowed) shows. One
-//! sink pointer (`dkrt_log_sink_set`, an import of the modules) receives every event before any filter: `digikit/debug` holds the long ring, the level
+//! sink pointer (`dk_debug_log_sink_set`, an import of the modules) receives every event before any filter: `digikit/debug` holds the long ring, the level
 //! filter and the host commands. Without a sink the other events are dropped (one pointer test).
 //!
 //! Appends mask interrupts for a few instructions: the UI task, the MIDI task and the crash handler all append.
+use crate::entry::Ctx;
 use crate::{fw_blocks, irq_mask, irq_restore};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
@@ -43,37 +44,59 @@ pub const INFO: u16 = logk::L_INFO << logk::LEVEL_SHIFT;
 
 /// The module whose code is running (record index + 1; 0: the runtime).
 static mut CURRENT_SRC: u8 = 0;
+/// What that module code is: one of the `PHASE_*` values. The crash record keeps it.
+static mut CURRENT_PHASE: u8 = PHASE_NONE;
 
-/// Module code is about to run: events it logs carry its source. Returns the previous source for `leave_module`.
-pub fn enter_module(idx: usize) -> u8 {
+/// No module code is running.
+pub const PHASE_NONE: u8 = 0;
+/// The module's `init`.
+pub const PHASE_INIT: u8 = 1;
+/// The module's `tick`.
+pub const PHASE_TICK: u8 = 2;
+/// The module's `fini`.
+pub const PHASE_FINI: u8 = 3;
+/// A callback of the module: a host command handler, an I/O or job step, an intro frame, a menu action.
+pub const PHASE_CALLBACK: u8 = 4;
+
+/// Module code is about to run in `phase`: events it logs carry its source. Returns the previous source and phase for `leave_module`.
+pub fn enter_module(idx: usize, phase: u8) -> u16 {
     unsafe {
-        let prev = read_volatile(addr_of!(CURRENT_SRC));
+        let prev = u16::from(read_volatile(addr_of!(CURRENT_SRC))) | u16::from(read_volatile(addr_of!(CURRENT_PHASE))) << 8;
         write_volatile(addr_of_mut!(CURRENT_SRC), idx as u8 + 1);
+        write_volatile(addr_of_mut!(CURRENT_PHASE), phase);
         prev
     }
 }
 
-pub fn leave_module(prev: u8) {
-    unsafe { write_volatile(addr_of_mut!(CURRENT_SRC), prev) }
+pub fn leave_module(prev: u16) {
+    unsafe {
+        write_volatile(addr_of_mut!(CURRENT_SRC), prev as u8);
+        write_volatile(addr_of_mut!(CURRENT_PHASE), (prev >> 8) as u8);
+    }
 }
 
-/// The source index of the module whose code runs now (record index + 1): its `init`, `fini`, slot 0 or a registered service command; 0 outside one.
+/// The source index of the module whose code runs now (record index + 1): its `init`, `fini`, `tick` or a callback; 0 outside one.
 pub fn current_source() -> u8 {
     unsafe { read_volatile(addr_of!(CURRENT_SRC)) }
 }
 
-/// Call a module's `init` (record `idx`) with its source set.
-pub unsafe fn call_init(idx: usize, f: unsafe extern "C" fn(*const Api) -> i32, api: *const Api) -> i32 {
-    let prev = enter_module(idx);
-    let r = f(api);
+/// What the running module code is (`PHASE_*`), for the crash record.
+pub fn current_phase() -> u8 {
+    unsafe { read_volatile(addr_of!(CURRENT_PHASE)) }
+}
+
+/// Call a module's `init` (record `idx`, context `ctx`) with its source set.
+pub unsafe fn call_init(idx: usize, f: unsafe extern "C" fn(*const Ctx) -> i32, ctx: *const Ctx) -> i32 {
+    let prev = enter_module(idx, PHASE_INIT);
+    let r = f(ctx);
     leave_module(prev);
     r
 }
 
-/// Call a module's `fini` (record `idx`) with its source set.
-pub unsafe fn call_fini(idx: usize, f: unsafe extern "C" fn(*const Api), api: *const Api) {
-    let prev = enter_module(idx);
-    f(api);
+/// Call a module's `fini` (record `idx`, context `ctx`) with its source set.
+pub unsafe fn call_fini(idx: usize, f: unsafe extern "C" fn(*const Ctx), ctx: *const Ctx) {
+    let prev = enter_module(idx, PHASE_FINI);
+    f(ctx);
     leave_module(prev);
 }
 
@@ -111,9 +134,9 @@ fn keeps(kind: u16, flags: u16) -> bool {
 }
 
 /// Set (or, with 0, clear) the sink and its tick. The events of the small ring, oldest first, are handed to a new sink at once, so it starts with the boot.
-/// `dkrt_log_sink_set(sink, tick)` of the module imports (sdk/sdk.toml).
+/// `dk_debug_log_sink_set(sink, tick)`, an import of the modules (sdk/sdk.toml).
 #[no_mangle]
-pub unsafe extern "C" fn dkrt_log_sink_set(f: *mut u8, tick: *mut u8) {
+pub unsafe extern "C" fn dk_debug_log_sink_set(f: *mut u8, tick: *mut u8) {
     let f = f as usize;
     write_volatile(addr_of_mut!(TICK_SRC), read_volatile(addr_of!(CURRENT_SRC)));
     write_volatile(addr_of_mut!(TICK), tick as usize);
@@ -137,9 +160,9 @@ pub unsafe extern "C" fn dkrt_log_sink_set(f: *mut u8, tick: *mut u8) {
     }
 }
 
-/// `dkrt_log_ev(kind, flags, a)`: the import of a module that logs a kind of its own. `a` points to five words.
+/// `dk_log_event(kind, flags, a)`: the import of a module that logs a kind of its own, and the call of the adapters that link to the runtime. `a` points to five words.
 #[no_mangle]
-pub unsafe extern "C" fn dkrt_log_ev(kind: u32, flags: u32, a: *const u32) {
+pub unsafe extern "C" fn dk_log_event(kind: u32, flags: u32, a: *const u32) {
     ev(kind as u16, flags as u16, [*a, *a.add(1), *a.add(2), *a.add(3), *a.add(4)]);
 }
 
@@ -163,7 +186,7 @@ pub unsafe fn run_tick() {
     let src = read_volatile(addr_of!(TICK_SRC));
     if t != 0 && src != 0 {
         let call: unsafe extern "C" fn() = core::mem::transmute(t);
-        let prev = enter_module(src as usize - 1);
+        let prev = enter_module(src as usize - 1, PHASE_CALLBACK);
         call();
         leave_module(prev);
     }

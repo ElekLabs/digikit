@@ -9,16 +9,12 @@ import { describe, expect, test } from 'vitest';
 import { withSession } from '../support.ts';
 import { moduleArtifact } from './install.ts';
 import { liveProtocol } from './protocol.ts';
+import { apiContract, linkedApiMinor, runtimeVersion } from './upload-kit.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
 const root = repoRoot();
 
-/** `size_of::<Api>()`: every field of the `[api]` table in sdk/sdk.toml is one 4-byte word. */
-function apiTableSize(): number {
-  const toml = fs.readFileSync(path.join(root, 'sdk/sdk.toml'), 'utf8');
-  const block = toml.slice(toml.indexOf('[api]\nfields = ['), toml.indexOf('\n]\n', toml.indexOf('[api]\nfields = [')));
-  return 4 * (block.match(/^\s*\{ name = /gm) ?? []).length;
-}
+const DEVICE_ID = { dt2: 1, dn2: 2 } as const; // [digikit] id of devices/*.toml
 const exec = promisify(execFile);
 const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const profiles = [
@@ -60,7 +56,7 @@ function decode(bytes: Buffer) {
 
 for (const profile of profiles) {
   const enabled = Boolean(profile.binary);
-  describe.skipIf(!enabled)(`${profile.device} public files API1.4`, () => {
+  describe.skipIf(!enabled)(`${profile.device} public files API`, () => {
     const runDir = path.join(root, 'out/runs/files-api', profile.device, randomUUID());
     let plan: RuntimePlan | undefined;
     let artifact: string | undefined;
@@ -80,9 +76,18 @@ for (const profile of profiles) {
         throw new Error('prepared listing patch/plan SHA mismatch');
       artifact = moduleArtifact(profile.device, 'test/files-proof');
       const dkm = fs.readFileSync(artifact);
-      if (dkm.readUInt32BE(0x8c) !== 0) throw new Error('files-proof must use no slots; callbacks work without slot0');
-      if (dkm[0x38] !== 1 || dkm[0x39] !== 4 || dkm.readUInt32BE(0x30) !== 0x504)
-        throw new Error('prepare files-proof with API1.4/runtime0.5.4 patchkit');
+      if (dkm.readUInt32BE(0xa4) !== 0xffffffff)
+        throw new Error('files-proof must define no tick; callbacks work without one');
+      const [apiMajor] = apiContract();
+      const apiMinor = linkedApiMinor(dkm);
+      if (
+        dkm[0x38] !== apiMajor ||
+        dkm[0x39] !== apiMinor ||
+        (dkm.readUInt32BE(0x30) & 0x7fffffff) !== runtimeVersion()
+      )
+        throw new Error(
+          `prepare files-proof with the current patchkit (entry point dk_module, api ${apiMajor}.${apiMinor})`,
+        );
       fs.mkdirSync(runDir, { recursive: true });
     }
     const handle = withSession({
@@ -93,7 +98,7 @@ for (const profile of profiles) {
       dsp: 'sharc',
       restart: false,
     });
-    test('lists both roots with typed metadata, owned rows and deferred cancellation without slot0', async () => {
+    test('lists both roots with typed metadata, owned rows and deferred cancellation without a tick', async () => {
       const session = handle.session;
       const save = (name: string, value: unknown) =>
         fs.writeFileSync(path.join(runDir, name), JSON.stringify(value, null, 2));
@@ -226,11 +231,11 @@ for (const profile of profiles) {
         };
         const caps = await request(0x3d);
         expect([caps.readUInt32BE(0), caps.readUInt32BE(4), caps.readUInt32BE(8)]).toEqual([
-          apiTableSize(),
-          0x504,
+          DEVICE_ID[profile.device],
+          runtimeVersion(),
           304,
         ]);
-        expect(caps.readInt32BE(12), 'client acquisition outside init fails').toBeLessThan(0);
+        expect(caps.readInt32BE(12), 'dk_files_open outside init fails').toBeLessThan(0);
         if (profile.device === 'dn2') {
           phase = 'empty virtual samples root';
           expect((await collected(1, '')).entries).toHaveLength(0);

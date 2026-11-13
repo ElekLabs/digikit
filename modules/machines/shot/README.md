@@ -55,7 +55,7 @@ The ordinary `DK_PAGE` remains the storage/parameter schema; its fixed knob slot
 
 ## Sources
 
-- `src/module.c`: the machine, parameters, page and the pool table declarations; `dkm_init`/`fini` resolve the table handle and start the picker;
+- `src/module.c`: the machine, parameters, page and the pool table declarations; `init`/`fini` open the pool handle and start the picker;
   `shot_smp_click` (the SMP click action) opens the pool list with the current entry marked; `smp_pick` sets SMP.
 - `src/pages.c`: the two native pages (draw and event callbacks). The short name and page name are SHT.
 - `src/sample_view.c`, `src/sample_view.h`: the view of one pool slot (info, peak copy and the detail window cache).

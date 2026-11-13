@@ -21,8 +21,8 @@
  *       src/dsp/dsp-link.inc); returns the number of words written (at most n, at most DL_DG_WORDS), -1 when the image has no record
  *       address, -2 when the reply carries no diagnostic block (core/dsp-voice absent from the image, or the DSP halted
  *       before it ran: the heartbeat words of an earlier call stop moving, the block stays in the record copy)
- *   void dl_set_tick_cb(void (*cb)(const volatile u16 *rec));   one per-block callback (NULL: off), called from dl_tick with the copy of
- *       the previous reply, in the block interrupt. It must be a short C function with no allocation and no logging. Off costs one pointer test.
+ *   The one per-block callback of a module is set with dk_dsp_link_set_tick (below): `void cb(const volatile u16 *rec)` (NULL: off), called from dl_tick
+ *       with the copy of the previous reply, in the block interrupt. It must be a short C function with no allocation and no logging. Off costs one pointer test.
  *   void dl_tick_cb_drop(u32 lo, u32 hi);   the runtime calls it after a module's fini: clears the callback when it points into [lo, hi)
  * dst_l2 is a byte address in the DSP's reserved area (_dl_area, DL_AREA_BYTES long), 4-aligned; len is a multiple of 4;
  * buf must stay valid until the state is DL_DONE or DL_ERROR. DL_DONE means the DSP has taken every chunk, has the bytes
@@ -97,13 +97,8 @@ typedef struct DlLink {
 
 DlLink dl_link __attribute__((aligned(16)));
 
-/* The per-block callback of a probe module (dl_set_tick_cb); 0 = none. */
+/* The per-block callback of a probe module (dk_dsp_link_set_tick); 0 = none. */
 static void (*volatile dl_tick_cb)(const volatile u16 *rec);
-
-void dl_set_tick_cb(void (*cb)(const volatile u16 *rec))
-{
-    dl_tick_cb = cb;
-}
 
 void dl_tick_cb_drop(u32 lo, u32 hi)
 {
@@ -359,6 +354,6 @@ int32_t dk_dsp_link_open(dk_module_ctx *ctx, dk_dsp_link **out)
 int32_t dk_dsp_link_set_tick(dk_dsp_link *dl, uint8_t *cb)
 {
     (void)dl;
-    dl_set_tick_cb((void (*)(const volatile u16 *))cb);
+    dl_tick_cb = (void (*)(const volatile u16 *))cb;
     return 0;
 }

@@ -440,7 +440,7 @@ unsafe fn fx_event(kind: u16, row: u32, faults: u32) {
     ev(kind, logk::F_ERROR | src, [row, faults, 0, 0, 0]);
 }
 
-/// The loaded modules, one event each (`logk::MOD_LIST`, an error event when the DSP stopped): index, slots mask, 12 bytes of name.
+/// The loaded modules, one event each (`logk::MOD_LIST`, an error event when the DSP stopped): index, whether it has a tick, 12 bytes of name.
 unsafe fn list_modules() {
     let s = st();
     let mut i = 0;
@@ -450,7 +450,7 @@ unsafe fn list_modules() {
             ev(
                 logk::MOD_LIST,
                 logk::F_ERROR,
-                [i as u32, m.slot_mask, word_of(m.name.as_ptr(), 0, 32), word_of(m.name.as_ptr(), 4, 32), word_of(m.name.as_ptr(), 8, 32)],
+                [i as u32, crate::entry::has_tick(i) as u32, word_of(m.name.as_ptr(), 0, 32), word_of(m.name.as_ptr(), 4, 32), word_of(m.name.as_ptr(), 8, 32)],
             );
         }
         i += 1;

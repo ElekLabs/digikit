@@ -1,5 +1,5 @@
 //! The runtime's use of the module and sample store: the format, the reader and the writer are `dkrt_sdk::store` (docs/design/digikit-store.md); this
-//! file adds the area of this device, the staging buffer, the file's hash check, `Api::store_read` and the list the DIGIKIT menu shows. Reads go
+//! file adds the area of this device, the staging buffer, the file's hash check, `dk_files_read` and the list the DIGIKIT menu shows. Reads go
 //! through the firmware's block read (16-byte aligned buffers, multiples of 512 bytes, at most 0x10000 per call). The table is never held whole: it is
 //! scanned through the staging buffer.
 
@@ -149,7 +149,7 @@ pub unsafe fn load_to_stage(f: &File) -> i32 {
     OK
 }
 
-/// `Api::store_read`: copy a store file to `dst` (at most `cap` bytes); returns its size or a negative code.
+/// `dk_files_read`: copy a store file to `dst` (at most `cap` bytes); returns its size or a negative code.
 pub unsafe fn read_file(path: *const u8, dst: *mut u8, cap: u32) -> i32 {
     let f = match find(path) {
         Ok(f) => f,

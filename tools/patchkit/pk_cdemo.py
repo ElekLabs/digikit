@@ -4,7 +4,7 @@
     uv run python -m tools.patchkit.pk_cdemo proof [--image dt2-1.17] [--keep DIR]
 
 Patches `core/runtime` into the stock image, packs `test/c-demo` (64-bit divide, remainder, multiply and shifts: libgcc helpers
-that `patchkit build` links in from the -mcpu=54418 libgcc), puts it in a +Drive card's module store with a selection record, boots (the boot hook loads it), reads the module's result block through the address its `dkm_init` logged, and compares every word with Python's
+that `patchkit build` links in from the -mcpu=54418 libgcc), puts it in a +Drive card's module store with a selection record, boots (the boot hook loads it), reads the module's result block through the address its `init` logged, and compares every word with Python's
 integer arithmetic. A V4e that met a 68020-only form in a helper would take an illegal-instruction exception instead, so a
 correct result is also the run-time proof that the helpers are ColdFire code. The write-watch (only the runtime and the arena
 write into `cf.expansion`) and the flush check run as in tools/patchkit/pk_dkrt.py.

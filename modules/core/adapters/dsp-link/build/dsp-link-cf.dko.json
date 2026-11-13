@@ -81,13 +81,6 @@
   },
   {
    "addend": 0,
-   "offset": 6,
-   "section": ".text.dl_set_tick_cb",
-   "symbol": ".sec..bss.dl_tick_cb",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 2,
    "section": ".text.dl_tick_cb_drop",
    "symbol": ".sec..bss.dl_tick_cb",
@@ -748,13 +741,6 @@
   },
   {
    "align": 2,
-   "hex": "41ef000423d0000000004e75",
-   "kind": "text",
-   "name": ".text.dl_set_tick_cb",
-   "size": 12
-  },
-  {
-   "align": 2,
    "hex": "203900000000b0af0004650cb0af0008640642b9000000004e75",
    "kind": "text",
    "name": ".text.dl_tick_cb_drop",
@@ -831,7 +817,7 @@
    "size": 80
   }
  ],
- "source_sha256": "e86d98608b01305cc9c62a456bf397c76680f5ba3eab015a20cb5a975cfa54c0",
+ "source_sha256": "e2264c45aef1d6d42b90972ea73691b2c2f9201beff4fa80a370c6bd25bf8c30",
  "symbols": [
   {
    "global": false,
@@ -925,12 +911,6 @@
   },
   {
    "global": true,
-   "name": "dl_set_tick_cb",
-   "section": ".text.dl_set_tick_cb",
-   "value": 0
-  },
-  {
-   "global": true,
    "name": "dl_stock_send",
    "section": null,
    "value": 0
@@ -982,8 +962,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "526",
-  "isa_check": "00fe55ee81b53dc71f6447d6c5cab89a3d2ce86ad6cfad2786da1289d06a19ab",
+  "instructions_redecoded": "523",
+  "isa_check": "9ff2fb7849d9ca596a9c449f40284c15dddfeb888a0aa9e6d2cb22b06324207f",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

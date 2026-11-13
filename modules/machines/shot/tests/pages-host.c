@@ -11,15 +11,15 @@ static unsigned char bitmap[53][107];
 static int start_x = -1, end_x = -1, two_digit_x = -1, range_draw;
 static char zoom_label[8];
 
-static int32_t status(uint32_t h, uint32_t i)
+int32_t dk_sample_pool_status(dk_sample_pool *p, uint32_t i)
 {
-    (void)h;
+    (void)p;
     (void)i;
     return current_state;
 }
-static int32_t info(uint32_t h, uint32_t i, uint8_t *out)
+int32_t dk_sample_pool_info(dk_sample_pool *p, uint32_t i, void *out)
 {
-    (void)h;
+    (void)p;
     (void)i;
     if (current_state != DK_SAMPLE_READY)
         return DK_SAMPLE_E_NOT_FOUND;
@@ -27,9 +27,9 @@ static int32_t info(uint32_t h, uint32_t i, uint8_t *out)
     memcpy(out, &value, sizeof(value));
     return 0;
 }
-static int32_t peaks(uint32_t h, uint32_t i, uint32_t token, uint8_t *out, uint32_t cap)
+int32_t dk_sample_pool_peaks(dk_sample_pool *p, uint32_t i, uint32_t token, void *out, uint32_t cap)
 {
-    (void)h;
+    (void)p;
     (void)i;
     assert(token == current_token);
     assert(cap == DK_SAMPLE_PEAK_BINS * sizeof(dk_sample_peak));
@@ -41,10 +41,11 @@ static int32_t peaks(uint32_t h, uint32_t i, uint32_t token, uint8_t *out, uint3
 }
 static unsigned window_calls, window_ready_after = 2, window_columns, window_first, window_span;
 static int window_hold; /* 1: new windows stay pending */
-static int32_t peaks_window(uint32_t h, uint32_t i, uint32_t token, uint32_t first, uint32_t frames,
-                            uint32_t columns, uint8_t *out, uint32_t cap)
+int32_t dk_sample_pool_peaks_window(dk_sample_pool *pool, uint32_t i, uint32_t token,
+                                    uint32_t first, uint32_t frames, uint32_t columns, void *out,
+                                    uint32_t cap)
 {
-    (void)h;
+    (void)pool;
     (void)i;
     assert(token == current_token && columns == 95 && cap >= columns * sizeof(dk_sample_peak));
     window_calls++;
@@ -97,12 +98,7 @@ static void rect(int32_t a, int32_t b, int32_t c, int32_t d, int32_t color)
 
 int main(void)
 {
-    dk_api api = {.version = 1,
-                  .size = sizeof(api),
-                  .sample_pool_info = info,
-                  .sample_pool_status = status,
-                  .sample_pool_peaks = peaks,
-                  .sample_pool_peaks_window = peaks_window};
+    static int pool_token;
     dk_page_frame_v1 f = {.version = 1,
                           .size = sizeof(f),
                           .track = 0,
@@ -110,7 +106,7 @@ int main(void)
                           .word_count = 5,
                           .word_values = {[2] = 127 << 8},
                           .canvas = {107, 53, text, rect}};
-    sample_view_init(&shot_samples, &api, 1);
+    sample_view_init(&shot_samples, (dk_sample_pool *)&pool_token);
     range_draw = 1;
     shot_range_draw(&f);
     shot_range_draw(&f);

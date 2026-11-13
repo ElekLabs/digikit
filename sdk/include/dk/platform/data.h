@@ -1,12 +1,12 @@
 /* <dk/platform/data.h>: the files a module owns. A module's own files live under `data/<module id>/`, not next to the `.dkm`: the `modules/` list is
-   capped at 32 entries. A module reads them with `api->store_read` in `dkm_init`, or lists them with the `files_*` calls (<dk/platform/files.h>, root
+   capped at 32 entries. A module reads them with `dk_files_read` in `init`, or lists them with the `dk_files_*` calls (<dk/platform/files.h>, root
    DK_FILES_STORE). For now only the host writes them.
 
-   Rules of store_read here: one call at a time, and in `dkm_init` only (the read uses the runtime's staging buffer). The buffer you give it is
-   yours: allocate it with api->alloc and keep it until you no longer need the file. */
+   Rules of dk_files_read here: one call at a time, and in `init` only (the read uses the runtime's staging buffer). The buffer you give it is
+   yours: allocate it with dk_alloc and keep it until you no longer need the file. */
 #ifndef DK_DATA_H
 #define DK_DATA_H
-#include <dk/core/api.h>
+#include <dk/core/module.h>
 
 #define DK_DATA_E_PATH                                                                             \
     (-1) /* dk_data_path: the path does not fit, or `name` is empty or breaks the rules */
