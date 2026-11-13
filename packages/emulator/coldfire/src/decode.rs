@@ -309,28 +309,28 @@ impl Insn {
 
     /// MAC Ry: (register 0-15, upper half).
     #[inline(always)]
-    pub(crate) fn mac_ry(&self) -> (u8, bool) {
+    pub fn mac_ry(&self) -> (u8, bool) {
         ((self.mac & 15) as u8, self.mac & 0x10 != 0)
     }
 
     /// MAC Rx: (register 0-15, upper half).
     #[inline(always)]
-    pub(crate) fn mac_rx(&self) -> (u8, bool) {
+    pub fn mac_rx(&self) -> (u8, bool) {
         ((self.mac >> 5 & 15) as u8, self.mac & 0x200 != 0)
     }
 
     #[inline(always)]
-    pub(crate) fn mac_scale(&self) -> u8 {
+    pub fn mac_scale(&self) -> u8 {
         (self.mac >> 10 & 3) as u8
     }
 
     #[inline(always)]
-    pub(crate) fn mac_mask(&self) -> bool {
+    pub fn mac_mask(&self) -> bool {
         self.mac & 0x1000 != 0
     }
 
     #[inline(always)]
-    pub(crate) fn mac_acc(&self) -> u8 {
+    pub fn mac_acc(&self) -> u8 {
         (self.mac >> 13 & 3) as u8
     }
 
