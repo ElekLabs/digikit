@@ -25,9 +25,13 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 
 ### R Device registry (lane `ts-py`, branch `device-registry`)
 
-- [ ] R0 Design: inventory of hard-coded device lists, registry schema with capabilities, Nx per-device targets
-      from module-declared devices, PR slices.
-- [ ] R1+ Slices per the agreed design (behaviour-preserving for dt2/dn2).
+- [x] R0 Design: device files + `[capabilities]`/`[container]`/`[acceptance]`, `@digi/devices`, Nx halves from
+      module `ports`, literal check with a shrinking baseline. Slices S0-S6.
+- [x] S0 schema, readers, `@digi/devices`, device-literals check (device-registry 2590f858, 35292c12, 72ef3389).
+- [ ] S5 apps on the registry, faceplate component additions (lane sharc-mode1, branch registry/s5-apps).
+- [ ] S6 Python tools on the registry, port_resolve DSP by container role (lane nx-nojob, branch registry/s6-python).
+- [ ] S1 Nx, S2 test harness, S3 emulator: one batch, one gate run.
+- [ ] S4 patchkit seal and section roles (after the SDK S3 patchkit lanes merge; seal/section parts may go first).
 
 ### P0 Firmware query
 
