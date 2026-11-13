@@ -55,6 +55,8 @@ export interface DeviceRecord {
   firmware: readonly Firmware[];
   /** `[patch_sets]`: the module ids of each named set (`device`, `emulator`); empty when the file has none. */
   patchSets: Readonly<Record<string, readonly string[]>>;
+  /** `[digikit] default_modules`: the module ids the apps install after a flash; empty when the file has none. */
+  defaultModules: readonly string[];
 }
 
 export interface Registry {
@@ -156,6 +158,14 @@ function patchSets(file: string, t: unknown): Record<string, string[]> {
   return out;
 }
 
+function defaultModules(file: string, t: unknown): string[] {
+  const ids = isTable(t) ? t.default_modules : undefined;
+  if (ids === undefined) return [];
+  if (!Array.isArray(ids) || !ids.every(isString))
+    throw new Error(`devices/${file}: [digikit] default_modules is not a list of module ids`);
+  return ids;
+}
+
 function acceptance(file: string, t: unknown, fw: readonly Firmware[]): Acceptance | undefined {
   if (t === undefined) return undefined;
   const a = need(file, '[acceptance]', t, isTable);
@@ -193,6 +203,7 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
       container: container(file, doc.container, caps),
       firmware: fw,
       patchSets: patchSets(file, doc.patch_sets),
+      defaultModules: defaultModules(file, doc.digikit),
     };
     if (d.syx_id !== undefined) rec.syxId = need(file, '[device] syx_id', d.syx_id, isInt);
     const acc = acceptance(file, doc.acceptance, fw);

@@ -84,6 +84,12 @@ describe('parse', () => {
     const rec = parse({ 'dev-one.toml': identity('x', fw) }).get('x');
     expect(rec.stem).toBe('dev-one');
     expect(rec.patchSets).toEqual({});
+    expect(rec.defaultModules).toEqual([]);
+    const withDefaults =
+      identity('x').replace('short = "x"', 'short = "x"\nsyx_id = 0x30') +
+      '[patch]\ncontainer_max = 1\n[digikit]\nid = 1\ndefault_modules = ["a/b"]\n';
+    expect(parse({ 'x.toml': withDefaults }).get('x').defaultModules).toEqual(['a/b']);
+    expect(() => parse({ 'x.toml': withDefaults.replace('["a/b"]', '"a/b"') })).toThrow(/not a list of module ids/);
     expect(
       parse({ 'x.toml': identity('x', '[patch_sets]\ndevice = ["core/a", "core/b"]\n') }).get('x').patchSets,
     ).toEqual({ device: ['core/a', 'core/b'] });
