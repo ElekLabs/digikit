@@ -101,7 +101,6 @@ cpu = "cf"
 mode = "retarget"
 regs = { in = [], clobbers = ["ccr"] }
 handler = { sig = "void ()", args = [] }
-devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/runtime"]
 doc = "The jsr at the top of the UI task's event loop that pops the next event; the hook point for the runtime's per-pass tick."

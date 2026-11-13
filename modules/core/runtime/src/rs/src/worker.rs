@@ -134,6 +134,10 @@ unsafe fn run_flight() {
 /// call: the worker may run the job before the call returns.
 #[cfg(not(test))]
 unsafe fn submit() -> bool {
+    // the stock sample worker may be absent on a firmware (its anchors are optional, linked to 0 there): nothing is queued
+    if core::hint::black_box(dkfw::samples::worker_get as usize) == 0 || core::hint::black_box(dkfw::samples::worker_queue as usize) == 0 {
+        return false;
+    }
     let worker = dkfw::samples::worker_get();
     if worker == 0 {
         return false;

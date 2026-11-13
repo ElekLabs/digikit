@@ -10,6 +10,11 @@ status = "experimental"
 summary = "Loads modules from the card module store into a private arena at run time (emulator only, no menu yet)"
 requires = ["core/expansion"]
 conflicts = []
+# The firmwares it is built for. (A device added after the device-literals baseline is listed here and not in [targets]: a `[targets]` key names a device.)
+ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
+# What the runtime does without on a firmware that lacks the anchor or hook: the DSP block counter (`dkrt_blocks` reports 0), the stock sample worker (`worker.rs` queues nothing)
+# and the machine page's encoder click (`pageclick.rs`; the two hooks and the tails of their sites).
+optional_anchors = ["cf.link.site.block_isr.counter_lit", "cf.samples.fn.worker.get", "cf.samples.fn.worker.queue", "cf.page.hook.source_key", "cf.page.hook.source_turn", "cf.page.fn.source_key", "cf.page.fn.source_turn"]
 
 [targets]
 "dt2-1.17" = "experimental"
@@ -71,6 +76,12 @@ path = "build/device-dn2.dko.json"
 sources = ["src/cf/dn2/device.s"]
 place = "cf.expansion"
 devices = ["dn2"]
+
+[[object]]
+path = "build/device-st.dko.json"
+sources = ["src/cf/st/device.s"]
+place = "cf.expansion"
+devices = ["st"]
 
 # The call at the top of the UI task's event loop that pops the next event from the UI queue
 # (`pea queue; jsr pop; addq.l #4,sp; moveq #0x29,d1; ...`) goes to the trampoline, which runs the runtime's tick and

@@ -64,6 +64,44 @@ stream_id = 0x11
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`; the section's destination word, finding 70).
 main_dest = 0x40000400
 
+# Board and CPU facts the digikit runtime uses (docs/design/device-data.md; findings 129 and 130 give the evidence, all **[D]** static). The runtime reads
+# them from its device object `dkrt_dev`. There is no DSP, so no dsp_* facts and no run-time machines (no `[digikit] dsp_*`). There is no
+# `[card.store]` yet: the store is off (`DEV_HAS_STORE` clear) until a canary run shows where on the card a store may live (finding 130 "Storage").
+[board]
+# The console UART (UART8, the same init function as on the Digitone II and Digitakt II): drained before MAIN's soft reset (finding 130).
+console_uart_base = 0xEC070000
+# DDR: 128 MiB cached at 0x40000000, the uncached alias 0x08000000 above it. The soft reset clears the first word through the alias.
+ddr_cached_base = 0x40000000
+ddr_bytes = 0x08000000
+ddr_uncached_alias = 0x48000000
+# The eSDHC controller of the eMMC (the same driver as the other devices; MAIN reaches registers by offset, so the base itself is not a literal).
+esdhc_base = 0xFC0CC000
+
+# The digikit runtime's view of this device (`id`: what a .dkm file and the INFO reply call it; unique among the device files).
+[digikit]
+id = 3
+name = "st"
+# The key held at power-on for safe mode. The runtime asks the firmware's `key_down(k)` with a FIRMWARE key index, not a panel code. On the
+# Syntakt the two differ (finding 130 "Safe key"): trig 16 (panel code 16) is key index 39 (trigs 1..16 are 24..39). Unproven at power-on **[O]**.
+safe_key = 39
+# RAM that neither MAIN nor the boot code touches, above cf.expansion (the first 4 KiB). The 4 MiB below 0x48000000 is a ring that MAIN clears
+# at boot, so the DT2 place (0x47fe0000) is not free here (finding 130 "RAM map"). A canary run is open **[O]**.
+keep_base = 0x47bf0000
+keep_bytes = 0x1000
+# RAM the PEEK command may read: image, data, bss and heap up to the first DMA arena, then the runtime's region with the keep area.
+peek = [[0x40000000, 0x45570000], [0x478c0000, 0x47bf1000]]
+
+# The runtime's static arrays have the sizes of core/runtime/abi.toml (`arena_bytes`, `stage_bytes`); the run-time machine type count is 0 without a DSP.
+[limits]
+modules = 8
+machine_rows = 0
+arena_bytes = 524288
+stage_bytes = 65536
+fx_slots = 0
+send_slots = 0
+param_rows = 0
+page_rows = 0
+
 # Board facts that only the emulator uses. free_running_dtcn: the DMA timer counter channels (DTCN0..3) that the firmware reads as
 # free-running counters at the bus clock without ever starting the timer (finding 70: MAIN busy-waits on DTCN2).
 [emulator]

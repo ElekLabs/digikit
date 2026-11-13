@@ -100,19 +100,17 @@ read over USB MIDI.
 - [x] Static patch dry run of core/expansion on 1.42, byte-level, nothing run ([finding 129](../findings/129-syntakt-patch-dry-run.md)):
       only section 3 differs; `tools/patchkit/image_report.py` is the second reader. core/runtime is not in it yet (next item).
 - [x] Patchkit: no-seal path, optional DSP section, refuse sections 1, 2, 4, 6, 7, 8 explicitly (from `[container]`, not names).
-- [ ] Runtime target on st (blocks the dry run with core/runtime and digikit/debug): `patchkit gen` needs DSP facts that a device
-      without a DSP may not have, and the runtime's shared constants have no Syntakt value (finding 129 "Runtime target").
-      Design: no device-specific values in the runtime. A per-device data object ("DKDV" struct, versioned, generated per
-      device, placed in cf.expansion like `dkrt_device_id`) holds the facts and capability bits (has DSP, store, eSDHC, safe
-      key). The runtime keeps only what it uses itself (console UART, DDR and keep RAM, safe key, eSDHC); services read their
-      own facts (DSP timing and area: DSP link; machine type range: machines; store layout: store) from the same object.
-      `[limits]` sizes static arrays and moves to the runtime ABI. Modules may list `optional_anchors`: a missing one is
-      linked to 0, its hook skipped, and reported. Proof replaces byte identity: image_report shows only runtime/device
-      objects changed, struct values equal the old constants, runtime device tests pass on DT2 and DN2.
-  - [ ] Syntakt runtime facts, static (finding 130): UART, eSDHC, DDR, keep area, store location, safe key, PEEK ranges.
-  - [ ] Device struct and gen kind, capability bits, optional anchors: after the SDK S3 branch merges (it changes the same
-        runtime and patchkit files), aligned with the services split.
-  - [ ] Syntakt `[digikit]`, then the dry run with core/runtime + core/expansion + digikit/debug.
+- [x] Runtime target on st: no device-specific values in the runtime. A per-device data object `dkrt_dev` (struct `DkrtDevice` of
+      `modules/core/runtime/abi.toml`: magic, version, size, capability bits HAS_DSP, HAS_STORE, HAS_SDHC, HAS_SAFE_KEY, then console UART, DDR window and
+      alias, eSDHC, safe key, keep area, DSP cycles per block, run-time machine types) is written per device by the `gas-dkdv` gen kind and placed in
+      cf.expansion with the runtime; the runtime and `tramp.s` read it, and `usb-bulk` too. The static array sizes are constants of the runtime ABI file. A manifest may list
+      `optional_anchors`: a missing one is linked to 0, its hook skipped, reported as `disabled`. DT2 and DN2: `image_report` shows only the runtime,
+      trampoline and device objects and the relocations into them changed, and the struct values equal the old constants.
+  - [x] Syntakt runtime facts, static (finding 130): UART, eSDHC, DDR, keep area, safe key, PEEK ranges (store location: proposal only).
+  - [x] Device struct, gen kind, capability bits, optional anchors (host tests for each missing capability and each optional-anchor path).
+  - [x] Syntakt `[digikit]`, `[board]`, `[limits]`; dry run with core/runtime + core/expansion passes `image_report` (finding 129); it boots in the emulator to the main
+        screen and the runtime is ready (boot record, event ring, INFO over USB MIDI).
+  - [ ] Debug module on st: needs a module store: `[card.store]` for st (finding 130 store proposal) and an eMMC image that the emulator seeds, or another way to load.
 - [x] Runtime anchor proposals on 1.42 [D] (scratchpad st-1.42-anchors.tsv): 111 anchors, 73 high, 22 med/med-high,
       3 low, 15 miss. Misses: DSP link ISR (no SHARC; health loses the DSP measurement), source page hooks,
       7 storage path/directory functions (file layer rewritten), compact_set_rect, shared_ptr_as_view, popup_make.

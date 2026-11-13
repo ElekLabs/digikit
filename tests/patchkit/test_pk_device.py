@@ -85,11 +85,11 @@ def test_port_resolve_reads_its_tables_from_the_device_files() -> None:
     }
     assert flagged == ports
     assert len(port_resolve.ported_firmware()) == len(ports)
-    # the limits written into a port are the device's `[patch]`
+    # the limits written into a port are the device's `[patch]` (a device without a DSP has no dsp_* limits)
     for pf in (ROOT / "devices" / "ports").glob("*.toml"):
         port = tomllib.loads(pf.read_text())
         patch = pk_device.load(port["port"]["device"])["patch"]
-        assert port["limits"] == {k: patch[k] for k in port_resolve.LIMIT_KEYS}
+        assert port["limits"] == {k: patch[k] for k in port_resolve.LIMIT_KEYS if k in patch}
 
 
 def test_the_harness_inputs_come_from_the_device_files() -> None:

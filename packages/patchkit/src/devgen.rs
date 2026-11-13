@@ -1800,6 +1800,20 @@ fn check_sources(
     ))
 }
 
+/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-`; a module that lists neither is for every device.
+fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
+    let prefix = format!("{short}-");
+    let listed = m.module.ports.iter().chain(m.targets.keys());
+    let mut any = false;
+    for t in listed {
+        any = true;
+        if t.starts_with(&prefix) {
+            return true;
+        }
+    }
+    !any
+}
+
 /// The files a module asks for with `[[gen]]` (empty: it asks for none).
 pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFile>> {
     let m = lib
@@ -1813,18 +1827,25 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
             "{module}: [[gen]] needs device files with [board], [digikit] and [card.store]"
         ));
     }
+    // a module gets files for the devices it is built for (`[targets]`, `ports`); a module that names none is for all of them
+    let devs: Vec<&String> = facts
+        .docs
+        .keys()
+        .filter(|d| targets_device(&m.manifest, d))
+        .collect();
+    if devs.is_empty() {
+        return Ok(vec![]);
+    }
     let mut per_dev: Vec<(String, Vec<C>)> = vec![];
-    for (dev, e) in &facts.docs {
-        per_dev.push((dev.clone(), constants(lib, dev, e)?));
+    for dev in &devs {
+        per_dev.push(((*dev).clone(), constants(lib, dev, &facts.docs[*dev])?));
     }
     let outputs: Vec<std::path::PathBuf> = m
         .manifest
         .gens
         .iter()
         .flat_map(|g| {
-            facts
-                .docs
-                .keys()
+            devs.iter()
                 .map(|dev| m.dir.join(g.path.replace("{dev}", dev)))
         })
         .collect();
@@ -1901,7 +1922,8 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         "{module}: a `sharc-adapter` gen is one file per device: put {{dev}} in the path"
                     ));
                 }
-                for (dev, e) in &facts.docs {
+                for dev in &devs {
+                    let e = &facts.docs[*dev];
                     let a = e
                         .adapter
                         .as_ref()
@@ -1926,7 +1948,8 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         "{module}: a `gas-sample-pool` gen is one file per device: put {{dev}} in the path"
                     ));
                 }
-                for (dev, e) in &facts.docs {
+                for dev in &devs {
+                    let e = &facts.docs[*dev];
                     let p = e
                         .sample_pool
                         .as_ref()
@@ -1943,7 +1966,8 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         "{module}: a `sharc-sample-pool` gen is one file per device: put {{dev}} in the path"
                     ));
                 }
-                for (dev, e) in &facts.docs {
+                for dev in &devs {
+                    let e = &facts.docs[*dev];
                     // a device that borrows the stock pool has no range and no DSP receiver
                     let Some(p) = e.sample_pool.as_ref().filter(|p| p.ddr_bytes != 0) else {
                         continue;

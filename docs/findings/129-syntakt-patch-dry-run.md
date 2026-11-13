@@ -23,23 +23,51 @@ Instruction operands of the stock MAIN OS that name the cave (2) or the expansio
 data decoded as code or constants: for example `move.l #$47faccf0,d3` at 0x40095818 is an EMAC coefficient (function 0x4009580c).
 DT2 1.17 has 2 such operands, Syntakt 10. A semantic check of each is **[O]**.
 
-## Runtime target [O]
+## Runtime target
 
-core/runtime cannot be applied to 1.42 yet. Nothing was changed for it.
+core/runtime with core/expansion patches 1.42 and boots in the emulator ([finding 130](130-syntakt-runtime-facts.md) for the device facts).
+What made it possible, all in the tree:
 
-- `patchkit gen` reads every device file with `[digikit]` as a runtime target and requires `[board] dsp_clock_hz`,
-  `dsp_blocks_per_second` and `[digikit] dsp_area_bytes`, `dsp_tail_off`, `dsp_tail_words` (`devgen.rs` `Board`, `Digikit`;
-  the error is `missing field dsp_clock_hz`). `devdata.rs` `validate` forbids these keys when `[capabilities] dsp = "none"`.
-- The runtime's shared constants (`[[gen]]` rust and gas-shared in `modules/core/runtime/module.toml`), with the DT2 = DN2 value
-  and what Syntakt has: `DSP_BLOCK_CYCLES` 666,667 (no DSP: no value), `SAFE_KEY_CODE` 19 (the RECORD code of the Syntakt panel
-  is not measured), `DYN_TYPE_FIRST/LAST/DYN_TYPES` 16 / 23 / 8 (`types.toml` has no `st` table; no run-time machines),
-  `ESDHC_BASE` 0xFC0CC000 and `CONSOLE_UART_BASE` 0xEC070000 (board not read), `DDR_*`, `KEEP_*`, `LIMIT_*` (could be equal).
-  Per-device values (`device-<dev>.inc`): `STORE_FIRST`, `STORE_SECTORS` (`[capabilities] card = "unknown"`: no card layout).
-- `patchkit check --modules core/runtime` on st lists: anchors `cf.link.site.block_isr.counter_lit`, `cf.samples.fn.worker.get`,
-  `cf.samples.fn.worker.queue`; hooks `cf.midi.hook.rx`, `cf.rtos.hook.main_os_task`, `cf.view.hook.ui_loop` (their sites resolve on
-  1.42, their `devices` lists name dt2 and dn2 only) and `cf.page.hook.source_key`, `source_turn` (no site on 1.42).
-  `compatible()` refuses a module for a missing anchor; a symbol in the manifest's `optional` list is linked to 0 only when
-  it is not an anchor name. So a missing anchor is a refusal today, not a "unsupported" answer at run time.
-- `dk_time_blocks` already answers 0 when the counter anchor reads 0 (`dkrt_blocks`); `dk_debug_track_type` and
-  `dk_debug_selected_params` call anchors (`cf.project.*`, `cf.page.fn.native_track_sound`) that resolve on 1.42 with medium
-  confidence; their Sound layout is unchecked.
+- The runtime has no device value in its code: the facts that differ between devices are the fields of the device object `dkrt_dev`
+  (`struct DkrtDevice` of `modules/core/runtime/abi.toml`, written per device by the `gas-dkdv` gen kind). `[capabilities]` and the tables
+  present give its capability bits; DSP facts are optional in `[board]` and `[digikit]` for `dsp = "none"`, `[card.store]` and
+  `[board] esdhc_base` and `[digikit] safe_key` are optional too (the runtime then has no store, no card polling, no safe key).
+- A manifest's `optional_anchors` names anchors and hooks that a port may lack: the link is 0, a hook op is skipped, the plan lists
+  `disabled`. The runtime lists `cf.link.site.block_isr.counter_lit`, `cf.samples.fn.worker.get` and `.queue`, and the two page hooks
+  (no site on 1.42) and their sites; the code checks each link for 0.
+- The hooks `cf.midi.hook.rx`, `cf.rtos.hook.main_os_task` and `cf.view.hook.ui_loop` name no devices (every device whose site resolves has them).
+
+Values of `devices/syntakt.toml [digikit]` and `[board]` are in finding 130. The safe key is the firmware key index 39 (trig 16), because the runtime
+asks `key_down(k)` with a firmware index.
+
+### Dry run, core/runtime + core/expansion on 1.42 **[D]**
+
+`tools/patchkit/image_report.py` over the stock file, the patched file and the plan: ALL CHECKS PASSED. Only section 3 differs; sections 1, 2, 4, 5, 6, 7, 8
+are identical to stock. MAIN grows from 3,442,576 to 3,713,176 bytes.
+
+| Write | Site | Size |
+| --- | --- | --- |
+| reset init call (core/expansion) | 0x4000053e | 8 |
+| UI loop retarget | 0x4000b2d8 | 6 |
+| main-OS task hook | 0x4000abd6 | 8 |
+| MIDI rx hook | 0x40103f5e | 6 |
+| loader in `cf.flash_cave` | 0x40339730 | 54 |
+| runtime object in `cf.expansion` | 0x478c0000 | 980,416 |
+| trampoline object, device object (with `dkrt_dev`) | 0x479af5c0, 0x479af720 | 352, 160 |
+| hook tails (main-OS task, MIDI), patch record | 0x479af7c0.. | 16, 12, 80 |
+
+Disabled (no anchor or hook on 1.42): `cf.link.site.block_isr.counter_lit`, `cf.samples.fn.worker.get`, `cf.samples.fn.worker.queue`, `cf.page.hook.source_key`,
+`cf.page.hook.source_turn`, `cf.page.fn.source_key`, `cf.page.fn.source_turn`. The runtime uses 981,036 of the 3,342,336 bytes of `cf.expansion`;
+the keep area (0x47bf0000) lies above its end.
+
+### Boot in the emulator **[D]**
+
+The patched file boots in the ColdFire-only emulator to the main screen (700 M ticks, `main_ui_reached`, `ready`): `DKRT_BOOT` has magic "DKBT", version 1,
+safe 0, reason 0, `ui_reached` 1; `dkrt_dev` reads back caps 0xc (eSDHC, safe key), safe key 0x27, keep area 0x47bf0000, no DSP facts. The runtime's
+event ring holds BOOT_START (runtime 0.7.0, device 3), RAM_KEEP (not kept: first boot), BOOT_RECORD and UI_FIRST. Over the emulated USB MIDI `dkupload --emu info` answers
+(port `st`, runtime 0.7.0, capacity store 0/0 KiB, fx_slots 0/0) and `modules` lists no module and no DSP area. **Not done:** the debug module is a run-time module loaded from the module
+store, and the Syntakt has no `[card.store]` (`DEV_HAS_STORE` clear), so it cannot load; its event log is the runtime's own ring, read from memory. A store needs the card layout of finding 130
+and an eMMC image the emulator seeds (`capabilities.card` is `unknown`).
+
+Missing anchors and hooks the other adapters need: core/ui (`cf.menu.site.settings_list.system_icon_ref`, `cf.menu.hook.settings_list.tail`), core/health (the DSP block interrupt
+`cf.link.site.reply_copy_lit`, `cf.link.hook.block_isr`, and `cf.rtos.hook.idle`), core/input (a per-device `input_cfg` object and `[input]` for the Syntakt).

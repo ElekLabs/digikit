@@ -6448,13 +6448,14 @@
           {
             "addr": "0x4011f1e2"
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x40103f5e"
+          }
         ]
       },
       "cpu": "cf",
-      "devices": [
-        "dt2",
-        "dn2"
-      ],
       "doc": "The MIDI task's router call for a gathered USB SysEx message (`jsr (A0)`, arguments on the stack); the hook can consume the message and continue after the call.",
       "file": "devices/fw/midi.toml",
       "kind": "hook",
@@ -10943,6 +10944,11 @@
           {
             "addr": "0x400337ba"
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000abd6"
+          }
         ]
       },
       "bindings": {
@@ -10951,10 +10957,6 @@
         "rust": "dkfw::rtos::MainOsTaskHook"
       },
       "cpu": "cf",
-      "devices": [
-        "dt2",
-        "dn2"
-      ],
       "doc": "Entry of the main-OS task, before the task builds its singletons; the hook point for boot-time module loading.",
       "file": "devices/fw/rtos.toml",
       "handler": {
@@ -15453,6 +15455,11 @@
           {
             "addr": "0x40033d06"
           }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4000b2d8"
+          }
         ]
       },
       "bindings": {
@@ -15461,10 +15468,6 @@
         "rust": "dkfw::view::UiLoopHook"
       },
       "cpu": "cf",
-      "devices": [
-        "dt2",
-        "dn2"
-      ],
       "doc": "The jsr at the top of the UI task's event loop that pops the next event; the hook point for the runtime's per-pass tick.",
       "file": "devices/fw/view.toml",
       "handler": {

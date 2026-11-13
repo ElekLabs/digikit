@@ -179,7 +179,7 @@
   "modules/core/fw/include/dk_fw_rtos.h": 14,
   "modules/core/fw/include/dk_fw_storage.h": 8,
   "modules/core/fw/include/dk_fw_usb.h": 8,
-  "modules/core/fw/reference.json": 2049,
+  "modules/core/fw/reference.json": 2046,
   "modules/core/fw/rs/src/lib.rs": 60,
   "modules/core/runtime/README.md": 7,
   "modules/core/runtime/abi.toml": 1,
