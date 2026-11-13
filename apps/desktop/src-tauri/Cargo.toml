@@ -9,6 +9,8 @@ publish = false
 [features]
 # Local-only DN2 coupling: generated DSP code must never be distributed.
 coupled-audio = ["digi-coupled/coupled-audio", "digi-control/coupled-audio"]
+# Audio of a device whose MAIN mixes a peer CPU's voices (`[emulator.peer_audio]`), without a generated DSP core.
+cf-audio = ["digi-coupled/cf-audio"]
 # Both devices' generated cores in one binary (SHARC_GEN_DIR and SHARC_GEN_DIR_2): a firmware of either device boots coupled.
 second-core = ["coupled-audio", "digi-coupled/second-core"]
 

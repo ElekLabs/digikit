@@ -45,7 +45,12 @@ pub enum PeerIrq {
     Edma29,
     /// EPORT IRQ4: INTC0 source 4, vector 68.
     Eport4,
+    /// The audio frame: eDMA channel 54 major loop of MAIN's audio DMA, INTC1 source 46, vector 174 (peer CPU mode; finding 128).
+    Frame,
 }
+
+/// MAIN ticks between audio frames: 32 samples at 48 kHz is 1500 frames a second, at the 132 MHz tick rate.
+pub const FRAME_TICKS: u64 = 132_000_000 / 1500;
 
 /// Reads `0xAA | length (4 bytes, big endian) | payload` out of the byte stream (what the stage-1 loader of the peer does).
 #[derive(Default)]
@@ -106,13 +111,28 @@ pub struct MailboxPeer {
     pub doorbell_edges: u64,
     /// IRQ4 delivered so far (the next one is `irq4_delivered + 1`).
     pub irq4_delivered: u64,
+    /// Audio frame interrupts delivered (peer CPU mode).
+    pub frames_delivered: u64,
     pin_high: bool,
     queue: VecDeque<(u64, PeerIrq)>,
+    /// `true` when a peer CPU answers MAIN (`machine::peer_cpu`): the responder keeps the image stream and the stage-1 "alive" interrupt, but
+    /// the hello block and the replies to doorbell edges come from the peer's own code. A doorbell edge is then an input for the peer.
+    pub cpu_mode: bool,
+    /// Doorbell edges MAIN made that the peer CPU has not taken yet.
+    edges_unread: u32,
+    /// Peer CPU mode: the next audio frame is due at this MAIN tick; `frame_pending` while its interrupt waits for MAIN to take it.
+    next_frame: u64,
+    frame_pending: bool,
+    /// The vector of the audio frame interrupt (INTC1: 120 + the eDMA channel), 174 unless the device names its audio channel.
+    pub frame_vector: u16,
 }
 
 impl MailboxPeer {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            frame_vector: 174,
+            ..Self::default()
+        }
     }
 
     /// A new transfer starts on channel 29 (the stage-1 loader of the peer begins at a frame marker again).
@@ -175,8 +195,32 @@ impl MailboxPeer {
         if pin != self.pin_high {
             self.pin_high = pin;
             self.doorbell_edges += 1;
-            self.queue.push_back((now + REPLY_DELAY, PeerIrq::Eport4));
+            if self.cpu_mode {
+                self.edges_unread += 1;
+            } else {
+                self.queue.push_back((now + REPLY_DELAY, PeerIrq::Eport4));
+            }
         }
+    }
+
+    /// Whether doorbell edges wait for the peer CPU.
+    pub fn has_edges(&self) -> bool {
+        self.edges_unread != 0
+    }
+
+    /// Doorbell edges since the last call (peer CPU mode).
+    pub fn take_edges(&mut self) -> u32 {
+        std::mem::take(&mut self.edges_unread)
+    }
+
+    /// The peer CPU changed its output pin: MAIN gets one IRQ4 after the reply delay (EPORT IRQ4 sees the pin through the bridge).
+    pub fn peer_pin_edge(&mut self, now: u64) {
+        self.queue.push_back((now + REPLY_DELAY, PeerIrq::Eport4));
+    }
+
+    /// The sound-engine program the peer was sent (the second image: `0xAA | length | payload`), once complete.
+    pub fn program(&self) -> Option<&[u8]> {
+        self.images.get(1).map(Vec::as_slice)
     }
 
     /// The next interrupt that is due at `now`, without taking it.
@@ -187,16 +231,38 @@ impl MailboxPeer {
             .map(|(_, irq)| *irq)
     }
 
+    /// Every interrupt that is due at `now` and may be offered to MAIN, in the order to try: the queue's first, then the audio frame
+    /// (a frame that MAIN cannot take yet does not hold the queue back, nor the other way round).
+    pub fn due_list(&self, now: u64) -> impl Iterator<Item = PeerIrq> {
+        self.due(now)
+            .into_iter()
+            .chain(self.frame_pending.then_some(PeerIrq::Frame))
+    }
+
+    /// Peer CPU mode: the audio frame source. Once per `FRAME_TICKS` of MAIN time the frame interrupt becomes pending (at most one waits).
+    pub fn frame_source(&mut self, now: u64) {
+        if self.cpu_mode && now >= self.next_frame {
+            self.frame_pending = true;
+            self.next_frame = now + FRAME_TICKS;
+        }
+    }
+
     /// The window bytes to store at +0 before the due interrupt is delivered (the hello block for IRQ4 #2 and #3).
     pub fn window_before(&self, irq: PeerIrq) -> Option<[u8; 6]> {
         let number = self.irq4_delivered + 1;
-        (irq == PeerIrq::Eport4 && (HELLO_FROM..=HELLO_TO).contains(&number)).then_some(HELLO)
+        (!self.cpu_mode && irq == PeerIrq::Eport4 && (HELLO_FROM..=HELLO_TO).contains(&number))
+            .then_some(HELLO)
     }
 
-    /// The due interrupt was delivered to the CPU.
-    pub fn delivered(&mut self) {
-        if let Some((_, irq)) = self.queue.pop_front()
-            && irq == PeerIrq::Eport4
+    /// The interrupt `irq` (from `due_list`) was delivered to the CPU.
+    pub fn delivered(&mut self, irq: PeerIrq) {
+        if irq == PeerIrq::Frame {
+            self.frame_pending = false;
+            self.frames_delivered += 1;
+            return;
+        }
+        if let Some((_, queued)) = self.queue.pop_front()
+            && queued == PeerIrq::Eport4
         {
             self.irq4_delivered += 1;
         }
@@ -204,7 +270,7 @@ impl MailboxPeer {
 
     /// Whether any interrupt is waiting (due or not).
     pub fn pending(&self) -> bool {
-        !self.queue.is_empty()
+        !self.queue.is_empty() || self.frame_pending
     }
 
     /// Run state for a snapshot: the counters, the pin, the queue and the image lengths (not the images).
@@ -216,7 +282,11 @@ impl MailboxPeer {
         w.u64(self.queue.len() as u64);
         for (at, irq) in &self.queue {
             w.u64(*at);
-            w.u8(u8::from(*irq == PeerIrq::Eport4));
+            w.u8(match irq {
+                PeerIrq::Edma29 => 0,
+                PeerIrq::Eport4 => 1,
+                PeerIrq::Frame => 2,
+            });
         }
         w.u64(self.image_lens.len() as u64);
         for len in &self.image_lens {
@@ -233,10 +303,10 @@ impl MailboxPeer {
         self.queue = (0..n)
             .map(|_| {
                 let at = r.u64()?;
-                let irq = if r.u8()? != 0 {
-                    PeerIrq::Eport4
-                } else {
-                    PeerIrq::Edma29
+                let irq = match r.u8()? {
+                    0 => PeerIrq::Edma29,
+                    1 => PeerIrq::Eport4,
+                    _ => PeerIrq::Frame,
                 };
                 Ok((at, irq))
             })
@@ -272,7 +342,7 @@ mod tests {
         p.end_major_loop(5, true);
         assert_eq!(p.images, vec![vec![0xff, 8, 9]]);
         assert_eq!(p.due(5 + REPLY_DELAY), Some(PeerIrq::Edma29));
-        p.delivered();
+        p.delivered(PeerIrq::Edma29);
         p.begin_transfer();
         let two = framed(&[9; 20]);
         let (a, b) = two.split_at(11);
@@ -304,7 +374,7 @@ mod tests {
             let at = now + REPLY_DELAY;
             let irq = p.due(at).expect("due");
             seen.push(p.window_before(irq).is_some());
-            p.delivered();
+            p.delivered(irq);
         }
         // numbers 1..=4: hello before 2 and 3 only
         assert_eq!(seen, [false, true, true, false]);
@@ -312,6 +382,46 @@ mod tests {
         // A set of another pin is ignored.
         p.gpio_write(PPDSDR_A, 0x20, 0);
         assert!(!p.pending());
+    }
+
+    #[test]
+    fn in_cpu_mode_a_doorbell_edge_is_an_input_for_the_peer_and_the_peer_pin_is_the_irq4_source() {
+        let mut p = MailboxPeer::new();
+        p.cpu_mode = true;
+        p.gpio_write(PPDSDR_A, 0x10, 0);
+        p.gpio_write(PCLRR_A, 0xef, 0);
+        assert_eq!(p.doorbell_edges, 2);
+        assert!(!p.pending(), "no reply without peer code");
+        assert!(p.has_edges());
+        assert_eq!(p.take_edges(), 2);
+        assert!(!p.has_edges());
+        p.peer_pin_edge(100);
+        assert_eq!(p.due(100), None);
+        let irq = p.due(100 + REPLY_DELAY).unwrap();
+        assert_eq!(
+            p.window_before(irq),
+            None,
+            "the hello block comes from the peer's own writes"
+        );
+    }
+
+    #[test]
+    fn the_audio_frame_is_pending_once_per_period_and_does_not_hold_back_the_queue() {
+        let mut p = MailboxPeer::new();
+        p.frame_source(0);
+        assert!(!p.pending(), "only in peer CPU mode");
+        p.cpu_mode = true;
+        p.peer_pin_edge(0);
+        p.frame_source(0);
+        p.frame_source(FRAME_TICKS - 1);
+        let due: Vec<_> = p.due_list(REPLY_DELAY).collect();
+        assert_eq!(due, [PeerIrq::Eport4, PeerIrq::Frame]);
+        p.delivered(PeerIrq::Frame);
+        assert_eq!(p.frames_delivered, 1);
+        assert_eq!(p.due_list(0).count(), 0);
+        p.frame_source(FRAME_TICKS);
+        assert_eq!(p.due_list(0).collect::<Vec<_>>(), [PeerIrq::Frame]);
+        assert_eq!(FRAME_TICKS, 88_000);
     }
 
     #[test]
@@ -326,7 +436,7 @@ mod tests {
         q.snap_load(&mut Reader::new(&w.buf)).unwrap();
         assert_eq!(q.doorbell_edges, 1);
         assert_eq!(q.due(5 + REPLY_DELAY), Some(PeerIrq::Eport4));
-        q.delivered();
+        q.delivered(PeerIrq::Eport4);
         assert_eq!(q.due(6 + REPLY_DELAY), Some(PeerIrq::Edma29));
     }
 }

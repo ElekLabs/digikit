@@ -1060,12 +1060,28 @@ pub(crate) fn service_peer<const TRACE: bool>(
     cpu: &mut Cpu,
     now: u64,
 ) -> Result<bool, String> {
-    let Some(irq) = bus.board.peer().and_then(|peer| peer.due(now)) else {
-        return Ok(false);
-    };
+    let due: Vec<PeerIrq> = bus
+        .board
+        .peer()
+        .map(|peer| peer.due_list(now).collect())
+        .unwrap_or_default();
+    for irq in due {
+        if offer_peer_irq(bus, cpu, irq)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn offer_peer_irq<const TRACE: bool>(
+    bus: &mut LoggingBus<TRACE>,
+    cpu: &mut Cpu,
+    irq: PeerIrq,
+) -> Result<bool, String> {
     let vector = match irq {
         PeerIrq::Eport4 => PEER_IRQ4_VECTOR,
         PeerIrq::Edma29 => PEER_EDMA29_VECTOR,
+        PeerIrq::Frame => bus.board.peer().map_or(174, |peer| peer.frame_vector),
     };
     let Some(level) = bus
         .board
@@ -1116,7 +1132,7 @@ pub(crate) fn service_peer<const TRACE: bool>(
     ) {
         Ok(true) => {
             if let Some(peer) = bus.board.peer_mut() {
-                peer.delivered();
+                peer.delivered(irq);
             }
             Ok(true)
         }

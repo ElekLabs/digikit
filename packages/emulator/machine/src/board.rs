@@ -237,6 +237,9 @@ pub struct Board {
     /// The second CPU's mailbox (`enable_peer`): eDMA channel 29 is its image stream, a GPIO port A pin its doorbell. `None` on a
     /// board without a peer.
     peer: Option<MailboxPeer>,
+    /// Peer CPU board: a TCD started with scatter/gather (CSR START and E_SG) reloads the next descriptor at once (`scatter_gather_reload`).
+    /// Off on every other board.
+    sg_reload: bool,
 }
 impl Board {
     /// Enable the recovered SSI/eDMA clock only for bounded diagnostics.
@@ -481,14 +484,18 @@ impl Board {
             midi_tx37_started: 0,
             dspi1_irq: false,
             peer: None,
+            sg_reload: false,
         }
     }
 
     /// Gives the board a mailbox peer (`[emulator] peer`): maps the FlexBus window it shares with MAIN (plain RAM, 1 MiB page; the window is the
     /// first `peer::WINDOW_BYTES`), takes over eDMA channel 29 as the peer's image stream and watches the GPIO doorbell.
-    pub fn enable_peer(&mut self) -> Result<(), BusError> {
+    pub fn enable_peer(&mut self, cpu_mode: bool) -> Result<(), BusError> {
         self.map_zeroed_ram_page(peer::WINDOW_BASE)?;
-        self.peer = Some(MailboxPeer::new());
+        let mut peer = MailboxPeer::new();
+        peer.cpu_mode = cpu_mode;
+        self.sg_reload = cpu_mode;
+        self.peer = Some(peer);
         Ok(())
     }
 
@@ -506,6 +513,93 @@ impl Board {
             let wrote = self.ram_write(peer::WINDOW_BASE + offset + i as u32, 1, u32::from(*byte));
             debug_assert!(wrote, "peer window page is mapped by enable_peer");
         }
+    }
+
+    /// A channel started by software (SSRT) runs its whole transfer at once: `nbytes` per minor loop, `citer` loops (nine bits when channel
+    /// linking is enabled, where every minor loop requests the next), then the major-loop writeback (SADDR and DADDR advanced plus SLAST
+    /// and DLASTSGA, CITER reloaded from BITER, DONE set, START cleared). Peer CPU board only: MAIN copies the peer's voices out of the
+    /// window this way every frame (finding 128). Guest memory that is not mapped ends the transfer.
+    fn edma_software_start(&mut self, chan: usize) {
+        let base = edma::tcd_offset(chan);
+        let r = &self.dma.edma_regs;
+        let (mut src, mut dst) = (r.u32_at(base + edma::SADDR), r.u32_at(base + edma::DADDR));
+        let (attr, nbytes) = (r.u16_at(base + edma::ATTR), r.u32_at(base + edma::NBYTES));
+        let (soff, doff) = (
+            r.u16_at(base + edma::SOFF) as i16,
+            r.u16_at(base + edma::DOFF) as i16,
+        );
+        let (slast, dlast) = (
+            r.u32_at(base + edma::SLAST) as i32,
+            r.u32_at(base + edma::DLAST) as i32,
+        );
+        let raw = r.u16_at(base + edma::CITER);
+        let biter = r.u16_at(base + edma::BITER);
+        let loops = if raw & 0x8000 != 0 {
+            raw & 0x1ff
+        } else {
+            raw & 0x7fff
+        };
+        // Transfer sizes are coded 0..5 for 1, 2, 4, 8, 16 and 32 bytes.
+        let (ssize, dsize) = (1u32 << ((attr >> 8) & 7).min(5), 1u32 << (attr & 7).min(5));
+        if nbytes == 0 || loops == 0 || ssize != dsize || !nbytes.is_multiple_of(ssize) {
+            return;
+        }
+        'run: for _ in 0..loops {
+            for _ in 0..nbytes / ssize {
+                for k in 0..ssize {
+                    let Some(v) = self.ram_read(src.wrapping_add(k), 1) else {
+                        break 'run;
+                    };
+                    if !self.ram_write(dst.wrapping_add(k), 1, v) {
+                        break 'run;
+                    }
+                }
+                src = src.wrapping_add_signed(i32::from(soff));
+                dst = dst.wrapping_add_signed(i32::from(doff));
+            }
+        }
+        let r = &mut self.dma.edma_regs;
+        r.set_u32_at(base + edma::SADDR, src.wrapping_add_signed(slast));
+        r.set_u32_at(base + edma::DADDR, dst.wrapping_add_signed(dlast));
+        r.set_u16_at(base + edma::CITER, biter);
+        let csr = r.u16_at(base + edma::CSR);
+        r.set_u16_at(base + edma::CSR, (csr & !edma::CSR_START) | edma::CSR_DONE);
+    }
+
+    /// A channel started with E_SG loads the descriptor at its DLASTSGA into its TCD, as the eDMA does when the major loop ends, and the
+    /// guest's wait for E_SG to clear ends. The loop's own data movement is not modelled (MAIN's delay-ring channel on the peer CPU board:
+    /// the ring only feeds effects). The loaded descriptor keeps its CSR except START.
+    fn scatter_gather_reload(&mut self, chan: usize) {
+        let base = edma::tcd_offset(chan);
+        // A chain of descriptors runs to the first one without E_SG (bounded).
+        for _ in 0..32 {
+            let next = self.dma.edma_regs.u32_at(base + edma::DLAST);
+            let mut raw = [0u8; 32];
+            for (i, byte) in raw.iter_mut().enumerate() {
+                let Some(v) = self.ram_read(next.wrapping_add(i as u32), 1) else {
+                    return;
+                };
+                *byte = v as u8;
+            }
+            for (i, byte) in raw.iter().enumerate() {
+                self.dma.edma_regs.set_u8_at(base + i, *byte);
+            }
+            let csr = self.dma.edma_regs.u16_at(base + edma::CSR) & !edma::CSR_START;
+            self.dma.edma_regs.set_u16_at(base + edma::CSR, csr);
+            if csr & edma::CSR_E_SG == 0 {
+                return;
+            }
+        }
+    }
+
+    /// One 32-bit word of guest RAM (host side; no MMIO, no access record).
+    pub fn peer_ram_word(&self, addr: u32) -> Option<u32> {
+        self.ram_read(addr, 4)
+    }
+
+    /// Reads the peer window at `offset` (host side; no MMIO, no access record).
+    pub fn peer_window_load(&self, offset: u32, size: u8) -> Option<u32> {
+        self.ram_read(peer::WINDOW_BASE + offset, size)
     }
 
     /// eDMA channel 29 armed with a peer on the board: the peer clocks the bytes out of the DSPI2 slave. Runs major loops now, feeding the
@@ -2054,6 +2148,18 @@ impl Board {
                 }
             }
             self.update_dma59_request(addr, size, value);
+            if self.sg_reload
+                && size == 2
+                && (edma::TCD_BASE..edma::TCD_BASE + 64 * 0x20).contains(&addr)
+                && (addr - edma::TCD_BASE) % 0x20 == edma::CSR as u32
+                && value as u16 & (edma::CSR_START | edma::CSR_E_SG)
+                    == edma::CSR_START | edma::CSR_E_SG
+            {
+                self.scatter_gather_reload(((addr - edma::TCD_BASE) / 0x20) as usize);
+            }
+            if self.sg_reload && addr == edma::SSRT && size == 1 && value as u8 & 0xc0 == 0 {
+                self.edma_software_start((value as u8 & 0x3f) as usize);
+            }
             if addr == edma::SERQ
                 && size == 1
                 && value as u8 & 0xC0 == 0
@@ -2941,5 +3047,15 @@ mod tests {
             edma::CSR_DONE
         );
         assert!(!b.dma59_armed());
+    }
+}
+
+/// The peer CPU reaches the same 128 KB the board maps at 0x10000000.
+impl crate::peer_cpu::Window for Board {
+    fn read(&mut self, offset: u32, size: u8) -> Option<u32> {
+        self.peer_window_load(offset, size)
+    }
+    fn write(&mut self, offset: u32, size: u8, value: u32) -> bool {
+        self.ram_write(peer::WINDOW_BASE + offset, size, value)
     }
 }

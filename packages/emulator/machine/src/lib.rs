@@ -2,6 +2,7 @@
 
 pub mod board;
 mod host_state;
+pub mod peer_cpu;
 pub mod state;
 pub mod time;
 pub mod timer_state;

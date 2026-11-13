@@ -28,7 +28,41 @@ pub struct PeerReport {
     pub images: Vec<(usize, String)>,
     pub doorbell_edges: u64,
     pub irq4_delivered: u64,
+    /// Audio frame interrupts MAIN took (peer CPU mode).
+    pub frames_delivered: u64,
+    /// The peer CPU (`[emulator] peer = "coldfire"`), once started.
+    pub cpu: Option<PeerCpuReport>,
 }
+
+/// What the peer CPU did (`Emulator::peer_report`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PeerCpuReport {
+    pub icount: u64,
+    pub pc: u32,
+    pub frames_raised: u64,
+    pub frames_taken: u64,
+    /// Instructions the frame interrupt handler ran, summed and the largest single run.
+    pub isr_instructions: u64,
+    pub isr_max: u64,
+    /// Peer GPIO pin changes MAIN saw as IRQ4.
+    pub pin_edges: u64,
+    /// Bytes the peer's eDMA moved.
+    pub dma_bytes: u64,
+    /// Accesses to addresses the peer map does not have.
+    pub faults: usize,
+    /// Host wall time spent running the peer core, in nanoseconds (0 in the browser build).
+    pub wall_ns: u64,
+    /// The first accesses outside the peer's map: "pc address size R/W".
+    pub first_faults: Vec<String>,
+    /// With `DIGI_PEER_PROFILE=1`: the busiest 64-byte code buckets of the frame handler, "address count".
+    pub isr_profile: Vec<String>,
+}
+
+/// Captured PCM kept for a consumer that is late (about ten seconds), in stereo frames.
+const PCM_QUEUE_FRAMES: usize = 480_000;
+
+/// MAIN ticks between two peer slices: the two CPUs run in lock step at this granularity (deterministic).
+const PEER_SLICE: u64 = 2048;
 
 /// ENDPTCTRL2 of the USB controller (the RX enable bit is 0x80).
 const USB_ENDPTCTRL2: u32 = 0xfc0b_01c8;
@@ -44,6 +78,57 @@ fn dtd_addr(pages: &[u32; 5], at: usize) -> u32 {
 /// at +0x0800_0000, and the internal SRAM backdoor at 0x8000_0000. Other addresses give a bus error to the DMA.
 fn usb_dma_reachable(addr: u32) -> bool {
     matches!(addr, 0x4000_0000..=0x4fff_ffff | 0x8000_0000..=0x8bff_ffff)
+}
+
+/// Reads one audio frame of MAIN's output (finding 128 "Audio"): the half of the converter ring that the engine tick filled for the frame
+/// that just ended, named by the TCD of the audio channel (`[emulator.peer_audio]`). It runs at the peer's doorbell edge, which MAIN's
+/// frame handler makes once per frame before the next tick starts. Edges less than half a frame apart (a handler that preempted a tick)
+/// are not read twice.
+fn capture_peer_audio(
+    board: &mut Board,
+    audio: Option<&device_profile::PeerAudio>,
+    now: u64,
+    clock: &mut u64,
+    pcm: &mut std::collections::VecDeque<f32>,
+    frames: &mut u64,
+) {
+    let Some(audio) = audio else {
+        return;
+    };
+    if *frames != 0 && now.saturating_sub(*clock) < periph::peer::FRAME_TICKS / 2 {
+        return;
+    }
+    *clock = now;
+    let tcd = periph::edma::tcd_offset(usize::from(audio.dma_channel));
+    let regs = &board.dma.edma_regs;
+    let (ring, words, count) = (
+        regs.u32_at(tcd + periph::edma::SADDR),
+        regs.u32_at(tcd + periph::edma::NBYTES) / 4,
+        u32::from(regs.u16_at(tcd + periph::edma::BITER) & 0x1ff),
+    );
+    if words == 0 || count < 2 {
+        return;
+    }
+    let half = count / 2;
+    let base = ring.wrapping_add(half * words * 4);
+    let scale = 1.0 / (1u64 << (audio.bits - 1)) as f32;
+    for frame in 0..half {
+        for slot in audio.slots {
+            let at = base.wrapping_add((frame * words + u32::from(slot)) * 4);
+            let Some(word) = board.peer_ram_word(at) else {
+                return;
+            };
+            // Right-aligned signed `bits` bits in a 32-bit word.
+            let shift = 32 - u32::from(audio.bits);
+            let value = ((word << shift) as i32) >> shift;
+            pcm.push_back(value as f32 * scale);
+        }
+        if pcm.len() > PCM_QUEUE_FRAMES * 2 {
+            pcm.pop_front();
+            pcm.pop_front();
+        }
+    }
+    *frames += u64::from(half);
 }
 
 /// The rules the controller applies when a dTD is primed (manual 24-49, 24-54, 24-71): the dTD is 32-byte aligned and its 28 bytes stay in one
@@ -410,6 +495,19 @@ pub struct Emulator {
     ram_clear_fast_forwarded_instructions: u64,
     flash_hle_calls: u64,
     dspi2_capture: Option<Dspi2Capture>,
+    /// The peer CPU (`[emulator] peer = "coldfire"`) and the MAIN tick it has run up to. It starts at the first doorbell edge after its
+    /// program arrived.
+    peer_cpu: Option<Box<machine::peer_cpu::PeerCpu>>,
+    peer_started: bool,
+    peer_clock: u64,
+    peer_pin_edges: u64,
+    peer_wall_ns: u64,
+    /// `[emulator.peer_audio]`: where MAIN's own mixed output of the peer's voices is read (`capture_peer_audio`).
+    peer_audio: Option<device_profile::PeerAudio>,
+    /// Stereo frames (interleaved, -1..1) captured and not yet taken by `take_pcm`; bounded at `PCM_QUEUE_FRAMES`.
+    pcm: std::collections::VecDeque<f32>,
+    pcm_frames: u64,
+    pcm_clock: u64,
     #[cfg(feature = "cf-profile")]
     prof: crate::cfprof::CfProf,
 }
@@ -656,6 +754,11 @@ impl Emulator {
         forced.insert(UART8_USR, 0x0d00_0000);
         forced.insert(DSPI0_SR, 0x1000_00f0);
         forced.insert(DSPI2_SR, 0x9000_0000);
+        // Peer CPU board: the engine tick MAIN runs every audio frame pushes words to DSPI3 (0xFC03C000, a serial link to the board's
+        // converter logic) and polls SR for the end of the queue (`FUN_4010222a`, bit 28). The transfer is not modelled: it is complete.
+        if device.peer == Some(device_profile::PeerModel::Coldfire) {
+            forced.insert(0xfc03_c02c, 0x9000_0000);
+        }
         // `[emulator] board_revision`: the PCB revision byte at FlexBus CS1 address 0.
         if let Some(revision) = device.board_revision {
             forced.insert(0, u32::from(revision) << 24);
@@ -670,10 +773,14 @@ impl Emulator {
             .expect("install forced status hooks");
         board.enable_oracle_sdram_faults();
         // `[emulator] peer`: the second CPU's mailbox (window, image stream, doorbell, IRQ4).
-        if device.peer.is_some() {
+        if let Some(model) = device.peer {
             board
-                .enable_peer()
+                .enable_peer(model == device_profile::PeerModel::Coldfire)
                 .map_err(|e| format!("peer window: {e:?}"))?;
+            // The audio frame is the half-way interrupt of the audio channel: INTC1, vector 120 + channel.
+            if let (Some(audio), Some(peer)) = (&device.peer_audio, board.peer_mut()) {
+                peer.frame_vector = 120 + u16::from(audio.dma_channel);
+            }
         }
         map_image(&mut board, &main);
         board
@@ -813,6 +920,16 @@ impl Emulator {
             ram_clear_fast_forwarded_instructions: 0,
             flash_hle_calls: 0,
             dspi2_capture: None,
+            peer_cpu: (device.peer == Some(device_profile::PeerModel::Coldfire))
+                .then(|| Box::new(machine::peer_cpu::PeerCpu::new())),
+            peer_started: false,
+            peer_clock: 0,
+            peer_pin_edges: 0,
+            peer_wall_ns: 0,
+            peer_audio: device.peer_audio,
+            pcm: Default::default(),
+            pcm_frames: 0,
+            pcm_clock: 0,
             #[cfg(feature = "cf-profile")]
             prof: Default::default(),
         };
@@ -832,6 +949,9 @@ impl Emulator {
         self.learn_count_spin();
         let mut iterations = 0;
         while iterations < budget && self.error.is_none() {
+            if self.peer_cpu.is_some() {
+                self.run_peer();
+            }
             if ACCELERATE_RAM_CLEAR
                 && self
                     .ram_clear
@@ -853,7 +973,11 @@ impl Emulator {
             }
             #[cfg(feature = "cf-profile")]
             let t0 = crate::cputime::thread_cpu_ns();
-            let fast = self.run_fast(budget - iterations);
+            let fast = self.run_fast(if self.peer_cpu.is_some() {
+                (budget - iterations).min(PEER_SLICE as u32)
+            } else {
+                budget - iterations
+            });
             if fast != 0 {
                 #[cfg(feature = "cf-profile")]
                 self.prof
@@ -963,7 +1087,167 @@ impl Emulator {
                 .collect(),
             doorbell_edges: peer.doorbell_edges,
             irq4_delivered: peer.irq4_delivered,
+            frames_delivered: peer.frames_delivered,
+            cpu: self
+                .peer_cpu
+                .as_ref()
+                .filter(|_| self.peer_started)
+                .map(|p| PeerCpuReport {
+                    icount: p.cpu.icount,
+                    pc: p.cpu.pc,
+                    frames_raised: p.frames_raised,
+                    frames_taken: p.frames_taken,
+                    isr_instructions: p.isr_instructions,
+                    isr_max: p.isr_max,
+                    pin_edges: self.peer_pin_edges,
+                    dma_bytes: p.mem.dma_bytes,
+                    faults: p.mem.faults.len(),
+                    wall_ns: self.peer_wall_ns,
+                    isr_profile: p
+                        .isr_profile
+                        .as_ref()
+                        .map(|h| {
+                            let mut v: Vec<_> = h.iter().collect();
+                            v.sort_by_key(|(_, n)| std::cmp::Reverse(**n));
+                            v.iter()
+                                .take(10)
+                                .map(|(a, n)| format!("{a:#x} {n}"))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    first_faults: p
+                        .mem
+                        .faults
+                        .iter()
+                        .take(6)
+                        .map(|f| {
+                            format!(
+                                "{:#x} {:#x}/{} {} {:#x}",
+                                f.pc,
+                                f.addr,
+                                f.size,
+                                if f.write { 'W' } else { 'R' },
+                                f.value
+                            )
+                        })
+                        .collect(),
+                }),
         })
+    }
+
+    /// The peer CPU's private state, for tools (`panel_drive`'s `peerwin`).
+    pub fn peer_cpu(&self) -> Option<&machine::peer_cpu::PeerCpu> {
+        self.peer_cpu.as_deref().filter(|_| self.peer_started)
+    }
+
+    /// Whether this device's audio comes from its peer CPU (`[emulator.peer_audio]` with a running peer core).
+    pub fn has_peer_audio(&self) -> bool {
+        self.peer_audio.is_some() && self.peer_cpu.is_some()
+    }
+
+    /// Takes the audio captured since the last call: interleaved stereo, 48 kHz, -1..1. Empty on a device without `[emulator.peer_audio]`.
+    pub fn take_pcm(&mut self) -> Vec<f32> {
+        self.pcm.drain(..).collect()
+    }
+
+    /// Stereo frames captured so far (32 per audio frame).
+    pub fn pcm_frames(&self) -> u64 {
+        self.pcm_frames
+    }
+
+    /// Bytes of the peer CPU's private memory (SDRAM or SRAM), for tools.
+    pub fn peer_private(&self, addr: u32, len: usize) -> Option<Vec<u8>> {
+        let p = self.peer_cpu()?;
+        if addr >= 0xEC00_0000 {
+            return Some(p.mem.io_peek(addr, len));
+        }
+        let (base, mem) = if addr >= machine::peer_cpu::SRAM_BASE {
+            (machine::peer_cpu::SRAM_BASE, p.mem.sram())
+        } else {
+            (machine::peer_cpu::SDRAM_BASE, p.mem.sdram())
+        };
+        let o = addr.checked_sub(base)? as usize;
+        mem.get(o..o + len).map(<[u8]>::to_vec)
+    }
+
+    /// The window as the board holds it (bytes at `offset`).
+    pub fn peer_window(&self, offset: u32, len: u32) -> Vec<u8> {
+        (0..len)
+            .map(|i| self.bus.board.peer_window_load(offset + i, 1).unwrap_or(0) as u8)
+            .collect()
+    }
+
+    /// Runs the peer CPU up to MAIN's current tick: first the doorbell edges MAIN made (the first one after the program arrived is what the
+    /// stage-1 loader waits for; later ones are DTIM0 capture events, the frame tick), then the instructions MAIN ran since the last slice.
+    /// The peer's output pin changes become IRQ4 for MAIN.
+    fn run_peer(&mut self) {
+        let Some(peer) = self.peer_cpu.as_mut() else {
+            return;
+        };
+        let Ok(now) = self
+            .cpu
+            .icount
+            .checked_add(self.softfloat.counts.calls())
+            .ok_or(())
+        else {
+            return;
+        };
+        let board = &mut self.bus.board;
+        if let Some(m) = board.peer_mut() {
+            m.frame_source(now);
+        }
+        if !board.peer().is_some_and(|m| m.has_edges())
+            && now.saturating_sub(self.peer_clock) < PEER_SLICE
+        {
+            return;
+        }
+        let edges = board.peer_mut().map_or(0, |m| m.take_edges());
+        for _ in 0..edges {
+            if self.peer_started {
+                capture_peer_audio(
+                    board,
+                    self.peer_audio.as_ref(),
+                    now,
+                    &mut self.pcm_clock,
+                    &mut self.pcm,
+                    &mut self.pcm_frames,
+                );
+                peer.frame_tick(board);
+            } else if let Some(program) = board.peer().and_then(|m| m.program()) {
+                peer.start(program);
+                self.peer_started = true;
+                self.peer_clock = now;
+                // MAIN's frame handler now forces vector 191 (the engine tick) and nothing else delivers it.
+                if let Some(time) = board.time_mut() {
+                    time.set_forced_191(true);
+                }
+            }
+        }
+        if !self.peer_started {
+            self.peer_clock = now;
+            return;
+        }
+        let n = now.saturating_sub(self.peer_clock);
+        self.peer_clock = now;
+        #[cfg(not(target_arch = "wasm32"))]
+        let started = std::time::Instant::now();
+        let ran = if n != 0 { peer.run(board, n) } else { Ok(()) };
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.peer_wall_ns += started.elapsed().as_nanos() as u64;
+        }
+        if let Err(stop) = ran {
+            let pc = peer.cpu.pc;
+            self.set_error(format!("PeerCpuStopped({stop:?}, pc={pc:#x})"));
+            return;
+        }
+        let edges = peer.mem.take_pin_edges();
+        self.peer_pin_edges += u64::from(edges);
+        for _ in 0..edges {
+            if let Some(m) = board.peer_mut() {
+                m.peer_pin_edge(self.bus.current_icount);
+            }
+        }
     }
 
     /// Export observations without stepping, reading guest memory, or consuming a frame.
@@ -4601,6 +4885,88 @@ fn resolve_fused_loops(main: &[u8]) -> Vec<(u32, Loop, Vec<u8>)> {
 
 #[cfg(test)]
 mod tests {
+    use machine::SemaphoreAddresses;
+
+    /// MAIN's output ring as `[emulator.peer_audio]` describes it: the TCD of the audio channel names the ring, the second half is read, the
+    /// words are 24-bit signed in 32-bit words, left and right come from the named words, and an edge soon after the last read adds nothing.
+    #[test]
+    fn peer_audio_reads_the_second_half_of_the_ring_the_tcd_names() {
+        let mut board = Board::new(
+            Card::new(CardIdentity::Mlc4G).unwrap(),
+            SemaphoreAddresses {
+                dma_sem: None,
+                data_sem: None,
+                cmd_sem: None,
+                status: None,
+            },
+            CompletionPolicy::Device,
+        );
+        board.map_ram_page(0x8000_0000).unwrap();
+        let tcd = 0xfc04_5000 + 54 * 0x20;
+        board.write32(tcd, 0x8000_0000).unwrap(); // SADDR
+        board.write32(tcd + 8, 0x20).unwrap(); // NBYTES: 8 words a frame
+        board.write16(tcd + 0x1c, 0x0040).unwrap(); // BITER: 64 frames, 32 a half
+        // Frame f of the second half (0x80000400 + f * 0x20): word 5 = f, word 3 = -f (24-bit, sign-extended in 32 bits).
+        for f in 0..32u32 {
+            let at = 0x8000_0400 + f * 0x20;
+            board.write32(at + 5 * 4, f).unwrap();
+            board
+                .write32(
+                    at + 3 * 4,
+                    (-(f as i32)) as u32 & 0x00ff_ffff | 0xff00_0000 * u32::from(f != 0),
+                )
+                .unwrap();
+        }
+        // The first half must not be read.
+        board.write32(0x8000_0000 + 5 * 4, 0x7f_ffff).unwrap();
+        let audio = device_profile::PeerAudio {
+            dma_channel: 54,
+            slots: [5, 3],
+            bits: 24,
+        };
+        let (mut clock, mut pcm, mut frames) = (0u64, std::collections::VecDeque::new(), 0u64);
+        capture_peer_audio(
+            &mut board,
+            Some(&audio),
+            1000,
+            &mut clock,
+            &mut pcm,
+            &mut frames,
+        );
+        assert_eq!(frames, 32);
+        assert_eq!(pcm.len(), 64);
+        let scale = 1.0 / (1u32 << 23) as f32;
+        assert_eq!(pcm[2 * 5], 5.0 * scale, "left of frame 5");
+        assert_eq!(pcm[2 * 5 + 1], -5.0 * scale, "right of frame 5");
+        capture_peer_audio(
+            &mut board,
+            Some(&audio),
+            1000 + periph::peer::FRAME_TICKS / 4,
+            &mut clock,
+            &mut pcm,
+            &mut frames,
+        );
+        assert_eq!(frames, 32, "an edge within half a frame is the same frame");
+        capture_peer_audio(
+            &mut board,
+            Some(&audio),
+            1000 + periph::peer::FRAME_TICKS,
+            &mut clock,
+            &mut pcm,
+            &mut frames,
+        );
+        assert_eq!(frames, 64);
+        capture_peer_audio(
+            &mut board,
+            None,
+            9_999_999,
+            &mut clock,
+            &mut pcm,
+            &mut frames,
+        );
+        assert_eq!(frames, 64, "no peer_audio, no capture");
+    }
+
     use super::*;
 
     #[test]

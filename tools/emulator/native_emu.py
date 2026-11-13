@@ -170,6 +170,9 @@ def default_audio_args(
     )
     syx = pathlib.Path(positional) if positional else digi_env.firmware()
     device = digi_env.device_for_syx(syx) or "dn2"
+    if device not in digi_env.READY_DIRS:
+        # A device with no DSP (no ready inputs, no generated core): ColdFire-only build; its audio, if any, is the peer's.
+        return args
     paths = digi_env.ready_inputs(device=device)
     if positional and device != "dn2":
         paths["firmware"] = syx
@@ -325,6 +328,9 @@ def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
                 ]
             )
     else:
+        # A device whose audio comes from its peer CPU needs the audio output in a ColdFire-only build (no generated core).
+        if digi_env.peer_audio_for_syx(syx_from_args(args)):
+            command.extend(["--features", "cf-audio"])
         command.extend(["--target-dir", target_dir_for(None)])
     return [*command, "--", *args]
 
@@ -847,6 +853,9 @@ def main(args: list[str] | None = None) -> None:
     if build_only:
         print(binary)
         return
+    if not daemon:
+        # Devices whose MAIN mixes the voices of a peer CPU play them (`[emulator.peer_audio]`); the other devices ignore it.
+        env.setdefault("DIGI_EMU_PEER_AUDIO", "0" if force_cf else "1")
     if not daemon and data.has_dsp():
         env.update(pgo_env())
         # Workbench default from config/emulator.json; an explicit value, including an empty one, still wins.
