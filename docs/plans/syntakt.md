@@ -69,11 +69,12 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 ### P2 Workbench and faceplate
 
 - [ ] Device chosen by firmware hash (no file-name regex).
-- [ ] Panel codes and LED map from an emulator sweep.
+- [x] Panel codes from an emulator sweep (finding 70 "Panel sweep"); LED map for the trig keys and the four page LEDs.
+- [ ] The other key LEDs and a `panel_leds` decoder for the Syntakt LED records.
 - [x] Faceplate TOML from the Syntakt photo: `apps/web/src/data/faceplates/syntakt.toml`, ±0.5 mm (uncommitted).
-- [ ] Faceplate component: per-device wordmark, Sound and Routing icons, Modifier Setup glyph, extra LED (TRK),
-      accent colour on knob sub-labels and split labels (registry S5).
-- [ ] Panel codes from the sweep replace the DN2 placeholders (TODO(panel sweep) in the file).
+- [x] Faceplate component: Sound and Routing icons, Modifier Setup glyph, extra LED (TRK), accent colour on knob
+      sub-labels and split labels (registry S5).
+- [x] Panel codes from the sweep replace the DN2 placeholders.
 
 ### P3 Patchkit, runtime and modules in the emulator
 

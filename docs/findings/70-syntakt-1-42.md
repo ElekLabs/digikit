@@ -156,8 +156,8 @@ Two counts, with different scope:
 - Panel wire (measured by use, 1.41):
   - Button message `2c mask`: `mask` is the whole state of channel c.
   - Encoder message `3c dd`: `dd` is a signed delta.
-  - Channel 0 bits 0-7 = tracks 1-8. Channel 1 bits 0-3 = tracks 9-12.
-  - Channel 2 bit 7 = LFO page. Channel 3 bit 3 = NO.
+  - Channel 0 bits 0-7 = trig keys 1-8. Channel 1 bits 0-7 = trig keys 9-16. A press of 1-12 also selects that track.
+  - Channel 2 bit 7 = LFO page. Channel 3 bit 3 = NO. The full table is in "Panel sweep" below.
   - Encoders A-H = channels 0-7. LEVEL = 8.
   - The first encoder message after a page or parameter change only shows the
     value. Each later one moves by delta/6 positions.
@@ -173,6 +173,40 @@ Two counts, with different scope:
   Why that dialog shows: **[O]**.
 - Through 1.21 G instructions the display stays the same and "DSP BOOT FAILURE" has not appeared
   (the peer mailbox is not modelled: unmapped pages read as zero). When it shows: **[O]**.
+
+## Panel sweep (OS 1.42) [D]
+
+- Method: `tools/emulator/panel_sweep.py` (frames of one tap per code, LED records) on the cold-booted image, after NO closes the
+  calibration dialog; encoders by `turn:N` with `panel_drive` (the turn shows after about 100 M instructions). Controls were named by the
+  screen they open or the value they show; the faceplate legends of the photo give the names.
+- The decoder is `FUN_40103094` (key decoder anchor of `devices/fw/input.toml`, hash unique on 1.42). It reads a table of 32 bytes per
+  channel at 0x401d7a48. Unlike DT2 and DN2 the table is not the identity, so the code of `devices/syntakt.toml` is the wire
+  position (`channel * 8 + bit + 1`, 1-48; 49 = channel 6 bit 0). Channel 6 has one key; `button_channels = 7`.
+- Firmware has no control-name table (no "ENCODER A" strings); only the UI test screens name a few controls.
+
+| Code | Control | Code | Control | Code | Control |
+| --- | --- | --- | --- | --- | --- |
+| 1-16 | trig keys 1-16 | 25 | settings (gear) | 36 | RECORD |
+| 17 | FUNC | 26 | FX | 37 | PLAY |
+| 18 | TRK | 27 | TEMPO | 38 | STOP |
+| 19 | TRIG page | 28 | NO | 39 | YES |
+| 20 | SYN page | 29 | LEFT | 40 | UP |
+| 21 | wired to nothing | 30 | DOWN | 41-48 | push G, F, E, B, A, D, C, H |
+| 22 | FLTR page | 31 | RIGHT | 49 | LEVEL push |
+| 23 | AMP page | 32 | PAGE | | |
+| 24 | LFO page | 33 | BANK, 34 PTN | | |
+
+- Code 35 is the key with the three dots: it opens the SONG MODE popup. Whether the printed name is Sound or Song is **[O]**.
+- Checked by effect: 19-20, 22-28, 30, 33-35, 39 and 40 (menu cursor), 41-48 (the value of the encoder's parameter), encoders 1-9 =
+  A-H, LEVEL. By order in the firmware's key enumeration only **[O]**: 17 FUNC and 18 TRK (FUNC lights LED 0-15, TRK lights LED 0-11 and 13-15),
+  29 LEFT and 31 RIGHT (a held press moves the tempo down and up), 36 RECORD, 37 PLAY, 38 STOP, 32 PAGE (it lights the pattern-page LEDs).
+- LED protocol (the Syntakt has 44 RGB LEDs, not the `b9 idx val` records of DT2 and DN2):
+  - `b5 n r g b` sets palette entry n (41 entries, 5 bits per channel); `b0..b3 led n` sets the palette entry of a LED's state 0-3.
+  - `0x20 + k, v` sets LEDs 4k..4k+3: two bits each, the state of the LED (3 is the idle state).
+  - LED 0-15 are the trig keys 1-16 (the selected track's key is lit, FUNC lights all 16); LED 40-43 are the pattern-page LEDs
+    1:4-4:4 (order **[O]**). PLAY, RECORD, FUNC, TRK, PTN, BANK, page and arrow key LEDs are not tied to an index: the page keys'
+    LEDs did not change on a press in the sweep. `devices/syntakt-leds.toml` lists only the 16 trig LEDs and the four indicators.
+  - `panel_leds.rs` decodes only the `b9` and `b5` records, so a faceplate does not light these LEDs yet.
 
 ## Analysis databases
 
