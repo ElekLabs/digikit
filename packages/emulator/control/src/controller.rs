@@ -3702,7 +3702,9 @@ impl Actor {
         report: &mut Value,
         start: &str,
     ) -> Result<bool, RpcError> {
-        if start == "cold" {
+        // A stock firmware with a DSP restores a ready snapshot (it holds the DSP state); one
+        // without a DSP has none and boots cold.
+        if start == "cold" && firmware::stock_has_dsp(&new.sha256) {
             return Err(RpcError::bad_params(
                 "start cold needs a patched MAIN; a stock firmware restores its snapshot",
             ));
@@ -3746,7 +3748,7 @@ impl Actor {
         report: &mut Value,
         start: &str,
     ) -> Result<bool, RpcError> {
-        if start == "cold" {
+        if start == "cold" && firmware::stock_has_dsp(&new.sha256) {
             return Err(RpcError::bad_params(
                 "start cold is for a patched MAIN; this MAIN is the base's",
             ));

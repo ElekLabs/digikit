@@ -10,8 +10,38 @@ use sha2::{Digest, Sha256};
 
 /// The MAIN OS section (ColdFire).
 pub const SECTION_MAIN: u32 = 3;
-/// The DSP boot stream.
+/// The DSP boot stream (on a device without a SHARC: the peer ColdFire's image).
 pub const SECTION_DSP: u32 = 7;
+
+/// Whether section 7 of `syx` is a DSP stream. Only a firmware the registry
+/// knows (by file or by MAIN) with a supported boot and no DSP profile says no;
+/// anything else (patched, unknown) is treated as a DSP firmware.
+fn expects_dsp(syx: &[u8]) -> bool {
+    let Ok(registry) = plusdrive_format::device_profile::Registry::load() else {
+        return true;
+    };
+    let known = match registry.identify(&sha256_hex(syx)) {
+        Ok((_, firmware)) => Some(firmware),
+        Err(_) => dt2_firmware_loader::parse(syx)
+            .ok()
+            .and_then(|f| f.sections.into_iter().find(|s| s.id == SECTION_MAIN))
+            .and_then(|main| registry.boot_by_main(&main.bytes))
+            .map(|(_, firmware, _)| firmware),
+    };
+    !known.is_some_and(|f| f.boot.is_some() && f.dsp.is_none())
+}
+
+/// Whether the stock firmware with this file digest has a DSP (true for an unknown digest).
+pub fn stock_has_dsp(syx_sha256: &str) -> bool {
+    plusdrive_format::device_profile::Registry::load()
+        .ok()
+        .and_then(|r| {
+            r.identify(syx_sha256)
+                .ok()
+                .map(|(_, f)| !(f.boot.is_some() && f.dsp.is_none()))
+        })
+        .unwrap_or(true)
+}
 
 pub fn sha256_hex(data: &[u8]) -> String {
     format!("{:x}", Sha256::digest(data))
@@ -30,6 +60,12 @@ pub struct Analysis {
 
 impl Analysis {
     pub fn of(syx: &[u8]) -> Result<Self, String> {
+        Self::with_dsp(syx, expects_dsp(syx))
+    }
+
+    /// As `of`. With `has_dsp` false, section 7 is not a DSP stream (a device
+    /// without a SHARC): it is digested like any section and not checked or kept.
+    pub fn with_dsp(syx: &[u8], has_dsp: bool) -> Result<Self, String> {
         let firmware =
             dt2_firmware_loader::parse(syx).map_err(|e| format!("parse SYX/ELE3: {e}"))?;
         let mut sections = BTreeMap::new();
@@ -39,7 +75,7 @@ impl Analysis {
                 section.id,
                 (sha256_hex(&section.bytes), section.bytes.len()),
             );
-            if section.id == SECTION_DSP {
+            if has_dsp && section.id == SECTION_DSP {
                 // The emulator flattens the stream and never runs the boot ROM: refuse here what the ROM would.
                 patchkit::bootrom::require(&section.bytes).map_err(|e| e.to_string())?;
                 dsp = Some(section.bytes.clone());
