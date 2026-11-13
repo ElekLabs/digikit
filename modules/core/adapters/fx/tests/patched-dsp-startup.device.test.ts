@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { repoRoot, resolveInputs } from '@digi/test-support';
-import { describe, expect, test } from 'vitest';
-import { withSession } from '../support.ts';
-import type { RuntimePlan } from './runtime-plan.ts';
+import { expect, test } from 'vitest';
+import { describeOn } from '@digi/regression/runtime/devices.ts';
+import { withSession } from '@digi/regression/support.ts';
+import type { RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 
 const binary = process.env.DIGI_PATCHED_STARTUP_EMUD;
 const patchkit = process.env.DIGI_PATCHKIT_BIN;
@@ -29,11 +30,11 @@ async function bounded<T>(operation: Promise<T>, ms: number, label: string): Pro
   }
 }
 
-// Opt in with immutable prebuilt daemon/patchkit binaries and existing stock
+// The patched DSP is core/dsp-link (its ColdFire code changes MAIN) with core/fx. Opt in with immutable prebuilt daemon/patchkit binaries and existing stock
 // ready inputs (DIGI_PK_READY_DT2_117 may select a private ready directory).
 // This checks prepared objects only: no daemon, module or core builds here.
 // Frame progress and register retention make no PCM, hardware or performance claim.
-describe.skipIf(!enabled)('DT2 1.17 changed-DSP startup and cached restore', () => {
+describeOn('dt2', 'DT2 1.17 changed-DSP startup and cached restore', () => {
   const runDir = path.join(root, 'out/runs/patched-dsp-startup', randomUUID());
   if (enabled) {
     for (const file of [binary!, patchkit!]) {
@@ -118,18 +119,16 @@ describe.skipIf(!enabled)('DT2 1.17 changed-DSP startup and cached restore', () 
           '--root',
           root,
           'build',
-          'tests/fixtures/modules/patched-pluck',
-          'modules/core/adapters/dsp-voice',
-          'modules/core/adapters/machines',
-          'modules/core/adapters/params',
+          'modules/core/adapters/dsp-link',
+          'modules/core/adapters/fx',
           'modules/core/expansion',
           '--check',
         ],
         { cwd: root, timeout: 30000 },
       );
       fs.writeFileSync(path.join(runDir, 'object-check.log'), checked.stdout + checked.stderr);
-      const output = path.join(runDir, 'patched-pluck.syx');
-      const planFile = path.join(runDir, 'patched-pluck.plan.json');
+      const output = path.join(runDir, 'patched-fx.syx');
+      const planFile = path.join(runDir, 'patched-fx.plan.json');
       const patched = await exec(
         patchkit!,
         [
@@ -139,7 +138,7 @@ describe.skipIf(!enabled)('DT2 1.17 changed-DSP startup and cached restore', () 
           '--firmware',
           inputs.syx,
           '--modules',
-          'test/patched-pluck',
+          'core/dsp-link,core/fx',
           '-o',
           output,
           '--plan',
@@ -150,13 +149,7 @@ describe.skipIf(!enabled)('DT2 1.17 changed-DSP startup and cached restore', () 
       fs.writeFileSync(path.join(runDir, 'patch.log'), patched.stdout + patched.stderr);
       const plan = JSON.parse(fs.readFileSync(planFile, 'utf8')) as RuntimePlan;
       expect(plan.base).toMatchObject({ device: 'dt2', version: '1.17', syx_sha256: stockSha });
-      expect(plan.modules.map((id) => id.split('@')[0]).sort()).toEqual([
-        'core/dsp-voice',
-        'core/expansion',
-        'core/machines',
-        'core/params',
-        'test/patched-pluck',
-      ]);
+      expect(plan.modules.map((id) => id.split('@')[0]).sort()).toEqual(['core/dsp-link', 'core/expansion', 'core/fx']);
       const outputSha = hash(output);
       expect(plan.output?.syx_sha256).toBe(outputSha);
       evidence.patchIdentity = { planFile, output, sha256: outputSha, plan };
@@ -248,4 +241,4 @@ describe.skipIf(!enabled)('DT2 1.17 changed-DSP startup and cached restore', () 
       await bounded(session.close(), 10000, 'owned daemon shutdown');
     }
   }, 330000);
-});
+}, !enabled);

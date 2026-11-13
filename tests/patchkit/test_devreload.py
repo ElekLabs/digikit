@@ -1,6 +1,5 @@
 """Automatic development-loop DSP selection and mode guards."""
 
-import argparse
 from unittest.mock import Mock
 
 import pytest
@@ -77,7 +76,7 @@ def test_zero_patch_set_policy_names_existing_sets():
 
 def test_zero_safe_base_still_requires_sharc_for_content_dsp():
     assert dev.dsp_mode(["test/sine"], [], zero_framework=True) == "sharc"
-    assert dev.dsp_mode(["test/patched-pluck"], [], zero_framework=True) == "sharc"
+    assert dev.dsp_mode(["digikit/pluck"], [], zero_framework=True) == "sharc"
     assert (
         dev.dsp_mode(["test/ui-demo"], ["core/sample-pool"], zero_framework=True)
         == "sharc"
@@ -115,108 +114,6 @@ def test_stop_reaches_exact_legacy_directory_for_same_device_target_store_and_tr
     ]
     legacy.quit.assert_called_once()
     legacy.close.assert_called_once()
-
-
-@pytest.mark.parametrize("device", ["dn2", "dt2"])
-def test_machine_ui_preview_store_overrides_dsp_but_keeps_exact_tuple(device):
-    store = ["test/sine*"]
-    assert dev.store_ui_preview_mode("emulator", device, store) == "zero"
-    assert dev.target_dsp_mode("emulator", device, store) == "sharc"
-    assert (
-        "store-test_sine" in dev.run_dir_of(device, "emulator", store, dsp="zero").name
-    )
-
-
-@pytest.mark.parametrize(
-    "target,store",
-    [
-        ("sample-tracks", ["test/sine*"]),
-        ("emulator", []),
-        ("emulator", ["file:anywhere=modules"]),
-        ("emulator", ["synth:test:0"]),
-        ("emulator", ["test/sine*", "test/sine"]),
-        ("emulator", ["core/sample-pool"]),
-    ],
-)
-def test_ui_preview_store_rejects_other_inputs(target, store):
-    with pytest.raises(dev.H.HarnessError, match="UI preview"):
-        dev.store_ui_preview_mode(target, "dn2", store)
-
-
-@pytest.mark.parametrize("preview", [False, True])
-def test_card_pack_uses_same_preview_variant_as_candidate(
-    monkeypatch, tmp_path, preview
-):
-    pack_cli = argparse.ArgumentParser()
-    pack_cli.add_argument("command", choices=["pack"])
-    pack_cli.add_argument("module")
-    pack_cli.add_argument("--device")
-    pack_cli.add_argument("-o", type=dev.Path)
-    pack_cli.add_argument("--ui-preview", action="store_true")
-
-    def pack(*args):
-        request = pack_cli.parse_args([str(arg) for arg in args])
-        request.o.write_text(f"{request.module}:{request.device}:{request.ui_preview}")
-
-    tools = Mock()
-    monkeypatch.setattr(dev, "pack_store", pack)
-    monkeypatch.setattr(pk_dkrt, "Tools", Mock(return_value=tools))
-    monkeypatch.setattr(config, "stock", Mock(return_value=tmp_path / "stock.syx"))
-    build_card = Mock()
-    selection = Mock()
-    monkeypatch.setattr(pk_dkrt, "build_card", build_card)
-    monkeypatch.setattr(pk_dkrt, "write_selection", selection)
-    card = dev.store_card("dn2", ["test/sine*"], tmp_path, ui_preview=preview)
-    staged = tmp_path / "plus_drive/digikit/modules/sine.dkm"
-    assert staged.read_text() == f"test/sine:dn2:{preview}"
-    build_card.assert_called_once()
-    selection.assert_called_once_with(card, ["modules/sine.dkm"], "dn2")
-
-
-def test_ui_preview_run_uses_zero_mode_for_start_and_kept_directory(
-    monkeypatch, tmp_path
-):
-    monkeypatch.setattr(dev, "build", Mock(return_value=(0, [])))
-    monkeypatch.setattr(dev, "load_keys", Mock(return_value=[]))
-    monkeypatch.setattr(dev, "connect", Mock(return_value=None))
-    card = tmp_path / "store-card.img"
-    monkeypatch.setattr(dev, "refresh_store", Mock(return_value=(None, card)))
-    emu = Mock()
-    emu.status.return_value = {"dsp": "zero"}
-    emu.call.return_value = {}
-    session = Mock()
-    start = Mock(return_value=(emu, session))
-    monkeypatch.setattr(dev, "start", start)
-    release = Mock()
-    monkeypatch.setattr(dev, "release", release)
-    args = argparse.Namespace(
-        target="emulator",
-        store="test/sine*",
-        store_ui_preview=True,
-        trace=False,
-        out=str(tmp_path),
-        keys=None,
-    )
-    report = dev.run_device("dn2", args)
-    assert report["dsp"] == "zero"
-    assert start.call_args.args[1] == dev.run_dir_of(
-        "dn2", "emulator", ["test/sine*"], dsp="zero"
-    )
-    assert start.call_args.args[2:] == (["test/sine*"], False, "zero")
-    assert start.call_args.kwargs == {
-        "store_ui_preview": True,
-        "prepared_card": card,
-    }
-    emu.pcm_start.assert_not_called()
-    release.assert_called_once_with(emu)
-
-
-def test_preview_trace_is_rejected_before_running(monkeypatch):
-    run = Mock()
-    monkeypatch.setattr(dev, "run_device", run)
-    with pytest.raises(SystemExit):
-        dev.main(["emulator", "--store", "test/sine*", "--store-ui-preview", "--trace"])
-    run.assert_not_called()
 
 
 @pytest.fixture
@@ -261,7 +158,6 @@ def refresh(run_dir, emu=None, ids=None, **kwargs):
         ids if ids is not None else ["test/sine*"],
         run_dir,
         kwargs.get("trace", False),
-        kwargs.get("ui_preview", False),
     )
 
 
@@ -344,7 +240,6 @@ def test_store_directory_changes_refresh_card(store_build, tmp_path, change):
     [
         ("ids", ["test/sine"]),
         ("trace", True),
-        ("ui_preview", True),
         ("target", "different/target"),
         ("device", "dt2"),
     ],
@@ -676,7 +571,7 @@ def test_module_preview_uploads_to_mounted_card_without_rebuilding_or_stopping(
     monkeypatch.setattr(dev, "upload_store", update)
     emu = Mock()
     result = dev.refresh_store(
-        emu, "dn2", "emulator", ["test/sine*"], run_dir, False, False, live_update=True
+        emu, "dn2", "emulator", ["test/sine*"], run_dir, False, live_update=True
     )
     assert result == (emu, card)
     update.assert_called_once()
@@ -707,7 +602,6 @@ def test_failed_upload_does_not_commit_candidate_or_replace_card(
             "emulator",
             ["test/sine*"],
             run_dir,
-            False,
             False,
             live_update=True,
         )
@@ -821,7 +715,7 @@ def test_missing_card_rebuilds_before_stopping_live_preview(store_build, tmp_pat
     card.unlink()
     emu = Mock()
     assert dev.refresh_store(
-        emu, "dn2", "emulator", ["test/sine*"], run_dir, False, False, live_update=True
+        emu, "dn2", "emulator", ["test/sine*"], run_dir, False, live_update=True
     ) == (None, card)
     assert card.is_file()
     assert card_build.call_count == 2
@@ -881,7 +775,6 @@ def test_lost_upload_overlay_rebuilds_card_instead_of_using_old_module(
         "emulator",
         ["test/sine*"],
         run_dir,
-        False,
         False,
         live_update=True,
     )

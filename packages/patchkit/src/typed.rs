@@ -1036,7 +1036,6 @@ summary = "t."
         assert_eq!(templates(&m, "dt2"), [0xcc, 0xcb]);
         assert_eq!(templates(&m, "dn2"), [0xd5, 0xd5]);
     }
-
 }
 
 /// A module-owned table of 16 per-track sample records, declared by DK_SAMPLE_TRACKS (<dk/sample/pool.h>, API 1.5): the symbols of the

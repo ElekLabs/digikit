@@ -1,7 +1,7 @@
 # Patched-in modules
 
 A module without `dynamic = true` is linked into a stock firmware image by patchkit (`packages/patchkit`). Use this route for hooks in
-firmware code (master-bus effects, ColdFire UI changes). The project's PLUCK machine (`digikit/pluck`) is a run-time module; its patched-in twin `test/patched-pluck` is a test fixture.
+firmware code (master-bus effects, ColdFire UI changes). Content machines are run-time modules (for example `digikit/pluck`); no patched-in content machine exists any more, and the declaration macros (`DK_MACHINE`, `DK_PARAM`, `DK_PAGE`) are gone.
 The browser patch page lists patched-in modules only; a `.dkm` goes to the device through `/upload`.
 
 - **Look up declared anchors** in `modules/core/fw/reference.json` or with `mise run fw:reference`.
@@ -15,7 +15,7 @@ The browser patch page lists patched-in modules only; a `.dkm` goes to the devic
 
 | step | command |
 | --- | --- |
-| new | Copy an existing patched-in module (`tests/fixtures/modules/patched-pluck`, `modules/core/adapters/fx`). `module:new` makes run-time content modules only. |
+| new | Copy an existing patched-in module (`modules/core/adapters/fx`, or the machine fixture `tests/fixtures/modules/machine-clone` for registry rows). `module:new` makes run-time content modules only. |
 | toolchains | `mise run patch:toolchains` once |
 | patch | `mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules fx/NAME -o out/patch/x.syx` |
 | explain | `mise run patch:explain -- --firmware ... --modules ...` |

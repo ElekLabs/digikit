@@ -23,8 +23,7 @@ conflicts = []
 id = "pluck"
 dsp = "pk"
 
-# The patched-in twin test/patched-pluck (tests/fixtures/modules) has its own copy of this DSP source. The equiv-dyn-pluck scenario
-# compares the two, so a change of the sound here needs the same change in the copy.
+# The equiv-dyn-pluck cells pin the PCM of a note (modules/machines/pluck/tests/equiv.device.test.ts): a change of the sound here moves the pins.
 [[object]]
 path = "build/pluck-cf.dko.json"
 sources = ["src/module.c"]

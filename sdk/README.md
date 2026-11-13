@@ -12,7 +12,6 @@ and the device profiles (`devices/*.toml`).
 | `include/dk/core/` | The module contract: `<dk/core/module.h>` (`dk_module_def`, `dk_module_ctx` and the prototypes of every import), `<dk/core/log.h>`, `<dk/core/mem.h>`, `<dk/core/time.h>` (the runtime services), `<dk/core/trace.h>` (trace marks), `<dk/core/bytes.h>` (big-endian 32-bit access, header only), `<dk/core/text.h>` (bounded text: length, copy, equal, append, concatenate, number text, truncation, size and time text), `<dk/core/path.h>` (join, parent, leaf) and `<dk/core/status.h>` (the `DK_E_*` status codes; generated, do not edit). No device access. | `module.h`, `log.h`, `mem.h`, `time.h`, `trace.h`, `bytes.h`, `text.h`, `path.h` yes; `status.h` no |
 | `include/dk/platform/` | What the device provides, one header per service group: `ui.h` (menus, lists and dialogs on the screen), `param.h` (read and write a machine parameter from a `dk_param_on_click` callback), `settings.h`, `files.h` (file listing and writing), `io.h`, `job.h` (background jobs), `hash32.h`, `usb_bulk.h`, `intro.h`, `data.h`. | yes |
 | `include/dk/page/` | Pages: `page.h` (the frame and event of a canvas page, the page flags) and `widgets.h` (small page widgets). | yes |
-| `patched-in/include/dk/` | The declaration macros (`DK_MACHINE`, `DK_FX`, `DK_PARAM`, `DK_PAGE`, `DK_SAMPLE_TRACKS`) and their record layouts (`gen/desc.h`) for patched-in modules only; patchkit adds this directory to the include path of builds with `dynamic = false`. | yes |
 | `include/dk/chooser/` | The slot list chooser (`chooser.h`) and its pure functions of row sort order and pool row text (`logic.h`). | yes |
 | `include/dk/sample/` | Sample components: `pool.h` (per-module stereo sample pool), `view.h` (waveform drawing for native pages) and `picker.h` (on-device sample picker for a 16-entry pool). | yes |
 | `include/dk/gen/` | C layouts and constants generated from `sdk.toml` (including `imports.h`, the prototypes of the service imports, and `sample.h`, the word layout of a sample pool entry). Included by the headers above, not by modules. | no |
@@ -113,8 +112,7 @@ static int32_t init(dk_module_ctx *ctx)
 const dk_module_def dk_module = {.init = init};
 ```
 
-List the file as an `[[object]]` in `module.toml`. The declaration macros (`DK_FX`, `DK_PAGE`, ...) are for patched-in modules only and are not in the public SDK
-(`sdk/patched-in/include`). The guide ([docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)) is rewritten for the builders in S4.
+List the file as an `[[object]]` in `module.toml`. The guide ([docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)) is rewritten for the builders in S4.
 
 ## Declaring a machine
 

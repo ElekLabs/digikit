@@ -38,7 +38,7 @@ Sources may sit in subfolders (`src/cf/dt2/`, `src/cf/dn2/`) when one module ser
   extra roots of `--modules-dir` and `PATCHKIT_MODULES`.
 - **Categories**: `core` (frameworks other modules require), `fx`, `machines`, `ui`, `tools`, `test` (fixtures and
   research probes; they are not for users). `mise run module:new` makes run-time content modules only (`machine`, `fx` or `tool`; guide section 3). A patched-in
-  module starts as a copy of a similar one, for example `tests/fixtures/modules/patched-pluck`.
+  module starts as a copy of a similar one, for example `tests/fixtures/modules/machine-clone`.
 - **Entry ids** (in `[[entry]]`): `[a-z][a-z0-9_]*`. They become symbols (`machines.pluck.index`).
 - **Symbols** in expressions: `[A-Za-z_.][A-Za-z0-9_.]*`.
 - **Version**: `major.minor.patch`; raise it when the module's behaviour or its interface to other modules changes.
@@ -275,7 +275,7 @@ on which other modules are selected. `core/machines` therefore ships `types.toml
 [dt2]
 last = 23                          # the highest number the framework supports on this device
 [dt2.alloc]
-"test/patched-pluck:pluck" = 9         # "<module id>:<entry id>" = number
+"test/machine-clone:xclone" = 8       # "<module id>:<entry id>" = number
 ```
 
 The numbers are allocated by hand (the next free number on each device) and committed with the module. A number is never reused or changed, also not
@@ -321,28 +321,13 @@ devices = ["dt2"]
 patchkit refuses an entry for an unknown registry, an unknown or missing field, a value that does not fit, a
 `cstr` that is too long and an id used twice.
 
-### Machine rows (lowering of the C declarations)
+### Machine rows
 
-**Note.** A patched-in machine is declared in C with `DK_MACHINE`, `DK_PARAM` and `DK_PAGE` (`sdk/patched-in/include/dk/machine/machine.h`, visible to patched-in builds only; see
-[docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), section 5.2), not in the manifest. The manifest parser ignores unknown keys,
-so `patchkit` keeps a short refusal: a manifest with `[[fx]]`, `[[voice]]`, `[[machine]]`, `[[param]]` or `[[page]]` fails with the
-name of the C macro to use. The text below describes how the declarations are lowered into registry rows.
-
-The declarations are lowered per device into the rows of `core/machines`, `core/params` and `core/dsp-voice`
-(`packages/patchkit/src/typed.rs`; the lowering also runs in the browser).
-
-- You write parameters and knobs. The device profile places them (`[modules.knobs]`, `[modules.templates]` and `[modules.frame]` in
-  `devices/<device>.toml`). A device file that has no `[modules]` section takes no machine declarations, and a new device is a new TOML file.
-- A `DK_PARAM` takes the profile's `encoder` template unless a `DK_PARAM_GLYPH` record picks `fader`, `pan`, `onoff` or `tune`. The knobs of a `DK_PAGE` (`DK_KNOB(n)`) name parameters of the module.
-- Parameter codes follow the order of the `DK_PARAM` records (`params.<id>.index`). Type numbers stay permanent
-  (`modules/core/adapters/machines/types.toml`); the lowering needs none.
-- Lowered rows, per device: `voices` (`type = machines.<id>.index`, `pc = render`), `machines`, `params`, `pages`.
-  On a device whose knobs go to the machine row (`to = "machine"`: Digitakt II) the machine row gets `f0..f7` and the
-  level `f8`. On a device whose knobs go to a page (`to = "page"`: Digitone II) the `[[page]]` gets `c0..c7`, the slots
-  `s0..` and the level `c8`; a stock code on a page is refused.
-- A typo is an error: unknown keys of a device table, a device table for a device without a model, more knobs than
-  the device has, a page on a device that keeps knobs in the machine row.
-- Hand-written `[[entry]]` rows still work, also next to declared machines (for example for a registry the typed form does not cover).
+A patched-in machine is written as `[[entry]]` rows (`machines`, `params`, `pages`, `voices`), as in the examples below. The C declaration macros
+(`DK_MACHINE`, `DK_PARAM`, `DK_PAGE`) and the typed lowering that turned them into rows are gone: content machines and effects are run-time modules that
+build themselves in `init` with builder calls (`dk_module_ctx_add_machine`, `dk_module_ctx_add_fx`) and list their ids as `[[machine]]` and `[[fx]]` in
+`module.toml` ([docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)). A manifest with `[[voice]]`, `[[param]]` or `[[page]]` is refused.
+The device profile still describes where knobs go (`[modules.knobs]`, `[modules.templates]` and `[modules.frame]` in `devices/<device>.toml`).
 
 The device model, from `devices/digitakt-ii.toml` (comments in the files):
 
@@ -438,7 +423,7 @@ main-loop stall. The complete list is the docstring of `tools/patchkit/pk_harnes
 
 Workflow:
 
-1. Copy a similar patched-in module (`tests/fixtures/modules/patched-pluck`) and fill in the manifest and the sources.
+1. Copy a similar patched-in module (`tests/fixtures/modules/machine-clone`) and fill in the manifest and the sources.
 2. `mise run module:dev -- --modules category/name`: edit, see one summary line per save.
 3. Add module tests; a `smoke.toml` like the one of `modules/core/adapters/fx` only checks that the patched firmware is audible and does not fault.
 4. Add a cell to `tests/patchkit/smoke/matrix.toml` for each device and firmware you support, then
@@ -473,35 +458,19 @@ mise run module:dev -- --modules core/fx
 mise run patch:test -- --cell "dt2-1.17:core/fx"
 ```
 
-## Worked example 2: `test/patched-pluck` (both CPUs, built on frameworks)
+## Worked example 2: `test/machine-clone` (a machine row on a framework)
 
-`tests/fixtures/modules/patched-pluck/` adds a PLUCK machine (Karplus-Strong string) to the Digitakt II. It is the patched-in twin of the
-run-time module `digikit/pluck` (`modules/machines/pluck/`), which builds from the same DSP source. It needs no ColdFire code
-of its own: three frameworks do the firmware work, and the module only declares data.
-The machine is declared in C (`src/module.c`: `DK_MACHINE`, `DK_PARAM`, `DK_PAGE`); see "Machine rows" above.
+`tests/fixtures/modules/machine-clone/` adds one machine to the Digitakt II, a clone of MANUAL SLICE, with hand-written rows. It needs no code of its own:
+`core/machines` does the firmware work, and the module only adds data.
 
-- **`requires = ["core/dsp-voice", "core/machines", "core/params"]`** and `ports = ["dt2-1.17", "dn2-1.12"]`. Patch it
-  with all four modules: `--modules core/dsp-voice,core/machines,core/params,test/patched-pluck`.
-- **The DSP voice.** `[[object]]` places `../../../../modules/machines/pluck/src/dsp/pluck.s` in `dsp.l2` (`devices = ["dt2"]`). An `[[entry]]` in the
-  `voices` registry of `core/dsp-voice` gives the machine type (`machines.pluck.index`) and the routine (`_pk_render`).
-  The framework hooks the sample renderer once; a track whose type is registered renders with the routine, every
-  other type renders as stock. (`DK_MACHINE` names the routine; the lowering produces the row.)
-- **The machine.** The `DK_MACHINE`, `DK_PARAM` and `DK_PAGE` records of the module (see "Machine rows" above) lower into
-  these rows. The machine row in the `machines` registry of `core/machines` has `name` and `short` (list and page
-  header), `clone_of = 0` (take SAMPLE's permission, per-type byte and DSP selector), and `f0` to `f8`, the nine
-  descriptor fields that choose which parameter occupies each knob of the SRC page. Fields are stock descriptor ids
-  (`f0 = 0xca` is TUNE) or `"params.<id>.index"` for a parameter this module adds. The voice row in `voices` gives the type
-  (`machines.pluck.index`) and the render routine (`_pk_render`).
-- **The parameters.** Four rows in the `params` registry of `core/params`: `name`, `short`, a `template`
-  stock row to copy the formatter and value class from (the profile's `plain` row), `slot` (the engine slot the value travels in), `min`, `max`
-  and `default`.
-- **No numbers of the firmware's types.** The machine's type number is permanent: its row in
-  `modules/core/adapters/machines/types.toml`, added by hand. The
-  parameter indices are assigned in canonical module order. The voice row and the machine row both name `machines.pluck.index`, so they always agree.
-- **Tests.** `tests/select.toml` opens the machine list, selects PLUCK, checks the committed type, the SRC page frame,
-  that a trig sounds, that the DSP knows the type and that turning a knob changes the page. `tests/smoke.toml` checks
-  that the module leaves the stock voice alone.
-- **Gallery.** The README and the icon of the machine are in `modules/machines/pluck/` (the knobs, and what projects saved with PLUCK do on stock firmware).
+- **`requires = ["core/machines"]`** and `ports = ["dt2-1.17"]`. Patch it with both modules: `--modules core/machines,test/machine-clone`.
+- **The machine.** One `[[entry]]` in the `machines` registry of `core/machines` has `name` and `short` (list and page header), `clone_of` (take that stock
+  machine's permission, per-type byte and DSP selector), and `f0` to `f8`, the nine descriptor fields that choose which parameter occupies each knob of the SRC
+  page. Fields are stock descriptor ids (`f0 = 0xf8`) or `"params.<id>.index"` for a parameter this module adds (`core/params` rows: `name`, `short`, a
+  `template` stock row, `slot`, `min`, `max`, `default`; `tests/fixtures/modules/dn2-pages` shows them on the Digitone II with its own pages).
+- **The number.** The machine's type number is permanent: its row in `modules/core/adapters/machines/types.toml` (`"test/machine-clone:xclone" = 8`), added by hand.
+  Parameter indices are assigned in canonical module order. A machine with its own DSP voice adds a `voices` row for `core/dsp-voice` (`type = machines.<id>.index`,
+  `pc` = the render routine); the project's PLUCK (`modules/machines/pluck/`) is a run-time module instead.
 
 ### An effect: `[[entry]] registry = "fx"`
 
@@ -529,5 +498,4 @@ Example and fixture: `tests/fixtures/modules/dyn-fx-gain`.
 The frameworks themselves are ordinary modules: `modules/core/adapters/machines/` (about 24 ColdFire anchors, six copied
 tables, the hooks in `src/cf/dt2/machines.s` and `src/cf/dn2/machines.s`), `modules/core/adapters/params/` and
 `modules/core/adapters/dsp-voice/`. Their routines are unit-tested on the emulated ColdFire core (`tools/patchkit/pk_cfunit.py`,
-`modules/core/adapters/machines/tests/test_pk_machines_fw.py`, `modules/core/adapters/params/tests/test_pk_params_fw.py`), and the proofs are `tools/patchkit/pk_proof_machines.py` and
-`tools/patchkit/pk_proof_pluck.py`. Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).
+`modules/core/adapters/machines/tests/test_pk_machines_fw.py`, `modules/core/adapters/params/tests/test_pk_params_fw.py`), and the proofs are `tools/patchkit/pk_proof_machines.py`. Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).

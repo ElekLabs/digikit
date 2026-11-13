@@ -57,10 +57,10 @@ name is `out/patch/<firmware>+<modules>.syx`. The command verifies the result be
 - The input must be a stock image. A patched image is refused.
 - Everything under `out/` is derived from firmware and is never committed.
 
-A machine needs its framework modules, which are added for you (`test/patched-pluck` is the patched-in test machine; the project's PLUCK, `digikit/pluck`, is a run-time module, see below):
+A machine needs its framework modules, which are added for you (`test/machine-clone` is a patched-in test machine of registry rows; content machines such as the project's PLUCK, `digikit/pluck`, are run-time modules, see below):
 
 ```sh
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules test/patched-pluck -o out/patch/pluck.syx
+mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules test/machine-clone -o out/patch/clone.syx
 ```
 
 ### Inspect, check, explain, verify
@@ -71,7 +71,7 @@ uv run python -m tools.patchkit.patchkit inspect out/patch/fx.syx               
 uv run python -m tools.patchkit.patchkit check --firmware firmware/Digitakt_II_OS1.17.syx           # which modules fit this firmware
 uv run python -m tools.patchkit.patchkit verify out/patch/fx.syx --base firmware/Digitakt_II_OS1.17.syx   # re-decode and check
 mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx
-mise run patch:mem -- core/machines test/patched-pluck --device dt2 --firmware 1.17    # bytes used and free per region
+mise run patch:mem -- core/machines test/machine-clone --device dt2 --firmware 1.17    # bytes used and free per region
 ```
 
 - `check` prints `ok` or `refused` plus the reason for every module (for example "built for dn2-1.12").
@@ -253,7 +253,7 @@ first `pnpm dev` in a fresh tree compiles the browser cores and takes several mi
 |---|---|---|
 | Port | Per-firmware facts: named anchors with SHA-256 of the expected bytes, free regions, container limits. Generated, keyed by the `.syx` SHA-256. | `devices/ports/dt2-1.17.toml` |
 | Framework module | Hooks firmware sites once and exports a registry that other modules add entries to. Ordinary assembly plus a manifest. | `core/machines`, `core/params`, `core/dsp-voice`, `core/expansion` |
-| Content module | Own code and declarative registry entries. No addresses. | `test/patched-pluck` |
+| Content module | Own code and declarative registry entries. No addresses. | `test/machine-clone` |
 
 Device, board and firmware facts are data (`devices/*.toml`, `devices/ports/*.toml`, `modules/core/adapters/machines/types.toml`); code that needs a constant gets it from `patchkit gen` (`[[gen]]` in a `module.toml`). Where each fact lives and what a new device needs: `docs/design/device-data.md`.
 
@@ -577,8 +577,7 @@ presses from the top of the list in the rehearsal), press **YES**. The track pag
 bug of an image built before 2026-10-19 (finding 50). Rebuild the image to get one page.
 (The emulator rig pressed YES twice, 300 ms apart; if the track page does not show those parameters after one press, press YES once more.)
 
-**8. Play:** press **TRIG 1** (hold it for a few seconds). Expected: a plucked-string tone, decaying (the rehearsal's note is sample for sample the
-patched-in `test/patched-pluck`). Keep the key down for 10 to 20 seconds once, then read the log again (command of step 6, new `--out`):
+**8. Play:** press **TRIG 1** (hold it for a few seconds). Expected: a plucked-string tone, decaying (the rehearsal's note matched the retired patched-in twin sample for sample; its PCM is pinned in `modules/machines/pluck/tests/equiv.device.test.ts`). Keep the key down for 10 to 20 seconds once, then read the log again (command of step 6, new `--out`):
 
 Good log (dispatches and returns rise together; this is the rehearsal's):
 

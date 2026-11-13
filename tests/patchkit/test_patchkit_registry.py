@@ -48,7 +48,7 @@ def test_pack_refuses_a_module_for_the_wrong_device(tmp_path):
         "--root",
         ROOT,
         "pack",
-        "test/patched-pluck",
+        "test/machine-clone",
         "--device",
         "dt2",
         "-o",

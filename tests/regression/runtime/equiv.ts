@@ -4,23 +4,9 @@ import { button, MS, type Device, type Session } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
-import {
-  bounded,
-  frames,
-  pcmWindow,
-  peak,
-  pickSine,
-  readFloatWav,
-  rpc,
-} from '@digi/regression/runtime/fx-live.ts';
+import { bounded, frames, pcmWindow, peak, pickSine, readFloatWav, rpc } from '@digi/regression/runtime/fx-live.ts';
 import { FIRMWARE, FULL_TIER, describeOn } from '@digi/regression/runtime/devices.ts';
-import {
-  decodeTables,
-  diffTables,
-  dynType,
-  selectType,
-  voiceRows,
-} from '@digi/regression/runtime/project-kit.ts';
+import { decodeTables, diffTables, dynType, selectType, voiceRows } from '@digi/regression/runtime/project-kit.ts';
 
 /**
  * A run-time module set against a boot of no module (port of tools/patchkit/pk_digikit_scen.py `run_equiv`).

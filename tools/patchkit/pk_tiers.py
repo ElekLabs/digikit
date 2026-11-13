@@ -8,8 +8,8 @@ counters of `status`, so boot and settling are excluded):
 
   stock         the stock firmware, the sample voice
   voice0        core/dsp-voice, no type registered
-  pluck-idle    the PLUCK module set, PLUCK selected on track 1, no note
-  pluck-ring    the same, TRIG 1 held at the default DECAY
+  clone-idle    core/machines with test/machine-clone, the clone selected on track 1, no note
+  clone-ring    the same, TRIG 1 held
 
 Per configuration: wall seconds per emulated second, DSP worker CPU per audio second, DSP instructions per audio
 second by tier (idle skip, interpreter, fast tier, AOT blocks). `--hist` also sets SHARC_FAST_HIST and
@@ -31,15 +31,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools.patchkit import pk_harness as H  # noqa: E402
 
 TRIG1 = H.button("TRIG 1")
-PLUCK_MODS = ["core/dsp-voice", "core/machines", "core/params", "test/patched-pluck"]
-PLUCK_DOWNS = 7
+CLONE_MODS = ["core/machines", "test/machine-clone"]
+CLONE_DOWNS = 7  # the clone is the first machine after the stock types
 
-# name -> (modules, DSP_FRAME_POKE, select PLUCK, hold TRIG 1)
+# name -> (modules, DSP_FRAME_POKE, select the clone, hold TRIG 1)
 CONFIGS: dict[str, tuple[list[str], str, bool, bool]] = {
     "stock": ([], "", False, True),
     "voice0": (["core/dsp-voice"], "", False, True),
-    "pluck-idle": (PLUCK_MODS, "", True, False),
-    "pluck-ring": (PLUCK_MODS, "", True, True),
+    "clone-idle": (CLONE_MODS, "", True, False),
+    "clone-ring": (CLONE_MODS, "", True, True),
 }
 
 
@@ -47,10 +47,10 @@ def tiers(emu) -> dict:
     return (emu.status().get("audio") or {}).get("dsp_tiers") or {}
 
 
-def select_pluck(s: H.Session) -> None:
+def select_clone(s: H.Session) -> None:
     s.do_tap(["FUNC", "SRC"])
     s.run_ms(200)
-    for _ in range(PLUCK_DOWNS):
+    for _ in range(CLONE_DOWNS):
         s.do_tap("DOWN")
         s.run_ms(80)
     s.do_tap("YES")
@@ -60,7 +60,7 @@ def select_pluck(s: H.Session) -> None:
 
 
 def measure(name: str, fw: str, seconds: float, hist: bool, pcm: bool = False) -> dict:
-    mods, poke, pluck, hold = CONFIGS[name]
+    mods, poke, clone, hold = CONFIGS[name]
     env: dict[str, str] = {}
     if poke:
         env["DSP_FRAME_POKE"] = poke
@@ -74,8 +74,8 @@ def measure(name: str, fw: str, seconds: float, hist: bool, pcm: bool = False) -
     errlog = pathlib.Path(emu._run_dir.name) / "daemon.stderr"  # type: ignore[union-attr]
     s.reset()
     s.run_ms(1500)
-    if pluck:
-        select_pluck(s)
+    if clone:
+        select_clone(s)
     wav = pathlib.Path(emu._run_dir.name) / "window.wav"  # type: ignore[union-attr]
     if pcm:
         emu.call("pcm.tap", action="capture", path=str(wav))

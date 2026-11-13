@@ -246,12 +246,7 @@ pub fn cf_include_dirs(root: &Path, moddir: &Path) -> Vec<PathBuf> {
 }
 
 /// The `source_sha256` a build of the object would write, computed the same way as the builders do and without compiling.
-fn source_hash(
-    env: &Env,
-    moddir: &Path,
-    sources: &[String],
-    sdk: bool,
-) -> Result<String> {
+fn source_hash(env: &Env, moddir: &Path, sources: &[String], sdk: bool) -> Result<String> {
     let paths: Vec<PathBuf> = sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(sources) {
         Kind::Sharc => {
@@ -259,12 +254,7 @@ fn source_hash(
             Ok(sharc::source_hash(&text))
         }
         Kind::Rust => rust::source_sha256(&paths[0]),
-        Kind::Cf => cf::source_digest(
-            env,
-            &paths,
-            &cf_include_dirs(&env.root, moddir),
-            sdk,
-        ),
+        Kind::Cf => cf::source_digest(env, &paths, &cf_include_dirs(&env.root, moddir), sdk),
     }
 }
 
@@ -355,12 +345,7 @@ fn build_object(
                 let (proto, sha, toolchain) = rust::object_proto(env, &paths[0])?;
                 cf::dko_from_proto(&proto, sha, toolchain)
             } else {
-                cf::cf_object(
-                    env,
-                    &paths,
-                    &cf_include_dirs(&env.root, moddir),
-                    sdk,
-                )
+                cf::cf_object(env, &paths, &cf_include_dirs(&env.root, moddir), sdk)
             }
         }
     }
@@ -466,13 +451,7 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
             });
             continue;
         }
-        let obj = build_object(
-            &env,
-            moddir,
-            o,
-            &opts.defines,
-            m.is_content(),
-        )?;
+        let obj = build_object(&env, moddir, o, &opts.defines, m.is_content())?;
         let out = match &opts.out {
             Some(d) => d.join(&o.path),
             None => stored(&hash),

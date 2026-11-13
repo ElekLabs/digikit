@@ -16,11 +16,6 @@ device = "dt2"
 firmware = "1.17"
 modules = ["core/machines", "test/machine-clone"]
 
-[[cell]]
-device = "dt2"
-firmware = "1.17"
-modules = ["core/dsp-voice", "core/machines", "core/params", "test/patched-pluck"]
-
 # Rust on the ColdFire (finding 26)
 [[cell]]
 device = "dt2"
@@ -43,12 +38,7 @@ device = "dn2"
 firmware = "1.12"
 modules = ["core/machines", "test/dn2-clone"]
 
-# Digitone II PLUCK (its own SYN page, the DN2 voice hook) and the own-pages test machine.
-[[cell]]
-device = "dn2"
-firmware = "1.12"
-modules = ["core/machines", "core/params", "core/dsp-voice", "test/patched-pluck"]
-
+# The own-pages test machine.
 [[cell]]
 device = "dn2"
 firmware = "1.12"
