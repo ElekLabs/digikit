@@ -8,9 +8,10 @@ import { expect, test } from 'vitest';
 import { describeOn } from '@digi/regression/runtime/devices.ts';
 import { withSession } from '@digi/regression/support.ts';
 import type { RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { optInPatchkit } from '@digi/regression/runtime/patchkit.ts';
 
 const binary = process.env.DIGI_PATCHED_STARTUP_EMUD;
-const patchkit = process.env.DIGI_PATCHKIT_BIN;
+const patchkit = optInPatchkit();
 const enabled = Boolean(binary && patchkit);
 const root = repoRoot();
 const exec = promisify(execFile);

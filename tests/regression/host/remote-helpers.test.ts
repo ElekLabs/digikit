@@ -34,6 +34,7 @@ vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
 import { expectRuntimeUi } from '../runtime/ready.ts';
 import { bindBootClock, pollEmulated, waitEmulated, waitForBootEmulated } from '../runtime/waits.ts';
 import { expectRemoteEnabled, installRemote, prepareRemote, remoteTap, withRemoteRelease } from '../runtime/remote.ts';
+import { prepareRuntimePlanModulesOffline } from '../runtime/runtime-plan-modules.ts';
 import {
   planSymbol,
   prepareRuntimePlanOffline,
@@ -630,7 +631,7 @@ for (const invalid of [null, 'root', 'artifact'] as const) {
       if (file === '/stock.syx') return Buffer.from('stock');
       return Buffer.from(invalid === 'artifact' ? 'changed' : 'prepared');
     });
-    const preparing = prepareRuntimePlanOffline(
+    const preparing = prepareRuntimePlanModulesOffline(
       { device: 'dt2', firmware: '1.17' },
       '/offline',
       '/artifacts',

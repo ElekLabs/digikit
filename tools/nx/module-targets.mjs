@@ -186,18 +186,16 @@ const SHARED_BUILT = [
 // (dist/daemons.json holds the path of the store entry, which is keyed on the patchkit sources too).
 const PATCHKIT_BINARIES = ['dist/patchkit/patchkit', 'dist/daemons.json'];
 // What a test result follows when it does not run patchkit itself: the patched images, plans and address maps, and the daemon key
-// without the sources that only patchkit reads (tools/devtools/daemon_test_key.py).
+// without the sources that only patchkit reads (`emud_key.test_key_of`, written by `verify_build daemons`).
 const MERGE_BYTES = ['dist/bytes/images.sha256', 'dist/bytes/daemon-test.key'];
 export const BUILT_OUTPUTS = outputFiles([...SHARED_BUILT, ...PATCHKIT_BINARIES]);
 // Merge keys: the same without the binaries; a test that runs patchkit live keeps `dist/patchkit/patchkit` (PATCHKIT_LIVE).
 export const MERGE_OUTPUTS = outputFiles([...SHARED_BUILT, ...MERGE_BYTES]);
-// A test whose import closure holds one of these runs patchkit for its own sake (the files document it): its key keeps the binary.
-// runtime-plan.ts and dkm.ts do not count: they import patchkit-exec.ts, and what they read follows dist/bytes/images.sha256
-// (image, plan, address map) and the packs.
+// A test whose import closure holds one of these runs patchkit (every module that executes it imports patchkit.ts, or is listed):
+// its key keeps the binary. Only runtime-plan.ts does not count: it runs `apply --set`, and its image, plan and address map are
+// hashed in dist/bytes/images.sha256. (An explicit module list goes through runtime-plan-modules.ts, which imports patchkit.ts.)
 export const PATCHKIT_LIVE = [
   'tests/regression/runtime/patchkit.ts',
-  'tests/regression/runtime/synth.ts',
-  'tests/regression/runtime/addrmap.ts',
   'packages/test-support/src/commit-records.ts',
 ].map((file) => `{workspaceRoot}/${file}`);
 export const DEVICE_INPUTS = [...READ_BY_TESTS, ...BUILT_OUTPUTS, ...DEVICE_COMMON];
@@ -240,6 +238,7 @@ export const deviceTarget = (root, tests, recs, imageInput, importInputs, upload
     executor: 'nx:run-commands',
     cache: true,
     inputs: [
+      ...(opts.narrow && patchkitLive ? outputFiles(['dist/patchkit/patchkit']) : []),
       ...(opts.narrow
         ? [
             ...DEVICE_COMMON,
@@ -337,10 +336,7 @@ const fileTargets = (name, root, tests, recs, imageInput, importInputs, uploadab
   if (tests.length === 1) {
     const [test] = tests;
     const targets = { [name]: build(tests, !isMerge(test), recs, Boolean(opts.twin)) };
-    if (opts.twin)
-      targets[allName] = isMerge(test)
-        ? { executor: 'nx:noop', inputs: build(tests, false).inputs, dependsOn: [name] }
-        : build(tests, false);
+    if (opts.twin) targets[allName] = build(tests, false); // the full key for every test, a merge test included
     return targets;
   }
   const targets = {};
@@ -358,7 +354,7 @@ const fileTargets = (name, root, tests, recs, imageInput, importInputs, uploadab
       return target;
     };
     targets[child] = make(narrow, Boolean(opts.twin));
-    if (opts.twin) all[narrow ? `${allName}--${suffix}` : child] = narrow ? make(false) : child;
+    if (opts.twin) all[`${allName}--${suffix}`] = make(false);
   }
   // Nx selects a target by its inputs, so the parents keep the inputs of the whole project.
   const { inputs } = build(tests, false);

@@ -82,8 +82,23 @@ export interface PreparedRuntimePlan {
   preparedImage?: PreparedRuntimeImage;
 }
 
-/** Offline plan preparation also supplies startup instrumentation before a daemon exists. */
-export async function prepareRuntimePlanOffline(
+/**
+ * Offline plan preparation of the patch set (`apply --set`): its result is the image, plan and address map hashed in
+ * dist/bytes/images.sha256, so this file does not count as running patchkit live. An explicit module list goes through
+ * runtime-plan-modules.ts. Also supplies startup instrumentation before a daemon exists.
+ */
+export function prepareRuntimePlanOffline(
+  options: Pick<SessionOptions, 'device' | 'firmware' | 'runtime'>,
+  directory: string,
+  artifacts: string,
+  symbols: string[],
+): Promise<PreparedRuntimePlan> {
+  return prepareOfflineWith(patchkit, options, directory, artifacts, symbols);
+}
+
+/** The shared body: `exec` is the patchkit helper of the caller (runtime-plan-modules.ts passes the one that counts as live). */
+export async function prepareOfflineWith(
+  exec: typeof patchkit,
   options: Pick<SessionOptions, 'device' | 'firmware' | 'runtime'>,
   directory: string,
   artifacts: string,
@@ -97,7 +112,7 @@ export async function prepareRuntimePlanOffline(
   fs.mkdirSync(directory, { recursive: true });
   const syx = path.join(directory, `runtime-${device}.syx`);
   const planFile = syx.replace(/\.syx$/, '.plan.json');
-  const patch = await patchkit(
+  const patch = await exec(
     [
       'apply',
       '--firmware',

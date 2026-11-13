@@ -104,7 +104,6 @@ const GATE = {
         '{workspaceRoot}/tools/patchkit/toolchain/**/*',
         '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
         '{workspaceRoot}/tools/devtools/emud_key.py',
-        '{workspaceRoot}/tools/devtools/daemon_test_key.py',
         '{workspaceRoot}/tools/devtools/verify_build.py',
         '{workspaceRoot}/tools/devtools/stablebin.py',
         '{workspaceRoot}/tools/emulator/digi_env.py',
@@ -117,8 +116,6 @@ const GATE = {
         commands: [
           'mkdir -p dist',
           'CARGO_BUILD_JOBS=${DIGI_JOBS:-4} uv run python -m tools.devtools.verify_build daemons --env-out dist/daemons.json',
-          // the daemon part of a merge key: the store key without the sources that only patchkit reads
-          'mkdir -p dist/bytes && uv run python -m tools.devtools.daemon_test_key',
         ],
         parallel: false,
         cwd: '.',

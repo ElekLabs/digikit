@@ -5,21 +5,7 @@
     "runtimeAcceptance": [
       {
         "files": [
-          "tests/fx-routes-panel.device.test.ts"
-        ],
-        "modules": [
-          "test/dyn-fx-gain",
-          "test/dyn-fx-gain-send",
-          "test/dyn-fx-gain-sendonly",
-          "test/sine"
-        ],
-        "aliases": {
-          "test/dyn-fx-gain-send-3": "test/dyn-fx-gain-send"
-        },
-        "plusdrive": true
-      },
-      {
-        "files": [
+          "tests/fx-routes-panel.device.test.ts",
           "tests/fx-routes-persist.device.test.ts"
         ],
         "modules": [

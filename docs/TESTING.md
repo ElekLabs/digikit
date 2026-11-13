@@ -391,13 +391,15 @@ merge key (the target of a file in `mergeTests`, and the narrow keys, see above)
 `patchkit:device-images` runs `patchkit apply` for each acceptance firmware (`CELLS` of `tools/nx/device-inputs.mjs`) with each patch set of
 its device file and writes `dist/bytes/images.sha256`, one line `<device>-<version> <set> image <sha256> plan <sha256> addrmap <sha256>`
 (the plan and the address map are what `runtime-plan.ts` reads). `digi-control:daemons` also writes `dist/bytes/daemon-test.key`, the
-daemon key without the sources that only patchkit reads (`tools/devtools/daemon_test_key.py`; the store key of the daemon is unchanged).
+daemon key without the sources that only patchkit reads (`emud_key.test_key_of`, written by `verify_build daemons`; it is part of the daemon store key recipe, so adding it rebuilt the daemons once).
 So a patchkit edit that changes no packed byte (image, plan, address map, `.dkm`, core object) selects no merge target. A test that runs
-patchkit for its own sake keeps `dist/patchkit/patchkit` in its merge key. The rule is the import closure: it holds `runtime/patchkit.ts`
-(the `patchkit` helper of tests; `runtime-plan.ts` and `dkm.ts` import `patchkit-exec.ts` instead), `synth.ts`, `addrmap.ts` or
+patchkit keeps `dist/patchkit/patchkit` in its key (merge and narrow). The rule is the import closure: it holds
+`tests/regression/runtime/patchkit.ts` (the helper every module that runs patchkit imports: `dkm.ts` for `needs` and `fit`, `synth.ts`,
+`addrmap.ts`, `runtime-plan-modules.ts` for `apply --modules`, the opt-in proofs through `optInPatchkit`) or
 `packages/test-support/src/commit-records.ts` (import it as `@digi/test-support/commit-records`), or the record patches fixture modules
-(`patchModules`). `test-device-all`, the non-twin targets (`test-device-full`) and `test-conformance` keep the full key: the patchkit binary
-and `dist/daemons.json`. A merge key lists a shared file of `SHARED_READS` (`sdk/sdk.toml`, `types.toml`, core `module.toml`) only when a
+(`patchModules`). Only `runtime-plan.ts` is exempt: its `apply --set` result is in `images.sha256`.
+`test-device-all` (a real run for every test, merge tests included), the non-twin targets (`test-device-full`) and `test-conformance`
+keep the full key: the patchkit binary and `dist/daemons.json`. A merge key lists a shared file of `SHARED_READS` (`sdk/sdk.toml`, `types.toml`, core `module.toml`) only when a
 helper in its closure reads it (`upload-kit.ts`, `synth.ts`, `memaudit-kit.ts`) or the test runs patchkit; the full key lists all of them.
 The sources, SDK headers and `source_sha256` of the image are not inputs: a comment, an unused constant or a rebuilt object with the same
 bytes changes no key. The key also holds the pack outputs (`dist/modules/*/*.dkm`), the `plusdrive` and `dksample.wasm` outputs, the

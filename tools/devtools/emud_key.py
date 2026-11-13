@@ -1,11 +1,13 @@
 """Cache key and input audit of the coupled PGO `digi-emud` daemon (the Nx `daemon-<dev>` targets).
 
     uv run python -m tools.devtools.emud_key key   --device dt2
+    uv run python -m tools.devtools.emud_key test-key --device dt2
     uv run python -m tools.devtools.emud_key audit --device dt2 --depfile FILE [--target-dir DIR]
 
 `key` prints a sha256 over everything the daemon build reads: the source files (SOURCE_GLOBS, content
 hashes), the build recipe scripts (RECIPE_FILES), every file of the generated core directory (and of
 SHARC_GEN_DIR_2), the PGO profile (content), the Rust toolchain pin, `rustc -vV` and the build flags.
+`test-key` is the same key without the files that only patchkit reads; `verify_build daemons` writes it to dist/bytes/daemon-test.key.
 It resolves the generated core and the profile with the same calls as tools/patchkit/pk_emud_pgo.py.
 
 `audit` reads the dependency file cargo wrote (`digi-emud.d`) and fails when it lists a file that the key does
@@ -113,6 +115,25 @@ def key_of(inputs: EmudInputs) -> str:
     }
     text = json.dumps(record, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+# What only patchkit reads: its sources, and the files it embeds with include_str (sdk/sdk.toml in sdkgen.rs, the toolchain pins in
+# build/toolchain.rs), plus the cargo test sources of a package, which no binary build reads. The patched image bytes carry what
+# these change for a test (dist/bytes/images.sha256).
+TEST_KEY_EXCLUDED = ("packages/patchkit/", "sdk/sdk.toml", "tools/patchkit/toolchain/")
+
+
+def test_key_excluded(name: str) -> bool:
+    return name.startswith(TEST_KEY_EXCLUDED) or (
+        name.startswith("packages/") and "/tests/" in name
+    )
+
+
+def test_key_of(inputs: EmudInputs) -> str:
+    """The key of INPUTS without the files that only patchkit reads: the daemon part of the cache key of a device test that
+    does not run patchkit itself. The store key (`key_of`) is unchanged."""
+    kept = {n: p for n, p in inputs.files.items() if not test_key_excluded(n)}
+    return key_of(dataclasses.replace(inputs, files=kept))
 
 
 def covered_paths(inputs: EmudInputs) -> set[str]:
@@ -241,10 +262,14 @@ def key(device: str) -> str:
     return key_of(inputs(device))
 
 
+def test_key(device: str) -> str:
+    return test_key_of(inputs(device))
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("key", "audit"):
+    for name in ("key", "test-key", "audit"):
         sp = sub.add_parser(name)
         sp.add_argument("--device", required=True, choices=("dt2", "dn2"))
     sub.choices["audit"].add_argument("--depfile", type=Path, required=True)
@@ -257,6 +282,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.cmd == "key":
             print(key(args.device))
+            return 0
+        if args.cmd == "test-key":
+            print(test_key(args.device))
             return 0
         from tools.patchkit import pk_emud_pgo
 

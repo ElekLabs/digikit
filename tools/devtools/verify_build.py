@@ -135,9 +135,11 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
     return binary
 
 
-def build_daemons(devices: list[str]) -> dict[str, str]:
-    """Provide the daemons of DEVICES from the store; publish each path for downstream consumers."""
+def build_daemons(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
+    """Provide the daemons of DEVICES from the store: the paths for downstream consumers, and the test key of each device
+    (the store key without the files that only patchkit reads)."""
     env: dict[str, str] = {}
+    test_keys: dict[str, str] = {}
     root = store_root()
     for device in devices:
         cell = pk_harness.Cell(device, pk_emud_pgo.FIRMWARE[device])
@@ -147,7 +149,8 @@ def build_daemons(devices: list[str]) -> dict[str, str]:
             print(f"SKIP {device}: {exc}", flush=True)
             continue
         env[f"DIGI_EMUD_{device.upper()}"] = str(ensure_daemon(device, syx, root))
-    return env
+        test_keys[device] = emud_key.test_key(device)
+    return env, test_keys
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -167,12 +170,17 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         ap.error(f"unknown devices: {', '.join(unknown)}")
     try:
-        env = build_daemons(devices)
+        env, test_keys = build_daemons(devices)
     except pk_harness.HarnessError as exc:
         print(f"verify_build: {exc}", file=sys.stderr)
         return 1
     if args.env_out:
         args.env_out.write_text(json.dumps(env, indent=2) + "\n")
+        # dist/bytes/daemon-test.key, one `device key` line each: device tasks of a merge key hash it instead of the daemon path,
+        # which moves with every patchkit edit
+        key_file = args.env_out.parent / "bytes" / "daemon-test.key"
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text("".join(f"{d} {k}\n" for d, k in sorted(test_keys.items())))
     return 0
 
 

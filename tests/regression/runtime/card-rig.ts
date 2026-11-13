@@ -36,6 +36,7 @@ import {
   type PreparedRuntimePlan,
   type RuntimePlan,
 } from './runtime-plan.ts';
+import { prepareRuntimePlanModulesOffline } from './runtime-plan-modules.ts';
 import {
   cardAfter,
   cardOverlay,
@@ -278,13 +279,10 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
           path.join(os.tmpdir(), `digi-${scope.split(':')[0]!.replace(/\W+/g, '-')}-${device}-`),
         );
         console.info('card scenario artifacts:', artifacts);
-        prepared = await prepareRuntimePlanOffline(
-          { device, firmware: FIRMWARE[device] },
-          artifacts,
-          artifacts,
-          symbols,
-          o.roots ? { modules: o.roots } : undefined,
-        );
+        const target = { device, firmware: FIRMWARE[device] };
+        prepared = o.roots
+          ? await prepareRuntimePlanModulesOffline(target, artifacts, artifacts, symbols, { modules: o.roots })
+          : await prepareRuntimePlanOffline(target, artifacts, artifacts, symbols);
         watchOutput = path.join(artifacts, 'writewatch.jsonl');
         // a plain image has no runtime areas to watch
         const env = o.plain ? {} : runtimeWatchEnv(prepared.planFile, watchOutput);

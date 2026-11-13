@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { patchkit } from './patchkit-exec.ts';
+import { patchkit } from './patchkit.ts';
 
 /** Offline oracles over a .dkm. The needs and the fit rule are the Rust ones (`patchkit needs|fit`); the DSP relocation is a second implementation. */
 const L2_BYTE_BASE = 0x2000_0000;
