@@ -26,10 +26,15 @@ Sections are numbered as in finding 70. Extract:
 ## Loader and memory
 
 - **[D]** Section 6 is the peer's stage-1 loader, linked at SRAM 0x80000000.
-  It sets up DDR (0xFC0B8000), runs a RAM test, reads SPI NOR through DSPI
-  0xFC05C000 (command 3), checks a 0xAA marker, reads a 4-byte length, copies
-  to 0x40000400 and jumps through `jmp *(0x40000400)`. A flash offset literal
-  0x12345678 at 0x80000648 is a placeholder. **[O]** Who writes the NOR.
+  It sets up DDR (0xFC0B8000), runs a RAM test, then acts as DSPI0
+  (0xFC05C000) master: it sends command 3 and a 3-byte address (placeholder
+  literal 0x12345678 at 0x80000648), reads bytes until 0xAA, reads a
+  big-endian 4-byte length, copies the payload to 0x40000400 and jumps
+  through `jmp *(0x40000400)`. The other end of this link is MAIN's DSPI2 in
+  slave mode, which streams section 7 (see "Image upload"). **[O]** Who sets
+  DSPI0 to master before stage-1 (section 6 only ORs 0xC00 into MCR), how
+  section 6 itself reaches the peer, and how the command bytes meet the
+  stream MAIN already sends.
 - **[D]** Section 7 code ends near 0x40009f1c (about 40 KB, 132 functions).
   Above it is data, including a second Xilinx-style bitstream at 0x40041060
   that the peer loads through DSPI 0xFC03C000.
@@ -44,10 +49,27 @@ Sections are numbered as in finding 70. Extract:
 - **[D]** Window layout: +0 "HO" or "NO", +2 command, +4 0xA5A5, +8 state
   (1 to 0xC), +0xC chunk sequence, +0x800 a 2 KB chunk. Chunks go to
   0x4004f750 + seq * 0x800 (64 MB, probably 64 sample slots). MAIN tests the
-  window with 0xAAAAAAAA and 0x55555555 and writes 0x4230 at +0.
-- **[D]** MAIN uploads 64 sample slots read from flash at boot.
-  `FUN_40082334` builds the buffer and `FUN_40082f90` sends the 2 KB chunks.
-  MAIN has no reference to section 7.
+  window with 0xAAAAAAAA and 0x55555555 and writes 0x4230 at +0. MAIN's hello
+  check needs 0x484F at +0 and 0x4841 at +2.
+- **[D]** Sample upload: `FUN_40082334` builds 0xAA, a length and 64 sample
+  slots (read by `FUN_401133ce`) at 0x4d84f2c0; `FUN_40082f90` sends them in
+  2 KB chunks through the window (+0x800).
+
+## Image upload
+
+- **[V]** MAIN's DSPI2 (0xEC038000) is a slave: MCR 0x00010C00 (MSTR = 0) at
+  0x40082bfc. `vector_149_handler` (0x400831d6) re-arms eDMA channel 29 with
+  source 0x4f84f2c1.
+- **[D]** MAIN's peer thread (entry 0x40082c04, created by `FUN_40082e9c` from
+  the boot thread) reads ids 6 and 7 from the OS directory in NOR at 0x80000
+  ("ELE3", 16-byte entries from 0x80020: +0 id, +4 offset, +8 length; the same
+  container layout as DT2/DN2) through DSPI 0xFC05C000. It builds
+  0xAA | big-endian length | payload buffers: id 6 at 0x4f8af2c1 (after eight
+  0xFF bytes), id 7 at 0x4f84f2c1 (length limit 0x5fffb; section 7 is 383,760
+  bytes). eDMA channel 29 writes them one byte per request to the DSPI2 slave
+  PUSHR (0xEC038037): first id 6 (TCD with DREQ), then `vector_149_handler`
+  streams id 7 (major loop 0x6000, source keeps advancing). So MAIN sends
+  section 7 to the peer at every boot.
 - **[D]** After state 0xC the peer installs an ISR on vector 96 (DTIM0). Each
   frame it renders 8 voices x 32 samples with the kernels at 0x4324, 0x112c,
   0x2320, 0x168e and 0x19d6. The eDMA channel 47 (TCD 0xFC0455E0) writes

@@ -41,7 +41,9 @@ independent checks) or **[O]** (open). The second CPU (section 7) is in
 - The Syntakt has no SHARC. Sections 6 and 7 belong to a second ColdFire CPU
   (the peer): section 6 is its loader and section 7 its sound engine. Facts
   are in [finding 128](128-syntakt-peer-cpu.md).
-- MAIN has no reference to section 7 and no copy of it.
+- MAIN reads sections 6 and 7 (ids 6 and 7 of the OS directory in NOR) and
+  streams them to the peer through DSPI2 in slave mode (finding 128, "Image
+  upload").
 
 ## FPGA
 
@@ -69,15 +71,18 @@ independent checks) or **[O]** (open). The second CPU (section 7) is in
 - Doorbell `FUN_40082f6a` toggles GPIO PA bit 4 (PPDSDR_A = 0x10, PCLRR_A =
   0xEF).
 - Mailbox in the FlexBus window at 0x10000000. State variable: 0x41bb32b0.
-  - Peer magic at 0x10000000: 0x484F ("HO") is hello. 0x4E4F ("NO") sets
-    status 4.
+  - Peer magic at 0x10000000: 0x484F ("HO") with 0x4841 at 0x10000002 is
+    hello. 0x4E4F ("NO") sets status 4.
   - 0x10000004 must read 0xA5A5 in state 5 for status 6.
 - `FUN_400829f4` sends progress bytes.
 - `FUN_40082f90` copies 2 KB chunks to 0x10000800. The sequence number is at
-  0x1000000C and command 2 is at 0x10000002. The source is a buffer at
-  0x4d84f2c1 (RX buffer 0x4d84f2c0 or 0x4f84f2c0: **[O]**).
-- `vector_149_handler` (0x400831d6) re-arms DSPI2 (0xEC038000) with eDMA
-  channel 29 for 0x6000 bytes into that buffer.
+  0x1000000C and command 2 is at 0x10000002. The source is the sample buffer
+  at 0x4d84f2c0 (0xAA, length at +1, data from +5).
+- `vector_149_handler` (0x400831d6) re-arms DSPI2 (0xEC038000, slave) with
+  eDMA channel 29 from the id-7 transmit buffer 0x4f84f2c1 (section 7).
+- The peer thread (0x40082c04) runs only after the NOR directory reads
+  succeed; the poll callback is registered last. A zeroed window never
+  reaches status 6.
 - Consumer: the main OS task at 0x4000abd6. It shows "DSP BOOT FAILURE
   (TIMEOUT)" at 0x4000af8c, "(CF)" for 5, "(DSP)" for 4, "(BUF)" for 3
   (strings at 0x4024bd6a-0x4024bdc3).
