@@ -10,6 +10,7 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 from tools.emulator import digi_env  # noqa: E402
+from tools.firmware import device as device_data  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +23,13 @@ def pinned_rustc(monkeypatch):
 def fresh_gen(monkeypatch):
     """The fake gen dirs here carry no CORE_FINGERPRINT."""
     monkeypatch.setenv("DIGI_ALLOW_STALE_GEN", "1")
+
+
+@pytest.fixture(autouse=True)
+def known_device(monkeypatch):
+    """The fake firmware files of these tests belong to a device with a DSP; a test of another device sets its own."""
+    short = [d.short for d in device_data.load_all() if d.has_dsp()][-1]
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda _path: short)
 
 
 @pytest.fixture(autouse=True)
@@ -934,3 +942,51 @@ def test_fallback_defaults_single_and_dual_core(monkeypatch, tmp_path):
     env = {}
     scope["set_fast_regions"](["--audio-profile-syx", str(unknown)], env)
     assert "SHARC_FAST_FALLBACK_REGIONS" not in env
+
+
+# --- a device without DSP, runtime or card ---------------------------------------------------------------------------------
+
+
+def _no_dsp_device():
+    """The short id of a device file that has no DSP, no `[digikit]` and no card the launcher can seed."""
+    return next(
+        d.short
+        for d in device_data.load_all()
+        if not d.has_dsp() and not d.runtime_target and not d.has_card()
+    )
+
+
+def test_a_device_without_dsp_runtime_or_card_launches_stock_and_cf_only(
+    monkeypatch, tmp_path, capsys
+):
+    scope, calls, built, syx = _card_run(monkeypatch, tmp_path, _no_dsp_device())
+    monkeypatch.setitem(
+        scope["main"].__globals__,
+        "default_audio_args",
+        lambda *a, **k: pytest.fail("a device without a DSP gets no audio inputs"),
+    )
+    scope["main"]([str(syx)])
+    # the ColdFire-only build: no coupled feature, no generated core, no card options
+    assert "--features" not in calls[0]
+    assert calls[-1][1:] == [str(syx), "--no-runtime"]
+    assert "not a digikit runtime target" in capsys.readouterr().err
+
+
+def test_a_device_without_a_card_refuses_a_card_folder(monkeypatch, tmp_path):
+    scope, calls, built, syx = _card_run(monkeypatch, tmp_path, _no_dsp_device())
+    with pytest.raises(SystemExit, match="no card"):
+        scope["main"]([str(syx), "--plus-drive", str(tmp_path)])
+    assert built == []
+
+
+def test_a_device_that_is_not_a_runtime_target_refuses_runtime(monkeypatch, tmp_path):
+    scope, calls, built, syx = _card_run(monkeypatch, tmp_path, _no_dsp_device())
+    with pytest.raises(SystemExit, match="not a digikit runtime target"):
+        scope["main"]([str(syx), "--runtime"])
+
+
+def test_an_unknown_firmware_is_an_error_not_a_default_device(monkeypatch, tmp_path):
+    scope, calls, built, syx = _card_run(monkeypatch, tmp_path, None)
+    with pytest.raises(SystemExit, match="cannot tell which device"):
+        scope["main"]([str(syx)])
+    assert calls == []

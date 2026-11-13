@@ -92,6 +92,8 @@ class Device:
         has_panel=True,
         syx_id=None,
         manual=None,
+        emulator=None,
+        runtime_target=False,
     ):
         self.name = name
         self.short = short
@@ -110,6 +112,9 @@ class Device:
         # `[device] syx_id` (the device byte of the .syx framing) and `[device] manual` (glob of the user manual under out/refs/); None when absent.
         self.syx_id = syx_id
         self.manual = manual
+        # `[emulator]` (board facts the emulator uses) and whether the file has `[digikit]`: a runtime target (docs/design/device-data.md).
+        self.emulator = dict(emulator or {})
+        self.runtime_target = runtime_target
 
     def __repr__(self):
         return "<Device %s>" % self.name
@@ -163,6 +168,10 @@ class Device:
     def has_dsp(self):
         """True when the device has a SHARC DSP stream (`[capabilities] dsp = "sharc"`)."""
         return self.capabilities.get("dsp") == "sharc"
+
+    def has_card(self):
+        """True when the device has a card the launcher may seed (`[capabilities] card` is `path-fs` or `slots`)."""
+        return self.capabilities.get("card") in ("path-fs", "slots")
 
     def firmware_for_sha256(self, sha256):
         for fw in self.firmwares:
@@ -227,6 +236,8 @@ def _from_raw(raw, path):
         has_panel="panel" in raw,
         syx_id=dev.get("syx_id"),
         manual=dev.get("manual"),
+        emulator=raw.get("emulator"),
+        runtime_target="digikit" in raw,
     )
 
 

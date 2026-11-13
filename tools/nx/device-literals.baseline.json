@@ -806,7 +806,7 @@
   "tools/emulator/gen_led_toml.py": 32,
   "tools/emulator/led_map.py": 4,
   "tools/emulator/live_audio.py": 3,
-  "tools/emulator/native_emu.py": 48,
+  "tools/emulator/native_emu.py": 47,
   "tools/emulator/native_pgo.py": 205,
   "tools/emulator/native_target.py": 2,
   "tools/emulator/os_upgrade_rig.py": 11,

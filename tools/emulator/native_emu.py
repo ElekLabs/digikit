@@ -24,6 +24,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools import python_env  # noqa: E402
 from tools.emulator import digi_env, emulator_config  # noqa: E402
+from tools.firmware import device as device_data  # noqa: E402
 
 # The desktop app embeds apps/desktop/ui/dist when cargo builds it, so a rewritten dist rebuilds the app (about 18 s). The digest of the
 # sources a dist was built from is kept inside that dist, and every worktree has its own dist: a stamp in the shared out/ made worktrees
@@ -719,6 +720,20 @@ def syx_from_args(args: list[str]) -> pathlib.Path:
     return pathlib.Path(syx_arg) if syx_arg else digi_env.firmware(os.environ)
 
 
+def launch_device(syx: pathlib.Path) -> device_data.Device:
+    """The device data of a firmware file, by hash (a patched image by its patch record).
+
+    A file that no device file lists is an error: the launcher never guesses a device.
+    """
+    short = digi_env.device_for_syx(syx)
+    if short is None:
+        raise SystemExit(
+            f"{syx}: cannot tell which device this firmware is for (the file is unreadable, or no device file in "
+            "devices/ lists its sha256)"
+        )
+    return device_data.by_short(short)
+
+
 def main(args: list[str] | None = None) -> None:
     args = sys.argv[1:] if args is None else args
     force_cf = "--cf-only" in args
@@ -738,8 +753,22 @@ def main(args: list[str] | None = None) -> None:
     if folder is not None and "--card-image" in args:
         raise SystemExit("--plus-drive/--samples and --card-image cannot be combined")
     syx = syx_from_args(args)
-    known = digi_env.device_for_syx(syx)
-    device = known or "dn2"
+    data = launch_device(syx)
+    device = data.short
+    # A device that is not a runtime target (no `[digikit]`) boots stock; a device without a DSP runs the ColdFire-only build.
+    if not data.runtime_target:
+        if "--runtime" in args:
+            raise SystemExit(f"{data.name} is not a digikit runtime target: --runtime")
+        if "--no-runtime" not in args:
+            print(
+                f"{data.name} is not a digikit runtime target: starting the stock firmware (--no-runtime)",
+                file=sys.stderr,
+            )
+            args = [*args, "--no-runtime"]
+    if folder is not None and not data.has_card():
+        raise SystemExit(
+            f"{data.name} has no card the launcher can seed: --plus-drive/--samples"
+        )
     if folder is not None:
         if plus_drive is None and samples is None:
             print(f"+Drive: {folder}", file=sys.stderr)
@@ -771,7 +800,7 @@ def main(args: list[str] | None = None) -> None:
     # when it holds something the card takes, and mirrors the module store to it while the emulator runs (the Card panel: files,
     # "Sync now"). --plus-drive/--samples name the folder of the first load instead (a card built here from it). --no-sync turns
     # the mirror and the export on exit off.
-    if known and "--device-folders" not in args:
+    if data.has_card() and "--device-folders" not in args:
         args = [
             *args,
             "--device-folders",
@@ -781,7 +810,14 @@ def main(args: list[str] | None = None) -> None:
         args = [*args, "--mirror-dir", str(folder.resolve())]
     if force_cf and ("--coupled" in args or "--auto-coupled" in args):
         raise SystemExit("--cf-only cannot be combined with coupled audio options")
-    if not force_cf and "--coupled" not in args and "--auto-coupled" not in args:
+    if not data.has_dsp() and ("--coupled" in args or "--auto-coupled" in args):
+        raise SystemExit(f"{data.name} has no DSP: coupled audio options do not apply")
+    if (
+        data.has_dsp()
+        and not force_cf
+        and "--coupled" not in args
+        and "--auto-coupled" not in args
+    ):
         args = default_audio_args(args, second_core_by_default=not daemon)
     fast = None
     if "--coupled" in args or "--auto-coupled" in args:
@@ -811,7 +847,7 @@ def main(args: list[str] | None = None) -> None:
     if build_only:
         print(binary)
         return
-    if not daemon:
+    if not daemon and data.has_dsp():
         env.update(pgo_env())
         # Workbench default from config/emulator.json; an explicit value, including an empty one, still wins.
         context = digi_env.resolve_tiers(
