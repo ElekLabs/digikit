@@ -90,3 +90,29 @@ def test_port_resolve_reads_its_tables_from_the_device_files() -> None:
         port = tomllib.loads(pf.read_text())
         patch = pk_device.load(port["port"]["device"])["patch"]
         assert port["limits"] == {k: patch[k] for k in port_resolve.LIMIT_KEYS}
+
+
+def test_the_harness_inputs_come_from_the_device_files() -> None:
+    ports = {p.stem for p in (ROOT / "devices" / "ports").glob("*.toml")}
+    assert {f"{s}-{v}" for s, v in pk_device.port_firmware()} == ports
+    for short, version in pk_device.acceptance_firmware().items():
+        acc = pk_device.load(short)["acceptance"]
+        assert pk_device.ready_dir(short, version) == acc["ready_dir"]
+    # a port firmware that is not the acceptance firmware gets the conventional ready directory
+    other = next(
+        (s, v)
+        for s, v in pk_device.port_firmware()
+        if pk_device.acceptance_firmware().get(s) != v
+    )
+    assert (
+        pk_device.ready_dir(*other)
+        == f"out/ready-{other[0]}-{other[1].replace('.', '')}"
+    )
+
+
+def test_the_dsp_section_is_the_container_role_and_needs_a_dsp_image() -> None:
+    profiles = port_resolve.load_profiles()
+    for prof in profiles.values():
+        if prof["dsp"]:
+            assert port_resolve.dsp_section(prof) == prof["container"]["dsp"]
+    assert port_resolve.dsp_section({"dsp": None, "container": {"dsp": 7}}) is None

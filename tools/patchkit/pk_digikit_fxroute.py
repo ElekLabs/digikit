@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.emulator import card_overlay
+from tools.firmware import device as device_files
 from tools.patchkit import pk_digikit_project as P
 
 CLASSES = {
@@ -53,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     commands = parser.add_subparsers(dest="command", required=True)
     lock = commands.add_parser("lock-check")
-    lock.add_argument("--device", choices=("dt2", "dn2"), required=True)
+    lock.add_argument("--device", choices=device_files.shorts(), required=True)
     lock.add_argument("--card", type=Path, required=True)
     for name in ("base", "none", "amount", "send"):
         lock.add_argument(f"--{name}", type=Path, required=True)

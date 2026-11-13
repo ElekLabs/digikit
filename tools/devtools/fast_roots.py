@@ -39,6 +39,8 @@ import sys
 import tempfile
 from collections.abc import Iterable, Mapping
 
+from tools.firmware import device as device_files
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 BUDGETS = ROOT / "tools" / "emulator" / "fast_budgets.json"
 
@@ -528,7 +530,7 @@ def main(argv: list[str] | None = None) -> int:
     rank.add_argument(
         "--prefix", required=True, help="SHARC_PROFILE_PREFIX of the capture"
     )
-    rank.add_argument("--device", required=True, choices=("dn2", "dt2"))
+    rank.add_argument("--device", required=True, choices=device_files.shorts())
     rank.add_argument("--gen", help="generated core directory (default: the device's)")
     rank.add_argument("--min-pct", type=float, default=0.3)
     rank.add_argument("--json", action="store_true")

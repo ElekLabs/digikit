@@ -27,7 +27,11 @@ import hashlib
 import os
 import tomllib
 
-DEVICES_DEFAULT = "devices"
+# the repository's devices/, whatever the working directory is
+DEVICES_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "devices",
+)
 
 BUTTON = "button"
 ENCODER = "encoder"
@@ -44,10 +48,12 @@ class UnknownFirmware(DeviceError):
 class Firmware:
     """One known firmware release of a device."""
 
-    def __init__(self, version, sha256, filename=None):
+    def __init__(self, version, sha256, filename=None, raw=None):
         self.version = version
         self.sha256 = sha256.lower()
         self.filename = filename
+        # the whole [[firmware]] table, for the optional keys (`main_sha256`, `port`, `dsp`)
+        self.raw = dict(raw or {})
 
     def __repr__(self):
         return "<Firmware %s %s>" % (self.version, self.sha256[:12])
@@ -84,6 +90,8 @@ class Device:
         container=None,
         acceptance=None,
         has_panel=True,
+        syx_id=None,
+        manual=None,
     ):
         self.name = name
         self.short = short
@@ -99,6 +107,9 @@ class Device:
         self.acceptance = dict(acceptance or {})
         # False: the file has no [panel], so the wire mapping above is only a default and means nothing.
         self.has_panel = has_panel
+        # `[device] syx_id` (the device byte of the .syx framing) and `[device] manual` (glob of the user manual under out/refs/); None when absent.
+        self.syx_id = syx_id
+        self.manual = manual
 
     def __repr__(self):
         return "<Device %s>" % self.name
@@ -138,6 +149,21 @@ class Device:
         """-> every button code this product's groups declare, in order."""
         return tuple(c for g in self.groups if g.kind == BUTTON for c in g.codes)
 
+    def image(self, fw):
+        """-> the image key of one of this device's firmwares: "<short>-<version>"."""
+        return "%s-%s" % (self.short, fw.version)
+
+    def firmware(self, version):
+        """-> the Firmware of this device with `version`, or None."""
+        for fw in self.firmwares:
+            if fw.version == version:
+                return fw
+        return None
+
+    def has_dsp(self):
+        """True when the device has a SHARC DSP stream (`[capabilities] dsp = "sharc"`)."""
+        return self.capabilities.get("dsp") == "sharc"
+
     def firmware_for_sha256(self, sha256):
         for fw in self.firmwares:
             if fw.sha256 == sha256.lower():
@@ -166,7 +192,7 @@ def _from_raw(raw, path):
     # [panel] is optional: an identity-only device file has none
     panel = raw.get("panel", {})
     firmwares = [
-        Firmware(f.get("version"), _require(f, "sha256", path), f.get("filename"))
+        Firmware(f.get("version"), _require(f, "sha256", path), f.get("filename"), f)
         for f in raw.get("firmware", ())
     ]
     # TOML bare keys are strings even when they look like integers, so the
@@ -199,6 +225,8 @@ def _from_raw(raw, path):
         container=raw.get("container"),
         acceptance=raw.get("acceptance"),
         has_panel="panel" in raw,
+        syx_id=dev.get("syx_id"),
+        manual=dev.get("manual"),
     )
 
 
@@ -233,6 +261,66 @@ def by_short(short, dirpath=None):
     raise DeviceError(
         "No device %r (known: %s)" % (short, ", ".join(d.short for d in devices))
     )
+
+
+def by_image(image, dirpath=None):
+    """-> the Device of an image key ("<short>-<version>"); refuses, listing the known ones."""
+    return by_short(image.partition("-")[0], dirpath)
+
+
+def by_syx_id(syx_id, dirpath=None):
+    """-> the Device with `[device] syx_id` equal to `syx_id`, or None."""
+    for d in load_all(dirpath):
+        if d.syx_id == syx_id:
+            return d
+    return None
+
+
+def shorts(dirpath=None):
+    """-> the short names of all devices, in file order: the `choices` of a tool's --device."""
+    return [d.short for d in load_all(dirpath)]
+
+
+def dsp_shorts(dirpath=None):
+    """-> the short names of the devices with a SHARC DSP, sorted: the `choices` of a DSP tool's --device."""
+    return sorted(d.short for d in load_all(dirpath) if d.has_dsp())
+
+
+def acceptance_images(dirpath=None):
+    """-> {image key: firmware filename} of the firmware each device's acceptance tests run (`[acceptance] firmware`)."""
+    out = {}
+    for d in load_all(dirpath):
+        version = d.acceptance.get("firmware")
+        fw = d.firmware(version) if version else None
+        if fw is not None and fw.filename:
+            out[d.image(fw)] = fw.filename
+    return out
+
+
+class BootImage:
+    """A firmware whose MAIN OS the emulator boots: its device, its Firmware, and the image key of its boot base."""
+
+    def __init__(self, device, firmware, base):
+        self.device = device
+        self.firmware = firmware
+        self.base = base
+
+
+def boot_images(dirpath=None):
+    """-> {image key: BootImage}: the firmwares that name a MAIN OS (`main_sha256`), in file order.
+
+    The first one of a device is the base whose profile boots the later ones (a later release is booted from it with
+    `--base-sha`); its `base` is None.
+    """
+    out = {}
+    for d in load_all(dirpath):
+        base = None
+        for fw in d.firmwares:
+            if "main_sha256" not in fw.raw:
+                continue
+            out[d.image(fw)] = BootImage(d, fw, base)
+            base = base or d.image(fw)
+    return out
 
 
 def sha256_of(path):

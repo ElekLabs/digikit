@@ -119,6 +119,61 @@ class ParseTest(unittest.TestCase):
             self.assertIn("td", str(e.exception))
 
 
+class ImageSetsTest(unittest.TestCase):
+    TWO = """
+[device]
+name = "Test Device"
+short = "td"
+
+[capabilities]
+dsp = "sharc"
+
+[acceptance]
+firmware = "2.0"
+
+[[firmware]]
+version = "1.0"
+sha256 = "01"
+filename = "T1.syx"
+
+[[firmware]]
+version = "1.5"
+sha256 = "02"
+filename = "T15.syx"
+main_sha256 = "a"
+
+[[firmware]]
+version = "2.0"
+sha256 = "03"
+filename = "T2.syx"
+main_sha256 = "b"
+"""
+
+    def test_boot_images_boot_later_releases_from_the_first_one_with_a_main_os(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_device(d, self.TWO)
+            images = device.boot_images(d)
+            self.assertEqual(list(images), ["td-1.5", "td-2.0"])
+            self.assertIsNone(images["td-1.5"].base)
+            self.assertEqual(images["td-2.0"].base, "td-1.5")
+            self.assertEqual(images["td-2.0"].firmware.filename, "T2.syx")
+            self.assertEqual(device.acceptance_images(d), {"td-2.0": "T2.syx"})
+            self.assertEqual(device.dsp_shorts(d), ["td"])
+
+    def test_syx_id_and_manual_are_optional_device_keys(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_device(
+                d,
+                self.TWO.replace(
+                    'short = "td"', 'short = "td"\nsyx_id = 0x30\nmanual = "M*"'
+                ),
+            )
+            self.assertEqual(device.by_syx_id(0x30, d).manual, "M*")
+            self.assertIsNone(device.by_syx_id(0x31, d))
+            write_device(d, self.TWO)
+            self.assertIsNone(device.by_short("td", d).manual)
+
+
 class WireMappingTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

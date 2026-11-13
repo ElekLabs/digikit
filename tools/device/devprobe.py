@@ -30,10 +30,20 @@ from typing import Any
 import numpy as np
 
 from tools.emulator import audiocheck
+from tools.firmware import device as device_files
 
 REPO = Path(__file__).resolve().parents[2]
-LEDS = {"dt2": "digitakt-ii-leds.toml", "dn2": "digitone-ii-leds.toml"}
-PORTS = {"dt2": "Digitakt", "dn2": "Digitone"}
+# short name -> LED/key map next to the device file (<device file stem>-leds.toml); the MIDI port name is the first word of the device name
+LEDS = {
+    d.short: Path(d.path).with_name(Path(d.path).stem + "-leds.toml").name
+    for d in device_files.load_all(str(REPO / "devices"))
+    if Path(d.path).with_name(Path(d.path).stem + "-leds.toml").exists()
+}
+PORTS = {
+    d.short: d.name.split()[0]
+    for d in device_files.load_all(str(REPO / "devices"))
+    if d.short in LEDS
+}
 RATE = 48000
 
 # A run is "consistent" when the hits agree: f0 within 3 %, length within 15 %,
@@ -435,7 +445,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--device", choices=sorted(LEDS), default="dt2")
+    ap.add_argument("--device", choices=sorted(LEDS), default=next(iter(LEDS)))
     ap.add_argument("--port", help="MIDI port substring (default by device)")
     ap.add_argument("--audio", help="audio device name substring (default by device)")
     ap.add_argument("--steps", default="trig1*10@500")

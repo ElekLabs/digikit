@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 from tools.patchkit import modroots, pk_device, pk_dsp_budget  # noqa: E402
 
-DEVICES = ("dt2", "dn2")
+DEVICES = tuple(pk_device.digikit_devices())
 # Stock rows of the knob list that a DSP routine reads (a code in `knobs`, not a `[[param]]` id): name, min, max, default.
 # 0xca is TUNE of SAMPLE (a pitch offset in semitones, 64.0 at rest; the routines read it as 64 * 256 at rest).
 STOCK_KNOBS = {0xCA: ("tune", 0, 0x7F00, 0x4000)}

@@ -31,6 +31,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools import python_env  # noqa: E402
 from tools.control.digi_client import Emu  # noqa: E402
 from tools.emulator import card_check, digi_env  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 
 # DN2: TRIG 1 tapped, then PLAY (the pinned trig1 scenarios' prelude).
 DN2_NOTE = [
@@ -193,7 +194,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("device", choices=("dn2", "dt2"))
+    p.add_argument("device", choices=device_files.shorts())
     p.add_argument("--syx")
     p.add_argument("--patched")
     p.add_argument("--ready")

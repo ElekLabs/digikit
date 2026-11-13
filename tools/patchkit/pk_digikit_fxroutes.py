@@ -18,6 +18,7 @@ from tools.coldfire import arena_safety
 from tools.control.digi_client import oled_png
 from tools.device import dksettings
 from tools.device.dksettings import encode as encode_record
+from tools.firmware import device as device_files
 from tools.patchkit import pk_device
 from tools.patchkit import pk_dkrt_machine as M
 from tools.patchkit.pk_digikit_fxroute import CLASSES
@@ -114,10 +115,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="FX routing scenario data helpers")
     commands = parser.add_subparsers(dest="command", required=True)
     facts = commands.add_parser("profile")
-    facts.add_argument("--device", choices=("dt2", "dn2"), required=True)
+    facts.add_argument("--device", choices=device_files.shorts(), required=True)
     seed = commands.add_parser("seed-card")
     seed.add_argument("card", type=Path)
-    seed.add_argument("--device", choices=("dt2", "dn2"), required=True)
+    seed.add_argument("--device", choices=device_files.shorts(), required=True)
     seed.add_argument("--entries", type=Path, required=True)
     shots = commands.add_parser("render-shots")
     shots.add_argument("directory", type=Path)

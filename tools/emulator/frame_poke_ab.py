@@ -21,6 +21,7 @@ from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools.emulator import coupled, digi_env  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 
 
 def run(
@@ -46,7 +47,7 @@ def run(
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("device", choices=["dt2", "dn2"])
+    p.add_argument("device", choices=device_files.shorts())
     p.add_argument("--file", type=pathlib.Path, required=True)
     p.add_argument("--scenario", action="append", required=True)
     p.add_argument("--poke", action="append", required=True)
