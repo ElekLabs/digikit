@@ -771,7 +771,7 @@ impl Board {
         }
         w.bytes(&self.uart_tx);
         if let Some(peer) = &self.peer {
-            w.tag("PEER");
+            w.tag("PEE2");
             peer.snap_save(w);
         }
         Ok(())
@@ -822,8 +822,12 @@ impl Board {
         }
         self.uart_tx = r.bytes()?.to_vec();
         if let Some(peer) = self.peer.as_mut() {
-            r.tag("PEER")?;
-            peer.snap_load(r)?;
+            // "PEER" is the older section without the frame deadline.
+            let with_frame = r.tag_if("PEE2");
+            if !with_frame {
+                r.tag("PEER")?;
+            }
+            peer.snap_load(r, with_frame)?;
         }
         Ok(())
     }

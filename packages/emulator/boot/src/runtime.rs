@@ -30,6 +30,8 @@ pub struct PeerReport {
     pub irq4_delivered: u64,
     /// Audio frame interrupts MAIN took (peer CPU mode).
     pub frames_delivered: u64,
+    /// Times the frame deadline was moved to now because it lagged by a period or more (a restore or a long masked stretch).
+    pub frame_resyncs: u64,
     /// The peer CPU (`[emulator] peer = "coldfire"`), once started.
     pub cpu: Option<PeerCpuReport>,
 }
@@ -1088,6 +1090,7 @@ impl Emulator {
             doorbell_edges: peer.doorbell_edges,
             irq4_delivered: peer.irq4_delivered,
             frames_delivered: peer.frames_delivered,
+            frame_resyncs: peer.frame_resyncs,
             cpu: self
                 .peer_cpu
                 .as_ref()
