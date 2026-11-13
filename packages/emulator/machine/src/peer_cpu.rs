@@ -286,7 +286,7 @@ impl PeerMem {
         let icr = self.io_byte(INTC0 + 0x40 + src);
         let level = icr & 7;
         // the source's own mask bit, or IMRL bit 0 (mask all)
-        let (byte, bit) = intc_mask_bit(src + 64);
+        let (byte, bit) = intc_mask_bit(src);
         let (all_byte, all_bit) = intc_mask_bit(0);
         let masked = self.io_byte(byte) & bit != 0 || self.io_byte(all_byte) & all_bit != 0;
         (level != 0 && !masked).then_some(level)
@@ -297,10 +297,11 @@ impl PeerMem {
     }
 }
 
-/// The IMRH/IMRL byte and bit that mask INTC0 source `src` (0..=63; sources 32..=63 are in IMRH, IMRL bit 0 is mask-all).
-fn intc_mask_bit(src: u32) -> (u32, u8) {
-    let reg = if src >= 32 { INTC0 + 8 } else { INTC0 + 12 };
-    (reg + (3 - (src & 31) / 8), 1u8 << (src & 7))
+/// The IMRH/IMRL byte and bit that mask INTC0 source number `source` (0..=63, not a vector; sources 32..=63 are in IMRH, IMRL bit 0 is
+/// mask-all).
+fn intc_mask_bit(source: u32) -> (u32, u8) {
+    let reg = if source >= 32 { INTC0 + 8 } else { INTC0 + 12 };
+    (reg + (3 - (source & 31) / 8), 1u8 << (source & 7))
 }
 
 /// The bus the core sees: the private memory plus the shared window.
