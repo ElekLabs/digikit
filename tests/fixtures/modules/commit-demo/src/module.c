@@ -1,7 +1,7 @@
 /* test/commit-demo: a machine with three params and an effect, declared with builder calls in init (docs/plans/sdk.md 6.2).
    The DSP symbols are _cmach_render, _cmach_note_on, _cmach_desc, _cfx_process and _cfx_desc. */
 #include <dk/core/module.h>
-#include <dk/gen/desc.h>
+#include <dk/gen/page_consts.h>
 #include "module_ids.h"
 
 /* The click action of the third param: nothing to do. */

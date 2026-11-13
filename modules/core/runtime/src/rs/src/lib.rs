@@ -34,8 +34,6 @@ pub mod paramapi;
 pub mod registry;
 pub mod scan;
 pub mod settings;
-mod sample;
-mod sample_source;
 mod tracks;
 mod files;
 mod hash32;
@@ -122,17 +120,18 @@ pub static mut DKRT_PATHS: [[u8; 64]; MAX_MODULES] = [[0; 64]; MAX_MODULES];
 /// The address of each module record's `menu` (0: none), apart from `State` for the same reason.
 #[no_mangle]
 pub static mut DKRT_MENUS: [u32; MAX_MODULES] = [0; MAX_MODULES];
-/// The api major of a module without a keys table (`.dk.desc` records); loaded next to the current major until S3 package F.
-pub const API_MAJOR_LEGACY: u8 = 2;
-/// Whether a module may declare `major` for contract `c` (0 api, 1 machine, 2 fx, 3 service): the runtime's major, and for the api
-/// also the legacy major, for the transition.
-pub fn contract_major_ok(c: usize, major: u8) -> bool {
-    let rt = [contract::API.0, contract::MACHINE.0, contract::FX.0, contract::SERVICE.0];
-    major == rt[c] || (c == 0 && major == API_MAJOR_LEGACY)
+/// Bit 31 of the `.dkm` header word at 0x30: the module was built with `DK_TRACE`; the other bits are the runtime version it needs.
+pub const FLAG_TRACE: u32 = 1 << 31;
+/// Whether this runtime loads a module that needs runtime version `needs` (the header word at 0x30, packed major << 16 | minor << 8 | patch,
+/// the newest `since` of the imports it links; 0: it links none). 0.x semver: another major or minor than the runtime's refuses, and so does
+/// a higher patch (a patch only adds). The trace flag is not part of the version.
+pub fn runtime_accepts(needs: u32) -> bool {
+    let needs = needs & !FLAG_TRACE;
+    needs == 0 || (needs >> 8 == RUNTIME_VERSION >> 8 && needs & 255 <= RUNTIME_VERSION & 255)
 }
-/// The contract versions each module record declared: api, machine, fx, service as (major, minor) bytes (`MODULES` reports them).
+/// The runtime version each module record needs (`MODULES` reports it).
 #[no_mangle]
-pub static mut DKRT_CONTRACTS: [[u8; 8]; MAX_MODULES] = [[0; 8]; MAX_MODULES];
+pub static mut DKRT_MODULE_RUNTIME: [u32; MAX_MODULES] = [0; MAX_MODULES];
 #[no_mangle]
 pub static mut DKRT_MAILBOX: Mailbox = Mailbox {
     cmd: 0,
@@ -426,9 +425,6 @@ import_table! {
     ("dk_sample_pool_set", entry::dk_sample_pool_set),
     ("dk_sample_pool_peaks", entry::dk_sample_pool_peaks),
     ("dk_sample_pool_peaks_window", entry::dk_sample_pool_peaks_window),
-    ("dk_sample_bank_open", entry::dk_sample_bank_open),
-    ("dk_sample_bank_load", entry::dk_sample_bank_load),
-    ("dk_sample_bank_status", entry::dk_sample_bank_status),
     ("dk_debug_peek", debug_peek),
     ("dk_debug_track_type", debug_track_type),
     ("dk_debug_selected_params", debug_selected_params),
@@ -498,9 +494,6 @@ const _: dkrt_sdk::api::DkSamplePoolPathFn = entry::dk_sample_pool_path;
 const _: dkrt_sdk::api::DkSamplePoolSetFn = entry::dk_sample_pool_set;
 const _: dkrt_sdk::api::DkSamplePoolPeaksFn = entry::dk_sample_pool_peaks;
 const _: dkrt_sdk::api::DkSamplePoolPeaksWindowFn = entry::dk_sample_pool_peaks_window;
-const _: dkrt_sdk::api::DkSampleBankOpenFn = entry::dk_sample_bank_open;
-const _: dkrt_sdk::api::DkSampleBankLoadFn = entry::dk_sample_bank_load;
-const _: dkrt_sdk::api::DkSampleBankStatusFn = entry::dk_sample_bank_status;
 const _: dkrt_sdk::api::DkDebugPeekFn = debug_peek;
 const _: dkrt_sdk::api::DkDebugTrackTypeFn = debug_track_type;
 const _: dkrt_sdk::api::DkDebugSelectedParamsFn = debug_selected_params;
@@ -1192,7 +1185,6 @@ pub unsafe extern "C" fn dkrt_tick() {
     store_writer::tick();
     crash::install();
     dsp::step();
-    sample::tick();
     worker::tick();
     io::tick();
     tracks::tick();

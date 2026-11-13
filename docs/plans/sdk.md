@@ -23,7 +23,7 @@ firmware, as device-agnostic as possible.
 - Tested on the host where possible. A module change never reruns SDK tests.
 - Low churn: move files once, into the final structure.
 
-Versions stay experimental. S2b bumped the runtime to 0.6.0 and the api contract to major 2 (the Api table is gone). S3 moves the runtime to 0.7.0 and the api contract to major 3.
+Versions stay experimental. There is one version, the runtime release (semantic, 0.x until 1.0.0). S2b bumped it to 0.6.0 (the Api table is gone). S3 moves it to 0.7.0 and deletes the separate contract numbers (api, machine, fx, service): the `.dkm` header has only the runtime version the module needs.
 
 ## 2. Today
 
@@ -139,11 +139,11 @@ requires = "core/usb-bulk"
 absent   = "missing"          # stub returns DK_E_MISSING
 sig      = "i32 (dk_module_ctx *ctx, dk_usb_bulk **out)"
 context  = "init"             # init, ui, io-step, any, isr
-since    = 11
+since    = "0.7.0"          # the runtime version that added the import
 ```
 
-- The packer derives the runtime minor version a module needs from the newest `since` among the imports it links, and the services it
-  needs from their `service` tags. `uses_api`, `api->size` and `DK_API_HAS` are gone.
+- The packer writes the runtime version a module needs, the newest `since` among the imports it links (0 when it links none), into the header word at 0x30 (bit 31 is the trace flag), and derives the services it
+  needs from their `service` tags. `uses_api`, `api->size` and `DK_API_HAS` are gone. The runtime loads the module only when that version has its own major and minor and at most its own patch (0.x semver: a minor may break, a patch only adds); otherwise the load fails with `E_CONTRACT`. The bytes 0x38 to 0x3f of the header are reserved zero.
 - `service` uses the names of runtime-and-services: `runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`, `sdhc_large`. Today
   every `runtime`, `samples` and `machines` import resolves to code in the runtime image. When runtime-and-services moves `samples`,
   `machines` and `fx` into `.dks` services, the same names resolve to the service exports and the loader loads a service only when a
@@ -166,8 +166,6 @@ listing and writing; `dk_file_create/write/close/abort/delete` become `dk_files_
 `dk_host_register`; `dkrt_blocks` becomes `dk_time_blocks`; `dkrt_log_ev` becomes `dk_log_event`; `dkrt_peek_range`, `dkrt_track_type`,
 `dkrt_selected_params` and `dkrt_log_sink_set` move to `platform/debug.h` as `dk_debug_*`. `fw_block_read`, `fw_alloc` and `fw_free` become
 `dk_fw_block_read`, `dk_fw_alloc` and `dk_fw_free` (service `runtime`, documented in `core/mem.h`; `usb-fast` uses them for its staging buffer and its storage bench).
-The sample bank calls `sample_bank`, `sample_load` and `sample_status` become `dk_sample_bank_open(ctx, &bank)`, `dk_sample_bank_load(bank, path)` and
-`dk_sample_bank_status(bank)` (service `samples`, since 11, context `init` and `any`); they exist only for the fixture `test/sample-proof` and are removed with the bank in S3.
 `DK_TRACE_INIT` is gone; `DK_TRACE_LOG` calls `dk_log` and stays a macro, so that its arguments are not evaluated when `DK_TRACE` is off.
 
 Limits checked on 2026-11-12: at most 64 imports per module (the largest module, `usb-fast`, needs about 25); runtime import names at most
@@ -392,7 +390,7 @@ the staged file is not read again, except for today's register records, which bu
 The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 (today `H_REG_OFF` and `H_REG_SIZE`, the register table) becomes
 `keys_off` and `keys_size`. They point to the keys table: `machine_rows`, `param_rows` and `page_rows` (the `[uses]` counts), the
 machine count, the FX count, then the machine keys (u32) and the FX ids. All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read `[uses]` from
-this table. The contract is api major 3 and the runtime 0.7.0. Until package F removes the `.dk.desc` path, the runtime also loads a `.dkm` of api major 2 (a module with no machine or effect tables, or one not yet migrated); after F a major 2 file is refused with `E_CONTRACT`.
+this table. Every `.dkm` has a keys table at the 0x90 pair (size 0 for a module with no machine and no effect: a tool or a service); the runtime has no other format. The version is the runtime 0.7.0.
 
 The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS`, which stays 32 (a shot-like
 machine needs about 10 records, the other modules 3 to 7). When `init` returns `DK_OK`:
@@ -473,7 +471,7 @@ These come from the profiling work and land after the steps in section 12 that t
 - C11: `-std=c11` for ColdFire builds, as the host tests already use.
 - A repository `.clang-format` and a format check target for C. `clang-tidy` later.
 - Names: functions `dk_<area>_<verb>`, types `dk_<thing>`, constants `DK_<AREA>_<NAME>`. No version suffixes (`_v1`, `_V2`); versions
-  live in `sdk.toml`.
+  live in `sdk.toml`: one runtime version, and `since` of each import.
 - Naming (agreed 2026-11-12):
 
 | Rule | Form | Examples |
@@ -567,27 +565,26 @@ What shipped, in three steps on `lane/sdk-design`:
 
 What changed in the binary contract (runtime 0.6.0, every `.dkm` changes):
 
-- The api contract is `[2, 11]`: major 2 refuses every file of the Api table with `E_CONTRACT`; the minor numbers go on, so the `since` values stay. The packer writes the newest `since`
-  among the imports a module links (0 when it links none).
+- The packer writes the newest `since` among the imports a module links (0 when it links none) into the header (S3 replaced the contract pairs by the one runtime version).
 - The `.dkm` header is 0xa0 bytes in one form: `init`, `fini`, `menu` and `tick` are the offsets at 0x80, 0x84, 0x88 and 0x8c (the slot table is gone, so no header size 0xa4 or 0xa8). A data-only module has the
   stub as `init`. The packer refuses an object that has no `dk_module`, or that still exports `dkm_init`, `dkm_fini`, `dkm_menu` or `dkm_slot_<n>`.
 - `DkrtModule.slots` and `DkrtStatus.slot_calls` are gone (`DkrtStatus.tick_calls` counts the module ticks); the `MOD_LIST` event carries whether the module has a tick, where it carried the slot mask.
 - The crash record's `slots_entered` word is now the phase of the module code at the fault (`dlog::PHASE_*`: 1 `init`, 2 `tick`, 3 `fini`, 4 a callback, 0 none); `CRASH_MOD` names its
   argument `phase_stable`, and `dklog crash` prints "during init", "during tick" and so on.
 - The runtime `State` shrinks to 904 bytes (no slot table: `ST_*` offsets of `tools/patchkit/pk_dkrt.py`). `E_SLOT` (-11) is retired.
-- The firmware memory and card calls are `dk_fw_alloc`, `dk_fw_free` and `dk_fw_block_read` (service `runtime`). The sample bank has three temporary imports for `test/sample-proof`
-  (`dk_sample_bank_open`, `dk_sample_bank_load`, `dk_sample_bank_status`), removed with the bank in S3.
+- The firmware memory and card calls are `dk_fw_alloc`, `dk_fw_free` and `dk_fw_block_read` (service `runtime`). The temporary sample bank (three imports) was removed with its fixture in S3.
 - `DK_TRACE_LOG` calls `dk_log` at the trace level and stays a macro, so the arguments are not evaluated when `DK_TRACE` is off; `DK_TRACE_INIT` is gone.
 
-### S3 Builders and the runtime commit path
+### S3 Builders and the runtime commit path (done)
 
 Work packages, in this order:
 
 - **A. Interfaces first.** Sections 5, 6 and 10 of this text, the `sdk.toml` entries for the builder calls and callback types, and the
   header layout (the keys table of 6.3). B to D start only after A is merged into the lane.
 - **B. Runtime commit path.** Collect builder calls during `init` in the module's arena share (`MAX_RECORDS` stays 32); commit as in
-  6.3, with DSP check and reserve unchanged before `init`; refuse a duplicate FX id across loaded modules; refuse api major 2
-  (contract api major 3, runtime 0.7.0).
+  6.3, with DSP check and reserve unchanged before `init`; refuse a duplicate FX id across loaded modules. After F the runtime loads
+  only files with a keys table, and a module is refused when the runtime version it needs has another major or minor, or a higher patch
+  (runtime 0.7.0).
 - **C. Packer and dkneeds.** The packer finds DSP entry points by name with the leading underscore (6.1), writes the `module.toml`
   machine and effect keys and `[uses]` into the keys table of the header (`keys_off`, `keys_size` at 0x90 and 0x94), and stops reading
   `.dk.desc`. `module.toml` accepts `[[machine]]` and `[[fx]]` with an id again. `dkneeds::needs_of` and the device menu read `[uses]`
@@ -597,8 +594,11 @@ Work packages, in this order:
   from the emulated device. B, C and D run in parallel, each in its own lane.
 - **E. Migration.** The machines and the FX, the fixtures (scripted for the fixtures), and the core proofs `dsp-ddr-proof` and
   `dsp-lp0-proof`, by three coders.
-- **F. Cleanup.** Delete the declaration macros and the macro headers, the `.dk.desc` spec in `sdk.toml`, `desc.rs` in `patchkit`, and
-  the `sample-proof` fixture with the temporary `dk_sample_bank_*` imports.
+- **F. Cleanup.** Delete the `sample-proof` fixture with the temporary `dk_sample_bank_*` imports, `dsp-ddr-proof` and `dsp-lp0-proof`, the `[contract]`
+  table (one version: the runtime's; `since` is a runtime version string) and the major-2 `.dkm` loading path. The declaration macros, their
+  headers and `desc.rs` stay for the two patched-in twins (`test/patched-pluck`, `test/twin-dn2`): the headers moved out of the public SDK to
+  `sdk/patched-in/include`, which patchkit adds to the include path of patched-in (not `dynamic`) modules only; a follow-up deletes the
+  patched-in content path.
 - Check: every module's and fixture's device tests on both devices; SHARC golden hashes and PCM pins unchanged; refusal cases for "more
   than `[uses]`", "unknown machine id", "missing DSP entry symbol", "duplicate FX id" and "no free row". `MAX_RECORDS` check: no module
   collects more than 32 records (the largest, `shot`, about 10: 1 machine, 5 params, 1 page, 1 click action, 2 canvas pages); the

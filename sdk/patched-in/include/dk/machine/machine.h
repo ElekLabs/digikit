@@ -1,5 +1,5 @@
-/* <dk/machine/machine.h>: the machine (voice) contract for content modules.
-   Hand-written. The layouts come from the generated <dk/gen/machine.h> and <dk/gen/desc.h> (from sdk/sdk.toml).
+/* <dk/machine/machine.h>: the declaration macros of a PATCHED-IN machine module (`dynamic = false`; patchkit adds this directory for those builds only).
+   A run-time module builds its machine in `init` (dk_module_ctx_add_machine); its contract structs are in <dk/gen/machine.h>. Hand-written. The layouts come from the generated <dk/gen/machine.h> and <dk/gen/desc.h> (from sdk/sdk.toml).
 
    Declare each machine in a C file of the module:
 
@@ -26,7 +26,7 @@
 #ifndef DK_MACHINE_H
 #define DK_MACHINE_H
 #include <dk/gen/machine.h>
-#include <dk/page/page.h>
+#include <dk/page/decl.h>
 
 /* A machine: ID is a C identifier and becomes the machine id. The rest are dk_desc_machine field initializers. */
 #define DK_MACHINE(ID, ...)                                                                        \

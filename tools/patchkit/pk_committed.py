@@ -1,6 +1,6 @@
 """The records a module committed on the emulated device, as `module:check` and conformance use them (docs/plans/sdk.md 6.4).
 
-A module of api major 3 declares its machines, parameters and pages with builder calls in `init`, so nothing in the repository lists them. The
+A module declares its machines, parameters and pages with builder calls in `init`, so nothing in the repository lists them. The
 runtime's `MODULE_COMMIT` event names the record block it wrote; `tools/devtools/commit_records.ts` boots a device, reads that block from
 emulator memory and decodes it with `patchkit records --json` (the one decoder of the record format). This file runs that tool and turns its
 output into what the callers need:

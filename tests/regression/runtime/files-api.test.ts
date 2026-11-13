@@ -9,7 +9,7 @@ import { describe, expect, test } from 'vitest';
 import { withSession } from '../support.ts';
 import { moduleArtifact } from './install.ts';
 import { liveProtocol } from './protocol.ts';
-import { apiContract, linkedApiMinor, runtimeVersion } from './upload-kit.ts';
+import { linkedRuntimeNeed, runtimeVersion } from './upload-kit.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
 const root = repoRoot();
@@ -78,15 +78,10 @@ for (const profile of profiles) {
       const dkm = fs.readFileSync(artifact);
       if (dkm.readUInt32BE(0xa4) !== 0xffffffff)
         throw new Error('files-proof must define no tick; callbacks work without one');
-      const [apiMajor] = apiContract();
-      const apiMinor = linkedApiMinor(dkm);
-      if (
-        dkm[0x38] !== apiMajor ||
-        dkm[0x39] !== apiMinor ||
-        (dkm.readUInt32BE(0x30) & 0x7fffffff) !== runtimeVersion()
-      )
+      const need = linkedRuntimeNeed(dkm);
+      if ((dkm.readUInt32BE(0x30) & 0x7fffffff) !== need)
         throw new Error(
-          `prepare files-proof with the current patchkit (entry point dk_module, api ${apiMajor}.${apiMinor})`,
+          `prepare files-proof with the current patchkit (entry point dk_module, needs runtime ${need.toString(16)})`,
         );
       fs.mkdirSync(runDir, { recursive: true });
     }

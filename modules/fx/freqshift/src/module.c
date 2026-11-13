@@ -7,7 +7,7 @@
    SHIFT is bipolar: the shown value -64 .. +63 is the float the routine reads. 0 is no shift; |v| = 1 is about 0.1 Hz,
    the ends are about +-2 kHz, exponential in between (the table is in docs/findings/54-module-cookbook.md). */
 #include <dk/core/module.h>
-#include <dk/gen/desc.h>
+#include <dk/gen/page_consts.h>
 #include "module_ids.h"
 
 static int32_t init(dk_module_ctx *ctx)

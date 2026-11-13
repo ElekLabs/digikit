@@ -1,7 +1,7 @@
 //! Synthetic `.dkm` files for the capacity tests of the runtime (docs/plans/capacity-isolation.md): a module of a chosen size, with a
 //! chosen number of machines, parameters, pages, DSP bytes and voices, made from a small TOML spec instead of a fixture folder.
 //!
-//! The file is made by the same packer as a real module (`dkm::pack_full_max`, `register::Register::encode`, `dkmdsp::DspSection::encode`),
+//! The file is made by the same packer as a real module (`dkm::pack_data_only_max`, `dkneeds::keys::write_keys`, `dkmdsp::DspSection::encode`),
 //! so the format has one source. The ColdFire code is `moveq #0,d0; rts` (the stub is `init`); everything else is data (`pad`, `fill`) or `bss`,
 //! which the file does not store. The DSP image is `fill` bytes (zero words are SHARC+ NOPs) and is never run: a voice names a type and an
 //! entry at byte 0, and the capacity tests do not play it.
@@ -30,7 +30,7 @@ use crate::dkm::{self, Options};
 use crate::dkmdsp::{DspSection, Voice};
 use crate::dko::{Dko, DkoSection, DkoSymbol};
 use crate::error::*;
-use crate::register::{self, KNOBS, Machine, Page, Param, Register};
+use crate::register;
 use crate::typed::Models;
 use serde::Deserialize;
 
@@ -98,7 +98,7 @@ pub fn machine_id(i: u32) -> String {
 
 /// Make the `.dkm` of SPEC for device DEV (`dt2`, `dn2`): the device gives the parameter slots and the DSP section its device word.
 pub fn synth(spec: &Spec, dev: &str, models: &Models) -> Result<Vec<u8>> {
-    let model = models
+    models
         .by_device
         .get(dev)
         .ok_or_else(|| err!("no device model for {dev:?}"))?;
@@ -149,57 +149,32 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models) -> Result<Vec<u8>> {
 
     let device = register::device_id(dev)?;
     let key = |m: &str| register::machine_key(&spec.name, m);
-    let mut reg = Register {
-        device,
-        ..Default::default()
-    };
-    let template = if dev == "dn2" { 0xd5 } else { 0xcc };
-    let slots = model.knobs.count.max(1) as i64;
-    for i in 0..spec.params {
-        reg.params.push(Param {
-            index: i,
-            template,
-            slot: (model.knobs.slot_base + i as i64 % slots) as u32,
-            min: 0,
-            max: 0x7f00,
-            default: 0x2000,
-            name: format!("Param {i}"),
-            short: format!("P{i}"),
-        });
-    }
-    for i in 0..spec.machines {
-        reg.machines.push(Machine {
-            type_no: key(&machine_id(i)),
-            clone_of: 0,
-            position: register::POS_END,
-            own_dsp: 0,
-            level: model.knobs.level_default as u32,
-            knobs: [0; KNOBS],
-            name: format!("Synth {i}"),
-            short: format!("S{i}"),
-        });
-    }
     if spec.pages > 0 && spec.machines == 0 {
         return Err(err!(
             "{}: a page belongs to a machine of the file, the spec has none",
             spec.name
         ));
     }
-    for i in 0..spec.pages {
-        reg.pages.push(Page {
-            type_no: key(&machine_id(i % spec.machines)),
-            knobs: [0; KNOBS],
-            level: model.knobs.level_default as u32,
-            name: format!("PG{i}"),
-            title: format!("Synth page {i}"),
-        });
+    // the keys table: the row counts and the machine keys. The stub `init` makes no builder call, so a module with machines is refused at the
+    // commit (docs/plans/sdk.md 6.3): the synthetic capacity modules with machine rows cannot load until `synth` generates the calls.
+    let machine_keys: Vec<u32> = (0..spec.machines).map(|i| key(&machine_id(i))).collect();
+    if spec.machines == 0 && spec.params > 0 {
+        return Err(err!(
+            "{}: parameters belong to a machine of the file, the spec has none",
+            spec.name
+        ));
     }
-    reg.check()?;
-    let reg_bytes = if reg.params.is_empty() && reg.machines.is_empty() && reg.pages.is_empty() {
-        vec![]
-    } else {
-        reg.encode()
-    };
+    let mut keys = vec![0u8; dkneeds::keys::keys_size(machine_keys.len(), 0)];
+    if !keys.is_empty() {
+        dkneeds::keys::write_keys(
+            (spec.machines as u16, spec.params as u16, spec.pages as u16),
+            &machine_keys,
+            &[],
+            &mut keys,
+        )
+        .map_err(|e| err!("{}: keys table: {e:?}", spec.name))?;
+    }
+    let reg_bytes = keys;
 
     let dsp_bytes = match &spec.dsp {
         None => vec![],
@@ -254,7 +229,6 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models) -> Result<Vec<u8>> {
     let opts = Options {
         name: spec.name.clone(),
         version: 0x00_01_00,
-        runtime_min: dkm::runtime_version(),
         trace: false,
         stereo: false,
         gate: false,
@@ -306,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn registry_records_are_counted_and_valid_on_both_devices() {
+    fn the_keys_table_has_the_rows_and_the_machine_keys_on_both_devices() {
         for dev in ["dt2", "dn2"] {
             let pages = if dev == "dn2" { 8 } else { 0 };
             let f = make(
@@ -314,14 +288,16 @@ mod tests {
                 dev,
             );
             let d = Dkm::parse(&f).unwrap();
-            let r = Register::parse(&d.register).unwrap();
+            let k = dkneeds::keys::Keys::parse(&d.register).unwrap();
             assert_eq!(
-                (r.machines.len(), r.params.len(), r.pages.len()),
+                (k.machine_rows(), k.param_rows(), k.page_rows()),
                 (8, 16, pages)
             );
             // a machine's key is the hashed key of "<module>:m<i>"
-            assert_eq!(r.machines[3].type_no, register::machine_key("cap/r", "m3"));
-            r.check().unwrap();
+            assert_eq!(
+                k.machine_keys().nth(3),
+                Some(register::machine_key("cap/r", "m3"))
+            );
         }
         let e = synth(
             &Spec::parse("name = \"x\"\npages = 2\n").unwrap(),
@@ -347,8 +323,6 @@ mod tests {
         assert_eq!(s.voices[0].type_no, 17);
         assert_eq!(s.voices[1].type_no, register::machine_key("cap/d", "m0"));
         assert_eq!((s.voices[1].state_bytes, s.voices[1].voices), (32, 2));
-        // the contract bytes say machine (a DSP section is a machine module)
-        assert_ne!(d.runtime_min, 0);
     }
 
     #[test]

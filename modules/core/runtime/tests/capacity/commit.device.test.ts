@@ -14,7 +14,7 @@ import { LOADED } from '@digi/regression/runtime/synth.ts';
 import { bootEntries, COUPLED_ROOTS, SYMBOLS, type Entry } from './capacity-helpers.ts';
 
 /**
- * The commit of a module of api major 3 (docs/plans/sdk.md 6.3), end to end on both devices, with the fixture test/commit-demo: a machine `cmach` with three
+ * The commit of a module (docs/plans/sdk.md 6.3), end to end on both devices, with the fixture test/commit-demo: a machine `cmach` with three
  * params (Mode is latched, Go has a click action) and an effect `cfx` with one page, declared by builder calls in `init`.
  *
  * - the MODULE_COMMIT event gives the rows the module uses and the committed record block; the block holds the params and the effect page;
@@ -80,7 +80,7 @@ async function expectNothing(rig: CardRig, got: Awaited<ReturnType<typeof bootEn
 }
 
 cardRigs(
-  'commit of a module of api major 3',
+  'commit of a module',
   {
     dsp: 'sharc',
     roots: COUPLED_ROOTS,

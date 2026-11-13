@@ -143,9 +143,7 @@ def machine_has_samples(mid: str) -> bool:
         )
     try:
         records = json.loads(result.stdout)
-        return any(
-            records.get(key) is not None for key in ("sample_bank", "sample_tracks")
-        )
+        return records.get("sample_tracks") is not None
     except (ValueError, AttributeError) as e:
         raise dev.H.HarnessError(f"{mid}: invalid module declarations: {e}") from e
 

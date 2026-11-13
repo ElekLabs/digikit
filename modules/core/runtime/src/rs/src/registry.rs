@@ -197,7 +197,7 @@ pub unsafe fn free_rows() -> Option<crate::collect::Free> {
     })
 }
 
-/// The arguments of the callbacks of the records `apply` is about to write (modules of api major 3): the k-th ACTION record's `arg` and the k-th
+/// The arguments of the callbacks of the records `apply` is about to write (modules): the k-th ACTION record's `arg` and the k-th
 /// native page record's `arg`. Set by the commit just before `apply`, cleared by it.
 pub struct ApplyArgs {
     pub click: [u32; 32],

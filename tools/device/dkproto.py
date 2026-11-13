@@ -173,7 +173,10 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -45: ("E_BOOT_ONLY", "the module set is fixed after the boot hook"),
     -46: ("E_RANGE", "a card write outside the store range"),
     -47: ("E_CARD_RO", "the card's store area is not ours and not blank"),
-    -48: ("E_CONTRACT", "the module was built for another SDK contract"),
+    -48: (
+        "E_CONTRACT",
+        "the module needs another runtime version than this one (another major or minor, or a higher patch)",
+    ),
     -49: ("E_TABLE", "the runtime's tables failed their check"),
     -73: (
         "E_MISSING",

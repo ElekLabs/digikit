@@ -13,7 +13,6 @@ fn opts() -> dkm::Options {
     dkm::Options {
         name: "test/x".into(),
         version: 0x010203,
-        runtime_min: 1,
         trace: false,
         stereo: false,
         gate: false,

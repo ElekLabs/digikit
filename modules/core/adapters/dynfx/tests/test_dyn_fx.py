@@ -3,7 +3,6 @@ header says fx 1.0 and no machine, its DSP section (version 4) holds one effect 
 the file infers are one effect slot and no row of any other kind. The emulator proof is modules/core/adapters/dynfx/tests/fx-chain.device.test.ts (both devices)."""
 
 import struct
-import tomllib
 
 import pytest
 from support.paths import REPO_ROOT
@@ -43,28 +42,20 @@ def test_committed_objects_are_current(mod):
     front_end.build_module(modroots.module_dir(mod), check=True)
 
 
-def test_the_header_says_fx_and_not_machine(packed):
+def test_the_header_has_no_contract_pairs(packed):
     _, out = packed
     b = out.read_bytes()
-    sdk = tomllib.loads((ROOT / "sdk" / "sdk.toml").read_text())["contract"]
-    # This fixture links no import with a `since`: the packer writes the newest
-    # `since` among the imports a module links (0 for none), not the latest SDK minor.
-    assert tuple(b[0x38:0x40]) == (sdk["api"][0], 0, 0, 0, *sdk["fx"], 0, 0)
-    assert sdk["fx"][0] != 0  # the runtime implements the contract
+    # 0x38..0x40 are reserved zero; the word at 0x30 is the newest `since` among the linked imports (0: none)
+    assert bytes(b[0x38:0x40]) == bytes(8)
+    assert int.from_bytes(b[0x30:0x34], "big") & 0x7FFFFFFF in (0, 0x000700)
 
 
 def effect_ids(dkm: bytes) -> list[int]:
-    """The `id` word (the fourth) of each EFFECT record (kind 4) of the file's register section."""
-    at = dkm.find(b"DKRG")
-    assert at >= 0 and struct.unpack_from(">II", dkm, at)[1] == 1
-    n = struct.unpack_from(">I", dkm, at + 12)[0]
-    p, out = at + 16, []
-    for _ in range(n):
-        kind, length = struct.unpack_from(">II", dkm, p)
-        if kind == 4:
-            out.append(struct.unpack_from(">I", dkm, p + 8 + 12)[0])
-        p += length
-    return out
+    """The effect ids of the file's keys table (the header's 0x90 pair): after the row counts and the machine keys."""
+    off, size = struct.unpack_from(">II", dkm, 0x90)
+    nm, nf = struct.unpack_from(">HH", dkm, off + 6)
+    assert size == 12 + 4 * (nm + nf)
+    return list(struct.unpack_from(f">{nf}I", dkm, off + 12 + 4 * nm))
 
 
 def fnv_effect_id(module: str, effect: str) -> int:

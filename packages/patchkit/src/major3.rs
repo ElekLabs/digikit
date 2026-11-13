@@ -1,4 +1,4 @@
-//! The sections of a module of api major 3 (docs/plans/sdk.md 6.1, 6.3): no `.dk.desc` records. The keys table comes from `module.toml`
+//! The sections of a run-time module (docs/plans/sdk.md 6.1, 6.3): no `.dk.desc` records. The keys table comes from `module.toml`
 //! (`[[machine]]`, `[[fx]]`, `[uses.<device>]`) and the DSP entry points are found by name in the DSP object.
 //!
 //! The names are the toolchain's symbols, with its leading underscore. The prefix `x` is the id with `-` as `_`, or `dsp` of the `[[machine]]` or
@@ -14,11 +14,10 @@ use crate::module::Module;
 use crate::typed::SampleTracksDef;
 use std::collections::BTreeMap;
 
-/// Does `m` declare machines or effects with `[[machine]]`/`[[fx]]` and no `.dk.desc` records? Such a module is of api major 3. A module
-/// with neither table (a tool or a service) keeps the register-table format until the contract moves for every module.
-pub fn is_new_style(m: &Module) -> Result<bool> {
+/// A run-time module declares in `init` (builder calls) and lists its machines and effects in `[[machine]]`/`[[fx]]` of module.toml; the
+/// `.dk.desc` declaration macros (DK_MACHINE, DK_FX, ...) are for patched-in modules only.
+pub fn refuse_declarations(m: &Module) -> Result<()> {
     let mf = &m.manifest;
-    let tables = !mf.machines.is_empty() || !mf.fxs.is_empty();
     let decls = !mf.machine.is_empty()
         || !mf.param.is_empty()
         || !mf.page.is_empty()
@@ -27,13 +26,13 @@ pub fn is_new_style(m: &Module) -> Result<bool> {
         || mf.sample_bank.is_some()
         || mf.sample_tracks.is_some()
         || !crate::desc::module_fx(m)?.is_empty();
-    if tables && decls {
+    if decls {
         return Err(err!(
-            "{}: has `.dk.desc` declarations (DK_MACHINE, DK_FX, ...) and [[machine]]/[[fx]] tables in module.toml; use the builder calls in init (api major 3) or the declarations, not both",
+            "{}: a run-time module has `.dk.desc` declarations (DK_MACHINE, DK_FX, ...); declare with builder calls in init and list [[machine]]/[[fx]] in module.toml",
             mf.module.id
         ));
     }
-    Ok(tables)
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -101,8 +100,20 @@ fn desc_flags(obj: &Dko, desc: &str) -> Result<bool> {
 pub fn sections(m: &Module, device: &str, dsp_obj: Option<&Dko>) -> Result<Sections> {
     let mf = &m.manifest;
     let id = &mf.module.id;
-    let obj = dsp_obj
-        .ok_or_else(|| err!("{id}: a machine or an effect needs a DSP object for {device}"))?;
+    let Some(obj) = dsp_obj else {
+        if mf.machines.is_empty() && mf.fxs.is_empty() {
+            // a tool or a service: no keys, no DSP section
+            return Ok(Sections {
+                keys: vec![],
+                dsp: vec![],
+                stereo: false,
+                gate: false,
+            });
+        }
+        return Err(err!(
+            "{id}: a machine or an effect needs a DSP object for {device}"
+        ));
+    };
     let mut voices = vec![];
     let mut fxs = vec![];
     let mut stereo = false;
@@ -299,17 +310,23 @@ mod tests {
         "[[machine]]\nid = \"foo\"\n[uses.dn2]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\n";
 
     #[test]
-    fn a_module_with_tables_and_no_declarations_is_new_style() {
-        assert!(is_new_style(&module(MACHINE)).unwrap());
-        assert!(!is_new_style(&module("")).unwrap());
+    fn a_run_time_module_has_no_declaration_macros() {
+        refuse_declarations(&module(MACHINE)).unwrap();
+        refuse_declarations(&module("")).unwrap();
         let mut m = module(MACHINE);
         m.manifest.sample_tracks = Some(SampleTracksDef {
             local_id: 0,
             records: "r".into(),
             control: "c".into(),
         });
-        let e = is_new_style(&m).unwrap_err().to_string();
-        assert!(e.contains("not both"), "{e}");
+        let e = refuse_declarations(&m).unwrap_err().to_string();
+        assert!(e.contains("builder calls"), "{e}");
+    }
+
+    #[test]
+    fn a_tool_without_tables_has_an_empty_keys_table_and_no_dsp() {
+        let s = sections(&module(""), "dn2", None).unwrap();
+        assert!(s.keys.is_empty() && s.dsp.is_empty());
     }
 
     #[test]
@@ -343,23 +360,21 @@ mod tests {
     }
 
     #[test]
-    fn the_packed_file_is_api_major_3_with_the_keys_table() {
+    fn the_packed_file_has_the_keys_table_and_the_needed_runtime() {
         let m = module(MACHINE);
         let obj = dsp_object(&["_foo_render", "_foo_note_on"], &[], &[], 0);
         let s = sections(&m, "dn2", Some(&obj)).unwrap();
         let o = crate::dkm::Options {
             name: "test/m".into(),
             version: 0x010203,
-            runtime_min: 1,
             trace: false,
             stereo: s.stereo,
             gate: false,
         };
         let f = crate::dkm::pack_keys(None, &s.keys, &s.dsp, &o).unwrap();
-        assert_eq!(f[crate::dkm::H_CONTRACT], 3);
-        // the machine contract is set (a machine key in the table), no service
-        assert_eq!(f[crate::dkm::H_CONTRACT + 2], 1);
-        assert_eq!(f[crate::dkm::H_CONTRACT + 6], 0);
+        // the bytes of the old contract pairs are reserved zero; the packer links no import here, so the file needs no runtime version
+        assert_eq!(&f[0x38..0x40], &[0u8; 8]);
+        assert_eq!(&f[0x30..0x34], &[0u8; 4]);
         let off = u32::from_be_bytes(f[0x90..0x94].try_into().unwrap()) as usize;
         let size = u32::from_be_bytes(f[0x94..0x98].try_into().unwrap()) as usize;
         assert_eq!(&f[off..off + size], &s.keys[..]);

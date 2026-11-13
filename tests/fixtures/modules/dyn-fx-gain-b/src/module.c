@@ -2,7 +2,7 @@
    Tab GNB. GAIN is p0, 0 to 1.27: the shown value 0 .. 127 is the gain in percent, so the default 25 is 0.25.
    The MIX knob starts at 64. */
 #include <dk/core/module.h>
-#include <dk/gen/desc.h>
+#include <dk/gen/page_consts.h>
 #include "module_ids.h"
 
 static int32_t init(dk_module_ctx *ctx)

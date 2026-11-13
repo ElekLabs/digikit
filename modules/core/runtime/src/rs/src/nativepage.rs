@@ -91,7 +91,7 @@ pub unsafe fn check(kind: u32, body: *const u8, params: u32, image_size: u32) ->
     if positions == 0 { E_FORMAT } else { OK }
 }
 
-/// `arg`: Some for a page of api major 3 (`dk_page_canvas`): its callbacks are `draw(arg, frame)` and `event(arg, event)`.
+/// `arg`: Some for a page (`dk_page_canvas`): its callbacks are `draw(arg, frame)` and `event(arg, event)`.
 pub unsafe fn apply(kind: u32, body: *const u8, base: u32, codes: &[u32], words: &[u32], arg: Option<u32>) -> i32 {
     let (arg, with_arg) = match arg { Some(a) => (a, 1u32), None => (0, 0) };
     if words.len() > 8 { return E_FORMAT; }

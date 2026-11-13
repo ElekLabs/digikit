@@ -105,9 +105,9 @@ def _daemon(device: str) -> str:
 
 
 def commit_stage(mid: str, devices: list[str]) -> bool:
-    """For a module of api major 3: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
+    """For a module with `[[machine]]` or `[[fx]]`: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
     `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from them (docs/plans/sdk.md 6.1 and 6.4). The
-    conformance suite that runs next reads that gallery.json. A module of api major 2 declares in `.dk.desc` and is left alone: returns False."""
+    conformance suite that runs next reads that gallery.json. A tool or a service has no rows to commit and is left alone: returns False."""
     moddir = modroots.module_dir(mid)
     manifest_path = moddir / "module.toml"
     original = manifest_path.read_text(encoding="utf-8")
@@ -149,7 +149,7 @@ def seed_uses(dev: str) -> dict[str, int]:
 
 
 def _measure(mid: str, devices: list[str]) -> dict[str, dict]:
-    """Pack MID for each device and read the rows its init committed on the emulated device. {} when no device packs it or it is of api major 2."""
+    """Pack MID for each device and read the rows its init committed on the emulated device. {} when no device packs it."""
     from tools.patchkit import patchkit, pk_committed
 
     per: dict[str, dict] = {}
@@ -161,8 +161,6 @@ def _measure(mid: str, devices: list[str]) -> dict[str, dict]:
             )
             if r.returncode:
                 continue  # not packed for this device (ports); the size lines say why
-            if out.read_bytes()[0x38] != 3:
-                return {}
             per[dev] = pk_committed.committed(
                 mid, dev, out, str(patchkit.binary()), _daemon(dev)
             )

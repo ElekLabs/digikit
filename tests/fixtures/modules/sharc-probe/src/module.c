@@ -1,7 +1,7 @@
 /* The effect of test/sharc-probe: one master effect with no knob and no page, declared with a builder call in init.
    The audio passes unchanged (the routine copies its input), so MIX does not matter. */
 #include <dk/core/module.h>
-#include <dk/gen/desc.h>
+#include <dk/gen/page_consts.h>
 #include "module_ids.h"
 
 static int32_t init(dk_module_ctx *ctx)

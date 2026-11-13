@@ -76,9 +76,7 @@ export async function expectModuleLoad(
     }
     const loaded = (await dk.modules()).find((entry) => entry.name === module.id)!;
     expect(loaded.version, 'loader reports the prepared module version').toBe(bytes.readUInt32BE(0x34));
-    const contracts = Array.from({ length: 4 }, (_, index) => [bytes[0x38 + 2 * index], bytes[0x39 + 2 * index]]);
-    expect(loaded.contracts, 'loader reports the prepared SDK contracts').toEqual(contracts);
-    expect(loaded.contracts[module.contract]![0], 'intended module contract is active').toBeGreaterThan(0);
+    expect(loaded.needs, 'loader reports the runtime version the prepared module needs').toBe(bytes.readUInt32BE(0x30) & 0x7fffffff);
     if (module.dsp) {
       expect(loaded.dsp_len, 'module DSP image was allocated').toBeGreaterThan(0);
       if (module.type === 'machine') {
