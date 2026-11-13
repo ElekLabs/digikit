@@ -40,7 +40,7 @@ cf_expansion = [0x478c0000, 0x47bf0000]
 dsp = "none"
 seal = "none"
 sample_pool = "none"
-card = "unknown"
+card = "slots"
 
 # Container section roles. Section 1 holds the FPGA bitstream, 6 and 7 the peer CPU: none of them is ever written.
 [container]
@@ -65,8 +65,8 @@ stream_id = 0x11
 main_dest = 0x40000400
 
 # Board and CPU facts the digikit runtime uses (docs/design/device-data.md; findings 129 and 130 give the evidence, all **[D]** static). The runtime reads
-# them from its device object `dkrt_dev`. There is no DSP, so no dsp_* facts and no run-time machines (no `[digikit] dsp_*`). There is no
-# `[card.store]` yet: the store is off (`DEV_HAS_STORE` clear) until a canary run shows where on the card a store may live (finding 130 "Storage").
+# them from its device object `dkrt_dev`. There is no DSP, so no dsp_* facts and no run-time machines (no `[digikit] dsp_*`). The module store
+# is the Digitone II's (`[card.store]` below; finding 130 "Storage").
 [board]
 # The console UART (UART8, the same init function as on the Digitone II and Digitakt II): drained before MAIN's soft reset (finding 130).
 console_uart_base = 0xEC070000
@@ -84,6 +84,8 @@ name = "st"
 # The key held at power-on for safe mode. The runtime asks the firmware's `key_down(k)` with a FIRMWARE key index, not a panel code. On the
 # Syntakt the two differ (finding 130 "Safe key"): trig 16 (panel code 16) is key index 39 (trigs 1..16 are 24..39). Unproven at power-on **[O]**.
 safe_key = 39
+# Run-time modules (ids) that the workbench installs after a flash: the debug log only; digikit/remote has no Syntakt port yet.
+default_modules = ["digikit/debug"]
 # RAM that neither MAIN nor the boot code touches, above cf.expansion (the first 4 KiB). The 4 MiB below 0x48000000 is a ring that MAIN clears
 # at boot, so the DT2 place (0x47fe0000) is not free here (finding 130 "RAM map"). A canary run is open **[O]**.
 keep_base = 0x47bf0000
@@ -101,6 +103,48 @@ fx_slots = 0
 send_slots = 0
 param_rows = 0
 page_rows = 0
+
+# Where the card keeps things (finding 130 "Storage"; sectors are 512 bytes). Read by packages/emulator/device-profile and used by the +Drive builder,
+# reader and exporter (packages/emulator/plusdrive). The MmcFs of OS 1.42 has no kit pool and no kit bitmap, and no path filesystem.
+[card]
+header_sector = 0x0
+total_sectors = 0x2e1a000   # the card the firmware whitelists (the pSLC 32 GB part, finding 14); the store runs to its end
+table_sector = 0x800        # the write-protect bitmaps of projects and sounds, 272 bytes
+
+# Projects: FUN_40110746, sector = (slot + 0x40) * 0x2000, 4 MiB per slot.
+[card.pools.projects]
+base_sector = 0x80000
+stride_sectors = 0x2000
+slots = 128
+slot_bytes = 0x400000
+bitmap_offset = 0
+bitmap_bytes = 16
+
+# Sound presets, 1 KiB, 2048 slots: FUN_40110c3a, sector = (slot + 0x800) * 2 (as the Digitone II).
+[card.pools.sounds]
+base_sector = 0x1000
+stride_sectors = 2
+slots = 2048
+slot_bytes = 0x400
+bitmap_offset = 16
+bitmap_bytes = 256
+
+# The working project (slot 0x80 of FUN_40110746), rewritten at every start. The two COKi copies of the persistent arena at 0x7a000 and 0x7c000 are
+# the firmware's own and are not listed: the builder would seed them with the other devices' boot record.
+[[card.regions]]
+role = "working-project"
+sector = 0x7e000
+sectors = 0x2000
+
+# Module and sample store (docs/design/digikit-store.md, version 3): the Digitone II's range. The most that stock MAIN 1.42 wrote in a session
+# (save project, save sound, +Drive format) is sector 0x81f7f and its format erases up to 0x17ffff; MmcFs writes refuse a sector at or above 0x180000
+# (finding 130 "Storage"). The store starts 5 times higher.
+[card.store]
+first_sector = 0x800000
+end_sector = 0x2e1a000
+selection_sectors = 2      # the last two sectors: the digikit selection record
+settings_sectors = 32      # the 32 sectors before them: the settings record, copy A then copy B of 16 sectors
+header_b_sector = 0x2e19fdd  # store header copy B: the sector before the settings record
 
 # Board facts that only the emulator uses. free_running_dtcn: the DMA timer counter channels (DTCN0..3) that the firmware reads as
 # free-running counters at the bus clock without ever starting the timer (finding 70: MAIN busy-waits on DTCN2).

@@ -22,7 +22,7 @@ def module(mid: str) -> dict:
 
 
 def test_the_store_geometry_is_the_device_files() -> None:
-    for dev in pk_device.digikit_devices():
+    for dev in pk_device.store_devices():
         s = pk_device.store_of(dev)
         card = pk_device.load(dev)["card"]["store"]
         assert s.first == card["first_sector"]
@@ -67,7 +67,7 @@ def test_dyndsp_reserves_one_voice_row_per_run_time_type() -> None:
 
 
 def test_digikit_ids_and_names_are_unique_and_fit_the_info_reply() -> None:
-    devs = [pk_device.load(d) for d in pk_device.digikit_devices()]
+    devs = [pk_device.load(d) for d in pk_device.store_devices()]
     ids = [d["digikit"]["id"] for d in devs]
     assert len(ids) == len(set(ids))
     assert len({d["device"]["syx_id"] for d in devs}) == len(devs)
@@ -89,7 +89,9 @@ def test_port_resolve_reads_its_tables_from_the_device_files() -> None:
     for pf in (ROOT / "devices" / "ports").glob("*.toml"):
         port = tomllib.loads(pf.read_text())
         patch = pk_device.load(port["port"]["device"])["patch"]
-        assert port["limits"] == {k: patch[k] for k in port_resolve.LIMIT_KEYS if k in patch}
+        assert port["limits"] == {
+            k: patch[k] for k in port_resolve.LIMIT_KEYS if k in patch
+        }
 
 
 def test_the_harness_inputs_come_from_the_device_files() -> None:

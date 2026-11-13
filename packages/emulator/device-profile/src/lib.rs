@@ -1183,7 +1183,10 @@ mod tests {
             assert_eq!(layout.table_sector, 0x800);
             let bitmaps: Vec<_> = Pool::ALL
                 .iter()
-                .map(|&p| (layout.pool(p).bitmap_offset, layout.pool(p).bitmap_bytes))
+                .map(|&p| {
+                    let l = layout.pool(p).unwrap();
+                    (l.bitmap_offset, l.bitmap_bytes)
+                })
                 .collect();
             assert_eq!(bitmaps, [(0, 16), (16, 256), (272, 128)]);
             let boots: Vec<_> = layout
@@ -1223,6 +1226,42 @@ mod tests {
         );
         assert_eq!(dt2.path_fs.as_ref().unwrap().superblock_sector, 0x5d8000);
         assert!(dn2.path_fs.is_none());
+    }
+
+    /// A device may have no kit pool (finding 130 "Storage": its MmcFs has none): its kit slot count is 0 and the pool is not listed.
+    #[test]
+    fn a_card_layout_may_have_no_kit_pool() {
+        let registry = Registry::embedded().unwrap();
+        let layouts: Vec<_> = registry
+            .devices()
+            .iter()
+            .filter_map(|d| d.card.as_ref())
+            .collect();
+        let without_kits: Vec<_> = layouts
+            .iter()
+            .filter(|l| l.pool(Pool::Kits).is_none())
+            .collect();
+        assert!(
+            !without_kits.is_empty(),
+            "a registry device has no kit pool"
+        );
+        for layout in without_kits {
+            assert_eq!(
+                layout.present_pools().collect::<Vec<_>>(),
+                [Pool::Projects, Pool::Sounds]
+            );
+            assert_eq!(
+                (layout.slot_count(Pool::Kits), layout.slot_bytes(Pool::Kits)),
+                (0, 0)
+            );
+        }
+        for layout in layouts {
+            let store = layout.store.as_ref().unwrap();
+            for pool in layout.present_pools() {
+                let last = layout.slot_sector(pool, layout.slot_count(pool) - 1);
+                assert!(store.first_sector > last, "the store lies above the pools");
+            }
+        }
     }
 
     #[test]

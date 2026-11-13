@@ -1,6 +1,6 @@
 # Syntakt OS 1.42: device facts for the digikit runtime
 
-All claims are **[D]** (read once, static) unless marked **[O]** (open). Nothing was run in the emulator or on a device. Image: st-1.42 MAIN
+All claims are **[D]** (read once, static) unless marked **[O]** (open). The storage section also holds one emulator observation; nothing was run on a device. Image: st-1.42 MAIN
 (`out/sections/st-1.42/section_3_MAIN_OS.bin`, load 0x40000400, end 0x40348b90) and its bootstrap (section 2). DT2 values are from
 `devices/digitakt-ii.toml` and the DT2 1.17 MAIN. Why these facts: [finding 129](129-syntakt-patch-dry-run.md) "Runtime target",
 [device-data](../design/device-data.md). Container and CPUs: [finding 70](70-syntakt-1-42.md).
@@ -16,7 +16,7 @@ All claims are **[D]** (read once, static) unless marked **[O]** (open). Nothing
 | Uncached alias | 0x48000000 (+0x08000000) | 0x48000000 (+0x08000000) | `clr.l 0x48000000` in the soft-reset function (above). MAIN reaches its DMA data through `0x4d...` and `0x4f...` addresses only (476 operands in 0x48000400..0x50000000, most of them constants; the real ones are in "RAM map" below). That the high half mirrors the DDR is a chip property **[O]**. | D |
 | Keep area 0x47fe0000 (+0x1000) | free | **in use** | See "RAM map": 0x47c00000..0x48000000 is a 4 MiB DMA ring that MAIN clears at boot. Proposal: keep 0x47bf0000 (+0x1000). | D |
 | cf.expansion | 0x47e8b000..0x47fe0000 | **0x478c0000..0x47bf0000** (3.2 MiB) | "RAM map". The region of finding 129 (0x47e8b000..0x47fe0000) lies inside the ring. | D, O (no canary run) |
-| Storage | eMMC, MmcFs + path filesystem | eMMC, MmcFs only (no path filesystem) | "Storage". | D |
+| Storage | eMMC, MmcFs + path filesystem | eMMC, MmcFs only (no path filesystem); the store is the Digitone II's (first sector 0x800000) | "Storage". | D |
 | Safe key | 19 (RECORD, firmware key index = panel code) | firmware key index 39 (trig 16, panel code 16) | "Safe key". | D, O |
 | PEEK ranges | `[0x40000000, 0x47e30000]`, `[0x47e8b000, 0x47fe1000]` | `[0x40000000, 0x45570000]`, `[0x478c0000, 0x47bf1000]` | "PEEK". | D |
 
@@ -80,15 +80,41 @@ Other writers of the card: the COKi mirror (sectors 0x7a000 and 0x7c000 only); a
 **[O]**; and a remote "Clear"/stream handler (`FUN_400b639a`, `FUN_400b60b6`, `FUN_400b8b8e`, `/soundbanks/...`) that takes a card offset
 from the request (a raw erase needs a permission flag, bit 3). Its offsets are not traced **[O]**.
 
-### Store proposal
+### Store location
 
-The DN2 store, unchanged: `first_sector = 0x800000`, `end_sector = 0x2e1a000`, `selection_sectors = 2`, `settings_sectors = 32`,
-`header_b_sector = 0x2e19fdd`. Reasons: every MAIN access found above is below 0x180000 (768 MiB); the store starts 5 times higher; the end and the
-tail are derived from the card size, which has the same whitelist as the DN2 card. Not proven: a Syntakt may carry a smaller part **[O]**.
+The store is the DN2 store, unchanged: `first_sector = 0x800000`, `end_sector = 0x2e1a000`, `selection_sectors = 2`, `settings_sectors = 32`,
+`header_b_sector = 0x2e19fdd` (`devices/syntakt.toml` `[card.store]`; `[capabilities] card = "slots"`).
 
-What one emulator observation decides: boot MAIN with a whitelist-sized card, run save project, save and delete sound, load a sample slot and
-`+DRIVE FORMAT`, with a watch on the eSDHC CMD17/18/24/25/35/36/38 argument; the maximum written sector must be below 0x180000. The same watch on
-the remote stream handler needs a host RPC and is not covered by it.
+Emulator observation **[D]**: stock 1.42 booted ColdFire-only (no DSP, no runtime) on the default emulated card (the whitelisted 32 GB pSLC part,
+0x2e1a000 sectors), with a log of every eSDHC command that writes or erases (CMD25 data with its sector, CMD35, CMD36, CMD38). The session used the
+panel: boot, SAVE PROJECT AS (slot 001, name NEW PROJECT, SAVE OK), a new project (LOAD PROJECT, CREATE NEW), SAVE SOUND (A:001, DONE) and
+FORMAT +DRIVE with PROJECTS+SOUNDS and SAMPLES ticked (SUCCESS). A sample could not be loaded from the panel (samples arrive over USB).
+
+| Step | Card access | Sectors |
+| --- | --- | --- |
+| Boot | CMD25 | 0x7e000..0x7ffff (the working project, 64 writes of 128 sectors) |
+| Save project as, slot 1 | CMD25 | 0x80000..0x81f7f (project slot 1 is 0x2000 sectors from 0x80000) and again the working project |
+| Save sound A:001 | CMD25, 1 sector | 0x1000 (`(slot + 0x800) * 2`) |
+| Format +Drive | CMD35/36/38, 546 erases of 0x800 sectors | 0x80000 up to **0x17ffff** (the last CMD36 end address), the erase of the whole project pool |
+
+The largest sector written is **0x81f7f** and the largest sector erased is **0x17ffff**. No CMD24 and no write at or above 0x180000 occurred. This
+agrees with the static result (MmcFs writes refuse a sector at or above 0x180000; the format erases only the two pools above). The store starts
+at 0x800000, 5 times higher. A real Syntakt may carry a smaller part **[O]** (`SEC_COUNT` of a unit was not read).
+
+The remote stream handler (**static [D]**, `/soundbanks/...`, `FUN_400b8b8e` through `FUN_400b8100`, and the "Clear" handler `FUN_400b639a`): the
+`MidiRpcData*` request handler `FUN_4010bd9a` dispatches Read/Write/Clear/Copy/Move/Swap requests. A source record has a type, a flags word
+(bit 3: Clear permission), an offset at +0xc and a length at +0x10. Type 1 is RAM (`MemoryStreamWriter`, `FUN_40116184` is `memset`); type 2 is
+the card: `SafeMmcStreamWriter(offset, length, 0x10000)`, whose first-block erase `FUN_4010f52a(offset >> 9, 1)` and block writes carry the offset of the
+request. Nothing in these functions bounds the offset below 0x180000; the only bound is the driver's capacity check (a sector at or above `SEC_COUNT`
+is refused, -10). So the offsets are the host's: a stock host (the Elektron transfer program) sends the offsets of the pools and records above, and
+a host that sends 0x800000 would erase the store. The table that the soundbank handler resolves paths against (the vector at `handler + 0x18`, entries
+of 0x1c bytes) is filled elsewhere and was not traced **[O]**. This is the risk of every device (DT2 and DN2 have the same handler), not new here.
+
+## INFO device id
+
+The runtime writes the device id in a 4-byte field of the INFO reply (`dkrt_device_name`, NUL padded), so "st" is followed by two NULs. The hosts
+parsed a NUL-terminated string and read the next field one byte early. They now skip the padding of a name shorter than 3 characters
+(`tools/device/dkupload.py`, `packages/dkupload/src/proto.rs`, `packages/dk-session/src/dkupload-core.ts`).
 
 ## Safe key
 
@@ -115,6 +141,6 @@ the remote stream handler needs a host RPC and is not covered by it.
 
 - Canary run of the new `cf.expansion` and keep area on st (regions.py `confirm`).
 - Whether a soft reset keeps DDR on the Syntakt (same open question as DT2).
-- The card part of a real Syntakt (`SEC_COUNT`), and the largest sector written in a scripted session (observation above).
-- The remote stream handler's offsets, and the self-test write at 0x400806e0.
+- The card part of a real Syntakt (`SEC_COUNT`).
+- The registered soundbank path table of the remote stream handler, and the self-test write at 0x400806e0.
 - The ring's purpose; the bootstrap's own key reads.

@@ -115,9 +115,9 @@ def card_used(card: Path, written: bool) -> None:
 # emulated ms a rig runs after its boot before the scenario looks: the first UI-loop passes (a module's DSP part is waited for by
 # `wait_dsp`); the boot tool's own proof keeps 1500
 SETTLE_MS = int(os.environ.get("DIGIKIT_SETTLE_MS", "300"))
-FIRMWARE_FIRST = (
-    pk_device.working_project_sector()
-)  # the working project; the project slots follow (finding 02, storage records)
+FIRMWARE_FIRST = {
+    d: pk_device.working_project_sector(d) for d in pk_device.digikit_devices()
+}  # per device: the working project; the project slots follow (finding 02, storage records)
 
 
 class Fail(RuntimeError):
@@ -445,7 +445,8 @@ class Ctx:
         outside = sorted(
             x
             for x in writes
-            if not (lo <= x < hi) and (x < FIRMWARE_FIRST or not project_writes_ok)
+            if not (lo <= x < hi)
+            and (x < FIRMWARE_FIRST[self.device] or not project_writes_ok)
         )
         self.check(
             "card writes: the module store range"

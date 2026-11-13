@@ -110,7 +110,7 @@ read over USB MIDI.
   - [x] Device struct, gen kind, capability bits, optional anchors (host tests for each missing capability and each optional-anchor path).
   - [x] Syntakt `[digikit]`, `[board]`, `[limits]`; dry run with core/runtime + core/expansion passes `image_report` (finding 129); it boots in the emulator to the main
         screen and the runtime is ready (boot record, event ring, INFO over USB MIDI).
-  - [ ] Debug module on st: needs a module store: `[card.store]` for st (finding 130 store proposal) and an eMMC image that the emulator seeds, or another way to load.
+  - [x] Module store on st: `[card]` and `[card.store]` (the DN2 range; [finding 130](../findings/130-syntakt-runtime-facts.md) "Store location": an emulator session wrote at most sector 0x81f7f), a card layout without kit pool, a card the emulator seeds from device data. digikit/debug uploaded over emulated USB MIDI loads (MOD_LOAD result 0) and its log is read with `dklog --emu`.
 - [x] Runtime anchor proposals on 1.42 [D] (scratchpad st-1.42-anchors.tsv): 111 anchors, 73 high, 22 med/med-high,
       3 low, 15 miss. Misses: DSP link ISR (no SHARC; health loses the DSP measurement), source page hooks,
       7 storage path/directory functions (file layer rewritten), compact_set_rect, shared_ptr_as_view, popup_make.

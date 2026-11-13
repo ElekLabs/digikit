@@ -258,6 +258,8 @@ pub fn parse_info(body: &[u8]) -> Result<Info, Error> {
     let protocol = c.u16()?;
     let runtime_version = c.u16()?;
     let port = c.cstr()?;
+    // the runtime writes the id in a 4-byte field: a name of fewer than 3 characters is followed by more NULs
+    c.take(3usize.saturating_sub(port.len()).min(c.0.len()))?;
     let free_bytes = c.u32()?;
     let max_chunk = c.u32()?;
     let flags = c.u8()?;
@@ -419,6 +421,21 @@ mod tests {
         assert!(i.safe_mode() && !i.upload_open());
         assert!(parse_info(&b[..b.len() - 1]).is_err());
         assert_eq!((i.log_oldest, i.runtime32, i.caps), (None, None, None));
+    }
+
+    #[test]
+    fn info_with_a_short_device_id_keeps_its_fields() {
+        // a 2-character id in the runtime's 4-byte field: two NULs, then free_bytes
+        let mut b = vec![0, 1, 0, 3];
+        b.extend(b"xy\0\0");
+        b.extend(1024u32.to_be_bytes());
+        b.extend(32768u32.to_be_bytes());
+        b.push(0);
+        let i = parse_info(&b).unwrap();
+        assert_eq!(
+            (i.port.as_str(), i.free_bytes, i.max_chunk),
+            ("xy", 1024, 32768)
+        );
     }
 
     fn info_body(runtime: u16, tail: &[u8]) -> Vec<u8> {

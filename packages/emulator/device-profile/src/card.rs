@@ -125,7 +125,8 @@ fn default_settings_sectors() -> u64 {
 pub struct PoolSet {
     pub projects: PoolLayout,
     pub sounds: PoolLayout,
-    pub kits: PoolLayout,
+    /// Absent on a device without kit slots (its `MmcFs` has no kit pool and no kit bitmap).
+    pub kits: Option<PoolLayout>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
@@ -145,23 +146,30 @@ pub struct CardLayout {
 }
 
 impl CardLayout {
-    pub fn pool(&self, pool: Pool) -> &PoolLayout {
+    /// The layout of a pool; `None` for a pool the device does not have.
+    pub fn pool(&self, pool: Pool) -> Option<&PoolLayout> {
         match pool {
-            Pool::Projects => &self.pools.projects,
-            Pool::Sounds => &self.pools.sounds,
-            Pool::Kits => &self.pools.kits,
+            Pool::Projects => Some(&self.pools.projects),
+            Pool::Sounds => Some(&self.pools.sounds),
+            Pool::Kits => self.pools.kits.as_ref(),
         }
     }
+    /// The pools the device has.
+    pub fn present_pools(&self) -> impl Iterator<Item = Pool> + '_ {
+        Pool::ALL.into_iter().filter(|&p| self.pool(p).is_some())
+    }
+    /// Slots of a pool; 0 for a pool the device does not have.
     pub fn slot_count(&self, pool: Pool) -> u32 {
-        self.pool(pool).slots
+        self.pool(pool).map_or(0, |p| p.slots)
     }
-    /// Bytes between the start of a slot and the next region.
+    /// Bytes between the start of a slot and the next region; 0 for a pool the device does not have.
     pub fn slot_bytes(&self, pool: Pool) -> usize {
-        self.pool(pool).slot_bytes
+        self.pool(pool).map_or(0, |p| p.slot_bytes)
     }
+    /// First sector of a slot; 0 for a pool the device does not have (its slot count is 0, so no slot is valid).
     pub fn slot_sector(&self, pool: Pool, slot: u32) -> u64 {
-        let p = self.pool(pool);
-        p.base_sector + u64::from(slot) * p.stride_sectors
+        self.pool(pool)
+            .map_or(0, |p| p.base_sector + u64::from(slot) * p.stride_sectors)
     }
     /// Regions of one role, in file order.
     pub fn regions_of(&self, role: RegionRole) -> impl Iterator<Item = &RegionLayout> {
@@ -178,8 +186,8 @@ impl CardLayout {
             ("header".into(), self.header_sector, self.header_sector + 1),
             ("table".into(), self.table_sector, self.table_sector + 1),
         ];
-        for pool in Pool::ALL {
-            let p = self.pool(pool);
+        for pool in self.present_pools() {
+            let Some(p) = self.pool(pool) else { continue };
             let name = pool.dir_name();
             if p.slots == 0 || p.stride_sectors == 0 {
                 return Err(format!("{name}: slots and stride_sectors must be nonzero"));
@@ -205,13 +213,11 @@ impl CardLayout {
                 .ok_or_else(|| format!("{name}: pool range overflows"))?;
             spans.push((format!("pool {name}"), p.base_sector, end));
         }
-        // The three bitmaps must not share bytes.
-        let mut bitmaps: Vec<_> = Pool::ALL
-            .iter()
-            .map(|&p| {
-                let l = self.pool(p);
-                (l.bitmap_offset, l.bitmap_offset + l.bitmap_bytes)
-            })
+        // The bitmaps of the pools the device has must not share bytes.
+        let mut bitmaps: Vec<_> = self
+            .present_pools()
+            .filter_map(|p| self.pool(p))
+            .map(|l| (l.bitmap_offset, l.bitmap_offset + l.bitmap_bytes))
             .collect();
         bitmaps.sort_unstable();
         if bitmaps.windows(2).any(|w| w[0].1 > w[1].0) {

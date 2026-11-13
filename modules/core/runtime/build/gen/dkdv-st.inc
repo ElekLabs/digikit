@@ -5,7 +5,7 @@ dkrt_dev:
     .long 0x444b4456    /* magic: DEV_MAGIC */
     .long 0x1    /* version: DEV_VERSION */
     .long 0x3c    /* size: the bytes of the struct */
-    .long 0xc    /* caps: DEV_HAS_* bits */
+    .long 0xe    /* caps: DEV_HAS_* bits */
     .long 0xec070000    /* console_uart_base: CONSOLE_UART_BASE */
     .long 0x48000000    /* ddr_uncached_alias: DDR_UNCACHED_ALIAS */
     .long 0x40000000    /* ddr_cached_base: DDR_CACHED_BASE */

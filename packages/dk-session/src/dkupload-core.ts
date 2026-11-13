@@ -897,7 +897,9 @@ export class DkSession {
     const b = await this.ok(GCMD.INFO, 'info', undefined, quick);
     const protocol = u16(b, 0);
     let runtime = u16(b, 2);
-    const [port, at] = cstr(b, 4);
+    const [port, nulEnd] = cstr(b, 4);
+    // the runtime writes the id in a 4-byte field: a name of fewer than 3 characters is followed by more NULs
+    const at = nulEnd + Math.max(0, 3 - port.length);
     const free = u32(b, at);
     const maxChunk = u32(b, at + 4);
     const flags = b[at + 8]!;

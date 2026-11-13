@@ -2,7 +2,8 @@
 
     from tools.patchkit import pk_device
     s = pk_device.store_of("dt2")  # the module store's geometry of a device (absolute sectors): the area differs per device
-    pk_device.digikit_devices()    # short names of the devices that have a module store
+    pk_device.store_devices()    # short names of the devices that have a module store
+    pk_device.digikit_devices()    # the ones of them that have a DSP
 
 The store area is per device (docs/design/digikit-store.md): the runtime reads it from its device object (`devices/*.toml [card.store]`).
 """
@@ -36,13 +37,18 @@ def load(short: str) -> dict:
         raise KeyError(f"no device file for {short!r}: {sorted(load_all())}") from None
 
 
-def digikit_devices() -> list[str]:
-    """Devices with a `[card.store]` and a `[digikit]` section."""
+def store_devices() -> list[str]:
+    """Devices with a `[card.store]` and a `[digikit]` section: the runtime runs there and keeps its module store on the card."""
     return [
         s
         for s, d in load_all().items()
         if "digikit" in d and "store" in d.get("card", {})
     ]
+
+
+def digikit_devices() -> list[str]:
+    """The `store_devices` that have a DSP (`[capabilities] dsp`): the targets of the run-time machine, effect and DSP tools and tests."""
+    return [s for s in store_devices() if load(s)["capabilities"]["dsp"] != "none"]
 
 
 @dataclass(frozen=True)
@@ -174,26 +180,19 @@ def keep_range(short: str) -> tuple[int, int]:
     return k["keep_base"], k["keep_bytes"]
 
 
-def working_project_sector() -> int:
-    """First sector of the working project record (`[[card.regions]]` role `working-project`), the same on every digikit device:
-    the card above it is the firmware's (project slots follow at the first project pool sector)."""
-    found = {}
-    for d in digikit_devices():
-        rs = [
-            r["sector"]
-            for r in load(d)["card"].get("regions", [])
-            if r["role"] == "working-project"
-        ]
-        if len(rs) != 1:
-            raise RuntimeError(
-                f"{d}: expected one working-project region, found {len(rs)}"
-            )
-        found[d] = rs[0]
-    if len(set(found.values())) != 1:
+def working_project_sector(short: str) -> int:
+    """First sector of the working project record of device SHORT (`[[card.regions]]` role `working-project`): the card above it is the firmware's
+    (project slots follow at the first project pool sector)."""
+    found = [
+        r["sector"]
+        for r in load(short)["card"].get("regions", [])
+        if r["role"] == "working-project"
+    ]
+    if len(found) != 1:
         raise RuntimeError(
-            f"the working-project region differs between devices: {found}"
+            f"{short}: expected one working-project region, found {len(found)}"
         )
-    return next(iter(found.values()))
+    return found[0]
 
 
 def port_images(short: str) -> tuple[str, ...]:

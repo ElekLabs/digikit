@@ -6,15 +6,17 @@ import { registry } from '../../../web/src/data/device-profiles';
 import { shouldInstallAtStart } from '../src/default-modules.ts';
 import { entries, summaryOf, waitForRuntime } from '../src/default-modules-data.ts';
 
-test('every runtime device file lists digikit/debug and digikit/remote, and each entry has the summary of its module.toml', () => {
+test('every runtime device file lists digikit/debug first, and each entry has the summary of its module.toml', () => {
   for (const device of registry.runtimeIds) {
     const list = entries(device);
     assert.deepEqual(
       list.map((e) => e.id),
-      ['digikit/debug', 'digikit/remote'],
+      registry.get(device).defaultModules,
     );
+    assert.equal(list[0]!.id, 'digikit/debug');
     assert.match(list[0]!.summary, /log/);
-    assert.match(list[1]!.summary, /USB MIDI/);
+    for (const e of list.slice(1)) assert.equal(e.id, 'digikit/remote');
+    for (const e of list.slice(1)) assert.match(e.summary, /USB MIDI/);
   }
   assert.deepEqual(entries('st1'), []);
 });

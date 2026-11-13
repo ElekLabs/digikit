@@ -400,6 +400,8 @@ class Uploader:
         proto, runtime = struct.unpack_from(">HH", b, 0)
         end = b.index(0, 4)
         port = b[4:end].decode()
+        # the runtime writes the id in a 4-byte field: a name of fewer than 3 characters is followed by more NULs
+        end += max(0, 3 - len(port))
         free, max_chunk, flags = struct.unpack_from(">IIB", b, end + 1)
         # runtime 3 appends two words for the log range of the old runtime; the runtime now sends zeros (the LOG command of the debug module has the range)
         oldest, newest = (
