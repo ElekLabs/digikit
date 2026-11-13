@@ -122,8 +122,17 @@ read over USB MIDI.
       0x40041060. Per frame (DTIM0 capture, vector 96) the peer copies window[0..0x1b0) as the parameter block, runs
       8 voices x 32 samples, and eDMA ch 47 writes 1 KB to window+0x1b0. No SSI/SAI. Open: who writes the peer NOR,
       the MAIN-side per-frame writer, the frame rate source.
-- [ ] Peer as a second ColdFire core started at 0x40000400 (skip stage 1), shared 128 KB window, DTIM0 frame tick,
-      FPGA DONE bit stubbed. Digital voice output read from window+0x1b0. Analog tracks stay silent; events logged.
+- Design (finding 128 "Peer CPU model"): a second `coldfire::Cpu` with its own map (private SDRAM and SRAM, its INTC0, DTIM0, PIT1, eDMA,
+  GPIO, DSPI), FlexBus CS0 at 0 mapped to the same 128 KB window MAIN sees at 0x10000000 (no copy: the peer's bus calls the board). One thread,
+  lock step: after every slice of 2048 MAIN ticks the peer runs the same count, so a run is deterministic. Start: section 7 as MAIN streamed it
+  (SHA-256 equal to the syx section), at 0x40000400, at its entry, on MAIN's first doorbell edge after the stream; stage 1 is skipped because its
+  only effects are the DDR, one pin toggle (the mailbox model raises MAIN's IRQ4 #1 for it) and that wait. `peer = "mailbox-responder"` stays as the
+  fallback. Pins: MAIN's doorbell is the peer's DTIM0 capture event; the peer's pin is MAIN's IRQ4. FPGA: stub of INIT, DONE and the DSPI flags.
+- [x] Slice proof: the peer runs from entry through init and the real handshake (MAIN status 6 from its own writes), installs the frame handler,
+      and renders 8 voices per frame; window + 0x1b0 is zero without a note and non-zero with trig 1 and PLAY (cost 86-89 k instructions a frame,
+      0.65 of real time on the host).
+- [ ] Audio out: read 8 voices x 32 samples from window + 0x1b0 each frame, mix to stereo, feed the output path at 1500 frames a second.
+      Analog tracks stay silent; events logged. Before it: the frame rate source (ch 54) and the peer state in snapshots.
 
 ### Later
 

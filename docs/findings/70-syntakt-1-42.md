@@ -178,7 +178,9 @@ Two counts, with different scope:
 - Through 1.21 G instructions the display stayed the same and "DSP BOOT FAILURE" had not appeared (the peer mailbox was not modelled).
   Without the responder the poll callback sets status 2 (TIMEOUT) after 0x12 periods, at about 1.04 G instructions.
 
-## Mailbox responder (`[emulator] peer = "mailbox-responder"`) [D]
+## Mailbox responder (`[emulator] peer = "mailbox-responder"`, the fallback) [D]
+
+The default is now `peer = "coldfire"`: the peer's program runs on a second core and answers by itself ([finding 128](128-syntakt-peer-cpu.md) "Peer CPU model"). The responder below keeps the image stream and IRQ4 #1 in both modes.
 
 - Model: `packages/emulator/periph/src/peer.rs` (state machine, no bus access), wired by `machine/src/board.rs` (channel 29, GPIO) and
   `boot/src/common.rs` `service_peer` (interrupt delivery). It runs no peer code and no FPGA logic: data transport only.

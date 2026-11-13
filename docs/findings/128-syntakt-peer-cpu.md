@@ -84,6 +84,62 @@ Sections are numbered as in finding 70. Extract:
   MAIN. Of 11,181 decoded instructions, 286 are `mac.l`, 73 `msac.l` and 265
   `movclr`. Wavetable-style interpolation is at 0x400038f2.
 
+## Peer CPU model (`[emulator] peer = "coldfire"`) [D]
+
+Code: `packages/emulator/machine/src/peer_cpu.rs` (second `coldfire::Cpu`, private SDRAM 0x40000000-0x48000000, SRAM 0x80000000-0x80010000,
+its own INTC0, DTIM0, PIT1, eDMA, GPIO and DSPI registers; address 0 is MAIN's 128 KB window, shared, not copied), `periph/src/peer.rs`
+(image stream, doorbell, IRQ4, frame source), `boot/src/runtime.rs` `run_peer` (lock step: the peer runs the MAIN ticks MAIN ran, in
+slices of 2048, one thread). `panel_drive` steps `peer` and `peerpeek:ADDR:LEN` report it.
+
+Protocol, read from section 6 and 7 and checked in the run:
+
+- Two pins cross the bridge. MAIN's doorbell (GPIO port A bit 4, `FUN_40082f6a`) is the peer's DTIM0 capture event: DTER bit 0 at
+  0xFC070003, INTC0 source 32, vector 96. The peer's pin (port 6 bit 2: set by a byte store to PPDSDR 0xEC09401E, cleared through PCLRR
+  0xEC09402A, bit 2 = 0) is MAIN's EPORT IRQ4. Each side sends an edge and waits for the other's.
+- Stage 1 (section 6): DDR init, one toggle (pin high: MAIN's IRQ4 #1), wait for the capture event (polled), read section 7 from the
+  stream, `jmp *(0x40000400)`. Section 7 at entry (0x40001070): copies .data, clears 64 MB (0x4004f6e0..0x4404f980), sets CS0, runs PIT1
+  delays, decompresses the second bitstream and pushes it through DSPI 0xFC03C000, polls INIT (0xEC09401C bit 0) and DONE (0xEC09401D
+  bit 7), builds a 256-entry vector table at 0x4004005c (all vectors to an RTE), then walks window+8 through 1 to 0xC with a toggle and a
+  wait for the next capture event at each step (hello `HO` `HA` at state 4, 0xA5A5 at +4 at state 8, window test with 0xAAAAAAAA and
+  0x55555555, sample chunks). At state 0xC it installs the frame handler 0x40000934 on vector 96 and spins.
+- The program's first toggle clears the pin (its flag word is 1 in the image), so the pin must start high: stage 1 raised it.
+- Frame handler (0x40000934), per capture event: copy window[0..0x1b0) to 0x80008000, render 8 voices x 32 samples (kernels 0x4324,
+  0x112c, 0x2320, 0x168e, 0x19d6) into 0x80003840, program eDMA ch 47 (SADDR 0x80003840, DADDR window + 0x1b0, 16-byte elements, CITER
+  0xde40 = linked, 64 minor loops) and start it with SSRT (0xFC04401E). The next call first waits for DONE (CSR bit 7). It toggles the
+  pin when 0x40040050 is set.
+- MAIN side: the audio frame handler is the eDMA channel 54 major-loop interrupt (vector 174 = INTC1 source 46, handler 0x400a2058). It
+  toggles the doorbell when 0x43bdd824 is set (set by the IRQ4 handler at status 6), then forces INTC1 source 63 (INTFRCH1 bit 31) to
+  run the engine tick (vector 191, handler 0x400a38ce, 7550 bytes). The tick writes the parameter block into the window and programs
+  MAIN's own eDMA ch 47 (window + 0x1b0 to 0x80003d50, same TCD shape) with SSRT, then polls DONE. Its other waits: DSPI3 SR bit 28 (0xFC03C02C)
+  and the scatter/gather chain of ch 30 (CSR bit 4 clears).
+
+What replaces hardware (data transport and CPU-side peripherals only; no FPGA logic, the bitstream is never loaded or read):
+
+- The mailbox model still streams the images and raises IRQ4 #1 at the end of the stream: that is stage 1's toggle. Stage 1 itself does not
+  run. It is equivalent because its only effects are the DDR (zero in the model), the toggle, and the wait for the first doorbell edge; the
+  program starts at MAIN's first doorbell edge after the stream (SP in SRAM, the stack word the entry copies is 0).
+- Stubbed status bits: GPIO 0xEC09401C bit 0 (INIT), 0xEC09401D bit 7 (DONE), DSPI 0xFC03C02C bits 31 and 28.
+- The frame source is host timed: one eDMA ch 54 interrupt per 88,000 MAIN ticks (1500 a second at 132 MHz), at most one pending. The peer
+  and MAIN share the tick rate (132 MHz, one instruction per tick).
+- MAIN's eDMA: software start (SSRT) of a channel runs its whole transfer; a TCD started with E_SG reloads the descriptor chain at once
+  (the ring data of ch 30 is not moved); DSPI3 SR (0xFC03C02C) reads 0x90000000. Vector 191 forced by the guest is delivered. All of this
+  is on only for `peer = "coldfire"`.
+- The 64 MB byte-clear loop (`clr.b (a0)+; cmp.l a0,d0; bne`) is replaced by one fill (all but the last iteration), counted as 3
+  instructions per byte.
+
+Result (cold boot, `panel_drive --after 100M`, step `peer`):
+
+- MAIN status 0x41bbf448 = 6 and state 0x41bb32b0 = 6 from the peer's own writes (window 0x4230 0003 a5a5 0000 000c: MAIN's check word, command 3,
+  the peer's 0xA5A5, state 0xC). The peer reaches its frame handler spin after 6 IRQ4 (5 peer toggles + stage 1) and 6 doorbell edges.
+- With the audio frame on, every MAIN frame gives one peer frame. Without a note window + 0x1b0 (1 KB) stays zero over 300 M ticks;
+  after trig 1 (code 1) and PLAY (code 37) it holds a smooth 32-bit ramp from the first sample (0x030cf208, 0x031439c5, ...) and 244 to 376
+  non-zero bytes of each 1 KB sample. The screen shows track 1 "ADRIANA" at 135 BPM.
+- Cost: the peer's frame handler runs 86,500 instructions on an idle frame and 87,300 (maximum 88,900) with a note. The frame
+  period is 88,000 instructions at 132 MHz, so the program uses the whole frame (about 0.99). On the host the peer core ran about 86 M
+  instructions a second (interpreter, EMAC): 0.65 of real time for the peer alone, before MAIN's own load.
+- **[O]** The real frame rate and its source (the ch 54 period), the peer clock against MAIN's, the peer state in snapshots (not saved: a
+  state restored with `peer = "coldfire"` has no running peer), the mixing of the 8 voices (the parameter block names it).
+
 ## Hardware (hearsay)
 
 - **[D]** Forum PCB photos: two ColdFire CPUs, two Xilinx Spartan-3A
