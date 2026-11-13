@@ -18,6 +18,12 @@ typedef struct dk_input dk_input;
 typedef struct dk_usb_bulk dk_usb_bulk;
 typedef struct dk_dsp_link dk_dsp_link;
 typedef struct dk_sdhc_large dk_sdhc_large;
+typedef struct dk_machine dk_machine;
+typedef struct dk_fx dk_fx;
+typedef struct dk_page dk_page;
+typedef struct dk_param dk_param;
+typedef struct dk_page_frame dk_page_frame;
+typedef struct dk_page_event dk_page_event;
 
 /* Callback types ([handle.callbacks]): `arg` is the user-data pointer the module gave with the callback. */
 typedef void dk_files_event_fn(uint32_t client, uint32_t request, int32_t state, void *arg);
@@ -28,6 +34,9 @@ typedef void dk_io_done_fn(void *arg, int32_t status);
 typedef int32_t dk_io_step_fn(void *arg);
 typedef void dk_job_done_fn(void *arg, int32_t status);
 typedef int32_t dk_job_step_fn(void *arg);
+typedef void dk_page_draw_fn(void *arg, const dk_page_frame *frame);
+typedef void dk_page_event_fn(void *arg, const dk_page_event *event);
+typedef void dk_param_click_fn(void *arg, uint32_t track);
 typedef void dk_ui_action_fn(void *arg, int32_t value);
 typedef void dk_ui_choice_fn(void *arg, int32_t index);
 typedef void dk_ui_confirm_fn(void *arg, int32_t yes);
@@ -197,6 +206,50 @@ int32_t dk_param_get(uint32_t track, uint32_t word);
 
 /* Set parameter word `word` of the calling module on `track` to `raw` (unit * 256) with the stock setter of a knob turn. Same click flow as dk_param_get. Returns 0, DK_PARAM_E_STATE, DK_PARAM_E_ARG or DK_PARAM_E_HELD. Context: ui. Since api 2.11. */
 int32_t dk_param_set(uint32_t track, uint32_t word, int32_t raw);
+
+/* Declare a machine of this module: `id` is its DK_MACHINE_ID_<ID> key (build/gen/module_ids.h), `name` the long name, `short_name` the short one. The DSP entry points are found by the names `_<id>_render` and `_<id>_note_on`. Returns the builder handle; on an error (full, bad id) a placeholder, and the error is reported when `init` returns. Context: init. Since api 2.13. */
+dk_machine *dk_module_ctx_add_machine(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name);
+
+/* Add a page to the machine, after the pages already added. Returns the page handle (a placeholder on an error). Context: init. Since api 2.13. */
+dk_page *dk_machine_add_page(dk_machine *m, const char *name);
+
+/* Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. Returns the parameter handle (a placeholder on an error). Context: init. Since api 2.13. */
+dk_param *dk_page_add_param(dk_page *p, const char *name, const char *short_name, uint32_t def);
+
+/* Set the range of a machine parameter (default 0 to 127). Context: init. Since api 2.13. */
+void dk_param_range(dk_param *prm, uint32_t min, uint32_t max);
+
+/* Set the glyph of a machine parameter (DK_GLYPH_*); its range must fit the glyph, or the commit refuses the module. Context: init. Since api 2.13. */
+void dk_param_glyph(dk_param *prm, uint32_t glyph);
+
+/* Latch the parameter at note_on (machine contract 1.3). Context: init. Since api 2.13. */
+void dk_param_latched(dk_param *prm);
+
+/* Run `fn(arg, track)` when the parameter's knob is clicked on the machine's page. Context: init. Since api 2.13. */
+void dk_param_on_click(dk_param *prm, dk_param_click_fn *fn, void *arg);
+
+/* Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`. Context: init. Since api 2.13. */
+void dk_page_canvas(dk_page *p, uint32_t flags, dk_page_draw_fn *draw, dk_page_event_fn *event, void *arg);
+
+/* On a canvas page, bind a shared parameter of the machine to the encoder `slot` (0 to 7). Context: init. Since api 2.13. */
+void dk_page_bind(dk_page *p, dk_param *prm, uint32_t slot);
+
+/* On a canvas page, bind the page's local control number `local` to the encoder `slot` (0 to 7); its turns arrive in the event callback. Context: init. Since api 2.13. */
+void dk_page_bind_local(dk_page *p, uint32_t local, uint32_t slot);
+
+/* ---- service fx ---- */
+
+/* Declare an effect of this module: `id` is its DK_FX_ID_<ID> key, `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit). Context: init. Since api 2.13. */
+dk_fx *dk_module_ctx_add_fx(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name);
+
+/* Add the effect's page. Returns the page handle (a placeholder on an error). Context: init. Since api 2.13. */
+dk_page *dk_fx_add_page(dk_fx *fx, const char *name);
+
+/* Add an effect parameter on the next knob of the page. `kind` is DK_PERCENT or DK_BIPOLAR (the display); `min`, `max` and `def` are in the parameter's unit. Returns the parameter handle (a placeholder on an error). Context: init. Since api 2.13. */
+dk_param *dk_page_add_fx_param(dk_page *p, const char *name, const char *short_name, uint32_t kind, float min, float max, float def);
+
+/* Set the routes the effect may run on (DK_ROUTE_MASTER, DK_ROUTE_SEND, or both) and the default one. Context: init. Since api 2.13. */
+void dk_fx_routes(dk_fx *fx, uint32_t allowed, uint32_t def);
 
 /* ---- service ui ---- */
 

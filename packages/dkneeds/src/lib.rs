@@ -471,5 +471,7 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
     Ok(())
 }
 
+pub mod keys;
+
 #[cfg(test)]
 mod tests;

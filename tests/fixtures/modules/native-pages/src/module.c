@@ -56,7 +56,7 @@ static void number(const dk_page_canvas_v1 *c, int x, int y, unsigned value)
     } while (value);
     c->text(x, y, at);
 }
-static void draw(const dk_page_frame_v1 *f, unsigned page)
+static void draw(const dk_page_frame *f, unsigned page)
 {
     if (f->version != 1 || f->size < sizeof(*f) || f->track >= 16 || f->word_count < 3)
         return;
@@ -78,15 +78,15 @@ static void draw(const dk_page_frame_v1 *f, unsigned page)
     number(c, 50, 51, (unsigned)zoom);
     number(c, 76, 51, (unsigned)seen[2] >> 8);
 }
-void twin_zero(const dk_page_frame_v1 *f)
+void twin_zero(const dk_page_frame *f)
 {
     draw(f, 0);
 }
-void twin_one(const dk_page_frame_v1 *f)
+void twin_one(const dk_page_frame *f)
 {
     draw(f, 1);
 }
-void twin_event(const dk_page_event_v1 *e)
+void twin_event(const dk_page_event *e)
 {
     if (e->version == 1 && e->size >= sizeof(*e) && e->track < 16 && e->control == 0)
         zoom += e->delta;

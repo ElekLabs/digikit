@@ -166,6 +166,8 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
     assert!(h.contains("typedef struct dk_settings dk_settings;"));
     assert!(h.contains("int32_t dk_settings_open(dk_module_ctx *ctx, dk_settings **out);"));
     assert!(h.contains("typedef int32_t dk_io_step_fn(void *arg);"));
+    assert!(h.contains("typedef struct dk_page_frame dk_page_frame;"));
+    assert!(h.contains("typedef void dk_page_draw_fn(void *arg, const dk_page_frame *frame);"));
     assert!(h.contains("Context: init. Since api 2.11."));
     assert!(h.contains("Context: io-step. Since api 2.11."));
     assert!(h.contains(
@@ -205,7 +207,7 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
         ("context = \"io-step\"", "context = \"anywhere\""),
         (
             "since = 11\ncontext = \"isr\"",
-            "since = 13\ncontext = \"isr\"",
+            "since = 14\ncontext = \"isr\"",
         ),
         (
             "requires = \"core/ui\"\nabsent = \"missing\"",

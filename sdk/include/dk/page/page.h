@@ -62,7 +62,8 @@ typedef struct dk_page_canvas_v1 {
     void (*fill_rect)(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color);
 } dk_page_canvas_v1;
 
-typedef struct dk_page_frame_v1 {
+typedef struct dk_page_frame dk_page_frame; /* also declared by <dk/gen/imports.h> */
+struct dk_page_frame {
     uint32_t version, size, track;
     int32_t params[8]; /* current native PARAM values, indexed by encoder position */
     dk_page_canvas_v1 canvas;
@@ -72,17 +73,18 @@ typedef struct dk_page_frame_v1 {
     uint32_t word_count;
     int32_t word_values[8];
     int32_t level; /* read-only native track level; independent of A-H bindings */
-} dk_page_frame_v1;
+};
 
-typedef struct dk_page_event_v1 {
+typedef struct dk_page_event dk_page_event; /* also declared by <dk/gen/imports.h> */
+struct dk_page_event {
     uint32_t version, size, track, control;
     int32_t delta; /* signed detents, independent of PARAM coarse/p-lock editing */
     uint32_t coarse;
-} dk_page_event_v1;
+};
 
 #define DK_NATIVE_PAGE_V1(OWNER, TITLE, DRAW, EVENT, ...)                                          \
-    void DRAW(const dk_page_frame_v1 *frame);                                                      \
-    void EVENT(const dk_page_event_v1 *event);                                                     \
+    void DRAW(const dk_page_frame *frame);                                                         \
+    void EVENT(const dk_page_event *event);                                                        \
     static const dk_desc_native_page DK_CAT(dk_desc_native_##OWNER##_, __LINE__)                   \
         DK_DESC = {.kind = DK_DESC_NATIVE_PAGE,                                                    \
                    .size = sizeof(dk_desc_native_page),                                            \
@@ -109,8 +111,8 @@ typedef struct dk_page_event_v1 {
    Mutually exclusive with STOCK_OVERLAY; ordinary pages remain 99x53. */
 #define DK_PAGE_WIDE_CANVAS 2u
 #define DK_NATIVE_PAGE_V2_FLAGS(OWNER, PAGE, FLAGS, TITLE, DRAW, EVENT, ...)                       \
-    void DRAW(const dk_page_frame_v1 *frame);                                                      \
-    void EVENT(const dk_page_event_v1 *event);                                                     \
+    void DRAW(const dk_page_frame *frame);                                                         \
+    void EVENT(const dk_page_event *event);                                                        \
     static const dk_desc_native_page_v2 DK_CAT(dk_desc_native_v2_##OWNER##_, __LINE__)             \
         DK_DESC = {.kind = DK_DESC_NATIVE_PAGE_V2,                                                 \
                    .size = sizeof(dk_desc_native_page_v2),                                         \

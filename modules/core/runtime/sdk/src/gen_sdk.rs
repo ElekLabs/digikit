@@ -4,7 +4,7 @@
 pub const RUNTIME_VERSION: u32 = 0x000600;
 
 pub mod contract {
-    pub const API: (u8, u8) = (2, 12);
+    pub const API: (u8, u8) = (2, 13);
     pub const MACHINE: (u8, u8) = (1, 6);
     pub const FX: (u8, u8) = (1, 0);
     pub const SERVICE: (u8, u8) = (1, 0);
@@ -297,6 +297,15 @@ pub mod api {
     /// The callback type `job_step_fn` of `[handle.callbacks]`.
     pub type JobStepFn = unsafe extern "C" fn(arg: *mut u8) -> i32;
 
+    /// The callback type `page_draw_fn` of `[handle.callbacks]`.
+    pub type PageDrawFn = unsafe extern "C" fn(arg: *mut u8, frame: *const u8);
+
+    /// The callback type `page_event_fn` of `[handle.callbacks]`.
+    pub type PageEventFn = unsafe extern "C" fn(arg: *mut u8, event: *const u8);
+
+    /// The callback type `param_click_fn` of `[handle.callbacks]`.
+    pub type ParamClickFn = unsafe extern "C" fn(arg: *mut u8, track: u32);
+
     /// The callback type `ui_action_fn` of `[handle.callbacks]`.
     pub type UiActionFn = unsafe extern "C" fn(arg: *mut u8, value: i32);
 
@@ -310,7 +319,7 @@ pub mod api {
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 94] = [
+    pub const IMPORT_NAMES: [&str; 108] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -358,6 +367,20 @@ pub mod api {
         "dk_intro_take",
         "dk_param_get",
         "dk_param_set",
+        "dk_module_ctx_add_machine",
+        "dk_module_ctx_add_fx",
+        "dk_machine_add_page",
+        "dk_fx_add_page",
+        "dk_page_add_param",
+        "dk_page_add_fx_param",
+        "dk_param_range",
+        "dk_param_glyph",
+        "dk_param_latched",
+        "dk_param_on_click",
+        "dk_page_canvas",
+        "dk_page_bind",
+        "dk_page_bind_local",
+        "dk_fx_routes",
         "dk_sample_pool_open",
         "dk_sample_pool_add",
         "dk_sample_pool_clear",
@@ -408,7 +431,7 @@ pub mod api {
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`.
-    pub const BUILTIN_NAMES: [&str; 59] = [
+    pub const BUILTIN_NAMES: [&str; 73] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -451,6 +474,20 @@ pub mod api {
         "dk_intro_take",
         "dk_param_get",
         "dk_param_set",
+        "dk_module_ctx_add_machine",
+        "dk_module_ctx_add_fx",
+        "dk_machine_add_page",
+        "dk_fx_add_page",
+        "dk_page_add_param",
+        "dk_page_add_fx_param",
+        "dk_param_range",
+        "dk_param_glyph",
+        "dk_param_latched",
+        "dk_param_on_click",
+        "dk_page_canvas",
+        "dk_page_bind",
+        "dk_page_bind_local",
+        "dk_fx_routes",
         "dk_sample_pool_open",
         "dk_sample_pool_add",
         "dk_sample_pool_clear",
@@ -586,6 +623,48 @@ pub mod api {
 
     /// `dk_param_set`: Set parameter word `word` of the calling module on `track` to `raw` (unit * 256) with the stock setter of a knob turn. Same click flow as dk_param_get. Returns 0, DK_PARAM_E_STATE, DK_PARAM_E_ARG or DK_PARAM_E_HELD.
     pub type DkParamSetFn = unsafe extern "C" fn(track: u32, word: u32, raw: i32) -> i32;
+
+    /// `dk_module_ctx_add_machine`: Declare a machine of this module: `id` is its DK_MACHINE_ID_<ID> key (build/gen/module_ids.h), `name` the long name, `short_name` the short one. The DSP entry points are found by the names `_<id>_render` and `_<id>_note_on`. Returns the builder handle; on an error (full, bad id) a placeholder, and the error is reported when `init` returns.
+    pub type DkModuleCtxAddMachineFn = unsafe extern "C" fn(ctx: *mut u8, id: u32, name: *const u8, short_name: *const u8) -> *mut u8;
+
+    /// `dk_module_ctx_add_fx`: Declare an effect of this module: `id` is its DK_FX_ID_<ID> key, `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit).
+    pub type DkModuleCtxAddFxFn = unsafe extern "C" fn(ctx: *mut u8, id: u32, name: *const u8, short_name: *const u8) -> *mut u8;
+
+    /// `dk_machine_add_page`: Add a page to the machine, after the pages already added. Returns the page handle (a placeholder on an error).
+    pub type DkMachineAddPageFn = unsafe extern "C" fn(m: *mut u8, name: *const u8) -> *mut u8;
+
+    /// `dk_fx_add_page`: Add the effect's page. Returns the page handle (a placeholder on an error).
+    pub type DkFxAddPageFn = unsafe extern "C" fn(fx: *mut u8, name: *const u8) -> *mut u8;
+
+    /// `dk_page_add_param`: Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. Returns the parameter handle (a placeholder on an error).
+    pub type DkPageAddParamFn = unsafe extern "C" fn(p: *mut u8, name: *const u8, short_name: *const u8, def: u32) -> *mut u8;
+
+    /// `dk_page_add_fx_param`: Add an effect parameter on the next knob of the page. `kind` is DK_PERCENT or DK_BIPOLAR (the display); `min`, `max` and `def` are in the parameter's unit. Returns the parameter handle (a placeholder on an error).
+    pub type DkPageAddFxParamFn = unsafe extern "C" fn(p: *mut u8, name: *const u8, short_name: *const u8, kind: u32, min: f32, max: f32, def: f32) -> *mut u8;
+
+    /// `dk_param_range`: Set the range of a machine parameter (default 0 to 127).
+    pub type DkParamRangeFn = unsafe extern "C" fn(prm: *mut u8, min: u32, max: u32);
+
+    /// `dk_param_glyph`: Set the glyph of a machine parameter (DK_GLYPH_*); its range must fit the glyph, or the commit refuses the module.
+    pub type DkParamGlyphFn = unsafe extern "C" fn(prm: *mut u8, glyph: u32);
+
+    /// `dk_param_latched`: Latch the parameter at note_on (machine contract 1.3).
+    pub type DkParamLatchedFn = unsafe extern "C" fn(prm: *mut u8);
+
+    /// `dk_param_on_click`: Run `fn(arg, track)` when the parameter's knob is clicked on the machine's page.
+    pub type DkParamOnClickFn = unsafe extern "C" fn(prm: *mut u8, r#fn: Option<ParamClickFn>, arg: *mut u8);
+
+    /// `dk_page_canvas`: Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`.
+    pub type DkPageCanvasFn = unsafe extern "C" fn(p: *mut u8, flags: u32, draw: Option<PageDrawFn>, event: Option<PageEventFn>, arg: *mut u8);
+
+    /// `dk_page_bind`: On a canvas page, bind a shared parameter of the machine to the encoder `slot` (0 to 7).
+    pub type DkPageBindFn = unsafe extern "C" fn(p: *mut u8, prm: *mut u8, slot: u32);
+
+    /// `dk_page_bind_local`: On a canvas page, bind the page's local control number `local` to the encoder `slot` (0 to 7); its turns arrive in the event callback.
+    pub type DkPageBindLocalFn = unsafe extern "C" fn(p: *mut u8, local: u32, slot: u32);
+
+    /// `dk_fx_routes`: Set the routes the effect may run on (DK_ROUTE_MASTER, DK_ROUTE_SEND, or both) and the default one.
+    pub type DkFxRoutesFn = unsafe extern "C" fn(fx: *mut u8, allowed: u32, def: u32);
 
     /// `dk_sample_pool_open`: Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none, declares a bank too, or this is not init; `*out` is untouched then.
     pub type DkSamplePoolOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;

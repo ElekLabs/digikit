@@ -65,7 +65,7 @@ static void number(const dk_page_canvas_v1 *canvas, int x, int y, int value)
     canvas->text(x, y, at);
 }
 
-void native_draw(const dk_page_frame_v1 *frame)
+void native_draw(const dk_page_frame *frame)
 {
     const dk_page_canvas_v1 *canvas = &frame->canvas;
     if (frame->version != 1 || frame->size < sizeof(*frame) || frame->track >= 16)
@@ -89,7 +89,7 @@ void native_draw(const dk_page_frame_v1 *frame)
     canvas->fill_rect(66, 44, (int)canvas->width + 12, (int)canvas->height + 8, -1);
 }
 
-void native_event(const dk_page_event_v1 *event)
+void native_event(const dk_page_event *event)
 {
     if (event->version != 1 || event->size < sizeof(*event) || event->track >= 16 ||
         event->control != 0)

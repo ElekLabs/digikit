@@ -23,7 +23,7 @@ firmware, as device-agnostic as possible.
 - Tested on the host where possible. A module change never reruns SDK tests.
 - Low churn: move files once, into the final structure.
 
-Versions stay experimental. S2b bumped the runtime to 0.6.0 and the api contract to major 2 (the Api table is gone).
+Versions stay experimental. S2b bumped the runtime to 0.6.0 and the api contract to major 2 (the Api table is gone). S3 moves the runtime to 0.7.0 and the api contract to major 3.
 
 ## 2. Today
 
@@ -112,11 +112,11 @@ const dk_module_def dk_module = {
   packer looks up the symbol `dk_module`. Modules write `const dk_module_def dk_module = {...}`.
 - The packer finds `dk_module` by symbol and writes `init`, `fini`, `tick` and `menu` into the `.dkm` header. The runtime calls them with a `dk_module_ctx`.
 - `dk_module_ctx` is opaque. The runtime passes it to every lifecycle function, always as the parameter `ctx`. It identifies the module (today implicit in
-  a global) and answers `dk_module_ctx_device()` and `dk_module_ctx_runtime_version()` (the runtime version); S3 adds `dk_module_ctx_has()`. Callbacks (host command handlers, I/O and job steps, intro
+  a global) and answers `dk_module_ctx_device()` and `dk_module_ctx_runtime_version()` (the runtime version). Callbacks (host command handlers, I/O and job steps, intro
   frames) keep their signatures: none of them needed the Api table either.
 - `dk_module` grows by appended fields: event handlers such as "project changed" or "settings changed" (runtime-and-services section 8,
   ordered event tables).
-- Settings: keys are declared in `init` (`dk_setting_add`, S3), values are read and written with `dk_settings_get/put`.
+- Settings: values are read and written with `dk_settings_get/put`.
 - Instrumentation: the SDK and runtime own the dispatch into `init`, `tick` and the kind dispatchers. Debug and profiling hooks (`DK_SPAN`,
   log) attach there. Module code does not change.
 
@@ -218,16 +218,27 @@ Only what the device needs before any module code runs:
 `module:check` runs the module in the emulator and writes `[uses]` from what `init` declared, like a lock file. Nobody maintains it by
 hand.
 
+The packer copies the machine and effect keys and the `[uses]` counts into the keys table of the `.dkm` header (6.3).
+
 Ids are written once. `patchkit gen` writes `build/gen/module_ids.h` from the `module.toml` ids, in the same way it writes other
 committed per-module files (for example `build/gen/dl-limits.h`), and `patchkit gen --check` guards it. Every module has `build/gen`
 first on its include path, so no new build phase is needed. Each constant is the key the runtime already uses: the hash of
 `<module id>:<machine id>` for a machine (`register.rs:88-92`) and of `<module id>:<effect id>` for an effect (`register.rs:76-86`).
+The names are `DK_MACHINE_ID_<ID>` and `DK_FX_ID_<ID>`, for example `#define DK_MACHINE_ID_ANALOG 0x...u` and
+`#define DK_FX_ID_FSHIFT 0x...u`. The `_ID_` part keeps them apart from existing constants such as `DK_MACHINE_GATE`.
 A typo is a compile error. `module.toml` refuses `[[machine]]` and `[[fx]]` tables today (`module.rs:47-57`); S3 allows them again,
 with an id only.
 
-DSP entry points are found by name, so the packer needs no declaration to build the DSP section: machine `analog` has `analog_render`
-and `analog_note_on`, effect `fshift` has `fshift_process`, and a machine's sample pool symbols follow the same rule. The packer refuses
-a module when a symbol is missing.
+DSP entry points are found by name, so the packer needs no declaration to build the DSP section. The C name of an entry point is
+`<id>_render` and `<id>_note_on` for a machine and `<id>_process` for an effect: machine `analog` has `analog_render` and
+`analog_note_on`, effect `fshift` has `fshift_process`. The toolchain adds a leading underscore, so the DSP object holds
+`_analog_render`, `_analog_note_on` and `_fshift_process` (as `shot` declares `_shot_render` today), and the packer looks up the
+underscored symbol. A machine with a sample pool also has `<machine>_sample_rec` and `<machine>_sample_ctl` (`_shot_rec` and
+`_shot_ctl` for `shot`, passed today to `DK_SAMPLE_TRACKS(0, _shot_rec, _shot_ctl)`). The packer refuses a module when a symbol is
+missing.
+
+[O] What the first argument of `DK_SAMPLE_TRACKS` means (it is `0` for `shot`). Settle it at implementation, before the pool symbols
+get their final rule.
 
 ```toml
 [module]
@@ -246,50 +257,93 @@ The Transfer tab does not check fit: the card holds as many modules as fit on di
 
 ### 6.2 Everything else comes from builder calls in `init`
 
+Rule: a child is added by `<parent>_add_<kind>`, as in `dk_ui_menu_add_<kind>`. Only the lifecycle functions, the `_open` accessors
+and the `dk_module_ctx_*` functions take `ctx` (section 10). So the module context adds machines and effects, a machine or effect
+adds pages, and a page adds params.
+
+| Call | Meaning |
+| --- | --- |
+| `dk_machine *dk_module_ctx_add_machine(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name)` | Add a machine; `id` is `DK_MACHINE_ID_<ID>` |
+| `dk_fx *dk_module_ctx_add_fx(dk_module_ctx *ctx, uint32_t id, const char *name, const char *short_name)` | Add an effect; `id` is `DK_FX_ID_<ID>` |
+| `dk_page *dk_machine_add_page(dk_machine *m, const char *name)` | Add a page to a machine |
+| `dk_page *dk_fx_add_page(dk_fx *fx, const char *name)` | Add a page to an effect |
+| `dk_param *dk_page_add_param(dk_page *p, const char *name, const char *short_name, int32_t def)` | Add a machine param; it goes on the next knob of the page |
+| `dk_param *dk_page_add_fx_param(dk_page *p, const char *name, const char *short_name, kind, float min, float max, float def)` | Add an effect param |
+
 ```c
 #include <dk/machine/machine.h>
 
 static int32_t analog_init(dk_module_ctx *ctx)
 {
-    dk_machine *m = dk_machine_add(ctx, DK_MACHINE_ANALOG, "Analog", "ANLG");   /* DSP: analog_render, analog_note_on */
+    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_ANALOG, "Analog", "ANLG");   /* DSP: analog_render, analog_note_on */
 
-    dk_page *p = dk_machine_page(m, "Analog");
-    dk_param_add(p, "Tone",  "TONE",  64);
-    dk_param_add(p, "Decay", "DECAY", 80);
-    dk_param_add(p, "Pitch", "PITCH", 0);
-    dk_param_add(p, "Level", "LEVEL", 127);
+    dk_page *p = dk_machine_add_page(m, "Analog");
+    dk_page_add_param(p, "Tone",  "TONE",  64);
+    dk_page_add_param(p, "Decay", "DECAY", 80);
+    dk_page_add_param(p, "Pitch", "PITCH", 0);
+    dk_page_add_param(p, "Level", "LEVEL", 127);
     return DK_OK;
 }
 
 const dk_module_def dk_module = { .init = analog_init };
 ```
 
-Optional properties are setters with sensible defaults (range 0 to 127, no glyph, not latched):
+Optional properties are setters with sensible defaults (range 0 to 127, no glyph, not latched). The setters keep their names:
+`dk_param_range`, `dk_param_glyph`, `dk_param_latched`, `dk_param_on_click`, `dk_page_canvas` and
+`dk_fx_routes`. The callback types are `dk_param_click_fn`, `dk_page_draw_fn` and `dk_page_event_fn`.
 
 ```c
-dk_param *play = dk_param_add(p, "Play", "PLAY", 0);
+dk_param *play = dk_page_add_param(p, "Play", "PLAY", 0);
 dk_param_range(play, 0, 3);
 dk_param_glyph(play, DK_GLYPH_PLAY);
 dk_param_latched(play);
 
-dk_param *smp = dk_param_add(p, "Sample", "SMP", 0);
+dk_param *smp = dk_page_add_param(p, "Sample", "SMP", 0);
 dk_param_range(smp, 0, 15);
-dk_param_on_click(smp, smp_click);               /* a real function; the compiler checks the type */
+dk_param_on_click(smp, smp_click);               /* a dk_param_click_fn; the compiler checks the type */
 
-dk_page *wave = dk_machine_page(m, "Shot wave");
+dk_page *wave = dk_machine_add_page(m, "Shot wave");
 dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event);
+```
 
-if (dk_module_ctx_has(ctx, DK_CAP_PAGE_ROWS))        /* device-aware: DN2 has page rows, DT2 has none */
-    dk_machine_page(m, "Extra");
+A param shown on more than one page is bound to a slot of each canvas page. `dk_page_bind(page, param, slot)` places a param.
+`dk_page_bind_local(page, local, slot)` places a page-local control (a value that is not a param) at a slot. The canvas flags
+`DK_PAGE_WIDE_CANVAS` and `DK_PAGE_STOCK_OVERLAY` are the `flags` argument of `dk_page_canvas`. A shot-like machine, with a knob page
+and two canvas pages (today `DK_PAGE_PARAM` and `DK_PAGE_LOCAL` in `modules/machines/shot/src/module.c`):
+
+```c
+dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_SHOT, "Shot", "SHOT");
+
+dk_page *knobs = dk_machine_add_page(m, "SHOT");              /* knob page: params go on knobs 1 to 5 */
+dk_param *smp   = dk_page_add_param(knobs, "Sample", "SMP",   0);
+dk_param *start = dk_page_add_param(knobs, "Start",  "START", 0);
+dk_param *end   = dk_page_add_param(knobs, "End",    "END",   127);
+dk_param *play  = dk_page_add_param(knobs, "Play",   "PLAY",  0);
+dk_param *pitch = dk_page_add_param(knobs, "Pitch",  "PITCH", 64);
+dk_param_on_click(smp, smp_click);
+
+dk_page *ctl = dk_machine_add_page(m, "SHOT");                /* canvas page over the stock page */
+dk_page_canvas(ctl, DK_PAGE_STOCK_OVERLAY, controls_draw, range_event);
+dk_page_bind(ctl, pitch, 0);
+dk_page_bind(ctl, play,  1);
+dk_page_bind(ctl, smp,   3);
+dk_page_bind(ctl, start, 4);
+dk_page_bind(ctl, end,   7);
+
+dk_page *wave = dk_machine_add_page(m, "SHOT WAVE");         /* wide canvas */
+dk_page_canvas(wave, DK_PAGE_WIDE_CANVAS, range_draw, range_event);
+dk_page_bind(wave, start, 4);
+dk_page_bind_local(wave, 0, 6);
+dk_page_bind(wave, end, 7);
 ```
 
 An FX:
 
 ```c
-dk_fx *fx = dk_fx_add(ctx, DK_FX_FSHIFT, "Freq shift", "FSHF");     /* DSP: fshift_process */
-dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_INSERT, DK_ROUTE_SEND);   /* allowed, default */
-dk_page *p = dk_fx_page(fx, "Freq shift");
-dk_fx_param_add(p, "Shift", "SHFT", DK_BIPOLAR, -1.0f, 1.0f, 0.0f);
+dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_FSHIFT, "Freq shift", "FSHF");   /* DSP: fshift_process */
+dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);              /* allowed, default */
+dk_page *p = dk_fx_add_page(fx, "Freq shift");
+dk_page_add_fx_param(p, "Shift", "SHFT", DK_BIPOLAR, -1.0f, 1.0f, 0.0f);
 ```
 
 A tool or raw module declares nothing:
@@ -315,8 +369,13 @@ DSP check and reserve stay before `init`, as today. They read only the static DS
 header: reserve copies the DSP image into its own arena block and fills the voice and FX row tables (`dsp.rs:842-989`). After reserve
 the staged file is not read again, except for today's register records, which builder calls replace.
 
-The runtime collects the builder calls during `init`, in the module's arena share, bounded by today's `MAX_RECORDS`. When `init`
-returns `DK_OK`:
+The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 (today `H_REG_OFF` and `H_REG_SIZE`, the register table) becomes
+`keys_off` and `keys_size`. They point to the keys table: `machine_rows`, `param_rows` and `page_rows` (the `[uses]` counts), the
+machine count, the FX count, then the machine keys (u32) and the FX ids. All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read `[uses]` from
+this table. A `.dkm` of api major 2 is refused with `E_CONTRACT`: the contract is api major 3 and the runtime 0.7.0.
+
+The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS`, which stays 32 (a shot-like
+machine needs about 10 records, the other modules 3 to 7). When `init` returns `DK_OK`:
 
 1. Check the collected records with the existing `registry::check` rules: against the device limits, against `[uses]`, against the
    machine and effect keys in the header, and against FX ids of modules already loaded (a duplicate FX id is refused with a reason).
@@ -401,14 +460,15 @@ These come from the profiling work and land after the steps in section 12 that t
 | --- | --- | --- |
 | The module context is `ctx` and only that | type `dk_module_ctx`; parameter `ctx` | `int32_t init(dk_module_ctx *ctx)`, `void fini(...)`, `void tick(...)`, `void menu(dk_module_ctx *ctx, dk_ui_menu *menu)` |
 | Entry point | type `dk_module_def`, constant `dk_module` (the packer looks the symbol up) | `const dk_module_def dk_module = { .init = init };` |
-| A function is named after the handle type it works on | `dk_<type>_<verb>`; the `_open` accessors are named after the service they open: `dk_settings_open(ctx, &s)` returns a `dk_settings` | `dk_settings_get` works on `dk_settings`; `dk_module_ctx_device(ctx)` and `dk_module_ctx_runtime_version(ctx)` (the runtime version) work on `dk_module_ctx`; S3 adds `dk_module_ctx_has(ctx, cap)` |
+| A function is named after the handle type it works on | `dk_<type>_<verb>`; the `_open` accessors are named after the service they open: `dk_settings_open(ctx, &s)` returns a `dk_settings` | `dk_settings_get` works on `dk_settings`; `dk_module_ctx_device(ctx)` and `dk_module_ctx_runtime_version(ctx)` (the runtime version) work on `dk_module_ctx` |
 | A function with no handle is named after its service | `dk_<service>_<verb>` (stateless calls, or calls that act on the calling module) | `dk_log_event`, `dk_time_blocks`, `dk_hash32_init`, `dk_param_get`, `dk_debug_peek`, `dk_host_register` |
 | Rows of a menu belong to `dk_ui_menu` | `dk_ui_menu_<verb>`; adding a row is `dk_ui_menu_add_<kind>` | `dk_ui_menu_add_text/action/toggle/value/submenu`, `dk_ui_menu_check`, `dk_ui_menu_checked` |
+| A child is added by its parent: `<parent>_add_<kind>` | `dk_<parent>_add_<kind>` | `dk_module_ctx_add_machine`, `dk_machine_add_page`, `dk_page_add_param`, `dk_ui_menu_add_text` |
 | A user-data pointer is `arg` | in sdk.toml `sig` strings, generated and hand-written headers | `dk_io_post(step, done, arg)`, `dk_job_post`, `dk_intro_take`, `dk_files_list(f, root, path, notify, arg)`, `dk_ui_menu_add_action(menu, text, run, arg, value)` |
-| Callback types end in `_fn` | `dk_<service>_<what>_fn` | `dk_host_cmd_fn`, `dk_io_step_fn`, `dk_io_done_fn`, `dk_job_step_fn`, `dk_job_done_fn`, `dk_intro_frame_fn`, `dk_intro_done_fn`, `dk_files_event_fn`, `dk_ui_action_fn` |
+| Callback types end in `_fn` | `dk_<service>_<what>_fn` | `dk_host_cmd_fn`, `dk_io_step_fn`, `dk_io_done_fn`, `dk_job_step_fn`, `dk_job_done_fn`, `dk_intro_frame_fn`, `dk_intro_done_fn`, `dk_files_event_fn`, `dk_ui_action_fn`, `dk_param_click_fn`, `dk_page_draw_fn`, `dk_page_event_fn` |
 | Raw bytes | `void *` and `const void *`; lengths `uint32_t` | `void *dk_alloc(uint32_t size)`, `void dk_free(void *p)`, `dk_files_write(f, h, offset, const void *buf, len)` |
 | One handle per service | `dk_<service>_open(ctx, &handle)` gives it; every other call takes the handle first | `dk_files_open`, then `dk_files_list/poll/cancel/create/write/close/abort/delete(files, ...)` |
-| Which functions take `ctx` | only lifecycle functions, `_open` accessors and `dk_module_ctx_*` queries | `dk_host_register(first, count, fn)` takes none |
+| Which functions take `ctx` | only lifecycle functions, `_open` accessors and `dk_module_ctx_*` functions (the device and version accessors and the two add builders) | `dk_host_register(first, count, fn)` takes none |
 
   A callback of `dk_ui_action_fn` gets `void (void *arg, int32_t value)`: `arg` is the user pointer, `value` the value the row was added with (an action) or the
   new value (a toggle or number row). The old typedef names (`dk_service_cmd`, `dk_file_event`, `dk_ui_act`, `dk_io_step`, `dk_io_done`, `dk_job_step`, `dk_job_done`,
@@ -501,18 +561,28 @@ What changed in the binary contract (runtime 0.6.0, every `.dkm` changes):
 
 ### S3 Builders and the runtime commit path
 
-- Runtime: collect builder calls during `init` in the module's arena share (today's `MAX_RECORDS` bound); commit as in 6.3, with DSP
-  check and reserve unchanged before `init`; refuse a duplicate FX id across loaded modules.
-- Packer: finds DSP entry points by name (6.1); writes the `module.toml` machine and effect keys and `[uses]` into the header; stops
-  reading `.dk.desc`. `module.toml` accepts `[[machine]]` and `[[fx]]` with an id again.
-- `patchkit gen` writes `build/gen/module_ids.h`; `gen --check` guards it.
-- `dkneeds::needs_of` and the device menu read `[uses]` from the header.
-- `module:check` writes `[uses]` and the gallery param names (`build/gen/gallery.json`). Conformance reads committed rows from the
-  emulated device.
-- Migrate the machines, the FX and the fixtures (scripted for the fixtures). Delete the declaration macros, the declaration object and the
-  `.dk.desc` path in `patchkit` (`desc.rs`).
+Work packages, in this order:
+
+- **A. Interfaces first.** Sections 5, 6 and 10 of this text, the `sdk.toml` entries for the builder calls and callback types, and the
+  header layout (the keys table of 6.3). B to D start only after A is merged into the lane.
+- **B. Runtime commit path.** Collect builder calls during `init` in the module's arena share (`MAX_RECORDS` stays 32); commit as in
+  6.3, with DSP check and reserve unchanged before `init`; refuse a duplicate FX id across loaded modules; refuse api major 2
+  (contract api major 3, runtime 0.7.0).
+- **C. Packer and dkneeds.** The packer finds DSP entry points by name with the leading underscore (6.1), writes the `module.toml`
+  machine and effect keys and `[uses]` into the keys table of the header (`keys_off`, `keys_size` at 0x90 and 0x94), and stops reading
+  `.dk.desc`. `module.toml` accepts `[[machine]]` and `[[fx]]` with an id again. `dkneeds::needs_of` and the device menu read `[uses]`
+  from the keys table.
+- **D. Gen and module:check.** `patchkit gen` writes `build/gen/module_ids.h` (`DK_MACHINE_ID_<ID>`, `DK_FX_ID_<ID>`); `gen --check`
+  guards it. `module:check` writes `[uses]` and the gallery param names (`build/gen/gallery.json`). Conformance reads committed rows
+  from the emulated device. B, C and D run in parallel, each in its own lane.
+- **E. Migration.** The machines and the FX, the fixtures (scripted for the fixtures), and the core proofs `dsp-ddr-proof` and
+  `dsp-lp0-proof`, by three coders.
+- **F. Cleanup.** Delete the declaration macros and the macro headers, the `.dk.desc` spec in `sdk.toml`, `desc.rs` in `patchkit`, and
+  the `sample-proof` fixture with the temporary `dk_sample_bank_*` imports.
 - Check: every module's and fixture's device tests on both devices; SHARC golden hashes and PCM pins unchanged; refusal cases for "more
-  than `[uses]`", "unknown machine id", "missing DSP entry symbol", "duplicate FX id" and "no free row".
+  than `[uses]`", "unknown machine id", "missing DSP entry symbol", "duplicate FX id" and "no free row". `MAX_RECORDS` check: no module
+  collects more than 32 records (the largest, `shot`, about 10: 1 machine, 5 params, 1 page, 1 click action, 2 canvas pages); the
+  runtime refuses a module that overflows it, and a refusal test covers that case.
 - Size: about 4 agent days. Risk: medium, because it changes the boot path; lower than first planned, because DSP binding stays
   before `init`.
 
@@ -529,4 +599,4 @@ What changed in the binary contract (runtime 0.6.0, every `.dkm` changes):
 ## 13. Open items
 
 - [O] `state_bytes` and `stack_bytes` stay in the DSP descriptor block (asm); the packer reads them as today.
-- [O] The value of `MAX_RECORDS` against the largest module's collected records (shot), checked when S3 starts.
+- [O] The meaning of the first argument of `DK_SAMPLE_TRACKS`, settled at S3 implementation (6.1).

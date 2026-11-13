@@ -1597,10 +1597,11 @@ pub(crate) fn c_args(sig: &Sig) -> String {
 /// The `[handle.callbacks]`: (name, signature). Their names end in `_fn`.
 fn callback_types(sdk: &Sdk) -> Result<Vec<(&String, Sig)>> {
     let none = BTreeMap::new();
+    let handles: Vec<&str> = sdk.handle.types.iter().map(String::as_str).collect();
     let mut v = Vec::new();
     for (n, s) in &sdk.handle.callbacks {
         let what = format!("[handle.callbacks] {n}");
-        let (name, sig) = parse_fn(&what, s, &none, &[])?;
+        let (name, sig) = parse_fn(&what, s, &none, &handles)?;
         if name.is_some() || !is_ident(n) || !n.ends_with("_fn") || BASES.contains(&n.as_str()) {
             return Err(err!(
                 "{SOURCE}: {what}: bad name (it ends in _fn) or signature"

@@ -232,7 +232,7 @@ static void paint(uint8_t *view, uint8_t *canvas, native_page *page, uint32_t tr
         pixels1[2 * x] = UINT32_MAX;
         pixels1[2 * x + 1] = UINT32_MAX << (64 - HEIGHT);
     }
-    dk_page_frame_v1 frame;
+    dk_page_frame frame;
     frame.version = 1;
     frame.size = sizeof(frame);
     frame.track = track;
@@ -253,7 +253,7 @@ static void paint(uint8_t *view, uint8_t *canvas, native_page *page, uint32_t tr
     for (unsigned i = 0; i < 8; i++)
         frame.word_values[i] = i < page->word_count ? value(view, page->word_codes[i], -1) : 0;
     drawing = &clipped;
-    ((void (*)(const dk_page_frame_v1 *))page->draw)(&frame);
+    ((void (*)(const dk_page_frame *))page->draw)(&frame);
     drawing = 0;
     if (overlay) {
         for (unsigned i = 0; i < width * 2; i++)
@@ -303,13 +303,13 @@ uint32_t mf_native_turn(uint8_t *view, const uint8_t *event)
         if (binding[0] && binding[2] == encoder) {
             if (binding[0] == 1)
                 return 0; /* exactly one native PARAM edit */
-            dk_page_event_v1 local = {1,
-                                      sizeof(local),
-                                      dk_fw_page_view_track(*(uint8_t **)(view + 0x74)),
-                                      binding[1],
-                                      *(const int32_t *)(event + 0x10),
-                                      event[0x14] != 0};
-            ((void (*)(const dk_page_event_v1 *))page->event)(&local);
+            dk_page_event local = {1,
+                                   sizeof(local),
+                                   dk_fw_page_view_track(*(uint8_t **)(view + 0x74)),
+                                   binding[1],
+                                   *(const int32_t *)(event + 0x10),
+                                   event[0x14] != 0};
+            ((void (*)(const dk_page_event *))page->event)(&local);
             dk_fw_view_invalidate(view);
             return 1;
         }

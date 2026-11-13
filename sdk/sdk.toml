@@ -10,7 +10,7 @@ version = "0.6.0"    # 0.x: MINOR may break (contract major, store format, SysEx
 [contract]          # [major, minor] per contract (docs/design/module-sdk.md 11.5 D3). The runtime refuses a module that declares a
                     # contract (major != 0) when its major differs from the runtime's or its minor is above the runtime's. Major 0 = not implemented.
                     # An appended import is a minor bump; a changed or removed one is a major bump.
-api = [2, 12]       # the imports and the entry point `dk_module` of every module (`raw` included), docs/plans/sdk.md sections 5 and 5.1; `patchkit pack` writes the newest `since` among the imports a module links as the minor. Major 2: the Api table, `dkm_init` and the slots of major 1 are gone; the minor numbers go on, so `since` keeps its values. Minor 12 adds `dk_debug_speed_flags`, `dk_usb_bulk_ring` and `dk_sdhc_large_open`, `dk_sdhc_large_ctl`
+api = [2, 13]       # the imports and the entry point `dk_module` of every module (`raw` included), docs/plans/sdk.md sections 5 and 5.1; `patchkit pack` writes the newest `since` among the imports a module links as the minor. Major 2: the Api table, `dkm_init` and the slots of major 1 are gone; the minor numbers go on, so `since` keeps its values. Minor 12 adds `dk_debug_speed_flags`, `dk_usb_bulk_ring` and `dk_sdhc_large_open`, `dk_sdhc_large_ctl`
 machine = [1, 6]    # minor 1: source track; 2: stereo; 3: executable parameter latches; 4: opt-in native callback page v1; 5: two replacement callback pages v2; 6: note gate appended to voice_in (DK_MACHINE_GATE); voice states start zeroed after a load
 fx = [1, 0]         # run-time effects (sdk/include/dk/gen/fx.h, DSP section version 4 of a .dkm); 0.4.0; effect pages (register kind 4) 0.5.0
 service = [1, 0]
@@ -18,7 +18,7 @@ service = [1, 0]
 # The opaque handle types of the service imports (`dk_module_ctx *ctx`, `dk_settings **out`). `patchkit gen` writes `typedef struct <name> <name>;` for each into
 # sdk/include/dk/gen/imports.h; in Rust a handle is a `u8` pointer. The runtime, or the provider module, gives one out in `init`.
 [handle]
-types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_sample_bank", "dk_ui", "dk_ui_menu", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large"]
+types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_sample_bank", "dk_ui", "dk_ui_menu", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event"]
 services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large"]
 contexts = ["init", "ui", "io-step", "any", "isr"]
 
@@ -51,6 +51,13 @@ ui_confirm_fn = "void (void *arg, i32 yes)"
 ui_choice_fn = "void (void *arg, i32 index)"
 # A UI-task timer (`dk_ui_tick`): short, it runs between key events and must not wait.
 ui_tick_fn = "void (void *arg)"
+# The click of a machine parameter's knob (`dk_param_on_click`), in the UI task, when the knob is clicked on the machine's page (release without a turn): `track` is the track of the page.
+# Replaces `void FN(uint32_t track)` of DK_PARAM_ACTION; `arg` is the pointer given to `dk_param_on_click`.
+param_click_fn = "void (void *arg, u32 track)"
+# The draw callback of a canvas page (`dk_page_canvas`), in the UI task: `frame` is a `const dk_page_frame *` (<dk/page/page.h>), valid for this call only. Replaces `void DRAW(const dk_page_frame *)`.
+page_draw_fn = "void (void *arg, const dk_page_frame *frame)"
+# The event callback of a canvas page (`dk_page_canvas`), in the UI task: `event` is a `const dk_page_event *` (<dk/page/page.h>), valid for this call only. Replaces `void EVENT(const dk_page_event *)`.
+page_event_fn = "void (void *arg, const dk_page_event *event)"
 
 # The machine contract's numbers (sdk/include/dk/gen/machine.h is the generated C view; it includes the generated sdk/include/dk/gen/machine_consts.h).
 # `patchkit gen` writes sdk/dsp/contract/dk_machine.inc and sdk/include/dk/gen/machine_consts.h from this table: the constants, then the byte and word offsets of the fields (all 4 bytes).
@@ -769,6 +776,118 @@ since = 11
 context = "ui"
 sig = "i32 (u32 track, u32 word, i32 raw)"
 doc = "Set parameter word `word` of the calling module on `track` to `raw` (unit * 256) with the stock setter of a knob turn. Same click flow as dk_param_get. Returns 0, DK_PARAM_E_STATE, DK_PARAM_E_ARG or DK_PARAM_E_HELD."
+
+[[import]]
+name = "dk_module_ctx_add_machine"
+service = "machines"
+since = 13
+context = "init"
+sig = "dk_machine *(dk_module_ctx *ctx, u32 id, const char *name, const char *short_name)"
+doc = "Declare a machine of this module: `id` is its DK_MACHINE_ID_<ID> key (build/gen/module_ids.h), `name` the long name, `short_name` the short one. The DSP entry points are found by the names `_<id>_render` and `_<id>_note_on`. Returns the builder handle; on an error (full, bad id) a placeholder, and the error is reported when `init` returns."
+
+[[import]]
+name = "dk_module_ctx_add_fx"
+service = "fx"
+since = 13
+context = "init"
+sig = "dk_fx *(dk_module_ctx *ctx, u32 id, const char *name, const char *short_name)"
+doc = "Declare an effect of this module: `id` is its DK_FX_ID_<ID> key, `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit)."
+
+[[import]]
+name = "dk_machine_add_page"
+service = "machines"
+since = 13
+context = "init"
+sig = "dk_page *(dk_machine *m, const char *name)"
+doc = "Add a page to the machine, after the pages already added. Returns the page handle (a placeholder on an error)."
+
+[[import]]
+name = "dk_fx_add_page"
+service = "fx"
+since = 13
+context = "init"
+sig = "dk_page *(dk_fx *fx, const char *name)"
+doc = "Add the effect's page. Returns the page handle (a placeholder on an error)."
+
+[[import]]
+name = "dk_page_add_param"
+service = "machines"
+since = 13
+context = "init"
+sig = "dk_param *(dk_page *p, const char *name, const char *short_name, u32 def)"
+doc = "Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. Returns the parameter handle (a placeholder on an error)."
+
+[[import]]
+name = "dk_page_add_fx_param"
+service = "fx"
+since = 13
+context = "init"
+sig = "dk_param *(dk_page *p, const char *name, const char *short_name, u32 kind, float min, float max, float def)"
+doc = "Add an effect parameter on the next knob of the page. `kind` is DK_PERCENT or DK_BIPOLAR (the display); `min`, `max` and `def` are in the parameter's unit. Returns the parameter handle (a placeholder on an error)."
+
+[[import]]
+name = "dk_param_range"
+service = "machines"
+since = 13
+context = "init"
+sig = "void (dk_param *prm, u32 min, u32 max)"
+doc = "Set the range of a machine parameter (default 0 to 127)."
+
+[[import]]
+name = "dk_param_glyph"
+service = "machines"
+since = 13
+context = "init"
+sig = "void (dk_param *prm, u32 glyph)"
+doc = "Set the glyph of a machine parameter (DK_GLYPH_*); its range must fit the glyph, or the commit refuses the module."
+
+[[import]]
+name = "dk_param_latched"
+service = "machines"
+since = 13
+context = "init"
+sig = "void (dk_param *prm)"
+doc = "Latch the parameter at note_on (machine contract 1.3)."
+
+[[import]]
+name = "dk_param_on_click"
+service = "machines"
+since = 13
+context = "init"
+sig = "void (dk_param *prm, param_click_fn fn, void *arg)"
+doc = "Run `fn(arg, track)` when the parameter's knob is clicked on the machine's page."
+
+[[import]]
+name = "dk_page_canvas"
+service = "machines"
+since = 13
+context = "init"
+sig = "void (dk_page *p, u32 flags, page_draw_fn draw, page_event_fn event, void *arg)"
+doc = "Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`."
+
+[[import]]
+name = "dk_page_bind"
+service = "machines"
+since = 13
+context = "init"
+sig = "void (dk_page *p, dk_param *prm, u32 slot)"
+doc = "On a canvas page, bind a shared parameter of the machine to the encoder `slot` (0 to 7)."
+
+[[import]]
+name = "dk_page_bind_local"
+service = "machines"
+since = 13
+context = "init"
+sig = "void (dk_page *p, u32 local, u32 slot)"
+doc = "On a canvas page, bind the page's local control number `local` to the encoder `slot` (0 to 7); its turns arrive in the event callback."
+
+[[import]]
+name = "dk_fx_routes"
+service = "fx"
+since = 13
+context = "init"
+sig = "void (dk_fx *fx, u32 allowed, u32 def)"
+doc = "Set the routes the effect may run on (DK_ROUTE_MASTER, DK_ROUTE_SEND, or both) and the default one."
 
 [[import]]
 name = "dk_sample_pool_open"
@@ -1610,7 +1729,19 @@ stage_bytes = 65536  # the runtime's staging buffer: the largest .dkm file (patc
 
 [limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, modules/core/runtime/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
                     # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).
-dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick offsets, then the tables follow); `dkneeds::HEADER`
+dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick offsets, the keys table pair at 0x90/0x94, then the tables follow); `dkneeds::HEADER`
+# The keys table of a `.dkm` (spec; patchkit writes it, the runtime and dkneeds read it). The header pair at 0x90 and 0x94 is `keys_off` and `keys_size`
+# (bytes from the start of the file; `keys_off` is a multiple of 4; the table replaces the register records of the old pair). Layout, big-endian as the
+# rest of the header (the header is 0xa0 bytes in all cases):
+#   +0  u16 machine_rows   machine rows the module uses (`[uses]`)
+#   +2  u16 param_rows     parameter rows
+#   +4  u16 page_rows      page rows
+#   +6  u16 n_machines     number of machine keys
+#   +8  u16 n_fx           number of effect keys
+#   +10 u16 reserved       0 (keeps the arrays aligned to 4)
+#   +12 u32 machine_key[n_machines]   hash of `<module id>:<machine id>` (register.rs), in module.toml order
+#   +.. u32 fx_key[n_fx]              hash of `<module id>:<effect id>`
+# keys_size = 12 + 4 * (n_machines + n_fx), so the table is a multiple of 4. A module with no machine and no effect has keys_size 0.
 dsp_header = 64     # 0x40: the header of the DSP section
 max_records = 32    # records of the `register` table
 max_relocs = 4096   # ColdFire relocations

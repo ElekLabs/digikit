@@ -58,7 +58,7 @@ static unsigned unit(int32_t raw)
     return value > 127 ? 127 : value;
 }
 
-static void region_values(const dk_page_frame_v1 *f, int end_active)
+static void region_values(const dk_page_frame *f, int end_active)
 {
     const dk_page_canvas_v1 *c = &f->canvas;
     /* Names sit on page 1's label row; values one row above, centred on the names.
@@ -77,7 +77,7 @@ static unsigned sample_visual(int ready, int status)
                                         : DK_WIDGET_SAMPLE_LOADING;
 }
 
-void shot_controls_draw(const dk_page_frame_v1 *f)
+void shot_controls_draw(const dk_page_frame *f)
 {
     if (f->version != 1 || f->size < sizeof(*f) || f->track >= 16 || f->word_count < SHOT_P_COUNT)
         return;
@@ -145,7 +145,7 @@ static uint32_t word_frame(uint32_t frames, unsigned unit_value)
     return frame > frames ? frames : frame;
 }
 
-void shot_range_draw(const dk_page_frame_v1 *f)
+void shot_range_draw(const dk_page_frame *f)
 {
     if (f->version != 1 || f->size < sizeof(*f) || f->track >= 16 || f->word_count < SHOT_P_COUNT)
         return;
@@ -228,7 +228,7 @@ void shot_range_draw(const dk_page_frame_v1 *f)
     zoom_number(&f->canvas, 135, 46, ratio);
 }
 
-void shot_range_event(const dk_page_event_v1 *event)
+void shot_range_event(const dk_page_event *event)
 {
     if (event->version != 1 || event->size < sizeof(*event) || event->track >= 16 ||
         event->control != 0)

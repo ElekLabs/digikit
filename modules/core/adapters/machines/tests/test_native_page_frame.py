@@ -21,7 +21,7 @@ static void rect(int32_t a, int32_t b, int32_t c, int32_t d, int32_t color) {
     (void)a; (void)b; (void)c; (void)d; (void)color;
 }
 int main(void) {
-    dk_page_frame_v1 f = {.version=1, .size=sizeof(f), .track=0,
+    dk_page_frame f = {.version=1, .size=sizeof(f), .track=0,
         .params={[7]=112<<8}, .canvas={99,53,text,rect}, .level=12345};
     native_draw(&f);
     assert(native_draws == 1 && native_end_seen == 112<<8 && native_level_seen == 12345);
@@ -34,7 +34,7 @@ int main(void) {
     uint8_t out[28];
     assert(status(0,0,0,0,out) == sizeof(out));
     assert(out[24] == 0 && out[25] == 0 && out[26] == (6789>>8) && out[27] == (6789&255));
-    f.size = offsetof(dk_page_frame_v1, level);
+    f.size = offsetof(dk_page_frame, level);
     native_draw(&f);
     assert(native_draws == 3);
     f.size = sizeof(f); f.track = 16;
