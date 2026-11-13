@@ -28,8 +28,8 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 - [x] R0 Design: device files + `[capabilities]`/`[container]`/`[acceptance]`, `@digi/devices`, Nx halves from
       module `ports`, literal check with a shrinking baseline. Slices S0-S6.
 - [x] S0 schema, readers, `@digi/devices`, device-literals check (device-registry 2590f858, 35292c12, 72ef3389).
-- [ ] S5 apps on the registry, faceplate component additions (lane sharc-mode1, branch registry/s5-apps).
-- [ ] S6 Python tools on the registry, port_resolve DSP by container role (lane nx-nojob, branch registry/s6-python).
+- [x] S5 apps on the registry, faceplate component additions (merged into device-registry 8c0e4078).
+- [x] S6 Python tools on the registry, port_resolve DSP by container role (merged c0a924bd).
 - [ ] S1 Nx, S2 test harness, S3 emulator: one batch, one gate run.
 - [ ] S4 patchkit seal and section roles (after the SDK S3 patchkit lanes merge; seal/section parts may go first).
 
@@ -38,8 +38,8 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 - [x] `fw.py -i st-1.42` works for fn, str, search, dossier from the existing cfdb.
 - [x] Peer image `st-1.42-peer` (section 7): Ghidra project, dump, cfdb; `fw.py -i st-1.42-peer` works.
 - [x] `atlas build st-1.42` (atlas skips the descriptor-parameter table when absent; dt2-1.17 counts unchanged).
-- [ ] Register the image through the registry (no `regions.IMAGES` row by hand).
-- [ ] `port_resolve`: build the DSP stream only for a device with a DSP.
+- [x] Image registered through the registry (S6 derives image tables from device files).
+- [x] `port_resolve`: DSP stream only for a firmware with a DSP image (S6).
 - [ ] One-sided `atlas catalog` (pairing with dt2-1.17 must not rewrite its catalog).
 - [x] Repeatable import of a raw ColdFire section: `tools/coldfire/imagepipe.py` (dry run proven; full run not repeated).
 - [x] Finding 70 corrected; peer CPU in finding 128. Anchor dry run now 81/106 rules; the old 27/172 is [O].
@@ -47,14 +47,16 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 ### P1 Emulator boots MAIN to the UI (no audio)
 
 - [x] Inventory of boot signatures and profile fields, resolved on 1.42 (almost all match as written).
-- [ ] Profile row `devices/syntakt.toml` (after registry S0); `readiness_contract = main-panel-v1` (no fs worker).
-- [ ] Section 7 is not parsed as a SHARC stream on a device without a DSP.
+- [x] `devices/syntakt.toml` at identity level (no seal, no DSP, section roles, placeholder panel); device-profile embeds every device file (177c3b43).
+- [x] Section roles come from `[container]`; a device without a DSP skips section 7 (bc109643, 0a6c0c15).
 - [x] Fix `data_mask` stride (`boot/src/common.rs:103`): mask every offset; `unique_signature_data` reuses it.
       Boot crate tests pass, incl. boot anchors on dt2-1.17 and dn2-1.12 (uncommitted).
 - [x] `resolve_uart`: expected bytes built from the resolved rx_isr, not a DT2 literal (uncommitted).
-- [ ] Five fixed addresses (task_create, uart init, queue_td, usb tx, usb register) by signature.
-- [ ] DTCN free-running channels as profile data (replaces `dtcn0_on` "dn2"); Syntakt needs channel 2.
-- [ ] Stock cold boot for a device without a DSP, then a ready snapshot.
+- [x] Five fixed addresses by signature on all four images (00abe314).
+- [x] `[emulator] free_running_dtcn` in device data (DN2 [0], DT2 [], Syntakt [2]) replaces `dtcn0_on`.
+- [x] Stock cold boot reaches the main screen at about 610 M instructions (5 s host): A01, with a "RUN WARM-UP CALIBRATION" dialog.
+- [ ] Why the calibration dialog shows (old 1.41 boot showed it too); when MAIN reports the peer boot failure.
+- [ ] Ready snapshot for st.
 - [ ] Later (audio, not UI): EPORT IRQ4, mailbox responder at 0x10000000. Unmapped pages are zero RAM today.
 
 ### P2 Workbench and faceplate
