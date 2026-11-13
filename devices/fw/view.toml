@@ -121,5 +121,6 @@ cpu = "cf"
 sig = "void (shared_ptr *out, const shared_ptr *src)"
 rule = { kind = "cf_func", hash = "b6b482b767aab226959365fd86205072", offset = 0x0, len = 4 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/ui"]
 doc = "Converting copy `shared_ptr<View>(const shared_ptr<Derived> &)` for a class with its View sub-object at +0x38 (the Menu views): out.ptr = src.ptr + 0x38 (0 stays 0), out.ctl = src.ctl, and the use count of the control block is incremented. It does not make a new control block; a raw pointer cannot be wrapped with it. The caller releases `out` afterwards."

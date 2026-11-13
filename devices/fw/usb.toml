@@ -41,6 +41,7 @@ cpu = "cf"
 sig = "void (u32 hs)"
 rule = { kind = "cf_func", hash = "bb700ddb6198cdea1276e325b627e28b", offset = 0x0, len = 4 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/usb-bulk"]
 doc = "The connect body of the USB MIDI port (`FUN_400043e2`, 0x400043e2): sets the EP1 queue heads, ENDPTCTRL1 and primes EP1 OUT."
 
@@ -59,6 +60,7 @@ cpu = "cf"
 sig = "i32 (u32 index, u8 *dtd)"
 rule = { kind = "cf_func", hash = "acfcf7d3502645bc708805c97d0450de", offset = 0x0, len = 4 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/usb-bulk"]
 doc = "Queue a transfer descriptor on endpoint queue `index` = endpoint + 4 * direction (IN = 1) and prime it (`FUN_40005a86`, 0x40005a86)."
 
@@ -68,6 +70,7 @@ cpu = "cf"
 sig = "void (u32 index)"
 rule = { kind = "cf_func", hash = "ceab1936e5dc859647d0067ef16568f9", offset = 0x0, len = 4 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/usb-bulk"]
 doc = "Cancel and free every transfer descriptor queued on endpoint queue `index` (`FUN_400059aa`, 0x400059aa); each one's cancel callback (+0x28) is called."
 

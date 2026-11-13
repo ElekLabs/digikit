@@ -19,6 +19,7 @@ cpu = "cf"
 sig = "void (shared_ptr *dst, shared_ptr *src)"
 rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x40, len = 4 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/digikit-menu"]
 doc = "Moves a `shared_ptr` from `src` to `dst`. core/digikit-menu uses it when it pushes a popup view."
 

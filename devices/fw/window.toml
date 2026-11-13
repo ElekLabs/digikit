@@ -7,6 +7,7 @@ was = ["cf.menu.fn.popup_make"]
 cpu = "cf"
 rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x32, len = 4 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/digikit-menu"]
 doc = "The firmware's `make_shared<PopupWindow>(const char *const &)`: `out` in a0, a reference to the message pointer on the stack. core/digikit-menu calls it through its dk_popup_make shim."
 
