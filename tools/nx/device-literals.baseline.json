@@ -193,6 +193,7 @@
   "modules/core/runtime/sdk/src/sample_tracks.rs": 8,
   "modules/core/runtime/sdk/src/sample_tracks/tests.rs": 16,
   "modules/core/runtime/sdk/src/store/lease.rs": 1,
+  "modules/core/runtime/src/cf/st/device.s": 1,
   "modules/core/runtime/src/cf/tramp.s": 2,
   "modules/core/runtime/src/rs/src/collect.rs": 1,
   "modules/core/runtime/src/rs/src/collect/tests.rs": 40,
