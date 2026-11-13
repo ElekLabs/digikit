@@ -317,14 +317,21 @@ impl Facts {
         let mut docs = BTreeMap::new();
         for t in texts {
             // a sidecar file (the LED maps) has no [device]
-            let Ok(d) = toml::from_str::<Doc>(t) else {
+            let table: toml::Table = toml::from_str(t)?;
+            if !table.contains_key("device") {
+                continue;
+            }
+            let d: Doc = toml::from_str(t)?;
+            let short = d.device.short.clone();
+            // only a runtime target (a file with [digikit]) has shared constants; an identity-only or patch-only device is skipped
+            let Some(k) = d.digikit else {
                 continue;
             };
-            let short = d.device.short.clone();
-            let (Some(b), Some(k), Some(s), Some(l)) =
-                (d.board, d.digikit, d.card.and_then(|c| c.store), d.limits)
+            let (Some(b), Some(s), Some(l)) = (d.board, d.card.and_then(|c| c.store), d.limits)
             else {
-                continue;
+                return Err(err!(
+                    "{short}: [digikit] needs [board], [card.store] and [limits] (a runtime target)"
+                ));
             };
             if k.peek.len() > PEEK_MAX {
                 return Err(err!(

@@ -2,8 +2,32 @@
 
 Status: implemented in Phase 8 (lane b). Rule: a fact about a device, its board or its firmware that the digikit runtime, the core
 modules, patchkit or `port_resolve` use comes from a data file, and code that needs a constant gets it generated
-(`patchkit gen`, kept current by `patchkit gen --check` and the Rust test `packages/patchkit/tests/devdata.rs`). Nothing in the code
-assumes exactly two devices. Syntakt is not added here.
+(`patchkit gen`, kept current by `patchkit gen --check` and the Rust test `packages/patchkit/tests/devdata.rs`). Code must not list
+devices by name: `tools/nx/device-literals.mjs` (part of `lint`) counts device ids and names outside the allowed places and fails
+when the count in any file differs from `tools/nx/device-literals.baseline.json`. The baseline holds the sites not yet moved to
+the registry; it only shrinks (`node tools/nx/device-literals.mjs --write` after a removal).
+
+## Device levels
+
+What a device file contains decides what the tools do with the device:
+
+| Tables present | Level | Effect |
+|---|---|---|
+| `[device]`, `[[firmware]]`, `[capabilities]`, `[container]` | identity | firmware lookup by sha256, analysis tools |
+| + `[patch]` (needs `[device] syx_id`) | patchable | patchkit and `port_resolve` accept the firmware |
+| + `[digikit]` with `[board]`, `[card.store]`, `[limits]` | runtime target | `patchkit gen` shared constants, runtime objects |
+| + `[acceptance]` | test cell | the firmware, ready directory and sample-card input of the device tests |
+
+`[digikit]` without `[patch]` is an error: a runtime target must be patchable. `[panel]` is optional.
+
+`[capabilities]` says what the device has: `dsp` (`sharc` | `none`), `seal` (`hmac` | `none`), `sample_pool` (`stock` |
+`ddr` | `none`) and `card` (`path-fs` | `slots` | `none` | `unknown`). Code branches on these values, not on device names.
+`[container]` names the role of each syx section (`main`, `dsp`, `cf2`, `fpga`) and lists the `readonly` sections that are never
+written; a section may have a role and be read-only, but `main` may not be read-only. `devdata.rs` `validate` checks that
+the capabilities agree with the other tables (for example `dsp = "none"` forbids a `[[firmware]].dsp` image and `container.dsp`).
+
+Readers: Rust embeds the files (`packages/patchkit/build.rs`, `packages/emulator/device-profile`); TS and Nx use `@digi/devices`
+(`packages/devices`, Node and Vite loaders); Python uses `tools/firmware/device.py`.
 
 ## Where each fact lives
 
@@ -63,11 +87,11 @@ The kinds `sharc-adapter`, `gas-sample-pool`, `sharc-sample-pool` and `c-shared`
 ## Adding a device (what exists today, what is still hand work)
 
 1. `devices/<name>.toml`: `[device]` (name, short, `syx_id`), `[[firmware]]` entries (add `port = true` when a port is wanted),
-   `[board]`, `[digikit]`, `[patch]`, `[card]` with `[card.store]`, `[modules.knobs]`/`[modules.frame]` for machines, `[panel]`.
+   `[capabilities]`, `[container]`, then the tables of the level the device needs (see "Device levels"): `[patch]`; `[board]`,
+   `[digikit]`, `[card]` with `[card.store]`, `[limits]`; `[modules.knobs]`/`[modules.frame]` for machines; `[panel]`; `[acceptance]`.
    Rebuild patchkit (the device files are embedded). The code refuses a device whose `syx_id` or `[digikit] id` repeats.
-2. The container seal key of the device in `SEALS` (`packages/patchkit/src/syx.rs`). It is key material of the firmware format, not
-   device-profile data, and the device files are published as they are, so it stays in code; a device without an entry is
-   refused with a message that says so.
+2. For `seal = "hmac"`: the container seal key of the device in `SEALS` (`packages/patchkit/src/syx.rs`); `validate` refuses
+   an `hmac` device without an entry. A device with `seal = "none"` needs no key.
 3. `modules/core/adapters/machines/types.toml`: a `[<dev>]` table (`last`, `dynamic_first`, `alloc`, `dynamic`).
 4. Modules that have per-device sources add an `[[object]]` with `devices = ["<dev>"]` and a small source for the device (the
    device objects of `core/runtime`, `core/dynreg`, `core/dyndsp`, `core/dsp-link` include the generated `device-<dev>.inc`).

@@ -56,6 +56,44 @@ pub struct DeviceProfile {
     pub keep_ram: Option<(u32, u32)>,
     /// Which backend takes samples and modules (`[storage]`), for the Transfer page.
     pub storage: Option<StorageProfile>,
+    /// `[capabilities]`: what the device can do. Checked against the tables by `patchkit` (`devdata.rs`), not here.
+    pub capabilities: Option<Capabilities>,
+    /// `[container]`: the section roles of the firmware container.
+    pub container: Option<ContainerProfile>,
+    /// `[acceptance]`: the device's test cell.
+    pub acceptance: Option<Acceptance>,
+}
+
+/// `[capabilities]`: closed sets of words (`dsp`: sharc | none; `seal`: hmac | none; `sample_pool`: stock | ddr | none; `card`:
+/// path-fs | slots | none | unknown).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Capabilities {
+    pub dsp: String,
+    pub seal: String,
+    pub sample_pool: String,
+    pub card: String,
+}
+
+/// `[container]`: section ids by role; roles a device lacks are absent. `readonly` sections are never changed.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContainerProfile {
+    pub main: u32,
+    pub dsp: Option<u32>,
+    pub cf2: Option<u32>,
+    pub fpga: Option<u32>,
+    #[serde(default)]
+    pub readonly: Vec<u32>,
+}
+
+/// `[acceptance]`: the firmware version, ready-snapshot directory and sample-card need of the device's acceptance tests.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Acceptance {
+    pub firmware: String,
+    pub ready_dir: String,
+    pub sample_card: bool,
 }
 
 /// `[storage]`: the backend of each kind of content. `samples`: "stock-rpc" (the device's MidiRpc file commands) or "digikit" (the digikit store).
@@ -204,6 +242,9 @@ struct SourceDocument {
     card: Option<CardLayout>,
     digikit: Option<SourceDigikit>,
     storage: Option<StorageProfile>,
+    capabilities: Option<Capabilities>,
+    container: Option<ContainerProfile>,
+    acceptance: Option<Acceptance>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -336,6 +377,9 @@ impl Registry {
                     .digikit
                     .and_then(|k| Some((k.keep_base?, k.keep_bytes?))),
                 storage: parsed.storage,
+                capabilities: parsed.capabilities,
+                container: parsed.container,
+                acceptance: parsed.acceptance,
             });
         }
         Ok(Self { devices })
@@ -610,6 +654,31 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../devices/digitone-ii.toml"
     ));
+
+    #[test]
+    fn embedded_devices_carry_capabilities_container_and_acceptance() {
+        let registry = Registry::embedded().unwrap();
+        for device in registry.devices() {
+            let caps = device.capabilities.as_ref().unwrap();
+            assert_eq!(caps.dsp, "sharc", "{}", device.short);
+            assert_eq!(device.container.as_ref().unwrap().main, 3);
+            let acceptance = device.acceptance.as_ref().unwrap();
+            assert!(
+                device
+                    .firmwares
+                    .iter()
+                    .any(|f| f.version == acceptance.firmware),
+                "{} acceptance firmware is a [[firmware]] version",
+                device.short
+            );
+        }
+        let syntakt = "[device]\nname = \"S\"\nshort = \"st\"\n[capabilities]\ndsp = \"none\"\nseal = \"none\"\nsample_pool = \"none\"\ncard = \"unknown\"\n[container]\nmain = 3\ncf2 = 7\nfpga = 1\nreadonly = [1, 2, 4, 6, 7, 8]\n";
+        let parsed = Registry::parse(&[("s.toml", syntakt)]).unwrap();
+        let container = parsed.devices()[0].container.as_ref().unwrap();
+        assert_eq!((container.cf2, container.fpga), (Some(7), Some(1)));
+        let bad = "[device]\nname = \"X\"\nshort = \"x\"\n[capabilities]\ndsp = \"sharc\"\nseal = \"hmac\"\nsample_pool = \"none\"\ncard = \"none\"\nextra = 1\n";
+        assert!(Registry::parse(&[("x.toml", bad)]).is_err());
+    }
 
     #[test]
     fn embedded_registry_has_the_four_canonical_releases() {

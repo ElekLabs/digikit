@@ -2,7 +2,19 @@
   "name": "workspace",
   "$schema": "node_modules/nx/schemas/project-schema.json",
   "targets": {
+    "device-literals": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "inputs": [],
+      "outputs": [],
+      "options": {
+        "command": "node tools/nx/device-literals.mjs",
+        "cwd": "."
+      },
+      "description": "Device ids and names outside the allowed places may not grow beyond tools/nx/device-literals.baseline.json (reads every tracked file, so it is not cached; `lint` depends on it)."
+    },
     "lint": {
+      "dependsOn": ["device-literals"],
       "executor": "nx:run-commands",
       "cache": true,
       "outputs": [],

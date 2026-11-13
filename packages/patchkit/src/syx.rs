@@ -40,10 +40,15 @@ const SEALS: [(&str, &[u8], &str); 2] = [
     ),
 ];
 
+/// Whether `SEALS` holds a key for the device (checked against `[capabilities] seal` by `devdata`).
+pub(crate) fn has_seal(short: &str) -> bool {
+    SEALS.iter().any(|s| s.0 == short)
+}
+
 impl Device {
     pub fn from_id(id: u8) -> Result<Device> {
         let d = devdata::by_syx_id(id).ok_or_else(|| err!("unknown device id {id:#04x}"))?;
-        if !SEALS.iter().any(|s| s.0 == d.short) {
+        if !has_seal(&d.short) {
             return Err(err!(
                 "device {} has no container seal key (add it to SEALS in packages/patchkit/src/syx.rs)",
                 d.short
