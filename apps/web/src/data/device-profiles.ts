@@ -1,6 +1,6 @@
 // The devices the site knows, from the registry (devices/*.toml through @digi/devices): names, firmware identities and the
 // short ids. No device is named in code; a device file added to devices/ shows up here.
-import { registry } from '../../../../packages/devices/src/vite.ts';
+import { registry } from '@digi/devices/vite';
 
 /** A device id: the `[device] short` of a device file. */
 export type DeviceId = string;

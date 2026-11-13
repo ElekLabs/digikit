@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
-import { loadDevices } from '../../../packages/devices/src/node.ts';
+import { loadDevices } from '@digi/devices/node';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const deviceIds = loadDevices().runtimeIds;

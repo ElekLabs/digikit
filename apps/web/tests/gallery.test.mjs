@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'smol-toml';
 import { buildModuleData, shipModules } from '../scripts/gen-modules.mjs';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
-import { loadDevices } from '../../../packages/devices/src/node.ts';
+import { loadDevices } from '@digi/devices/node';
 import { PatchKit, patchedFileName } from '../src/patch/patchkit-core.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
