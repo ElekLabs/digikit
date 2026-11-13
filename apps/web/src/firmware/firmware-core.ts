@@ -2,19 +2,12 @@
 // how the progress reads, and what the device's answer after the restart means. Pure; apps/web/tests/firmware-core.test.ts. The page is
 // FirmwarePage.tsx, the run itself (sending, waiting for the restart) is firmware-flow.ts.
 import type { PreparedFlash } from '../patch/patchkit-core';
+import { deviceNameOf, deviceOfPort, isDeviceId, type DeviceId } from '../data/device-profiles';
 
-export type DeviceId = 'dt2' | 'dn2';
-
-export const DEVICE_NAMES: Record<DeviceId, string> = { dt2: 'Digitakt II', dn2: 'Digitone II' };
+export { deviceNameOf, isDeviceId, type DeviceId };
 
 /** Which device a MIDI port name belongs to (a stock device has no INFO to say it). */
-export function modelOfPort(port: string): DeviceId | undefined {
-  if (/digitakt/i.test(port)) return 'dt2';
-  if (/digitone/i.test(port)) return 'dn2';
-  return undefined;
-}
-
-export const isDeviceId = (d: string): d is DeviceId => d === 'dt2' || d === 'dn2';
+export const modelOfPort = deviceOfPort;
 
 // ---- the image and its checks --------------------------------------------------------------------------------------------------
 
@@ -66,7 +59,7 @@ export const shortSha = (sha: string): string => `${sha.slice(0, 4)}…`;
 
 /** The .syx file name of the image that can be downloaded. */
 export function imageFileName(p: PreparedFlash): string {
-  const name = DEVICE_NAMES[p.device as DeviceId] ?? p.device;
+  const name = deviceNameOf(p.device);
   return `${name.replace(/\s+/g, '_')}_OS${p.os}${p.restore ? '' : `+digikit-${p.runtime ?? 'runtime'}`}.syx`;
 }
 
@@ -106,14 +99,14 @@ export function matchView(p: PreparedFlash | undefined, dev: DeviceState): Match
   if (dev.kind !== 'connected') return { state: 'none', text: '' };
   const d = dev.d;
   if (!p) return { state: 'unknown', text: '' };
-  const want = DEVICE_NAMES[p.device as DeviceId] ?? p.device;
+  const want = deviceNameOf(p.device);
   if (!d.model) {
     return {
       state: 'unknown',
       text: `The port name does not say which device this is. The image is for a ${want}.`,
     };
   }
-  const have = DEVICE_NAMES[d.model];
+  const have = deviceNameOf(d.model);
   if (d.model !== p.device) {
     return { state: 'mismatch', text: `This is a ${have}. The image is for a ${want}: it would not start.` };
   }
@@ -233,7 +226,7 @@ export type Verdict = { ok: true; message: string; lines: string[] } | { ok: fal
  * and no runtime.
  */
 export function judge(p: PreparedFlash, a: Answer): Verdict {
-  const name = DEVICE_NAMES[p.device as DeviceId] ?? p.device;
+  const name = deviceNameOf(p.device);
   if (p.restore) {
     if (a.runtime) {
       return {

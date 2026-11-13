@@ -18,8 +18,10 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
+import { loadDevices } from '../../../packages/devices/src/node.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const deviceIds = loadDevices().runtimeIds;
 export const repoRoot = resolve(here, '../../..');
 
 const walk = (dir, name, out = []) => {
@@ -167,7 +169,7 @@ function pack(root, id, device, to) {
 /** Write the shipped modules under `out`: <dev>/<leaf>.dkm, index.json and src/<id>/**. Returns the index. */
 export function shipModules(out, root = repoRoot) {
   const scratch = join(root, 'out', 'cache', 'site-pack');
-  for (const sub of ['dt2', 'dn2', 'src']) rmSync(join(out, sub), { recursive: true, force: true });
+  for (const sub of [...deviceIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
   const modules = [];
   const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
     walk(join(root, 'modules', r), 'module.toml').sort(byParts),
@@ -179,7 +181,7 @@ export function shipModules(out, root = repoRoot) {
     const m = d.module;
     const leaf = m.id.split('/').pop();
     const devices = {};
-    for (const dev of shippedDevices(d)) {
+    for (const dev of shippedDevices(d, deviceIds)) {
       const tmp = join(scratch, dev, `${leaf}.dkm`);
       mkdirSync(dirname(tmp), { recursive: true });
       const bytes = pack(root, m.id, dev, tmp);

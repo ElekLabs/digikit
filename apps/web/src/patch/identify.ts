@@ -1,4 +1,4 @@
-import { deviceProfiles, type DeviceId } from '../data/device-profiles';
+import { deviceNameOf, deviceProfiles, type DeviceId } from '../data/device-profiles';
 
 export interface Identity {
   device: DeviceId;
@@ -16,4 +16,4 @@ export function identify(sha256: string): Identity | undefined {
   return undefined;
 }
 
-export const deviceName = (device: string): string => deviceProfiles[device as DeviceId]?.name ?? device;
+export const deviceName = (device: string): string => deviceNameOf(device);

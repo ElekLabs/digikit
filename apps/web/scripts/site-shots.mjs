@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
+import { loadDevices } from '../../../packages/devices/src/node.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -19,7 +20,7 @@ for (const kind of ['machines', 'fx', 'tools']) {
     if (!e.isDirectory() || !existsSync(file)) continue;
     const manifest = parse(readFileSync(file, 'utf8'));
     const dir = `modules/${kind}/${e.name}`;
-    if (!isShipped(manifest, dir) || !shippedDevices(manifest).includes('dt2')) continue;
+    if (!isShipped(manifest, dir) || !shippedDevices(manifest, loadDevices().runtimeIds).includes('dt2')) continue;
     ids.push(manifest.module.id);
   }
 }

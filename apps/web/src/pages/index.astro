@@ -3,7 +3,7 @@ import Base from '../layouts/Base.astro';
 import DeviceArt from '../components/DeviceArt.astro';
 import ModuleCard from '../components/ModuleCard';
 import { shippedModules } from '../data/modules';
-import { deviceProfiles } from '../data/device-profiles';
+import { deviceNameOf, deviceNamesText, deviceProfiles, runtimeDeviceIds } from '../data/device-profiles';
 import { SHOW_EMULATOR } from '../../site.config.mjs';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
@@ -14,10 +14,10 @@ const portFiles = new Set(
   ).map((p) => p.split('/').pop()),
 );
 // Releases the emulator boots and patchkit has ports for: the ones with a boot profile.
-const supported = (['dt2', 'dn2'] as const).map((id) => ({
+const supported = runtimeDeviceIds.map((id) => ({
   id,
-  name: deviceProfiles[id].name,
-  versions: deviceProfiles[id].firmware
+  name: deviceProfiles[id]?.name ?? id,
+  versions: (deviceProfiles[id]?.firmware ?? [])
     .filter((f) => f.main_sha256)
     .map((f) => f.version)
     .filter((v) => SHOW_EMULATOR || portFiles.has(`${id}-${v}.toml`))
@@ -27,11 +27,11 @@ const supported = (['dt2', 'dn2'] as const).map((id) => ({
 ---
 
 <Base
-  title="digikit · new machines and effects for Digitakt II and Digitone II"
+  title={`digikit · new machines and effects for ${deviceNamesText('and')}`}
   description={
     SHOW_EMULATOR
-      ? 'Add community machines and effects to your own Digitakt II or Digitone II firmware, then try it in the emulator before you flash. Everything runs in your browser.'
-      : 'Add loadable machines and effects to your own Digitakt II or Digitone II firmware. Everything runs in your browser.'
+      ? `Add community machines and effects to your own ${deviceNamesText('or')} firmware, then try it in the emulator before you flash. Everything runs in your browser.`
+      : `Add loadable machines and effects to your own ${deviceNamesText('or')} firmware. Everything runs in your browser.`
   }
   active="home"
 >
@@ -39,7 +39,7 @@ const supported = (['dt2', 'dn2'] as const).map((id) => ({
     <section class="hero">
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <span class="eyebrow accent">Digitakt II · Digitone II</span>
+          <span class="eyebrow accent">{runtimeDeviceIds.map(deviceNameOf).join(' · ')}</span>
           <h1>Loadable machines and effects for your Elektron&nbsp;box.</h1>
           <p class="lede">
             {SHOW_EMULATOR
