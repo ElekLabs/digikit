@@ -69,12 +69,14 @@ pub enum CalibrationRecord {
     Synthetic,
 }
 
-/// The stand-in for the second CPU of a two-CPU device. `MailboxResponder` answers MAIN's mailbox handshake from the shared window and
-/// runs no peer code (data transport only; no FPGA logic).
+/// The second CPU of a two-CPU device. `MailboxResponder` answers MAIN's mailbox handshake from the shared window and runs no peer code
+/// (data transport only; no FPGA logic). `Coldfire` runs the peer's program on a second ColdFire core (`machine::peer_cpu`); the mailbox
+/// model then only streams the image and stands in for the stage-1 loader.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PeerModel {
     MailboxResponder,
+    Coldfire,
 }
 
 /// The panel LED records on UART8. `Indexed`: `b9 idx val` and `b5 idx r g b`. `PackedStates`: `b5` and `b0..b3`
@@ -798,7 +800,7 @@ mod tests {
         assert_eq!(twin.len(), 1);
         let twin = twin[0];
         assert_eq!(twin.calibration_record, Some(CalibrationRecord::Synthetic));
-        assert_eq!(twin.peer, Some(PeerModel::MailboxResponder));
+        assert_eq!(twin.peer, Some(PeerModel::Coldfire));
         assert_eq!(twin.led_protocol, LedProtocol::PackedStates);
         assert!(twin.board_revision.is_some());
         for d in registry.devices().iter().filter(|d| d.short != twin.short) {

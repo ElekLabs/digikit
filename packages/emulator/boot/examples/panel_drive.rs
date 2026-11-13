@@ -54,6 +54,8 @@
 //!   peek:ADDR:LEN        read guest memory: reported as hex
 //!   peer                 report the mailbox peer (a device with `[emulator] peer`): bytes taken from
 //!                        the image stream, each image's length and SHA-256, doorbell edges, IRQ4 delivered
+//!   peerpeek:ADDR:LEN    read the peer CPU's own SDRAM (0x40000000..) or SRAM (0x80000000..) once it runs
+//!                        (the shared window is MAIN's 0x10000000: use `peek`)
 //!   touched              every 1 MiB RAM page the guest touched that nothing had
 //!                        mapped beforehand, with its first touch (PC, kind, address)
 //!   poke:ADDR:HEX        write guest memory
@@ -473,6 +475,19 @@ fn main() -> ExitCode {
                 "peer" => {
                     let report = run.emulator.peer_report().ok_or("no peer on this board")?;
                     results.push(json!({"peer": report, "icount": run.icount}));
+                    Ok(())
+                }
+                "peerpeek" => {
+                    let addr = parts.get(1).and_then(|p| number(p)).ok_or_else(bad)? as u32;
+                    let len = parts.get(2).and_then(|p| number(p)).ok_or_else(bad)? as usize;
+                    let bytes = run
+                        .emulator
+                        .peer_private(addr, len)
+                        .ok_or("peer CPU not running or address outside its SDRAM/SRAM")?;
+                    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+                    results.push(
+                        json!({"peerpeek": format!("{addr:#010x}"), "hex": hex, "icount": run.icount}),
+                    );
                     Ok(())
                 }
                 "touched" => {

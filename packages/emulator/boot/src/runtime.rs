@@ -28,7 +28,38 @@ pub struct PeerReport {
     pub images: Vec<(usize, String)>,
     pub doorbell_edges: u64,
     pub irq4_delivered: u64,
+    /// Audio frame interrupts MAIN took (peer CPU mode).
+    pub frames_delivered: u64,
+    /// The peer CPU (`[emulator] peer = "coldfire"`), once started.
+    pub cpu: Option<PeerCpuReport>,
 }
+
+/// What the peer CPU did (`Emulator::peer_report`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PeerCpuReport {
+    pub icount: u64,
+    pub pc: u32,
+    pub frames_raised: u64,
+    pub frames_taken: u64,
+    /// Instructions the frame interrupt handler ran, summed and the largest single run.
+    pub isr_instructions: u64,
+    pub isr_max: u64,
+    /// Peer GPIO pin changes MAIN saw as IRQ4.
+    pub pin_edges: u64,
+    /// Bytes the peer's eDMA moved.
+    pub dma_bytes: u64,
+    /// Accesses to addresses the peer map does not have.
+    pub faults: usize,
+    /// Host wall time spent running the peer core, in nanoseconds (0 in the browser build).
+    pub wall_ns: u64,
+    /// The first accesses outside the peer's map: "pc address size R/W".
+    pub first_faults: Vec<String>,
+    /// With `DIGI_PEER_PROFILE=1`: the busiest 64-byte code buckets of the frame handler, "address count".
+    pub isr_profile: Vec<String>,
+}
+
+/// MAIN ticks between two peer slices: the two CPUs run in lock step at this granularity (deterministic).
+const PEER_SLICE: u64 = 2048;
 
 /// ENDPTCTRL2 of the USB controller (the RX enable bit is 0x80).
 const USB_ENDPTCTRL2: u32 = 0xfc0b_01c8;
@@ -410,6 +441,13 @@ pub struct Emulator {
     ram_clear_fast_forwarded_instructions: u64,
     flash_hle_calls: u64,
     dspi2_capture: Option<Dspi2Capture>,
+    /// The peer CPU (`[emulator] peer = "coldfire"`) and the MAIN tick it has run up to. It starts at the first doorbell edge after its
+    /// program arrived.
+    peer_cpu: Option<Box<machine::peer_cpu::PeerCpu>>,
+    peer_started: bool,
+    peer_clock: u64,
+    peer_pin_edges: u64,
+    peer_wall_ns: u64,
     #[cfg(feature = "cf-profile")]
     prof: crate::cfprof::CfProf,
 }
@@ -656,6 +694,11 @@ impl Emulator {
         forced.insert(UART8_USR, 0x0d00_0000);
         forced.insert(DSPI0_SR, 0x1000_00f0);
         forced.insert(DSPI2_SR, 0x9000_0000);
+        // Peer CPU board: the engine tick MAIN runs every audio frame pushes words to DSPI3 (0xFC03C000, a serial link to the board's
+        // converter logic) and polls SR for the end of the queue (`FUN_4010222a`, bit 28). The transfer is not modelled: it is complete.
+        if device.peer == Some(device_profile::PeerModel::Coldfire) {
+            forced.insert(0xfc03_c02c, 0x9000_0000);
+        }
         // `[emulator] board_revision`: the PCB revision byte at FlexBus CS1 address 0.
         if let Some(revision) = device.board_revision {
             forced.insert(0, u32::from(revision) << 24);
@@ -670,9 +713,9 @@ impl Emulator {
             .expect("install forced status hooks");
         board.enable_oracle_sdram_faults();
         // `[emulator] peer`: the second CPU's mailbox (window, image stream, doorbell, IRQ4).
-        if device.peer.is_some() {
+        if let Some(model) = device.peer {
             board
-                .enable_peer()
+                .enable_peer(model == device_profile::PeerModel::Coldfire)
                 .map_err(|e| format!("peer window: {e:?}"))?;
         }
         map_image(&mut board, &main);
@@ -813,6 +856,12 @@ impl Emulator {
             ram_clear_fast_forwarded_instructions: 0,
             flash_hle_calls: 0,
             dspi2_capture: None,
+            peer_cpu: (device.peer == Some(device_profile::PeerModel::Coldfire))
+                .then(|| Box::new(machine::peer_cpu::PeerCpu::new())),
+            peer_started: false,
+            peer_clock: 0,
+            peer_pin_edges: 0,
+            peer_wall_ns: 0,
             #[cfg(feature = "cf-profile")]
             prof: Default::default(),
         };
@@ -832,6 +881,9 @@ impl Emulator {
         self.learn_count_spin();
         let mut iterations = 0;
         while iterations < budget && self.error.is_none() {
+            if self.peer_cpu.is_some() {
+                self.run_peer();
+            }
             if ACCELERATE_RAM_CLEAR
                 && self
                     .ram_clear
@@ -853,7 +905,11 @@ impl Emulator {
             }
             #[cfg(feature = "cf-profile")]
             let t0 = crate::cputime::thread_cpu_ns();
-            let fast = self.run_fast(budget - iterations);
+            let fast = self.run_fast(if self.peer_cpu.is_some() {
+                (budget - iterations).min(PEER_SLICE as u32)
+            } else {
+                budget - iterations
+            });
             if fast != 0 {
                 #[cfg(feature = "cf-profile")]
                 self.prof
@@ -963,7 +1019,144 @@ impl Emulator {
                 .collect(),
             doorbell_edges: peer.doorbell_edges,
             irq4_delivered: peer.irq4_delivered,
+            frames_delivered: peer.frames_delivered,
+            cpu: self
+                .peer_cpu
+                .as_ref()
+                .filter(|_| self.peer_started)
+                .map(|p| PeerCpuReport {
+                    icount: p.cpu.icount,
+                    pc: p.cpu.pc,
+                    frames_raised: p.frames_raised,
+                    frames_taken: p.frames_taken,
+                    isr_instructions: p.isr_instructions,
+                    isr_max: p.isr_max,
+                    pin_edges: self.peer_pin_edges,
+                    dma_bytes: p.mem.dma_bytes,
+                    faults: p.mem.faults.len(),
+                    wall_ns: self.peer_wall_ns,
+                    isr_profile: p
+                        .isr_profile
+                        .as_ref()
+                        .map(|h| {
+                            let mut v: Vec<_> = h.iter().collect();
+                            v.sort_by_key(|(_, n)| std::cmp::Reverse(**n));
+                            v.iter()
+                                .take(10)
+                                .map(|(a, n)| format!("{a:#x} {n}"))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    first_faults: p
+                        .mem
+                        .faults
+                        .iter()
+                        .take(6)
+                        .map(|f| {
+                            format!(
+                                "{:#x} {:#x}/{} {} {:#x}",
+                                f.pc,
+                                f.addr,
+                                f.size,
+                                if f.write { 'W' } else { 'R' },
+                                f.value
+                            )
+                        })
+                        .collect(),
+                }),
         })
+    }
+
+    /// The peer CPU's private state, for tools (`panel_drive`'s `peerwin`).
+    pub fn peer_cpu(&self) -> Option<&machine::peer_cpu::PeerCpu> {
+        self.peer_cpu.as_deref().filter(|_| self.peer_started)
+    }
+
+    /// Bytes of the peer CPU's private memory (SDRAM or SRAM), for tools.
+    pub fn peer_private(&self, addr: u32, len: usize) -> Option<Vec<u8>> {
+        let p = self.peer_cpu()?;
+        if addr >= 0xEC00_0000 {
+            return Some(p.mem.io_peek(addr, len));
+        }
+        let (base, mem) = if addr >= machine::peer_cpu::SRAM_BASE {
+            (machine::peer_cpu::SRAM_BASE, p.mem.sram())
+        } else {
+            (machine::peer_cpu::SDRAM_BASE, p.mem.sdram())
+        };
+        let o = addr.checked_sub(base)? as usize;
+        mem.get(o..o + len).map(<[u8]>::to_vec)
+    }
+
+    /// The window as the board holds it (bytes at `offset`).
+    pub fn peer_window(&self, offset: u32, len: u32) -> Vec<u8> {
+        (0..len)
+            .map(|i| self.bus.board.peer_window_load(offset + i, 1).unwrap_or(0) as u8)
+            .collect()
+    }
+
+    /// Runs the peer CPU up to MAIN's current tick: first the doorbell edges MAIN made (the first one after the program arrived is what the
+    /// stage-1 loader waits for; later ones are DTIM0 capture events, the frame tick), then the instructions MAIN ran since the last slice.
+    /// The peer's output pin changes become IRQ4 for MAIN.
+    fn run_peer(&mut self) {
+        let Some(peer) = self.peer_cpu.as_mut() else {
+            return;
+        };
+        let Ok(now) = self
+            .cpu
+            .icount
+            .checked_add(self.softfloat.counts.calls())
+            .ok_or(())
+        else {
+            return;
+        };
+        let board = &mut self.bus.board;
+        if let Some(m) = board.peer_mut() {
+            m.frame_source(now);
+        }
+        if !board.peer().is_some_and(|m| m.has_edges())
+            && now.saturating_sub(self.peer_clock) < PEER_SLICE
+        {
+            return;
+        }
+        let edges = board.peer_mut().map_or(0, |m| m.take_edges());
+        for _ in 0..edges {
+            if self.peer_started {
+                peer.frame_tick(board);
+            } else if let Some(program) = board.peer().and_then(|m| m.program()) {
+                peer.start(program);
+                self.peer_started = true;
+                self.peer_clock = now;
+                // MAIN's frame handler now forces vector 191 (the engine tick) and nothing else delivers it.
+                if let Some(time) = board.time_mut() {
+                    time.set_forced_191(true);
+                }
+            }
+        }
+        if !self.peer_started {
+            self.peer_clock = now;
+            return;
+        }
+        let n = now.saturating_sub(self.peer_clock);
+        self.peer_clock = now;
+        #[cfg(not(target_arch = "wasm32"))]
+        let started = std::time::Instant::now();
+        let ran = if n != 0 { peer.run(board, n) } else { Ok(()) };
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.peer_wall_ns += started.elapsed().as_nanos() as u64;
+        }
+        if let Err(stop) = ran {
+            let pc = peer.cpu.pc;
+            self.set_error(format!("PeerCpuStopped({stop:?}, pc={pc:#x})"));
+            return;
+        }
+        let edges = peer.mem.take_pin_edges();
+        self.peer_pin_edges += u64::from(edges);
+        for _ in 0..edges {
+            if let Some(m) = board.peer_mut() {
+                m.peer_pin_edge(self.bus.current_icount);
+            }
+        }
     }
 
     /// Export observations without stepping, reading guest memory, or consuming a frame.

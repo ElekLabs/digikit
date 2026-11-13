@@ -103,6 +103,9 @@ pub struct Time {
     /// `DIGI_INTC_FORCE=0` turns it off at construction for A/B; on wasm32 it
     /// is always on. `restore_timer_component` does not touch it.
     force_irq: bool,
+    /// Deliver the guest-forced INTC1 source 63 (vector 191) here too. Off while the SSI model delivers it; on for a board without SSI
+    /// pacing, where the audio frame handler forces it to run the engine tick (finding 128).
+    forced_191: bool,
 }
 
 impl Time {
@@ -138,6 +141,7 @@ impl Time {
             service_not_before: None,
             blocked: None,
             force_irq: Self::default_force_irq(),
+            forced_191: false,
         }
     }
 
@@ -152,6 +156,13 @@ impl Time {
         }
     }
 
+    /// Deliver a guest-forced vector 191 (see `forced_191`).
+    pub fn set_forced_191(&mut self, on: bool) {
+        self.forced_191 = on;
+        self.service_not_before = None;
+        self.blocked = None;
+    }
+
     /// Software-forced INTC delivery (see `force_irq`).
     pub fn set_force_irq(&mut self, on: bool) {
         self.force_irq = on;
@@ -161,7 +172,8 @@ impl Time {
 
     fn forced_candidate(&self) -> Option<(u16, u8)> {
         if self.force_irq {
-            self.intc.forced_candidate(SSI_VECTOR191)
+            self.intc
+                .forced_candidate(if self.forced_191 { 0 } else { SSI_VECTOR191 })
         } else {
             None
         }
