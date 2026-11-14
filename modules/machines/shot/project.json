@@ -16,6 +16,12 @@
         "dksampleWasm": true
       },
       {
+        "files": ["tests/shot-dn2-link.device.test.ts"],
+        "modules": ["digikit/shot", "digikit/debug", "test/track-select", "test/dyn-fx-gain"],
+        "plusdrive": true,
+        "dksampleWasm": true
+      },
+      {
         "files": ["tests/shot-dn2-lease.device.test.ts"],
         "modules": ["digikit/shot", "digikit/debug", "test/track-select"],
         "plusdrive": true,
