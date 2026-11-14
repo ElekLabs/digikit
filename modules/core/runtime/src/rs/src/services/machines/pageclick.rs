@@ -12,7 +12,9 @@
 //!
 //! Without any action or native page, the hooks return after their armed checks.
 use crate::paramapi::{self, Ctx, Held};
-use crate::registry;
+use crate::core_api::CoreApi;
+#[cfg(not(test))]
+use crate::core_api::REAL_CORE;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::limits;
 
@@ -191,7 +193,7 @@ unsafe fn click(view: *const u8, enc: u32) {
     let vt = word(view, 0) as *const u8;
     let code_of: unsafe extern "C" fn(*const u8, u32) -> i32 = core::mem::transmute(word(vt, 4 * VT_PARAM_CODE) as usize);
     let code = code_of(view, enc);
-    let first = registry::param_first();
+    let first = REAL_CORE.param_first();
     let track = || dkfw::page::view_track(word(view, VIEW_TRACK_REF) as *const u8);
     if let Some((callback, track)) = resolve(&*addr_of!(ACTIONS), first, code, track) {
         *addr_of_mut!(PENDING) = Pending { callback, track, view: view as usize, code: code as u32 };
@@ -207,6 +209,11 @@ pub fn context(p: &Pending, owners: &[u8], first: u32) -> Option<Ctx> {
     }
 }
 
+/// The context of the queued click: the owner is read from the core's parameter rows.
+pub fn click_context<C: CoreApi>(c: &C, p: &Pending) -> Option<Ctx> {
+    context(p, c.param_owners(), c.param_first())
+}
+
 /// The UI loop pass: run the queued action (`void fn(u32 track)`). `param_get` and `param_set` serve the clicked view from here until the page
 /// gets input again, so the list the action opens can set the value when the user picks.
 #[cfg(not(test))]
@@ -214,10 +221,9 @@ pub unsafe fn tick() {
     let p = *addr_of!(PENDING);
     if p.callback != 0 {
         *addr_of_mut!(PENDING) = NO_CLICK;
-        let owners = &(*addr_of!(registry::DKRT_REG)).param_owner;
-        let Some(ctx) = context(&p, owners, registry::param_first()) else { return };
+        let Some(ctx) = click_context(&REAL_CORE, &p) else { return };
         (*addr_of_mut!(HELD)).begin(ctx);
-        let (with_arg, arg) = (*addr_of!(ARGS))[(p.code.wrapping_sub(registry::param_first())) as usize % limits::PARAM_ROWS];
+        let (with_arg, arg) = (*addr_of!(ARGS))[(p.code.wrapping_sub(REAL_CORE.param_first())) as usize % limits::PARAM_ROWS];
         if with_arg {
             let call: unsafe extern "C" fn(u32, u32) = core::mem::transmute(p.callback as usize);
             call(arg, p.track);
@@ -281,15 +287,13 @@ impl paramapi::Fw for PageFw {
 /// `dk_param_get`.
 #[cfg(not(test))]
 pub unsafe fn param_get(track: u32, word: u32) -> i32 {
-    let owners = &(*addr_of!(registry::DKRT_REG)).param_owner;
-    paramapi::get(&PageFw, (*addr_of!(HELD)).ctx(), owners, registry::param_first(), track, word)
+    paramapi::get(&PageFw, (*addr_of!(HELD)).ctx(), REAL_CORE.param_owners(), REAL_CORE.param_first(), track, word)
 }
 
 /// `dk_param_set`.
 #[cfg(not(test))]
 pub unsafe fn param_set(track: u32, word: u32, raw: i32) -> i32 {
-    let owners = &(*addr_of!(registry::DKRT_REG)).param_owner;
-    paramapi::set(&PageFw, (*addr_of!(HELD)).ctx(), owners, registry::param_first(), track, word, raw)
+    paramapi::set(&PageFw, (*addr_of!(HELD)).ctx(), REAL_CORE.param_owners(), REAL_CORE.param_first(), track, word, raw)
 }
 
 // Host tests exercise the parameter rules through paramapi::Fw, never firmware pointers.
@@ -306,6 +310,8 @@ pub unsafe fn param_set(_: u32, _: u32, _: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::core_api::FakeCore;
 
     const V: usize = 0x1000;
     const PRESS: u32 = F_PRESS;
@@ -456,5 +462,20 @@ mod tests {
         assert_eq!(context(&p, &owners, 100), None, "free row");
         assert_eq!(context(&Pending { code: 50, ..p }, &owners, 100), None, "a stock code");
         assert_eq!(context(&Pending { code: 200, ..p }, &owners, 100), None, "past the table");
+    }
+
+    #[test]
+    fn a_click_reads_the_parameter_rows_through_the_core() {
+        let mut core = FakeCore::new();
+        core.first = 200;
+        core.owners = std::vec![0, 0, 3, 0];
+        let p = |code| Pending { callback: 1, track: 5, view: V, code };
+        // row 2 (code 202) belongs to module record 2 (owner 3)
+        assert_eq!(click_context(&core, &p(202)), Some(Ctx { view: V, track: 5, owner: 3 }));
+        // a free row, a code below the first row and a code past the table have no context
+        assert_eq!(click_context(&core, &p(201)), None);
+        assert_eq!(click_context(&core, &p(199)), None);
+        assert_eq!(click_context(&core, &p(204)), None);
+        assert!(core.calls().is_empty(), "reading rows writes nothing");
     }
 }
