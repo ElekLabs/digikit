@@ -5,6 +5,7 @@ import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { runtimeTests } from '../runtime/ready.ts';
 import { CMD_RESET, CMD_STATUS, installProbe, PROBE, readRing, status } from '../runtime/probe-kit.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /** The probe stream (tools/device/dkprobe_seq.py): frames of a header word (0xB0, payload size, frame number), 4 records of 3 words and a checksum. A run is a header record (run counter, item count, table checksum), a record of the start state and one record per item (result, ASTAT, STKY). */
 const FRAME_MAGIC = 0xb0;
@@ -70,24 +71,24 @@ async function expectSeedTables(patched: PatchedSession): Promise<void> {
   await installProbe(patched, PROBE);
   expect((await dk.request(CMD_RESET)).status).toBe(0);
   let last: Record<string, number> = {};
-  await expect
-    .poll(
-      async () => {
-        last = status((await dk.request(CMD_STATUS)).body);
-        return last.words! >= last.cap!;
-      },
-      { timeout: 300_000, interval: 2000, message: 'a full ring (one run and a margin)' },
-    )
-    .toBe(true);
-  await expect
-    .poll(
-      async () => {
-        last = status((await dk.request(CMD_STATUS)).body);
-        return last.parsed! >= last.words! - (PAYLOAD_WORDS + 2);
-      },
-      { timeout: 60_000, interval: 1000 },
-    )
-    .toBe(true);
+  await expectPollEmulated(
+    session,
+    async () => {
+      last = status((await dk.request(CMD_STATUS)).body);
+      return last.words! >= last.cap!;
+    },
+    (value) => expect(value).toBe(true),
+    { emulatedMs: 300000, intervalMs: 2000, message: 'a full ring (one run and a margin)' },
+  );
+  await expectPollEmulated(
+    session,
+    async () => {
+      last = status((await dk.request(CMD_STATUS)).body);
+      return last.parsed! >= last.words! - (PAYLOAD_WORDS + 2);
+    },
+    (value) => expect(value).toBe(true),
+    { emulatedMs: 60000, intervalMs: 1000 },
+  );
   expect(last.seq_errors, `sequence errors: ${JSON.stringify(last)}`).toBe(0);
   const words = await readRing(dk, last.words!);
   const items = probeItems(words, fixture.rows.length);
@@ -115,7 +116,6 @@ async function expectSeedTables(patched: PatchedSession): Promise<void> {
 
 runtimeTests('RECIPS and RSQRTS give the measured result and flags for every probe item', expectSeedTables, {
   dsp: 'sharc',
-  timeout: 600_000,
 });
 
 /** The value items of the dsp-facts probe (tests/fixtures/modules/dsp-facts) that the Digitakt II measured (tests/fixtures/sharc/dsp-facts-values-dt2-1.17.json): FIX, float ALU edge cases, fixed-point overflow with and without ALUSAT, the
@@ -132,15 +132,15 @@ async function expectFactsValues(patched: PatchedSession): Promise<void> {
   expect((await dk.request(CMD_RESET)).status).toBe(0);
   let last: Record<string, number> = {};
   const want = Math.min(3 * FACTS_WORDS_PER_RUN, 1200);
-  await expect
-    .poll(
-      async () => {
-        last = status((await dk.request(CMD_STATUS)).body);
-        return last.words! >= want && last.parsed! >= last.words! - (PAYLOAD_WORDS + 2);
-      },
-      { timeout: 300_000, interval: 2000, message: 'three runs of the facts stream' },
-    )
-    .toBe(true);
+  await expectPollEmulated(
+    session,
+    async () => {
+      last = status((await dk.request(CMD_STATUS)).body);
+      return last.words! >= want && last.parsed! >= last.words! - (PAYLOAD_WORDS + 2);
+    },
+    (value) => expect(value).toBe(true),
+    { emulatedMs: 300000, intervalMs: 2000, message: 'three runs of the facts stream' },
+  );
   expect(last.seq_errors, `sequence errors: ${JSON.stringify(last)}`).toBe(0);
   const words = await readRing(dk, Math.min(last.words!, last.cap!));
   const items = probeItems(words, fixture.items);
@@ -166,5 +166,5 @@ async function expectFactsValues(patched: PatchedSession): Promise<void> {
 runtimeTests(
   'the instruction facts of the Digitakt II hold for every value item of the dsp-facts probe',
   expectFactsValues,
-  { dsp: 'sharc', timeout: 600_000 },
+  { dsp: 'sharc' },
 );

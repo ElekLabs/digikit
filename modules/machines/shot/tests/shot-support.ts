@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
-import { button } from '@digi/test-support';
+import { button, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { record } from '@digi/regression/runtime/artifacts.ts';
 import { memory, panel } from '@digi/regression/runtime/panel.ts';
 import { listenEvents, remoteTurnTaken } from '@digi/regression/runtime/events.ts';
-import { waitEmulated } from '@digi/regression/runtime/waits.ts';
+import { waitEmulated, expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 // Helpers of the SHOT device tests (shot-dn2): WAV fixtures, the sample pool requests of test/track-select, PCM capture with the
 // key held and the tone measurements on it. shot-dt2.device.test.ts has its own copies of the same code (it passed before they were split out).
@@ -339,12 +339,15 @@ export async function trackRecord(session: PatchedSession['session'], recordsSym
   };
 }
 
+/** The PCM clock of a capture (stereo frames since it began), with the session it reads. */
+export type PcmClock = (() => Promise<number>) & { session: Session };
+
 /** A note on TRIG 1 held while `during` runs; returns the captured PCM. The clock counts stereo frames since the capture began
  * (pcm.tap reports floats, two per frame). */
 export async function captureNote(
   { session }: Pick<PatchedSession, 'session'>,
   file: string,
-  during: (clock: () => Promise<number>) => Promise<void>,
+  during: (clock: PcmClock) => Promise<void>,
 ): Promise<Capture> {
   const tapReport = async () =>
     (await session.client.call('pcm.tap', { action: 'report' })) as { samples: number; window_rms: number[] };
@@ -352,19 +355,14 @@ export async function captureNote(
   await session.client.call('pcm.tap', { action: 'start' });
   await session.client.call('pcm.tap', { action: 'capture', path: file });
   const base = await floats();
-  const clock = async () => Math.floor(((await floats()) - base) / 2);
+  const clock: PcmClock = Object.assign(async () => Math.floor(((await floats()) - base) / 2), { session });
   let pressedAt = 0;
   try {
     // A one-shot keeps sounding after the key is released: wait until the output has been silent for 0.3 s, then press.
-    await expect
-      .poll(
-        async () => {
+    await expectPollEmulated(session, async () => {
           const windows = (await tapReport()).window_rms;
           return windows.length >= 3 && windows.slice(-3).every((v) => v < 1e-4);
-        },
-        { timeout: 180_000, interval: 200 }, // wall time only guards a hang: a Delay tail needs about 7 emulated seconds, which take longer on a busy host
-      )
-      .toBe(true);
+        }, (value) => expect(value).toBe(true), { emulatedMs: 180000, intervalMs: 200 });
     pressedAt = await clock();
     await session.client.inputButton(button('TRIG 1'), true);
     try {
@@ -382,6 +380,9 @@ export async function captureNote(
   return { ...capture, pressedAt };
 }
 
-export async function until(clock: () => Promise<number>, frames: number, timeoutMs = 120_000): Promise<void> {
-  await expect.poll(clock, { timeout: timeoutMs, interval: 100 }).toBeGreaterThanOrEqual(frames);
+export async function until(clock: PcmClock, frames: number, emulatedMs = 120_000): Promise<void> {
+  await expectPollEmulated(clock.session, clock, (value) => expect(value).toBeGreaterThanOrEqual(frames), {
+    emulatedMs,
+    intervalMs: 100,
+  });
 }
