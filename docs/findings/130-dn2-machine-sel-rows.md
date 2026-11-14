@@ -51,6 +51,13 @@ In C (Ghidra, `0x4005b9e8`): with the view's mode word `+0x1a8` = 0, the value u
 So choosing the machine a track already has commits nothing. A module cannot use "the user picked my machine again" as a signal
 to open its own chooser.
 
+## Keys
+
+**[D]** The view's key handler is `0x4005b9e8`. By key code (`0x401162f8(event)`): `0x0c` NO closes the view (vtable `+0x28`);
+`0x0b` and `0x0e` are UP and DOWN; `0x0d` and `0x0f` are LEFT and RIGHT; `0x0a` and `0x31` run the YES path above; codes 1 to 6
+(the page keys) close the view. Everything else goes to the base handler `0x4011c954`. NO has no other use in this view, so a
+sub-list can take "NO goes up one level" without displacing anything.
+
 ## Two pages: SYN and FLTR
 
 **[D] static, [V] run.** The view has two lists and a page word at `+0x1a8`: 0 is the machine list (rows at `+0x184`, the page
@@ -58,7 +65,9 @@ drawn as `< SYN >`), 1 is the filter type list (rows at `+0x190`, drawn as `< FL
 COMB+, EQUALIZER). LEFT and RIGHT switch the page (`0x4005ba8a`-`0x4005ba9c`). Every function of the view branches on the word:
 the row count (`0x4005a92c`), the value under the cursor (`0x4005b162`), the draw (`0x4005b7d4`: the page's bitmap, its label,
 its list and two page dots, the current one larger), and YES, which on page 1 compares with `+0x1a0` and commits with
-`0x40031a56(model, track, value, 1, 1)`. The cursor row `+0x1a4` is kept when the page changes.
+`0x40031a56(model, track, value, 1, 1)`. On a page change the cursor row `+0x1a4` is set from the new page's marker *value*
+(`+0x19c` or `+0x1a0`, at `0x4005baa8` and `0x4005bab6`), used as a row number. That is the marked row only where value and row
+agree: with FM DRUM marked (type 2, second row), LEFT from FLTR puts the cursor on the third row (WAVETONE).
 
 So the stock view already shows several lists as pages of one view. A group of run-time machines could be a third page
 (its own label and dot), with the machine page's code path: the smallest "folder" this view can show.
@@ -74,8 +83,8 @@ So the stock view already shows several lists as pages of one view. A group of r
 - YES on the marked machine closes the view; the track keeps FM TONE.
 - After DOWN to FM DRUM, YES commits it: the dot moves to FM DRUM and the view stays open. A second YES closes it, and the
   track shows FM DRUM's page.
-- RIGHT shows `< FLTR >` with the six filter types and the second dot larger; LEFT returns to `< SYN >`; the cursor keeps
-  its row across the switch.
+- RIGHT shows `< FLTR >` with the six filter types and the second dot larger; LEFT returns to `< SYN >`. With FM DRUM
+  marked, the cursor came back on WAVETONE (the marker value 2 used as a row number, above).
 
 ## What it means for more run-time machines
 
