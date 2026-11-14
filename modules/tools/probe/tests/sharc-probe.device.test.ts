@@ -2,6 +2,7 @@ import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { CMD_RESET, CMD_STATUS, installProbe, PROBE, readRing, status } from '@digi/regression/runtime/probe-kit.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /** A run is 1674 frames and takes about 33 s of emulated time; the test checks this many frames from the start of the capture, not a whole run. */
 const FRAMES = 60;
@@ -12,17 +13,12 @@ async function expectProbeTransport(patched: PatchedSession): Promise<void> {
   expect((await dk.request(CMD_RESET)).status).toBe(0);
   // the effect starts a few thousand blocks after the boot; the collector then fills its ring
   let last: Record<string, number> = {};
-  await expect
-    .poll(
-      async () => {
+  await expectPollEmulated(session, async () => {
         const reply = await dk.request(CMD_STATUS);
         expect(reply.status, 'STATUS answers').toBe(0);
         last = status(reply.body);
         return last.frames_ok;
-      },
-      { timeout: 300_000, interval: 2000, message: `${FRAMES} frames` },
-    )
-    .toBeGreaterThanOrEqual(FRAMES);
+      }, (value) => expect(value).toBeGreaterThanOrEqual(FRAMES), { emulatedMs: 300000, intervalMs: 2000, message: `${FRAMES} frames` });
   expect(last.seq_errors, `sequence errors: ${JSON.stringify(last)}`).toBe(0);
   expect(last.cks_errors, `checksum errors: ${JSON.stringify(last)}`).toBe(0);
   expect(last.drops, `records the callback missed: ${JSON.stringify(last)}`).toBe(0);
@@ -57,15 +53,10 @@ async function expectBeaconWords(patched: PatchedSession): Promise<void> {
   expect((await dk.request(CMD_RESET)).status).toBe(0);
   const WORDS = 400;
   let last: Record<string, number> = {};
-  await expect
-    .poll(
-      async () => {
+  await expectPollEmulated(session, async () => {
         last = status((await dk.request(CMD_STATUS)).body);
         return last.words;
-      },
-      { timeout: 120_000, interval: 2000, message: 'beacon words' },
-    )
-    .toBeGreaterThanOrEqual(WORDS);
+      }, (value) => expect(value).toBeGreaterThanOrEqual(WORDS), { emulatedMs: 120000, intervalMs: 2000, message: 'beacon words' });
   expect(last.drops, `records the callback missed: ${JSON.stringify(last)}`).toBe(0);
   const words = await readRing(dk, WORDS);
   expect(words.length).toBe(WORDS);

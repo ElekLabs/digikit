@@ -199,6 +199,39 @@ export async function pollEmulated<T>(
   }
 }
 
+/**
+ * `expect.poll` in emulated time: retry `read` (a failing read counts as a miss) until `assertion(value)` stops throwing, and fail with `message`
+ * and the last assertion error after `emulatedMs` of emulated time. Replaces `expect.poll(read, { timeout })`, whose wall limit a loaded host cuts.
+ */
+export async function expectPollEmulated<T>(
+  session: Pick<Session, 'status'>,
+  read: () => Promise<T>,
+  assertion: (value: T) => void,
+  {
+    emulatedMs = 30_000,
+    message = 'poll',
+    intervalMs = 200,
+  }: { emulatedMs?: number; message?: string; intervalMs?: number } = {},
+): Promise<T> {
+  let miss: unknown;
+  return pollEmulated(
+    session,
+    async () => {
+      const value = await read();
+      try {
+        assertion(value);
+        miss = undefined;
+      } catch (error) {
+        miss = error;
+        throw error;
+      }
+      return value;
+    },
+    () => true,
+    { emulatedMs, message, intervalMs, retry: true },
+  );
+}
+
 const bootClocks = new WeakMap<object, Pick<Session, 'status'>>();
 
 /** Tie a DkSession to the emulator session it talks to, so `waitForBootEmulated` can count emulated time. */
