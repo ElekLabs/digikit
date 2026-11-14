@@ -24,7 +24,6 @@ coldfire = { path = "../emulator/coldfire" }
 dkaddrmap = { path = "../dkaddrmap" }
 dksharc = { path = "../dksharc" }
 dkneeds = { path = "../dkneeds" }
-dkprof = { path = "../dkprof" }
 dkupload = { path = "../dkupload" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -52,6 +51,8 @@ dkrt-fit = { path = "../../modules/core/runtime/fit" }
 midir = "0.11"
 plusdrive-format = { path = "../emulator/plusdrive" }
 emmc-card = { path = "../emulator/card" }
+# `patchkit budget` reads the rule of dkprof; dkprof has its own wasm, so patchkit.wasm leaves it out and stays small.
+dkprof = { path = "../dkprof" }
 
 [dev-dependencies]
 machine = { path = "../emulator/machine" }
