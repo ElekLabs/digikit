@@ -3,7 +3,7 @@
 //! The firmware's default exception handler loads a function pointer from a RAM word (anchor `cf.rtos.site.exc_hook_lit` is the 4-byte literal of
 //! that load) and calls it with the stack pointer, which points at the hardware exception frame; the firmware's own function there prints
 //! `EXCEPTION ...` and executes `halt`, so a fault hangs the device until the power is cycled (finding 37). The runtime points the word at
-//! `dkrt_exc_hook` (src/cf/tramp.s: it saves d2-d7 and a2-a6, which are still the faulting code's, and calls `dkrt_exc`). `dkrt_exc` writes
+//! `dkrt_exc_hook` (core/platform, src/cf/platform.s: it saves d2-d7 and a2-a6, which are still the faulting code's, and calls `dkrt_exc`). `dkrt_exc` writes
 //! a crash record into the keep area (`KEEP_BASE`, above `cf.expansion`, which neither the firmware nor the boot code writes), flushes it to RAM
 //! and soft-resets, the way `dkrt_restart` does, instead of halting.
 //!
@@ -63,11 +63,6 @@ const W_HNAME: usize = W_HDIAG + dkrt_sdk::fault::DIAG_WORDS; // 4 words: the mo
 const W_CRC: usize = W_HNAME + 4;
 const REC_WORDS: usize = W_CRC + 1;
 
-extern "C" {
-    /// `src/cf/tramp.s`.
-    fn dkrt_exc_hook();
-}
-
 fn rec() -> *mut u32 {
     KEEP_BASE as usize as *mut u32
 }
@@ -87,7 +82,7 @@ pub struct CrashSeen {
     pub stable: u32,
     /// The probe word of the boot before was in RAM.
     pub ram_kept: u32,
-    /// The hook word has been pointed at `dkrt_exc_hook` (1) / the anchor did not lead to a RAM word (0).
+    /// The hook word has been pointed at `dkrt_exc_hook` of core/platform (1) / the anchor did not lead to a RAM word (0).
     pub installed: u32,
     /// A record was there but failed its CRC.
     pub bad: u32,
@@ -105,34 +100,17 @@ pub fn seen() -> &'static CrashSeen {
     unsafe { &*addr_of!(DKRT_CRASH) }
 }
 
-/// The address of the hook word the anchor's literal holds, when it lies in DDR and is word aligned.
-unsafe fn hook_word() -> Option<*mut u32> {
-    // `EXC_HOOK_LIT`: the 4-byte literal in the firmware's default exception handler whose value is the address of the hook word.
-    let lit = core::hint::black_box(crate::platform::exc_hook_literal()) as u32;
-    if lit == 0 {
-        return None;
-    }
-    let a = read_volatile(lit as *const u32);
-    if !(DDR_CACHED_BASE..DDR_CACHED_BASE + DDR_BYTES).contains(&a) || a & 3 != 0 {
-        return None;
-    }
-    Some(a as usize as *mut u32)
-}
-
-/// Point the firmware's exception hook word at `dkrt_exc_hook`. Called every UI pass: the firmware sets the word in its own boot, so the first
+/// Point the firmware's exception hook word at the platform adapter's `dkrt_exc_hook`. Called every UI pass: the firmware sets the word in its own boot, so the first
 /// call must come after that, and a second setting would be caught by the next pass.
 pub unsafe fn install() {
-    let Some(w) = hook_word() else { return };
-    let ours = core::hint::black_box(dkrt_exc_hook as usize) as u32;
-    if read_volatile(w) != ours {
-        write_volatile(w, ours);
+    if PLATFORM.install_exception_hook() {
         (*addr_of_mut!(DKRT_CRASH)).installed = 1;
     }
 }
 
 static mut IN_EXC: u32 = 0;
 
-/// The exception handler proper (from `dkrt_exc_hook`): `frame` is the hardware exception frame (format/vector/status word, then the PC); the
+/// The exception handler proper (from `dkrt_exc_hook` of core/platform): `frame` is the hardware exception frame (format/vector/status word, then the PC); the
 /// four words below it are d0, d1, a0, a1 as the firmware's default handler saved them; `saved` points at d2-d7, a2-a6 as saved by the hook.
 /// Never returns.
 #[no_mangle]

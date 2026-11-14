@@ -32,6 +32,12 @@ extern "C" {
     fn dkrt_soft_reset() -> !;
 }
 
+#[cfg(not(test))]
+extern "C" {
+    /// core/platform (`src/cf/platform.s`): point the firmware's exception hook word at the adapter's trampoline; 1 when it changed the word.
+    fn dkplat_exc_install() -> u32;
+}
+
 // Presence checks of the optional adapters: only the addresses and the version call (the calls themselves stay with their users, with their own types).
 #[allow(clashing_extern_declarations)]
 extern "C" {
@@ -218,6 +224,14 @@ impl Platform for RealPlatform {
         let _ = dkrt_soft_reset as unsafe extern "C" fn() -> !;
         panic!("soft reset")
     }
+    #[cfg(not(test))]
+    fn install_exception_hook(&self) -> bool {
+        unsafe { dkplat_exc_install() != 0 }
+    }
+    #[cfg(test)]
+    fn install_exception_hook(&self) -> bool {
+        false
+    }
 }
 
 impl Tasking for RealPlatform {
@@ -299,11 +313,6 @@ impl StagedWriter for RealPlatform {
 /// The address of the firmware's pointer to the intro's current entry (`INTRO_ENTRY`), a firmware object the intro takes over.
 pub fn intro_entry_addr() -> *mut u32 {
     addr_of!(dkfw::rtos::INTRO_ENTRY) as *mut u32
-}
-
-/// The address of the 4-byte literal in the firmware's default exception handler whose value is the address of the hook word (`EXC_HOOK_LIT`).
-pub fn exc_hook_literal() -> usize {
-    addr_of!(dkfw::rtos::EXC_HOOK_LIT) as usize
 }
 
 /// Draw the intro frame `src` onto the firmware bitmap `dst` (the firmware's blit).

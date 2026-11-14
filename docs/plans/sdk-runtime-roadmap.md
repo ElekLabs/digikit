@@ -42,7 +42,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | 2 | P4 | Per-module cost, machine budget check, fast-tier refusals per module | P2, P3 | todo | |
 | 2 | S5 | SDK DSP contract: DSP rules, derived cycle cost, `DK_SPAN` | R4, P3, P4 | todo | |
 | 3 | R2 | Runtime deletions and split; sink slots; service anatomy: a service is a module with a role (settled before R7) | S4 | R2a, R2b, R2c, R2d done; R2 done after the gate | |
-| 3 | R3 | R3a Platform trait; R3b adapter move (see runtime-and-services, Platform adapter) | R2 | R3a done (this PR), R3b next; the image changes (two device words), so R3a gates together with R3b | |
+| 3 | R3 | R3a Platform trait; R3b adapter move (see runtime-and-services, Platform adapter) | R2 | R3a and R3b done (this PR); the image changes (two device words, the `core/platform` adapter object), so they gate together | |
 | 3 | R6 | DSP transfer queue; dsp-link windows | R3 | todo | |
 | 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | todo | |
 | 3 | R8 | Spike, whole path | R7 | todo | |

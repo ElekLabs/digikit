@@ -28,7 +28,9 @@ Rules:
             come from the crate dkrt-abi. The core reaches a service only through `handlers.rs` (`Services`, `exports`).
   platform  Inside the runtime crate, only `platform.rs` (the real platform, L1) and an adapter file named `fw.rs` name the firmware crate dkfw; the rest
             of the core and the services use the `Platform` trait (`dkrt-abi`). No runtime file but `platform.rs` compares the device id with a number
-            (`device() == 1`): the code asks the device profile (`samples_in_store()`), whose values come from the device files.
+            (`device() == 1`): the code asks the device profile (`samples_in_store()`), whose values come from the device files. The runtime
+            module patches the firmware only with the machine page hooks (finding 128: runtime-owned, with slots); the UI loop, main-OS task and MIDI
+            receive hooks and the exception hook install are in the adapter `core/platform`.
   imports   Every function of <dk/platform/ui.h> is an `[[import]]` of sdk/sdk.toml with `requires = "core/ui"`, and every import
             with `requires` is in the runtime's `optional` list, so the runtime can link it by name (or hand out its stub).
 
@@ -661,12 +663,32 @@ RT_DEVICE_COMPARE = re.compile(
 )
 
 
+# The firmware hooks that the runtime module still patches in itself: the machine page hooks, which finding 128 keeps runtime-owned (with slots).
+# Every other hook (UI loop, main-OS task entry, MIDI receive) belongs to the platform adapter.
+RT_OWN_HOOKS = {"cf.page.hook.source_key", "cf.page.hook.source_turn"}
+RT_MANIFEST = "modules/core/runtime/module.toml"
+
+
 def check_runtime_platform(root: Path) -> list[Violation]:
-    """The runtime has no firmware calls outside its L1 files (`platform.rs`, an adapter's `fw.rs`) and branches on no device id."""
+    """The runtime has no firmware calls outside its L1 files (`platform.rs`, an adapter's `fw.rs`), branches on no device id and patches only its own hooks."""
     src = root / RT_SRC
     if not src.is_dir():
         return []
     out: list[Violation] = []
+    manifest = root / RT_MANIFEST
+    if manifest.is_file():
+        text = manifest.read_text(encoding="utf-8")
+        for op in tomllib.loads(text).get("op", []):
+            hook = op.get("hook", "")
+            if hook and hook not in RT_OWN_HOOKS:
+                out.append(
+                    Violation(
+                        f"{RT_MANIFEST}:{line_of(text, hook)}",
+                        "platform",
+                        f"the runtime installs the firmware hook {hook} itself",
+                        "put the hook and its trampoline in the platform adapter (modules/core/adapters/platform); the runtime exports the function it calls",
+                    )
+                )
     for f in sorted(src.rglob("*.rs")):
         r = f.relative_to(src)
         l1 = r.name == RT_ADAPTER_FILE or r.as_posix() == RT_PLATFORM_FILE

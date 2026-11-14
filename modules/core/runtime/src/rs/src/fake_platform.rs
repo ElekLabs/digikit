@@ -45,6 +45,8 @@ pub struct FakePlatform {
     pub tx_in_flight: Cell<Option<u32>>,
     pub os_upgrade: Cell<bool>,
     pub reset: Cell<bool>,
+    /// The exception hook word has been pointed at the runtime's hook.
+    pub exc_hook: Cell<bool>,
     /// The `*_info` tables of the adapters, by name.
     pub info: RefCell<BTreeMap<&'static str, Vec<u8>>>,
     pub pool: Cell<bool>,
@@ -75,6 +77,7 @@ impl FakePlatform {
             tx_in_flight: Cell::new(Some(0)),
             os_upgrade: Cell::new(false),
             reset: Cell::new(false),
+            exc_hook: Cell::new(false),
             info: RefCell::new(BTreeMap::new()),
             pool: Cell::new(false),
             staged: Cell::new(false),
@@ -160,6 +163,11 @@ impl Platform for FakePlatform {
     }
     unsafe fn key_down(&self, _key: u32) -> bool {
         false
+    }
+    fn install_exception_hook(&self) -> bool {
+        let first = !self.exc_hook.get();
+        self.exc_hook.set(true);
+        first
     }
     fn soft_reset(&self) -> ! {
         self.reset.set(true);
@@ -418,6 +426,13 @@ fn the_optional_providers_are_absent_until_the_image_has_them() {
 }
 
 #[test]
+fn the_exception_hook_is_installed_once_and_asked_for_again_harmlessly() {
+    let f = FakePlatform::new(profiles::DT2);
+    assert!(f.install_exception_hook(), "the first call changes the word");
+    assert!(!f.install_exception_hook(), "the next passes find it ours");
+}
+
+#[test]
 fn the_kernel_calls_go_to_the_platform() {
     let f = FakePlatform::new(profiles::DT2);
     unsafe {
@@ -500,5 +515,5 @@ fn every_contract_row_names_a_host_test() {
         assert!(get("device").is_some() || get("device_pending").is_some(), "{id}: a device check or a reason");
         assert!(get("what").is_some(), "{id}: says what it checks");
     }
-    assert!(rows >= 9, "the nine checks of the design");
+    assert!(rows >= 10, "the checks of the design and the exception hook");
 }

@@ -111,6 +111,9 @@ pub trait Platform: Tasking + SamplePool + StagedWriter {
     /// Is panel key `key` held?
     unsafe fn key_down(&self, key: u32) -> bool;
     fn soft_reset(&self) -> !;
+    /// Point the firmware's exception handler at the runtime's hook (`dkrt_exc`, through the adapter's trampoline). `true` when this call changed it. The runtime
+    /// asks every UI pass: the firmware sets its own hook word in its boot, so the first successful call comes after that.
+    fn install_exception_hook(&self) -> bool;
 
     // ---- provided: the profile's facts -------------------------------------------------------------------------------------
     fn device_id(&self) -> u32 {

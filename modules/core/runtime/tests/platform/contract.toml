@@ -62,3 +62,9 @@ id = "info_tables"
 what = "every *_info table that is present has its magic and the version the runtime reads"
 host = "the_info_tables_are_bytes_the_fake_hands_out"
 device = "addrmap.device.test.ts"
+
+[[check]]
+id = "exception_hook"
+what = "the firmware's exception handler runs the runtime's hook once it is installed: the hook word is set after the firmware's boot and stays ours"
+host = "the_exception_hook_is_installed_once_and_asked_for_again_harmlessly"
+device = "crash-capture.device.test.ts"
