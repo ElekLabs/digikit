@@ -171,7 +171,7 @@ fn label(s: &DkoSection, content: &HashMap<&str, String>) -> String {
     }
 }
 
-fn load(o: &Dko) -> Result<(Vec<Item>, BTreeSet<String>)> {
+fn load(o: &Dko, pool: bool) -> Result<(Vec<Item>, BTreeSet<String>)> {
     let secs: HashMap<&str, &DkoSection> =
         o.sections.iter().map(|s| (s.name.as_str(), s)).collect();
     // the content of an anonymous section (no relocations: a target label must not depend on other labels)
@@ -207,15 +207,24 @@ fn load(o: &Dko) -> Result<(Vec<Item>, BTreeSet<String>)> {
                 .map(|s| (y.name.as_str(), (s, y.value)))
         })
         .collect();
+    // Pool mode: the compiler merges string literals into blobs whose layout depends on the order of the code, so a relocation into an
+    // anonymous constant has no stable blob or offset (a pointer past the end of a literal may even sit in another blob). The label is
+    // only "pool": the code bytes, the position of every pool reference and all other relocations still have to match.
+    let at_label = |s: &DkoSection, addend: i64| -> String {
+        if pool && class_of(s) == Class::Anon {
+            return "pool".into();
+        }
+        format!("{}{:+}", label(s, &content), addend)
+    };
     let target = |sym: &str, addend: i64| -> String {
         if let Some(sn) = sym.strip_prefix(".sec.") {
             if let Some(s) = secs.get(sn) {
-                return format!("{}{:+}", label(s, &content), addend);
+                return at_label(s, addend);
             }
         }
         if let Some((sn, v)) = defined.get(sym) {
             if let Some(s) = secs.get(sn) {
-                return format!("{}{:+}", label(s, &content), *v as i64 + addend);
+                return at_label(s, *v as i64 + addend);
             }
         }
         format!("{}{:+}", norm_name(sym), addend)
@@ -388,6 +397,11 @@ fn insn_line(i: &Item, at: usize) -> String {
 
 /// Compare two objects.
 pub fn diff(old: &Dko, new: &Dko) -> Result<Report> {
+    diff_with(old, new, false)
+}
+
+/// Compare two objects; `pool` ignores the layout of merged anonymous constants (see `load`) and does not list them.
+pub fn diff_with(old: &Dko, new: &Dko, pool: bool) -> Result<Report> {
     if old.arch != "cf" || new.arch != "cf" {
         return Err(err!(
             "objdiff compares ColdFire objects (got {} and {})",
@@ -395,8 +409,8 @@ pub fn diff(old: &Dko, new: &Dko) -> Result<Report> {
             new.arch
         ));
     }
-    let (a, ae) = load(old)?;
-    let (b, be) = load(new)?;
+    let (a, ae) = load(old, pool)?;
+    let (b, be) = load(new, pool)?;
     let mut rep = Report::default();
     let mut push = |kind: &str, name: String, detail: String| {
         rep.differences.push(Difference {
@@ -445,6 +459,9 @@ pub fn diff(old: &Dko, new: &Dko) -> Result<Report> {
             }
         }
         if k.0 == Class::Anon as u8 {
+            if pool {
+                continue;
+            }
             xs.iter().for_each(|x| flag("only-old", x, &mut push));
             ys.iter().for_each(|y| flag("only-new", y, &mut push));
             continue;
@@ -479,12 +496,15 @@ pub fn diff(old: &Dko, new: &Dko) -> Result<Report> {
 
 /// `patchkit objdiff OLD NEW [--format text|json]`; returns the exit code.
 pub fn run(rest: &[String]) -> Result<i32> {
-    const U: &str = "usage: patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json]";
+    const U: &str = "usage: patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json] [--pool]";
+    let mut pool = false;
     let mut files = vec![];
     let mut format = "text".to_string();
     let mut it = rest.iter();
     while let Some(a) = it.next() {
-        if a == "--format" {
+        if a == "--pool" {
+            pool = true;
+        } else if a == "--format" {
             format = it.next().ok_or_else(|| Error(U.into()))?.clone();
         } else if a.starts_with("--") {
             return Err(Error(U.into()));
@@ -498,7 +518,7 @@ pub fn run(rest: &[String]) -> Result<i32> {
     let read = |f: &str| -> Result<Dko> {
         Ok(Dko::parse(&std::fs::read_to_string(f).map_err(|e| Error(format!("{f}: {e}")))?)?)
     };
-    let rep = diff(&read(&files[0])?, &read(&files[1])?)?;
+    let rep = diff_with(&read(&files[0])?, &read(&files[1])?, pool)?;
     if format == "json" {
         println!("{}", serde_json::to_string_pretty(&rep)?);
     } else {

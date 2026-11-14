@@ -88,7 +88,7 @@ mise run patch:mem -- core/machines test/machine-clone --device dt2 --firmware 1
 
 ### Compare two objects after a move
 
-`patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json]` proves that two ColdFire objects hold the same code when only
+`patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json] [--pool]` proves that two ColdFire objects hold the same code when only
 names, order and addresses differ (the check for moving Rust items between modules of the runtime crate). A byte compare of such
 objects always fails: mangled names contain the module path, functions change order, and relocations name section symbols.
 
@@ -99,6 +99,9 @@ objects always fails: mangled names contain the module path, functions change or
 - Code and data are compared byte by byte with every relocated field masked. A relocation is compared by its normalized target
   plus addend, never by address. The first difference of a function is shown as an instruction with its relocation.
 - Undefined symbols (anchors, `memcpy`) are compared as a set (`extern`).
+- `--pool`: the compiler merges string literals into blobs, and a move changes their layout (`"samples/RET"` becomes `"samples/CALL"`). With
+  `--pool` a relocation into an anonymous constant is compared as "some pooled constant": the code bytes, the position of every such
+  reference and all other relocations must still match, but not the blob, the offset or the content. Anonymous constants are not listed.
 - Exit 0 and `identical: N functions, M data objects`, or exit 1 and the list.
 
 ```text
