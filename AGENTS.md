@@ -81,6 +81,8 @@ Wait without polling. Run a long command with a long tool timeout, up to 2 hours
 
 Iterate with `dk:dev` ([testing](docs/TESTING.md) "Fast iteration"), not with harness runs or fresh boots; run the harness once for the proof. Respect the layers in docs/ARCHITECTURE.md; `mise run check:layers`. Prefer existing tooling and shared helpers over custom runners or wrappers. Use fast unit tests for logic and integration tests for real boundaries. New host/device scenarios use TypeScript/Vitest; analysis, decompilation and devtools use Python. Avoid unrelated refactors.
 
+A PR that adds or changes a tool a developer runs documents its use in the tool's owning doc (commands that work from a clean checkout, expected output) and links it from docs/DEVELOPMENT.md.
+
 Run Python tools from the repository root as `uv run python -m tools.<owner>.<module>`. Import through `tools`; never modify `sys.path`. Child tools use `[sys.executable, "-m", ...]` with `env=tools.python_env()`. Find tasks with `mise tasks` and options with `mise run TASK -- --help`.
 
 Use existing database helpers before one-off queries: `tools/coldfire/cf.py` and `tools/sharc_dev/sharc.py`. Read dumps first. Ghidra uses one JVM per project and language `68000:BE:32:ColdfireEMAC`; check apparent missing callers with `tools/coldfire/refscan.py`.

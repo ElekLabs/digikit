@@ -85,6 +85,45 @@ patchkit addr ... --format text    # "0x401be1be name+0x4" per line
 JSON on stdout: `{"unloaded": [...], "results": [{"cpu", "addr", "name", "text", "layer", "sym_addr", "offset", "size", "module"}]}`. `name` is null
 when no layer holds the address. Python tools do not read maps: `tools/devtools/addrnames.py` (`AddrNames`) runs this command once for a batch.
 
+## Usage
+
+Build patchkit once: `pnpm nx:pilot run patchkit:cli` (writes `dist/patchkit/patchkit`). Commands run from the repository root; the outputs below are trimmed.
+
+Write the map of a module while packing it (the DSP symbols of a machine or effect are in it too):
+
+```sh
+mkdir -p out/try
+dist/patchkit/patchkit --root . pack digikit/pluck -o out/try/pluck.dkm --device dn2 --addrmap out/try/pluck.addrmap.json
+```
+
+Name a ColdFire address and a DSP PC of the module. The load table says where the module sits (`--load ID=BASE`, hex); `--dsp-base ID=PC` is the software PC where
+its DSP image starts:
+
+```sh
+dist/patchkit/patchkit addr --map out/try/pluck.addrmap.json --load digikit/pluck=47e10000 --dsp-base digikit/pluck=b81000 \
+  --format text 0x47e10000 sharc:0xb811e7 sharc:0xb811ea
+# 0x47e10000 init
+# 0xb811e7 _pk_render
+# 0xb811ea _pk_render+0x3
+```
+
+Without `--dsp-base` the DSP address has no name (`0xb811ea ?`). Without `--format text` the output is JSON (see Lookup).
+
+Read the load table of a running emulator or device. This needs the stock firmware in `firmware/`. `patchkit apply --addrmap` writes the ship map, which says what to
+read; patchkit decodes the bytes:
+
+```sh
+dist/patchkit/patchkit --root . apply --firmware firmware/Digitakt_II_OS1.17.syx --set emulator -o out/try/rt.syx --plan out/try/rt.plan.json --addrmap out/try/rt.addrmap.json
+dist/patchkit/patchkit addr --map out/try/rt.addrmap.json --format reads
+# [{"len":456,"symbol":"DKRT_STATE"},{"len":116,"symbol":"DKRT_DSP"},{"len":16,"symbol":"dyndsp_info"}]
+dist/patchkit/patchkit addr --map out/try/rt.addrmap.json --snapshot DKRT_STATE=$(printf '00%.0s' $(seq 456)) --format loads
+# {"modules":[]}
+```
+
+The second command is an all-zero module table: no module loaded. With real bytes, peek each symbol (its address is in `out/try/rt.plan.json`) for the given length and pass it as
+`--snapshot SYMBOL=HEX`; the table lists every module with `base` and `dsp_base`, and the same flags name addresses in the same call. `tools/devtools/cfprof.py` and
+`tools/device/dklog.py` do the peeking for the emulator and the device.
+
 ## Consumers
 
 | Tool | Use |
