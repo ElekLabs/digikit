@@ -32,7 +32,7 @@ vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
   resolveInputs: () => ({ syx: '/stock.syx' }),
 }));
 import { expectRuntimeUi } from '../runtime/ready.ts';
-import { bindBootClock, pollEmulated, waitEmulated, waitForBootEmulated } from '../runtime/waits.ts';
+import { bindBootClock, pollEmulated, waitEmulated, waitForBootEmulated, withEmulatedProbe } from '../runtime/waits.ts';
 import { expectRemoteEnabled, installRemote, prepareRemote, remoteTap, withRemoteRelease } from '../runtime/remote.ts';
 import { prepareRuntimePlanModulesOffline } from '../runtime/runtime-plan-modules.ts';
 import {
@@ -327,16 +327,16 @@ test('a halted DSP does not stop the emulated clock: the ColdFire instruction co
   const sleeps: number[] = [];
   const probeOpts: unknown[] = [];
   const dk = {
-    waitForBoot: async (sleep: (ms: number) => Promise<void>, _t?: number, opts?: { probeTimeoutMs?: number }) => {
-      probeOpts.push(opts?.probeTimeoutMs);
+    waitForBoot: async (sleep: (ms: number) => Promise<void>, _t?: number, opts?: { probe?: unknown }) => {
+      probeOpts.push(typeof opts?.probe);
       for (; waits < 3; waits++) await sleep(1).then(() => sleeps.push(waits));
     },
   };
   bindBootClock(dk, make());
   await expect(waitForBootEmulated(dk)).resolves.toBeUndefined();
   expect(sleeps).toEqual([0, 1, 2]);
-  // a probe is never longer than the quick wait: a long one blocks on a request that the restart lost (see waitForBootEmulated)
-  expect(probeOpts).toEqual([undefined]);
+  // every probe runs under an emulated-time bound (see waitForBootEmulated)
+  expect(probeOpts).toEqual(['function']);
   const late = {
     waitForBoot: async (sleep: (ms: number) => Promise<void>) => {
       for (;;) await sleep(1);
@@ -681,3 +681,23 @@ for (const invalid of [null, 'root', 'artifact'] as const) {
     }
   });
 }
+
+test('an emulated probe ends after its emulated bound, however slow the wall clock is', async () => {
+  // a fake session: every status read is 10 emulated ms (1 320 000 ColdFire instructions) on a clock that ignores the wall
+  let elapsed = 0;
+  const session = {
+    status: vi.fn(async () => ({ mode: 'free', elapsed: (elapsed += 1_320_000) })),
+  } as unknown as Session;
+  // a probe that is never answered: only the signal ends it, after 200 emulated ms (about 20 reads)
+  const lost = await withEmulatedProbe(
+    session,
+    ({ signal }) =>
+      new Promise<string>((done) => signal.addEventListener('abort', () => done('ended'), { once: true })),
+    200,
+  );
+  expect(lost).toBe('ended');
+  expect(session.status).toHaveBeenCalled();
+  // a probe that answers (wall-slow, emulated-fast) is not cut: the bound is emulated time, not the reply's wall time
+  const slow = await withEmulatedProbe(session, async () => 'answer', 60_000);
+  expect(slow).toBe('answer');
+});
