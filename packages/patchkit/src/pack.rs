@@ -49,6 +49,49 @@ pub fn patch_only(m: &Module) -> bool {
         })
 }
 
+/// Pack the modules `ids` for `device` in this process: one library for all of them (objects built when stale), or, when that load
+/// fails (a module's build failed), one library per module so the failure is that module's and the others still pack. Patch-only
+/// modules (`patch_only`) are left out of the result.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn pack_all(
+    root: &std::path::Path,
+    ids: &[String],
+    device: &str,
+) -> Vec<(String, std::result::Result<Packed, String>)> {
+    let source = crate::module::LibrarySource::default();
+    let opts = PackOptions {
+        device: Some(device.into()),
+        ..Default::default()
+    };
+    let pack_in = |lib: &Library, id: &String| {
+        if lib.get(id).is_some_and(patch_only) {
+            return None;
+        }
+        Some((
+            id.clone(),
+            pack_module(lib, id, &opts).map_err(|e| e.to_string()),
+        ))
+    };
+    match crate::module::selected_library(root, &source, false, ids, ids) {
+        Ok(lib) => ids.iter().filter_map(|id| pack_in(&lib, id)).collect(),
+        Err(_) => ids
+            .iter()
+            .filter_map(|id| {
+                match crate::module::selected_library(
+                    root,
+                    &source,
+                    false,
+                    std::slice::from_ref(id),
+                    std::slice::from_ref(id),
+                ) {
+                    Ok(lib) => pack_in(&lib, id),
+                    Err(e) => Some((id.clone(), Err(e.to_string()))),
+                }
+            })
+            .collect(),
+    }
+}
+
 /// Packs the objects of module `id` as they are in memory in `lib`.
 pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
     let m = lib

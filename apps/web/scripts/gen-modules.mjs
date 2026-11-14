@@ -2,8 +2,8 @@
 // texts) from the COMMITTED devices/ports/, modules/ and tests/fixtures/modules/. Never reads out/modules (generated oracles hold firmware
 // words). The bundle equals `tools/patchkit/patchkit.py bundle` (the node test compares them).
 //
-// The objects of content modules (every module but category "core") are build output, not committed: `patchkit build` makes them
-// first (it needs the m68k-elf toolchain; nothing is built when they are current) and they are read from the cache out/cache/dko/<id>/<src12>/ (`patchkit build MODDIR --paths` names the files).
+// The objects of content modules (every module but category "core") are build output, not committed: `patchkit build` (the Rust CLI, run through cargo) makes them
+// first (it needs the m68k-elf toolchain; nothing is built when they are current) and they are read from the cache out/cache/dko/<id>/<src12>/ (`patchkit build MODDIR... --paths` names the files).
 // It also writes what the Transfer page ships (see shipModules): per device the prebuilt .dkm of each run-time content module
 // (public/modules/<dev>/<leaf>.dkm, the bytes the workbench app's `lib_build` writes to out/modules/<dev>/), public/modules/index.json and the sources of the
 // modules (public/modules/src/<id>/: module.toml, README.md, src/**; nothing of build/ or out/).
@@ -47,33 +47,48 @@ const GALLERY = 'build/gen/gallery.json';
  */
 export function buildObjects(dirs, root = repoRoot) {
   if (!dirs.length) return;
-  const env = { ...process.env, PYTHONPATH: root };
-  delete env.PATCHKIT_MODULES; // only the committed roots go into the bundle
   try {
-    execFileSync('python3', ['-m', 'tools.patchkit.patchkit', 'build', ...dirs], {
-      cwd: root,
-      env,
-      encoding: 'utf8',
-      stdio: 'pipe',
-    });
+    patchkit(['build', ...dirs], { root });
   } catch (e) {
     throw new Error(
-      `patchkit build failed (the gallery needs the module objects; toolchain: uv run python -m tools.patchkit.pk_toolchains m68k):\n${e.stderr || e.message}`,
+      `patchkit build failed (the gallery needs the module objects; toolchain: uv run python -m tools.patchkit.pk_toolchains m68k):\n${e.message}`,
     );
   }
 }
 
-/** `patchkit build MODDIR --paths`: the stored file of each object with sources, for the sources now (the cache entry is keyed by them). */
-function cachedPaths(root, dir) {
-  const env = { ...process.env, PYTHONPATH: root };
-  delete env.PATCHKIT_MODULES;
-  const out = execFileSync('python3', ['-m', 'tools.patchkit.patchkit', 'build', dir, '--paths'], {
-    cwd: root,
-    env,
-    encoding: 'utf8',
-    stdio: 'pipe',
-  });
-  return Object.values(JSON.parse(out))[0] ?? {};
+/** Runs the Rust patchkit CLI from the repository `root`; returns stdout, throws an Error with the stderr tail on failure. */
+function patchkit(args, { root = repoRoot } = {}) {
+  const env = { ...process.env };
+  delete env.PATCHKIT_MODULES; // only the committed roots go into the bundle
+  try {
+    return execFileSync(
+      'cargo',
+      ['run', '-q', '--release', '--offline', '-p', 'patchkit', '--', '--root', root, ...args],
+      {
+        cwd: root,
+        env,
+        encoding: 'utf8',
+        stdio: 'pipe',
+        maxBuffer: 256 * 1024 * 1024,
+      },
+    );
+  } catch (e) {
+    const err = new Error(
+      String(e.stderr ?? e.message ?? e)
+        .trim()
+        .split('\n')
+        .slice(-40)
+        .join('\n'),
+    );
+    err.stdout = String(e.stdout ?? '');
+    throw err;
+  }
+}
+
+/** `patchkit build DIR... --paths`: per directory, the stored file of each object with sources, for the sources now (the cache entry is keyed by them). */
+function cachedPaths(root, dirs) {
+  if (!dirs.length) return {};
+  return JSON.parse(patchkit(['build', ...dirs, '--paths'], { root }));
 }
 
 /** The text of an object: in the module for `core/*`, else in the cache (`stored`: the paths of `cachedPaths`). */
@@ -98,14 +113,13 @@ export function buildModuleData(root = repoRoot) {
     return { dir: dirname(file), text, d: parse(text) };
   });
   const built = (d) => d.module.category !== 'core' && (d.object ?? []).some((o) => (o.sources ?? []).length > 0);
-  buildObjects(
-    parsed.filter((m) => built(m.d)).map((m) => m.dir),
-    root,
-  );
+  const builtDirs = parsed.filter((m) => built(m.d)).map((m) => m.dir);
+  buildObjects(builtDirs, root);
+  const storedByDir = cachedPaths(root, builtDirs);
   const modules = [];
   for (const { dir, text, d } of parsed) {
     const files = {};
-    const stored = built(d) ? cachedPaths(root, dir) : {};
+    const stored = built(d) ? (storedByDir[dir] ?? {}) : {};
     for (const o of d.object ?? []) files[o.path] = objectText(dir, d, o, stored);
     for (const r of d.registry ?? [])
       if (r.index_table) files[r.index_table] = readFileSync(join(dir, r.index_table), 'utf8');
@@ -146,22 +160,27 @@ function sourceFiles(dir) {
 
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
-/** `patchkit pack` of one module for one device (the packer `lib_build` uses); throws when it fails. */
-function pack(root, id, device, to) {
-  const env = { ...process.env, PYTHONPATH: root };
-  delete env.PATCHKIT_MODULES;
+/** `patchkit pack-all` of the ids for one device: `{id: bytes}` of the packed ones; throws when any fails. */
+function packAll(root, ids, device, to) {
+  mkdirSync(to, { recursive: true });
+  let stdout;
+  let failure = '';
   try {
-    execFileSync('python3', ['-m', 'tools.patchkit.patchkit', 'pack', id, '--device', device, '-o', to], {
-      cwd: root,
-      env,
-      encoding: 'utf8',
-      stdio: 'pipe',
-    });
-    return readFileSync(to);
+    stdout = patchkit(['pack-all', '--device', device, '--out', to, ...ids], { root });
   } catch (e) {
-    const stderr = String(e.stderr ?? e.message ?? e).trim();
-    throw new Error(`patchkit pack failed for ${id} on ${device}: ${stderr}`);
+    stdout = e.stdout ?? '';
+    failure = e.message;
   }
+  const packed = {};
+  const failed = [];
+  for (const line of stdout.split('\n').filter((l) => l.trim().startsWith('{'))) {
+    const r = JSON.parse(line);
+    if (r.error !== undefined) failed.push(`${r.id}: ${r.error}`);
+    else if (r.file !== undefined) packed[r.id] = readFileSync(resolve(root, r.file));
+  }
+  if (failed.length) throw new Error(`patchkit pack failed for ${failed.join('; ')} on ${device}`);
+  if (failure) throw new Error(`patchkit pack failed on ${device}: ${failure}`);
+  return packed;
 }
 
 /** Write the shipped modules under `out`: <dev>/<leaf>.dkm, index.json and src/<id>/**. Returns the index. */
@@ -172,17 +191,24 @@ export function shipModules(out, root = repoRoot) {
   const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
     walk(join(root, 'modules', r), 'module.toml').sort(byParts),
   );
+  const shipped = [];
+  const idsByDevice = {};
   for (const file of manifests) {
     const dir = dirname(file);
     const d = parse(readFileSync(file, 'utf8'));
     if (!isShipped(d, relative(root, dir).split(sep).join('/'))) continue;
+    shipped.push({ dir, d });
+    for (const dev of shippedDevices(d)) (idsByDevice[dev] ??= []).push(d.module.id);
+  }
+  const packed = {};
+  for (const [dev, ids] of Object.entries(idsByDevice)) packed[dev] = packAll(root, ids, dev, join(scratch, dev));
+  for (const { dir, d } of shipped) {
     const m = d.module;
     const leaf = m.id.split('/').pop();
     const devices = {};
     for (const dev of shippedDevices(d)) {
-      const tmp = join(scratch, dev, `${leaf}.dkm`);
-      mkdirSync(dirname(tmp), { recursive: true });
-      const bytes = pack(root, m.id, dev, tmp);
+      const bytes = packed[dev][m.id];
+      if (!bytes) continue; // skipped by the packer (patch-only)
       mkdirSync(join(out, dev), { recursive: true });
       writeFileSync(join(out, dev, `${leaf}.dkm`), bytes);
       devices[dev] = { file: `${dev}/${leaf}.dkm`, size: bytes.length, sha256: sha256(bytes) };

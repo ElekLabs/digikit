@@ -144,9 +144,8 @@ fn record(
 }
 
 /// Build and pack every run-time module that builds for `device` into its library folder. A `.dkm` is written only when its bytes
-/// changed; a `.dkm` whose module did not pack this time is deleted. The build loads one library for all candidates; when that load
-/// fails (a module's build failed) each module loads on its own, so one failure does not stop the others.
-/// A patch-only module (`patchkit::pack::patch_only`) is skipped.
+/// changed; a `.dkm` whose module did not pack this time is deleted. `patchkit::pack::pack_all` packs the candidates: one library for
+/// all of them, or one per module when that load fails, so one failure does not stop the others. A patch-only module is skipped.
 fn build(root: &Path, device: &str) -> Result<LibBuildReport, String> {
     let _one = BUILD_LOCK.lock().map_err(|e| e.to_string())?;
     let started = std::time::Instant::now();
@@ -164,46 +163,8 @@ fn build(root: &Path, device: &str) -> Result<LibBuildReport, String> {
         .collect();
     let mut report = LibBuildReport::default();
     let mut kept = std::collections::BTreeSet::new();
-    let opts = patchkit::pack::PackOptions {
-        device: Some(device.to_string()),
-        ..Default::default()
-    };
-    match patchkit::module::selected_library(root, &source, false, &ids, &ids) {
-        Ok(lib) => {
-            for id in &ids {
-                if lib.get(id).is_some_and(patchkit::pack::patch_only) {
-                    continue;
-                }
-                let packed =
-                    patchkit::pack::pack_module(&lib, id, &opts).map_err(|e| e.to_string());
-                record(&dir, id, packed, &mut report, &mut kept);
-            }
-        }
-        Err(_) => {
-            for id in &ids {
-                let packed = patchkit::module::selected_library(
-                    root,
-                    &source,
-                    false,
-                    std::slice::from_ref(id),
-                    std::slice::from_ref(id),
-                )
-                .map_err(|e| e.to_string())
-                .and_then(|lib| {
-                    if lib.get(id).is_some_and(patchkit::pack::patch_only) {
-                        return Ok(None);
-                    }
-                    patchkit::pack::pack_module(&lib, id, &opts)
-                        .map(Some)
-                        .map_err(|e| e.to_string())
-                });
-                match packed {
-                    Ok(None) => {}
-                    Ok(Some(p)) => record(&dir, id, Ok(p), &mut report, &mut kept),
-                    Err(e) => record(&dir, id, Err(e), &mut report, &mut kept),
-                }
-            }
-        }
+    for (id, packed) in patchkit::pack::pack_all(root, &ids, device) {
+        record(&dir, &id, packed, &mut report, &mut kept);
     }
     for file in scan(root, device)? {
         if !kept.contains(&file.path) {
