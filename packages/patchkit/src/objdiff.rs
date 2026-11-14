@@ -496,7 +496,8 @@ pub fn diff_with(old: &Dko, new: &Dko, pool: bool) -> Result<Report> {
 
 /// `patchkit objdiff OLD NEW [--format text|json]`; returns the exit code.
 pub fn run(rest: &[String]) -> Result<i32> {
-    const U: &str = "usage: patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json] [--pool]";
+    const U: &str =
+        "usage: patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json] [--pool]";
     let mut pool = false;
     let mut files = vec![];
     let mut format = "text".to_string();
@@ -516,7 +517,9 @@ pub fn run(rest: &[String]) -> Result<i32> {
         return Err(Error(U.into()));
     }
     let read = |f: &str| -> Result<Dko> {
-        Ok(Dko::parse(&std::fs::read_to_string(f).map_err(|e| Error(format!("{f}: {e}")))?)?)
+        Ok(Dko::parse(
+            &std::fs::read_to_string(f).map_err(|e| Error(format!("{f}: {e}")))?,
+        )?)
     };
     let rep = diff_with(&read(&files[0])?, &read(&files[1])?, pool)?;
     if format == "json" {

@@ -11,7 +11,7 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
   (about 25 s); tests: `tests/patchkit/test_patchkit_dkrt.py`.
 - Try it by hand: `patchkit pack test/dyn-demo -o plus_drive/dt2/digikit/modules/dyn-demo.dkm`, patch with `--modules core/runtime`,
   boot with that `plus_drive/`; put `modules/dyn-demo.dkm` in `plus_drive/dt2/digikit/selection.txt` (or use DIGIKIT > MODULES), and the boot loads it.
-- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime; `src/cf/tramp.s` the
+- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime (`src/services/{machines,fx,samples}` hold the service code of the runtime crate, `params.rs` the kind-free parameter row writers, `dsp/` the DSP loader core); `src/cf/tramp.s` the
   hook trampoline and `dkrt_flush`; `src/cf/<dev>/device.s` the device id.
 - Module upload (finding 43, `docs/design/digikit-upload.md`): `src/rs/src/upload.rs` handles the SysEx messages that start `F0 7D 64 6B` from a hook in the firmware's MIDI task (`cf.midi.site.rx`, `dkrt_midi_hook` in `tramp.s`); the host is `tools/device/dkupload.py`. `DKRT_UPLOAD_CUT` is the power-cut test knob.
 - Safe mode (finding 37): the boot counter is cleared after a stable period (45,000 DSP blocks = 30 s of UI loop, clock: the firmware's block counter,
