@@ -170,6 +170,9 @@ export function bindBootClock(dk: object, session: Pick<Session, 'status'>): voi
 /**
  * `dk.waitForBoot()` with the emulated clock instead of its 90 s wall limit: a slow host only slows the boot, a stuck daemon trips the guard.
  * A dk that was never bound to a session keeps the wall-time wait.
+ * Each probe keeps the 1 s quick wait, whatever the host load: the loop retries a missed probe, and the emulated clock is the limit. A long probe
+ * blocks on a request that the restart lost, and every such probe costs 30 s of wall time and as much emulated time of the budget, while the
+ * runtime's boot-time module loads wait for the next probe (R2c's DSP loads then ran out of the 30 s that `installModules` allows).
  */
 export function waitForBootEmulated(
   dk: {
@@ -190,7 +193,6 @@ export function waitForBootEmulated(
       if (await tick()) throw new Error(`no new boot: not seen within ${emulatedMs} ms of emulated time`);
     },
     Number.POSITIVE_INFINITY,
-    { probeTimeoutMs: PROBE_TIMEOUT_MS },
   );
 }
 

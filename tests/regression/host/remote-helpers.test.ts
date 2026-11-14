@@ -325,14 +325,18 @@ test('a halted DSP does not stop the emulated clock: the ColdFire instruction co
   await expect(waitEmulated(make(), 100, { hangMs: 40 })).resolves.toBeUndefined();
   let waits = 0;
   const sleeps: number[] = [];
+  const probeOpts: unknown[] = [];
   const dk = {
-    waitForBoot: async (sleep: (ms: number) => Promise<void>) => {
+    waitForBoot: async (sleep: (ms: number) => Promise<void>, _t?: number, opts?: { probeTimeoutMs?: number }) => {
+      probeOpts.push(opts?.probeTimeoutMs);
       for (; waits < 3; waits++) await sleep(1).then(() => sleeps.push(waits));
     },
   };
   bindBootClock(dk, make());
   await expect(waitForBootEmulated(dk)).resolves.toBeUndefined();
   expect(sleeps).toEqual([0, 1, 2]);
+  // a probe is never longer than the quick wait: a long one blocks on a request that the restart lost (see waitForBootEmulated)
+  expect(probeOpts).toEqual([undefined]);
   const late = {
     waitForBoot: async (sleep: (ms: number) => Promise<void>) => {
       for (;;) await sleep(1);
