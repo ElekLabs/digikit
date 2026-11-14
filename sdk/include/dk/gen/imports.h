@@ -151,6 +151,21 @@ int32_t dk_intro_take(dk_intro_frame_fn *frame, dk_intro_done_fn *done, void *ar
 /* Declare one record of a generic kind (`[records.kinds]` `generic = true`; a service of the runtime owns the kind). `len` is the record's length less its 8-byte header; the bytes are copied. A kind that is unknown or not generic, or a wrong length, returns DK_E_FORMAT, a full collection DK_E_DECL_FULL; the owning service checks the record at the commit. Context: init. Since runtime 0.8.0. */
 int32_t dk_record_add(dk_module_ctx *ctx, uint32_t kind, const void *bytes, uint32_t len);
 
+/* A service module declares a record kind it owns: `len` is the whole record with its 8-byte header, `handler` the function that handles the records. The runtime compares every dk_service_declare_* call of `init` with the header table (KINDS, SLOTS, HOOKS, EXPORTS, RESOURCES entries) at the commit: a difference refuses the module with DK_E_DECL_KIND. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_kind(dk_module_ctx *ctx, uint32_t kind, uint32_t len, const void *handler);
+
+/* A service module declares a plug-in point (slot) it takes. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_slot(dk_module_ctx *ctx, uint32_t slot, uint32_t flags);
+
+/* A service module declares a hook site it takes, with the function that runs there. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_hook(dk_module_ctx *ctx, uint32_t site, const void *entry);
+
+/* A service module declares a function it offers to other modules: `name_hash` is the FNV-1a 32 hash of its name. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_export(dk_module_ctx *ctx, uint32_t name_hash, const void *entry);
+
+/* A service module declares a resource it adds, with its limit. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_resource(dk_module_ctx *ctx, uint32_t resource, uint32_t limit);
+
 /* The RAM ranges `[lo, hi)` of the device file's `[digikit] peek`: returns how many there are, and for `i` below that writes `lo, hi` to `out[0..2]`. For a module that implements PEEK. See <dk/platform/debug.h>. Context: any. Since runtime 0.7.0. */
 uint32_t dk_debug_peek(uint32_t i, uint32_t *out);
 

@@ -119,6 +119,11 @@ import_table! {
     ("dk_module_ctx_add_machine", collect::dk_module_ctx_add_machine),
     ("dk_module_ctx_add_fx", collect::dk_module_ctx_add_fx),
     ("dk_record_add", collect::dk_record_add),
+    ("dk_service_declare_kind", collect::dk_service_declare_kind),
+    ("dk_service_declare_slot", collect::dk_service_declare_slot),
+    ("dk_service_declare_hook", collect::dk_service_declare_hook),
+    ("dk_service_declare_export", collect::dk_service_declare_export),
+    ("dk_service_declare_resource", collect::dk_service_declare_resource),
     ("dk_machine_add_page", collect::dk_machine_add_page),
     ("dk_fx_add_page", collect::dk_fx_add_page),
     ("dk_page_add_param", collect::dk_page_add_param),
@@ -202,6 +207,11 @@ const _: dkrt_sdk::api::DkPageBindFn = collect::dk_page_bind;
 const _: dkrt_sdk::api::DkPageBindLocalFn = collect::dk_page_bind_local;
 const _: dkrt_sdk::api::DkFxRoutesFn = collect::dk_fx_routes;
 const _: dkrt_sdk::api::DkRecordAddFn = collect::dk_record_add;
+const _: dkrt_sdk::api::DkServiceDeclareKindFn = collect::dk_service_declare_kind;
+const _: dkrt_sdk::api::DkServiceDeclareSlotFn = collect::dk_service_declare_slot;
+const _: dkrt_sdk::api::DkServiceDeclareHookFn = collect::dk_service_declare_hook;
+const _: dkrt_sdk::api::DkServiceDeclareExportFn = collect::dk_service_declare_export;
+const _: dkrt_sdk::api::DkServiceDeclareResourceFn = collect::dk_service_declare_resource;
 const _: dkrt_sdk::api::DkFxMixFn = collect::dk_fx_mix;
 const _: dkrt_sdk::api::DkSamplePoolOpenFn = crate::handlers::exports::dk_sample_pool_open;
 const _: dkrt_sdk::api::DkSamplePoolAddFn = crate::handlers::exports::dk_sample_pool_add;

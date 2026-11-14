@@ -9,4 +9,4 @@ pub static SERVICES: [ServiceRow; 3] = [
     ServiceRow::of::<crate::services::fx::records::Fx>("fx", &dkrt_sdk::records::KINDS_FX),
 ];
 
-pub const TABLE: ServiceTable = ServiceTable { rows: &SERVICES };
+pub const TABLE: ServiceTable = ServiceTable { rows: &SERVICES, failed: 0 };

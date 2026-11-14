@@ -380,6 +380,10 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
     use crate::collect as col;
     let owner = rec as u8 + 1;
     let base = st().modules[rec].base;
+    // the declarations of a service module against its header table (declare-check-commit)
+    if !col::decl_matches(c, keys, base) {
+        return E_DECL_KIND;
+    }
     let declared = c.nm + c.nf + c.nparam + c.np + c.ng != 0;
     let mut block: *mut u8 = core::ptr::null_mut();
     let mut size = 0usize;

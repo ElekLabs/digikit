@@ -12,9 +12,26 @@
 //! - the declarations of a module's DSP rows (`has_voice`, `declare_voice`, `declare_fx`) and `on_loaded`.
 pub use dkrt_abi::service::*;
 
-/// The in-crate services, in the order the core calls them (`[[service]]` of sdk/sdk.toml: samples, machines, fx).
+/// The rows whose declare check failed (`check_declarations`): bit `i` for row `i`.
+static mut FAILED: u32 = 0;
+
+/// The in-crate services, in the order the core calls them (`[[service]]` of sdk/sdk.toml: samples, machines, fx), with the mask of the ones that failed
+/// their declare check.
 pub fn services() -> ServiceTable {
-    crate::gen_services::TABLE
+    ServiceTable { failed: unsafe { core::ptr::read_volatile(core::ptr::addr_of!(FAILED)) }, ..crate::gen_services::TABLE }
+}
+
+/// Declare-check-commit of the in-crate services (the runtime's init): each service declares its kinds, the runtime compares them with the generated
+/// table of the service. A service that differs is FAILED: its kinds are unknown to the registry (a record of the kind is `E_FORMAT`), and the
+/// event log says which (`E_DECL_KIND`). Returns the mask.
+pub unsafe fn check_declarations() -> u32 {
+    let failed = crate::gen_services::TABLE.check_declarations();
+    core::ptr::write_volatile(core::ptr::addr_of_mut!(FAILED), failed);
+    if failed != 0 {
+        // a MOD_LOAD of selection index 0xffffffff (no module): the result and the mask of the failed rows
+        crate::dlog::ev(dkrt_sdk::logk::MOD_LOAD, dkrt_sdk::logk::F_ERROR, [u32::MAX, dkrt_sdk::E_DECL_KIND as u32, failed, 0, 0]);
+    }
+    failed
 }
 
 /// The C-ABI entry points of the services that the core links into its own tables (interface A: the imports of `sdk.toml` and the events the adapters

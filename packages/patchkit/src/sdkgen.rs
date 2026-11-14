@@ -444,7 +444,9 @@ fn rust_services(sdk: &Sdk) -> String {
             d.name.to_uppercase()
         );
     }
-    s.push_str("];\n\npub const TABLE: ServiceTable = ServiceTable { rows: &SERVICES };\n");
+    s.push_str(
+        "];\n\npub const TABLE: ServiceTable = ServiceTable { rows: &SERVICES, failed: 0 };\n",
+    );
     s
 }
 

@@ -6,8 +6,11 @@ use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::dsp::DspSec;
 use dkrt_abi::mem::{cstr_len, iw, rd, rd32, wr};
 use dkrt_abi::registry::{each, w, RegState, MACH_TEXT};
-use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
-use dkrt_abi::service::{check_step, tick_phase, ApplyCtx, CheckCtx, Claim, GuardState, RowWrite, Service};
+use dkrt_sdk::records::{
+    KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM, LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE,
+    LEN_PARAM,
+};
+use dkrt_abi::service::{check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, RowWrite, Service};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::*;
 
@@ -63,6 +66,15 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 pub struct Machines;
 
 impl Service for Machines {
+    unsafe fn declare(d: &mut Declare) {
+        d.kind(KIND_PARAM, LEN_PARAM);
+        d.kind(KIND_MACHINE, LEN_MACHINE);
+        d.kind(KIND_PAGE, LEN_PAGE);
+        d.kind(KIND_ACTION, LEN_ACTION);
+        d.kind(KIND_NATIVE_PAGE, LEN_NATIVE_PAGE);
+        d.kind(KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2);
+    }
+
     unsafe fn fits(inf: *const u32) -> bool {
         // the table must fit this registry's state (a table that says more rows than the state has would index past it)
         !(iw(inf, w::M_DYN_N) as usize > MAX_MACH

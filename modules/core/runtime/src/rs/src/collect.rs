@@ -14,6 +14,7 @@
 use crate::{cstr_len, MAX_MODULES};
 use dkrt_sdk::records::{KIND_ACTION, KIND_EFFECT, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
+use dkrt_abi::service::Declare;
 use dkrt_sdk::*;
 
 /// The length of a record of `kind`, as the service that owns the kind declares it.
@@ -158,6 +159,8 @@ pub struct Collect {
     /// the generic records (`dk_record_add`): kind and body, appended to the `register` section as they came
     pub grecs: [GRec; MAX_G],
     pub ng: usize,
+    /// what a service module declared in `init` (`dk_service_declare_*`), compared with its header table at the commit
+    pub decl: Declare,
     gbytes: [u8; G_BYTES],
     gat: usize,
     records: usize,
@@ -169,7 +172,7 @@ const _: () = assert!(core::mem::size_of::<Collect>() == dkneeds::COLLECT_BYTES 
 
 impl Collect {
     pub const fn new() -> Collect {
-        Collect { err: 0, machines: [M0; MAX_M], nm: 0, fxs: [F0; MAX_F], nf: 0, pages: [G0; MAX_PG], np: 0, params: [P0; MAX_PA], nparam: 0, grecs: [GRec { kind: 0, at: 0, len: 0 }; MAX_G], ng: 0, gbytes: [0; G_BYTES], gat: 0, records: 0 }
+        Collect { err: 0, machines: [M0; MAX_M], nm: 0, fxs: [F0; MAX_F], nf: 0, pages: [G0; MAX_PG], np: 0, params: [P0; MAX_PA], nparam: 0, grecs: [GRec { kind: 0, at: 0, len: 0 }; MAX_G], ng: 0, decl: Declare::new(), gbytes: [0; G_BYTES], gat: 0, records: 0 }
     }
 
     /// `dk_record_add`: keep one record of a generic kind (`[records.kinds]` `generic = true`; the typed kinds have their builders). The body is
@@ -584,6 +587,36 @@ pub unsafe extern "C" fn dk_record_add(ctx: *mut u8, kind: u32, bytes: *const u8
         _ => E_CONTEXT,
     }
 }
+/// One `dk_service_declare_*` call: the item goes to the declarations (they take one record of the bounded collection each).
+unsafe fn declare(ctx: *mut u8, tag: u16, a: u32, b: u32, c: u32) -> i32 {
+    match active() {
+        Some(col) if crate::entry::is_ctx(ctx) => {
+            if col.decl.n >= Declare::MAX || !col.room() {
+                col.fail(E_DECL_FULL);
+                return E_DECL_FULL;
+            }
+            col.decl.add(tag, a, b, c);
+            OK
+        }
+        _ => E_CONTEXT,
+    }
+}
+pub unsafe extern "C" fn dk_service_declare_kind(ctx: *mut u8, kind: u32, len: u32, handler: *const u8) -> i32 {
+    // a handler is an image address: the header table carries its offset in the image
+    declare(ctx, Declare::KIND, kind, len, handler as usize as u32)
+}
+pub unsafe extern "C" fn dk_service_declare_slot(ctx: *mut u8, slot: u32, flags: u32) -> i32 {
+    declare(ctx, Declare::SLOT, slot, flags, 0)
+}
+pub unsafe extern "C" fn dk_service_declare_hook(ctx: *mut u8, site: u32, entry: *const u8) -> i32 {
+    declare(ctx, Declare::HOOK, site, entry as usize as u32, 0)
+}
+pub unsafe extern "C" fn dk_service_declare_export(ctx: *mut u8, name_hash: u32, entry: *const u8) -> i32 {
+    declare(ctx, Declare::EXPORT, name_hash, entry as usize as u32, 0)
+}
+pub unsafe extern "C" fn dk_service_declare_resource(ctx: *mut u8, resource: u32, limit: u32) -> i32 {
+    declare(ctx, Declare::RESOURCE, resource, limit, 0)
+}
 pub unsafe extern "C" fn dk_fx_mix(f: *mut u8, def: u32) {
     if let Some(c) = active() {
         c.fx_mix(f, def);
@@ -602,11 +635,13 @@ pub struct KeysCopy {
     pub nf: usize,
     pub mk: [u32; MAX_RECORDS],
     pub fk: [u32; MAX_RECORDS],
+    /// the KINDS, SLOTS, HOOKS, EXPORTS and RESOURCES entries of the table, as `init`'s declarations must repeat them (`decl_matches`)
+    pub decl: Declare,
 }
 
 impl KeysCopy {
     pub const fn empty() -> KeysCopy {
-        KeysCopy { machine_rows: 0, param_rows: 0, page_rows: 0, nm: 0, nf: 0, mk: [0; MAX_RECORDS], fk: [0; MAX_RECORDS] }
+        KeysCopy { machine_rows: 0, param_rows: 0, page_rows: 0, nm: 0, nf: 0, mk: [0; MAX_RECORDS], fk: [0; MAX_RECORDS], decl: Declare::new() }
     }
 
     /// Parse the header table bytes. A file with no table, or another magic or version, is the format of runtime 0.7: `E_CONTRACT`; a damaged
@@ -630,6 +665,24 @@ impl KeysCopy {
             }
             k.fk[k.nf] = v;
             k.nf += 1;
+        }
+        for d in keys.kinds() {
+            k.decl.add(Declare::KIND, d.kind, d.len, d.entry);
+        }
+        for p in keys.slots() {
+            k.decl.add(Declare::SLOT, p.a, p.b, 0);
+        }
+        for p in keys.hooks() {
+            k.decl.add(Declare::HOOK, p.a, p.b, 0);
+        }
+        for p in keys.exports() {
+            k.decl.add(Declare::EXPORT, p.a, p.b, 0);
+        }
+        for p in keys.resources() {
+            k.decl.add(Declare::RESOURCE, p.a, p.b, 0);
+        }
+        if k.decl.full {
+            return Err(E_FORMAT);
         }
         Ok(k)
     }
@@ -1220,6 +1273,26 @@ pub fn counts_of(c: &Collect, p: &Profile) -> (u32, u32, u32) {
         i += 1;
     }
     (c.nm as u32, params, pages)
+}
+
+/// Whether what `init` declared (`dk_service_declare_*`, addresses in the loaded image at `base`) is what the header table carries (declare-check-commit):
+/// the same kinds with the same lengths and handlers, slots, hooks, exports and resources. A module that declares nothing and has no such entries passes.
+pub fn decl_matches(c: &Collect, keys: &KeysCopy, base: u32) -> bool {
+    let mut d = c.decl;
+    let mut i = 0;
+    while i < d.n {
+        let (tag, a, b, e) = d.items[i];
+        // the entries that are addresses become image offsets, as the table has them
+        d.items[i] = if tag == Declare::KIND {
+            (tag, a, b, e.wrapping_sub(base))
+        } else if tag == Declare::HOOK || tag == Declare::EXPORT {
+            (tag, a, b.wrapping_sub(base), e)
+        } else {
+            (tag, a, b, e)
+        };
+        i += 1;
+    }
+    d.same_as(&keys.decl)
 }
 
 /// The checks of 6.3 that need only the collection, the header's keys table, the effect ids of the other loaded modules and the free rows. Returns OK or the refusal.

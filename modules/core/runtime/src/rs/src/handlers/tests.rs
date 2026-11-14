@@ -121,7 +121,7 @@ impl<const N: u8> Service for Fake<N> {
 static KINDS_1: [(u32, u32); 1] = [(101, 12)];
 static KINDS_2: [(u32, u32); 1] = [(102, 16)];
 static TWO_ROWS: [ServiceRow; 2] = [ServiceRow::of::<Fake<1>>("fake1", &KINDS_1), ServiceRow::of::<Fake<2>>("fake2", &KINDS_2)];
-pub(crate) const TWO: ServiceTable = ServiceTable { rows: &TWO_ROWS };
+pub(crate) const TWO: ServiceTable = ServiceTable { rows: &TWO_ROWS, failed: 0 };
 
 /// The words of a `dynreg_info` that the walker reads: the magic and the device.
 static TABLE: [u32; 100] = {
@@ -289,4 +289,53 @@ fn a_tick_phase_reaches_every_service_in_list_order() {
             ]
         );
     }
+}
+
+/// A service that declares a kind its table does not carry, one that declares a wrong length, and one that matches.
+struct Good;
+impl Service for Good {
+    unsafe fn declare(d: &mut Declare) {
+        d.kind(70, 16);
+    }
+}
+struct WrongLen;
+impl Service for WrongLen {
+    unsafe fn declare(d: &mut Declare) {
+        d.kind(71, 20);
+    }
+}
+struct Extra;
+impl Service for Extra {
+    unsafe fn declare(d: &mut Declare) {
+        d.kind(72, 8);
+        d.slot(1, 0);
+    }
+}
+struct Silent;
+impl Service for Silent {}
+
+static DECL_ROWS: [ServiceRow; 4] = [
+    ServiceRow::of::<Good>("good", &[(70, 16)]),
+    ServiceRow::of::<WrongLen>("wronglen", &[(71, 16)]),
+    ServiceRow::of::<Extra>("extra", &[(72, 8)]),
+    ServiceRow::of::<Silent>("silent", &[(73, 8)]),
+];
+
+#[test]
+fn a_service_whose_declarations_differ_from_its_table_is_failed_and_its_kinds_are_unknown() {
+    let t = ServiceTable { rows: &DECL_ROWS, failed: 0 };
+    let failed = unsafe { t.check_declarations() };
+    assert_eq!(failed, 0b1110, "the matching service passes; a wrong length, an extra item and a missing declaration fail");
+    let t = ServiceTable { failed, ..t };
+    assert_eq!(t.len(70), Some(16));
+    for kind in [71, 72, 73] {
+        assert_eq!(t.len(kind), None);
+        assert!(t.owner(kind).is_none());
+    }
+}
+
+#[test]
+fn the_in_crate_services_declare_what_the_generated_table_carries() {
+    // the real rows: samples owns none, machines six kinds, fx one
+    assert_eq!(unsafe { crate::gen_services::TABLE.check_declarations() }, 0);
 }

@@ -422,7 +422,7 @@ pub mod api {
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 108] = [
+    pub const IMPORT_NAMES: [&str; 113] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -474,6 +474,11 @@ pub mod api {
         "dk_module_ctx_add_machine",
         "dk_module_ctx_add_fx",
         "dk_record_add",
+        "dk_service_declare_kind",
+        "dk_service_declare_slot",
+        "dk_service_declare_hook",
+        "dk_service_declare_export",
+        "dk_service_declare_resource",
         "dk_machine_add_page",
         "dk_fx_add_page",
         "dk_page_add_param",
@@ -534,7 +539,7 @@ pub mod api {
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`.
-    pub const BUILTIN_NAMES: [&str; 73] = [
+    pub const BUILTIN_NAMES: [&str; 78] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -581,6 +586,11 @@ pub mod api {
         "dk_module_ctx_add_machine",
         "dk_module_ctx_add_fx",
         "dk_record_add",
+        "dk_service_declare_kind",
+        "dk_service_declare_slot",
+        "dk_service_declare_hook",
+        "dk_service_declare_export",
+        "dk_service_declare_resource",
         "dk_machine_add_page",
         "dk_fx_add_page",
         "dk_page_add_param",
@@ -738,6 +748,21 @@ pub mod api {
 
     /// `dk_record_add`: Declare one record of a generic kind (`[records.kinds]` `generic = true`; a service of the runtime owns the kind). `len` is the record's length less its 8-byte header; the bytes are copied. A kind that is unknown or not generic, or a wrong length, returns DK_E_FORMAT, a full collection DK_E_DECL_FULL; the owning service checks the record at the commit.
     pub type DkRecordAddFn = unsafe extern "C" fn(ctx: *mut u8, kind: u32, bytes: *const u8, len: u32) -> i32;
+
+    /// `dk_service_declare_kind`: A service module declares a record kind it owns: `len` is the whole record with its 8-byte header, `handler` the function that handles the records. The runtime compares every dk_service_declare_* call of `init` with the header table (KINDS, SLOTS, HOOKS, EXPORTS, RESOURCES entries) at the commit: a difference refuses the module with DK_E_DECL_KIND. Returns 0, or DK_E_DECL_FULL.
+    pub type DkServiceDeclareKindFn = unsafe extern "C" fn(ctx: *mut u8, kind: u32, len: u32, handler: *const u8) -> i32;
+
+    /// `dk_service_declare_slot`: A service module declares a plug-in point (slot) it takes. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL.
+    pub type DkServiceDeclareSlotFn = unsafe extern "C" fn(ctx: *mut u8, slot: u32, flags: u32) -> i32;
+
+    /// `dk_service_declare_hook`: A service module declares a hook site it takes, with the function that runs there. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL.
+    pub type DkServiceDeclareHookFn = unsafe extern "C" fn(ctx: *mut u8, site: u32, entry: *const u8) -> i32;
+
+    /// `dk_service_declare_export`: A service module declares a function it offers to other modules: `name_hash` is the FNV-1a 32 hash of its name. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL.
+    pub type DkServiceDeclareExportFn = unsafe extern "C" fn(ctx: *mut u8, name_hash: u32, entry: *const u8) -> i32;
+
+    /// `dk_service_declare_resource`: A service module declares a resource it adds, with its limit. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL.
+    pub type DkServiceDeclareResourceFn = unsafe extern "C" fn(ctx: *mut u8, resource: u32, limit: u32) -> i32;
 
     /// `dk_machine_add_page`: Add a page to the machine, after the pages already added: `name` is its title, `short_name` its tab label on a device that keeps knobs in page rows. Returns the page handle (a placeholder on an error).
     pub type DkMachineAddPageFn = unsafe extern "C" fn(m: *mut u8, name: *const u8, short_name: *const u8) -> *mut u8;

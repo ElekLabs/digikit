@@ -343,7 +343,7 @@ mod tests {
 
     fn run(tables: &[Option<Vec<u8>>]) -> Plan {
         let c = caps();
-        let env = Env { services: ServiceTable { rows: &ROWS }, runtime: 0x000800, caps: &c };
+        let env = Env { services: ServiceTable { rows: &ROWS, failed: 0 }, runtime: 0x000800, caps: &c };
         let keys: Vec<Option<Keys>> = tables.iter().map(|t| t.as_ref().map(|b| Keys::parse(b).unwrap())).collect();
         plan(&env, &keys)
     }

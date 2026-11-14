@@ -95,9 +95,117 @@ pub struct GuardState {
     pub disabled: bool,
 }
 
+/// What a service declares at its init (declare-check-commit, docs/plans/runtime-and-services.md R7): the record kinds it owns, the slots and hook
+/// sites it takes, the functions it exports and the resources it adds. The items have the shape of the header table's entries of a service module
+/// (`KINDS`, `SLOTS`, `HOOKS`, `EXPORTS`, `RESOURCES`: tags 4 to 8 of packages/dkneeds/src/keys.rs), so the runtime compares them with the table
+/// (the generated static of an in-crate service, the header table of a module) and a difference means the service FAILED.
+#[derive(Clone, Copy)]
+pub struct Declare {
+    /// (table tag, first word, second word, third word): `kind(kind, len)` (and the handler entry of a module), `slot(id, flags)`, `hook(site, entry)`,
+    /// `export(name hash, entry)`, `resource(id, limit)`; an unused word is 0.
+    pub items: [(u16, u32, u32, u32); Declare::MAX],
+    pub n: usize,
+    /// More declarations than `MAX` were made.
+    pub full: bool,
+}
+
+impl Declare {
+    pub const MAX: usize = 12;
+    pub const KIND: u16 = 4;
+    pub const SLOT: u16 = 5;
+    pub const HOOK: u16 = 6;
+    pub const EXPORT: u16 = 7;
+    pub const RESOURCE: u16 = 8;
+
+    pub const fn new() -> Declare {
+        Declare {
+            items: [(0, 0, 0, 0); Declare::MAX],
+            n: 0,
+            full: false,
+        }
+    }
+    /// One more item; `full` is set when there is no room.
+    pub fn add(&mut self, tag: u16, a: u32, b: u32, c: u32) {
+        if self.n < Declare::MAX {
+            self.items[self.n] = (tag, a, b, c);
+            self.n += 1;
+        } else {
+            self.full = true;
+        }
+    }
+    /// A record kind the service owns, with the length of its record (the 8-byte header included).
+    pub fn kind(&mut self, kind: u32, len: u32) {
+        self.add(Declare::KIND, kind, len, 0);
+    }
+    pub fn slot(&mut self, slot: u32, flags: u32) {
+        self.add(Declare::SLOT, slot, flags, 0);
+    }
+    pub fn hook(&mut self, site: u32, entry: u32) {
+        self.add(Declare::HOOK, site, entry, 0);
+    }
+    pub fn export(&mut self, name_hash: u32, entry: u32) {
+        self.add(Declare::EXPORT, name_hash, entry, 0);
+    }
+    pub fn resource(&mut self, id: u32, limit: u32) {
+        self.add(Declare::RESOURCE, id, limit, 0);
+    }
+    /// Whether `other` holds the same items (in any order): what a module declared in `init` against what its header table says.
+    pub fn same_as(&self, other: &Declare) -> bool {
+        if self.full || other.full || self.n != other.n {
+            return false;
+        }
+        let has = |d: &Declare, x: (u16, u32, u32, u32)| {
+            let mut k = 0;
+            while k < d.n {
+                if d.items[k] == x {
+                    return true;
+                }
+                k += 1;
+            }
+            false
+        };
+        let mut i = 0;
+        while i < self.n {
+            if !has(other, self.items[i]) || !has(self, other.items[i]) {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
+    /// Whether the declarations are exactly the record kinds `kinds` (kind, length) and nothing else, in any order.
+    pub fn matches_kinds(&self, kinds: &[(u32, u32)]) -> bool {
+        if self.full || self.n != kinds.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < self.n {
+            let (tag, a, b, _) = self.items[i];
+            if tag != Declare::KIND {
+                return false;
+            }
+            let mut found = false;
+            let mut k = 0;
+            while k < kinds.len() {
+                if kinds[k].0 == a && kinds[k].1 == b {
+                    found = true;
+                }
+                k += 1;
+            }
+            if !found {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
+}
+
 /// A service. Every method has a default that declares nothing; a service implements the ones it owns.
 #[allow(unused_variables)]
 pub trait Service {
+    /// The service's declarations (`Declare`): called once at the runtime's init; the runtime compares them with the service's table.
+    unsafe fn declare(d: &mut Declare) {}
     /// Whether the registry's table fits this service's state (the walker refuses with `E_NO_REGISTRY` when not).
     unsafe fn fits(inf: *const u32) -> bool {
         true
@@ -193,6 +301,7 @@ pub struct ServiceRow {
     pub name: &'static str,
     /// The record kinds of the `register` section the service owns: (kind, whole record length with its header), from `[records.kinds]`.
     pub kinds: &'static [(u32, u32)],
+    declare: unsafe fn(&mut Declare),
     fits: unsafe fn(*const u32) -> bool,
     check: unsafe fn(u32, &CheckCtx) -> i32,
     apply: unsafe fn(&ApplyCtx) -> i32,
@@ -222,6 +331,7 @@ impl ServiceRow {
         ServiceRow {
             name,
             kinds,
+            declare: S::declare,
             fits: S::fits,
             check: S::check,
             apply: S::apply,
@@ -251,13 +361,34 @@ impl ServiceRow {
 #[derive(Clone, Copy)]
 pub struct ServiceTable {
     pub rows: &'static [ServiceRow],
+    /// Bit `i` set: row `i` FAILED its declare check (`check_declarations`); its kinds are unknown to `owner` and `len`.
+    pub failed: u32,
 }
 
 impl ServiceTable {
+    /// Declare-check-commit of the in-crate services: each row's `declare` against its table (the generated static `kinds`). Returns the mask of the
+    /// rows whose declarations differ (bit `i`: row `i`); the caller keeps it in the table it hands out (`failed`).
+    pub unsafe fn check_declarations(&self) -> u32 {
+        let mut failed = 0u32;
+        let mut i = 0;
+        while i < self.rows.len() && i < 32 {
+            let mut d = Declare::new();
+            (self.rows[i].declare)(&mut d);
+            if !d.matches_kinds(self.rows[i].kinds) {
+                failed |= 1 << i;
+            }
+            i += 1;
+        }
+        failed
+    }
     /// The row that owns record kind `kind`.
     pub fn owner(&self, kind: u32) -> Option<&'static ServiceRow> {
         let mut i = 0;
         while i < self.rows.len() {
+            if i < 32 && self.failed & (1 << i) != 0 {
+                i += 1;
+                continue;
+            }
             let mut k = 0;
             while k < self.rows[i].kinds.len() {
                 if self.rows[i].kinds[k].0 == kind {
@@ -273,6 +404,10 @@ impl ServiceTable {
     pub fn len(&self, kind: u32) -> Option<u32> {
         let mut i = 0;
         while i < self.rows.len() {
+            if i < 32 && self.failed & (1 << i) != 0 {
+                i += 1;
+                continue;
+            }
             let mut k = 0;
             while k < self.rows[i].kinds.len() {
                 if self.rows[i].kinds[k].0 == kind {
@@ -526,7 +661,10 @@ mod tests {
         ServiceRow::of::<A>("a", &[(1, 8)]),
         ServiceRow::of::<B>("b", &[(2, 12)]),
     ];
-    const T: ServiceTable = ServiceTable { rows: &ROWS };
+    const T: ServiceTable = ServiceTable {
+        rows: &ROWS,
+        failed: 0,
+    };
 
     #[test]
     fn a_table_asks_each_service_and_ands_the_clears() {
@@ -537,7 +675,11 @@ mod tests {
         assert!(T.owner(9).is_none());
         unsafe {
             assert!(!T.dsp_clear(0));
-            assert!(ServiceTable { rows: &ROWS[..1] }.dsp_clear(0));
+            assert!(ServiceTable {
+                rows: &ROWS[..1],
+                failed: 0
+            }
+            .dsp_clear(0));
         }
     }
 
@@ -548,7 +690,14 @@ mod tests {
             ServiceRow::of::<B>("b2", &[]),
         ];
         unsafe {
-            assert_eq!(ServiceTable { rows: &TWO_B }.cap(3), Some((12, 2)));
+            assert_eq!(
+                ServiceTable {
+                    rows: &TWO_B,
+                    failed: 0
+                }
+                .cap(3),
+                Some((12, 2))
+            );
             assert_eq!(T.cap(3), Some((6, 1)));
             assert_eq!(T.cap(4), None);
         }

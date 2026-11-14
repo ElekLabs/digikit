@@ -4,13 +4,17 @@ use super::{fxpage, fxsend};
 use dkrt_abi::dsp::{DspSec, MAX_FX};
 use dkrt_abi::mem::rd32;
 use dkrt_abi::registry::each;
-use dkrt_abi::service::{tick_phase, ApplyCtx, CheckCtx, Claim, RowWrite, Service};
+use dkrt_abi::service::{tick_phase, ApplyCtx, CheckCtx, Claim, Declare, RowWrite, Service};
 use dkrt_sdk::*;
 
 /// The fx service.
 pub struct Fx;
 
 impl Service for Fx {
+    unsafe fn declare(d: &mut Declare) {
+        d.kind(fxpage::KIND_EFFECT, fxpage::LEN_EFFECT);
+    }
+
     unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
         use dkrt_abi::service::check_step as st;
         if step == st::COUNTS {
