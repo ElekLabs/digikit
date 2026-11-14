@@ -6,8 +6,8 @@ use patchkit::flash::{self, Prepared};
 use patchkit::module::Library;
 use patchkit::port::Registry;
 use patchkit::syx;
-use patchkit::verify;
 use patchkit::typed::Models;
+use patchkit::verify;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -273,7 +273,8 @@ fn a_message_list_with_one_message_dropped_reordered_or_altered_fails() {
         .map(|i| p.message(i).to_vec())
         .collect();
     let check = |m: &[Vec<u8>]| {
-        let c = flash::check_image(m.concat(), reg(), base_of_patched().as_deref()).map(|c| c.checks);
+        let c =
+            flash::check_image(m.concat(), reg(), base_of_patched().as_deref()).map(|c| c.checks);
         match c {
             Ok(cs) => cs.iter().any(|c| c.name == "round trip" && !c.ok),
             Err(_) => true,
@@ -401,9 +402,14 @@ fn the_summary_tiles_the_image_and_a_checkout_prepare_makes_the_same_image() {
 /// The stock images in `firmware/` that a port knows (any device), as (file name, bytes).
 fn known_stock_images() -> Vec<(String, Vec<u8>)> {
     let mut out = vec![];
-    for e in std::fs::read_dir(root().join("firmware")).unwrap().flatten() {
+    for e in std::fs::read_dir(root().join("firmware"))
+        .unwrap()
+        .flatten()
+    {
         let name = e.file_name().to_string_lossy().into_owned();
-        let Ok(bytes) = std::fs::read(e.path()) else { continue };
+        let Ok(bytes) = std::fs::read(e.path()) else {
+            continue;
+        };
         if name.ends_with(".syx")
             && Firmware::parse(&bytes).is_ok_and(|fw| reg().find(&fw.syx_sha256).is_some())
         {
@@ -434,8 +440,15 @@ fn damaged_section(stock: &[u8], id: u32) -> Vec<u8> {
 #[test]
 fn verify_needs_the_stock_base_of_a_device_with_read_only_sections() {
     for (f, s) in known_stock_images() {
-        let ro = Firmware::parse(&s).unwrap().device.readonly_sections().to_vec();
-        assert!(!ro.is_empty(), "{f}: the device file lists read-only sections");
+        let ro = Firmware::parse(&s)
+            .unwrap()
+            .device
+            .readonly_sections()
+            .to_vec();
+        assert!(
+            !ro.is_empty(),
+            "{f}: the device file lists read-only sections"
+        );
         // a stock image is its own base: its hash is a known stock hash
         verify::verify(&s, Some(reg()), None).unwrap_or_else(|e| panic!("{f}: {}", e.0));
         // an image of unknown hash, read-only sections untouched: no base fails, the base passes
@@ -446,22 +459,38 @@ fn verify_needs_the_stock_base_of_a_device_with_read_only_sections() {
         assert!(e.contains("stock base image is required"), "{f}: {e}");
         let ok = verify::verify(&changed, Some(reg()), Some(&s))
             .unwrap_or_else(|e| panic!("{f}: {}", e.0));
-        assert!(ok.checks.iter().any(|c| c.contains("read-only sections")), "{f}: {:?}", ok.checks);
+        assert!(
+            ok.checks.iter().any(|c| c.contains("read-only sections")),
+            "{f}: {:?}",
+            ok.checks
+        );
         // `inspect` identifies a file without a base and is no proof
         verify::inspect(&changed, Some(reg())).unwrap();
         // a damaged read-only section never passes, with or without the base; where the image still decodes the comparison names it
         let mut named = 0;
         for id in ro {
-            if Firmware::parse(&s).unwrap().section(id).is_none_or(|x| x.stored.len() < 4) {
+            if Firmware::parse(&s)
+                .unwrap()
+                .section(id)
+                .is_none_or(|x| x.stored.len() < 4)
+            {
                 continue;
             }
             let bad = damaged_section(&s, id);
-            assert!(verify::verify(&bad, Some(reg()), None).is_err(), "{f}: section {id} without base");
-            let e = verify::verify(&bad, Some(reg()), Some(&s)).expect_err(&format!("{f}: section {id} with base passed")).0;
+            assert!(
+                verify::verify(&bad, Some(reg()), None).is_err(),
+                "{f}: section {id} without base"
+            );
+            let e = verify::verify(&bad, Some(reg()), Some(&s))
+                .expect_err(&format!("{f}: section {id} with base passed"))
+                .0;
             if e.contains(&format!("section {id} differs from the stock image")) {
                 named += 1;
             }
         }
-        assert!(named > 0, "{f}: no damaged read-only section was caught by the base comparison");
+        assert!(
+            named > 0,
+            "{f}: no damaged read-only section was caught by the base comparison"
+        );
     }
 }

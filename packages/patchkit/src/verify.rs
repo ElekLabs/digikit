@@ -258,11 +258,7 @@ fn check(
     }
     checks.push("size limits".into());
 
-    if base.is_none()
-        && need_base
-        && port.is_none()
-        && !fw.device.readonly_sections().is_empty()
-    {
+    if base.is_none() && need_base && port.is_none() && !fw.device.readonly_sections().is_empty() {
         let ids: Vec<String> = fw
             .device
             .readonly_sections()
