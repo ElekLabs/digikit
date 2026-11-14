@@ -344,3 +344,45 @@ def test_self_contained_a_host_module_is_exempt(tree: Path) -> None:
     module(tree, "modules/fx/gain", "digikit/gain", "fx", None, "host = true\n")
     # `host` must sit in [module]: the extra text lands there because the manifest has no later table
     assert sc(tree) == []
+
+
+def arrows(tree: Path) -> list[str]:
+    return [str(v) for v in layercheck.check_runtime_arrows(tree)]
+
+
+def test_arrows_a_service_sees_the_interface_and_its_own_folder(tree: Path) -> None:
+    src = "modules/core/runtime/src/rs/src"
+    write(tree, f"{src}/lib.rs", "pub mod services;\n")
+    write(tree, f"{src}/handlers.rs", "use crate::services::fx::records::Fx;\n")
+    write(tree, f"{src}/services/mod.rs", "pub mod fx;\n")
+    write(
+        tree,
+        f"{src}/services/fx/records.rs",
+        "use crate::core_api::{CoreApi, REAL_CORE};\nuse crate::services::fx::fxpage;\nuse super::fxsend;\n",
+    )
+    assert arrows(tree) == []
+
+
+def test_arrows_a_service_may_not_name_another_service_or_a_core_module(
+    tree: Path,
+) -> None:
+    src = "modules/core/runtime/src/rs/src"
+    write(
+        tree,
+        f"{src}/services/fx/records.rs",
+        "use crate::core_api::REAL_CORE;\nuse crate::services::samples::tracks;\nuse crate::{dlog, core_api};\nlet x = crate::dsp::ds();\n// crate::store is only a comment\n",
+    )
+    found = arrows(tree)
+    assert len(found) == 3
+    assert "records.rs:2" in found[0] and "samples" in found[0]
+    assert "records.rs:3" in found[1] and "crate::dlog" in found[1]
+    assert "records.rs:4" in found[2] and "crate::dsp" in found[2]
+
+
+def test_arrows_the_core_names_a_service_only_in_handlers(tree: Path) -> None:
+    src = "modules/core/runtime/src/rs/src"
+    write(tree, f"{src}/lib.rs", "pub mod services;\npub use services::fx::fxpage;\n")
+    write(tree, f"{src}/tick.rs", "fn t() { crate::services::fx::fxpage::tick(); }\n")
+    write(tree, f"{src}/handlers.rs", "pub use crate::services::fx::fxpage::tick;\n")
+    found = arrows(tree)
+    assert [f.split(": ")[0] for f in found] == [f"{src}/lib.rs:2", f"{src}/tick.rs:1"]
