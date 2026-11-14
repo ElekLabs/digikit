@@ -41,7 +41,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | 2 | P3 | sharcdb tables for module DSP sections | P1 | done | PR 450 (dksharc, Rust static analysis of module DSP sections, slice 1); this PR (P3b, DSP names in the address map: pack writes sharc entries, dkaddrmap decodes the load table from the DKRT_STATE/DKRT_DSP/dyndsp_info snapshot, readers are thin callers) |
 | 2 | P4 | Per-module cost, machine budget check, fast-tier refusals per module | P2, P3 | todo | |
 | 2 | S5 | SDK DSP contract: DSP rules, derived cycle cost, `DK_SPAN` | R4, P3, P4 | todo | |
-| 3 | R2 | Runtime deletions and split; sink slots; service anatomy: a service is a module with a role (settled before R7) | S4 | in progress (R2a) | |
+| 3 | R2 | Runtime deletions and split; sink slots; service anatomy: a service is a module with a role (settled before R7) | S4 | in progress: R2a done (PR 459), R2b done (this PR), R2c next | |
 | 3 | R3 | Platform adapter, layer rule | R2 | todo | |
 | 3 | R6 | DSP transfer queue; dsp-link windows | R3 | todo | |
 | 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | todo | |
@@ -70,3 +70,4 @@ Later, only when a feature needs it: the firmware tooling list in [profiling.md]
 - 2026-11-12: S2 split into S2a (C hygiene) and S2b (entry point and imports), so the whitespace-only format commit and the binding change
   are reviewed apart.
 - P3 was done in Rust (dksharc) instead of the Python sharcdb builder, because the workbench uses it through wasm. The sharcdb module mode was an oracle only and was not merged. Register def/use is dksharc slice 2, needed by S5.
+- R2b was split into moves only (proven identical with `patchkit objdiff`); the interfaces and the body splits (registry `check`/`apply`/`remove`, dsp `check`/`reserve`/`step`) are in R2c.

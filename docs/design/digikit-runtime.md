@@ -133,7 +133,7 @@ state and the write order: `docs/design/digikit-registry.md`.
 
 ## DSP code of a module (state machine)
 
-A `.dkm` with a DSP section (`docs/design/digikit-dkm.md`) loads in two parts. `src/rs/src/dsp.rs` holds the DSP loader, `loader.rs` the
+A `.dkm` with a DSP section (`docs/design/digikit-dkm.md`) loads in two parts. `src/rs/src/dsp/mod.rs` holds the DSP loader (voice, effect and sample parts: `services/*/dsp/`), `loader.rs` the
 shared tail of a load. Link: `dl_send`, `dl_send_win`, `dl_poll` of `core/dsp-link` and `dyndsp_info` of `core/dyndsp`, all optional
 (`[object] optional`): an image without them refuses a file that has a DSP section with `E_NO_DSP`.
 

@@ -11,9 +11,12 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
   (about 25 s); tests: `tests/patchkit/test_patchkit_dkrt.py`.
 - Try it by hand: `patchkit pack test/dyn-demo -o plus_drive/dt2/digikit/modules/dyn-demo.dkm`, patch with `--modules core/runtime`,
   boot with that `plus_drive/`; put `modules/dyn-demo.dkm` in `plus_drive/dt2/digikit/selection.txt` (or use DIGIKIT > MODULES), and the boot loads it.
-- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime; `src/cf/tramp.s` the
+- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime (`src/services/{machines,fx,samples}` hold the service code of the runtime crate, `params.rs` the kind-free parameter row writers, `dsp/` the DSP loader core); `src/rs/src/lib.rs` has the module list, the panic handler and the kind-specific parts that wait for the service moves;
+  `state.rs` (`State` and the `DKRT_*` statics), `platform.rs` (device, block read and write, MIDI send, helpers), `imports.rs` (the import table),
+  `api.rs` (the C ABI), `health.rs`, `report.rs` (status, capacity, diag, debug imports), `tick.rs`, `mailbox.rs`; boot: `boot.rs`, `selection.rs`, `safe_mode.rs`;
+  upload: `transport.rs`, `store_cmds.rs`, `admin_cmds.rs`, `module_cmds.rs`; `fault.rs` (crash, hang and panic records), `invariants.rs` (the module table check); `src/cf/tramp.s` the
   hook trampoline and `dkrt_flush`; `src/cf/<dev>/device.s` the device id.
-- Module upload (finding 43, `docs/design/digikit-upload.md`): `src/rs/src/upload.rs` handles the SysEx messages that start `F0 7D 64 6B` from a hook in the firmware's MIDI task (`cf.midi.site.rx`, `dkrt_midi_hook` in `tramp.s`); the host is `tools/device/dkupload.py`. `DKRT_UPLOAD_CUT` is the power-cut test knob.
+- Module upload (finding 43, `docs/design/digikit-upload.md`): `src/rs/src/transport.rs` handles the SysEx messages that start `F0 7D 64 6B` from a hook in the firmware's MIDI task and dispatches them to `store_cmds.rs`, `admin_cmds.rs` and `module_cmds.rs` (`cf.midi.site.rx`, `dkrt_midi_hook` in `tramp.s`); the host is `tools/device/dkupload.py`. `DKRT_UPLOAD_CUT` is the power-cut test knob.
 - Safe mode (finding 37): the boot counter is cleared after a stable period (45,000 DSP blocks = 30 s of UI loop, clock: the firmware's block counter,
   anchor `cf.link.site.block_isr.counter_lit`), not at the first UI pass; a hang or a fault before then counts as a bad boot (a CPU fault halts the device).
   `DKRT_STABLE_BLOCKS` and the record's `stable_blocks` shorten it for tests. Upload safety (finding 43): replies are dropped when the firmware's TX
@@ -37,7 +40,7 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
 - Log levels and sources (0.1.0): a log event has a level (flags bits 1-3: error, warn, info, debug, trace) and a source (bits 8-15; 0 = runtime, n = module
   record index + 1). The default level is info; the level filter is the debug module's. SysEx LOGCFG (0x22) sets the default and per-module levels. They are not
   stored on the card (reset at boot). Modules use `dk_log(level, msg, value)`. Host: `tools/device/dklog.py level`.
-- Table check (0.1.0): after every load and unload the runtime checks its module table (ranges inside their area, disjoint, rows owned by live modules).
+- Table check (0.1.0, `invariants.rs`): after every load and unload the runtime checks its module table (ranges inside their area, disjoint, rows owned by live modules).
   A violation logs TABLE_BAD and refuses further loads (`E_TABLE` -49). Limits per type are `[limits]` in `devices/*.toml`, generated into the runtime.
 - Capacity (finding 57, 0.2.3): `dkrt_capacity(DkrtCap *out, max)` writes the CAPACITY command's entries (limit, used, largest per resource) and returns how many; the SysEx command and the DIGIKIT MEMORY page read the same call.
 - Health (finding 41): `dkrt_health(DkrtHealth *)` (CPU load, the DSP's block time, heap, arena, DSP area; the first three need `core/health`), `dkrt_blocks()` (a 1500 Hz
