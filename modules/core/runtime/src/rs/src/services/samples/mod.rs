@@ -2,6 +2,7 @@
 pub mod peakwin;
 pub mod tracks;
 pub mod dsp;
+pub mod records;
 
 use crate::entry::{client, give, own_rec};
 use dkrt_sdk::*;

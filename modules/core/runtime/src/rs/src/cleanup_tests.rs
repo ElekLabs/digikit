@@ -374,6 +374,31 @@ fn never_started_cancel_is_reclaimable() {
     }
 }
 
+#[test]
+fn on_loaded_runs_once_per_load_and_after_the_last_row() {
+    use crate::handlers::tests::{log, Call, Fake, LOCK as FAKE_LOCK};
+    let _f = FAKE_LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, false);
+        log().clear();
+        let d = dsp::ds();
+        d.row_owner = [0; dsp::MAX_ROWS];
+        d.fx_owner = [0; dsp::MAX_FX];
+        d.step = 0; // no row of module 0 in the fake's list: every row is in
+        type Two = (Fake<1>, (Fake<2>, ()));
+        crate::loader::dsp_step_with::<Two>();
+        // each service hears it once, in list order, and the load is over
+        assert_eq!(*log(), vec![Call::OnLoaded { svc: 1, rec: 0 }, Call::OnLoaded { svc: 2, rec: 0 }]);
+        assert_eq!(dsp::ds().phase, dsp::PH_IDLE);
+        assert_eq!(boot::info().loaded, 1);
+        // an idle loader has nothing to list
+        log().clear();
+        crate::loader::dsp_step_with::<Two>();
+        assert!(log().is_empty());
+    }
+}
+
 // Optional diagnostic firmware link boundary, absent in this host fixture.
 #[no_mangle]
 pub extern "C" fn dl_diag(_: *mut u32, _: u32) -> i32 {

@@ -4,3 +4,4 @@ pub mod nativepage;
 pub mod pageclick;
 pub mod paramapi;
 pub mod dsp;
+pub mod records;

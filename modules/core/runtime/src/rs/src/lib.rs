@@ -22,6 +22,7 @@ pub use services::fx::{fxpage, fxsend};
 pub use services::machines::{assign, nativepage, pageclick, paramapi};
 pub use services::samples::{peakwin, tracks};
 pub mod collect;
+mod handlers;
 pub mod boot;
 pub mod card;
 pub mod fault;
@@ -74,12 +75,6 @@ pub use tick::*;
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
     crate::fault::panic()
-}
-
-/// The effects the image takes at run time: CAPACITY's limit for `FX_SLOTS`. The free effect rows of `core/dynfx` (0 on an image without it, so a device
-/// that cannot load effects yet reports 0).
-pub fn fx_slots() -> u32 {
-    unsafe { dsp::fx_free_rows() }
 }
 
 extern "C" {

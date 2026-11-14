@@ -21,16 +21,13 @@
 //! module's range behind the image, bss and voice states (`state_bytes` of its `dk_fx_desc`).
 //!
 //! Nothing here runs unless the file has a DSP section; the link to `core/dsp-link`, `core/dyndsp` and `core/dynfx` is optional.
+use crate::handlers::{Claim, ServiceList, Services};
 use crate::{arena, cstr_eq, cstr_len, rd32};
 use core::ptr::{addr_of_mut, read_volatile};
 use dkrt_sdk::*;
 
 // Moved to the services (R2b); these paths keep the callers. R2c replaces them with interfaces.
-pub(crate) use crate::services::fx::dsp::{
-    clear_fx_rows, fx_flags_of, fx_free_rows, fx_live, fx_row_of, fx_set_declared, fx_set_mix, fx_set_route, fx_used,
-    fx_word_poll, fx_word_start, module_of_fx_table_row,
-};
-pub(crate) use crate::services::machines::dsp::{clear_rows, module_of_type, set_declared, voice_row};
+pub(crate) use crate::services::fx::dsp::{fx_flags_of, fx_live, fx_row_of, fx_set_mix, fx_set_route, fx_word_poll, fx_word_start};
 pub(crate) use crate::services::samples::dsp::{sample_idle, sample_poll, sample_send};
 
 pub(crate) const INFO_MAGIC: u32 = 0x4444_5350; // "DDSP"
@@ -450,6 +447,29 @@ impl Job {
     }
 }
 
+/// The tables of a DSP section after the header checks (offsets are into the section `s`), for the services' checks of their entries.
+#[derive(Clone, Copy)]
+pub struct DspSec {
+    pub s: *const u8,
+    pub version: u32,
+    /// Bytes of the section.
+    pub size: u32,
+    pub image_size: u32,
+    pub image_off: u32,
+    pub reloc_off: u32,
+    pub nreloc: u32,
+    pub import_off: u32,
+    pub nimport: u32,
+    pub voice_off: u32,
+    pub nvoice: u32,
+    pub fx_off: u32,
+    pub nfx: u32,
+    /// Bytes of a voice entry (`VOICE_V1`, `VOICE_V2` or `VOICE_V3`).
+    pub vstride: u32,
+    /// The track-table record's offset (version 5; 0 otherwise).
+    pub bank_off: u32,
+}
+
 pub(crate) unsafe fn in_sec(off: u32, len: u32, size: u32) -> bool {
     off <= size && len <= size - off
 }
@@ -544,99 +564,27 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         return E_DSP_FORMAT;
     }
     let bank_off = if version == 5 { rd32(s.add(0x3c)) } else { 0 };
-    if version == 5 {
-        if bank_off < 64 || bank_off & 3 != 0 || !in_sec(bank_off, 32, size) {
-            return E_DSP_FORMAT;
-        }
-        // The record must not alias another section table or the initialized image.
-        for (o, n) in [
-            (image_off, image_size),
-            (reloc_off, nreloc * 8),
-            (import_off, nimport * 32),
-            (voice_off, nvoice * vstride),
-            (fx_off, nfx * FX_REC),
-        ] {
-            if n != 0 && bank_off < o + n && o < bank_off + 32 {
-                return E_DSP_FORMAT;
-            }
-        }
-        let regions = [
-            (image_off, image_size),
-            (reloc_off, nreloc * 8),
-            (import_off, nimport * 32),
-            (voice_off, nvoice * vstride),
-            (fx_off, nfx * FX_REC),
-        ];
-        for (i, &(o, n)) in regions.iter().enumerate() {
-            if n != 0 && o < 64 {
-                return E_DSP_FORMAT;
-            }
-            for &(p, m) in &regions[..i] {
-                if n != 0 && m != 0 && o < p + m && p < o + n {
-                    return E_DSP_FORMAT;
-                }
-            }
-        }
-        let b = s.add(bank_off as usize);
-        let record = core::slice::from_raw_parts(b, 32);
-        let image = core::slice::from_raw_parts(s.add(image_off as usize), image_size as usize);
-        // The record is a per-track table (kind 2) with its two blocks.
-        if rd32le(b) != 2 || !dkrt_sdk::sample_job::valid_tracks(record, image) {
-            return E_DSP_FORMAT;
-        }
-        // Relocations cannot turn the initially empty table into a published one.
-        let (records, control) = (rd32le(b.add(8)), rd32le(b.add(12)));
-        for k in 0..nreloc {
-            let at = rd32(s.add((reloc_off + k * 8) as usize));
-            if (at < records + dkrt_sdk::sample_job::TRACK_RECORDS_BYTES && records < at.saturating_add(6))
-                || (at < control + dkrt_sdk::sample_job::TRACK_CONTROL_BYTES && control < at.saturating_add(6))
-            {
-                return E_DSP_FORMAT;
-            }
-        }
-    }
-    // version 3 voices: the state counts must be sane before the range is computed from them
-    if vstride == VOICE_V3 {
-        let mut i = 0;
-        while i < nvoice {
-            let e = s.add((voice_off + vstride * i) as usize);
-            let (note_on, state, clear, count) = (rd32(e.add(8)), rd32(e.add(12)), rd32(e.add(16)), rd32(e.add(52)));
-            if note_on >= image_size || note_on & 1 != 0 || clear > state || state > iw(I_AREA_BYTES) || count > MAX_STATE_VOICES {
-                return E_DSP_FORMAT;
-            }
-            let latched = rd32(e.add(56));
-            if latched & !0xff != 0 || (latched != 0 && note_on == 0) || rd32(e.add(60)) != 0 {
-                return E_DSP_FORMAT;
-            }
-            i += 1;
-        }
-    }
-    // effect records: entries and descriptor inside the image, the descriptor says what the record says (the adapter zeroes `state_bytes` of the
-    // descriptor at the state address: it must not be more than the range holds)
-    let mut i = 0;
-    while i < nfx {
-        let e = s.add((fx_off + FX_REC * i) as usize);
-        let (process, desc, state, np) = (rd32(e), rd32(e.add(4)), rd32(e.add(8)), rd32(e.add(12)));
-        if process >= image_size
-            || process & 1 != 0
-            || desc & 3 != 0
-            || !in_sec(desc, FX_DESC_BYTES, image_size)
-            || state & 3 != 0
-            || state > iw(I_AREA_BYTES)
-            || np > FX_MAX_PARAMS
-        {
-            return E_DSP_FORMAT;
-        }
-        // the routes: send allowed (bit 0), master not allowed (bit 1), default send (bit 2); the default must be an allowed route (0 is a record before the routes)
-        let fl = rd32(e.add(16));
-        if fl & !7 != 0 || (fl & 6 != 0 && fl & 1 == 0) || (fl & 2 != 0 && fl & 4 == 0) {
-            return E_DSP_FORMAT;
-        }
-        let dd = s.add((image_off + desc) as usize);
-        if rd32le(dd) != FX_DESC_MAGIC || rd32le(dd.add(4)) != 1 || rd32le(dd.add(8)) != np || rd32le(dd.add(12)) != state {
-            return E_DSP_FORMAT;
-        }
-        i += 1;
+    let sec = DspSec {
+        s,
+        version,
+        size,
+        image_size,
+        image_off,
+        reloc_off,
+        nreloc,
+        import_off,
+        nimport,
+        voice_off,
+        nvoice,
+        fx_off,
+        nfx,
+        vstride,
+        bank_off,
+    };
+    // the entries of the tables the services own: track table, voices, effects
+    let r = Services::dsp_check_sections(&sec);
+    if r != OK {
+        return r;
     }
     // the range must fit the area at all (a later load may still find it taken: reserve())
     let need = extent(image_size, bss, s.add(voice_off as usize), nvoice, vstride, s.add(fx_off as usize), nfx);
@@ -667,46 +615,10 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         }
         i += 1;
     }
-    // voices: types in the run-time range, entries inside the image, rows available
-    let d = ds();
-    let r = capacity::dsp_rows(nvoice, capacity::free_rows(&d.row_owner, iw(I_VFREE)));
+    // voice and effect rows, and the voices' types
+    let r = Services::dsp_check_rows(&sec);
     if r != OK {
         return r;
-    }
-    // effect rows: the image must have the chain's table, and a free row for each record
-    if nfx > 0 {
-        if finfo().is_null() {
-            return E_NO_DSP;
-        }
-        let r = capacity::dsp_rows(nfx, capacity::free_rows(&d.fx_owner, fx_free_rows()));
-        if r != OK {
-            return r;
-        }
-    }
-    i = 0;
-    while i < nvoice {
-        let e = s.add(voice_off as usize + vstride as usize * i as usize);
-        // the voice names its machine by key (or by a pinned number): `assign` has the type
-        let t = crate::assign::resolve(rd32(e));
-        let entry = rd32(e.add(4));
-        if !(TYPE_FIRST..=TYPE_LAST).contains(&t) || entry >= image_size || entry & 1 != 0 {
-            return E_DSP_TYPE;
-        }
-        let mut k = 0;
-        while k < MAX_ROWS {
-            if d.row_owner[k] != 0 && d.row_type[k] == t {
-                return E_DSP_TYPE; // used by a module that is loaded or loading
-            }
-            k += 1;
-        }
-        let mut j = 0;
-        while j < i {
-            if crate::assign::resolve(rd32(s.add(voice_off as usize + vstride as usize * j as usize))) == t {
-                return E_DSP_TYPE; // twice in this file
-            }
-            j += 1;
-        }
-        i += 1;
     }
     job.image = s.add(image_off as usize);
     job.image_size = image_size;
@@ -740,9 +652,10 @@ pub(crate) unsafe fn put_le16(p: *mut u8, v: u32) {
 /// Nothing is sent yet. On an error nothing is left reserved.
 pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
     if retained() { return E_BUSY; }
-    // a track table needs a free client slot: refuse before anything is reserved
-    if !job.bank.is_null() && rd32le(job.bank) == 2 && !crate::tracks::can_reserve() {
-        return E_TABLE_FULL;
+    // a service may need a slot of its own: refuse before anything is reserved
+    let r = Services::dsp_admit(job);
+    if r != OK {
+        return r;
     }
     let d = ds();
     let len = (extent(job.image_size, job.bss, job.voices, job.nvoice, job.vstride, job.fxs, job.nfx) + GRANULE - 1) & !(GRANULE - 1);
@@ -790,87 +703,11 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
         }
         i += 1;
     }
-    // claim the voice rows (lowest free ones first)
-    let mut claimed = 0u32;
-    let mut v = 0;
-    let mut row = 0;
-    // version 3: the state blocks follow image and bss (8-aligned), one block of `voices * stride` per voice record, in record order
-    let mut state_at = (job.image_size + job.bss + 7) & !7;
-    while v < job.nvoice as usize {
-        while row < MAX_ROWS && (d.row_owner[row] != 0 || (row as u32) >= iw(I_VFREE)) {
-            row += 1;
-        }
-        let e = job.voices.add(job.vstride as usize * v);
-        d.row_type[row] = crate::assign::resolve(rd32(e));
-        d.row_pc[row] = L2_SW_BASE + (base + rd32(e.add(4)) - L2_BYTE_BASE) / 2;
-        let mut k = 0;
-        while k < 8 {
-            d.row_rng[row][k] = match job.vstride {
-                VOICE_V2 => rd32(e.add(8 + 4 * k)),
-                VOICE_V3 => rd32(e.add(20 + 4 * k)),
-                _ => 0,
-            };
-            k += 1;
-        }
-        if job.vstride == VOICE_V3 {
-            let note_on = rd32(e.add(8));
-            let stride = (rd32(e.add(12)) + 7) & !7;
-            d.row_note_on[row] = if note_on == 0 { 0 } else { L2_SW_BASE + (base + note_on - L2_BYTE_BASE) / 2 };
-            // the byte address of a data symbol at image offset `state_at`: nominal L2_BYTE_BASE + state_at, plus the byte shift
-            d.row_state_base[row] = L2_BYTE_BASE + state_at + byte_shift;
-            d.row_stride[row] = stride;
-            d.row_clear[row] = rd32(e.add(16));
-            d.row_latched[row] = rd32(e.add(56));
-            state_at += rd32(e.add(52)) * stride;
-        } else {
-            d.row_note_on[row] = 0;
-            d.row_state_base[row] = 0;
-            d.row_stride[row] = 0;
-            d.row_clear[row] = 0;
-            d.row_latched[row] = 0;
-        }
-        d.row_owner[row] = rec as u8 + 1;
-        d.row_pub[row] = 0;
-        claimed |= 1 << row;
-        row += 1;
-        v += 1;
-    }
-    // claim the effect rows (lowest free ones first); the states follow the voice states, in record order
-    let mut fclaimed = 0u32;
-    let mut f = 0;
-    let mut frow = 0;
-    while f < job.nfx as usize {
-        while frow < MAX_FX && (d.fx_owner[frow] != 0 || (frow as u32) >= fx_free_rows()) {
-            frow += 1;
-        }
-        let e = job.fxs.add(FX_REC as usize * f);
-        d.fx_pc[frow] = L2_SW_BASE + (base + rd32(e) - L2_BYTE_BASE) / 2;
-        d.fx_desc[frow] = base + rd32(e.add(4));
-        d.fx_state[frow] = base + state_at;
-        state_at += (rd32(e.add(8)) + 7) & !7;
-        let mut k = 0;
-        while k < 8 {
-            d.fx_par[frow][k] = rd32(e.add(20 + 4 * k));
-            k += 1;
-        }
-        d.fx_mix[frow] = MIX_ONE;
-        d.fx_route[frow] = 0;
-        d.fx_amt[frow] = [0; 4];
-        d.fx_flags[frow] = rd32(e.add(16));
-        d.fx_owner[frow] = rec as u8 + 1;
-        d.fx_pub[frow] = 0;
-        fclaimed |= 1 << frow;
-        frow += 1;
-        f += 1;
-    }
-    if !job.bank.is_null() {
-        // a client slot was checked free at the start of this function
-        crate::tracks::reserve(rec, rd32le(job.bank.add(4)), base + rd32le(job.bank.add(8)), base + rd32le(job.bank.add(12)));
-    }
-    d.mod_fx[rec] = fclaimed;
+    // the services claim their rows: the voice states follow image and bss (8-aligned), then the effect states, in record order
+    let mut claim = Claim { rec, job, base, byte_shift, state_at: (job.image_size + job.bss + 7) & !7 };
+    Services::dsp_claim(&mut claim);
     d.mod_off[rec] = off;
     d.mod_len[rec] = len;
-    d.mod_rows[rec] = claimed;
     d.send_base = base;
     d.send_len = job.image_size;
     d.send_buf = buf as u32;
@@ -879,44 +716,10 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
 
 /// Give back what `reserve` took for module record `rec` (the rows must have been cleared first).
 pub(crate) unsafe fn unreserve(rec: usize) {
-    crate::tracks::remove(rec);
+    Services::dsp_release(rec);
     let d = ds();
-    let mut k = 0;
-    while k < MAX_ROWS {
-        if d.row_owner[k] == rec as u8 + 1 {
-            d.row_owner[k] = 0;
-            d.row_type[k] = FREE_TYPE;
-            d.row_pub[k] = 0;
-            d.row_pc[k] = 0;
-            d.row_rng[k] = [0; 8];
-            d.row_note_on[k] = 0;
-            d.row_state_base[k] = 0;
-            d.row_stride[k] = 0;
-            d.row_clear[k] = 0;
-            d.row_latched[k] = 0;
-        }
-        k += 1;
-    }
-    k = 0;
-    while k < MAX_FX {
-        if d.fx_owner[k] == rec as u8 + 1 {
-            d.fx_owner[k] = 0;
-            d.fx_pub[k] = 0;
-            d.fx_pc[k] = 0;
-            d.fx_desc[k] = 0;
-            d.fx_state[k] = 0;
-            d.fx_par[k] = [0; 8];
-            d.fx_mix[k] = MIX_ONE;
-            d.fx_route[k] = 0;
-            d.fx_amt[k] = [0; 4];
-            d.fx_flags[k] = 0;
-        }
-        k += 1;
-    }
     d.mod_off[rec] = 0;
     d.mod_len[rec] = 0;
-    d.mod_rows[rec] = 0;
-    d.mod_fx[rec] = 0;
 }
 
 /// Undo a `reserve` that was never started (the CF side failed after it).
@@ -993,7 +796,7 @@ pub(crate) unsafe fn write_word_blocking(win: u32, word: u32, value: u32) -> boo
 pub unsafe fn quiesce(rec: usize) -> bool {
     if retained() { return false; }
     if ds().mod_len[rec] == 0 { return true; }
-    clear_rows(rec) && clear_fx_rows(rec)
+    Services::dsp_clear(rec)
 }
 
 /// Release only after the caller has confirmed invalidation and CF admission/drain.
@@ -1089,6 +892,11 @@ pub(crate) unsafe fn loaded_done() {
 
 /// Advance the load in progress by what is ready now. Called once per UI-loop pass.
 pub unsafe fn step() -> Advance {
+    step_with::<Services>()
+}
+
+/// `step` over a given list of services.
+pub(crate) unsafe fn step_with<L: ServiceList>() -> Advance {
     let d = ds();
     if d.magic != STATE_MAGIC {
         return Advance::Pending;
@@ -1140,98 +948,21 @@ pub unsafe fn step() -> Advance {
                 }
             }
             PH_ROWS => {
-                // rows of the module in claim order; `ROW_STEPS` steps each: the 8 ranges, the pc, note_on, state base, stride, clear
-                // bytes, the latch mask, the disabled word cleared, the type
-                let rec = d.pending.rec as usize;
-                let first = iw(I_VFIRST);
+                // the rows of the module in claim order, each a run of steps that the services declare (`Service::dsp_row_step`)
                 let mut want = d.step;
-                let mut row = MAX_ROWS;
-                let mut k = 0;
-                while k < MAX_ROWS {
-                    if d.row_owner[k] == rec as u8 + 1 {
-                        if want < ROW_STEPS {
-                            row = k;
-                            break;
-                        }
-                        want -= ROW_STEPS;
+                let write = match L::dsp_row_step(d.pending.rec as usize, &mut want, d.started == 0) {
+                    Some(w) => w,
+                    None => {
+                        // every row is in: list the machine
+                        return Advance::Loaded;
                     }
-                    k += 1;
-                }
-                // then the effect rows, `FX_STEPS` steps each: the 8 parameter words, desc, state, mix, enabled, the 4 amount words, the route, the pc
-                let mut frow = MAX_FX;
-                if row == MAX_ROWS {
-                    k = 0;
-                    while k < MAX_FX {
-                        if d.fx_owner[k] == rec as u8 + 1 {
-                            if want < FX_STEPS {
-                                frow = k;
-                                break;
-                            }
-                            want -= FX_STEPS;
-                        }
-                        k += 1;
-                    }
-                }
-                if row == MAX_ROWS && frow == MAX_FX {
-                    // every row is in: list the machine
-                    return Advance::Loaded;
-                }
-                if d.started == 0 && frow != MAX_FX {
-                    let at = FX_ROW_WORDS * (fiw(F_FIRST) + frow as u32);
-                    let (word, value) = if want < 8 {
-                        (at + FXW_P0 + want, d.fx_par[frow][want as usize])
-                    } else if want == 8 {
-                        (at + FXW_DESC, d.fx_desc[frow])
-                    } else if want == 9 {
-                        (at + FXW_STATE, d.fx_state[frow])
-                    } else if want == 10 {
-                        (at + FXW_MIX, d.fx_mix[frow])
-                    } else if want == 11 {
-                        (at + FXW_ENABLED, 1)
-                    } else if want < FX_STEPS - 2 {
-                        (at + FXW_AMT0 + (want - FX_STEP_ROUTE), d.fx_amt[frow][(want - FX_STEP_ROUTE) as usize])
-                    } else if want == FX_STEPS - 2 {
-                        (at + FXW_ROUTE, d.fx_route[frow])
-                    } else {
-                        (at + FXW_PC, d.fx_pc[frow])
-                    };
-                    if start_word(WIN_FX, word, value) {
-                        d.started = 1;
-                        d.row_writes += 1;
-                        if want >= FX_STEP_ROUTE {
-                            d.fx_pub[frow] = 1; // from here the amounts, the route or the pc word may be in the DSP: clear them on failure
-                        }
-                    }
-                    return Advance::Pending;
-                }
+                };
                 if d.started == 0 {
-                    let at = ROW_WORDS * (first + row as u32);
-                    let (word, value) = if want < 8 {
-                        (at + 2 + want, d.row_rng[row][want as usize])
-                    } else if want == 8 {
-                        (at + 1, d.row_pc[row])
-                    } else if want == 9 {
-                        (at + 16, d.row_note_on[row])
-                    } else if want == 10 {
-                        (at + 17, d.row_state_base[row])
-                    } else if want == 11 {
-                        (at + 18, d.row_stride[row])
-                    } else if want == 12 {
-                        (at + 19, d.row_clear[row])
-                    } else if want == 13 {
-                        (at + 22, d.row_latched[row])
-                    } else if want == 14 {
-                        (at + 23, 0) // no track has had its state zeroed since this load (the adapter zeroes it at the track's first note-on)
-                    } else if want == 15 {
-                        (at + 10, 0)
-                    } else {
-                        (at, d.row_type[row])
-                    };
-                    if start_word(WIN_VOICES, word, value) {
+                    if start_word(write.win, write.word, write.value) {
                         d.started = 1;
                         d.row_writes += 1;
-                        if want == ROW_STEPS - 1 {
-                            d.row_pub[row] = 1; // from here the type word may be in the DSP: clear it on failure
+                        if let Some(flag) = write.published {
+                            *flag = 1;
                         }
                     }
                     return Advance::Pending;

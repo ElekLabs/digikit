@@ -1,5 +1,6 @@
 //! The DSP diagnostics poll and its heartbeat watch, the effect and voice guards, the module list for a stop, and the health snapshot. They stay in
 //! the runtime: the fault record, `dk/fault`, ABOUT and the machine table read their results. What they log goes through `dlog::ev`.
+use crate::handlers::{ServiceList, Services};
 use crate::dlog::{ev, sink_present, word_of, INFO};
 use crate::{arena, fw_blocks, st};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
@@ -392,10 +393,10 @@ unsafe fn write_hang(w: &mut Watch) {
     let (site, stage, id, last, module) = if w.m_fx != 0 {
         let site = (w.m_fx >> 8) & 0xff;
         let off = w.m_fx >> 16;
-        (site, w.m_fx & 0xff, off, w.m_fx, crate::dsp::module_of_fx_table_row(off / FX_ROW_BYTES))
+        (site, w.m_fx & 0xff, off, w.m_fx, Services::attribute(site, off / FX_ROW_BYTES))
     } else if w.m_voice != 0 {
         let ty = w.m_voice >> 16;
-        (SITE_VOICE, w.m_voice & 0xff, ty, w.m_voice, crate::dsp::module_of_type(ty))
+        (SITE_VOICE, w.m_voice & 0xff, ty, w.m_voice, Services::attribute(SITE_VOICE, ty))
     } else {
         (SITE_NONE, 0, 0, w.stop_crumb, None)
     };
@@ -421,7 +422,7 @@ unsafe fn log_fx(w: &mut Watch, buf: &[u32; DIAG_WORDS]) {
 }
 
 unsafe fn fx_event(kind: u16, row: u32, faults: u32) {
-    let src = match crate::dsp::module_of_fx_table_row(row) {
+    let src = match Services::attribute(dkrt_sdk::fault::SITE_FX_MASTER, row) {
         Some(m) => (m as u16 + 1) << logk::SOURCE_SHIFT,
         None => 0,
     };

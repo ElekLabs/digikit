@@ -1,6 +1,7 @@
 //! The `.dkm` loader (docs/design/digikit-dkm.md). Every check runs before anything is written to the arena.
 
 use crate::dsp;
+use crate::handlers::{ServiceList, Services};
 use crate::selection::BOOT_IDX;
 use crate::sha256::Sha;
 use crate::entry::Ctx;
@@ -401,7 +402,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         let mut voice = [false; limits::MACHINE_ROWS];
         let mut m = 0;
         while m < c.nm {
-            voice[m] = dsp::voice_row(rec, crate::assign::resolve(col::machine_key(keys, &c.machines[m]))).is_some();
+            voice[m] = Services::has_voice(rec, crate::assign::resolve(col::machine_key(keys, &c.machines[m])));
             m += 1;
         }
         size = match col::lower(c, &p, keys, &voice, base, core::ptr::null_mut(), 0, &mut plan) {
@@ -425,7 +426,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         let mut m = 0;
         while m < c.nm {
             let t = crate::assign::resolve(col::machine_key(keys, &c.machines[m]));
-            if let Some(row) = dsp::voice_row(rec, t) {
+            if Services::has_voice(rec, t) {
                 let (rng, latched) = col::voice_declared(c, &plan, m);
                 if latched != 0 {
                     crate::dlog::ev(
@@ -434,7 +435,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
                         [read_volatile(addr_of!(BOOT_IDX)), m as u32, latched, 0, 0],
                     );
                 }
-                let r = dsp::set_declared(row, rng, latched);
+                let r = Services::declare_voice(rec, t, rng, latched).unwrap_or(OK);
                 if r != OK {
                     arena::free(block);
                     return r;
@@ -449,7 +450,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
             // without `dk_fx_routes` the effect runs on the master only (the rule of the old `routes` field: unset means the default route)
             let flags = Some(col::fx_flags_of_decl(fx));
             let par = if fx.page >= 0 { Some(col::fx_defaults(c, f)) } else { None };
-            if (flags.is_some() || par.is_some()) && !dsp::fx_set_declared(rec, ord, flags, par) {
+            if (flags.is_some() || par.is_some()) && !Services::declare_fx(rec, ord, flags, par).unwrap_or(false) {
                 arena::free(block);
                 return E_FORMAT; // no such effect in the module's DSP section
             }
@@ -481,7 +482,12 @@ pub unsafe fn undo_early(rec: usize) -> i32 {
 /// One UI-loop pass of the DSP loader. `dsp` only advances its state and reports what it found; the module teardown, the machine
 /// listing and the boot result belong here, so `dsp` depends on neither the loader nor the boot.
 pub unsafe fn dsp_step() {
-    match dsp::step() {
+    dsp_step_with::<Services>()
+}
+
+/// `dsp_step` over a given list of services.
+pub(crate) unsafe fn dsp_step_with<L: ServiceList>() {
+    match dsp::step_with::<L>() {
         dsp::Advance::Pending => {}
         dsp::Advance::Failed(code) => {
             let (rec, idx) = {
@@ -498,16 +504,11 @@ pub unsafe fn dsp_step() {
                 let p = &dsp::ds().pending;
                 (p.rec as usize, p.boot_idx)
             };
-            on_loaded(rec);
+            L::on_loaded(rec);
             crate::boot::note_result(idx, OK);
             dsp::loaded_done();
         }
     }
-}
-
-/// Every row of module `rec` is in the DSP: list its machine. The one call from the loader into the track adapter (`tracks`).
-unsafe fn on_loaded(rec: usize) {
-    crate::tracks::ready(rec);
 }
 
 /// While the boot hook loads the selection: the CF part of a module with DSP code is published at once (the machine view is built

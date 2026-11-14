@@ -2,3 +2,4 @@
 pub mod fxpage;
 pub mod fxsend;
 pub mod dsp;
+pub mod records;
