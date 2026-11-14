@@ -7,7 +7,7 @@ role = "runtime"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "Loads modules from the card module store into a private arena at run time (emulator only, no menu yet)"
+summary = "Loads modules from the card module store into a private arena at run time"
 requires = ["core/expansion"]
 conflicts = []
 

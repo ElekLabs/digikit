@@ -13,7 +13,7 @@
 //! restart from the menu is the same reset, so one restart tells.
 //!
 //! Version 2 of the record (the fault trace): a kind word (`W_HKIND`: 1 CPU crash, 2 DSP stopped) and the DSP's site, id, step and diagnostic words after the
-//! last events. A DSP stop is written by `write_hang` (from the heartbeat watch in dlog.rs) the same way, then the soft reset. At the next boot either kind is
+//! last events. A DSP stop is written by `write_hang` (from the heartbeat watch in watch.rs) the same way, then the soft reset. At the next boot either kind is
 //! copied into the settings key `dk/fault` (`store_fault`), which stays until a newer fault replaces it; the ABOUT page reads that key.
 use crate::{dlog, watch};
 use crate::{dkrt_flush, dkrt_soft_reset, st};
