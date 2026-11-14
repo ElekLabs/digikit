@@ -15,7 +15,8 @@
 //! Version 2 of the record (the fault trace): a kind word (`W_HKIND`: 1 CPU crash, 2 DSP stopped) and the DSP's site, id, step and diagnostic words after the
 //! last events. A DSP stop is written by `write_hang` (from the heartbeat watch in watch.rs) the same way, then the soft reset. At the next boot either kind is
 //! copied into the settings key `dk/fault` (`store_fault`), which stays until a newer fault replaces it; the ABOUT page reads that key.
-use crate::{dlog, watch};
+use crate::dlog;
+use dkrt_sdk::fault::Hang;
 use crate::{dkrt_flush, dkrt_soft_reset, st};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::device::{DDR_BYTES, DDR_CACHED_BASE, KEEP_BASE, KEEP_BYTES};
@@ -57,7 +58,7 @@ const W_HSTEP: usize = W_HKIND + 4; // the module step (DK_STEP), 0: none
 const W_HLAST: usize = W_HKIND + 5; // the site's raw last word
 const W_HRT: usize = W_HKIND + 6; // runtime version
 const W_HDIAG: usize = W_HKIND + 7; // the DSP diagnostic words (DIAG_WORDS)
-const W_HNAME: usize = W_HDIAG + watch::DIAG_WORDS; // 4 words: the module's name after its last `/` (16 bytes), what ABOUT shows
+const W_HNAME: usize = W_HDIAG + dkrt_sdk::fault::DIAG_WORDS; // 4 words: the module's name after its last `/` (16 bytes), what ABOUT shows
 const W_CRC: usize = W_HNAME + 4;
 const REC_WORDS: usize = W_CRC + 1;
 
@@ -332,18 +333,6 @@ pub fn panic() -> ! {
     }
 }
 
-/// What the heartbeat watch knows when the DSP has stopped (dlog.rs).
-pub struct Hang {
-    pub site: u32,
-    pub id: u32,
-    pub stage: u32,
-    pub step: u32,
-    pub last: u32,
-    /// Module record index that owns the site's machine type or effect row (`usize::MAX`: none).
-    pub module: usize,
-    pub diag: [u32; watch::DIAG_WORDS],
-}
-
 /// Write the hang record of a stopped DSP (version 2, kind 2) into the keep area and soft-reset. Never returns.
 pub unsafe fn write_hang(h: &Hang) -> ! {
     begin(dkrt_sdk::fault::KIND_DSP);
@@ -365,7 +354,7 @@ pub unsafe fn write_hang(h: &Hang) -> ! {
     write_volatile(r.add(W_HSTEP), h.step);
     write_volatile(r.add(W_HLAST), h.last);
     i = 0;
-    while i < watch::DIAG_WORDS {
+    while i < dkrt_sdk::fault::DIAG_WORDS {
         write_volatile(r.add(W_HDIAG + i), h.diag[i]);
         i += 1;
     }
@@ -486,8 +475,8 @@ unsafe fn log_detail(v: &[u32; REC_WORDS]) {
     let kind = v[W_HKIND];
     let mut k = 0;
     if kind == dkrt_sdk::fault::KIND_DSP {
-        while k < watch::DIAG_WORDS {
-            dlog::ev(logk::DSP_DIAG, e, [(watch::DIAG_WORDS as u32) << 8 | (k / 4) as u32, v[W_HDIAG + k], v[W_HDIAG + k + 1], v[W_HDIAG + k + 2], v[W_HDIAG + k + 3]]);
+        while k < dkrt_sdk::fault::DIAG_WORDS {
+            dlog::ev(logk::DSP_DIAG, e, [(dkrt_sdk::fault::DIAG_WORDS as u32) << 8 | (k / 4) as u32, v[W_HDIAG + k], v[W_HDIAG + k + 1], v[W_HDIAG + k + 2], v[W_HDIAG + k + 3]]);
             k += 4;
         }
     } else {

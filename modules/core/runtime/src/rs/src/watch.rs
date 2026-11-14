@@ -3,6 +3,7 @@
 use crate::dlog::{ev, sink_present, word_of, INFO};
 use crate::{arena, fw_blocks, st};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
+use dkrt_sdk::fault::{Hang, DIAG_HEARTBEAT, DIAG_MAGIC, DIAG_WORDS};
 use dkrt_sdk::*;
 
 extern "C" {
@@ -11,16 +12,6 @@ extern "C" {
     fn dl_diag();
 }
 
-/// Words asked of `dl_diag`, and the word of its output that the DSP counts up while it runs (the heartbeat). The layout is `core/dsp-link`'s
-/// (its README): word 0 is `0xD1A6` with the count in the high half, word 1 the link hook's block beat, word 2 the voice hook's, words 3 to 13 the
-/// context registers, word 14 the last breadcrumb (stage | voice << 8 | machine type << 16), word 15 the dispatches to registered machine types, word 16 the routines that returned,
-/// words 17 to 23 the guard of `core/dsp-voice` (finding 51): 17 faults (16 bits) | kind << 16 | machine types disabled << 24, 18 type | voice << 16 of the last fault, 19 to 22 the
-/// eight parameter words of that call in pairs, 23 the type disabled last. The fault table (always, even without `core/dsp-voice`): 24 `last` of `core/fx`
-/// (stage | site << 8 | row byte offset << 16: stage 4 the core is about to call the module, 5 it returned; site 2 master, 3 send), 25 the module step (`DK_STEP`: the block tail copies the module's static word `_dk_step` into every record),
-/// 26 and 27 the module calls of the master and the send route, 28 effect faults (16 bits) | row of the last fault (byte offset + 1) << 16, 29 and 30 the
-/// addresses of this and of the previous reply record, 31 the effect row switched off last (byte offset + 1).
-/// If it moves the heartbeat, change `DIAG_HEARTBEAT` here and nothing else.
-pub const DIAG_WORDS: usize = 32;
 /// Words of the fault table.
 const D_FXLAST: usize = 24;
 const D_STEP: usize = 25;
@@ -30,12 +21,9 @@ const D_REC1: usize = 30;
 const D_FXDIS: usize = 31;
 /// The effect table's row size in bytes.
 const FX_ROW_BYTES: u32 = 96;
-pub const DIAG_HEARTBEAT: usize = 1;
 /// Words that count up while the DSP runs and so say nothing when they move: the two beats and the dispatch and return counts. The poll logs the diagnostics
 /// again only when another word changes.
 const DIAG_COUNTERS: [usize; 8] = [1, 2, 15, 16, 26, 27, D_REC0, D_REC1];
-/// The low half of word 0 of a diagnostics block.
-pub const DIAG_MAGIC: u32 = 0xd1a6;
 /// The DSP diagnostics are read once a second (blocks); a full set is logged at the first poll, when a word other than a counter changes, and at
 /// least every ten seconds. The health snapshot every ten seconds, the heap walk in every fourth snapshot.
 const DIAG_EVERY: u32 = 1500;
@@ -413,7 +401,7 @@ unsafe fn write_hang(w: &mut Watch) {
     };
     ev(logk::FAULT_FOUND, logk::F_ERROR, [KIND_DSP | site << 8 | stage << 16, id, w.m_step, last, module.map_or(u32::MAX, |m| m as u32)]);
     crate::settings::flush_if_dirty();
-    crate::fault::write_hang(&crate::fault::Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
+    crate::fault::write_hang(&Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
 }
 
 /// The effect guard's words (28 and 31): a new fault is an `FX_FAULT`, a row switched off an `FX_DISABLED`, each with the source of the module that owns the row.
