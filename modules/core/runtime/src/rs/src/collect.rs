@@ -12,7 +12,7 @@
 //! Device facts (knob positions of a machine's words, stock rows by glyph, clone_of, level) come from `Profile`, read from the `dynreg_info` table
 //! (`registry::profile`); before builders the packer took them from the device file.
 use crate::{cstr_len, MAX_MODULES};
-use dkrt_abi::registry::{KIND_NATIVE, KIND_NATIVE_V2};
+use dkrt_sdk::records::{KIND_ACTION, KIND_EFFECT, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
@@ -33,12 +33,7 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 const KNOB_PARAM: u32 = 0x8000_0000;
 const FX_KNOBS: usize = 7;
 
-// record kinds of the `register` section; the lengths come from the services' declarations (`handlers::len`)
-const KIND_PARAM: u32 = 1;
-const KIND_MACHINE: u32 = 2;
-const KIND_PAGE: u32 = 3;
-const KIND_EFFECT: u32 = 4;
-const KIND_ACTION: u32 = 5;
+// record kinds of the `register` section: `dkrt_sdk::records` (sdk/sdk.toml `[records.kinds]`); the lengths come from the services' declarations (`handlers::len`)
 const REG_MAGIC: u32 = 0x444b_5247;
 const HEADER: usize = 16;
 const POS_END: u32 = 255;
@@ -130,6 +125,18 @@ pub struct CParam {
     pub fdef: u32,
 }
 
+/// The most generic records (`dk_record_add`) and the bytes of their bodies one `init` may emit.
+pub const MAX_G: usize = 8;
+pub const G_BYTES: usize = 512;
+
+/// A generic record: its kind and where its body is in `Collect::gbytes`.
+#[derive(Clone, Copy)]
+pub struct GRec {
+    pub kind: u32,
+    pub at: u16,
+    pub len: u16,
+}
+
 const M0: CMachine = CMachine { index: 0, name: [0; TEXT], short: [0; TEXT] };
 const F0: CFx = CFx { index: 0, name: [0; TEXT], short: [0; TEXT], routes_set: false, allowed: 0, def: 0, mix: 127, page: -1 };
 const G0: CPage = CPage { fx: false, owner: 0, name: [0; TEXT], short: [0; TEXT], canvas: false, flags: 0, draw: 0, event: 0, arg: 0, nbind: 0, binds: [[0; 3]; 8], nparam: 0 };
@@ -148,6 +155,11 @@ pub struct Collect {
     pub np: usize,
     pub params: [CParam; MAX_PA],
     pub nparam: usize,
+    /// the generic records (`dk_record_add`): kind and body, appended to the `register` section as they came
+    pub grecs: [GRec; MAX_G],
+    pub ng: usize,
+    gbytes: [u8; G_BYTES],
+    gat: usize,
     records: usize,
 }
 
@@ -157,7 +169,37 @@ const _: () = assert!(core::mem::size_of::<Collect>() == dkneeds::COLLECT_BYTES 
 
 impl Collect {
     pub const fn new() -> Collect {
-        Collect { err: 0, machines: [M0; MAX_M], nm: 0, fxs: [F0; MAX_F], nf: 0, pages: [G0; MAX_PG], np: 0, params: [P0; MAX_PA], nparam: 0, records: 0 }
+        Collect { err: 0, machines: [M0; MAX_M], nm: 0, fxs: [F0; MAX_F], nf: 0, pages: [G0; MAX_PG], np: 0, params: [P0; MAX_PA], nparam: 0, grecs: [GRec { kind: 0, at: 0, len: 0 }; MAX_G], ng: 0, gbytes: [0; G_BYTES], gat: 0, records: 0 }
+    }
+
+    /// `dk_record_add`: keep one record of a generic kind (`[records.kinds]` `generic = true`; the typed kinds have their builders). The body is
+    /// copied; its length is the kind's record length less the 8-byte header. The owning service checks the record at the commit. Returns OK
+    /// or the error that the commit reports too.
+    pub fn add_record(&mut self, kind: u32, bytes: *const u8, len: u32) -> i32 {
+        let want = match crate::handlers::len(kind) {
+            Some(l) if is_generic(kind) => l,
+            _ => {
+                self.fail(E_FORMAT);
+                return E_FORMAT;
+            }
+        };
+        if bytes.is_null() || len + 8 != want {
+            self.fail(E_FORMAT);
+            return E_FORMAT;
+        }
+        if self.ng >= MAX_G || self.gat + len as usize > G_BYTES || !self.room() {
+            self.fail(E_DECL_FULL);
+            return E_DECL_FULL;
+        }
+        let mut i = 0;
+        while i < len as usize {
+            self.gbytes[self.gat + i] = unsafe { *bytes.add(i) };
+            i += 1;
+        }
+        self.grecs[self.ng] = GRec { kind, at: self.gat as u16, len: len as u16 };
+        self.ng += 1;
+        self.gat += len as usize;
+        OK
     }
 
     fn fail(&mut self, e: i32) {
@@ -536,6 +578,12 @@ pub unsafe extern "C" fn dk_fx_routes(f: *mut u8, allowed: u32, def: u32) {
         c.fx_routes(f, allowed, def);
     }
 }
+pub unsafe extern "C" fn dk_record_add(ctx: *mut u8, kind: u32, bytes: *const u8, len: u32) -> i32 {
+    match active() {
+        Some(c) if crate::entry::is_ctx(ctx) => c.add_record(kind, bytes, len),
+        _ => E_CONTEXT,
+    }
+}
 pub unsafe extern "C" fn dk_fx_mix(f: *mut u8, def: u32) {
     if let Some(c) = active() {
         c.fx_mix(f, def);
@@ -643,11 +691,33 @@ impl Out {
         }
         self.at += field;
     }
+    fn bytes(&mut self, s: &[u8]) {
+        let mut i = 0;
+        while i < s.len() {
+            if !self.buf.is_null() && self.at + i < self.cap {
+                unsafe { *self.buf.add(self.at + i) = s[i] };
+            }
+            i += 1;
+        }
+        self.at += s.len();
+    }
     fn head(&mut self, kind: u32, len: usize) {
         self.p32(kind);
         self.p32(len as u32);
         self.count += 1;
     }
+}
+
+/// Whether `kind` is a generic kind: a record a module emits with `dk_record_add` (`[records.kinds]` `generic = true`).
+fn is_generic(kind: u32) -> bool {
+    let mut i = 0;
+    while i < dkrt_sdk::records::GENERIC_KINDS.len() {
+        if dkrt_sdk::records::GENERIC_KINDS[i] == kind {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }
 
 fn len_of(s: &[u8]) -> usize {
@@ -966,10 +1036,10 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             };
             taken |= 1 << index;
             if v1 {
-                o.head(KIND_NATIVE, record_len(KIND_NATIVE));
+                o.head(KIND_NATIVE_PAGE, record_len(KIND_NATIVE_PAGE));
                 o.p32(1);
             } else {
-                o.head(KIND_NATIVE_V2, record_len(KIND_NATIVE_V2));
+                o.head(KIND_NATIVE_PAGE_V2, record_len(KIND_NATIVE_PAGE_V2));
                 o.p32(2);
             }
             o.p32(machine_key(keys, &c.machines[m]));
@@ -1008,6 +1078,14 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             j += 1;
         }
         m += 1;
+    }
+    // the generic records, as they were added: the owning service checks and applies them
+    let mut g = 0;
+    while g < c.ng {
+        let r = c.grecs[g];
+        o.head(r.kind, 8 + r.len as usize);
+        o.bytes(&c.gbytes[r.at as usize..r.at as usize + r.len as usize]);
+        g += 1;
     }
     let size = o.at;
     if !buf.is_null() {

@@ -5,7 +5,7 @@
 # and sample.h from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
-version = "0.7.1"   # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.8.0"   # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -592,6 +592,14 @@ since = "0.7.0"
 context = "init"
 sig = "dk_fx *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
 doc = "Declare an effect of this module: `index` is its DK_FX_ID_<ID>: the position of the id in the `[[fx]]` list of module.toml, which is the row of its id in the keys table. `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit)."
+
+[[import]]
+name = "dk_record_add"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 kind, const void *bytes, u32 len)"
+doc = "Declare one record of a generic kind (`[records.kinds]` `generic = true`; a service of the runtime owns the kind). `len` is the record's length less its 8-byte header; the bytes are copied. A kind that is unknown or not generic, or a wrong length, returns DK_E_FORMAT, a full collection DK_E_DECL_FULL; the owning service checks the record at the commit."
 
 [[import]]
 name = "dk_machine_add_page"
@@ -1521,6 +1529,47 @@ STORE = { id = 12 }   # the module and sample store, in KiB (a store can be 22 G
 SETTINGS = { id = 13 }   # the settings record, in bytes: limit: the area of one copy (`[settings]`); used: the record's bytes (header and entries); largest: 0
 SEND_SLOTS = { id = 14 }   # effects that run on a send bus: the device's limit (`[limits] send_slots`, 0 when the image has no send page); used: loaded effects with the send route; largest: 0
 
+# The in-crate services of the runtime, in the order the core calls them (samples first: its DSP-section checks and its track-table claim ran before the
+# voice and effect parts, and the unreserve of its table before theirs; machines before fx: the registry applies machines, pages and native pages before
+# effect pages, and the removal runs the other way round). `rust` is the type that implements `Service` in the runtime crate (path from its root).
+# `patchkit gen` writes the static table of these rows (modules/core/runtime/src/rs/src/gen_services.rs); a new service is a row here, its folder in
+# src/services/ and its `[records.kinds]`.
+[[service]]
+name = "samples"
+rust = "services::samples::records::Samples"
+
+[[service]]
+name = "machines"
+rust = "services::machines::records::Machines"
+
+[[service]]
+name = "fx"
+rust = "services::fx::records::Fx"
+
+# The record kinds of the `register` section of a `.dkm` (docs/plans/runtime-and-services.md R7): one table for the runtime, dkneeds and patchkit
+# (`patchkit gen` writes `records::KINDS` and one `KIND_<NAME>` and `LEN_<NAME>` per kind into gen_sdk.rs and packages/dkneeds/src/gen_limits.rs).
+# `len` is the whole record, the 8-byte header (kind, length) included. `service` is the in-crate service that owns the kind: it checks, applies and
+# removes the records. A number is never reused. A kind is added here and in its service only; the registry, the collector, the loader, dkneeds and
+# patchkit do not name it. `generic = true`: a module emits the record with `dk_record_add(ctx, kind, bytes, len)` (the typed kinds have their builders); the
+# owning service checks it at the commit.
+[records.kinds]
+PARAM = { id = 1, len = 0x50, service = "machines" }
+MACHINE = { id = 2, len = 0x6c, service = "machines" }
+PAGE = { id = 3, len = 0x60, service = "machines" }
+EFFECT = { id = 4, len = 0x1a4, service = "fx" }
+ACTION = { id = 5, len = 0x10, service = "machines" }
+NATIVE_PAGE = { id = 6, len = 0x90, service = "machines" }
+NATIVE_PAGE_V2 = { id = 7, len = 0x98, service = "machines" }
+
+# The resources a module counts in its `uses` (R7, the header table of a `.dkm`): one id each. `capacity` names the [capacity.kinds] entry the
+# runtime reports for it. `reserved = true`: the id is taken and no module counts it yet.
+[records.resources]
+MACHINE_ROWS = { id = 1, capacity = "MACHINE_ROWS" }
+PARAM_ROWS = { id = 2, capacity = "PARAM_ROWS" }
+PAGE_ROWS = { id = 3, capacity = "PAGE_ROWS" }
+RECORD_BYTES = { id = 4 }     # arena bytes of the record block `init` commits
+DSP_COST = { id = 5, reserved = true }   # DSP cycles of a module (S5, docs/plans/sdk.md); not counted yet
+
 [limits.max]        # contract maxima (capacity plan, docs/plans/capacity-isolation.md): a device's `[limits]` value in devices/*.toml may not exceed them
                     # (`patchkit gen` refuses it). Names are the keys of `[limits]` and, for dsp_area_bytes, of `[digikit]`.
 modules = 8         # module records: the selection record holds SEL_MAX = 8 paths (record format, modules/core/runtime/sdk/src/lib.rs)
@@ -1558,7 +1607,7 @@ max_state_bytes = 16777216  # bytes of one voice state (1 << 24, the loader's mo
 granule = 64        # the DSP area's placement granule
 dsp_slack = 8       # bytes the DSP range may start before its alignment
 arena_hdr = 16      # the arena's block header
-collect_bytes = 6320  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the builder calls of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)
+collect_bytes = 6904  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the builder calls of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)
 
 # The settings store (docs/design/digikit-store.md, "The settings record"): one record in two copies in the store range, next to the selection
 # record. `sectors` is the size of ONE copy; the runtime keeps the record in RAM and writes the copy that is not current. The area is part of the

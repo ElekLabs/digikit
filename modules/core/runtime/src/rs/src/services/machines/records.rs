@@ -5,8 +5,9 @@ use super::{nativepage, pageclick};
 use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::dsp::DspSec;
 use dkrt_abi::mem::{cstr_len, iw, rd, rd32, wr};
-use dkrt_abi::registry::{each, w, RegState, KIND_NATIVE, KIND_NATIVE_V2, MACH_TEXT};
-use dkrt_abi::service::{check_step, tick_phase, ApplyCtx, CapSink, CheckCtx, Claim, GuardState, RowWrite, Service};
+use dkrt_abi::registry::{each, w, RegState, MACH_TEXT};
+use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
+use dkrt_abi::service::{check_step, tick_phase, ApplyCtx, CheckCtx, Claim, GuardState, RowWrite, Service};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::*;
 
@@ -52,15 +53,6 @@ unsafe fn counts() -> [(u32, u32); 3] {
     ]
 }
 
-pub(crate) const KIND_PARAM: u32 = 1;
-pub(crate) const KIND_MACHINE: u32 = 2;
-pub(crate) const KIND_PAGE: u32 = 3;
-/// A click action of a parameter: the file's PARAM index and the image offset of the callback (docs/design/machine-page-click.md).
-pub(crate) const KIND_ACTION: u32 = 5;
-const LEN_ACTION: u32 = 0x10;
-const LEN_PARAM: u32 = 0x50;
-const LEN_MACHINE: u32 = 0x6c;
-const LEN_PAGE: u32 = 0x60;
 const KNOB_PARAM: u32 = 0x8000_0000;
 const MAX_MACH: usize = limits::MACHINE_ROWS;
 const MAX_PARAM: usize = limits::PARAM_ROWS;
@@ -71,25 +63,6 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 pub struct Machines;
 
 impl Service for Machines {
-    fn len(kind: u32) -> Option<u32> {
-        // an if chain, not a `match`: a dense match becomes a PC-relative jump table, which is not ColdFire code
-        if kind == KIND_PARAM {
-            Some(LEN_PARAM)
-        } else if kind == KIND_MACHINE {
-            Some(LEN_MACHINE)
-        } else if kind == KIND_PAGE {
-            Some(LEN_PAGE)
-        } else if kind == KIND_ACTION {
-            Some(LEN_ACTION)
-        } else if kind == KIND_NATIVE_V2 {
-            Some(nativepage::LEN_V2)
-        } else if kind == KIND_NATIVE {
-            Some(nativepage::LEN)
-        } else {
-            None
-        }
-    }
-
     unsafe fn fits(inf: *const u32) -> bool {
         // the table must fit this registry's state (a table that says more rows than the state has would index past it)
         !(iw(inf, w::M_DYN_N) as usize > MAX_MACH
@@ -136,15 +109,22 @@ impl Service for Machines {
         }
     }
 
-    unsafe fn caps(out: &mut CapSink) {
+    unsafe fn cap(kind: u8) -> Option<(u32, u32)> {
         use dkrt_sdk::proto::*;
-        let [mach, param, page] = counts();
-        let (vrows, vused) = super::dsp::rows_counts();
-        out.add(CAPK_MACHINE_ROWS, mach.0, mach.1);
-        out.add(CAPK_VOICE_ROWS, vrows, vused);
-        out.add(CAPK_PARAM_ROWS, param.0, param.1);
-        out.add(CAPK_PAGE_ROWS, page.0, page.1);
-        out.add(CAPK_MAP_ENTRIES, dkrt_sdk::sel::MAP_N as u32, REAL_CORE.type_map_used());
+        // an if chain, not a `match`: a dense match becomes a PC-relative jump table, which is not ColdFire code
+        if kind == CAPK_MACHINE_ROWS {
+            Some(counts()[0])
+        } else if kind == CAPK_VOICE_ROWS {
+            Some(super::dsp::rows_counts())
+        } else if kind == CAPK_PARAM_ROWS {
+            Some(counts()[1])
+        } else if kind == CAPK_PAGE_ROWS {
+            Some(counts()[2])
+        } else if kind == CAPK_MAP_ENTRIES {
+            Some((dkrt_sdk::sel::MAP_N as u32, REAL_CORE.type_map_used()))
+        } else {
+            None
+        }
     }
 
     unsafe fn attribute(site: u32, id: u32) -> Option<usize> {

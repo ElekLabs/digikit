@@ -22,6 +22,8 @@ pub mod services;
 pub mod assign;
 pub mod collect;
 mod handlers;
+#[rustfmt::skip]
+mod gen_services;
 pub mod boot;
 pub mod card;
 pub mod fault;

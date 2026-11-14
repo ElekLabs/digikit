@@ -36,9 +36,7 @@ fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
     f
 }
 
-const KIND_PARAM: u32 = 1;
-const KIND_MACHINE: u32 = 2;
-const KIND_PAGE: u32 = 3;
+use crate::{KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 
 /// A keys table whose row counts are those of these kinds (one machine key per machine row).
 fn register(kinds: &[u32]) -> Vec<u8> {

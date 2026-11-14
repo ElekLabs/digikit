@@ -19,7 +19,7 @@ export const MAX_STATE_BYTES = 16777216;
 export const GRANULE = 64;
 export const DSP_SLACK = 8;
 export const ARENA_HDR = 16;
-export const COLLECT_BYTES = 6320;
+export const COLLECT_BYTES = 6904;
 export const MAX_VOICES = 8;
 export const MAX_FX = 4;
 

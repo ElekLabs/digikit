@@ -118,6 +118,7 @@ import_table! {
     ("dk_param_set", imp_param_set),
     ("dk_module_ctx_add_machine", collect::dk_module_ctx_add_machine),
     ("dk_module_ctx_add_fx", collect::dk_module_ctx_add_fx),
+    ("dk_record_add", collect::dk_record_add),
     ("dk_machine_add_page", collect::dk_machine_add_page),
     ("dk_fx_add_page", collect::dk_fx_add_page),
     ("dk_page_add_param", collect::dk_page_add_param),
@@ -200,6 +201,7 @@ const _: dkrt_sdk::api::DkPageCanvasFn = collect::dk_page_canvas;
 const _: dkrt_sdk::api::DkPageBindFn = collect::dk_page_bind;
 const _: dkrt_sdk::api::DkPageBindLocalFn = collect::dk_page_bind_local;
 const _: dkrt_sdk::api::DkFxRoutesFn = collect::dk_fx_routes;
+const _: dkrt_sdk::api::DkRecordAddFn = collect::dk_record_add;
 const _: dkrt_sdk::api::DkFxMixFn = collect::dk_fx_mix;
 const _: dkrt_sdk::api::DkSamplePoolOpenFn = crate::handlers::exports::dk_sample_pool_open;
 const _: dkrt_sdk::api::DkSamplePoolAddFn = crate::handlers::exports::dk_sample_pool_add;

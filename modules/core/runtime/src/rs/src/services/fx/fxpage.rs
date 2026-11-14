@@ -28,8 +28,7 @@ use dkrt_abi::mem::{cstr_len, iw, rd, rd16, rd32, wr, wr16};
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
-pub const KIND_EFFECT: u32 = 4;
-pub const LEN_EFFECT: u32 = 0x1a4;
+pub use dkrt_sdk::records::{KIND_EFFECT, LEN_EFFECT};
 const INFO_MAGIC: u32 = 0x4658_5047; // "FXPG"
 use dkrt_abi::dsp::MAX_FX;
 const KNOBS: usize = 7;

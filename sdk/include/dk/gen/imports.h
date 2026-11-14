@@ -148,6 +148,9 @@ uint32_t dk_hash32_finish(void *state);
 /* Replace the stock boot animation. `frame(tick, arg)` returns the 1024-byte native bitmap of tick 0 .. ticks-1 (30 ticks a second), or NULL to end the animation; it runs on the intro task, must not block and must not call any import. `done(arg)` (may be NULL) runs once in the UI task at the first UI pass. `ticks` is 1 to 300. Returns 0, DK_E_NOT_FOUND outside init, DK_E_CONTRACT, DK_E_BUSY (taken already) or DK_E_BOOT_ONLY. See <dk/platform/intro.h>. Context: init. Since runtime 0.7.0. */
 int32_t dk_intro_take(dk_intro_frame_fn *frame, dk_intro_done_fn *done, void *arg, uint32_t ticks);
 
+/* Declare one record of a generic kind (`[records.kinds]` `generic = true`; a service of the runtime owns the kind). `len` is the record's length less its 8-byte header; the bytes are copied. A kind that is unknown or not generic, or a wrong length, returns DK_E_FORMAT, a full collection DK_E_DECL_FULL; the owning service checks the record at the commit. Context: init. Since runtime 0.8.0. */
+int32_t dk_record_add(dk_module_ctx *ctx, uint32_t kind, const void *bytes, uint32_t len);
+
 /* The RAM ranges `[lo, hi)` of the device file's `[digikit] peek`: returns how many there are, and for `i` below that writes `lo, hi` to `out[0..2]`. For a module that implements PEEK. See <dk/platform/debug.h>. Context: any. Since runtime 0.7.0. */
 uint32_t dk_debug_peek(uint32_t i, uint32_t *out);
 

@@ -4,6 +4,7 @@ use super::*;
 use dkrt_sdk::*;
 use crate::registry::{apply_with, check_with, each, remove_with, DKRT_REG};
 use dkrt_sdk::proto::CAPK_FX_SLOTS;
+use dkrt_abi::service::ServiceRow;
 use std::sync::Mutex;
 use std::vec::Vec;
 
@@ -46,14 +47,6 @@ unsafe fn body(reg: *const u8, kind: u32, b: *const u8) -> Vec<u8> {
 }
 
 impl<const N: u8> Service for Fake<N> {
-    fn len(kind: u32) -> Option<u32> {
-        if kind == kind_of(N) {
-            Some(8 + 4 * N as u32)
-        } else {
-            None
-        }
-    }
-
     /// Service 1 checks its records at the step of native pages, service 2 at the step of effects: the order of the old body.
     unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
         let mine = if N == 1 { check_step::NATIVE } else { check_step::EFFECTS };
@@ -93,8 +86,8 @@ impl<const N: u8> Service for Fake<N> {
         log().push(Call::Remove { svc: N, owner });
     }
 
-    unsafe fn caps(out: &mut CapSink) {
-        out.add(CAPK_FX_SLOTS, 10 * N as u32, N as u32);
+    unsafe fn cap(kind: u8) -> Option<(u32, u32)> {
+        (kind == CAPK_FX_SLOTS).then_some((10 * N as u32, N as u32))
     }
 
     unsafe fn attribute(site: u32, id: u32) -> Option<usize> {
@@ -124,7 +117,11 @@ impl<const N: u8> Service for Fake<N> {
     }
 }
 
-type Two = (Fake<1>, (Fake<2>, ()));
+/// Fake service `N` owns record kind `100 + N`, a record of `8 + 4 * N` bytes.
+static KINDS_1: [(u32, u32); 1] = [(101, 12)];
+static KINDS_2: [(u32, u32); 1] = [(102, 16)];
+static TWO_ROWS: [ServiceRow; 2] = [ServiceRow::of::<Fake<1>>("fake1", &KINDS_1), ServiceRow::of::<Fake<2>>("fake2", &KINDS_2)];
+pub(crate) const TWO: ServiceTable = ServiceTable { rows: &TWO_ROWS };
 
 /// The words of a `dynreg_info` that the walker reads: the magic and the device.
 static TABLE: [u32; 100] = {
@@ -173,9 +170,9 @@ fn a_mixed_file_checks_in_step_order_applies_in_file_order_and_removes_in_revers
         reset();
         // mixed kinds: service 1, 2, 1
         let sec = section(&[kind_of(1), kind_of(2), kind_of(1)]);
-        assert_eq!(check_with::<Two>(sec.as_ptr(), sec.len() as u32, 0), OK);
-        assert_eq!(apply_with::<Two>(5, sec.as_ptr(), sec.len() as u32, 0x1000), OK);
-        remove_with::<Two>(5);
+        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0), OK);
+        assert_eq!(apply_with(TWO, 5, sec.as_ptr(), sec.len() as u32, 0x1000), OK);
+        remove_with(TWO, 5);
         let (k1, b1) = rec(1, 1);
         let (k1b, b1b) = rec(1, 3);
         let (k2, b2) = rec(2, 2);
@@ -212,18 +209,18 @@ fn the_first_fault_is_the_first_step_that_finds_one_and_a_failed_apply_stops_the
         // an effect-step fault precedes nothing: the native step runs first, as in the old body, wherever the records sit in the file
         let sec = section(&[kind_of(2), kind_of(1), kind_of(2)]);
         REFUSE = (2, kind_of(2));
-        assert_eq!(check_with::<Two>(sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
+        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
         assert_eq!(log().len(), 2); // service 1's record, then service 2's first (refused) record; the second is not looked at
         assert!(matches!(log()[0], Call::Check { svc: 1, .. }));
         reset();
         REFUSE = (1, kind_of(1));
-        assert_eq!(check_with::<Two>(sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
+        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
         assert_eq!(log().len(), 1, "service 1 refused at its step, so service 2's step never ran");
 
         // apply stops at the first failing record in file order; later records of any kind are not applied
         reset();
         FAIL_APPLY = (1, kind_of(1));
-        assert_eq!(apply_with::<Two>(5, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
+        assert_eq!(apply_with(TWO, 5, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
         let applied: Vec<_> = log().iter().filter(|c| matches!(c, Call::Apply { .. })).collect();
         assert_eq!(applied.len(), 2, "the effect record before the failing one was applied, the one after was not");
         assert_eq!((*core::ptr::addr_of!(DKRT_REG)).registers, 0, "a failed apply is not a registration");
@@ -240,11 +237,11 @@ fn the_walker_refuses_a_kind_no_service_declared_and_a_wrong_length() {
         bad[12..16].copy_from_slice(&2u32.to_be_bytes());
         bad.extend_from_slice(&99u32.to_be_bytes());
         bad.extend_from_slice(&8u32.to_be_bytes());
-        assert_eq!(check_with::<Two>(bad.as_ptr(), bad.len() as u32, 0), E_FORMAT);
+        assert_eq!(check_with(TWO, bad.as_ptr(), bad.len() as u32, 0), E_FORMAT);
         assert!(log().is_empty());
         let mut wrong = section(&[kind_of(2)]);
         wrong[20..24].copy_from_slice(&12u32.to_be_bytes()); // the record's length word: a kind-1 length
-        assert_eq!(check_with::<Two>(wrong.as_ptr(), wrong.len() as u32, 0), E_FORMAT);
+        assert_eq!(check_with(TWO, wrong.as_ptr(), wrong.len() as u32, 0), E_FORMAT);
         assert!(log().is_empty());
     }
 }
@@ -252,11 +249,9 @@ fn the_walker_refuses_a_kind_no_service_declared_and_a_wrong_length() {
 #[test]
 fn capacity_sums_the_declared_counts() {
     unsafe {
-        let mut sink = CapSink::new();
-        <Two as ServiceList>::caps(&mut sink);
         // 10 + 20 slots, 1 + 2 used: two services declare the same kind
-        assert_eq!(sink.get(CAPK_FX_SLOTS), Some((30, 3)));
-        assert_eq!(sink.get(CAPK_FX_SLOTS + 1), None);
+        assert_eq!(TWO.cap(CAPK_FX_SLOTS), Some((30, 3)));
+        assert_eq!(TWO.cap(CAPK_FX_SLOTS + 1), None);
     }
 }
 
@@ -265,14 +260,14 @@ fn attribution_asks_the_services_in_order_until_one_answers() {
     let _g = LOCK.lock().unwrap();
     unsafe {
         reset();
-        assert_eq!(<Two as ServiceList>::attribute(2, 7), Some(207));
+        assert_eq!(TWO.attribute(2, 7), Some(207));
         assert_eq!(
             *log(),
             vec![Call::Attribute { svc: 1, site: 2, id: 7 }, Call::Attribute { svc: 2, site: 2, id: 7 }]
         );
-        assert_eq!(<Two as ServiceList>::attribute(9, 7), None);
+        assert_eq!(TWO.attribute(9, 7), None);
         reset();
-        assert_eq!(<Two as ServiceList>::declare_voice(0, 1, [0; 8], 0), Some(OK));
+        assert_eq!(TWO.declare_voice(0, 1, [0; 8], 0), Some(OK));
         assert_eq!(*log(), vec![Call::DeclareVoice { svc: 1, rec: 0, ty: 1 }]);
     }
 }
@@ -282,8 +277,8 @@ fn a_tick_phase_reaches_every_service_in_list_order() {
     let _g = LOCK.lock().unwrap();
     unsafe {
         reset();
-        <Two as ServiceList>::tick(tick_phase::EARLY);
-        <Two as ServiceList>::tick(tick_phase::LATE);
+        TWO.tick(tick_phase::EARLY);
+        TWO.tick(tick_phase::LATE);
         assert_eq!(
             *log(),
             vec![

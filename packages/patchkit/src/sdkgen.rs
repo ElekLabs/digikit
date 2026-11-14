@@ -39,6 +39,8 @@ pub const C_SAMPLE_OUT: &str = "sdk/include/dk/gen/sample.h";
 pub const SAMPLE_INC_OUT: &str = "sdk/dsp/contract/dk_sample_pool.inc";
 /// The generated Rust format limits of the `.dkm` loader (re-exported by `dkneeds`), relative to the repository root.
 pub const LIMITS_RS_OUT: &str = "packages/dkneeds/src/gen_limits.rs";
+/// The generated static table of the runtime's in-crate services, relative to the repository root.
+pub const SERVICES_RS_OUT: &str = "modules/core/runtime/src/rs/src/gen_services.rs";
 /// The generated Python protocol numbers, relative to the repository root.
 pub const PROTO_PY_OUT: &str = "tools/device/dkproto.py";
 /// The generated Rust protocol numbers of the host client, relative to the repository root.
@@ -66,6 +68,8 @@ struct Sdk {
     protocol: Protocol,
     limits: LimitsSection,
     capacity: Capacity,
+    records: Records,
+    service: Vec<ServiceDecl>,
     settings: Settings,
     load: Load,
     sample: SampleToml,
@@ -207,6 +211,41 @@ struct CapKind {
     fit: bool,
     label: Option<String>,
 }
+/// `[records]`: the record kinds of the `register` section and the resources of a module's `uses` (R7).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Records {
+    kinds: BTreeMap<String, RecKind>,
+    resources: BTreeMap<String, Resource>,
+}
+/// One in-crate service of the runtime: `[[service]]`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ServiceDecl {
+    name: String,
+    /// The type that implements `Service`, from the runtime crate's root.
+    rust: String,
+}
+/// One record kind: its number, the whole record's length (header included) and the in-crate service that owns it.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecKind {
+    id: u32,
+    len: u32,
+    service: String,
+    /// A module emits the record with `dk_record_add`.
+    #[serde(default)]
+    generic: bool,
+}
+/// One resource of a module's `uses`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Resource {
+    id: u32,
+    capacity: Option<String>,
+    #[serde(default)]
+    reserved: bool,
+}
 /// The kind numbers by name.
 fn kind_ids(sdk: &Sdk) -> BTreeMap<String, u8> {
     sdk.capacity
@@ -288,6 +327,105 @@ fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
     ]
 }
 
+/// The record kinds and resources (`[records]`), one `KIND_`, `LEN_` and `RES_` constant each and the tables `KINDS` (kind, length,
+/// owning service) and `RESOURCES` (id, name), with `indent`. The runtime (`gen_sdk.rs`) and dkneeds (`gen_limits.rs`) carry the same text.
+fn records_consts(sdk: &Sdk, indent: &str) -> String {
+    let mut s = String::new();
+    let mut kinds: Vec<_> = sdk.records.kinds.iter().collect();
+    kinds.sort_by_key(|(_, k)| k.id);
+    for (n, k) in &kinds {
+        let _ = writeln!(s, "{indent}pub const KIND_{n}: u32 = {};", k.id);
+        let _ = writeln!(s, "{indent}pub const LEN_{n}: u32 = {:#x};", k.len);
+    }
+    let _ = writeln!(
+        s,
+        "{indent}/// Every record kind in the order of its number: (kind, record length with its header, owning service)."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const KINDS: [(u32, u32, &str); {}] = [",
+        kinds.len()
+    );
+    for (n, k) in &kinds {
+        let _ = writeln!(s, "{indent}    (KIND_{n}, LEN_{n}, {:?}),", k.service);
+    }
+    let _ = writeln!(s, "{indent}];");
+    for d in &sdk.service {
+        let own: Vec<_> = kinds.iter().filter(|(_, k)| k.service == d.name).collect();
+        let _ = writeln!(
+            s,
+            "{indent}/// The kinds of the `{}` service: (kind, record length).",
+            d.name
+        );
+        let _ = writeln!(
+            s,
+            "{indent}pub const KINDS_{}: [(u32, u32); {}] = [",
+            d.name.to_uppercase(),
+            own.len()
+        );
+        for (n, _) in &own {
+            let _ = writeln!(s, "{indent}    (KIND_{n}, LEN_{n}),");
+        }
+        let _ = writeln!(s, "{indent}];");
+    }
+    let generic: Vec<_> = kinds.iter().filter(|(_, k)| k.generic).collect();
+    let _ = writeln!(
+        s,
+        "{indent}/// The kinds a module emits with `dk_record_add`."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const GENERIC_KINDS: [u32; {}] = [",
+        generic.len()
+    );
+    for (n, _) in &generic {
+        let _ = writeln!(s, "{indent}    KIND_{n},");
+    }
+    let _ = writeln!(s, "{indent}];");
+    let mut res: Vec<_> = sdk.records.resources.iter().collect();
+    res.sort_by_key(|(_, r)| r.id);
+    for (n, r) in &res {
+        let _ = writeln!(s, "{indent}pub const RES_{n}: u32 = {};", r.id);
+    }
+    let _ = writeln!(
+        s,
+        "{indent}/// The resources of a module's `uses` in the order of their ids: (id, name, reserved: no module counts it yet)."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const RESOURCES: [(u32, &str, bool); {}] = [",
+        res.len()
+    );
+    for (n, r) in &res {
+        let _ = writeln!(s, "{indent}    (RES_{n}, {:?}, {}),", n.to_lowercase(), r.reserved);
+    }
+    let _ = writeln!(s, "{indent}];");
+    s
+}
+
+/// `modules/core/runtime/src/rs/src/gen_services.rs`: the static table of the in-crate services (`[[service]]`).
+fn rust_services(sdk: &Sdk) -> String {
+    let mut s = format!("// {HEADER}\n\n");
+    s.push_str("use dkrt_abi::service::{ServiceRow, ServiceTable};\n\n");
+    s.push_str("/// The in-crate services in the order the core calls them (`[[service]]` of sdk/sdk.toml), each with the record kinds it owns.\n");
+    let _ = writeln!(
+        s,
+        "pub static SERVICES: [ServiceRow; {}] = [",
+        sdk.service.len()
+    );
+    for d in &sdk.service {
+        let _ = writeln!(
+            s,
+            "    ServiceRow::of::<crate::{}>({:?}, &dkrt_sdk::records::KINDS_{}),",
+            d.rust,
+            d.name,
+            d.name.to_uppercase()
+        );
+    }
+    s.push_str("];\n\npub const TABLE: ServiceTable = ServiceTable { rows: &SERVICES };\n");
+    s
+}
+
 /// `packages/dkneeds/src/gen_limits.rs`: the format limits as `u32`. The `.dkm` header is `HEADER` here (`dkneeds::HEADER`).
 fn rust_limits(sdk: &Sdk) -> String {
     let mut s = format!("// {HEADER}\n\n");
@@ -295,6 +433,8 @@ fn rust_limits(sdk: &Sdk) -> String {
         let n = if n == "DKM_HEADER" { "HEADER" } else { n };
         let _ = writeln!(s, "pub const {n}: u32 = {v};");
     }
+    s.push('\n');
+    s.push_str(&records_consts(sdk, ""));
     s
 }
 /// The contract maxima of the capacity limits: `[limits.max]` of `sdk/sdk.toml`. A device's `[limits]` value (and its `[digikit]`
@@ -569,6 +709,40 @@ fn parse(text: &str) -> Result<Sdk> {
             ));
         }
     }
+    for (i, (n, k)) in sdk.records.kinds.iter().enumerate() {
+        if k.id == 0
+            || k.len < 8
+            || k.len % 4 != 0
+            || !sdk.service.iter().any(|d| d.name == k.service)
+            || sdk
+                .records
+                .kinds
+                .iter()
+                .skip(i + 1)
+                .any(|(_, w)| w.id == k.id)
+        {
+            return Err(err!(
+                "{SOURCE}: record kind {n}: the number is 0 or twice, the length is not a multiple of 4 from 8, or the service is not a [[service]]"
+            ));
+        }
+    }
+    for (i, (n, r)) in sdk.records.resources.iter().enumerate() {
+        if r.id == 0
+            || sdk
+                .records
+                .resources
+                .iter()
+                .skip(i + 1)
+                .any(|(_, w)| w.id == r.id)
+            || r.capacity
+                .as_ref()
+                .is_some_and(|c| !sdk.capacity.kinds.contains_key(c))
+        {
+            return Err(err!(
+                "{SOURCE}: resource {n}: the number is 0 or twice, or its capacity kind is unknown"
+            ));
+        }
+    }
     let st = &sdk.settings;
     if st.copies != 2 || st.sectors == 0 || st.key_max == 0 || st.key_max > 255 || st.value_max == 0
     {
@@ -763,6 +937,9 @@ fn rust(sdk: &Sdk) -> String {
         "    pub const PAGE_KNOBS: usize = {};",
         page_knobs_of(sdk)
     );
+    s.push_str("}\n\n");
+    s.push_str("/// The record kinds of the `register` section and the resources of `uses` (`[records]`).\npub mod records {\n");
+    s.push_str(&records_consts(sdk, "    "));
     s.push_str("}\n\n");
     s.push_str(&rust_sample_pool(sdk));
     s.push_str(&rust_settings(sdk));
@@ -2139,6 +2316,7 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (BULK_RS_OUT.to_string(), rust_bulk(&sdk)),
         (BULK_TS_OUT.to_string(), ts_bulk(&sdk)),
         (LIMITS_RS_OUT.to_string(), rust_limits(&sdk)),
+        (SERVICES_RS_OUT.to_string(), rust_services(&sdk)),
         (C_MACHINE_VIEW_OUT.to_string(), machine_h(&sdk)?),
         (C_FX_VIEW_OUT.to_string(), fx_h(&sdk)?),
         (C_IMPORTS_OUT.to_string(), imports_h(&sdk)?),

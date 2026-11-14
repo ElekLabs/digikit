@@ -3,7 +3,7 @@
 use crate::platform::device;
 use crate::platform::st;
 use crate::state::{init_once, MAX_MODULES, STAGE_BYTES};
-use crate::handlers::{CapSink, ServiceList, Services};
+use crate::handlers::services;
 use crate::{arena, boot, card, fault, dlog, dsp, settings, speed, store, watch};
 use core::ptr::{addr_of, read_volatile};
 use dkrt_abi::platform::Platform;
@@ -103,9 +103,8 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         None => 0,
     };
     let (set_limit, set_used) = settings::capacity();
-    // the services declare their own counts (machine, voice, parameter and page rows, effect and send slots, map entries)
-    let mut declared = CapSink::new();
-    Services::caps(&mut declared);
+    // the services declare their own counts (machine, voice, parameter and page rows, effect and send slots, map entries), per kind
+    let table = services();
     // the values of each kind (a table, not a `match`: a jump table would put data in .text)
     let entries: [(u8, u32, u32, u32); 7] = [
         (CAPK_MODULES, MAX_MODULES as u32, mods, 0),
@@ -128,7 +127,7 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
             }
             e += 1;
         }
-        if let Some((limit, used)) = declared.get(kind) {
+        if let Some((limit, used)) = table.cap(kind) {
             v = (kind, limit, used, 0);
         }
         *out.add(k) = DkrtCap { kind: kind as u32, limit: v.1, used: v.2, largest: v.3 };

@@ -11,6 +11,63 @@ pub const MAX_STATE_BYTES: u32 = 16777216;
 pub const GRANULE: u32 = 64;
 pub const DSP_SLACK: u32 = 8;
 pub const ARENA_HDR: u32 = 16;
-pub const COLLECT_BYTES: u32 = 6320;
+pub const COLLECT_BYTES: u32 = 6904;
 pub const MAX_VOICES: u32 = 8;
 pub const MAX_FX: u32 = 4;
+
+pub const KIND_PARAM: u32 = 1;
+pub const LEN_PARAM: u32 = 0x50;
+pub const KIND_MACHINE: u32 = 2;
+pub const LEN_MACHINE: u32 = 0x6c;
+pub const KIND_PAGE: u32 = 3;
+pub const LEN_PAGE: u32 = 0x60;
+pub const KIND_EFFECT: u32 = 4;
+pub const LEN_EFFECT: u32 = 0x1a4;
+pub const KIND_ACTION: u32 = 5;
+pub const LEN_ACTION: u32 = 0x10;
+pub const KIND_NATIVE_PAGE: u32 = 6;
+pub const LEN_NATIVE_PAGE: u32 = 0x90;
+pub const KIND_NATIVE_PAGE_V2: u32 = 7;
+pub const LEN_NATIVE_PAGE_V2: u32 = 0x98;
+/// Every record kind in the order of its number: (kind, record length with its header, owning service).
+pub const KINDS: [(u32, u32, &str); 7] = [
+    (KIND_PARAM, LEN_PARAM, "machines"),
+    (KIND_MACHINE, LEN_MACHINE, "machines"),
+    (KIND_PAGE, LEN_PAGE, "machines"),
+    (KIND_EFFECT, LEN_EFFECT, "fx"),
+    (KIND_ACTION, LEN_ACTION, "machines"),
+    (KIND_NATIVE_PAGE, LEN_NATIVE_PAGE, "machines"),
+    (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2, "machines"),
+];
+/// The kinds of the `samples` service: (kind, record length).
+pub const KINDS_SAMPLES: [(u32, u32); 0] = [
+];
+/// The kinds of the `machines` service: (kind, record length).
+pub const KINDS_MACHINES: [(u32, u32); 6] = [
+    (KIND_PARAM, LEN_PARAM),
+    (KIND_MACHINE, LEN_MACHINE),
+    (KIND_PAGE, LEN_PAGE),
+    (KIND_ACTION, LEN_ACTION),
+    (KIND_NATIVE_PAGE, LEN_NATIVE_PAGE),
+    (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2),
+];
+/// The kinds of the `fx` service: (kind, record length).
+pub const KINDS_FX: [(u32, u32); 1] = [
+    (KIND_EFFECT, LEN_EFFECT),
+];
+/// The kinds a module emits with `dk_record_add`.
+pub const GENERIC_KINDS: [u32; 0] = [
+];
+pub const RES_MACHINE_ROWS: u32 = 1;
+pub const RES_PARAM_ROWS: u32 = 2;
+pub const RES_PAGE_ROWS: u32 = 3;
+pub const RES_RECORD_BYTES: u32 = 4;
+pub const RES_DSP_COST: u32 = 5;
+/// The resources of a module's `uses` in the order of their ids: (id, name, reserved: no module counts it yet).
+pub const RESOURCES: [(u32, &str, bool); 5] = [
+    (RES_MACHINE_ROWS, "machine_rows", false),
+    (RES_PARAM_ROWS, "param_rows", false),
+    (RES_PAGE_ROWS, "page_rows", false),
+    (RES_RECORD_BYTES, "record_bytes", false),
+    (RES_DSP_COST, "dsp_cost", true),
+];

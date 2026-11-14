@@ -454,3 +454,23 @@ fn machine_keys_of_a_torn_file_is_none() {
     past[dkm::H_REG_SIZE..][..4].copy_from_slice(&1000u32.to_be_bytes()); // table runs past the end
     assert_eq!(machine_keys(&past, &mut out), 0);
 }
+
+#[test]
+fn a_generic_record_of_an_unknown_or_a_typed_kind_is_refused_and_the_error_is_kept() {
+    let body = [0u8; 0x100];
+    // no service owns kind 999
+    let mut a = Collect::new();
+    assert_eq!(a.add_record(999, body.as_ptr(), 8), E_FORMAT);
+    assert_eq!(a.err, E_FORMAT);
+    assert_eq!(a.ng, 0);
+    // a typed kind has its builders: even with the right length it is not taken as a generic record
+    let mut b = Collect::new();
+    assert_eq!(b.add_record(KIND_PARAM, body.as_ptr(), 0x50 - 8), E_FORMAT);
+    assert_eq!(b.ng, 0);
+    // without an active collection the import refuses and changes nothing
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        end();
+        assert_eq!(dk_record_add(core::ptr::null_mut(), KIND_PARAM, body.as_ptr(), 8), E_CONTEXT);
+    }
+}

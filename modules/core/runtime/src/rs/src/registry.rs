@@ -11,7 +11,7 @@
 //! Rules: all checks run before the first write (`check`); rows are written in an order that a reader never sees a
 //! half-filled machine (the name pointer, which marks a row as used, is the last store, one aligned 32-bit word); the
 //! strings the rows point to live in this module's own state, never in the arena, so unload cannot leave a dangling pointer.
-use crate::handlers::{check_step, ApplyCtx, CheckCtx, ServiceList, Services};
+use crate::handlers::{check_step, services, ApplyCtx, CheckCtx, ServiceTable};
 use crate::rd32;
 use core::ptr::{addr_of, addr_of_mut};
 #[cfg(not(test))]
@@ -133,16 +133,16 @@ pub fn param_first() -> u32 {
 
 /// Validate the `register` records of a module file. `reg` points into the file (the staging buffer). Nothing is written.
 pub unsafe fn check(reg: *const u8, size: u32, image_size: u32) -> i32 {
-    check_with::<Services>(reg, size, image_size)
+    check_with(services(), reg, size, image_size)
 }
 
 /// The walker of `check`: the layout of the section against the lengths the services declare, then each service's own records.
-pub(crate) unsafe fn check_with<L: ServiceList>(reg: *const u8, size: u32, image_size: u32) -> i32 {
+pub(crate) unsafe fn check_with(l: ServiceTable, reg: *const u8, size: u32, image_size: u32) -> i32 {
     if size == 0 {
         return OK;
     }
     let inf = info();
-    if inf.is_null() || !L::fits(inf) {
+    if inf.is_null() || !l.fits(inf) {
         return E_NO_REGISTRY;
     }
     if size < 16 || rd32(reg) != REG_MAGIC || rd32(reg.add(4)) != 1 {
@@ -164,7 +164,7 @@ pub(crate) unsafe fn check_with<L: ServiceList>(reg: *const u8, size: u32, image
         }
         let kind = rd32(reg.add(at as usize));
         let len = rd32(reg.add(at as usize + 4));
-        let want = match L::len(kind) {
+        let want = match l.len(kind) {
             Some(want) => want,
             None => return E_FORMAT,
         };
@@ -181,7 +181,7 @@ pub(crate) unsafe fn check_with<L: ServiceList>(reg: *const u8, size: u32, image
     let c = CheckCtx { reg, image_size, inf };
     let mut step = 0;
     while step < check_step::COUNT {
-        let r = L::check(step, &c);
+        let r = l.check(step, &c);
         if r != OK {
             return r;
         }
@@ -192,11 +192,11 @@ pub(crate) unsafe fn check_with<L: ServiceList>(reg: *const u8, size: u32, image
 
 /// Fill the reserved rows from the (checked) records. `owner` = module record index + 1.
 pub unsafe fn apply(owner: u8, reg: *const u8, size: u32, base: u32) -> i32 {
-    apply_with::<Services>(owner, reg, size, base)
+    apply_with(services(), owner, reg, size, base)
 }
 
 /// The walker of `apply`: each service writes its records, in list order; the first failure stops the walk.
-pub(crate) unsafe fn apply_with<L: ServiceList>(owner: u8, reg: *const u8, size: u32, base: u32) -> i32 {
+pub(crate) unsafe fn apply_with(l: ServiceTable, owner: u8, reg: *const u8, size: u32, base: u32) -> i32 {
     if size == 0 {
         return OK;
     }
@@ -205,12 +205,12 @@ pub(crate) unsafe fn apply_with<L: ServiceList>(owner: u8, reg: *const u8, size:
         return E_NO_REGISTRY;
     }
     let c = ApplyCtx { owner, reg, base, inf, args: (*addr_of!(ARGS)).as_ref() };
-    let mut rc = L::apply(&c);
+    let mut rc = l.apply(&c);
     if rc == OK {
         // the records that register callbacks and pages, in file order; the first failure stops the walk
         each(reg, |kind, b| {
             if rc == OK {
-                rc = L::apply_record(kind, b, &c);
+                rc = l.apply_record(kind, b, &c);
             }
         });
     }
@@ -267,11 +267,11 @@ pub fn types_of(owner: u8, out: &mut [u8; MAX_MACH]) -> usize {
 
 /// Give back every row `owner` filled: each service gives back its own, the last service of the list first.
 pub unsafe fn remove(owner: u8) {
-    remove_with::<Services>(owner)
+    remove_with(services(), owner)
 }
 
-pub(crate) unsafe fn remove_with<L: ServiceList>(owner: u8) {
-    L::remove(owner);
+pub(crate) unsafe fn remove_with(l: ServiceTable, owner: u8) {
+    l.remove(owner);
     if !info().is_null() {
         let s = rs();
         s.removes = s.removes.wrapping_add(1);
