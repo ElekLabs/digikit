@@ -157,7 +157,12 @@ pub fn prepare(root: &Path, stock: &[u8], set: &str) -> Result<Outcome, String> 
             .flatten()
             .is_some_and(|r| r.base_sha256 == base_sha256)
     {
-        return patched(syx, modules, true);
+        // the same `id@version` names an apply reports (`plan.modules`), so a cache hit and a build list alike
+        let tags = modules
+            .iter()
+            .map(|i| lib.get(i).map_or_else(|| i.clone(), |m| m.tag()))
+            .collect();
+        return patched(syx, tags, true);
     }
     let reg = Registry::from_dir(&root.join("devices/ports")).map_err(e)?;
     let out = apply::apply(stock, &reg, &lib, &modules).map_err(e)?;
