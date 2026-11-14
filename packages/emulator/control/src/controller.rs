@@ -755,6 +755,8 @@ struct Actor {
     runtime_info: Option<Value>,
     /// The ready state `dev.reload` restores before it writes module code (see `rpc_dev_reload`).
     reload: Option<ReloadState>,
+    /// The `runtime.maps` answer for the image with this SHA-256 (the apply that makes it takes about a second).
+    maps_cache: Option<(String, Value)>,
     quit: bool,
     /// Fault, DSP halt and main-loop stall detection (events `fault`, `halt`, `stall`).
     health: Health,
@@ -873,6 +875,7 @@ impl Actor {
             repo_root: config.repo_root,
             runtime_info: None,
             reload: None,
+            maps_cache: None,
             quit: false,
             health: Health::new(
                 std::env::var("DIGI_STALL_MS")
@@ -2006,6 +2009,7 @@ impl Actor {
             "flash.read" => self.rpc_flash_read(&p).map(Some),
             "mem.cf.write" => self.rpc_mem_write(&p).map(Some),
             "dev.reload" => self.rpc_dev_reload(&p, &reply),
+            "runtime.maps" => self.rpc_runtime_maps(&p).map(Some),
             "guard.set" => self.rpc_guard_set(&p).map(Some),
             "guard.report" => self
                 .with_runtime(|r| Ok(serde_json::to_value(r.guard_report()).unwrap_or(Value::Null)))
@@ -2282,6 +2286,52 @@ impl Actor {
             .map(|digest| json!({"digest": digest}))
             .map_err(|e| RpcError::new(code::GUEST_FAULT, e))
         })
+    }
+
+    /// `runtime.maps {modules_dir?}`: what a host needs to name addresses of the image that runs now: `{image_sha256, matches, ship, symbols}`.
+    /// `ship` is the ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` to their byte
+    /// addresses, the memory the host reads (`mem.cf.peek`) for the load table. The map is made from the running image's patch record, so
+    /// after a `dev.reload` swap the next call answers for the new image. `matches` is false when the image on disk gives other bytes than
+    /// the running ones (a hot DSP injection, or an object changed since): the names may be wrong. An image with no patch record is an error.
+    fn rpc_runtime_maps(&mut self, p: &Params) -> RpcResult {
+        let rejected =
+            |m: String| RpcError::new(code::FIRMWARE_REJECTED, format!("runtime.maps: {m}"));
+        let loaded = self.loaded.as_ref().ok_or_else(RpcError::no_firmware)?;
+        let sha = firmware::sha256_hex(&loaded.current);
+        if let Some((s, v)) = &self.maps_cache
+            && *s == sha
+        {
+            return Ok(v.clone());
+        }
+        let record = patchkit::verify::patch_record(&loaded.current)
+            .map_err(|e| rejected(e.to_string()))?
+            .ok_or_else(|| rejected("the running image has no patch record (load a patched image or `runtime: true`)".into()))?;
+        let root = runtime_patch::find_root(
+            p.opt_str("modules_dir")?
+                .map(Path::new)
+                .or(self.repo_root.as_deref()),
+        )
+        .map_err(&rejected)?;
+        let stock = loaded
+            .base
+            .clone()
+            .filter(|b| firmware::sha256_hex(b) == record.base_sha256)
+            .or_else(|| runtime_patch::find_stock(&root, &record.base_sha256))
+            .ok_or_else(|| {
+                rejected(format!(
+                    "the stock image {} is not in firmware/",
+                    record.base_sha256
+                ))
+            })?;
+        let maps = runtime_patch::image_maps(&root, &stock, &loaded.current).map_err(&rejected)?;
+        let value = json!({
+            "image_sha256": sha,
+            "matches": maps.matches,
+            "ship": maps.ship,
+            "symbols": maps.symbols,
+        });
+        self.maps_cache = Some((sha, value.clone()));
+        Ok(value)
     }
 
     /// `mem.cf.peek {addr}`: one guest longword, read without side effects.
