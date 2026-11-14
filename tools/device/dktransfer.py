@@ -88,7 +88,12 @@ def group_of(f: bytes) -> str:
     pair (offset, size); a header alone, without the table, gives Tools."""
     off, size = struct.unpack_from(">II", f, 0x90)
     t = f[off : off + size]
-    if size < 8 or len(t) != size or struct.unpack_from(">IH", t, 0) != (dkproto.TABLE_MAGIC, dkproto.TABLE_VERSION):
+    if (
+        size < 8
+        or len(t) != size
+        or struct.unpack_from(">IH", t, 0)
+        != (dkproto.TABLE_MAGIC, dkproto.TABLE_VERSION)
+    ):
         return "Tools"
     kinds: set[int] = set()
     at = 8

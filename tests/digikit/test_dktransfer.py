@@ -17,11 +17,18 @@ def header(name, machines=0, fx=0, size=500, dsp=0):
         # the header table: the head and one KEYS entry with a group for each kind that has keys (packages/dkneeds/src/keys.rs)
         groups = b""
         n_groups = 0
-        for kind, n in ((dkproto.RECORD_KIND["MACHINE"], machines), (dkproto.RECORD_KIND["EFFECT"], fx)):
+        for kind, n in (
+            (dkproto.RECORD_KIND["MACHINE"], machines),
+            (dkproto.RECORD_KIND["EFFECT"], fx),
+        ):
             if n:
                 groups += struct.pack(">II", kind, n) + bytes(4 * n)
                 n_groups += 1
-        keys = struct.pack(">IHH", dkproto.TABLE_MAGIC, dkproto.TABLE_VERSION, 1) + struct.pack(">HHI", T.KEYS_TAG, n_groups, len(groups)) + groups
+        keys = (
+            struct.pack(">IHH", dkproto.TABLE_MAGIC, dkproto.TABLE_VERSION, 1)
+            + struct.pack(">HHI", T.KEYS_TAG, n_groups, len(groups))
+            + groups
+        )
     h = bytearray(D.HEADER_BYTES)
     h[:4] = b"DKMF"
     struct.pack_into(">II", h, 8, size, 0xA0)

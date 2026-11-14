@@ -39,16 +39,24 @@ def patchkit_bin() -> str:
 
 
 def module_ids(binary: str) -> list[str]:
-    out = subprocess.run([binary, "list"], check=True, capture_output=True, text=True).stdout
+    out = subprocess.run(
+        [binary, "list"], check=True, capture_output=True, text=True
+    ).stdout
     ids = []
     for line in out.splitlines():
         parts = line.split()
-        if len(parts) >= 2 and parts[0] == "module" and not parts[1].startswith("core/"):
+        if (
+            len(parts) >= 2
+            and parts[0] == "module"
+            and not parts[1].startswith("core/")
+        ):
             ids.append(parts[1].split("@")[0])
     return ids
 
 
-def pack_one(binary: str, mid: str, device: str, out_dir: Path) -> tuple[str, str, bool, str]:
+def pack_one(
+    binary: str, mid: str, device: str, out_dir: Path
+) -> tuple[str, str, bool, str]:
     path = out_dir / f"{mid.replace('/', '__')}-{device}.dkm"
     r = subprocess.run(
         [binary, "pack", mid, "--device", device, "-o", str(path)],
@@ -67,8 +75,13 @@ def cmd_pack(args: argparse.Namespace) -> int:
     jobs = [(mid, dev) for mid in ids for dev in DEVICES]
     packed = 0
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        for mid, dev, ok, note in pool.map(lambda j: pack_one(binary, j[0], j[1], out_dir), jobs):
-            print(f"{'ok  ' if ok else 'skip'} {mid} {dev}" + ("" if ok else f"  ({note})"))
+        for mid, dev, ok, note in pool.map(
+            lambda j: pack_one(binary, j[0], j[1], out_dir), jobs
+        ):
+            print(
+                f"{'ok  ' if ok else 'skip'} {mid} {dev}"
+                + ("" if ok else f"  ({note})")
+            )
             packed += ok
     print(f"packed {packed} of {len(jobs)} into {out_dir}")
     return 0 if packed else 1
@@ -124,11 +137,15 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("pack")
     p.add_argument("out_dir")
-    p.add_argument("--only", help="comma separated module ids (default: every run-time module)")
+    p.add_argument(
+        "--only", help="comma separated module ids (default: every run-time module)"
+    )
     p.add_argument("--jobs", type=int, default=2)
     p.set_defaults(fn=cmd_pack)
     c = sub.add_parser("compare")

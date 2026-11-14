@@ -634,7 +634,10 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                                 ARROW_SERVICE_HINT,
                             )
                         )
-                elif first == "services" and r.as_posix() not in ("handlers.rs", "gen_services.rs"):
+                elif first == "services" and r.as_posix() not in (
+                    "handlers.rs",
+                    "gen_services.rs",
+                ):
                     out.append(
                         Violation(
                             where,
