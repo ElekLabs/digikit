@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Workbench actions from the command line, through the workbench's own code: the dk-session TypeScript (prepareUpload, openSamples, put,
 // verify) over the dkmidi Rust MIDI port (packages/dkmidi, the code the desktop app uses), here as a child process on stdin and stdout.
+// The workbench's Host (packages/workbench-core/src/host/host.ts) is the NodeHost here (src/node/node-host.ts): `ports` lists the MIDI ports
+// and the samples commands read the device profile through it, the calls the desktop app makes through its Tauri Host.
 //
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] info
@@ -43,6 +45,7 @@ import {
 import { ProcessTransport } from '../../packages/dk-session/src/process-transport.ts';
 import { Sample, prepareUpload } from '../../packages/dk-session/src/dksample.ts';
 import { openSamples, skipVerifyAfterBulk } from '../../packages/dk-session/src/samples.ts';
+import { createNodeHost } from '../../packages/workbench-core/src/node/node-host.ts';
 import { profCommand } from './wb_prof.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -132,6 +135,17 @@ async function speedReport(session) {
 function fail(msg, code = 2) {
   console.error(`wb: ${msg}`);
   process.exit(code);
+}
+
+const host = createNodeHost({ root, dkmidiBin: opts.bin, dkbulkBin: opts['bulk-bin'] });
+
+/** The samples backend the device profile names (`[storage] samples`), as the desktop app reads it; the stock +Drive when the device or its profile is unknown. */
+async function samplesKind(info) {
+  try {
+    return (await host.library.deviceStorage(info.port)).samples;
+  } catch {
+    return 'stock-rpc';
+  }
 }
 
 if (!OFFLINE.includes(words[0]) && !existsSync(opts.bin))
@@ -322,8 +336,12 @@ let status = 0;
 if (OFFLINE.includes(cmd)) {
   status = await profCommand({ cmd, sub, rest, opts, root, fail });
 } else if (cmd === 'ports') {
-  const r = spawnSync(opts.bin, ['ports'], { stdio: 'inherit' });
-  status = r.status ?? 1;
+  try {
+    for (const name of await host.ports.midi.ports()) console.log(name);
+  } catch (e) {
+    console.error(`wb: ${e instanceof Error ? e.message : e}`);
+    status = 1;
+  }
 } else if (cmd === 'info') {
   await withSession(async (session) => {
     console.log(JSON.stringify(await session.info(), null, 2));
@@ -360,7 +378,7 @@ if (OFFLINE.includes(cmd)) {
         (i) => {
           devInfo = i;
           isDt2 = i.port === 'dt2';
-          return i.port === 'dn2' ? 'digikit' : 'stock-rpc';
+          return samplesKind(i);
         },
         () => 'stock-rpc',
       );
@@ -437,10 +455,7 @@ if (OFFLINE.includes(cmd)) {
   });
   const sample = await loadSample();
   await withSession(async (session) => {
-    const kind = await session.info().then(
-      (i) => (i.port === 'dn2' ? 'digikit' : 'stock-rpc'),
-      () => 'stock-rpc',
-    );
+    const kind = await session.info().then(samplesKind, () => 'stock-rpc');
     const backend = openSamples(kind, {
       session,
       hashOf: (d) => sample.hash(d),

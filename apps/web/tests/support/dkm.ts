@@ -1,6 +1,6 @@
 // Fake modules and the needs stand-in of the Transfer logic tests (dktransfer.test.ts, dktransfer.wasm.test.ts).
-import type { FitReader } from '../../src/modules/fit.ts';
-import type { Needs } from '../../src/modules/fit.ts';
+import type { FitReader } from '@digi/workbench-core/modules/fit.ts';
+import type { Needs } from '@digi/workbench-core/modules/fit.ts';
 
 export interface DkmOptions {
   machine?: number;

@@ -1,0 +1,33 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "@digi/workbench-core",
+  "implicitDependencies": ["@digi/dk-session", "@digi/dkbs"],
+  "targets": {
+    "test-host": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/ui/**/*",
+        "{projectRoot}/tests/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/tsconfig.json",
+        "jsToolchain",
+        "{workspaceRoot}/vitest.host.config.ts",
+        "{workspaceRoot}/vitest.host.projects.json",
+        "{workspaceRoot}/tsconfig*.json",
+        {
+          "externalDependencies": ["vitest"]
+        },
+        "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/config/emulator.json"
+      ],
+      "outputs": [],
+      "options": {
+        "forwardAllArgs": false,
+        "command": "pnpm exec vitest run --config vitest.host.config.ts --project workbench-core",
+        "cwd": "."
+      }
+    }
+  }
+}

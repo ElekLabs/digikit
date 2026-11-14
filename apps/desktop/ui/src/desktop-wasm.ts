@@ -1,7 +1,7 @@
-// The desktop app's WasmSource (apps/web/src/wasm-source.ts): the wasm files come through the Host (the Tauri commands that read the checkout's
+// The desktop app's WasmSource (packages/workbench-core/src/wasm-source.ts): the wasm files come through the Host (the Tauri commands that read the checkout's
 // builds), not over HTTP.
-import type { WasmSource } from '../../../web/src/wasm-source';
-import type { Host } from './host/host';
+import type { WasmSource } from '@digi/workbench-core/wasm-source.ts';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 
 export function hostWasmSource(host: Host): WasmSource {
   return {

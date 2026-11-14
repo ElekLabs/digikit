@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { test } from 'vitest';
-import type { RuntimeSnapshot } from '../src/runtime/runtime.ts';
-import { hostMetrics, pcmMetrics } from '../src/runtime/runtime-metrics.ts';
+import type { RuntimeSnapshot } from '@digi/workbench-core/runtime/runtime.ts';
+import { hostMetrics, pcmMetrics } from '@digi/workbench-core/runtime/runtime-metrics.ts';
 
 /** The AudioWorkletProcessor of public/pcm-worklet.js as the tests reach into it. */
 type Worklet = {
@@ -71,10 +71,10 @@ function workerHarness({ ordinaryHasCoupling = false } = {}) {
   if (ordinaryHasCoupling) abi.digi_load_coupled = () => writeResult({ snapshot: { status: { icount } } });
   const source = fs
     .readFileSync(new URL('../src/runtime/runtime-worker.ts', import.meta.url), 'utf8')
-    .replace("import { LinkClient } from '../sab-link.ts';", 'class LinkClient {}')
+    .replace("import { LinkClient } from '@digi/workbench-core/sab-link.ts';", 'class LinkClient {}')
     .replace("import.meta.env.BASE_URL.replace(/\\/?$/, '/')", "'/'")
     .replace(
-      "import { hostMetrics, pcmMetrics } from './runtime-metrics';",
+      "import { hostMetrics, pcmMetrics } from '@digi/workbench-core/runtime/runtime-metrics.ts';",
       'const hostMetrics = () => ({ reset() {}, loaded() {}, step() {}, report() { return {}; } }); const pcmMetrics = () => ({});',
     );
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;

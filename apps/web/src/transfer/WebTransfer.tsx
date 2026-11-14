@@ -2,8 +2,8 @@
 // Without Web MIDI (Safari) or without the SysEx permission the pane still opens on the `none` target; its error line says why (web-env.ts, `whyNone`)
 // and its Try again button asks again. The island builds the site's app once and gives it to the pane (AppProvider).
 import { Show, createSignal, onMount, type JSX } from 'solid-js';
-import AppProvider from './AppProvider';
-import TransferPage from './TransferPage';
+import AppProvider from '@digi/workbench-core/ui/transfer/AppProvider.tsx';
+import TransferPage from '@digi/workbench-core/ui/transfer/TransferPage.tsx';
 import { createWebTransferApp } from './web-env';
 
 export default function WebTransfer(): JSX.Element {

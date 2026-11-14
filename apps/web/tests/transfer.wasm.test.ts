@@ -1,8 +1,14 @@
-import type { Group, RowTag, TransferEvent, TransferRow, TransferView } from '../src/transfer/transfer-core.ts';
+import type {
+  Group,
+  RowTag,
+  TransferEvent,
+  TransferRow,
+  TransferView,
+} from '@digi/workbench-core/transfer/transfer-core.ts';
 import { useFitWasm } from './fit-wasm.ts';
 
 await useFitWasm();
-// The pure logic of the Transfer page (apps/web/src/transfer/transfer-core.ts).
+// The pure logic of the Transfer page (packages/workbench-core/src/transfer/transfer-core.ts).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
@@ -31,7 +37,7 @@ import {
   storageLine,
   tickedFit,
   warningText,
-} from '../src/transfer/transfer-core.ts';
+} from '@digi/workbench-core/transfer/transfer-core.ts';
 
 const row = (id: string | null, group: Group, extra: Partial<TransferRow> = {}): TransferRow => ({
   id,

@@ -19,8 +19,8 @@ import { cardStore, deviceProfile } from '@digi/regression/runtime/device-data.t
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { encodeSettings } from '@digi/regression/runtime/project-kit.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
-import { installDefaults, type DefaultOps } from '../../../../apps/web/src/firmware/default-modules-core.ts';
-import { install, libraryModule } from '../../../../apps/web/src/modules/dktransfer.ts';
+import { installDefaults, type DefaultOps } from '../../../../packages/workbench-core/src/firmware/default-modules-core.ts';
+import { install, libraryModule } from '../../../../packages/workbench-core/src/modules/dktransfer.ts';
 
 /**
  * The store's file hash (version 4: the +Drive content hash in the table's 32-byte slot) and what a store of another version is. Both devices.

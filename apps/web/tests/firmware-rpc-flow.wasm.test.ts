@@ -1,4 +1,4 @@
-// The RPC route of the Firmware page (apps/web/src/firmware/firmware-flow.ts `runRpcFlash`): the loop around the Rust state machine
+// The RPC route of the Firmware page (packages/workbench-core/src/firmware/firmware-flow.ts `runRpcFlash`): the loop around the Rust state machine
 // (patchkit.wasm), over a fake device on a virtual clock. The machine's own rules are tested in packages/patchkit/src/flash_rpc.rs; here:
 // what the page shows, that nothing is flashed before the user says yes, and that leaving or cancelling sends End with commit 0.
 import assert from 'node:assert/strict';
@@ -6,9 +6,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import { decode8in7, encode8in7 } from '@digi/dk-session';
-import { PatchKit, type PreparedFlash } from '../src/patch/patchkit-core.ts';
-import type { Answer, FlashState } from '../src/firmware/firmware-core.ts';
-import { runRpcFlash, type FlowLimits, type RpcOps } from '../src/firmware/firmware-flow.ts';
+import { PatchKit, type PreparedFlash } from '@digi/workbench-core/patch/patchkit-core.ts';
+import type { Answer, FlashState } from '@digi/workbench-core/firmware/firmware-core.ts';
+import { runRpcFlash, type FlowLimits, type RpcOps } from '@digi/workbench-core/firmware/firmware-flow.ts';
 
 const wasm = fileURLToPath(new URL('../public/patchkit.wasm', import.meta.url));
 const have = existsSync(wasm);

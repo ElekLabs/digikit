@@ -237,10 +237,20 @@ export function shipModules(out, root = repoRoot) {
   return index;
 }
 
-const MODULE_FILES_TS = join(here, '..', 'src', 'transfer', 'module-files.generated.ts');
+const MODULE_FILES_TS = join(
+  here,
+  '..',
+  '..',
+  '..',
+  'packages',
+  'workbench-core',
+  'src',
+  'transfer',
+  'module-files.generated.ts',
+);
 
 /**
- * The text of src/transfer/module-files.generated.ts: module id to the `[files]` table of its module.toml (the files it owns under
+ * The text of packages/workbench-core/src/transfer/module-files.generated.ts: module id to the `[files]` table of its module.toml (the files it owns under
  * `data/<module id>/`). Committed, because the desktop build does not run this script; `--check` fails when the file is stale.
  */
 export function moduleFilesSource(root = repoRoot) {
@@ -272,7 +282,9 @@ if (
 ) {
   const stale = !existsSync(MODULE_FILES_TS) || readFileSync(MODULE_FILES_TS, 'utf8') !== moduleFilesSource();
   if (stale) {
-    console.error('src/transfer/module-files.generated.ts is stale: run node apps/web/scripts/gen-modules.mjs');
+    console.error(
+      'packages/workbench-core/src/transfer/module-files.generated.ts is stale: run node apps/web/scripts/gen-modules.mjs',
+    );
     process.exit(1);
   }
   console.log('module-files.generated.ts is current');

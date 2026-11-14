@@ -1,9 +1,9 @@
 ---
 // A still picture of a device: the emulator's own panel drawing, optionally "playing" (trigs 1, 5, 9 and 13
 // lit in the device accent) with a screenshot of the MODULES list on the OLED. Server-rendered; no emulator runs.
-import PanelArt from './PanelArt';
-import { panels } from '../data/faceplates';
-import type { Key } from '../data/faceplates';
+import PanelArt from '@digi/workbench-core/ui/components/PanelArt.tsx';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import type { Key } from '@digi/workbench-core/data/faceplates.ts';
 import type { DeviceId } from '../data/device-profiles';
 
 interface Props {

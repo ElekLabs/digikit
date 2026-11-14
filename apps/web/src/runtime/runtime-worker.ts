@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
-import { hostMetrics, pcmMetrics } from './runtime-metrics';
-import { LinkClient } from '../sab-link.ts';
+import { hostMetrics, pcmMetrics } from '@digi/workbench-core/runtime/runtime-metrics.ts';
+import { LinkClient } from '@digi/workbench-core/sab-link.ts';
 const metrics = hostMetrics('wasm_abi');
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 

@@ -1,7 +1,12 @@
-// The Modules backend of the preview (replaces web/src/transfer/transfer-backend.ts): the library and the device come from sim.ts; an install, a delete
+// The Modules backend of the preview (replaces packages/workbench-core/src/transfer/transfer-backend.ts): the library and the device come from sim.ts; an install, a delete
 // and a restart emit the same events as dktransfer.ts, paced by `sim.speed`.
-import { moduleFilePath, moduleFilesFolder, type TransferEvent, type TransferView } from '@web/modules/dktransfer';
-import { noteActivity } from '@web/transfer/activity';
+import {
+  moduleFilePath,
+  moduleFilesFolder,
+  type TransferEvent,
+  type TransferView,
+} from '@digi/workbench-core/modules/dktransfer.ts';
+import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
 import { PAUSED } from '../src/desktop-env';
 import { LIBRARY, delay, deviceFiles, deviceRead, libraryById, pathOf, sim, simApp, view, control } from './sim';
 
@@ -104,5 +109,5 @@ export const transferBackend = {
   },
 };
 
-/** The same bag as the real `createTransferBackend` (../../../web/src/transfer/transfer-backend.ts); the preview reads the library from sim.ts. */
+/** The same bag as the real `createTransferBackend` (packages/workbench-core/src/transfer/transfer-backend.ts); the preview reads the library from sim.ts. */
 export const createTransferBackend = (_deps: unknown) => ({ transferBackend, loadLibrary: async () => [] });

@@ -3,8 +3,8 @@
 // which work while digikit/remote is loaded at the device. The page speaks the protocol itself in TypeScript over the target of
 // target.ts: the emulator's USB capture or a MIDI port. No process is started.
 import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
-import { panels } from '@web/data/faceplates';
+import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import type { DkSession, RemoteState } from '@digi/dk-session';
 import {
   deviceOfPort,
@@ -18,9 +18,9 @@ import {
 } from './remote-core';
 import { windowShown } from './log-follow-core';
 import SidePanels from './SidePanels';
-import { useTransferApp } from '@web/transfer/app-context';
-import { sameTarget, targetLabel } from '@web/transfer/target';
-import { failureLine } from '@web/transfer/wait-core';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
+import { sameTarget, targetLabel } from '@digi/workbench-core/transfer/target.ts';
+import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import './remote-page.css';
 
 const SCREEN_MS = { emulator: 250, midi: 400 };

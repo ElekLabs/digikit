@@ -9,7 +9,7 @@ import { parse } from 'smol-toml';
 import { test } from 'vitest';
 import { buildModuleData, shipModules } from '../scripts/gen-modules.mjs';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
-import { PatchKit } from '../src/patch/patchkit-core.ts';
+import { PatchKit } from '@digi/workbench-core/patch/patchkit-core.ts';
 import {
   haveWasmAndImages as have,
   images,

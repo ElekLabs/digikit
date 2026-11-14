@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'vitest';
-import { PatchKit } from '../src/patch/patchkit-core.ts';
+import { PatchKit } from '@digi/workbench-core/patch/patchkit-core.ts';
 import {
   haveWasmAndImages as need,
   images,
