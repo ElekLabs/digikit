@@ -89,6 +89,7 @@ Everything moves down a level where it can.
 - Scope: TypeScript only. Clearer boundaries, mocked integration points.
 - Proof: `test:plan` shows that a TS-only change selects only Vitest targets.
 - Depends on: nothing (own lane, any time).
+- [x] Step 1, fix test selection for TypeScript changes: `patchkit:wasm` keyed on the Rust crates only, `@digi/web:test-host` without wasm (real-wasm tests moved to `test-wasm`: `*.wasm.test.ts` and the node tests), desktop `test-host`, `rust-tests` and web `check` with the inputs they read. Result: an edit in `apps/web/src/transfer` selected 13 tasks (patchkit wasm build, desktop `rust-tests`, web `test`) and now 11, with no wasm build and no cargo; an edit in `apps/desktop/ui/src` selected 9 (cargo `rust-tests`, web `check`) and now 7, desktop TS targets only.
 
 ## Order
 
