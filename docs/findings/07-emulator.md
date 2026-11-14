@@ -7136,3 +7136,28 @@ So the core runs at 264 MHz, 5.6 % above the data sheet's 250 MHz. The eSDHC clo
 **DTCN2.** Stock writes DTMR2 = `0x0007`: RST = 1, CLK = 11, PS = 0. CLK = 11 selects the DT2IN pin (falling edge). So
 DMA timer 2 counts an external signal, and the bus clock cannot model it.
 
+
+## Registers that are stored but not acted on (2026-11-12) **[D]**
+
+This closes the register part of issue #46. That report listed registers the Python emulator left as plain RAM. The
+table below is the same list, read again in the Rust machine at `b657f370`. It is a code reading: nothing was run, and
+no firmware image was used. "Runtime" is the machine `boot/src/runtime.rs` builds: `TimerPolicy::Oracle`,
+`CompletionPolicy::Oracle`, PIT 3, 2, 0 and DTIM 3 and 1 (`runtime.rs:620-633`).
+
+| register | in the runtime | where |
+|---|---|---|
+| INTFRCH/L, INTC0-2 (`+0x10`, `+0x14`) | Modelled. The write is stored as RAM; `IntcBank::forced_candidate` then offers the highest forced source, for sources 1-63 of all three controllers, if its ICR is not 0 and its IMR bit is clear. On by default (`DIGI_INTC_FORCE=0` turns it off natively). INTC1 source 63 (vector 191) is left to the SSI model. A guest read of IPR does not show forced bits. | `periph/src/intc.rs:273`, `machine/src/time.rs:151`, `:162` |
+| SIMR, CIMR (`+0x1C`, `+0x1D`) | Stored only. A write does not change IMR. `hw_apply_simr_cimr` runs only under `TimerPolicy::Device`, which the runtime never selects. | `machine/src/time.rs:412` |
+| IMRH/L (`+0x08`, `+0x0C`) | RAM, seeded to 0 at boot, and read as the delivery gate by PIT, DTIM, the eSDHC and storage DMA levels, forced delivery and the DSPI1 peer IRQ. Because SIMR/CIMR are inert, the gates see only direct IMR writes. | `periph/src/intc.rs:148`, `boot/src/runtime.rs:637` |
+| DTIM1 (`0xFC074000`) | Modelled: the runtime lists channels 3 and 1. DTIM0 and DTIM2 are not scheduled. The headless `boot` binary models DTIM1 only with `--diagnostic-services`; `DtimBank::default` is channel 3 alone. | `boot/src/runtime.rs:631`, `boot/src/main.rs:490`, `periph/src/dtim.rs:111` |
+| eDMA CERQ (`0xFC044019`) | Stored, and acted on by one model: the SSI model clears its RX/TX enables, when it is enabled. The eSDHC channel 59 handler is inert under `CompletionPolicy::Oracle`. UART35 TX, MIDI TX and the DSPI2 channels have no CERQ handling, so a CERQ does not stop them. | `periph/src/spilink.rs:254`, `periph/src/ssi.rs:398`, `machine/src/board.rs:1295` |
+| DSPI2 MCR (`0xEC038000`) | Stored only. HALT, CLR_TXF and CLR_RXF are not decoded; the link is driven by eDMA SERQ/CINT. | `periph/src/spilink.rs:266` |
+| EPORT0 (`0xFC090000`) | No model and no register reference. The runtime's bus maps unclaimed MMIO as zeroed RAM (`zero_page_mmio`), so the registers read back what was written. The DSPI1 peer's IRQ1 is a synthetic pulse on INTC0 source 1 that uses no EPORT register. | `boot/src/runtime.rs:673`, `:2692` |
+
+What changed since the #46 report: forced interrupts and DTIM1 are modelled by default, and CERQ reaches the SSI
+model. Still stored only: SIMR/CIMR, DSPI2 MCR and EPORT0.
+
+- **[O]** Whether the firmware depends on any of the three: a SIMR/CIMR write that should mask or unmask a source the
+  runtime delivers, a DSPI2 MCR HALT or FIFO clear, or an EPORT0 access on DN2. This needs the images.
+- [Finding 19](19-sequencer-and-leds.md) says forced delivery is behind `DIGI_INTC_FORCE=1` (default off) at line 37
+  and on by default since 2026-10-13 at line 113. The code agrees with line 113.
