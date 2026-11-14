@@ -85,6 +85,31 @@ test('with the debug module the log shows the new boot: BOOT_START and no RESTAR
   assert.equal(polls, 2);
 });
 
+/** A device whose replies take `delayMs` of wall time; a receive that waits less gets nothing, as on a real transport. */
+class SlowDevice extends Device {
+  delayMs = 0;
+  async recv(waitMs?: number) {
+    if (this.queue.length === 0) return null;
+    const want = this.delayMs;
+    if (waitMs !== undefined && want > waitMs) {
+      await new Promise((r) => setTimeout(r, waitMs));
+      return null;
+    }
+    await new Promise((r) => setTimeout(r, want));
+    return this.queue.shift() ?? null;
+  }
+}
+
+test('a probe timeout longer than the default lets a slow host show the boot', async () => {
+  const dev = new SlowDevice();
+  dev.debug = true;
+  dev.rebooted = true;
+  const s = new DkSession(dev, { timeoutMs: 200, retries: 0 });
+  await s.restart();
+  dev.delayMs = 1300; // longer than the 1 s quick probe
+  await s.waitForBoot(async () => {}, 20000, { probeTimeoutMs: 5000 });
+});
+
 test('a cancelled read ends the wait', async () => {
   const dev = new Device();
   const s = new DkSession(dev, { timeoutMs: 50, retries: 0 });

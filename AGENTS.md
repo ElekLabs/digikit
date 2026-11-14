@@ -2,7 +2,7 @@
 
 Reverse engineering and emulation of the Elektron Digitakt II and Digitone II, with a ColdFire MCF5441x CPU and SHARC+ DSP, for desktop and browser (Wasm).
 
-Use **DT2 OS 1.17** and **DN2 OS 1.12** for analysis, patches, tests and reported addresses. DN2 1.11 is a secondary patch port (the health proof and its tests run on it); analysis and reported addresses stay on 1.17/1.12. DT2 1.16 and older images are references only: resolve their addresses on the current image before use. Patchkit anchors resolve by hash through `devices/ports/`.
+Use **DT2 OS 1.17** and **DN2 OS 1.12** for analysis, patches, tests and reported addresses. DN2 1.11 remains a patch port for patchkit; the health proof runs on DN2 1.12 and DT2 1.17. Analysis and reported addresses stay on 1.17/1.12. DT2 1.16 and older images are references only: resolve their addresses on the current image before use. Patchkit anchors resolve by hash through `devices/ports/`.
 
 Start with [README.md](README.md) for setup and the newest `docs/handovers/HANDOVER-*.md` for current work. Detailed guides: [layout](docs/LAYOUT.md), [testing](docs/TESTING.md), [regression acceptance](tests/regression/README.md), [instrumentation](docs/INSTRUMENTATION.md), and [findings index](docs/FINDINGS.md).
 

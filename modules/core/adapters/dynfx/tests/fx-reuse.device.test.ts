@@ -11,7 +11,7 @@ import {
   rpc,
   dspWords,
   rows,
-  frames,
+  runFrames,
   capture,
   compare,
   inspect,
@@ -46,9 +46,7 @@ for (const device of DEVICES) {
       await compare(dryPcm, wetPcm, 0.5, artifacts, 'gain');
       const stateAddress = wetState.chain[0]![2]!;
       const before = (await dspWords(dirty.session, stateAddress, 1))[0]!;
-      await bounded(async () =>
-        dirty.session.client.runUntil({ frames: (await frames(dirty.session)) + 100, timeout_wall_s: 30 }),
-      );
+      await runFrames(dirty.session, 100);
       const after = (await dspWords(dirty.session, stateAddress, 1))[0]!;
       expect(before).toBeGreaterThan(1000);
       expect(after - before).toBeGreaterThanOrEqual(90);
