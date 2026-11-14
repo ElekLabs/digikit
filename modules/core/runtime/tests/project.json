@@ -96,6 +96,11 @@
         "plusdrive": true
       },
       {
+        "files": ["platform-contract.device.test.ts"],
+        "modules": [],
+        "sources": ["modules/core/runtime/tests/platform/contract.toml"]
+      },
+      {
         "files": ["addrmap.device.test.ts"],
         "modules": ["digikit/debug", "test/dyn-demo"]
       },

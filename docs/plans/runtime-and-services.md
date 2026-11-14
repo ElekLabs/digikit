@@ -435,7 +435,7 @@ Memory cleanup: files state is 33,980 B in `.data`, about 42 KB with scratch, fo
 
 **Runtime split:** `lib.rs` into state, imports, api, tick, health, report, mailbox. `boot.rs` into selection, safe mode, boot. `upload.rs` into transport, store commands, admin commands, module commands. `dlog.rs` and module context. `crash.rs` becomes `fault.rs`, `table.rs` becomes `invariants.rs`. Split `apps/digikit-menu/src/menu.c` by page. Split crate `dkrt-sdk`, whose name wrongly suggests it is the SDK: R2c created `dkrt-abi` with the interfaces (`CoreApi`, `Service`) and the pure types they share. Renaming `dkrt-sdk` to hold only the host-shared ABI and formats, and moving the fault and selection types, is left. Pure logic such as `sticky.rs` goes with its owner.
 
-**Platform adapter** `modules/core/adapters/platform`. **Proposed design, for review.**
+**Platform adapter** `modules/core/adapters/platform`. **R3a done (the trait, `RealPlatform`, `FakePlatform`, the contract table and the layer rule; PR of branch rt/r3a-platform), R3b next.** Differences from the design below: the trait has `profile()` with `DeviceProfile` (generated, from `[capabilities] card` and `[digikit] sample_path_max`) in place of raw device ids, so the device objects gained two data words and R3a gates together with R3b; `track_type` returns `Option<i32>`; the `dkpool_*` and `dkpw_*` calls stay with their users and the trait only holds `present()` and, for the pool, the worker calls; the machines service's calls are in `services/machines/fw.rs`; the interrupt helper `locked`, `blocks_since`, the card gate (`block_write_with`, `check_with`), the MIDI reply (`reply_with`) and the sample route (`root_route`, `path_too_big`) are generic over `P: Platform`, so host tests drive them with `FakePlatform`.
 
 R3 splits into two steps.
 
@@ -481,11 +481,11 @@ It takes a `DeviceProfile` from the same generator as `RealPlatform`.
 
 **R3b, adapter move (image change, needs a gate).** The hooks `cf.view.hook.ui_loop`, `cf.rtos.hook.main_os_task` and `cf.midi.hook.rx`, their trampolines, and the exception hook install (`crash.rs:106-129`) move into `modules/core/adapters/platform`. The runtime then sees a neutral interface: tick, boot, `sysex_rx` returning consumed, and the `Platform` calls above.
 
-**Open checks for the build:**
+**Checks made for the build:**
 
-- Confirm the profile-driven rule against `docs/plans/syntakt.md`.
-- Read the `devices/*.toml` and `devices/ports` contents and the patchkit devdata, to decide which per-device numbers to generate.
-- Confirm where `dynreg_info`, `dyndsp_info` and `dynfx_info` are read after R2c.
+- The profile-driven rule holds (`docs/plans/syntakt.md` on the syntakt branches): device facts come from `devices/*.toml`, code branches on capabilities. The runtime had 12 raw `device() == N` tests (sample path limits, the samples root route, the +Drive tick, the track sample probe); all became capabilities.
+- Per-device numbers generated: `[capabilities] card` (`slots` is `samples_in_store`) and `[digikit] sample_path_max`, as `SAMPLES_IN_STORE` and `SAMPLE_PATH_MAX` words of `device.s`, and a `DeviceProfile` constant for each device file (`rust-profiles` gen kind, `abi/src/profiles.rs`).
+- `dynreg_info`, `dyndsp_info` and `dynfx_info` are read in the core (`registry.rs`, `dsp/mod.rs`); services get them through `CoreApi::dynreg`, `dsp_info` and `fx_info`. `fxpages_info` is still read by the effect service itself (`fxpage.rs`): it moves with the neutral adapter functions below.
 
 **Size:** R3a about 2 agent days, R3b about 1 (scout estimates; recent ones ran pessimistic).
 

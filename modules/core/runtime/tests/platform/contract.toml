@@ -2,6 +2,7 @@
 # two checkers:
 #   host    the `FakePlatform` host test of the runtime crate (`src/rs/src/fake_platform.rs`) that checks the rule on the model
 #   device  the check of `platform-contract.device.test.ts` that runs the rule against the real platform on each device
+# `device` is a check that platform-contract.device.test.ts runs, or an existing device test file of this folder that covers the row.
 # A row that has no checker on one side says why (`host_pending`, `device_pending`). The numbers here are the contract's own; every number
 # that a device file owns (id, name, where the samples live, the sample path limit) is read from the device file, not written here.
 
@@ -17,19 +18,19 @@ what = "the block counter advances at about 1500 per emulated second and wraps c
 blocks_per_second = 1500
 tolerance_percent = 10
 host = "the_block_clock_wraps_and_reports_none_without_a_counter"
-device = "blocks"
+device_pending = "the runtime exposes no read of the block counter; safe-mode and boot-restart run on it (stable blocks, settle time)"
 
 [[check]]
 id = "sector_read"
 what = "a known sector reads back (store header A of a card that has a store)"
 host_pending = "the fake's card holds what the test puts there; there is nothing platform-specific to model"
-device = "sector_read"
+device = "card-safety.device.test.ts"
 
 [[check]]
 id = "card_write_gate"
 what = "writes outside the store and on a foreign card are refused, and never reach the card"
 host = "a_foreign_card_is_read_only_for_every_write"
-device = "card_write_gate"
+device = "card-safety.device.test.ts"
 
 [[check]]
 id = "midi_out"
@@ -42,7 +43,7 @@ device = "midi_out"
 id = "irq_roundtrip"
 what = "masking interrupts returns the old state, and restoring it brings the old state back, nested"
 host = "interrupt_masks_nest_and_restore_the_caller_state"
-device = "irq_roundtrip"
+device_pending = "the runtime exposes no read of the status register; every log record and job runs under the mask"
 
 [[check]]
 id = "flush_exec"
@@ -60,4 +61,4 @@ device = "anchors"
 id = "info_tables"
 what = "every *_info table that is present has its magic and the version the runtime reads"
 host = "the_info_tables_are_bytes_the_fake_hands_out"
-device = "info_tables"
+device = "addrmap.device.test.ts"
