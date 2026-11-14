@@ -95,7 +95,24 @@ export function prepareRuntimePlanOffline(
   artifacts: string,
   symbols: string[],
 ): Promise<PreparedRuntimePlan> {
+  assertCovered(options);
   return prepareOfflineWith(patchkitCovered, options, directory, artifacts, symbols);
+}
+
+/** `apply --set` is covered by dist/bytes/images.sha256 only for a firmware and patch set that file has a line for (the acceptance cells). */
+function assertCovered({ device, firmware, runtime }: Pick<SessionOptions, 'device' | 'firmware' | 'runtime'>): void {
+  const set = runtime?.patchSet ?? 'emulator';
+  const file = path.join(repoRoot(), 'dist/bytes/images.sha256');
+  if (!fs.existsSync(file)) throw new Error(`missing ${file}: run nx run patchkit:device-images`);
+  if (
+    !fs
+      .readFileSync(file, 'utf8')
+      .split('\n')
+      .some((line) => line.startsWith(`${device}-${firmware} ${set} image `))
+  )
+    throw new Error(
+      `${device} ${firmware} with patch set ${set} is not in dist/bytes/images.sha256: add the firmware to CELLS in tools/nx/device-inputs.mjs, or run patchkit through runtime/patchkit.ts (a live test)`,
+    );
 }
 
 /** What the offline preparation needs of the patch step: `patchkit apply ...`, or the copy of an image made ahead. */

@@ -32,6 +32,10 @@ function run(args: string[], { input, timeout = 30_000 }: Options) {
   return child;
 }
 
+/** An Nx task: module-targets.mjs sets DIGI_PATCHKIT_LIVE to '1' or '' for every device task, so a value exported in a shell never leaks in. */
+const underNx = () =>
+  process.env.DIGI_PATCHKIT_LIVE !== undefined || Object.keys(process.env).some((name) => name.startsWith('NX_TASK_'));
+
 /**
  * The one place that spawns patchkit for a test (tools/nx/check-patchkit-spawn.mjs checks it). Under Nx it throws unless the task is
  * marked live: tools/nx/module-targets.mjs sets DIGI_PATCHKIT_LIVE=1 for a task whose key holds the patchkit binary, that is, a full key
@@ -39,7 +43,7 @@ function run(args: string[], { input, timeout = 30_000 }: Options) {
  * would not change with the binary. `DIGI_PK_ROOT` names a module variant. `input` goes to stdin.
  */
 export function patchkit(args: string[], options: Options = {}) {
-  if (process.env.NX_TASK_TARGET_PROJECT && !process.env.DIGI_PATCHKIT_LIVE)
+  if (underNx() && process.env.DIGI_PATCHKIT_LIVE !== '1')
     throw new Error(
       `patchkit ${args[0]}: this task's cache key does not hold the patchkit binary. Import runtime/patchkit.ts in the test (that marks it live), or read the result from dist/bytes (images.sha256, pack-verdicts.json).`,
     );

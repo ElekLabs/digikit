@@ -301,7 +301,7 @@ export const deviceTarget = (root, tests, recs, imageInput, importInputs, upload
       command: `${EMU_SLOT} pnpm --filter @digi/regression test:runtime ${tests.map((t) => `../../${root}/${t}`).join(' ')}`,
       cwd: '.',
       // the key holds the patchkit binary (a full key, or a live closure): runtime/patchkit-exec.ts runs patchkit only then
-      ...((!opts.narrow && !opts.merge) || patchkitLive ? { env: { DIGI_PATCHKIT_LIVE: '1' } } : {}),
+      env: { DIGI_PATCHKIT_LIVE: (!opts.narrow && !opts.merge) || patchkitLive ? '1' : '' },
     },
   };
 };

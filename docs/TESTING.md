@@ -387,7 +387,7 @@ built bytes (full set; the narrow set of a file outside `mergeTests` is describe
 `dist/bytes/core-objects.sha256`, one line per committed core object (`modules/core/**/build/*.dko.json`) with its hash without
 `source_sha256`, the only field that follows the source text (a comment edit changes no other field; checked for Rust, C and assembly).
 The patched image is a function of these objects, the core manifests, the device files, the patchkit code and the firmware. A
-merge key (the target of a file in `mergeTests`, and the narrow keys, see above) hashes the result instead of the patchkit code:
+merge key (the target of a file in `mergeTests`) hashes the result instead of the patchkit code (a narrow key holds none of these files: only the packs the test loads, `pack-verdicts.json` when it imports `pack-needs.ts`, and the binary when it is live):
 `patchkit:device-images` runs `patchkit apply` for each acceptance firmware (`CELLS` of `tools/nx/device-inputs.mjs`) with each patch set of
 its device file and writes `dist/bytes/images.sha256`, one line `<device>-<version> <set> image <sha256> plan <sha256> addrmap <sha256>`
 (the plan and the address map are what `runtime-plan.ts` reads). `digi-control:daemons` also writes `dist/bytes/daemon-test.key`, the
@@ -396,7 +396,7 @@ the store entry), the crates of its dependency closure (`cargo tree`, not the wh
 flags (`emud_key.test_key_of`, written by `verify_build daemons`). An unrelated workspace member leaves it unchanged; an emulator source edit
 changes it. The daemon store key is not touched by it.
 So a patchkit edit that changes no packed byte (image, plan, address map, `.dkm`, core object) selects no merge target. A test that runs
-patchkit keeps `dist/patchkit/patchkit` in its key (merge and narrow) and runs with `DIGI_PATCHKIT_LIVE=1`. The rule is the import closure: it
+patchkit keeps `dist/patchkit/patchkit` in its key (merge and narrow keys) and runs with `DIGI_PATCHKIT_LIVE=1`. The rule is the import closure: it
 holds `tests/regression/runtime/patchkit.ts` (the helper every module that runs patchkit imports: `dkm.ts` for `needs` and `fit`, `synth.ts`,
 `addrmap.ts`, `runtime-plan-modules.ts` for `apply --modules`, the opt-in proofs through `optInPatchkit`), or the record patches fixture
 modules (`patchModules`). Only `runtime-plan.ts` is exempt: its `apply --set` result is in `images.sha256`. All test code starts patchkit in

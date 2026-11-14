@@ -123,9 +123,15 @@ function fakeDk() {
   return { calls, dk, runtime: { session: daemon, dk } as unknown as PatchedSession };
 }
 
+/** Every read returns `text`, except dist/bytes/images.sha256, which covers the DT2 1.17 emulator set (runtime-plan.ts assertCovered). */
+const readFiles = (text: string) =>
+  fake.read.mockImplementation((file: string) =>
+    String(file).endsWith('images.sha256') ? 'dt2-1.17 emulator image x plan y addrmap z\n' : text,
+  );
+
 beforeEach(() => {
   vi.resetAllMocks();
-  fake.read.mockReturnValue(JSON.stringify(plan));
+  readFiles(JSON.stringify(plan));
   fake.exists.mockReturnValue(true);
   fake.mkdtemp.mockReturnValue('/artifacts/remote-input/dt2/run-1');
   fake.exec.mockResolvedValue({ stdout: '' });
@@ -165,7 +171,7 @@ for (const stage of ['patch', 'install', 'plan'] as const) {
     const { dk, runtime } = fakeDk();
     if (stage === 'patch') fake.exec.mockRejectedValueOnce(new Error('patch failed'));
     if (stage === 'install') dk.put.mockRejectedValueOnce(new Error('install failed'));
-    if (stage === 'plan') fake.read.mockReturnValue(JSON.stringify({ ...plan, modules: ['wrong'] }));
+    if (stage === 'plan') readFiles(JSON.stringify({ ...plan, modules: ['wrong'] }));
     await expect(prepareRemote(runtime)).rejects.toThrow();
     expect(fake.exec).toHaveBeenCalledTimes(1);
     expect(dk.put).toHaveBeenCalledTimes(stage === 'install' ? 1 : 0);

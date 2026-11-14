@@ -144,6 +144,35 @@ def repo_files_of_depfile(depfile_text: str, root: Path, target_dir: Path) -> li
     return sorted(names)
 
 
+def backfill_files(entry: Path, root: Path = ROOT) -> bool:
+    """Write `files.txt` of a store ENTRY made without it (by code that predates the test key) from its stored `depfile.d`; True when
+    the entry now has one. The dependency file holds the absolute paths of the tree that built it: that tree is found from the daemon's
+    own crate, and only names that exist in ROOT are kept. False (nothing written) when this cannot be done: the caller rebuilds."""
+    if (entry / "files.txt").is_file():
+        return True
+    try:
+        text = (entry / "depfile.d").read_text()
+        marker = "/packages/emulator/control/"
+        builder = next(
+            Path(d[: d.index(marker)]) for d in parse_depfile(text) if marker in d
+        )
+        names = [
+            n
+            for n in repo_files_of_depfile(text, builder, builder / "dist")
+            if (root / n).is_file() or n.startswith("out/")
+        ]
+        if not any(n.startswith("packages/emulator/control/") for n in names):
+            return False
+        tmp = entry / f".files-{os.getpid()}"
+        tmp.write_text("".join(f"{n}\n" for n in names))
+        os.replace(
+            tmp, entry / "files.txt"
+        )  # whole or not at all; another process may do the same
+        return True
+    except (OSError, StopIteration, ValueError):
+        return False
+
+
 def cargo_closure(root: Path = ROOT) -> str:
     """The crates the daemon links, `name vVERSION` per line (workspace paths removed), from `cargo tree` on the pinned toolchain."""
     from tools.emulator import digi_env
