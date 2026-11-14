@@ -95,6 +95,24 @@ impl Platform for RealPlatform {
         dkrt_abi::profiles::DT2
     }
 
+    // The facts one word each: a caller that needs one fact does not read the other three (the reads are volatile and stay).
+    #[cfg(not(test))]
+    fn device_id(&self) -> u32 {
+        unsafe { read_volatile(addr_of!(dkrt_device_id)) }
+    }
+    #[cfg(not(test))]
+    fn device_name(&self) -> u32 {
+        unsafe { read_volatile(addr_of!(dkrt_device_name)) }
+    }
+    #[cfg(not(test))]
+    fn samples_in_store(&self) -> bool {
+        unsafe { read_volatile(addr_of!(dkrt_samples_in_store)) != 0 }
+    }
+    #[cfg(not(test))]
+    fn sample_path_max(&self) -> u32 {
+        unsafe { read_volatile(addr_of!(dkrt_sample_path_max)) }
+    }
+
     #[cfg(not(test))]
     fn image_id(&self) -> [u8; 8] {
         let p = addr_of!(dkrt_image_id) as *const u8;
