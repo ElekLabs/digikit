@@ -15,7 +15,6 @@ export function runtimeTests(
     patchSet?: string;
     dsp?: SessionOptions['dsp'];
     mirror?: boolean;
-    timeout?: number;
     devices?: readonly Device[];
     full?: boolean;
     skip?: string;
@@ -34,7 +33,6 @@ export function runtimeTests(
             await expectRuntimeBoot(handle.runtime);
             await timePhase('scenario.body', () => body(handle.runtime), timingContext(handle.runtime.session));
           },
-          opts.timeout,
         );
       },
     );

@@ -82,4 +82,4 @@ async function expectBeaconWords(patched: PatchedSession): Promise<void> {
   await session.expectNoFault('step beacon');
 }
 
-runtimeTests('the step beacon words reach the collector in every block', expectBeaconWords, { dsp: 'sharc', timeout: 300_000 });
+runtimeTests('the step beacon words reach the collector in every block', expectBeaconWords, { dsp: 'sharc' });

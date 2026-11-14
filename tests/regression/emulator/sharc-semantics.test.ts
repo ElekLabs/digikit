@@ -115,7 +115,6 @@ async function expectSeedTables(patched: PatchedSession): Promise<void> {
 
 runtimeTests('RECIPS and RSQRTS give the measured result and flags for every probe item', expectSeedTables, {
   dsp: 'sharc',
-  timeout: 600_000,
 });
 
 /** The value items of the dsp-facts probe (tests/fixtures/modules/dsp-facts) that the Digitakt II measured (tests/fixtures/sharc/dsp-facts-values-dt2-1.17.json): FIX, float ALU edge cases, fixed-point overflow with and without ALUSAT, the
@@ -166,5 +165,5 @@ async function expectFactsValues(patched: PatchedSession): Promise<void> {
 runtimeTests(
   'the instruction facts of the Digitakt II hold for every value item of the dsp-facts probe',
   expectFactsValues,
-  { dsp: 'sharc', timeout: 600_000 },
+  { dsp: 'sharc' },
 );
