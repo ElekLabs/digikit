@@ -95,9 +95,10 @@ workbench call the same code (`mise run wb:cli` runs workbench actions through t
 - **Artifact:** one schema for emulator and device runs (section 9). The pane, the CLI and replay readers read the same artifact and reach the
   same numbers.
 - **Workbench consumers:**
-  - The Log pane ([workbench-device-log.md](workbench-device-log.md)) shows names for addresses in log events and crash records.
-  - New panes: DSP and ColdFire utilisation per module or owner over time, per block, and per function in the emulator. Interval graphs,
-    markers, record and stop, export.
+  - The Log pane ([workbench-device-log.md](workbench-device-log.md)) shows names for addresses in log events and crash records (P6, done: ADDRMAP.md "Workbench"; the same dk-session and debug-module PEEK path serves the emulator and
+    hardware, and hardware proof is a later explicit step). The Memory panel lists what each module takes of each resource (P6, done).
+  - The Profile pane (P8): DSP and ColdFire utilisation per module or owner over time, per block, and per function in the emulator. Interval
+    graphs, markers, record and stop, export. The same dk-session path (the debug module and its PEEK, the remote module) will carry the device's profile data; the pane shows "needs P8" for the device until its source exists.
 - The workbench never runs Python.
 
 P2 design:
@@ -110,7 +111,7 @@ P2 design:
 - **`wb:cli`:** a global `--format json|text`, and the commands `addrmap lookup`, `module analyse`, `profile record` (emulator: `cf.profile` through control-client) and
   `profile report`. All go through `dkprof.wasm`; `wb` starts no child process for them.
 - **Python:** `tools/devtools/cfprof.py` is deleted (done): on one paused emulator, `wb profile record --since-boot` and `cfprof.py` gave equal path counters and equal function, idle and exit rows.
-- **Not in P2:** the SHARC profile source (a new daemon call) is P4, the device source is P8, the panes are P6.
+- **Not in P2:** the SHARC profile source (a new daemon call) is P4, the device source and the Profile pane are P8; P6 (Log names, Memory per-module rows) is done.
 - **patchkit:** it uses the dksharc DKDS and `.dko` readers (done; packed bytes unchanged).
 
 ## 5. Track A: emulator host speed
@@ -298,9 +299,9 @@ Item numbers are ids, not an order. The order lives in [sdk-runtime-roadmap.md](
 | 3 | Module DSP analysis: the Rust crate `dksharc` (slice 1 done; slice 2 register def/use) | B | 1 day | 1 |
 | 4 | Per-module cost, machine budget check, fast-tier refusals per module | B | 1-2 days | 1, 3 |
 | 5 | Host profiles named from sharcdb, first ranking | A | 1-2 days | Nothing; in a lane |
-| 6 | Workbench: names in the Log pane, first utilisation pane | B | 2-3 days | 2 |
+| 6 | Workbench: names in the Log pane (emulator and device, one dk-session/debug-module PEEK path; hardware proof later), per-module rows in the Memory panel. **Done** (docs/ADDRMAP.md "Workbench"); the Profile pane moved to item 8 | B | 2-3 days | 2 |
 | 7 | Clock audit | B | 1 day | Nothing (static) |
-| 8 | `DK_SPAN`, sink slot, `profile.dks`, DSP stats window | B | 3-4 days | runtime-and-services sink slots, dsp-link windows, the owner of DSP dispatch |
+| 8 | `DK_SPAN`, sink slot, `profile.dks`, DSP stats window, Profile pane (emulator `cf.profile` and device, over the same dk-session path as the Log names) | B | 3-4 days | runtime-and-services sink slots, dsp-link windows, the owner of DSP dispatch |
 | 9 | Device calibration | B | 1 day | 8; the device transport proven on hardware |
 | 10 | ColdFire PC sampling on the device | B | 2 days | 9 |
 

@@ -47,9 +47,9 @@ Status: `todo`, `active`, `done`, `parked`.
 | 3 | R6 | DSP transfer queue; dsp-link windows | R3 | todo | |
 | 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | todo | |
 | 3 | R8 | Spike, whole path | R7 | todo | |
-| 3 | P6 | Workbench: names in the Log pane, first utilisation pane (UI lane) | P2 | todo | |
+| 3 | P6 | Workbench: names in the Log pane, first utilisation view (UI lane) | P2 | done (this PR): Log names, Memory per-module rows; Profile pane moves to P8 | ui/p6-names |
 | Stop | | Review the model with Em; the contract is proven by the new kind | R7, R8 | | |
-| 4 | P8 | `DK_SPAN`, sink slot, `profile.dks`, DSP stats window | R2, R6, R4 answer | todo | |
+| 4 | P8 | `DK_SPAN`, sink slot, `profile.dks`, DSP stats window, and the Profile pane (moved from P6) | R2, R6, R4 answer | todo | |
 | 4 | P9 | Device calibration; the broker's cycle budget uses the measured factor | P8; device transport proven on hardware, with Em's go | todo | |
 | 5 | R9 | `fx` linked in | R8 | todo | |
 | 5 | R10 | `machines` linked in; layer check final | R9 | todo | |
