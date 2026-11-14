@@ -303,14 +303,16 @@ A new plug-in point starts as an experimental `.dks` with its own hook table, an
 
 ### 5.11 Sink slots
 
-**Proposal.** The runtime has one observer mechanism today: the log sink. `digikit/debug` sets it with `dkrt_log_sink_set`; without a sink, error events go to the small ring and the rest is dropped, at the cost of one pointer test ([debug-mode-and-probes.md](debug-mode-and-probes.md), phase 1). Make this one generic mechanism with numbered channels, `log` and `span` first:
+**Built (R2d, runtime 0.7.1).** The runtime has numbered sink channels, `log` (0) and `span` (1), in `dlog.rs`. The import is `dk_sink_set(channel, sink)` ([sdk.md](sdk.md) section 5.1, `<dk/core/sink.h>`).
 
-- The runtime keeps one pointer per channel and names no service or kind. Producers pass opaque owner ids (`owner_of_row`).
-- A module or service sets a channel's sink by import. One owner per channel; a second claimant is refused while planning, like a hook site.
-- The slot is cleared after the owner's `fini`. Only `log` replays its ring to a new sink, as today.
-- With no sink set, a producer pays one pointer test.
+- The runtime keeps one pointer and one owner per channel and names no service or kind. The owner is the calling module (its source index). Producers pass opaque owner ids (`owner_of_row`) in span records.
+- One owner per channel. A second owner gets `DK_E_BUSY` from `dk_sink_set` at the call, not while planning (a module sets its sink in `init` or later, so the table cannot know it).
+- The channel is cleared after the owner's `fini` and after a failed `init`.
+- `log` receives every event the runtime logs, in addition to the older `dk_debug_log_sink_set` pointer, which is unchanged (the debug module has not moved to the channel; there is no ring replay on the channel).
+- `span` receives `(owner, cycles)` records from `dlog::span_emit`; no producer exists yet (`DK_SPAN`, S5).
+- With no sink set, a producer pays one word test per channel and calls nothing.
 
-Users: `digikit/debug` (`log`), `profile.dks` (`span`, [profiling plan](profiling.md) section 7). The probe's per-block `dl_set_tick_cb` slot in dsp-link can follow the same rule later.
+Users: `digikit/debug` (`log`, later), `profile.dks` (`span`, [profiling plan](profiling.md) section 7). The probe's per-block `dl_set_tick_cb` slot in dsp-link can follow the same rule later. Usage for a sink owner: [INSTRUMENTATION.md](../INSTRUMENTATION.md).
 
 ### 5.12 Service anatomy
 
@@ -342,21 +344,10 @@ Three concepts are mixed today:
 | Concept | Today | Target |
 | --- | --- | --- |
 | Transport: moves bytes using hooks | `dsp-link` adapter, ~900 lines. Names its users (`_dl_vrows`, `_dl_frows`, `_sp_tail`) | `dsp-link` adapter with window registration. It stops naming users |
-| DSP code load and memory | `dsp.rs` | Runtime, with one transfer queue |
-| What goes in DSP memory: voice rows, FX rows, sample tables | `dsp.rs`, `fxpage.rs`, `fxsend.rs`, `tracks.rs` | Services |
+| DSP code load and memory | `dsp.rs` | Runtime, with one transfer queue (R6a: `link.rs`) |
+| What goes in DSP memory: voice rows, FX rows, sample tables | `dsp.rs`, `fxpage.rs`, `fxsend.rs`, `tracks.rs` | Services, through the link API (6.2) |
 
-Only one transfer can run at a time (`dsp-link.c:133,153`). There is no queue, so writers check each other's `busy()` (`tracks.rs:197`, `sample.rs:130-136`, `fxpage.rs:585`, `fxsend.rs:417`, `dsp.rs:360-363`). The status is shared with no owner token (`dl_poll`, `dsp-link.c:168-182`).
-
-Target: `submit(owner, addr, bytes, done)` with one FIFO. Delete all `busy()` cross-checks. Requirements:
-
-- The queue owns the bytes of each request. The link reads buffers in place today (`d.word`, `STAGE`).
-- In-order delivery per owner. Voice rows write the type last, FX rows write the pc last, and clears run in reverse. The FX row is an 18-step sequence (`FX_STEPS`, `dsp.rs:54`).
-- Failure in the middle of a sequence needs rollback (`fx_pub`, `row_pub`).
-- Unload needs a synchronous drain.
-
-**Desired state with versions (live values).** Live values (fx knobs, send amounts, track controls) are not queued as one request per change. The runtime keeps a desired value and a version for each address. The pump writes what is newer than the DSP's confirmed version, so a fast knob turn sends the last value only and a refused write is sent again by the same rule. Bulk transfers (images, row sequences, track records) stay one-off requests with an owner result.
-
-**[D] Latent bug in the shared result.** `write_word_blocking` (`dsp.rs:1109`) only spins until the link accepts a send. The bug is that link results have no owner: a writer that has not polled yet would read the result of the next writer. Today this cannot happen: the live writers check each other, and the loader and `write_word_blocking` run only at boot ([finding 129](../findings/129-dsp-link-result-ownership.md)). It becomes reachable with any live load or unload path. **The owner-tagged transfer queue must land before any live load or unload path.**
+Only one transfer can run at a time (`dsp-link.c:133,153`). Before R6 there was no queue: writers checked each other's `busy()` and the status was shared with no owner token (`dl_poll`, `dsp-link.c:168-182`).
 
 `watch.rs`: keep the heartbeat and hang record in the runtime. Move voice and FX guards and attribution to their services. Boot-counter safe mode does not use `watch.rs` (`boot.rs:254-309`); hang records do (`crash.rs:449`). The DIAG words move to a shared crate to break the `crash` and `watch` cycle.
 
@@ -367,6 +358,39 @@ Target: `submit(owner, addr, bytes, done)` with one FIFO. Delete all `busy()` cr
 Today the per-block calls into machine and FX DSP code sit in the `dsp-voice` and `fx` adapters (28 and 2 SHARC hooks, section 11.1). This plan does not yet say who owns that dispatch in the target.
 
 **Decided** ([finding 128](../findings/128-r4-hooks-in-services.md)): SHARC hooks cannot move into a `.dks`, so the image keeps every SHARC hook site as a thin stub. The stub jumps through a pointer slot; a zero slot runs the stock path. Each kind's per-block dispatch code and rows belong to the service that owns the kind: `machines` for voice rows, `fx` for effect rows, and a new kind's service brings its own. A service loads its DSP code at run time (already relocated by the runtime) and writes its entry into the slot. `DK_SPAN` ([sdk.md](sdk.md) section 9) and the DSP stack guard (section 8) live in the stub, so content modules need neither. The stub overhead per block is checked in R8 whole-path spike.
+
+### 6.2 R6: the DSP link queue
+
+R6 has two steps. **R6a is built; R6b is planned.**
+
+**R6a, the link API in the runtime core (built; no ISR change, no SHARC change, no wire change).** The core owns the link (`link.rs`). The wire protocol stays as it is: one transfer at a time through `dl_send`, `dl_send_win` and `dl_poll`. R6a adds who may send and in what order.
+
+- **Live values.** One table of desired state. A slot is a window and a word offset. `link::set(slot, value)` keeps the newest value with a version and a dirty bit. Several sets before the next send give one write of the newest value. A write that failed (the link refused it, or reported an error) stays dirty and is sent again after a short hold. Writers: the effect pages' knob and MIX words, the send amounts.
+- **Owner requests.** `link::submit(owner, stream)` returns a `Ticket`. `link::result(ticket)` answers its owner only, once. There are two kinds of stream:
+  - *Bulk*: bytes, either copied into the queue (at most 28 bytes) or a buffer the caller keeps valid until the result is taken or the owner is drained. A bulk is sent in chunks of 4 KiB.
+  - *Sequence*: word writes in order, at most 18 (an effect row). The last word publishes (the voice row's type, the effect row's pc). A step may carry an undo word. When a transfer of a sequence fails, the steps with an undo word that were sent are undone in reverse order, then the request fails (`Failed`, or `RollbackFailed` when an undo failed too).
+  - Writers: the loader (the module image as a bulk, each row as a sequence), the sample track writer (each table write as an owned bulk), and the core's own clears (`link_run`: submit a sequence and wait; the effect row clear is one sequence, the voice row clear one word).
+- **Retained state.** As before the queue, a retained loader fails an area send (the answer -2 of `dl_send`, which fails the image or a track write) and holds word writes (they wait; a blocking `link_run` gives up at its spin bound). Nothing is polled or sent while retained.
+- **Order and priority.** Requests are sent oldest first, so each owner's requests stay in order. Priority: an undo first, then a dirty live value, then the oldest request. A live edit therefore goes between two bulk chunks and between two steps of a sequence.
+- **Drain.** `link::drain(owner)` cancels the owner's queued requests and waits for the transfer in flight (bounded). `dsp::quiesce` drains the loader before a module's rows are cleared, so no transfer reads a buffer that is about to be freed.
+- **Confirmed state on the ColdFire side.** The link reports DONE when the DSP has taken the bytes and copied them, so the confirmed version is the version that was sent. `link_confirmed(slot)` gives the value. A DSP restart marks every slot dirty and clears the confirmed values (`dsp_restarted`; no event source calls it yet, see the open items below).
+- **The pump runs in the UI task** (`dkrt_tick`, before the loader step and the service ticks) and in the blocking waits (`link_run`, drain). It never runs in an interrupt.
+- **Windows.** The window field is 2 bits: 0 the area, 1 the voice rows, 2 the effect rows. Window 3 is reserved for the profiler's statistics (P8); no writer may use it (`submit` and `set` refuse it). The direction of the statistics (DSP to ColdFire needs a read path) and their transport are decided in P8, not here.
+- **Observability.** Each request logs submit, start, done and error, and a live word logs resend and taken, as the `DSP_LINK` event (kind 46) through the log sink of R2d. Without a sink the cost is one flag test. There is no span event: the span sink carries `(owner, DSP cycles)` records of the profiler, and a link request has no cycles. Its duration in blocks would be a second meaning in a channel with one, so the log event is the only record of a request.
+- **The writers use only this API.** The `busy()` cross-checks and the interim claim bits (`LINK_CLAIM`, `link_busy`, `link_claimed`) are deleted. Services reach the link through `CoreApi::link_*`; the core calls it directly. The finding-129 hazard cannot occur: no interim fix was made.
+
+Decisions:
+
+- The pump runs in the UI task for R6a. The frame tick (`dl_tick`, 1500 Hz) is an interrupt and stays unchanged.
+- The confirmed state is kept on the ColdFire side. A DSP echo of the version would cost reply-record space that is not free.
+- Windows stay 2 bits wide, with window 3 reserved.
+- Live edits go between bulk chunks (a priority policy of the pump), not between whole requests.
+
+Open items of R6a: no event source calls `dsp_restarted` yet (the DSP restart is not observable in the runtime today); the module image is the only chunked bulk, and its chunk size is not tuned (4 KiB, one transfer of about six END frames each).
+
+**R6b, a batched state-sync transport (planned, not built).** Each block's frame tail carries a batch of `(window, offset, value)` taken from the desired-state table. One acknowledgement confirms the batch, and there are no END frames between batches. It needs SHARC-side changes to `dsp-link` and an ISR A/B measurement first (`tools/devtools/coupled_ab.py`, the host instruction ratios). Trigger: the modulation rate. One word costs about 8 blocks today (about 190 words per second), so R7 (LFO) or P4 needs R6b when the modulated words per block exceed that. The API of R6a does not change: `set` and `confirmed` stay, only what the pump does with a dirty slot changes.
+
+**[D] The latent bug of the shared result** ([finding 129](../findings/129-dsp-link-result-ownership.md)): link results had no owner, so a writer that had not polled yet could read the result of the next writer. R6a removes it by construction.
 
 ## 7. SDK
 
@@ -431,19 +455,61 @@ Memory cleanup: files state is 33,980 B in `.data`, about 42 KB with scratch, fo
 - Check by symbol before removing: whether tools read `State.log`, `DKRT_REG`, `DKRT_DSP`, `DKRT_FXP` or `DKRT_FXS`. `dkrt_load` has a caller in `tools/patchkit/pk_dkrt.py:429`. `dkrt_project_changed` has no C caller found; check assembly and project work first.
 - `sample_stream.rs` is deleted (R2a); add it back when something uses it.
 
-**Runtime split:** `lib.rs` into state, imports, api, tick, health, report, mailbox. `boot.rs` into selection, safe mode, boot. `upload.rs` into transport, store commands, admin commands, module commands. `dlog.rs` and module context. `crash.rs` becomes `fault.rs`, `table.rs` becomes `invariants.rs`. Split `apps/digikit-menu/src/menu.c` by page. Split crate `dkrt-sdk`, whose name wrongly suggests it is the SDK: host-shared ABI and formats go in `dkrt-abi`, internals into the runtime and services. Pure logic such as `sticky.rs` goes with its owner.
+**Runtime split:** `lib.rs` into state, imports, api, tick, health, report, mailbox. `boot.rs` into selection, safe mode, boot. `upload.rs` into transport, store commands, admin commands, module commands. `dlog.rs` and module context. `crash.rs` becomes `fault.rs`, `table.rs` becomes `invariants.rs`. Split `apps/digikit-menu/src/menu.c` by page. Split crate `dkrt-sdk`, whose name wrongly suggests it is the SDK: R2c created `dkrt-abi` with the interfaces (`CoreApi`, `Service`) and the pure types they share. Renaming `dkrt-sdk` to hold only the host-shared ABI and formats, and moving the fault and selection types, is left. Pure logic such as `sticky.rs` goes with its owner.
 
-**Platform adapter** `modules/core/adapters/platform`. It takes:
+**Platform adapter** `modules/core/adapters/platform`. **R3a and R3b done (the trait, `RealPlatform`, `FakePlatform`, the contract table, the layer rule and the `core/platform` adapter; branches rt/r3a-platform and rt/r3b-adapter).** Differences from the design below: the trait has `profile()` with `DeviceProfile` (generated, from `[capabilities] card` and `[digikit] sample_path_max`) in place of raw device ids, so the device objects gained two data words and R3a gates together with R3b; `track_type` returns `Option<i32>`; the `dkpool_*` and `dkpw_*` calls stay with their users and the trait only holds `present()` and, for the pool, the worker calls; the machines service's calls are in `services/machines/fw.rs`; the interrupt helper `locked`, `blocks_since`, the card gate (`block_write_with`, `check_with`), the MIDI reply (`reply_with`) and the sample route (`root_route`, `path_too_big`) are generic over `P: Platform`, so host tests drive them with `FakePlatform`.
 
-- hooks `cf.view.hook.ui_loop`, `cf.rtos.hook.main_os_task`, `cf.midi.hook.rx` and their trampolines;
-- exception hook install (`crash.rs:106-129`);
-- soft reset, eSDHC busy check, block read and write, MIDI send and TX ring sizes, `project::serialize`, boot record write, `track_type`, UI queue walk for safe key (`boot.rs:198`), `scan.rs:26` allocation;
-- the two `dkfw::samples` calls in `worker.rs:137,153` and its `std::function` layouts;
-- firmware-backed imports.
+R3 splits into two steps.
 
-The runtime calls a neutral interface: tick, boot, `sysex_rx` returning consumed, block read and write, MIDI send, TX room, soft reset, project serialize, track type, safe key held, clock.
+**R3a, Platform trait (Rust only, no image change).**
 
-About 20 `dkfw::` lines exist in 6 runtime files today. Remove the runtime's exemption at `layercheck.py:243-244` and fix `docs/ARCHITECTURE.md:32`. Page key and turn hooks move to the `machines` adapter with `pageclick.rs`'s firmware half (`:185, :238, :260`).
+- Platform methods: `device_id`, `device_name`, `image_id`, `blocks() -> Option<u32>` (firmware block counter, about 1500 per second), `irq_mask` and `irq_restore`, `flush(start, len)`, `block_read(sector, bytes, buf)`, `block_write_raw(...)`, `midi_send(port, msg)`, `midi_tx_in_flight() -> Option<u32>`, `os_upgrade_active`, `soft_reset() -> !`, `track_type(track)`, `key_down(key)` (safe key, the UI queue walk of `boot.rs:198`).
+- A `Tasking` sub-trait: task spawn, semaphores, sleep, current task, firmware alloc and free (including the `scan.rs:26` allocation).
+- Optional providers are sub-traits with `present()`: `SamplePool` (`dkpool_*`) and `StagedWriter` (`dkpw_*`). The two `dkfw::samples` calls in `worker.rs:137,153` and their `std::function` layouts go behind `SamplePool`.
+- `RealPlatform` is a zero-size type over today's `platform.rs` and `dkfw` calls. Use `#[inline]` only on small hot paths: lane E measured that inlining larger helpers cost about 4% text. The core is generic over `P: Platform`, like `C: CoreApi`.
+- Not in the trait: `st()` (core state), and `rd32`, `wr32` and `cstr_*` (pure helpers in `dkrt-abi`).
+- Device id, name and image id come from the generated device data (`device.s`, the patchkit stamp). Firmware addresses resolve at patch time through anchors and the `*_info` tables, never as runtime literals. Per-device numbers come as generated consts, like `dkrt_sdk::device` `DDR_CACHED_BASE`.
+- The `machines` service's firmware calls (`dkfw` page, input and param calls in `pageclick`) go behind that service's own adapter interface (`paramapi::Fw` exists), not into the core `Platform`. This matches finding 128: page key and turn hooks stay runtime-owned with slots.
+- About 20 `dkfw::` lines exist in 6 runtime files today. They move behind the trait.
+
+`FakePlatform` (`cfg(test)`) models:
+
+- a sector-addressed card with a write log and injected errors;
+- a block clock that tests advance, including `None` and wrap;
+- IRQ nesting checks;
+- captured MIDI output and a settable `tx_in_flight`;
+- the `*_info` tables as bytes;
+- presence and version of each optional provider;
+- a reset flag;
+- `os_upgrade_active`.
+
+It takes a `DeviceProfile` from the same generator as `RealPlatform`.
+
+**Contract suite.** One expectation table, checked by host tests against `FakePlatform` and by a device test per device (DT2 1.17, DN2 1.12; Syntakt later) against the real platform. Checks:
+
+- device id and name equal the profile;
+- blocks advance at about 1500 per emulated second and wrap cleanly;
+- a known sector reads back;
+- out-of-range and foreign-card writes are refused;
+- MIDI output appears and `tx_in_flight` drains;
+- IRQ state round-trips;
+- flush, then execution of fresh code, works;
+- every anchor resolves or returns `None` deliberately;
+- every `*_info` table is well formed with a matching version.
+
+**Layer rules.** Remove the runtime's exemption at `layercheck.py:243-244` (the firmware-call rule) and fix `docs/ARCHITECTURE.md:32`. Forbid device-id comparisons outside L1.
+
+**Proof for R3a:** `patchkit objdiff` (near-identical, since `RealPlatform` is a zero-size type); host tests; the DT2 text-size check; the contract device test once per device.
+
+**R3b, adapter move (image change, needs a gate; done).** The hooks `cf.view.hook.ui_loop`, `cf.rtos.hook.main_os_task` and `cf.midi.hook.rx`, their trampolines, and the exception hook install (`crash.rs:106-129`) move into `modules/core/adapters/platform`. The runtime then sees a neutral interface: tick, boot, `sysex_rx` returning consumed, and the `Platform` calls above.
+
+**Checks made for the build:**
+
+- The profile-driven rule holds (`docs/plans/syntakt.md` on the syntakt branches): device facts come from `devices/*.toml`, code branches on capabilities. The runtime had 12 raw `device() == N` tests (sample path limits, the samples root route, the +Drive tick, the track sample probe); all became capabilities.
+- Per-device numbers generated: `[capabilities] card` (`slots` is `samples_in_store`) and `[digikit] sample_path_max`, as `SAMPLES_IN_STORE` and `SAMPLE_PATH_MAX` words of `device.s`, and a `DeviceProfile` constant for each device file (`rust-profiles` gen kind, `abi/src/profiles.rs`).
+- `dynreg_info`, `dyndsp_info` and `dynfx_info` are read in the core (`registry.rs`, `dsp/mod.rs`); services get them through `CoreApi::dynreg`, `dsp_info` and `fx_info`. `fxpages_info` is still read by the effect service itself (`fxpage.rs`): it moves with the neutral adapter functions below.
+
+**Size:** R3a about 2 agent days, R3b about 1 (scout estimates; recent ones ran pessimistic).
 
 **Neutral adapter functions**, done as each service is extracted: replace `dynreg_info`, `dyndsp_info`, `dynfx_info`, `fxpages_info` raw tables, so the firmware math (`registry.rs:478-536`, string layout `:192-207`, `dsp.rs` row words, `fxpage.rs:248`) moves into the adapters. One device-split style. Generated manifest rows. One anchor convention. Correct `requires`. `ui`: replace `dk_ui_stock_row` and `dk_app_settings_rows(uint8_t*)` with a neutral settings row callback. Update `devices/*.toml [patch_sets]`.
 
@@ -455,20 +521,19 @@ About 20 `dkfw::` lines exist in 6 runtime files today. Remove the runtime's exe
 | `registry` and `fxpage`, `fxsend`, `pageclick` | The generic walker dispatches to handlers; each service owns its rows |
 | `fxpage` and `fxsend` | Both go into `fx` |
 | `dsp` and `sample`, `tracks` | "DSP part loaded" event; DSP records go through handlers |
-| `sample`, `tracks` to `fxpage`, `fxsend` through `busy()` | The transfer queue (section 6) |
+| `sample`, `tracks` to `fxpage`, `fxsend` through `busy()` | The link queue (section 6.2, R6a): done |
 | `fxsend`, `tracks`, `files` to the module table and `dlog::current_source` | A small module-context interface in the runtime |
 | `crash` and `watch` | DIAG words in a shared crate |
 | `tracks` and `peakwin` | Both go into `samples` |
 
-**R2b service moves and the crossings left for R2c.** R2b moved whole files and whole functions only; every call below is unchanged and still goes through a `pub use` shim at the old path.
+**R2b and R2c: service moves and the crossing list.** R2b moved whole files and whole functions. R2c split the walkers (`registry::check`, `apply` and `remove`, and the `dsp` check, reserve and step) into handlers, made the interfaces, and resolved every crossing:
 
-- Moved: `assign`, `nativepage`, `pageclick`, `paramapi` to `services/machines`; `fxpage`, `fxsend` to `services/fx`; `tracks`, `peakwin` and the `dk_sample_pool_*` imports of `entry.rs` to `services/samples`; the parameter row writers of `registry.rs` to core `params.rs`; `dsp.rs` is core `dsp/mod.rs`, and its voice, effect and sample functions are `services/{machines,fx,samples}/dsp/mod.rs`. Files keep their names inside the service folders: no `slots.rs` or `records.rs` yet, because the page key and turn slot and the record branches are not whole functions.
-- Not split, kept whole in core: `registry::check`, `apply` and `remove` (machine, page, parameter and effect branches share closures and locals; `counts`, `types_of`, `free_rows` and `profile` are generic), and `dsp::check`, `reserve`, `unreserve`, `step` (voice, effect and track records share one body). R2c turns each into a walker that calls per-kind handlers.
-- Core calls into services: `registry` to `fxpage` (`apply`, `check_record`, `remove`, `KIND_EFFECT`, `LEN_EFFECT`), to `nativepage` (`check`, `apply`, `remove`, `is_kind`, `page_index`, `binding_offset`, `PageSet`, the `KIND` and `LEN` constants) and to `pageclick` (`set`, `set_arg`); `registry`, `loader` and `dsp` to `assign::resolve`; `boot` and `loader` to `assign::plan` and `changed_map`; `lib.rs` to `assign::map_used`, `fxpage::tick`, `fxpage::rd`, `fxsend::{fx_entry, slots, used}`, `pageclick::{tick, param_get, param_set}` and `tracks::tick`; `collect.rs` to the `nativepage` constants; `dsp` to `tracks::{can_reserve, ready, remove, reserve}`; `gen_abi_check` to the `tracks` exports; `loader` and `watch` to the moved `dsp` functions (`voice_row`, `set_declared`, `fx_set_declared`, `module_of_type`, `module_of_fx_table_row`); `lib.rs` to `fx_free_rows` and `fx_used`; `dsp` itself to the moved row functions through its shim block.
-- Services call into core: `fxpage` and `fxsend` to `dsp::reserve`, `dsp::MAX_FX`, `dsp::FXW_*` and the core row functions, and to `registry::{write_fx_param_row, write_send_param_row, reset_param_row, make_rep}`; `fxsend` to `settings::{get, put}`; `assign` to `loader::{BOOT_IDX, machine_keys}` and `dlog`; `pageclick` to `registry::{apply, DKRT_REG, param_first}`; `tracks` to `dsp::{reserve, sample_send, sample_poll, sample_idle}`, `dlog::current_source`, `store` and `files`; `peakwin` to `worker`; the moved `dsp` functions to private state of core `dsp` (now `pub(crate)`).
-- `tracks` still calls `fxpage::busy` and `fxsend::busy` (R6 transfer queue); `fxsend` still imports the helpers of `fxpage` (`fxpage::{iw, rd, rd16, wr, wr16}`).
-- `pub(crate)` was added to: the private items of core `dsp` (constants, `ds` helpers, `info`, `iw`, `finfo`, `fiw`, call wrappers, `start_word`, `poll_done`, ...), `registry::{w, iw, rd, wr, MACH_TEXT}`, `entry::{handle, client, give, own_rec}`.
-- Build note: the rodata string pool of the runtime object changes with the order of the code, so `patchkit objdiff --pool` is the proof for a move ([PATCHING.md](../PATCHING.md#compare-two-objects-after-a-move)). The `samples/` rule of `.gitignore` is negated for `services/samples`.
+- Services: `services/{machines,fx,samples}` with `mod.rs`, `records.rs` (the `Service` impl) and `dsp/` parts. `assign` is not a service part: it only maps machine keys to type numbers from the selection, the store and the log, so it is core (`assign.rs`), and services call `CoreApi::type_resolve`.
+- Core to services: only `handlers.rs`: the static list `Services` (record kinds, DSP parts, capacity, attribution, `on_loaded`, `tick(phase)`) and `handlers::exports` (`fx_entry`, `param_get` and `param_set`, the pool events `dkrt_pool_done`, `dkrt_pool_lost` and `dkrt_project_changed`, and the `dk_sample_pool_*` imports). The `pub use` shims of R2b are deleted.
+- Services to the core: only `crate::core_api`: `CoreApi` (rows and strings of the registry, `write_param_row`, `make_rep`, `type_resolve`, guard counts, module names, settings, `store_probe`, log and source, jobs, `dsp`, `dsp_info`, `fx_info`, the link API of R6a: `link_set`, `link_confirmed`, `link_submit`, `link_result`, `link_drain`, `link_run`) plus the C glue it re-exports (`client`, `give`, `own_rec`). Pure types, constants and memory helpers come from `dkrt-abi`. A service names no other service: the effect pages, send amounts and track tables do not check each other any more; they use the link API (R6a).
+- Moved into a service: `counts` (registry rows for CAPACITY) and `rows_counts` (voice rows) into `machines`; the effect row word address (`fx_word_start`) into `fx`; the memory helpers that `fxsend` took from `fxpage` into `dkrt-abi`.
+- Left for R3 and R6: platform calls in `CoreApi` (`device`, `irq_mask`, `irq_restore`); `dkfw` and adapter symbols still named by `pageclick`, `fxpage` and `tracks`; the row arrays of `DspState` and `RegState`, which stay in core-owned objects (`DKRT_DSP`, `DKRT_REG`) because host tools read them.
+- Build note: the rodata string pool of the runtime object changes with the order of the code, so `patchkit objdiff --pool` is the proof for a move ([PATCHING.md](../PATCHING.md#compare-two-objects-after-a-move)). The `samples/` rule of `.gitignore` is negated for `services/samples`. Functions of `dkrt-abi` that are not generic are not marked `#[inline]` when they are larger than a few instructions: an `#[inline]` hint made the runtime object 4.6% larger.
 
 **Encapsulation.** Visibility by layer; state behind functions; list the `#[no_mangle]` statics host tools read and keep only those; replace `cfg(test)` seams in `loader`, `arena` and `dsp` with traits.
 
@@ -555,7 +620,7 @@ Items 7, 9 and 10 link services into the image as a temporary step, so each boun
 | 4 | Spike, static part | 11.1 | 1 day | High: decides how adapters get built | High for the answer |
 | **Stop** | Report to Em; next estimates | | | | |
 | 5 | SDK contract: moved to [sdk.md](sdk.md) S2-S5; versions stay in section 12 | 7, 12 | | | |
-| 6 | DSP transfer queue | 6 | 1-2 days | High: removes the coupling; may fix a bug | Medium-high |
+| 6 | DSP transfer queue: R6a built (the link API, section 6.2), R6b planned (batched state-sync transport, trigger: modulation rate) | 6 | 1-2 days | High: removes the coupling; may fix a bug | Medium-high |
 | 7 | Generic records, service registry, `samples` linked in, storage interface, files memory | 4, 5, 9 | 4-5 days | High: first real proof of the model | Medium |
 | 8 | Spike, whole path | 11.2 | 3-4 days | High: decides item 12 and the small-image goal | Medium for ColdFire; unknown for SHARC |
 | **Stop** | Report to Em; review the model against what was learned | | | | |

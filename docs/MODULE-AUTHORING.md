@@ -694,6 +694,7 @@ Names a module may import (from `[[import]]` in `sdk/sdk.toml`; every one is doc
 | `dk_input_*` | Press a key or turn an encoder (`dk_input_open` first). They need `core/input`; without it `dk_input_open` returns `DK_E_MISSING`. |
 | `dk_ui_*` | The calls of `<dk/platform/ui.h>`: menus, lists, rows and dialogs. They need `core/ui`. Without it the module still loads, `dk_ui_open` returns `DK_E_MISSING` and each call returns its failure value (`dk_ui_menu_new` NULL, the int calls -1, `dk_ui_menu_is_open` and `dk_ui_menu_checked` 0, the void calls nothing). `dk_ui_tick(ui, fn, arg, period_ms)` is a timer in the UI task: redraw a screen while a load runs; 0 stops it. |
 | `dk_time_blocks` | The 1500 Hz block clock. |
+| `dk_sink_set` | Sets the sink of a runtime channel (`DK_SINK_LOG`, `DK_SINK_SPAN`) for this module; one owner per channel, cleared after `fini` (`<dk/core/sink.h>`). For debug and profiling modules. |
 | `dk_dsp_link_*` | Sets one per-block callback in the block interrupt (`core/dsp-link`; `dk_dsp_link_open` returns `DK_E_MISSING` without it): `void cb(const volatile u16 *rec)` gets the previous DSP reply record. Short C only; clear it in `fini`. |
 
 A load fails with `E_IMPORT` when a name is not in the runtime's table, or when `init` returns `DK_E_MISSING` because a provider the module needs is absent.

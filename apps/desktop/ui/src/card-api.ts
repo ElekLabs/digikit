@@ -1,7 +1,7 @@
 // What the Card panel asks of the emulator and the system: the `card.*` methods of the controller (through the host's `rpc`), the folder dialog
 // and the file manager. The panel (CardPanel.tsx) keeps the state and the log; this module only asks.
 import { pickStart, type CardFolder, type OverlayReset } from './card-core';
-import type { Host } from './host/host';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 
 export type CardHost = Pick<Host, 'rpc' | 'fs' | 'shell'>;
 

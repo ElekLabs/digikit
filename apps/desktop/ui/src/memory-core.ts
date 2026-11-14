@@ -2,12 +2,12 @@
 // Host tests: apps/desktop/ui/tests/memory.test.ts.
 //
 // The data is CAPACITY (limit and used per resource), MODULES (which modules are loaded) and, per module, what its file takes (`needs_of` of
-// packages/dkneeds, through patchkit.wasm: apps/web/src/modules/dkneeds.ts) from the matching file of the local library. What `used` holds beyond
+// packages/dkneeds, through patchkit.wasm: packages/workbench-core/src/modules/dkneeds.ts) from the matching file of the local library. What `used` holds beyond
 // the known modules (the runtime's own, a module that is not in the library) is one "other" segment. Nothing that is only ticked or pending
 // is shown: the bars are what the device holds now.
 
 import { ARENA_HDR } from '@digi/dk-session/gen_proto';
-import type { Caps, Needs } from '../../../web/src/modules/fit.ts';
+import type { Caps, Needs } from '@digi/workbench-core/modules/fit.ts';
 
 // ARENA_HDR (the arena's block header): the `largest` of the ARENA is a payload, while `free` adds up block sizes. DSP_AREA's `largest` is a raw gap.
 

@@ -9,6 +9,7 @@ crate-type = ["staticlib"]
 
 [dependencies]
 dkrt-sdk = { path = "../../sdk" }
+dkrt-abi = { path = "../../abi" }
 dkrt-fit = { path = "../../fit" }
 dkneeds = { path = "../../../../../packages/dkneeds" }
 dkfw = { path = "../../../fw/rs" }

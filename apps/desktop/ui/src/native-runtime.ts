@@ -1,8 +1,8 @@
-// The emulator of the desktop app behind `EmulatorRuntime` (apps/web/src/runtime/runtime.ts): the controller's session, the pump that steps it and
+// The emulator of the desktop app behind `EmulatorRuntime` (packages/workbench-core/src/runtime/runtime.ts): the controller's session, the pump that steps it and
 // the inputs, all through the Host. The browser app has its own, `browserRuntime`, over workers; Console.tsx picks the one of its app.
-import type { CardStatus } from '@web/runtime/cards';
-import type { ReloadReport } from '@web/runtime/reload';
-import type { ControllerJob } from '@web/jobs/jobs-core';
+import type { CardStatus } from '@digi/workbench-core/runtime/cards.ts';
+import type { ReloadReport } from '@digi/workbench-core/runtime/reload.ts';
+import type { ControllerJob } from '@digi/workbench-core/jobs/jobs-core.ts';
 import type {
   EmulatorRuntime,
   NativeAudioStatus,
@@ -11,9 +11,9 @@ import type {
   RuntimePatch,
   RuntimeSnapshot,
   RuntimeUpdate,
-} from '@web/runtime/runtime';
-import { hostMetrics } from '@web/runtime/runtime-metrics';
-import type { Host } from './host/host';
+} from '@digi/workbench-core/runtime/runtime.ts';
+import { hostMetrics } from '@digi/workbench-core/runtime/runtime-metrics.ts';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 
 /**
  * The emulator of the desktop app, behind `EmulatorRuntime`: every call goes through the Host (`host.emu`, `host.rpc`), which is the Tauri

@@ -651,7 +651,7 @@ at = "scan"
 name = "dkrt_pool_done"
 sig = "void dkrt_pool_done(u32 req, i32 result)"
 doc = "Adapter to runtime: the load `req` of dkpool_load finished. result is OK (the handle `out` is filled), E_POOL, E_READ or E_FORMAT. Only from dkpool_tick."
-at = "tracks"
+at = "handlers::exports"
 
 [[fn]]
 name = "dkrt_job_post"
@@ -687,10 +687,10 @@ at = "aux"
 name = "dkrt_pool_lost"
 sig = "void dkrt_pool_lost()"
 doc = "Adapter to runtime: the backing was lost (a stock reset), every handle is invalid. Only from dkpool_tick."
-at = "tracks"
+at = "handlers::exports"
 
 [[fn]]
 name = "dkrt_project_changed"
 sig = "void dkrt_project_changed(u32 slot)"
 doc = "Adapter to runtime: the current project slot changed. The runtime never reads the byte."
-at = "tracks"
+at = "handlers::exports"

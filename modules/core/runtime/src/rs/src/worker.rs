@@ -13,14 +13,17 @@
 //! the worker runs exactly one step per submit.
 //!
 //! Values `JOB_MORE` and `JOB_E_CANCELLED` must match sdk/include/dk/platform/job.h.
+use crate::PLATFORM;
 use core::ffi::c_void;
+#[cfg(not(test))]
+use dkrt_abi::platform::SamplePool;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use core::sync::atomic::{compiler_fence, Ordering};
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 use dkrt_sdk::*;
 
 pub const JOB_MORE: i32 = 1;
-pub const JOB_E_CANCELLED: i32 = -80;
+pub use dkrt_abi::core_api::JOB_E_CANCELLED;
 
 /// The DT2 sample pool can have 16 requests queued at once (SP_REQS), plus module jobs.
 const JOBS: usize = 24;
@@ -116,10 +119,7 @@ unsafe fn run_flight() {
             if result != JOB_MORE || read_volatile(addr_of!(FLIGHT_CANCEL)) != 0 {
                 break;
             }
-            let spent = match (start, crate::fw_blocks()) {
-                (Some(a), Some(b)) => b.wrapping_sub(a) >= BUDGET_BLOCKS,
-                _ => true,
-            };
+            let spent = dkrt_abi::platform::blocks_since(&PLATFORM, start).map_or(true, |d| d >= BUDGET_BLOCKS);
             if spent {
                 break;
             }
@@ -134,7 +134,7 @@ unsafe fn run_flight() {
 /// call: the worker may run the job before the call returns.
 #[cfg(not(test))]
 unsafe fn submit() -> bool {
-    let worker = dkfw::samples::worker_get();
+    let worker = PLATFORM.worker();
     if worker == 0 {
         return false;
     }
@@ -150,7 +150,7 @@ unsafe fn submit() -> bool {
     }
     compiler_fence(Ordering::SeqCst);
     write_volatile(addr_of_mut!(FLIGHT_STATE), FLIGHT_RUN);
-    dkfw::samples::worker_queue(
+    PLATFORM.worker_queue(
         worker,
         b"DkJob\0".as_ptr(),
         addr_of_mut!(FN) as *mut c_void,

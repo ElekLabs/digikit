@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "name": "@digi/desktop",
-  "implicitDependencies": ["@digi/web", "@digi/dk-session", "digiemu-desktop", "dkui-host", "dkprof"],
+  "implicitDependencies": ["@digi/workbench-core", "@digi/dk-session", "digiemu-desktop", "dkui-host", "dkprof"],
   "targets": {
     "build:ui": {
       "cache": true,
@@ -33,9 +33,7 @@
         "jsToolchain",
         "{workspaceRoot}/modules/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json",
-        "{workspaceRoot}/apps/web/tests/fakeflash.mjs",
-        "{workspaceRoot}/devices/*.toml",
-        "{workspaceRoot}/apps/web/tests/fakeflash.d.mts"
+        "{workspaceRoot}/devices/*.toml"
       ],
       "outputs": []
     },
@@ -56,8 +54,9 @@
         {
           "externalDependencies": ["vitest"]
         },
-        "{workspaceRoot}/apps/web/src/**/*",
-        "{workspaceRoot}/apps/web/site.config.mjs",
+        "{workspaceRoot}/packages/workbench-core/src/**/*",
+        "{workspaceRoot}/packages/workbench-core/ui/**/*",
+        "{workspaceRoot}/packages/workbench-core/package.json",
         "{workspaceRoot}/packages/dk-session/src/**/*",
         "{workspaceRoot}/packages/dk-session/package.json",
         "{workspaceRoot}/packages/dkbs/src/**/*",

@@ -1,4 +1,4 @@
-/* The Remote page (RemotePage.tsx): the faceplate of the selected target with the device's screen. Tokens from the site (apps/web/src/styles/site.css). */
+/* The Remote page (RemotePage.tsx): the faceplate of the selected target with the device's screen. Tokens from the site (packages/workbench-core/ui/styles/site.css). */
 .remote-page {
   flex: 1;
   min-height: 0;

@@ -11,10 +11,16 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import { connect } from '../../../packages/control-client/src/client.ts';
 import { DkSession, EmuUsbTransport, decode8in7, splitMessages } from '@digi/dk-session';
-import { askSession } from '../src/firmware/firmware-ask.ts';
-import { LIMITS, runFlash, runRpcFlash, type FlowOps, type RpcOps } from '../src/firmware/firmware-flow.ts';
-import type { FlashState } from '../src/firmware/firmware-core.ts';
-import { PatchKit, type PreparedFlash } from '../src/patch/patchkit-core.ts';
+import { askSession } from '@digi/workbench-core/firmware/firmware-ask.ts';
+import {
+  LIMITS,
+  runFlash,
+  runRpcFlash,
+  type FlowOps,
+  type RpcOps,
+} from '@digi/workbench-core/firmware/firmware-flow.ts';
+import type { FlashState } from '@digi/workbench-core/firmware/firmware-core.ts';
+import { PatchKit, type PreparedFlash } from '@digi/workbench-core/patch/patchkit-core.ts';
 
 const socket = process.env.DIGI_FW_EMU_SOCKET;
 const NAME = 'Digitakt II';

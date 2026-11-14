@@ -2,8 +2,8 @@
 // The firmware arrives as an ArrayBuffer and never leaves this page: there is no network call here except
 // fetching the (firmware-free) wasm and module bundle that the site itself serves. The wasm comes from a WasmSource over `base` (a worker
 // cannot be given the page's objects, so it builds its own from the base URL in `init`).
-import { fetchWasmSource } from '../wasm-source.ts';
-import { PatchKit } from './patchkit-core.ts';
+import { fetchWasmSource } from '@digi/workbench-core/wasm-source.ts';
+import { PatchKit } from '@digi/workbench-core/patch/patchkit-core.ts';
 
 export type PatchRequest =
   | { type: 'init'; base: string }

@@ -4,6 +4,7 @@
   "implicitDependencies": [
     "control-client",
     "@digi/dk-session",
+    "@digi/workbench-core",
     "patchkit",
     "dkupload",
     "dksample",
@@ -43,7 +44,8 @@
         "{projectRoot}/src/**/*",
         "{projectRoot}/tests/**/*",
         "!{projectRoot}/tests/*.wasm.test.ts",
-        "!{projectRoot}/tests/*.test.mjs",
+        "{projectRoot}/scripts/**/*",
+        "{projectRoot}/public/pcm-worklet.js",
         "{projectRoot}/package.json",
         "{projectRoot}/tsconfig.json",
         "{projectRoot}/site.config.mjs",
@@ -54,11 +56,18 @@
         {
           "externalDependencies": ["vitest"]
         },
+        "{workspaceRoot}/packages/workbench-core/src/**/*",
+        "{workspaceRoot}/packages/workbench-core/ui/**/*",
+        "{workspaceRoot}/packages/workbench-core/package.json",
         "{workspaceRoot}/packages/dk-session/src/**/*",
         "{workspaceRoot}/packages/dk-session/package.json",
         "{workspaceRoot}/packages/dkbs/src/**/*",
         "{workspaceRoot}/packages/dkbs/package.json",
         "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/devices/ports/*",
+        "{workspaceRoot}/modules/**/module.toml",
+        "{workspaceRoot}/modules/**/gallery/icon.svg",
+        "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
         "{workspaceRoot}/config/emulator.json"
       ],
       "outputs": [],
@@ -72,14 +81,22 @@
       }
     },
     "test-wasm": {
-      "description": "Tests that load the real public/*.wasm: the node --test files and the Vitest project web-wasm (tests/*.wasm.test.ts).",
+      "description": "Tests that load the real public/*.wasm or run the patchkit command line: the Vitest project web-wasm (tests/*.wasm.test.ts).",
       "dependsOn": ["patchkit-wasm"],
       "inputs": [
-        "default",
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/scripts/**/*",
+        "{projectRoot}/public/*.js",
+        "{projectRoot}/tests/*.wasm.test.ts",
+        "{projectRoot}/tests/fit-wasm.ts",
+        "{projectRoot}/tests/support/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/tsconfig.json",
+        "{projectRoot}/site.config.mjs",
         "^production",
         "jsToolchain",
-        "{workspaceRoot}/apps/desktop/ui/src/card-core.ts",
-        "{workspaceRoot}/apps/desktop/ui/src/samples-core.ts"
+        "{workspaceRoot}/vitest.host.config.ts",
+        "{workspaceRoot}/vitest.host.projects.json"
       ]
     }
   }

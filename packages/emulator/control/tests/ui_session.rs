@@ -50,7 +50,7 @@ fn a_session_is_adopted_by_the_load_that_starts_it() {
             .as_array()
             .unwrap()
             .len(),
-        16
+        17 // the emulator set and core/platform, which the runtime requires
     );
     // The maps of the running image: the ship map and the addresses the load table is read from (`runtime.maps`).
     let maps = handle.call("runtime.maps", json!({"session": 3})).unwrap();

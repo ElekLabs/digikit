@@ -55,6 +55,8 @@ pub trait Fw {
     fn object_value(&self, obj: usize, code: u32) -> i32;
     /// The stock absolute setter.
     fn store(&self, obj: usize, code: u32, raw: i32, track: u32);
+    /// The track the page shows (`track_ref` is the page's track reference word).
+    fn view_track(&self, track_ref: usize) -> u32;
 }
 
 /// The registry row of `word` of module `owner`: the `word`-th row it owns, in declaration order.
@@ -132,6 +134,9 @@ mod tests {
         fn object(&self, view: usize, code: u32, track: u32) -> usize {
             self.calls.borrow_mut().push(format!("object {view:#x} {code} {track}"));
             if self.no_object { 0 } else { 0x7000 }
+        }
+        fn view_track(&self, _track_ref: usize) -> u32 {
+            0
         }
         fn object_value(&self, obj: usize, code: u32) -> i32 {
             self.calls.borrow_mut().push(format!("object_value {obj:#x} {code}"));

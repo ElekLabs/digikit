@@ -5,7 +5,7 @@
 import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
 import type { DkSession } from '@digi/dk-session';
 import CardPanel from './CardPanel';
-import type { Host } from './host/host';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 import MemoryPanel from './MemoryPanel';
 import { TAB_LABEL, shownTab, type InspectorTab } from './inspector-core';
 import { inspectorOpen, inspectorTab, setInspectorOpen, setInspectorTab } from './panel-open';

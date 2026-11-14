@@ -1,7 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   deadlineExpired,
-  PROGRESS_HANG_S,
   describeRestart,
   restartProgress,
   withinRuntimeDeadline as beforeReadinessDeadline,
@@ -56,8 +55,48 @@ export async function waitEmulatedFrames(session: Session, frames: number, { han
   }
 }
 
-/** Wall milliseconds one probe of a device wait may take: a loaded host answers late while the emulator free-runs, and the emulated deadline is the real limit. */
-export const PROBE_TIMEOUT_MS = PROGRESS_HANG_S * 1000;
+/**
+ * Emulated milliseconds one probe of a device wait may take. A probe lost while the device restarts ends after this much emulated time, and a slow
+ * host slows the emulated clock too, so a probe does not fail under load (a wall bound is too short on a loaded host and too long after a lost request).
+ */
+export const PROBE_EMULATED_MS = 2000;
+
+/** Wall milliseconds after which a probe fails whatever the clock says: a guard for a dead link, never the limit of a healthy wait. */
+const PROBE_WALL_GUARD_MS = 180_000;
+
+/** How often the emulated clock is read while a probe waits. */
+const PROBE_READ_MS = 100;
+
+/**
+ * Run one probe (`dk.info`, `dk.readLog`, ...) bounded in emulated time: `run` gets a `Quick` whose signal fires `emulatedMs` of emulated time after the
+ * probe started (the clock only counts forward; a restart that lowers it starts the count again). The probe then fails like a lost request.
+ */
+export async function withEmulatedProbe<T>(
+  session: Pick<Session, 'status'>,
+  run: (quick: { signal: AbortSignal; ms: number }) => Promise<T>,
+  emulatedMs = PROBE_EMULATED_MS,
+): Promise<T> {
+  const ctl = new AbortController();
+  let live = true;
+  const watch = (async () => {
+    let last: number | undefined;
+    let waited = 0;
+    while (live) {
+      await delay(PROBE_READ_MS);
+      if (!live) break;
+      const now = emulatedClockMs(await session.status());
+      if (last !== undefined && now > last) waited += now - last;
+      last = now;
+      if (waited >= emulatedMs) return ctl.abort();
+    }
+  })().catch(() => {});
+  try {
+    return await run({ signal: ctl.signal, ms: PROBE_WALL_GUARD_MS });
+  } finally {
+    live = false;
+    await watch;
+  }
+}
 
 /** Wall milliseconds the emulated clock may stand still before a wait fails (a paused daemon, a halted DSP); a slow but rising clock never trips it. DIGI_CLOCK_STUCK_MS overrides it. */
 export const CLOCK_STUCK_MS = Number(process.env.DIGI_CLOCK_STUCK_MS ?? 60_000);
@@ -160,6 +199,32 @@ export async function pollEmulated<T>(
   }
 }
 
+/**
+ * `expect.poll` in emulated time: retry `read` (a failing read counts as a miss) until `assertion(value)` stops throwing, and fail with `message`
+ * and the last assertion error after `emulatedMs` of emulated time. Replaces `expect.poll(read, { timeout })`, whose wall limit a loaded host cuts.
+ */
+export async function expectPollEmulated<T>(
+  session: Pick<Session, 'status'>,
+  read: () => Promise<T>,
+  assertion: (value: T) => void,
+  {
+    emulatedMs = 30_000,
+    message = 'poll',
+    intervalMs = 200,
+  }: { emulatedMs?: number; message?: string; intervalMs?: number } = {},
+): Promise<T> {
+  return pollEmulated(
+    session,
+    async () => {
+      const value = await read();
+      assertion(value);
+      return value;
+    },
+    () => true,
+    { emulatedMs, message, intervalMs, retry: true },
+  );
+}
+
 const bootClocks = new WeakMap<object, Pick<Session, 'status'>>();
 
 /** Tie a DkSession to the emulator session it talks to, so `waitForBootEmulated` can count emulated time. */
@@ -170,13 +235,16 @@ export function bindBootClock(dk: object, session: Pick<Session, 'status'>): voi
 /**
  * `dk.waitForBoot()` with the emulated clock instead of its 90 s wall limit: a slow host only slows the boot, a stuck daemon trips the guard.
  * A dk that was never bound to a session keeps the wall-time wait.
+ * Each probe keeps the 1 s quick wait, whatever the host load: the loop retries a missed probe, and the emulated clock is the limit. A long probe
+ * blocks on a request that the restart lost, and every such probe costs 30 s of wall time and as much emulated time of the budget, while the
+ * runtime's boot-time module loads wait for the next probe (R2c's DSP loads then ran out of the 30 s that `installModules` allows).
  */
 export function waitForBootEmulated(
   dk: {
     waitForBoot(
       sleep?: (ms: number) => Promise<void>,
       timeoutMs?: number,
-      opts?: { probeTimeoutMs?: number },
+      opts?: { probe?: <T>(run: (quick: { signal: AbortSignal; ms: number }) => Promise<T>) => Promise<T> },
     ): Promise<void>;
   },
   { emulatedMs = 90_000 }: { emulatedMs?: number } = {},
@@ -190,8 +258,13 @@ export function waitForBootEmulated(
       if (await tick()) throw new Error(`no new boot: not seen within ${emulatedMs} ms of emulated time`);
     },
     Number.POSITIVE_INFINITY,
-    { probeTimeoutMs: PROBE_TIMEOUT_MS },
+    { probe: (run) => withEmulatedProbe(session, run) },
   );
+}
+
+/** The emulator session `bindBootClock` tied to `dk`, if any. */
+export function bootClockOf(dk: object): Pick<Session, 'status'> | undefined {
+  return bootClocks.get(dk);
 }
 
 /** Wait for `ms` of emulated time (the daemon must run freely). */

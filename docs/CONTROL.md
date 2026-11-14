@@ -92,11 +92,14 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `state.save {path}`, `state.load {path}` | `state_save`, `state_load` | `call` |
 | `pcm.tap` (`start`, `report`, `capture`, `capture_stop`) | `pcm_start`, `pcm_report` | `call` |
 | `cf.profile` | | `call`; only with the `cf-profile` feature |
+| `sharc.profile {enable?}` | | `call`; only with the `sharc-profile` feature |
 | `dsp.peek` | `dsp_peek` | `call` |
 | `dsp.patch` | `patch` | `call` |
 | `guard.set`, `guard.report`, `guard.clear` | | `call` |
 | `events.subscribe` | `events`, `subscribe`, `drain_events` | `events` |
 | `quit` | `quit` | `quit` |
+
+`sharc.profile`: DSP execution counts as raw counters of the profile artifact `dk.profile/1` ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)). `{enable: true}` starts counting and clears the counts; `{enable: false}` stops and clears; without `enable` the call reads the counts since the start (an error says so when the counting is off). The answer: `clock` (`emu.sharc.insn`, unit `insn`, the sampling text), `blocks` (DSP blocks since the start), `icount` and `idle_skipped` (instructions executed and replayed by the idle skip since the start), `counted` (`fast`, `block`, `interpreted`: instructions each source counted) and `raw`, a list of `{cpu: "sharc", addr, count, series: "pc"}` sorted by software PC. Two sources are added by PC: the dispatch profile of the fast and block tiers (a dispatch is credited whole to its entry PC, so a count at an entry PC covers the region that starts there) and the interpreter's per-PC counts (each instruction at its own PC). [O] `icount` and `idle_skipped` are engine totals; in the first DN2 run they did not reconcile with the sum of `counted` (a dispatch may be counted in two sources, and a chained dispatch is not counted), so read the per-PC counts as a ranking and per-block estimate, not as an exact total. It reads no EMUCLK or TCOUNT. A daemon built without the feature answers "built without sharc-profile"; it needs `coupled-audio` (a DSP): `cargo build --release -p digi-control --bin digi-emud --features sharc-profile`.
 
 `job.cancel`: cancel the long job that runs: a cold boot (`firmware.load`, `restart`, a soft-reset boot), a card load, or `step`/`run_until`.
 Answers `{cancelled: kind|null}`; the cancelled call answers error 10 `cancelled`. After a cancelled `firmware.load {replace: true}` no firmware is loaded.

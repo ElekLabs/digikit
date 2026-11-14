@@ -10,7 +10,7 @@
     "prebuild": "node scripts/prebuild.mjs",
     "build": "astro build",
     "check": "node scripts/gen-modules.mjs --check && astro check",
-    "test-wasm": "node --test \"tests/*.test.mjs\" && pnpm exec vitest run --config ../../vitest.host.config.ts --project web-wasm"
+    "test-wasm": "pnpm exec vitest run --config ../../vitest.host.config.ts --project web-wasm"
   },
   "dependencies": {
     "@astrojs/solid-js": "7.0.2",
@@ -22,6 +22,7 @@
     "smol-toml": "1.9.0",
     "solid-js": "1.9.15",
     "@digi/dk-session": "workspace:*",
+    "@digi/workbench-core": "workspace:*",
     "@digi/dkbs": "workspace:*"
   },
   "devDependencies": {

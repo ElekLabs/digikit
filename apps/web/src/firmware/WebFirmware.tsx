@@ -2,9 +2,9 @@
 // Without Web MIDI (Safari) or without the SysEx permission the page still opens and works up to the checks; its device step says why there is
 // no port. The island builds the site's apps once and gives them to the page (AppProvider).
 import { Show, createSignal, onMount, type JSX } from 'solid-js';
-import AppProvider from '../transfer/AppProvider';
+import AppProvider from '@digi/workbench-core/ui/transfer/AppProvider.tsx';
 import { createWebFirmwareApp } from './web-env';
-import FirmwarePage from './FirmwarePage';
+import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
 
 export default function WebFirmware(): JSX.Element {
   const web = createWebFirmwareApp();

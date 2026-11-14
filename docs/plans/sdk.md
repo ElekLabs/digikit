@@ -129,6 +129,8 @@ A module reaches the device through named imports, grouped by service in `sdk.to
   `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`, `dk_sdhc_large_open`.
 - When an optional provider is not loaded, its imports bind to stubs: `_open` returns `DK_E_MISSING`, the other functions return the same
   code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the last `_open` stub that answered DK_E_MISSING during `init` as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
+- Sink channels: `dk_sink_set(channel, sink)` (runtime 0.7.1, `<dk/core/sink.h>`) sets the sink of the `log` or `span` channel for the calling module; one owner per channel
+  (`DK_E_BUSY` for a second), cleared after the owner's `fini` (runtime-and-services 5.11). A new import is a PATCH: the runtime went from 0.7.0 to 0.7.1 and the import has `since = "0.7.1"`.
 - Each import has `service`, `since`, `context` and `sig` in `sdk.toml`:
 
 ```toml
@@ -461,6 +463,15 @@ These come from the profiling work and land after the steps in section 12 that t
 - **Cycle cost.** `max_cycles_*` stops being written by hand. The packer writes a DSP cycles-per-block use into the header and the report,
   from the `module:check` emulator measurement at the device's voice count or a static estimate over the module's sharcdb tables, scaled
   by the emulator-to-device calibration ([profiling.md](profiling.md) 6 and 7.3). The broker checks it (runtime-and-services 5.3).
+  P4 measures and names the cost; this item puts it into the header and the broker. The unit is **instructions** per block (SHARC+
+  instructions the emulator counts) until the device calibration (P9); the name "cycles" waits for it. `dkprof::budget` holds the rule,
+  filled from `devices/*.toml` and `devices/cycle-factors.json` (`patchkit budget` prints it; `module:check` reads that). The headroom of a
+  device is what is left of the block between the stock firmware (`stock_busy`) and 85 percent of the block, with instructions projected to
+  cycles by the "high" factor (the 15 percent are the safety margin until P9). A machine's cost is its own worst steady block for one
+  voice, measured by `module:check`; the check is `voice-block <= headroom / voices`. The note-on block is checked on its own against the
+  whole headroom, never added to the other voices' steady blocks. The selection rule the broker applies (`dkprof::budget::check_selection`):
+  `max(machine costs) * voices + sum(FX costs) + stock baseline <= block at 85 percent`, which is `own <= headroom`. Every voice may run
+  any selected machine, so the largest one counts for all voices.
 - **`DK_SPAN`.** `DK_SPAN_BEGIN(owner)` and `DK_SPAN_END(owner)` in `core/trace.h` and `dsp/contract/dk_trace.inc`. They read the cycle
   counter and emit `(owner, cycles)` to the `span` sink (runtime-and-services 5.11). With no sink set they cost one flag test. Only
   service dispatchers use them (runtime-and-services 6.1). In the emulator a counter read can change the execution tier

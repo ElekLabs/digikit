@@ -1,0 +1,75 @@
+[module]
+id = "core/platform"
+version = "0.1.0"
+name = "Platform"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "The firmware hooks of the digikit runtime (UI loop, main-OS task entry, MIDI receive) and the exception hook install: the L1 adapter under the runtime's Platform interface"
+requires = ["core/expansion"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.11" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The runtime (core/runtime) requires this module, and the objects of the two link by name: the trampolines here call the runtime's exports
+# (`dkrt_tick`, `dkrt_boot`, `dkrt_midi_rx`, `dkrt_exc`), and the runtime calls `dkplat_exc_install`. `requires` has no cycle because only the
+# runtime names the other: a selection that has the runtime has this adapter.
+
+[[gen]]
+kind = "gas-shared"
+path = "build/gen/device.inc"
+uses = ["DDR_CACHED_BASE", "DDR_BYTES"]
+
+[[object]]
+path = "build/platform.dko.json"
+sources = ["src/cf/platform.s"]
+place = "cf.expansion"
+
+[object.externs]
+fw_queue_pop = "cf.rtos.fn.queue_pop"
+dkrt_boot_next = "hook.cf.rtos.site.main_os_task.tail"
+dkrt_midi_next = "hook.cf.midi.site.rx.tail"
+dkrt_midi_ret = "hook.cf.midi.site.rx.return"
+exc_hook_lit = "cf.rtos.site.exc_hook_lit"
+
+# The call at the top of the UI task's event loop that pops the next event from the UI queue
+# (`pea queue; jsr pop; addq.l #4,sp; moveq #0x29,d1; ...`) goes to the trampoline, which runs the runtime's tick and
+# continues in the stock pop.
+[[op]]
+op = "hook"
+hook = "cf.view.hook.ui_loop"
+to = "dkrt_loop_hook"
+
+[[claim]]
+resource = "cf.view.site.ui_loop"
+
+# Boot-time loading (finding 37): the entry of the main-OS task jumps to the boot hook, which reads the selection record and loads
+# the selected modules (src/cf/platform.s dkrt_boot_hook), then runs the displaced prologue and continues in the task. That is before the
+# task builds its singletons, and the MainScreenView (and with it the machine selection view, which reads the machine list once) is
+# built by one of them well before the call that the first design hooked (measured: the view existed at that call). Finding 128: a hook that
+# must exist before the main OS starts stays patched in the image.
+[[op]]
+op = "hook"
+hook = "cf.rtos.hook.main_os_task"
+to = "dkrt_boot_hook"
+
+[[claim]]
+resource = "cf.rtos.site.main_os_task"
+
+# Module upload (docs/design/digikit-upload.md): the MIDI task's dispatch of a gathered USB (cable 0) SysEx message. The two displaced
+# instructions `movea.l (0,A2,D1*4),A0; jsr (A0)` call the router with (msg, len, source) already pushed. The hook runs the runtime's
+# dkrt_midi_rx first: it returns 1 for a message of ours (continue after the call: the tail that frees the gathered blocks), 0 to run the
+# displaced router call unchanged (docs/findings/43-digikit-upload.md). The same 428-byte task function is on all four ports.
+[[op]]
+op = "hook"
+hook = "cf.midi.hook.rx"
+to = "dkrt_midi_hook"
+
+[[claim]]
+resource = "cf.midi.site.rx"

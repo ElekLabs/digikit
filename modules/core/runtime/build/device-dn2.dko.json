@@ -5,13 +5,13 @@
  "sections": [
   {
    "align": 4,
-   "hex": "00000002646e3200000000020000006540000000466c00004671200047fe100000000000000000000000000000000000008000000261a000444b494d47494431000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "00000002646e32000000000100000097000000020000006540000000466c00004671200047fe100000000000000000000000000000000000008000000261a000444b494d47494431000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 100
+   "size": 108
   }
  ],
- "source_sha256": "9b5e72d5e7846badcd0641db533dcb36414460d0e9c55381e514ec6b4093431e",
+ "source_sha256": "593a22521ecc9f12da56103d73591cce56f72e8cb3ca21d0e7ffb66320178e05",
  "symbols": [
   {
    "global": true,
@@ -29,49 +29,61 @@
    "global": true,
    "name": "dkrt_files_fs",
    "section": ".rodata",
-   "value": 88
+   "value": 96
   },
   {
    "global": true,
    "name": "dkrt_image_id",
    "section": ".rodata",
-   "value": 64
+   "value": 72
   },
   {
    "global": true,
    "name": "dkrt_peek_n",
    "section": ".rodata",
-   "value": 8
+   "value": 16
   },
   {
    "global": true,
    "name": "dkrt_peek_ranges",
    "section": ".rodata",
-   "value": 16
+   "value": 24
   },
   {
    "global": true,
    "name": "dkrt_sample_fs",
    "section": ".rodata",
-   "value": 72
+   "value": 80
   },
   {
    "global": true,
-   "name": "dkrt_sound_words",
+   "name": "dkrt_sample_path_max",
    "section": ".rodata",
    "value": 12
   },
   {
    "global": true,
+   "name": "dkrt_samples_in_store",
+   "section": ".rodata",
+   "value": 8
+  },
+  {
+   "global": true,
+   "name": "dkrt_sound_words",
+   "section": ".rodata",
+   "value": 20
+  },
+  {
+   "global": true,
    "name": "dkrt_store_first",
    "section": ".rodata",
-   "value": 48
+   "value": 56
   },
   {
    "global": true,
    "name": "dkrt_store_sectors",
    "section": ".rodata",
-   "value": 52
+   "value": 60
   }
  ],
  "toolchain": {
@@ -79,7 +91,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "932c9e88f20c294b371d504cfd9b93fefd31b7350d6883364121637f349609c4",
+  "isa_check": "b057d0e004396679f10b9eab40ad885bef0008a062218d537067eaae2870ce8b",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

@@ -1,4 +1,4 @@
-/* The Memory panel (MemoryPanel.tsx): the Card panel's frame (card-panel.css) with the bars of its own. Tokens from the site (apps/web/src/styles/site.css). */
+/* The Memory panel (MemoryPanel.tsx): the Card panel's frame (card-panel.css) with the bars of its own. Tokens from the site (packages/workbench-core/ui/styles/site.css). */
 .memory-panel .mem-bar {
   display: flex;
   flex-direction: column;

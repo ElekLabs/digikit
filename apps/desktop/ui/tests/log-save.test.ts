@@ -1,7 +1,7 @@
 // The Save button of the Log drawer (apps/desktop/ui/src/log-save.ts) over a FakeHost.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createFakeHost } from '../src/host/fake-host.ts';
+import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
 import { saveLog } from '../src/log-save.ts';
 import { saveName, saveText, type LogEntry } from '../src/log-core.ts';
 

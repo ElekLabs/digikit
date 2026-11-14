@@ -6,9 +6,9 @@
 // the visitor's own storage.
 //
 // Only erasable TypeScript (the logic is tested under Node, tools/devtools/wasm_split.mjs
-// users and apps/web/tests/ready-cache.test.mjs, with an in-memory store).
+// users and apps/web/tests/ready-cache.test.ts, with an in-memory store).
 
-import type { BlobStore } from './blob-store.ts';
+import type { BlobStore } from '@digi/workbench-core/blob-store.ts';
 
 export interface ReadyState {
   /** Packed DSP image, DSP state (`DT2DSP01` file) and ColdFire snapshot (`DT2SNP01`). */

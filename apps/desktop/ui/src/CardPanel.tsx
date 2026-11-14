@@ -5,8 +5,8 @@
 // from the folder (the Digitakt II) takes a new folder at the next load: the panel says so and offers "Reload now". The emulator does the
 // work and keeps the choice per device (`card.folder`, `card.folder_set`, `card.sync` through `emu_call`); this panel only asks.
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
-import { errorLine, formatBytes } from '@web/modules/backend';
-import { panels } from '@web/data/faceplates';
+import { errorLine, formatBytes } from '@digi/workbench-core/modules/backend.ts';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import {
   canUseDefault,
   fileGroups,
@@ -21,7 +21,7 @@ import { cardApi } from './card-api';
 import { cardRefresh } from './card-state';
 import { cardEntry, failureEntry, overlayResetEntry } from './log-core';
 import { logInput } from './log-state';
-import type { Host } from './host/host';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 import './card-panel.css';
 
 const POLL_MS = 2000;

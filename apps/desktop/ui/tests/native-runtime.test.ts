@@ -1,8 +1,8 @@
 // The desktop runtime (apps/desktop/ui/src/native-runtime.ts) over a FakeHost: when it is offered, and the calls of a load.
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import type { RuntimeSnapshot, RuntimeUpdate } from '../../../web/src/runtime/runtime.ts';
-import { createFakeHost } from '../src/host/fake-host.ts';
+import type { RuntimeSnapshot, RuntimeUpdate } from '@digi/workbench-core/runtime/runtime.ts';
+import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
 import { createNativeRuntime } from '../src/native-runtime.ts';
 
 const snapshot = (icount: number): RuntimeSnapshot => ({

@@ -5,12 +5,12 @@
 // unsupported) the caller falls back to the single-thread core in
 // runtime-worker.ts. No firmware or derived data ships with the site; the .syx
 // and everything made from it stay in the visitor's browser.
-import type { BlobStore } from './blob-store.ts';
+import type { BlobStore } from '@digi/workbench-core/blob-store.ts';
 import { ReadyCache, sha256Hex, type ReadyState } from './ready-cache.ts';
-import { createLinkBuffer, LinkServer } from './sab-link.ts';
-import type { CfStart } from './cf-worker.ts';
-import type { DspStart } from './dsp-worker.ts';
-import type { WorkerFactory, WorkerPort } from './workers.ts';
+import { createLinkBuffer, LinkServer } from '@digi/workbench-core/sab-link.ts';
+import type { CfStart } from '@digi/workbench-core/cf-worker.ts';
+import type { DspStart } from '@digi/workbench-core/dsp-worker.ts';
+import type { WorkerFactory, WorkerPort } from '@digi/workbench-core/workers.ts';
 
 export interface SessionOptions {
   /** The page's workers (`browserWorkers()`; a test gives fakes). */
