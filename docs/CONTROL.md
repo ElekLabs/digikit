@@ -101,7 +101,7 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 Answers `{cancelled: kind|null}`; the cancelled call answers error 10 `cancelled`. After a cancelled `firmware.load {replace: true}` no firmware is loaded.
 
 `status.job` is `null` or `{kind: "boot"|"card"|"step"|"run_until"|"firmware.load", wall_seconds, phase?, progress?, icount?}`.
-`progress` (0..1) is an estimate. `icount` restarts at 0 when a soft reset reboots the job. `status.boot` is gone.
+`progress` (0..1) is an estimate. A cold boot has `phase` "starting the DSP" with `progress: null` (a changed DSP section runs its cold start first), then "booting" with an estimated `progress`. `icount` restarts at 0 when a soft reset reboots the job. `status.boot` is gone.
 
 `firmware.load {syx, runtime?, patch_set?, ...}`: with `runtime: true` the controller patches the stock image in-process with the
 device's patch set (`patch_set`, default `emulator`; the roots are in `devices/*.toml` `[patch_sets]`, the modules they require are added)

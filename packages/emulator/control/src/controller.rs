@@ -15,7 +15,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
         mpsc,
     },
     thread,
@@ -2188,10 +2188,18 @@ impl Actor {
         // One job: a cold boot, else a card load, else a stepping job.
         let job = if let Some(j) = &self.patch_job {
             // The count restarts at 0 when a soft reset reboots the job, so a client counts any change as progress.
+            let (phase, progress) = match j.phase.load(Ordering::Relaxed) {
+                PHASE_DSP => ("starting the DSP", Value::Null),
+                PHASE_COLDFIRE => (
+                    "booting",
+                    json!(f64::from_bits(j.fraction.load(Ordering::Relaxed))),
+                ),
+                _ => ("booting", Value::Null),
+            };
             Some(json!({
-                "kind": "boot", "phase": "booting",
+                "kind": "boot", "phase": phase,
                 "icount": j.progress.load(Ordering::Relaxed),
-                "progress": f64::from_bits(j.fraction.load(Ordering::Relaxed)),
+                "progress": progress,
                 "wall_seconds": j.started.elapsed().as_secs_f64(),
             }))
         } else if let Some(j) = &self.card_job {
@@ -4082,6 +4090,10 @@ struct PatchBooted {
     dsp_start_seconds: f64,
 }
 
+const PHASE_DSP: u8 = 0;
+const PHASE_COLDFIRE: u8 = 1;
+const PHASE_STARTING: u8 = 2;
+
 struct PatchJob {
     done: mpsc::Receiver<Result<PatchBooted, String>>,
     cancel: Arc<AtomicBool>,
@@ -4092,6 +4104,8 @@ struct PatchJob {
     progress: Arc<AtomicU64>,
     /// Estimated boot fraction 0..1 (`f64` bits), stored with `progress`.
     fraction: Arc<AtomicU64>,
+    /// The boot phase: `PHASE_DSP`, `PHASE_COLDFIRE`, or `PHASE_STARTING` before the first callback.
+    phase: Arc<AtomicU8>,
     install: PatchInstall,
     /// The card writes of a boot that ended in a soft reset (see `digi_coupled::cold::SOFT_RESET`).
     reset_out: Arc<Mutex<Option<Vec<emmc_card::CardOverlaySector>>>>,
@@ -4372,6 +4386,8 @@ impl Actor {
         let worker_progress = progress.clone();
         let fraction = Arc::new(AtomicU64::new(0f64.to_bits()));
         let worker_fraction = fraction.clone();
+        let phase = Arc::new(AtomicU8::new(PHASE_STARTING));
+        let worker_phase = phase.clone();
         let (done_tx, done) = mpsc::channel();
         let (worker_cancel, worker_bytes, worker_card, worker_base) = (
             cancel.clone(),
@@ -4413,6 +4429,11 @@ impl Actor {
                         |p| {
                             worker_progress.store(p.icount, Ordering::Relaxed);
                             worker_fraction.store(p.fraction.to_bits(), Ordering::Relaxed);
+                            let phase = match p.phase {
+                                digi_coupled::cold::ColdPhase::Dsp => PHASE_DSP,
+                                digi_coupled::cold::ColdPhase::ColdFire => PHASE_COLDFIRE,
+                            };
+                            worker_phase.store(phase, Ordering::Relaxed);
                         },
                     )
                 });
@@ -4431,6 +4452,7 @@ impl Actor {
             started: Instant::now(),
             progress,
             fraction,
+            phase,
             install,
             reset_out,
             keep_out,
