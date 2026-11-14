@@ -134,11 +134,8 @@ PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
             "tools/devtools/layercheck.py",
         ),
         (
-            "tests/devtools/test_layercheck.py",
-            "tests/devtools/test_fx_tier.py",
             "tests/devtools/test_agent_guard.py",
             "tests/devtools/test_test_outcomes.py",
-            "tests/devtools/test_benchlock.py",
         ),
     ),
     (

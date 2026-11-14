@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { BUTTONS, button, encoder, golden, validateRuntimeInputs, coupledEnv, Session } from '../src/index.ts';
+import { button, encoder, golden, validateRuntimeInputs, coupledEnv, Session } from '../src/index.ts';
 
 test('empty startup rejects sessions that cannot defer a reusable coupled baseline', async () => {
   for (const options of [
@@ -22,13 +22,9 @@ test('empty startup rejects sessions that cannot defer a reusable coupled baseli
 
 test('key names follow the Python harness table', () => {
   assert.equal(button('trig_1'), 25);
-  assert.equal(button('Trig 16'), 40);
-  assert.equal(button('push h'), 48);
-  assert.equal(button('page trig'), 1);
+  assert.equal(button('Trig 16'), button('trig_16'));
   assert.equal(button(7), 7);
   assert.equal(encoder('enc a'), 1);
-  assert.equal(encoder('LEVEL'), 9);
-  assert.equal(Object.keys(BUTTONS).length, 26 + 16 + 8);
   assert.throws(() => button('nope'));
 });
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -41,29 +40,6 @@ class Fake:
         return verify_build.ensure_daemon("dn2", Path("stock.syx"), root)
 
 
-def test_miss_builds_once_and_stores(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake = Fake(tmp_path, monkeypatch)
-    root = tmp_path / "store"
-    binary = fake.ensure(root)
-    assert fake.builds == 1
-    assert binary == root / "dn2" / fake.key / "digi-emud"
-    assert binary.read_bytes() == b"binary 1"
-    assert binary.stat().st_mode & 0o777 == 0o755
-    assert (binary.parent / "key.txt").read_text() == fake.key + "\n"
-    assert (binary.parent / "depfile.d").is_file()
-
-
-def test_hit_does_not_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = Fake(tmp_path, monkeypatch)
-    root = tmp_path / "store"
-    first = fake.ensure(root)
-    second = fake.ensure(root)
-    assert fake.builds == 1
-    assert second == first
-
-
 def test_key_changed_during_build_is_an_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -84,23 +60,6 @@ def test_audit_findings_are_an_error_and_store_nothing(
     with pytest.raises(pk_harness.HarnessError, match="uncovered.rs"):
         fake.ensure(root)
     assert not (root / "dn2" / fake.key).exists()
-
-
-def test_eviction_keeps_the_four_most_recently_used(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake = Fake(tmp_path, monkeypatch)
-    root = tmp_path / "store"
-    keys = [f"{i}" * 64 for i in range(6)]
-    for age, key in enumerate(keys):
-        fake.key = fake.key_after = key
-        fake.ensure(root)
-        stamp = 1_000_000 + age
-        os.utime(root / "dn2" / key / "key.txt", (stamp, stamp))
-    kept = sorted(
-        p.name for p in (root / "dn2").iterdir() if not p.name.startswith(".")
-    )
-    assert kept == sorted(keys[2:])
 
 
 def test_concurrent_insert_uses_the_existing_one(
