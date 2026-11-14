@@ -1185,6 +1185,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sha2",
  "sharc-rt",
 ]
 
@@ -3167,6 +3168,7 @@ dependencies = [
  "dkneeds",
  "dkrt-fit",
  "dkrt-sdk",
+ "dksharc",
  "dkupload",
  "dt2-firmware-loader",
  "emmc-card",

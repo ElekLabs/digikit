@@ -53,6 +53,7 @@ PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
         (
             "packages/patchkit/",
             "packages/dkaddrmap/",
+            "packages/dksharc/",
             "packages/dkneeds/",
             "devices/ports/",
             "tools/patchkit/pk_",

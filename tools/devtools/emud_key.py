@@ -42,6 +42,7 @@ SOURCE_GLOBS = (
     ".cargo/**",
     "packages/emulator/**",
     "packages/dkaddrmap/**",
+    "packages/dksharc/**",
     "packages/dkneeds/**",
     "packages/dksample/**",
     "packages/dkupload/**",
