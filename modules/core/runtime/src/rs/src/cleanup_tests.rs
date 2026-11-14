@@ -2,7 +2,8 @@
 //! No device ACK/block-tail/callback quiescence claim. All shared runtime state is
 //! serialized; fake CF addresses are logged at free/fini, never host-dereferenced.
 use super::*;
-use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
+use crate::core_api::{CoreApi, REAL_CORE};
+use dkrt_abi::link::{Owner, Sequence};
 use std::sync::Mutex;
 use std::vec::Vec;
 
@@ -105,6 +106,19 @@ pub unsafe fn arena_free(p: *mut u8) -> bool {
     true
 }
 
+/// One UI pass: the link settles and starts, then the loader steps (the order of `dkrt_tick`).
+unsafe fn pass() {
+    crate::link::pump();
+    crate::loader::dsp_step();
+}
+
+/// No transfer is on the wire and the loader has none in flight.
+unsafe fn idle_link() {
+    *crate::link::lk() = crate::link::Link::new(crate::link::DspTransport);
+    crate::link::lk().spin = 20_000;
+    dsp::ds().ticket = 0;
+}
+
 unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) {
     *st() = core::mem::zeroed();
     *dsp::ds() = core::mem::zeroed();
@@ -131,11 +145,14 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     } else {
         dsp::PH_SEND
     };
-    d.started = 1;
+    // a transfer of the loader is on the wire: the link answers it with the seeded failure at the next pump
+    *crate::link::lk() = crate::link::Link::new(crate::link::DspTransport);
+    crate::link::lk().spin = 20_000;
+    d.ticket = crate::link::lk().test_in_flight(Owner::Loader).id as u32;
     d.pending.rec = 0;
     d.pending.boot_idx = 0;
     d.pending.send_buf = if published { 0 } else { IMAGE };
-    d.word = 0x11223344;
+    d.row_steps = 0x11223344;
     d.mod_len[0] = 256;
     d.transfers = 1;
     if fx {
@@ -170,16 +187,16 @@ fn voice_latch_mask_is_published_before_the_type() {
         seed(Completion::Ack, false, true, false);
         LINK.original_failure = false;
         let d = dsp::ds();
-        d.started = 0;
+        idle_link();
         d.step = 13;
         d.row_pub[0] = 0;
         d.row_latched[0] = 5;
         d.row_type[0] = 17;
         while LINK.events.len() < 4 {
-            crate::loader::dsp_step();
+            pass();
         }
         let at = 24 * VOICE_INFO[6];
-        assert_eq!(LINK.events, [Event::Word(1, at + 22, 5u32.swap_bytes()), Event::Word(1, at + 23, 0), Event::Word(1, at + 10, 0), Event::Word(1, at, 17u32.swap_bytes())]);
+        assert_eq!(LINK.events, [Event::Word(1, at + 22, 5), Event::Word(1, at + 23, 0), Event::Word(1, at + 10, 0), Event::Word(1, at, 17)]);
         assert_eq!(dsp::ds().row_pub[0], 1);
     }
 }
@@ -213,7 +230,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
         .iter()
         .any(|e| matches!(e, Event::Fini | Event::Registry | Event::Free(_))));
     let frozen = (
-        d.word,
+        d.row_steps,
         d.ticks,
         d.step,
         LINK.tries,
@@ -221,17 +238,18 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
         LINK.events.len(),
     );
     for _ in 0..3 {
-        crate::loader::dsp_step();
+        pass();
     }
-    assert!(!REAL_CORE.link_word(LinkWriter::FxPage, dsp::WIN_FX, 0, 0xabcdef00));
-    assert_eq!(REAL_CORE.link_sample_send(0, core::ptr::null(), 4), -2);
+    let mut one = Sequence::new();
+    one.push(dsp::WIN_FX, 0, 0xabcdef00);
+    assert!(!REAL_CORE.link_run(Owner::Core, &one), "a retained link sends nothing");
     assert_eq!(dsp::reserve(2, &dsp::Job::empty()), E_BUSY);
     dsp::cancel(0);
     dsp::release_range(0);
     dsp::launch(d.waiting[0]);
     assert_eq!(
         (
-            d.word,
+            d.row_steps,
             d.ticks,
             d.step,
             LINK.tries,
@@ -247,7 +265,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
 
 unsafe fn failure_case(completion: Completion) {
     seed(completion, false, true, true);
-    crate::loader::dsp_step();
+    pass();
     assert_retained(false, 0);
     assert_eq!(
         dsp::ds().last_dl_err,
@@ -264,6 +282,7 @@ fn dsp_step_reports_a_failure_without_acting_on_it() {
     unsafe {
         seed(Completion::Ack, false, true, true);
         let d = dsp::ds();
+        crate::link::pump();
         assert_eq!(dsp::step(), dsp::Advance::Failed(E_DSP_XFER));
         // the module is still up and the DSP loader still counts nothing: the loader decides next
         assert!(entry::has_tick(0));
@@ -302,7 +321,7 @@ fn fx_partial_cleanup_does_not_discard_publication() {
     let _g = LOCK.lock().unwrap();
     unsafe {
         seed(Completion::ErrorAt(3), true, true, true);
-        crate::loader::dsp_step();
+        pass();
         assert_retained(true, 0);
         assert_eq!(LINK.accepted, 3); // no subsequent cleanup writes after failure
     }
@@ -313,14 +332,14 @@ fn missing_fx_info_retains_published_row() {
     unsafe {
         seed(Completion::Ack, true, true, true);
         LINK.no_fx_info = true;
-        crate::loader::dsp_step();
+        pass();
         assert_retained(true, 0);
         assert_eq!(LINK.accepted, 0);
     }
 }
 unsafe fn successful_case(fx: bool, published: bool) {
     seed(Completion::Ack, fx, published, true);
-    crate::loader::dsp_step();
+    pass();
     assert!(!dsp::retained());
     assert!(!entry::has_tick(0));
     assert_eq!(st().modules[0].used, 0);
@@ -382,6 +401,7 @@ fn on_loaded_runs_once_per_load_and_after_the_last_row() {
     let _g = LOCK.lock().unwrap();
     unsafe {
         seed(Completion::Ack, false, true, false);
+        idle_link();
         log().clear();
         let d = dsp::ds();
         d.row_owner = [0; dsp::MAX_ROWS];
@@ -545,7 +565,7 @@ fn unload_of_a_module_without_fini_releases_its_sink() {
         assert_eq!(crate::dlog::dk_sink_set(0, test_sink as *const () as usize as *mut u8), OK);
         crate::dlog::leave_module(prev);
         assert!(crate::dlog::sink_on(0));
-        crate::loader::dsp_step();
+        pass();
         assert_eq!(st().modules[0].used, 0);
         assert!(!crate::dlog::sink_on(0));
     }

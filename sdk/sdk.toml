@@ -1378,6 +1378,14 @@ id = 45
 name = "MODULE_LATCH"
 args = ["index", "machine", "latched", "-", "-"]
 
+# one event of the DSP link queue (info level; an error is at warn level; none is kept in the small ring): `what` 1 submit (owner, id, kind | steps << 8, bytes), 2 start
+# (owner, id), 3 done (owner, id), 4 error (owner, id, link error code, step), 5 resend of a live word (slot, version, attempt), 6 live word taken (slot, version, window, word).
+# The owner is 0 loader, 1 tracks, 2 core, 0xff a live word (its id is 0x8000 | slot).
+[[log.kind]]
+id = 46
+name = "DSP_LINK"
+args = ["what", "a", "b", "c", "d"]
+
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 

@@ -27,6 +27,7 @@ pub mod card;
 pub mod fault;
 pub mod dlog;
 mod dsp;
+mod link;
 pub mod entry;
 mod gen_abi_check;
 mod loader;

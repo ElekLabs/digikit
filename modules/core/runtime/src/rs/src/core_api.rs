@@ -6,12 +6,12 @@
 //! drive takes a generic `C: CoreApi` (no `dyn`: the runtime has no allocator and no vtables); everything else calls the `REAL_CORE` constant.
 use crate::{dlog, registry, settings, worker};
 use core::ptr::addr_of;
-use dkrt_abi::core_api::FX_CLAIMS;
+use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use dkrt_abi::dsp::DspState;
 use dkrt_abi::registry::RegState;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
-pub use dkrt_abi::core_api::{CoreApi, LinkWriter, JOB_E_CANCELLED, LOG_INFO};
+pub use dkrt_abi::core_api::{CoreApi, JOB_E_CANCELLED, LOG_INFO};
 
 // The platform facts a service may read (the device profile, the interrupt mask, the sample-pool provider): the only platform names a service has.
 pub use crate::platform::PLATFORM;
@@ -25,9 +25,6 @@ pub(crate) use crate::entry::{client, give, own_rec};
 pub(crate) mod testing {
     pub(crate) use crate::worker::{cancel, test_pump, test_reset, TEST_LOCK};
 }
-
-/// The claims of the writers that hold the link across polls: set when a submission is accepted, cleared when its result is taken by `link_poll`.
-static mut LINK_CLAIM: u8 = 0;
 
 /// The core's own functions, called through `CoreApi`.
 #[derive(Clone, Copy)]
@@ -113,39 +110,29 @@ impl CoreApi for RealCore {
     unsafe fn fx_info(&self) -> *const u32 {
         crate::dsp::finfo()
     }
-    unsafe fn link_word(&self, who: LinkWriter, win: u32, word: u32, value: u32) -> bool {
-        let ok = crate::dsp::start_word(win, word, value);
-        if ok {
-            LINK_CLAIM |= who.claim();
-        }
-        ok
+    fn link_set(&self, slot: Slot, value: u32) {
+        crate::link::lk().set(slot, value)
     }
-    unsafe fn link_word_blocking(&self, win: u32, word: u32, value: u32) -> bool {
-        crate::dsp::write_word_blocking(win, word, value)
+    fn link_confirmed(&self, slot: Slot) -> Option<u32> {
+        crate::link::lk().confirmed(slot)
     }
-    unsafe fn link_sample_send(&self, dst: u32, src: *const u8, len: u32) -> i32 {
-        let r = crate::dsp::call_send(dst, src, len);
-        if r == 0 {
-            LINK_CLAIM |= LinkWriter::Sample.claim();
-        }
-        r
+    fn link_errors(&self) -> u32 {
+        crate::link::lk().errors()
     }
-    unsafe fn link_poll(&self, who: LinkWriter) -> Option<bool> {
-        let r = crate::dsp::poll_done();
-        if r.is_some() {
-            LINK_CLAIM &= !who.claim();
-        }
-        r
+    fn link_forget(&self, win: u32, first: u32, count: u32) {
+        crate::link::lk().forget(win, first, count)
     }
-    unsafe fn link_idle(&self) -> bool {
-        let d = crate::dsp::ds();
-        d.phase == crate::dsp::PH_IDLE && d.nwait == 0
+    unsafe fn link_submit(&self, owner: Owner, stream: &Stream) -> Option<Ticket> {
+        crate::link::lk().submit(owner, stream)
     }
-    fn link_busy(&self) -> bool {
-        unsafe { LINK_CLAIM & FX_CLAIMS != 0 }
+    fn link_result(&self, t: Ticket) -> LinkResult {
+        crate::link::lk().result(t)
     }
-    fn link_claimed(&self, who: LinkWriter) -> bool {
-        unsafe { LINK_CLAIM & who.claim() != 0 }
+    unsafe fn link_drain(&self, owner: Owner) -> bool {
+        crate::link::lk().drain(owner)
+    }
+    unsafe fn link_run(&self, owner: Owner, seq: &Sequence) -> bool {
+        crate::link::lk().run(owner, seq)
     }
 }
 
@@ -170,24 +157,18 @@ mod fake {
         Log { kind: u16, args: [u32; 5] },
         JobPost { owner: u8 },
         JobCancel { owner: u8, id: u32 },
-        Word { who: LinkWriter, win: u32, word: u32, value: u32 },
-        WordBlocking { win: u32, word: u32, value: u32 },
-        SampleSend { dst: u32, bytes: Vec<u8> },
-        Poll(LinkWriter),
+        Set { slot: Slot, value: u32 },
     }
 
-    /// A core that records what services ask of it. `accept` is what the link answers to a submission, `done` what a poll answers. `fx_table` is the
-    /// words of `dynfx_info` the fake hands out (first row 0).
+    /// A core that records what services ask of it. Its link is the real queue over a model of `core/dsp-link` (`link::fake::FakeLink`): the tests read the
+    /// wire from `link.borrow().t.wire` and let the model's time pass with `pump`. `fx_table` is the words of `dynfx_info` the fake hands out (first row 0).
     pub struct FakeCore {
         pub calls: RefCell<Vec<Call>>,
         pub first: u32,
         pub owners: Vec<u8>,
         pub source: Cell<u8>,
         pub settings: RefCell<Vec<(Vec<u8>, Vec<u8>)>>,
-        pub accept: Cell<bool>,
-        pub poll: Cell<Option<bool>>,
-        pub idle: Cell<bool>,
-        pub claim: Cell<u8>,
+        pub link: RefCell<&'static mut crate::link::Link<crate::link::fake::FakeLink>>,
         pub name: String,
         pub fx_table: Vec<u32>,
         reg: *mut RegState,
@@ -205,10 +186,7 @@ mod fake {
                 owners: Vec::new(),
                 source: Cell::new(0),
                 settings: RefCell::new(Vec::new()),
-                accept: Cell::new(true),
-                poll: Cell::new(Some(true)),
-                idle: Cell::new(true),
-                claim: Cell::new(0),
+                link: RefCell::new(Box::leak(Box::new(crate::link::fake::link()))),
                 name: String::from("fake\0"),
                 fx_table: std::vec![0; 8],
                 reg,
@@ -303,42 +281,30 @@ mod fake {
         unsafe fn fx_info(&self) -> *const u32 {
             self.fx_table.as_ptr()
         }
-        unsafe fn link_word(&self, who: LinkWriter, win: u32, word: u32, value: u32) -> bool {
-            self.rec(Call::Word { who, win, word, value });
-            if self.accept.get() {
-                self.claim.set(self.claim.get() | who.claim());
-            }
-            self.accept.get()
+        fn link_set(&self, slot: Slot, value: u32) {
+            self.rec(Call::Set { slot, value });
+            self.link.borrow_mut().set(slot, value)
         }
-        unsafe fn link_word_blocking(&self, win: u32, word: u32, value: u32) -> bool {
-            self.rec(Call::WordBlocking { win, word, value });
-            true
+        fn link_confirmed(&self, slot: Slot) -> Option<u32> {
+            self.link.borrow().confirmed(slot)
         }
-        unsafe fn link_sample_send(&self, dst: u32, src: *const u8, len: u32) -> i32 {
-            self.rec(Call::SampleSend { dst, bytes: core::slice::from_raw_parts(src, len as usize).to_vec() });
-            if self.accept.get() {
-                self.claim.set(self.claim.get() | LinkWriter::Sample.claim());
-                0
-            } else {
-                -2
-            }
+        fn link_errors(&self) -> u32 {
+            self.link.borrow().errors()
         }
-        unsafe fn link_poll(&self, who: LinkWriter) -> Option<bool> {
-            self.rec(Call::Poll(who));
-            let r = self.poll.get();
-            if r.is_some() {
-                self.claim.set(self.claim.get() & !who.claim());
-            }
-            r
+        fn link_forget(&self, win: u32, first: u32, count: u32) {
+            self.link.borrow_mut().forget(win, first, count)
         }
-        unsafe fn link_idle(&self) -> bool {
-            self.idle.get()
+        unsafe fn link_submit(&self, owner: Owner, stream: &Stream) -> Option<Ticket> {
+            self.link.borrow_mut().submit(owner, stream)
         }
-        fn link_busy(&self) -> bool {
-            self.claim.get() & FX_CLAIMS != 0
+        fn link_result(&self, t: Ticket) -> LinkResult {
+            self.link.borrow_mut().result(t)
         }
-        fn link_claimed(&self, who: LinkWriter) -> bool {
-            self.claim.get() & who.claim() != 0
+        unsafe fn link_drain(&self, owner: Owner) -> bool {
+            self.link.borrow_mut().drain(owner)
+        }
+        unsafe fn link_run(&self, owner: Owner, seq: &Sequence) -> bool {
+            self.link.borrow_mut().run(owner, seq)
         }
     }
 }

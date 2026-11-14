@@ -11,6 +11,7 @@
 
 pub mod core_api;
 pub mod dsp;
+pub mod link;
 pub mod mem;
 pub mod platform;
 pub mod profiles;

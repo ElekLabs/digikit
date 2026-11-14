@@ -127,10 +127,10 @@ pub struct DspState {
     pub phase: u32,
     pub ticks: u32,
     pub step: u32,
-    /// A transfer has been started in this step.
-    pub started: u32,
-    /// The buffer of one-word transfers (`dl_send_win` reads it in place).
-    pub word: u32,
+    /// The link request of the loader in flight (the id of its `Ticket`; 0: none).
+    pub ticket: u32,
+    /// The steps of the row sequence that request carries.
+    pub row_steps: u32,
     /// Byte address, bytes and arena block of the image `reserve` has prepared and `launch` has not taken yet.
     pub send_base: u32,
     pub send_len: u32,

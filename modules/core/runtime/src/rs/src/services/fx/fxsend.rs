@@ -15,12 +15,12 @@
 //! - after the loader counter changed and stayed still for `SETTLE` passes, and when the live kit object changed (a pattern's kit), the stored amounts are written back
 //!   into the Sound arrays of the 16 tracks first (so the zeroes of a load are never taken as a turn),
 //! - then each Sound array is read: a value that is not the one last written or seen is a turn of the knob: the effect's amount for that track follows (a put into the
-//!   settings, written to the card 2 s after the last change, and the DSP words, one word per pass through window 2 like the effect pages' values).
+//!   settings, written to the card 2 s after the last change, and the DSP words, live values on the link through window 2 like the effect pages' values).
 //!
 //! Everything runs in the UI task (the settings store is not for other tasks).
 use super::dsp as fxdsp;
 use super::fxpage;
-use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
+use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::dsp;
 use dkrt_abi::mem::{cstr_len, iw, rd, rd16, wr, wr16};
 use core::ptr::addr_of_mut;
@@ -83,16 +83,12 @@ pub struct SendState {
     pub idlen: [u8; dsp::MAX_FX],
     /// Per cell: its effect row + 1.
     pub row: [u8; SEND_MAX],
-    /// The transfer in flight: the effect row, the amount word (0 .. 3) and its value.
-    pub busy: u8,
-    pub busy_k: u8,
-    pub busy_w: u8,
-    pub busy_v: u32,
     pub id: [[u8; 32]; dsp::MAX_FX],
     /// The amounts, one byte for each track.
     pub amt: [[u8; TRACKS]; dsp::MAX_FX],
-    /// The amount words the DSP row has.
+    /// The amount words the DSP row has taken, and the ones handed to the link as live values.
     pub dsp: [[u32; 4]; dsp::MAX_FX],
+    pub want: [[u32; 4]; dsp::MAX_FX],
     /// The live kit object last seen (the 16 Sound objects lie in it), and for each cell and track the raw value last written to or read from `Sound[idx]` (-1: none).
     pub kit: u32,
     pub shown: [[i32; TRACKS]; SEND_MAX],
@@ -276,6 +272,7 @@ pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
     }
     s.amt[k] = a;
     s.dsp[k] = words_of(&a);
+    s.want[k] = s.dsp[k];
     let cells = iw(inf, w::CELLS).min(SEND_MAX as u32) as usize;
     let mut c = 0;
     while c < cells && s.row[c] != 0 {
@@ -352,11 +349,13 @@ pub unsafe fn remove(k: usize) {
     if !inf.is_null() {
         release(inf, k);
     }
+    fxdsp::fx_forget(&REAL_CORE, k);
     let s = ss();
     s.allow[k] = 0;
     s.dflt[k] = 0;
     s.amt[k] = [0; TRACKS];
     s.dsp[k] = [0; 4];
+    s.want[k] = [0; 4];
     s.idlen[k] = 0;
     s.id[k] = [0; 32];
 }
@@ -379,20 +378,6 @@ pub unsafe fn tick() {
     if inf.is_null() {
         return;
     }
-    if s.busy != 0 {
-        match REAL_CORE.link_poll(LinkWriter::FxSend) {
-            None => return,
-            Some(ok) => {
-                if ok {
-                    s.dsp[s.busy_k as usize][s.busy_w as usize] = s.busy_v;
-                    s.sent += 1;
-                } else {
-                    s.errors += 1;
-                }
-                s.busy = 0;
-            }
-        }
-    }
     // a kit, a pattern's kit or a project was loaded: wait until the loads are over, then write the amounts back
     let ns = rd(iw(inf, w::NSOUND));
     if ns != s.nsound {
@@ -411,37 +396,29 @@ pub unsafe fn tick() {
     if quiet {
         tracks(inf);
     }
-    // one DSP word a pass
-    if s.busy == 0 && !REAL_CORE.link_busy() {
-        let mut k = 0;
-        while k < dsp::MAX_FX {
-            if s.route[k] != 0 && fxdsp::fx_live(k) {
-                let want = words_of(&s.amt[k]);
-                let mut j = 0;
-                while j < 4 {
-                    if want[j] != s.dsp[k][j] {
-                        send_amount(&REAL_CORE, s, k, j, want[j]);
-                        return;
+    // the amounts go to the link as live values; the DSP's own copy follows the link's confirmation
+    let mut k = 0;
+    while k < dsp::MAX_FX {
+        if s.route[k] != 0 && fxdsp::fx_live(k) {
+            let want = words_of(&s.amt[k]);
+            let mut j = 0;
+            while j < 4 {
+                if let Some(slot) = fxdsp::fx_slot(&REAL_CORE, k, dsp::FXW_AMT0 + j as u32) {
+                    if want[j] != s.want[k][j] {
+                        REAL_CORE.link_set(slot, want[j]);
+                        s.want[k][j] = want[j];
                     }
-                    j += 1;
+                    if s.dsp[k][j] != s.want[k][j] && REAL_CORE.link_confirmed(slot) == Some(s.want[k][j]) {
+                        s.dsp[k][j] = s.want[k][j];
+                        s.sent += 1;
+                    }
                 }
+                j += 1;
             }
-            k += 1;
         }
+        k += 1;
     }
-}
-
-/// Start the write of send amount word `j` of effect row `k` on the link; the transfer is in flight when it is accepted.
-unsafe fn send_amount<C: CoreApi>(c: &C, s: &mut SendState, k: usize, j: usize, value: u32) -> bool {
-    if fxdsp::fx_word_start(c, LinkWriter::FxSend, k, dsp::FXW_AMT0 + j as u32, value) {
-        s.busy = 1;
-        s.busy_k = k as u8;
-        s.busy_w = j as u8;
-        s.busy_v = value;
-        true
-    } else {
-        false
-    }
+    s.errors = REAL_CORE.link_errors();
 }
 
 /// The 16 Sound arrays: the stored amounts back into those that need them, a turn of the knob in the others.
