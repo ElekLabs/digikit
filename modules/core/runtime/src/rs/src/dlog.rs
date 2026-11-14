@@ -156,7 +156,7 @@ pub unsafe extern "C" fn dk_debug_log_sink_set(f: *mut u8, tick: *mut u8) {
     write_volatile(addr_of_mut!(SINK), f);
     irq_restore(sr);
     if f != 0 {
-        crate::crash::replay_detail();
+        crate::fault::replay_detail();
     }
 }
 
