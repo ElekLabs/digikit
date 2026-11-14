@@ -47,12 +47,14 @@ from pathlib import Path
 from typing import Any
 
 from tools.device import dkneeds as N
+from tools.device import dkproto
 from tools.device import dkrun as R
 from tools.device import dkupload as D
 from tools.patchkit import modroots
 
 MAGIC = b"DKMF"
 GROUPS = ("Machines", "Effects", "Tools")
+KEYS_TAG = 3  # the KEYS entry of the header table (packages/dkneeds/src/keys.rs)
 SELECTION_MAX = 8
 
 
@@ -86,12 +88,25 @@ def group_of(f: bytes) -> str:
     pair (offset, size); a header alone, without the table, gives Tools."""
     off, size = struct.unpack_from(">II", f, 0x90)
     t = f[off : off + size]
-    if size >= 12 and len(t) == size:
-        machines, effects = struct.unpack_from(">HH", t, 6)
-        if machines:
-            return "Machines"
-        if effects:
-            return "Effects"
+    if size < 8 or len(t) != size or struct.unpack_from(">IH", t, 0) != (dkproto.TABLE_MAGIC, dkproto.TABLE_VERSION):
+        return "Tools"
+    kinds: set[int] = set()
+    at = 8
+    for _ in range(struct.unpack_from(">H", t, 6)[0]):
+        tag, count, length = struct.unpack_from(">HHI", t, at)
+        body = at + 8
+        if tag == KEYS_TAG:
+            g = body
+            for _ in range(count):
+                kind, n = struct.unpack_from(">II", t, g)
+                if n:
+                    kinds.add(kind)
+                g += 8 + 4 * n
+        at = body + length
+    if dkproto.RECORD_KIND["MACHINE"] in kinds:
+        return "Machines"
+    if dkproto.RECORD_KIND["EFFECT"] in kinds:
+        return "Effects"
     return "Tools"
 
 

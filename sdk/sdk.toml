@@ -5,6 +5,7 @@
 # and sample.h from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
+table = "0.8.0"     # the runtime version that introduced the header table of a `.dkm` (R7): `patchkit pack` writes at least this as the version the module needs, so the loader refuses a module of the 0.7 format with E_CONTRACT
 version = "0.8.0"   # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
@@ -1585,18 +1586,13 @@ stage_bytes = 65536  # the runtime's staging buffer: the largest .dkm file (patc
 [limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, modules/core/runtime/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
                     # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).
 dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick offsets, the keys table pair at 0x90/0x94, then the tables follow); `dkneeds::HEADER`
-# The keys table of a `.dkm` (spec; patchkit writes it, the runtime and dkneeds read it). The header pair at 0x90 and 0x94 is `keys_off` and `keys_size`
-# (bytes from the start of the file; `keys_off` is a multiple of 4; the table replaces the register records of the old pair). Layout, big-endian as the
-# rest of the header (the header is 0xa0 bytes in all cases):
-#   +0  u16 machine_rows   machine rows the module uses (`[uses]`)
-#   +2  u16 param_rows     parameter rows
-#   +4  u16 page_rows      page rows
-#   +6  u16 n_machines     number of machine keys
-#   +8  u16 n_fx           number of effect keys
-#   +10 u16 record_bytes   payload bytes of the record block `init` commits and the module keeps in the arena (`[uses]`; 0: it declares nothing)
-#   +12 u32 machine_key[n_machines]   hash of `<module id>:<machine id>` (register.rs), in module.toml order
-#   +.. u32 fx_key[n_fx]              hash of `<module id>:<effect id>`
-# keys_size = 12 + 4 * (n_machines + n_fx), so the table is a multiple of 4. A module with no machine and no effect has keys_size 0.
+# The header table of a `.dkm` (spec: packages/dkneeds/src/keys.rs; patchkit writes it, the runtime, the boot planner, dkneeds and the host tools read it). The header
+# pair at 0x90 and 0x94 is `table_off` and `table_size` (bytes from the start of the file; `table_off` is a multiple of 4). A versioned, tagged table, big-endian:
+#   +0  u32 magic "DKTB" (`table_magic`)   +4  u16 version (`table_version`)   +6  u16 n_entries
+#   then, in ascending tag order, each tag at most once: u16 tag, u16 count, u32 payload_bytes, the payload.
+# Tags: 1 NEEDS (service name hash, minimum version, hard or optional), 2 USES (resource id, count; ids in [records.resources]), 3 KEYS (record kind, n, keys: the
+# machine keys, effect ids and the keys of a service's kind), 4 KINDS (kind, length, handler entry: a service module's kinds), 5 SLOTS, 6 HOOKS, 7 EXPORTS, 8 RESOURCES.
+# A module that needs and keeps nothing has the 8-byte head. A file with no table, or another magic, is the format of runtime 0.7: E_CONTRACT.
 dsp_header = 64     # 0x40: the header of the DSP section
 max_records = 32    # records of the `register` table
 max_relocs = 4096   # ColdFire relocations
@@ -1607,6 +1603,8 @@ max_state_bytes = 16777216  # bytes of one voice state (1 << 24, the loader's mo
 granule = 64        # the DSP area's placement granule
 dsp_slack = 8       # bytes the DSP range may start before its alignment
 arena_hdr = 16      # the arena's block header
+table_magic = 1145390146  # 0x444b5442 "DKTB": the first word of the header table of a `.dkm` (packages/dkneeds/src/keys.rs); another word is a file of the 0.7 format
+table_version = 1   # the version of the header table (a change is a MINOR of the runtime)
 collect_bytes = 6904  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the builder calls of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)
 
 # The settings store (docs/design/digikit-store.md, "The settings record"): one record in two copies in the store range, next to the selection

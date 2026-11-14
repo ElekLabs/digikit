@@ -20,8 +20,21 @@ GRANULE = 64
 DSP_SLACK = 8
 ARENA_HDR = 16
 COLLECT_BYTES = 6904
+TABLE_MAGIC = 1145390146
+TABLE_VERSION = 1
 MAX_VOICES = 8
 MAX_FX = 4
+
+# the record kinds of a .dkm ([records.kinds])
+RECORD_KIND: dict[str, int] = {
+    "PARAM": 1,
+    "MACHINE": 2,
+    "PAGE": 3,
+    "EFFECT": 4,
+    "ACTION": 5,
+    "NATIVE_PAGE": 6,
+    "NATIVE_PAGE_V2": 7,
+}
 
 CMD: dict[str, int] = {
     "INFO": 0x01,

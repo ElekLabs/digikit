@@ -11,6 +11,9 @@ fn put(b: &mut [u8], at: usize, v: u32) {
 /// A file with this image, bss, keys table and DSP section (both may be empty), laid out like the packer's: header, keys table, DSP
 /// section, image. The tables the loader reads (relocations, imports) are empty.
 fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
+    // a file always has a header table: with none given, the table of a module that needs and keeps nothing
+    let none = register(&[]);
+    let reg = if reg.is_empty() { &none[..] } else { reg };
     let reg_off = HEADER as usize;
     let dsp_off = (reg_off + reg.len()).div_ceil(16) * 16;
     let image_off = (dsp_off + dsp.len()).div_ceil(16) * 16;
@@ -38,25 +41,17 @@ fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
 
 use crate::{KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 
-/// A keys table whose row counts are those of these kinds (one machine key per machine row).
+/// A header table whose row counts are those of these kinds (one machine key per machine row).
 fn register(kinds: &[u32]) -> Vec<u8> {
     let n = |k: u32| kinds.iter().filter(|&&x| x == k).count();
     let machines: Vec<u32> = (0..n(KIND_MACHINE) as u32).map(|i| 0x100 + i).collect();
-    let mut t = vec![0u8; keys::keys_size(machines.len(), 0)];
-    if !t.is_empty() {
-        keys::write_keys(
-            (
-                n(KIND_MACHINE) as u16,
-                n(KIND_PARAM) as u16,
-                n(KIND_PAGE) as u16,
-            ),
-            0,
-            &machines,
-            &[],
-            &mut t,
-        )
-        .unwrap();
-    }
+    let rows = (
+        n(KIND_MACHINE) as u32,
+        n(KIND_PARAM) as u32,
+        n(KIND_PAGE) as u32,
+    );
+    let mut t = vec![0u8; keys::keys_size(rows, 0, machines.len(), 0)];
+    keys::write_keys(rows, 0, &machines, &[], &mut t).unwrap();
     t
 }
 
@@ -125,7 +120,7 @@ fn a_coldfire_only_module_takes_an_arena_block() {
 #[test]
 fn the_rows_come_from_the_keys_table() {
     let t = {
-        let mut t = [0u8; 64];
+        let mut t = [0u8; 256];
         let size = keys::write_keys((2, 9, 3), 0x1b0, &[0x11, 0x22], &[0x33], &mut t).unwrap();
         t[..size].to_vec()
     };
@@ -134,8 +129,12 @@ fn the_rows_come_from_the_keys_table() {
     // the record block is one more arena block: 0x1b0 payload bytes and the header
     let plain = of(&dkm(4, 0, &[], &[])).unwrap().arena;
     assert_eq!(n.arena, plain + arena_block(0x1b0).unwrap());
-    // a module with no machine and no effect has no table
+    // a module with no machine and no effect has the head only
     assert_eq!(of(&dkm(4, 0, &[], &[])).unwrap().machine_rows, 0);
+    // a file without a table (the format of runtime 0.7 with no machine) is refused
+    let mut old = dkm(4, 0, &[], &[]);
+    put(&mut old, H_REG_SIZE as usize, 0);
+    assert_eq!(of(&old), Err(Error::Register));
     // a table whose size is not the counts' size, is refused
     assert_eq!(of(&dkm(4, 0, &t[..t.len() - 4], &[])), Err(Error::Register));
 }
@@ -333,18 +332,11 @@ fn absurd_sizes_and_counts_are_refused_without_a_panic() {
         Err(Error::Sizes)
     );
     // keys table
+    assert_eq!(of(&edit(reg_off, 0)), Err(Error::Register)); // no magic: the table of runtime 0.7
     assert_eq!(
-        of(&edit(reg_off + keys::K_N_MACHINES, u32::MAX)),
+        of(&edit(reg_off + keys::HEAD + 4, u32::MAX)),
         Err(Error::Register)
-    );
-    assert_eq!(
-        of(&edit(reg_off + keys::K_N_MACHINES, 0)),
-        Err(Error::Register)
-    ); // the table is longer than no key
-    assert_eq!(
-        of(&edit(reg_off + keys::K_N_FX, 1 << 16)),
-        Err(Error::Register)
-    ); // and shorter than one effect key
+    ); // the first entry is longer than the table
     assert_eq!(of(&edit(H_REG_SIZE as usize, 8)), Err(Error::Register)); // too short for its head
                                                                          // DSP section
     let d = |at: usize, v: u32| edit(dsp_off + at, v);

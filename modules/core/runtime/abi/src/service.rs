@@ -395,7 +395,13 @@ impl ServiceTable {
         }
         false
     }
-    pub unsafe fn declare_voice(&self, rec: usize, ty: u32, rng: [u32; 8], latched: u32) -> Option<i32> {
+    pub unsafe fn declare_voice(
+        &self,
+        rec: usize,
+        ty: u32,
+        rng: [u32; 8],
+        latched: u32,
+    ) -> Option<i32> {
         let mut i = 0;
         while i < self.rows.len() {
             if let Some(r) = (self.rows[i].declare_voice)(rec, ty, rng, latched) {
@@ -405,7 +411,13 @@ impl ServiceTable {
         }
         None
     }
-    pub unsafe fn declare_fx(&self, rec: usize, ordinal: u32, flags: Option<u32>, par: Option<[u32; 8]>) -> Option<bool> {
+    pub unsafe fn declare_fx(
+        &self,
+        rec: usize,
+        ordinal: u32,
+        flags: Option<u32>,
+        par: Option<[u32; 8]>,
+    ) -> Option<bool> {
         let mut i = 0;
         while i < self.rows.len() {
             if let Some(r) = (self.rows[i].declare_fx)(rec, ordinal, flags, par) {
@@ -510,7 +522,10 @@ mod tests {
         }
     }
 
-    static ROWS: [ServiceRow; 2] = [ServiceRow::of::<A>("a", &[(1, 8)]), ServiceRow::of::<B>("b", &[(2, 12)])];
+    static ROWS: [ServiceRow; 2] = [
+        ServiceRow::of::<A>("a", &[(1, 8)]),
+        ServiceRow::of::<B>("b", &[(2, 12)]),
+    ];
     const T: ServiceTable = ServiceTable { rows: &ROWS };
 
     #[test]
@@ -528,7 +543,10 @@ mod tests {
 
     #[test]
     fn a_kind_two_services_count_is_the_sum_of_their_counts() {
-        static TWO_B: [ServiceRow; 2] = [ServiceRow::of::<B>("b1", &[]), ServiceRow::of::<B>("b2", &[])];
+        static TWO_B: [ServiceRow; 2] = [
+            ServiceRow::of::<B>("b1", &[]),
+            ServiceRow::of::<B>("b2", &[]),
+        ];
         unsafe {
             assert_eq!(ServiceTable { rows: &TWO_B }.cap(3), Some((12, 2)));
             assert_eq!(T.cap(3), Some((6, 1)));

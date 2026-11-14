@@ -131,6 +131,71 @@ pub fn needed_runtime<'a>(imports: impl IntoIterator<Item = &'a str>) -> u32 {
         .unwrap_or(0)
 }
 
+/// The `NEEDS` of a module that links `imports`: one per service its imports name, the newest `since` among them, hard unless each of them has a
+/// stub for an absent provider. Sorted by service name hash.
+pub fn needs_of_imports<'a>(
+    imports: impl IntoIterator<Item = &'a str>,
+) -> Vec<dkneeds::keys::Need> {
+    let table = crate::sdkgen::import_infos();
+    let mut by: BTreeMap<u32, dkneeds::keys::Need> = BTreeMap::new();
+    for n in imports {
+        if let Some(i) = table.get(n) {
+            let h = dkneeds::keys::name_hash(&i.service);
+            let e = by.entry(h).or_insert(dkneeds::keys::Need {
+                service: h,
+                min_version: 0,
+                hard: false,
+            });
+            e.min_version = e.min_version.max(i.since);
+            e.hard |= !i.optional;
+        }
+    }
+    by.into_values().collect()
+}
+
+/// The header table to write: `reg` is the table the caller built (empty: a module that takes and keeps nothing) with the `NEEDS` entry replaced by
+/// the needs of `imports`.
+fn table_with_needs(reg: &[u8], imports: &[&str]) -> Result<Vec<u8>> {
+    use dkneeds::keys::{KeyGroup, Keys, Table, write_table};
+    let keys = if reg.is_empty() {
+        None
+    } else {
+        Some(Keys::parse(reg).map_err(|e| err!("header table: {e:?}"))?)
+    };
+    let needs = needs_of_imports(imports.iter().copied());
+    let (mut uses, mut kinds, mut slots, mut hooks, mut exports, mut resources) =
+        (vec![], vec![], vec![], vec![], vec![], vec![]);
+    let mut groups: Vec<(u32, Vec<u32>)> = vec![];
+    if let Some(k) = &keys {
+        uses.extend(k.uses());
+        kinds.extend(k.kinds());
+        slots.extend(k.slots());
+        hooks.extend(k.hooks());
+        exports.extend(k.exports());
+        resources.extend(k.resources());
+        for (kind, ks) in k.key_groups() {
+            groups.push((kind, ks.collect()));
+        }
+    }
+    let key_groups: Vec<KeyGroup> = groups
+        .iter()
+        .map(|(kind, keys)| KeyGroup { kind: *kind, keys })
+        .collect();
+    let t = Table {
+        needs: &needs,
+        uses: &uses,
+        keys: &key_groups,
+        kinds: &kinds,
+        slots: &slots,
+        hooks: &hooks,
+        exports: &exports,
+        resources: &resources,
+    };
+    let mut out = vec![0u8; dkneeds::keys::table_size(&t)];
+    write_table(&t, &mut out).map_err(|e| err!("header table: {e:?}"))?;
+    Ok(out)
+}
+
 /// The services the imports name (`service` of `[[import]]`), each with the imports of it, sorted; a compiler helper names none.
 pub fn services_of<'a>(
     imports: impl IntoIterator<Item = &'a str>,
@@ -409,10 +474,10 @@ fn pack_inner(
     let import_off = HEADER;
     let reloc_off = import_off + imports.len() * IMPORT_LEN;
     let reg_off = reloc_off + relocs.len() * 8;
+    // the header table: the packer's uses and keys (none: a module that keeps nothing) and the needs of the imports the module links
+    let table = table_with_needs(reg, &imports)?;
+    let reg: &[u8] = &table;
     let reg_size = reg.len();
-    if !reg.is_empty() {
-        dkneeds::keys::Keys::parse(reg).map_err(|e| err!("keys table: {e:?}"))?;
-    }
     let dsp_off = align_up(reg_off + reg_size, 16);
     let image_off = align_up(dsp_off + dsp.len(), 16);
     let total = image_off + image.len();
@@ -426,11 +491,13 @@ fn pack_inner(
     put(&mut f, 4, FORMAT);
     put(&mut f, H_SIZE, total as u32);
     put(&mut f, H_HDRSIZE, HEADER as u32);
-    // the runtime version the module needs: the newest `since` of its service imports (0: none), and the trace flag; 0x38..0x40 stay zero
+    // the runtime version the module needs: the newest `since` of its service imports, at least the version that introduced the header table,
+    // and the trace flag; 0x38..0x40 stay zero
     put(
         &mut f,
         H_RUNTIME,
-        needed_runtime(imports.iter().copied()) | if o.trace { FLAG_TRACE } else { 0 },
+        needed_runtime(imports.iter().copied()).max(crate::sdkgen::table_runtime())
+            | if o.trace { FLAG_TRACE } else { 0 },
     );
     put(&mut f, H_VERSION, o.version);
     f[H_NAME..H_NAME + o.name.len()].copy_from_slice(o.name.as_bytes());
@@ -775,7 +842,8 @@ mod tests {
         // 0x38..0x40 are reserved zero; 0x30 is the newest `since` of the imports (0: none) with the trace flag
         let f = pack(&object(), &opts()).unwrap();
         assert_eq!(&f[H_RESERVED..H_RESERVED + 8], &[0u8; 8]);
-        assert_eq!(get(&f, H_RUNTIME), 0);
+        // no import is linked: the file needs the version that introduced the header table
+        assert_eq!(get(&f, H_RUNTIME), crate::sdkgen::table_runtime());
         let f = pack_keys(Some(&object()), &[], &[0u8; 16], &opts()).unwrap();
         assert_eq!(&f[H_RESERVED..H_RESERVED + 8], &[0u8; 8]);
         let traced = Options {
@@ -783,11 +851,34 @@ mod tests {
             ..opts()
         };
         let f = pack(&object(), &traced).unwrap();
-        assert_eq!(get(&f, H_RUNTIME), FLAG_TRACE);
-        assert_eq!(Dkm::parse(&f).unwrap().runtime_min, 0);
+        assert_eq!(
+            get(&f, H_RUNTIME),
+            FLAG_TRACE | crate::sdkgen::table_runtime()
+        );
+        assert_eq!(
+            Dkm::parse(&f).unwrap().runtime_min,
+            crate::sdkgen::table_runtime()
+        );
         assert!(Dkm::parse(&f).unwrap().trace);
-        // the keys table is validated; any other bytes are refused
+        // the header table is validated; any other bytes are refused
         assert!(pack_keys(None, &[1, 2, 3], &[], &opts()).is_err());
+        // the needs of the linked imports are written: the service and the newest version among its imports
+        let mut o = unstamped();
+        for s in o.symbols.iter_mut().filter(|s| s.name == "fw_thing") {
+            s.name = "dk_settings_open".into();
+        }
+        for r in o.relocs.iter_mut().filter(|r| r.symbol == "fw_thing") {
+            r.symbol = "dk_settings_open".into();
+        }
+        o.stamp_isa();
+        let f = pack(&o, &opts()).unwrap();
+        let d = Dkm::parse(&f).unwrap();
+        let k = dkneeds::keys::Keys::parse(&d.register).unwrap();
+        let n: Vec<_> = k.needs().collect();
+        assert_eq!(n.len(), 1);
+        assert_eq!(n[0].service, dkneeds::keys::name_hash("runtime"));
+        assert_eq!(n[0].min_version, 0x000700);
+        assert!(n[0].hard);
     }
 
     /// A DSP section of an 8-byte image with BSS bytes of bss and one version 3 voice with `voices` states of 20 bytes (0: version 2).
@@ -849,7 +940,7 @@ mod tests {
         let f = pack_keys(Some(&object()), &[], &dsp_section(100, 0), &opts()).unwrap();
         assert_eq!(needs(&f).unwrap().dsp_area, 128);
         // a keys table: the row counts the packer wrote
-        let mut keys = vec![0u8; dkneeds::keys::keys_size(1, 0)];
+        let mut keys = vec![0u8; dkneeds::keys::keys_size((1, 2, 1), 0, 1, 0)];
         dkneeds::keys::write_keys((1, 2, 1), 0, &[0x123400], &[], &mut keys).unwrap();
         let f = pack_keys(None, &keys, &[], &opts()).unwrap();
         let n = needs(&f).unwrap();
@@ -1028,10 +1119,14 @@ mod tests {
             .push(rel(".text", 0, "cf.32", "dk_settings_open", 0));
         o.stamp_isa();
         let f = pack(&o, &opts()).unwrap();
-        assert_eq!(get(&f, H_RUNTIME), 0x000700);
+        // the newest `since` of its imports, and at least the version that introduced the header table
+        assert_eq!(get(&f, H_RUNTIME), crate::sdkgen::table_runtime());
         assert_eq!(Dkm::parse(&f).unwrap().imports, vec!["dk_settings_open"]);
-        // a module that links nothing of the SDK needs none
-        assert_eq!(get(&pack(&object(), &opts()).unwrap(), H_RUNTIME), 0);
+        // a module that links nothing of the SDK needs the header table's version
+        assert_eq!(
+            get(&pack(&object(), &opts()).unwrap(), H_RUNTIME),
+            crate::sdkgen::table_runtime()
+        );
     }
 
     #[test]

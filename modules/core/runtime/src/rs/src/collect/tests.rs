@@ -474,3 +474,19 @@ fn a_generic_record_of_an_unknown_or_a_typed_kind_is_refused_and_the_error_is_ke
         assert_eq!(dk_record_add(core::ptr::null_mut(), KIND_PARAM, body.as_ptr(), 8), E_CONTEXT);
     }
 }
+
+#[test]
+fn a_header_table_of_runtime_0_7_or_none_is_a_contract_error_and_a_damaged_one_a_format_error() {
+    // no table (the old "no machine, no effect" file), and the old table that begins with the row counts
+    assert_eq!(KeysCopy::from_bytes(&[]).err(), Some(E_CONTRACT));
+    let old = [0u8, 2, 0, 3, 0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1];
+    assert_eq!(KeysCopy::from_bytes(&old).err(), Some(E_CONTRACT));
+    // the current table: rows from USES, keys from KEYS
+    let mut t = [0u8; 128];
+    let n = dkneeds::keys::write_keys((2, 5, 1), 0, &[0x100, 0x200], &[7], &mut t).unwrap();
+    let k = KeysCopy::from_bytes(&t[..n]).unwrap();
+    assert_eq!((k.machine_rows, k.param_rows, k.page_rows, k.nm, k.nf), (2, 5, 1, 2, 1));
+    assert_eq!((k.mk[1], k.fk[0]), (0x200, 7));
+    // a damaged table (cut) is a format error, not a contract error
+    assert_eq!(KeysCopy::from_bytes(&t[..n - 4]).err(), Some(E_FORMAT));
+}

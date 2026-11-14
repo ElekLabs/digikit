@@ -609,21 +609,25 @@ impl KeysCopy {
         KeysCopy { machine_rows: 0, param_rows: 0, page_rows: 0, nm: 0, nf: 0, mk: [0; MAX_RECORDS], fk: [0; MAX_RECORDS] }
     }
 
-    /// Parse the table bytes (size 0: no machine, no effect and no rows).
+    /// Parse the header table bytes. A file with no table, or another magic or version, is the format of runtime 0.7: `E_CONTRACT`; a damaged
+    /// table is `E_FORMAT`.
     pub fn from_bytes(b: &[u8]) -> Result<KeysCopy, i32> {
         let mut k = KeysCopy::empty();
-        if b.is_empty() {
-            return Ok(k);
-        }
-        let keys = dkneeds::keys::Keys::parse(b).map_err(|_| E_FORMAT)?;
-        k.machine_rows = keys.machine_rows() as u32;
-        k.param_rows = keys.param_rows() as u32;
-        k.page_rows = keys.page_rows() as u32;
+        let keys = dkneeds::keys::Keys::parse(b).map_err(|e| if e == dkneeds::keys::KeysError::Format { E_CONTRACT } else { E_FORMAT })?;
+        k.machine_rows = keys.machine_rows();
+        k.param_rows = keys.param_rows();
+        k.page_rows = keys.page_rows();
         for v in keys.machine_keys() {
+            if k.nm >= MAX_RECORDS {
+                return Err(E_FORMAT);
+            }
             k.mk[k.nm] = v;
             k.nm += 1;
         }
         for v in keys.fx_keys() {
+            if k.nf >= MAX_RECORDS {
+                return Err(E_FORMAT);
+            }
             k.fk[k.nf] = v;
             k.nf += 1;
         }

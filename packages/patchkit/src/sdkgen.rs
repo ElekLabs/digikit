@@ -304,6 +304,8 @@ struct FormatLimits {
     dsp_slack: u32,
     arena_hdr: u32,
     collect_bytes: u32,
+    table_magic: u32,
+    table_version: u32,
 }
 /// The format limits in file order, then the ones that come from other keys: (generated name, value).
 /// `MAX_VOICES` and `MAX_FX` are the contract maxima `machine_rows` and `fx_slots`.
@@ -322,6 +324,8 @@ fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
         ("DSP_SLACK", f.dsp_slack),
         ("ARENA_HDR", f.arena_hdr),
         ("COLLECT_BYTES", f.collect_bytes),
+        ("TABLE_MAGIC", f.table_magic),
+        ("TABLE_VERSION", f.table_version),
         ("MAX_VOICES", sdk.limits.max.machine_rows as u32),
         ("MAX_FX", sdk.limits.max.fx_slots as u32),
     ]
@@ -397,7 +401,12 @@ fn records_consts(sdk: &Sdk, indent: &str) -> String {
         res.len()
     );
     for (n, r) in &res {
-        let _ = writeln!(s, "{indent}    (RES_{n}, {:?}, {}),", n.to_lowercase(), r.reserved);
+        let _ = writeln!(
+            s,
+            "{indent}    (RES_{n}, {:?}, {}),",
+            n.to_lowercase(),
+            r.reserved
+        );
     }
     let _ = writeln!(s, "{indent}];");
     s
@@ -553,6 +562,8 @@ pub fn machine(text: &str) -> Result<Machine> {
 #[serde(deny_unknown_fields)]
 struct Runtime {
     version: String,
+    /// The runtime version that introduced the header table of a `.dkm`.
+    table: String,
 }
 /// The runtime version of a parsed file as (major, minor, patch).
 fn runtime_parts(sdk: &Sdk) -> Result<(u8, u8, u8)> {
@@ -593,6 +604,12 @@ fn pack_runtime((a, b, c): (u8, u8, u8)) -> u32 {
 }
 
 /// The runtime version of the `sdk/sdk.toml` this crate was built with, packed major << 16 | minor << 8 | patch.
+/// The runtime version that introduced the header table of a `.dkm` (`[runtime] table`), packed: the least version a packed module needs.
+pub fn table_runtime() -> u32 {
+    let sdk = parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses");
+    parse_runtime(&sdk.runtime.table).expect("sdk/sdk.toml [runtime] table")
+}
+
 pub fn embedded_runtime() -> u32 {
     let sdk = parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses");
     pack_runtime(runtime_parts(&sdk).expect("sdk/sdk.toml runtime version"))
@@ -706,6 +723,17 @@ fn parse(text: &str) -> Result<Sdk> {
         if k.fit != k.label.is_some() {
             return Err(err!(
                 "{SOURCE}: capacity kind {n}: a label belongs to a fit kind and a fit kind has one"
+            ));
+        }
+    }
+    match (
+        parse_runtime(&sdk.runtime.table),
+        parse_runtime(&sdk.runtime.version),
+    ) {
+        (Ok(t), Ok(v)) if t <= v => {}
+        _ => {
+            return Err(err!(
+                "{SOURCE}: [runtime] table is not a version, or is newer than version"
             ));
         }
     }
@@ -1027,6 +1055,13 @@ fn python_proto(sdk: &Sdk) -> String {
         let _ = writeln!(s, "{n} = {v}");
     }
     s.push('\n');
+    s.push_str("# the record kinds of a .dkm ([records.kinds])\nRECORD_KIND: dict[str, int] = {\n");
+    let mut kinds: Vec<_> = sdk.records.kinds.iter().collect();
+    kinds.sort_by_key(|(_, k)| k.id);
+    for (n, k) in &kinds {
+        let _ = writeln!(s, "    {n:?}: {},", k.id);
+    }
+    s.push_str("}\n\n");
     s.push_str("CMD: dict[str, int] = {\n");
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "    {n:?}: 0x{v:02X},");
@@ -1097,7 +1132,13 @@ fn ts_proto(sdk: &Sdk) -> String {
     for (n, v) in format_limits(sdk) {
         let _ = writeln!(s, "export const {n} = {v};");
     }
-    s.push('\n');
+    s.push_str("\n/** The record kinds of a `.dkm` (`[records.kinds]`). */\nexport const RECORD_KIND = {\n");
+    let mut kinds: Vec<_> = sdk.records.kinds.iter().collect();
+    kinds.sort_by_key(|(_, k)| k.id);
+    for (n, k) in &kinds {
+        let _ = writeln!(s, "  {n}: {},", k.id);
+    }
+    s.push_str("} as const;\n\n");
     s.push_str("export const CMD = {\n");
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "  {n}: {v:#04x},");
@@ -1890,6 +1931,8 @@ fn imports(sdk: &Sdk) -> Result<Vec<(&Import, Option<Sig>)>> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportInfo {
     pub service: String,
+    /// The import has a stub for an absent provider (`absent`): a module may load without it.
+    pub optional: bool,
     /// The runtime version that added it, packed major << 16 | minor << 8 | patch.
     pub since: u32,
     pub context: String,
@@ -1906,6 +1949,7 @@ pub fn import_infos() -> BTreeMap<String, ImportInfo> {
                 i.name.clone(),
                 ImportInfo {
                     service: s.clone(),
+                    optional: i.absent.is_some(),
                     since: parse_runtime(since).expect("parse checked since"),
                     context: c.clone(),
                 },

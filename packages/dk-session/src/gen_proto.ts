@@ -20,8 +20,21 @@ export const GRANULE = 64;
 export const DSP_SLACK = 8;
 export const ARENA_HDR = 16;
 export const COLLECT_BYTES = 6904;
+export const TABLE_MAGIC = 1145390146;
+export const TABLE_VERSION = 1;
 export const MAX_VOICES = 8;
 export const MAX_FX = 4;
+
+/** The record kinds of a `.dkm` (`[records.kinds]`). */
+export const RECORD_KIND = {
+  PARAM: 1,
+  MACHINE: 2,
+  PAGE: 3,
+  EFFECT: 4,
+  ACTION: 5,
+  NATIVE_PAGE: 6,
+  NATIVE_PAGE_V2: 7,
+} as const;
 
 export const CMD = {
   INFO: 0x01,

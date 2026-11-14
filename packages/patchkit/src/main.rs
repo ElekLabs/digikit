@@ -942,15 +942,25 @@ plan.json {}",
             }
             if !d.register.is_empty() {
                 let k = dkneeds::keys::Keys::parse(&d.register)
-                    .map_err(|e| Error(format!("keys table: {e:?}")))?;
+                    .map_err(|e| Error(format!("header table: {e:?}")))?;
                 println!(
-                    "  keys: {} machine rows, {} param rows, {} page rows; machines {:x?}, effects {:x?}",
-                    k.machine_rows(),
-                    k.param_rows(),
-                    k.page_rows(),
+                    "  table: {} entries; uses {:?}; machines {:x?}, effects {:x?}",
+                    k.n_entries(),
+                    k.uses().map(|u| (u.resource, u.count)).collect::<Vec<_>>(),
                     k.machine_keys().collect::<Vec<_>>(),
                     k.fx_keys().collect::<Vec<_>>()
                 );
+                for n in k.needs() {
+                    println!(
+                        "  needs: service {:08x} from {}{}",
+                        n.service,
+                        patchkit::dkm::fmt_runtime(n.min_version),
+                        if n.hard { "" } else { " (optional)" }
+                    );
+                }
+                for (kind, ks) in k.key_groups() {
+                    println!("  keys: kind {kind}: {:x?}", ks.collect::<Vec<_>>());
+                }
             }
         }
         "pack-section" => {

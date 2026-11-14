@@ -8,6 +8,9 @@ import {
   DkError,
   DkSession,
   HEADER_BYTES,
+  RECORD_KIND,
+  TABLE_MAGIC,
+  TABLE_VERSION,
   fileHashHex,
   fmtVersion,
   hasCap,
@@ -84,18 +87,34 @@ export interface LibraryModule extends HeaderInfo {
 }
 
 const MAGIC = [0x44, 0x4b, 0x4d, 0x46]; // "DKMF"
+const KEYS_TAG = 3; // the KEYS entry of the header table (packages/dkneeds/src/keys.rs)
 
-/** The group of a .dkm: Machines when its keys table (the header's 0x90 pair) lists a machine, Effects when it lists an effect, else Tools. Without the table
- * (a header alone) it is Tools. */
+/** The group of a .dkm: Machines when the KEYS entry of its header table (the header's 0x90 pair) has machine keys, Effects when it has effect keys, else Tools.
+ * Without the table (a header alone, or the table of runtime 0.7) it is Tools. */
 export function groupOf(f: Uint8Array): Group {
   const v = new DataView(f.buffer, f.byteOffset, f.length);
   if (f.length < HEADER_BYTES) return 'Tools';
   const off = v.getUint32(0x90);
   const size = v.getUint32(0x94);
-  if (size >= 12 && off + size <= f.length) {
-    if (v.getUint16(off + 6)) return 'Machines';
-    if (v.getUint16(off + 8)) return 'Effects';
+  if (size < 8 || off + size > f.length || v.getUint32(off) !== TABLE_MAGIC || v.getUint16(off + 4) !== TABLE_VERSION) return 'Tools';
+  const kinds = new Set<number>();
+  let at = off + 8;
+  for (let i = v.getUint16(off + 6); i > 0 && at + 8 <= off + size; i--) {
+    const tag = v.getUint16(at);
+    const count = v.getUint16(at + 2);
+    const len = v.getUint32(at + 4);
+    if (tag === KEYS_TAG) {
+      let g = at + 8;
+      for (let j = 0; j < count && g + 8 <= off + size; j++) {
+        const n = v.getUint32(g + 4);
+        if (n) kinds.add(v.getUint32(g));
+        g += 8 + 4 * n;
+      }
+    }
+    at += 8 + len;
   }
+  if (kinds.has(RECORD_KIND.MACHINE)) return 'Machines';
+  if (kinds.has(RECORD_KIND.EFFECT)) return 'Effects';
   return 'Tools';
 }
 
@@ -349,7 +368,7 @@ async function headerWithKeys(s: DkSession, path: string): Promise<Uint8Array> {
   const v = new DataView(h.buffer, h.byteOffset, h.length);
   const off = v.getUint32(0x90);
   const size = v.getUint32(0x94);
-  if (size < 12 || size > 4096 || off < HEADER_BYTES) return h;
+  if (size < 8 || size > 4096 || off < HEADER_BYTES) return h;
   const t = (await s.read(path, off, size)).bytes;
   const out = new Uint8Array(off + t.length);
   out.set(h);

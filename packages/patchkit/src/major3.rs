@@ -193,15 +193,15 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
         .iter()
         .map(|y| crate::register::effect_id(name, &y.id))
         .collect();
-    let mut keys = vec![0u8; dkneeds::keys::keys_size(mk.len(), fk.len())];
-    dkneeds::keys::write_keys(
-        (u.machine_rows, u.param_rows, u.page_rows),
-        u.record_bytes,
-        &mk,
-        &fk,
-        &mut keys,
-    )
-    .map_err(|e| err!("{id}: keys table: {e:?}"))?;
+    let rows = (
+        u32::from(u.machine_rows),
+        u32::from(u.param_rows),
+        u32::from(u.page_rows),
+    );
+    let mut keys =
+        vec![0u8; dkneeds::keys::keys_size(rows, u32::from(u.record_bytes), mk.len(), fk.len())];
+    dkneeds::keys::write_keys(rows, u32::from(u.record_bytes), &mk, &fk, &mut keys)
+        .map_err(|e| err!("{id}: keys table: {e:?}"))?;
     Ok(Sections {
         keys,
         dsp,
@@ -356,9 +356,12 @@ mod tests {
             gate: false,
         };
         let f = crate::dkm::pack_keys(None, &s.keys, &s.dsp, &o).unwrap();
-        // the bytes of the old contract pairs are reserved zero; the packer links no import here, so the file needs no runtime version
+        // the bytes of the old contract pairs are reserved zero; the packer links no import here, so the file needs the version of the header table
         assert_eq!(&f[0x38..0x40], &[0u8; 8]);
-        assert_eq!(&f[0x30..0x34], &[0u8; 4]);
+        assert_eq!(
+            &f[0x30..0x34],
+            &crate::sdkgen::table_runtime().to_be_bytes()
+        );
         let off = u32::from_be_bytes(f[0x90..0x94].try_into().unwrap()) as usize;
         let size = u32::from_be_bytes(f[0x94..0x98].try_into().unwrap()) as usize;
         assert_eq!(&f[off..off + size], &s.keys[..]);
