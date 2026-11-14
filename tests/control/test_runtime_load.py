@@ -47,8 +47,10 @@ def test_the_runtime_boots_and_answers_info(device, version):
         load_s = time.monotonic() - started
         runtime = report["runtime"]
         assert runtime["patched"] is True and runtime["set"] == "emulator"
-        # the emulator set: 12 modules, core/sample-pool and the run-time effects (their chain, its free rows and their pages) on both devices
-        assert len(runtime["modules"]) == 16
+        # the emulator set: 12 modules, core/sample-pool and the run-time effects (their chain, its free rows and their pages) on both devices, and the
+        # L1 adapter core/platform (R3b) that the runtime requires
+        assert len(runtime["modules"]) == 17
+        assert "core/platform@0.1.0" in runtime["modules"]
         info = Uploader(EmuTransport(emu, limit=2_000_000_000)).info()
         print(
             device,

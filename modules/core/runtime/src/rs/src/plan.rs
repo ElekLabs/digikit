@@ -209,6 +209,15 @@ pub unsafe fn capture(k: usize, file: &[u8]) {
 pub unsafe fn run(count: usize) -> Plan {
     let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
     let k = crate::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
+    // the report counts the selection's paths as used from the start of the boot (`boot::selected`); the plan counts them one by one as it takes the modules
+    let mut c = 0;
+    while c < k {
+        if caps[c].kind == dkrt_sdk::proto::CAPK_SELECTION as u32 {
+            caps[c].used = 0;
+            caps[c].largest = caps[c].limit;
+        }
+        c += 1;
+    }
     let tables = &*addr_of!(TABLES);
     let lens = &*addr_of!(TABLE_LEN);
     let mut mods: [Option<Keys>; SEL_MAX] = [None; SEL_MAX];
@@ -480,6 +489,14 @@ mod tests {
         let m = Table { keys: &[KeyGroup { kind: KIND_MACHINE, keys: &ms }], ..KEEP };
         let p = run(&[Some(bytes(&m)), Some(bytes(&m))]);
         assert_eq!(p.verdicts[..2], [Verdict::Accepted; 2]);
+    }
+
+    #[test]
+    fn a_full_selection_of_modules_that_use_nothing_is_accepted() {
+        // eight modules, eight selection paths and eight module records: the plan counts the paths as it takes the modules, so all fit
+        let tables: Vec<Option<Vec<u8>>> = (0..8).map(|_| Some(bytes(&KEEP))).collect();
+        let p = run(&tables);
+        assert_eq!(p.verdicts[..8], [Verdict::Accepted; 8]);
     }
 
     #[test]
