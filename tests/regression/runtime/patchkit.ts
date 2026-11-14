@@ -1,4 +1,4 @@
-// A test that imports this file runs patchkit: its Nx merge key keeps the patchkit binary (tools/nx/module-targets.mjs,
+// A test that imports this file runs patchkit: its Nx merge key keeps the patchkit binary (tools/nx/device-test-keys.mjs,
 // PATCHKIT_LIVE). Only runtime-plan.ts imports patchkit-exec.ts directly: its `apply --set` result is the image, plan and address map
 // hashed in dist/bytes/images.sha256 (an explicit module list goes through runtime-plan-modules.ts, which imports this file).
 export { patchkit, patchkitBinary } from './patchkit-exec.ts';

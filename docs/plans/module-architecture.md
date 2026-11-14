@@ -358,7 +358,7 @@ A `raw` machine adds one line: `contract = "raw"`.
   `apps/desktop/ui/src/memory-backend.ts` and its preview fixtures.
 - Templates: `sdk/templates/*/module.toml`.
 - Manifests: the 9 content modules, every fixture in `tests/fixtures/modules/`, the 21 `core/*` modules (`type` removed).
-- Tests that pin the strings: `tests/patchkit/test_pk_new.py`, `tests/patchkit/test_pk_package.py`, `tests/devtools/test_layercheck.py`,
+- Tests that pin the strings: `tests/patchkit/test_pk_new.py`, `tests/patchkit/test_pk_package.py`,
   `tests/devtools/test_verify.py`, `tests/conformance/load.ts`.
 - Docs: `docs/MODULE-AUTHORING.md`, `docs/design/digikit-dkm.md`, `docs/design/module-sdk.md` (D2, D10).
 

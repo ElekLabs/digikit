@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, expect, it } from 'vitest';
-import { testImportInputs } from '../test-imports.mjs';
+import { testImportInputs } from '../ts-imports.mjs';
 
-const root = mkdtempSync(join(tmpdir(), 'digikit-test-imports-'));
+const root = mkdtempSync(join(tmpdir(), 'digikit-ts-imports-'));
 const repository = fileURLToPath(new URL('../../../', import.meta.url));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const write = (file: string, content: string) => {

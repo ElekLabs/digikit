@@ -1,5 +1,5 @@
 // Lint check (run by `pnpm lint`): test code starts patchkit in one place, tests/regression/runtime/patchkit-exec.ts, which refuses to
-// run unless the Nx task is marked live (DIGI_PATCHKIT_LIVE, set by tools/nx/module-targets.mjs from the same rule that puts the patchkit
+// run unless the Nx task is marked live (DIGI_PATCHKIT_LIVE, set by tools/nx/device-tests.mjs from the same rule that puts the patchkit
 // binary in the cache key). Scanned: the .ts and .mjs files of the test dirs and of the helper packages the device tests import. Outside
 // patchkit-exec.ts and its re-export patchkit.ts:
 //  - no DIGI_PATCHKIT, DIGI_PATCHKIT_BIN or dist/patchkit (the binary lookup);
