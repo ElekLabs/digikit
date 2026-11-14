@@ -18,7 +18,16 @@ export const PACK_VERDICTS = 'patchkit:pack-verdicts';
 export const EMU_SLOT = 'node tools/devtools/emu-slot.mjs --';
 
 // `opts`: see deviceInputs (device-test-keys.mjs).
-export const deviceTarget = (root, tests, recs, imageInput, importInputs, uploadable = false, opts = {}) => {
+export const deviceTarget = (
+  root,
+  tests,
+  recs,
+  imageInput,
+  importInputs,
+  pythonInputs,
+  uploadable = false,
+  opts = {},
+) => {
   const dependsOn = ['patchkit:cli', 'digi-control:daemons', IMAGE_BUILD, DEVICE_BYTES, DEVICE_IMAGES, PACK_VERDICTS];
   if (uploadable) dependsOn.push('pack');
   for (const rec of recs) {
@@ -27,7 +36,16 @@ export const deviceTarget = (root, tests, recs, imageInput, importInputs, upload
     if (rec.plusdrive) dependsOn.push('plusdrive-format:cli');
     if (rec.dksampleWasm) dependsOn.push('dksample:wasm');
   }
-  const { inputs, patchkitLive } = deviceInputs(root, tests, recs, imageInput, importInputs, uploadable, opts);
+  const { inputs, patchkitLive } = deviceInputs(
+    root,
+    tests,
+    recs,
+    imageInput,
+    importInputs,
+    pythonInputs,
+    uploadable,
+    opts,
+  );
   return {
     executor: 'nx:run-commands',
     cache: true,
@@ -49,8 +67,18 @@ export const deviceTarget = (root, tests, recs, imageInput, importInputs, upload
 // runs every file with full inputs.
 // Each run target is split in two halves, `<name>--dt2` and `<name>--dn2` (env DIGI_DEVICE), so they run in
 // parallel. `<name>` stays as a no-op parent with the inputs of the run target.
-export const deviceTargets = (name, root, tests, recs, imageInput, importInputs, uploadable = false, opts = {}) => {
-  const targets = fileTargets(name, root, tests, recs, imageInput, importInputs, uploadable, opts);
+export const deviceTargets = (
+  name,
+  root,
+  tests,
+  recs,
+  imageInput,
+  importInputs,
+  pythonInputs,
+  uploadable = false,
+  opts = {},
+) => {
+  const targets = fileTargets(name, root, tests, recs, imageInput, importInputs, pythonInputs, uploadable, opts);
   const split = {};
   for (const [key, target] of Object.entries(targets)) {
     if (!target.options?.command) {
@@ -70,13 +98,23 @@ export const deviceTargets = (name, root, tests, recs, imageInput, importInputs,
   return split;
 };
 
-const fileTargets = (name, root, tests, recs, imageInput, importInputs, uploadable = false, opts = {}) => {
+const fileTargets = (
+  name,
+  root,
+  tests,
+  recs,
+  imageInput,
+  importInputs,
+  pythonInputs,
+  uploadable = false,
+  opts = {},
+) => {
   const allName = `${name}-all`;
   const merge = opts.mergeTests ?? [];
   const isMerge = (test) => !opts.twin || merge.includes(test);
   // `merge`: the key of the merge target (the target everything selects); the `-all` twins keep the full key.
   const build = (list, narrow, recList = recs, merge = false) =>
-    deviceTarget(root, list, recList, imageInput, importInputs, uploadable, { ...opts, narrow, merge });
+    deviceTarget(root, list, recList, imageInput, importInputs, pythonInputs, uploadable, { ...opts, narrow, merge });
   if (tests.length === 1) {
     const [test] = tests;
     const targets = { [name]: build(tests, !isMerge(test), recs, Boolean(opts.twin)) };
@@ -143,7 +181,7 @@ export const conformanceTarget = (workspaceRoot, root, m, f, importInputs) => ({
 });
 
 // Nodes of the test-only projects (their device targets); appended to `nodes`.
-export const testOnlyNodes = (workspaceRoot, testOwners, byId, coreBuilds, importInputs, nodes) => {
+export const testOnlyNodes = (workspaceRoot, testOwners, byId, coreBuilds, importInputs, pythonInputs, nodes) => {
   for (const [file, config] of testOwners) {
     const root = dirname(file);
     const tests = globSync('**/*.device.test.ts', { cwd: join(workspaceRoot, root) })
@@ -175,6 +213,7 @@ export const testOnlyNodes = (workspaceRoot, testOwners, byId, coreBuilds, impor
       recs,
       patchIds ? { input: 'production', projects: patchIds } : null,
       importInputs,
+      pythonInputs,
       false,
       {
         twin: targetName === 'test-device',

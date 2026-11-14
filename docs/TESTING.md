@@ -94,8 +94,7 @@ reads or external inputs require input/output review and scoped invalidation/res
 only the support/session pair was timed, not whole preflight. The standalone runtime unit target
 remains uncached; all test-only device targets, including `core/runtime-tests`, are cached like other module device targets.
 Plugin sources are not inputs of module device targets. A `runtimeAcceptance` record may set `dksampleWasm: true`
-(depends on `dksample:wasm`) and `pythonTools` (`true` hashes the Python tools in `PYTHON_TOOL_SOURCES`; `"client"` hashes only the smaller
-`PYTHON_CLIENT_SOURCES`; both in `tools/nx/device-test-keys.mjs`, for tests that spawn Python tools).
+(depends on `dksample:wasm`). Python tools need no record flag: list the `.py` tools a test runs in the record's `sources`. `tools/nx/py-imports.mjs` follows their `tools.*` imports (including function-local imports and `-m tools.x` strings) and hashes those files. Relative imports are not followed.
 
 | Command | What runs |
 | --- | --- |

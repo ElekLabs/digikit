@@ -10,6 +10,7 @@ import { read, records, mergeTests, packDevices, isUploadable } from './module-m
 import { buildObjectsTarget, packTarget, packAliasesTarget } from './module-build.mjs';
 import { deviceTargets, checkMergeTests, conformanceTarget, testOnlyNodes, regressionNode } from './device-tests.mjs';
 import { testImportInputs } from './ts-imports.mjs';
+import { pythonImportInputs } from './py-imports.mjs';
 
 export { createDependencies } from './module-dependencies.mjs';
 
@@ -19,6 +20,8 @@ export const createNodesV2 = [
     // Lazy for manifests without device targets (including small plugin fixtures).
     let imports;
     const importInputs = (files) => (imports ??= testImportInputs(ctx.workspaceRoot))(files);
+    let py;
+    const pythonInputs = (seeds) => (py ??= pythonImportInputs(ctx.workspaceRoot))(seeds);
     const files = matched.filter((f) => f.endsWith('/module.toml'));
     const testOwners = matched
       .filter((f) => f.endsWith('/project.json'))
@@ -111,7 +114,7 @@ export const createNodesV2 = [
       if (shipped && deviceTests.length)
         Object.assign(
           targets,
-          deviceTargets('test-device', root, deviceTests, recs, null, importInputs, uploadable, {
+          deviceTargets('test-device', root, deviceTests, recs, null, importInputs, pythonInputs, uploadable, {
             twin: true,
             moduleId: m.id,
             mergeTests: mergeTests(join(ctx.workspaceRoot, root)),
@@ -122,7 +125,7 @@ export const createNodesV2 = [
       if (Object.keys(targets).length) project.targets = targets;
       return [f, { projects: { [root]: project } }];
     });
-    testOnlyNodes(ctx.workspaceRoot, testOwners, byId, coreBuilds, importInputs, nodes);
+    testOnlyNodes(ctx.workspaceRoot, testOwners, byId, coreBuilds, importInputs, pythonInputs, nodes);
     if (matched.includes('tests/regression/project.json')) nodes.push(regressionNode(ctx.workspaceRoot, importInputs));
     return nodes;
   },
