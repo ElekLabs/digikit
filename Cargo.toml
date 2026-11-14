@@ -27,6 +27,7 @@ members = [
     "packages/emulator/sharc-rt",
     "packages/emulator/sharc-stats",
     "packages/dkaddrmap",
+    "packages/dksharc",
     "packages/dkneeds",
     "packages/dkupload",
     "packages/dkmidi",
