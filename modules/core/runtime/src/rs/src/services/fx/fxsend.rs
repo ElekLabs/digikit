@@ -482,3 +482,16 @@ unsafe fn tracks(inf: *const u32) {
         k += 1;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The offsets that the device tests read from `DKRT_FXS` (`fx-routes-ui.ts`, `fx-track-route-kit.device.test.ts`).
+    #[test]
+    fn the_layout_the_device_tests_read_is_unchanged() {
+        assert_eq!(core::mem::offset_of!(SendState, restores), 16);
+        assert_eq!(core::mem::offset_of!(SendState, allow), 40);
+        assert_eq!(core::mem::offset_of!(SendState, dflt), 44);
+    }
+}

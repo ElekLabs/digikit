@@ -21,9 +21,9 @@ use core::ptr::addr_of_mut;
 use dkrt_abi::link::*;
 
 /// Requests the queue holds at once (the loader, the track writer, the core's clears and one spare).
-pub const REQ_MAX: usize = 4;
-/// Live words (the effect pages' knobs and MIX, and the send amounts: 4 rows of 9 and 4 words, with room).
-pub const SLOT_MAX: usize = 64;
+pub const REQ_MAX: usize = 3;
+/// Live words: 4 effect rows of 8 page words (7 knobs and MIX) and 4 send amounts.
+pub const SLOT_MAX: usize = 48;
 /// The bytes of one transfer of a bulk. A multiple of 4.
 pub const CHUNK: u32 = 4096;
 /// Pump passes a live word waits after a failed write before it is sent again.
@@ -37,7 +37,7 @@ pub enum Sent {
     Accepted,
     /// Busy or ending: try again later.
     Refused,
-    /// Never: a bad destination, or the loader is retained.
+    /// Never: an area send with a bad destination, or while the loader is retained (the answer -2 of `dl_send`).
     Hard,
 }
 
@@ -296,7 +296,7 @@ impl<T: Transport> Link<T> {
     pub fn submit(&mut self, owner: Owner, stream: &Stream) -> Option<Ticket> {
         let mut r = REQ0;
         r.owner = owner.index() as u8;
-        let (kind, steps, len) = if let Stream::Bulk { dst, src, len } = *stream {
+        let (kind, steps, len) = if let &Stream::Bulk { dst, src, len } = stream {
             if src.is_null() || len == 0 || len & 3 != 0 || dst & 3 != 0 {
                 return None;
             }
@@ -305,7 +305,8 @@ impl<T: Transport> Link<T> {
             r.src = src;
             r.len = len;
             (K_BULK, 0, len)
-        } else if let Stream::Owned { win, dst, len, bytes } = *stream {
+        } else if let Stream::Owned { win, dst, len, bytes } = stream {
+            let (win, dst, len) = (*win, *dst, *len);
             if len == 0 || len & 3 != 0 || len as usize > OWNED_MAX || win >= WIN_RESERVED {
                 return None;
             }
@@ -313,9 +314,9 @@ impl<T: Transport> Link<T> {
             r.win = win;
             r.dst = dst;
             r.len = len as u32;
-            r.bytes = bytes;
+            r.bytes = *bytes;
             (K_OWNED, 0, len as u32)
-        } else if let Stream::Sequence(seq) = *stream {
+        } else if let Stream::Sequence(seq) = stream {
             if seq.n == 0 || seq.n as usize > SEQ_MAX {
                 return None;
             }
@@ -327,7 +328,7 @@ impl<T: Transport> Link<T> {
                 i += 1;
             }
             r.kind = K_SEQ;
-            r.seq = seq;
+            r.seq = *seq;
             (K_SEQ, seq.n as u32, seq.n as u32 * 4)
         } else {
             return None;
@@ -614,14 +615,14 @@ impl<T: Transport> Link<T> {
                         self.live[j].tries = e.tries.saturating_add(1);
                     }
                     self.flight = Flight { kind: F_LIVE, idx: j as u8, win: e.win, ver: e.ver, word: e.word, value: e.value };
-                    self.cursor = ((j + 1) % SLOT_MAX) as u8;
+                    self.cursor = if j + 1 == SLOT_MAX { 0 } else { j as u8 + 1 };
                 } else if ok == Sent::Hard {
                     self.live[j].hold = HOLD;
                     self.stats.live_errors += 1;
                 }
                 return;
             }
-            j = (j + 1) % SLOT_MAX;
+            j = if j + 1 == SLOT_MAX { 0 } else { j + 1 };
             n += 1;
         }
         // 3. the oldest request
@@ -677,16 +678,23 @@ pub struct DspTransport;
 
 impl Transport for DspTransport {
     unsafe fn send(&mut self, win: u32, dst: u32, buf: *const u8, len: u32) -> Sent {
-        if crate::dsp::retained() {
-            return Sent::Hard;
-        }
-        let r = if win == 0 { crate::dsp::call_send(dst, buf, len) } else { crate::dsp::call_send_win(win, dst, buf as *const u32, len) };
-        if r == 0 {
-            Sent::Accepted
-        } else if r == -1 {
+        // What the loader did before the queue: the area send (`dl_send`) answered -2 (retained or a bad destination) with a failure, and every other
+        // refusal, a word write included, was tried again until the loader's guard ended it. A retained state therefore holds word writes; it fails area sends.
+        if win == 0 {
+            let r = crate::dsp::call_send(dst, buf, len);
+            if r == 0 {
+                Sent::Accepted
+            } else if r == -1 {
+                Sent::Refused
+            } else {
+                Sent::Hard
+            }
+        } else if crate::dsp::retained() {
             Sent::Refused
+        } else if crate::dsp::call_send_win(win, dst, buf as *const u32, len) == 0 {
+            Sent::Accepted
         } else {
-            Sent::Hard
+            Sent::Refused
         }
     }
     unsafe fn poll(&mut self) -> Poll {
