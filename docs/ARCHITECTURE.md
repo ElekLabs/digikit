@@ -86,7 +86,7 @@ Today the runtime is one crate in which L2 and L3 code is mixed, and the service
 
 ## Boundaries and tests
 
-This section is the target. The interfaces and fakes below are not built yet: B and C (with `FakeService` and `FakeCore`) arrive with R2c, and the Platform interface (with `FakePlatform`) with R3. After R3, test-speed item 7 moves logic tests from the device to the host. The rule for review of deleted tests applies to each move: a host test replaces a device test only when it covers the same path.
+This section is the target. Interface B exists as the `Service` trait and its static list in `modules/core/runtime/src/rs/src/handlers.rs`, with `FakeService` in `handlers/tests.rs`. C (with `FakeCore`) is built beside it in R2c, and the Platform interface (with `FakePlatform`) arrives with R3. After R3, test-speed item 7 moves logic tests from the device to the host. The rule for review of deleted tests applies to each move: a host test replaces a device test only when it covers the same path.
 
 Each layer has entry points (what the layer above calls) and exit points (what the layer calls), and is tested at those points.
 
