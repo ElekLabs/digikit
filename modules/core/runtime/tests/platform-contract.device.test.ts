@@ -26,7 +26,7 @@ interface Row {
   device_pending?: string;
 }
 
-const contract = parse(fs.readFileSync(path.join(HERE, 'platform/contract.toml'), 'utf8')) as { check: Row[] };
+const contract = parse(fs.readFileSync(path.join(HERE, 'platform/contract.toml'), 'utf8')) as unknown as { check: Row[] };
 
 runtimeTests('platform contract: identity, MIDI output and anchors on the real platform', async (runtime) => {
   const { session, dk } = runtime;

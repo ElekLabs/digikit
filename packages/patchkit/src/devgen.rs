@@ -407,7 +407,7 @@ impl Facts {
                 other => {
                     return Err(err!(
                         "{short}: [capabilities] card = {other:?}: a digikit device is \"slots\" (samples in the store) or \"path-fs\" (the firmware's folder filesystem)"
-                    ))
+                    ));
                 }
             };
             if k.sample_path_max == 0 || k.sample_path_max > 254 {

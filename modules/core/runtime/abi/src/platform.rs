@@ -39,7 +39,14 @@ pub trait Tasking {
     /// Sleep `us` microseconds (task context).
     unsafe fn sleep_us(&self, us: u32);
     /// Create a task on `tcb` and `stack`; `true` when the kernel accepted it. It starts with `task_start`.
-    unsafe fn task_create(&self, tcb: u32, entry: u32, priority: u32, stack: u32, stack_bytes: u32) -> bool;
+    unsafe fn task_create(
+        &self,
+        tcb: u32,
+        entry: u32,
+        priority: u32,
+        stack: u32,
+        stack_bytes: u32,
+    ) -> bool;
     unsafe fn task_start(&self, tcb: u32);
     /// The current task's TCB address.
     unsafe fn current_task(&self) -> u32;
@@ -55,7 +62,13 @@ pub trait SamplePool {
     /// The firmware's sample worker object; 0 when it does not exist yet.
     unsafe fn worker(&self) -> u32;
     /// Queue a job on the worker (`job` and `done` are its two 32-byte function and flag tables).
-    unsafe fn worker_queue(&self, worker: u32, name: *const u8, job: *mut c_void, done: *mut c_void);
+    unsafe fn worker_queue(
+        &self,
+        worker: u32,
+        name: *const u8,
+        job: *mut c_void,
+        done: *mut c_void,
+    );
 }
 
 /// Optional provider: the staged writer of the +Drive filesystem (`dkpw_*`). Its calls stay with the store writer; this says whether they may be made.
