@@ -34,6 +34,7 @@ export const RECORD_KIND = {
   ACTION: 5,
   NATIVE_PAGE: 6,
   NATIVE_PAGE_V2: 7,
+  LFO_SHAPE: 8,
 } as const;
 
 export const CMD = {

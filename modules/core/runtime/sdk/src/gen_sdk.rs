@@ -92,8 +92,10 @@ pub mod records {
     pub const LEN_NATIVE_PAGE: u32 = 0x90;
     pub const KIND_NATIVE_PAGE_V2: u32 = 7;
     pub const LEN_NATIVE_PAGE_V2: u32 = 0x98;
+    pub const KIND_LFO_SHAPE: u32 = 8;
+    pub const LEN_LFO_SHAPE: u32 = 0x4c;
     /// Every record kind in the order of its number: (kind, record length with its header, owning service).
-    pub const KINDS: [(u32, u32, &str); 7] = [
+    pub const KINDS: [(u32, u32, &str); 8] = [
         (KIND_PARAM, LEN_PARAM, "machines"),
         (KIND_MACHINE, LEN_MACHINE, "machines"),
         (KIND_PAGE, LEN_PAGE, "machines"),
@@ -101,6 +103,7 @@ pub mod records {
         (KIND_ACTION, LEN_ACTION, "machines"),
         (KIND_NATIVE_PAGE, LEN_NATIVE_PAGE, "machines"),
         (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2, "machines"),
+        (KIND_LFO_SHAPE, LEN_LFO_SHAPE, "lfo"),
     ];
     /// The kinds of the `samples` service: (kind, record length).
     pub const KINDS_SAMPLES: [(u32, u32); 0] = [
@@ -118,6 +121,10 @@ pub mod records {
     pub const KINDS_FX: [(u32, u32); 1] = [
         (KIND_EFFECT, LEN_EFFECT),
     ];
+    /// The kinds of the `lfo` service: (kind, record length).
+    pub const KINDS_LFO: [(u32, u32); 1] = [
+        (KIND_LFO_SHAPE, LEN_LFO_SHAPE),
+    ];
     /// The services of `[handle] services`: the names a module's `NEEDS` may carry (hashed by `dkneeds::keys::name_hash`).
     pub const HANDLE_SERVICES: [&str; 9] = [
         "runtime",
@@ -131,7 +138,7 @@ pub mod records {
         "sdhc_large",
     ];
     /// The kind names of `[records.kinds]` in lower case with their numbers: the `kind` of a `[[record]]` of a module.toml.
-    pub const KIND_NAMES: [(&str, u32); 7] = [
+    pub const KIND_NAMES: [(&str, u32); 8] = [
         ("param", KIND_PARAM),
         ("machine", KIND_MACHINE),
         ("page", KIND_PAGE),
@@ -139,9 +146,11 @@ pub mod records {
         ("action", KIND_ACTION),
         ("native_page", KIND_NATIVE_PAGE),
         ("native_page_v2", KIND_NATIVE_PAGE_V2),
+        ("lfo_shape", KIND_LFO_SHAPE),
     ];
     /// The kinds a module emits with `dk_record_add`.
-    pub const GENERIC_KINDS: [u32; 0] = [
+    pub const GENERIC_KINDS: [u32; 1] = [
+        KIND_LFO_SHAPE,
     ];
     pub const RES_MACHINE_ROWS: u32 = 1;
     pub const RES_PARAM_ROWS: u32 = 2;

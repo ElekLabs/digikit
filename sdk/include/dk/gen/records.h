@@ -17,5 +17,7 @@
 #define DK_RECORD_LEN_NATIVE_PAGE 144 /* with the 8-byte record header */
 #define DK_RECORD_KIND_NATIVE_PAGE_V2 7 /* not generic: a builder writes it */
 #define DK_RECORD_LEN_NATIVE_PAGE_V2 152 /* with the 8-byte record header */
+#define DK_RECORD_KIND_LFO_SHAPE 8
+#define DK_RECORD_LEN_LFO_SHAPE 76 /* with the 8-byte record header */
 
 #endif /* DK_GEN_RECORDS_H */
