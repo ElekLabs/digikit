@@ -137,12 +137,33 @@ The second command is an all-zero module table: no module loaded. With real byte
 `--snapshot SYMBOL=HEX`; the table lists every module with `base` and `dsp_base`, and the same flags name addresses in the same call. `wb profile record --image X.syx` (emulator) and
 `tools/device/dklog.py` (device) do the peeking.
 
+## Workbench
+
+The desktop Log pane names addresses of the **emulator** and of a **device** (`apps/desktop/ui/src/log-names*.ts`, `dkprof-env.ts`); the shared text builders are in
+`packages/dk-session/src/runtime-log.ts`. One path serves both origins: the load table is read through the dk-session protocol with PEEK of the debug module
+(`DkSession.peek`; the capability PEEK, so `digikit/debug` must be loaded), on the session the follower already uses, and `dkprof.wasm` decodes it. `mem.cf.peek` is not used.
+Only the source of the ship map differs. **Hardware proof is a later, explicit step**: the device path runs in the emulator over the same code
+(`modules/core/runtime/tests/log-names.device.test.ts`, registered, run in the batched gate), and the host tests use a fake session for both origins.
+
+- Emulator: the controller call `runtime.maps` ([CONTROL.md](CONTROL.md)) returns the ship map of the running image, made from its patch record where `dev.reload` makes its plan, and
+  the addresses of `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info`; it follows a module swap.
+- Device: `firmware_prepare` keeps the ship map and the same symbol addresses of the image it prepares in `out/addrmap/<device>/<image id>.ship.json` (`library::store_ship`).
+  The follower picks the record whose image id equals the id INFO reports. A device whose image was not prepared by this workbench has no names: the Log says why once.
+- Modules: `lib_build` writes `M.addrmap.json` beside each `M.dkm` in `out/modules/<device>/`. The Host command `library.readMaps(device)` returns these and the kept ship
+  maps; `host.firmware.dkprofWasm()` gives the wasm.
+- When the maps are read: before the first entry that names an address (a crash, a fault) and again after the module list changed. Without PEEK, without a map for the image or when the
+  maps do not match the running bytes, the pane shows hex and one line `names unavailable: <reason>`.
+- Text: a name is appended as ` (module: function+0xNN)` after the `pc` of a crash and the `at` of a stopped DSP, and a stack word that names code is listed as a return
+  address in the detail of a fault. An address no map holds stays hex. Records of an earlier boot (crash, fault) mark a module name `unverified`: the module sits at the load
+  addresses of the boot that reads the record (above). Whether the DSP's last word of a fault record is a SHARC PC is unverified [O]: it is named only when a module's DSP map holds it.
+- The Memory panel lists, under each bar, what each loaded module takes of the resource (`moduleRows`, from CAPACITY and the module files' needs).
+
 ## Consumers
 
 | Tool | Use |
 | --- | --- |
 | `tools/device/dklog.py crash --image X.syx [--module M.dkm]` | pc, registers and return-address-looking stack words of a crash record |
-| `wb profile record`, `wb profile report` | `cf.profile` of the emulator (feature `cf-profile`) by function and module ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)); `--map out/addrmap/<device>-<version>.dev.json` adds firmware names |
+| `wb profile record`, `wb profile report` | `cf.profile` (feature `cf-profile`) or, with `--cpu sharc`, `sharc.profile` (feature `sharc-profile`) of the emulator by function, loop and module ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)); `--map out/addrmap/<device>-<version>.dev.json` adds firmware names |
 | `tools/devtools/fastcov.py` | SHARC function names of the interpreter report |
 | `tools/emulator/snapread.py` | ColdFire names for `regs` and `tasks` (the image comes from the snapshot path or `--image`) |
 | `tools/devtools/pcdump_names.py` | a `func` column and names in the `#stack-max` line of a `pcdump.csv` |

@@ -15,7 +15,6 @@ export function runtimeTests(
     patchSet?: string;
     dsp?: SessionOptions['dsp'];
     mirror?: boolean;
-    timeout?: number;
     devices?: readonly Device[];
     full?: boolean;
     skip?: string;
@@ -28,14 +27,10 @@ export function runtimeTests(
       `${device.toUpperCase()} ${FIRMWARE[device]}`,
       () => {
         const handle = withPatchedSession({ ...liveOptions(device, opts), dsp: opts.dsp }, name);
-        test(
-          name,
-          async () => {
-            await expectRuntimeBoot(handle.runtime);
-            await timePhase('scenario.body', () => body(handle.runtime), timingContext(handle.runtime.session));
-          },
-          opts.timeout,
-        );
+        test(name, async () => {
+          await expectRuntimeBoot(handle.runtime);
+          await timePhase('scenario.body', () => body(handle.runtime), timingContext(handle.runtime.session));
+        });
       },
     );
   }

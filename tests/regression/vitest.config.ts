@@ -71,8 +71,9 @@ export default defineConfig({
         test: {
           name: 'proofs',
           include: ['runtime/**/*.test.ts'],
-          testTimeout: 300_000,
-          hookTimeout: 150_000,
+          // Backstops; see the runtime project.
+          testTimeout: 1_800_000,
+          hookTimeout: 600_000,
         },
       },
       {

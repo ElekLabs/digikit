@@ -3,7 +3,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Sample, prepareUpload } from '@digi/dk-session/dksample';
 import { openSamples } from '@digi/dk-session/samples';
-import { button, repoRoot } from '@digi/test-support';
+import { button, repoRoot, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
@@ -12,6 +12,7 @@ import { memory, panel } from '@digi/regression/runtime/panel.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { expectedWindow, setSmp, trackApi as sharedTrackApi } from './shot-support.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 // End to end, DT2 1.17: the device-neutral runtime (API 1.5 sample pool), core/sample-pool (the borrowed stock pool), machine contract 1.2
 // and digikit/shot playing a stereo sample that a fixture module added to the pool by path (docs/design/sample-api-1.5.md).
@@ -218,12 +219,15 @@ function trackApi({ dk }: PatchedSession) {
   return { add, clear, select, status, settle };
 }
 
+/** The PCM clock of a capture (stereo frames since it began), with the session it reads. */
+type PcmClock = (() => Promise<number>) & { session: Session };
+
 /** A note on TRIG 1 held while `during` runs; returns the captured PCM. The clock counts stereo frames since the capture began
  * (pcm.tap reports floats, two per frame). */
 async function captureNote(
   { session }: Pick<PatchedSession, 'session'>,
   file: string,
-  during: (clock: () => Promise<number>) => Promise<void>,
+  during: (clock: PcmClock) => Promise<void>,
 ): Promise<Capture> {
   const tapReport = async () =>
     (await session.client.call('pcm.tap', { action: 'report' })) as { samples: number; window_rms: number[] };
@@ -231,19 +235,14 @@ async function captureNote(
   await session.client.call('pcm.tap', { action: 'start' });
   await session.client.call('pcm.tap', { action: 'capture', path: file });
   const base = await floats();
-  const clock = async () => Math.floor(((await floats()) - base) / 2);
+  const clock: PcmClock = Object.assign(async () => Math.floor(((await floats()) - base) / 2), { session });
   let pressedAt = 0;
   try {
     // A one-shot keeps sounding after the key is released: wait until the output has been silent for 0.3 s, then press.
-    await expect
-      .poll(
-        async () => {
+    await expectPollEmulated(session, async () => {
           const windows = (await tapReport()).window_rms;
           return windows.length >= 3 && windows.slice(-3).every((v) => v < 1e-4);
-        },
-        { timeout: 40_000, interval: 200 },
-      )
-      .toBe(true);
+        }, (value) => expect(value).toBe(true), { emulatedMs: 40000, intervalMs: 200 });
     pressedAt = await clock();
     await session.client.inputButton(button('TRIG 1'), true);
     try {
@@ -261,8 +260,11 @@ async function captureNote(
   return { ...capture, pressedAt };
 }
 
-async function until(clock: () => Promise<number>, frames: number, timeoutMs = 120_000): Promise<void> {
-  await expect.poll(clock, { timeout: timeoutMs, interval: 100 }).toBeGreaterThanOrEqual(frames);
+async function until(clock: PcmClock, frames: number, emulatedMs = 120_000): Promise<void> {
+  await expectPollEmulated(clock.session, clock, (value) => expect(value).toBeGreaterThanOrEqual(frames), {
+    emulatedMs,
+    intervalMs: 100,
+  });
 }
 
 // ---- the test ------------------------------------------------------------------------------------------------------------------
@@ -504,7 +506,7 @@ runtimeTests(
       await session.client.inputButton(button('TRIG 1'), true);
       let turned: Awaited<ReturnType<typeof ui.turnTo>>;
       try {
-        await expect.poll(readPitch, { timeout: 10_000, interval: 100 }).toBe(0x4000);
+        await expectPollEmulated(session, readPitch, (value) => expect(value).toBe(0x4000), { emulatedMs: 10000, intervalMs: 100 });
         turned = await ui.turnTo('ENC A', readPitch, PITCH_OCTAVE);
       } finally {
         await session.client.inputButton(button('TRIG 1'), false);

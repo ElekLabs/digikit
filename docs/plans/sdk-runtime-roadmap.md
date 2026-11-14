@@ -39,7 +39,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | Stop | | Review the R4 answer with Em: it decides the owner of DSP dispatch and where `DK_SPAN` lives | R4 | reviewed | DSP dispatch is owned by the `machines` and `fx` services; `DK_SPAN` lives in the image stub |
 | 2 | P2 | Shared Rust library, `wb:cli` profile and addrmap commands, JSON output | P1 | done | PR 457; phase A (host): dkprof, dkprof.wasm, `wb` addrmap, module and profile commands, patchkit on the dksharc readers; phase B (one real emulator profile; `cfprof.py` removed after equal numbers) |
 | 2 | P3 | sharcdb tables for module DSP sections | P1 | done | PR 450 (dksharc, Rust static analysis of module DSP sections, slice 1); this PR (P3b, DSP names in the address map: pack writes sharc entries, dkaddrmap decodes the load table from the DKRT_STATE/DKRT_DSP/dyndsp_info snapshot, readers are thin callers) |
-| 2 | P4 | Per-module cost, machine budget check, fast-tier refusals per module | P2, P3 | todo | |
+| 2 | P4 | Per-module cost, machine budget check (fast-tier refusals moved to P5) | P2, P3 | done | done (this PR): `sharc.profile`, DSP attribution by function and loop in `wb profile report`, `patchkit budget` (Rust, `dkprof::budget`) behind `module:check` |
 | 2 | S5 | SDK DSP contract: DSP rules, derived cycle cost, `DK_SPAN` | R4, P3, P4 | todo | |
 | 3 | R2 | Runtime deletions and split; sink slots; service anatomy: a service is a module with a role (settled before R7) | S4 | R2a, R2b, R2c, R2d done; R2 done after the gate | |
 | 3 | R3 | R3a Platform trait; R3b adapter move (see runtime-and-services, Platform adapter) | R2 | R3a and R3b done (this PR); the image changes (two device words, the `core/platform` adapter object), so they gate together | |
@@ -48,9 +48,9 @@ Status: `todo`, `active`, `done`, `parked`.
 | 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | done (this PR) | one generated kind and service table, `dk_record_add`, the header table, the boot planner and its verdict, declare-check-commit, the `lfo` service ([runtime-and-services.md](runtime-and-services.md) 4.1) |
 | 3 | R13 | Storage interface and files memory (split out of R7) | R7 | todo | runtime-and-services item 13 |
 | 3 | R8 | Spike, whole path | R7 | todo | |
-| 3 | P6 | Workbench: names in the Log pane, first utilisation pane (UI lane) | P2 | todo | |
+| 3 | P6 | Workbench: names in the Log pane, first utilisation view (UI lane) | P2 | done (this PR): Log names, Memory per-module rows; Profile pane moves to P8 | ui/p6-names |
 | Stop | | Review the model with Em; the contract is proven by the new kind | R7, R8 | | |
-| 4 | P8 | `DK_SPAN`, sink slot, `profile.dks`, DSP stats window | R2, R6, R4 answer | todo | |
+| 4 | P8 | `DK_SPAN`, sink slot, `profile.dks`, DSP stats window, and the Profile pane (moved from P6) | R2, R6, R4 answer | todo | |
 | 4 | P9 | Device calibration; the broker's cycle budget uses the measured factor | P8; device transport proven on hardware, with Em's go | todo | |
 | 5 | R9 | `fx` linked in | R8 | todo | |
 | 5 | R10 | `machines` linked in; layer check final | R9 | todo | |

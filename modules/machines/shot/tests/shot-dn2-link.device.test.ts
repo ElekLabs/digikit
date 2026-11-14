@@ -35,7 +35,7 @@ dn2Tests(
     const gain = async () => (await rows(session, plan, slots))[0]![4]!;
     const burst = async (detents: number, events: number) => {
       for (let i = 0; i < events; i++) {
-        await bounded(() => session.client.inputTurn(encoder('A'), detents));
+        await bounded(() => session.client.inputTurn(encoder('ENC A'), detents));
         await advance(session, 2);
       }
     };

@@ -3184,6 +3184,7 @@ dependencies = [
  "coldfire",
  "dkaddrmap",
  "dkneeds",
+ "dkprof",
  "dkrt-fit",
  "dkrt-sdk",
  "dksharc",

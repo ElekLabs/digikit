@@ -132,6 +132,28 @@ pub fn anchor_entries(port: &Port) -> Vec<Entry> {
         .collect()
 }
 
+/// The byte addresses of the symbols a host reads to decode the load table (`DKRT_STATE`, `DKRT_DSP`, `dyndsp_info`; docs/ADDRMAP.md "Load table"),
+/// for those the image has exactly once.
+pub fn load_symbols(plan: &crate::apply::Plan) -> std::collections::BTreeMap<String, u64> {
+    [
+        dkaddrmap::snapshot::SYM_STATE,
+        dkaddrmap::snapshot::SYM_DSP,
+        dkaddrmap::snapshot::SYM_INFO,
+    ]
+    .iter()
+    .filter_map(|s| {
+        let mut found = plan
+            .symbols
+            .iter()
+            .filter(|(k, _)| k.rsplit(':').next() == Some(*s));
+        match (found.next(), found.next()) {
+            (Some((_, a)), None) => Some((s.to_string(), *a)),
+            _ => None,
+        }
+    })
+    .collect()
+}
+
 /// The ship map of an applied plan.
 pub fn ship_map(plan: &crate::apply::Plan) -> AddrMap {
     let has = |name: &str| {

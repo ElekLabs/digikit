@@ -699,6 +699,8 @@ struct Actor {
     events: Events,
     on_quit: Option<Box<dyn Fn() + Send>>,
     runtime: Option<Runtime>,
+    /// DSP blocks, instructions and idle-skipped instructions the worker had counted when `sharc.profile` started counting.
+    sharc_profile_base: (u64, u64, u64),
     /// The session id the webview protocol checks.
     session: u64,
     /// Raised whenever the runtime is replaced, whoever asked.
@@ -755,6 +757,8 @@ struct Actor {
     runtime_info: Option<Value>,
     /// The ready state `dev.reload` restores before it writes module code (see `rpc_dev_reload`).
     reload: Option<ReloadState>,
+    /// The `runtime.maps` answer for the image with this SHA-256 (the apply that makes it takes about a second).
+    maps_cache: Option<(String, Value)>,
     quit: bool,
     /// Fault, DSP halt and main-loop stall detection (events `fault`, `halt`, `stall`).
     health: Health,
@@ -828,6 +832,7 @@ impl Actor {
             events: config.events,
             on_quit: config.on_quit,
             runtime: None,
+            sharc_profile_base: (0, 0, 0),
             session: 0,
             epoch: 0,
             loaded: None,
@@ -873,6 +878,7 @@ impl Actor {
             repo_root: config.repo_root,
             runtime_info: None,
             reload: None,
+            maps_cache: None,
             quit: false,
             health: Health::new(
                 std::env::var("DIGI_STALL_MS")
@@ -2006,6 +2012,7 @@ impl Actor {
             "flash.read" => self.rpc_flash_read(&p).map(Some),
             "mem.cf.write" => self.rpc_mem_write(&p).map(Some),
             "dev.reload" => self.rpc_dev_reload(&p, &reply),
+            "runtime.maps" => self.rpc_runtime_maps(&p).map(Some),
             "guard.set" => self.rpc_guard_set(&p).map(Some),
             "guard.report" => self
                 .with_runtime(|r| Ok(serde_json::to_value(r.guard_report()).unwrap_or(Value::Null)))
@@ -2051,6 +2058,7 @@ impl Actor {
                     }
                 })
                 .map(Some),
+            "sharc.profile" => self.rpc_sharc_profile(&p).map(Some),
             "dsp.peek" => self.rpc_dsp_peek(&p).map(Some),
             "dsp.peek_word" => self.rpc_dsp_peek_word(&p).map(Some),
             "dsp.patch" => self.rpc_dsp_patch(&p).map(Some),
@@ -2282,6 +2290,52 @@ impl Actor {
             .map(|digest| json!({"digest": digest}))
             .map_err(|e| RpcError::new(code::GUEST_FAULT, e))
         })
+    }
+
+    /// `runtime.maps {modules_dir?}`: what a host needs to name addresses of the image that runs now: `{image_sha256, matches, ship, symbols}`.
+    /// `ship` is the ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` to their byte
+    /// addresses, the memory the host reads (`mem.cf.peek`) for the load table. The map is made from the running image's patch record, so
+    /// after a `dev.reload` swap the next call answers for the new image. `matches` is false when the image on disk gives other bytes than
+    /// the running ones (a hot DSP injection, or an object changed since): the names may be wrong. An image with no patch record is an error.
+    fn rpc_runtime_maps(&mut self, p: &Params) -> RpcResult {
+        let rejected =
+            |m: String| RpcError::new(code::FIRMWARE_REJECTED, format!("runtime.maps: {m}"));
+        let loaded = self.loaded.as_ref().ok_or_else(RpcError::no_firmware)?;
+        let sha = firmware::sha256_hex(&loaded.current);
+        if let Some((s, v)) = &self.maps_cache
+            && *s == sha
+        {
+            return Ok(v.clone());
+        }
+        let record = patchkit::verify::patch_record(&loaded.current)
+            .map_err(|e| rejected(e.to_string()))?
+            .ok_or_else(|| rejected("the running image has no patch record (load a patched image or `runtime: true`)".into()))?;
+        let root = runtime_patch::find_root(
+            p.opt_str("modules_dir")?
+                .map(Path::new)
+                .or(self.repo_root.as_deref()),
+        )
+        .map_err(&rejected)?;
+        let stock = loaded
+            .base
+            .clone()
+            .filter(|b| firmware::sha256_hex(b) == record.base_sha256)
+            .or_else(|| runtime_patch::find_stock(&root, &record.base_sha256))
+            .ok_or_else(|| {
+                rejected(format!(
+                    "the stock image {} is not in firmware/",
+                    record.base_sha256
+                ))
+            })?;
+        let maps = runtime_patch::image_maps(&root, &stock, &loaded.current).map_err(&rejected)?;
+        let value = json!({
+            "image_sha256": sha,
+            "matches": maps.matches,
+            "ship": maps.ship,
+            "symbols": maps.symbols,
+        });
+        self.maps_cache = Some((sha, value.clone()));
+        Ok(value)
     }
 
     /// `mem.cf.peek {addr}`: one guest longword, read without side effects.
@@ -3318,6 +3372,73 @@ impl Actor {
             Err(RpcError::new(
                 code::AUDIO_UNAVAILABLE,
                 "this build has no coupled audio",
+            ))
+        }
+    }
+
+    /// `sharc.profile {enable?}`: DSP instruction counts as raw `dk.profile/1` counters (docs/CONTROL.md). `enable: true` starts (and clears) the
+    /// counting, `enable: false` stops and clears it; no `enable` reads the cumulative counts. Only with the `sharc-profile` feature.
+    fn rpc_sharc_profile(&mut self, p: &Params) -> RpcResult {
+        #[cfg(feature = "sharc-profile")]
+        {
+            let enable = p.opt_bool("enable")?;
+            let started = self.sharc_profile_base;
+            let mut now = None;
+            let answer = self.with_runtime(|r| {
+                let unavailable = |m: &str| RpcError::new(code::AUDIO_UNAVAILABLE, m);
+                if let Some(on) = enable {
+                    if !r.set_sharc_profile(on) {
+                        return Err(unavailable("no DSP audio session"));
+                    }
+                    let frames = r.frames_sent();
+                    now = r.worker_report().map(|w| {
+                        let t = w.tiers.as_ref();
+                        (
+                            frames,
+                            t.map_or(0, |t| t.icount),
+                            t.map_or(0, |t| t.idle_skipped),
+                        )
+                    });
+                    return Ok(json!({"enabled": on}));
+                }
+                let w = r
+                    .worker_report()
+                    .ok_or_else(|| unavailable("no DSP audio session"))?;
+                let (Some(regions), Some(hist)) = (w.region_profile.as_ref(), w.pc_hist.as_ref())
+                else {
+                    return Err(unavailable(
+                        "the DSP profile is off (call sharc.profile with enable: true)",
+                    ));
+                };
+                let counts = crate::sharc_profile::SharcCounts {
+                    blocks: r.frames_sent().saturating_sub(started.0),
+                    icount: w
+                        .tiers
+                        .as_ref()
+                        .map_or(0, |t| t.icount.saturating_sub(started.1)),
+                    idle_skipped: w
+                        .tiers
+                        .as_ref()
+                        .map_or(0, |t| t.idle_skipped.saturating_sub(started.2)),
+                    regions: regions
+                        .entries()
+                        .map(|(pc, e)| (pc, e.fast.instructions, e.aot.instructions))
+                        .collect(),
+                    hist: hist.clone(),
+                };
+                Ok(crate::sharc_profile::profile_json(&counts))
+            })?;
+            if let Some(base) = now {
+                self.sharc_profile_base = base;
+            }
+            Ok(answer)
+        }
+        #[cfg(not(feature = "sharc-profile"))]
+        {
+            let _ = p;
+            Err(RpcError::new(
+                code::METHOD_NOT_FOUND,
+                "built without sharc-profile",
             ))
         }
     }

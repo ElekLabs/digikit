@@ -52,6 +52,12 @@ fn a_session_is_adopted_by_the_load_that_starts_it() {
             .len(),
         17 // the emulator set and core/platform, which the runtime requires
     );
+    // The maps of the running image: the ship map and the addresses the load table is read from (`runtime.maps`).
+    let maps = handle.call("runtime.maps", json!({"session": 3})).unwrap();
+    assert_eq!(maps["matches"], true, "{maps}");
+    assert!(maps["symbols"]["DKRT_STATE"].is_u64(), "{maps}");
+    let ship: serde_json::Value = serde_json::from_str(maps["ship"].as_str().unwrap()).unwrap();
+    assert_eq!(ship["kind"], "ship");
     // The same token again is not newer; a reset takes the next one and keeps the runtime report.
     assert!(stale(handle.call("firmware.load", load)));
     handle.call("restart", json!({"session": 4})).unwrap();
@@ -168,4 +174,19 @@ fn patched_zero_keeps_the_block_clock_through_cache_fallback_and_restart() {
         std::panic::resume_unwind(error);
     }
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_maps_need_a_loaded_image() {
+    let dir = std::env::temp_dir().join(format!("digi-maps-none-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut config = Config::new(None);
+    config.run_dir = dir;
+    let (handle, _join) = spawn(config);
+    let err = handle.call("runtime.maps", json!({})).unwrap_err();
+    assert!(
+        err.message.to_lowercase().contains("firmware"),
+        "{}",
+        err.message
+    );
 }

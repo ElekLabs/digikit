@@ -12,7 +12,8 @@ listed under "Voices".
 | Block | 32 samples at 48 kHz, 1500 blocks per second | same |
 | Instructions per block (1 GHz assumed) | about 666,000 | same |
 | Stock DSP busy per block (measured) | about 211,000 | about 335,000 |
-| Free per block | about 450,000 | about 330,000 |
+| Free per block (headroom: the block at 85 percent, projected with the high cycle factor, minus the stock busy count; `patchkit budget`) | 194,244 | 92,796 |
+| Per voice of 16 (`voice_block`) | 12,140 | 5,799 |
 | Reference cost | pluck: about 900 per ringing voice per block; adapter and guard about 700 of that | similar |
 
 Plan a machine for 16 voices at once: 16 x your `max_cycles_block` must fit with room for the other modules.

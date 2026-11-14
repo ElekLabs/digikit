@@ -925,6 +925,7 @@ mod tests {
             sha_stock: String::new(),
             sha_image: String::new(),
             restore,
+            ship_map: None,
         }
     }
 

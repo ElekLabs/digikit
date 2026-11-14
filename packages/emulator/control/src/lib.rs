@@ -26,6 +26,7 @@ pub mod proto;
 pub mod runtime_patch;
 #[cfg(all(feature = "server", unix))]
 pub mod server;
+pub mod sharc_profile;
 
 pub use controller::{
     CardSource, Command, Config, Handle, JsonReply, Mode, Reply, ScenarioSetup, load_scenario,

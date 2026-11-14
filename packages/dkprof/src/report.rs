@@ -6,6 +6,7 @@
 
 use crate::profile::{Metric, Profile};
 use dkaddrmap::{AddrMap, Cpu, Layer, LoadTable, Resolver};
+use dksharc::{Analysis, LoopCount};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -23,6 +24,33 @@ pub struct Func {
     pub self_count: u64,
     /// Of the total of this series and CPU, 0 to 100.
     pub share: f64,
+    /// SHARC series only, when the profile has the metric [`BLOCKS_METRIC`]: `self_count` per DSP block.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_block: Option<f64>,
+}
+
+/// The metric that holds the DSP blocks a SHARC profile covers; it turns counts into instructions per block.
+pub const BLOCKS_METRIC: &str = "sharc.blocks";
+
+/// A DO loop of a module's DSP code (from `dksharc`) with the counters inside its body. A counter belongs to the innermost loop that holds
+/// it, so loops of one nest are never added up: a loop's own number is its own body without the inner loops.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct LoopRow {
+    pub module: String,
+    /// The function the loop is in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function: Option<String>,
+    pub depth: u32,
+    /// The body, as short-word offsets from the start of the module's DSP image (first and last instruction).
+    pub start: u64,
+    pub end: u64,
+    /// How the loop counts (`dksharc`): `lit N`, `reg R0`, `until`.
+    pub count: String,
+    pub self_count: u64,
+    /// Of the total of this series and CPU, 0 to 100.
+    pub share: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_block: Option<f64>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -31,6 +59,8 @@ pub struct Owner {
     pub owner: String,
     pub self_count: u64,
     pub share: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_block: Option<f64>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -43,6 +73,9 @@ pub struct SeriesReport {
     pub rows: usize,
     pub functions: Vec<Func>,
     pub owners: Vec<Owner>,
+    /// SHARC series with module analyses: the loops that hold counters, heaviest first.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub loops: Vec<LoopRow>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -52,6 +85,9 @@ pub struct Report {
     pub clock: String,
     pub unit: String,
     pub metrics: Vec<Metric>,
+    /// DSP blocks of the run (`sharc.blocks`), when the profile says.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocks: Option<f64>,
     pub series: Vec<SeriesReport>,
     pub loss: Vec<String>,
     /// Modules named by the maps but missing from the load table: their names are missing from the report.
@@ -74,6 +110,27 @@ pub fn build(
     loads: &LoadTable,
     top: usize,
 ) -> Result<Report, String> {
+    build_with(p, maps, loads, &BTreeMap::new(), top)
+}
+
+/// [`build`] with the static analyses of module DSP code (`dksharc`, by module id): SHARC counters inside a loop body are added to the loop.
+pub fn build_with(
+    p: &Profile,
+    maps: &[AddrMap],
+    loads: &LoadTable,
+    analyses: &BTreeMap<String, Analysis>,
+    top: usize,
+) -> Result<Report, String> {
+    let blocks = p
+        .metrics
+        .iter()
+        .find(|m| m.name == BLOCKS_METRIC)
+        .and_then(|m| m.value)
+        .filter(|b| *b > 0.0);
+    let per_block = |cpu: Cpu, n: u64| match (cpu, blocks) {
+        (Cpu::Sharc, Some(b)) => Some(n as f64 / b),
+        _ => None,
+    };
     let mut table = p.run.loads.clone().unwrap_or_default();
     table.modules.extend(loads.modules.iter().cloned());
     let resolver = Resolver::new(maps, &table)?;
@@ -83,6 +140,7 @@ pub fn build(
         rows: usize,
         total: u64,
         funcs: BTreeMap<String, Func>,
+        addrs: Vec<(u64, u64)>,
     }
     let mut acc: BTreeMap<Key, Acc> = BTreeMap::new();
     for r in &p.raw {
@@ -90,6 +148,7 @@ pub fn build(
         let a = acc.entry((r.series.clone(), r.cpu)).or_default();
         a.rows += 1;
         a.total += r.count;
+        a.addrs.push((r.addr, r.count));
         let (name, module, layer) = match hit {
             Some(h) => (h.name, h.module, Some(h.layer)),
             None => (format!("{:#x}", r.addr), None, None),
@@ -100,6 +159,7 @@ pub fn build(
             layer,
             self_count: 0,
             share: 0.0,
+            per_block: None,
         });
         f.self_count += r.count;
     }
@@ -109,6 +169,7 @@ pub fn build(
         let mut functions: Vec<Func> = a.funcs.into_values().collect();
         for f in &mut functions {
             f.share = pct(f.self_count, a.total);
+            f.per_block = per_block(cpu, f.self_count);
             let owner = match (&f.module, f.layer) {
                 (Some(m), _) => m.clone(),
                 (None, Some(Layer::Our)) => "runtime".into(),
@@ -129,6 +190,7 @@ pub fn build(
                 owner,
                 self_count,
                 share: pct(self_count, a.total),
+                per_block: per_block(cpu, self_count),
             })
             .collect();
         owners.sort_by(|x, y| {
@@ -143,6 +205,11 @@ pub fn build(
             rows: a.rows,
             functions,
             owners,
+            loops: if cpu == Cpu::Sharc {
+                loop_rows(&a.addrs, &table, analyses, a.total, &per_block)
+            } else {
+                vec![]
+            },
         });
     }
     Ok(Report {
@@ -151,6 +218,7 @@ pub fn build(
         clock: p.clock.source.clone(),
         unit: p.clock.unit.clone(),
         metrics: p.metrics.clone(),
+        blocks,
         series,
         loss: p
             .loss
@@ -164,6 +232,73 @@ pub fn build(
     })
 }
 
+/// The loops of the analysed modules that hold counters. A module's DSP image starts at `dsp_base` of its load; an analysis pc `x` sits at
+/// `dsp_base + x - base_sw`.
+fn loop_rows(
+    addrs: &[(u64, u64)],
+    table: &LoadTable,
+    analyses: &BTreeMap<String, Analysis>,
+    total: u64,
+    per_block: &dyn Fn(Cpu, u64) -> Option<f64>,
+) -> Vec<LoopRow> {
+    let mut rows = vec![];
+    for (id, a) in analyses {
+        let Some(base) = table
+            .modules
+            .iter()
+            .find(|l| &l.id == id)
+            .and_then(|l| l.dsp_base)
+        else {
+            continue;
+        };
+        let off = |pc: u32| u64::from(pc.wrapping_sub(a.base_sw));
+        // innermost first: a counter goes to the deepest loop that holds it
+        let mut order: Vec<usize> = (0..a.loops.len()).collect();
+        order.sort_by_key(|&i| std::cmp::Reverse(a.loops[i].depth));
+        let mut sums = vec![0u64; a.loops.len()];
+        for &(addr, count) in addrs {
+            let Some(rel) = addr.checked_sub(base) else {
+                continue;
+            };
+            if let Some(&i) = order
+                .iter()
+                .find(|&&i| (off(a.loops[i].start)..=off(a.loops[i].end)).contains(&rel))
+            {
+                sums[i] += count;
+            }
+        }
+        for (i, l) in a.loops.iter().enumerate() {
+            if sums[i] == 0 {
+                continue;
+            }
+            rows.push(LoopRow {
+                module: id.clone(),
+                function: l
+                    .function
+                    .and_then(|f| a.functions.get(f))
+                    .map(|f| f.name.clone()),
+                depth: l.depth,
+                start: off(l.start),
+                end: off(l.end),
+                count: match &l.count {
+                    LoopCount::Lit { count } => format!("lit {count}"),
+                    LoopCount::Reg { name, .. } => format!("reg {name}"),
+                    LoopCount::Until { .. } => "until".into(),
+                },
+                self_count: sums[i],
+                share: pct(sums[i], total),
+                per_block: per_block(Cpu::Sharc, sums[i]),
+            });
+        }
+    }
+    rows.sort_by(|x, y| {
+        y.self_count
+            .cmp(&x.self_count)
+            .then_with(|| (&x.module, x.start).cmp(&(&y.module, y.start)))
+    });
+    rows
+}
+
 fn metric_text(m: &Metric) -> String {
     match (m.value, &m.na_reason) {
         (Some(v), _) if v.fract() == 0.0 && v.abs() < 1e15 => format!("{} {}", v as i64, m.unit),
@@ -171,6 +306,10 @@ fn metric_text(m: &Metric) -> String {
         (None, Some(r)) => format!("N/A ({r})"),
         (None, None) => "N/A".into(),
     }
+}
+
+fn block_text(per_block: Option<f64>) -> String {
+    per_block.map_or(String::new(), |b| format!(" {b:>10.1}/block"))
 }
 
 /// The text view of a report.
@@ -195,11 +334,47 @@ pub fn text(r: &Report, top: usize) -> String {
             x.series, x.rows, x.total
         );
         for f in x.functions.iter().take(top) {
-            let _ = writeln!(s, "  {:>14} {:5.1}%  {}", f.self_count, f.share, f.name);
+            let _ = writeln!(
+                s,
+                "  {:>14} {:5.1}%{}  {}",
+                f.self_count,
+                f.share,
+                block_text(f.per_block),
+                f.name
+            );
+        }
+        if !x.loops.is_empty() {
+            let _ = writeln!(
+                s,
+                "{} {cpu} by loop (self; an inner loop is not in its outer one):",
+                x.series
+            );
+            for l in x.loops.iter().take(top) {
+                let _ = writeln!(
+                    s,
+                    "  {:>14} {:5.1}%{}  {} {} depth {} +{:#06x}..+{:#06x} count {}",
+                    l.self_count,
+                    l.share,
+                    block_text(l.per_block),
+                    l.module,
+                    l.function.as_deref().unwrap_or("?"),
+                    l.depth,
+                    l.start,
+                    l.end,
+                    l.count
+                );
+            }
         }
         let _ = writeln!(s, "{} {cpu} by owner:", x.series);
         for o in &x.owners {
-            let _ = writeln!(s, "  {:>14} {:5.1}%  {}", o.self_count, o.share, o.owner);
+            let _ = writeln!(
+                s,
+                "  {:>14} {:5.1}%{}  {}",
+                o.self_count,
+                o.share,
+                block_text(o.per_block),
+                o.owner
+            );
         }
     }
     for l in &r.loss {
@@ -380,6 +555,83 @@ mod tests {
             ]
         );
         assert_eq!(r.series[2].functions[0].name, "_pk_render");
+    }
+
+    fn analysis() -> Analysis {
+        let function = |name: &str, entry: u32, end: u32| dksharc::Function {
+            name: name.into(),
+            entry,
+            end,
+            global: true,
+            origin: vec![],
+            complete: true,
+            blocks: vec![],
+        };
+        let lp = |start, end, depth, parent, count| dksharc::DoLoop {
+            do_pc: start - 1,
+            start,
+            end,
+            count,
+            parent,
+            depth,
+            function: Some(0),
+        };
+        Analysis {
+            // the module's DSP image starts at software PC 0x1000 in the analysis
+            base_sw: 0x1000,
+            functions: vec![function("_pk_render", 0x1010, 0x1030)],
+            loops: vec![
+                lp(0x1014, 0x101c, 0, None, LoopCount::Lit { count: 8 }),
+                lp(
+                    0x1016,
+                    0x1018,
+                    1,
+                    Some(0),
+                    LoopCount::Reg {
+                        ureg: 0,
+                        name: "R0".into(),
+                    },
+                ),
+            ],
+            ..Analysis::default()
+        }
+    }
+
+    #[test]
+    fn dsp_counters_go_to_the_function_and_to_the_innermost_loop_and_per_block() {
+        // dsp_base 0xb8_1000 is where the analysis's 0x1000 sits at run time: the function is at 0xb8_1010
+        let mut p = profile(vec![
+            raw(Cpu::Sharc, 0xb8_1011, 10, "pc"), // _pk_render, outside any loop
+            raw(Cpu::Sharc, 0xb8_1015, 20, "pc"), // the outer loop
+            raw(Cpu::Sharc, 0xb8_1017, 60, "pc"), // the inner loop
+            raw(Cpu::Sharc, 0xb8_2000, 10, "pc"), // another module's code
+        ]);
+        p.metrics = vec![Metric::value(BLOCKS_METRIC, 10.0, "blocks")];
+        let analyses = BTreeMap::from([("vendor/demo".to_string(), analysis())]);
+        let r = build_with(&p, &maps(), &LoadTable::default(), &analyses, 10).unwrap();
+        let s = &r.series[0];
+        assert_eq!(r.blocks, Some(10.0));
+        let render = s.functions.iter().find(|f| f.name == "_pk_render").unwrap();
+        assert_eq!(render.self_count, 90);
+        assert_eq!(render.per_block, Some(9.0));
+        let loops: Vec<(u32, u64, &str)> = s
+            .loops
+            .iter()
+            .map(|l| (l.depth, l.self_count, l.count.as_str()))
+            .collect();
+        // heaviest first; the outer loop does not include the inner one
+        assert_eq!(loops, [(1, 60, "reg R0"), (0, 20, "lit 8")]);
+        assert_eq!(s.loops[0].function.as_deref(), Some("_pk_render"));
+        assert_eq!((s.loops[1].start, s.loops[1].end), (0x14, 0x1c));
+        assert_eq!(s.loops[0].per_block, Some(6.0));
+        let t = text(&r, 10);
+        assert!(t.contains("by loop"), "{t}");
+        assert!(t.contains("/block"), "{t}");
+        // without analyses or the blocks metric nothing of that is reported
+        p.metrics.clear();
+        let r = build(&p, &maps(), &LoadTable::default(), 10).unwrap();
+        assert!(r.series[0].loops.is_empty() && r.blocks.is_none());
+        assert!(r.series[0].functions[0].per_block.is_none());
     }
 
     #[test]
