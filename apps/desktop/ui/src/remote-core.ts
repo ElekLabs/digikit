@@ -1,8 +1,8 @@
 // The Remote page's logic, without the page: what the state of digikit/remote says to the user, the device behind a session, and the
 // runtime object the faceplate presses keys on. Pure, so host tests can run it (apps/desktop/ui/tests/remote-page.test.ts).
 import { DkError, type DkSession, type RemoteState } from '@digi/dk-session';
-import { writing } from '../../../web/src/transfer/transfer-core.ts';
-import { isNoRuntime } from '../../../web/src/modules/backend.ts';
+import { writing } from '@digi/workbench-core/transfer/transfer-core.ts';
+import { isNoRuntime } from '@digi/workbench-core/modules/backend.ts';
 
 /** The message under the faceplate for the state of digikit/remote (or for the error that asking for it gave). */
 export function remoteNotice(state: RemoteState | undefined, error?: unknown): string {

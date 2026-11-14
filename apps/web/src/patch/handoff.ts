@@ -1,7 +1,7 @@
 // Hand-off of a patched firmware from /patch to the emulator page, inside this browser only:
 // the bytes go into IndexedDB (too big for sessionStorage) and the emulator page takes and deletes them.
 // Nothing is sent over the network. The store is a BlobStore (blob-store.ts): a test gives `memoryBlobStore()`.
-import { indexedDbBlobStore, type BlobStore } from '../blob-store';
+import { indexedDbBlobStore, type BlobStore } from '@digi/workbench-core/blob-store.ts';
 
 const KEY = 'pending';
 

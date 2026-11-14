@@ -1,11 +1,15 @@
-// The desktop side of the default modules (apps/web/src/firmware/default-modules-core.ts): the install over the protocol session of the flashed
+// The desktop side of the default modules (packages/workbench-core/src/firmware/default-modules-core.ts): the install over the protocol session of the flashed
 // device or of the emulator, with the built .dkm of the library folder (`out/modules/<device>`). The Transfer pane's calls do the upload and the
 // restart; the list is in default-modules-data.ts.
 import type { DkSession } from '@digi/dk-session';
-import { installDefaults, type DefaultOps, type DefaultProgress } from '../../../web/src/firmware/default-modules-core';
-import type { FirmwareEnv } from '../../../web/src/firmware/env';
-import { install, restartDevice, type LibraryModule } from '../../../web/src/modules/dktransfer';
-import type { TransferApp } from '../../../web/src/transfer/app';
+import {
+  installDefaults,
+  type DefaultOps,
+  type DefaultProgress,
+} from '@digi/workbench-core/firmware/default-modules-core.ts';
+import type { FirmwareEnv } from '@digi/workbench-core/firmware/env.ts';
+import { install, restartDevice, type LibraryModule } from '@digi/workbench-core/modules/dktransfer.ts';
+import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import { entries, waitForRuntime } from './default-modules-data';
 
 /** The operations of the install run over a session and the library of built modules. */

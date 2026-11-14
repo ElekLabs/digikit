@@ -1,7 +1,7 @@
 // The real Host: the only module that imports Tauri's `invoke` (a lint rule keeps it so). Bytes go as the raw request body with the
 // small arguments in headers, as the Rust commands take them (`tauri::ipc::Request`); the names and arguments follow the Rust signatures.
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import type { EmuRpc, Host } from './host';
+import type { EmuRpc, Host } from '@digi/workbench-core/host/host.ts';
 
 const timeout = (ms: number) => ({ timeoutMs: Math.max(1, Math.round(ms)) });
 

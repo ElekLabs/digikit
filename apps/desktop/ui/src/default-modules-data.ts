@@ -5,7 +5,7 @@ import { parse } from 'smol-toml';
 import { DkError, type DkSession } from '@digi/dk-session';
 import dt2Source from '../../../../devices/digitakt-ii.toml?raw';
 import dn2Source from '../../../../devices/digitone-ii.toml?raw';
-import type { DefaultModuleEntry } from '../../../web/src/firmware/default-modules-core';
+import type { DefaultModuleEntry } from '@digi/workbench-core/firmware/default-modules-core.ts';
 
 const sources: Record<string, string> = { dt2: dt2Source, dn2: dn2Source };
 

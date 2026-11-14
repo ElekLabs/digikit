@@ -1,16 +1,16 @@
-// The desktop Samples backend: the samples API of apps/web/src/modules over the selected target (target.ts), with the backend the device profile
+// The desktop Samples backend: the samples API of packages/workbench-core/src/modules over the selected target (target.ts), with the backend the device profile
 // names (`[storage] samples`, read by the native `device_storage`; the page names no device). The converter is `dksample.wasm`, loaded once through
 // the native `sample_wasm`. The local side is the native `local_*` commands (local.rs): pick a folder, list a level, read a file.
 // Nothing is started and nothing is built here.
-import { errorLine } from '@web/modules/backend';
+import { errorLine } from '@digi/workbench-core/modules/backend.ts';
 import { failureModule, fmtVersion, hasCap, type DkSession, type LoadFailure } from '@digi/dk-session';
 import { Sample, prepareUpload, sourceKind, type Prepared } from '@digi/dk-session/dksample';
 import { openSamples, type SamplesBackend } from '@digi/dk-session/samples';
 import { chooseBulk, type BulkChoice } from '@digi/dk-session/bulk-select';
-import type { TransferApp } from '@web/transfer/app';
-import type { Host } from './host/host';
+import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 import { joinPath, type LocalEntry, type Prepare } from './samples-core';
-import type { LinkState } from '@web/transfer/link-core';
+import type { LinkState } from '@digi/workbench-core/transfer/link-core.ts';
 import {
   localFolder,
   localPath,

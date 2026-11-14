@@ -1,10 +1,10 @@
-// browserRuntime (apps/web/src/runtime/runtime.ts) over a fake worker and a stub wasm source: the messages it posts, the replies it waits for,
+// browserRuntime (packages/workbench-core/src/runtime/runtime.ts) over a fake worker and a stub wasm source: the messages it posts, the replies it waits for,
 // and the updates it passes on (only those of the current load).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { browserRuntime, type RuntimeSnapshot, type RuntimeUpdate } from '../src/runtime/runtime.ts';
-import { EMPTY_WASM, memoryWasmSource } from '../src/wasm-source.ts';
-import { createFakeWorkers, type FakeWorker } from '../src/workers-fake.ts';
+import { browserRuntime, type RuntimeSnapshot, type RuntimeUpdate } from '@digi/workbench-core/runtime/runtime.ts';
+import { EMPTY_WASM, memoryWasmSource } from '@digi/workbench-core/wasm-source.ts';
+import { createFakeWorkers, type FakeWorker } from '@digi/workbench-core/workers-fake.ts';
 
 const snapshot = (icount: number): RuntimeSnapshot => ({
   status: {

@@ -58,7 +58,7 @@ separate from the focused migration checks below.
 | `control-client` | `control-client` |
 | `@digi/test-support` | `test-support` |
 | `@digi/dk-session` | `dk-session` |
-| `@digi/web` | `web-transfer` (`test-wasm` runs `web-wasm` and the node tests) |
+| `@digi/web` | `web-transfer` (`test-wasm` runs `web-wasm`) |
 | `@digi/desktop` | `desktop-host` |
 | `regression` | `regression-host` |
 | each module with host tests | `module-tests` |

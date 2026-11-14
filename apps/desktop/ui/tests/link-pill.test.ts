@@ -1,7 +1,7 @@
-// The link pill of the Target row and the progress suffix (apps/web/src/transfer/link-core.ts), and the bar message that carries the suffix.
+// The link pill of the Target row and the progress suffix (packages/workbench-core/src/transfer/link-core.ts), and the bar message that carries the suffix.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { linkTag, viaSuffix } from '../../../web/src/transfer/link-core.ts';
+import { linkTag, viaSuffix } from '@digi/workbench-core/transfer/link-core.ts';
 import { applyUpload, samplesBar, type Uploads } from '../src/samples-core.ts';
 
 test('no pill and no suffix while the link is unknown', () => {

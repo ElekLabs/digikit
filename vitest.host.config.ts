@@ -18,6 +18,7 @@ export default defineConfig({
         exclude?: string[];
         conditions?: string[];
         alias?: Record<string, string>;
+        testTimeout?: number;
       }) => ({
         // modules/ has no node_modules: its tests reach the workspace packages by path
         resolve: {
@@ -37,7 +38,8 @@ export default defineConfig({
           root: fileURLToPath(new URL(p.dir, import.meta.url)),
           include: [p.include],
           exclude: [...configDefaults.exclude, '**/*.device.test.ts', ...(p.exclude ?? [])],
-          testTimeout: 5000,
+          // a project that runs the command lines or loads wasm names its own limit
+          testTimeout: p.testTimeout ?? 5000,
         },
       }),
     ),

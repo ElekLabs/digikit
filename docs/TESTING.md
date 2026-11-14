@@ -21,7 +21,7 @@ execution requirements, not levels. A successful boot proves only what the run a
 | Static (Python) | ruff check and format over pyproject `[tool.ruff] include`; mypy over `[tool.mypy] files` | `mise run lint:py`; `mise run check:layers` (module layering, docs/ARCHITECTURE.md) |
 | Fast preflight | Affected projects only; no builds, no devices | `mise run test:changed` |
 | Unit (TS host) | Packages, desktop UI logic, regression helpers; no device | `pnpm test:host` |
-| Unit (web) | Web app suites in `apps/web/tests`: Vitest `*.test.ts` (`test-host`, no wasm) and the real-wasm suites (`test-wasm`) | `pnpm nx:pilot run @digi/web:test-host`, `@digi/web:test-wasm` |
+| Unit (web) | Web app suites in `apps/web/tests`: Vitest `*.test.ts` (`test-host`, no wasm) and the real-wasm suites `*.wasm.test.ts` (`test-wasm`) | `pnpm nx:pilot run @digi/web:test-host`, `@digi/web:test-wasm` |
 | Unit (Python) | RE, firmware and dev tools | pytest on named files under `tests/<owner>/`; `mise run test:pypy` for the PyPy subset |
 | Unit (Rust) | Workspace and standalone dkrt | Explicit Nx project target `rust-tests`; runtime-only: `pnpm nx:pilot run core/runtime:rust-tests` |
 | Component | Module DSP conformance on the SHARC core | `mise run module:check ID` |
@@ -42,7 +42,7 @@ iteration checks do not replace this gate. `mise run test:plan` explains task se
 | Change | While iterating |
 | --- | --- |
 | JS/TS host tests and helpers | `pnpm nx:pilot run <project>:test-host`, `<project>:typecheck` |
-| Web tests | `pnpm nx:pilot run @digi/web:test-host` (no wasm); `@digi/web:test-wasm` (real `public/*.wasm`: `tests/*.test.mjs` and `tests/*.wasm.test.ts`, which builds the wasm first) |
+| Web tests | `pnpm nx:pilot run @digi/web:test-host` (no wasm); `@digi/web:test-wasm` (real `public/*.wasm` and the patchkit command line: `tests/*.wasm.test.ts`, which builds the wasm first) |
 | Desktop UI or app | `pnpm nx:pilot run @digi/desktop:test-host`, `@digi/desktop:check:ui` (source types); `@digi/desktop:typecheck` for test types. `ui:preview` and `ui_shots.mjs` for pages (below). |
 | Stock DT2 UI goldens | `test:stock` |
 | DN2 or DT2 FX sources and oracles | `test:fx`, `test:fx:dt2` |
@@ -86,7 +86,7 @@ Use `DIGI_GATE_BASE` rather than forwarding `--base`, so Python sees the same co
 For a proposed file, invoke `pnpm nx:pilot affected --files=path/to/file -t TARGET --explain` directly;
 Nx rejects `--files` together with the main command's `--base`.
 
-TypeScript edits select TypeScript targets. An edit in `apps/web/src` selects `@digi/web:test-host`, `check`, `build`, `test-wasm` and the desktop `test-host`, `typecheck`, `check:ui` and `build:ui` (the desktop imports the web sources); an edit in `apps/desktop/ui/src` selects only the desktop targets. Neither selects a cargo, wasm-build, device or conformance target: `patchkit:wasm` reads the Rust crates, `digiemu-desktop:rust-tests` reads the crate and its Rust dependencies, and the desktop `test-host` reads its own `ui/`, the web sources, `dk-session`, `dkbs`, `devices/*.toml`, `modules/*/*/module.toml` and `config/emulator.json`. `@digi/web:test-host` runs the Vitest project `web-transfer` and does not load wasm. Tests that load the real `public/*.wasm` (`tests/*.test.mjs` and `tests/*.wasm.test.ts`, Vitest project `web-wasm`) are the target `@digi/web:test-wasm`, which depends on `patchkit:wasm` (replayed from the cache unless a Rust input changed). A new test that needs the wasm is named `*.wasm.test.ts`.
+TypeScript edits select TypeScript targets. An edit in `packages/workbench-core/src` or `ui` selects its own `test-host` and `typecheck`, `@digi/web:test-host`, `check`, `test-wasm` and `build`, and the desktop `test-host`, `typecheck`, `check:ui` and `build:ui` (both apps import it); an edit in `packages/workbench-core/tests` selects only its own two targets; an edit in `apps/web/src` selects the web targets and an edit in `apps/desktop/ui/src` only the desktop targets (the apps do not import each other). Neither selects a cargo, wasm-build, device or conformance target: `patchkit:wasm` reads the Rust crates, `digiemu-desktop:rust-tests` reads the crate and its Rust dependencies, and the desktop `test-host` reads its own `ui/`, the workbench-core sources, `dk-session`, `dkbs`, `devices/*.toml`, `modules/*/*/module.toml` and `config/emulator.json`. `@digi/web:test-host` runs the Vitest project `web-transfer` and does not load wasm; `@digi/workbench-core:test-host` runs the project `workbench-core` (the tests of the shared code and of the NodeHost, with temp folders and stand-in bridge programs). Tests that load the real `public/*.wasm` or compare it with the patchkit command line (`tests/*.wasm.test.ts`, Vitest project `web-wasm`, the only web runner besides `web-transfer`) are the target `@digi/web:test-wasm`, which depends on `patchkit:wasm` (replayed from the cache unless a Rust input changed). A new test that needs the wasm or the command line is named `*.wasm.test.ts`. The fake devices of the web tests (`FakeDevice`, `FakeDrive`, `FakeUpgrade`), the fake modules and the command-line helpers are in `apps/web/tests/support/`; the site's screenshot tools import them from there. The logic of the desktop Samples mode is tested in `apps/desktop/ui/tests/samples-core.test.ts`.
 
 Control-client, test-support, dk-session, desktop-host and regression-host targets use local result
 caching; web-transfer and the per-module `test-host` targets remain uncached. tools/nx/modules.mjs infers, for each shipped module, a `test-host` target (host tests under `tests/`), a `test-device` target (its `tests/**/*.device.test.ts`, run with Vitest directly after its packs) and, for each shipped dynamic, service or `host` module, a `test-conformance` target (the shared conformance suite for that module). A project with several device test files has one cached target per file, `test-device--<file>`, and `test-device` is their no-op parent; a project with one file has only `test-device`. Tasks and Vitest workers follow the CPU budget below. Other Nx targets: `pack` (patchkit pack for each device, building stale module objects on demand, into `dist/modules/<device>/<leaf>.dkm`; only for the modules the gate packs, not for patched-in core modules or static fixtures), `pack-aliases` (renamed copies named by `runtimeAcceptance` aliases, same directory), `patchkit:cli` (`dist/patchkit/patchkit`) and `plusdrive-format:cli` (`dist/plusdrive/plusdrive`). Outputs go to `dist/`, never under `out/`. Shipped content modules (not `core/*`) depend on `core/runtime`; machines also on `core/dynreg` and `core/dsp-voice`, effects on `core/dynfx` and `core/fxpages`. Web tests retain ignored
@@ -101,9 +101,9 @@ Plugin sources are not inputs of module device targets. A `runtimeAcceptance` re
 | Command | What runs |
 | --- | --- |
 | `mise run test:changed` | `nx affected` against `DIGI_GATE_BASE` (default `main`) over the targets `lint`, `fmt-check`, `typecheck`, `test-host` and `python-checks`. Does not run Rust, module builds or devices. |
-| `pnpm test:host` | All nine Vitest projects from `vitest.host.projects.json`: control-client, test-support, dk-session, web-transfer, web-wasm, desktop-host, regression-host, module-tests, nx-host. One worker by default; `-- --maxWorkers N` changes it. |
+| `pnpm test:host` | The Vitest projects of `vitest.host.projects.json` except `web-wasm` (the Nx `test-host` set): control-client, test-support, dk-session, web-transfer, desktop-host, regression-host, module-tests, nx-host, dkbs. One worker by default; `-- --maxWorkers N` changes it. |
 | `pnpm verify:host` | oxlint, Prettier check, host Vitest, typecheck of control-client, dk-session, test-support, regression and desktop. Stops at the first failure. |
-| `pnpm --filter @digi/web test-wasm` | `node --test` in `apps/web/tests`, then the Vitest project `web-wasm` (`tests/*.wasm.test.ts`). Needs `public/*.wasm` (`@digi/web:test-wasm` builds it). Cases that need firmware skip when absent. |
+| `pnpm --filter @digi/web test-wasm` | The Vitest project `web-wasm` (`tests/*.wasm.test.ts`, 120 s limit per test). Needs `public/*.wasm` (`@digi/web:test-wasm` builds it). Cases that need firmware skip when absent. |
 | `mise run lint:py` | `ruff check` and `ruff format --check` over the pyproject include list. |
 | `mise run lint` | `lint:py`, `lint:rust`, `pnpm lint`, `pnpm fmt:check`. `lint:rust` runs `workspace:rust-fmt` (`cargo fmt --check` on every workspace crate except `dkfw`). `dkfw` is left out because its crate root is generated. Other generated files carry `#[rustfmt::skip]` on their `mod` line. A format change of `dkrt-sdk`, `dkrt-fit` or `dkneeds` changes `source_sha256` in the committed `build/*.dko.json` objects, so rebuild them with `core/runtime:build-objects`. |
 | `mise run test:pypy` | The SHARC core tests under PyPy 3.11. Slow. |
@@ -250,7 +250,7 @@ under `modules/` and `tests/conformance/`.
 | `tests/support` | Shared helpers, not collected; `paths.py` gives `REPO_ROOT`, `TESTS`, `TOOLS` |
 | `tests/golden`, `tests/fixtures` | Reference hashes and small fixtures |
 
-Other owners: `apps/web/tests` (web Node tests), `packages/control-client/tests`,
+Other owners: `apps/web/tests` (web Vitest tests), `packages/control-client/tests`,
 `packages/dk-session/tests`, `packages/test-support/tests`, `apps/desktop/ui/tests` (host Vitest), and
 Rust tests in their crates.
 

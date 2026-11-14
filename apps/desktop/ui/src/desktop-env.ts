@@ -1,22 +1,22 @@
-// The desktop workbench's side of the Transfer pane (apps/web/src/transfer/env.ts): the library folder of built modules, the MIDI ports and
+// The desktop workbench's side of the Transfer pane (packages/workbench-core/src/transfer/env.ts): the library folder of built modules, the MIDI ports and
 // the emulator through the Host (host/host.ts), the samples mode and the Card panel. main.tsx builds it with `createDesktopApps`.
 import { createComponent } from 'solid-js';
 import { EmuBulkLink } from '@digi/dk-session';
-import { listingChanged } from '../../../web/src/transfer/refresh-core';
-import type { TransferApp } from '../../../web/src/transfer/app';
-import type { SamplesSlot, TransferEnv } from '../../../web/src/transfer/env';
-import { MODULE_FILES } from '../../../web/src/transfer/module-files.generated';
-import { targetLabel, type Target } from '../../../web/src/transfer/target';
-import { failureLine } from '../../../web/src/transfer/wait-core';
+import { listingChanged } from '@digi/workbench-core/transfer/refresh-core.ts';
+import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
+import type { SamplesSlot, TransferEnv } from '@digi/workbench-core/transfer/env.ts';
+import { MODULE_FILES } from '@digi/workbench-core/transfer/module-files.generated.ts';
+import { targetLabel, type Target } from '@digi/workbench-core/transfer/target.ts';
+import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import { bumpCardRefresh } from './card-state';
 import { hostWasmSource } from './desktop-wasm';
 import { reloadWithRuntime } from './emulator-actions';
-import { TauriBulkLink } from './bulk-link';
-import { EmuUsbTransport, emulatorMode } from './desktop-transport';
+import { TauriBulkLink } from '@digi/workbench-core/host/bulk-link.ts';
+import { EmuUsbTransport, emulatorMode } from '@digi/workbench-core/host/emu-transport.ts';
 import { logInput } from './log-state';
 import { transferEntry } from './log-core';
-import type { Host, LibBuildReport } from './host/host';
-import { MidiPortTransport } from './midi-transport';
+import type { Host, LibBuildReport } from '@digi/workbench-core/host/host.ts';
+import { MidiPortTransport } from '@digi/workbench-core/host/midi-transport.ts';
 import { createSamplesBackend, type SamplesBackendApi } from './samples-backend';
 import { samplesBar, uploadLines } from './samples-core';
 import {

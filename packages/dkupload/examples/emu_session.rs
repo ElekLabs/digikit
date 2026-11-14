@@ -1,5 +1,5 @@
 //! The host `Session` against a real device in the emulator: a transport over the emulator's control socket
-//! (`midi.usb.in`, `midi.usb.out`, `step`), the same calls as the desktop Transfer page's transport (apps/desktop/ui/src/desktop-transport.ts).
+//! (`midi.usb.in`, `midi.usb.out`, `step`), the same calls as the desktop Transfer page's transport (packages/workbench-core/src/host/emu-transport.ts).
 //! Time in the emulator passes only when stepped, so `recv` steps it until a reply is there.
 //!
 //! ```text
