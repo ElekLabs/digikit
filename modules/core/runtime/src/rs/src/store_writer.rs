@@ -1,5 +1,5 @@
 //! The store's write steps (docs/plans/usb-fast.md 3.1): begin, write, close, abort and delete of a store file, the one write session, the store
-//! lock and the card write with the power-cut knobs. Two front ends use it: the SysEx handlers of `upload.rs` (the MIDI task, through the upload
+//! lock and the card write with the power-cut knobs. Two front ends use it: the SysEx handlers of `transport.rs` and `store_cmds.rs` (the MIDI task, through the upload
 //! buffer) and the SDK `file_*` calls (the I/O task, through a static buffer of their own).
 //!
 //! Store writes go through the firmware's block write, only to store sectors: file data and tables in `[1, limit)`, the two header copies at sector
@@ -22,7 +22,7 @@ use dkrt_sdk::{CARD_TOO_SMALL, E_BUSY, E_CONTEXT, E_CONTRACT, E_EXISTS, E_NOT_FO
 
 /// The table is streamed through two buffers of this size.
 pub const TBL_CAP: usize = 8192;
-/// Offsets in the SysEx upload buffer (`upload::DKRT_UPLOAD_BUF`): the two table buffers, inside the body region (a command that is not DATA
+/// Offsets in the SysEx upload buffer (`transport::DKRT_UPLOAD_BUF`): the two table buffers, inside the body region (a command that is not DATA
 /// has a small body, copied out first), and the scratch region after the 32 KiB of body room (table read-back, header sector).
 pub const IN_AT: usize = 1024;
 pub const OUT_AT: usize = IN_AT + TBL_CAP;

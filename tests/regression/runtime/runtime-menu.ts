@@ -166,7 +166,7 @@ export async function logEvents({ session, dk }: PatchedSession, plan: RuntimePl
   return hasCap(await dk.info(), 'LOG') ? dk.readLog() : readSmallRing(session, plan);
 }
 
-/** What the boot found of a crash record (`DKRT_CRASH`, crash.rs `CrashSeen`): the words that tests look at. */
+/** What the boot found of a crash record (`DKRT_CRASH`, fault.rs `CrashSeen`): the words that tests look at. */
 export async function readCrashSeen(
   session: Session,
   plan: RuntimePlan,

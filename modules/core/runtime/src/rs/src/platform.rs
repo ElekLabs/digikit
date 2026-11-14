@@ -93,7 +93,7 @@ pub unsafe fn raw_block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
 
 /// The one function that writes the card. Write `bytes` (a multiple of 512) from `buf` (16-byte aligned) to `sector`: refused with `E_RANGE`
 /// outside the store range of the device file, and with `E_CARD_RO` when the card's area is not ours (`card::admit`; finding 46). Every
-/// runtime card write goes through here: the selection record and the boot counter (boot.rs), uploads (upload.rs), and the claim of a blank
+/// runtime card write goes through here: the selection record and the boot counter (boot.rs), uploads (store_cmds.rs), and the claim of a blank
 /// range (card.rs, which calls `raw_block_write` for its own headers after the same checks).
 pub unsafe fn block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
     let g = card::admit(sector, bytes);
