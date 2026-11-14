@@ -6,12 +6,15 @@ import '@web/styles/site.css';
 import './console.css';
 import './native.css';
 import './tooltip.css';
-import './desktop-env';
 import Console from './Console';
+import { installDesktopEnv } from './desktop-env';
+import { createTauriHost } from './host/tauri-host';
 import { installNativeFeel } from './native';
 import { installTooltips } from './tooltip';
 
+const host = createTauriHost();
+installDesktopEnv(host);
 installNativeFeel();
 installTooltips();
 
-render(() => <Console />, document.getElementById('app')!);
+render(() => <Console host={host} />, document.getElementById('app')!);

@@ -236,3 +236,15 @@ export async function readLocal(): Promise<void> {
     }
   setLocalKinds((k) => ({ ...Object.fromEntries(Object.entries(k).filter(([key]) => key.startsWith('+'))), ...kinds }));
 }
+
+/** The same bag as the real `createSamplesBackend` (src/samples-backend.ts); the preview has no host to ask. */
+export const createSamplesBackend = (_host: unknown) => ({
+  deviceStorage,
+  openDeviceSamples,
+  readSamples,
+  pickFolder,
+  readLocalFile,
+  listLocalAt,
+  listLocalNow,
+  readLocal,
+});

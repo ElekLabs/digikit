@@ -25,6 +25,28 @@
   },
   "overrides": [
     {
+      "files": ["apps/desktop/ui/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@tauri-apps/api/core",
+                "message": "Call the Tauri commands through the Host (apps/desktop/ui/src/host/host.ts); only host/tauri-host.ts imports invoke."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/desktop/ui/src/host/tauri-host.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": "off"
+      }
+    },
+    {
       "files": ["**/*.tsx"],
       "rules": {
         "eslint/no-unassigned-vars": "off"

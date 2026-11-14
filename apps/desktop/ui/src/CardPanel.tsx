@@ -4,7 +4,6 @@
 // sizes, the time of the last sync, "Choose folder...", "Use default", "Show in Finder" and "Sync now". A device whose card is built
 // from the folder (the Digitakt II) takes a new folder at the next load: the panel says so and offers "Reload now". The emulator does the
 // work and keeps the choice per device (`card.folder`, `card.folder_set`, `card.sync` through `emu_call`); this panel only asks.
-import { invoke } from '@tauri-apps/api/core';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { errorLine, formatBytes } from '@web/modules/backend';
 import { panels } from '@web/data/faceplates';
@@ -14,31 +13,31 @@ import {
   fileRows,
   folderNotice,
   nameInGroup,
-  pickStart,
   shortFolder,
   statusText,
   type CardFolder,
-  type OverlayReset,
 } from './card-core';
+import { cardApi } from './card-api';
 import { cardRefresh } from './card-state';
 import { cardEntry, failureEntry, overlayResetEntry } from './log-core';
 import { logInput } from './log-state';
+import type { Host } from './host/host';
 import './card-panel.css';
 
 const POLL_MS = 2000;
-const call = <T,>(method: string, params: Record<string, unknown> = {}) =>
-  invoke<T>('emu_call', { method, params, session: null });
 /** The device's name as the faceplate gives it. */
 const deviceName = (id: string | undefined) =>
   id && id in panels ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
 
 /** `reload`: start the loaded firmware again (the Restart button's path), which builds the card from the folder in use. */
 export default function CardPanel(props: {
+  host: Host;
   visible: boolean;
   reload?: () => Promise<void>;
   /** Set when the panel is a tab of the column (SidePanels.tsx): the tabpanel's id and the id of its tab. */
   tabpanel?: { id: string; labelledBy: string };
 }): JSX.Element {
+  const api = cardApi(props.host);
   const [card, setCard] = createSignal<CardFolder>();
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -50,7 +49,7 @@ export default function CardPanel(props: {
     if (reading) return;
     reading = true;
     try {
-      setCard(await call<CardFolder>('card.folder'));
+      setCard(await api.folder());
       setError('');
     } catch (e) {
       setError(errorLine(e));
@@ -75,7 +74,7 @@ export default function CardPanel(props: {
   const sync = async () => {
     setBusy(true);
     try {
-      const next = await call<CardFolder>('card.sync');
+      const next = await api.sync();
       setCard(next);
       setError('');
       logInput(cardEntry('synced', next));
@@ -106,28 +105,24 @@ export default function CardPanel(props: {
     }
   };
   const choose = () =>
-    change('folder chosen', async () => {
+    change('folder chosen', () => {
       const c = card();
-      const dir = await invoke<string | null>('local_pick_folder', {
-        start: c ? pickStart(c) : null,
-        title: `Choose the folder of the ${deviceName(c?.device)} card`,
-      });
-      return dir ? call<CardFolder>('card.folder_set', { dir }) : undefined;
+      return api.choose(c, `Choose the folder of the ${deviceName(c?.device)} card`);
     });
-  const useDefault = () => change('default folder', () => call<CardFolder>('card.folder_set', {}));
+  const useDefault = () => change('default folder', () => api.useDefault());
   const reloadNow = () =>
     change('card reloaded', async () => {
       await props.reload?.();
-      return call<CardFolder>('card.folder');
+      return api.folder();
     });
   /** Set the saved card changes aside (never deleted), then start the firmware again on the card without them. */
   const resetOverlay = async () => {
     setBusy(true);
     try {
-      const r = await call<OverlayReset>('card.reset_overlay');
+      const r = await api.resetOverlay();
       logInput(overlayResetEntry(r));
       if (r.set_aside) await props.reload?.();
-      setCard(await call<CardFolder>('card.folder'));
+      setCard(await api.folder());
       setError('');
     } catch (e) {
       setError(errorLine(e));
@@ -139,7 +134,7 @@ export default function CardPanel(props: {
   };
   const openFolder = async () => {
     try {
-      await invoke('card_open_folder');
+      await api.openFolder();
     } catch (e) {
       setError(errorLine(e));
     }

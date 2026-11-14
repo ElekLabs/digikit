@@ -9,7 +9,7 @@
 // local files come through the native `local_*` commands (local.rs); no process is started.
 import { For, Show, createMemo, createSignal, onMount, type JSX } from 'solid-js';
 import { errorLine, formatBytes, isCancelled } from '@web/modules/backend';
-import { openDeviceSamples, labelOf, listLocalAt, pickFolder, readLocal, readLocalFile } from './samples-backend';
+import { labelOf, type SamplesBackendApi } from './samples-backend';
 import WaitNotice from '@web/transfer/WaitNotice';
 import {
   applyUpload,
@@ -81,8 +81,9 @@ import {
   uploads,
 } from './samples-state';
 
-export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
+export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBackendApi }): JSX.Element {
   const { busy, run, setError } = props.ctx;
+  const { openDeviceSamples, listLocalAt, pickFolder, readLocal, readLocalFile } = props.backend;
   const [note, setNote] = createSignal('');
   const [naming, setNaming] = createSignal(false);
   const [newName, setNewName] = createSignal('');
