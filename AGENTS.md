@@ -16,6 +16,7 @@ packages/
   emulator/         ColdFire/SHARC engines and control daemon
   patchkit/         Firmware patching and module packaging
   control-client/   TypeScript daemon socket client
+  workbench-core/   Code shared by the site and the desktop app (src, ui) and the NodeHost
   dk-session/       TypeScript SysEx session layer
   test-support/     Shared test fixtures and helpers
   dkupload/         Rust upload protocol
