@@ -1,4 +1,4 @@
-//! core/runtime: the digikit runtime (dkrt) v0. Code, data and the module arena live in `cf.expansion`.
+//! core/runtime: the digikit runtime (dkrt). Code, data and the module arena live in `cf.expansion`.
 //!
 //! What it does (docs/plans/digikit-runtime.md, docs/design/digikit-runtime.md): reads `.dkm` module files from the card
 //! module store with the firmware's own block read, checks them, copies and relocates them into a private arena, flushes
@@ -969,6 +969,7 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         None => 0,
     };
     let (set_limit, set_used) = settings::capacity();
+    // the values of each kind (a table, not a `match`: a jump table would put data in .text)
     let entries: [(u8, u32, u32, u32); 14] = [
         (CAPK_MODULES, MAX_MODULES as u32, mods, 0),
         (CAPK_SELECTION, dkrt_sdk::SEL_MAX as u32, boot::selected(), 0),
@@ -985,10 +986,19 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         (CAPK_SETTINGS, set_limit, set_used, 0),
         (CAPK_SEND_SLOTS, fxsend::slots(), fxsend::used(), 0),
     ];
+    // one entry per kind of `[capacity.kinds]`, in its order; a kind with no row above reports zeros
     let mut k = 0;
-    while k < entries.len() && (k as u32) < max {
-        let (kind, limit, used, largest) = entries[k];
-        *out.add(k) = DkrtCap { kind: kind as u32, limit, used, largest };
+    while k < CAP_KINDS.len() && (k as u32) < max {
+        let kind = CAP_KINDS[k];
+        let mut v = (kind, 0, 0, 0);
+        let mut e = 0;
+        while e < entries.len() {
+            if entries[e].0 == kind {
+                v = entries[e];
+            }
+            e += 1;
+        }
+        *out.add(k) = DkrtCap { kind: kind as u32, limit: v.1, used: v.2, largest: v.3 };
         k += 1;
     }
     k as u32

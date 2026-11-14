@@ -13,19 +13,11 @@ fn vectors() -> Value {
 
 /// kind name of `[capacity.kinds]` -> CAPK number
 fn kind(name: &str) -> u8 {
-    match name {
-        "MODULES" => CAPK_MODULES,
-        "SELECTION" => CAPK_SELECTION,
-        "ARENA" => CAPK_ARENA,
-        "STAGE" => CAPK_STAGE,
-        "DSP_AREA" => CAPK_DSP_AREA,
-        "MACHINE_ROWS" => CAPK_MACHINE_ROWS,
-        "VOICE_ROWS" => CAPK_VOICE_ROWS,
-        "PARAM_ROWS" => CAPK_PARAM_ROWS,
-        "PAGE_ROWS" => CAPK_PAGE_ROWS,
-        "FX_SLOTS" => CAPK_FX_SLOTS,
-        _ => panic!("kind {name}"),
-    }
+    CAP_FIT
+        .iter()
+        .find(|k| k.0 == name)
+        .unwrap_or_else(|| panic!("kind {name}"))
+        .1
 }
 
 fn caps(base: &Value, over: Option<&Value>) -> Vec<DkrtCap> {

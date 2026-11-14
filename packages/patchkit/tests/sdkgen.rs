@@ -82,7 +82,7 @@ fn bad_protocol_ranges_commands_and_capacity_kinds_are_refused() {
     assert_ne!(broken, text);
     assert!(sdkgen::render(&broken).is_err());
     // two kinds with one number, or kind 0, are refused
-    let dup = text.replace("ARENA = 3 ", "ARENA = 2 ");
+    let dup = text.replace("ARENA = { id = 3,", "ARENA = { id = 2,");
     assert_ne!(dup, text);
     assert!(
         sdkgen::render(&dup)

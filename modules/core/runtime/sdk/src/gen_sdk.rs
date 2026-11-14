@@ -192,6 +192,36 @@ pub mod proto {
     pub const CAPK_STORE: u8 = 12;
     pub const CAPK_SETTINGS: u8 = 13;
     pub const CAPK_SEND_SLOTS: u8 = 14;
+    /// Every CAPACITY kind in the order of its number: the runtime answers each one.
+    pub const CAP_KINDS: [u8; 14] = [
+        CAPK_MODULES,
+        CAPK_SELECTION,
+        CAPK_ARENA,
+        CAPK_STAGE,
+        CAPK_DSP_AREA,
+        CAPK_MACHINE_ROWS,
+        CAPK_VOICE_ROWS,
+        CAPK_PARAM_ROWS,
+        CAPK_PAGE_ROWS,
+        CAPK_FX_SLOTS,
+        CAPK_MAP_ENTRIES,
+        CAPK_STORE,
+        CAPK_SETTINGS,
+        CAPK_SEND_SLOTS,
+    ];
+    /// The resources a fit looks at: name, kind and what a person calls it.
+    pub const CAP_FIT: [(&str, u8, &str); 10] = [
+        ("MODULES", CAPK_MODULES, "module records"),
+        ("SELECTION", CAPK_SELECTION, "selection paths"),
+        ("ARENA", CAPK_ARENA, "CPU memory"),
+        ("STAGE", CAPK_STAGE, "file"),
+        ("DSP_AREA", CAPK_DSP_AREA, "DSP memory"),
+        ("MACHINE_ROWS", CAPK_MACHINE_ROWS, "machine rows"),
+        ("VOICE_ROWS", CAPK_VOICE_ROWS, "voice rows"),
+        ("PARAM_ROWS", CAPK_PARAM_ROWS, "parameter rows"),
+        ("PAGE_ROWS", CAPK_PAGE_ROWS, "page rows"),
+        ("FX_SLOTS", CAPK_FX_SLOTS, "effect slots"),
+    ];
     /// The command ranges a module may register, as (first, last).
     pub const RANGES: [(u8, u8); 9] = [
         (0x20, 0x22), // debug
