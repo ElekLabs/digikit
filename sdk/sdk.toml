@@ -5,7 +5,7 @@
 # and sample.h from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
-version = "0.7.0"   # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.7.1"   # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -312,6 +312,14 @@ since = "0.7.0"
 context = "any"
 sig = "void (u32 kind, u32 flags, const u32 *a)"
 doc = "Log one event as the runtime's own call does (the sink and the small ring see it): `kind` and `flags` as in `dk_log_ev`, `a` five words. The source is the module that is running unless `flags` names another."
+
+[[import]]
+name = "dk_sink_set"
+service = "runtime"
+since = "0.7.1"
+context = "any"
+sig = "i32 (u32 channel, u8 *sink)"
+doc = "Set (or, with 0, clear) the sink of a runtime channel for the calling module: DK_SINK_LOG (0) gets `void sink(const dk_log_ev *e)` for every event the runtime logs, DK_SINK_SPAN (1) gets `void sink(const dk_span *s)`, an (owner, cycles) record. A sink runs in the producer's task with interrupts masked: short, no waiting, no logging. A channel has one owner; the runtime clears it after the owner's fini. Returns 0, DK_E_RANGE (no such channel), DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the channel). See <dk/core/sink.h>."
 
 [[import]]
 name = "dk_time_blocks"

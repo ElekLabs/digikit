@@ -55,6 +55,9 @@ void dk_log(uint32_t level, const char *msg, uint32_t value);
 /* Log one event as the runtime's own call does (the sink and the small ring see it): `kind` and `flags` as in `dk_log_ev`, `a` five words. The source is the module that is running unless `flags` names another. Context: any. Since runtime 0.7.0. */
 void dk_log_event(uint32_t kind, uint32_t flags, const uint32_t *a);
 
+/* Set (or, with 0, clear) the sink of a runtime channel for the calling module: DK_SINK_LOG (0) gets `void sink(const dk_log_ev *e)` for every event the runtime logs, DK_SINK_SPAN (1) gets `void sink(const dk_span *s)`, an (owner, cycles) record. A sink runs in the producer's task with interrupts masked: short, no waiting, no logging. A channel has one owner; the runtime clears it after the owner's fini. Returns 0, DK_E_RANGE (no such channel), DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the channel). See <dk/core/sink.h>. Context: any. Since runtime 0.7.1. */
+int32_t dk_sink_set(uint32_t channel, uint8_t *sink);
+
 /* The 1500 Hz block clock (wraps), for a module that wants to measure time; 0 when the image has no counter. See <dk/core/time.h>. Context: any. Since runtime 0.7.0. */
 uint32_t dk_time_blocks(void);
 
