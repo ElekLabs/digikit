@@ -216,13 +216,30 @@ export default function TransferPage(): JSX.Element {
   };
 
   // the bar along the bottom, for the install, delete or restart of Modules and the upload of Samples
-  const bar = createMemo(() => {
-    if (activeMode() === 'modules') {
-      const p = progress();
-      return p ? { info: modulesBar(p), running: writing(busy()) } : undefined;
-    }
-    return env.extras?.samples?.bar(busy());
-  });
+  const bar = createMemo(
+    () => {
+      if (activeMode() === 'modules') {
+        const p = progress();
+        return p ? { info: modulesBar(p), running: writing(busy()) } : undefined;
+      }
+      return env.extras?.samples?.bar(busy());
+    },
+    undefined,
+    {
+      // a builder may return a fresh object each time: equal fields must not notify
+      equals: (a, b) =>
+        a === b ||
+        (!!a &&
+          !!b &&
+          a.running === b.running &&
+          a.info.fraction === b.info.fraction &&
+          a.info.message === b.info.message &&
+          a.info.failed === b.info.failed &&
+          a.info.sent === b.info.sent &&
+          a.info.total === b.info.total &&
+          a.info.checking === b.info.checking),
+    },
+  );
   const samples = () => env.extras?.samples;
   // the status bar shows the same fraction and line
   createEffect(() => {
