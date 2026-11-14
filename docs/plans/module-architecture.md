@@ -606,7 +606,7 @@ adapters/<name>/src/cf/dt2/…, dn2/…           per-device code only where the
 adapters/<name>/build/<name>-{dev}.dko.json   one object per device
 ```
 
-Gen kinds today are `gas`, `gas-shared`, `sharc`, `sharc-adapter`, `gas-sample-pool`, `rust` and `c-shared`
+Gen kinds today are `gas`, `gas-shared`, `sharc`, `sharc-adapter`, `gas-sample-pool`, `rust`, `rust-profiles` and `c-shared`
 (`packages/patchkit/src/devgen.rs`). `rust` and `gas-shared` are one file for all devices; a constant that differs between devices is an
 error there (`docs/design/device-data.md`).
 

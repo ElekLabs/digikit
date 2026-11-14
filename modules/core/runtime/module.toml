@@ -39,6 +39,11 @@ uses = ["DYN_TYPE_FIRST", "DYN_TYPE_LAST", "DYN_TYPES", "DDR_CACHED_BASE", "DDR_
     "DSP_BLOCK_CYCLES", "KEEP_BASE", "KEEP_BYTES", "LIMIT_MODULES", "LIMIT_MACHINE_ROWS", "LIMIT_ARENA_BYTES",
     "LIMIT_STAGE_BYTES"]
 
+# One DeviceProfile constant for each device file: what the host tests' FakePlatform is built from (the real platform reads the device object's words).
+[[gen]]
+kind = "rust-profiles"
+path = "abi/src/profiles.rs"
+
 [[gen]]
 kind = "gas-shared"
 path = "build/gen/device.inc"
@@ -47,7 +52,7 @@ uses = ["CONSOLE_UART_BASE", "DDR_UNCACHED_ALIAS"]
 [[gen]]
 kind = "gas"
 path = "build/gen/device-{dev}.inc"
-uses = ["DEVICE_ID", "DEVICE_NAME_WORD", "STORE_FIRST", "STORE_SECTORS", "PEEK_N", "FX_SOUND_WORDS", "PEEK_LO_*", "PEEK_HI_*"]
+uses = ["DEVICE_ID", "DEVICE_NAME_WORD", "SAMPLES_IN_STORE", "SAMPLE_PATH_MAX", "STORE_FIRST", "STORE_SECTORS", "PEEK_N", "FX_SOUND_WORDS", "PEEK_LO_*", "PEEK_HI_*"]
 
 # The UI-loop hook trampoline and the cache flush (assembly).
 [[object]]

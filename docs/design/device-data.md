@@ -18,6 +18,7 @@ assumes exactly two devices. Syntakt is not added here.
 | DSP area size (window 0) and frame tail geometry | `[digikit] dsp_area_bytes`, `dsp_tail_off`, `dsp_tail_words` | `core/dsp-link` DSP object, `core/dyndsp` table | `DL_AREA_BYTES`, `DL_AREA_WORDS`, `DL_TAIL_*` in `build/gen/device-<dev>.inc` (SHARC `#define`s and gas `.equ`s) |
 | Console UART, DDR window and uncached alias, eSDHC controller | `[board]` | `tramp.s` (soft reset), `boot.rs` (`key_held`), `lib.rs` (`card_busy`) | `CONSOLE_UART_BASE`, `DDR_*`, `ESDHC_BASE` in `device.rs` / `build/gen/device.inc` |
 | Safe-mode key (a panel control code) | `[digikit] safe_key` | runtime boot | `SAFE_KEY_CODE` |
+| Where samples live and how long a sample path may be (the runtime branches on these, never on the device id) | `[capabilities] card` (`slots`: the store; `path-fs`: the firmware's folder filesystem), `[digikit] sample_path_max` | runtime `Platform::samples_in_store`, `sample_path_max` | `SAMPLES_IN_STORE`, `SAMPLE_PATH_MAX` in `device-<dev>.inc` (words `dkrt_samples_in_store`, `dkrt_sample_path_max` of `device.s`); `DeviceProfile` constants of `abi/src/profiles.rs` |
 | RAM that the firmware and boot code leave alone and that the emulator keeps across a soft reset (the crash record, the keep probe) | `[digikit] keep_base`, `keep_bytes` | runtime `crash.rs`; emulator (`device-profile` `keep_ram`) | `KEEP_BASE`, `KEEP_BYTES` in `device.rs` / `device.inc`; the emulator reads the file |
 | RAM ranges the PEEK command may read (at most four `[lo, hi)`: the firmware's data, the runtime's region with the keep area; no peripheral registers) | `[digikit] peek` | runtime `upload.rs` (`cmd_peek`) | `PEEK_N`, `PEEK_LO_i`, `PEEK_HI_i` in `build/gen/device-<dev>.inc`; `device.s` lays them out as `dkrt_peek_ranges` (the ranges differ per device, so they are a per-device object, not a shared constant) |
 | DSP clock and blocks per second (so cycles per block) | `[board] dsp_clock_hz`, `dsp_blocks_per_second`. The clock word in the start-up code decodes to 1 GHz **[D]** ([finding 100](../findings/100-module-limits.md); the control-register write is not traced). | runtime HEALTH figures | `DSP_BLOCK_CYCLES` (rounded) |
@@ -58,7 +59,7 @@ A trailing `*` matches a family by prefix (`FX_VALUE_*`). The generator writes o
 
 A constant the sources use but the list lacks is not in the include, so the build fails on the undefined name.
 
-The kinds `sharc-adapter`, `gas-sample-pool`, `sharc-sample-pool` and `c-shared` take no `uses`.
+The kinds `sharc-adapter`, `gas-sample-pool`, `sharc-sample-pool`, `c-shared` and `rust-profiles` take no `uses`. `rust-profiles` writes one `DeviceProfile` constant for each device file (the runtime ABI crate; `FakePlatform` of the host tests).
 
 ## Adding a device (what exists today, what is still hand work)
 
