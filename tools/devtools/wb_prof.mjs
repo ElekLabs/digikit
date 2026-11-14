@@ -184,7 +184,6 @@ async function recordSharc(ctx) {
     }
     const a = await client.call('sharc.profile');
     const run = await runInfo(ctx, client);
-    const counted = a.counted.fast + a.counted.block + a.counted.interpreted;
     const profile = {
       schema: 'dk.profile/1',
       run,
@@ -200,7 +199,8 @@ async function recordSharc(ctx) {
         {
           name: 'sharc.coverage',
           unit: 'ratio',
-          na_reason: 'sharc.insn.executed and the per-PC counts do not reconcile in the DN2 proof run (open, profiling plan P4)',
+          na_reason:
+            'sharc.insn.executed and the per-PC counts do not reconcile in the DN2 proof run (open, profiling plan P4)',
         },
       ],
       markers: [{ name: 'record.start', at: 0 }],
