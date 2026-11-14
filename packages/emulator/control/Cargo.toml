@@ -21,6 +21,8 @@ server = []
 # Local-only DN2 coupling: generated DSP code must never be distributed.
 # ColdFire path/PC profile (`cf.profile` method).
 cf-profile = ["elektron-native-boot/cf-profile"]
+# DSP execution counts (`sharc.profile` method): per-entry dispatch costs of the fast and block tiers plus interpreted PC counts.
+sharc-profile = ["coupled-audio", "digi-coupled/region-profile"]
 coupled-audio = ["digi-coupled/coupled-audio"]
 # Both devices' generated cores in one binary (SHARC_GEN_DIR and SHARC_GEN_DIR_2).
 second-core = ["coupled-audio", "digi-coupled/second-core"]

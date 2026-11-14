@@ -24,6 +24,7 @@ pub mod health;
 pub mod load;
 pub mod proto;
 pub mod runtime_patch;
+pub mod sharc_profile;
 #[cfg(all(feature = "server", unix))]
 pub mod server;
 
