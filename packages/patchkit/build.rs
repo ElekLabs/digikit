@@ -55,18 +55,37 @@ fn without_firmware(text: &str) -> String {
     out
 }
 
-/// `PATCHKIT_SRC_ID`: a hash of the crate's sources (FNV-1a over the files in name order). A cache of patched images keys on it
-/// (`patchkit::SRC_ID`), so a change to the linker or the apply code never serves an image made before it.
+/// `PATCHKIT_SRC_ID`: a hash of the sources patchkit is built from (FNV-1a over the files in name order): its own `src` and the files of every
+/// workspace crate it links through `path` dependencies, transitively (read from the Cargo.toml files, not listed here). A cache of patched images keys on
+/// it (`patchkit::SRC_ID`), so a change to the linker, the apply code or a crate that parses or sizes what it packs never serves an image made before it.
 fn src_id() {
-    let src = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("src");
-    println!("cargo:rerun-if-changed={}", src.display());
+    let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let mut roots = vec![manifest.join("src")];
+    let mut seen = vec![manifest.clone()];
+    let mut todo = vec![manifest];
+    while let Some(dir) = todo.pop() {
+        for dep in path_dependencies(&dir) {
+            if !seen.contains(&dep) {
+                seen.push(dep.clone());
+                roots.push(dep.clone());
+                todo.push(dep);
+            }
+        }
+    }
     let mut files = vec![];
-    let mut dirs = vec![src];
+    let mut dirs = roots;
     while let Some(d) = dirs.pop() {
+        println!("cargo:rerun-if-changed={}", d.display());
         for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
             let p = e.path();
+            let name = e.file_name();
             if p.is_dir() {
-                dirs.push(p);
+                if !matches!(
+                    name.to_str(),
+                    Some("target" | "tests" | "examples" | "benches")
+                ) {
+                    dirs.push(p);
+                }
             } else {
                 println!("cargo:rerun-if-changed={}", p.display());
                 files.push(p);
@@ -81,4 +100,27 @@ fn src_id() {
         }
     }
     println!("cargo:rustc-env=PATCHKIT_SRC_ID={h:016x}");
+}
+
+/// The `path = "..."` dependencies (normal, build and target tables, not dev-dependencies) of the crate in `dir`, as canonical directories.
+fn path_dependencies(dir: &std::path::Path) -> Vec<PathBuf> {
+    let toml = dir.join("Cargo.toml");
+    println!("cargo:rerun-if-changed={}", toml.display());
+    let text = std::fs::read_to_string(&toml).unwrap_or_default();
+    let mut live = false;
+    let mut out = vec![];
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            live = t.contains("dependencies") && !t.contains("dev-dependencies");
+        } else if live && let Some(at) = t.find("path = \"") {
+            let rest = &t[at + 8..];
+            if let Some(end) = rest.find('"')
+                && let Ok(p) = dir.join(&rest[..end]).canonicalize()
+            {
+                out.push(p);
+            }
+        }
+    }
+    out
 }
