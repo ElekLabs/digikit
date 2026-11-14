@@ -460,7 +460,9 @@ class HealthProof:
         i1, n1, b1 = self.w(idle), self.icount(), self.w(burn + 32)
         return {"idle": (i1 - i0) & 0xFFFFFFFF, "instr": n1 - n0, "runs": b1 - b0}
 
-    POLL_SLOTS = 4  # the size of `DKRT_POLLS` (`dkrt_poll_add` fills the first free slot)
+    POLL_SLOTS = (
+        4  # the size of `DKRT_POLLS` (`dkrt_poll_add` fills the first free slot)
+    )
 
     def poll_functions(self) -> list[int]:
         table = self.sym("DKRT_POLLS")

@@ -515,7 +515,11 @@ fn sample_track_record_v5_needs_kind_2_zero_blocks_and_no_overlap() {
     ] {
         let mut bad = dsp.clone();
         bad[record_off + word * 4..record_off + word * 4 + 4].copy_from_slice(&value.to_le_bytes());
-        assert_eq!(of(&dkm(4, 0, &[], &bad)), Err(Error::Dsp), "word {word}: {value}");
+        assert_eq!(
+            of(&dkm(4, 0, &[], &bad)),
+            Err(Error::Dsp),
+            "word {word}: {value}"
+        );
     }
     let mut bad = dsp.clone();
     put(&mut bad, 0x3c, DSP_HEADER);

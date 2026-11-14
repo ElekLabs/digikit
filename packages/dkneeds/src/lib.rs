@@ -343,9 +343,7 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
             }
             for i in 0..nreloc {
                 let r = word(src, off + reloc_off + i * 8)?;
-                if u64::from(r) < u64::from(b) + u64::from(len)
-                    && u64::from(r) + 6 > u64::from(b)
-                {
+                if u64::from(r) < u64::from(b) + u64::from(len) && u64::from(r) + 6 > u64::from(b) {
                     return Err(Error::Dsp);
                 }
             }
