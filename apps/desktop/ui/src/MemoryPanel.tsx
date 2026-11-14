@@ -1,6 +1,6 @@
 // The Memory panel: what the resources a device limits are used for. A tab of the right-hand column (SidePanels.tsx) of the Emulator page, beside
 // Card and Metrics, and of the Remote page, alone; in the Card panel's look (card-panel.css). One bar per resource the device limits
-// (memory-core.ts); each bar is split into one segment per loaded module, coloured by the module's type, then free space (a count with few slots,
+// (memory-core.ts); under each bar a table lists what each module takes of it; each bar is split into one segment per loaded module, coloured by the module's type, then free space (a count with few slots,
 // such as Machines, is one cell per slot instead); hover a
 // segment for the module and its amount.
 // The panel reads CAPACITY, MODULES and the local library (memory-backend.ts) over the session it is given, which is the target's one session
@@ -14,7 +14,7 @@ import { isCancelled, isNoRuntime } from '@web/modules/backend';
 import type { DkSession } from '@digi/dk-session';
 import { cardRefresh } from './card-state';
 import { deviceOfPort } from './remote-core';
-import { freeTitle, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
+import { freeTitle, moduleRows, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
 import { readMemory, type MemoryReading } from './memory-backend';
 import { createReadGate } from './read-gate-core';
 import { focusReadDue } from '@web/transfer/refresh-core';
@@ -188,6 +188,17 @@ export default function MemoryPanel(props: {
                         </div>
                       )}
                     </Show>
+                    <ul class="mem-mods" aria-label={`${bar.label} by module`}>
+                      <For each={moduleRows(bar)}>
+                        {(m) => (
+                          <li>
+                            <span class={`swatch ${m.kind}`} />
+                            <span class="name">{m.label}</span>
+                            <span class="amount">{m.text}</span>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
                     <Show when={noteText(bar)}>
                       {(note) => (
                         <span class="mem-note" classList={{ over: bar.over }}>

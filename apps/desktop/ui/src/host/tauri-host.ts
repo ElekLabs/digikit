@@ -22,6 +22,7 @@ export function createTauriHost(): Host {
       build: (device) => invoke('lib_build', { device }),
       scan: (device) => invoke('lib_scan', { device }),
       read: (device, path) => invoke('lib_read', { device, path }),
+      readMaps: (device) => invoke('lib_maps', { device }),
       deviceStorage: (device) => invoke('device_storage', { device }),
     },
     ports: {
@@ -50,6 +51,7 @@ export function createTauriHost(): Host {
         invoke('firmware_prepare', stock, { headers: { 'x-restore': restore ? '1' : '0', 'x-set': set } }),
       save: (bytes, name) => invoke('firmware_save', bytes, { headers: { 'x-name': encodeURIComponent(name) } }),
       patchkitWasm: () => invoke('patchkit_wasm'),
+      dkprofWasm: () => invoke('dkprof_wasm'),
       sampleWasm: () => invoke('sample_wasm'),
     },
     emu: {
