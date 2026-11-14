@@ -264,7 +264,7 @@ pub fn preflight(
     }
 
     // Container checksum, HMAC, section decode, expansion segments, size limits (verify), without a base.
-    match verify::verify(patched, Some(reg), None) {
+    match verify::verify(patched, Some(reg), Some(&base_bytes)) {
         Ok(rep) => {
             for c in &rep.checks {
                 o.ok(c.clone());

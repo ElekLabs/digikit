@@ -340,7 +340,7 @@ fn run(a: Args) -> Result<()> {
                 Some(p) => println!("port      {} (stock image)", p.id()),
                 None => println!("port      none for this sha256"),
             }
-            let rep = verify::verify(&raw, Some(&reg), None)?;
+            let rep = verify::inspect(&raw, Some(&reg))?;
             match rep.record {
                 Some(r) => println!(
                     "record    patched from {} with {}",

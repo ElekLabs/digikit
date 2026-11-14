@@ -102,7 +102,25 @@ pub fn patch_record(syx_bytes: &[u8]) -> Result<Option<Record>> {
     find_record(&Firmware::parse(syx_bytes)?)
 }
 
+/// Verifies an image. A device with read-only sections (`[container] readonly`: bootstrap, FPGA or peer programs) needs `base`, the stock
+/// image, to prove those sections unchanged; without it the call fails, so a damaged read-only section can never pass. The one exception
+/// is an image whose SHA-256 is a known stock image (a port in `reg`): it is the stock image, so its read-only sections are stock.
 pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> Result<Report> {
+    check(syx_bytes, reg, base, true)
+}
+
+/// Decodes and checks an image like `verify` but does not require the stock base: for identifying a file (what device, which record),
+/// never as a proof that the image is safe to flash.
+pub fn inspect(syx_bytes: &[u8], reg: Option<&Registry>) -> Result<Report> {
+    check(syx_bytes, reg, None, false)
+}
+
+fn check(
+    syx_bytes: &[u8],
+    reg: Option<&Registry>,
+    base: Option<&[u8]>,
+    need_base: bool,
+) -> Result<Report> {
     let mut checks = vec![];
     let msgs = syx::messages(syx_bytes)?;
     if msgs.len() < 3 || msgs[0].len() != 16 || msgs[msgs.len() - 1].len() != 16 {
@@ -240,6 +258,25 @@ pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> 
     }
     checks.push("size limits".into());
 
+    if base.is_none()
+        && need_base
+        && port.is_none()
+        && !fw.device.readonly_sections().is_empty()
+    {
+        let ids: Vec<String> = fw
+            .device
+            .readonly_sections()
+            .iter()
+            .map(|i| i.to_string())
+            .collect();
+        return Err(err!(
+            "the stock base image is required to verify a {} image: its read-only sections ({}) can only be checked against it \
+             (this file's sha256 {} is not a known stock image)",
+            fw.device.short(),
+            ids.join(", "),
+            fw.syx_sha256
+        ));
+    }
     if let Some(base_bytes) = base {
         let b = Firmware::parse(base_bytes)?;
         for &id in fw.device.readonly_sections() {

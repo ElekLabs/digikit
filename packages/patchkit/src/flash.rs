@@ -190,7 +190,7 @@ pub fn prepare(stock: &[u8], reg: &Registry, lib: &Library, set: &str) -> Result
             bad.join(" | ")
         },
     });
-    let mut p = finish(applied.syx, reg, cs, false, Some(&code))?;
+    let mut p = finish(applied.syx, reg, cs, false, Some(&code), Some(stock))?;
     p.os = os;
     p.sha_stock = stock_sha;
     p.image_id = applied.image_id;
@@ -251,7 +251,7 @@ pub fn restore(stock: &[u8], reg: &Registry) -> Result<Prepared> {
         "stock",
         Ok(((), format!("{device} {os}, sha256 {}", sfw.syx_sha256))),
     );
-    let mut p = finish(stock.to_vec(), reg, cs, true, None)?;
+    let mut p = finish(stock.to_vec(), reg, cs, true, None, Some(stock))?;
     p.os = os;
     p.sha_stock = sfw.syx_sha256;
     Ok(p)
@@ -274,9 +274,10 @@ fn known_port<'a>(fw: &Firmware, raw: &[u8], reg: &'a Registry) -> Result<&'a cr
 }
 
 /// The checks every image takes, patched or stock: verify (checksums, HMAC, limits, record), the product byte, the build floor and
-/// the round trip through the model of the device's receiver. `check_image` runs them on any image (the tests tamper with images).
-pub fn check_image(image: Vec<u8>, reg: &Registry) -> Result<Prepared> {
-    finish(image, reg, Checks(vec![]), false, None)
+/// the round trip through the model of the device's receiver. `check_image` runs them on any image (the tests tamper with images);
+/// `base` is the stock image it was made from, which a device with read-only sections needs for the verify check.
+pub fn check_image(image: Vec<u8>, reg: &Registry, base: Option<&[u8]>) -> Result<Prepared> {
+    finish(image, reg, Checks(vec![]), false, None, base)
 }
 
 fn finish(
@@ -285,13 +286,14 @@ fn finish(
     mut cs: Checks,
     restore: bool,
     code: Option<&[(u64, u64)]>,
+    base: Option<&[u8]>,
 ) -> Result<Prepared> {
     let device = Firmware::parse(&image)?.device.short().to_string();
     let info = info_of(&device)?;
     let mut messages: Vec<Range<usize>> = vec![];
     let rep = cs.run(
         "verify",
-        verify::verify(&image, Some(reg), None).map(|r| {
+        verify::verify(&image, Some(reg), base).map(|r| {
             let d = format!(
                 "{}; container {} bytes, {} data messages",
                 r.checks.join("; "),

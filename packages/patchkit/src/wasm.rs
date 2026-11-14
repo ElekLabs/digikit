@@ -77,7 +77,7 @@ pub fn apply_bundle(fw: &[u8], bundle: &[u8], ids: &str) -> Result<(Vec<u8>, Str
 pub fn inspect_bundle(fw: &[u8], bundle: &[u8]) -> Result<String> {
     let (reg, _) = load(bundle)?;
     let f = crate::firmware::Firmware::parse(fw)?;
-    let rep = crate::verify::verify(fw, Some(&reg), None)?;
+    let rep = crate::verify::inspect(fw, Some(&reg))?;
     Ok(serde_json::json!({
         "device": f.device.short(),
         "sha256": f.syx_sha256,
