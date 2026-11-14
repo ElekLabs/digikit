@@ -79,7 +79,21 @@
     "test-wasm": {
       "description": "Tests that load the real public/*.wasm or run the patchkit command line: the Vitest project web-wasm (tests/*.wasm.test.ts).",
       "dependsOn": ["patchkit-wasm"],
-      "inputs": ["default", "^production", "jsToolchain"]
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/scripts/**/*",
+        "{projectRoot}/public/*.js",
+        "{projectRoot}/tests/*.wasm.test.ts",
+        "{projectRoot}/tests/fit-wasm.ts",
+        "{projectRoot}/tests/support/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/tsconfig.json",
+        "{projectRoot}/site.config.mjs",
+        "^production",
+        "jsToolchain",
+        "{workspaceRoot}/vitest.host.config.ts",
+        "{workspaceRoot}/vitest.host.projects.json"
+      ]
     }
   }
 }
