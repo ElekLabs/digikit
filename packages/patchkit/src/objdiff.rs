@@ -3,7 +3,12 @@
 //! Proof for moves of Rust items between modules. Mangled names contain the module path, the function order follows it, and
 //! relocations point at section symbols, so a byte compare of the objects fails for a perfect move. Here:
 //! - functions and named data are matched by a normalized name (demangled, module path removed; a C symbol keeps its exact name);
-//! - an anonymous constant (`.rodata.global.*`) is matched by its content;
+//! - an anonymous constant (`.rodata.global.*`) with no relocation inside is a string pool: the compiler merges and orders such constants
+//!   as it likes, so it is cut at the places the object refers to (each cut piece is one constant, trailing zero padding removed) and
+//!   the pieces are compared as one multiset (content and count) over the whole object. A relocation to a piece is compared by the
+//!   piece's content, not by blob or offset. Another anonymous constant (with relocations) is matched by its content;
+//! - a panic location (`core::panic::Location`: 16 bytes, one relocation at 0 to its file name) is ignored and counted, unless `--strict`;
+//!   the runtime is `panic=abort`, so file, line and column cannot change behaviour. File names only a location refers to are ignored too;
 //! - a relocation is compared by its normalized target plus addend, never by section or address;
 //! - code is compared byte by byte with the relocated fields masked, and the first difference is shown as an instruction.
 //!
@@ -12,7 +17,7 @@
 use crate::dko::{Dko, DkoSection};
 use crate::error::*;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// One difference. `kind`: `only-old`, `only-new`, `differs`, `c-symbol` (an exact-name symbol was added, removed or changed) or `extern`.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -27,19 +32,32 @@ pub struct Report {
     pub identical: bool,
     pub functions: usize,
     pub data_objects: usize,
+    /// Panic locations ignored in the old and the new object (0 with `strict`).
+    pub ignored_locations_old: usize,
+    pub ignored_locations_new: usize,
     pub differences: Vec<Difference>,
 }
 
 impl Report {
     pub fn text(&self) -> String {
+        let ignored = if self.ignored_locations_old + self.ignored_locations_new == 0 {
+            String::new()
+        } else if self.ignored_locations_old == self.ignored_locations_new {
+            format!("ignored: {} panic locations\n", self.ignored_locations_new)
+        } else {
+            format!(
+                "ignored: {} panic locations (old {})\n",
+                self.ignored_locations_new, self.ignored_locations_old
+            )
+        };
         if self.identical {
             return format!(
-                "identical: {} functions, {} data objects\n",
+                "identical: {} functions, {} data objects\n{ignored}",
                 self.functions, self.data_objects
             );
         }
         let mut s = format!(
-            "differences: {} ({} functions and {} data objects match)\n",
+            "differences: {} ({} functions and {} data objects match)\n{ignored}",
             self.differences.len(),
             self.functions,
             self.data_objects
@@ -162,41 +180,44 @@ fn class_of(s: &DkoSection) -> Class {
     }
 }
 
-/// The label of a section as a relocation target.
-fn label(s: &DkoSection, content: &HashMap<&str, String>) -> String {
-    let (p, rest) = split_prefix(&s.name);
-    match class_of(s) {
-        Class::Anon => format!("anon:{}", content[s.name.as_str()]),
-        _ => format!("{}{}", p, norm_name(rest)),
-    }
+/// One constant of a string pool: how often it occurs and a short text for messages.
+#[derive(Default)]
+struct Piece {
+    count: usize,
+    size: usize,
+    shown: String,
 }
 
-fn load(o: &Dko) -> Result<(Vec<Item>, BTreeSet<String>)> {
+struct Loaded {
+    items: Vec<Item>,
+    externs: BTreeSet<String>,
+    /// content hash -> piece (the string constants of the object as one multiset)
+    pieces: BTreeMap<String, Piece>,
+    /// panic locations that were left out
+    locations: usize,
+}
+
+fn printable(b: &[u8], n: usize) -> String {
+    b.iter()
+        .take(n)
+        .map(|&c| {
+            if (32..127).contains(&c) {
+                c as char
+            } else {
+                '.'
+            }
+        })
+        .collect()
+}
+
+fn trim_zeros(b: &[u8]) -> &[u8] {
+    let n = b.iter().rposition(|&c| c != 0).map_or(0, |i| i + 1);
+    &b[..n]
+}
+
+fn load(o: &Dko, strict: bool) -> Result<Loaded> {
     let secs: HashMap<&str, &DkoSection> =
         o.sections.iter().map(|s| (s.name.as_str(), s)).collect();
-    // the content of an anonymous section (no relocations: a target label must not depend on other labels)
-    let mut content: HashMap<&str, String> = HashMap::new();
-    for s in &o.sections {
-        let mut h = Sha256::new();
-        h.update(s.align.to_be_bytes());
-        h.update(s.size.to_be_bytes());
-        h.update(unhex(&s.hex)?);
-        let shown: String = unhex(&s.hex)?
-            .iter()
-            .take(20)
-            .map(|&b| {
-                if (32..127).contains(&b) && b != b'"' {
-                    b as char
-                } else {
-                    '.'
-                }
-            })
-            .collect();
-        content.insert(
-            s.name.as_str(),
-            format!("{}\"{shown}\"", hex(&h.finalize()[..6])),
-        );
-    }
     let defined: HashMap<&str, (&str, u64)> = o
         .symbols
         .iter()
@@ -207,28 +228,166 @@ fn load(o: &Dko) -> Result<(Vec<Item>, BTreeSet<String>)> {
                 .map(|s| (y.name.as_str(), (s, y.value)))
         })
         .collect();
-    let target = |sym: &str, addend: i64| -> String {
-        if let Some(sn) = sym.strip_prefix(".sec.") {
-            if let Some(s) = secs.get(sn) {
-                return format!("{}{:+}", label(s, &content), addend);
+    // the section and offset a relocation target names (None: an undefined symbol)
+    let resolve = |sym: &str, addend: i64| -> Option<(&DkoSection, i64)> {
+        if let Some(s) = sym.strip_prefix(".sec.").and_then(|sn| secs.get(sn)) {
+            return Some((s, addend));
+        }
+        let (sn, v) = defined.get(sym)?;
+        Some((secs.get(sn)?, *v as i64 + addend))
+    };
+    let mut reloc_in: HashMap<&str, Vec<&crate::dko::DkoReloc>> = HashMap::new();
+    for r in &o.relocs {
+        reloc_in.entry(r.section.as_str()).or_default().push(r);
+    }
+    let anon = |s: &DkoSection| class_of(s) == Class::Anon;
+    // a panic location: 16 bytes, one relocation at 0 to a constant (its file name)
+    let is_location = |s: &DkoSection| {
+        !strict
+            && anon(s)
+            && s.size == 16
+            && match reloc_in.get(s.name.as_str()).map(|v| v.as_slice()) {
+                Some([r]) => {
+                    r.offset == 0 && resolve(&r.symbol, r.addend).is_some_and(|(t, _)| anon(t))
+                }
+                _ => false,
+            }
+    };
+    let locations: HashSet<&str> = o
+        .sections
+        .iter()
+        .filter(|s| is_location(s))
+        .map(|s| s.name.as_str())
+        .collect();
+    // a string pool: an anonymous constant with no relocation inside
+    let pool: HashSet<&str> = o
+        .sections
+        .iter()
+        .filter(|s| {
+            anon(s)
+                && !locations.contains(s.name.as_str())
+                && !reloc_in.contains_key(s.name.as_str())
+        })
+        .map(|s| s.name.as_str())
+        .collect();
+    // where the object refers into a pool: `real` (by anything but a location) and `from_loc`
+    let mut real: HashMap<&str, BTreeSet<i64>> = HashMap::new();
+    // who refers to (pool, offset)
+    let mut referrers: HashMap<(&str, i64), HashSet<&str>> = HashMap::new();
+    let mut from_loc: HashMap<&str, BTreeSet<i64>> = HashMap::new();
+    for r in &o.relocs {
+        if let Some((t, off)) = resolve(&r.symbol, r.addend) {
+            if pool.contains(t.name.as_str()) {
+                let m = if locations.contains(r.section.as_str()) {
+                    &mut from_loc
+                } else {
+                    &mut real
+                };
+                m.entry(t.name.as_str()).or_default().insert(off);
+                if !locations.contains(r.section.as_str()) {
+                    referrers
+                        .entry((t.name.as_str(), off))
+                        .or_default()
+                        .insert(r.section.as_str());
+                }
             }
         }
-        if let Some((sn, v)) = defined.get(sym) {
-            if let Some(s) = secs.get(sn) {
-                return format!("{}{:+}", label(s, &content), *v as i64 + addend);
+    }
+    for (sn, v) in defined.values() {
+        if pool.contains(sn) {
+            real.entry(sn).or_default().insert(*v as i64);
+            referrers.entry((sn, *v as i64)).or_default().insert("");
+        }
+    }
+    // the pieces of each pool: cut at every place something refers to (and at 0)
+    let mut cuts: HashMap<&str, Vec<i64>> = HashMap::new();
+    let mut pieces: BTreeMap<String, Piece> = BTreeMap::new();
+    let mut piece_key: HashMap<(&str, i64), String> = HashMap::new();
+    for s in o.sections.iter().filter(|s| pool.contains(s.name.as_str())) {
+        let bytes = unhex(&s.hex)?;
+        let mut at: BTreeSet<i64> = BTreeSet::new();
+        at.insert(0);
+        at.extend(real.get(s.name.as_str()).into_iter().flatten().copied());
+        at.extend(from_loc.get(s.name.as_str()).into_iter().flatten().copied());
+        let at: Vec<i64> = at
+            .into_iter()
+            .filter(|&c| (0..=bytes.len() as i64).contains(&c))
+            .collect();
+        for (k, &c) in at.iter().enumerate() {
+            let end = at.get(k + 1).map_or(bytes.len(), |&e| e as usize);
+            let body = trim_zeros(&bytes[c as usize..end]);
+            let mut h = Sha256::new();
+            h.update(body);
+            let key = hex(&h.finalize()[..8]);
+            piece_key.insert((s.name.as_str(), c), key.clone());
+            let loc_only = from_loc
+                .get(s.name.as_str())
+                .is_some_and(|f| f.contains(&c))
+                && !real.get(s.name.as_str()).is_some_and(|f| f.contains(&c));
+            if !loc_only && !body.is_empty() {
+                let p = pieces.entry(key).or_default();
+                p.count += 1;
+                p.size = body.len();
+                p.shown = printable(body, 24);
             }
         }
-        format!("{}{:+}", norm_name(sym), addend)
+        cuts.insert(s.name.as_str(), at);
+    }
+    // the content of another anonymous section (a target label must not depend on other labels)
+    let content = |s: &DkoSection| -> Result<String> {
+        let b = unhex(&s.hex)?;
+        let mut h = Sha256::new();
+        h.update(s.align.to_be_bytes());
+        h.update(s.size.to_be_bytes());
+        h.update(&b);
+        Ok(format!(
+            "{}\"{}\"",
+            hex(&h.finalize()[..6]),
+            printable(&b, 20).replace('"', ".")
+        ))
+    };
+    let target = |sym: &str, addend: i64, from: &str| -> Result<String> {
+        let Some((s, off)) = resolve(sym, addend) else {
+            return Ok(format!("{}{:+}", norm_name(sym), addend));
+        };
+        let n = s.name.as_str();
+        if locations.contains(n) {
+            return Ok("panic-location".into());
+        }
+        if pool.contains(n) {
+            // the piece that starts at `off` (an offset inside a piece keeps its distance from the start)
+            let at = &cuts[n];
+            let start = at.iter().copied().rfind(|&c| c <= off).unwrap_or(0);
+            let key = &piece_key[&(n, start)];
+            // The end pointer of the piece the same item refers to just before it (`cmp` against the end of a table): what follows is
+            // whatever the pool placed there, so the target is "the end of that piece". An adjacent piece that the item reads next is
+            // compared by this label too: a difference in it is caught by the piece multiset and by the other users of that piece.
+            let prev = at.iter().copied().rfind(|&c| c < off);
+            if let Some(a) = prev {
+                if referrers.get(&(n, a)).is_some_and(|f| f.contains(from)) {
+                    return Ok(format!("str-end:{}", piece_key[&(n, a)]));
+                }
+            }
+            return Ok(format!("str:{key}{:+}", off - start));
+        }
+        let (p, rest) = split_prefix(&s.name);
+        Ok(match class_of(s) {
+            Class::Anon => format!("anon:{}{:+}", content(s)?, off),
+            _ => format!("{}{}{:+}", p, norm_name(rest), off),
+        })
     };
     let mut items = vec![];
     for s in &o.sections {
+        if locations.contains(s.name.as_str()) || pool.contains(s.name.as_str()) {
+            continue;
+        }
         let mut bytes = if s.kind == "bss" {
             vec![]
         } else {
             unhex(&s.hex)?
         };
         let mut relocs = vec![];
-        for r in o.relocs.iter().filter(|r| r.section == s.name) {
+        for r in reloc_in.get(s.name.as_str()).into_iter().flatten() {
             let w = match r.rtype.as_str() {
                 "cf.pc8" => 1,
                 "cf.pc16" => 2,
@@ -238,7 +397,11 @@ fn load(o: &Dko) -> Result<(Vec<Item>, BTreeSet<String>)> {
             if at + w <= bytes.len() {
                 bytes[at..at + w].fill(0);
             }
-            relocs.push((r.offset, r.rtype.clone(), target(&r.symbol, r.addend)));
+            relocs.push((
+                r.offset,
+                r.rtype.clone(),
+                target(&r.symbol, r.addend, &s.name)?,
+            ));
         }
         relocs.sort();
         let class = class_of(s);
@@ -264,7 +427,12 @@ fn load(o: &Dko) -> Result<(Vec<Item>, BTreeSet<String>)> {
         .filter(|y| y.section.is_none())
         .map(|y| norm_name(&y.name))
         .collect();
-    Ok((items, externs))
+    Ok(Loaded {
+        items,
+        externs,
+        pieces,
+        locations: locations.len(),
+    })
 }
 
 fn describe(i: &Item) -> String {
@@ -386,8 +554,13 @@ fn insn_line(i: &Item, at: usize) -> String {
     s
 }
 
-/// Compare two objects.
+/// Compare two objects (panic locations ignored).
 pub fn diff(old: &Dko, new: &Dko) -> Result<Report> {
+    diff_with(old, new, false)
+}
+
+/// Compare two objects; with `strict` a panic location (file, line, column) is compared like any constant.
+pub fn diff_with(old: &Dko, new: &Dko, strict: bool) -> Result<Report> {
     if old.arch != "cf" || new.arch != "cf" {
         return Err(err!(
             "objdiff compares ColdFire objects (got {} and {})",
@@ -395,9 +568,23 @@ pub fn diff(old: &Dko, new: &Dko) -> Result<Report> {
             new.arch
         ));
     }
-    let (a, ae) = load(old)?;
-    let (b, be) = load(new)?;
-    let mut rep = Report::default();
+    let Loaded {
+        items: a,
+        externs: ae,
+        pieces: pa,
+        locations: la,
+    } = load(old, strict)?;
+    let Loaded {
+        items: b,
+        externs: be,
+        pieces: pb,
+        locations: lb,
+    } = load(new, strict)?;
+    let mut rep = Report {
+        ignored_locations_old: la,
+        ignored_locations_new: lb,
+        ..Report::default()
+    };
     let mut push = |kind: &str, name: String, detail: String| {
         rep.differences.push(Difference {
             kind: kind.into(),
@@ -465,6 +652,30 @@ pub fn diff(old: &Dko, new: &Dko) -> Result<Report> {
         xs[n..].iter().for_each(|x| flag("only-old", x, &mut push));
         ys[n..].iter().for_each(|y| flag("only-new", y, &mut push));
     }
+    // the string constants as one multiset
+    let mut strings = 0usize;
+    for (k, x) in &pa {
+        let n = pb.get(k).map_or(0, |y| y.count);
+        strings += x.count.min(n);
+        if x.count > n {
+            push(
+                "only-old",
+                format!("string constant {:?} of {} bytes", x.shown, x.size),
+                format!("old {} times, new {} times", x.count, n),
+            );
+        }
+    }
+    for (k, y) in &pb {
+        let n = pa.get(k).map_or(0, |x| x.count);
+        if y.count > n {
+            push(
+                "only-new",
+                format!("string constant {:?} of {} bytes", y.shown, y.size),
+                format!("old {} times, new {} times", n, y.count),
+            );
+        }
+    }
+    datas += strings;
     for e in ae.difference(&be) {
         push("extern", e.clone(), "undefined symbol only in old".into());
     }
@@ -477,15 +688,19 @@ pub fn diff(old: &Dko, new: &Dko) -> Result<Report> {
     Ok(rep)
 }
 
-/// `patchkit objdiff OLD NEW [--format text|json]`; returns the exit code.
+/// `patchkit objdiff OLD NEW [--format text|json] [--strict]`; returns the exit code.
 pub fn run(rest: &[String]) -> Result<i32> {
-    const U: &str = "usage: patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json]";
+    const U: &str =
+        "usage: patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json] [--strict]";
+    let mut strict = false;
     let mut files = vec![];
     let mut format = "text".to_string();
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         if a == "--format" {
             format = it.next().ok_or_else(|| Error(U.into()))?.clone();
+        } else if a == "--strict" {
+            strict = true;
         } else if a.starts_with("--") {
             return Err(Error(U.into()));
         } else {
@@ -499,7 +714,7 @@ pub fn run(rest: &[String]) -> Result<i32> {
         Dko::parse(&std::fs::read_to_string(f).map_err(|e| Error(format!("{f}: {e}")))?)
             .map_err(|e| Error(format!("{f}: {e}")))
     };
-    let rep = diff(&read(&files[0])?, &read(&files[1])?)?;
+    let rep = diff_with(&read(&files[0])?, &read(&files[1])?, strict)?;
     if format == "json" {
         println!("{}", serde_json::to_string_pretty(&rep)?);
     } else {

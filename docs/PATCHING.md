@@ -88,18 +88,24 @@ mise run patch:mem -- core/machines test/machine-clone --device dt2 --firmware 1
 
 ### Compare two objects after a move
 
-`patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json]` proves that two ColdFire objects hold the same code when only
+`patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json] [--strict]` proves that two ColdFire objects hold the same code when only
 names, order and addresses differ (the check for moving Rust items between modules of the runtime crate). A byte compare of such
 objects always fails: mangled names contain the module path, functions change order, and relocations name section symbols.
 
 - Functions and named data are matched by a normalized name: demangled, crate and module path removed (`dkrt::foo::rd32` is `rd32`;
   `<dkrt::a::T>::m` is `<T>::m`). Two items with one normalized name are paired by equal content first. A C symbol or `#[no_mangle]`
   item keeps its exact name: adding, removing or renaming one is a `c-symbol` difference.
-- Anonymous constants (`.rodata.global.*`) are matched by content.
+- Merged string rodata (an anonymous constant with no relocation inside) is cut at the places the object refers to, and each piece is one
+  string (trailing zero padding removed). A relocation into it is compared by the content of the string it names, wherever the pool
+  placed it; a reference to the end of a string that the same function reads is compared as "the end of that string". The strings are
+  also compared as one multiset (content and count), so an unused changed string is caught: `only-old` or `only-new string constant`.
+- A panic location (`core::panic::Location`: 16 bytes, one relocation at 0 to its file name) is ignored when only file, line or column
+  differ: the runtime is `panic=abort`. The result says `ignored: N panic locations`. `--strict` compares them like any constant.
+- Other anonymous constants (with relocations inside) are matched by content.
 - Code and data are compared byte by byte with every relocated field masked. A relocation is compared by its normalized target
   plus addend, never by address. The first difference of a function is shown as an instruction with its relocation.
 - Undefined symbols (anchors, `memcpy`) are compared as a set (`extern`).
-- Exit 0 and `identical: N functions, M data objects`, or exit 1 and the list.
+- Exit 0 and `identical: N functions, M data objects` (then `ignored: N panic locations` when there are any), or exit 1 and the list.
 
 ```text
 $ patchkit objdiff modules/core/runtime/build/runtime.dko.json modules/core/runtime/build/runtime.dko.json
