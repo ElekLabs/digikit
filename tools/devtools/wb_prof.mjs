@@ -4,7 +4,9 @@
 //     wb [--format json|text] addrmap lookup ADDR... [--map F]... [--image X.syx] [--loads F | --snapshot F] [--load ID=BASE] [--dsp-base ID=PC] [--cpu cf|sharc] [--ret]
 //     wb [--format json|text] module analyse MODULE.dkm DSP.dko.json
 //     wb [--format json|text] profile report FILE [--top N] [--map F]... [--image X.syx] [--loads F]
-//     wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR]
+//     wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot]
+//
+// `record` reads `cf.profile` before and after N seconds and keeps the difference; `--since-boot` keeps the cumulative counters (the state of a paused emulator).
 //
 // ADDR is a number (decimal or 0x hex), or `cpu:number` (`sharc:0xb80105`). A map is a `.addrmap.json` (docs/ADDRMAP.md); `--image X.syx` adds
 // the ship map `X.addrmap.json` beside the image. `--loads` is a load table JSON; `--snapshot` a JSON object of runtime symbol to hex bytes.
@@ -126,7 +128,8 @@ async function readLoads(prof, client, ship, plan) {
 
 async function record({ opts, root, fail }) {
   const seconds = Number(opts.seconds);
-  if (!(seconds > 0) || !opts.out) fail('profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR]');
+  if (!(seconds > 0) || !opts.out)
+    fail('profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot]');
   const { connect, readSocket } = await import('../../packages/control-client/src/index.ts');
   const runDir = path.resolve(root, opts['run-dir'] ?? 'out/native/run');
   const sock = readSocket(runDir);
@@ -137,7 +140,7 @@ async function record({ opts, root, fail }) {
     );
   const client = await connect(sock);
   try {
-    const before = await client.call('cf.profile');
+    const before = opts['since-boot'] ? { paths: [] } : await client.call('cf.profile');
     const t0 = Date.now();
     await sleep(seconds * 1000);
     const after = await client.call('cf.profile');

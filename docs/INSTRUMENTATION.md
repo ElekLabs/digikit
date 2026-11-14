@@ -506,7 +506,7 @@ script change; check the frames by eye first).
 
 ## Names for addresses
 
-Profiles, crash records and PC dumps name their addresses through the address map ([ADDRMAP.md](ADDRMAP.md)): `tools/devtools/addrnames.py` for tools, `patchkit addr` for everything else. `tools/devtools/cfprof.py` prints `cf.profile` by function, `tools/devtools/pcdump_names.py` adds a `func` column to `pcdump.csv`, `fastcov` and `snapread` use the same lookup.
+Profiles, crash records and PC dumps name their addresses through the address map ([ADDRMAP.md](ADDRMAP.md)): `tools/devtools/addrnames.py` for tools, `patchkit addr` for everything else. `wb profile report` prints a `cf.profile` recording by function ([Profiles](#profiles)), `tools/devtools/pcdump_names.py` adds a `func` column to `pcdump.csv`, `fastcov` and `snapread` use the same lookup.
 
 ## Profiles
 
@@ -541,7 +541,16 @@ node tools/devtools/wb.mjs profile report out/try/synthetic.profile.json --map o
 ```
 
 `wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR]` reads `cf.profile` of the running emulator (the daemon needs the `cf-profile` feature, below) before and after N seconds
-and writes the difference as a profile; with `--image` it also reads the load table of the running image. `cf.profile` keeps the 400 heaviest rows of its cumulative tables, which the artifact records under `loss`.
+and writes the difference as a profile; with `--image` it also reads the load table of the running image. `--since-boot` keeps the cumulative counters instead of the difference (read a paused emulator to get a stable state). A real run, 4 s of a DT2 1.17 image with the runtime (no modules loaded; the dev map adds firmware names):
+
+```sh
+cargo build --release -p digi-control --bin digi-emud --features cf-profile   # a daemon with the profile
+target/release/digi-emud out/try/rt.syx --free     # from the repository root: its socket is out/native/run/current.json
+node tools/devtools/wb.mjs profile record --seconds 4 --image out/try/rt.syx --out out/try/real.profile.json
+# out/try/real.profile.json: 371 counters over 4 s
+```
+
+`cf.profile` keeps the 400 heaviest rows of its cumulative tables, which the artifact records under `loss`.
 `wb addrmap lookup` and `wb module analyse` ([ADDRMAP.md](ADDRMAP.md#usage), [dksharc](../packages/dksharc/README.md#usage)) use the same `dkprof.wasm`.
 
 ## Cargo features

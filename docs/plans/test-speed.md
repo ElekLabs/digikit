@@ -186,6 +186,8 @@ Measured payoff is given where known.
 - SDK host compile tests for every template and header (`chooser.h`, `data.h`, `job.h`, `params.h` and `sample_picker.h` have no test reference).
 - Host-test moves: fits row format, capacity error boundaries, upload protocol errors, store v3 layout, settings bounds, card-safety classification.
 - Conformance uses the cached `runtimeTests` daemon instead of a fresh daemon per module.
+- The root `.gitignore` selects the whole gate: `nx affected` names it as an input of every project. Find the glob that does it and list `.gitignore` only for `fmt-check` and lint. Until then a new ignored output goes in a nested `.gitignore` (`apps/web/public/.gitignore` for `dkprof.wasm`).
+- [x] The daemon test key leaves out the workspace crates the daemon reaches only through patchkit (`emud_key.patchkit_only_dirs`, from `cargo metadata`; dkaddrmap, dkneeds, dksharc, dkupload and the runtime sdk and fit crates today). Their effect is in `images.sha256` and the pack bytes. Done in the dkprof PR (P2).
 - Python ports still open: pluck menu flows, `pages-dyn-pluck`, `upload-rust`, the last dkrt proof gap (step 10).
 
 ## Not planned

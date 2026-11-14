@@ -109,7 +109,7 @@ P2 design:
   overhead.
 - **`wb:cli`:** a global `--format json|text`, and the commands `addrmap lookup`, `module analyse`, `profile record` (emulator: `cf.profile` through control-client) and
   `profile report`. All go through `dkprof.wasm`; `wb` starts no child process for them.
-- **Python:** `tools/devtools/cfprof.py` is deleted once `wb profile report` matches its output.
+- **Python:** `tools/devtools/cfprof.py` is deleted (done): on one paused emulator, `wb profile record --since-boot` and `cfprof.py` gave equal path counters and equal function, idle and exit rows.
 - **Not in P2:** the SHARC profile source (a new daemon call) is P4, the device source is P8, the panes are P6.
 - **patchkit:** it uses the dksharc DKDS and `.dko` readers (done; packed bytes unchanged).
 

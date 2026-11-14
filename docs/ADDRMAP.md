@@ -69,7 +69,7 @@ base, size, fini. `DKRT_DSP` (`DspState` in `.../dsp.rs`) has 13 words, then `mo
 `DKRT_DSP`. A module with `mod_len[i] != 0` starts at the L2 byte address `area + mod_off[i]` (`area` is word 3 of `dyndsp_info`); `dsp_base` is
 `l2_sw_base + (that address - l2_byte_base) / 2`. The slot count is read from the length of the `DKRT_STATE` bytes. No firmware or runtime change.
 
-Callers: `tools.devtools.addrnames.AddrNames.for_image(..., peek=)` (Python tools: `dklog`, `cfprof`) and `readLoadTable` in `tests/regression/runtime/addrmap.ts`
+Callers: `tools.devtools.addrnames.AddrNames.for_image(..., peek=)` (Python tools: `dklog`) and `readLoadTable` in `tests/regression/runtime/addrmap.ts`
 only peek the symbols and pass the bytes on.
 
 ## Lookup
@@ -134,15 +134,15 @@ dist/patchkit/patchkit addr --map out/try/rt.addrmap.json --snapshot DKRT_STATE=
 ```
 
 The second command is an all-zero module table: no module loaded. With real bytes, peek each symbol (its address is in `out/try/rt.plan.json`) for the given length and pass it as
-`--snapshot SYMBOL=HEX`; the table lists every module with `base` and `dsp_base`, and the same flags name addresses in the same call. `tools/devtools/cfprof.py` and
-`tools/device/dklog.py` do the peeking for the emulator and the device.
+`--snapshot SYMBOL=HEX`; the table lists every module with `base` and `dsp_base`, and the same flags name addresses in the same call. `wb profile record --image X.syx` (emulator) and
+`tools/device/dklog.py` (device) do the peeking.
 
 ## Consumers
 
 | Tool | Use |
 | --- | --- |
 | `tools/device/dklog.py crash --image X.syx [--module M.dkm]` | pc, registers and return-address-looking stack words of a crash record |
-| `tools/devtools/cfprof.py` | `cf.profile` of the emulator (feature `cf-profile`) by function |
+| `wb profile record`, `wb profile report` | `cf.profile` of the emulator (feature `cf-profile`) by function and module ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)); `--map out/addrmap/<device>-<version>.dev.json` adds firmware names |
 | `tools/devtools/fastcov.py` | SHARC function names of the interpreter report |
 | `tools/emulator/snapread.py` | ColdFire names for `regs` and `tasks` (the image comes from the snapshot path or `--image`) |
 | `tools/devtools/pcdump_names.py` | a `func` column and names in the `#stack-max` line of a `pcdump.csv` |

@@ -100,6 +100,7 @@ for (let i = 0; i < args.length; i++) {
     if (REPEATED.has(key)) (opts[key] ??= []).push(args[++i]);
     else opts[key] = args[++i];
   } else if (a === '--ret') opts.ret = true;
+  else if (a === '--since-boot') opts['since-boot'] = true;
   else if (a.startsWith('--')) fail(`unknown option ${a}\n${usage}`);
   else words.push(a);
 }
