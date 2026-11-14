@@ -523,6 +523,21 @@ test('ABOUT returns only the complete snapshot after the new open, keeping the k
   expect(polls).toBe(4);
 });
 
+/**
+ * Timers fire with no wall-clock time passing, the worst case of a timer firing before `Date.now()` reaches its deadline
+ * (up to 1 ms on a real host). Only timers are faked: `expired` must come from the deadline that fired, not from `Date.now()`.
+ */
+async function withFiredTimers<T>(run: () => Promise<T>, advanceMs: number): Promise<PromiseSettledResult<T>> {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+  try {
+    const settled = Promise.allSettled([run()]).then(([result]) => result!);
+    await vi.advanceTimersByTimeAsync(advanceMs);
+    return await settled;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 test('ABOUT bounds initial count, info and row reads, and preserves incomplete rows on timeout', async () => {
   for (const stalled of ['initial-count', 'info', 'row', 'incomplete'] as const) {
     fake.write.mockClear();
@@ -539,33 +554,36 @@ test('ABOUT bounds initial count, info and row reads, and preserves incomplete r
     const tap = vi.fn(async () => {
       opened = true;
     });
-    const started = Date.now();
-    await expect(
-      openRuntimeAbout(
-        tap,
-        { client: { memPeek } } as unknown as Session,
-        { info } as unknown as DkSession,
-        plan,
-        '/artifacts',
-        30,
-      ),
-    ).rejects.toThrow();
-    expect(Date.now() - started).toBeLessThan(500);
+    const result = await withFiredTimers(
+      () =>
+        openRuntimeAbout(
+          tap,
+          { client: { memPeek } } as unknown as Session,
+          { info } as unknown as DkSession,
+          plan,
+          '/artifacts',
+          30,
+        ),
+      30,
+    );
+    expect(result.status, stalled).toBe('rejected');
     const initial = fake.write.mock.calls.find(([file]) => file.endsWith('about-before-open.json'));
-    expect(JSON.parse(initial![1])).toMatchObject({ expired: true });
+    expect(JSON.parse(initial![1]), stalled).toMatchObject({ expired: true });
     if (stalled === 'initial-count') expect(tap).not.toHaveBeenCalled();
     else {
       const saved = fake.write.mock.calls.find(([file]) => file.endsWith('about-readiness.json'));
-      expect(JSON.parse(saved![1])).toMatchObject({ expired: true, rows: stalled === 'incomplete' ? rows : [] });
+      expect(JSON.parse(saved![1]), stalled).toMatchObject({
+        expired: true,
+        rows: stalled === 'incomplete' ? rows : [],
+      });
     }
   }
 });
 
 test('a never-answering remote state request obeys the readiness deadline', async () => {
   const dk = { remoteState: vi.fn(() => new Promise(() => {})) } as unknown as DkSession;
-  const started = Date.now();
-  await expect(expectRemoteEnabled(session, dk, 30)).rejects.toThrow();
-  expect(Date.now() - started).toBeLessThan(500);
+  const result = await withFiredTimers(() => expectRemoteEnabled(session, dk, 30), 30);
+  expect(result.status).toBe('rejected');
   const saved = fake.write.mock.calls.find(([file]) => file.endsWith('remote-readiness.json'));
   expect(JSON.parse(saved![1])).toMatchObject({ state: null, expired: true });
 });

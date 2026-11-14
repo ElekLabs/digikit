@@ -8,7 +8,7 @@ import { aggregate, type PatchedSession } from '../support.ts';
 import { liveArtifacts, record } from './artifacts.ts';
 import { installModule, moduleArtifact } from './install.ts';
 import { expectRuntimeUi } from './ready.ts';
-import { beforeReadinessDeadline, tap } from './waits.ts';
+import { beforeReadinessDeadline, deadlineExpired, tap } from './waits.ts';
 import { prepareRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 
 const exec = promisify(execFile);
@@ -29,6 +29,7 @@ export async function prepareRemote(runtime: PatchedSession): Promise<RuntimePla
 export async function expectRemoteEnabled(session: Session, dk: DkSession, timeout = 10_000): Promise<void> {
   const deadline = Date.now() + timeout;
   let state: Awaited<ReturnType<DkSession['remoteState']>> | undefined;
+  let failure: unknown;
   try {
     await expect
       .poll(async () => (state = await beforeReadinessDeadline(deadline, () => dk.remoteState())).enabled, {
@@ -37,10 +38,13 @@ export async function expectRemoteEnabled(session: Session, dk: DkSession, timeo
         message: 'installed remote module enables its commands',
       })
       .toBe(true);
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
     record(liveArtifacts(session, 'remote-input'), 'remote-readiness', {
       state: state ?? null,
-      expired: Date.now() >= deadline,
+      expired: deadlineExpired(deadline, failure),
     });
   }
 }
