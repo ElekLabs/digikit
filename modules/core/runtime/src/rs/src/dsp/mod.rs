@@ -21,7 +21,7 @@
 //! module's range behind the image, bss and voice states (`state_bytes` of its `dk_fx_desc`).
 //!
 //! Nothing here runs unless the file has a DSP section; the link to `core/dsp-link`, `core/dyndsp` and `core/dynfx` is optional.
-use crate::handlers::{Claim, ServiceList, Services};
+use crate::handlers::{services, Claim, ServiceTable};
 use crate::{arena, cstr_eq, cstr_len, rd32};
 use core::ptr::{addr_of_mut, read_volatile};
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Stream, Ticket, SEQ_MAX};
@@ -318,7 +318,7 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         bank_off,
     };
     // the entries of the tables the services own: track table, voices, effects
-    let r = Services::dsp_check_sections(&sec);
+    let r = services().dsp_check_sections(&sec);
     if r != OK {
         return r;
     }
@@ -352,11 +352,11 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         i += 1;
     }
     // voice and effect rows, then the voices' types
-    let r = Services::dsp_check_rows(&sec);
+    let r = services().dsp_check_rows(&sec);
     if r != OK {
         return r;
     }
-    let r = Services::dsp_check_types(&sec);
+    let r = services().dsp_check_types(&sec);
     if r != OK {
         return r;
     }
@@ -393,7 +393,7 @@ pub(crate) unsafe fn put_le16(p: *mut u8, v: u32) {
 pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
     if retained() { return E_BUSY; }
     // a service may need a slot of its own: refuse before anything is reserved
-    let r = Services::dsp_admit(job);
+    let r = services().dsp_admit(job);
     if r != OK {
         return r;
     }
@@ -445,7 +445,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
     }
     // the services claim their rows: the voice states follow image and bss (8-aligned), then the effect states, in record order
     let mut claim = Claim { rec, job, base, byte_shift, state_at: (job.image_size + job.bss + 7) & !7 };
-    Services::dsp_claim(&mut claim);
+    services().dsp_claim(&mut claim);
     d.mod_off[rec] = off;
     d.mod_len[rec] = len;
     d.send_base = base;
@@ -456,7 +456,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
 
 /// Give back what `reserve` took for module record `rec` (the rows must have been cleared first).
 pub(crate) unsafe fn unreserve(rec: usize) {
-    Services::dsp_release(rec);
+    services().dsp_release(rec);
     let d = ds();
     d.mod_off[rec] = 0;
     d.mod_len[rec] = 0;
@@ -483,7 +483,7 @@ pub unsafe fn quiesce(rec: usize) -> bool {
         if !crate::link::lk().drain(Owner::Loader) { return false; }
         d.ticket = 0;
     }
-    Services::dsp_clear(rec)
+    services().dsp_clear(rec)
 }
 
 /// Release only after the caller has confirmed invalidation and CF admission/drain.
@@ -579,11 +579,11 @@ pub(crate) unsafe fn loaded_done() {
 
 /// Advance the load in progress by what is ready now. Called once per UI-loop pass.
 pub unsafe fn step() -> Advance {
-    step_with::<Services>()
+    step_with(services())
 }
 
 /// `step` over a given list of services.
-pub(crate) unsafe fn step_with<L: ServiceList>() -> Advance {
+pub(crate) unsafe fn step_with(l: ServiceTable) -> Advance {
     let d = ds();
     if d.magic != STATE_MAGIC {
         return Advance::Pending;
@@ -640,7 +640,7 @@ pub(crate) unsafe fn step_with<L: ServiceList>() -> Advance {
                     let mut n = 0u32;
                     loop {
                         let mut want = d.step + n;
-                        match L::dsp_row_step(d.pending.rec as usize, &mut want, true) {
+                        match l.dsp_row_step(d.pending.rec as usize, &mut want, true) {
                             None => break,
                             Some(w) => {
                                 if let Some(undo) = w.undo {

@@ -25,7 +25,8 @@ Rules:
             its protocol).
   arrows    Inside the runtime crate (modules/core/runtime/src/rs/src), a service (services/NAME) names no other service folder and no core
             module except `crate::core_api` (the interface to the core: CoreApi, RealCore, FakeCore and the few core functions it re-exports); pure types
-            come from the crate dkrt-abi. The core reaches a service only through `handlers.rs` (`Services`, `exports`).
+            come from the crate dkrt-abi. The core reaches a service only through `handlers.rs` (`exports`) and the generated table `gen_services.rs`. A service's own
+            host tests (`tests.rs` or a `tests/` folder in the service) may name core modules: they drive the walkers and the planner over the service.
   platform  Inside the runtime crate, only `platform.rs` (the real platform, L1) and an adapter file named `fw.rs` name the firmware crate dkfw; the rest
             of the core and the services use the `Platform` trait (`dkrt-abi`). No runtime file but `platform.rs` compares the device id with a number
             (`device() == 1`): the code asks the device profile (`samples_in_store()`), whose values come from the device files. The runtime
@@ -599,6 +600,7 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
         r = f.relative_to(src)
         text = rust_without_comments(f.read_text(encoding="utf-8"))
         own = r.parts[1] if r.parts[0] == "services" and len(r.parts) > 2 else None
+        is_test = r.name == "tests.rs" or "tests" in r.parts
         if own is None and r.parts[0] == "services":
             continue  # services/mod.rs: the list of service folders
         for m in RT_CRATE_REF.finditer(text):
@@ -623,7 +625,7 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                                 ARROW_SERVICE_HINT,
                             )
                         )
-                    elif first not in ("services", "core_api"):
+                    elif first not in ("services", "core_api") and not is_test:
                         out.append(
                             Violation(
                                 where,
@@ -632,7 +634,10 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                                 ARROW_SERVICE_HINT,
                             )
                         )
-                elif first == "services" and r.as_posix() != "handlers.rs":
+                elif first == "services" and r.as_posix() not in (
+                    "handlers.rs",
+                    "gen_services.rs",
+                ):
                     out.append(
                         Violation(
                             where,
@@ -641,7 +646,7 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                             ARROW_CORE_HINT,
                         )
                     )
-        if own is None and r.as_posix() != "handlers.rs":
+        if own is None and r.as_posix() not in ("handlers.rs", "gen_services.rs"):
             for m in RT_BARE_SERVICES.finditer(text):
                 line = text.count("\n", 0, m.start()) + 1
                 out.append(

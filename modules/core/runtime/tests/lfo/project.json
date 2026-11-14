@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-lfo-tests",
+  "tags": ["test-only"],
+  "implicitDependencies": ["core/runtime"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["lfo.device.test.ts"],
+        "modules": ["test/lfo-shape", "test/lfo-shape-dup"]
+      }
+    ],
+    "mergeTests": ["lfo.device.test.ts"]
+  }
+}

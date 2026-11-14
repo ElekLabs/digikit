@@ -22,6 +22,8 @@ pub mod services;
 pub mod assign;
 pub mod collect;
 mod handlers;
+#[rustfmt::skip]
+mod gen_services;
 pub mod boot;
 pub mod card;
 pub mod fault;
@@ -51,6 +53,7 @@ mod worker;
 mod health;
 mod imports;
 mod mailbox;
+mod plan;
 mod platform;
 mod safe_mode;
 mod selection;

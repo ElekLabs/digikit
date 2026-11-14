@@ -213,9 +213,8 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
     if !inside(reg_off, reg_size, size) {
         return Err(Error::Sizes);
     }
-    if reg_size != 0 {
-        keys_table(src, reg_off, reg_size, &mut n)?;
-    }
+    // every file has a header table (a file of the 0.7 format has none, or another one: the loader refuses it)
+    keys_table(src, reg_off, reg_size, &mut n)?;
     let (dsp_off, dsp_size) = (word(src, H_DSP_OFF)?, word(src, H_DSP_SIZE)?);
     if !inside(dsp_off, dsp_size, size) {
         return Err(Error::Sizes);
@@ -226,31 +225,74 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
     Ok(n)
 }
 
-/// The keys table of the file (`keys.rs`): the `[uses]` row counts the packer wrote.
+/// The header table of the file (`keys.rs`): the resources the packer wrote in its `USES` entry. The table is read entry by entry (the head, then
+/// each entry head; only `USES` is read in full), so the menu never holds the whole table.
 fn keys_table<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), Error> {
-    // only the 12 byte head is read; the size must be the one its counts give (the check of `Keys::parse`)
-    let mut b = [0u8; keys::K_KEYS];
-    if (size as usize) < b.len() || !src.read(off, &mut b) {
+    let mut head = [0u8; keys::HEAD];
+    if (size as usize) < head.len() || size % 4 != 0 || !src.read(off, &mut head) {
         return Err(Error::Register);
     }
-    let w = |at: usize| u16::from_be_bytes([b[at], b[at + 1]]);
-    let (nm, nf) = (w(keys::K_N_MACHINES) as usize, w(keys::K_N_FX) as usize);
-    if nm > MAX_RECORDS as usize
-        || nf > MAX_RECORDS as usize
-        || keys::keys_size(nm, nf) != size as usize
+    if u32::from_be_bytes([head[0], head[1], head[2], head[3]]) != keys::MAGIC
+        || u16::from_be_bytes([head[4], head[5]]) != keys::VERSION
     {
         return Err(Error::Register);
     }
-    n.machine_rows = w(keys::K_MACHINE_ROWS) as u32;
-    n.param_rows = w(keys::K_PARAM_ROWS) as u32;
-    n.page_rows = w(keys::K_PAGE_ROWS) as u32;
-    // the record block the module keeps after `init` is one more arena block (the loader's `arena::alloc` of the records)
-    let records = w(keys::K_RECORD_BYTES) as u32;
-    if records != 0 {
-        n.arena = n
-            .arena
-            .checked_add(arena_block(records).ok_or(Error::Sizes)?)
-            .ok_or(Error::Sizes)?;
+    let entries = u16::from_be_bytes([head[6], head[7]]) as usize;
+    let mut at = keys::HEAD as u32;
+    let mut last = 0u16;
+    let mut i = 0;
+    while i < entries {
+        let mut e = [0u8; keys::ENTRY_HEAD];
+        if size - at < e.len() as u32 || !src.read(off + at, &mut e) {
+            return Err(Error::Register);
+        }
+        let tg = u16::from_be_bytes([e[0], e[1]]);
+        let count = u16::from_be_bytes([e[2], e[3]]) as u32;
+        let len = u32::from_be_bytes([e[4], e[5], e[6], e[7]]);
+        if !(keys::tag::NEEDS..=keys::tag::RESOURCES).contains(&tg)
+            || tg <= last
+            || len % 4 != 0
+            || len > size - at - e.len() as u32
+        {
+            return Err(Error::Register);
+        }
+        last = tg;
+        if tg == keys::tag::USES {
+            // 8 bytes an item; at most the resources of `[records.resources]`, each read as it comes
+            if count.checked_mul(8) != Some(len) {
+                return Err(Error::Register);
+            }
+            let mut k = 0;
+            while k < count {
+                let mut u = [0u8; 8];
+                if !src.read(off + at + e.len() as u32 + 8 * k, &mut u) {
+                    return Err(Error::Register);
+                }
+                let (id, c) = (
+                    u32::from_be_bytes([u[0], u[1], u[2], u[3]]),
+                    u32::from_be_bytes([u[4], u[5], u[6], u[7]]),
+                );
+                if id == RES_MACHINE_ROWS {
+                    n.machine_rows = n.machine_rows.saturating_add(c);
+                } else if id == RES_PARAM_ROWS {
+                    n.param_rows = n.param_rows.saturating_add(c);
+                } else if id == RES_PAGE_ROWS {
+                    n.page_rows = n.page_rows.saturating_add(c);
+                } else if id == RES_RECORD_BYTES && c != 0 {
+                    // the record block the module keeps after `init` is one more arena block (the loader's `arena::alloc` of the records)
+                    n.arena = n
+                        .arena
+                        .checked_add(arena_block(c).ok_or(Error::Sizes)?)
+                        .ok_or(Error::Sizes)?;
+                }
+                k += 1;
+            }
+        }
+        at += e.len() as u32 + len;
+        i += 1;
+    }
+    if at != size {
+        return Err(Error::Register);
     }
     Ok(())
 }

@@ -11,6 +11,96 @@ pub const MAX_STATE_BYTES: u32 = 16777216;
 pub const GRANULE: u32 = 64;
 pub const DSP_SLACK: u32 = 8;
 pub const ARENA_HDR: u32 = 16;
-pub const COLLECT_BYTES: u32 = 6320;
+pub const COLLECT_BYTES: u32 = 7206;
+pub const TABLE_MAGIC: u32 = 1145787458;
+pub const TABLE_VERSION: u32 = 1;
 pub const MAX_VOICES: u32 = 8;
 pub const MAX_FX: u32 = 4;
+
+pub const KIND_PARAM: u32 = 1;
+pub const LEN_PARAM: u32 = 0x50;
+pub const KIND_MACHINE: u32 = 2;
+pub const LEN_MACHINE: u32 = 0x6c;
+pub const KIND_PAGE: u32 = 3;
+pub const LEN_PAGE: u32 = 0x60;
+pub const KIND_EFFECT: u32 = 4;
+pub const LEN_EFFECT: u32 = 0x1a4;
+pub const KIND_ACTION: u32 = 5;
+pub const LEN_ACTION: u32 = 0x10;
+pub const KIND_NATIVE_PAGE: u32 = 6;
+pub const LEN_NATIVE_PAGE: u32 = 0x90;
+pub const KIND_NATIVE_PAGE_V2: u32 = 7;
+pub const LEN_NATIVE_PAGE_V2: u32 = 0x98;
+pub const KIND_LFO_SHAPE: u32 = 8;
+pub const LEN_LFO_SHAPE: u32 = 0x4c;
+/// Every record kind in the order of its number: (kind, record length with its header, owning service).
+pub const KINDS: [(u32, u32, &str); 8] = [
+    (KIND_PARAM, LEN_PARAM, "machines"),
+    (KIND_MACHINE, LEN_MACHINE, "machines"),
+    (KIND_PAGE, LEN_PAGE, "machines"),
+    (KIND_EFFECT, LEN_EFFECT, "fx"),
+    (KIND_ACTION, LEN_ACTION, "machines"),
+    (KIND_NATIVE_PAGE, LEN_NATIVE_PAGE, "machines"),
+    (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2, "machines"),
+    (KIND_LFO_SHAPE, LEN_LFO_SHAPE, "lfo"),
+];
+/// The kinds of the `samples` service: (kind, record length).
+pub const KINDS_SAMPLES: [(u32, u32); 0] = [
+];
+/// The kinds of the `machines` service: (kind, record length).
+pub const KINDS_MACHINES: [(u32, u32); 6] = [
+    (KIND_PARAM, LEN_PARAM),
+    (KIND_MACHINE, LEN_MACHINE),
+    (KIND_PAGE, LEN_PAGE),
+    (KIND_ACTION, LEN_ACTION),
+    (KIND_NATIVE_PAGE, LEN_NATIVE_PAGE),
+    (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2),
+];
+/// The kinds of the `fx` service: (kind, record length).
+pub const KINDS_FX: [(u32, u32); 1] = [
+    (KIND_EFFECT, LEN_EFFECT),
+];
+/// The kinds of the `lfo` service: (kind, record length).
+pub const KINDS_LFO: [(u32, u32); 1] = [
+    (KIND_LFO_SHAPE, LEN_LFO_SHAPE),
+];
+/// The services of `[handle] services`: the names a module's `NEEDS` may carry (hashed by `dkneeds::keys::name_hash`).
+pub const HANDLE_SERVICES: [&str; 9] = [
+    "runtime",
+    "samples",
+    "machines",
+    "fx",
+    "ui",
+    "input",
+    "usb_bulk",
+    "dsp_link",
+    "sdhc_large",
+];
+/// The kind names of `[records.kinds]` in lower case with their numbers: the `kind` of a `[[record]]` of a module.toml.
+pub const KIND_NAMES: [(&str, u32); 8] = [
+    ("param", KIND_PARAM),
+    ("machine", KIND_MACHINE),
+    ("page", KIND_PAGE),
+    ("effect", KIND_EFFECT),
+    ("action", KIND_ACTION),
+    ("native_page", KIND_NATIVE_PAGE),
+    ("native_page_v2", KIND_NATIVE_PAGE_V2),
+    ("lfo_shape", KIND_LFO_SHAPE),
+];
+/// The kinds a module emits with `dk_record_add`.
+pub const GENERIC_KINDS: [u32; 1] = [
+    KIND_LFO_SHAPE,
+];
+pub const RES_MACHINE_ROWS: u32 = 1;
+pub const RES_PARAM_ROWS: u32 = 2;
+pub const RES_PAGE_ROWS: u32 = 3;
+pub const RES_RECORD_BYTES: u32 = 4;
+pub const RES_DSP_COST: u32 = 5;
+/// The resources of a module's `uses` in the order of their ids: (id, name, reserved: no module counts it yet).
+pub const RESOURCES: [(u32, &str, bool); 5] = [
+    (RES_MACHINE_ROWS, "machine_rows", false),
+    (RES_PARAM_ROWS, "param_rows", false),
+    (RES_PAGE_ROWS, "page_rows", false),
+    (RES_RECORD_BYTES, "record_bytes", false),
+    (RES_DSP_COST, "dsp_cost", true),
+];

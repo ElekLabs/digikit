@@ -28,6 +28,7 @@ pub mod bootrom;
 pub mod budget_cli;
 pub mod build;
 pub mod dkm;
+pub mod dkm_identity;
 pub mod dkmdsp;
 pub mod dkmsynth;
 pub mod dko;
