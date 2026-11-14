@@ -433,17 +433,59 @@ Memory cleanup: files state is 33,980 B in `.data`, about 42 KB with scratch, fo
 
 **Runtime split:** `lib.rs` into state, imports, api, tick, health, report, mailbox. `boot.rs` into selection, safe mode, boot. `upload.rs` into transport, store commands, admin commands, module commands. `dlog.rs` and module context. `crash.rs` becomes `fault.rs`, `table.rs` becomes `invariants.rs`. Split `apps/digikit-menu/src/menu.c` by page. Split crate `dkrt-sdk`, whose name wrongly suggests it is the SDK: host-shared ABI and formats go in `dkrt-abi`, internals into the runtime and services. Pure logic such as `sticky.rs` goes with its owner.
 
-**Platform adapter** `modules/core/adapters/platform`. It takes:
+**Platform adapter** `modules/core/adapters/platform`. **Proposed design, for review.**
 
-- hooks `cf.view.hook.ui_loop`, `cf.rtos.hook.main_os_task`, `cf.midi.hook.rx` and their trampolines;
-- exception hook install (`crash.rs:106-129`);
-- soft reset, eSDHC busy check, block read and write, MIDI send and TX ring sizes, `project::serialize`, boot record write, `track_type`, UI queue walk for safe key (`boot.rs:198`), `scan.rs:26` allocation;
-- the two `dkfw::samples` calls in `worker.rs:137,153` and its `std::function` layouts;
-- firmware-backed imports.
+R3 splits into two steps.
 
-The runtime calls a neutral interface: tick, boot, `sysex_rx` returning consumed, block read and write, MIDI send, TX room, soft reset, project serialize, track type, safe key held, clock.
+**R3a, Platform trait (Rust only, no image change).**
 
-About 20 `dkfw::` lines exist in 6 runtime files today. Remove the runtime's exemption at `layercheck.py:243-244` and fix `docs/ARCHITECTURE.md:32`. Page key and turn hooks move to the `machines` adapter with `pageclick.rs`'s firmware half (`:185, :238, :260`).
+- Platform methods: `device_id`, `device_name`, `image_id`, `blocks() -> Option<u32>` (firmware block counter, about 1500 per second), `irq_mask` and `irq_restore`, `flush(start, len)`, `block_read(sector, bytes, buf)`, `block_write_raw(...)`, `midi_send(port, msg)`, `midi_tx_in_flight() -> Option<u32>`, `os_upgrade_active`, `soft_reset() -> !`, `track_type(track)`, `key_down(key)` (safe key, the UI queue walk of `boot.rs:198`).
+- A `Tasking` sub-trait: task spawn, semaphores, sleep, current task, firmware alloc and free (including the `scan.rs:26` allocation).
+- Optional providers are sub-traits with `present()`: `SamplePool` (`dkpool_*`) and `StagedWriter` (`dkpw_*`). The two `dkfw::samples` calls in `worker.rs:137,153` and their `std::function` layouts go behind `SamplePool`.
+- `RealPlatform` is a zero-size type over today's `platform.rs` and `dkfw` calls. Use `#[inline]` only on small hot paths: lane E measured that inlining larger helpers cost about 4% text. The core is generic over `P: Platform`, like `C: CoreApi`.
+- Not in the trait: `st()` (core state), and `rd32`, `wr32` and `cstr_*` (pure helpers in `dkrt-abi`).
+- Device id, name and image id come from the generated device data (`device.s`, the patchkit stamp). Firmware addresses resolve at patch time through anchors and the `*_info` tables, never as runtime literals. Per-device numbers come as generated consts, like `dkrt_sdk::device` `DDR_CACHED_BASE`.
+- The `machines` service's firmware calls (`dkfw` page, input and param calls in `pageclick`) go behind that service's own adapter interface (`paramapi::Fw` exists), not into the core `Platform`. This matches finding 128: page key and turn hooks stay runtime-owned with slots.
+- About 20 `dkfw::` lines exist in 6 runtime files today. They move behind the trait.
+
+`FakePlatform` (`cfg(test)`) models:
+
+- a sector-addressed card with a write log and injected errors;
+- a block clock that tests advance, including `None` and wrap;
+- IRQ nesting checks;
+- captured MIDI output and a settable `tx_in_flight`;
+- the `*_info` tables as bytes;
+- presence and version of each optional provider;
+- a reset flag;
+- `os_upgrade_active`.
+
+It takes a `DeviceProfile` from the same generator as `RealPlatform`.
+
+**Contract suite.** One expectation table, checked by host tests against `FakePlatform` and by a device test per device (DT2 1.17, DN2 1.12; Syntakt later) against the real platform. Checks:
+
+- device id and name equal the profile;
+- blocks advance at about 1500 per emulated second and wrap cleanly;
+- a known sector reads back;
+- out-of-range and foreign-card writes are refused;
+- MIDI output appears and `tx_in_flight` drains;
+- IRQ state round-trips;
+- flush, then execution of fresh code, works;
+- every anchor resolves or returns `None` deliberately;
+- every `*_info` table is well formed with a matching version.
+
+**Layer rules.** Remove the runtime's exemption at `layercheck.py:243-244` (the firmware-call rule) and fix `docs/ARCHITECTURE.md:32`. Forbid device-id comparisons outside L1.
+
+**Proof for R3a:** `patchkit objdiff` (near-identical, since `RealPlatform` is a zero-size type); host tests; the DT2 text-size check; the contract device test once per device.
+
+**R3b, adapter move (image change, needs a gate).** The hooks `cf.view.hook.ui_loop`, `cf.rtos.hook.main_os_task` and `cf.midi.hook.rx`, their trampolines, and the exception hook install (`crash.rs:106-129`) move into `modules/core/adapters/platform`. The runtime then sees a neutral interface: tick, boot, `sysex_rx` returning consumed, and the `Platform` calls above.
+
+**Open checks for the build:**
+
+- Confirm the profile-driven rule against `docs/plans/syntakt.md`.
+- Read the `devices/*.toml` and `devices/ports` contents and the patchkit devdata, to decide which per-device numbers to generate.
+- Confirm where `dynreg_info`, `dyndsp_info` and `dynfx_info` are read after R2c.
+
+**Size:** R3a about 2 agent days, R3b about 1 (scout estimates; recent ones ran pessimistic).
 
 **Neutral adapter functions**, done as each service is extracted: replace `dynreg_info`, `dyndsp_info`, `dynfx_info`, `fxpages_info` raw tables, so the firmware math (`registry.rs:478-536`, string layout `:192-207`, `dsp.rs` row words, `fxpage.rs:248`) moves into the adapters. One device-split style. Generated manifest rows. One anchor convention. Correct `requires`. `ui`: replace `dk_ui_stock_row` and `dk_app_settings_rows(uint8_t*)` with a neutral settings row callback. Update `devices/*.toml [patch_sets]`.
 
