@@ -51,6 +51,18 @@ In C (Ghidra, `0x4005b9e8`): with the view's mode word `+0x1a8` = 0, the value u
 So choosing the machine a track already has commits nothing. A module cannot use "the user picked my machine again" as a signal
 to open its own chooser.
 
+## Two pages: SYN and FLTR
+
+**[D] static, [V] run.** The view has two lists and a page word at `+0x1a8`: 0 is the machine list (rows at `+0x184`, the page
+drawn as `< SYN >`), 1 is the filter type list (rows at `+0x190`, drawn as `< FLTR >`: MULTI-MODE, LOWPASS 4, LEGACY LP/HP, COMB-,
+COMB+, EQUALIZER). LEFT and RIGHT switch the page (`0x4005ba8a`-`0x4005ba9c`). Every function of the view branches on the word:
+the row count (`0x4005a92c`), the value under the cursor (`0x4005b162`), the draw (`0x4005b7d4`: the page's bitmap, its label,
+its list and two page dots, the current one larger), and YES, which on page 1 compares with `+0x1a0` and commits with
+`0x40031a56(model, track, value, 1, 1)`. The cursor row `+0x1a4` is kept when the page changes.
+
+So the stock view already shows several lists as pages of one view. A group of run-time machines could be a third page
+(its own label and dot), with the machine page's code path: the smallest "folder" this view can show.
+
 ## Emulator run
 
 **[V] (run here; the byte check by a second agent is pending).** `mise run dk:dev -- emulator --device dn2` with a key script
@@ -62,6 +74,8 @@ to open its own chooser.
 - YES on the marked machine closes the view; the track keeps FM TONE.
 - After DOWN to FM DRUM, YES commits it: the dot moves to FM DRUM and the view stays open. A second YES closes it, and the
   track shows FM DRUM's page.
+- RIGHT shows `< FLTR >` with the six filter types and the second dot larger; LEFT returns to `< SYN >`; the cursor keeps
+  its row across the switch.
 
 ## What it means for more run-time machines
 
@@ -76,10 +90,6 @@ to open its own chooser.
   rebuilt (the archived `dynreg_view_hook`, [digikit-hot-reload](../plans/digikit-hot-reload.md)).
 
 ## Open
-
-- **A second mode of the view [O].** With `+0x1a8` = 1, YES compares the cursor's value with `+0x1a0` instead and commits it with
-  `0x40031a56(model, track, value, 1, 1)`. What that mode lists is not known. A second selection the stock view already makes
-  is worth reading before a sub-list is designed.
 
 - Where `MachineListView` (`0x40059ab0`) is used **[O]**.
 - A run with a third group (a changed group function) to show its divider **[O]**.
