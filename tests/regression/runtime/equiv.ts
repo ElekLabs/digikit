@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { button, MS, type Device, type Session } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
+import { readLoadTable, resolveAddresses } from '@digi/regression/runtime/addrmap.ts';
+import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import { bounded, frames, pcmWindow, peak, pickSine, readFloatWav, rpc } from '@digi/regression/runtime/fx-live.ts';
 import { FIRMWARE, FULL_TIER, describeOn } from '@digi/regression/runtime/devices.ts';
@@ -31,6 +34,8 @@ export interface Equiv {
   voices: number;
   /** Machines of the run-time set: their machine row, parameters and pages are not compared. */
   ignoreRunMachines: string[];
+  /** The address map names a DSP function of a loaded module: the load table is read from the running emulator and the symbol's address in the module's own map resolves to it (docs/ADDRMAP.md). */
+  dspName?: { module: string; symbol: string };
   /** SHA-256 of the PCM from the onset, `PIN_SAMPLES` interleaved float32; none: the note is only audible. */
   pcmSha256?: string;
 }
@@ -110,6 +115,32 @@ export function defineEquiv(scenarios: Equiv[]): void {
           const got = await decodeTables(session, run.plan);
           const used = (await voiceRows(session, run.plan)).filter(([type]) => type !== FREE_TYPE);
           expect(used.length, `voice rows claimed: ${JSON.stringify(used)}`).toBe(sc.voices);
+
+          if (sc.dspName) {
+            const { module, symbol } = sc.dspName;
+            const shipMap = path.join(run.artifacts, `runtime-${device}.addrmap.json`);
+            const moduleMap = moduleArtifact(device, module).replace(/\.dkm$/, '.addrmap.json');
+            const load = (await readLoadTable(session, run.plan, shipMap)).find((l) => l.id === module);
+            expect(load?.dspBase, `${module} has a DSP image start`).toBeGreaterThan(0);
+            const entry = (
+              JSON.parse(fs.readFileSync(moduleMap, 'utf8')) as {
+                entries: { cpu: string; addr: number; name: string }[];
+              }
+            ).entries.find((e) => e.cpu === 'sharc' && e.name === symbol);
+            expect(entry, `${symbol} in the module map`).toBeDefined();
+            const [hit] = await resolveAddresses(
+              [shipMap, moduleMap],
+              [load!],
+              [load!.dspBase! + entry!.addr],
+              'sharc',
+            );
+            expect(hit, `the DSP address of ${symbol}`).toMatchObject({
+              name: symbol,
+              layer: 'our',
+              offset: 0,
+              module,
+            });
+          }
 
           // the note starts the same instruction after the block boundary of `trigFrame` in every run
           await pickRun(session);

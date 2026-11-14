@@ -2,7 +2,8 @@
 //!
 //! `patchkit apply --addrmap FILE` writes layers `our` (the ColdFire code of the runtime, adapters and apps the plan placed) and `anchor`
 //! (the code anchors of the port). `patchkit pack --addrmap FILE` writes the module map: the code symbols of one module, link-relative.
-//! SHARC code of our own is not in the map yet (docs/plans/profiling.md item 3).
+//! The module map also holds the code symbols of the module's DSP object (`cpu: sharc`), as short-word offsets from the start of its DSP image;
+//! the `dsp_base` of the load table places them.
 
 use crate::dko::Dko;
 use crate::error::*;
@@ -27,10 +28,45 @@ fn readable(name: &str) -> String {
 /// section (the object has no symbol sizes; with one function per section it is the function's size).
 /// With `module` the addresses are those of the link (base 0): offsets from the module's load address.
 pub fn text_entries(obj: &Dko, l: &Linked, module: Option<&str>) -> Vec<Entry> {
+    code_entries(obj, l, module, Cpu::Cf)
+}
+
+/// The functions of a module's DSP object linked at `L2_BYTE_BASE` (as the packer does): `cpu: sharc` entries with short-word offsets from the
+/// start of the DSP image (symbol values and sizes are in short words).
+pub fn dsp_entries(obj: &Dko, module: &str) -> Result<Vec<Entry>> {
+    let linked = link_for_map(obj, crate::dsp::L2_BYTE_BASE as u64)?;
+    Ok(code_entries(obj, &linked, Some(module), Cpu::Sharc))
+}
+
+/// `obj` linked at `base` with every import at 0: addresses are right, relocated fields are not used.
+fn link_for_map(obj: &Dko, base: u64) -> Result<Linked> {
+    let defined: std::collections::BTreeSet<&str> = obj
+        .symbols
+        .iter()
+        .filter(|s| s.section.is_some())
+        .map(|s| s.name.as_str())
+        .collect();
+    let externs: BTreeMap<String, u64> = obj
+        .relocs
+        .iter()
+        .filter(|r| !defined.contains(r.symbol.as_str()))
+        .map(|r| (r.symbol.clone(), 0))
+        .collect();
+    crate::link::link(obj, base, &externs)
+}
+
+fn code_entries(obj: &Dko, l: &Linked, module: Option<&str>, cpu: Cpu) -> Vec<Entry> {
+    let sharc = cpu == Cpu::Sharc;
     let sections: BTreeMap<&str, (&str, u64)> = obj
         .sections
         .iter()
-        .map(|s| (s.name.as_str(), (s.kind.as_str(), s.size as u64)))
+        .map(|s| {
+            let size = s.size as u64;
+            (
+                s.name.as_str(),
+                (s.kind.as_str(), if sharc { size / 2 } else { size }),
+            )
+        })
         .collect();
     let mut by_section: BTreeMap<&str, Vec<(u64, &str)>> = BTreeMap::new();
     for s in &obj.symbols {
@@ -46,6 +82,12 @@ pub fn text_entries(obj: &Dko, l: &Linked, module: Option<&str>) -> Vec<Entry> {
     for (sec, mut syms) in by_section {
         syms.sort();
         let at = l.places.get(sec).copied().unwrap_or(0);
+        // a SHARC section is placed at an L2 byte address; its symbols are short-word offsets from there
+        let at = if sharc {
+            at.saturating_sub(crate::dsp::L2_BYTE_BASE as u64) / 2
+        } else {
+            at
+        };
         let end = sections[sec].1;
         for (i, (value, name)) in syms.iter().enumerate() {
             // a second symbol at the same offset (an alias) shares the range
@@ -55,7 +97,7 @@ pub fn text_entries(obj: &Dko, l: &Linked, module: Option<&str>) -> Vec<Entry> {
                 .find(|v| v > value)
                 .unwrap_or(end);
             out.push(Entry {
-                cpu: Cpu::Cf,
+                cpu,
                 addr: at + value,
                 size: next.saturating_sub(*value),
                 name: readable(name),
@@ -92,7 +134,23 @@ pub fn anchor_entries(port: &Port) -> Vec<Entry> {
 
 /// The ship map of an applied plan.
 pub fn ship_map(plan: &crate::apply::Plan) -> AddrMap {
+    let has = |name: &str| {
+        plan.symbols
+            .keys()
+            .any(|k| k.rsplit(':').next() == Some(name))
+    };
+    // how a host reads the load table of this image: the runtime's tables and the L2 bases of the DSP placement
+    let loader = crate::devdata::by_short(&plan.base.device)
+        .and_then(|d| d.modules)
+        .filter(|_| has(dkaddrmap::snapshot::SYM_STATE))
+        .map(|modules| dkaddrmap::snapshot::Loader {
+            modules,
+            l2_byte_base: crate::dsp::L2_BYTE_BASE as u64,
+            l2_sw_base: crate::dsp::L2_SW_BASE as u64,
+            dsp: has(dkaddrmap::snapshot::SYM_DSP) && has(dkaddrmap::snapshot::SYM_INFO),
+        });
     let key = Key {
+        loader,
         device: Some(plan.base.device.clone()),
         firmware: Some(plan.base.version.clone()),
         image_sha256: Some(plan.base.syx_sha256.clone()),
@@ -103,37 +161,36 @@ pub fn ship_map(plan: &crate::apply::Plan) -> AddrMap {
     AddrMap::new("ship", key, plan.addr_entries.clone())
 }
 
-/// The map of one packed module: link-relative entries (`obj` linked at base 0 as `pack` does).
-pub fn module_map(obj: &Dko, id: &str, dkm_sha256: &str) -> Result<AddrMap> {
-    let defined: std::collections::BTreeSet<&str> = obj
-        .symbols
-        .iter()
-        .filter(|s| s.section.is_some())
-        .map(|s| s.name.as_str())
-        .collect();
-    let externs: BTreeMap<String, u64> = obj
-        .relocs
-        .iter()
-        .filter(|r| !defined.contains(r.symbol.as_str()))
-        .map(|r| (r.symbol.clone(), 0))
-        .collect();
-    let linked = crate::link::link(obj, 0, &externs)?;
+/// The map of one packed module: link-relative entries. The ColdFire object is linked at base 0 as `pack` does; the DSP object, if any, gives
+/// `sharc` entries relative to the start of the DSP image. A data-only module has neither.
+pub fn module_map(
+    cf: Option<&Dko>,
+    dsp: Option<&Dko>,
+    id: &str,
+    dkm_sha256: &str,
+) -> Result<AddrMap> {
     let key = Key {
         module: Some(id.to_string()),
-        source_sha256: Some(obj.source_sha256.clone()),
+        source_sha256: cf.map(|o| o.source_sha256.clone()),
         dkm_sha256: Some(dkm_sha256.to_string()),
         ..Key::default()
     };
-    Ok(AddrMap::new(
-        "module",
-        key,
-        text_entries(obj, &linked, Some(id)),
-    ))
+    let mut entries = vec![];
+    if let Some(o) = cf {
+        entries.extend(text_entries(o, &link_for_map(o, 0)?, Some(id)));
+    }
+    if let Some(o) = dsp {
+        entries.extend(dsp_entries(o, id)?);
+    }
+    Ok(AddrMap::new("module", key, entries))
 }
 
-const USAGE: &str = "usage: patchkit addr --map FILE... [--loads FILE] [--load ID=BASE]... [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
+const USAGE: &str = "usage: patchkit addr --map FILE... [--loads FILE] [--load ID=BASE]... [--dsp-base ID=PC]... [--snapshot SYMBOL=HEX]... [--cpu cf|sharc] [--ret] [--format json|text|reads|loads] (ADDR... | --stdin)
   ADDR is hex (0x...) or decimal, optionally CPU:ADDR (sharc:0xb80010). --stdin reads one ADDR per line.
   --loads is a JSON load table {\"modules\":[{\"id\":NAME,\"base\":N}]}; --load adds one module (hex base).
+  --snapshot gives the raw bytes of a runtime symbol (DKRT_STATE, DKRT_DSP, dyndsp_info) as read from the emulator or device; the load table is decoded from them
+  with the map's loader header. --format reads lists the symbols and byte counts to read; --format loads prints the decoded load table.
+  --dsp-base sets where the DSP image of a loaded module starts (hex software PC); `sharc` names of the module need it.
   --ret names a return address (the address minus 2).";
 
 fn number(s: &str) -> Result<u64> {
@@ -151,8 +208,11 @@ pub fn run(rest: &[String]) -> Result<()> {
     let mut maps = vec![];
     let mut loads = LoadTable::default();
     let mut cpu = Cpu::Cf;
-    let (mut ret, mut stdin, mut text) = (false, false, false);
+    let (mut ret, mut stdin) = (false, false);
+    let mut format = String::from("json");
+    let mut snapshot = dkaddrmap::snapshot::Snapshot::new();
     let mut addrs: Vec<String> = vec![];
+    let mut dsp_bases: Vec<(String, u64)> = vec![];
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         let mut value = |what: &str| -> Result<&String> {
@@ -181,13 +241,34 @@ pub fn run(rest: &[String]) -> Result<()> {
                     id: id.into(),
                     base: number(&format!("0x{}", base.trim_start_matches("0x")))?,
                     size: 0,
+                    dsp_base: None,
+                    fini: None,
                 });
+            }
+            "--dsp-base" => {
+                let v = value("--dsp-base")?;
+                let (id, pc) = v
+                    .split_once('=')
+                    .ok_or_else(|| Error(format!("--dsp-base ID=PC\n{USAGE}")))?;
+                dsp_bases.push((
+                    id.into(),
+                    number(&format!("0x{}", pc.trim_start_matches("0x")))?,
+                ));
             }
             "--cpu" => {
                 let v = value("--cpu")?;
                 cpu = Cpu::parse(v).ok_or_else(|| Error(format!("--cpu cf|sharc\n{USAGE}")))?;
             }
-            "--format" => text = value("--format")? == "text",
+            "--format" => format = value("--format")?.clone(),
+            "--snapshot" => {
+                let v = value("--snapshot")?;
+                let (sym, hex) = v
+                    .split_once('=')
+                    .ok_or_else(|| Error(format!("--snapshot SYMBOL=HEX\n{USAGE}")))?;
+                let bytes = dkaddrmap::snapshot::parse_hex(hex)
+                    .map_err(|e| Error(format!("--snapshot {sym}: {e}")))?;
+                snapshot.insert(sym.into(), bytes);
+            }
             "--ret" => ret = true,
             "--stdin" => stdin = true,
             _ => addrs.push(a.clone()),
@@ -199,8 +280,46 @@ pub fn run(rest: &[String]) -> Result<()> {
             .map_err(|e| Error(format!("stdin: {e}")))?;
         addrs.extend(b.lines().filter(|l| !l.trim().is_empty()).map(String::from));
     }
+    let text = format == "text";
+    if !["json", "text", "reads", "loads"].contains(&format.as_str()) {
+        return Err(Error(format!("--format json|text|reads|loads\n{USAGE}")));
+    }
+    if format == "reads" {
+        let l = dkaddrmap::loader_of(&maps).ok_or_else(|| {
+            Error(
+                "no map describes the load table (a ship map from `patchkit apply --addrmap` does)"
+                    .into(),
+            )
+        })?;
+        println!("{}", serde_json::json!(l.reads()));
+        return Ok(());
+    }
+    if !snapshot.is_empty() {
+        let l = dkaddrmap::loader_of(&maps).ok_or_else(|| {
+            Error("--snapshot needs a ship map (it holds the loader header)".into())
+        })?;
+        let t = dkaddrmap::snapshot::decode_loads(l, &snapshot).map_err(Error)?;
+        loads.modules.extend(t.modules);
+    }
+    if format == "loads" {
+        println!(
+            "{}",
+            serde_json::to_string(&loads).expect("load table serialises")
+        );
+        return Ok(());
+    }
     if maps.is_empty() || addrs.is_empty() {
         return Err(Error(USAGE.into()));
+    }
+    for (id, pc) in dsp_bases {
+        match loads.modules.iter_mut().find(|l| l.id == id) {
+            Some(l) => l.dsp_base = Some(pc),
+            None => {
+                return Err(Error(format!(
+                    "--dsp-base {id}: the module is not loaded\n{USAGE}"
+                )));
+            }
+        }
     }
     let r = Resolver::new(&maps, &loads).map_err(Error)?;
     let mut results = vec![];
@@ -326,7 +445,7 @@ mod tests {
     #[test]
     fn a_module_map_is_link_relative_and_resolves_after_rebasing() {
         let o = object();
-        let map = module_map(&o, "test/demo", "cd").unwrap();
+        let map = module_map(Some(&o), None, "test/demo", "cd").unwrap();
         assert_eq!(map.key.module.as_deref(), Some("test/demo"));
         assert!(
             map.entries
@@ -338,11 +457,58 @@ mod tests {
                 id: "test/demo".into(),
                 base: 0x2100_0000,
                 size: 0x100,
+                dsp_base: None,
+                fini: None,
             }],
         };
         let r = Resolver::new(&[map.clone()], &loads).unwrap();
         let pair_b = map.entries.iter().find(|e| e.name == "pair_b").unwrap();
         let hit = r.lookup(Cpu::Cf, 0x2100_0000 + pair_b.addr + 4).unwrap();
         assert_eq!((hit.name.as_str(), hit.offset), ("pair_b", 4));
+    }
+
+    /// A SHARC object: two functions in one text section (parcels), a data symbol.
+    fn dsp_object() -> Dko {
+        Dko {
+            format: crate::dko::FORMAT,
+            arch: "sharc".into(),
+            source_sha256: "ef".repeat(32),
+            toolchain: Default::default(),
+            sections: vec![
+                section("seg_pmco", "text", 40),
+                section("seg_dmda", "data", 8),
+            ],
+            symbols: vec![
+                symbol("_pk_init", "seg_pmco", 0),
+                symbol("_pk_render", "seg_pmco", 6),
+                symbol("_pk_table", "seg_dmda", 0),
+            ],
+            relocs: vec![],
+        }
+    }
+
+    #[test]
+    fn dsp_symbols_are_short_word_offsets_from_the_image_start() {
+        let map = module_map(Some(&object()), Some(&dsp_object()), "test/demo", "cd").unwrap();
+        let dsp: Vec<_> = map.entries.iter().filter(|e| e.cpu == Cpu::Sharc).collect();
+        let at = |n: &str| dsp.iter().find(|e| e.name == n).map(|e| (e.addr, e.size));
+        // 40 bytes of text are 20 parcels: init runs 6 parcels, render to the end
+        assert_eq!(at("_pk_init"), Some((0, 6)));
+        assert_eq!(at("_pk_render"), Some((6, 14)));
+        assert_eq!(dsp.len(), 2, "no data symbol");
+        assert!(dsp.iter().all(|e| e.module.as_deref() == Some("test/demo")));
+        assert!(map.entries.iter().any(|e| e.cpu == Cpu::Cf));
+        let loads = LoadTable {
+            modules: vec![dkaddrmap::Load {
+                id: "test/demo".into(),
+                base: 0x2100_0000,
+                size: 0x100,
+                dsp_base: Some(0xb8_1000),
+                fini: None,
+            }],
+        };
+        let r = Resolver::new(&[map], &loads).unwrap();
+        let hit = r.lookup(Cpu::Sharc, 0xb8_1000 + 6 + 3).unwrap();
+        assert_eq!((hit.name.as_str(), hit.offset), ("_pk_render", 3));
     }
 }
