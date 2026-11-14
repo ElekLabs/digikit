@@ -694,17 +694,35 @@ edit invalidates only the targets whose definition changes. `UPDATE_GOLDENS` is 
 targets and `gate-stock:stock`.
 
 A package or a harness file that no test imports is not an input: an edit to `packages/dk-session/src/samples.ts`
-leaves a target that does not import it cached. A file that a test reads by path and does not import goes in
-`READ_BY_TESTS`, or in the `sources` of the record whose test reads it. `digi-control:daemons` declares the daemon
+leaves a target that does not import it cached. Files read by path are described in "What a device test's cache key contains". `digi-control:daemons` declares the daemon
 sources (`SOURCE_GLOBS` of `tools/devtools/emud_key.py`) as inputs. The binary is keyed by content, and these
 inputs make a source edit select every task that consumes `dist/daemons.json`.
 `tools/device/dktransfer.py` keeps the state of failed packs in a folder. A test run sets `DIGI_TRANSFER_DIR` to a folder
 of its run directory, because `out/` is shared by all worktrees.
 
-Inspect declared inputs with `pnpm nx:pilot show target inputs PROJECT:TARGET --json`, or use
-`pnpm nx:pilot show target inputs PROJECT:TARGET --check PATH` for one file. Native Nx resolves
-nested ownership, dependency inputs and prerequisite outputs; inspection executes no target.
-This describes the declared hash plan, not every file a command or subprocess actually reads.
+### What a device test's cache key contains
+
+Where the targets come from:
+- `tools/nx/modules.mjs` is the inference plugin that creates the targets.
+- `tools/nx/module-build.mjs` defines the build and pack targets.
+- `tools/nx/device-tests.mjs` defines the target shape: one target per test file, a DT2 half and a DN2 half, and a parent.
+- `tools/nx/device-test-keys.mjs` is the key policy.
+- `tools/nx/ts-imports.mjs` and `tools/nx/py-imports.mjs` compute import closures.
+
+Three keys exist:
+- Full key: all shared reads and all built outputs, including the patchkit binary. Used by `test-device-all` and by files listed in `metadata.mergeTests`.
+- Merge key: the default for files not in `metadata.mergeTests`. It holds the bytes the test loads (its `.dkm` packs, `images.sha256`, the daemon key) and the reads its import closure needs.
+- Narrow key: the production files of the project, the packs the test loads, and its imports.
+
+`mise run test` selects affected targets with merge keys. `mise run test:full` runs every file with full keys.
+
+Inputs computed from code:
+- The TypeScript import closure of the test file.
+- The Python import closure of the `.py` tools that a record lists in `sources`. A test that runs a new Python tool must list it in the `sources` of its record.
+
+Inputs listed by hand are files that a test reads by path. No import walk sees them. They are in `READ_BY_TESTS` and `TEST_READS` in `tools/nx/device-test-keys.mjs`. Add an entry when a test reads a new file by path.
+
+To inspect a key, use `pnpm nx:pilot show target inputs PROJECT:TARGET --json`, or `--check PATH` for one file. Inspection executes no target. It shows the declared hash plan, not every file a subprocess reads.
 
 Before enabling or changing a cache, review source/dependency reads, outputs, toolchain and
 environment identities, including setup commands and runtime digests. Run scoped behavior checks
