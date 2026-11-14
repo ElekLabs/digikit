@@ -1,8 +1,8 @@
 // The library of the site's Transfer page (pure apart from the two fetch functions it is given; apps/web/tests/web-library.test.ts): the modules the
 // site ships (public/modules/index.json, made by scripts/gen-modules.mjs) with their prebuilt .dkm files per device, plus the .dkm files the user adds.
 import { hexOf } from '@digi/dk-session';
-import { headerInfo } from '../modules/dktransfer';
-import type { LibraryFile, TransferLibrary, TransferSource } from './env';
+import { headerInfo } from '@digi/workbench-core/modules/dktransfer.ts';
+import type { LibraryFile, TransferLibrary, TransferSource } from '@digi/workbench-core/transfer/env.ts';
 
 export interface ShippedFile {
   file: string;

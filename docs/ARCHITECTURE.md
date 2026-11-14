@@ -31,7 +31,7 @@ Five layers, L0 to L4. Calls go down. The diagram is the target; "today and targ
      loading    loader, collect (relocate, commit records),
                 registry walker + record-kind handler table, params (param-table writer)
      dsp core   DSP area allocator, dsp-link + windows, row table,
-                DSP load state machine   (→ R6 transfer queue)
+                DSP load state machine   (R6a: its transfers go through the link queue)
      storage    store, files, card, scan, arena, worker, settings (broker)
      transport  SysEx/USB: transport, store/admin/module commands
      diagnostics dlog, sinks log/span (R2d), fault (crash), watch, invariants,
@@ -41,8 +41,10 @@ Five layers, L0 to L4. Calls go down. The diagram is the target; "today and targ
  ───────┼─────────────────────────────────────────────────────────────────
  L1  Platform and firmware adapters (in the patched image)
      platform glue     st, flush, block timing, MIDI send, raw memory
-                       (platform.rs in R2b → platform adapter at R3)
-     patched adapters  ColdFire hooks and *_info tables: dynreg, dyndsp,
+                       (platform.rs: RealPlatform behind the Platform trait; the
+                       hooks are in the platform adapter, core/platform)
+     patched adapters  ColdFire hooks and *_info tables: platform (UI loop,
+                       main-OS entry, MIDI receive, exception hook), dynreg, dyndsp,
                        dynfx, fxpages, ui, input, health, dsp-link …
                        SHARC hook stubs with pointer slots (finding 128)
      device profiles / anchors  per-device and per-firmware addresses
@@ -64,29 +66,34 @@ Three interfaces (details in [runtime and services](plans/runtime-and-services.m
 - **B, runtime to service:** only what a service declared: lifecycle, record-kind handlers, slots and hooks, resources, and the log and span sinks.
 - **C, service to runtime:** the same `sdk.toml` imports as modules, plus a small service-only set.
 
-Service-to-service crossings in today's code, and where they belong:
+The interfaces are Rust traits in the crate `dkrt-abi` (`modules/core/runtime/abi`): `CoreApi` (C), `Service` and `ServiceList` (B), with the pure types and constants they share (`DspState`, `RegState`, the DSP section types, the row and word constants, memory helpers). The core implements `CoreApi` as `RealCore` and services as `Services`, the static list in `handlers.rs`. A service never calls another service and never names a core module: it calls the core through `crate::core_api` (`REAL_CORE`, or a generic `C: CoreApi` where a host test drives it), and the core calls a service only through `Services` or the C entry points listed in `handlers::exports`.
 
-| Today's crossing | Where it belongs |
+The crossings of the R2b code, and what R2c made of them:
+
+| R2b crossing | Now |
 | --- | --- |
-| `tracks` checks `fxpage` and `fxsend` busy | The runtime link (R6 transfer queue) |
-| `fx` needs `machines` rows | The kind-free core registry |
-| `pageclick` reads registry rows | A core registry accessor |
-| `fxsend` uses `settings` | A core broker resource (allowed) |
+| `tracks` checks `fxpage` and `fxsend` busy; `fx_live` checks `tracks::busy` | The DSP link queue of the core (R6a, `link.rs`): live values with `link_set`, owner requests with `link_submit`. No writer asks whether the link is busy |
+| `fx` needs `machines` rows | Both use `CoreApi` rows (`reg_state`, `dynreg`, `write_param_row`, `make_rep`) and no function of the other |
+| `pageclick` reads registry rows | `CoreApi::param_first`, `param_owners` |
+| `fxsend` uses `settings` | `CoreApi::settings_get` and `settings_put` (a broker resource) |
+| `assign` (sticky type numbers) in `machines` | Back in the core (`assign.rs`): it is kind-free. Services call `CoreApi::type_resolve` |
+| core calls of `assign`, `fxpage::tick`, `pageclick::tick`, `tracks::tick`, `fxsend::fx_entry`, the nativepage kinds | `Service::tick(phase)`, `handlers::exports`, `dkrt_abi::registry::KIND_NATIVE*` |
 
 ### Today and target
 
-Today the runtime is one crate in which L2 and L3 code is mixed, and the services have no folder of their own. The adapters, the app and the installer are separate patched-in modules. The target is reached in steps:
+Today the runtime is one crate with the L2 core and the L3 services in separate folders (`src/services/NAME`), joined by the interfaces of the crate `dkrt-abi`. The adapters, the app and the installer are separate patched-in modules. The target is reached in steps:
 
-- **R2b** moves files into L2 and L3 folders inside the runtime crate, with shims at the old paths.
-- **R2c** turns the crossings above into interfaces. `check:layers` and the `dkrt-abi` crate split then enforce the arrows.
-- **R3** moves the platform glue into the L1 platform adapter.
+- **R2b** moved files into L2 and L3 folders inside the runtime crate.
+- **R2c** is done: the interfaces exist with fakes (`FakeCore`, `FakeService`), the shims of R2b are gone, and `check:layers` enforces the arrows (rule 6). What Cargo enforces: `dkrt-abi` cannot see the runtime. What only `check:layers` enforces: that services see only `core_api`. A separate services crate needs `RealCore` to be reachable from it (a generic `C: CoreApi` through every export, or a link-time symbol) and is left for the `.dks` step. Exceptions left for R3b and later: the optional `fxpages_info`, `dkpool_*` and `dkpw_*` symbols of the adapters are still declared where they are used; the DSP row table (`DspState`: voice, effect and track rows) is service data inside a core-owned object, because `DKRT_DSP` is read by host tools (`DKRT_REG` likewise); the walkers of `registry.rs` and `dsp/mod.rs` still hold the machine-only tables (`counts`, `types_of`, `free_rows`, `profile`) that R6 and R7 move.
+- **R3a** is done: the `Platform` trait (`dkrt-abi`: device profile, block clock, interrupt mask, flush, card block calls, MIDI, OS upgrade flag, soft reset, with `Tasking`, `SamplePool` and `StagedWriter`) and `RealPlatform`, a zero-sized type in `platform.rs`. `platform.rs` is the only runtime file that names `dkfw`, besides an adapter's own `fw.rs` (the machines service's `paramapi::Fw` implementation). The runtime branches on no device id: the device files give `[capabilities] card` and `[digikit] sample_path_max`, which `patchkit gen` writes into the device objects and into the `DeviceProfile` constants of `abi/src/profiles.rs`. `FakePlatform` drives the host tests, and the contract table `modules/core/runtime/tests/platform/contract.toml` is checked against it and by `platform-contract.device.test.ts` on the device (rule 7). The device objects gain two data words, so R3a is gated together with R3b.
+- **R3b** is done: the hooks `cf.view.hook.ui_loop`, `cf.rtos.hook.main_os_task` and `cf.midi.hook.rx`, their trampolines and the exception hook install (`dkplat_exc_install`, which `Platform::install_exception_hook` calls every UI pass) are the L1 adapter `core/platform` (`modules/core/adapters/platform`). Same hook sites, the same stock-byte checks and the same trampoline code as before; the runtime requires the adapter, and the two link by name (the adapter calls `dkrt_tick`, `dkrt_boot`, `dkrt_midi_rx` and `dkrt_exc`), so every image with the runtime has it and `requires` has no cycle. The runtime module keeps only the machine page hooks (finding 128: runtime-owned, with slots); the hooks that must exist before the main OS starts stay patched in the image. Rule 7 checks it.
 - **R7 and R9 to R12** make the L3 services real modules (`.dks`). The movable ColdFire hooks go from L1 into their services, and the runtime shrinks to L2.
 
 `core/expansion` is the reset-time installer: it runs at reset and copies all patched-in code to its place. `modules/core/fw` holds the generated firmware bindings (a library, not a module).
 
 ## Boundaries and tests
 
-This section is the target. The interfaces and fakes below are not built yet: B and C (with `FakeService` and `FakeCore`) arrive with R2c, and the Platform interface (with `FakePlatform`) with R3. After R3, test-speed item 7 moves logic tests from the device to the host. The rule for review of deleted tests applies to each move: a host test replaces a device test only when it covers the same path.
+This section is the target. Interface B exists as the `Service` trait and its static list in `modules/core/runtime/src/rs/src/handlers.rs`, with `FakeService` in `handlers/tests.rs`. C is `CoreApi` in `dkrt-abi`, with `RealCore` and `FakeCore` in `core_api.rs`, and the Platform interface is `Platform` in `dkrt-abi`, with `RealPlatform` and `FakePlatform` (`fake_platform.rs`). After R3, test-speed item 7 moves logic tests from the device to the host. The rule for review of deleted tests applies to each move: a host test replaces a device test only when it covers the same path.
 
 Each layer has entry points (what the layer above calls) and exit points (what the layer calls), and is tested at those points.
 
@@ -107,11 +114,11 @@ Rules:
 
 | Layer | Folder | `role` | Runs | May depend on |
 | --- | --- | --- | --- | --- |
-| L2 Runtime core | `modules/core/runtime` | `runtime` | At boot and in the UI and block loops | Firmware bindings, SDK crate `dkrt-sdk`, adapters through optional symbols |
-| L3 Service | `src/services/NAME` in the runtime crate (later `modules/core/services/NAME`) | `service` (planned) | Loaded when a selected module needs it | SDK imports (interface C), other services through imports (interface A) |
+| L2 Runtime core | `modules/core/runtime` | `runtime` | At boot and in the UI and block loops | Firmware bindings, SDK crate `dkrt-sdk`, interface crate `dkrt-abi`, adapters through optional symbols |
+| L3 Service | `src/services/NAME` in the runtime crate (later `modules/core/services/NAME`) | `service` (planned) | Loaded when a selected module needs it | The core through `CoreApi` (interface C) and `dkrt-abi`, other services through imports (interface A) |
 | L1 Installer | `modules/core/expansion` | `installer` | At reset, once | Firmware bindings |
 | L1 Firmware bindings | `modules/core/fw` | none (not a module) | Never; generated by `patchkit gen` from `devices/fw/` | Anchors |
-| L1 Adapter | `modules/core/adapters/NAME` | `adapter` | Inside firmware hooks, in the firmware's contexts | Firmware bindings, runtime exports, other adapters' headers |
+| L1 Adapter | `modules/core/adapters/NAME` (`platform`: the runtime's hooks) | `adapter` | Inside firmware hooks, in the firmware's contexts | Firmware bindings, runtime exports, other adapters' headers |
 | L4 App | `modules/core/apps/NAME` | `app` | In the task context, called by an adapter | SDK, `dkrt.h`, `dk_ui_core.h` |
 | L4 Content module | `modules/machines`, `fx`, `tools`, `tests/fixtures/modules` | none | Loaded at run time from the card (a `.dkm`) | SDK only |
 | SDK contract | `sdk/` | none | Not code that runs; the contract between L4 and L2 and L3 | Nothing |
@@ -121,12 +128,16 @@ Rules:
 `layercheck` reads manifests, sources and built objects. It builds nothing; for the objects of content modules it asks patchkit where the objects of this tree's sources are stored (`patchkit build --paths`, about 10 s), so a cache entry another worktree built is never read.
 
 1. **Roles.** Every module under `modules/core` has `role` in `[module]`, and the role fits the folder: `adapters/` is `adapter`, `apps/` is `app`, `runtime/` is `runtime`, `expansion/` is `installer`. Roles map to layers as in the table above.
-2. **Sources.** Content modules and apps include only their own files and the SDK (`<dk/...>`, `sdk/dsp/contract`). An app may also include `dkrt.h` and `dk_ui_core.h`. Only runtime, installer and adapters include `dk_fw_*` headers or depend on the `dkfw` crate. C, ColdFire and SHARC assembly (`#include`, `.include`) and Rust (`dkfw`, path dependencies) are checked.
+2. **Sources.** Content modules and apps include only their own files and the SDK (`<dk/...>`, `sdk/dsp/contract`). An app may also include `dkrt.h` and `dk_ui_core.h`. Only the runtime (its `platform.rs`, rule 7), the installer and adapters include `dk_fw_*` headers or depend on the `dkfw` crate. C, ColdFire and SHARC assembly (`#include`, `.include`) and Rust (`dkfw`, path dependencies) are checked.
 3. **Objects.** The undefined symbols of the built objects of apps and content modules are SDK imports (`sdk/sdk.toml` `[[import]]`), `dkrt_*`, `dk_ui_*`, `dk_app_*` or the SHARC externs the SDK documents. They never name a firmware anchor (`cf.*`, `dsp.*`, `hook.*`, `pk.*`), and `[object.externs]` never maps a symbol to one.
 4. **Apps do not patch.** An app has no `[[op]]` and no `[[claim]]`. If an app needs a firmware hook, the adapter that owns that plug-in point installs the hook and calls the app through an optional symbol (`dk_app_*`).
 5. **Capabilities cost nothing unused.** A module asks for capabilities; adapters implement them per device. Prefer data (a field an adapter already passes) to a new firmware hook. A hook must cost at most one flag check on a hot path when no loaded module asks for its capability ([capabilities plan](plans/capabilities.md)).
 
-Today `check:layers` enforces these five rules: roles, which sources and objects each role may use (so L4 never reaches firmware names and L1 is the only layer with `dk_fw_*`), no patching by apps, and the capability cost. It does not yet check the arrows inside the runtime crate between L2 and L3. R2c adds that: the rest of the runtime reaches a service only through the interfaces, and the `dkrt-abi` split turns the cycles into build errors.
+6. **Arrows inside the runtime crate.** A service (`src/services/NAME`) names no other service folder and no core module except `crate::core_api`; pure types come from `dkrt-abi`. The core names a service only in `handlers.rs`.
+
+7. **Platform.** The runtime module installs no firmware hook except the machine page hooks (`cf.page.hook.source_key`, `source_turn`); the rest are in the platform adapter. Only `platform.rs` of the runtime crate and an adapter's `fw.rs` name the firmware crate `dkfw`; the rest of the core and the services use the `Platform` trait. No runtime file but `platform.rs` compares the device id with a number: it asks the device profile (`Platform::samples_in_store`, `sample_path_max`), whose values come from the device files.
+
+Today `check:layers` enforces these seven rules: roles, which sources and objects each role may use (so L4 never reaches firmware names and L1 is the only layer with `dk_fw_*`), no patching by apps, the capability cost, the arrows between L2 and L3, and the platform boundary of the runtime.
 
 Exceptions are listed in `layercheck.py` with a reason: `test/registry-demo` patches the firmware itself (it is patchkit's example of a hook), and `test/ui-demo` stands in for an app.
 

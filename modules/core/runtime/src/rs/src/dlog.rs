@@ -7,6 +7,10 @@
 //! sink pointer (`dk_debug_log_sink_set`, an import of the modules) receives every event before any filter: `digikit/debug` holds the long ring, the level
 //! filter and the host commands. Without a sink the other events are dropped (one pointer test).
 //!
+//! The sink channels (`dk_sink_set`, runtime-and-services 5.11) are the generic form of that mechanism: channel `SINK_LOG` receives the same events as the
+//! pointer above, channel `SINK_SPAN` receives `(owner, cycles)` records (`Span`) from `span_emit`. Each channel has one owner, the module whose code set it;
+//! a second owner is refused with `E_BUSY`. The channel is cleared after its owner's `fini` (`release_sinks`). With no sink set a producer pays one test.
+//!
 //! Appends mask interrupts for a few instructions: the UI task, the MIDI task and the crash handler all append.
 use crate::entry::Ctx;
 use crate::{fw_blocks, irq_mask, irq_restore};
@@ -39,8 +43,29 @@ static mut SINK: usize = 0;
 static mut TICK: usize = 0;
 static mut TICK_SRC: u8 = 0;
 
+/// Sink channel numbers (`dk_sink_set`, <dk/core/sink.h>).
+pub const SINK_LOG: u32 = 0;
+pub const SINK_SPAN: u32 = 1;
+const SINKS: usize = 2;
+
+/// One sink channel: the callback (`unsafe extern "C" fn(*const Record)`, 0: none) and its owner (source index of the module that set it, record index + 1).
+#[derive(Clone, Copy)]
+struct Chan {
+    f: usize,
+    owner: u8,
+}
+static mut CHAN: [Chan; SINKS] = [Chan { f: 0, owner: 0 }; SINKS];
+
+/// The record of the `span` channel: the owner id the producer gave (opaque to the runtime, `owner_of_row`) and the cycles it measured.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Span {
+    pub owner: u32,
+    pub cycles: u32,
+}
+
 /// The flags of a non-error event at the info level (an error event is `logk::F_ERROR`: level 0).
-pub const INFO: u16 = logk::L_INFO << logk::LEVEL_SHIFT;
+pub const INFO: u16 = dkrt_abi::core_api::LOG_INFO;
 
 /// The module whose code is running (record index + 1; 0: the runtime).
 static mut CURRENT_SRC: u8 = 0;
@@ -90,6 +115,9 @@ pub unsafe fn call_init(idx: usize, f: unsafe extern "C" fn(*const Ctx) -> i32, 
     let prev = enter_module(idx, PHASE_INIT);
     let r = f(ctx);
     leave_module(prev);
+    if r != OK {
+        release_sinks(idx);
+    }
     r
 }
 
@@ -98,6 +126,7 @@ pub unsafe fn call_fini(idx: usize, f: unsafe extern "C" fn(*const Ctx), ctx: *c
     let prev = enter_module(idx, PHASE_FINI);
     f(ctx);
     leave_module(prev);
+    release_sinks(idx);
 }
 
 /// Is a sink set (the debug module is loaded)?
@@ -166,9 +195,78 @@ pub unsafe extern "C" fn dk_log_event(kind: u32, flags: u32, a: *const u32) {
     ev(kind as u16, flags as u16, [*a, *a.add(1), *a.add(2), *a.add(3), *a.add(4)]);
 }
 
-/// After a module's `fini`: the sink and the tick may not point into its memory [lo, hi) (a module that forgot to clear them).
+/// `dk_sink_set(channel, sink)`, an import of the modules (sdk/sdk.toml): set (or, with 0, clear) the sink of `channel` for the module that is running.
+/// Returns 0, `E_RANGE` (no such channel), `E_CONTEXT` (no module code is running) or `E_BUSY` (another module owns the channel; it is not changed).
+#[no_mangle]
+pub unsafe extern "C" fn dk_sink_set(channel: u32, sink: *mut u8) -> i32 {
+    if channel as usize >= SINKS {
+        return E_RANGE;
+    }
+    let owner = current_source();
+    if owner == 0 {
+        return E_CONTEXT;
+    }
+    let sr = irq_mask();
+    let c = &mut (*addr_of_mut!(CHAN))[channel as usize];
+    let r = if c.owner != 0 && c.owner != owner {
+        E_BUSY
+    } else {
+        write_volatile(addr_of_mut!(c.owner), if sink.is_null() { 0 } else { owner });
+        write_volatile(addr_of_mut!(c.f), sink as usize);
+        OK
+    };
+    irq_restore(sr);
+    r
+}
+
+/// The module with record index `idx` is gone (after its `fini`, or a failed `init`): it owns no channel any more.
+pub unsafe fn release_sinks(idx: usize) {
+    let owner = idx as u8 + 1;
+    let sr = irq_mask();
+    let mut i = 0;
+    while i < SINKS {
+        let c = &mut (*addr_of_mut!(CHAN))[i];
+        if c.owner == owner {
+            write_volatile(addr_of_mut!(c.f), 0);
+            write_volatile(addr_of_mut!(c.owner), 0);
+        }
+        i += 1;
+    }
+    irq_restore(sr);
+}
+
+/// Is a sink set on `channel`? (The one flag test of a producer.)
+#[inline]
+pub fn sink_on(channel: u32) -> bool {
+    unsafe { read_volatile(addr_of!((*addr_of!(CHAN))[channel as usize].f)) != 0 }
+}
+
+/// Hand a `(owner, cycles)` record to the `span` sink; nothing happens (one flag test) without one. Runs in the producer's task with interrupts masked.
+pub unsafe fn span_emit(owner: u32, cycles: u32) {
+    if !sink_on(SINK_SPAN) {
+        return;
+    }
+    let sr = irq_mask();
+    let f = read_volatile(addr_of!((*addr_of!(CHAN))[SINK_SPAN as usize].f));
+    if f != 0 {
+        let call: unsafe extern "C" fn(*const Span) = core::mem::transmute(f);
+        call(&Span { owner, cycles });
+    }
+    irq_restore(sr);
+}
+
+/// After a module's `fini`, or when its range is freed: the sink, the tick and the channels may not point into its memory [lo, hi) (a module that forgot to clear them).
 pub unsafe fn sink_drop(lo: u32, hi: u32) {
     let sr = irq_mask();
+    let mut i = 0;
+    while i < SINKS {
+        let c = &mut (*addr_of_mut!(CHAN))[i];
+        if c.f as u32 >= lo && (c.f as u32) < hi {
+            write_volatile(addr_of_mut!(c.f), 0);
+            write_volatile(addr_of_mut!(c.owner), 0);
+        }
+        i += 1;
+    }
     let f = read_volatile(addr_of!(SINK)) as u32;
     if f >= lo && f < hi {
         write_volatile(addr_of_mut!(SINK), 0);
@@ -201,7 +299,7 @@ pub unsafe fn ev(kind: u16, flags: u16, a: [u32; 5]) {
     }
     let sink = read_volatile(addr_of!(SINK));
     let keep = keeps(kind, flags);
-    if sink == 0 && !keep {
+    if sink == 0 && !keep && !sink_on(SINK_LOG) {
         return;
     }
     let time = fw_blocks().unwrap_or(0);
@@ -209,6 +307,11 @@ pub unsafe fn ev(kind: u16, flags: u16, a: [u32; 5]) {
     let sink = read_volatile(addr_of!(SINK));
     if sink != 0 {
         let call: unsafe extern "C" fn(*const Ev) = core::mem::transmute(sink);
+        call(&Ev { seq: 0, time, kind, flags, a });
+    }
+    let chan = read_volatile(addr_of!((*addr_of!(CHAN))[SINK_LOG as usize].f));
+    if chan != 0 {
+        let call: unsafe extern "C" fn(*const Ev) = core::mem::transmute(chan);
         call(&Ev { seq: 0, time, kind, flags, a });
     }
     if keep {
@@ -271,4 +374,133 @@ pub unsafe fn copy_event(seq: u32, dst: *mut u8) -> bool {
         i += 1;
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static LOCK: Mutex<()> = Mutex::new(());
+    static mut LOGGED: u32 = 0;
+    static mut LAST_KIND: u16 = 0;
+    static mut SPANS: u32 = 0;
+    static mut LAST_SPAN: (u32, u32) = (0, 0);
+
+    unsafe extern "C" fn fake_log(e: *const Ev) {
+        LOGGED += 1;
+        LAST_KIND = (*e).kind;
+    }
+    unsafe extern "C" fn fake_span(s: *const Span) {
+        SPANS += 1;
+        LAST_SPAN = ((*s).owner, (*s).cycles);
+    }
+
+    /// A clean channel table and counters; the guard serializes the tests that share the statics.
+    unsafe fn fresh() -> std::sync::MutexGuard<'static, ()> {
+        let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        *addr_of_mut!(CHAN) = [Chan { f: 0, owner: 0 }; SINKS];
+        *addr_of_mut!(SINK) = 0;
+        LOGGED = 0;
+        SPANS = 0;
+        g
+    }
+
+    unsafe fn set_as(idx: usize, channel: u32, f: usize) -> i32 {
+        let prev = enter_module(idx, PHASE_INIT);
+        let r = dk_sink_set(channel, f as *mut u8);
+        leave_module(prev);
+        r
+    }
+
+    #[test]
+    fn set_refuse_a_second_owner_and_clear() {
+        unsafe {
+            let _g = fresh();
+            assert_eq!(set_as(2, SINK_LOG, fake_log as *const () as usize), OK);
+            assert_eq!(set_as(3, SINK_LOG, fake_span as *const () as usize), E_BUSY);
+            assert_eq!(set_as(3, SINK_LOG, 0), E_BUSY, "another module cannot clear it either");
+            assert!(sink_on(SINK_LOG));
+            // the other channel is free, and the owner may replace or clear its own
+            assert_eq!(set_as(3, SINK_SPAN, fake_span as *const () as usize), OK);
+            assert_eq!(set_as(2, SINK_LOG, fake_log as *const () as usize), OK);
+            assert_eq!(set_as(2, SINK_LOG, 0), OK);
+            assert!(!sink_on(SINK_LOG));
+            assert_eq!(set_as(3, SINK_LOG, fake_log as *const () as usize), OK);
+            assert_eq!(set_as(0, 9, fake_log as *const () as usize), E_RANGE);
+            // no module code is running: no owner
+            release_sinks(3);
+            assert_eq!(dk_sink_set(SINK_LOG, fake_log as *const () as usize as *mut u8), E_CONTEXT);
+        }
+    }
+
+    #[test]
+    fn freeing_a_range_drops_the_channels_that_point_into_it() {
+        unsafe {
+            let _g = fresh();
+            let f = fake_log as *const () as usize;
+            assert_eq!(set_as(2, SINK_LOG, f), OK);
+            assert_eq!(set_as(3, SINK_SPAN, fake_span as *const () as usize), OK);
+            // a range that holds only the log sink: the span sink stays
+            sink_drop(f as u32, f as u32 + 1);
+            assert!(!sink_on(SINK_LOG));
+            assert!(sink_on(SINK_SPAN));
+            // its owner can set it again: the owner slot was cleared too
+            assert_eq!(set_as(3, SINK_LOG, f), OK);
+        }
+    }
+
+    #[test]
+    fn log_events_reach_the_log_sink_and_the_ring_is_unchanged() {
+        unsafe {
+            let _g = fresh();
+            let before = read_volatile(addr_of!(DKRT_LOG_COUNT));
+            ev(logk::CRASH_TAIL, INFO, [0; 5]); // not kept by the ring (no error flag)
+            assert_eq!(LOGGED, 0);
+            assert_eq!(set_as(1, SINK_LOG, fake_log as *const () as usize), OK);
+            ev(logk::SETTINGS_LOAD, INFO, [1, 2, 3, 4, 5]);
+            ev(logk::CRASH_TAIL, INFO, [0; 5]);
+            assert_eq!(LOGGED, 2);
+            assert_eq!(LAST_KIND, logk::CRASH_TAIL);
+            // the old sink still works beside the channel
+            *addr_of_mut!(SINK) = fake_log as *const () as usize;
+            ev(logk::SETTINGS_LOAD, INFO, [0; 5]);
+            assert_eq!(LOGGED, 4);
+            assert!(read_volatile(addr_of!(DKRT_LOG_COUNT)) >= before);
+        }
+    }
+
+    #[test]
+    fn the_sink_is_cleared_after_fini_and_a_failed_init() {
+        unsafe {
+            let _g = fresh();
+            assert_eq!(set_as(4, SINK_LOG, fake_log as *const () as usize), OK);
+            assert_eq!(set_as(4, SINK_SPAN, fake_span as *const () as usize), OK);
+            unsafe extern "C" fn fini(_: *const Ctx) {}
+            call_fini(4, fini, core::ptr::null());
+            assert!(!sink_on(SINK_LOG) && !sink_on(SINK_SPAN));
+            ev(logk::SETTINGS_LOAD, INFO, [0; 5]);
+            assert_eq!(LOGGED, 0);
+            // another module may own it now
+            assert_eq!(set_as(5, SINK_LOG, fake_log as *const () as usize), OK);
+            unsafe extern "C" fn bad_init(_: *const Ctx) -> i32 { -1 }
+            call_init(5, bad_init, core::ptr::null());
+            assert!(!sink_on(SINK_LOG));
+        }
+    }
+
+    #[test]
+    fn span_without_a_sink_calls_nothing() {
+        unsafe {
+            let _g = fresh();
+            span_emit(7, 100);
+            assert_eq!(SPANS, 0);
+            assert_eq!(set_as(1, SINK_SPAN, fake_span as *const () as usize), OK);
+            span_emit(7, 100);
+            assert_eq!((SPANS, LAST_SPAN), (1, (7, 100)));
+            assert_eq!(set_as(1, SINK_SPAN, 0), OK);
+            span_emit(8, 5);
+            assert_eq!(SPANS, 1);
+        }
+    }
 }

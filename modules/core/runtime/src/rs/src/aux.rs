@@ -39,29 +39,30 @@ static mut CTX: *mut u8 = core::ptr::null_mut();
 #[cfg(not(test))]
 mod kernel {
     use super::*;
+    use crate::PLATFORM;
+    use dkrt_abi::platform::Tasking;
 
     pub unsafe fn create() -> bool {
-        dkfw::rtos::sem_init(addr_of_mut!(DKRT_AUX_TASK.work) as *mut u32, 0);
-        dkfw::rtos::sem_init(addr_of_mut!(DKRT_AUX_TASK.done) as *mut u32, 0);
+        PLATFORM.sem_init(addr_of_mut!(DKRT_AUX_TASK.work) as *mut u32, 0);
+        PLATFORM.sem_init(addr_of_mut!(DKRT_AUX_TASK.done) as *mut u32, 0);
         let tcb = addr_of_mut!(DKRT_AUX_TASK.tcb) as u32;
-        let ok = dkfw::rtos::task_create(tcb, entry as usize as u32, PRIORITY, addr_of_mut!(DKRT_AUX_TASK.stack) as u32, STACK_BYTES as u32);
-        if ok != 1 {
+        if !PLATFORM.task_create(tcb, entry as usize as u32, PRIORITY, addr_of_mut!(DKRT_AUX_TASK.stack) as u32, STACK_BYTES as u32) {
             return false;
         }
-        dkfw::rtos::task_start(tcb);
+        PLATFORM.task_start(tcb);
         true
     }
     pub unsafe fn pend_work() {
-        dkfw::rtos::sem_pend(addr_of_mut!(DKRT_AUX_TASK.work) as *mut u32);
+        PLATFORM.sem_pend(addr_of_mut!(DKRT_AUX_TASK.work) as *mut u32);
     }
     pub unsafe fn post_work() {
-        dkfw::rtos::sem_post(addr_of_mut!(DKRT_AUX_TASK.work) as *mut u32);
+        PLATFORM.sem_post(addr_of_mut!(DKRT_AUX_TASK.work) as *mut u32);
     }
     pub unsafe fn pend_done() {
-        dkfw::rtos::sem_pend(addr_of_mut!(DKRT_AUX_TASK.done) as *mut u32);
+        PLATFORM.sem_pend(addr_of_mut!(DKRT_AUX_TASK.done) as *mut u32);
     }
     pub unsafe fn post_done() {
-        dkfw::rtos::sem_post(addr_of_mut!(DKRT_AUX_TASK.done) as *mut u32);
+        PLATFORM.sem_post(addr_of_mut!(DKRT_AUX_TASK.done) as *mut u32);
     }
 }
 
@@ -96,10 +97,7 @@ extern "C" fn entry() -> ! {
 }
 
 unsafe fn locked<T>(f: impl FnOnce() -> T) -> T {
-    let sr = crate::irq_mask();
-    let r = f();
-    crate::irq_restore(sr);
-    r
+    dkrt_abi::platform::locked(&crate::PLATFORM, f)
 }
 
 /// Create the task when it does not exist yet (the same hand-over as `io::ensure_task`: a second caller meanwhile gets false).

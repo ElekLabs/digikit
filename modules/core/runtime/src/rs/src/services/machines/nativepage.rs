@@ -1,11 +1,14 @@
 //! Validated registration/lifetime for native callback page v1.
 //! Firmware view, bitmap and event details belong to core/machines.
-use crate::rd32;
+use dkrt_abi::mem::rd32;
+use dkrt_abi::registry::{KIND_NATIVE, KIND_NATIVE_V2};
+#[cfg(not(test))]
+use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_sdk::*;
 
-pub const KIND: u32 = 6;
+pub const KIND: u32 = KIND_NATIVE;
 pub const LEN: u32 = 0x90;
-pub const KIND_V2: u32 = 7;
+pub const KIND_V2: u32 = KIND_NATIVE_V2;
 pub const LEN_V2: u32 = 0x98;
 
 pub fn is_kind(kind: u32) -> bool { kind == KIND || kind == KIND_V2 }
@@ -104,7 +107,7 @@ pub unsafe fn apply(kind: u32, body: *const u8, base: u32, codes: &[u32], words:
         binding[2] = rd32(b.add(8));
     }
     #[cfg(not(test))] {
-        let owner = crate::assign::resolve(rd32(body.add(4)));
+        let owner = REAL_CORE.type_resolve(rd32(body.add(4)));
         if kind == KIND_V2 {
             mf_native_register_v2(owner, page_index(kind, body), rd32(body.add(44)), body.add(16),
                 base + rd32(body.add(8)), base + rd32(body.add(12)), bindings.as_ptr() as *const u32, words.as_ptr(), words.len() as u32, arg, with_arg)

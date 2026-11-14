@@ -1,15 +1,15 @@
-// The desktop workbench's side of the Firmware page (apps/web/src/firmware/env.ts): patchkit in process through the Tauri command
+// The desktop workbench's side of the Firmware page (packages/workbench-core/src/firmware/env.ts): patchkit in process through the Tauri command
 // `firmware_prepare` (the checkout's modules, ports and device files), the Rust sender and the RPC flash machine through patchkit.wasm (the same code the site runs),
 // the system's save dialog, and the Log panel. The MIDI port is the Transfer pane's (desktop-env.ts).
-import type { TransferApp } from '../../../web/src/transfer/app';
-import type { FirmwareEnv } from '../../../web/src/firmware/env';
-import { preparedFromSummary, type FlashSummary } from '../../../web/src/patch/patchkit-core';
-import { senderKit } from '../../../web/src/patch/sender-kit';
+import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
+import type { FirmwareEnv } from '@digi/workbench-core/firmware/env.ts';
+import { preparedFromSummary, type FlashSummary } from '@digi/workbench-core/patch/patchkit-core.ts';
+import { senderKit } from '@digi/workbench-core/patch/sender-kit.ts';
 import { createDesktopDefaultModules } from './default-modules';
 import { hostWasmSource } from './desktop-wasm';
 import { flashEntry } from './log-core';
 import { logInput } from './log-state';
-import type { Host } from './host/host';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 
 /** The answer of `firmware_prepare`: 4 bytes of JSON length (big endian), the summary JSON, the image. */
 export function unpack(buf: Uint8Array): { summary: FlashSummary; image: Uint8Array } {

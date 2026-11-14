@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { parse } from 'smol-toml';
 import { test } from 'vitest';
-import { patchedFileName } from '../src/patch/patchkit-core.ts';
+import { patchedFileName } from '@digi/workbench-core/patch/patchkit-core.ts';
 import { manifestFiles, root } from './support/patchkit-env.ts';
 
 test('public module summaries are one short sentence', () => {

@@ -227,19 +227,6 @@ pub unsafe extern "C" fn dk_files_delete(_f: *mut u8, root: u32, path: *const u8
     store_writer::sdk_delete(root, path)
 }
 
-// The sample pool imports live in `services/samples` (R2b); the import table in `lib.rs` names them here.
-pub use crate::services::samples::{
-    dk_sample_pool_open,
-    dk_sample_pool_add,
-    dk_sample_pool_clear,
-    dk_sample_pool_status,
-    dk_sample_pool_info,
-    dk_sample_pool_path,
-    dk_sample_pool_set,
-    dk_sample_pool_peaks,
-    dk_sample_pool_peaks_window,
-};
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,7 +271,7 @@ mod tests {
             let mut out: *mut u8 = core::ptr::null_mut();
             assert_eq!(dk_settings_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert_eq!(dk_files_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
-            assert_eq!(dk_sample_pool_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
+            assert_eq!(crate::handlers::exports::dk_sample_pool_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert!(out.is_null());
         }
     }

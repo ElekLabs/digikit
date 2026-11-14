@@ -10,6 +10,7 @@ import { liveArtifacts, record } from './artifacts.ts';
 import { installModule, moduleArtifact } from './install.ts';
 import { memory, panel } from './panel.ts';
 import { runtimeTests } from './ready.ts';
+import { expectPollEmulated } from './waits.ts';
 
 // DT2 1.17 stock sample pool (findings 81, 82, 85). All firmware state is read with peeks.
 const POOL = { slotMap: 0x405b5368, slotKey: 0x405b1368, slotLength: 0x405ba768, blocks: 0x405a0f64 };
@@ -81,7 +82,7 @@ async function pool({ session }: PatchedSession) {
 }
 
 /** The module's commands (tests/fixtures/modules/stock-pool). */
-function moduleApi({ dk }: PatchedSession) {
+function moduleApi({ dk, session }: PatchedSession) {
   async function request(cmd: number, body: Buffer) {
     const reply = await dk.request(cmd, body);
     expect(reply.status, `stock-pool command 0x${cmd.toString(16)}`).toBe(0);
@@ -108,7 +109,12 @@ function moduleApi({ dk }: PatchedSession) {
         ? Buffer.concat([Buffer.from([0]), Buffer.from(`${source.path}\0`)])
         : Buffer.concat([Buffer.from([1]), ...source.key.map(be32)]);
     await request(0x38, Buffer.concat([Buffer.from([mode]), be32(slot), tail]));
-    await expect.poll(async () => (await status()).state, { timeout: 30_000, interval: 50 }).toBe(2);
+    await expectPollEmulated(
+      session,
+      async () => (await status()).state,
+      (value) => expect(value).toBe(2),
+      { emulatedMs: 30000, intervalMs: 50 },
+    );
     return status();
   }
   async function reload(reset: number) {
@@ -181,19 +187,19 @@ runtimeTests(
     // Stock slots loaded from the card project.
     // The firmware loads the project's samples after the main UI: wait on that state.
     let stock: { slot: number; state: Awaited<ReturnType<typeof p.slot>> }[] = [];
-    await expect
-      .poll(
-        async () => {
-          stock = [];
-          for (let n = 1; n < 0x80; n++) {
-            const state = await p.slot(n);
-            if (state.index >= 0) stock.push({ slot: n, state });
-          }
-          return stock.length;
-        },
-        { timeout: 60_000, interval: 1000, message: 'the card project loads samples' },
-      )
-      .toBeGreaterThan(0);
+    await expectPollEmulated(
+      session,
+      async () => {
+        stock = [];
+        for (let n = 1; n < 0x80; n++) {
+          const state = await p.slot(n);
+          if (state.index >= 0) stock.push({ slot: n, state });
+        }
+        return stock.length;
+      },
+      (value) => expect(value).toBeGreaterThan(0),
+      { emulatedMs: 60000, intervalMs: 1000, message: 'the card project loads samples' },
+    );
     record(out, 'stock-slots', stock);
     const donor = stock[0]!;
     // A slot the boot never touched reads map word 0 (zeroed BSS), not -1: only the DSP record tells it is empty.
@@ -310,24 +316,24 @@ runtimeTests(
     const reloaded = await mod.reload(1);
     const started = Date.now();
     try {
-      await expect
-        .poll(
-          async () => {
-            const map = [await p.cf(POOL.slotMap + 0x3ff * 4), await p.cf(POOL.slotMap + 0x3fe * 4)].map((v) => v | 0);
-            const lengths = [(await p.slot(0x3ff)).dspLength, (await p.slot(0x3fe)).dspLength];
-            const key = await p.words(POOL.slotKey + 0x3ff * 16, 4);
-            trace.push({
-              t: Date.now() - started,
-              map,
-              dsp: lengths,
-              donor: (await p.slot(donor.slot)).dspLength,
-              key,
-            });
-            return lengths.every((v) => v === 0) && map.every((v) => v === -1 || v === 0);
-          },
-          { timeout: 30_000, interval: 20 },
-        )
-        .toBe(true);
+      await expectPollEmulated(
+        session,
+        async () => {
+          const map = [await p.cf(POOL.slotMap + 0x3ff * 4), await p.cf(POOL.slotMap + 0x3fe * 4)].map((v) => v | 0);
+          const lengths = [(await p.slot(0x3ff)).dspLength, (await p.slot(0x3fe)).dspLength];
+          const key = await p.words(POOL.slotKey + 0x3ff * 16, 4);
+          trace.push({
+            t: Date.now() - started,
+            map,
+            dsp: lengths,
+            donor: (await p.slot(donor.slot)).dspLength,
+            key,
+          });
+          return lengths.every((v) => v === 0) && map.every((v) => v === -1 || v === 0);
+        },
+        (value) => expect(value).toBe(true),
+        { emulatedMs: 30000, intervalMs: 20 },
+      );
     } finally {
       record(out, 'reload', { reloaded, invoker: invoker.map((v) => v.toString(16)), trace });
     }
@@ -338,5 +344,5 @@ runtimeTests(
     await session.expectNoFault('stock pool borrow');
     writeFileSync(path.join(out, 'done'), 'ok');
   },
-  { dsp: 'sharc', devices: ['dt2'], timeout: 600_000 },
+  { dsp: 'sharc', devices: ['dt2'] },
 );

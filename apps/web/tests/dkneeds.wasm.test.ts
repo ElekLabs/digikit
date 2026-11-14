@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'vitest';
-import { DkNeeds } from '../src/modules/dkneeds.ts';
-import type { Needs } from '../src/modules/fit.ts';
+import { DkNeeds } from '@digi/workbench-core/modules/dkneeds.ts';
+import type { Needs } from '@digi/workbench-core/modules/fit.ts';
 import { py, readBytes, wasmPath, workDir } from './support/patchkit-env.ts';
 
 const patchkit = (...args: string[]) => py('tools.patchkit.patchkit', ...args);

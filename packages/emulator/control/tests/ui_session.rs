@@ -50,7 +50,7 @@ fn a_session_is_adopted_by_the_load_that_starts_it() {
             .as_array()
             .unwrap()
             .len(),
-        16
+        17 // the emulator set and core/platform, which the runtime requires
     );
     // The same token again is not newer; a reset takes the next one and keeps the runtime report.
     assert!(stale(handle.call("firmware.load", load)));

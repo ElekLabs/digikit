@@ -1,0 +1,186 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 134,
+   "section": ".text",
+   "symbol": "exc_hook_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 110,
+   "offset": 172,
+   "section": ".text",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text",
+   "symbol": "dkrt_tick",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text",
+   "symbol": "fw_queue_pop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text",
+   "symbol": "dkrt_boot",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 52,
+   "section": ".text",
+   "symbol": "dkrt_boot_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 78,
+   "section": ".text",
+   "symbol": "dkrt_midi_rx",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
+   "section": ".text",
+   "symbol": "dkrt_midi_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 106,
+   "section": ".text",
+   "symbol": "dkrt_midi_ret",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 126,
+   "section": ".text",
+   "symbol": "dkrt_exc",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "4feffff048d703034eb9000000004cd703034fef00104ef9000000004feffff048d703034eb9000000004cd703034fef00104ef9000000004feffff048d703032f2f00182f2f00182f2f00184eb9000000004fef000c4a804cd703034fef001066064ef9000000004ef9000000004fefffd448d77cfc2f0f2f2f00344eb90000000060fe203c00000000672e2040205020080480400000000c8008000000641a22080281000000036610223c00000000b2906706208170014e7570004e75",
+   "kind": "text",
+   "name": ".text",
+   "size": 190
+  }
+ ],
+ "source_sha256": "808dc1421e808622b324d9972a73b8a03d8600841df9bb3e04a0557b0684fb03",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..text",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkplat_exc_install",
+   "section": ".text",
+   "value": 132
+  },
+  {
+   "global": true,
+   "name": "dkrt_boot",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_boot_hook",
+   "section": ".text",
+   "value": 28
+  },
+  {
+   "global": true,
+   "name": "dkrt_boot_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_exc",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_exc_hook",
+   "section": ".text",
+   "value": 110
+  },
+  {
+   "global": true,
+   "name": "dkrt_loop_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_midi_hook",
+   "section": ".text",
+   "value": 56
+  },
+  {
+   "global": true,
+   "name": "dkrt_midi_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_midi_ret",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_midi_rx",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_tick",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "exc_hook_lit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "fw_queue_pop",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "50",
+  "isa_check": "88809bafe6b010a650a34b04405d33968909b2ac5c959b9c1eba0eae4ab68a16",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

@@ -15,11 +15,14 @@
 //! - after the loader counter changed and stayed still for `SETTLE` passes, and when the live kit object changed (a pattern's kit), the stored amounts are written back
 //!   into the Sound arrays of the 16 tracks first (so the zeroes of a load are never taken as a turn),
 //! - then each Sound array is read: a value that is not the one last written or seen is a turn of the knob: the effect's amount for that track follows (a put into the
-//!   settings, written to the card 2 s after the last change, and the DSP words, one word per pass through window 2 like the effect pages' values).
+//!   settings, written to the card 2 s after the last change, and the DSP words, live values on the link through window 2 like the effect pages' values).
 //!
 //! Everything runs in the UI task (the settings store is not for other tasks).
-use crate::fxpage::{self, iw, rd, rd16, wr, wr16};
-use crate::{dsp, registry, settings};
+use super::dsp as fxdsp;
+use super::fxpage;
+use crate::core_api::{CoreApi, REAL_CORE};
+use dkrt_abi::dsp;
+use dkrt_abi::mem::{cstr_len, iw, rd, rd16, wr, wr16};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::*;
 
@@ -80,16 +83,12 @@ pub struct SendState {
     pub idlen: [u8; dsp::MAX_FX],
     /// Per cell: its effect row + 1.
     pub row: [u8; SEND_MAX],
-    /// The transfer in flight: the effect row, the amount word (0 .. 3) and its value.
-    pub busy: u8,
-    pub busy_k: u8,
-    pub busy_w: u8,
-    pub busy_v: u32,
     pub id: [[u8; 32]; dsp::MAX_FX],
     /// The amounts, one byte for each track.
     pub amt: [[u8; TRACKS]; dsp::MAX_FX],
-    /// The amount words the DSP row has.
+    /// The amount words the DSP row has taken, and the ones handed to the link as live values.
     pub dsp: [[u32; 4]; dsp::MAX_FX],
+    pub want: [[u32; 4]; dsp::MAX_FX],
     /// The live kit object last seen (the 16 Sound objects lie in it), and for each cell and track the raw value last written to or read from `Sound[idx]` (-1: none).
     pub kit: u32,
     pub shown: [[i32; TRACKS]; SEND_MAX],
@@ -141,7 +140,7 @@ unsafe fn saved_route(k: usize) -> u8 {
     let mut key = [0u8; KEY_MAX];
     let kn = key_of(&mut key, b"fx/route/", &s.id[k], s.idlen[k] as usize);
     let mut v = [0u8; 4];
-    if settings::get(&key[..kn], &mut v) == 1 {
+    if REAL_CORE.settings_get(&key[..kn], &mut v) == 1 {
         let r = if v[0] == 1 { ROUTE_SEND } else if v[0] == 0 { ROUTE_MASTER } else { 0 };
         if r != 0 && s.allow[k] & r != 0 {
             return r;
@@ -183,11 +182,6 @@ pub fn is_send(k: usize) -> bool {
 /// Send effects loaded (CAPACITY `used`).
 pub fn used() -> u32 {
     ss().used
-}
-
-/// Is a send amount transfer in flight (the effect pages' values wait for it: one transfer at a time).
-pub fn busy() -> bool {
-    ss().busy != 0
 }
 
 fn words_of(amt: &[u8; TRACKS]) -> [u32; 4] {
@@ -244,20 +238,20 @@ pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
     if !inf.is_null() {
         release(inf, k);
     }
-    let (allow, dflt) = routes_of(dsp::fx_flags_of(k));
+    let (allow, dflt) = routes_of(fxdsp::fx_flags_of(k));
     s.allow[k] = allow;
     s.dflt[k] = dflt;
-    let m = &crate::st().modules[owner as usize - 1];
+    let name = REAL_CORE.module_name(owner);
     let mut n = 0;
-    while n < 31 && m.name[n] != 0 {
-        s.id[k][n] = m.name[n];
+    while n < 31 && *name.add(n) != 0 {
+        s.id[k][n] = *name.add(n);
         n += 1;
     }
     while n < 32 {
         s.id[k][n] = 0;
         n += 1;
     }
-    s.idlen[k] = crate::cstr_len(m.name.as_ptr(), 32) as u8;
+    s.idlen[k] = cstr_len(name, 32) as u8;
     // an image with no send page (no cells) has every effect on the master, whatever the settings say
     if inf.is_null() {
         return;
@@ -266,7 +260,7 @@ pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
     let mut key = [0u8; KEY_MAX];
     let mut a = [0u8; TRACKS];
     let kn = key_of(&mut key, b"fx/send/", &s.id[k], s.idlen[k] as usize);
-    if settings::get(&key[..kn], &mut a) != TRACKS as i32 {
+    if REAL_CORE.settings_get(&key[..kn], &mut a) != TRACKS as i32 {
         a = [0u8; TRACKS];
     }
     let mut t = 0;
@@ -278,6 +272,7 @@ pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
     }
     s.amt[k] = a;
     s.dsp[k] = words_of(&a);
+    s.want[k] = s.dsp[k];
     let cells = iw(inf, w::CELLS).min(SEND_MAX as u32) as usize;
     let mut c = 0;
     while c < cells && s.row[c] != 0 {
@@ -305,7 +300,7 @@ pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
         }
         copy(&mut s.name[c], name.as_ptr(), 16);
         let code = iw(inf, w::P_SEND) + c as u32;
-        registry::write_send_param_row(
+        REAL_CORE.write_send_param_row(
             code,
             iw(inf, w::TPL_PERCENT),
             iw(inf, w::TEMPLATE),
@@ -319,7 +314,7 @@ pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
         s.kit = 0;
         publish_count(inf);
     }
-    dsp::fx_set_route(k, s.route[k] as u32, s.dsp[k]);
+    fxdsp::fx_set_route(k, s.route[k] as u32, s.dsp[k]);
     // the FX view lists the send effects first: the list is built again now that the route is known
     fxpage::relist();
 }
@@ -332,7 +327,7 @@ unsafe fn release(inf: *const u32, k: usize) {
     }
     let c = s.cell[k] as usize - 1;
     wr(iw(inf, w::ROW) + 8 + 4 * c as u32, 0);
-    registry::reset_param_row(iw(inf, w::P_SEND) + c as u32);
+    REAL_CORE.reset_param_row(iw(inf, w::P_SEND) + c as u32);
     s.row[c] = 0;
     s.cell[k] = 0;
     s.route[k] = 0;
@@ -354,11 +349,13 @@ pub unsafe fn remove(k: usize) {
     if !inf.is_null() {
         release(inf, k);
     }
+    fxdsp::fx_forget(&REAL_CORE, k);
     let s = ss();
     s.allow[k] = 0;
     s.dflt[k] = 0;
     s.amt[k] = [0; TRACKS];
     s.dsp[k] = [0; 4];
+    s.want[k] = [0; 4];
     s.idlen[k] = 0;
     s.id[k] = [0; 32];
 }
@@ -367,7 +364,7 @@ unsafe fn put_amounts(k: usize) {
     let s = ss();
     let mut key = [0u8; KEY_MAX];
     let kn = key_of(&mut key, b"fx/send/", &s.id[k], s.idlen[k] as usize);
-    settings::put(&key[..kn], &s.amt[k]);
+    REAL_CORE.settings_put(&key[..kn], &s.amt[k]);
     s.puts += 1;
 }
 
@@ -380,20 +377,6 @@ pub unsafe fn tick() {
     let inf = info();
     if inf.is_null() {
         return;
-    }
-    if s.busy != 0 {
-        match dsp::fx_word_poll() {
-            None => return,
-            Some(ok) => {
-                if ok {
-                    s.dsp[s.busy_k as usize][s.busy_w as usize] = s.busy_v;
-                    s.sent += 1;
-                } else {
-                    s.errors += 1;
-                }
-                s.busy = 0;
-            }
-        }
     }
     // a kit, a pattern's kit or a project was loaded: wait until the loads are over, then write the amounts back
     let ns = rd(iw(inf, w::NSOUND));
@@ -413,29 +396,29 @@ pub unsafe fn tick() {
     if quiet {
         tracks(inf);
     }
-    // one DSP word a pass
-    if s.busy == 0 && !fxpage::busy() {
-        let mut k = 0;
-        while k < dsp::MAX_FX {
-            if s.route[k] != 0 && dsp::fx_live(k) {
-                let want = words_of(&s.amt[k]);
-                let mut j = 0;
-                while j < 4 {
-                    if want[j] != s.dsp[k][j] {
-                        if dsp::fx_word_start(k, dsp::FXW_AMT0 + j as u32, want[j]) {
-                            s.busy = 1;
-                            s.busy_k = k as u8;
-                            s.busy_w = j as u8;
-                            s.busy_v = want[j];
-                        }
-                        return;
+    // the amounts go to the link as live values; the DSP's own copy follows the link's confirmation
+    let mut k = 0;
+    while k < dsp::MAX_FX {
+        if s.route[k] != 0 && fxdsp::fx_live(k) {
+            let want = words_of(&s.amt[k]);
+            let mut j = 0;
+            while j < 4 {
+                if let Some(slot) = fxdsp::fx_slot(&REAL_CORE, k, dsp::FXW_AMT0 + j as u32) {
+                    if want[j] != s.want[k][j] {
+                        REAL_CORE.link_set(slot, want[j]);
+                        s.want[k][j] = want[j];
                     }
-                    j += 1;
+                    if s.dsp[k][j] != s.want[k][j] && REAL_CORE.link_confirmed(slot) == Some(s.want[k][j]) {
+                        s.dsp[k][j] = s.want[k][j];
+                        s.sent += 1;
+                    }
                 }
+                j += 1;
             }
-            k += 1;
         }
+        k += 1;
     }
+    s.errors = REAL_CORE.link_errors();
 }
 
 /// The 16 Sound arrays: the stored amounts back into those that need them, a turn of the knob in the others.
@@ -497,5 +480,18 @@ unsafe fn tracks(inf: *const u32) {
             put_amounts(k);
         }
         k += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The offsets that the device tests read from `DKRT_FXS` (`fx-routes-ui.ts`, `fx-track-route-kit.device.test.ts`).
+    #[test]
+    fn the_layout_the_device_tests_read_is_unchanged() {
+        assert_eq!(core::mem::offset_of!(SendState, restores), 16);
+        assert_eq!(core::mem::offset_of!(SendState, allow), 40);
+        assert_eq!(core::mem::offset_of!(SendState, dflt), 44);
     }
 }

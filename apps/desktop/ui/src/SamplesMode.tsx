@@ -8,9 +8,9 @@
 // uploaded unchanged. Each upload is verified against the bytes sent. The page speaks the protocol in TypeScript over the selected target; the
 // local files come through the native `local_*` commands (local.rs); no process is started.
 import { For, Show, createMemo, createSignal, onMount, type JSX } from 'solid-js';
-import { errorLine, formatBytes, isCancelled } from '@web/modules/backend';
+import { errorLine, formatBytes, isCancelled } from '@digi/workbench-core/modules/backend.ts';
 import { labelOf, type SamplesBackendApi } from './samples-backend';
-import WaitNotice from '@web/transfer/WaitNotice';
+import WaitNotice from '@digi/workbench-core/ui/transfer/WaitNotice.tsx';
 import {
   applyUpload,
   confirmDeleteLabel,
@@ -50,13 +50,13 @@ import {
   droppedFiles,
   type CancelledRun,
   type PageCtx,
-} from '@web/transfer/TransferParts';
-import { createPaneSelect } from '@web/transfer/pane-select';
-import { ROWS_TYPE, dropFolder } from '@web/transfer/select-core';
-import { noteActivity } from '@web/transfer/activity';
-import { countLabel } from '@web/transfer/transfer-core';
-import SplitPane from '@web/transfer/SplitPane';
-import { useTransferApp } from '@web/transfer/app-context';
+} from '@digi/workbench-core/ui/transfer/TransferParts.tsx';
+import { createPaneSelect } from '@digi/workbench-core/transfer/pane-select.ts';
+import { ROWS_TYPE, dropFolder } from '@digi/workbench-core/transfer/select-core.ts';
+import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
+import { countLabel } from '@digi/workbench-core/transfer/transfer-core.ts';
+import SplitPane from '@digi/workbench-core/ui/transfer/SplitPane.tsx';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import {
   addedFiles,
   localEntries,

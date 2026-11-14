@@ -58,8 +58,8 @@ was = ["dkrt.hook.ui_loop"]
 cpu = "cf"
 rule = { kind = "cf_words", as = "code", words = ["*", "*", 0x40001928, 0x588f7229, 0x24407192, 0xb28065e8], offset = 0x6, len = 6 }
 mark = "D"
-users = ["core/runtime"]
-doc = "The `jsr` at the top of the UI task's event loop that pops the next event; core/runtime retargets it to run its per-pass tick."
+users = ["core/platform"]
+doc = "The `jsr` at the top of the UI task's event loop that pops the next event; core/platform retargets it to run the runtime's per-pass tick."
 
 [[site]]
 name = "cf.view.site.ui_loop.queue_lit"
@@ -91,7 +91,7 @@ regs = { in = [], clobbers = ["ccr"] }
 handler = { sig = "void ()", args = [] }
 devices = ["dt2", "dn2"]
 mark = "D"
-users = ["core/runtime"]
+users = ["core/platform"]
 doc = "The jsr at the top of the UI task's event loop that pops the next event; the hook point for the runtime's per-pass tick."
 
 [[fn]]

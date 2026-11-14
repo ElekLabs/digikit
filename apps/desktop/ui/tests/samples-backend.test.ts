@@ -1,8 +1,8 @@
 // The desktop Samples backend over a FakeHost (apps/desktop/ui/src/samples-backend.ts): what it asks of the host and what it shows.
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'vitest';
-import { createFakeTransferApp } from '../../../web/src/transfer/fake-app.ts';
-import { createFakeHost } from '../src/host/fake-host.ts';
+import { createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
+import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
 import { createSamplesBackend } from '../src/samples-backend.ts';
 import {
   localEntries,

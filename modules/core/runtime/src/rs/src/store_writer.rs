@@ -13,7 +13,10 @@
 //! Rules: no `match` on integers (a dense one becomes a jump table, which is not ColdFire code), no `core::fmt`, no slice indexing.
 
 use crate::hash32::{self, Hash32};
-use crate::{block_read, block_write, card};
+use crate::{block_read, block_write, card, PLATFORM};
+use dkrt_abi::platform::{Platform, StagedWriter};
+#[cfg(not(test))]
+use dkrt_abi::platform::Tasking;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::store::lease::{self, Leases};
@@ -94,7 +97,7 @@ const WAIT_STEPS: u32 = 3000;
 
 #[cfg(not(test))]
 unsafe fn pause() {
-    dkfw::rtos::sleep_us(1000);
+    PLATFORM.sleep_us(1000);
 }
 #[cfg(test)]
 unsafe fn pause() {}
@@ -904,16 +907,16 @@ fn readback_piece() -> usize {
 /// caller's smaller pieces). Free it with `rb_free`.
 #[cfg(not(test))]
 unsafe fn rb_alloc(n: usize) -> *mut u8 {
-    let p = dkfw::mem::new(n as u32);
+    let p = PLATFORM.alloc(n as u32);
     if !p.is_null() && p as usize & 15 != 0 {
-        dkfw::mem::free(p);
+        PLATFORM.free(p);
         return core::ptr::null_mut();
     }
     p
 }
 #[cfg(not(test))]
 unsafe fn rb_free(p: *mut u8) {
-    dkfw::mem::free(p)
+    PLATFORM.free(p)
 }
 #[cfg(test)]
 unsafe fn rb_alloc(_: usize) -> *mut u8 {
@@ -1078,8 +1081,8 @@ pub unsafe fn delete(b: &Bufs, path: *const u8, drop_sysex: bool) -> i32 {
 // ---- the SDK front end (`file_*`, api 1.10) -----------------------------------------------------------------------------------
 
 /// `DK_FILES_*` of `<dk/platform/files.h>`.
-const ROOT_SAMPLES: u32 = 1;
-const ROOT_STORE: u32 = 2;
+pub(crate) const ROOT_SAMPLES: u32 = 1;
+pub(crate) const ROOT_STORE: u32 = 2;
 /// `DK_FILE_REPLACE` of `<dk/platform/file.h>`.
 pub const FILE_REPLACE: u32 = 1;
 /// A store path with its root prefix: at most `store::PATH_MAX` bytes and the NUL.
@@ -1101,24 +1104,26 @@ fn busy(r: i32) -> i32 {
     r
 }
 
+/// Where the root's files live: the prefix that the store path takes, and whether the +Drive adapter serves it. The device's capabilities decide:
+/// the samples are files of the store (`samples/`), or the firmware's folder filesystem behind the staged writer (`E_CONTRACT` without it).
+pub(crate) fn root_route<P: Platform>(p: &P, root: u32) -> Result<(&'static [u8], bool), i32> {
+    if root == ROOT_STORE {
+        Ok((b"", false))
+    } else if root == ROOT_SAMPLES && p.samples_in_store() {
+        Ok((b"samples/", false))
+    } else if root == ROOT_SAMPLES && StagedWriter::present(p) {
+        Ok((b"", true))
+    } else {
+        Err(E_CONTRACT) // no such root, or no adapter in the image
+    }
+}
+
 /// `root`/`path` as one path in `full` (the store's: `store::path_ok`; the +Drive's: the same rules without a root prefix). `pd` is set for the
 /// DT2 samples root, which the +Drive adapter serves. `E_CONTRACT`: no such root; `E_PATH`: no NUL in 160 bytes, or the path breaks the rules, or
 /// (+Drive) it starts in the adapter's staging folder. Returns the length.
 unsafe fn sdk_path(root: u32, path: *const u8, full: &mut [u8; FULL_MAX], pd: &mut bool) -> Result<usize, i32> {
-    *pd = false;
-    let prefix: &[u8] = if root == ROOT_STORE {
-        b""
-    } else if root == ROOT_SAMPLES && crate::device() == 2 {
-        b"samples/"
-    } else if root == ROOT_SAMPLES && crate::device() == 1 {
-        if !pd_present() {
-            return Err(E_CONTRACT); // no adapter in the image
-        }
-        *pd = true;
-        b""
-    } else {
-        return Err(E_CONTRACT);
-    };
+    let (prefix, via_pd) = root_route(&PLATFORM, root)?;
+    *pd = via_pd;
     if path.is_null() {
         return Err(E_PATH);
     }
@@ -1276,9 +1281,6 @@ extern "C" {
     fn dkpw_staging() -> *const u8;
 }
 
-const DKPW_VERSION: u32 = 1;
-/// 0 not checked, 1 usable, 2 absent or another version.
-static mut PD_STATE: u8 = 0;
 /// An adapter call is running (the I/O task, or the UI task in `pd_tick`): the adapter has one set of state and runs one call at a time.
 static mut PD_BUSY: bool = false;
 /// The adapter holds a staged file that the runtime no longer tracks (a session dropped by idle expiry, job end or unload): `pd_tick` aborts it.
@@ -1298,19 +1300,8 @@ static mut PD_STAGE_AT: u32 = 0;
 /// 2 s (1500 blocks a second): longer than the gap between the files of one upload, short enough that the folder is gone soon after it.
 const PD_STAGE_IDLE: u32 = 2 * 1500;
 
-unsafe fn pd_present() -> bool {
-    if read_volatile(addr_of!(PD_STATE)) == 0 {
-        let here = core::hint::black_box(dkpw_begin as *const () as usize) != 0
-            && core::hint::black_box(dkpw_write as *const () as usize) != 0
-            && core::hint::black_box(dkpw_close as *const () as usize) != 0
-            && core::hint::black_box(dkpw_abort as *const () as usize) != 0
-            && core::hint::black_box(dkpw_delete as *const () as usize) != 0
-            && core::hint::black_box(dkpw_recover as *const () as usize) != 0
-            && core::hint::black_box(dkpw_version as *const () as usize) != 0
-            && core::hint::black_box(dkpw_staging as *const () as usize) != 0;
-        write_volatile(addr_of_mut!(PD_STATE), if here && dkpw_version() == DKPW_VERSION { 1 } else { 2 });
-    }
-    read_volatile(addr_of!(PD_STATE)) == 1
+fn pd_present() -> bool {
+    StagedWriter::present(&PLATFORM)
 }
 
 /// Take the adapter for one call while no write session is open (the UI pass). The session test and the claim of the adapter are one step under
@@ -1377,7 +1368,7 @@ unsafe fn pd_staging(full: *const u8, l: usize) -> bool {
 
 /// UI task, once per pass: remove the staged file of a dropped session, and run the staging recovery once after the filesystem is up.
 unsafe fn pd_tick() {
-    if crate::device() != 1 || !pd_present() {
+    if PLATFORM.samples_in_store() || !pd_present() {
         return;
     }
     if read_volatile(addr_of!(PD_DIRTY)) && pd_enter_idle() {

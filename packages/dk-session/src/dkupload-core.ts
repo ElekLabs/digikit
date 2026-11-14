@@ -258,8 +258,12 @@ export interface DkOptions {
 /** The wait for the INFO probe that finds out whether a runtime answers at all. */
 export const QUICK_TIMEOUT_MS = 1000;
 
-/** A probe: `true` is one try of QUICK_TIMEOUT_MS; a number is one try with that wait in ms (a loaded host answers late). */
-export type Quick = boolean | number;
+/**
+ * A probe: `true` is one try of QUICK_TIMEOUT_MS; a number is one try with that wait in ms (a loaded host answers late). `{ signal, ms }` is one try that
+ * the caller ends with `signal` (a harness that measures the wait in emulated time) and that waits `ms` of wall time at most (default: `this.timeoutMs`,
+ * a guard for a dead link); an ended probe fails with a `timeout` error like any lost request, so a wait loop treats it as no answer.
+ */
+export type Quick = boolean | number | { signal: AbortSignal; ms?: number };
 
 export class DkClient {
   private dk: Dk;
@@ -935,9 +939,50 @@ export class DkSession {
 
   private async exchange(cmd: number, body: Uint8Array, quick: Quick, signal: AbortSignal): Promise<RawReply> {
     const retries = quick ? 0 : this.retries;
-    const timeoutMs =
-      typeof quick === 'number' ? quick : quick ? Math.min(this.timeoutMs, QUICK_TIMEOUT_MS) : this.timeoutMs;
+    const probe = typeof quick === 'object' ? quick : null;
+    const timeoutMs = probe
+      ? (probe.ms ?? this.timeoutMs)
+      : typeof quick === 'number'
+        ? quick
+        : quick
+          ? Math.min(this.timeoutMs, QUICK_TIMEOUT_MS)
+          : this.timeoutMs;
     const retryBusy = !quick && STORE_COMMANDS.has(cmd);
+    // the caller's signal ends the probe (a timeout), the session's signal cancels it
+    const lost = () => new DkError({ error: 'no reply from the device', kind: 'timeout' });
+    let both = signal;
+    let release = () => {};
+    if (probe) {
+      const c = new AbortController();
+      const stop = () => c.abort();
+      if (signal.aborted || probe.signal.aborted) c.abort();
+      signal.addEventListener('abort', stop, { once: true });
+      probe.signal.addEventListener('abort', stop, { once: true });
+      release = () => {
+        signal.removeEventListener('abort', stop);
+        probe.signal.removeEventListener('abort', stop);
+      };
+      both = c.signal;
+    }
+    try {
+      return await this.exchangeLoop(cmd, body, retries, retryBusy, timeoutMs, both);
+    } catch (e) {
+      if (probe && probe.signal.aborted && !signal.aborted && e instanceof DkError && e.kind === 'cancelled')
+        throw lost();
+      throw e;
+    } finally {
+      release();
+    }
+  }
+
+  private async exchangeLoop(
+    cmd: number,
+    body: Uint8Array,
+    retries: number,
+    retryBusy: boolean,
+    timeoutMs: number,
+    signal: AbortSignal,
+  ): Promise<RawReply> {
     let busy = 0;
     for (let attempt = 0; attempt <= retries; attempt++) {
       if (signal.aborted) throw cancelledError();
@@ -1428,19 +1473,26 @@ export class DkSession {
   async waitForBoot(
     sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
     timeoutMs = 90000,
-    opts: { signal?: AbortSignal; stillBooting?: () => boolean; probeTimeoutMs?: number } = {},
+    opts: {
+      signal?: AbortSignal;
+      stillBooting?: () => boolean;
+      probeTimeoutMs?: number;
+      /** Runs one probe: calls `run` with the `Quick` that bounds it (a harness gives each probe a signal that ends in emulated time). Overrides `probeTimeoutMs`. */
+      probe?: <T>(run: (quick: Quick) => Promise<T>) => Promise<T>;
+    } = {},
   ): Promise<void> {
     let end = Date.now() + timeoutMs;
     let last = 'no answer';
     let silent = false;
-    const probe: Quick = opts.probeTimeoutMs ?? true;
+    const quick: Quick = opts.probeTimeoutMs ?? true;
+    const probe = opts.probe ?? (<T>(run: (q: Quick) => Promise<T>) => run(quick));
     while (Date.now() < end) {
       if (opts.signal?.aborted) throw cancelledError();
       if (opts.stillBooting?.()) end = Math.max(end, Date.now() + timeoutMs);
       try {
-        const info = await this.info(probe);
+        const info = await probe((q) => this.info(q));
         if (info.caps !== null && ((info.caps >>> GCAP.LOG) & 1) === 1) {
-          if (restarted(await this.readLog(probe))) return;
+          if (restarted(await probe((q) => this.readLog(q)))) return;
         } else if (silent) return;
         last = 'the old boot still runs';
       } catch (e) {

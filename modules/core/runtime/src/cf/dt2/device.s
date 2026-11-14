@@ -9,6 +9,14 @@ dkrt_device_id:
     .globl dkrt_device_name
 dkrt_device_name:
     .long DEVICE_NAME_WORD
+    /* the capabilities the runtime branches on instead of the device id: [capabilities] card = "slots" (the samples are store files) and
+     * [digikit] sample_path_max */
+    .globl dkrt_samples_in_store
+dkrt_samples_in_store:
+    .long SAMPLES_IN_STORE
+    .globl dkrt_sample_path_max
+dkrt_sample_path_max:
+    .long SAMPLE_PATH_MAX
     .globl dkrt_peek_n
 dkrt_peek_n:
     .long PEEK_N

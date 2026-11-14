@@ -1,0 +1,13 @@
+[package]
+name = "dkrt-abi"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The interfaces of the digikit runtime: CoreApi (services to the core), Service (the core to services) and the pure types and constants they share"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+dkrt-sdk = { path = "../sdk" }
+dkneeds = { path = "../../../../packages/dkneeds" }

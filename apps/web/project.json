@@ -4,6 +4,7 @@
   "implicitDependencies": [
     "control-client",
     "@digi/dk-session",
+    "@digi/workbench-core",
     "patchkit",
     "dkupload",
     "dksample",
@@ -55,6 +56,9 @@
         {
           "externalDependencies": ["vitest"]
         },
+        "{workspaceRoot}/packages/workbench-core/src/**/*",
+        "{workspaceRoot}/packages/workbench-core/ui/**/*",
+        "{workspaceRoot}/packages/workbench-core/package.json",
         "{workspaceRoot}/packages/dk-session/src/**/*",
         "{workspaceRoot}/packages/dk-session/package.json",
         "{workspaceRoot}/packages/dkbs/src/**/*",

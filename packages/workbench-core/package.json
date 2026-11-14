@@ -1,0 +1,26 @@
+{
+  "name": "@digi/workbench-core",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    "./ui/*": "./ui/*",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@digi/control-client": "workspace:*",
+    "@digi/dk-session": "workspace:*",
+    "@digi/dkbs": "workspace:*",
+    "smol-toml": "1.9.0",
+    "solid-js": "1.9.15"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.0",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}

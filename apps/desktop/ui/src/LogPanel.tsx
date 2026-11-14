@@ -3,7 +3,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { copyText, filterEntries, formatTime, sourceMenu, type Origin } from './log-core';
 import { saveLog as saveLogEntries } from './log-save';
-import type { Host } from './host/host';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 import { cardLogView } from './log-cardlog-core';
 import { levelOrigin, levelsOff } from './log-level-core';
 import LogLevelMenu from './LogLevelMenu';

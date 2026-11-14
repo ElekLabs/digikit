@@ -1,6 +1,8 @@
-//! `machines` service: run-time machine types, sticky type numbers, parameters, page clicks, native pages.
-pub mod assign;
+//! `machines` service: run-time machine types, parameters, page clicks, native pages.
+#[cfg(not(test))]
+pub mod fw;
 pub mod nativepage;
 pub mod pageclick;
 pub mod paramapi;
 pub mod dsp;
+pub mod records;

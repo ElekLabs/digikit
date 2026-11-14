@@ -2,15 +2,15 @@
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
-import { panels } from '@web/data/faceplates';
+import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import {
   type EmulatorRuntime,
   type FirmwareInfo,
   type NativeAudioStatus,
   type RuntimeSnapshot,
   type RuntimeUpdate,
-} from '@web/runtime/runtime';
+} from '@digi/workbench-core/runtime/runtime.ts';
 import { booting as startBoot, bootingScreen, bootingStatus, loadFailure, type Booting } from './boot-core';
 import { bumpCardRefresh } from './card-state';
 import {
@@ -47,24 +47,24 @@ import { createLogFollow, followSession } from './log-follow';
 import { windowShown } from './log-follow-core';
 import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import LogPanel from './LogPanel';
-import type { EmuSource as Source, Host } from './host/host';
+import type { EmuSource as Source, Host } from '@digi/workbench-core/host/host.ts';
 import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
 import { setInspectorOpen, setInspectorTab } from './panel-open';
 import RemotePage from './RemotePage';
-import { useFirmwareApp, useTransferApp } from '@web/transfer/app-context';
-import { EMULATOR_NO_RUNTIME } from '@web/transfer/target';
+import { useFirmwareApp, useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
+import { EMULATOR_NO_RUNTIME } from '@digi/workbench-core/transfer/target.ts';
 import { setReloadWithRuntime } from './emulator-actions';
-import { running as flashRunning } from '@web/firmware/firmware-core';
-import FirmwarePage from '@web/firmware/FirmwarePage';
-import DefaultModules from '@web/firmware/DefaultModules';
-import { DefaultModuleError } from '@web/firmware/default-modules-core';
-import TransferPage from '@web/transfer/TransferPage';
-import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
-import { reloadError, reloadLine } from '@web/runtime/reload';
-import type { ControllerJob } from '@web/jobs/jobs-core';
-import { isCancelled } from '@web/modules/backend';
-import { JobBusyError, type JobHandle } from '@web/jobs/jobs';
+import { running as flashRunning } from '@digi/workbench-core/firmware/firmware-core.ts';
+import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
+import DefaultModules from '@digi/workbench-core/ui/firmware/DefaultModules.tsx';
+import { DefaultModuleError } from '@digi/workbench-core/firmware/default-modules-core.ts';
+import TransferPage from '@digi/workbench-core/ui/transfer/TransferPage.tsx';
+import { cardLine, folderFiles, startCard, type CardStatus } from '@digi/workbench-core/runtime/cards.ts';
+import { reloadError, reloadLine } from '@digi/workbench-core/runtime/reload.ts';
+import type { ControllerJob } from '@digi/workbench-core/jobs/jobs-core.ts';
+import { isCancelled } from '@digi/workbench-core/modules/backend.ts';
+import { JobBusyError, type JobHandle } from '@digi/workbench-core/jobs/jobs.ts';
 
 type Status = RuntimeSnapshot['status'];
 

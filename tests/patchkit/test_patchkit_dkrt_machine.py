@@ -14,7 +14,6 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 
-from tools.device.dklog_kinds import RUNTIME_VERSION  # noqa: E402
 from tools.patchkit import (  # noqa: E402
     modroots,
     pk_dkrt,
@@ -78,9 +77,8 @@ def test_dsp_section_is_deterministic_and_relocates_like_the_reference(tmp_path)
     )
     # the guard's ranges: since S3 a parameter is declared by a builder call that carries no range, so every knob is undeclared (0)
     assert "ranges [0, 0, 0, 0, 0, 0, 0, 0]" in info
-    assert (
-        f"runtime   >= {'.'.join(map(str, RUNTIME_VERSION))}" in info
-    )  # DSP sections of version 2 (voices with knob ranges) need runtime 5
+    # a module needs the newest `since` of the imports it links (sdk.toml), not the runtime's own version: test/sine links no import newer than 0.7.0
+    assert "runtime   >= 0.7.0" in info
     sec = pk_dkrt_machine.parse_dsp_section(a.read_bytes())
     imports = {"_dv_exp2": 0xB9D7E0, "_dv_frame_hw": 0xB9D80E}
     for base in (0x2000_0000, 0x2001_AE80, 0x2003_F000):

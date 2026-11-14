@@ -17,8 +17,8 @@ was = ["dkrt.hook.midi_rx"]
 cpu = "cf"
 rule = { kind = "cf_words", as = "code", words = ["*", 0x1c004e90, 0x4fef000c, 0x2f052044, 0x4e90588f], offset = 0x2, len = 6 }
 mark = "D"
-users = ["core/runtime"]
-doc = "The 6-byte router call `jsr (A0)` in the MIDI task for a gathered USB SysEx message (arguments on the stack); core/runtime hooks it to take the message or continue after the call."
+users = ["core/platform"]
+doc = "The 6-byte router call `jsr (A0)` in the MIDI task for a gathered USB SysEx message (arguments on the stack); core/platform hooks it to give the message to the runtime or continue after the call."
 
 # The USB MIDI transmit function (DT2 1.16 FUN_40004734, `void f(u32 len, const u8 *msg)`, hash identical on the four images): the 4-byte address
 # literal of its `movea.l (<in flight>).l,a0`, the bytes handed to the USB stack and not yet sent (added by the submit function, taken off by
@@ -50,5 +50,5 @@ mode = "before"
 regs = { in = [], clobbers = ["ccr"] }   # the stub continues at the tail or at hook.cf.midi.site.rx.return (after the call)
 devices = ["dt2", "dn2"]
 mark = "D"
-users = ["core/runtime"]
+users = ["core/platform"]
 doc = "The MIDI task's router call for a gathered USB SysEx message (`jsr (A0)`, arguments on the stack); the hook can consume the message and continue after the call."

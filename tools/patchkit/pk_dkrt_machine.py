@@ -40,7 +40,7 @@ TRACK_OBJ_WORD = 0x4265338C  # the type byte is the third byte of this word (fin
 MODULES_STATIC = "core/runtime,core/dynreg,core/dyndsp"
 MODULE = "test/sine"
 MACHINE = "sine"  # its machine
-# DspState (modules/core/runtime/src/rs/src/dsp/mod.rs), byte offsets of the fields the proof reads
+# DspState (modules/core/runtime/abi/src/dsp.rs), byte offsets of the fields the proof reads
 D_MAGIC, D_PHASE, D_STEP, D_TRANSFERS, D_ROW_WRITES, D_FAILURES = 0, 4, 12, 36, 40, 44
 D_MOD_OFF, D_MOD_LEN, D_ROW_TYPE, D_ROW_PC, D_ROW_OWNER = 52, 84, 148, 180, 212
 # State: last_result at 12; Mailbox: cmd 0, seq 4, result 8, arg 12

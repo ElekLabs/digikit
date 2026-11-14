@@ -251,7 +251,7 @@ Today the boot loads modules in selection order and a load either returns OK, LO
 
 ## 8. Versions
 
-There is one version: the runtime release (`[runtime] version` in `sdk/sdk.toml`, semantic, now 0.7.0).
+There is one version: the runtime release (`[runtime] version` in `sdk/sdk.toml`, semantic, now 0.7.1).
 
 - While it is 0.x, a minor may break (an import changed or removed, the module file format, the store format, the SysEx protocol). A patch only adds. Stable is 1.0.0.
 - There are no separate numbers for the API, the machine contract, the effect contract or a service.

@@ -34,6 +34,7 @@ struct Doc {
     device: Dev,
     board: Option<Board>,
     digikit: Option<Digikit>,
+    capabilities: Option<Capabilities>,
     card: Option<Card>,
     limits: Option<Limits>,
     adapter: Option<AdapterDoc>,
@@ -171,6 +172,11 @@ struct Board {
     dsp_clock_hz: u64,
     dsp_blocks_per_second: u64,
 }
+/// `[capabilities]`: only `card` is read here (the device-registry schema has more keys).
+#[derive(Deserialize)]
+struct Capabilities {
+    card: String,
+}
 #[derive(Deserialize)]
 struct Digikit {
     id: u64,
@@ -181,6 +187,7 @@ struct Digikit {
     dsp_tail_words: u64,
     keep_base: u64,
     keep_bytes: u64,
+    sample_path_max: u64,
     peek: Vec<[u64; 2]>,
 }
 #[derive(Deserialize)]
@@ -361,6 +368,8 @@ struct DigikitF {
     dsp_tail_words: u64,
     keep_base: u64,
     keep_bytes: u64,
+    sample_path_max: u64,
+    samples_in_store: bool,
     peek: Vec<[u64; 2]>,
 }
 #[derive(Debug)]
@@ -383,11 +392,27 @@ impl Facts {
                 continue;
             };
             let short = d.device.short.clone();
-            let (Some(b), Some(k), Some(s), Some(l)) =
-                (d.board, d.digikit, d.card.and_then(|c| c.store), d.limits)
-            else {
+            let (Some(b), Some(k), Some(s), Some(l), Some(caps)) = (
+                d.board,
+                d.digikit,
+                d.card.and_then(|c| c.store),
+                d.limits,
+                d.capabilities,
+            ) else {
                 continue;
             };
+            let samples_in_store = match caps.card.as_str() {
+                "slots" => true,
+                "path-fs" => false,
+                other => {
+                    return Err(err!(
+                        "{short}: [capabilities] card = {other:?}: a digikit device is \"slots\" (samples in the store) or \"path-fs\" (the firmware's folder filesystem)"
+                    ));
+                }
+            };
+            if k.sample_path_max == 0 || k.sample_path_max > 254 {
+                return Err(err!("{short}: [digikit] sample_path_max is 1 to 254"));
+            }
             if k.peek.len() > PEEK_MAX {
                 return Err(err!(
                     "{short}: [digikit] peek lists at most {PEEK_MAX} ranges"
@@ -443,6 +468,8 @@ impl Facts {
                             dsp_tail_words: k.dsp_tail_words,
                             keep_base: k.keep_base,
                             keep_bytes: k.keep_bytes,
+                            sample_path_max: k.sample_path_max,
+                            samples_in_store,
                             peek: k.peek,
                         },
                         store: StoreF {
@@ -1073,6 +1100,18 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "[digikit] name, NUL padded, as a big-endian word",
         ),
         c(
+            "SAMPLES_IN_STORE",
+            k.samples_in_store as u64,
+            PerDevice,
+            "[capabilities] card = \"slots\": the samples are files of the digikit store",
+        ),
+        c(
+            "SAMPLE_PATH_MAX",
+            k.sample_path_max,
+            PerDevice,
+            "[digikit] sample_path_max",
+        ),
+        c(
             "STORE_FIRST",
             s.first,
             PerDevice,
@@ -1560,6 +1599,41 @@ fn rust(module: &str, per_dev: &[(String, Vec<C>)], emit: &[&str]) -> Result<Str
     Ok(s)
 }
 
+/// `DeviceProfile` constants of every device (the type is `dkrt_abi::platform::DeviceProfile`): what the real platform reads from the device object
+/// (`device.s`) and what the host tests' `FakePlatform` is built from, so the two cannot differ.
+fn rust_profiles(module: &str, docs: &BTreeMap<String, Entry>) -> String {
+    let mut s = format!(
+        "// {module}: {NOTE}.\n// One DeviceProfile for each device file, from the same facts as the device objects' words.\n\nuse crate::platform::DeviceProfile;\n"
+    );
+    let mut names = vec![];
+    for (dev, e) in docs {
+        let k = &e.digikit;
+        let name_word = k
+            .name
+            .bytes()
+            .chain(std::iter::repeat(0))
+            .take(4)
+            .fold(0u64, |a, x| (a << 8) | x as u64);
+        let up = dev.to_uppercase();
+        let _ = writeln!(
+            s,
+            "\n/// `{dev}`: [digikit] id, name, sample_path_max and [capabilities] card.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n}};",
+            k.id,
+            hex(name_word as i64),
+            k.samples_in_store,
+            k.sample_path_max
+        );
+        names.push(up);
+    }
+    let _ = writeln!(
+        s,
+        "\n/// Every device file's profile.\npub const ALL: [DeviceProfile; {}] = [{}];",
+        names.len(),
+        names.join(", ")
+    );
+    s
+}
+
 /// A C header of the contract maxima of `sdk/sdk.toml` `[limits.max]` that a ColdFire object shared by all devices checks against: the
 /// DSP area's size is a device value, but the link's word offset (17 bits) is the contract's.
 fn c_shared(module: &str) -> String {
@@ -1782,6 +1856,14 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     return Err(err!("{module}: a `rust` gen is one file for all devices"));
                 }
                 out.push((g.path.clone(), rust(module, &per_dev, &emit)?));
+            }
+            "rust-profiles" => {
+                if g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `rust-profiles` gen is one file for all devices"
+                    ));
+                }
+                out.push((g.path.clone(), rust_profiles(module, &facts.docs)));
             }
             "c-shared" => {
                 if g.path.contains("{dev}") {

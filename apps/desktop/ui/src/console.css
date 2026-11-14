@@ -1,5 +1,5 @@
 /* The desktop console: a title bar, the pages beside a sidebar, the Log dock and a status bar.
-   Tokens and fonts come from the site (apps/web/src/styles/site.css); the panel drawing from panel.css. */
+   Tokens and fonts come from the site (packages/workbench-core/ui/styles/site.css); the panel drawing from panel.css. */
 html,
 body,
 #app {

@@ -7,8 +7,8 @@
  * tools/devtools/browser_bench.mjs (`mise run web:bench`).
  */
 import { browserRuntimeDeps } from './browser-deps';
-import { browserRuntime, type CoupledStats } from './runtime';
-import { fetchLocalFirmware, fetchLocalInputs } from './local-inputs';
+import { browserRuntime, type CoupledStats } from '@digi/workbench-core/runtime/runtime.ts';
+import { fetchLocalFirmware, fetchLocalInputs } from '@digi/workbench-core/runtime/local-inputs.ts';
 
 declare global {
   interface Window {

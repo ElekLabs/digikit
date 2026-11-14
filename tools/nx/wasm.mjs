@@ -267,7 +267,7 @@ buildSmalls(['dkprof']);
 // The plain core has no fast tier. The coupled core has one (feature fast-wasm,
 // off until the page calls digi_sharc_fast or digi_sharc_fast_regions): it
 // reads no SHARC_FAST_REGIONS (wasm32-unknown-unknown has no environment) and
-// its kernels are wasm modules the page compiles (apps/web/src/core-host.ts).
+// its kernels are wasm modules the page compiles (packages/workbench-core/src/core-host.ts).
 const diagnostics = args.diagnostics ? ['diagnostic-profile', 'diagnostic-events'] : [];
 build(diagnostics, resolveTargetDir(''), withoutGenDir(baseEnv), path.join(publicDir, 'emulator-core.wasm'));
 const sharcWasm = args.out ? path.resolve(args.out) : path.join(localDir, 'emulator-core-sharc.wasm');
