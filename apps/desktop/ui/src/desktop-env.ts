@@ -63,10 +63,56 @@ const samples: SamplesSlot = {
 
 const emulatorBulk = EmuBulkLink.opener(emuCall);
 
+interface LibBuildReport {
+  packed: number;
+  changed: string[];
+  removed: string[];
+  failed: { id: string; error: string }[];
+  ms: number;
+}
+
+/** One entry per module that did not build, one for what changed; nothing when all is unchanged. */
+function logBuild(device: string, report: LibBuildReport): void {
+  for (const f of report.failed)
+    logInput({
+      source: 'transfer',
+      level: 'error',
+      text: `module ${f.id} did not build for ${device}`,
+      detail: f.error,
+    });
+  const { changed, removed, ms } = report;
+  if (changed.length || removed.length) {
+    const detail = [...changed.map((id) => `packed ${id}`), ...removed.map((id) => `removed ${id}`)].join('\n');
+    logInput({
+      source: 'transfer',
+      level: 'info',
+      text: `${device} library: ${changed.length} packed new, ${removed.length} removed (${ms} ms)`,
+      detail,
+    });
+  }
+}
+
+const builds = new Map<string, Promise<void>>();
+
+/** Build and pack the device's run-time modules (`lib_build`) before the library is read; callers that ask together share one build. */
+const buildLibrary = (device: string): Promise<void> => {
+  let run = builds.get(device);
+  if (!run) {
+    run = invoke<LibBuildReport>('lib_build', { device })
+      .then((report) => logBuild(device, report))
+      .finally(() => builds.delete(device));
+    builds.set(device, run);
+  }
+  return run;
+};
+
 export const desktopEnv: TransferEnv = {
   libraryDevices: ['dt2', 'dn2'],
   library: {
-    scan: (device) => invoke<{ path: string; size: number }[]>('lib_scan', { device }),
+    scan: async (device) => {
+      await buildLibrary(device);
+      return invoke<{ path: string; size: number }[]>('lib_scan', { device });
+    },
     read: async (device, path) => new Uint8Array(await invoke<ArrayBuffer>('lib_read', { device, path })),
   },
   moduleFiles: (id) => MODULE_FILES[id],

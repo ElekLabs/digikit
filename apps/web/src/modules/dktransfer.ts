@@ -3,7 +3,7 @@
 // VERIFY), delete (DELETE, confirmed by LIST) and restart (RESTART, wait for the boot, report what loaded). The events have the shapes
 // the Python tool prints with --json. Written without TS-only runtime syntax so node can import it for the tests.
 //
-// The app does not build: its modules are built `.dkm` files of a folder (`mise run module:pack-all`).
+// The app does not build: its modules are built `.dkm` files of a folder (the workbench app builds and packs them into out/modules/<device>/ when it reads the library: `lib_build`, apps/desktop/src-tauri/src/library.rs).
 import {
   DkError,
   DkSession,

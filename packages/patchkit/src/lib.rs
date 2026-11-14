@@ -39,6 +39,7 @@ pub mod live;
 pub mod major3;
 pub mod modgen;
 pub mod module;
+pub mod pack;
 pub mod port;
 pub mod preflight;
 pub mod prim;

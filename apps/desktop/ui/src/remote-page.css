@@ -30,6 +30,10 @@
   font-size: 11.5px;
   color: var(--ink-3, #868b94);
 }
+.remote-page .remote-empty {
+  padding: 24px;
+  color: var(--ink-3, #868b94);
+}
 /* How to play the faceplate, as key caps. */
 .remote-page .hints {
   display: inline-flex;

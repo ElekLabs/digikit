@@ -1,5 +1,5 @@
-// Transfer page, Modules mode. On your computer: the built modules of the library folder (out/modules/<device>/, filled by `mise run
-// module:pack-all`) in their groups, and "Add .dkm" or a drop for a module from outside it. On device: what the card holds. The page speaks the
+// Transfer page, Modules mode. On your computer: the built modules of the library folder (out/modules/<device>/, filled by the workbench
+// app's `lib_build`) in their groups, and "Add .dkm" or a drop for a module from outside it. On device: what the card holds. The page speaks the
 // upload protocol itself, in TypeScript (apps/web/src/modules), over the selected target; no process is started and nothing is built. Install
 // uploads and verifies each ticked module on the card; that is all. The device's selection is the device's own: the user selects the module
 // in MODULES on the device, then applies and restarts there. Restart only restarts the device and reports what loaded. Delete removes the
