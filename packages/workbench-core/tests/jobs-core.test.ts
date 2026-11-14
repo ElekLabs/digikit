@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { addJob, emptyJobs, groupBusy, removeJob, syncController, controllerLabel } from '../src/jobs/jobs-core.ts';
+import {
+  addJob,
+  emptyJobs,
+  groupBusy,
+  removeJob,
+  syncController,
+  controllerLabel,
+  updateJob,
+} from '../src/jobs/jobs-core.ts';
 
 describe('jobs', () => {
   it('allows one job per group and frees the group on remove', () => {
@@ -10,6 +18,13 @@ describe('jobs', () => {
     const freed = removeJob(first.state, first.id);
     expect(groupBusy(freed, 'emulator')).toBe(false);
     expect(addJob(freed, { group: 'emulator', label: 'Again' }, 3)).toBeDefined();
+  });
+  it('an update that changes nothing returns the same state', () => {
+    const first = addJob(emptyJobs(), { group: 'target', label: 'Upload', progress: 0.5, detail: '1/2' }, 1)!;
+    expect(updateJob(first.state, first.id, { progress: 0.5, detail: '1/2' })).toBe(first.state);
+    const changed = updateJob(first.state, first.id, { progress: 0.6 });
+    expect(changed).not.toBe(first.state);
+    expect(changed.list[0].progress).toBe(0.6);
   });
 });
 

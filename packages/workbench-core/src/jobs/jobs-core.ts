@@ -45,6 +45,11 @@ export function updateJob(
   id: number,
   patch: Pick<Partial<Job>, 'progress' | 'detail' | 'label'>,
 ): JobsState {
+  // An update that changes nothing returns the same state, so no reader is notified.
+  const job = s.list.find((j) => j.id === id);
+  if (!job) return s;
+  const keys = Object.keys(patch) as (keyof typeof patch)[];
+  if (keys.every((k) => job[k] === patch[k])) return s;
   return { ...s, list: s.list.map((j) => (j.id === id ? { ...j, ...patch } : j)) };
 }
 
