@@ -32,13 +32,13 @@ function run(args: string[], { input, timeout = 30_000 }: Options) {
   return child;
 }
 
-/** An Nx task: module-targets.mjs sets DIGI_PATCHKIT_LIVE to '1' or '' for every device task, so a value exported in a shell never leaks in. */
+/** An Nx task: tools/nx/device-tests.mjs sets DIGI_PATCHKIT_LIVE to '1' or '' for every device task, so a value exported in a shell never leaks in. */
 const underNx = () =>
   process.env.DIGI_PATCHKIT_LIVE !== undefined || Object.keys(process.env).some((name) => name.startsWith('NX_TASK_'));
 
 /**
  * The one place that spawns patchkit for a test (tools/nx/check-patchkit-spawn.mjs checks it). Under Nx it throws unless the task is
- * marked live: tools/nx/module-targets.mjs sets DIGI_PATCHKIT_LIVE=1 for a task whose key holds the patchkit binary, that is, a full key
+ * marked live: tools/nx/device-tests.mjs sets DIGI_PATCHKIT_LIVE=1 for a task whose key holds the patchkit binary, that is, a full key
  * or an import closure that holds runtime/patchkit.ts. A test with a merge or narrow key that is not live must not run patchkit: its key
  * would not change with the binary. `DIGI_PK_ROOT` names a module variant. `input` goes to stdin.
  */

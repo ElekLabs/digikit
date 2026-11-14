@@ -23,8 +23,7 @@
       {
         "files": ["transfer-live.device.test.ts"],
         "modules": ["digikit/debug", "test/sine"],
-        "sources": ["tools/device/dktransfer.py"],
-        "pythonTools": true
+        "sources": ["tools/device/dktransfer.py"]
       },
       {
         "files": ["samples-live.device.test.ts"],
@@ -69,7 +68,6 @@
         "files": ["upload-faults.device.test.ts"],
         "modules": ["test/sine"],
         "sources": ["tools/patchkit/pk_digikit_fxroutes.py"],
-        "pythonTools": true,
         "plusdrive": true
       },
       {
