@@ -53,6 +53,7 @@ mod worker;
 mod health;
 mod imports;
 mod mailbox;
+mod plan;
 mod platform;
 mod safe_mode;
 mod selection;

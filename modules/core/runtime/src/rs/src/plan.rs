@@ -1,0 +1,445 @@
+//! The boot planner (docs/plans/runtime-and-services.md R7): a pure function over the header tables of the selected modules. No module code runs and
+//! nothing is written; it is the answer to "may this selection load, and in which order" before the first load.
+//!
+//! Input: for each module of the selection its header table (`dkneeds::keys::Keys`), or `None` when the file could not be read or has no table (the
+//! loader reports that error itself; the planner accepts the module). Output (`Plan`): one `Verdict` per module (`dkrt_abi::plan`: accepted, or refused with a
+//! `Reason`) and the order to load them in.
+//!
+//! - Order: a module that needs a service another module exports (`NEEDS`, `EXPORTS`), or whose keys are for a kind another module owns (`KEYS`, `KINDS`),
+//!   loads after that module; otherwise the order is the selection's (the module id's position). A cycle refuses its modules (`NeedMissing`).
+//! - Needs: a hard need of a service that is neither one of the runtime's (`[handle] services`) nor exported by an earlier module is refused (`NeedMissing`);
+//!   a need of a newer version than the runtime is refused (`NeedVersion`). A service of the image (core/ui and the like) that is not there is the
+//!   loader's `E_IMPORT`, with the missing module's name: the planner does not know the image.
+//! - Exclusive: one owner for each kind (a service of the table, or a module's `KINDS`), slot and hook site; keys of a *generic* kind (`[records.kinds]`
+//!   `generic`) are unique across the selection. The keys of the typed kinds (machines, effects) keep their own rules: a machine key twice takes a fresh type
+//!   number, an effect id twice is `E_FX_ID_DUP` at the load.
+//! - Fit: the module's `USES` (machine, parameter and page rows, the record block) against the capacity the earlier accepted modules left, with the same
+//!   function the menu uses (`dkrt_fit::fits_now` and `take`).
+use dkneeds::keys::{name_hash, Keys};
+use dkrt_abi::plan::{Reason, Verdict};
+use dkrt_abi::service::ServiceTable;
+use dkrt_fit as fit;
+use dkrt_sdk::{DkrtCap, CAP_MAX, SEL_MAX};
+
+/// What the planner is told about the runtime it plans for.
+pub struct Env<'a> {
+    pub services: ServiceTable,
+    /// The runtime version, packed major << 16 | minor << 8 | patch.
+    pub runtime: u32,
+    /// The capacity before the selection loads (`dkrt_capacity`).
+    pub caps: &'a [DkrtCap],
+}
+
+/// The plan of a selection of `n` modules (at most `SEL_MAX`).
+pub struct Plan {
+    pub n: usize,
+    /// The verdict of each module, by selection index.
+    pub verdicts: [Verdict; SEL_MAX],
+    /// The selection indices in load order (a refused module is in it too: the loader reports its verdict).
+    pub order: [u8; SEL_MAX],
+}
+
+fn is_runtime_service(h: u32, services: &ServiceTable) -> bool {
+    if h == name_hash("runtime") {
+        return true;
+    }
+    let mut i = 0;
+    while i < services.rows.len() {
+        if name_hash(services.rows[i].name) == h {
+            return true;
+        }
+        i += 1;
+    }
+    let mut k = 0;
+    while k < dkrt_sdk::records::HANDLE_SERVICES.len() {
+        if name_hash(dkrt_sdk::records::HANDLE_SERVICES[k]) == h {
+            return true;
+        }
+        k += 1;
+    }
+    false
+}
+
+fn exports(t: &Keys, h: u32) -> bool {
+    t.exports().any(|e| e.a == h)
+}
+
+fn provides_kind(t: &Keys, kind: u32) -> bool {
+    t.kinds().any(|d| d.kind == kind)
+}
+
+fn is_generic(kind: u32) -> bool {
+    dkrt_sdk::records::GENERIC_KINDS.contains(&kind)
+}
+
+/// Whether module `j` has to load after module `i`: it needs a service `i` exports, or has keys for a kind `i` owns.
+fn after(j: &Keys, i: &Keys) -> bool {
+    j.needs().any(|n| n.hard && exports(i, n.service)) || j.key_groups().any(|g| provides_kind(i, g.0))
+}
+
+/// The load order: the selection's, moved only as far as the dependencies need (the smallest unplaced index whose providers are placed comes next). The
+/// modules of a cycle follow in selection order and are not `placed`.
+fn order_of(mods: &[Option<Keys>], order: &mut [u8; SEL_MAX], cyclic: &mut [bool; SEL_MAX]) {
+    let n = mods.len();
+    let mut placed = [false; SEL_MAX];
+    let mut at = 0;
+    while at < n {
+        let mut pick = None;
+        let mut j = 0;
+        while j < n && pick.is_none() {
+            if !placed[j] {
+                let mut ready = true;
+                if let Some(tj) = &mods[j] {
+                    let mut i = 0;
+                    while i < n {
+                        if i != j && !placed[i] {
+                            if let Some(ti) = &mods[i] {
+                                if after(tj, ti) {
+                                    ready = false;
+                                }
+                            }
+                        }
+                        i += 1;
+                    }
+                }
+                if ready {
+                    pick = Some(j);
+                }
+            }
+            j += 1;
+        }
+        let j = match pick {
+            Some(j) => j,
+            None => {
+                // a cycle: the rest in selection order
+                let mut r = 0;
+                while r < n {
+                    if !placed[r] {
+                        cyclic[r] = true;
+                        placed[r] = true;
+                        order[at] = r as u8;
+                        at += 1;
+                    }
+                    r += 1;
+                }
+                return;
+            }
+        };
+        placed[j] = true;
+        order[at] = j as u8;
+        at += 1;
+    }
+}
+
+// ---- the boot's use: the tables are copied while `assign::plan` reads each file once ---------------------------------------------
+
+use core::ptr::{addr_of, addr_of_mut};
+
+/// The most bytes of a header table the boot planner keeps (a module with eight machines and effects has about 150).
+const TABLE_MAX: usize = 768;
+static mut TABLES: [[u8; TABLE_MAX]; SEL_MAX] = [[0; TABLE_MAX]; SEL_MAX];
+/// Bytes of the table kept for selection index `k`; 0: none (the file is missing, torn, of the old format or has a larger table).
+static mut TABLE_LEN: [usize; SEL_MAX] = [0; SEL_MAX];
+
+/// Forget the tables (the start of a boot's planning).
+pub unsafe fn reset() {
+    *addr_of_mut!(TABLE_LEN) = [0; SEL_MAX];
+}
+
+/// Keep the header table of the `.dkm` `file` (the whole file in the staging buffer) for selection index `k`.
+pub unsafe fn capture(k: usize, file: &[u8]) {
+    if k >= SEL_MAX || file.len() < dkneeds::HEADER as usize {
+        return;
+    }
+    let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]) as usize;
+    let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
+    if len == 0 || len > TABLE_MAX || off > file.len() || len > file.len() - off {
+        return;
+    }
+    core::ptr::copy_nonoverlapping(file.as_ptr().add(off), (addr_of_mut!(TABLES) as *mut u8).add(k * TABLE_MAX), len);
+    (*addr_of_mut!(TABLE_LEN))[k] = len;
+}
+
+/// Plan the selection `count` modules long from the tables `capture` kept.
+pub unsafe fn run(count: usize) -> Plan {
+    let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+    let k = crate::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
+    let tables = &*addr_of!(TABLES);
+    let lens = &*addr_of!(TABLE_LEN);
+    let mut mods: [Option<Keys>; SEL_MAX] = [None; SEL_MAX];
+    let mut i = 0;
+    while i < count.min(SEL_MAX) {
+        if lens[i] != 0 {
+            mods[i] = Keys::parse(&tables[i][..lens[i]]).ok();
+        }
+        i += 1;
+    }
+    let env = Env { services: crate::handlers::services(), runtime: dkrt_sdk::RUNTIME_VERSION, caps: &caps[..k] };
+    plan(&env, &mods[..count.min(SEL_MAX)])
+}
+
+/// The needs of a module, as the fit function counts them.
+fn needs_of_uses(t: &Keys) -> fit::Needs {
+    let rb = t.record_bytes();
+    fit::Needs {
+        machine_rows: t.machine_rows(),
+        param_rows: t.param_rows(),
+        page_rows: t.page_rows(),
+        arena: if rb != 0 { dkneeds::arena_block(rb).unwrap_or(u32::MAX) } else { 0 },
+        ..fit::Needs::default()
+    }
+}
+
+/// The verdict of module `j` against the accepted modules `done` (the ones before it in the order).
+fn judge(env: &Env, mods: &[Option<Keys>], j: usize, done: &[bool; SEL_MAX], caps: &mut [DkrtCap]) -> Verdict {
+    let t = match &mods[j] {
+        Some(t) => t,
+        None => return Verdict::Accepted,
+    };
+    // needs
+    for n in t.needs() {
+        if !n.hard {
+            continue;
+        }
+        if is_runtime_service(n.service, &env.services) {
+            if n.min_version > env.runtime {
+                return Verdict::Refused(Reason::NeedVersion);
+            }
+            continue;
+        }
+        let mut found = false;
+        let mut i = 0;
+        while i < mods.len() {
+            if i != j && done[i] {
+                if let Some(ti) = &mods[i] {
+                    found |= exports(ti, n.service);
+                }
+            }
+            i += 1;
+        }
+        if !found {
+            return Verdict::Refused(Reason::NeedMissing);
+        }
+    }
+    // the kinds the module owns, the slots and hook sites it takes: one owner each
+    for d in t.kinds() {
+        if env.services.owner(d.kind).is_some() {
+            return Verdict::Refused(Reason::DuplicateOwner(d.kind));
+        }
+        let mut i = 0;
+        while i < mods.len() {
+            if i != j && done[i] {
+                if let Some(ti) = &mods[i] {
+                    if provides_kind(ti, d.kind) {
+                        return Verdict::Refused(Reason::DuplicateOwner(d.kind));
+                    }
+                }
+            }
+            i += 1;
+        }
+    }
+    let mut i = 0;
+    while i < mods.len() {
+        if i != j && done[i] {
+            if let Some(ti) = &mods[i] {
+                if t.slots().any(|a| ti.slots().any(|b| a.a == b.a)) {
+                    return Verdict::Refused(Reason::DuplicateOwner(t.slots().find(|a| ti.slots().any(|b| a.a == b.a)).map_or(0, |s| s.a)));
+                }
+                if t.hooks().any(|a| ti.hooks().any(|b| a.a == b.a)) {
+                    return Verdict::Refused(Reason::DuplicateOwner(t.hooks().find(|a| ti.hooks().any(|b| a.a == b.a)).map_or(0, |s| s.a)));
+                }
+            }
+        }
+        i += 1;
+    }
+    // the keys: an owner for the kind, and no key twice for a generic kind
+    for (kind, keys) in t.key_groups() {
+        let mut owned = env.services.owner(kind).is_some();
+        let mut i = 0;
+        while i < mods.len() {
+            if i != j && done[i] {
+                if let Some(ti) = &mods[i] {
+                    owned |= provides_kind(ti, kind);
+                }
+            }
+            i += 1;
+        }
+        owned |= t.kinds().any(|d| d.kind == kind);
+        if !owned {
+            return Verdict::Refused(Reason::UnownedKind(kind));
+        }
+        if is_generic(kind) {
+            for k in keys {
+                let mut i = 0;
+                while i < mods.len() {
+                    if i != j && done[i] {
+                        if let Some(ti) = &mods[i] {
+                            if ti.keys_of(kind).any(|x| x == k) {
+                                return Verdict::Refused(Reason::DuplicateKey(kind, k));
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+            }
+        }
+    }
+    // fit
+    let n = needs_of_uses(t);
+    if let Some(s) = fit::fits_now(&n, caps) {
+        return Verdict::Refused(Reason::Fit(s.kind));
+    }
+    fit::take(&n, caps);
+    Verdict::Accepted
+}
+
+/// Plan a selection: `mods[k]` is the header table of selection index `k`.
+pub fn plan(env: &Env, mods: &[Option<Keys>]) -> Plan {
+    let n = mods.len().min(SEL_MAX);
+    let mods = &mods[..n];
+    let mut p = Plan { n, verdicts: [Verdict::Accepted; SEL_MAX], order: [0; SEL_MAX] };
+    let mut cyclic = [false; SEL_MAX];
+    order_of(mods, &mut p.order, &mut cyclic);
+    let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+    let k = env.caps.len().min(CAP_MAX);
+    caps[..k].copy_from_slice(&env.caps[..k]);
+    let mut done = [false; SEL_MAX];
+    let mut at = 0;
+    while at < n {
+        let j = p.order[at] as usize;
+        let v = if cyclic[j] { Verdict::Refused(Reason::NeedMissing) } else { judge(env, mods, j, &done, &mut caps[..k]) };
+        p.verdicts[j] = v;
+        done[j] = v.is_accepted();
+        at += 1;
+    }
+    p
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dkneeds::keys::{write_table, KeyGroup, KindDecl, Need, Pair, Table, Use};
+    use dkneeds::{KIND_EFFECT, KIND_MACHINE, RES_MACHINE_ROWS};
+    use dkrt_abi::service::{Service, ServiceRow};
+    use dkrt_sdk::proto::*;
+    use dkrt_sdk::{E_CONTRACT, E_MISSING, E_PLAN_FIT, E_PLAN_KIND, E_PLAN_OWNER};
+    use std::vec;
+    use std::vec::Vec;
+
+    struct S;
+    impl Service for S {}
+    static ROWS: [ServiceRow; 1] = [ServiceRow::of::<S>("machines", &[(KIND_MACHINE, 0x6c), (KIND_EFFECT, 0x1a4)])];
+
+    fn bytes(t: &Table) -> Vec<u8> {
+        let mut b = vec![0u8; dkneeds::keys::table_size(t)];
+        write_table(t, &mut b).unwrap();
+        b
+    }
+
+    fn caps() -> Vec<DkrtCap> {
+        let c = |kind: u8, limit: u32| DkrtCap { kind: kind as u32, limit, used: 0, largest: limit };
+        vec![c(CAPK_MODULES, 8), c(CAPK_SELECTION, 8), c(CAPK_MACHINE_ROWS, 4), c(CAPK_PARAM_ROWS, 16), c(CAPK_PAGE_ROWS, 8), c(CAPK_STAGE, 65536), c(CAPK_ARENA, 1 << 20)]
+    }
+
+    fn run(tables: &[Option<Vec<u8>>]) -> Plan {
+        let c = caps();
+        let env = Env { services: ServiceTable { rows: &ROWS }, runtime: 0x000800, caps: &c };
+        let keys: Vec<Option<Keys>> = tables.iter().map(|t| t.as_ref().map(|b| Keys::parse(b).unwrap())).collect();
+        plan(&env, &keys)
+    }
+
+    const KEEP: Table<'static> = Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[] };
+
+    #[test]
+    fn a_module_with_no_table_and_a_module_with_nothing_to_share_are_accepted_in_selection_order() {
+        let p = run(&[None, Some(bytes(&KEEP)), Some(bytes(&KEEP))]);
+        assert_eq!(p.verdicts[..3], [Verdict::Accepted; 3]);
+        assert_eq!(p.order[..3], [0, 1, 2]);
+    }
+
+    #[test]
+    fn a_provider_loads_before_the_modules_that_need_it_and_a_need_nobody_provides_is_refused() {
+        let svc = name_hash("lfo_bus");
+        let consumer = Table { needs: &[Need { service: svc, min_version: 0x000800, hard: true }], ..KEEP };
+        let provider = Table { exports: &[Pair { a: svc, b: 0x40 }], ..KEEP };
+        // consumer first in the selection, provider second: the provider loads first
+        let p = run(&[Some(bytes(&consumer)), Some(bytes(&provider))]);
+        assert_eq!(p.order[..2], [1, 0]);
+        assert_eq!(p.verdicts[..2], [Verdict::Accepted; 2]);
+        // without the provider the need is missing; an optional need is not looked at
+        let p = run(&[Some(bytes(&consumer))]);
+        assert_eq!(p.verdicts[0], Verdict::Refused(Reason::NeedMissing));
+        assert_eq!(p.verdicts[0].result(), E_MISSING);
+        let soft = Table { needs: &[Need { service: svc, min_version: 0x000800, hard: false }], ..KEEP };
+        assert_eq!(run(&[Some(bytes(&soft))]).verdicts[0], Verdict::Accepted);
+        // a service of the runtime is always there, at a version up to the runtime's
+        let ok = Table { needs: &[Need { service: name_hash("runtime"), min_version: 0x000800, hard: true }, Need { service: name_hash("ui"), min_version: 0x000700, hard: true }], ..KEEP };
+        assert_eq!(run(&[Some(bytes(&ok))]).verdicts[0], Verdict::Accepted);
+        let newer = Table { needs: &[Need { service: name_hash("runtime"), min_version: 0x000801, hard: true }], ..KEEP };
+        assert_eq!(run(&[Some(bytes(&newer))]).verdicts[0].result(), E_CONTRACT);
+        // two modules that need each other cannot load: both are refused
+        let a = Table { needs: &[Need { service: 1, min_version: 0, hard: true }], exports: &[Pair { a: 2, b: 0 }], ..KEEP };
+        let b = Table { needs: &[Need { service: 2, min_version: 0, hard: true }], exports: &[Pair { a: 1, b: 0 }], ..KEEP };
+        let p = run(&[Some(bytes(&a)), Some(bytes(&b))]);
+        assert_eq!(p.verdicts[..2], [Verdict::Refused(Reason::NeedMissing); 2]);
+    }
+
+    #[test]
+    fn keys_for_a_kind_nobody_owns_are_refused_and_a_provider_makes_the_kind_owned() {
+        let ks = [5u32];
+        let unowned = Table { keys: &[KeyGroup { kind: 90, keys: &ks }], ..KEEP };
+        let p = run(&[Some(bytes(&unowned))]);
+        assert_eq!(p.verdicts[0], Verdict::Refused(Reason::UnownedKind(90)));
+        assert_eq!(p.verdicts[0].result(), E_PLAN_KIND);
+        // a service of the table owns the machine kind
+        let ms = [0x100u32];
+        let owned = Table { keys: &[KeyGroup { kind: KIND_MACHINE, keys: &ms }], ..KEEP };
+        assert_eq!(run(&[Some(bytes(&owned))]).verdicts[0], Verdict::Accepted);
+        // a module that declares the kind owns it, and the module with keys for it loads after
+        let provider = Table { kinds: &[KindDecl { kind: 90, len: 16, entry: 8 }], ..KEEP };
+        let p = run(&[Some(bytes(&unowned)), Some(bytes(&provider))]);
+        assert_eq!(p.order[..2], [1, 0]);
+        assert_eq!(p.verdicts[..2], [Verdict::Accepted; 2]);
+    }
+
+    #[test]
+    fn a_kind_a_slot_or_a_hook_site_has_one_owner() {
+        let dup_kind = Table { kinds: &[KindDecl { kind: KIND_MACHINE, len: 8, entry: 0 }], ..KEEP };
+        let p = run(&[Some(bytes(&dup_kind))]);
+        assert_eq!(p.verdicts[0], Verdict::Refused(Reason::DuplicateOwner(KIND_MACHINE)));
+        assert_eq!(p.verdicts[0].result(), E_PLAN_OWNER);
+        let k = Table { kinds: &[KindDecl { kind: 90, len: 16, entry: 8 }], ..KEEP };
+        let p = run(&[Some(bytes(&k)), Some(bytes(&k))]);
+        assert_eq!(p.verdicts[..2], [Verdict::Accepted, Verdict::Refused(Reason::DuplicateOwner(90))]);
+        let slot = Table { slots: &[Pair { a: 7, b: 0 }], ..KEEP };
+        let hook = Table { hooks: &[Pair { a: 9, b: 4 }], ..KEEP };
+        let p = run(&[Some(bytes(&slot)), Some(bytes(&slot)), Some(bytes(&hook)), Some(bytes(&hook))]);
+        assert_eq!(
+            p.verdicts[..4],
+            [Verdict::Accepted, Verdict::Refused(Reason::DuplicateOwner(7)), Verdict::Accepted, Verdict::Refused(Reason::DuplicateOwner(9))]
+        );
+    }
+
+    #[test]
+    fn the_keys_of_the_typed_kinds_are_not_exclusive_across_modules() {
+        // a machine key twice takes a fresh type number (assign rule 4) and an effect id twice is E_FX_ID_DUP at the load: not the planner's
+        let ms = [0x100u32];
+        let m = Table { keys: &[KeyGroup { kind: KIND_MACHINE, keys: &ms }], ..KEEP };
+        let p = run(&[Some(bytes(&m)), Some(bytes(&m))]);
+        assert_eq!(p.verdicts[..2], [Verdict::Accepted; 2]);
+    }
+
+    #[test]
+    fn the_uses_are_summed_against_the_capacity_the_earlier_modules_left() {
+        let three = Table { uses: &[Use { resource: RES_MACHINE_ROWS, count: 3 }], ..KEEP };
+        let two = Table { uses: &[Use { resource: RES_MACHINE_ROWS, count: 2 }], ..KEEP };
+        let one = Table { uses: &[Use { resource: RES_MACHINE_ROWS, count: 1 }], ..KEEP };
+        // 4 machine rows: 3 fit, 2 more do not, 1 more does; a refused module takes nothing
+        let p = run(&[Some(bytes(&three)), Some(bytes(&two)), Some(bytes(&one))]);
+        assert_eq!(
+            p.verdicts[..3],
+            [Verdict::Accepted, Verdict::Refused(Reason::Fit(CAPK_MACHINE_ROWS)), Verdict::Accepted]
+        );
+        assert_eq!(p.verdicts[1].result(), E_PLAN_FIT);
+    }
+}

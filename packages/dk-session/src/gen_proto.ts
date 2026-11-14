@@ -150,6 +150,15 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-49, 'E_TABLE', "the runtime's tables failed their check"],
   [-73, 'E_MISSING', 'the service is not in the image (the module that provides it is not loaded)'],
   [-74, 'E_DECL_FULL', 'init made more builder calls than the record limit allows'],
+  [-75, 'E_PLAN_KIND', 'the boot plan refused the module: a record kind of its header table has no owning service'],
+  [-76, 'E_PLAN_OWNER', 'the boot plan refused the module: another module owns the kind, slot or hook site it takes'],
+  [-77, 'E_PLAN_KEY', 'the boot plan refused the module: another module of the selection has the same key for a kind'],
+  [
+    -78,
+    'E_PLAN_FIT',
+    'the boot plan refused the module: its uses do not fit what the earlier modules of the selection left',
+  ],
+  [-79, 'E_DECL_KIND', 'a service declared a record kind that the header table does not carry, or with another length'],
 ];
 
 export const CAP = {

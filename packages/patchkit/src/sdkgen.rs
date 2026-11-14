@@ -372,6 +372,19 @@ fn records_consts(sdk: &Sdk, indent: &str) -> String {
         }
         let _ = writeln!(s, "{indent}];");
     }
+    let _ = writeln!(
+        s,
+        "{indent}/// The services of `[handle] services`: the names a module's `NEEDS` may carry (hashed by `dkneeds::keys::name_hash`)."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const HANDLE_SERVICES: [&str; {}] = [",
+        sdk.handle.services.len()
+    );
+    for n in &sdk.handle.services {
+        let _ = writeln!(s, "{indent}    {n:?},");
+    }
+    let _ = writeln!(s, "{indent}];");
     let generic: Vec<_> = kinds.iter().filter(|(_, k)| k.generic).collect();
     let _ = writeln!(
         s,

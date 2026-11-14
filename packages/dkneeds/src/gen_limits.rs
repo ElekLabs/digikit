@@ -57,6 +57,18 @@ pub const KINDS_MACHINES: [(u32, u32); 6] = [
 pub const KINDS_FX: [(u32, u32); 1] = [
     (KIND_EFFECT, LEN_EFFECT),
 ];
+/// The services of `[handle] services`: the names a module's `NEEDS` may carry (hashed by `dkneeds::keys::name_hash`).
+pub const HANDLE_SERVICES: [&str; 9] = [
+    "runtime",
+    "samples",
+    "machines",
+    "fx",
+    "ui",
+    "input",
+    "usb_bulk",
+    "dsp_link",
+    "sdhc_large",
+];
 /// The kinds a module emits with `dk_record_add`.
 pub const GENERIC_KINDS: [u32; 0] = [
 ];

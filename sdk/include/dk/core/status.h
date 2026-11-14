@@ -51,6 +51,11 @@
 #define DK_E_TABLE (-49) /* the runtime's tables failed their check */
 #define DK_E_MISSING (-73) /* the service is not in the image (the module that provides it is not loaded) */
 #define DK_E_DECL_FULL (-74) /* init made more builder calls than the record limit allows */
+#define DK_E_PLAN_KIND (-75) /* the boot plan refused the module: a record kind of its header table has no owning service */
+#define DK_E_PLAN_OWNER (-76) /* the boot plan refused the module: another module owns the kind, slot or hook site it takes */
+#define DK_E_PLAN_KEY (-77) /* the boot plan refused the module: another module of the selection has the same key for a kind */
+#define DK_E_PLAN_FIT (-78) /* the boot plan refused the module: its uses do not fit what the earlier modules of the selection left */
+#define DK_E_DECL_KIND (-79) /* a service declared a record kind that the header table does not carry, or with another length */
 
 /* Replies of the upload commands ([protocol.status]). */
 #define DK_E_MSG (-50) /* body too short or malformed */

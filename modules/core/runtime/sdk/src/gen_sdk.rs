@@ -118,6 +118,18 @@ pub mod records {
     pub const KINDS_FX: [(u32, u32); 1] = [
         (KIND_EFFECT, LEN_EFFECT),
     ];
+    /// The services of `[handle] services`: the names a module's `NEEDS` may carry (hashed by `dkneeds::keys::name_hash`).
+    pub const HANDLE_SERVICES: [&str; 9] = [
+        "runtime",
+        "samples",
+        "machines",
+        "fx",
+        "ui",
+        "input",
+        "usb_bulk",
+        "dsp_link",
+        "sdhc_large",
+    ];
     /// The kinds a module emits with `dk_record_add`.
     pub const GENERIC_KINDS: [u32; 0] = [
     ];
@@ -355,6 +367,11 @@ pub mod load {
     pub const E_TABLE: i32 = -49;
     pub const E_MISSING: i32 = -73;
     pub const E_DECL_FULL: i32 = -74;
+    pub const E_PLAN_KIND: i32 = -75;
+    pub const E_PLAN_OWNER: i32 = -76;
+    pub const E_PLAN_KEY: i32 = -77;
+    pub const E_PLAN_FIT: i32 = -78;
+    pub const E_DECL_KIND: i32 = -79;
 }
 
 /// The imports of a module (`[[import]]`) and the callback types they take (`[handle.callbacks]`).

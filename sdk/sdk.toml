@@ -1657,6 +1657,11 @@ E_DECL_ID = { code = -27, text = "a builder call names a machine or effect id th
 E_DECL_USES = { code = -28, text = "init declared more machine, param or page rows than the [uses] counts of the header say" }
 E_FX_ID_DUP = { code = -29, text = "an effect id of the module is already loaded (or twice in the module)" }
 E_DECL_FULL = { code = -74, text = "init made more builder calls than the record limit allows" }
+E_PLAN_KIND = { code = -75, text = "the boot plan refused the module: a record kind of its header table has no owning service" }
+E_PLAN_OWNER = { code = -76, text = "the boot plan refused the module: another module owns the kind, slot or hook site it takes" }
+E_PLAN_KEY = { code = -77, text = "the boot plan refused the module: another module of the selection has the same key for a kind" }
+E_PLAN_FIT = { code = -78, text = "the boot plan refused the module: its uses do not fit what the earlier modules of the selection left" }
+E_DECL_KIND = { code = -79, text = "a service declared a record kind that the header table does not carry, or with another length" }
 E_NO_DSP = { code = -30, text = "DSP code in the file, no DSP loader in the image" }
 E_DSP_FORMAT = { code = -31, text = "the DSP section is malformed" }
 E_DSP_IMPORT = { code = -32, text = "a DSP symbol is not exported by the image" }
