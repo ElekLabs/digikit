@@ -115,6 +115,8 @@ export const pinned = (types: number[]): SynthVoice[] => types.map((type) => ({ 
 export const ARENA_HDR = 16; // the arena block's header
 export const DSP_GRANULE = 64; // the DSP area is handed out in granules
 export const DKM_HEADER = 160;
+/** The header and the 8-byte header table of a module with no machine, effect or key, up to the next multiple of 16 (where the image starts). */
+export const DKM_FIXTURE_HEADER = DKM_HEADER + 16;
 export const MAX_VOICES = 8; // voices of one DSP section
 /** The synthetic module's code: `moveq #0,d0; rts`. */
 export const CODE = 4;
@@ -187,8 +189,8 @@ export const block = (n: number): number => ((n + 15) & ~15) + ARENA_HDR;
  */
 export const COLLECT_BLOCK = block(COLLECT_BYTES);
 
-/** `pad` of a raw module whose file is `stageBytes + extra` bytes (the file is the header, the code and the pad). */
-export const stageFilePad = (stageBytes: number, extra = 0): number => stageBytes + extra - DKM_HEADER - CODE;
+/** `pad` of a raw module whose file is `stageBytes + extra` bytes (the file is the header, its table, the code and the pad). */
+export const stageFilePad = (stageBytes: number, extra = 0): number => stageBytes + extra - DKM_FIXTURE_HEADER - CODE;
 
 // ---- the full set: every limit used at once (capacity.device.test.ts, memaudit.device.test.ts) ---------------------------------
 

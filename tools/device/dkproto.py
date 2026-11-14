@@ -37,6 +37,15 @@ RECORD_KIND: dict[str, int] = {
     "LFO_SHAPE": 8,
 }
 
+# the resources of a module's uses ([records.resources])
+RESOURCE: dict[str, int] = {
+    "MACHINE_ROWS": 1,
+    "PARAM_ROWS": 2,
+    "PAGE_ROWS": 3,
+    "RECORD_BYTES": 4,
+    "DSP_COST": 5,
+}
+
 CMD: dict[str, int] = {
     "INFO": 0x01,
     "LIST": 0x02,

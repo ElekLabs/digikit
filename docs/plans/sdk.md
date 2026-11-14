@@ -145,7 +145,7 @@ context  = "init"             # init, ui, io-step, any, isr
 since    = "0.7.0"          # the runtime version that added the import
 ```
 
-- The packer writes the runtime version a module needs, the newest `since` among the imports it links (0 when it links none), into the header word at 0x30 (bit 31 is the trace flag), and derives the services it
+- The packer writes the runtime version a module needs, the newest `since` among the imports it links, and at least the version that introduced the header table (`[runtime] table`, 0.8.0), into the header word at 0x30 (bit 31 is the trace flag), and derives the services it
   needs from their `service` tags. `uses_api`, `api->size` and `DK_API_HAS` are gone. The runtime loads the module only when that version has its own major and minor and at most its own patch (0.x semver: a minor may break, a patch only adds); otherwise the load fails with `E_CONTRACT`. The bytes 0x38 to 0x3f of the header are reserved zero.
 - `service` uses the names of runtime-and-services: `runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`, `sdhc_large`. Today
   every `runtime`, `samples` and `machines` import resolves to code in the runtime image. When runtime-and-services moves `samples`,

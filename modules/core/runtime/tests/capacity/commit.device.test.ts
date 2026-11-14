@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { RESOURCE } from '@digi/dk-session/gen_proto';
 import { committedRecords } from '@digi/test-support/commit-records';
 import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
@@ -31,10 +32,23 @@ const H_NAME = 0x40;
 const H_KEYS_OFF = 0x90;
 const H_KEYS_SIZE = 0x94;
 const H_DSP_SIZE = 0x9c;
-const K_PARAM_ROWS = 2;
 const ROW_BYTES = 96;
 const ROW_RANGE0 = 2;
 const ROW_LATCH = 22;
+/** The offset of the count of resource `id` in the USES entry (tag 2) of the header table (packages/dkneeds/src/keys.rs). */
+function usesCountAt(f: Buffer, id: number): number {
+  const table = f.readUInt32BE(H_KEYS_OFF);
+  let at = table + 8;
+  for (let i = f.readUInt16BE(table + 6); i > 0; i--) {
+    const count = f.readUInt16BE(at + 2);
+    if (f.readUInt16BE(at) === 2) {
+      for (let k = 0; k < count; k++) if (f.readUInt32BE(at + 8 + 8 * k) === id) return at + 8 + 8 * k + 4;
+    }
+    at += 8 + f.readUInt32BE(at + 4);
+  }
+  throw new Error(`no uses entry for resource ${id}`);
+}
+
 /** The machine key the packer writes for the fixture's `test/commit-demo:cmach` (the keys table and the DSP voice record; init passes the index 0). */
 const KEY = Buffer.from([0xa6, 0x51, 0x3f, 0x00]);
 const KEY2 = Buffer.from([0xa6, 0x51, 0x3e, 0x00]);
@@ -157,9 +171,9 @@ cardRigs(
     test('more rows than [uses] is E_DECL_USES and writes nothing', async () => {
       await rig.first();
       const file = patched('uses.dkm', (f) => {
-        const keys = f.readUInt32BE(H_KEYS_OFF);
-        expect(f.readUInt16BE(keys + K_PARAM_ROWS), 'the fixture declares three param rows').toBe(3);
-        f.writeUInt16BE(2, keys + K_PARAM_ROWS);
+        const at = usesCountAt(f, RESOURCE.PARAM_ROWS);
+        expect(f.readUInt32BE(at), 'the fixture declares three param rows').toBe(3);
+        f.writeUInt32BE(2, at);
       });
       const got = await bootEntries(rig, 'commit-uses', [{ name: ID, file, want: E_DECL_USES }]);
       expect(got.info.results).toEqual([E_DECL_USES]);
@@ -168,9 +182,10 @@ cardRigs(
 
     test('a machine index that the keys table lacks is E_DECL_ID and writes nothing', async () => {
       await rig.first();
-      // init declares machine 0 and effect 0; with no keys table (and no DSP section, which would name its voice key) there is no row for them
+      // init declares machine 0 and effect 0; with a header table that has no entries (and no DSP section, which would name its voice key) there is no row for them
       const file = patched('id.dkm', (f) => {
-        f.writeUInt32BE(0, H_KEYS_SIZE);
+        f.writeUInt32BE(8, H_KEYS_SIZE);
+        f.writeUInt16BE(0, f.readUInt32BE(H_KEYS_OFF) + 6);
         f.writeUInt32BE(0, H_DSP_SIZE);
       });
       const got = await bootEntries(rig, 'commit-id', [{ name: ID, file, want: E_DECL_ID }]);

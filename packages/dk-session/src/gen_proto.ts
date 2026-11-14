@@ -37,6 +37,15 @@ export const RECORD_KIND = {
   LFO_SHAPE: 8,
 } as const;
 
+/** The resources of a module's `uses` (`[records.resources]`). */
+export const RESOURCE = {
+  MACHINE_ROWS: 1,
+  PARAM_ROWS: 2,
+  PAGE_ROWS: 3,
+  RECORD_BYTES: 4,
+  DSP_COST: 5,
+} as const;
+
 export const CMD = {
   INFO: 0x01,
   LIST: 0x02,

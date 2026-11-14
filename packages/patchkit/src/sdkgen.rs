@@ -1091,6 +1091,12 @@ fn python_proto(sdk: &Sdk) -> String {
     for (n, k) in &kinds {
         let _ = writeln!(s, "    {n:?}: {},", k.id);
     }
+    s.push_str("}\n\n# the resources of a module's uses ([records.resources])\nRESOURCE: dict[str, int] = {\n");
+    let mut res: Vec<_> = sdk.records.resources.iter().collect();
+    res.sort_by_key(|(_, r)| r.id);
+    for (n, r) in &res {
+        let _ = writeln!(s, "    {n:?}: {},", r.id);
+    }
     s.push_str("}\n\n");
     s.push_str("CMD: dict[str, int] = {\n");
     for (n, v) in by_value(&p.commands) {
@@ -1167,6 +1173,12 @@ fn ts_proto(sdk: &Sdk) -> String {
     kinds.sort_by_key(|(_, k)| k.id);
     for (n, k) in &kinds {
         let _ = writeln!(s, "  {n}: {},", k.id);
+    }
+    s.push_str("} as const;\n\n/** The resources of a module's `uses` (`[records.resources]`). */\nexport const RESOURCE = {\n");
+    let mut res: Vec<_> = sdk.records.resources.iter().collect();
+    res.sort_by_key(|(_, r)| r.id);
+    for (n, r) in &res {
+        let _ = writeln!(s, "  {n}: {},", r.id);
     }
     s.push_str("} as const;\n\n");
     s.push_str("export const CMD = {\n");
