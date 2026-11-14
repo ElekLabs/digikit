@@ -15,7 +15,7 @@
 //!   number, an effect id twice is `E_FX_ID_DUP` at the load.
 //! - Fit: the module's `USES` (machine, parameter and page rows, the record block) against the capacity the earlier accepted modules left, with the same
 //!   function the menu uses (`dkrt_fit::fits_now` and `take`).
-use dkneeds::keys::{name_hash, Keys};
+use dkneeds::keys::{name_hash, tag, Keys};
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::service::ServiceTable;
 use dkrt_fit as fit;
@@ -60,21 +60,66 @@ fn is_runtime_service(h: u32, services: &ServiceTable) -> bool {
     false
 }
 
+/// Whether item `(first word == w)` is in entry `t` (an index loop: the iterator forms are code of their own for each closure).
+fn has_word(t: &Keys, tg: u16, w: u32) -> bool {
+    let mut i = 0;
+    while let Some(x) = t.words(tg, i) {
+        if x.0 == w {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
 fn exports(t: &Keys, h: u32) -> bool {
-    t.exports().any(|e| e.a == h)
+    has_word(t, tag::EXPORTS, h)
 }
 
 fn provides_kind(t: &Keys, kind: u32) -> bool {
-    t.kinds().any(|d| d.kind == kind)
+    has_word(t, tag::KINDS, kind)
+}
+
+/// The first word that entry `a` and entry `b` of the two tables share (slots, hook sites).
+fn shared(a: &Keys, b: &Keys, tg: u16) -> Option<u32> {
+    let mut i = 0;
+    while let Some(x) = a.words(tg, i) {
+        if has_word(b, tg, x.0) {
+            return Some(x.0);
+        }
+        i += 1;
+    }
+    None
 }
 
 fn is_generic(kind: u32) -> bool {
-    dkrt_sdk::records::GENERIC_KINDS.contains(&kind)
+    let mut i = 0;
+    while i < dkrt_sdk::records::GENERIC_KINDS.len() {
+        if dkrt_sdk::records::GENERIC_KINDS[i] == kind {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }
 
 /// Whether module `j` has to load after module `i`: it needs a service `i` exports, or has keys for a kind `i` owns.
 fn after(j: &Keys, i: &Keys) -> bool {
-    j.needs().any(|n| n.hard && exports(i, n.service)) || j.key_groups().any(|g| provides_kind(i, g.0))
+    let mut k = 0;
+    while let Some(n) = j.words(tag::NEEDS, k) {
+        if n.2 & 1 != 0 && exports(i, n.0) {
+            return true;
+        }
+        k += 1;
+    }
+    let mut g = 0;
+    while let Some((kind, _)) = j.group(g) {
+        if provides_kind(i, kind) {
+            return true;
+        }
+        g += 1;
+    }
+    false
 }
 
 /// The load order: the selection's, moved only as far as the dependencies need (the smallest unplaced index whose providers are placed comes next). The
@@ -135,8 +180,8 @@ fn order_of(mods: &[Option<Keys>], order: &mut [u8; SEL_MAX], cyclic: &mut [bool
 
 use core::ptr::{addr_of, addr_of_mut};
 
-/// The most bytes of a header table the boot planner keeps (a module with eight machines and effects has about 150).
-const TABLE_MAX: usize = 768;
+/// The most bytes of a header table the boot planner keeps (a module with eight machines, three effects and nine needs has about 260; a larger table is not planned and the loader decides).
+const TABLE_MAX: usize = 384;
 static mut TABLES: [[u8; TABLE_MAX]; SEL_MAX] = [[0; TABLE_MAX]; SEL_MAX];
 /// Bytes of the table kept for selection index `k`; 0: none (the file is missing, torn, of the old format or has a larger table).
 static mut TABLE_LEN: [usize; SEL_MAX] = [0; SEL_MAX];
@@ -197,12 +242,15 @@ fn judge(env: &Env, mods: &[Option<Keys>], j: usize, done: &[bool; SEL_MAX], cap
         None => return Verdict::Accepted,
     };
     // needs
-    for n in t.needs() {
-        if !n.hard {
+    let mut ni = 0;
+    while let Some(n) = t.words(tag::NEEDS, ni) {
+        ni += 1;
+        let (service, min_version, hard) = (n.0, n.1, n.2 & 1 != 0);
+        if !hard {
             continue;
         }
-        if is_runtime_service(n.service, &env.services) {
-            if n.min_version > env.runtime {
+        if is_runtime_service(service, &env.services) {
+            if min_version > env.runtime {
                 return Verdict::Refused(Reason::NeedVersion);
             }
             continue;
@@ -212,7 +260,7 @@ fn judge(env: &Env, mods: &[Option<Keys>], j: usize, done: &[bool; SEL_MAX], cap
         while i < mods.len() {
             if i != j && done[i] {
                 if let Some(ti) = &mods[i] {
-                    found |= exports(ti, n.service);
+                    found |= exports(ti, service);
                 }
             }
             i += 1;
@@ -222,16 +270,19 @@ fn judge(env: &Env, mods: &[Option<Keys>], j: usize, done: &[bool; SEL_MAX], cap
         }
     }
     // the kinds the module owns, the slots and hook sites it takes: one owner each
-    for d in t.kinds() {
-        if env.services.owner(d.kind).is_some() {
-            return Verdict::Refused(Reason::DuplicateOwner(d.kind));
+    let mut ki = 0;
+    while let Some(d) = t.words(tag::KINDS, ki) {
+        ki += 1;
+        let kind = d.0;
+        if env.services.owner(kind).is_some() {
+            return Verdict::Refused(Reason::DuplicateOwner(kind));
         }
         let mut i = 0;
         while i < mods.len() {
             if i != j && done[i] {
                 if let Some(ti) = &mods[i] {
-                    if provides_kind(ti, d.kind) {
-                        return Verdict::Refused(Reason::DuplicateOwner(d.kind));
+                    if provides_kind(ti, kind) {
+                        return Verdict::Refused(Reason::DuplicateOwner(kind));
                     }
                 }
             }
@@ -242,18 +293,17 @@ fn judge(env: &Env, mods: &[Option<Keys>], j: usize, done: &[bool; SEL_MAX], cap
     while i < mods.len() {
         if i != j && done[i] {
             if let Some(ti) = &mods[i] {
-                if t.slots().any(|a| ti.slots().any(|b| a.a == b.a)) {
-                    return Verdict::Refused(Reason::DuplicateOwner(t.slots().find(|a| ti.slots().any(|b| a.a == b.a)).map_or(0, |s| s.a)));
-                }
-                if t.hooks().any(|a| ti.hooks().any(|b| a.a == b.a)) {
-                    return Verdict::Refused(Reason::DuplicateOwner(t.hooks().find(|a| ti.hooks().any(|b| a.a == b.a)).map_or(0, |s| s.a)));
+                if let Some(site) = shared(t, ti, tag::SLOTS).or_else(|| shared(t, ti, tag::HOOKS)) {
+                    return Verdict::Refused(Reason::DuplicateOwner(site));
                 }
             }
         }
         i += 1;
     }
     // the keys: an owner for the kind, and no key twice for a generic kind
-    for (kind, keys) in t.key_groups() {
+    let mut gi = 0;
+    while let Some((kind, keys)) = t.group(gi) {
+        gi += 1;
         let mut owned = env.services.owner(kind).is_some();
         let mut i = 0;
         while i < mods.len() {
@@ -264,17 +314,20 @@ fn judge(env: &Env, mods: &[Option<Keys>], j: usize, done: &[bool; SEL_MAX], cap
             }
             i += 1;
         }
-        owned |= t.kinds().any(|d| d.kind == kind);
+        owned |= provides_kind(t, kind);
         if !owned {
             return Verdict::Refused(Reason::UnownedKind(kind));
         }
         if is_generic(kind) {
-            for k in keys {
+            let mut n = 0;
+            while n < keys.len() {
+                let k = keys.get(n);
+                n += 1;
                 let mut i = 0;
                 while i < mods.len() {
                     if i != j && done[i] {
                         if let Some(ti) = &mods[i] {
-                            if ti.keys_of(kind).any(|x| x == k) {
+                            if ti.has_key(kind, k) {
                                 return Verdict::Refused(Reason::DuplicateKey(kind, k));
                             }
                         }

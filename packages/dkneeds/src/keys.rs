@@ -334,28 +334,103 @@ impl<'a> Keys<'a> {
         u16_at(self.bytes, 6) as usize
     }
 
+    // The readers below are plain index loops, not iterator chains: the runtime and the boot planner call them, and each distinct iterator type is code of
+    // its own on the ColdFire. The iterator forms for host tools follow them.
+
+    /// Items of entry `t` (key groups for `KEYS`); 0 when the table has none.
+    pub fn count(&self, t: u16) -> usize {
+        match entry(self.bytes, t) {
+            Some((n, _)) => n,
+            None => 0,
+        }
+    }
+
+    /// Item `i` of the fixed-size entry `t` as `(first, second, third)` words (0 for a missing word); `None` outside the entry.
+    pub fn words(&self, t: u16, i: usize) -> Option<(u32, u32, u32)> {
+        let w = item_bytes(t)?;
+        let (n, body) = entry(self.bytes, t)?;
+        if i >= n {
+            return None;
+        }
+        let at = w * i;
+        Some((
+            u32_at(body, at),
+            u32_at(body, at + 4),
+            if w == 12 { u32_at(body, at + 8) } else { 0 },
+        ))
+    }
+
+    /// Key group `g`: its record kind and its keys.
+    pub fn group(&self, g: usize) -> Option<(u32, KeyList<'a>)> {
+        let (n, body) = entry(self.bytes, tag::KEYS)?;
+        if g >= n {
+            return None;
+        }
+        let mut at = 0usize;
+        let mut k = 0;
+        while k < g {
+            at += 8 + 4 * u32_at(body, at + 4) as usize;
+            k += 1;
+        }
+        let nk = u32_at(body, at + 4) as usize;
+        Some((
+            u32_at(body, at),
+            KeyList {
+                bytes: &body[at + 8..at + 8 + 4 * nk],
+            },
+        ))
+    }
+
+    /// Whether the module provides key `key` for record kind `kind`.
+    pub fn has_key(&self, kind: u32, key: u32) -> bool {
+        let mut g = 0;
+        while let Some((k, list)) = self.group(g) {
+            if k == kind {
+                let mut j = 0;
+                while j < list.len() {
+                    if list.get(j) == key {
+                        return true;
+                    }
+                    j += 1;
+                }
+            }
+            g += 1;
+        }
+        false
+    }
+
     pub fn needs(&self) -> impl Iterator<Item = Need> + 'a {
-        let (n, body) = entry(self.bytes, tag::NEEDS).unwrap_or((0, &[]));
-        (0..n).map(move |i| Need {
-            service: u32_at(body, 12 * i),
-            min_version: u32_at(body, 12 * i + 4),
-            hard: u32_at(body, 12 * i + 8) & 1 != 0,
+        let me = *self;
+        (0..self.count(tag::NEEDS)).filter_map(move |i| {
+            me.words(tag::NEEDS, i).map(|w| Need {
+                service: w.0,
+                min_version: w.1,
+                hard: w.2 & 1 != 0,
+            })
         })
     }
 
     pub fn uses(&self) -> impl Iterator<Item = Use> + 'a {
-        let (n, body) = entry(self.bytes, tag::USES).unwrap_or((0, &[]));
-        (0..n).map(move |i| Use {
-            resource: u32_at(body, 8 * i),
-            count: u32_at(body, 8 * i + 4),
+        let me = *self;
+        (0..self.count(tag::USES)).filter_map(move |i| {
+            me.words(tag::USES, i).map(|w| Use {
+                resource: w.0,
+                count: w.1,
+            })
         })
     }
 
     /// What the module takes of resource `id` (0 when it lists none; a resource listed twice adds up).
     pub fn use_of(&self, id: u32) -> u32 {
-        self.uses()
-            .filter(|u| u.resource == id)
-            .fold(0u32, |a, u| a.saturating_add(u.count))
+        let mut sum = 0u32;
+        let mut i = 0;
+        while let Some(w) = self.words(tag::USES, i) {
+            if w.0 == id {
+                sum = sum.saturating_add(w.1);
+            }
+            i += 1;
+        }
+        sum
     }
 
     pub fn machine_rows(&self) -> u32 {
@@ -377,15 +452,10 @@ impl<'a> Keys<'a> {
 
     /// The key groups, in file order: (record kind, its keys).
     pub fn key_groups(&self) -> impl Iterator<Item = (u32, impl Iterator<Item = u32> + 'a)> + 'a {
-        let (n, body) = entry(self.bytes, tag::KEYS).unwrap_or((0, &[]));
-        let mut at = 0usize;
-        (0..n).map(move |_| {
-            let kind = u32_at(body, at);
-            let nk = u32_at(body, at + 4) as usize;
-            let first = at + 8;
-            at = first + 4 * nk;
-            (kind, (0..nk).map(move |i| u32_at(body, first + 4 * i)))
-        })
+        let me = *self;
+        (0..self.count(tag::KEYS))
+            .filter_map(move |g| me.group(g))
+            .map(|(kind, l)| (kind, l.iter()))
     }
 
     /// The keys the module provides for record kind `kind` (all groups of that kind).
@@ -412,20 +482,19 @@ impl<'a> Keys<'a> {
     }
 
     pub fn kinds(&self) -> impl Iterator<Item = KindDecl> + 'a {
-        let (n, body) = entry(self.bytes, tag::KINDS).unwrap_or((0, &[]));
-        (0..n).map(move |i| KindDecl {
-            kind: u32_at(body, 12 * i),
-            len: u32_at(body, 12 * i + 4),
-            entry: u32_at(body, 12 * i + 8),
+        let me = *self;
+        (0..self.count(tag::KINDS)).filter_map(move |i| {
+            me.words(tag::KINDS, i).map(|w| KindDecl {
+                kind: w.0,
+                len: w.1,
+                entry: w.2,
+            })
         })
     }
 
     fn pairs(&self, t: u16) -> impl Iterator<Item = Pair> + 'a {
-        let (n, body) = entry(self.bytes, t).unwrap_or((0, &[]));
-        (0..n).map(move |i| Pair {
-            a: u32_at(body, 8 * i),
-            b: u32_at(body, 8 * i + 4),
-        })
+        let me = *self;
+        (0..self.count(t)).filter_map(move |i| me.words(t, i).map(|w| Pair { a: w.0, b: w.1 }))
     }
 
     pub fn slots(&self) -> impl Iterator<Item = Pair> + 'a {
@@ -442,6 +511,28 @@ impl<'a> Keys<'a> {
 
     pub fn resources(&self) -> impl Iterator<Item = Pair> + 'a {
         self.pairs(tag::RESOURCES)
+    }
+}
+
+/// The keys of one group, as the bytes of the table.
+#[derive(Clone, Copy, Debug)]
+pub struct KeyList<'a> {
+    bytes: &'a [u8],
+}
+
+impl<'a> KeyList<'a> {
+    pub fn len(&self) -> usize {
+        self.bytes.len() / 4
+    }
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+    pub fn get(&self, i: usize) -> u32 {
+        u32_at(self.bytes, 4 * i)
+    }
+    pub fn iter(&self) -> impl Iterator<Item = u32> + 'a {
+        let me = *self;
+        (0..me.len()).map(move |i| me.get(i))
     }
 }
 

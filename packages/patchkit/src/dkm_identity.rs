@@ -97,7 +97,10 @@ mod tests {
         let n = dkneeds::keys::write_keys((1, 2, 0), 64, &[0x100], &[], &mut t).unwrap();
         let (plain, with_table) = (file(&[], &[]), file(&t[..n], &[]));
         assert_ne!(plain, with_table);
-        assert_eq!(differing_parts(&plain, &with_table).unwrap(), Vec::<&str>::new());
+        assert_eq!(
+            differing_parts(&plain, &with_table).unwrap(),
+            Vec::<&str>::new()
+        );
         // a DSP section that differs is a difference
         let (d1, d2) = (file(&t[..n], &[0u8; 16]), file(&t[..n], &[1u8; 16]));
         assert_eq!(differing_parts(&d1, &d2).unwrap(), vec!["dsp"]);

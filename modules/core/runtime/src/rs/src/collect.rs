@@ -652,34 +652,34 @@ impl KeysCopy {
         k.machine_rows = keys.machine_rows();
         k.param_rows = keys.param_rows();
         k.page_rows = keys.page_rows();
-        for v in keys.machine_keys() {
-            if k.nm >= MAX_RECORDS {
-                return Err(E_FORMAT);
+        let mut g = 0;
+        while let Some((kind, list)) = keys.group(g) {
+            g += 1;
+            let mut j = 0;
+            while j < list.len() {
+                let v = list.get(j);
+                j += 1;
+                if kind == KIND_MACHINE {
+                    if k.nm >= MAX_RECORDS {
+                        return Err(E_FORMAT);
+                    }
+                    k.mk[k.nm] = v;
+                    k.nm += 1;
+                } else if kind == KIND_EFFECT {
+                    if k.nf >= MAX_RECORDS {
+                        return Err(E_FORMAT);
+                    }
+                    k.fk[k.nf] = v;
+                    k.nf += 1;
+                }
             }
-            k.mk[k.nm] = v;
-            k.nm += 1;
         }
-        for v in keys.fx_keys() {
-            if k.nf >= MAX_RECORDS {
-                return Err(E_FORMAT);
+        for tg in [dkneeds::keys::tag::KINDS, dkneeds::keys::tag::SLOTS, dkneeds::keys::tag::HOOKS, dkneeds::keys::tag::EXPORTS, dkneeds::keys::tag::RESOURCES] {
+            let mut i = 0;
+            while let Some(w) = keys.words(tg, i) {
+                k.decl.add(tg, w.0, w.1, w.2);
+                i += 1;
             }
-            k.fk[k.nf] = v;
-            k.nf += 1;
-        }
-        for d in keys.kinds() {
-            k.decl.add(Declare::KIND, d.kind, d.len, d.entry);
-        }
-        for p in keys.slots() {
-            k.decl.add(Declare::SLOT, p.a, p.b, 0);
-        }
-        for p in keys.hooks() {
-            k.decl.add(Declare::HOOK, p.a, p.b, 0);
-        }
-        for p in keys.exports() {
-            k.decl.add(Declare::EXPORT, p.a, p.b, 0);
-        }
-        for p in keys.resources() {
-            k.decl.add(Declare::RESOURCE, p.a, p.b, 0);
         }
         if k.decl.full {
             return Err(E_FORMAT);
