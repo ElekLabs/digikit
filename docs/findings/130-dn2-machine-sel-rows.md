@@ -1,7 +1,8 @@
 # MACHINE SEL on the Digitone II 1.12: rows, dividers and the commit rule
 
 Static read of DN2 OS 1.12 (MAIN OS section, load address `0x40000400`): `tools/coldfire/disasm.py`, `tools/coldfire/refscan.py`
-(96.6% byte coverage) and Ghidra 12.2 (`tools/coldfire/ghidra.sh`, `Decompile.java`). Nothing was run, so the marks are [D]. Written for the planned rework of the
+(96.6% byte coverage) and Ghidra 12.2 (`tools/coldfire/ghidra.sh`, `Decompile.java`), marked [D]; the visible behaviour was then
+run in the emulator (section "Emulator run"). Written for the planned rework of the
 machine list (more run-time machines, groups or sub-lists).
 
 Prior art: the DN2 mk2 mod read the same functions on DN2 1.11 (de-pattern.github.io/dn2mk2, `docs/machine-list.md`, AGPL-3.0; facts
@@ -50,6 +51,18 @@ In C (Ghidra, `0x4005b9e8`): with the view's mode word `+0x1a8` = 0, the value u
 So choosing the machine a track already has commits nothing. A module cannot use "the user picked my machine again" as a signal
 to open its own chooser.
 
+## Emulator run
+
+**[V] (run here; the byte check by a second agent is pending).** `mise run dk:dev -- emulator --device dn2` with a key script
+(FUNC+SRC, DOWN and UP steps, YES), DN2 1.12, stock machines, 2026-11-14. Screenshots in `out/runs/devreload/dn2/` (not committed):
+
+- FUNC+SRC opens `MACHINE SEL > TRACK 1` with the cursor on the track's machine (FM TONE, marked by the filled dot). The rows are
+  FM TONE, FM DRUM, WAVETONE, SWARMER, a dotted divider, MIDI: the stock order, one divider where the group changes from 1 to 2.
+- DOWN from SWARMER lands on MIDI, and UP from MIDI on SWARMER: the cursor never stops on the divider.
+- YES on the marked machine closes the view; the track keeps FM TONE.
+- After DOWN to FM DRUM, YES commits it: the dot moves to FM DRUM and the view stays open. A second YES closes it, and the
+  track shows FM DRUM's page.
+
 ## What it means for more run-time machines
 
 - **Groups:** a divider per family (for example one per module, or per collection) is a change to the group function only; a
@@ -69,5 +82,5 @@ to open its own chooser.
   is worth reading before a sub-list is designed.
 
 - Where `MachineListView` (`0x40059ab0`) is used **[O]**.
-- An emulator run with a fourth group, as the mk2 mod did on 1.11, would raise the marks to [V] (after a second check
-  against the image bytes).
+- A run with a third group (a changed group function) to show its divider **[O]**.
+- The second agent's check of the addresses against the image bytes (pending).
