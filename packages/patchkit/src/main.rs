@@ -39,6 +39,8 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          (--trace: built with DK_TRACE defined, trace bit set in the header; objects cached apart)
                                          --manifest PATH (repeatable, relative to cwd): explicit library instead of discovery; include the module and its requires closure
                                          explicit manifests replace modules/, --modules-dir and PATCHKIT_MODULES
+  pack-all --device SHORT --out DIR ID...  pack many modules for a device in one process into DIR/<last part of id>.dkm, one JSON line each:
+                                         {id, file, bytes, sha256}, {id, error} or {id, skipped: \"patch-only\"}; exit 1 when a module failed
   synth-dkm SPEC.toml --device SHORT -o OUT.dkm [--size]   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
   dkm-info FILE.dkm                      check a .dkm and list what it holds
@@ -684,6 +686,59 @@ plan.json {}",
                         .join("; ")
                 }
             );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        "pack-all" => {
+            let dev = flag(rest, "--device").ok_or_else(|| Error(USAGE.into()))?;
+            let out = PathBuf::from(flag(rest, "--out").ok_or_else(|| Error(USAGE.into()))?);
+            let mut ids: Vec<String> = vec![];
+            let mut i = 0;
+            while i < rest.len() {
+                if rest[i] == "--device" || rest[i] == "--out" {
+                    i += 1;
+                } else {
+                    ids.push(rest[i].clone());
+                }
+                i += 1;
+            }
+            if ids.is_empty() {
+                return Err(Error(USAGE.into()));
+            }
+            std::fs::create_dir_all(&out).map_err(|e| Error(format!("{}: {e}", out.display())))?;
+            let mut failed = false;
+            let results = patchkit::pack::pack_all(&a.root, &ids, &dev);
+            for id in &ids {
+                let line = match results.iter().find(|(r, _)| r == id) {
+                    None => serde_json::json!({ "id": id, "skipped": "patch-only" }),
+                    Some((_, Ok(p))) => {
+                        let leaf = id.rsplit('/').next().unwrap_or(id);
+                        let path = out.join(format!("{leaf}.dkm"));
+                        match std::fs::write(&path, &p.bytes) {
+                            Ok(()) => serde_json::json!({
+                                "id": id,
+                                "file": path.display().to_string(),
+                                "bytes": p.bytes.len(),
+                                "sha256": p.dkm.sha256,
+                            }),
+                            Err(e) => {
+                                failed = true;
+                                serde_json::json!({
+                                    "id": id,
+                                    "error": format!("{}: {e}", path.display()),
+                                })
+                            }
+                        }
+                    }
+                    Some((_, Err(e))) => {
+                        failed = true;
+                        serde_json::json!({ "id": id, "error": e })
+                    }
+                };
+                println!("{line}");
+            }
+            if failed {
+                std::process::exit(1);
+            }
         }
         "dkm-dsp-image" => {
             // the DSP image of a .dkm placed at the L2 byte address BASE, imports as NAME=VALUE: the reference loader
