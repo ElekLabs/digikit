@@ -64,7 +64,7 @@ function readModule(manifest: string, scoped = false): RuntimeModule | undefined
   };
 }
 
-/** Production upload candidates, matching isUploadable in tools/nx/modules.mjs. */
+/** Production upload candidates, matching isUploadable in tools/nx/module-manifests.mjs. */
 export function scanRuntimeModules(root: string): RuntimeModule[] {
   const found: RuntimeModule[] = [];
   for (const kind of fs.readdirSync(root).sort()) {

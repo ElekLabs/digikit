@@ -17,7 +17,7 @@ time (the stock project may run files in parallel, `REGRESSION_JOBS`, set by the
 Device tests for a module live in that module: `modules/**/tests/*.device.test.ts` (patched runtime on DT2 1.17
 and DN2 1.12). The owner's `project.json` lists them in `metadata.runtimeAcceptance`, with paths relative
 to that project. A record with `dksampleWasm: true` makes the target depend on `dksample:wasm`, which builds
-`apps/web/public/dksample.wasm`. A record with `pythonTools: true` hashes the Python tools in `PYTHON_TOOL_SOURCES`, and `pythonTools: "client"` only those in `PYTHON_CLIENT_SOURCES` (`tools/nx/module-targets.mjs`), for tests that spawn Python tools. Runtime acceptance belongs to `modules/core/runtime/tests/project.json`
+`apps/web/public/dksample.wasm`. A record with `pythonTools: true` hashes the Python tools in `PYTHON_TOOL_SOURCES`, and `pythonTools: "client"` only those in `PYTHON_CLIENT_SOURCES` (`tools/nx/device-test-keys.mjs`), for tests that spawn Python tools. Runtime acceptance belongs to `modules/core/runtime/tests/project.json`
 (`core/runtime-tests`) except CF-only service commands and settings, owned by nested `service-commands/project.json`
 and `settings/project.json` (`core/runtime-service-tests` and `core/runtime-settings-tests`). Run an owner's
 `test-device` directly; `module:check core/runtime` discovers all owners. Checks that run over

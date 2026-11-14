@@ -2,33 +2,14 @@
 // that resolve into another module directory. tools/devtools/nx_graph.py reads them from the graph.
 // Targets: pack (build stale objects and pack to dist/modules/<dev>/<leaf>.dkm), pack-aliases (renamed copies named by
 // metadata.runtimeAcceptance), test-host, test-device and test-conformance (vitest directly, after the packs).
+// This file wires the plugin. Build and pack targets are in module-build.mjs, device-test cache keys in
+// device-test-keys.mjs, and the shape of device, conformance and test-only targets in device-tests.mjs.
 import { globSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import {
-  read,
-  records,
-  mergeTests,
-  packDevices,
-  isUploadable,
-  dkm,
-  dkmMap,
-  manifestClosure,
-  manifestArgs,
-} from './module-manifests.mjs';
-import {
-  PK,
-  IMAGE_BUILD,
-  BUILD_INPUTS,
-  DEVICE_INPUTS,
-  EMU_SLOT,
-  VITEST_SETUP,
-  deviceTargets,
-  builtSourceExclusions,
-  DEVICE_BYTES,
-  scopedManifestInputs,
-} from './module-targets.mjs';
-import { packSourceInputs } from './pack-inputs.mjs';
-import { testImportInputs } from './test-imports.mjs';
+import { read, records, mergeTests, packDevices, isUploadable } from './module-manifests.mjs';
+import { buildObjectsTarget, packTarget, packAliasesTarget } from './module-build.mjs';
+import { deviceTargets, checkMergeTests, conformanceTarget, testOnlyNodes, regressionNode } from './device-tests.mjs';
+import { testImportInputs } from './ts-imports.mjs';
 
 export { createDependencies } from './module-dependencies.mjs';
 
@@ -50,15 +31,6 @@ export const createNodesV2 = [
         return [parsed.module.id, { file: f, manifest: parsed.module, objects: parsed.object ?? [] }];
       }),
     );
-    // Core generation reads the allocation providers and declarations of the complete core library.
-    // Build inputs follow manifest/source ownership, never the module's acceptance relationships.
-    const packInputs = (manifests) => [
-      ...scopedManifestInputs(
-        BUILD_INPUTS.filter((input) => input !== '^production'),
-        manifests,
-      ),
-      ...packSourceInputs(ctx.workspaceRoot, byId, manifests),
-    ];
     const coreManifests = [...byId.values()]
       .filter(({ manifest }) => manifest.category === 'core')
       .map(({ file }) => file)
@@ -101,19 +73,6 @@ export const createNodesV2 = [
         for (const source of Object.values(rec.aliases ?? {})) packable.add(source);
       }
     }
-    // A marker that names a missing file would silently give that file a narrow key.
-    const checkMergeTests = (root, deviceTests, fullTier) => {
-      const listed = mergeTests(join(ctx.workspaceRoot, root));
-      if (!Array.isArray(listed) || listed.some((t) => typeof t !== 'string'))
-        throw new Error(`metadata.mergeTests of ${root} must be an array of strings`);
-      if (!listed.length) return;
-      if (fullTier) throw new Error(`metadata.mergeTests of ${root} has no meaning on a tier:full project`);
-      const unknown = listed.filter((t) => !deviceTests.includes(t));
-      if (unknown.length)
-        throw new Error(
-          `metadata.mergeTests of ${root} names files that are not its device tests: ${unknown.join(', ')}`,
-        );
-    };
     const nodes = files.map((f) => {
       const { module: m, object: objects = [] } = read(ctx.workspaceRoot, f);
       const root = dirname(f);
@@ -133,76 +92,10 @@ export const createNodesV2 = [
       const recs = records(join(ctx.workspaceRoot, root));
       const devices = packDevices(m);
       if (coreBuilds.has(m.id))
-        targets['build-objects'] = {
-          executor: 'nx:run-commands',
-          cache: false,
-          inputs: scopedManifestInputs(BUILD_INPUTS, coreManifests),
-          description:
-            'Check generated sources, then incrementally build committed core objects; may update tracked outputs.',
-          dependsOn: [
-            'sdk:check-generated',
-            ...(m.requires ?? []).filter((id) => coreBuilds.has(id)).map((id) => `${id}:build-objects`),
-          ],
-          outputs: objects.filter((o) => o.sources?.length).map((o) => `{workspaceRoot}/${root}/${o.path}`),
-          options: {
-            commands: [
-              `${PK} gen --modules ${m.id} ${manifestArgs(coreManifests)} --check --scope modules`,
-              `${PK} build ${root}`,
-            ],
-            parallel: false,
-            cwd: '.',
-          },
-        };
-      if (devices.length && packable.has(m.id)) {
-        const manifests = manifestClosure(byId, [m.id]);
-        targets.pack = {
-          executor: 'nx:run-commands',
-          cache: false,
-          inputs: packInputs(manifests),
-          dependsOn: ['patchkit:cli'],
-          outputs: devices.flatMap((d) => [`{workspaceRoot}/${dkm(d, m.id)}`, `{workspaceRoot}/${dkmMap(d, m.id)}`]),
-          options: {
-            commands: [
-              'mkdir -p dist/modules/dt2 dist/modules/dn2',
-              ...devices.map(
-                (d) =>
-                  `${PK} pack ${m.id} ${manifestArgs(manifests)} --device ${d} --addrmap ${dkmMap(d, m.id)} -o ${dkm(d, m.id)}`,
-              ),
-            ],
-            parallel: false,
-            cwd: '.',
-          },
-        };
-      }
-      const aliasCmds = [];
-      const aliasOutputs = [];
-      const aliasSources = new Set();
-      for (const rec of recs)
-        for (const [alias, source] of Object.entries(rec.aliases ?? {})) {
-          // A source outside the scanned module.toml files has no manifest: its devices are unknown, skip it.
-          const src = byId.get(source);
-          if (!src) continue;
-          aliasSources.add(source);
-          for (const d of packDevices(src.manifest)) {
-            aliasCmds.push(
-              `${PK} pack ${source} ${manifestArgs(manifestClosure(byId, [source]))} --device ${d} --name ${alias} -o ${dkm(d, alias)}`,
-            );
-            aliasOutputs.push(`{workspaceRoot}/${dkm(d, alias)}`);
-          }
-        }
-      if (aliasCmds.length)
-        targets['pack-aliases'] = {
-          executor: 'nx:run-commands',
-          cache: false,
-          inputs: packInputs(manifestClosure(byId, [...aliasSources])),
-          dependsOn: ['patchkit:cli', ...[...aliasSources].map((s) => `${s}:pack`)],
-          outputs: aliasOutputs,
-          options: {
-            commands: ['mkdir -p dist/modules/dt2 dist/modules/dn2', ...aliasCmds],
-            parallel: false,
-            cwd: '.',
-          },
-        };
+        targets['build-objects'] = buildObjectsTarget(m, root, objects, coreBuilds, coreManifests);
+      if (devices.length && packable.has(m.id)) targets.pack = packTarget(ctx.workspaceRoot, byId, m, devices);
+      const aliasesTarget = packAliasesTarget(ctx.workspaceRoot, byId, recs);
+      if (aliasesTarget) targets['pack-aliases'] = aliasesTarget;
       if (shipped && hostTests.length)
         targets['test-host'] = {
           executor: 'nx:run-commands',
@@ -214,7 +107,7 @@ export const createNodesV2 = [
             cwd: '.',
           },
         };
-      checkMergeTests(root, deviceTests, false);
+      checkMergeTests(ctx.workspaceRoot, root, deviceTests, false);
       if (shipped && deviceTests.length)
         Object.assign(
           targets,
@@ -225,107 +118,12 @@ export const createNodesV2 = [
             base: ctx.workspaceRoot,
           }),
         );
-      // The rule is `isUploadable` in this file: the shared conformance suite loads these.
-      if (uploadable)
-        targets['test-conformance'] = {
-          executor: 'nx:run-commands',
-          cache: true,
-          inputs: [
-            ...DEVICE_INPUTS,
-            'production',
-            ...builtSourceExclusions(root, ctx.workspaceRoot),
-            ...importInputs([
-              ...globSync('tests/conformance/**/*.device.test.ts', { cwd: ctx.workspaceRoot }),
-              VITEST_SETUP,
-            ]),
-          ],
-          dependsOn: ['pack', 'digikit/debug:pack', 'digi-control:daemons', IMAGE_BUILD, DEVICE_BYTES],
-          outputs: [],
-          options: {
-            command: `${EMU_SLOT} pnpm --filter @digi/regression test:conformance`,
-            env: { DIGI_CONFORMANCE_MODULES: m.id, DIGI_CONFORMANCE_MANIFEST: f, DIGI_PATCHKIT_LIVE: '1' },
-            cwd: '.',
-          },
-        };
+      if (uploadable) targets['test-conformance'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);
       if (Object.keys(targets).length) project.targets = targets;
       return [f, { projects: { [root]: project } }];
     });
-    for (const [file, config] of testOwners) {
-      const root = dirname(file);
-      const tests = globSync('**/*.device.test.ts', { cwd: join(ctx.workspaceRoot, root) })
-        .filter(
-          (t) =>
-            !t.endsWith('.manual.device.test.ts') &&
-            !testOwners.some(
-              ([pf]) => dirname(pf).startsWith(root + '/') && join(root, t).startsWith(dirname(pf) + '/'),
-            ),
-        )
-        .sort();
-      checkMergeTests(root, tests, config.tags.includes('tier:full'));
-      if (!tests.length) continue;
-      const recs = records(join(ctx.workspaceRoot, root));
-      if (recs.some((rec) => Object.keys(rec.aliases ?? {}).length))
-        throw new Error(`Test-only project ${config.name} needs explicit pack-aliases support`);
-      // Explicit fixture images build only their manifest requirements; ordinary owners keep the default image.
-      const patchRoots = [...new Set(recs.flatMap((rec) => rec.patchModules ?? []))];
-      const patchIds = patchRoots.length
-        ? manifestClosure(byId, patchRoots).map((file) => read(ctx.workspaceRoot, file).module.id)
-        : undefined;
-      const targetName = config.tags.includes('tier:full') ? 'test-device-full' : 'test-device';
-      if (targetName === 'test-device' && !config.implicitDependencies?.length && !patchRoots.length)
-        throw new Error(
-          `Test-only project ${config.name}: the narrow merge key needs the subject module; name it in implicitDependencies`,
-        );
-      const targets = deviceTargets(
-        targetName,
-        root,
-        tests,
-        recs,
-        patchIds ? { input: 'production', projects: patchIds } : null,
-        importInputs,
-        false,
-        {
-          twin: targetName === 'test-device',
-          subjects: config.implicitDependencies,
-          base: ctx.workspaceRoot,
-          mergeTests: mergeTests(join(ctx.workspaceRoot, root)),
-        },
-      );
-      for (const target of Object.values(targets)) {
-        if (!target.options) continue; // the no-op parent
-        if (patchIds)
-          target.dependsOn = target.dependsOn.flatMap((dependency) =>
-            dependency === IMAGE_BUILD
-              ? patchIds.filter((id) => coreBuilds.has(id)).map((id) => `${id}:build-objects`)
-              : [dependency],
-          );
-        if (targetName === 'test-device-full') target.options.env = { ...target.options.env, DIGIKIT_TIER: 'full' };
-      }
-      nodes.push([file, { projects: { [root]: { name: config.name, root, tags: config.tags, targets } } }]);
-    }
-    if (matched.includes('tests/regression/project.json'))
-      nodes.push([
-        'tests/regression/project.json',
-        {
-          projects: {
-            'tests/regression': {
-              targets: {
-                'test-device': {
-                  inputs: [
-                    ...DEVICE_INPUTS,
-                    '{projectRoot}/project.json',
-                    ...importInputs([
-                      ...globSync('tests/regression/emulator/**/*.test.ts', { cwd: ctx.workspaceRoot }),
-                      VITEST_SETUP,
-                    ]),
-                  ],
-                },
-                'test-device-all': { executor: 'nx:noop', dependsOn: ['test-device'] },
-              },
-            },
-          },
-        },
-      ]);
+    testOnlyNodes(ctx.workspaceRoot, testOwners, byId, coreBuilds, importInputs, nodes);
+    if (matched.includes('tests/regression/project.json')) nodes.push(regressionNode(ctx.workspaceRoot, importInputs));
     return nodes;
   },
 ];

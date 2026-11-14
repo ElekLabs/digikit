@@ -95,7 +95,7 @@ only the support/session pair was timed, not whole preflight. The standalone run
 remains uncached; all test-only device targets, including `core/runtime-tests`, are cached like other module device targets.
 Plugin sources are not inputs of module device targets. A `runtimeAcceptance` record may set `dksampleWasm: true`
 (depends on `dksample:wasm`) and `pythonTools` (`true` hashes the Python tools in `PYTHON_TOOL_SOURCES`; `"client"` hashes only the smaller
-`PYTHON_CLIENT_SOURCES`; both in `tools/nx/module-targets.mjs`, for tests that spawn Python tools).
+`PYTHON_CLIENT_SOURCES`; both in `tools/nx/device-test-keys.mjs`, for tests that spawn Python tools).
 
 | Command | What runs |
 | --- | --- |
@@ -130,7 +130,7 @@ Plugin sources are not inputs of module device targets. A `runtimeAcceptance` re
 
 - `mise run test` runs the gate targets against `DIGI_GATE_BASE` (default `main`): `nx affected` selects them, device and conformance targets included, through `node tools/nx/gate.mjs --tier merge`; the Nx launcher holds the shared benchlock and runs at nice 10.
 - `mise run test:full` runs every gate target on every project, plus `tier-sweep` and `dt2-tier-sweep`. Its device tests run as `test-device-all`. Run it once per batch of merges (for example at the end of a day) in a background lane, bisect a red batch among its merges, and run it after generated-core changes. A merge needs the affected gate (`mise run test`) plus `pnpm nx:pilot run-many -t lint,fmt-check,rust-fmt,typecheck,python-checks`.
-- Core-change policy: a change runs all device tests of the projects it edits. A device test file not listed in `metadata.mergeTests` of the owning project.json (paths relative to the project root; policy in `tools/nx/module-targets.mjs`) has a narrow `test-device` cache key: the project's production files (not tests/), the test's imports, the packs it loads, the tools it runs and, for a test-only project, `production` of its subject modules. A change that reaches it only through shared inputs (other core modules, SDK, device profiles, patchkit, the daemon) leaves the key unchanged, and Nx replays the last result. Loaded packs include the alias packs of the file's records. Files in `metadata.mergeTests`, `test-conformance` and `test-device-all` use the full inputs. `test-device-all` (per-file `test-device-all--<file>` for unlisted files) is the full-inputs twin; the `full` tier selects it instead of `test-device`.
+- Core-change policy: a change runs all device tests of the projects it edits. A device test file not listed in `metadata.mergeTests` of the owning project.json (paths relative to the project root; policy in `tools/nx/device-test-keys.mjs`) has a narrow `test-device` cache key: the project's production files (not tests/), the test's imports, the packs it loads, the tools it runs and, for a test-only project, `production` of its subject modules. A change that reaches it only through shared inputs (other core modules, SDK, device profiles, patchkit, the daemon) leaves the key unchanged, and Nx replays the last result. Loaded packs include the alias packs of the file's records. Files in `metadata.mergeTests`, `test-conformance` and `test-device-all` use the full inputs. `test-device-all` (per-file `test-device-all--<file>` for unlisted files) is the full-inputs twin; the `full` tier selects it instead of `test-device`.
 - Gate projects in `tools/gate/` carry their triggers as `{workspaceRoot}` inputs: `gate-smoke` (target `smoke`), `gate-card` (`card`), `gate-stock` (`stock`, cached), `gate-fx-dn2` (`fx`, `fx-no-aot`, `tier-quick`, `tier-sweep`), `gate-fx-dt2` (`fx-dt2`, `dt2-tier-quick`, `dt2-tier-sweep`), `gate-pins` (`pins`), `gate-dt2-tone` (`dt2-tone`) and `gate-rust-modules` (`rust-tests`). The Vitest suites behind `stock`, `fx` and `fx-dt2` are the `test:stock`, `test:fx` and `test:fx:dt2` scripts of `tests/regression`. `smoke` and `card` run through `tools/nx/daemon-env.mjs`, which sets `DIGI_EMUD_<DEV>` from `dist/daemons.json`, so they use the same content-keyed daemon as the Vitest device tests. Module projects with device tests depend on `regression` (harness), `digi-control` (daemons), `patchkit` (packs) and `devices`; shared SDK contract/compiler surfaces are explicit target inputs. Only modules with `test-conformance` also depend on `conformance`. `python-checks` and `python-tests` run on any change outside `docs/`.
 - The number of concurrent Nx tasks and Vitest workers comes from the machine budget; see "CPU budget of the gate".
 - A device or conformance file that fails only with a load symptom (boot timeout, lifecycle deadline, closed connection, remote release timeout) is rerun once by `tools/devtools/emu-slot.mjs`; the retry is printed in the task output and counted as `retried (n)` in the gate summary. Assertion failures and second failures fail the task.
@@ -382,7 +382,7 @@ The store has a 14-day TTL swept daily and no size cap.
 
 Cached targets: module `test-device` and `test-conformance`, `gate-stock:stock`, and the FX targets of `gate-fx-dn2`
 (`fx`, `fx-no-aot`, `tier-quick`) and `gate-fx-dt2` (`fx-dt2`, `dt2-tier-quick`; the FX key is described below). A key covers what the run consumes: the
-TypeScript import closure of the test files and of the Vitest setup file (`tools/nx/test-imports.mjs`), the
+TypeScript import closure of the test files and of the Vitest setup file (`tools/nx/ts-imports.mjs`), the
 built bytes (full set; the narrow set of a file outside `mergeTests` is described above): `patchkit:device-bytes` writes
 `dist/bytes/core-objects.sha256`, one line per committed core object (`modules/core/**/build/*.dko.json`) with its hash without
 `source_sha256`, the only field that follows the source text (a comment edit changes no other field; checked for Rust, C and assembly).
@@ -411,7 +411,7 @@ helper in its closure reads it (`upload-kit.ts`, `synth.ts`, `memaudit-kit.ts`) 
 The sources, SDK headers and `source_sha256` of the image are not inputs: a comment, an unused constant or a rebuilt object with the same
 bytes changes no key. The key also holds the pack outputs (`dist/modules/*/*.dkm`), the `plusdrive` and `dksample.wasm` outputs, the
 module's own production files without its object sources (`src`, `include`, `fit`, `sdk`; they reach the run through the packs and the
-object hashes), the files in `READ_BY_TESTS` (`tools/nx/module-targets.mjs`: `devices/**/*.toml`, `modules/core/**/module.toml`,
+object hashes), the files in `READ_BY_TESTS` (`tools/nx/device-test-keys.mjs`: `devices/**/*.toml`, `modules/core/**/module.toml`,
 `sdk/sdk.toml`, `types.toml`, fixture files, the Vitest and TypeScript config; tests read these without importing them),
 each record's `sources`. A record that runs `patchkit build` or `pack` at run time, or patches with explicit fixture modules (`patchModules`),
 also keeps the SDK and the toolchain as inputs (record flag `compiles`; a record that patches fixture modules or packs at run time sets it),
