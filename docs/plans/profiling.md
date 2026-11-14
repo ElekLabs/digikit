@@ -152,7 +152,7 @@ TCOUNT in `UNSAFE_READ_NAMES`. Per-function detail comes from PC counts plus the
    deterministic, so counts repeat. These are instruction counts, not hardware cycles; section 7.3 calibrates them.
 3. **Machine budget check (P4, done).** The rule is Rust: `dkprof::budget`, run by `patchkit budget` and read by `module:check` (`pk_conform.budget`, `fx_budget`; the numbers equal the former
    Python's). Units are instructions per block. Per device the headroom is the block at 85 percent (projected with the "high" factor of `devices/cycle-factors.json`) minus the stock baseline
-   (`stock_busy`); today about 194k instructions on DT2 and 93k on DN2 (the 450k and 330k quoted in older notes are not what the device files and cycle factors give). The machine check is
+   (`stock_busy`); today 194,244 instructions on DT2 and 92,796 on DN2 (`patchkit budget`, from `devices/*.toml` and `devices/cycle-factors.json`). The machine check is
    `voice-block <= headroom / voices` for the steady worst block and `note-on <= headroom` apart; `check_selection` is the rule S5's broker uses ([sdk.md](sdk.md) section 9).
 4. **Fast-tier refusals per module: moved to P5** (emulator speed track, parked). It lists the module instructions the fast tier refuses, which keep it in the interpreter. This matters
    for emulator and browser speed, not for hardware; it is input for an SDK warning and for fast-tier lowering work.
