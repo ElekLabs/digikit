@@ -31,7 +31,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   isa-scan X.syx [--list]                stores in the DSP section (7) the SHARC+ ISA does not have, one per line; exit 1 when found
                                          (X.plan.json as for preflight)
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
-  addr    --map FILE... [--loads FILE | --load ID=BASE...] [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
+  addr    --map FILE... [--loads FILE | --load ID=BASE... --dsp-base ID=PC...] [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
                                          names for addresses from address maps and a module load table (docs/ADDRMAP.md); JSON by default
   pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)

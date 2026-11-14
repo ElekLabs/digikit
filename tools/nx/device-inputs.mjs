@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-const CELLS = [
+export const CELLS = [
   { dev: 'dt2', ver: '1.17', syx: 'firmware/Digitakt_II_OS1.17.syx', ready: 'out/ready-pk-dt2-117', samples: true },
   { dev: 'dn2', ver: '1.12', syx: 'firmware/Digitone_II_OS1.12.syx', ready: 'out/ready-fix-dn2-112', samples: false },
 ];

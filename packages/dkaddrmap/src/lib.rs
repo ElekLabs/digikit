@@ -13,6 +13,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub mod snapshot;
+
 pub const FORMAT: &str = "dk-addrmap";
 pub const VERSION: u32 = 1;
 
@@ -41,6 +43,9 @@ pub struct Key {
     pub source_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dkm_sha256: Option<String>,
+    /// A ship map: what a host needs to read the load table of the running image (slots, L2 bases).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader: Option<snapshot::Loader>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -72,7 +77,8 @@ pub enum Layer {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Entry {
     pub cpu: Cpu,
-    /// ColdFire: byte address. SHARC: software (short-word) PC. With `module` set: the offset from the module's load address.
+    /// ColdFire: byte address. SHARC: software (short-word) PC. With `module` set: the offset from the module's load address (SHARC: from the
+    /// start of its DSP image, in short words).
     pub addr: u64,
     /// Bytes (SHARC: words) from `addr`; 0 holds the address `addr` only.
     pub size: u64,
@@ -147,6 +153,18 @@ pub struct Load {
     pub base: u64,
     #[serde(default)]
     pub size: u64,
+    /// Where the module's DSP image starts, as a software (short-word) PC; `sharc` entries of the module are relative to it. None: the module
+    /// has no DSP part, or the reader did not find where it sits (its DSP entries stay unresolved).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dsp_base: Option<u64>,
+    /// The address of the module's `fini` function, when the table was read from the runtime (None: none).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fini: Option<u64>,
+}
+
+/// The loader description of the first map that has one.
+pub fn loader_of(maps: &[AddrMap]) -> Option<&snapshot::Loader> {
+    maps.iter().find_map(|m| m.key.loader.as_ref())
 }
 
 /// A name for an address.
@@ -238,11 +256,8 @@ impl Resolver {
                 }
             }
         }
-        let base: BTreeMap<&str, u64> = loads
-            .modules
-            .iter()
-            .map(|l| (l.id.as_str(), l.base))
-            .collect();
+        let base: BTreeMap<&str, &Load> =
+            loads.modules.iter().map(|l| (l.id.as_str(), l)).collect();
         let mut items: BTreeMap<(Cpu, Layer), Vec<Item>> = BTreeMap::new();
         let mut unloaded: Vec<String> = vec![];
         for m in maps {
@@ -250,7 +265,12 @@ impl Resolver {
                 let addr = match &e.module {
                     None => e.addr,
                     Some(id) => match base.get(id.as_str()) {
-                        Some(b) => b + e.addr,
+                        // a ColdFire entry is relative to the load address, a SHARC entry to the start of the module's DSP image
+                        Some(l) => match (e.cpu, l.dsp_base) {
+                            (Cpu::Cf, _) => l.base + e.addr,
+                            (Cpu::Sharc, Some(b)) => b + e.addr,
+                            (Cpu::Sharc, None) => continue,
+                        },
                         None => {
                             if !unloaded.contains(id) {
                                 unloaded.push(id.clone());

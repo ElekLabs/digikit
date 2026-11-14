@@ -1,0 +1,4 @@
+{
+  "_comment": "Committed packs whose `patchkit needs` verdict a test reads from dist/bytes/pack-verdicts.json (pack-needs.ts). The target patchkit:pack-verdicts (tools/nx/pack-verdicts.mjs) computes them for every acceptance device. A test that needs more (fit, synthetic or card modules) runs patchkit through dkm.ts instead.",
+  "modules": ["test/dyn-fx-gain"]
+}

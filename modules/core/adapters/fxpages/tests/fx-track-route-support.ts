@@ -1,7 +1,4 @@
-import { execFile } from 'node:child_process';
 import path from 'node:path';
-import { promisify } from 'node:util';
-import { repoRoot } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { rpc, rows } from '@digi/regression/runtime/fx-live.ts';
@@ -10,7 +7,7 @@ import { withRouteFxSession } from '@digi/regression/runtime/fx-route-live.ts';
 import { inspectFxBoot, withPausedFxProtocol, selectSine, shot, tap } from '@digi/regression/runtime/fx-session.ts';
 import { trackNote } from '@digi/regression/runtime/fx-track-ui.ts';
 import { record } from '@digi/regression/runtime/artifacts.ts';
-import { patchkitBinary } from '@digi/regression/runtime/patchkit.ts';
+import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import type { Device } from '@digi/test-support';
@@ -19,7 +16,6 @@ import type { Device } from '@digi/test-support';
 // and ready snapshot and boots on its own; the image without core/fxpages closes before the regular image starts, and only artifacts cross that
 // boundary. A file that compares pixels or PCM with the stock image (`base: true`) captures them first in this helper's base test.
 
-const exec = promisify(execFile);
 export const names = [FX, `${FX}-2`, `${FX}-3`];
 export const routeKey = (name: string) => `fx/route/${name}`;
 export const sendKey = `fx/send/${FX}`;
@@ -66,11 +62,9 @@ function makeTrackRoute(
       const settings = async (runtime: PatchedSession, tag: string) => {
         const overlay = path.join(context.artifacts, `${tag}.overlay.bin`);
         await rpc(runtime.session, 'card.overlay', { path: overlay });
-        const binary = patchkitBinary();
-        const result = await exec(
-          binary,
+        const result = await patchkit(
           ['store', 'dump', context.baseline('send').cardImage!, '--device', device, '--overlay', overlay, '--json'],
-          { cwd: repoRoot(), timeout: 30_000 },
+          { timeout: 30_000 },
         );
         const dump = JSON.parse(result.stdout) as StoreDump;
         record(context.artifacts, `${tag}-store`, dump);
