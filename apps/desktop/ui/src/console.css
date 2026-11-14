@@ -416,6 +416,31 @@ body {
   color: var(--ink-3);
   border-right: 0;
 }
+.statusbar .job {
+  min-width: 0;
+  color: var(--ink);
+  border-right: 0;
+}
+.statusbar .job .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.statusbar .job .detail,
+.statusbar .job .more {
+  color: var(--ink-3);
+}
+.statusbar .job .cancel {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid #2a2d33;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.statusbar .job .cancel:hover {
+  border-color: var(--ink-3);
+}
 /* a long status line gives way: the Log and Metrics buttons stay in view */
 .statusbar > button {
   flex-shrink: 0;

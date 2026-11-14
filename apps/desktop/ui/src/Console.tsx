@@ -75,6 +75,7 @@ import { tickedFor } from '@web/firmware/default-modules-state';
 import TransferPage from '@web/transfer/TransferPage';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
 import { reloadError, reloadLine } from '@web/runtime/reload';
+import { JobBusyError, type JobHandle, busy, currentJob, jobs, runJob, syncControllerJob } from '@web/jobs/jobs';
 
 type Source = { path: string; name: string; bytes: number; modified_ms: number };
 interface Launch {
@@ -133,7 +134,7 @@ export default function Console() {
   const [failed, setFailed] = createSignal<Booting>();
   const [watching, setWatching] = createSignal(true);
   const [reloadNote, setReloadNote] = createSignal('');
-  const [modulesBusy, setModulesBusy] = createSignal(false);
+  const [now, setNow] = createSignal(Date.now());
   const [audio, setAudio] = createSignal<NativeAudioStatus>();
   const [buildInfo, setBuildInfo] = createSignal<BuildInfo>();
   const [rate, setRate] = createSignal<number>();
@@ -146,7 +147,6 @@ export default function Console() {
   const [page, setPage] = createSignal<'emulator' | 'transfer' | 'remote' | 'firmware'>('emulator');
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
-  const [cardBusy, setCardBusy] = createSignal(false);
   const [bootRuntime, setBootRuntime] = createSignal(readRuntimePref());
   const [loadOnStart, setLoadOnStart] = createSignal(readPref(LOAD_ON_START_KEY) === 'on');
   const [info, setInfo] = createSignal<FirmwareInfo>();
@@ -154,7 +154,6 @@ export default function Console() {
   let folderInput: HTMLInputElement | undefined;
   let lastAudio: { produced: number; wall: number } | undefined;
   let lastModified: number | undefined;
-  let reloading = false;
   let health = healthStart();
   let dockEl: HTMLElement | undefined;
   const timers: number[] = [];
@@ -168,7 +167,6 @@ export default function Console() {
   };
   const panel = () => panels[device()];
 
-  let defaultsWork: Promise<void> | undefined;
   const update = (event: RuntimeUpdate) => {
     if (event.type === 'error') {
       setError(event.error);
@@ -214,16 +212,19 @@ export default function Console() {
    * The ticked default modules of the device (devices/*.toml `[digikit] default_modules`) go on the emulator's card and are enabled, so the
    * emulator has what a flashed device has. The card keeps them: a later load finds them there and only checks the files.
    */
-  const installDefaultModules = (deviceId: string): Promise<void> =>
-    (defaultsWork ??= performDefaultInstall(deviceId).finally(() => {
-      defaultsWork = undefined;
-    }));
-  const performDefaultInstall = async (deviceId: string) => {
+  const installDefaultModules = async (deviceId: string): Promise<void> => {
+    try {
+      await runJob('Installing default modules', { group: 'emulator' }, (job) => performDefaultInstall(deviceId, job));
+    } catch (e) {
+      if (!(e instanceof JobBusyError)) setError(message(e));
+    }
+  };
+  const performDefaultInstall = async (deviceId: string, job: JobHandle) => {
     const ids = tickedFor(deviceId);
     if (ids.length === 0) return;
     try {
       const lines = await desktopDefaultModules.install('emulator', deviceId, ids, (p) =>
-        setReloadNote(`Default modules: ${p.text}`),
+        job.progress(undefined, p.text),
       );
       setReloadNote(`Default modules ready: ${ids.join(', ')}`);
       logInput({
@@ -245,8 +246,6 @@ export default function Console() {
     name: string,
     withRuntime = bootRuntime(),
   ) => {
-    // Defaults may be restarting the runtime. Keep the current UI alive until that transaction is finished.
-    await defaultsWork;
     const r = runtime();
     if (!r) return;
     live?.releaseAll();
@@ -282,9 +281,6 @@ export default function Console() {
       // another firmware may be another device: its card folder and its memory (the runtime needs a moment to load its modules)
       bumpCardRefresh();
       window.setTimeout(bumpCardRefresh, 2500);
-      if (s && withRuntime) {
-        void installDefaultModules(s.device);
-      }
       return true;
     } catch (e) {
       setError(message(e));
@@ -299,29 +295,37 @@ export default function Console() {
   };
   /** Make `path` the console's firmware file and boot it; the controller reads it from its path. */
   const bootPath = async (path: string, why: string, options: { runtime?: boolean; card?: string } = {}) => {
-    if (reloading) return;
-    reloading = true;
+    const withRuntime = options.runtime ?? bootRuntime();
+    const base = path.split(/[\\/]/).pop() || path;
     try {
-      const file = await invoke<Source | null>('emu_set_source', { path });
-      setSource(file ?? undefined);
-      lastModified = file?.modified_ms;
-      const withRuntime = options.runtime ?? bootRuntime();
-      const loaded = await boot(
-        (r) =>
-          r.loadPath
-            ? r.loadPath(path, { runtime: withRuntime, card: options.card })
-            : Promise.reject(new Error('no reload')),
-        file?.name ?? path,
-        withRuntime,
+      const loaded = await runJob(
+        `Loading ${base}`,
+        { group: 'emulator', cancel: () => void runtime()?.cancelJob?.() },
+        async () => {
+          const file = await invoke<Source | null>('emu_set_source', { path });
+          setSource(file ?? undefined);
+          lastModified = file?.modified_ms;
+          const ok = await boot(
+            (r) =>
+              r.loadPath
+                ? r.loadPath(path, { runtime: withRuntime, card: options.card })
+                : Promise.reject(new Error('no reload')),
+            file?.name ?? path,
+            withRuntime,
+          );
+          if (ok) {
+            writePref(LAST_FIRMWARE_KEY, path);
+            setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
+          }
+          return ok;
+        },
       );
-      if (loaded) {
-        writePref(LAST_FIRMWARE_KEY, path);
-        setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
-      }
+      // the install is its own job in the same group: it starts after the load job ended
+      const s = status();
+      if (loaded && s && withRuntime) void installDefaultModules(s.device);
     } catch (e) {
+      if (e instanceof JobBusyError) return;
       setError(message(e));
-    } finally {
-      reloading = false;
     }
   };
   /** Boot the console's firmware file again. */
@@ -339,23 +343,26 @@ export default function Console() {
    * error is one short line in the status area; the Log has it with the compiler output as its detail. */
   const reloadModules = async () => {
     const r = runtime();
-    if (!r?.reloadModules || modulesBusy()) return;
-    setModulesBusy(true);
-    setError('');
-    setReloadNote('Reloading modules…');
+    if (!r?.reloadModules) return;
     try {
-      const report = await r.reloadModules();
-      setReloadNote(reloadLine(report));
-      logInput(reloadEntry(report));
-      health = healthStart();
-      setPaused(false);
-      await refreshInfo();
+      await runJob('Reloading modules', { group: 'emulator' }, async () => {
+        setError('');
+        setReloadNote('Reloading modules…');
+        try {
+          const report = await r.reloadModules!();
+          setReloadNote(reloadLine(report));
+          logInput(reloadEntry(report));
+          health = healthStart();
+          setPaused(false);
+          await refreshInfo();
+        } catch (e) {
+          const failure = reloadError(e);
+          setReloadNote(failure.status);
+          logInput(reloadFailureEntry(failure));
+        }
+      });
     } catch (e) {
-      const failure = reloadError(e);
-      setReloadNote(failure.status);
-      logInput(reloadFailureEntry(failure));
-    } finally {
-      setModulesBusy(false);
+      if (!(e instanceof JobBusyError)) setError(message(e));
     }
   };
   // the "Boot with runtime" tick of other pages' "Reload with runtime" button
@@ -394,9 +401,11 @@ export default function Console() {
 
   /** The heartbeat, once a second: a stalled main loop shows nowhere else. */
   const pollHealth = async () => {
+    setNow(Date.now());
     try {
-      const beat = await runtime()?.health?.();
-      if (beat) watchHealth({ stalled: beat.stalled, stallMs: beat.stall_ms });
+      const s = await runtime()?.controllerStatus?.();
+      if (s?.heartbeat) watchHealth({ stalled: s.heartbeat.stalled, stallMs: s.heartbeat.stall_ms });
+      syncControllerJob(s?.job, () => void runtime()?.cancelJob?.());
     } catch {
       /* a replaced session has no status */
     }
@@ -429,6 +438,7 @@ export default function Console() {
     // ⌘R / Ctrl+R reloads the firmware file, not the page; with Shift it reloads the modules into the running session.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
       e.preventDefault();
+      if (busy('emulator')) return;
       if (e.shiftKey) void reloadModules();
       else void reload('Reloaded at');
     }
@@ -527,23 +537,27 @@ export default function Console() {
       logEvent('card', 'error', 'sample folder: no files in that folder');
       return;
     }
-    setCardBusy(true);
     try {
-      await startCard(cards, files, (done, total) =>
-        setCard({ state: 'working', message: `Sending samples (${done}/${total})`, fraction: 0 }),
+      await runJob(
+        'Loading the sample card',
+        { group: 'emulator', cancel: () => void runtime()?.cancelJob?.() },
+        async () => {
+          await startCard(cards, files, (done, total) =>
+            setCard({ state: 'working', message: `Sending samples (${done}/${total})`, fraction: 0 }),
+          );
+          while (true) {
+            const s = await cards.status();
+            setCard(s);
+            if (s.state !== 'working') {
+              logEvent('card', s.state === 'error' ? 'error' : 'info', cardLine(s));
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        },
       );
-      const poll = async () => {
-        const s = await runtime()!.cards!.status();
-        setCard(s);
-        if (s.state === 'working') window.setTimeout(() => void poll(), 400);
-        else {
-          setCardBusy(false);
-          logEvent('card', s.state === 'error' ? 'error' : 'info', cardLine(s));
-        }
-      };
-      void poll();
     } catch (e) {
-      setCardBusy(false);
+      if (e instanceof JobBusyError) return;
       setCard({ state: 'error', message: message(e) });
       logInput(failureEntry('card', 'sample folder', message(e)));
     }
@@ -652,7 +666,7 @@ export default function Console() {
           <button
             type="button"
             class="tb"
-            disabled={!status() || cardBusy()}
+            disabled={!status() || busy('emulator')}
             title="Pick a plus_drive-style folder: WAVs become samples (track N plays file N, sorted by name), .mmcfs/ and digikit/ are used as they are"
             onClick={() => folderInput?.click()}
           >
@@ -752,6 +766,7 @@ export default function Console() {
                 <button
                   type="button"
                   class="file-open"
+                  disabled={busy('emulator')}
                   aria-label="Open firmware file"
                   title={source() ? 'Open another firmware file' : 'Open a firmware file'}
                   onClick={() => void openFirmware()}
@@ -846,7 +861,7 @@ export default function Console() {
                   type="button"
                   class="tb"
                   classList={{ pending: runtimePending() }}
-                  disabled={!source()}
+                  disabled={!source() || busy('emulator')}
                   aria-label="Reload"
                   title={`Reload the startup file (${reloadKey})${runtimePending() ? ' · applies the Runtime choice' : ''}`}
                   onClick={() => void reload('Reloaded at')}
@@ -858,7 +873,7 @@ export default function Console() {
                 <button
                   type="button"
                   class="tb"
-                  disabled={!status() || modulesBusy()}
+                  disabled={!status() || busy('emulator')}
                   aria-label="Reload modules"
                   title={`Build the stale module objects, then apply the modules into the running session, without a boot when only UI modules changed (${modulesKey}). A changed SHARC+ source still needs mise run dk:dev.`}
                   onClick={() => void reloadModules()}
@@ -1023,10 +1038,38 @@ export default function Console() {
           </Show>
         </Show>
         <span class="sp" />
-        <Show when={reloadNote()}>
-          <span class="muted" title={reloadNote()}>
-            {reloadNote()}
-          </span>
+        <Show
+          when={currentJob()}
+          fallback={
+            <Show when={reloadNote()}>
+              <span class="muted" title={reloadNote()}>
+                {reloadNote()}
+              </span>
+            </Show>
+          }
+        >
+          {(job) => (
+            <span class="job" title={job().detail ? `${job().label}: ${job().detail}` : job().label}>
+              <Icon d={RELOAD} />
+              <span class="label">{job().label}</span>
+              <Show when={job().detail}>
+                <span class="detail">{job().detail}</span>
+              </Show>
+              <span>{Math.max(0, Math.round((now() - job().started) / 1000))} s</span>
+              <Show when={job().progress !== undefined}>
+                <Meter value={job().progress! * 100} tone="amber" />
+                <span>~{Math.round(job().progress! * 100)}%</span>
+              </Show>
+              <Show when={jobs().list.length > 1}>
+                <span class="more">+{jobs().list.length - 1}</span>
+              </Show>
+              <Show when={job().cancel}>
+                <button type="button" class="cancel" onClick={() => job().cancel?.()}>
+                  Cancel
+                </button>
+              </Show>
+            </span>
+          )}
         </Show>
         <button type="button" class="sb" aria-expanded={logOpen()} title={`Log (${logKey})`} onClick={toggleLog}>
           Log
