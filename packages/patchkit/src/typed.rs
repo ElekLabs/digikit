@@ -1047,11 +1047,3 @@ pub struct SampleTracksDef {
     pub control: String,
 }
 
-/// A module-owned sample bank, declared by DK_SAMPLE_BANK.
-#[derive(Clone, Debug, serde::Serialize)]
-pub struct SampleBankDef {
-    pub local_id: u32,
-    pub bank: String,
-    pub descriptor: String,
-    pub capacity_frames: u32,
-}

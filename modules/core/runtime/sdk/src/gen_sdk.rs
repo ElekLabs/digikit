@@ -660,7 +660,7 @@ pub mod api {
     /// `dk_fx_mix`: Set the default of the effect's MIX knob, 0 to 127 (127 when this is not called).
     pub type DkFxMixFn = unsafe extern "C" fn(fx: *mut u8, def: u32);
 
-    /// `dk_sample_pool_open`: Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none, declares a bank too, or this is not init; `*out` is untouched then.
+    /// `dk_sample_pool_open`: Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none or this is not init; `*out` is untouched then.
     pub type DkSamplePoolOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;
 
     /// `dk_sample_pool_add`: Add a stereo-capable sample file to the pool (copies the path, no file IO here). Returns the pool index 0..15: the first free entry, or the entry that already holds this path. DK_E_POOL when all 16 are in use; DK_E_SEL_PATH for an empty or too long path. See <dk/sample/pool.h>.

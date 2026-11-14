@@ -9,13 +9,12 @@
 //! records and the 16 control sets in the module's DSP data). `dsp::reserve` calls `reserve` with their L2 byte addresses and
 //! `ready` when the DSP image is in; before that no DSP write is made.
 //!
-//! The DSP link is write-only, so close, drain and publish are queued writes, one in flight at a time (`pump`), with the same link
-//! discipline as the 1.3 bank job (`sample.rs`): a start needs an idle loader and no bank, fx page or fx send transfer, and the bank
-//! tick waits while a table write is in flight (`busy`).
+//! The DSP link is write-only, so close, drain and publish are queued writes, one in flight at a time (`pump`): a start needs an idle
+//! loader and no fx page or fx send transfer, and the fx word writers wait while a table write is in flight (`busy`).
 //!   close:   control CLOSED = 1, then record `ready` = 0. The DSP holds a track only between ACQUIRE and RELEASE inside one `render`
 //!            call, so a render that was inside when CLOSED landed ends within that block. The second write lands in a later block than
 //!            the first (one transfer at a time, each acknowledged), so its acknowledgement drains the track: no COUNT read-back
-//!            exists, and the 1.3 bank never closes, so it never drains.
+//!            exists.
 //!   publish: record words 1..7 (token, frames, rate, channels, fmt, base_l, base_r), control CLOSED = 0, then `ready` = 1 last.
 //! A write the link refuses is retried; after `TRIES` failures the op stays failed (a close then never drains and the generic drain
 //! guard of `sample_tracks` ends the request; a publish stays unpublished, `ready` = 0, the track plays silence).
@@ -110,7 +109,7 @@ static mut OPS: [[Op; TRACKS]; CLIENTS] = [[OP0; TRACKS]; CLIENTS];
 static mut STAGE: [u8; 28] = [0; 28];
 static mut FLIGHT: usize = NO_FLIGHT;
 
-/// A table write is in flight: the bank job and the fx word writers wait (one transfer on the link at a time).
+/// A table write is in flight: the fx word writers wait (one transfer on the link at a time).
 pub fn busy() -> bool {
     unsafe { FLIGHT != NO_FLIGHT }
 }
@@ -476,7 +475,7 @@ pub unsafe fn remove(rec: usize) {
     }
 }
 
-/// Does module record `rec` hold a track table (the bank API refuses it then)?
+/// Does module record `rec` hold a track table?
 pub unsafe fn has(rec: usize) -> bool {
     let mut i = 0;
     while i < CLIENTS {
@@ -505,7 +504,7 @@ pub unsafe fn tracks(local_id: u32) -> i32 {
 }
 
 /// `dk_sample_pool_open`: the handle of the module's pool table with the lowest local id (the one table a module declares), as `tracks` gives it for
-/// that id; E_NOT_FOUND without a table, E_CONTRACT when the module also declares a bank.
+/// that id; E_NOT_FOUND without a table.
 pub unsafe fn open_first() -> i32 {
     let owner = crate::dlog::current_source();
     if owner == 0 {

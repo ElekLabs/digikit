@@ -48,14 +48,12 @@ pub const VERSION: u32 = 2;
 pub const VERSION_3: u32 = 3;
 /// The version with effect records (`FX_LEN` bytes each); its voices are those of version 3.
 pub const VERSION_4: u32 = 4;
-/// One module-owned sample bank; voices and effects retain version 4 layouts.
+/// A per-track sample table; voices and effects retain version 4 layouts.
 pub const VERSION_5: u32 = 5;
-/// Little-endian words: version 1, local id, bank byte offset, capacity frames,
-/// descriptor byte offset, then three reserved zero words. Offsets are relative
-/// to the module DSP image base; unlike this record the enclosing header is BE.
-pub const SAMPLE_BANK_LEN: usize = 32;
-/// The same 32-byte record with kind word 2 declares the per-track sample table (API 1.5) instead of a bank: little-endian words
-/// kind, local id, records byte offset, control byte offset, then four reserved zero words. A module has a bank or a table, never both.
+/// The 32-byte version 5 record: little-endian words kind, local id, records byte offset, control byte offset, then four reserved
+/// zero words. Offsets are relative to the module DSP image base; unlike this record the enclosing header is BE.
+pub const SAMPLE_RECORD_LEN: usize = 32;
+/// Kind word of the per-track sample table (API 1.5), the only record kind.
 pub const SAMPLE_TRACKS_KIND: u32 = 2;
 /// The pool's `dk_sample_pool_entry` records and its control sets (`<dk/sample/pool.h>`), from `[sample]` of `sdk/sdk.toml`.
 pub const SAMPLE_POOL_RECORD_BYTES: u32 =
@@ -260,57 +258,6 @@ pub struct Reloc {
     pub import: u32,
 }
 
-/// Version 1 sample-bank wire record (little-endian words).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SampleBank {
-    pub local_id: u32,
-    pub bank_byte_offset: u32,
-    pub capacity_frames: u32,
-    pub descriptor_byte_offset: u32,
-}
-
-impl SampleBank {
-    fn validate(&self, image: &[u8], bss: u32, relocs: &[Reloc]) -> Result<()> {
-        let image_end = u32::try_from(image.len()).map_err(|_| err!("DSP image too large"))?;
-        let end = image_end
-            .checked_add(bss)
-            .ok_or_else(|| err!("sample bank extent overflow"))?;
-        let bank_end = self
-            .capacity_frames
-            .checked_mul(4)
-            .and_then(|n| self.bank_byte_offset.checked_add(n))
-            .ok_or_else(|| err!("sample bank capacity overflow"))?;
-        let desc_end = self
-            .descriptor_byte_offset
-            .checked_add(16)
-            .ok_or_else(|| err!("sample descriptor overflow"))?;
-        if !(1..=8192).contains(&self.capacity_frames)
-            || self.bank_byte_offset % 4 != 0
-            || self.descriptor_byte_offset % 4 != 0
-            || self.bank_byte_offset < image_end
-            || bank_end > end
-            || desc_end > image_end
-        {
-            return Err(err!(
-                "sample bank or descriptor outside owned BSS/data, unaligned or invalid capacity"
-            ));
-        }
-        if image[self.descriptor_byte_offset as usize..desc_end as usize]
-            .iter()
-            .any(|&b| b != 0)
-            || relocs.iter().any(|r| {
-                u64::from(r.offset) < u64::from(desc_end)
-                    && u64::from(r.offset) + 6 > u64::from(self.descriptor_byte_offset)
-            })
-        {
-            return Err(err!(
-                "sample descriptor must be zero and contain no relocations"
-            ));
-        }
-        Ok(())
-    }
-}
-
 /// Version 5 sample-table wire record, kind 2 (little-endian words).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SampleTracks {
@@ -354,7 +301,6 @@ impl SampleTracks {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DspSection {
-    pub sample_bank: Option<SampleBank>,
     pub sample_tracks: Option<SampleTracks>,
     pub device: u32,
     pub image: Vec<u8>,
@@ -369,30 +315,18 @@ pub struct DspSection {
 /// Link `obj` (a SHARC+ object) at the nominal base and encode the section. `voices` names the entry routine of each machine type
 /// (a global text symbol of the object), `fxs` the process routine and descriptor of each effect.
 pub fn pack(obj: &Dko, device: u32, voices: &[VoiceSpec], fxs: &[FxSpec]) -> Result<Vec<u8>> {
-    pack_with_bank(obj, device, voices, fxs, None)
+    pack_with_samples(obj, device, voices, fxs, None)
 }
 
-/// Pack an optional module-owned sample bank.
-pub fn pack_with_bank(
-    obj: &Dko,
-    device: u32,
-    voices: &[VoiceSpec],
-    fxs: &[FxSpec],
-    bank: Option<&crate::typed::SampleBankDef>,
-) -> Result<Vec<u8>> {
-    pack_with_samples(obj, device, voices, fxs, bank, None)
-}
-
-/// Pack an optional module-owned sample bank or per-track sample table (not both).
+/// Pack an optional per-track sample table.
 pub fn pack_with_samples(
     obj: &Dko,
     device: u32,
     voices: &[VoiceSpec],
     fxs: &[FxSpec],
-    bank: Option<&crate::typed::SampleBankDef>,
     tracks: Option<&crate::typed::SampleTracksDef>,
 ) -> Result<Vec<u8>> {
-    pack_with_gate(obj, device, voices, fxs, bank, tracks).map(|(bytes, _)| bytes)
+    pack_with_gate(obj, device, voices, fxs, tracks).map(|(bytes, _)| bytes)
 }
 
 /// [`pack_with_samples`], and whether a voice desc carries `DESC_GATE` (the file then declares machine contract 1.6).
@@ -401,15 +335,9 @@ pub fn pack_with_gate(
     device: u32,
     voices: &[VoiceSpec],
     fxs: &[FxSpec],
-    bank: Option<&crate::typed::SampleBankDef>,
     tracks: Option<&crate::typed::SampleTracksDef>,
 ) -> Result<(Vec<u8>, bool)> {
     let mut gate = false;
-    if bank.is_some() && tracks.is_some() {
-        return Err(err!(
-            "a module declares a sample bank or a track table, not both"
-        ));
-    }
     if obj.arch != "sharc" {
         return Err(err!(
             "a DSP section holds a SHARC+ object; the object is {}",
@@ -705,26 +633,6 @@ pub fn pack_with_gate(
             .ok_or_else(|| err!("sample symbol {name}: offset overflow"))?;
         Ok(at)
     };
-    let sample_bank = bank
-        .map(|b| -> Result<SampleBank> {
-            let len = b
-                .capacity_frames
-                .checked_mul(4)
-                .ok_or_else(|| err!("sample bank capacity overflow"))?;
-            let bank = SampleBank {
-                local_id: b.local_id,
-                bank_byte_offset: symbol(&b.bank, "bss", len)?,
-                descriptor_byte_offset: symbol(&b.descriptor, "data", 16)?,
-                capacity_frames: b.capacity_frames,
-            };
-            bank.validate(
-                &image,
-                u32::try_from(linked.bss_size).map_err(|_| err!("DSP BSS too large"))?,
-                &relocs,
-            )?;
-            Ok(bank)
-        })
-        .transpose()?;
     let sample_tracks = tracks
         .map(|t| -> Result<SampleTracks> {
             let tracks = SampleTracks {
@@ -737,7 +645,6 @@ pub fn pack_with_gate(
         })
         .transpose()?;
     let s = DspSection {
-        sample_bank,
         sample_tracks,
         device,
         image,
@@ -763,13 +670,13 @@ impl DspSection {
         let import_off = HEADER;
         let reloc_off = import_off + self.imports.len() * IMPORT_LEN;
         let voice_off = reloc_off + self.relocs.len() * RELOC_LEN;
-        let v5 = self.sample_bank.is_some() || self.sample_tracks.is_some();
+        let v5 = self.sample_tracks.is_some();
         let v4 = v5 || !self.fxs.is_empty();
         let v3 = v4 || self.voices.iter().any(|v| v.contract());
         let vlen = if v3 { VOICE_LEN_V3 } else { VOICE_LEN };
         let fx_off = voice_off + self.voices.len() * vlen;
         let bank_off = fx_off + self.fxs.len() * FX_LEN;
-        let image_off = align_up(bank_off + if v5 { SAMPLE_BANK_LEN } else { 0 }, 16);
+        let image_off = align_up(bank_off + if v5 { SAMPLE_RECORD_LEN } else { 0 }, 16);
         let mut f = vec![0u8; image_off + self.image.len()];
         put(&mut f, 0, MAGIC);
         put(
@@ -800,18 +707,8 @@ impl DspSection {
             put(&mut f, 0x34, fx_off as u32);
             put(&mut f, 0x38, self.fxs.len() as u32);
         }
-        let record = match (&self.sample_bank, &self.sample_tracks) {
-            (Some(b), _) => Some([
-                1,
-                b.local_id,
-                b.bank_byte_offset,
-                b.capacity_frames,
-                b.descriptor_byte_offset,
-                0,
-                0,
-                0,
-            ]),
-            (None, Some(t)) => Some([
+        let record = self.sample_tracks.as_ref().map(|t| {
+            [
                 SAMPLE_TRACKS_KIND,
                 t.local_id,
                 t.records_byte_offset,
@@ -820,9 +717,8 @@ impl DspSection {
                 0,
                 0,
                 0,
-            ]),
-            (None, None) => None,
-        };
+            ]
+        });
         if let Some(words) = record {
             put(&mut f, 0x3c, bank_off as u32);
             for (i, w) in words.iter().enumerate() {
@@ -1026,7 +922,7 @@ impl DspSection {
         }) {
             return Err(err!("DSP effect record outside the image or malformed"));
         }
-        let (sample_bank, sample_tracks) = if version == VERSION_5 {
+        let sample_tracks = if version == VERSION_5 {
             let off = get(f, 0x3c);
             let mut ranges = vec![
                 (0u64, HEADER as u64),
@@ -1034,7 +930,7 @@ impl DspSection {
                     u64::from(get(f, 0x18)),
                     u64::from(get(f, 0x18)) + image_size as u64,
                 ),
-                (u64::from(off), u64::from(off) + SAMPLE_BANK_LEN as u64),
+                (u64::from(off), u64::from(off) + SAMPLE_RECORD_LEN as u64),
             ];
             for (start, len) in [
                 (get(f, 0x24), nimp * IMPORT_LEN),
@@ -1052,7 +948,7 @@ impl DspSection {
             ranges.sort_unstable();
             if get(f, 0x10) % 4 != 0 || ranges.windows(2).any(|w| w[0].1 > w[1].0) {
                 return Err(err!(
-                    "sample bank section has overlapping ranges or unaligned BSS"
+                    "sample track section has overlapping ranges or unaligned BSS"
                 ));
             }
             let table_end = [
@@ -1067,41 +963,26 @@ impl DspSection {
             .unwrap();
             if off % 4 != 0
                 || u64::from(off) < table_end
-                || u64::from(off) + SAMPLE_BANK_LEN as u64 > u64::from(get(f, 0x18))
+                || u64::from(off) + SAMPLE_RECORD_LEN as u64 > u64::from(get(f, 0x18))
             {
-                return Err(err!("sample bank record overlaps header, tables or image"));
+                return Err(err!("sample track record overlaps header, tables or image"));
             }
-            let raw = rng(off, SAMPLE_BANK_LEN)?;
+            let raw = rng(off, SAMPLE_RECORD_LEN)?;
             let w = |i: usize| u32::from_le_bytes(raw[i * 4..i * 4 + 4].try_into().unwrap());
-            if w(0) == SAMPLE_TRACKS_KIND {
-                if (4..8).any(|i| w(i) != 0) {
-                    return Err(err!("sample track record reserved words"));
-                }
-                let t = SampleTracks {
-                    local_id: w(1),
-                    records_byte_offset: w(2),
-                    control_byte_offset: w(3),
-                };
-                t.validate(&image, &relocs)?;
-                (None, Some(t))
-            } else {
-                if w(0) != 1 || (5..8).any(|i| w(i) != 0) {
-                    return Err(err!("sample bank record version or reserved words"));
-                }
-                let b = SampleBank {
-                    local_id: w(1),
-                    bank_byte_offset: w(2),
-                    capacity_frames: w(3),
-                    descriptor_byte_offset: w(4),
-                };
-                b.validate(&image, get(f, 0x10), &relocs)?;
-                (Some(b), None)
+            if w(0) != SAMPLE_TRACKS_KIND || (4..8).any(|i| w(i) != 0) {
+                return Err(err!("sample track record kind or reserved words"));
             }
+            let t = SampleTracks {
+                local_id: w(1),
+                records_byte_offset: w(2),
+                control_byte_offset: w(3),
+            };
+            t.validate(&image, &relocs)?;
+            Some(t)
         } else {
-            (None, None)
+            None
         };
         Ok(DspSection {
-            sample_bank,
             sample_tracks,
             device: get(f, 8),
             image,
@@ -1231,21 +1112,6 @@ mod tests {
         }
     }
 
-    fn bank_object() -> (Dko, crate::typed::SampleBankDef) {
-        let mut o = object();
-        o.sections[1] = sec("d", "data", 4, &[0; 16]);
-        o.relocs.clear();
-        (
-            o,
-            crate::typed::SampleBankDef {
-                local_id: 0x12345678,
-                bank: "buf".into(),
-                descriptor: "var".into(),
-                capacity_frames: 14,
-            },
-        )
-    }
-
     fn tracks_object() -> (Dko, crate::typed::SampleTracksDef) {
         let mut o = object();
         o.sections[1] = sec("d", "data", 4, &[0; 768]);
@@ -1262,21 +1128,20 @@ mod tests {
     }
 
     #[test]
-    fn sample_tracks_record_roundtrips_and_a_bank_record_stays_a_bank() {
+    fn sample_tracks_record_roundtrips_and_old_sections_stay_old() {
         let (o, t) = tracks_object();
-        let bytes = pack_with_samples(&o, 1, &[], &[], None, Some(&t)).unwrap();
+        let bytes = pack_with_samples(&o, 1, &[], &[], Some(&t)).unwrap();
         assert_eq!(get(&bytes, 4), VERSION_5);
         let at = get(&bytes, 0x3c) as usize;
         assert_eq!(&bytes[at..at + 8], &[2, 0, 0, 0, 7, 0, 0, 0]);
         let d = DspSection::parse(&bytes).unwrap();
-        assert!(d.sample_bank.is_none());
         let tr = d.sample_tracks.as_ref().unwrap();
         assert_eq!(tr.control_byte_offset - tr.records_byte_offset, 512);
         assert_eq!(d.encode(), bytes);
-        let (ob, b) = bank_object();
-        let bank = pack_with_bank(&ob, 1, &[], &[], Some(&b)).unwrap();
-        assert!(DspSection::parse(&bank).unwrap().sample_tracks.is_none());
-        assert!(pack_with_samples(&ob, 1, &[], &[], Some(&b), Some(&t)).is_err());
+        let old = pack(&o, 1, &[], &[]).unwrap();
+        assert_eq!(get(&old, 4), VERSION);
+        assert_eq!(get(&old, 0x3c), 0);
+        assert!(DspSection::parse(&old).unwrap().sample_tracks.is_none());
     }
 
     #[test]
@@ -1295,107 +1160,22 @@ mod tests {
                 ..t.clone()
             };
             assert!(
-                pack_with_samples(&o, 1, &[], &[], None, Some(&t)).is_err(),
+                pack_with_samples(&o, 1, &[], &[], Some(&t)).is_err(),
                 "{records} {control}"
             );
         }
         let mut bad = o.clone();
         bad.sections[1] = sec("d", "data", 4, &[0; 767]);
-        assert!(pack_with_samples(&bad, 1, &[], &[], None, Some(&t)).is_err());
+        assert!(pack_with_samples(&bad, 1, &[], &[], Some(&t)).is_err());
         let mut bad = o.clone();
         let mut bytes = [0u8; 768];
         bytes[700] = 1;
         bad.sections[1] = sec("d", "data", 4, &bytes);
-        assert!(pack_with_samples(&bad, 1, &[], &[], None, Some(&t)).is_err());
+        assert!(pack_with_samples(&bad, 1, &[], &[], Some(&t)).is_err());
         // the parser refuses reserved words, a relocation inside a block and a wrong kind
-        let good = pack_with_samples(&o, 1, &[], &[], None, Some(&t)).unwrap();
+        let good = pack_with_samples(&o, 1, &[], &[], Some(&t)).unwrap();
         let at = get(&good, 0x3c) as usize;
         for (word, value) in [(0, 3u32), (2, 2), (3, u32::MAX - 3), (4, 1), (7, 1)] {
-            let mut bad = good.clone();
-            bad[at + word * 4..at + word * 4 + 4].copy_from_slice(&value.to_le_bytes());
-            assert!(DspSection::parse(&bad).is_err(), "word {word}: {value}");
-        }
-        let mut d = DspSection::parse(&good).unwrap();
-        d.relocs.push(Reloc {
-            offset: d.sample_tracks.as_ref().unwrap().control_byte_offset + 250,
-            kind: KIND_ABS32,
-            class: CLASS_DATA,
-            import: 0,
-        });
-        assert!(DspSection::parse(&d.encode()).is_err());
-    }
-
-    #[test]
-    fn sample_bank_v5_roundtrips_little_endian_record_and_old_sections_stay_old() {
-        let (o, b) = bank_object();
-        let bytes = pack_with_bank(&o, 1, &[], &[], Some(&b)).unwrap();
-        assert_eq!(get(&bytes, 4), VERSION_5);
-        let at = get(&bytes, 0x3c) as usize;
-        assert_eq!(&bytes[at..at + 8], &[1, 0, 0, 0, 0x78, 0x56, 0x34, 0x12]);
-        let d = DspSection::parse(&bytes).unwrap();
-        assert_eq!(d.sample_bank.as_ref().unwrap().capacity_frames, 14);
-        assert_eq!(d.encode(), bytes);
-        let old = pack(&o, 1, &[], &[]).unwrap();
-        assert_eq!(get(&old, 4), VERSION);
-        assert_eq!(get(&old, 0x3c), 0);
-        assert!(DspSection::parse(&old).unwrap().sample_bank.is_none());
-    }
-
-    #[test]
-    fn sample_bank_requires_owned_bss_and_initialized_zero_descriptor() {
-        let (o, b) = bank_object();
-        for (bank, desc, cap) in [
-            ("helper", "var", 1),
-            ("var", "var", 1),
-            ("buf", "buf", 1),
-            ("buf", "var", 15),
-            ("buf", "var", 0),
-            ("buf", "var", 8193),
-        ] {
-            let b = crate::typed::SampleBankDef {
-                bank: bank.into(),
-                descriptor: desc.into(),
-                capacity_frames: cap,
-                ..b.clone()
-            };
-            assert!(pack_with_bank(&o, 1, &[], &[], Some(&b)).is_err());
-        }
-        let mut bad = o.clone();
-        bad.sections[1].hex = hex(&[1; 16]);
-        assert!(pack_with_bank(&bad, 1, &[], &[], Some(&b)).is_err());
-        let mut bad = o.clone();
-        bad.symbols
-            .iter_mut()
-            .find(|s| s.name == "var")
-            .unwrap()
-            .value = 4;
-        assert!(pack_with_bank(&bad, 1, &[], &[], Some(&b)).is_err());
-        let mut bad = o;
-        bad.symbols
-            .iter_mut()
-            .find(|s| s.name == "buf")
-            .unwrap()
-            .value = 9;
-        assert!(pack_with_bank(&bad, 1, &[], &[], Some(&b)).is_err());
-    }
-
-    #[test]
-    fn sample_bank_parser_rejects_malformed_records_bounds_and_relocation_overlap() {
-        let (o, b) = bank_object();
-        let good = pack_with_bank(&o, 1, &[], &[], Some(&b)).unwrap();
-        let at = get(&good, 0x3c) as usize;
-        for (word, value) in [
-            (0, 2u32),
-            (2, 0),
-            (2, u32::MAX - 3),
-            (3, 0),
-            (3, 8193),
-            (4, 1),
-            (4, u32::MAX - 3),
-            (5, 1),
-            (6, 1),
-            (7, 1),
-        ] {
             let mut bad = good.clone();
             bad[at + word * 4..at + word * 4 + 4].copy_from_slice(&value.to_le_bytes());
             assert!(DspSection::parse(&bad).is_err(), "word {word}: {value}");
@@ -1407,14 +1187,11 @@ mod tests {
         }
         let mut d = DspSection::parse(&good).unwrap();
         d.relocs.push(Reloc {
-            offset: d.sample_bank.as_ref().unwrap().descriptor_byte_offset - 2,
+            offset: d.sample_tracks.as_ref().unwrap().control_byte_offset + 250,
             kind: KIND_ABS32,
             class: CLASS_DATA,
             import: 0,
         });
-        assert!(DspSection::parse(&d.encode()).is_err());
-        let mut d = DspSection::parse(&good).unwrap();
-        d.bss = u32::MAX;
         assert!(DspSection::parse(&d.encode()).is_err());
     }
 
@@ -1581,7 +1358,7 @@ mod tests {
         let plain = machine_object(DESC_CONTRACT);
         let both = machine_object(DESC_CONTRACT | DESC_STEREO | DESC_GATE);
         let gate_of = |o: &Dko, stereo: bool| {
-            pack_with_gate(o, 1, &[machine_spec(stereo)], &[], None, None)
+            pack_with_gate(o, 1, &[machine_spec(stereo)], &[], None)
                 .unwrap()
                 .1
         };

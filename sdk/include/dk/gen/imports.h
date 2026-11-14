@@ -162,7 +162,7 @@ uint32_t dk_debug_speed_flags(uint32_t clear, uint32_t set);
 
 /* ---- service samples ---- */
 
-/* Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none, declares a bank too, or this is not init; `*out` is untouched then. Context: init. Since runtime 0.7.0. */
+/* Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none or this is not init; `*out` is untouched then. Context: init. Since runtime 0.7.0. */
 int32_t dk_sample_pool_open(dk_module_ctx *ctx, dk_sample_pool **out);
 
 /* Add a stereo-capable sample file to the pool (copies the path, no file IO here). Returns the pool index 0..15: the first free entry, or the entry that already holds this path. DK_E_POOL when all 16 are in use; DK_E_SEL_PATH for an empty or too long path. See <dk/sample/pool.h>. Context: ui. Since runtime 0.7.0. */

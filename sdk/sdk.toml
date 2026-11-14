@@ -695,7 +695,7 @@ service = "samples"
 since = "0.7.0"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, dk_sample_pool **out)"
-doc = "Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none, declares a bank too, or this is not init; `*out` is untouched then."
+doc = "Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none or this is not init; `*out` is untouched then."
 
 [[import]]
 name = "dk_sample_pool_add"
