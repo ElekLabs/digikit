@@ -1,7 +1,8 @@
 // Two panes side by side with a draggable divider between them (Transfer: "On your computer" | "On device"). The first two children are the
 // panes. The divider moves with the pointer (or the arrow keys) between two minimum widths; a double click puts it back in the middle-ish
-// default. The position is remembered per viewer in localStorage under `id` (no storage: it lasts until the window closes).
+// default. The position is remembered per viewer in the app's KeyValue under `id` (no storage: it lasts until the window closes).
 import { children, createSignal, type JSX } from 'solid-js';
+import { useTransferApp } from './app-context';
 import { KEY_STEP, SPLIT_DEFAULT, clampSplit, parseSplit, splitAt } from './split-core';
 import './split-pane.css';
 
@@ -9,24 +10,13 @@ const KEY = (id: string) => `digikit.split.${id}`;
 
 export default function SplitPane(props: { id: string; children: JSX.Element }): JSX.Element {
   let box: HTMLDivElement | undefined;
-  let saved: string | null = null;
-  try {
-    saved = localStorage.getItem(KEY(props.id));
-  } catch {
-    // nothing remembered
-  }
-  const [split, setSplit] = createSignal(parseSplit(saved));
+  const { storage } = useTransferApp();
+  const [split, setSplit] = createSignal(parseSplit(storage.get(KEY(props.id))));
   const [dragging, setDragging] = createSignal(false);
   const kids = children(() => props.children);
   const panes = () => kids.toArray();
 
-  const keep = () => {
-    try {
-      localStorage.setItem(KEY(props.id), String(split()));
-    } catch {
-      // the position lasts until the window closes
-    }
-  };
+  const keep = () => storage.set(KEY(props.id), String(split()));
   const width = () => box?.getBoundingClientRect().width ?? 0;
   const move = (e: PointerEvent) => {
     if (!box || !dragging()) return;

@@ -1,6 +1,6 @@
 // What the Transfer pane takes from the app it runs in. The pane (TransferPage.tsx and the files beside it) is the same code in the
 // desktop workbench and on the site; everything that differs is behind this interface. The app builds one `TransferEnv` and gives it to
-// `setTransferEnv` before it shows the pane (or the target selector of another page).
+// `createTransferApp` (app.ts); the app goes to the pages (app-context.ts).
 //   desktop: apps/desktop/ui/src/desktop-env.ts (Tauri commands: the library folder, MIDI ports, the emulator, samples, the card)
 //   site:    apps/web/src/transfer/web-env.ts (WebMIDI, the built modules the site ships, their sources)
 import type { JSX } from 'solid-js';
@@ -133,15 +133,4 @@ export interface TransferEnv {
     /** Reload the emulator with the digikit runtime (the desktop): offered next to an "emulator runs without the runtime" error. */
     reloadWithRuntime?: () => void;
   };
-}
-
-let current: TransferEnv | undefined;
-
-export function setTransferEnv(env: TransferEnv): void {
-  current = env;
-}
-
-export function transferEnv(): TransferEnv {
-  if (!current) throw new Error('The Transfer pane has no environment: call setTransferEnv first.');
-  return current;
 }

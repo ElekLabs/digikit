@@ -1,9 +1,10 @@
 // The desktop workbench's side of the Firmware page (apps/web/src/firmware/env.ts): patchkit in process through the Tauri command
 // `firmware_prepare` (the checkout's modules, ports and device files), the Rust sender and the RPC flash machine through patchkit.wasm (the same code the site runs),
 // the system's save dialog, and the Log panel. The MIDI port is the Transfer pane's (desktop-env.ts).
-import { setFirmwareEnv, type FirmwareEnv } from '../../../web/src/firmware/env';
+import type { TransferApp } from '../../../web/src/transfer/app';
+import type { FirmwareEnv } from '../../../web/src/firmware/env';
 import { PatchKit, preparedFromSummary, type FlashSummary } from '../../../web/src/patch/patchkit-core';
-import { desktopDefaultModules } from './default-modules';
+import { createDesktopDefaultModules } from './default-modules';
 import { flashEntry } from './log-core';
 import { logInput } from './log-state';
 import type { Host } from './host/host';
@@ -17,8 +18,11 @@ export function unpack(buf: Uint8Array): { summary: FlashSummary; image: Uint8Ar
   };
 }
 
-/** The Firmware page's environment over `host`; the patchkit wasm is loaded once (a failed load is tried again at the next use). */
-export function createDesktopFirmwareEnv(host: Host): FirmwareEnv {
+/**
+ * The Firmware page's environment over `host`; the patchkit wasm is loaded once (a failed load is tried again at the next use). `app` is the
+ * Transfer app whose sessions the default modules install over (a function: the apps are built from the environments).
+ */
+export function createDesktopFirmwareEnv(host: Host, app: () => TransferApp): FirmwareEnv {
   let sender: Promise<PatchKit> | undefined;
   /** The sender needs no firmware or modules: an empty bundle. */
   const kit = (): Promise<PatchKit> => {
@@ -48,8 +52,6 @@ export function createDesktopFirmwareEnv(host: Host): FirmwareEnv {
       return (await host.firmware.save(bytes, name)) ?? undefined;
     },
     log: (run) => logInput(flashEntry(run)),
-    defaultModules: desktopDefaultModules,
+    defaultModules: createDesktopDefaultModules(app),
   };
 }
-
-export const installDesktopFirmware = (host: Host): void => setFirmwareEnv(createDesktopFirmwareEnv(host));

@@ -18,8 +18,8 @@ import { freeTitle, noteText, segmentTitle, slotCells, usedText, widthPct } from
 import { readMemory, type MemoryReading } from './memory-backend';
 import { createReadGate } from './read-gate-core';
 import { focusReadDue } from '@web/transfer/refresh-core';
-import { asked, noteReply } from '@web/transfer/connection-state';
-import { checkRuntime, emulatorRuntime, sameTarget, target } from '@web/transfer/target';
+import { useTransferApp } from '@web/transfer/app-context';
+import { sameTarget } from '@web/transfer/target';
 import { failureLine } from '@web/transfer/wait-core';
 import { reloadWithRuntime } from './emulator-actions';
 import './card-panel.css';
@@ -47,6 +47,9 @@ export default function MemoryPanel(props: {
   /** Set when the panel is a tab of the column (SidePanels.tsx): the tabpanel's id and the id of its tab. */
   tabpanel?: { id: string; labelledBy: string };
 }): JSX.Element {
+  const app = useTransferApp();
+  const { asked, noteReply } = app.connection;
+  const { checkRuntime, emulatorRuntime, target } = app.target;
   const [reading, setReading] = createSignal<MemoryReading>();
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -66,7 +69,9 @@ export default function MemoryPanel(props: {
         if (readsTarget()) await asked(async () => check());
         else check();
         const s = await props.session();
-        const r = readsTarget() ? await asked(() => readMemory(s)) : await readMemory(s);
+        const r = readsTarget()
+          ? await asked(() => readMemory(s, app.loadLibrary))
+          : await readMemory(s, app.loadLibrary);
         if (current()) {
           setReading(r);
           setError('');

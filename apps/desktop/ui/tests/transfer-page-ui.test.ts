@@ -6,7 +6,6 @@ type UploadEventWithoutFolder = WithoutFolder<Exclude<UploadEvent, { event: 'not
 // samples-core). The pictures of the page are checked with `node tools/devtools/ui_shots.mjs` (docs/TESTING.md).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { jobs } from '../../../web/src/jobs/jobs.ts';
 import { instrument } from '../../../web/src/transfer/activity.ts';
 import { createRate, etaSeconds, fmtEta, fmtRate, statsLine } from '../../../web/src/transfer/rate-core.ts';
 import { FOCUS_GAP_MS, canAutoRefresh, focusReadDue, listingChanged } from '../../../web/src/transfer/refresh-core.ts';
@@ -40,7 +39,7 @@ import {
   toggleAll,
 } from '../../../web/src/transfer/select-core.ts';
 import { countLabel, applyEvent, modulesBar, startProgress } from '../../../web/src/transfer/transfer-core.ts';
-import { beginJob, busy, endJob, error, setError } from '../../../web/src/transfer/transfer-state.ts';
+import { createFakeTransferApp } from '../../../web/src/transfer/fake-app.ts';
 import { WAIT_QUIET_MS, createActivity, waitShown } from '../../../web/src/transfer/wait-core.ts';
 
 test('select all: none, some or all of the visible rows; a click ticks all, or clears them when all are ticked', () => {
@@ -459,6 +458,7 @@ test('drop targets: the folder row the drop is on, else the open folder; rows of
 });
 
 test('the busy action outlives the page: a page that comes back during an upload sees it, and its end clears it once', () => {
+  const { beginJob, busy, endJob, error, setError } = createFakeTransferApp().state;
   assert.equal(beginJob('Uploading'), true);
   // a second page (a new mount) reads busy from the shared state: the bar stays running, the buttons stay off, no job starts
   assert.equal(busy(), 'Uploading');
@@ -489,6 +489,9 @@ test('the busy action outlives the page: a page that comes back during an upload
 });
 
 test('a write job is a target job in the shared store, a read is not', () => {
+  const app = createFakeTransferApp();
+  const { beginJob, busy, endJob } = app.state;
+  const { jobs } = app.jobs;
   assert.equal(beginJob('Uploading'), true);
   assert.deepEqual(
     jobs().list.map((j) => [j.group, j.label]),

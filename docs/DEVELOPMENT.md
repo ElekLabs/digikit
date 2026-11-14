@@ -107,6 +107,22 @@ Add a command: write the Rust command, then add a method to the group in `host.t
 
 Tests use `createFakeHost(replies)` from `host/fake-host.ts`: it records `calls` (command as `group.method`, arguments, order) and answers from `replies` (a value, or a function of the arguments). A command with no reply fails, except the ones that answer nothing (open, close, send, cancel). Examples: `ui/tests/samples-backend.test.ts`, `card-api.test.ts`, `links.test.ts`. The browser preview (`mise run ui:preview`) still replaces `@tauri-apps/api/core` with `ui/preview/tauri-mock.ts` behind `TauriHost`.
 
+### The app object, KeyValue and BlobStore (desktop UI and site)
+
+The Transfer pane, the Firmware page and the target selector keep no module-level state. `createTransferApp(env, { storage, sessions })` (`apps/web/src/transfer/app.ts`) builds one app from the environment (`TransferEnv`): `app.target` (selected target, its sessions and transports), `app.connection`, `app.jobs`, `app.state` (the Transfer page's signals), `app.backend` and `app.loadLibrary`. `createFirmwareApp(env, transferApp)` (`apps/web/src/firmware/app.ts`) adds `defaults` (default modules) and `state` (the flash). An entry point builds the apps once and wraps its pages in `<AppProvider app firmware>`; a component takes them with `useTransferApp()` or `useFirmwareApp()` and destructures what it uses. Code that is not a component takes the app (or the part it needs) as an argument.
+
+- Desktop: `createDesktopApps(host)` in `apps/desktop/ui/src/desktop-app.ts`, called by `main.tsx`.
+- Site: `createWebTransferApp()` in `apps/web/src/transfer/web-env.ts` (Transfer) and `createWebFirmwareApp()` in `apps/web/src/firmware/web-env.ts` (Firmware), called by the Astro islands `WebTransfer.tsx` and `WebFirmware.tsx`.
+- An environment needs the app it will belong to (its ports and transports call `app.target`, `app.connection`): its factory takes `app: () => TransferApp`, a function because the app is built from the environment.
+
+What an app is given, so that a test gives something else:
+
+- `storage: KeyValue` (`apps/web/src/storage.ts`): `get`, `set`, `remove` of small strings. `localStorageKeyValue()` is the browser's (every call guarded); `memoryKeyValue(initial)` is the fake (`.data` shows what was written). `remembered(storage, key, parse)` is a signal kept in it.
+- `sessions: SessionHub` (`transfer/session-core.ts`): `get(key, transport)`, `drop`, `cancel`. `createSessionHub(make)` makes one `DkSession` per target; `createFakeSessions(make)` (`transfer/fake-app.ts`) makes whatever the test returns and records `made`, `dropped` and `cancelled`.
+- `BlobStore` (`apps/web/src/blob-store.ts`): `get`, `put`, `delete` of bytes. `indexedDbBlobStore(database, objectStore)` is the browser's; `memoryBlobStore()` is the fake. The ready-state cache (`ReadyCache`) and the firmware hand-off (`patch/handoff.ts`) take one.
+
+`createFakeTransferApp({ env, storage, sessions })` (`apps/web/src/transfer/fake-app.ts`) is the real `createTransferApp` over those fakes and a stub `TransferEnv` that a test overrides in part. Examples: `apps/web/tests/transfer-app.test.ts` (target and session selection, remembered values), `apps/desktop/ui/tests/module-loading.test.ts`, `samples-backend.test.ts`. Only `storage.ts` touches `localStorage` and `blob-store.ts` touches `indexedDB`.
+
 ## Web panel
 
 ```sh

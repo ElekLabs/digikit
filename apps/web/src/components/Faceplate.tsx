@@ -12,7 +12,7 @@ import SyxFile from './SyxFile';
 import { benchRequested, runBench } from '../runtime/bench';
 import { devEnabled } from '../dev';
 import { identify } from '../patch/identify';
-import { takeHandoff } from '../patch/handoff';
+import { handoffStore, takeHandoff } from '../patch/handoff';
 import './faceplate.css';
 
 function BenchStatus() {
@@ -191,7 +191,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   onMount(() => {
     if (new URLSearchParams(location.search).get('handoff') !== '1') return;
     setStage('run');
-    void takeHandoff()
+    void takeHandoff(handoffStore())
       .then((item) => {
         if (!item) {
           setStatus('Nothing to boot: open the patch page and press Boot in emulator.');

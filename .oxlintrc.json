@@ -47,6 +47,28 @@
       }
     },
     {
+      "files": ["apps/web/src/**/*.{ts,tsx}", "apps/desktop/ui/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "localStorage",
+            "message": "Take a KeyValue (apps/web/src/storage.ts); only storage.ts reads localStorage."
+          },
+          {
+            "name": "indexedDB",
+            "message": "Take a BlobStore (apps/web/src/blob-store.ts); only blob-store.ts opens IndexedDB."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/src/storage.ts", "apps/web/src/blob-store.ts"],
+      "rules": {
+        "eslint/no-restricted-globals": "off"
+      }
+    },
+    {
       "files": ["**/*.tsx"],
       "rules": {
         "eslint/no-unassigned-vars": "off"

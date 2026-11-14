@@ -1,6 +1,7 @@
 // The workbench log: one list for the window, written by every part of the app (`logEvent`) and shown by the Log drawer in Console.tsx.
 // In memory only; the rules are in log-core.ts.
 import { createSignal } from 'solid-js';
+import { localStorageKeyValue } from '../../../web/src/storage';
 import {
   addEntries,
   addEntry,
@@ -33,19 +34,9 @@ export const clearLog = (): void => {
 
 // Follow: read the runtime log of the emulator and the device. On unless the user turned it off; kept per browser profile of the app.
 const FOLLOW_KEY = 'digikit.logFollow';
-const readFollow = (): boolean => {
-  try {
-    return localStorage.getItem(FOLLOW_KEY) !== 'off';
-  } catch {
-    return true;
-  }
-};
-export const [followOn, setFollowSignal] = createSignal(readFollow());
+const prefs = localStorageKeyValue();
+export const [followOn, setFollowSignal] = createSignal(prefs.get(FOLLOW_KEY) !== 'off');
 export function setFollowOn(on: boolean): void {
   setFollowSignal(on);
-  try {
-    localStorage.setItem(FOLLOW_KEY, on ? 'on' : 'off');
-  } catch {
-    /* the choice lasts until the window closes */
-  }
+  prefs.set(FOLLOW_KEY, on ? 'on' : 'off');
 }

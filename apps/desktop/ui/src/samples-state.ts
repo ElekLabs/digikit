@@ -2,11 +2,15 @@
 import { createSignal } from 'solid-js';
 import type { Prepared } from '@digi/dk-session/dksample';
 import type { SampleEntry } from '@digi/dk-session/samples';
-import { remembered } from '../../../web/src/transfer/transfer-state';
+import { localStorageKeyValue, remembered } from '../../../web/src/storage';
 import type { LocalEntry, Uploads } from './samples-core';
 
 /** The folder on the computer that Samples mode lists ('' until one is chosen). */
-export const [localFolder, setLocalFolder] = remembered('digikit.samplesFolder', (v) => v ?? '');
+export const [localFolder, setLocalFolder] = remembered(
+  localStorageKeyValue(),
+  'digikit.samplesFolder',
+  (v) => v ?? '',
+);
 
 /** Samples mode, On your computer: the open level of the chosen folder, its entries, what each file will become, the files added by hand,
  * and the ticks. */

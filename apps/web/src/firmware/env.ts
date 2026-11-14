@@ -48,14 +48,3 @@ export interface FirmwareEnv {
     ): Promise<string[]>;
   };
 }
-
-let current: FirmwareEnv | undefined;
-
-export function setFirmwareEnv(env: FirmwareEnv): void {
-  current = env;
-}
-
-export function firmwareEnv(): FirmwareEnv {
-  if (!current) throw new Error('The Firmware page has no environment: call setFirmwareEnv first.');
-  return current;
-}

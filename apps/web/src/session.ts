@@ -5,7 +5,8 @@
 // unsupported) the caller falls back to the single-thread core in
 // runtime-worker.ts. No firmware or derived data ships with the site; the .syx
 // and everything made from it stay in the visitor's browser.
-import { ReadyCache, idbStore, sha256Hex, type ReadyState } from './ready-cache.ts';
+import { indexedDbBlobStore } from './blob-store.ts';
+import { ReadyCache, sha256Hex, type ReadyState } from './ready-cache.ts';
 import { createLinkBuffer, LinkServer } from './sab-link.ts';
 import type { CfStart } from './cf-worker.ts';
 import type { DspStart } from './dsp-worker.ts';
@@ -48,7 +49,7 @@ export async function coldBoot(_syx: Uint8Array, _progress?: (fraction: number) 
 
 export async function startSession(syx: Uint8Array, o: SessionOptions): Promise<Session> {
   if (!canSplit()) throw new Error('not cross-origin isolated: use the single-thread core');
-  const cache = new ReadyCache(idbStore());
+  const cache = new ReadyCache(indexedDbBlobStore('digi-ready-state', 'states'));
   const key = await sha256Hex(syx as BufferSource);
   let state = await cache.load(key);
   const source = state ? 'cache' : 'cold-boot';

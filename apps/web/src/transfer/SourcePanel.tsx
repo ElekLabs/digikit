@@ -2,15 +2,17 @@
 // README.md and src/**) and the chosen one as text. No editor. Opened by the Source link of a library row (ModulesMode.tsx); Esc or Close shuts it.
 import { For, Show, createEffect, createResource, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { errorLine } from '../modules/backend';
-import { transferEnv } from './env';
-import { setSourceId, sourceId } from './transfer-state';
+import { useTransferApp } from './app-context';
 
 export default function SourcePanel(): JSX.Element {
+  const { sourceId } = useTransferApp().state;
   return <Show when={sourceId()}>{(id) => <Panel id={id()} />}</Show>;
 }
 
 function Panel(props: { id: string }): JSX.Element {
-  const files = () => transferEnv().source?.files(props.id) ?? [];
+  const { env, state } = useTransferApp();
+  const { setSourceId } = state;
+  const files = () => env.source?.files(props.id) ?? [];
   // module.toml first, then the README, then the code: the order the site ships
   const [path, setPath] = createSignal(files().find((f) => f.startsWith('src/')) ?? files()[0] ?? '');
   createEffect(
@@ -25,7 +27,7 @@ function Panel(props: { id: string }): JSX.Element {
     async (k) => {
       if (!k.path) return '';
       try {
-        return await transferEnv().source!.read(k.id, k.path);
+        return await env.source!.read(k.id, k.path);
       } catch (e) {
         return `Could not load ${k.path}: ${errorLine(e)}`;
       }

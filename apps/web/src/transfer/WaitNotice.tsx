@@ -3,11 +3,13 @@
 // (`DkSession.cancelPending`); the request then fails as "Cancelled.". Used by the pages that talk to the target.
 import { Show, createEffect, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { quietMs } from './activity';
-import { cancelPending, target, targetLabel } from './target';
+import { useTransferApp } from './app-context';
+import { targetLabel } from './target';
 import { waitShown, waitingLine } from './wait-core';
 
 /** `cancel` false: the page has its own Cancel while the job runs (the bar's), so this line only says what it waits for. */
 export default function WaitNotice(props: { active: boolean; cancel?: boolean }): JSX.Element {
+  const { cancelPending, target } = useTransferApp().target;
   const [quiet, setQuiet] = createSignal<number>();
   const timer = window.setInterval(() => setQuiet(quietMs()), 250);
   onCleanup(() => window.clearInterval(timer));
