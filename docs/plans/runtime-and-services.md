@@ -317,11 +317,23 @@ Users: `digikit/debug` (`log`), `profile.dks` (`span`, [profiling plan](profilin
 A service is a module with a role.
 
 - Same as a module: `module.toml` with `role = "service"`, the folder layout (`src/`, `tests/`, `build/gen/`), the `dk_module` entry point with `init`, `fini` and `tick`, imports through `sdk.toml`, the naming rules of sdk.md section 10, the declare-check-commit pattern of sdk.md 6.3, and tests that live with the service.
-- Only a service has: exports (`sdk.toml` imports with `requires`), a hook table, record-kind handlers, and its adapter linked into the same file.
+- Only a service has: exports (`sdk.toml` imports with `requires`), a hook table, slots, record-kind handlers, and its adapter linked into the same file.
 
-The contract is the ABI in `sdk.toml`, so a Rust service uses the generated bindings, as the runtime does today.
+The contract is the ABI in `sdk.toml`, so a Rust service uses the generated bindings, as the runtime does today. The target firmware is bound at bind time (5.8), not written in the manifest.
 
-**[O]** Settled with Em before R7.
+**Manifest.** The service section of `module.toml` has: `name`, `exports` (a group of `sdk.toml`), `record_kinds`, `resources`, `[[hook]]` (a ColdFire site that the service installs, movable) and `[[slot]]` (a fixed site, ColdFire or SHARC, that the service fills). The file format of a `.dks` waits for R12. R2 only writes the schema here and in `docs/ARCHITECTURE.md`.
+
+**Slot.** A hook has two shapes ([finding 128](../findings/128-r4-hooks-in-services.md)). A movable ColdFire hook is installed by the service. A fixed site stays in the image or the runtime and calls through a pointer that a service registers: the SHARC stubs, the page key and turn hooks, and any hook that runs before main-OS entry. That fixed site plus its pointer is a **slot**. The registry treats slots and ColdFire hook sites alike in its one-owner check: a second claimant is refused while planning. A zero slot means the stock path, so a device with no service behaves as stock. The page key and turn hooks therefore stay in the runtime, and the `machines` service fills their slot.
+
+**Three interfaces.**
+
+- **A, module to service.** As in [MODULES.md](../MODULES.md) section 4: imports named by service group in `sdk.toml`, `dk_<service>_open` handles, `DK_E_MISSING` for a service that is absent, and needs derived by the packer.
+- **B, runtime to service.** Derived and declarative, the same rule as S3 for modules. The service's `init` declares through builder calls (record kinds, slots, hooks, exports, resources), and these calls are the only source of truth. `module:check` and the packer write a static table into the file. Boot planning reads only that table (dependency order, fit with the service's needs added to the module needs, slot and hook conflicts) and runs no code. At `init` the runtime checks the declarations against the table and commits them; a mismatch means FAILED. The fixed entry points are: lifecycle, a handler table per record kind, slots and hooks, broker resources, and the log and span sinks (5.11). The kernel never names a service.
+- **C, service to runtime.** The same `sdk.toml` imports as modules, plus a small service-only set (registry queries, installing slots and hooks).
+
+`check:layers` enforces that the rest of the runtime reaches a service only through these interfaces.
+
+**Template.** In the runtime crate a service is a folder `src/services/<name>/` with `mod.rs`, `records.rs`, `slots.rs`, `dsp/` and `tests/`. It maps one to one to `modules/core/services/<name>/{module.toml, src/, adapter/, tests/}` when the services are linked in (R9 and R10), and `module:new service` generates it at R12. R2 moves code only: no behaviour change. R7 proves that interface B is generic.
 
 ## 6. DSP
 
@@ -342,7 +354,9 @@ Target: `submit(owner, addr, bytes, done)` with one FIFO. Delete all `busy()` cr
 - Failure in the middle of a sequence needs rollback (`fx_pub`, `row_pub`).
 - Unload needs a synchronous drain.
 
-**[O] Possible bug.** The error and unload path `write_word_blocking` (`dsp.rs:1109`) may take the link while another writer is mid-transfer, so that writer may misread the result. Plausible from reading; not run, and whether the loader drains other writers first was not checked. Check this statically first. If it is real, record it in `docs/findings/`.
+**Desired state with versions (live values).** Live values (fx knobs, send amounts, track controls) are not queued as one request per change. The runtime keeps a desired value and a version for each address. The pump writes what is newer than the DSP's confirmed version, so a fast knob turn sends the last value only and a refused write is sent again by the same rule. Bulk transfers (images, row sequences, track records) stay one-off requests with an owner result.
+
+**[D] Latent bug in the shared result.** `write_word_blocking` (`dsp.rs:1109`) only spins until the link accepts a send. The bug is that link results have no owner: a writer that has not polled yet would read the result of the next writer. Today this cannot happen: the live writers check each other, and the loader and `write_word_blocking` run only at boot ([finding 129](../findings/129-dsp-link-result-ownership.md)). It becomes reachable with any live load or unload path. **The owner-tagged transfer queue must land before any live load or unload path.**
 
 `watch.rs`: keep the heartbeat and hang record in the runtime. Move voice and FX guards and attribution to their services. Boot-counter safe mode does not use `watch.rs` (`boot.rs:254-309`); hang records do (`crash.rs:449`). The DIAG words move to a shared crate to break the `crash` and `watch` cycle.
 
@@ -408,14 +422,14 @@ Memory cleanup: files state is 33,980 B in `.data`, about 42 KB with scratch, fo
 
 **Deletions and single sources:**
 
-- Sample bank API 1.3, by Em's decision. Only `tests/fixtures/modules/sample-proof` declares a bank. Delete `R/sample.rs` and `DK_SAMPLE_BANK`; the Api entries stay as reserved fields until imports replace the table, so module bytes do not shift. Check first what still uses `sample_source.rs`, `dk/sample/bank.h` and `sdk/dsp/sample/bank.inc`: SHOT includes `bank.inc`, so it may stay. Separate commit, outside the byte check, because the fixture and the runtime change.
-- One generated source for record kinds (section 4). `fxpage::MAX_FX` literal goes. Extend the pin test (`dkm.rs:966-975`) to cover all kinds.
-- After a caller check across modules, packages, apps, tools and tests: `dkrt_store_list`, `dkrt_settings_get/remove` externs, second poll registry, second log (`State.log`), `selection_set_one` duplication, hot-reload leftovers not on the failure path.
-- One capacity table used by `dkrt_capacity` and `dkrt-fit`.
+- Sample bank API 1.3: **done.** The runtime, the fixture and the SDK entries are gone, and the host side (`SampleBankDef`, the bank record in the DSP section, the kind 1 branch of `dkneeds`) was deleted in R2a. `sdk/dsp/sample/bank.inc` stays: SHOT includes it. The DSP v5 record keeps kind 2, the track table.
+- One generated source for record kinds (section 4), built in R7 with the generic records. The `fxpage::MAX_FX` literal is gone (R2a); the kind literals remain (`registry.rs`, `collect.rs`, `fxpage.rs`, `nativepage.rs`, patchkit `register.rs`).
+- After a caller check across modules, packages, apps, tools and tests: the `dkrt_store_list` extern, the `dkrt_settings_get/remove` externs and the second poll registry are **deleted** (R2a). `State.log` stays until `tools/patchkit/pk_dkrt.py` reads `dlog` instead (it reads `ST_LOG`). `selection_set_one` stays: it is the mailbox test hook (`lib.rs`, `pk_dkrt_boot.py`, `safe-mode.device.test.ts`), and only `boot.rs` duplicates two lines of it. No hot-reload leftovers remain: `STATE_UNLOADING`, `E_BUSY` and `E_TYPE_IN_USE` stay as reserved numbers and the retire paths of `loader.rs` are in use.
+- One capacity table used by `dkrt_capacity`, `dkrt-fit` and patchkit: **done** (R2a), `[capacity.kinds]` in `sdk.toml` with `fit` and `label`, generated as `CAP_KINDS` and `CAP_FIT`.
 - Fix stale text: "emulator only" in the runtime, health, dynreg and dyndsp summaries; runtime README "Version 0.1.0"; `lib.rs:1-9` crate doc; `settings.rs:9`; `crash.rs:16` (names `dlog.rs` for `watch.rs`); `tracks.rs:5`; patch-set comments in `devices/digitakt-ii.toml:181-182`; `[targets]` "untested" on shipped `dsp-link` and `sample-pool`; `abi.toml` `STATE_UNLOADING` and `CAP_MAX` docs; the runtime `module.toml` summary.
-- Proof adapters (`dsp-ddr-proof`, `dsp-lp0-proof`, `dsp-stereo-proof`, `file-catalog-proof`, `storage-fault-proof`) are old experiments among the shipped adapters. They go during this refactor. Before deleting each one, check that shipped tests cover what it proves.
+- Proof adapters: `dsp-ddr-proof` and `dsp-lp0-proof` are already gone. `dsp-stereo-proof`, `file-catalog-proof` and `storage-fault-proof` stay: no shipped test covers their paths (`dsp-stereo-proof.test.ts`, `file-catalog.test.ts`, `storage-fault-proof.test.ts` and the patchkit `storage_fault_*` tests use them).
 - Check by symbol before removing: whether tools read `State.log`, `DKRT_REG`, `DKRT_DSP`, `DKRT_FXP` or `DKRT_FXS`. `dkrt_load` has a caller in `tools/patchkit/pk_dkrt.py:429`. `dkrt_project_changed` has no C caller found; check assembly and project work first.
-- Keep `sample_stream.rs` out of the build until something uses it.
+- `sample_stream.rs` is deleted (R2a); add it back when something uses it.
 
 **Runtime split:** `lib.rs` into state, imports, api, tick, health, report, mailbox. `boot.rs` into selection, safe mode, boot. `upload.rs` into transport, store commands, admin commands, module commands. `dlog.rs` and module context. `crash.rs` becomes `fault.rs`, `table.rs` becomes `invariants.rs`. Split `apps/digikit-menu/src/menu.c` by page. Split crate `dkrt-sdk`, whose name wrongly suggests it is the SDK: host-shared ABI and formats go in `dkrt-abi`, internals into the runtime and services. Pure logic such as `sticky.rs` goes with its owner.
 

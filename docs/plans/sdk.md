@@ -592,9 +592,8 @@ Work packages, in this order:
 - **D. Gen and module:check.** `patchkit gen` writes `build/gen/module_ids.h` (`DK_MACHINE_ID_<ID>`, `DK_FX_ID_<ID>`); `gen --check`
   guards it. `module:check` writes `[uses]` and the gallery param names (`build/gen/gallery.json`). Conformance reads committed rows
   from the emulated device. B, C and D run in parallel, each in its own lane.
-- **E. Migration.** The machines and the FX, the fixtures (scripted for the fixtures), and the core proofs `dsp-ddr-proof` and
-  `dsp-lp0-proof`, by three coders.
-- **F. Cleanup.** Delete the `sample-proof` fixture with the temporary `dk_sample_bank_*` imports, `dsp-ddr-proof` and `dsp-lp0-proof`, the `[contract]`
+- **E. Migration.** The machines and the FX, and the fixtures (scripted for the fixtures), by three coders.
+- **F. Cleanup.** Delete the `[contract]`
   table (one version: the runtime's; `since` is a runtime version string) and the major-2 `.dkm` loading path. The declaration macros, their
   headers and `desc.rs` stay for the two patched-in twins (`test/patched-pluck`, `test/twin-dn2`): the headers moved out of the public SDK to
   `sdk/patched-in/include`, which patchkit adds to the include path of patched-in (not `dynamic`) modules only; a follow-up deletes the
