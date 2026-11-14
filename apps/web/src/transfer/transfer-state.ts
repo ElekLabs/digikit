@@ -1,6 +1,8 @@
 // The Transfer page's state (Modules mode and the mode), kept for the life of the window: closing the page and opening it again shows the last list at once
 // (it is refreshed behind it), and an install's verify results stay until the next restart.
 import { createSignal } from 'solid-js';
+import { addJob, removeJob, updateJob } from '../jobs/jobs-core';
+import { jobs, setJobs } from '../jobs/jobs';
 import { transferEnv } from './env';
 import type { LinkState } from './link-core';
 import { parseMode, type Mode, type Progress, type TransferView, type Verified } from './transfer-core';
@@ -77,21 +79,36 @@ export const [liveRate, setLiveRate] = createSignal<number>();
 
 /** The page's one busy action ('' when none) and its error line. They live here, not in the page: leaving the page unmounts it while a job
  * goes on, and the page that comes back must see the job (the buttons stay off, no second job, no read) and show its error. */
-export const [busy, setBusy] = createSignal('');
+const [reading, setReading] = createSignal(false);
+export const busy = (): string => jobs().list.find((j) => j.group === 'target')?.label ?? (reading() ? 'Reading' : '');
 export const [error, setError] = createSignal('');
 let readAgain = false;
 let stopAsked = false;
+let jobId: number | undefined;
 
-/** Start the one busy action `what`; false when another job runs (a read asked for then runs when that job ends: see `endJob`). */
-export function beginJob(what: string): boolean {
+/** Start the one busy action `what`; false when another job runs (a read asked for then runs when that job ends: see `endJob`).
+ * A write is a job of the shared store (group 'target'); a background read is not. */
+export function beginJob(what: string, cancel?: () => void): boolean {
   if (busy()) {
     if (what === 'Reading') readAgain = true;
     return false;
   }
-  setBusy(what);
+  if (what === 'Reading') setReading(true);
+  else {
+    const added = addJob(jobs(), { group: 'target', label: what, cancel }, Date.now());
+    if (!added) return false;
+    setJobs(added.state);
+    jobId = added.id;
+  }
   stopAsked = false;
   return true;
 }
+
+/** Report the progress of the running transfer job to the shared store (no-op with none). */
+export const jobProgress = (fraction?: number, detail?: string): void => {
+  const id = jobId;
+  if (id !== undefined) setJobs((s) => updateJob(s, id, { progress: fraction, detail }));
+};
 
 /** The user asked to stop the running job (its Cancel button): a job that loops over files checks this before the next one. */
 export const askStop = (): void => {
@@ -101,7 +118,12 @@ export const stopWasAsked = (): boolean => stopAsked;
 
 /** End the busy action; true when a read was asked for during it. */
 export function endJob(): boolean {
-  setBusy('');
+  setReading(false);
+  if (jobId !== undefined) {
+    const id = jobId;
+    setJobs((s) => removeJob(s, id));
+    jobId = undefined;
+  }
   const again = readAgain;
   readAgain = false;
   return again;

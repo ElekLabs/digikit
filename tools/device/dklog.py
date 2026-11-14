@@ -51,8 +51,6 @@ from tools.device.dklog_kinds import (
 from tools.devtools.addrnames import (
     AddrNames,
     AddrNamesError,
-    plan_symbol,
-    read_load_table,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -856,13 +854,9 @@ def names_for_crash(
 ) -> AddrNames | None:
     """The names of a running device: the image's address map, the modules' maps and the load table read from the runtime's module table."""
     try:
-        plan = json.loads(image.with_suffix(".plan.json").read_text())
-        table = plan_symbol(plan, "DKRT_STATE") + 40
-        raw = peek_range(up, table, 8 * 52)
-        loads = read_load_table(
-            lambda a: int.from_bytes(raw[a - table : a - table + 4], "big"), table - 40
+        return AddrNames.for_image(
+            image, modules, peek=lambda a, n: peek_range(up, a, n)
         )
-        return AddrNames.for_image(image, modules, loads)
     except (AddrNamesError, OSError, KeyError, D.UploadError, TimeoutError) as e:
         print(f"no names: {e}", file=sys.stderr)
         return None

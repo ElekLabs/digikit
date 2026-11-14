@@ -1,6 +1,7 @@
 // The state of the Firmware page for the life of the window, and the actions on it (the page is FirmwarePage.tsx; the rules are in
 // firmware-core.ts, the run in firmware-flow.ts). Signals, so the desktop app keeps a half-finished flash screen while another page is shown.
 import { createSignal } from 'solid-js';
+import { JobBusyError, runJob } from '../jobs/jobs';
 import { asked, noteConnection } from '../transfer/connection-state';
 import { transferEnv } from '../transfer/env';
 import { target } from '../transfer/target';
@@ -12,6 +13,7 @@ import {
   imageFileName,
   isDeviceId,
   modelOfPort,
+  progressView,
   refusalText,
   running,
   type DeviceFacts,
@@ -150,22 +152,42 @@ export async function startFlash(): Promise<void> {
   if (prep.kind !== 'ready' || t.kind !== 'midi' || running(run())) return;
   const p = prep.p;
   const log = firmwareEnv().log;
-  controller = new AbortController();
   const what = p.restore ? 'restore' : 'flash';
   const rpc = route() === 'rpc';
-  log({
-    level: 'info',
-    text: `${what} ${p.device} OS ${p.os} to ${t.port}: ${rpc ? `${p.image.length} bytes (MidiRpc)` : `${p.ends.length} messages (OS UPGRADE menu)`}`,
-  });
-  setNotice('');
-  resetPostRun();
   let final: FlashState = IDLE;
   try {
-    final = rpc
-      ? await runRpcFlash(rpcPortOps(), p, controller.signal, setRun)
-      : await runFlash(portOps(), p, controller.signal, setRun);
+    final = await runJob('Flashing firmware', { group: 'target', cancel: cancelFlash }, async (job) => {
+      controller = new AbortController();
+      log({
+        level: 'info',
+        text: `${what} ${p.device} OS ${p.os} to ${t.port}: ${rpc ? `${p.image.length} bytes (MidiRpc)` : `${p.ends.length} messages (OS UPGRADE menu)`}`,
+      });
+      setNotice('');
+      resetPostRun();
+      const report = (s: FlashState): void => {
+        setRun(s);
+        if (s.phase === 'sending') {
+          const v = progressView(s);
+          job.progress(v.fraction, v.text);
+        } else job.progress(undefined, s.phase === 'rebooting' ? 'restarting' : undefined);
+      };
+      try {
+        return rpc
+          ? await runRpcFlash(rpcPortOps(), p, controller.signal, report)
+          : await runFlash(portOps(), p, controller.signal, report);
+      } catch (e) {
+        const failed: FlashState = {
+          phase: 'failed',
+          code: 'send',
+          message: e instanceof Error ? e.message : String(e),
+        };
+        setRun(failed);
+        return failed;
+      }
+    });
   } catch (e) {
-    final = { phase: 'failed', code: 'send', message: e instanceof Error ? e.message : String(e) };
+    if (!(e instanceof JobBusyError)) throw e;
+    final = { phase: 'failed', code: 'send', message: 'a transfer is running; wait for it' };
     setRun(final);
   }
   setAck(false);

@@ -11,6 +11,7 @@ import { moduleArtifact } from './install.ts';
 import { liveProtocol } from './protocol.ts';
 import { linkedRuntimeNeed, runtimeVersion } from './upload-kit.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
+import { optInPatchkit } from './patchkit.ts';
 
 const root = repoRoot();
 
@@ -65,7 +66,7 @@ for (const profile of profiles) {
         binary: profile.binary,
         patched: profile.patched,
         plan: profile.plan,
-        patchkit: process.env.DIGI_PATCHKIT_BIN,
+        patchkit: optInPatchkit(),
         ...(profile.device === 'dt2' ? { card: profile.card } : {}),
       })) {
         if (!value || !path.isAbsolute(value) || !fs.existsSync(value))
@@ -103,7 +104,7 @@ for (const profile of profiles) {
         // This proof applies no patch and builds nothing. Both SYX/plan and DKM
         // must already exist; also reject stale local runtime/dependency objects.
         const checked = await exec(
-          process.env.DIGI_PATCHKIT_BIN!,
+          optInPatchkit()!,
           [
             '--root',
             root,

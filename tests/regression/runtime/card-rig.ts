@@ -31,6 +31,7 @@ import { expectRuntimeUi } from './ready.ts';
 import { RING_SYMBOLS } from './runtime-menu.ts';
 import {
   planSymbol,
+  prepareRuntimePlanListedOffline,
   prepareRuntimePlanOffline,
   validateRuntimePlan,
   type PreparedRuntimePlan,
@@ -47,6 +48,7 @@ import {
   runtimeWatchEnv,
   withoutOwn,
 } from './write-safety.ts';
+import { rootsOf } from './image-roots.ts';
 
 /**
  * The one card fixture of the runtime device tests (settings, round trip, equiv, debug, card, crash, safe mode and upload): an owned daemon
@@ -56,7 +58,7 @@ import {
  */
 
 /** The runtime image of the Python scenarios (`B.RT`). */
-export const RT = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
+export const RT = rootsOf('rt');
 /** Runtime variables the card scenarios read or poke (`DKRT_BOOT` is always planned). */
 export const CARD_SYMBOLS = ['DKRT_CARD', 'DKRT_CRASH', 'DKRT_MAILBOX', 'DKRT_STATE', ...RING_SYMBOLS];
 /** The test knob `DKRT_STORE_CAP` keeps every sector from here to header B out of the allocations (a DN2 store of 20 GiB then fits INFO's 32 bits). */
@@ -278,13 +280,10 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
           path.join(os.tmpdir(), `digi-${scope.split(':')[0]!.replace(/\W+/g, '-')}-${device}-`),
         );
         console.info('card scenario artifacts:', artifacts);
-        prepared = await prepareRuntimePlanOffline(
-          { device, firmware: FIRMWARE[device] },
-          artifacts,
-          artifacts,
-          symbols,
-          o.roots ? { modules: o.roots } : undefined,
-        );
+        const target = { device, firmware: FIRMWARE[device] };
+        prepared = o.roots
+          ? await prepareRuntimePlanListedOffline(target, artifacts, artifacts, symbols, { modules: o.roots })
+          : await prepareRuntimePlanOffline(target, artifacts, artifacts, symbols);
         watchOutput = path.join(artifacts, 'writewatch.jsonl');
         // a plain image has no runtime areas to watch
         const env = o.plain ? {} : runtimeWatchEnv(prepared.planFile, watchOutput);

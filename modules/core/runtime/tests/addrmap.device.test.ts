@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect } from 'vitest';
-import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { resolveAddresses, readLoadTable } from '@digi/regression/runtime/addrmap.ts';
 import { DEBUG_MODULE, installModules, moduleArtifact } from '@digi/regression/runtime/install.ts';
@@ -20,7 +19,7 @@ runtimeTests('the address map names a runtime function and a loaded module funct
   const { session, dk } = runtime;
   await expectRuntimeReady(session);
   const device = session.options.device;
-  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'addrmap'), ['DKRT_STATE']);
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'addrmap'), ['DKRT_STATE', 'DKRT_DSP', 'dyndsp_info']);
   const shipMap = path.join(session.runDir, `runtime-${device}.addrmap.json`);
   const artifact = moduleArtifact(device, ID);
   const moduleMap = artifact.replace(/\.dkm$/, '.addrmap.json');
@@ -31,9 +30,13 @@ runtimeTests('the address map names a runtime function and a loaded module funct
     { id: DEBUG_MODULE, artifact: moduleArtifact(device, DEBUG_MODULE) },
   ]);
 
-  const loads = await readLoadTable(session, planSymbol(plan, 'DKRT_STATE'), deviceProfile(device).limits.modules!);
+  const loads = await readLoadTable(session, plan, shipMap);
   expect(loads.map((l) => l.id)).toEqual([ID, DEBUG_MODULE]);
   const load = loads[0]!;
+  expect(
+    loads.map((l) => l.dspBase),
+    'dyn-demo and the debug module have no DSP part',
+  ).toEqual([undefined, undefined]);
   expect(load.fini, 'the module has a fini function').toBeGreaterThan(load.base);
 
   const runtimeFn = planSymbol(plan, 'dkrt_module');

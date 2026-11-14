@@ -44,6 +44,7 @@ export interface FirmwareEnv {
       device: string,
       ids: string[],
       progress: (p: DefaultProgress) => void,
+      opts?: { signal?: AbortSignal; stillBooting?: () => boolean },
     ): Promise<string[]>;
   };
 }

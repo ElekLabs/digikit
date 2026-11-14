@@ -28,6 +28,8 @@ pub struct DeviceInfo {
     /// `[patch] build_floor`: the four ASCII characters the OS validator compares the container's build word with (DT2 "0060");
     /// `None` when the OS has no floor (DN2).
     pub build_floor: Option<[u8; 4]>,
+    /// `[limits] modules`: module slots of the runtime's tables.
+    pub modules: Option<u64>,
     /// `[limits] fx_slots`: effects the device's chain takes (at most the contract's `DK_FX_MAX`).
     pub fx_slots: Option<u64>,
     /// `[patch_sets]`: named module sets as roots (the modules they require are added), e.g. `emulator` and `device`.
@@ -70,6 +72,7 @@ struct File {
 }
 #[derive(Deserialize)]
 struct LimitsDoc {
+    modules: Option<u64>,
     fx_slots: Option<u64>,
 }
 #[derive(Deserialize)]
@@ -131,6 +134,7 @@ fn parse(files: &[(&str, &str)]) -> Result<Vec<DeviceInfo>> {
                     })?)
                 }
             },
+            modules: f.limits.as_ref().and_then(|l| l.modules),
             fx_slots: f.limits.and_then(|l| l.fx_slots),
             patch_sets: f.patch_sets,
         });

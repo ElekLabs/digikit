@@ -21,9 +21,15 @@ from tools.control.digi_client import Emu, EmuError, discover
 from tools.devtools.addrnames import (
     AddrNames,
     AddrNamesError,
-    plan_symbol,
-    read_load_table,
 )
+
+
+def peek_bytes(emu: Emu, addr: int, length: int) -> bytes:
+    """Guest memory as bytes (the emulator peeks longwords)."""
+    raw = b"".join(
+        (emu.peek32(addr + i) or 0).to_bytes(4, "big") for i in range(0, length, 4)
+    )
+    return raw[:length]
 
 
 def by_function(samples: list[list[Any]], names: AddrNames) -> list[tuple[str, int]]:
@@ -75,12 +81,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with Emu.connect(discover(args.run_dir)) as emu:
             report = emu.call("cf.profile")
-            state = plan_symbol(
-                json.loads(args.image.with_suffix(".plan.json").read_text()),
-                "DKRT_STATE",
-            )
             names = AddrNames.for_image(
-                args.image, args.module, read_load_table(emu.peek32, state)
+                args.image, args.module, peek=lambda a, n: peek_bytes(emu, a, n)
             )
             print(format_report(report, names, args.top))
     except (AddrNamesError, EmuError, OSError) as e:

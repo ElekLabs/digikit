@@ -7,6 +7,11 @@ import { join, normalize } from 'node:path';
 import { DependencyType } from '@nx/devkit';
 import { parse } from 'smol-toml';
 
+// The packs whose `needs` verdict tests read from dist/bytes/pack-verdicts.json (one list: tests/regression/runtime/needs-packs.json).
+const NEEDS_PACKS = JSON.parse(
+  readFileSync(new URL('../../tests/regression/runtime/needs-packs.json', import.meta.url), 'utf8'),
+).modules;
+
 const read = (root, toml) => parse(readFileSync(join(root, toml), 'utf8'));
 const KINDS = ['dependencies', 'dev-dependencies', 'build-dependencies'];
 
@@ -52,6 +57,36 @@ const CRATE_TARGETS = {
       outputs: ['{workspaceRoot}/dist/bytes/core-objects.sha256'],
       options: { command: 'node tools/nx/device-bytes.mjs', cwd: '.' },
     },
+    'pack-verdicts': {
+      executor: 'nx:run-commands',
+      cache: false, // under a second: the file it writes is part of the key of the device tasks that read it
+      parallelism: true,
+      description:
+        'Writes dist/bytes/pack-verdicts.json: the `patchkit needs` verdict of each pack in tests/regression/runtime/needs-packs.json.',
+      inputs: [
+        '{workspaceRoot}/tools/nx/pack-verdicts.mjs',
+        '{workspaceRoot}/tests/regression/runtime/needs-packs.json',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
+      dependsOn: ['cli', ...NEEDS_PACKS.map((id) => `${id}:pack`)],
+      outputs: ['{workspaceRoot}/dist/bytes/pack-verdicts.json'],
+      options: { command: 'node tools/nx/pack-verdicts.mjs', cwd: '.' },
+    },
+    'device-images': {
+      executor: 'nx:run-commands',
+      cache: false, // a few seconds: the file it writes is part of the merge key of the device tasks
+      parallelism: true,
+      description:
+        'Writes dist/bytes/images.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set.',
+      inputs: [
+        '{workspaceRoot}/tools/nx/device-images.mjs',
+        '{workspaceRoot}/tests/regression/runtime/image-roots.json',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
+      dependsOn: ['cli', { target: 'build-objects', projects: ['tag:acceptance-image'] }],
+      outputs: ['{workspaceRoot}/dist/bytes/images.sha256', '{workspaceRoot}/dist/bytes/images'],
+      options: { command: 'node tools/nx/device-images.mjs', cwd: '.' },
+    },
   },
   dksample: {
     wasm: {
@@ -71,7 +106,7 @@ const GATE = {
       executor: 'nx:run-commands',
       cache: false,
       parallelism: true, // no gate task is exclusive; an exclusive task scheduled mid-run makes Nx wait for every running task
-      outputs: ['{workspaceRoot}/dist/daemons.json'],
+      outputs: ['{workspaceRoot}/dist/daemons.json', '{workspaceRoot}/dist/bytes/daemon-test.key'],
       inputs: [
         // The sources the daemon is built from: SOURCE_GLOBS of tools/devtools/emud_key.py. The store keys the binary by
         // content; these inputs make a source edit select this task, and so every task that consumes dist/daemons.json.

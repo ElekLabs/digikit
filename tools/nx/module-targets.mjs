@@ -7,6 +7,12 @@ export const PK = 'dist/patchkit/patchkit --root .';
 export const IMAGE_BUILD = { target: 'build-objects', projects: ['tag:acceptance-image'] };
 // Writes the hash of every committed core object without its source hash (tools/nx/device-bytes.mjs).
 export const DEVICE_BYTES = 'patchkit:device-bytes';
+// Writes the hash of the image, plan and address map that `patchkit apply` makes for each acceptance firmware and patch set
+// (tools/nx/device-images.mjs).
+export const DEVICE_IMAGES = 'patchkit:device-images';
+// Writes the `needs` verdict of the packs in tests/regression/runtime/needs-packs.json (tools/nx/pack-verdicts.mjs).
+export const PACK_VERDICTS = 'patchkit:pack-verdicts';
+const PACK_NEEDS = '{workspaceRoot}/tests/regression/runtime/pack-needs.ts';
 // Shared compiler/contract surfaces. Optional implementation sources are named by their consumers.
 export const SHARED_SDK_INPUTS = [
   '{workspaceRoot}/sdk/sdk.toml',
@@ -100,15 +106,17 @@ export const scopedManifestInputs = (inputs, manifests) => [
 // Files that tests read by path and do not import. The import walk (test-imports.mjs) cannot see them.
 // Extend this list when a test reads a new file; a file only one record's tests read goes in that record's `sources`.
 // SHARED_READS are files that every device test may read and the built bytes do not carry.
+const workspaceFile = (file) => `{workspaceRoot}/${file}`;
 const SHARED_READS = [
   // tests/regression/runtime/device-data.ts and card-cache.ts read the profiles and the firmware ports
-  '{workspaceRoot}/devices/**/*.toml',
-  // the manifests of the core modules: `patchkit apply` reads them with the objects
-  '{workspaceRoot}/modules/core/**/module.toml',
-  // upload-kit.ts reads the runtime version
-  '{workspaceRoot}/sdk/sdk.toml',
+  { file: 'devices/**/*.toml' },
+  // the manifests of the core modules: `patchkit apply` reads them with the objects (the image, plan and address map in
+  // dist/bytes/images.sha256 carry the effect); only the memaudit helper reads them itself
+  { file: 'modules/core/**/module.toml', readers: ['tests/regression/runtime/memaudit-kit.ts'] },
+  // upload-kit.ts reads the runtime version and the `since` of the imports
+  { file: 'sdk/sdk.toml', readers: ['tests/regression/runtime/upload-kit.ts'] },
   // synth.ts reads the machine types
-  '{workspaceRoot}/modules/core/adapters/machines/types.toml',
+  { file: 'modules/core/adapters/machines/types.toml', readers: ['tests/regression/runtime/synth.ts'] },
 ];
 const TEST_READS = [
   // fixture files
@@ -118,9 +126,19 @@ const TEST_READS = [
   '{workspaceRoot}/tests/regression/vitest.config.ts',
   '{workspaceRoot}/tests/regression/tsconfig.json',
   '{workspaceRoot}/tests/regression/package.json',
+  // read at run time by runtime-plan.ts and pack-needs.ts
+  '{workspaceRoot}/tests/regression/runtime/image-roots.json',
+  '{workspaceRoot}/tests/regression/runtime/needs-packs.json',
   '{workspaceRoot}/tools/emulator/ready_inputs.json',
 ];
-export const READ_BY_TESTS = [...SHARED_READS, ...TEST_READS];
+// Full keys list every shared file. A merge key lists a file only when the test (its import closure) reads it, or runs patchkit
+// live: the other effects of the file are in the bytes the key hashes.
+const sharedReads = (imports = null, patchkitLive = false) =>
+  SHARED_READS.filter(
+    ({ readers }) =>
+      !imports || !readers || patchkitLive || readers.some((reader) => imports.includes(workspaceFile(reader))),
+  ).map(({ file }) => workspaceFile(file));
+export const READ_BY_TESTS = [...sharedReads(), ...TEST_READS];
 
 // Core-change policy. A change runs all device tests of the projects it edits. A device test that a change reaches
 // only through shared inputs (other core modules, SDK, device profiles, patchkit, the daemon) runs only if it is
@@ -163,15 +181,34 @@ const DEVICE_COMMON = [
 ];
 // Full set: what the run consumes is the built bytes (the image hashes, the packs, the tool binaries), not the sources
 // they are made from. A source edit that leaves these bytes alone changes no key.
-export const BUILT_OUTPUTS = [
+const outputFiles = (globs) => globs.map((glob) => ({ dependentTasksOutputFiles: glob, transitive: true }));
+const SHARED_BUILT = [
   'dist/bytes/core-objects.sha256',
   'dist/modules/*/*.dkm',
-  'dist/patchkit/patchkit',
-  'dist/daemons.json',
   'dist/plusdrive/plusdrive',
   'apps/web/public/dksample.wasm',
-].map((glob) => ({ dependentTasksOutputFiles: glob, transitive: true }));
+];
+// The binaries that move with every edit of the patchkit sources, whatever bytes the edit packs: the patchkit CLI, and the daemon
+// (dist/daemons.json holds the path of the store entry, which is keyed on the patchkit sources too).
+const PATCHKIT_BINARIES = ['dist/patchkit/patchkit', 'dist/daemons.json'];
+// What a test result follows when it does not run patchkit itself: the patched images, plans and address maps, and the daemon key
+// without the sources that only patchkit reads (`emud_key.test_key_of`, written by `verify_build daemons`).
+const MERGE_BYTES = ['dist/bytes/images.sha256', 'dist/bytes/daemon-test.key'];
+export const BUILT_OUTPUTS = outputFiles([...SHARED_BUILT, ...PATCHKIT_BINARIES]);
+// Merge keys: the same without the binaries; a test that runs patchkit live keeps `dist/patchkit/patchkit` (PATCHKIT_LIVE).
+export const MERGE_OUTPUTS = outputFiles([...SHARED_BUILT, ...MERGE_BYTES]);
+// A test whose import closure holds one of these runs patchkit (every module that executes it imports patchkit.ts, or is listed):
+// its key keeps the binary. Only runtime-plan.ts does not count: it runs `apply --set`, and its image, plan and address map are
+// hashed in dist/bytes/images.sha256. (An explicit module list goes through runtime-plan-modules.ts, which imports patchkit.ts.)
+export const PATCHKIT_LIVE = ['tests/regression/runtime/patchkit.ts'].map((file) => `{workspaceRoot}/${file}`);
 export const DEVICE_INPUTS = [...READ_BY_TESTS, ...BUILT_OUTPUTS, ...DEVICE_COMMON];
+const mergeDeviceInputs = (imports, patchkitLive) => [
+  ...sharedReads(imports, patchkitLive),
+  ...TEST_READS,
+  ...MERGE_OUTPUTS,
+  ...(patchkitLive ? outputFiles(['dist/patchkit/patchkit']) : []),
+  ...DEVICE_COMMON,
+];
 // Tests that run `patchkit build` or `pack` at run time, or patch with explicit fixture modules, compile sources:
 // they keep the SDK and the toolchain as inputs (record flag `compiles`, `patchModules`, or any `pythonTools`: the Python devtools may build or pack).
 export const COMPILE_INPUTS = [...SHARED_SDK_INPUTS, '{workspaceRoot}/tools/patchkit/toolchain/**/*'];
@@ -186,7 +223,7 @@ export const builtSourceExclusions = (root, base = '.') =>
 // `opts`: `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
 // `uploadable`); `subjects` are the projects a test-only project tests.
 export const deviceTarget = (root, tests, recs, imageInput, importInputs, uploadable = false, opts = {}) => {
-  const dependsOn = ['patchkit:cli', 'digi-control:daemons', IMAGE_BUILD, DEVICE_BYTES];
+  const dependsOn = ['patchkit:cli', 'digi-control:daemons', IMAGE_BUILD, DEVICE_BYTES, DEVICE_IMAGES, PACK_VERDICTS];
   if (uploadable) dependsOn.push('pack');
   for (const rec of recs) {
     for (const id of rec.modules ?? []) dependsOn.push(`${id}:pack`);
@@ -194,10 +231,19 @@ export const deviceTarget = (root, tests, recs, imageInput, importInputs, upload
     if (rec.plusdrive) dependsOn.push('plusdrive-format:cli');
     if (rec.dksampleWasm) dependsOn.push('dksample:wasm');
   }
+  // The test files and the setup file with everything they import.
+  const imports = importInputs([...tests.map((test) => join(root, test)), VITEST_SETUP]);
+  // A test that runs patchkit for its own sake (or patches with explicit fixture modules) depends on the patchkit code, not only on
+  // the image bytes: its key keeps the binary.
+  const patchkitCompiles = recs.some((rec) => rec.patchModules?.length);
+  const patchkitLive = imports.some((file) => PATCHKIT_LIVE.includes(file)) || patchkitCompiles;
   return {
     executor: 'nx:run-commands',
     cache: true,
     inputs: [
+      // a test that reads the precomputed `needs` of committed packs keys on that file's content
+      ...(imports.includes(PACK_NEEDS) ? outputFiles(['dist/bytes/pack-verdicts.json']) : []),
+      ...(opts.narrow && patchkitLive ? outputFiles(['dist/patchkit/patchkit']) : []),
       ...(opts.narrow
         ? [
             ...DEVICE_COMMON,
@@ -230,15 +276,16 @@ export const deviceTarget = (root, tests, recs, imageInput, importInputs, upload
               : []),
           ]
         : [
-            ...DEVICE_INPUTS,
+            // merge key: the image bytes and the daemon key instead of the binaries
+            ...(opts.merge ? mergeDeviceInputs(imports, patchkitLive) : DEVICE_INPUTS),
             // an explicit fixture image is built from the sources of its modules at run time
             ...(imageInput ? [imageInput] : []),
           ]),
       // the module itself (its sources, without tests/ and docs). Full set: the sources that become objects reach the
       // run through the pack outputs and the image hashes.
       ...(opts.narrow ? ['production'] : ['production', ...builtSourceExclusions(root, opts.base)]),
-      ...importInputs([...tests.map((test) => join(root, test)), VITEST_SETUP]),
-      ...(!opts.narrow && recs.some((rec) => rec.compiles || rec.patchModules?.length || rec.pythonTools)
+      ...imports,
+      ...(!opts.narrow && (patchkitCompiles || recs.some((rec) => rec.compiles || rec.pythonTools))
         ? COMPILE_INPUTS
         : []),
       ...new Set(recs.flatMap((rec) => (rec.sources ?? []).map((s) => `{workspaceRoot}/${s}`))),
@@ -253,6 +300,8 @@ export const deviceTarget = (root, tests, recs, imageInput, importInputs, upload
     options: {
       command: `${EMU_SLOT} pnpm --filter @digi/regression test:runtime ${tests.map((t) => `../../${root}/${t}`).join(' ')}`,
       cwd: '.',
+      // the key holds the patchkit binary (a full key, or a live closure): runtime/patchkit-exec.ts runs patchkit only then
+      env: { DIGI_PATCHKIT_LIVE: (!opts.narrow && !opts.merge) || patchkitLive ? '1' : '' },
     },
   };
 };
@@ -288,15 +337,13 @@ const fileTargets = (name, root, tests, recs, imageInput, importInputs, uploadab
   const allName = `${name}-all`;
   const merge = opts.mergeTests ?? [];
   const isMerge = (test) => !opts.twin || merge.includes(test);
-  const build = (list, narrow, recList = recs) =>
-    deviceTarget(root, list, recList, imageInput, importInputs, uploadable, { ...opts, narrow });
+  // `merge`: the key of the merge target (the target everything selects); the `-all` twins keep the full key.
+  const build = (list, narrow, recList = recs, merge = false) =>
+    deviceTarget(root, list, recList, imageInput, importInputs, uploadable, { ...opts, narrow, merge });
   if (tests.length === 1) {
     const [test] = tests;
-    const targets = { [name]: build(tests, !isMerge(test)) };
-    if (opts.twin)
-      targets[allName] = isMerge(test)
-        ? { executor: 'nx:noop', inputs: targets[name].inputs, dependsOn: [name] }
-        : build(tests, false);
+    const targets = { [name]: build(tests, !isMerge(test), recs, Boolean(opts.twin)) };
+    if (opts.twin) targets[allName] = build(tests, false); // the full key for every test, a merge test included
     return targets;
   }
   const targets = {};
@@ -308,13 +355,13 @@ const fileTargets = (name, root, tests, recs, imageInput, importInputs, uploadab
     const own = recs.filter((rec) => rec.files?.includes(test));
     const narrow = !isMerge(test);
     // A sibling test file is not an input. This file's own closure comes from importInputs.
-    const make = (isNarrow) => {
-      const target = build([test], isNarrow, own.length ? own : recs);
+    const make = (isNarrow, merge = false) => {
+      const target = build([test], isNarrow, own.length ? own : recs, merge);
       target.inputs.push('!{projectRoot}/**/*.device.test.ts');
       return target;
     };
-    targets[child] = make(narrow);
-    if (opts.twin) all[narrow ? `${allName}--${suffix}` : child] = narrow ? make(false) : child;
+    targets[child] = make(narrow, Boolean(opts.twin));
+    if (opts.twin) all[`${allName}--${suffix}`] = make(false);
   }
   // Nx selects a target by its inputs, so the parents keep the inputs of the whole project.
   const { inputs } = build(tests, false);

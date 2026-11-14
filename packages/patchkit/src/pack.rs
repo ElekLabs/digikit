@@ -22,23 +22,18 @@ pub struct Packed {
     pub dkm: crate::dkm::Dkm,
     name: String,
     cf: Option<crate::dko::Dko>,
+    dsp: Option<crate::dko::Dko>,
 }
 
 impl Packed {
-    /// The address map of the code the loader places (empty for a data-only module).
+    /// The address map of the code the loader places: ColdFire symbols, and for a module with a DSP object its `sharc` symbols (empty for a data-only module).
     pub fn addrmap(&self) -> Result<dkaddrmap::AddrMap> {
-        Ok(match &self.cf {
-            Some(o) => crate::addrmap::module_map(o, &self.name, &self.dkm.sha256)?,
-            None => dkaddrmap::AddrMap::new(
-                "module",
-                dkaddrmap::Key {
-                    module: Some(self.name.clone()),
-                    dkm_sha256: Some(self.dkm.sha256.clone()),
-                    ..Default::default()
-                },
-                vec![],
-            ),
-        })
+        crate::addrmap::module_map(
+            self.cf.as_ref(),
+            self.dsp.as_ref(),
+            &self.name,
+            &self.dkm.sha256,
+        )
     }
 }
 
@@ -81,6 +76,7 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
     };
     // a run-time module declares in `init`: `[[machine]]`/`[[fx]]` in module.toml; the table at 0x90 is the keys table
     let mut dsp: Vec<u8> = vec![];
+    let mut dsp_obj = None;
     let reg = if dynamic {
         let dev = o.device.clone().ok_or_else(|| {
             Error(format!(
@@ -110,6 +106,7 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
             )));
         }
         let s = crate::major3::sections(m, &opts.name, &dev, sharc.first().map(|(o, _)| *o))?;
+        dsp_obj = sharc.first().map(|(o, _)| (*o).clone());
         opts.stereo = s.stereo;
         opts.gate = s.gate;
         dsp = s.dsp;
@@ -124,5 +121,6 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
         dkm,
         name: opts.name,
         cf: cf.first().map(|c| c.0.clone()),
+        dsp: dsp_obj,
     })
 }

@@ -12,10 +12,10 @@ import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/runtime-menu.ts';
 import {
   planSymbol,
-  prepareRuntimePlanOffline,
   validateRuntimePlan,
   type RuntimePlan,
 } from '@digi/regression/runtime/runtime-plan.ts';
+import { prepareRuntimePlanModulesOffline } from '@digi/regression/runtime/runtime-plan-modules.ts';
 
 for (const device of DEVICES) {
   describe(`${device} SDK UI without DSP`, () => {
@@ -26,7 +26,7 @@ for (const device of DEVICES) {
       {
         prepareBaseline: async (session) => {
           artifacts = liveArtifacts(session, 'sdk-ui-zero');
-          const prepared = await prepareRuntimePlanOffline(
+          const prepared = await prepareRuntimePlanModulesOffline(
             session.options,
             session.runDir,
             artifacts,

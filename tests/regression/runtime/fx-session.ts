@@ -25,7 +25,7 @@ import { pollEmulated } from './waits.ts';
 import { advance, analysisJson, bounded, evidence, options, pickSine, word } from './fx-live.ts';
 import {
   planSymbol,
-  prepareRuntimePlanOffline,
+  prepareRuntimePlanListedOffline,
   validateRuntimePlan,
   type PreparedRuntimePlan,
   type RuntimePlan,
@@ -258,7 +258,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
       env: async () => {
         artifacts = fs.mkdtempSync(path.join(os.tmpdir(), `digi-fx-${name}-${device}-`));
         console.info('FX route safety artifacts:', artifacts);
-        prepared = await prepareRuntimePlanOffline(
+        prepared = await prepareRuntimePlanListedOffline(
           { device, firmware: FIRMWARE[device] },
           artifacts,
           artifacts,

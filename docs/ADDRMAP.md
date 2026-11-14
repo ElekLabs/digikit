@@ -8,14 +8,14 @@ A lookup uses the most specific layer that holds the address and falls back to t
 
 | Layer | `layer` | Holds | Written by | Ships |
 | --- | --- | --- | --- | --- |
-| 1 Our code | `our` | The ColdFire code of the runtime, core adapters and apps in a patched image; loaded `.dkm` modules, rebased to their load address | `patchkit apply --addrmap`, `patchkit pack --addrmap` | yes |
+| 1 Our code | `our` | The ColdFire code of the runtime, core adapters and apps in a patched image; loaded `.dkm` modules, rebased to their load address; the DSP code of loaded modules, rebased to the start of their DSP image | `patchkit apply --addrmap`, `patchkit pack --addrmap` | yes |
 | 2 Anchors | `anchor` | Code anchors of `devices/ports/*.toml` that are at most 4096 bytes long. Region anchors (`cf.main`) are left out: they would hide every firmware name | `patchkit apply --addrmap` | yes |
 | 3 Firmware names | `fw` | Functions of the firmware databases (cfdb: ColdFire; sharcdb: SHARC) | `tools/coldfire/addrmap_export.py` | no, developer machines only |
 
 Names of Rust symbols are demangled without the hash (`dkrt::card::gate`). A return address is looked up at the address minus 2: a call to a
 function that does not return is often the last instruction of its caller.
 
-SHARC: only layer 3 (stock firmware, software PC). Our own DSP code and module DSP names wait for plan item 3 (sharcdb tables for module DSP).
+SHARC: layer 3 (stock firmware, software PC) and, in layer 1, the DSP code of loaded modules (symbols of the module's DSP object). The patched image has no DSP code of its own in the map.
 
 ## Files
 
@@ -32,8 +32,9 @@ JSON, one object. `kind` is `ship`, `module` or `dev`.
 - `cpu`: `cf` (byte address) or `sharc` (software PC, in words).
 - `size`: bytes (words) from `addr`; 0 holds only `addr`.
 - `module`: set on the entries of a module map. `addr` is then the offset from the module's load address; the lookup adds the base from the load
-  table. A module that is not in the load table has no names.
-- `key` of a ship map: the stock image (`image_sha256`), the patched image (`output_sha256`) and the modules the patch placed. A module map has
+  table. A module that is not in the load table has no names. For a `sharc` entry `addr` is the offset in words from the start of the module's DSP
+  image and the lookup adds the module's `dsp_base` (below); a module without `dsp_base` has no DSP names.
+- `key` of a ship map: the stock image (`image_sha256`), the patched image (`output_sha256`), the modules the patch placed and the `loader` header (below). A module map has
   `module` (the name the runtime reports), `source_sha256` (its object) and `dkm_sha256`. The dev map has the stock image hash from the port file.
   The lookup refuses maps that name different stock images.
 - Entries are sorted by (cpu, layer, module, addr, name): equal inputs give equal files.
@@ -52,23 +53,76 @@ A ship map and a module map hold no firmware bytes and no firmware-derived text 
 
 ## Load table
 
-`{"modules": [{"id": "test/dyn-demo", "base": 1196000000, "size": 512}]}`. In the emulator it is read from the runtime's module table
-`DKRT_STATE` (symbol of the patch plan; `State` in `modules/core/runtime/src/rs/src/lib.rs`: ten header words, then one record of 13 words per
-slot: used, name[32], version, base, size, fini). `tools.devtools.addrnames.read_load_table` and `tests/regression/runtime/addrmap.ts` read it.
-No firmware or runtime change.
+`{"modules": [{"id": "test/dyn-demo", "base": 1196000000, "size": 512, "fini": 1196000064, "dsp_base": 12062720}]}`. `dsp_base` is optional: the software PC
+where the module's DSP image starts. A module without a DSP part, or a table written without it, leaves it out. `fini` is optional too.
+
+Hosts do not decode the table. They read raw memory and `dkaddrmap::snapshot` (one Rust decoder, also built for wasm32) turns it into the table:
+
+- A ship map has `key.loader`: `{"modules": slots, "l2_byte_base": ..., "l2_sw_base": ..., "dsp": true}`. `patchkit apply --addrmap` writes it from the device
+  file (`[limits] modules`) and the L2 constants of `packages/patchkit/src/dsp.rs`; `dsp` says the image has the run-time DSP loader.
+- `patchkit addr --map SHIP --format reads` lists what to read: the plan symbols `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` with their byte counts.
+- `patchkit addr --map SHIP --snapshot SYMBOL=HEX ... [--format loads]` takes the bytes (hex, one flag per symbol) and decodes them; `--format loads` prints
+  the table, any other format names addresses with it.
+
+Layout: `DKRT_STATE` (`State` in `modules/core/runtime/src/rs/src/lib.rs`) has ten header words, then one record of 13 words per slot: used, name[32], version,
+base, size, fini. `DKRT_DSP` (`DspState` in `.../dsp.rs`) has 13 words, then `mod_off[slots]` and `mod_len[slots]`. The record index of `DKRT_STATE` is the index in
+`DKRT_DSP`. A module with `mod_len[i] != 0` starts at the L2 byte address `area + mod_off[i]` (`area` is word 3 of `dyndsp_info`); `dsp_base` is
+`l2_sw_base + (that address - l2_byte_base) / 2`. The slot count is read from the length of the `DKRT_STATE` bytes. No firmware or runtime change.
+
+Callers: `tools.devtools.addrnames.AddrNames.for_image(..., peek=)` (Python tools: `dklog`, `cfprof`) and `readLoadTable` in `tests/regression/runtime/addrmap.ts`
+only peek the symbols and pass the bytes on.
 
 ## Lookup
 
 Rust: crate `dkaddrmap` (`packages/dkaddrmap`: format, `Resolver`), the map writers and `patchkit addr` in `packages/patchkit/src/addrmap.rs`.
 
 ```sh
-patchkit addr --map X.addrmap.json --map M.addrmap.json --map out/addrmap/dt2-1.17.dev.json --load test/dyn-demo=47e10000 [--ret] 0x401be1be sharc:0xb80105
+patchkit addr --map X.addrmap.json --map M.addrmap.json --map out/addrmap/dt2-1.17.dev.json --load test/dyn-demo=47e10000 [--dsp-base test/dyn-demo=b81000] [--ret] 0x401be1be sharc:0xb80105
 patchkit addr ... --stdin          # one address per line
 patchkit addr ... --format text    # "0x401be1be name+0x4" per line
 ```
 
 JSON on stdout: `{"unloaded": [...], "results": [{"cpu", "addr", "name", "text", "layer", "sym_addr", "offset", "size", "module"}]}`. `name` is null
 when no layer holds the address. Python tools do not read maps: `tools/devtools/addrnames.py` (`AddrNames`) runs this command once for a batch.
+
+## Usage
+
+Build patchkit once: `pnpm nx:pilot run patchkit:cli` (writes `dist/patchkit/patchkit`). Commands run from the repository root; the outputs below are trimmed.
+
+Write the map of a module while packing it (the DSP symbols of a machine or effect are in it too):
+
+```sh
+mkdir -p out/try
+dist/patchkit/patchkit --root . pack digikit/pluck -o out/try/pluck.dkm --device dn2 --addrmap out/try/pluck.addrmap.json
+```
+
+Name a ColdFire address and a DSP PC of the module. The load table says where the module sits (`--load ID=BASE`, hex); `--dsp-base ID=PC` is the software PC where
+its DSP image starts:
+
+```sh
+dist/patchkit/patchkit addr --map out/try/pluck.addrmap.json --load digikit/pluck=47e10000 --dsp-base digikit/pluck=b81000 \
+  --format text 0x47e10000 sharc:0xb811e7 sharc:0xb811ea
+# 0x47e10000 init
+# 0xb811e7 _pk_render
+# 0xb811ea _pk_render+0x3
+```
+
+Without `--dsp-base` the DSP address has no name (`0xb811ea ?`). Without `--format text` the output is JSON (see Lookup).
+
+Read the load table of a running emulator or device. This needs the stock firmware in `firmware/`. `patchkit apply --addrmap` writes the ship map, which says what to
+read; patchkit decodes the bytes:
+
+```sh
+dist/patchkit/patchkit --root . apply --firmware firmware/Digitakt_II_OS1.17.syx --set emulator -o out/try/rt.syx --plan out/try/rt.plan.json --addrmap out/try/rt.addrmap.json
+dist/patchkit/patchkit addr --map out/try/rt.addrmap.json --format reads
+# [{"len":456,"symbol":"DKRT_STATE"},{"len":116,"symbol":"DKRT_DSP"},{"len":16,"symbol":"dyndsp_info"}]
+dist/patchkit/patchkit addr --map out/try/rt.addrmap.json --snapshot DKRT_STATE=$(printf '00%.0s' $(seq 456)) --format loads
+# {"modules":[]}
+```
+
+The second command is an all-zero module table: no module loaded. With real bytes, peek each symbol (its address is in `out/try/rt.plan.json`) for the given length and pass it as
+`--snapshot SYMBOL=HEX`; the table lists every module with `base` and `dsp_base`, and the same flags name addresses in the same call. `tools/devtools/cfprof.py` and
+`tools/device/dklog.py` do the peeking for the emulator and the device.
 
 ## Consumers
 

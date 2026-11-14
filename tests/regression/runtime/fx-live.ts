@@ -22,7 +22,8 @@ import { daemonBinary, FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { deviceProfile } from './device-data.ts';
-import { fxExpectations, type FxExpectations } from './dkm.ts';
+import type { FxExpectations } from './dkm-parse.ts';
+import { committedFxExpectations } from './pack-needs.ts';
 import { planSymbol, prepareRuntimePlanOffline, validateRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
 import { GAIN, SINE } from './fixtures.ts';
@@ -420,8 +421,7 @@ export async function inspect(
     expect(effect.needs, 'the effect module needs the runtime of sdk/sdk.toml').toBeGreaterThan(0);
     expect(effect.rows).toBe(0);
     const base = planSymbol(plan, '_dl_area') + effect.dsp_off;
-    const artifact = moduleArtifact(session.options.device, GAIN); // the module that the card was built from
-    oracle = await fxExpectations(artifact, base);
+    oracle = committedFxExpectations(session.options.device, GAIN, base); // the module that the card was built from
     record(artifacts, `${tag}-expected-gain`, oracle);
     expect(effect.dsp_len, 'MODULES range agrees with independently inferred needs').toBe(oracle.needs.DSP_AREA);
     expect(oracle.needs.FX_SLOTS).toBe(1);

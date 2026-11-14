@@ -145,7 +145,7 @@ setFirmwareEnv({
   ...firmwareEnv(),
   defaultModules: {
     entries: desktopDefaultModules.entries,
-    async install(where, _device, ids, progress) {
+    async install(where, _device, ids, progress, _opts) {
       const wait = (ms: number) => new Promise((r) => setTimeout(r, defmods === 'slow' ? ms * 4 : ms));
       progress({ text: 'Waiting for the runtime to answer', done: 0, total: ids.length + 2 });
       await wait(700);

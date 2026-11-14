@@ -131,7 +131,7 @@ mise run scenario:all         # every DN2 scenario; fails when a pinned PCM hash
 mise run scenario trig1-taps --wav
 ```
 
-Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md). The most used:
+Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md); what a change selects and why a device test is keyed as it is: [TESTING.md, "Check what a change selects"](TESTING.md#check-what-a-change-selects). The most used:
 
 ```sh
 mise run test:changed         # lint, format, types, host tests and Python checks of the affected projects; no builds or devices
@@ -163,6 +163,9 @@ gives `func`, `callers`, `callees`, `reach`, `last_def`, `refs`, `trace` and `sq
 Ghidra project, `tools/coldfire/cfdb.py build` makes a database from the dump, and `tools/coldfire/cf.py`
 queries it. Decoding uses only public manuals ([docs/sharc/SOURCES.md](sharc/SOURCES.md)).
 All tools are indexed in [docs/TOOLS.md](TOOLS.md).
+
+Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).
+Usage of the module DSP analysis (`cargo run -p dksharc --example analyse`): [packages/dksharc/README.md](../packages/dksharc/README.md#usage).
 
 ### ColdFire UI candidate review
 

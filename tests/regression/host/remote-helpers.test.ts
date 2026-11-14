@@ -16,7 +16,7 @@ const fake = vi.hoisted(() => ({
 vi.mock('node:timers/promises', () => ({
   setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 }));
-vi.mock('../runtime/patchkit.ts', () => ({ patchkit: fake.exec }));
+vi.mock('../runtime/patchkit-exec.ts', () => ({ patchkit: fake.exec, patchkitCovered: fake.exec }));
 vi.mock('node:fs', async (original) => ({
   default: {
     ...(await original<{ default: typeof import('node:fs') }>()).default,
@@ -34,6 +34,7 @@ vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
 import { expectRuntimeUi } from '../runtime/ready.ts';
 import { bindBootClock, pollEmulated, waitEmulated, waitForBootEmulated } from '../runtime/waits.ts';
 import { expectRemoteEnabled, installRemote, prepareRemote, remoteTap, withRemoteRelease } from '../runtime/remote.ts';
+import { prepareRuntimePlanModulesOffline } from '../runtime/runtime-plan-modules.ts';
 import {
   planSymbol,
   prepareRuntimePlanOffline,
@@ -122,9 +123,15 @@ function fakeDk() {
   return { calls, dk, runtime: { session: daemon, dk } as unknown as PatchedSession };
 }
 
+/** Every read returns `text`, except dist/bytes/images.sha256, which covers the DT2 1.17 emulator set (runtime-plan.ts assertCovered). */
+const readFiles = (text: string) =>
+  fake.read.mockImplementation((file: string) =>
+    String(file).endsWith('images.sha256') ? 'dt2-1.17 emulator image x plan y addrmap z\n' : text,
+  );
+
 beforeEach(() => {
   vi.resetAllMocks();
-  fake.read.mockReturnValue(JSON.stringify(plan));
+  readFiles(JSON.stringify(plan));
   fake.exists.mockReturnValue(true);
   fake.mkdtemp.mockReturnValue('/artifacts/remote-input/dt2/run-1');
   fake.exec.mockResolvedValue({ stdout: '' });
@@ -164,7 +171,7 @@ for (const stage of ['patch', 'install', 'plan'] as const) {
     const { dk, runtime } = fakeDk();
     if (stage === 'patch') fake.exec.mockRejectedValueOnce(new Error('patch failed'));
     if (stage === 'install') dk.put.mockRejectedValueOnce(new Error('install failed'));
-    if (stage === 'plan') fake.read.mockReturnValue(JSON.stringify({ ...plan, modules: ['wrong'] }));
+    if (stage === 'plan') readFiles(JSON.stringify({ ...plan, modules: ['wrong'] }));
     await expect(prepareRemote(runtime)).rejects.toThrow();
     expect(fake.exec).toHaveBeenCalledTimes(1);
     expect(dk.put).toHaveBeenCalledTimes(stage === 'install' ? 1 : 0);
@@ -274,18 +281,21 @@ test('pollEmulated fails after the emulated time, counts a lowered clock as a re
   ).rejects.toThrow('boom');
 });
 
-test('pollEmulated counts boot progress as movement only while a load or boot runs', async () => {
-  // The emulated clock stands still. A restart's cold boot moves boot.icount: no trip. A running ColdFire without a job or boot (a halted DSP) trips.
+test('pollEmulated counts boot progress as movement only while a job runs', async () => {
+  // The emulated clock stands still. A restart's cold boot moves job.icount: no trip. A running ColdFire without a job (a halted DSP) trips.
   let icount = 0;
   const booting = {
-    status: vi.fn(async () => ({ audio: { frames: 1000 }, boot: { icount: (icount += 1000) } })),
+    status: vi.fn(async () => ({
+      audio: { frames: 1000 },
+      job: { kind: 'boot', phase: 'booting', icount: (icount += 1000), progress: 0.5, wall_seconds: 1 },
+    })),
   } as unknown as Session;
   let reads = 0;
   const bootDone = async () => ++reads > 30;
   await expect(
     pollEmulated(booting, bootDone, Boolean, { emulatedMs: 1000, intervalMs: 5, hangMs: 40, message: 'm' }),
   ).resolves.toBe(true);
-  // Everything stands still and no load or boot runs (paused or dead): trip.
+  // Everything stands still and no job runs (paused or dead): trip.
   let cf = 0;
   const frozen = {
     status: vi.fn(async () => ({
@@ -630,7 +640,7 @@ for (const invalid of [null, 'root', 'artifact'] as const) {
       if (file === '/stock.syx') return Buffer.from('stock');
       return Buffer.from(invalid === 'artifact' ? 'changed' : 'prepared');
     });
-    const preparing = prepareRuntimePlanOffline(
+    const preparing = prepareRuntimePlanModulesOffline(
       { device: 'dt2', firmware: '1.17' },
       '/offline',
       '/artifacts',

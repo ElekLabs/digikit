@@ -69,7 +69,7 @@ export interface DefaultOps {
   /** Save the selection (what the next boot loads). */
   select(paths: string[]): Promise<void>;
   /** Restart and wait for the boot; the ids loaded after it. */
-  restart(): Promise<string[]>;
+  restart(opts?: { signal?: AbortSignal; stillBooting?: () => boolean }): Promise<string[]>;
 }
 
 export interface DefaultProgress {
@@ -82,6 +82,9 @@ export interface DefaultProgress {
 /** The selection holds at most this many paths (SELECT). */
 export const SELECTION_MAX = 8;
 
+/** The user's cancel; `isCancelled` (modules/backend.ts) knows the kind. */
+const cancelled = (): Error => Object.assign(new Error('cancelled'), { kind: 'cancelled' });
+
 const reason = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /** Install and enable `ids`. Returns one line for each module and for the enabling; throws `DefaultModuleError` for the first that fails. */
@@ -89,6 +92,7 @@ export async function installDefaults(
   ops: DefaultOps,
   ids: string[],
   progress: (p: DefaultProgress) => void = () => {},
+  opts: { signal?: AbortSignal; stillBooting?: () => boolean } = {},
 ): Promise<string[]> {
   if (ids.length === 0) return [];
   const lines: string[] = [];
@@ -97,6 +101,7 @@ export async function installDefaults(
     try {
       return await step;
     } catch (e) {
+      if ((e as { kind?: string })?.kind === 'cancelled') throw e;
       throw e instanceof DefaultModuleError ? e : new DefaultModuleError(id, reason(e));
     }
   };
@@ -106,6 +111,7 @@ export async function installDefaults(
   progress({ text: 'Waiting for the runtime to answer', done: 0, total });
   await wrap(ids[0]!, ops.waitForRuntime());
   for (const [i, id] of ids.entries()) {
+    if (opts.signal?.aborted) throw cancelled();
     progress({ text: `Installing ${id} (${i + 1} of ${ids.length})`, done: i + 1, total });
     lines.push(`${id}: ${(await wrap(id, ops.upload(id))) === 'same' ? 'already on the card' : 'uploaded'}`);
   }
@@ -123,7 +129,7 @@ export async function installDefaults(
     );
   progress({ text: `Enabling ${missing.join(', ')}: restarting the runtime`, done: ids.length + 1, total });
   await wrap(missing[0]!, ops.select(paths));
-  const after = await wrap(missing[0]!, ops.restart());
+  const after = await wrap(missing[0]!, ops.restart(opts));
   const still = missing.filter((id) => !after.includes(id));
   if (still.length)
     throw new DefaultModuleError(still[0]!, 'it is not loaded after the restart (see the Log for the reason)');

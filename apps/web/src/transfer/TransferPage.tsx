@@ -31,6 +31,7 @@ import {
   busy,
   endJob,
   error,
+  jobProgress,
   log,
   lastView,
   pendingAdd,
@@ -101,7 +102,7 @@ const haltOn = (e: unknown): void => {
 
 /** The one busy action. It is not made by the page: a job goes on when the page is left, and the old and the new page share it. */
 const run = async (what: string, f: () => Promise<void | CancelledRun>) => {
-  if (!beginJob(what)) return;
+  if (!beginJob(what, cancellable(what) ? cancelJob : undefined)) return;
   noteActivity();
   setError('');
   // after a cancel or a "no reply" the device is not asked again at once (that would wait the whole time a second time)
@@ -225,6 +226,11 @@ export default function TransferPage(): JSX.Element {
     return transferEnv().extras?.samples?.bar(busy());
   });
   const samples = () => transferEnv().extras?.samples;
+  // the status bar shows the same fraction and line
+  createEffect(() => {
+    const b = bar();
+    if (b?.running) jobProgress(b.info.fraction, b.info.message);
+  });
 
   return (
     <section class="transfer-page" aria-label="Transfer">

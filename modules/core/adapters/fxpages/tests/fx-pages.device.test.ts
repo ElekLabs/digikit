@@ -30,8 +30,9 @@ import { record } from '@digi/regression/runtime/artifacts.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 
-const RT = ['core/runtime', 'core/dynreg', 'core/dyndsp', 'core/dynfx'];
+const RT = rootsOf('rt-dynfx');
 const inventory = [SINE, GAIN];
 const presets = {
   stock: { selection: ['modules/m0.dkm'] },

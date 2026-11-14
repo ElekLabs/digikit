@@ -365,6 +365,35 @@ body {
   white-space: pre-wrap;
   max-height: 30vh;
   overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  animation: alert-in 150ms ease-out;
+}
+.alert > span {
+  flex: 1;
+  min-width: 0;
+}
+.alert .dismiss {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0 4px;
+  line-height: 1;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.alert .dismiss:hover {
+  opacity: 1;
+}
+@keyframes alert-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .stage {
@@ -415,6 +444,31 @@ body {
   text-overflow: ellipsis;
   color: var(--ink-3);
   border-right: 0;
+}
+.statusbar .job {
+  min-width: 0;
+  color: var(--ink);
+  border-right: 0;
+}
+.statusbar .job .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.statusbar .job .detail,
+.statusbar .job .more {
+  color: var(--ink-3);
+}
+.statusbar .job .cancel {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid #2a2d33;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.statusbar .job .cancel:hover {
+  border-color: var(--ink-3);
 }
 /* a long status line gives way: the Log and Metrics buttons stay in view */
 .statusbar > button {
