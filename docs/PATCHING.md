@@ -86,6 +86,45 @@ mise run patch:mem -- core/machines test/machine-clone --device dt2 --firmware 1
   after, and the SHARC+ listing of DSP sites. Its output contains disassembly of firmware code: keep it out of
   commits.
 
+### Compare two objects after a move
+
+`patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json]` proves that two ColdFire objects hold the same code when only
+names, order and addresses differ (the check for moving Rust items between modules of the runtime crate). A byte compare of such
+objects always fails: mangled names contain the module path, functions change order, and relocations name section symbols.
+
+- Functions and named data are matched by a normalized name: demangled, crate and module path removed (`dkrt::foo::rd32` is `rd32`;
+  `<dkrt::a::T>::m` is `<T>::m`). Two items with one normalized name are paired by equal content first. A C symbol or `#[no_mangle]`
+  item keeps its exact name: adding, removing or renaming one is a `c-symbol` difference.
+- Anonymous constants (`.rodata.global.*`) are matched by content.
+- Code and data are compared byte by byte with every relocated field masked. A relocation is compared by its normalized target
+  plus addend, never by address. The first difference of a function is shown as an instruction with its relocation.
+- Undefined symbols (anchors, `memcpy`) are compared as a set (`extern`).
+- Exit 0 and `identical: N functions, M data objects`, or exit 1 and the list.
+
+```text
+$ patchkit objdiff modules/core/runtime/build/runtime.dko.json modules/core/runtime/build/runtime.dko.json
+identical: 666 functions, 291 data objects
+
+$ patchkit objdiff modules/core/runtime/build/runtime.dko.json R2A-DELETIONS.dko.json
+differences: 57 (638 functions and 276 data objects match)
+...
+differs   dkrt_poll_add
+            first difference at +0xe (relocation); old, then new
+              +0x0008  4a89         tst.l
+              +0x000a  6728         beq.b
+            - +0x000c  41f900000000 lea.l  [reloc +0x2 .bss.DKRT_POLLS+0]
+            + +0x000c  41f900000000 lea.l  [reloc +0x2 .bss.POLL_TABLE+0]
+differs   dkrt_scan
+            size 5780 -> 5896 bytes
+            first difference at +0x3 (bytes); old, then new
+            - +0x0000  4e56fc50     link.w
+            + +0x0000  4e56fcfc     link.w
+c-symbol  dkrt_poll_set
+            exact-name symbol .text.dkrt_poll_set (only-new)
+```
+
+`--format json` prints `{identical, functions, data_objects, differences: [{kind, name, detail}]}`.
+
 ### Run it in the emulator
 
 ```sh
