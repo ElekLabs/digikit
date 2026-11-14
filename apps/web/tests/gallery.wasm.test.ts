@@ -1,9 +1,9 @@
-// The patch worker's core (`PatchKit`, patchkit-core.ts) over patchkit.wasm against the patchkit command line, the gallery bundle against the
-// command line's, and the shipped modules (`shipModules` packs them with the CLI). Skips when the wasm, a stock image or the CLI is absent. The rest
+// The patch worker's core (`PatchKit`, patchkit-core.ts) over patchkit.wasm against the patchkit command line, the gallery bundle (its shape, and against the
+// command line's) and the shipped modules (`shipModules` packs them with the CLI). Skips when the wasm, a stock image or the CLI is absent. The rest
 // of the gallery's build step is gallery.test.ts.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { parse } from 'smol-toml';
 import { test } from 'vitest';
@@ -20,6 +20,38 @@ import {
   wasmPath,
   workDir,
 } from './support/patchkit-env.ts';
+
+test('bundle lists the committed modules and ports', () => {
+  const { bundle } = buildModuleData(root);
+  assert.equal(
+    bundle.modules.length,
+    manifestFiles().length + manifestFiles(join(root, 'tests/fixtures/modules')).length,
+  );
+  assert.ok(bundle.modules.some((m) => m.manifest.includes('id = "core/fx"')));
+  assert.equal(bundle.ports.length, readdirSync(join(root, 'devices/ports')).length);
+  // Module content only: no firmware blobs or out/modules oracles.
+  assert.ok(!JSON.stringify(bundle).includes('out/modules'));
+});
+
+test('bundle carries the device knob models and the gallery JSON of typed modules', () => {
+  const { bundle } = buildModuleData(root);
+  assert.equal(bundle.devices.length, 2);
+  assert.ok(bundle.devices.every((t: string) => 'modules' in parse(t)));
+  const sine = bundle.modules.find((m: { manifest: string }) => m.manifest.includes('id = "test/sine"'))!;
+  assert.ok(!sine.manifest.includes('[[entry]]'));
+  const g = JSON.parse((sine.files as Record<string, string>)['build/gen/gallery.json']);
+  assert.equal(g.module, 'test/sine');
+  const m = g.machines[0];
+  assert.deepEqual(Object.keys(m.devices).sort(), ['dn2', 'dt2']);
+  assert.equal(m.devices.dt2.knobs[1].param, 'level');
+  assert.equal(m.devices.dn2.knobs[1].slot, 26);
+  assert.deepEqual(
+    g.params.dt2.map((p: { short: string }) => p.short),
+    ['LEVEL'],
+  );
+  for (const p of g.params.dt2 as { min: number; default: number; max: number; id: string }[])
+    assert.ok(p.min <= p.default && p.default <= p.max, p.id);
+});
 
 test.skipIf(!existsSync(join(root, '.venv')))('bundle equals tools/patchkit/patchkit.py bundle', () => {
   const out = join(workDir('gal-'), 'bundle.json');
