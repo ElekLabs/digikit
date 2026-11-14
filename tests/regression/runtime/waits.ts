@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   deadlineExpired,
+  PROGRESS_HANG_S,
   describeRestart,
   restartProgress,
   withinRuntimeDeadline as beforeReadinessDeadline,
@@ -54,6 +55,9 @@ export async function waitEmulatedFrames(session: Session, frames: number, { han
     seen = now;
   }
 }
+
+/** Wall milliseconds one probe of a device wait may take: a loaded host answers late while the emulator free-runs, and the emulated deadline is the real limit. */
+export const PROBE_TIMEOUT_MS = PROGRESS_HANG_S * 1000;
 
 /** Wall milliseconds the emulated clock may stand still before a wait fails (a paused daemon, a halted DSP); a slow but rising clock never trips it. DIGI_CLOCK_STUCK_MS overrides it. */
 export const CLOCK_STUCK_MS = Number(process.env.DIGI_CLOCK_STUCK_MS ?? 60_000);
@@ -168,16 +172,26 @@ export function bindBootClock(dk: object, session: Pick<Session, 'status'>): voi
  * A dk that was never bound to a session keeps the wall-time wait.
  */
 export function waitForBootEmulated(
-  dk: { waitForBoot(sleep?: (ms: number) => Promise<void>, timeoutMs?: number): Promise<void> },
+  dk: {
+    waitForBoot(
+      sleep?: (ms: number) => Promise<void>,
+      timeoutMs?: number,
+      opts?: { probeTimeoutMs?: number },
+    ): Promise<void>;
+  },
   { emulatedMs = 90_000 }: { emulatedMs?: number } = {},
 ): Promise<void> {
   const session = bootClocks.get(dk);
   if (!session) return dk.waitForBoot();
   const tick = emulatedWatch(session, { emulatedMs, message: 'no new boot' });
-  return dk.waitForBoot(async (ms) => {
-    await delay(ms);
-    if (await tick()) throw new Error(`no new boot: not seen within ${emulatedMs} ms of emulated time`);
-  }, Number.POSITIVE_INFINITY);
+  return dk.waitForBoot(
+    async (ms) => {
+      await delay(ms);
+      if (await tick()) throw new Error(`no new boot: not seen within ${emulatedMs} ms of emulated time`);
+    },
+    Number.POSITIVE_INFINITY,
+    { probeTimeoutMs: PROBE_TIMEOUT_MS },
+  );
 }
 
 /** Wait for `ms` of emulated time (the daemon must run freely). */

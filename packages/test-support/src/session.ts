@@ -164,6 +164,44 @@ export async function withinRuntimeDeadline<T>(deadline: number, operation: () =
   }
 }
 
+/**
+ * Wall seconds one slice of emulated time may take before it counts as a hang. A loaded host (many emulators at once) runs several times
+ * slower than a quiet one, so a fixed bound on a whole step fails a healthy run; a slice that makes no progress for this long does not.
+ * DIGI_PROGRESS_HANG_S overrides it.
+ */
+export const PROGRESS_HANG_S = Number(process.env.DIGI_PROGRESS_HANG_S ?? 30);
+
+/** One slice: 0.5 emulated seconds (66 M ColdFire instructions, 750 DSP frames). The whole wait is capped at slices times PROGRESS_HANG_S. */
+const SLICE_INSNS = MS * 500;
+const SLICE_FRAMES = 750;
+
+type StepClient = Pick<Session['client'], 'step' | 'runUntil'>;
+
+/** Step `instructions` in slices; each slice is bounded by PROGRESS_HANG_S of wall time, so the total scales with the emulated time asked for. */
+export async function stepWithProgress(client: StepClient, instructions: number): Promise<void> {
+  for (let left = Math.floor(instructions); left > 0;) {
+    const n = Math.min(left, SLICE_INSNS);
+    await withinRuntimeDeadline(Date.now() + PROGRESS_HANG_S * 1000, () =>
+      client.step(n, { timeout_wall_s: PROGRESS_HANG_S }),
+    );
+    left -= n;
+  }
+}
+
+/** Run to the absolute DSP frame `target` in slices, each bounded like `stepWithProgress`. `now` reads the current DSP frame. */
+export async function runUntilFramesWithProgress(
+  client: StepClient,
+  now: () => Promise<number>,
+  target: number,
+): Promise<void> {
+  for (let at = await now(); at < target; at = await now()) {
+    const next = Math.min(target, at + SLICE_FRAMES);
+    await withinRuntimeDeadline(Date.now() + PROGRESS_HANG_S * 1000, () =>
+      client.runUntil({ frames: next, timeout_wall_s: PROGRESS_HANG_S }),
+    );
+  }
+}
+
 export class Session {
   readonly options: SessionOptions;
   #daemon: Daemon;

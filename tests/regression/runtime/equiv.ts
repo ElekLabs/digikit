@@ -1,13 +1,22 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { button, MS, type Device, type Session } from '@digi/test-support';
+import { button, MS, stepWithProgress, type Device, type Session } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
 import { readLoadTable, resolveAddresses } from '@digi/regression/runtime/addrmap.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
-import { bounded, frames, pcmWindow, peak, pickSine, readFloatWav, rpc } from '@digi/regression/runtime/fx-live.ts';
+import {
+  bounded,
+  frames,
+  pcmWindow,
+  peak,
+  pickSine,
+  readFloatWav,
+  rpc,
+  runToFrame,
+} from '@digi/regression/runtime/fx-live.ts';
 import { FIRMWARE, FULL_TIER, describeOn } from '@digi/regression/runtime/devices.ts';
 import { decodeTables, diffTables, dynType, selectType, voiceRows } from '@digi/regression/runtime/project-kit.ts';
 
@@ -65,15 +74,15 @@ async function playNote(session: Session, file: string, trigFrame: number): Prom
   const current = await frames(session);
   if (current >= trigFrame - 20) throw new Error(`setup took until frame ${current}; raise trigFrame`);
   await rpc(session, 'pcm.tap', { action: 'start' });
-  await bounded(() => session.client.runUntil({ frames: trigFrame, timeout_wall_s: 30 }));
-  await bounded(() => session.client.step(PRESS_OFFSET, { timeout_wall_s: 30 }));
+  await runToFrame(session, trigFrame);
+  await stepWithProgress(session.client, PRESS_OFFSET);
   await rpc(session, 'pcm.tap', { action: 'capture', path: file });
   await bounded(() => session.client.inputButton(button('TRIG 1'), true));
   // the key stays down for the whole capture: nothing time-dependent is left in the comparison
-  await bounded(() => session.client.runUntil({ frames: trigFrame + NOTE_FRAMES, timeout_wall_s: 30 }));
+  await runToFrame(session, trigFrame + NOTE_FRAMES);
   await rpc(session, 'pcm.tap', { action: 'capture_stop' });
   await bounded(() => session.client.inputButton(button('TRIG 1'), false));
-  await bounded(() => session.client.step(50 * MS, { timeout_wall_s: 30 }));
+  await stepWithProgress(session.client, 50 * MS);
   await bounded(() => session.expectNoFault('note'));
   return readFloatWav(file);
 }

@@ -9,6 +9,8 @@ import {
   MS,
   repoRoot,
   type Session,
+  runUntilFramesWithProgress,
+  stepWithProgress,
   withinRuntimeDeadline,
   type Device,
   type RuntimeBaseline,
@@ -153,7 +155,17 @@ export async function frames(session: Session): Promise<number> {
 }
 
 export async function advance(session: Session, ms: number): Promise<void> {
-  await bounded(() => session.client.step(Math.floor(ms * MS), { timeout_wall_s: 30 }));
+  await stepWithProgress(session.client, Math.floor(ms * MS));
+}
+
+/** Run to absolute DSP frame `target`; fails only when a half emulated second makes no progress for PROGRESS_HANG_S. */
+export async function runToFrame(session: Session, target: number): Promise<void> {
+  await runUntilFramesWithProgress(session.client, () => frames(session), target);
+}
+
+/** Run `n` more DSP frames with the same progress guard. */
+export async function runFrames(session: Session, n: number): Promise<void> {
+  await runToFrame(session, (await frames(session)) + n);
 }
 
 /** Choose the original device list hint or a numeric override without asserting selected-track identity.
@@ -205,12 +217,12 @@ export async function captureNote(session: Session, opts: NoteOptions): Promise<
   if (current >= trigger - 20) throw new Error(`${tag} setup too late: current frame ${current}, trigger ${trigger}`);
   if (!opts.tapStarted) await rpc(session, 'pcm.tap', { action: 'start' });
   try {
-    await bounded(() => session.client.runUntil({ frames: trigger, timeout_wall_s: 30 }));
-    if (!opts.skipStep) await bounded(() => session.client.step(44_000, { timeout_wall_s: 30 }));
+    await runToFrame(session, trigger);
+    if (!opts.skipStep) await stepWithProgress(session.client, 44_000);
     await rpc(session, 'pcm.tap', { action: 'capture', path: file });
     if (!opts.noPress) await bounded(() => session.client.inputButton(button('TRIG 1'), true));
     await opts.during?.();
-    await bounded(() => session.client.runUntil({ frames: trigger + length, timeout_wall_s: 30 }));
+    await runToFrame(session, trigger + length);
   } finally {
     try {
       await rpc(session, 'pcm.tap', { action: 'capture_stop' });
