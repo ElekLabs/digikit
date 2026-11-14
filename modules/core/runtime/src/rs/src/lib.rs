@@ -55,6 +55,8 @@ mod health;
 mod imports;
 mod mailbox;
 mod platform;
+mod safe_mode;
+mod selection;
 mod report;
 mod state;
 mod tick;

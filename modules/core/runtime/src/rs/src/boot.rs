@@ -10,17 +10,20 @@
 //!
 //! The record is the only thing the runtime writes to the card here, and only to its two sectors (`store::Layout::sel_a`/`sel_b`), through
 //! `block_write`, which refuses a write when the card's area is not ours (`card.rs`): then the boot counter is not raised either.
-use crate::{assign, block_read, block_write, card, crash, dlog, loader, st};
+
+use crate::platform::st;
+use crate::safe_mode::{key_held, DKRT_STABLE_BLOCKS, LATE_FLOOR};
+use crate::selection::{current, update, Choice, REC, REC_COPY, REC_VALID};
+use crate::{assign, card, crash, dlog, loader};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::sel::{self, Record};
 use dkrt_sdk::*;
 
-const INFO_MAGIC: u32 = 0x444b_4254; // "DKBT"
+pub use crate::safe_mode::*;
+pub use crate::selection::*;
 
-#[repr(C, align(16))]
-pub struct Sector([u8; 512]);
-#[no_mangle]
-pub static mut DKRT_SECBUF: Sector = Sector([0; 512]);
+
+pub(crate) const INFO_MAGIC: u32 = 0x444b_4254; // "DKBT"
 
 #[no_mangle]
 pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
@@ -39,24 +42,6 @@ pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
     stable: 0,
     needs: [[0; NEEDS_LEN]; SEL_MAX],
 };
-/// The stable period in DSP blocks (`STABLE_BLOCKS`). A static so that the scenarios can shorten it (they poke it; nothing else writes it).
-#[repr(C, align(4))]
-pub struct Knob(pub u32); // a ColdFire gcc aligns a u32 to 2: the emulator's poke wants a word
-#[no_mangle]
-pub static mut DKRT_STABLE_BLOCKS: Knob = Knob(STABLE_BLOCKS);
-/// The block count at the first UI-loop pass and the number of passes since (the fallback when the block counter does not move).
-#[no_mangle]
-pub static mut DKRT_UI_START: Knob = Knob(0);
-static mut UI_PASSES: u32 = 0;
-/// The boot counter a stable session leaves behind: 1 after a boot that found the crash record of a session that had been stable, else 0.
-static mut LATE_FLOOR: u32 = 0;
-/// UI-loop passes after which a block counter that has not moved at all is taken for dead and the counter is cleared as in the first
-/// pass of old (the UI loop runs 30 to 120 times a second: 1800 passes are 15 s to a minute).
-const DEAD_CLOCK_PASSES: u32 = 1800;
-/// The record this boot started from (or an empty one) and the bookkeeping the writes need.
-static mut REC: Record = Record::empty();
-static mut REC_VALID: bool = false;
-static mut REC_COPY: u32 = 0;
 
 /// The file name of each module of this boot's selection (the part of its path after the last `/`, up to `NAME_LEN - 1` bytes, NUL padded): the LOADS
 /// command reports it with the result, and the record may change after the boot (a SELECT).
@@ -75,198 +60,6 @@ pub fn selected() -> u32 {
 
 pub fn info() -> &'static mut DkrtBootInfo {
     unsafe { &mut *addr_of_mut!(DKRT_BOOT) }
-}
-
-fn secbuf() -> *mut u8 {
-    unsafe { addr_of_mut!(DKRT_SECBUF) as *mut u8 }
-}
-
-/// One selection copy as read from the card.
-#[derive(Clone, Copy)]
-enum CopyRead {
-    /// The read worked and the record is good.
-    Valid(Record),
-    /// The read worked and the record is bad.
-    Invalid,
-    /// The block read failed.
-    ReadError,
-}
-
-/// The selection as the two copies give it.
-#[derive(Clone, Copy)]
-enum Choice {
-    /// The valid copy with the higher sequence number (A when equal), the copy it is in, and whether the other copy is valid too.
-    Use { record: Record, copy: u32, other_valid: bool },
-    /// No valid copy and no read error: nothing was ever saved.
-    Empty,
-    /// No valid copy and at least one read error: the record cannot be known.
-    Unreadable,
-}
-
-/// The choice from the two copies. A valid copy wins even when the other copy could not be read.
-fn choose(a: CopyRead, b: CopyRead) -> Choice {
-    match (a, b) {
-        (CopyRead::Valid(x), CopyRead::Valid(y)) => {
-            if y.seq > x.seq {
-                Choice::Use { record: y, copy: 1, other_valid: true }
-            } else {
-                Choice::Use { record: x, copy: 0, other_valid: true }
-            }
-        }
-        (CopyRead::Valid(x), _) => Choice::Use { record: x, copy: 0, other_valid: false },
-        (_, CopyRead::Valid(y)) => Choice::Use { record: y, copy: 1, other_valid: false },
-        (CopyRead::ReadError, _) | (_, CopyRead::ReadError) => Choice::Unreadable,
-        _ => Choice::Empty,
-    }
-}
-
-/// The copy `selection_set` writes first: the one that is not the only valid copy, so that a cut write leaves a valid copy.
-fn first_write(c: &Choice) -> u32 {
-    match c {
-        Choice::Use { copy: 0, other_valid: false, .. } => 1,
-        _ => 0,
-    }
-}
-
-/// Read one copy (0 = A, 1 = B).
-unsafe fn read_copy(i: u32) -> CopyRead {
-    let sector = if i == 0 { crate::store::layout().sel_a() } else { crate::store::layout().sel_b() };
-    if block_read(sector, 512, secbuf()) != 0 {
-        return CopyRead::ReadError;
-    }
-    let b = &*(secbuf() as *const [u8; 512]);
-    match sel::decode(b) {
-        Some(r) => CopyRead::Valid(r),
-        None => CopyRead::Invalid,
-    }
-}
-
-/// The record in use, read from both copies.
-unsafe fn current() -> Choice {
-    // the card's state first (reads only): a card too small has no store, which is an empty record and not a read failure
-    card::check();
-    current_on(card::state() == CARD_TOO_SMALL, |i| read_copy(i))
-}
-
-/// `current` with the card state and the copy reader given: no store means `Empty` with no read.
-fn current_on(no_store: bool, mut read: impl FnMut(u32) -> CopyRead) -> Choice {
-    if no_store {
-        return Choice::Empty;
-    }
-    let a = read(0);
-    let b = read(1);
-    choose(a, b)
-}
-
-/// Write `r` to copy `i`. Only these two sectors are ever written.
-unsafe fn write_copy(i: u32, r: &Record) -> i32 {
-    let sector = if i == 0 { crate::store::layout().sel_a() } else { crate::store::layout().sel_b() };
-    let b = &mut *(secbuf() as *mut [u8; 512]);
-    sel::encode(r, b);
-    let e = block_write(sector, 512, secbuf());
-    if e == E_CARD_RO || e == E_RANGE {
-        return e;
-    }
-    if e != 0 {
-        return E_SEL_WRITE;
-    }
-    OK
-}
-
-unsafe fn path_ok(p: *const u8) -> bool {
-    let mut n = 0;
-    while n < SEL_PATH {
-        let c = *p.add(n);
-        if c == 0 {
-            return n > 0;
-        }
-        if !(0x21..0x7f).contains(&c) {
-            return false;
-        }
-        n += 1;
-    }
-    false
-}
-
-/// `dkrt_selection_get`: `E_READ` when no copy is valid and a copy could not be read.
-pub unsafe fn selection_get(out: *mut DkrtSelection) -> i32 {
-    let r = match current() {
-        Choice::Use { record, .. } => record,
-        Choice::Empty => Record::empty(),
-        Choice::Unreadable => return E_READ,
-    };
-    let o = &mut *out;
-    o.count = r.count;
-    o.flags = r.flags;
-    o.paths = r.paths;
-    OK
-}
-
-/// `dkrt_selection_set`: both copies, A then B, with the next sequence number (B first when A is the only valid copy). The boot counter
-/// carries over. `E_READ`, with no write, when no copy is valid and a copy could not be read.
-pub unsafe fn selection_set(s: *const DkrtSelection) -> i32 {
-    let s = &*s;
-    let r = sel::check_count(s.count);
-    if r != OK {
-        return r;
-    }
-    let mut k = 0;
-    while k < s.count as usize {
-        if !path_ok(s.paths[k].as_ptr()) {
-            return E_SEL_PATH;
-        }
-        k += 1;
-    }
-    let choice = current();
-    let cur = match choice {
-        Choice::Use { record, .. } => record,
-        Choice::Empty => Record::empty(),
-        Choice::Unreadable => return E_READ,
-    };
-    let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
-    dlog::ev(logk::MENU, dlog::INFO, [logk::MENU_SELECT, s.count, 0, 0, 0]);
-    let first = first_write(&choice);
-    let e = write_copy(first, &r);
-    if e != OK {
-        return e;
-    }
-    write_copy(1 - first, &r)
-}
-
-/// `CMD_SELECT_ONE`: write copy `i` only, with `seq + 1` (the state of a power cut between the two writes).
-pub unsafe fn selection_set_one(i: u32, s: *const DkrtSelection) -> i32 {
-    let s = &*s;
-    let e = sel::check_one(s.count, i);
-    if e != OK {
-        return e;
-    }
-    let cur = match current() {
-        Choice::Use { record, .. } => record,
-        Choice::Empty => Record::empty(),
-        Choice::Unreadable => return E_READ,
-    };
-    let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
-    write_copy(i, &r)
-}
-
-/// Write the record with a changed counter/flags into the copy that is not the current one (the current one stays valid if
-/// the write is cut).
-unsafe fn update(mut r: Record, current_copy: u32, valid: bool) -> i32 {
-    r.seq = if valid { r.seq.wrapping_add(1) } else { 1 };
-    let target = if valid { 1 - current_copy } else { 0 };
-    let e = write_copy(target, &r);
-    if e == OK {
-        REC = r;
-        REC_VALID = true;
-        REC_COPY = target;
-    }
-    e
-}
-
-/// Is the safe-mode key down? Reads the stock key state byte. REC is key 0x13, panel channel 2 bit 2. Returns 0 before the first
-/// channel-2 report. Hardware timing not yet proved **[O]**.
-unsafe fn key_held() -> bool {
-    dkfw::input::key_down(SAFE_KEY_CODE) != 0
 }
 
 /// The boot hook (once per boot, main-OS task).
@@ -430,50 +223,6 @@ pub unsafe fn note_result(idx: u32, r: i32) {
     }
 }
 
-/// Every pass of the UI loop (`dkrt_tick`). The first pass notes the block count; the boot counter goes back to 0 when the session has run
-/// `DKRT_STABLE_BLOCKS` blocks past it, or at once in a safe boot (nothing of a module runs there). A hang or a fault in between leaves
-/// the counter raised, so the next boots count it: two such boots in a row start the third in safe mode.
-pub unsafe fn ui_pass() {
-    let b = info();
-    if b.stable != 0 {
-        return;
-    }
-    if b.magic != INFO_MAGIC {
-        b.ui_reached = 1;
-        b.stable = 1;
-        return; // the boot hook did not run (an image patched without the boot site)
-    }
-    let now = crate::fw_blocks().unwrap_or(0);
-    if b.ui_reached == 0 {
-        b.ui_reached = 1;
-        DKRT_UI_START.0 = now;
-        UI_PASSES = 0;
-        dlog::ev(logk::UI_FIRST, dlog::INFO, [now, b.safe, b.loaded, 0, 0]);
-    }
-    UI_PASSES = UI_PASSES.wrapping_add(1);
-    let elapsed = now.wrapping_sub(DKRT_UI_START.0);
-    let period = core::ptr::read_volatile(addr_of!(DKRT_STABLE_BLOCKS.0));
-    let dead = elapsed == 0 && UI_PASSES >= DEAD_CLOCK_PASSES;
-    if b.safe != 0 || elapsed >= period || dead {
-        b.stable = 1;
-        // The record as the card holds it now, not the one this boot started from: the menu may have saved a selection since.
-        // A boot that followed a crash in a stable session leaves one bad boot counted (`LATE_FLOOR`), so that a second such crash leads to safe mode.
-        let floor = LATE_FLOOR;
-        // With SAFE_READ the record is unknown: the counter stays as it is.
-        let cur = match current() {
-            Choice::Use { record, copy, .. } if b.reason != SAFE_READ => Some((record, copy)),
-            _ => None,
-        };
-        if let Some((mut r, copy)) = cur {
-            if r.boot_counter != floor {
-                r.boot_counter = floor;
-                update(r, copy, true);
-            }
-        }
-        dlog::ev(logk::STABLE, dlog::INFO, [now, floor, 0, 0, 0]);
-    }
-}
-
 pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
     let b = info();
     let o = &mut *out;
@@ -493,80 +242,4 @@ pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
         stable: b.stable,
         needs: b.needs,
     };
-}
-
-#[cfg(test)]
-mod choice_tests {
-    use super::*;
-
-    #[derive(Clone, Copy)]
-    enum In {
-        Valid(u32),
-        Invalid,
-        ReadError,
-    }
-
-    fn read(i: In) -> CopyRead {
-        match i {
-            In::Valid(seq) => {
-                let mut r = Record::empty();
-                r.seq = seq;
-                CopyRead::Valid(r)
-            }
-            In::Invalid => CopyRead::Invalid,
-            In::ReadError => CopyRead::ReadError,
-        }
-    }
-
-    /// (kind, seq, copy, other_valid)
-    fn summary(c: &Choice) -> (&'static str, u32, u32, bool) {
-        match c {
-            Choice::Use { record, copy, other_valid } => ("use", record.seq, *copy, *other_valid),
-            Choice::Empty => ("empty", 0, 0, false),
-            Choice::Unreadable => ("unreadable", 0, 0, false),
-        }
-    }
-
-    #[test]
-    fn the_choice_over_every_pair_of_copy_states() {
-        use In::*;
-        let table = [
-            (Valid(5), Valid(9), ("use", 9, 1, true)),
-            (Valid(9), Valid(5), ("use", 9, 0, true)),
-            (Valid(7), Valid(7), ("use", 7, 0, true)),
-            (Valid(5), Invalid, ("use", 5, 0, false)),
-            (Valid(5), ReadError, ("use", 5, 0, false)),
-            (Invalid, Valid(5), ("use", 5, 1, false)),
-            (Invalid, Invalid, ("empty", 0, 0, false)),
-            (Invalid, ReadError, ("unreadable", 0, 0, false)),
-            (ReadError, Valid(5), ("use", 5, 1, false)),
-            (ReadError, Invalid, ("unreadable", 0, 0, false)),
-            (ReadError, ReadError, ("unreadable", 0, 0, false)),
-        ];
-        for (a, b, want) in table {
-            assert_eq!(summary(&choose(read(a), read(b))), want);
-        }
-    }
-
-    #[test]
-    fn a_card_without_a_store_is_empty_and_is_not_read() {
-        let c = current_on(true, |_| panic!("no read on a card without a store"));
-        assert_eq!(summary(&c), ("empty", 0, 0, false));
-        assert_eq!(first_write(&c), 0);
-        // with a store, read errors with no valid copy are still unreadable
-        let c = current_on(false, |_| CopyRead::ReadError);
-        assert_eq!(summary(&c), ("unreadable", 0, 0, false));
-    }
-
-    #[test]
-    fn selection_set_never_writes_first_to_the_only_valid_copy() {
-        use In::*;
-        let first = |a, b| first_write(&choose(read(a), read(b)));
-        assert_eq!(first(Valid(5), ReadError), 1);
-        assert_eq!(first(Valid(5), Invalid), 1);
-        assert_eq!(first(Invalid, Valid(5)), 0);
-        assert_eq!(first(ReadError, Valid(5)), 0);
-        assert_eq!(first(Valid(5), Valid(9)), 0);
-        assert_eq!(first(Invalid, Invalid), 0);
-    }
 }
