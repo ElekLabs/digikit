@@ -45,7 +45,8 @@ Status: `todo`, `active`, `done`, `parked`.
 | 3 | R3 | R3a Platform trait; R3b adapter move (see runtime-and-services, Platform adapter) | R2 | R3a and R3b done (this PR); the image changes (two device words, the `core/platform` adapter object), so they gate together | |
 | 3 | T1 | [Test architecture](test-architecture.md): tests follow layers, fakes and contract suites, service-scoped selection | T1a after R2c; T1c with R3 | todo | |
 | 3 | R6 | DSP transfer queue; dsp-link windows | R3 | R6a done (this PR), R6b planned (trigger: modulation rate) | |
-| 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | todo | |
+| 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | done (this PR) | one generated kind and service table, `dk_record_add`, the header table, the boot planner and its verdict, declare-check-commit, the `lfo` service ([runtime-and-services.md](runtime-and-services.md) 4.1) |
+| 3 | R13 | Storage interface and files memory (split out of R7) | R7 | todo | runtime-and-services item 13 |
 | 3 | R8 | Spike, whole path | R7 | todo | |
 | 3 | P6 | Workbench: names in the Log pane, first utilisation pane (UI lane) | P2 | todo | |
 | Stop | | Review the model with Em; the contract is proven by the new kind | R7, R8 | | |

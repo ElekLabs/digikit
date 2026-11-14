@@ -147,6 +147,8 @@ An id names the machine or effect only. The position of the entry in its list is
 `build/gen/module_ids.h` as `DK_MACHINE_ID_<ID>` or `DK_FX_ID_<ID>`, and `init` passes it to the builder call. Do not change the order after a
 release. A tool has neither list.
 
+`[[record]]` lists a record of a generic kind that `init` emits with `dk_record_add` (a kind that a service owns and that has no builder, such as `lfo_shape`): `kind` is the kind's lower-case name from `sdk/sdk.toml` `[records.kinds]` and `key` the identity of the record (the shape id of an `lfo_shape`). The packer writes the keys into the header table, so the boot planner refuses a kind no service owns and a key that another module of the selection has before the module loads. Machines and effects are builder calls, not `[[record]]`.
+
 `[uses.dt2]` and `[uses.dn2]` hold the rows the module takes on each device: `machine_rows`, `param_rows`, `page_rows`, `record_bytes`.
 `module:check` runs `init` in the emulator and writes them. Never write them by hand. The device menu and the packer use them to tell whether the
 module fits.
