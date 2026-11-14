@@ -30,7 +30,7 @@ fn every_committed_coldfire_object_carries_a_matching_record() {
     for m in lib.modules.iter() {
         for o in m.objects.iter().filter(|o| o.arch == "cf") {
             o.require_isa_checked()
-                .unwrap_or_else(|e| panic!("{}: {}", m.id(), e.0));
+                .unwrap_or_else(|e| panic!("{}: {e}", m.id()));
             n += 1;
             // a changed code byte: refused
             let mut t = o.clone();

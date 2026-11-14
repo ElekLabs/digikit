@@ -88,6 +88,15 @@ const CRATE_TARGETS = {
       options: { command: 'node tools/nx/device-images.mjs', cwd: '.' },
     },
   },
+  dkprof: {
+    wasm: {
+      executor: 'nx:run-commands',
+      cache: false,
+      description: 'Builds the dkprof wasm that wb (profile, addrmap and module commands) loads.',
+      outputs: ['{workspaceRoot}/apps/web/public/dkprof.wasm'],
+      options: { command: 'node tools/nx/wasm.mjs --dkprof-only', cwd: '.' },
+    },
+  },
   dksample: {
     wasm: {
       executor: 'nx:run-commands',
@@ -116,6 +125,7 @@ const GATE = {
         '{workspaceRoot}/.cargo/**/*',
         '{workspaceRoot}/packages/emulator/**/*',
         '{workspaceRoot}/packages/dkaddrmap/**/*',
+        '{workspaceRoot}/packages/dksharc/**/*',
         '{workspaceRoot}/packages/dkneeds/**/*',
         '{workspaceRoot}/packages/dksample/**/*',
         '{workspaceRoot}/packages/dkupload/**/*',
@@ -193,6 +203,7 @@ export const HERMETIC = {
   periph: [],
   'emmc-card': [],
   dkaddrmap: [],
+  dkprof: [],
   dkneeds: [],
   dksharc: [],
   'dkrt-sdk': ['{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json'],

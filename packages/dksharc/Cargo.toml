@@ -17,3 +17,4 @@ path = "src/lib.rs"
 sharc-rt = { path = "../emulator/sharc-rt" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"

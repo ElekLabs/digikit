@@ -4,7 +4,7 @@ import type { Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { record } from './artifacts.ts';
-import { beforeReadinessDeadline } from './waits.ts';
+import { beforeReadinessDeadline, deadlineExpired } from './waits.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 type Tap = (name: string, settleMs?: number) => Promise<void>;
@@ -30,6 +30,7 @@ export async function openRuntimeAbout(
 ): Promise<string[]> {
   const deadline = Date.now() + timeout;
   let initialCount: number | null | undefined;
+  let failure: unknown;
   try {
     initialCount = await beforeReadinessDeadline(deadline, () =>
       session.client.memPeek(planSymbol(plan, 'DK_ABOUT_N')),
@@ -38,8 +39,14 @@ export async function openRuntimeAbout(
     // ABOUT is the first row of the DIGIKIT menu; content completion replaces the final settle only.
     await tap('YES', 0);
     return await expectRuntimeAbout(session, dk, plan, artifacts, { deadline });
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
-    record(artifacts, 'about-before-open', { initialCount: initialCount ?? null, expired: Date.now() >= deadline });
+    record(artifacts, 'about-before-open', {
+      initialCount: initialCount ?? null,
+      expired: deadlineExpired(deadline, failure),
+    });
   }
 }
 
@@ -76,6 +83,7 @@ export async function expectRuntimeAbout(
   const deadline = options.deadline ?? Date.now() + (options.timeout ?? 10_000);
   let runtimeRow: string | undefined;
   let rows: string[] = [];
+  let failure: unknown;
   try {
     runtimeRow = `RUNTIME ${fmtVersion((await beforeReadinessDeadline(deadline, () => dk.info())).runtime)}`;
     await expect
@@ -97,8 +105,15 @@ export async function expectRuntimeAbout(
       )
       .toBe(true);
     return rows;
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
-    record(artifacts, 'about-readiness', { runtimeRow: runtimeRow ?? null, rows, expired: Date.now() >= deadline });
+    record(artifacts, 'about-readiness', {
+      runtimeRow: runtimeRow ?? null,
+      rows,
+      expired: deadlineExpired(deadline, failure),
+    });
   }
 }
 

@@ -102,16 +102,16 @@ workbench call the same code (`mise run wb:cli` runs workbench actions through t
 
 P2 design:
 
-- **Crate:** `packages/dkprof` builds on `dkaddrmap` (later also `dksharc`). It turns raw profiles into named per-module and per-function self aggregates.
+- **Crate:** `packages/dkprof` builds on `dkaddrmap` and `dksharc`. It turns raw profiles into named per-module and per-function self aggregates.
 - **Wasm:** one `dkprof.wasm`, built by `tools/nx/wasm.mjs`, with C-ABI calls that take and return JSON: `addr_lookup`, `load_table`, `profile_report`
-  (`module_analyse` later). A TypeScript loader lives in `packages/dk-session`.
+  and `module_analyse` (`dksharc`). A TypeScript loader lives in `packages/dk-session`.
 - **Artifact:** schema `dk.profile/1` (section 9): `run`, `clock`, `raw` (`{cpu, addr, count}`), `metrics` (a value, or N/A with a reason), phase markers, and loss and
   overhead.
-- **`wb:cli`:** a global `--format json|text`, and the commands `addrmap lookup`, `profile record` (emulator: `cf.profile` through control-client) and
-  `profile report`.
-- **Python:** `tools/devtools/cfprof.py` is deleted once `wb profile report` matches its output.
+- **`wb:cli`:** a global `--format json|text`, and the commands `addrmap lookup`, `module analyse`, `profile record` (emulator: `cf.profile` through control-client) and
+  `profile report`. All go through `dkprof.wasm`; `wb` starts no child process for them.
+- **Python:** `tools/devtools/cfprof.py` is deleted (done): on one paused emulator, `wb profile record --since-boot` and `cfprof.py` gave equal path counters and equal function, idle and exit rows.
 - **Not in P2:** the SHARC profile source (a new daemon call) is P4, the device source is P8, the panes are P6.
-- **patchkit:** it moves to the dksharc DKDS and `.dko` readers in P2.
+- **patchkit:** it uses the dksharc DKDS and `.dko` readers (done; packed bytes unchanged).
 
 ## 5. Track A: emulator host speed
 
