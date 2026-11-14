@@ -39,7 +39,7 @@ const HIDDEN_MS = 500;
 // Keys and knobs are LivePanel's (the knobs turn by drag and wheel), so the page has no extra buttons for them.
 const HINT = 'Click keys; drag or scroll knobs. Shift: ×10.';
 
-export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JSX.Element {
+export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2'; emulatorLoaded: boolean }): JSX.Element {
   const [state, setState] = createSignal<RemoteState>();
   const [stateError, setStateError] = createSignal<unknown>();
   const [screenError, setScreenError] = createSignal('');
@@ -50,12 +50,13 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
   const panel = () => panels[device()];
   const runtime = remoteRuntime(() => session());
   const notice = () => remoteNotice(state(), stateError());
+  const noEmulator = () => target().kind === 'emulator' && !props.emulatorLoaded;
 
   /** Screen loop: one Screenshot after the other; an error shows and the loop tries again slowly. */
   const screenLoop = async () => {
     while (alive) {
       // nothing is asked of the device while the window is hidden or a Transfer job uses the session
-      if (!windowShown() || remotePaused(busy())) {
+      if (!windowShown() || remotePaused(busy()) || noEmulator()) {
         await new Promise((r) => setTimeout(r, HIDDEN_MS));
         continue;
       }
@@ -80,7 +81,7 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
     let infoKey = '';
     let infoAt: number | undefined;
     while (alive) {
-      if (!windowShown() || remotePaused(busy())) {
+      if (!windowShown() || remotePaused(busy()) || noEmulator()) {
         await new Promise((r) => setTimeout(r, HIDDEN_MS));
         continue;
       }
@@ -148,35 +149,44 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
           </span>
         </span>
       </header>
-      <Show when={remotePaused(busy())}>
-        <p class="note" role="status">
-          Paused during the transfer.
-        </p>
+      <Show
+        when={!noEmulator()}
+        fallback={
+          <p class="remote-empty">
+            No firmware is loaded in the emulator. Open one on the Emulator page, or choose a MIDI device as the target.
+          </p>
+        }
+      >
+        <Show when={remotePaused(busy())}>
+          <p class="note" role="status">
+            Paused during the transfer.
+          </p>
+        </Show>
+        <Show when={notice()}>
+          <p class="note" role="status">
+            {notice()}
+          </p>
+        </Show>
+        <Show when={screenError()}>
+          <p class="err" role="alert">
+            {screenError()}
+          </p>
+        </Show>
+        {/* the same markup as the Emulator page's faceplate (Console.tsx), so the screen has the same place and scale; the side column with the Memory panel is beside it */}
+        <div class="remote-row">
+          <main
+            class="stage"
+            aria-label={`${panel().name} front panel`}
+            title={HINT}
+            style={{ '--accent': panel().accent, '--func-legend': panel().func_legend }}
+          >
+            <div class="surface">
+              <LivePanel panel={panel()} runtime={() => runtime} onError={setScreenError} ref={(api) => (live = api)} />
+            </div>
+          </main>
+          <SidePanels visible session={session} where={() => targetLabel(target())} track={target} />
+        </div>
       </Show>
-      <Show when={notice()}>
-        <p class="note" role="status">
-          {notice()}
-        </p>
-      </Show>
-      <Show when={screenError()}>
-        <p class="err" role="alert">
-          {screenError()}
-        </p>
-      </Show>
-      {/* the same markup as the Emulator page's faceplate (Console.tsx), so the screen has the same place and scale; the side column with the Memory panel is beside it */}
-      <div class="remote-row">
-        <main
-          class="stage"
-          aria-label={`${panel().name} front panel`}
-          title={HINT}
-          style={{ '--accent': panel().accent, '--func-legend': panel().func_legend }}
-        >
-          <div class="surface">
-            <LivePanel panel={panel()} runtime={() => runtime} onError={setScreenError} ref={(api) => (live = api)} />
-          </div>
-        </main>
-        <SidePanels visible session={session} where={() => targetLabel(target())} track={target} />
-      </div>
     </section>
   );
 }
