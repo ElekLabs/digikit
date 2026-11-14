@@ -313,6 +313,18 @@ test('buildView reads the device: INFO, LIST, MODULES, CAPACITY and the headers 
   assert.ok(dev.seen.includes('READ') && dev.seen.includes('MODULES') && dev.seen.includes('CAPACITY'));
 });
 
+test('a card-only module without the header table of this runtime says it was built for an older runtime', async () => {
+  const dev = new FakeDevice();
+  const old = dkm('someone/old', { machine: 1, size: 900 });
+  old.fill(0, 0xa0, 0xa8); // no magic: the table of runtime 0.7
+  dev.files.set('modules/old.dkm', old);
+  dev.files.set('modules/new.dkm', dkm('someone/new', { machine: 1, size: 900 }));
+  const view = await buildView(session(dev), []);
+  const by = Object.fromEntries(view.card_only.map((r) => [r.path, r]));
+  assert.deepEqual(by['modules/old.dkm'].warnings, ['module built for an older runtime: rebuild it']);
+  assert.equal(by['modules/new.dkm'].warnings, undefined);
+});
+
 test('Modules mode lists the modules/ folder only: the samples/ of a version 3 store stay out (with and without FOLDERS)', async () => {
   const mach = dkm('someone/machine', { machine: 1, dsp: 64, size: 900 });
   const withSamples = () => {

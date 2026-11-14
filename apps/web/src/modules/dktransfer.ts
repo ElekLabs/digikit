@@ -248,6 +248,8 @@ export function mergeView(
       on_card: 'yes',
       loaded: h ? loaded.includes(h.name) : false,
       ...whyNot(c.path, h ? loaded.includes(h.name) : false),
+      // a file without the header table of this runtime was built for an older one
+      ...(h && !hasHeaderTable(headers[c.path]!) ? { warnings: [OLDER_RUNTIME_TEXT] } : {}),
     });
   }
   return { modules, card_only };
