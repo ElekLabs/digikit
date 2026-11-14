@@ -2,7 +2,7 @@
 
 use patchkit::dko::{Dko, DkoReloc, DkoSection, DkoSymbol};
 use patchkit::error::hex;
-use patchkit::objdiff::{diff, norm_name};
+use patchkit::objdiff::{diff, diff_with, norm_name};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -207,4 +207,129 @@ fn tracked_runtime_object_equals_itself() {
     let r = diff(&o, &o).unwrap();
     assert!(r.identical, "{}", r.text());
     assert!(r.functions > 500 && r.data_objects > 100);
+}
+
+// ---- string pools and panic locations ----------------------------------------------------------------------------
+
+/// `jsr` is not needed: the function is `lea.l <reloc>,a0; rts`, so one relocation names the string it reads.
+fn reader(name: &str, target: &str, addend: i64) -> (DkoSection, DkoReloc) {
+    (
+        text(name, &[0x41, 0xf9, 0, 0, 0, 0, 0x4e, 0x75]),
+        reloc(name, 2, &format!(".sec..rodata.global.{target}"), addend),
+    )
+}
+
+fn pooled(sections: Vec<DkoSection>, readers: Vec<(DkoSection, DkoReloc)>) -> Dko {
+    let mut secs = sections;
+    let mut rels = vec![];
+    for (s, r) in readers {
+        secs.push(s);
+        rels.push(r);
+    }
+    object(secs, rels)
+}
+
+#[test]
+fn a_string_in_another_pool_place_is_identical() {
+    // one merged blob, and the same two strings as separate constants in the other order
+    let a = pooled(
+        vec![data(".rodata.global.1", b"helloworld")],
+        vec![reader("f", "1", 0), reader("g", "1", 5)],
+    );
+    let b = pooled(
+        vec![
+            data(".rodata.global.2", b"world"),
+            data(".rodata.global.3", b"hello\0\0\0"),
+        ],
+        vec![reader("f", "3", 0), reader("g", "2", 0)],
+    );
+    let r = diff(&a, &b).unwrap();
+    assert!(r.identical, "{}", r.text());
+    assert_eq!((r.functions, r.data_objects), (2, 2));
+}
+
+#[test]
+fn a_function_that_reads_other_string_content_is_caught() {
+    let a = pooled(
+        vec![data(".rodata.global.1", b"helloworld")],
+        vec![reader("f", "1", 0), reader("g", "1", 5)],
+    );
+    // f and g swap their strings: the pool holds the same strings, but no function reads what it read
+    let b = pooled(
+        vec![data(".rodata.global.1", b"helloworld")],
+        vec![reader("f", "1", 5), reader("g", "1", 0)],
+    );
+    let r = diff(&a, &b).unwrap();
+    assert!(!r.identical);
+    assert!(
+        r.differences
+            .iter()
+            .any(|d| d.kind == "differs" && d.name == "f"),
+        "{}",
+        r.text()
+    );
+    // changed content is a string difference too
+    let c = pooled(
+        vec![data(".rodata.global.1", b"helloWorld")],
+        vec![reader("f", "1", 0), reader("g", "1", 5)],
+    );
+    let r = diff(&a, &c).unwrap();
+    assert!(
+        r.differences
+            .iter()
+            .any(|d| d.kind == "only-old" && d.name.contains("world")),
+        "{}",
+        r.text()
+    );
+    assert!(
+        r.differences
+            .iter()
+            .any(|d| d.kind == "only-new" && d.name.contains("World")),
+        "{}",
+        r.text()
+    );
+}
+
+/// A function that panics at `file:line`: its location constant (16 bytes, the file name pointer at 0) and the file name.
+fn panicker(file: &[u8], line: u8) -> Dko {
+    let mut loc = vec![0u8; 16];
+    loc[3] = file.len() as u8;
+    loc[7] = line;
+    loc[11] = 5;
+    let mut o = pooled(
+        vec![
+            data(".rodata.global.F", file),
+            data(".rodata.global.L", &loc),
+        ],
+        vec![reader("boom", "L", 0)],
+    );
+    o.relocs.push(DkoReloc {
+        section: ".rodata.global.L".into(),
+        offset: 0,
+        rtype: "cf.32".into(),
+        symbol: ".sec..rodata.global.F".into(),
+        addend: 0,
+    });
+    o
+}
+
+#[test]
+fn a_panic_location_changed_by_a_move_is_identical_but_strict_reports_it() {
+    let a = panicker(b"src/lib.rs", 10);
+    let b = panicker(b"src/api.rs", 77);
+    let r = diff(&a, &b).unwrap();
+    assert!(r.identical, "{}", r.text());
+    assert_eq!(
+        r.text(),
+        "identical: 1 functions, 0 data objects\nignored: 1 panic locations\n"
+    );
+    let r = diff_with(&a, &b, true).unwrap();
+    assert!(!r.identical, "{}", r.text());
+    assert!(
+        r.text().contains("src/lib.rs") || r.text().contains("src/api.rs"),
+        "{}",
+        r.text()
+    );
+    // a location that is not there any more is not ignored silently
+    assert!(diff_with(&a, &a, true).unwrap().identical);
 }

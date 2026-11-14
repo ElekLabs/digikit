@@ -5,7 +5,7 @@
 //!
 //! The service imports (`[[import]]` with `service` in sdk/sdk.toml) that name a handle live here: the runtime hands out the handle of a service in `init`
 //! (`dk_settings_open`, `dk_files_open`, `dk_sample_pool_open`) and each call takes the handle. The handle is the client number the existing code
-//! (`settings.rs`, `files.rs`, `tracks.rs`) keeps, as a pointer. The imports that need no handle point at the functions of `lib.rs`.
+//! (`settings.rs`, `files.rs`, `tracks.rs`) keeps, as a pointer. The imports that need no handle point at the functions of `imports.rs`.
 
 use crate::{dlog, files, settings, store, store_writer, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};

@@ -174,7 +174,7 @@ pub unsafe fn read_file(path: *const u8, dst: *mut u8, cap: u32) -> i32 {
 
 /// The store figures as the headers last said them, and whether the headers may have changed since. Only an upload writes a header sector
 /// (the card is not swapped while the device runs), so the HEALTH page, which asks twice a second, reads the card once and again after an
-/// upload wrote a header (`upload.rs` sets `STORE_DIRTY` when it writes one): a page that read the card on every refresh would cost the UI task
+/// upload wrote a header (`store_writer.rs` calls `figures_stale` when it writes one): a page that read the card on every refresh would cost the UI task
 /// card reads that show up in the CPU load it displays.
 static mut STORE_DIRTY: bool = true;
 static mut STORE_SEEN: Option<(u32, u32)> = None; // (used KiB, free KiB) of a usable header; None: no store

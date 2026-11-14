@@ -372,7 +372,7 @@ unsafe fn stall_check(w: &mut Watch, now: u32, buf: &[u32; DIAG_WORDS]) {
         w.m_fx = 0;
         w.m_voice = 0;
         merge_stop(w, buf);
-        // The hang record (crash.rs): only after a valid reply was read (a DSP that has not started leaves no diagnostic block) and not in a safe boot (a stop there
+        // The hang record (fault.rs): only after a valid reply was read (a DSP that has not started leaves no diagnostic block) and not in a safe boot (a stop there
         // would reset again and again). The first UI pass has run: the watch is called from it. A DSP that stops within the first seconds (a module that hangs at once)
         // never shows a second beat; it counts as stopped after the 20 s of `NEVER_BLOCKS`.
         if w.hb_valid && crate::boot::info().safe == 0 && crate::boot::info().ui_reached != 0 {
@@ -395,7 +395,7 @@ fn merge_stop(w: &mut Watch, buf: &[u32; DIAG_WORDS]) {
     }
 }
 
-/// Write the hang record and reset (crash.rs). The site is the one with a call pending: an effect (the master or the send route) or a voice; with none, the stop was
+/// Write the hang record and reset (fault.rs). The site is the one with a call pending: an effect (the master or the send route) or a voice; with none, the stop was
 /// in the core itself and the record has no site.
 unsafe fn write_hang(w: &mut Watch) {
     use dkrt_sdk::fault::*;
@@ -413,7 +413,7 @@ unsafe fn write_hang(w: &mut Watch) {
     };
     ev(logk::FAULT_FOUND, logk::F_ERROR, [KIND_DSP | site << 8 | stage << 16, id, w.m_step, last, module.map_or(u32::MAX, |m| m as u32)]);
     crate::settings::flush_if_dirty();
-    crate::crash::write_hang(&crate::crash::Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
+    crate::fault::write_hang(&crate::fault::Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
 }
 
 /// The effect guard's words (28 and 31): a new fault is an `FX_FAULT`, a row switched off an `FX_DISABLED`, each with the source of the module that owns the row.
