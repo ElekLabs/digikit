@@ -1,9 +1,9 @@
 //! Interface B of docs/ARCHITECTURE.md: what the core calls on a service, and only what the service declared.
 //!
-//! A service implements `Service`. The core keeps one fixed list of the in-crate services (`Services`) and walks it through
-//! `ServiceList`, a static list of types: no `dyn`, no table in RAM, and a method a service does not declare costs nothing.
-//! The core never names a service outside this file. The builder calls and the static table that `module:check` writes are R7
-//! (docs/plans/runtime-and-services.md 5.12); here the declaration is the `impl`.
+//! A service implements `Service`. The core keeps one static table of the in-crate services (`ServiceTable` over `ServiceRow`s,
+//! generated from `[[service]]` of sdk/sdk.toml into `gen_services.rs`): a row is the service's name, the record kinds it owns
+//! (kind and length, from `[records.kinds]`) and one function pointer per method; there is no `dyn` and no table in RAM.
+//! The core never names a service outside the generated table (docs/plans/runtime-and-services.md R7).
 //!
 //! What a service declares:
 //! - record kinds of the `register` section (`len`), and their `check`, `apply` and `remove` (the registry walker calls them);
@@ -76,13 +76,16 @@ pub struct Claim<'a> {
     pub state_at: u32,
 }
 
-/// One word the DSP loader writes to publish a row: window, word index and value. `published` is set once the write is accepted, when
-/// from then on the row may have words in the DSP (so a failure must clear them).
+/// One word the DSP loader writes to publish a row: window, word index and value. The loader collects the steps of one row into a link `Sequence`.
+/// `published` is set once the write is accepted, when from then on the row may have words in the DSP (so a failure must clear them). `last` ends the
+/// row (its type or pc word, the one that makes it visible). `undo` is the word that takes a step back when the sequence fails.
 pub struct RowWrite {
     pub win: u32,
     pub word: u32,
     pub value: u32,
     pub published: Option<&'static mut u8>,
+    pub last: bool,
+    pub undo: Option<u32>,
 }
 
 /// What the guard counted for a machine type (`MODULES` reports it).
@@ -92,56 +95,117 @@ pub struct GuardState {
     pub disabled: bool,
 }
 
-/// The capacity counts the services declare: one (kind, limit, used) entry per kind of `dkrt_capacity`.
-pub struct CapSink {
-    e: [(u8, u32, u32); 8],
-    n: usize,
+/// What a service declares at its init (declare-check-commit, docs/plans/runtime-and-services.md R7): the record kinds it owns, the slots and hook
+/// sites it takes, the functions it exports and the resources it adds. The items have the shape of the header table's entries of a service module
+/// (`KINDS`, `SLOTS`, `HOOKS`, `EXPORTS`, `RESOURCES`: tags 4 to 8 of packages/dkneeds/src/keys.rs), so the runtime compares them with the table
+/// (the generated static of an in-crate service, the header table of a module) and a difference means the service FAILED.
+#[derive(Clone, Copy)]
+pub struct Declare {
+    /// (table tag, first word, second word, third word): `kind(kind, len)` (and the handler entry of a module), `slot(id, flags)`, `hook(site, entry)`,
+    /// `export(name hash, entry)`, `resource(id, limit)`; an unused word is 0.
+    pub items: [(u16, u32, u32, u32); Declare::MAX],
+    pub n: usize,
+    /// More declarations than `MAX` were made.
+    pub full: bool,
 }
 
-impl CapSink {
-    pub const fn new() -> CapSink {
-        CapSink {
-            e: [(0, 0, 0); 8],
+impl Declare {
+    pub const MAX: usize = 12;
+    pub const KIND: u16 = 4;
+    pub const SLOT: u16 = 5;
+    pub const HOOK: u16 = 6;
+    pub const EXPORT: u16 = 7;
+    pub const RESOURCE: u16 = 8;
+
+    pub const fn new() -> Declare {
+        Declare {
+            items: [(0, 0, 0, 0); Declare::MAX],
             n: 0,
+            full: false,
         }
     }
-    /// A kind that two services declare is the sum of their counts.
-    pub fn add(&mut self, kind: u8, limit: u32, used: u32) {
-        let mut i = 0;
-        while i < self.n {
-            if self.e[i].0 == kind {
-                self.e[i].1 += limit;
-                self.e[i].2 += used;
-                return;
-            }
-            i += 1;
-        }
-        if self.n < self.e.len() {
-            self.e[self.n] = (kind, limit, used);
+    /// One more item; `full` is set when there is no room.
+    pub fn add(&mut self, tag: u16, a: u32, b: u32, c: u32) {
+        if self.n < Declare::MAX {
+            self.items[self.n] = (tag, a, b, c);
             self.n += 1;
+        } else {
+            self.full = true;
         }
     }
-    /// `(limit, used)` of `kind`, if a service declared it.
-    pub fn get(&self, kind: u8) -> Option<(u32, u32)> {
-        let mut r = None;
+    /// A record kind the service owns, with the length of its record (the 8-byte header included).
+    pub fn kind(&mut self, kind: u32, len: u32) {
+        self.add(Declare::KIND, kind, len, 0);
+    }
+    pub fn slot(&mut self, slot: u32, flags: u32) {
+        self.add(Declare::SLOT, slot, flags, 0);
+    }
+    pub fn hook(&mut self, site: u32, entry: u32) {
+        self.add(Declare::HOOK, site, entry, 0);
+    }
+    pub fn export(&mut self, name_hash: u32, entry: u32) {
+        self.add(Declare::EXPORT, name_hash, entry, 0);
+    }
+    pub fn resource(&mut self, id: u32, limit: u32) {
+        self.add(Declare::RESOURCE, id, limit, 0);
+    }
+    /// Whether `other` holds the same items (in any order): what a module declared in `init` against what its header table says.
+    pub fn same_as(&self, other: &Declare) -> bool {
+        if self.full || other.full || self.n != other.n {
+            return false;
+        }
+        let has = |d: &Declare, x: (u16, u32, u32, u32)| {
+            let mut k = 0;
+            while k < d.n {
+                if d.items[k] == x {
+                    return true;
+                }
+                k += 1;
+            }
+            false
+        };
         let mut i = 0;
         while i < self.n {
-            if self.e[i].0 == kind {
-                r = Some((self.e[i].1, self.e[i].2));
+            if !has(other, self.items[i]) || !has(self, other.items[i]) {
+                return false;
             }
             i += 1;
         }
-        r
+        true
+    }
+    /// Whether the declarations are exactly the record kinds `kinds` (kind, length) and nothing else, in any order.
+    pub fn matches_kinds(&self, kinds: &[(u32, u32)]) -> bool {
+        if self.full || self.n != kinds.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < self.n {
+            let (tag, a, b, _) = self.items[i];
+            if tag != Declare::KIND {
+                return false;
+            }
+            let mut found = false;
+            let mut k = 0;
+            while k < kinds.len() {
+                if kinds[k].0 == a && kinds[k].1 == b {
+                    found = true;
+                }
+                k += 1;
+            }
+            if !found {
+                return false;
+            }
+            i += 1;
+        }
+        true
     }
 }
 
 /// A service. Every method has a default that declares nothing; a service implements the ones it owns.
 #[allow(unused_variables)]
 pub trait Service {
-    /// The length of a record of `kind` (the whole record, header included) if this service owns the kind.
-    fn len(kind: u32) -> Option<u32> {
-        None
-    }
+    /// The service's declarations (`Declare`): called once at the runtime's init; the runtime compares them with the service's table.
+    unsafe fn declare(d: &mut Declare) {}
     /// Whether the registry's table fits this service's state (the walker refuses with `E_NO_REGISTRY` when not).
     unsafe fn fits(inf: *const u32) -> bool {
         true
@@ -162,8 +226,10 @@ pub trait Service {
     /// Give back everything module record `owner - 1` filled.
     unsafe fn remove(owner: u8) {}
 
-    /// Add the capacity counts of this service.
-    unsafe fn caps(out: &mut CapSink) {}
+    /// `(limit, used)` of capacity kind `kind` (`proto::CAPK_*`) if this service counts it; a kind two services count is the sum of their counts.
+    unsafe fn cap(kind: u8) -> Option<(u32, u32)> {
+        None
+    }
     /// The module record behind a fault site and the id the DSP reported there (`fault::SITE_*`).
     unsafe fn attribute(site: u32, id: u32) -> Option<usize> {
         None
@@ -228,219 +294,350 @@ pub trait Service {
     }
 }
 
-/// A static list of services; `()` is the empty list and `(S, L)` is `S` then `L`.
-pub trait ServiceList {
-    fn len(kind: u32) -> Option<u32>;
-    unsafe fn fits(inf: *const u32) -> bool;
-    /// One step of the validation over the services in list order; the first failure.
-    unsafe fn check(step: u32, c: &CheckCtx) -> i32;
-    unsafe fn apply(c: &ApplyCtx) -> i32;
-    unsafe fn apply_record(kind: u32, body: *const u8, c: &ApplyCtx) -> i32;
-    /// Last service first.
-    unsafe fn remove(owner: u8);
-    unsafe fn caps(out: &mut CapSink);
-    unsafe fn attribute(site: u32, id: u32) -> Option<usize>;
-    unsafe fn guard_state(ty: u32) -> Option<GuardState>;
-    unsafe fn on_loaded(rec: usize);
-    unsafe fn tick(phase: u32);
-    unsafe fn has_voice(rec: usize, ty: u32) -> bool;
-    unsafe fn declare_voice(rec: usize, ty: u32, rng: [u32; 8], latched: u32) -> Option<i32>;
-    unsafe fn declare_fx(
-        rec: usize,
-        ordinal: u32,
-        flags: Option<u32>,
-        par: Option<[u32; 8]>,
-    ) -> Option<bool>;
-    unsafe fn dsp_check_sections(sec: &DspSec) -> i32;
-    unsafe fn dsp_check_rows(sec: &DspSec) -> i32;
-    unsafe fn dsp_check_types(sec: &DspSec) -> i32;
-    unsafe fn dsp_admit(job: &Job) -> i32;
-    unsafe fn dsp_claim(c: &mut Claim);
-    unsafe fn dsp_release(rec: usize);
-    unsafe fn dsp_clear(rec: usize) -> bool;
-    unsafe fn dsp_row_step(rec: usize, want: &mut u32, write: bool) -> Option<RowWrite>;
+/// One in-crate service in the static table: its name, the record kinds it owns and its methods as function pointers. `ServiceRow::of`
+/// builds it from the `impl Service`; a method the service does not implement points at the default (`OK`, `None`).
+pub struct ServiceRow {
+    /// The name of `[[service]]` in sdk/sdk.toml (the owner a kind's declaration names).
+    pub name: &'static str,
+    /// The record kinds of the `register` section the service owns: (kind, whole record length with its header), from `[records.kinds]`.
+    pub kinds: &'static [(u32, u32)],
+    declare: unsafe fn(&mut Declare),
+    fits: unsafe fn(*const u32) -> bool,
+    check: unsafe fn(u32, &CheckCtx) -> i32,
+    apply: unsafe fn(&ApplyCtx) -> i32,
+    apply_record: unsafe fn(u32, *const u8, &ApplyCtx) -> i32,
+    remove: unsafe fn(u8),
+    cap: unsafe fn(u8) -> Option<(u32, u32)>,
+    attribute: unsafe fn(u32, u32) -> Option<usize>,
+    guard_state: unsafe fn(u32) -> Option<GuardState>,
+    on_loaded: unsafe fn(usize),
+    tick: unsafe fn(u32),
+    has_voice: unsafe fn(usize, u32) -> bool,
+    declare_voice: unsafe fn(usize, u32, [u32; 8], u32) -> Option<i32>,
+    declare_fx: unsafe fn(usize, u32, Option<u32>, Option<[u32; 8]>) -> Option<bool>,
+    dsp_check_sections: unsafe fn(&DspSec) -> i32,
+    dsp_check_rows: unsafe fn(&DspSec) -> i32,
+    dsp_check_types: unsafe fn(&DspSec) -> i32,
+    dsp_admit: unsafe fn(&Job) -> i32,
+    dsp_claim: unsafe fn(&mut Claim),
+    dsp_release: unsafe fn(usize),
+    dsp_clear: unsafe fn(usize) -> bool,
+    dsp_row_step: unsafe fn(usize, &mut u32, bool) -> Option<RowWrite>,
 }
 
-impl ServiceList for () {
-    fn len(_: u32) -> Option<u32> {
+impl ServiceRow {
+    /// The row of service `S` that owns `kinds`.
+    pub const fn of<S: Service>(name: &'static str, kinds: &'static [(u32, u32)]) -> ServiceRow {
+        ServiceRow {
+            name,
+            kinds,
+            declare: S::declare,
+            fits: S::fits,
+            check: S::check,
+            apply: S::apply,
+            apply_record: S::apply_record,
+            remove: S::remove,
+            cap: S::cap,
+            attribute: S::attribute,
+            guard_state: S::guard_state,
+            on_loaded: S::on_loaded,
+            tick: S::tick,
+            has_voice: S::has_voice,
+            declare_voice: S::declare_voice,
+            declare_fx: S::declare_fx,
+            dsp_check_sections: S::dsp_check_sections,
+            dsp_check_rows: S::dsp_check_rows,
+            dsp_check_types: S::dsp_check_types,
+            dsp_admit: S::dsp_admit,
+            dsp_claim: S::dsp_claim,
+            dsp_release: S::dsp_release,
+            dsp_clear: S::dsp_clear,
+            dsp_row_step: S::dsp_row_step,
+        }
+    }
+}
+
+/// The static table of services, in the order the core calls them: the walks below run the rows in table order (removal runs the other way).
+#[derive(Clone, Copy)]
+pub struct ServiceTable {
+    pub rows: &'static [ServiceRow],
+    /// Bit `i` set: row `i` FAILED its declare check (`check_declarations`); its kinds are unknown to `owner` and `len`.
+    pub failed: u32,
+}
+
+impl ServiceTable {
+    /// Declare-check-commit of the in-crate services: each row's `declare` against its table (the generated static `kinds`). Returns the mask of the
+    /// rows whose declarations differ (bit `i`: row `i`); the caller keeps it in the table it hands out (`failed`).
+    pub unsafe fn check_declarations(&self) -> u32 {
+        let mut failed = 0u32;
+        let mut i = 0;
+        while i < self.rows.len() && i < 32 {
+            let mut d = Declare::new();
+            (self.rows[i].declare)(&mut d);
+            if !d.matches_kinds(self.rows[i].kinds) {
+                failed |= 1 << i;
+            }
+            i += 1;
+        }
+        failed
+    }
+    /// The row that owns record kind `kind`.
+    pub fn owner(&self, kind: u32) -> Option<&'static ServiceRow> {
+        let mut i = 0;
+        while i < self.rows.len() {
+            if i < 32 && self.failed & (1 << i) != 0 {
+                i += 1;
+                continue;
+            }
+            let mut k = 0;
+            while k < self.rows[i].kinds.len() {
+                if self.rows[i].kinds[k].0 == kind {
+                    return Some(&self.rows[i]);
+                }
+                k += 1;
+            }
+            i += 1;
+        }
         None
     }
-    unsafe fn fits(_: *const u32) -> bool {
+    /// The length of a record of `kind` (the whole record, header included); `None` when no service owns the kind.
+    pub fn len(&self, kind: u32) -> Option<u32> {
+        let mut i = 0;
+        while i < self.rows.len() {
+            if i < 32 && self.failed & (1 << i) != 0 {
+                i += 1;
+                continue;
+            }
+            let mut k = 0;
+            while k < self.rows[i].kinds.len() {
+                if self.rows[i].kinds[k].0 == kind {
+                    return Some(self.rows[i].kinds[k].1);
+                }
+                k += 1;
+            }
+            i += 1;
+        }
+        None
+    }
+    pub unsafe fn fits(&self, inf: *const u32) -> bool {
+        let mut i = 0;
+        while i < self.rows.len() {
+            if !(self.rows[i].fits)(inf) {
+                return false;
+            }
+            i += 1;
+        }
         true
     }
-    unsafe fn check(_: u32, _: &CheckCtx) -> i32 {
+    /// One step of the validation over the services in table order; the first failure.
+    pub unsafe fn check(&self, step: u32, c: &CheckCtx) -> i32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.rows[i].check)(step, c);
+            if r != OK {
+                return r;
+            }
+            i += 1;
+        }
         OK
     }
-    unsafe fn apply(_: &ApplyCtx) -> i32 {
+    pub unsafe fn apply(&self, c: &ApplyCtx) -> i32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.rows[i].apply)(c);
+            if r != OK {
+                return r;
+            }
+            i += 1;
+        }
         OK
     }
-    unsafe fn apply_record(_: u32, _: *const u8, _: &ApplyCtx) -> i32 {
+    pub unsafe fn apply_record(&self, kind: u32, body: *const u8, c: &ApplyCtx) -> i32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.rows[i].apply_record)(kind, body, c);
+            if r != OK {
+                return r;
+            }
+            i += 1;
+        }
         OK
     }
-    unsafe fn remove(_: u8) {}
-    unsafe fn caps(_: &mut CapSink) {}
-    unsafe fn attribute(_: u32, _: u32) -> Option<usize> {
+    /// Last service first.
+    pub unsafe fn remove(&self, owner: u8) {
+        let mut i = self.rows.len();
+        while i > 0 {
+            i -= 1;
+            (self.rows[i].remove)(owner);
+        }
+    }
+    /// `(limit, used)` of capacity kind `kind`: the sum of the counts of the services that count it; `None` when none does.
+    pub unsafe fn cap(&self, kind: u8) -> Option<(u32, u32)> {
+        let mut r: Option<(u32, u32)> = None;
+        let mut i = 0;
+        while i < self.rows.len() {
+            if let Some((l, u)) = (self.rows[i].cap)(kind) {
+                r = Some(match r {
+                    Some((a, b)) => (a + l, b + u),
+                    None => (l, u),
+                });
+            }
+            i += 1;
+        }
+        r
+    }
+    pub unsafe fn attribute(&self, site: u32, id: u32) -> Option<usize> {
+        let mut i = 0;
+        while i < self.rows.len() {
+            if let Some(m) = (self.rows[i].attribute)(site, id) {
+                return Some(m);
+            }
+            i += 1;
+        }
         None
     }
-    unsafe fn guard_state(_: u32) -> Option<GuardState> {
+    pub unsafe fn guard_state(&self, ty: u32) -> Option<GuardState> {
+        let mut i = 0;
+        while i < self.rows.len() {
+            if let Some(g) = (self.rows[i].guard_state)(ty) {
+                return Some(g);
+            }
+            i += 1;
+        }
         None
     }
-    unsafe fn on_loaded(_: usize) {}
-    unsafe fn tick(_: u32) {}
-    unsafe fn has_voice(_: usize, _: u32) -> bool {
+    pub unsafe fn on_loaded(&self, rec: usize) {
+        let mut i = 0;
+        while i < self.rows.len() {
+            (self.rows[i].on_loaded)(rec);
+            i += 1;
+        }
+    }
+    pub unsafe fn tick(&self, phase: u32) {
+        let mut i = 0;
+        while i < self.rows.len() {
+            (self.rows[i].tick)(phase);
+            i += 1;
+        }
+    }
+    pub unsafe fn has_voice(&self, rec: usize, ty: u32) -> bool {
+        let mut i = 0;
+        while i < self.rows.len() {
+            if (self.rows[i].has_voice)(rec, ty) {
+                return true;
+            }
+            i += 1;
+        }
         false
     }
-    unsafe fn declare_voice(_: usize, _: u32, _: [u32; 8], _: u32) -> Option<i32> {
+    pub unsafe fn declare_voice(
+        &self,
+        rec: usize,
+        ty: u32,
+        rng: [u32; 8],
+        latched: u32,
+    ) -> Option<i32> {
+        let mut i = 0;
+        while i < self.rows.len() {
+            if let Some(r) = (self.rows[i].declare_voice)(rec, ty, rng, latched) {
+                return Some(r);
+            }
+            i += 1;
+        }
         None
     }
-    unsafe fn declare_fx(_: usize, _: u32, _: Option<u32>, _: Option<[u32; 8]>) -> Option<bool> {
-        None
-    }
-    unsafe fn dsp_check_sections(_: &DspSec) -> i32 {
-        OK
-    }
-    unsafe fn dsp_check_rows(_: &DspSec) -> i32 {
-        OK
-    }
-    unsafe fn dsp_check_types(_: &DspSec) -> i32 {
-        OK
-    }
-    unsafe fn dsp_admit(_: &Job) -> i32 {
-        OK
-    }
-    unsafe fn dsp_claim(_: &mut Claim) {}
-    unsafe fn dsp_release(_: usize) {}
-    unsafe fn dsp_clear(_: usize) -> bool {
-        true
-    }
-    unsafe fn dsp_row_step(_: usize, _: &mut u32, _: bool) -> Option<RowWrite> {
-        None
-    }
-}
-
-impl<H: Service, T: ServiceList> ServiceList for (H, T) {
-    fn len(kind: u32) -> Option<u32> {
-        match H::len(kind) {
-            Some(n) => Some(n),
-            None => T::len(kind),
-        }
-    }
-    unsafe fn fits(inf: *const u32) -> bool {
-        H::fits(inf) && T::fits(inf)
-    }
-    unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
-        let r = H::check(step, c);
-        if r != OK {
-            return r;
-        }
-        T::check(step, c)
-    }
-    unsafe fn apply(c: &ApplyCtx) -> i32 {
-        let r = H::apply(c);
-        if r != OK {
-            return r;
-        }
-        T::apply(c)
-    }
-    unsafe fn apply_record(kind: u32, body: *const u8, c: &ApplyCtx) -> i32 {
-        let r = H::apply_record(kind, body, c);
-        if r != OK {
-            return r;
-        }
-        T::apply_record(kind, body, c)
-    }
-    unsafe fn remove(owner: u8) {
-        T::remove(owner);
-        H::remove(owner);
-    }
-    unsafe fn caps(out: &mut CapSink) {
-        H::caps(out);
-        T::caps(out);
-    }
-    unsafe fn attribute(site: u32, id: u32) -> Option<usize> {
-        match H::attribute(site, id) {
-            Some(m) => Some(m),
-            None => T::attribute(site, id),
-        }
-    }
-    unsafe fn guard_state(ty: u32) -> Option<GuardState> {
-        match H::guard_state(ty) {
-            Some(g) => Some(g),
-            None => T::guard_state(ty),
-        }
-    }
-    unsafe fn on_loaded(rec: usize) {
-        H::on_loaded(rec);
-        T::on_loaded(rec);
-    }
-    unsafe fn tick(phase: u32) {
-        H::tick(phase);
-        T::tick(phase);
-    }
-    unsafe fn has_voice(rec: usize, ty: u32) -> bool {
-        H::has_voice(rec, ty) || T::has_voice(rec, ty)
-    }
-    unsafe fn declare_voice(rec: usize, ty: u32, rng: [u32; 8], latched: u32) -> Option<i32> {
-        match H::declare_voice(rec, ty, rng, latched) {
-            Some(r) => Some(r),
-            None => T::declare_voice(rec, ty, rng, latched),
-        }
-    }
-    unsafe fn declare_fx(
+    pub unsafe fn declare_fx(
+        &self,
         rec: usize,
         ordinal: u32,
         flags: Option<u32>,
         par: Option<[u32; 8]>,
     ) -> Option<bool> {
-        match H::declare_fx(rec, ordinal, flags, par) {
-            Some(r) => Some(r),
-            None => T::declare_fx(rec, ordinal, flags, par),
+        let mut i = 0;
+        while i < self.rows.len() {
+            if let Some(r) = (self.rows[i].declare_fx)(rec, ordinal, flags, par) {
+                return Some(r);
+            }
+            i += 1;
+        }
+        None
+    }
+    pub unsafe fn dsp_check_sections(&self, sec: &DspSec) -> i32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.rows[i].dsp_check_sections)(sec);
+            if r != OK {
+                return r;
+            }
+            i += 1;
+        }
+        OK
+    }
+    pub unsafe fn dsp_check_rows(&self, sec: &DspSec) -> i32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.rows[i].dsp_check_rows)(sec);
+            if r != OK {
+                return r;
+            }
+            i += 1;
+        }
+        OK
+    }
+    pub unsafe fn dsp_check_types(&self, sec: &DspSec) -> i32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.rows[i].dsp_check_types)(sec);
+            if r != OK {
+                return r;
+            }
+            i += 1;
+        }
+        OK
+    }
+    pub unsafe fn dsp_admit(&self, job: &Job) -> i32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.rows[i].dsp_admit)(job);
+            if r != OK {
+                return r;
+            }
+            i += 1;
+        }
+        OK
+    }
+    pub unsafe fn dsp_claim(&self, c: &mut Claim) {
+        let mut i = 0;
+        while i < self.rows.len() {
+            (self.rows[i].dsp_claim)(c);
+            i += 1;
         }
     }
-    unsafe fn dsp_check_sections(sec: &DspSec) -> i32 {
-        let r = H::dsp_check_sections(sec);
-        if r != OK {
-            return r;
+    pub unsafe fn dsp_release(&self, rec: usize) {
+        let mut i = 0;
+        while i < self.rows.len() {
+            (self.rows[i].dsp_release)(rec);
+            i += 1;
         }
-        T::dsp_check_sections(sec)
     }
-    unsafe fn dsp_check_rows(sec: &DspSec) -> i32 {
-        let r = H::dsp_check_rows(sec);
-        if r != OK {
-            return r;
+    pub unsafe fn dsp_clear(&self, rec: usize) -> bool {
+        let mut ok = true;
+        let mut i = 0;
+        while i < self.rows.len() {
+            ok = (self.rows[i].dsp_clear)(rec) && ok;
+            i += 1;
         }
-        T::dsp_check_rows(sec)
+        ok
     }
-    unsafe fn dsp_check_types(sec: &DspSec) -> i32 {
-        let r = H::dsp_check_types(sec);
-        if r != OK {
-            return r;
+    pub unsafe fn dsp_row_step(&self, rec: usize, want: &mut u32, write: bool) -> Option<RowWrite> {
+        let mut i = 0;
+        while i < self.rows.len() {
+            if let Some(w) = (self.rows[i].dsp_row_step)(rec, want, write) {
+                return Some(w);
+            }
+            i += 1;
         }
-        T::dsp_check_types(sec)
-    }
-    unsafe fn dsp_admit(job: &Job) -> i32 {
-        let r = H::dsp_admit(job);
-        if r != OK {
-            return r;
-        }
-        T::dsp_admit(job)
-    }
-    unsafe fn dsp_claim(c: &mut Claim) {
-        H::dsp_claim(c);
-        T::dsp_claim(c);
-    }
-    unsafe fn dsp_release(rec: usize) {
-        H::dsp_release(rec);
-        T::dsp_release(rec);
-    }
-    unsafe fn dsp_clear(rec: usize) -> bool {
-        H::dsp_clear(rec) && T::dsp_clear(rec)
-    }
-    unsafe fn dsp_row_step(rec: usize, want: &mut u32, write: bool) -> Option<RowWrite> {
-        match H::dsp_row_step(rec, want, write) {
-            Some(w) => Some(w),
-            None => T::dsp_row_step(rec, want, write),
-        }
+        None
     }
 }
 
@@ -448,42 +645,61 @@ impl<H: Service, T: ServiceList> ServiceList for (H, T) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_kind_two_services_declare_is_the_sum_of_their_counts() {
-        let mut c = CapSink::new();
-        c.add(3, 10, 2);
-        c.add(4, 5, 5);
-        c.add(3, 6, 1);
-        assert_eq!(c.get(3), Some((16, 3)));
-        assert_eq!(c.get(4), Some((5, 5)));
-        assert_eq!(c.get(9), None);
-    }
-
     struct A;
-    impl Service for A {
-        fn len(kind: u32) -> Option<u32> {
-            (kind == 1).then_some(8)
-        }
-    }
+    impl Service for A {}
     struct B;
     impl Service for B {
-        fn len(kind: u32) -> Option<u32> {
-            (kind == 2).then_some(12)
-        }
         unsafe fn dsp_clear(_: usize) -> bool {
             false
         }
+        unsafe fn cap(kind: u8) -> Option<(u32, u32)> {
+            (kind == 3).then_some((6, 1))
+        }
+    }
+
+    static ROWS: [ServiceRow; 2] = [
+        ServiceRow::of::<A>("a", &[(1, 8)]),
+        ServiceRow::of::<B>("b", &[(2, 12)]),
+    ];
+    const T: ServiceTable = ServiceTable {
+        rows: &ROWS,
+        failed: 0,
+    };
+
+    #[test]
+    fn a_table_asks_each_service_and_ands_the_clears() {
+        assert_eq!(T.len(1), Some(8));
+        assert_eq!(T.len(2), Some(12));
+        assert_eq!(T.len(3), None);
+        assert_eq!(T.owner(2).map(|r| r.name), Some("b"));
+        assert!(T.owner(9).is_none());
+        unsafe {
+            assert!(!T.dsp_clear(0));
+            assert!(ServiceTable {
+                rows: &ROWS[..1],
+                failed: 0
+            }
+            .dsp_clear(0));
+        }
     }
 
     #[test]
-    fn a_list_asks_each_service_and_ands_the_clears() {
-        type L = (A, (B, ()));
-        assert_eq!(<L as ServiceList>::len(1), Some(8));
-        assert_eq!(<L as ServiceList>::len(2), Some(12));
-        assert_eq!(<L as ServiceList>::len(3), None);
+    fn a_kind_two_services_count_is_the_sum_of_their_counts() {
+        static TWO_B: [ServiceRow; 2] = [
+            ServiceRow::of::<B>("b1", &[]),
+            ServiceRow::of::<B>("b2", &[]),
+        ];
         unsafe {
-            assert!(!<L as ServiceList>::dsp_clear(0));
-            assert!(<(A, ()) as ServiceList>::dsp_clear(0));
+            assert_eq!(
+                ServiceTable {
+                    rows: &TWO_B,
+                    failed: 0
+                }
+                .cap(3),
+                Some((12, 2))
+            );
+            assert_eq!(T.cap(3), Some((6, 1)));
+            assert_eq!(T.cap(4), None);
         }
     }
 }

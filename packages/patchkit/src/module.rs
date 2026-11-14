@@ -49,6 +49,10 @@ pub struct Manifest {
     /// `[[fx]] id = "..."`: the same for effects (`dk_module_ctx_add_fx`).
     #[serde(default, rename = "fx")]
     pub fxs: Vec<IdRef>,
+    /// `[[record]] kind = "lfo_shape", key = 7`: a record of a generic kind (`[records.kinds]` `generic = true`) that `init` emits with `dk_record_add`, with its key (the first
+    /// word of the record's body). The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
+    #[serde(default, rename = "record")]
+    pub records: Vec<RecordKey>,
     /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
     /// builds different rows per device (DT2 has no page rows).
     #[serde(default)]
@@ -119,6 +123,14 @@ impl Manifest {
         }
         Ok(())
     }
+}
+
+/// An entry of `[[record]]`: the kind by its lower-case name (`dkneeds::KIND_NAMES`) and the key of one record of it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecordKey {
+    pub kind: String,
+    pub key: u32,
 }
 
 /// An entry of `[[machine]]` or `[[fx]]`: the id and an optional DSP symbol prefix (any other key is refused).

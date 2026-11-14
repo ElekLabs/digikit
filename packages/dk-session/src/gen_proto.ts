@@ -19,9 +19,32 @@ export const MAX_STATE_BYTES = 16777216;
 export const GRANULE = 64;
 export const DSP_SLACK = 8;
 export const ARENA_HDR = 16;
-export const COLLECT_BYTES = 6320;
+export const COLLECT_BYTES = 7206;
+export const TABLE_MAGIC = 1145787458;
+export const TABLE_VERSION = 1;
 export const MAX_VOICES = 8;
 export const MAX_FX = 4;
+
+/** The record kinds of a `.dkm` (`[records.kinds]`). */
+export const RECORD_KIND = {
+  PARAM: 1,
+  MACHINE: 2,
+  PAGE: 3,
+  EFFECT: 4,
+  ACTION: 5,
+  NATIVE_PAGE: 6,
+  NATIVE_PAGE_V2: 7,
+  LFO_SHAPE: 8,
+} as const;
+
+/** The resources of a module's `uses` (`[records.resources]`). */
+export const RESOURCE = {
+  MACHINE_ROWS: 1,
+  PARAM_ROWS: 2,
+  PAGE_ROWS: 3,
+  RECORD_BYTES: 4,
+  DSP_COST: 5,
+} as const;
 
 export const CMD = {
   INFO: 0x01,
@@ -137,6 +160,15 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-49, 'E_TABLE', "the runtime's tables failed their check"],
   [-73, 'E_MISSING', 'the service is not in the image (the module that provides it is not loaded)'],
   [-74, 'E_DECL_FULL', 'init made more builder calls than the record limit allows'],
+  [-75, 'E_PLAN_KIND', 'the boot plan refused the module: a record kind of its header table has no owning service'],
+  [-76, 'E_PLAN_OWNER', 'the boot plan refused the module: another module owns the kind, slot or hook site it takes'],
+  [-77, 'E_PLAN_KEY', 'the boot plan refused the module: another module of the selection has the same key for a kind'],
+  [
+    -78,
+    'E_PLAN_FIT',
+    'the boot plan refused the module: its uses do not fit what the earlier modules of the selection left',
+  ],
+  [-79, 'E_DECL_KIND', 'a service declared a record kind that the header table does not carry, or with another length'],
 ];
 
 export const CAP = {
@@ -235,6 +267,7 @@ export const LOG_KIND = {
   MOD_NEEDS: 43,
   MODULE_COMMIT: 44,
   MODULE_LATCH: 45,
+  DSP_LINK: 46,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -284,6 +317,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   43: ['MOD_NEEDS', ['index', 'name0', 'name1', 'name2', '-']],
   44: ['MODULE_COMMIT', ['index', 'rows', 'records_addr', 'records_size', '-']],
   45: ['MODULE_LATCH', ['index', 'machine', 'latched', '-', '-']],
+  46: ['DSP_LINK', ['what', 'a', 'b', 'c', 'd']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

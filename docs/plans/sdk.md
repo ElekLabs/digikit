@@ -129,6 +129,7 @@ A module reaches the device through named imports, grouped by service in `sdk.to
   `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`, `dk_sdhc_large_open`.
 - When an optional provider is not loaded, its imports bind to stubs: `_open` returns `DK_E_MISSING`, the other functions return the same
   code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the last `_open` stub that answered DK_E_MISSING during `init` as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
+- Records of a generic kind: `dk_record_add(ctx, kind, bytes, len)` (runtime 0.8.0, `<dk/gen/imports.h>`, kinds in `<dk/gen/records.h>`) emits a record of a kind that a service owns and `[records.kinds]` marks `generic`; the module lists its key in `module.toml` (`[[record]] kind = "lfo_shape", key = 7`). The typed kinds (machine, page, parameter, effect) stay builder calls. A service module declares its kinds, slots, hooks, exports and resources with `dk_service_declare_kind`, `_slot`, `_hook`, `_export` and `_resource`; the commit compares them with the header table and refuses a difference with `DK_E_DECL_KIND`.
 - Sink channels: `dk_sink_set(channel, sink)` (runtime 0.7.1, `<dk/core/sink.h>`) sets the sink of the `log` or `span` channel for the calling module; one owner per channel
   (`DK_E_BUSY` for a second), cleared after the owner's `fini` (runtime-and-services 5.11). A new import is a PATCH: the runtime went from 0.7.0 to 0.7.1 and the import has `since = "0.7.1"`.
 - Each import has `service`, `since`, `context` and `sig` in `sdk.toml`:
@@ -144,7 +145,7 @@ context  = "init"             # init, ui, io-step, any, isr
 since    = "0.7.0"          # the runtime version that added the import
 ```
 
-- The packer writes the runtime version a module needs, the newest `since` among the imports it links (0 when it links none), into the header word at 0x30 (bit 31 is the trace flag), and derives the services it
+- The packer writes the runtime version a module needs, the newest `since` among the imports it links, and at least the version that introduced the header table (`[runtime] table`, 0.8.0), into the header word at 0x30 (bit 31 is the trace flag), and derives the services it
   needs from their `service` tags. `uses_api`, `api->size` and `DK_API_HAS` are gone. The runtime loads the module only when that version has its own major and minor and at most its own patch (0.x semver: a minor may break, a patch only adds); otherwise the load fails with `E_CONTRACT`. The bytes 0x38 to 0x3f of the header are reserved zero.
 - `service` uses the names of runtime-and-services: `runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`, `sdhc_large`. Today
   every `runtime`, `samples` and `machines` import resolves to code in the runtime image. When runtime-and-services moves `samples`,
@@ -393,11 +394,9 @@ placeholder, so chained calls stay safe.
 The load order is: store and file checks (magic, size, sha256, runtime version, name, import resolution with `E_IMPORT`, relocations, keys table), the module record, the DSP check, a comparison of the header keys with the DSP voice and effect counts (`collect::check_dsp_keys`, `E_DECL_ID`), `dsp::reserve`, the arena copy, then `init`. The DSP check and reserve stay before `init`. They read only the static DSP section and the machine and effect keys from the
 header: reserve copies the DSP image into its own arena block and fills the voice and FX row tables. After reserve the staged file is not read again.
 
-The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 is `keys_off` and `keys_size`. They point to the keys table: `machine_rows`, `param_rows` and `page_rows` (the `[uses]` counts), the
-machine count, the FX count, `record_bytes` (the size of the record block the module keeps), then the machine keys (u32) and the FX ids. All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read `[uses]` from
-this table; `needs_of` adds the arena block of `record_bytes` (rounded to 16, plus the 16-byte block header, as `arena::alloc` takes it) to `ARENA`. Every `.dkm` has a keys table at the 0x90 pair (size 0 for a module with no machine and no effect: a tool or a service); the runtime has no other format. The version is the runtime 0.7.0.
+The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 is `table_off` and `table_size`. They point to the header table, a versioned, tagged table (R7; layout in `packages/dkneeds/src/keys.rs` and `sdk/sdk.toml` `[limits.format]`): magic `DKTB`, version, then entries in tag order, each `u16 tag, u16 count, u32 payload bytes, payload`. NEEDS lists the services the linked imports name with the newest `since` of each and whether the need is hard; USES lists `(resource id, count)` for the `[uses]` counts and `record_bytes`; KEYS lists `(kind, n, keys)` for the machine keys, the effect ids and the keys of `[[record]]` entries; KINDS, SLOTS, HOOKS, EXPORTS and RESOURCES are the entries of a service module (R12). All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read USES from the table; `needs_of` adds the arena block of `record_bytes` (rounded to 16, plus the 16-byte block header, as `arena::alloc` takes it) to `ARENA`. Every `.dkm` has a table (a module that needs and keeps nothing has the 8-byte head); a file with no table or another magic is the format of runtime 0.7 and the loader refuses it with `E_CONTRACT`. The packer writes at least 0.8.0 as the version the module needs. The version is the runtime 0.8.0.
 
-The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS` (32) and by the size of the `Collect` block, `collect_bytes` (6320 in `sdk.toml` `[limits.format]`, asserted at compile time in `collect.rs`). A shot-like
+The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS` (32) and by the size of the `Collect` block, `collect_bytes` (7206 in `sdk.toml` `[limits.format]`, asserted at compile time in `collect.rs`). A shot-like
 machine needs about 10 records, the other modules 3 to 7. The collection is refused with `E_DECL_ID` (-27: an index outside the keys table), `E_DECL_USES` (-28: more rows than `[uses]` says) or `E_DECL_FULL` (-74: more calls than the limits allow). When `init` returns `DK_OK`:
 
 1. Check the collection (device limits, `[uses]`, the keys in the header, FX ids of modules already loaded: a duplicate is `E_FX_ID_DUP`), lower it to records and check the records with the `registry::check` rules.
@@ -463,6 +462,15 @@ These come from the profiling work and land after the steps in section 12 that t
 - **Cycle cost.** `max_cycles_*` stops being written by hand. The packer writes a DSP cycles-per-block use into the header and the report,
   from the `module:check` emulator measurement at the device's voice count or a static estimate over the module's sharcdb tables, scaled
   by the emulator-to-device calibration ([profiling.md](profiling.md) 6 and 7.3). The broker checks it (runtime-and-services 5.3).
+  P4 measures and names the cost; this item puts it into the header and the broker. The unit is **instructions** per block (SHARC+
+  instructions the emulator counts) until the device calibration (P9); the name "cycles" waits for it. `dkprof::budget` holds the rule,
+  filled from `devices/*.toml` and `devices/cycle-factors.json` (`patchkit budget` prints it; `module:check` reads that). The headroom of a
+  device is what is left of the block between the stock firmware (`stock_busy`) and 85 percent of the block, with instructions projected to
+  cycles by the "high" factor (the 15 percent are the safety margin until P9). A machine's cost is its own worst steady block for one
+  voice, measured by `module:check`; the check is `voice-block <= headroom / voices`. The note-on block is checked on its own against the
+  whole headroom, never added to the other voices' steady blocks. The selection rule the broker applies (`dkprof::budget::check_selection`):
+  `max(machine costs) * voices + sum(FX costs) + stock baseline <= block at 85 percent`, which is `own <= headroom`. Every voice may run
+  any selected machine, so the largest one counts for all voices.
 - **`DK_SPAN`.** `DK_SPAN_BEGIN(owner)` and `DK_SPAN_END(owner)` in `core/trace.h` and `dsp/contract/dk_trace.inc`. They read the cycle
   counter and emit `(owner, cycles)` to the `span` sink (runtime-and-services 5.11). With no sink set they cost one flag test. Only
   service dispatchers use them (runtime-and-services 6.1). In the emulator a counter read can change the execution tier

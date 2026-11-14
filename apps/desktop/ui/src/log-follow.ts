@@ -7,10 +7,12 @@ import type { LogInput, Origin } from './log-core.ts';
 import { changeLevel, configOf, readLevels, type LevelChange, type LevelView } from './log-level-core.ts';
 import { LogFollower, POLL_MS, pace, type FollowSession, type OriginStatus } from './log-follow-core.ts';
 import { logInputs } from './log-state.ts';
+import type { LogNames } from './log-names.ts';
 
 /** The protocol session as the follower uses it. */
 export const followSession = (dk: DkSession): FollowSession => ({
   info: (quick) => dk.info(quick),
+  peek: (addr, len) => dk.peek(addr, len),
   logPage: (from, quick) => dk.logPage(from, quick),
   logConfig: (quick) => dk.logConfig(quick),
   setLogConfig: (level, modules, quick) => dk.setLogConfig(level, modules, quick),
@@ -25,8 +27,13 @@ export interface FollowEnv {
   follow(): boolean;
   /** A firmware flash is running: the Firmware page has the MIDI port. */
   flashing(): boolean;
-  emulator: { running(): boolean; session(): Promise<FollowSession> };
-  device: { port(): string | undefined; session(): Promise<FollowSession>; present(): Promise<boolean> };
+  emulator: { running(): boolean; session(): Promise<FollowSession>; names?: LogNames };
+  device: {
+    port(): string | undefined;
+    session(): Promise<FollowSession>;
+    present(): Promise<boolean>;
+    names?: LogNames;
+  };
   push?(inputs: LogInput[]): void;
   /** The window is on screen (default: yes). A hidden window asks nothing of the device. */
   shown?(): boolean;
@@ -100,6 +107,7 @@ export function createLogFollow(env: FollowEnv): LogFollow {
           origin,
           session: source.session,
           present: 'present' in source ? source.present : undefined,
+          names: 'names' in source ? source.names : undefined,
           now,
           out: {
             push,

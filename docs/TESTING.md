@@ -630,8 +630,8 @@ Formatting an emulator crate or `dkneeds` changes the daemon key and the PGO key
   moves no counter and is not covered: a daemon is not asked to progress then, and only the Vitest limit applies.
 - Tests have no wall-time limit of their own for runtime start, baseline reload, boot, restart and safe-mode waits. The
   watchdog catches a stopped emulator; a wait on firmware state uses emulated time (`pollEmulated` and `waitEmulated` in
-  `tests/regression/runtime/waits.ts`, `events.until(kind, predicate, { emulatedMs })`). Vitest's `testTimeout` (30 min) and
-  `hookTimeout` (10 min) of the `runtime` and `conformance` projects are the only wall limits: do not repeat them in a test.
+  `tests/regression/runtime/waits.ts`, `events.until(kind, predicate, { emulatedMs })`). `expectPollEmulated(session, read, assertion, { emulatedMs })` replaces `expect.poll(read, { timeout })` in device tests: a wall `timeout` there is cut by a loaded host. Wall limits that remain are readiness deadlines (`expectRemoteEnabled`, the runtime-menu rows) and polls of host processes. Vitest's `testTimeout` (30 min) and
+  `hookTimeout` (10 min) of the `runtime`, `proofs` and `conformance` projects are outer safety nets, not hang detectors: hangs are caught by the progress guard and the emulated-time waits above. `runtimeTests` takes no `timeout` option, so a test cannot set a shorter wall budget that host load then cuts. The emulator-slot wait happens in `emu-slot.mjs` before Vitest starts and never counts against them.
   Hang guards that never fail a healthy slow run: a clock that stands still for 60 s (`DIGI_CLOCK_STUCK_MS`) fails `pollEmulated`
   (a paused daemon, a halted DSP); the phases before the daemon has a socket (environment preparation, the startup load of a
   non-reused session) nothing can be asked, so each has a 300 s guard (`PRE_SOCKET_HANG_MS`); `waitReset` stops after 200 steps

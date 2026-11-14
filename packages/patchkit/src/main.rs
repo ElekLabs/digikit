@@ -33,6 +33,8 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
   addr    --map FILE... [--loads FILE | --load ID=BASE... --dsp-base ID=PC...] [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
                                          names for addresses from address maps and a module load table (docs/ADDRMAP.md); JSON by default
+  budget  [--device SHORT]... [--fx-max N] [--budget-pct P]   the DSP budget of each device in instructions per block (headroom, voice-block, note-on-block;
+                                         with --fx-max the effect budget of the tightest device): JSON from devices/*.toml and devices/cycle-factors.json
   pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
                                          (a `dynamic = true` module: its machine and param records for --device)
@@ -44,6 +46,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   synth-dkm SPEC.toml --device SHORT -o OUT.dkm [--size]   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
   dkm-info FILE.dkm                      check a .dkm and list what it holds
+  dkm-identity BEFORE_DIR AFTER_DIR      do two sets of .dkm (patchkit pack-all) differ only in the header table? (image, relocs, imports, DSP section compared)
   fit     --json -                       the fit rule (dkrt-fit): {caps, needs, empty?} on stdin -> {each, set, line}; exit 1 on a bad request
   records --json FILE|-                  the decoded records (counts, params, machines, pages, effects) of a committed record block
   needs   [--json] FILE.dkm...           what a load of each file takes (arena, DSP area, rows), inferred from its contents; `-` reads stdin;
@@ -807,6 +810,7 @@ plan.json {}",
         }
         "records" => patchkit::records_cli::run(rest)?,
         "addr" => patchkit::addrmap::run(rest)?,
+        "budget" => patchkit::budget_cli::run(rest)?,
         "needs" => {
             let json = rest.iter().any(|a| a == "--json");
             let files: Vec<&String> = rest.iter().filter(|a| *a != "--json").collect();
@@ -860,6 +864,21 @@ plan.json {}",
             std::io::Read::read_to_end(&mut std::io::stdin(), &mut req)
                 .map_err(|e| Error(format!("stdin: {e}")))?;
             println!("{}", patchkit::fit::fit_json(&req)?);
+        }
+        "dkm-identity" => {
+            let (b, a2) = (need(rest)?, rest.get(1).ok_or_else(|| Error(USAGE.into()))?);
+            let r = patchkit::dkm_identity::compare_dirs(Path::new(b), Path::new(a2))?;
+            for f in &r.failures {
+                println!("FAIL {f}");
+            }
+            println!(
+                "identical code and DSP: {} files; failures: {}",
+                r.identical,
+                r.failures.len()
+            );
+            if !r.failures.is_empty() {
+                std::process::exit(1);
+            }
         }
         "dkm-info" => {
             let raw = read(need(rest)?)?;
@@ -942,15 +961,25 @@ plan.json {}",
             }
             if !d.register.is_empty() {
                 let k = dkneeds::keys::Keys::parse(&d.register)
-                    .map_err(|e| Error(format!("keys table: {e:?}")))?;
+                    .map_err(|e| Error(format!("header table: {e:?}")))?;
                 println!(
-                    "  keys: {} machine rows, {} param rows, {} page rows; machines {:x?}, effects {:x?}",
-                    k.machine_rows(),
-                    k.param_rows(),
-                    k.page_rows(),
+                    "  table: {} entries; uses {:?}; machines {:x?}, effects {:x?}",
+                    k.n_entries(),
+                    k.uses().map(|u| (u.resource, u.count)).collect::<Vec<_>>(),
                     k.machine_keys().collect::<Vec<_>>(),
                     k.fx_keys().collect::<Vec<_>>()
                 );
+                for n in k.needs() {
+                    println!(
+                        "  needs: service {:08x} from {}{}",
+                        n.service,
+                        patchkit::dkm::fmt_runtime(n.min_version),
+                        if n.hard { "" } else { " (optional)" }
+                    );
+                }
+                for (kind, ks) in k.key_groups() {
+                    println!("  keys: kind {kind}: {:x?}", ks.collect::<Vec<_>>());
+                }
             }
         }
         "pack-section" => {

@@ -23,13 +23,12 @@
 //! Everything runs in the UI task. No float arithmetic runs in an interrupt; the arithmetic is the compiler's soft float.
 use super::dsp as fxdsp;
 use super::fxsend;
-use crate::core_api::{CoreApi, LinkWriter, Platform, PLATFORM, REAL_CORE};
+use crate::core_api::{CoreApi, Platform, PLATFORM, REAL_CORE};
 use dkrt_abi::mem::{cstr_len, iw, rd, rd16, rd32, wr, wr16};
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
-pub const KIND_EFFECT: u32 = 4;
-pub const LEN_EFFECT: u32 = 0x1a4;
+pub use dkrt_sdk::records::{KIND_EFFECT, LEN_EFFECT};
 const INFO_MAGIC: u32 = 0x4658_5047; // "FXPG"
 use dkrt_abi::dsp::MAX_FX;
 const KNOBS: usize = 7;
@@ -88,13 +87,10 @@ pub struct FxpState {
     pub owner: [u8; MAX_FX],
     /// Knobs of the page (the words p0 .. p(n-1)); MIX is word 7.
     pub nknob: [u8; MAX_FX],
-    /// A word being sent: row, word (0 .. 7), and the raw value it carries.
-    pub busy: u8,
-    pub busy_k: u8,
-    pub busy_w: u8,
-    pub busy_v: i32,
-    /// The raw value (0 .. 0x7f00, as the kit's array holds it) in force and the one the DSP has (-1: not sent).
+    /// The raw value (0 .. 0x7f00, as the kit's array holds it) in force, the one handed to the link as the word's live value (`want`) and the one the DSP has
+    /// taken (`dsp`; -1: none).
     pub cur: [[i32; WORDS]; MAX_FX],
+    pub want: [[i32; WORDS]; MAX_FX],
     pub dsp: [[i32; WORDS]; MAX_FX],
     /// The record's default raw values (knob j, MIX): what a kit gets that holds no values of this effect.
     pub def: [[i32; WORDS]; MAX_FX],
@@ -404,9 +400,11 @@ pub unsafe fn remove(owner: u8) {
                 s.cur[k][j] = 0;
                 s.def[k][j] = 0;
                 s.dsp[k][j] = -1;
+                s.want[k][j] = -1;
                 j += 1;
             }
             s.nknob[k] = 0;
+            fxdsp::fx_forget(&REAL_CORE, k);
             fxsend::remove(k);
         }
         k += 1;
@@ -466,7 +464,7 @@ fn has_word(s: &FxpState, k: usize, j: usize) -> bool {
     j == WORDS - 1 || j < s.nknob[k] as usize
 }
 
-/// Once per UI-loop pass: finish the transfer in flight, put the values in a new kit's array, and send the next changed value; then the send effects' amounts.
+/// Once per UI-loop pass: note which values the DSP has taken, put the values in a new kit's array, and hand the changed values to the link; then the send effects' amounts.
 pub unsafe fn tick() {
     let s = fs();
     let mut any = false;
@@ -482,22 +480,7 @@ pub unsafe fn tick() {
     if inf.is_null() {
         return;
     }
-    if s.busy != 0 {
-        match REAL_CORE.link_poll(LinkWriter::FxPage) {
-            None => return,
-            Some(ok) => {
-                let (bk, bw) = (s.busy_k as usize, s.busy_w as usize);
-                if ok {
-                    s.dsp[bk][bw] = s.busy_v;
-                    s.sent += 1;
-                } else {
-                    s.dsp[bk][bw] = -1; // try again
-                    s.errors += 1;
-                }
-                s.busy = 0;
-            }
-        }
-    }
+    confirm();
     values(inf);
     fxsend::tick();
 }
@@ -544,9 +527,9 @@ unsafe fn values(inf: *const u32) {
                         s.cur[k][j] = n;
                         s.changes += 1;
                     }
-                    // one word per pass, and only when the row is in the DSP and no load is going on
-                    if n != s.dsp[k][j] && s.busy == 0 && !REAL_CORE.link_busy() && fxdsp::fx_live(k) {
-                        send_knob(&REAL_CORE, s, k, j, n);
+                    // only when the row is in the DSP and no load is going on; the link sends the newest value of the word when it is free
+                    if n != s.want[k][j] && fxdsp::fx_live(k) {
+                        set_knob(&REAL_CORE, s, k, j, n);
                     }
                 }
                 j += 1;
@@ -563,24 +546,54 @@ unsafe fn write_knob_row<C: CoreApi>(c: &C, s: &mut FxpState, k: usize, j: usize
     s.cur[k][j] = def_n;
     s.def[k][j] = def_n;
     s.dsp[k][j] = def_n; // the DSP row gets the record's defaults (p words) and the mix below
+    s.want[k][j] = def_n;
 }
 
-/// Start the write of word `j` of effect row `k` for the raw value `n`; the transfer is in flight when the link accepts it.
-unsafe fn send_knob<C: CoreApi>(c: &C, s: &mut FxpState, k: usize, j: usize, n: i32) -> bool {
+/// The link slot and the DSP word of word `j` of effect row `k` for the raw value `n`: knob j is word 4 + j (a float in [min, max]), MIX is word 13.
+unsafe fn knob_word<C: CoreApi>(c: &C, s: &FxpState, k: usize, j: usize, n: i32) -> Option<(dkrt_abi::link::Slot, u32)> {
     let (word, bits) = if j == WORDS - 1 {
         (dkrt_abi::dsp::FXW_MIX, mix_value(n))
     } else {
         (4 + j as u32, knob_value(s.min[k][j], s.span[k][j], n))
     };
-    if fxdsp::fx_word_start(c, LinkWriter::FxPage, k, word, bits) {
-        s.busy = 1;
-        s.busy_k = k as u8;
-        s.busy_w = j as u8;
-        s.busy_v = n;
-        true
-    } else {
-        false
+    fxdsp::fx_slot(c, k, word).map(|slot| (slot, bits))
+}
+
+/// Hand the raw value `n` of word `j` of effect row `k` to the link as the word's live value.
+unsafe fn set_knob<C: CoreApi>(c: &C, s: &mut FxpState, k: usize, j: usize, n: i32) -> bool {
+    match knob_word(c, s, k, j, n) {
+        Some((slot, bits)) => {
+            c.link_set(slot, bits);
+            s.want[k][j] = n;
+            true
+        }
+        None => false,
     }
+}
+
+/// Note the values the DSP has taken: a word whose live value the link confirms is the DSP's.
+unsafe fn confirm() {
+    let s = fs();
+    let mut k = 0;
+    while k < MAX_FX {
+        if s.owner[k] != 0 {
+            let mut j = 0;
+            while j < WORDS {
+                let n = s.want[k][j];
+                if has_word(s, k, j) && n >= 0 && n != s.dsp[k][j] {
+                    if let Some((slot, bits)) = knob_word(&REAL_CORE, s, k, j, n) {
+                        if REAL_CORE.link_confirmed(slot) == Some(bits) {
+                            s.dsp[k][j] = n;
+                            s.sent += 1;
+                        }
+                    }
+                }
+                j += 1;
+            }
+        }
+        k += 1;
+    }
+    s.errors = REAL_CORE.link_errors();
 }
 
 /// Pages in use and the pages the image reserved (for CAPACITY-like reports and tests): (reserved, used).
@@ -606,50 +619,57 @@ mod tests {
     use super::*;
     use crate::core_api::{Call, FakeCore};
 
-    /// A knob of effect row 2 is declared with a default, then its value changes: the parameter row is written first, then the DSP word goes out and holds the link.
+    /// A knob of effect row 2 is declared with a default, then its value changes: the parameter row is written first, then the new value is the word's live value.
     #[test]
-    fn a_knob_gets_its_row_then_a_change_goes_to_the_dsp() {
+    fn a_knob_gets_its_row_then_a_change_is_set_on_the_link() {
         let mut s: std::boxed::Box<FxpState> = unsafe { std::boxed::Box::new(core::mem::zeroed()) };
         let core = FakeCore::new();
         unsafe {
             s.min[2][1] = 0f32.to_bits();
             s.span[2][1] = 1f32.to_bits();
             write_knob_row(&core, &mut s, 2, 1, 120, 7, 33, 0x4000);
-            assert_eq!((s.cur[2][1], s.def[2][1], s.dsp[2][1]), (0x4000, 0x4000, 0x4000));
-            assert!(!core.link_busy());
-            assert!(send_knob(&core, &mut s, 2, 1, 0x7f00));
-            assert_eq!((s.busy, s.busy_k, s.busy_w, s.busy_v), (1, 2, 1, 0x7f00));
-            assert!(core.link_busy(), "the transfer holds the link for the other writers");
-            // a refused submission starts nothing
-            let other = FakeCore::new();
-            other.accept.set(false);
-            s.busy = 0;
-            assert!(!send_knob(&other, &mut s, 2, 1, 0x100));
-            assert_eq!(s.busy, 0);
-            assert!(!other.link_busy());
+            assert_eq!((s.cur[2][1], s.def[2][1], s.dsp[2][1], s.want[2][1]), (0x4000, 0x4000, 0x4000, 0x4000));
+            assert!(set_knob(&core, &mut s, 2, 1, 0x7f00));
+            assert_eq!(s.want[2][1], 0x7f00);
             // a knob is word 4 + j of its row, MIX word 13, whatever its place among the knobs; the rows are 24 words apart
-            send_knob(&core, &mut s, 3, WORDS - 1, 0x7f00);
+            set_knob(&core, &mut s, 3, WORDS - 1, 0x7f00);
         }
         let calls = core.calls();
         assert_eq!(calls[0], Call::FxRow { code: 120, mirror: 33, def: 0x4000 });
-        assert!(matches!(calls[1], Call::Word { who: LinkWriter::FxPage, win: dkrt_abi::dsp::WIN_FX, word: 53, .. }));
-        assert!(matches!(calls[2], Call::Word { who: LinkWriter::FxPage, win: dkrt_abi::dsp::WIN_FX, word: 85, .. }));
+        assert!(matches!(calls[1], Call::Set { slot: dkrt_abi::link::Slot { win: 2, word: 53 }, .. }));
+        assert!(matches!(calls[2], Call::Set { slot: dkrt_abi::link::Slot { win: 2, word: 85 }, .. }));
     }
 
-    /// The claim of the fx page writer is the one `busy` was: set with the accepted transfer, cleared when its result is taken.
+    /// The offsets that the device tests read from `DKRT_FXP` (`tests/regression/runtime/fx-pages-ui.ts`).
     #[test]
-    fn the_link_is_busy_from_submission_to_result() {
+    fn the_layout_the_device_tests_read_is_unchanged() {
+        assert_eq!(core::mem::offset_of!(FxpState, sent), 16);
+        assert_eq!(core::mem::offset_of!(FxpState, errors), 20);
+        assert_eq!(core::mem::offset_of!(FxpState, seeds), 24);
+        assert_eq!(core::mem::offset_of!(FxpState, owner), 28);
+        assert_eq!(core::mem::offset_of!(FxpState, cur), 36);
+        assert_eq!(core::mem::offset_of!(FxpState, dsp), 292);
+    }
+
+    /// Several turns before the link is free end as one write of the newest value, and the word counts as the DSP's when the link confirms it.
+    #[test]
+    fn a_fast_turn_sends_the_last_value_and_the_dsp_value_follows_the_confirmation() {
+        let mut s: std::boxed::Box<FxpState> = unsafe { std::boxed::Box::new(core::mem::zeroed()) };
         let core = FakeCore::new();
         unsafe {
-            assert!(!core.link_busy());
-            core.link_word(LinkWriter::FxPage, dkrt_abi::dsp::WIN_FX, 4, 1);
-            assert!(core.link_busy());
-            core.poll.set(None);
-            assert_eq!(core.link_poll(LinkWriter::FxPage), None);
-            assert!(core.link_busy(), "a running transfer keeps the claim");
-            core.poll.set(Some(false));
-            core.link_poll(LinkWriter::FxPage);
-            assert!(!core.link_busy(), "a failed transfer releases it too");
+            s.min[2][1] = 0f32.to_bits();
+            s.span[2][1] = 1f32.to_bits();
+            write_knob_row(&core, &mut s, 2, 1, 120, 7, 33, 0x4000);
+            for n in [0x100, 0x200, 0x300] {
+                set_knob(&core, &mut s, 2, 1, n);
+            }
+            for _ in 0..50 {
+                core.link.borrow_mut().pump();
+            }
+            let slot = fxdsp::fx_slot(&core, 2, 5).unwrap();
+            let wire = core.link.borrow().t.words();
+            assert_eq!(wire.len(), 1);
+            assert_eq!(core.link_confirmed(slot), Some(knob_value(s.min[2][1], s.span[2][1], 0x300)));
         }
     }
 }

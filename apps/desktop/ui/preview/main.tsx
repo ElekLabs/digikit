@@ -33,6 +33,7 @@ import { createLogFollow } from '../src/log-follow';
 import LogPanel from '../src/LogPanel';
 import { setLogOpen } from '../src/log-state';
 import { logMode, previewLog } from './runtime-log-mock';
+import { previewNames } from './runtime-names-mock';
 import { SAMPLES_ROOT, bindSimApp, control, sim } from './sim';
 const host = createTauriHost();
 const apps = createDesktopApps(host);
@@ -125,7 +126,7 @@ function LogPage() {
   const follow = createLogFollow({
     follow: () => true,
     flashing: () => false,
-    emulator: { running: previewLog.emulatorRunning, session: async () => previewLog.emulator },
+    emulator: { running: previewLog.emulatorRunning, session: async () => previewLog.emulator, names: previewNames },
     device: { port: previewLog.devicePort, session: async () => previewLog.device, present: async () => true },
   });
   return (

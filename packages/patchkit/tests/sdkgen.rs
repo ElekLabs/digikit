@@ -180,7 +180,7 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
         ("context = \"io-step\"", "context = \"anywhere\""),
         (
             "since = \"0.7.0\"\ncontext = \"isr\"",
-            "since = \"0.8.0\"\ncontext = \"isr\"",
+            "since = \"0.9.0\"\ncontext = \"isr\"",
         ),
         (
             "since = \"0.7.0\"\ncontext = \"isr\"",

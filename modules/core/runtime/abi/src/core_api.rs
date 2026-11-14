@@ -6,13 +6,12 @@
 //! that a host test must drive takes a generic `C: CoreApi` (no `dyn`: the runtime has no allocator and no vtables); everything else calls the `REAL_CORE`
 //! constant. `FakeCore` (host tests of the runtime crate) records the calls in order.
 //!
-//! The DSP link is one transfer at a time. Three writers hold it across polls: the effect page values (`LinkWriter::FxPage`), the send amounts
-//! (`LinkWriter::FxSend`) and the sample track writer (`LinkWriter::Sample`). `link_busy` says that an effect writer has a transfer in flight (the
-//! sample writer checks it before it starts one); `link_claimed` asks for one writer (the effect writers check the sample writer). Interim until the R6
-//! transfer queue.
+//! The DSP link belongs to the core (`link.rs` of the runtime crate): a service sets live values with `link_set` and sends owned streams with
+//! `link_submit` (types in `crate::link`). It never asks whether the link is busy.
 //!
 //! Platform facts (the device profile, the interrupt mask) are not here: they belong to `platform::Platform`. A service names them through `crate::core_api::PLATFORM`.
 use crate::dsp::DspState;
+use crate::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use crate::registry::RegState;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
@@ -21,31 +20,6 @@ pub const JOB_E_CANCELLED: i32 = -80;
 
 /// The flags of an info-level log record.
 pub const LOG_INFO: u16 = dkrt_sdk::logk::L_INFO << dkrt_sdk::logk::LEVEL_SHIFT;
-
-/// Who starts a transfer on the DSP link.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LinkWriter {
-    /// The effect pages' knob and MIX words.
-    FxPage,
-    /// The send amount words.
-    FxSend,
-    /// The sample tracks' table writes.
-    Sample,
-}
-
-impl LinkWriter {
-    /// The claim bit a writer holds while its transfer is in flight.
-    pub const fn claim(self) -> u8 {
-        match self {
-            LinkWriter::FxPage => 1,
-            LinkWriter::FxSend => 2,
-            LinkWriter::Sample => 4,
-        }
-    }
-}
-
-/// The claim bits of the effect writers.
-pub const FX_CLAIMS: u8 = 3;
 
 pub trait CoreApi {
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
@@ -141,35 +115,20 @@ pub trait CoreApi {
     unsafe fn fx_info(&self) -> *const u32;
 
     // ---- the DSP link ----------------------------------------------------------------------------------------------------
-    /// Start the write of word `word` of window `win` for `who`. `true` when it was accepted.
-    unsafe fn link_word(&self, who: LinkWriter, win: u32, word: u32, value: u32) -> bool;
-    /// Write one word of window `win` and wait for it (a load is in progress or the module is being released). `false` when it failed.
-    unsafe fn link_word_blocking(&self, win: u32, word: u32, value: u32) -> bool;
-    /// Start a serialized window-zero transfer of `len` bytes at `src` to `dst`: 0 accepted, -2 refused for now, another negative error.
-    unsafe fn link_sample_send(&self, dst: u32, src: *const u8, len: u32) -> i32;
-    /// The result of the transfer `who` started: `Some(true)` done, `Some(false)` failed, `None` still running.
-    unsafe fn link_poll(&self, who: LinkWriter) -> Option<bool>;
-    /// No load and no transfer is in progress on the link.
-    unsafe fn link_idle(&self) -> bool;
-    /// An effect page value or a send amount transfer is in flight.
-    fn link_busy(&self) -> bool;
-    /// `who` has a transfer in flight.
-    fn link_claimed(&self, who: LinkWriter) -> bool;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn each_link_writer_has_its_own_claim_bit_and_the_effect_writers_are_the_mask() {
-        let (a, b, c) = (
-            LinkWriter::FxPage.claim(),
-            LinkWriter::FxSend.claim(),
-            LinkWriter::Sample.claim(),
-        );
-        assert_eq!(a & b | a & c | b & c, 0);
-        assert_eq!(a | b, FX_CLAIMS);
-        assert_eq!(c & FX_CLAIMS, 0);
-    }
+    /// Set the live value of `slot`. The core sends it (the newest value only) and sends it again when a write failed.
+    fn link_set(&self, slot: Slot, value: u32);
+    /// The value of `slot` that the DSP has taken (`None`: none yet, or the DSP restarted since).
+    fn link_confirmed(&self, slot: Slot) -> Option<u32>;
+    /// Live writes that failed so far (each is sent again).
+    fn link_errors(&self) -> u32;
+    /// Drop the live values of the `count` words from `first` of window `win` (their row is gone): nothing more is sent for them.
+    fn link_forget(&self, win: u32, first: u32, count: u32);
+    /// Queue a request of `owner`. `None` when the queue is full or the request is not valid (an empty or odd-sized transfer, a reserved window).
+    unsafe fn link_submit(&self, owner: Owner, stream: &Stream) -> Option<Ticket>;
+    /// The result of a request, for its owner only. A terminal result is given once.
+    fn link_result(&self, t: Ticket) -> LinkResult;
+    /// Cancel the queued requests of `owner` and wait for its transfer in flight. `false` when that did not end in time.
+    unsafe fn link_drain(&self, owner: Owner) -> bool;
+    /// Send `seq` for `owner` and wait for the result (error paths and unload clears). `true` when every step was taken.
+    unsafe fn link_run(&self, owner: Owner, seq: &Sequence) -> bool;
 }

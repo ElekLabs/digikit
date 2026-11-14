@@ -59,11 +59,35 @@ export interface FsHost {
   saveLog(bytes: Uint8Array, name: string): Promise<string | null>;
 }
 
+/** The address map of one built module (docs/ADDRMAP.md): the JSON text `lib_build` wrote beside its `.dkm`. */
+export interface LibMap {
+  /** The module's library path without `.dkm` (`author/name`). */
+  id: string;
+  json: string;
+}
+
+/** The ship map `firmware_prepare` kept for a prepared image, and the addresses of its load-table symbols (docs/ADDRMAP.md "Workbench"). */
+export interface ShipRecord {
+  /** The id the image reports in INFO after the flash, 16 hex digits. */
+  image_id: string;
+  /** The ship map as JSON text. */
+  ship: string;
+  symbols: Record<string, number>;
+}
+
+/** What `lib_maps` answers: the ship maps kept for the device's images, and the maps of its built modules. */
+export interface LibMaps {
+  ships: ShipRecord[];
+  modules: LibMap[];
+}
+
 /** The library folder of built modules and the device profiles. */
 export interface LibraryHost {
   build(device: string): Promise<LibBuildReport>;
   scan(device: string): Promise<{ path: string; size: number }[]>;
   read(device: string, path: string): Promise<ArrayBuffer>;
+  /** The address maps of the device: the ship maps of the images `firmware.prepare` made, and the maps of its built modules (`build` writes them; a module built before has none). */
+  readMaps(device: string): Promise<LibMaps>;
   /** What the device profile says about the device with this id (`dt2`): its name and the backend of its samples. */
   deviceStorage(device: string): Promise<{ name: string; samples: string }>;
 }
@@ -105,6 +129,8 @@ export interface FirmwareHost {
   /** The system's save dialog for an image; the path, or null when the user cancels. */
   save(bytes: Uint8Array, name: string): Promise<string | null>;
   patchkitWasm(): Promise<ArrayBuffer>;
+  /** `dkprof.wasm`: address lookup and load table decoding (the Log pane's names). */
+  dkprofWasm(): Promise<ArrayBuffer>;
   sampleWasm(): Promise<ArrayBuffer>;
 }
 

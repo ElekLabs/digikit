@@ -5,15 +5,15 @@ core through the wrapper (core/dsp-voice) by tests/support/machine_rig.py. This 
 
   * `spec(module_id, device)`: the module's DSP sources, entry symbol, machine type, parameters (knob slots, min, max, default)
     and the frame layout of the device, all read from the manifests;
-  * `budget(device, spec)`: the instruction budget of one voice-block (rule below);
+  * `budget(device, spec)`: the instruction budget of one voice-block (rule below; the numbers come from `patchkit budget`, packages/dkprof);
   * `cases(spec)`: the cases (`Case`) of tests/modules/test_machine_conformance.py, generated from the parameters.
 
 Parameter kinds do not exist in the manifest yet, so every parameter is treated as possibly pitch-like.
 
 The budget rule. A machine shares the DSP block with the stock firmware. The block is `dsp_clock_hz / dsp_blocks_per_second`
 cycles (devices/*.toml `[board]`). The stock firmware with one held note uses `stock_busy` instructions per block
-(devices/cycle-factors.json); tools/patchkit/pk_dsp_budget.py projects instructions to cycles with the
-"high" factor of the same file, and a patched image stays under DEFAULT_BUDGET_PCT of the block. The headroom
+(devices/cycle-factors.json); instructions are projected to cycles with the "high" factor of the same file, and a patched image
+stays under DEFAULT_BUDGET_PCT (85) of the block (packages/dkprof/src/budget.rs, run by `patchkit budget`). The headroom
 (instructions) is what is left between the stock load and that limit. The `voices` of the device's `[adapter.machine]` share it:
 
     voice-block budget  = headroom / voices        (every block that is not a note-on)
@@ -36,7 +36,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-from tools.patchkit import modroots, pk_device, pk_dsp_budget  # noqa: E402
+from tools.patchkit import modroots, pk_device  # noqa: E402
 
 DEVICES = ("dt2", "dn2")
 # Stock rows of the knob list that a DSP routine reads (a code in `knobs`, not a `[[param]]` id): name, min, max, default.
@@ -354,24 +354,38 @@ class Budget:
     headroom: int
 
 
+@cache
+def _device_budgets() -> dict:
+    """`patchkit budget`: the Rust computation (packages/dkprof budget), one process per run; every device and the effect budget."""
+    import subprocess
+
+    from tools.patchkit import patchkit
+
+    r = subprocess.run(
+        [
+            str(patchkit.binary()),
+            "--root",
+            str(ROOT),
+            "budget",
+            "--fx-max",
+            str(FX_MAX),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode:
+        raise RuntimeError(f"patchkit budget failed: {r.stderr.strip()}")
+    return json.loads(r.stdout)
+
+
 def budget(device: str, sp: MachineSpec | None = None) -> Budget:
-    block_cycles = (
-        pk_device.load(device)["board"]["dsp_clock_hz"]
-        // pk_device.load(device)["board"]["dsp_blocks_per_second"]
-    )
-    high = pk_dsp_budget.FACTORS[device]["high"]
-    stock_pct = (
-        100.0 * pk_dsp_budget.FACTORS[device]["stock_busy"] * high / block_cycles
-    )
-    voices = pk_device.load(device)["adapter"]["machine"]["voices"]
-    headroom = int(
-        (pk_dsp_budget.DEFAULT_BUDGET_PCT - stock_pct) / 100.0 * block_cycles / high
-    )
+    d = _device_budgets()["devices"][device]
     declared = sp.declared if sp else {}
     return Budget(
-        int(declared.get("voice_block", headroom // voices)),
-        int(declared.get("note_on_block", headroom)),
-        headroom,
+        int(declared.get("voice_block", d["voice_block"])),
+        int(declared.get("note_on_block", d["note_on_block"])),
+        d["headroom"],
     )
 
 
@@ -581,7 +595,7 @@ def is_fx_module(mid: str) -> bool:
 
 def fx_budget() -> int:
     """Instructions of one process call: the headroom of the tighter device shared by FX_MAX effects (module.toml may not override yet)."""
-    return min(budget(d).headroom for d in DEVICES) // FX_MAX
+    return _device_budgets()["fx_budget"]
 
 
 @dataclass(frozen=True)

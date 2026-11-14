@@ -5,7 +5,8 @@
 # and sample.h from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
-version = "0.7.1"   # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+table = "0.8.0"     # the runtime version that introduced the header table of a `.dkm` (R7): `patchkit pack` writes at least this as the version the module needs, so the loader refuses a module of the 0.7 format with E_CONTRACT
+version = "0.8.0"   # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -592,6 +593,54 @@ since = "0.7.0"
 context = "init"
 sig = "dk_fx *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
 doc = "Declare an effect of this module: `index` is its DK_FX_ID_<ID>: the position of the id in the `[[fx]]` list of module.toml, which is the row of its id in the keys table. `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit)."
+
+[[import]]
+name = "dk_record_add"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 kind, const void *bytes, u32 len)"
+doc = "Declare one record of a generic kind (`[records.kinds]` `generic = true`; a service of the runtime owns the kind). `len` is the record's length less its 8-byte header; the bytes are copied. A kind that is unknown or not generic, or a wrong length, returns DK_E_FORMAT, a full collection DK_E_DECL_FULL; the owning service checks the record at the commit."
+
+[[import]]
+name = "dk_service_declare_kind"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 kind, u32 len, const void *handler)"
+doc = "A service module declares a record kind it owns: `len` is the whole record with its 8-byte header, `handler` the function that handles the records. The runtime compares every dk_service_declare_* call of `init` with the header table (KINDS, SLOTS, HOOKS, EXPORTS, RESOURCES entries) at the commit: a difference refuses the module with DK_E_DECL_KIND. Returns 0, or DK_E_DECL_FULL."
+
+[[import]]
+name = "dk_service_declare_slot"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 slot, u32 flags)"
+doc = "A service module declares a plug-in point (slot) it takes. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL."
+
+[[import]]
+name = "dk_service_declare_hook"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 site, const void *entry)"
+doc = "A service module declares a hook site it takes, with the function that runs there. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL."
+
+[[import]]
+name = "dk_service_declare_export"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 name_hash, const void *entry)"
+doc = "A service module declares a function it offers to other modules: `name_hash` is the FNV-1a 32 hash of its name. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL."
+
+[[import]]
+name = "dk_service_declare_resource"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 resource, u32 limit)"
+doc = "A service module declares a resource it adds, with its limit. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL."
 
 [[import]]
 name = "dk_machine_add_page"
@@ -1378,6 +1427,14 @@ id = 45
 name = "MODULE_LATCH"
 args = ["index", "machine", "latched", "-", "-"]
 
+# one event of the DSP link queue (info level; an error is at warn level; none is kept in the small ring): `what` 1 submit (owner, id, kind | steps << 8, bytes), 2 start
+# (owner, id), 3 done (owner, id), 4 error (owner, id, link error code, step), 5 resend of a live word (slot, version, attempt), 6 live word taken (slot, version, window, word).
+# The owner is 0 loader, 1 tracks, 2 core, 0xff a live word (its id is 0x8000 | slot).
+[[log.kind]]
+id = 46
+name = "DSP_LINK"
+args = ["what", "a", "b", "c", "d"]
+
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 
@@ -1513,6 +1570,52 @@ STORE = { id = 12 }   # the module and sample store, in KiB (a store can be 22 G
 SETTINGS = { id = 13 }   # the settings record, in bytes: limit: the area of one copy (`[settings]`); used: the record's bytes (header and entries); largest: 0
 SEND_SLOTS = { id = 14 }   # effects that run on a send bus: the device's limit (`[limits] send_slots`, 0 when the image has no send page); used: loaded effects with the send route; largest: 0
 
+# The in-crate services of the runtime, in the order the core calls them (samples first: its DSP-section checks and its track-table claim ran before the
+# voice and effect parts, and the unreserve of its table before theirs; machines before fx: the registry applies machines, pages and native pages before
+# effect pages, and the removal runs the other way round). `rust` is the type that implements `Service` in the runtime crate (path from its root).
+# `patchkit gen` writes the static table of these rows (modules/core/runtime/src/rs/src/gen_services.rs); a new service is a row here, its folder in
+# src/services/ and its `[records.kinds]`.
+[[service]]
+name = "samples"
+rust = "services::samples::records::Samples"
+
+[[service]]
+name = "machines"
+rust = "services::machines::records::Machines"
+
+[[service]]
+name = "fx"
+rust = "services::fx::records::Fx"
+
+[[service]]
+name = "lfo"
+rust = "services::lfo::records::Lfo"
+
+# The record kinds of the `register` section of a `.dkm` (docs/plans/runtime-and-services.md R7): one table for the runtime, dkneeds and patchkit
+# (`patchkit gen` writes `records::KINDS` and one `KIND_<NAME>` and `LEN_<NAME>` per kind into gen_sdk.rs and packages/dkneeds/src/gen_limits.rs).
+# `len` is the whole record, the 8-byte header (kind, length) included. `service` is the in-crate service that owns the kind: it checks, applies and
+# removes the records. A number is never reused. A kind is added here and in its service only; the registry, the collector, the loader, dkneeds and
+# patchkit do not name it. `generic = true`: a module emits the record with `dk_record_add(ctx, kind, bytes, len)` (the typed kinds have their builders); the
+# owning service checks it at the commit.
+[records.kinds]
+PARAM = { id = 1, len = 0x50, service = "machines" }
+MACHINE = { id = 2, len = 0x6c, service = "machines" }
+PAGE = { id = 3, len = 0x60, service = "machines" }
+EFFECT = { id = 4, len = 0x1a4, service = "fx" }
+ACTION = { id = 5, len = 0x10, service = "machines" }
+NATIVE_PAGE = { id = 6, len = 0x90, service = "machines" }
+NATIVE_PAGE_V2 = { id = 7, len = 0x98, service = "machines" }
+LFO_SHAPE = { id = 8, len = 76, service = "lfo", generic = true }   # u32 shape id (not 0), 32 samples of i16 (big-endian)
+
+# The resources a module counts in its `uses` (R7, the header table of a `.dkm`): one id each. `capacity` names the [capacity.kinds] entry the
+# runtime reports for it. `reserved = true`: the id is taken and no module counts it yet.
+[records.resources]
+MACHINE_ROWS = { id = 1, capacity = "MACHINE_ROWS" }
+PARAM_ROWS = { id = 2, capacity = "PARAM_ROWS" }
+PAGE_ROWS = { id = 3, capacity = "PAGE_ROWS" }
+RECORD_BYTES = { id = 4 }     # arena bytes of the record block `init` commits
+DSP_COST = { id = 5, reserved = true }   # DSP cycles of a module (S5, docs/plans/sdk.md); not counted yet
+
 [limits.max]        # contract maxima (capacity plan, docs/plans/capacity-isolation.md): a device's `[limits]` value in devices/*.toml may not exceed them
                     # (`patchkit gen` refuses it). Names are the keys of `[limits]` and, for dsp_area_bytes, of `[digikit]`.
 modules = 8         # module records: the selection record holds SEL_MAX = 8 paths (record format, modules/core/runtime/sdk/src/lib.rs)
@@ -1528,18 +1631,13 @@ stage_bytes = 65536  # the runtime's staging buffer: the largest .dkm file (patc
 [limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, modules/core/runtime/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
                     # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).
 dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick offsets, the keys table pair at 0x90/0x94, then the tables follow); `dkneeds::HEADER`
-# The keys table of a `.dkm` (spec; patchkit writes it, the runtime and dkneeds read it). The header pair at 0x90 and 0x94 is `keys_off` and `keys_size`
-# (bytes from the start of the file; `keys_off` is a multiple of 4; the table replaces the register records of the old pair). Layout, big-endian as the
-# rest of the header (the header is 0xa0 bytes in all cases):
-#   +0  u16 machine_rows   machine rows the module uses (`[uses]`)
-#   +2  u16 param_rows     parameter rows
-#   +4  u16 page_rows      page rows
-#   +6  u16 n_machines     number of machine keys
-#   +8  u16 n_fx           number of effect keys
-#   +10 u16 record_bytes   payload bytes of the record block `init` commits and the module keeps in the arena (`[uses]`; 0: it declares nothing)
-#   +12 u32 machine_key[n_machines]   hash of `<module id>:<machine id>` (register.rs), in module.toml order
-#   +.. u32 fx_key[n_fx]              hash of `<module id>:<effect id>`
-# keys_size = 12 + 4 * (n_machines + n_fx), so the table is a multiple of 4. A module with no machine and no effect has keys_size 0.
+# The header table of a `.dkm` (spec: packages/dkneeds/src/keys.rs; patchkit writes it, the runtime, the boot planner, dkneeds and the host tools read it). The header
+# pair at 0x90 and 0x94 is `table_off` and `table_size` (bytes from the start of the file; `table_off` is a multiple of 4). A versioned, tagged table, big-endian:
+#   +0  u32 magic "DKTB" (`table_magic`)   +4  u16 version (`table_version`)   +6  u16 n_entries
+#   then, in ascending tag order, each tag at most once: u16 tag, u16 count, u32 payload_bytes, the payload.
+# Tags: 1 NEEDS (service name hash, minimum version, hard or optional), 2 USES (resource id, count; ids in [records.resources]), 3 KEYS (record kind, n, keys: the
+# machine keys, effect ids and the keys of a service's kind), 4 KINDS (kind, length, handler entry: a service module's kinds), 5 SLOTS, 6 HOOKS, 7 EXPORTS, 8 RESOURCES.
+# A module that needs and keeps nothing has the 8-byte head. A file with no table, or another magic, is the format of runtime 0.7: E_CONTRACT.
 dsp_header = 64     # 0x40: the header of the DSP section
 max_records = 32    # records of the `register` table
 max_relocs = 4096   # ColdFire relocations
@@ -1550,7 +1648,9 @@ max_state_bytes = 16777216  # bytes of one voice state (1 << 24, the loader's mo
 granule = 64        # the DSP area's placement granule
 dsp_slack = 8       # bytes the DSP range may start before its alignment
 arena_hdr = 16      # the arena's block header
-collect_bytes = 6320  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the builder calls of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)
+table_magic = 1145787458  # 0x444b5442 "DKTB": the first word of the header table of a `.dkm` (packages/dkneeds/src/keys.rs); another word is a file of the 0.7 format
+table_version = 1   # the version of the header table (a change is a MINOR of the runtime)
+collect_bytes = 7206  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the builder calls of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)
 
 # The settings store (docs/design/digikit-store.md, "The settings record"): one record in two copies in the store range, next to the selection
 # record. `sectors` is the size of ONE copy; the runtime keeps the record in RAM and writes the copy that is not current. The area is part of the
@@ -1602,6 +1702,11 @@ E_DECL_ID = { code = -27, text = "a builder call names a machine or effect id th
 E_DECL_USES = { code = -28, text = "init declared more machine, param or page rows than the [uses] counts of the header say" }
 E_FX_ID_DUP = { code = -29, text = "an effect id of the module is already loaded (or twice in the module)" }
 E_DECL_FULL = { code = -74, text = "init made more builder calls than the record limit allows" }
+E_PLAN_KIND = { code = -75, text = "the boot plan refused the module: a record kind of its header table has no owning service" }
+E_PLAN_OWNER = { code = -76, text = "the boot plan refused the module: another module owns the kind, slot or hook site it takes" }
+E_PLAN_KEY = { code = -77, text = "the boot plan refused the module: another module of the selection has the same key for a kind" }
+E_PLAN_FIT = { code = -78, text = "the boot plan refused the module: its uses do not fit what the earlier modules of the selection left" }
+E_DECL_KIND = { code = -79, text = "a service declared a record kind that the header table does not carry, or with another length" }
 E_NO_DSP = { code = -30, text = "DSP code in the file, no DSP loader in the image" }
 E_DSP_FORMAT = { code = -31, text = "the DSP section is malformed" }
 E_DSP_IMPORT = { code = -32, text = "a DSP symbol is not exported by the image" }

@@ -4,6 +4,7 @@ import { bootInfo, bootInfoLoaded } from '@digi/regression/runtime/card-kit.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import { intro, lastFrame, spec, valid } from './bootscreen-support.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
  * tools/bootscreen: a custom boot animation as a normal module. The active file is a setting that the card holds before the cold boot (the settings
@@ -20,7 +21,7 @@ cardRigs('boot screen', { relaxFs: true, roots: RT, symbols: CARD_SYMBOLS }, (h)
       const info = await bootInfoLoaded(h.session, h.plan);
       expect(info).toMatchObject({ safe: 0, loaded: 1 });
       expect(await intro(h)).toEqual(lastFrame);
-      await expect.poll(async () => (await bootInfo(h.session, h.plan)).uiReached, { timeout: 30_000 }).toBe(1);
+      await expectPollEmulated(h.session, async () => (await bootInfo(h.session, h.plan)).uiReached, (value) => expect(value).toBe(1), { emulatedMs: 30000 });
     },
   );
 
@@ -30,7 +31,7 @@ cardRigs('boot screen', { relaxFs: true, roots: RT, symbols: CARD_SYMBOLS }, (h)
       const ticks = h.mod('test/intro-ticks', 'intro-ticks');
       await h.load('ticks', { modules: [ticks], selection: [ticks.name] });
       await bootInfoLoaded(h.session, h.plan);
-      await expect.poll(async () => (await bootInfo(h.session, h.plan)).uiReached, { timeout: 30_000 }).toBe(1);
+      await expectPollEmulated(h.session, async () => (await bootInfo(h.session, h.plan)).uiReached, (value) => expect(value).toBe(1), { emulatedMs: 30000 });
       // `done` logs "ticks" and "hash" at the first UI pass
       const logged = new Map<string, number[]>();
       for (const e of await ringEvents(h.session, h.plan, 'MOD_LOG')) {
@@ -62,7 +63,7 @@ cardRigs('boot screen', { relaxFs: true, roots: RT, symbols: CARD_SYMBOLS }, (h)
         expect(raw.equals(lastFrame), 'not the module frame').toBe(false);
         stock ??= raw;
         expect(raw.equals(stock!), 'the same stock intro every time').toBe(true);
-        await expect.poll(async () => (await bootInfo(h.session, h.plan)).uiReached, { timeout: 30_000 }).toBe(1);
+        await expectPollEmulated(h.session, async () => (await bootInfo(h.session, h.plan)).uiReached, (value) => expect(value).toBe(1), { emulatedMs: 30000 });
       },
     );
   }

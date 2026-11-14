@@ -1,7 +1,7 @@
 //! The `.dkm` loader (docs/design/digikit-dkm.md). Every check runs before anything is written to the arena.
 
 use crate::dsp;
-use crate::handlers::{ServiceList, Services};
+use crate::handlers::{services, ServiceTable};
 use crate::selection::BOOT_IDX;
 use crate::sha256::Sha;
 use crate::entry::Ctx;
@@ -380,7 +380,11 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
     use crate::collect as col;
     let owner = rec as u8 + 1;
     let base = st().modules[rec].base;
-    let declared = c.nm + c.nf + c.nparam + c.np != 0;
+    // the declarations of a service module against its header table (declare-check-commit)
+    if !col::decl_matches(c, keys, base) {
+        return E_DECL_KIND;
+    }
+    let declared = c.nm + c.nf + c.nparam + c.np + c.ng != 0;
     let mut block: *mut u8 = core::ptr::null_mut();
     let mut size = 0usize;
     let mut rows = (0u32, 0u32, 0u32);
@@ -403,7 +407,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         let mut voice = [false; limits::MACHINE_ROWS];
         let mut m = 0;
         while m < c.nm {
-            voice[m] = Services::has_voice(rec, crate::assign::resolve(col::machine_key(keys, &c.machines[m])));
+            voice[m] = services().has_voice(rec, crate::assign::resolve(col::machine_key(keys, &c.machines[m])));
             m += 1;
         }
         size = match col::lower(c, &p, keys, &voice, base, core::ptr::null_mut(), 0, &mut plan) {
@@ -427,7 +431,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         let mut m = 0;
         while m < c.nm {
             let t = crate::assign::resolve(col::machine_key(keys, &c.machines[m]));
-            if Services::has_voice(rec, t) {
+            if services().has_voice(rec, t) {
                 let (rng, latched) = col::voice_declared(c, &plan, m);
                 if latched != 0 {
                     crate::dlog::ev(
@@ -436,7 +440,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
                         [read_volatile(addr_of!(BOOT_IDX)), m as u32, latched, 0, 0],
                     );
                 }
-                let r = Services::declare_voice(rec, t, rng, latched).unwrap_or(OK);
+                let r = services().declare_voice(rec, t, rng, latched).unwrap_or(OK);
                 if r != OK {
                     arena::free(block);
                     return r;
@@ -451,7 +455,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
             // without `dk_fx_routes` the effect runs on the master only (the rule of the old `routes` field: unset means the default route)
             let flags = Some(col::fx_flags_of_decl(fx));
             let par = if fx.page >= 0 { Some(col::fx_defaults(c, f)) } else { None };
-            if (flags.is_some() || par.is_some()) && !Services::declare_fx(rec, ord, flags, par).unwrap_or(false) {
+            if (flags.is_some() || par.is_some()) && !services().declare_fx(rec, ord, flags, par).unwrap_or(false) {
                 arena::free(block);
                 return E_FORMAT; // no such effect in the module's DSP section
             }
@@ -483,12 +487,12 @@ pub unsafe fn undo_early(rec: usize) -> i32 {
 /// One UI-loop pass of the DSP loader. `dsp` only advances its state and reports what it found; the module teardown, the machine
 /// listing and the boot result belong here, so `dsp` depends on neither the loader nor the boot.
 pub unsafe fn dsp_step() {
-    dsp_step_with::<Services>()
+    dsp_step_with(services())
 }
 
 /// `dsp_step` over a given list of services.
-pub(crate) unsafe fn dsp_step_with<L: ServiceList>() {
-    match dsp::step_with::<L>() {
+pub(crate) unsafe fn dsp_step_with(l: ServiceTable) {
+    match dsp::step_with(l) {
         dsp::Advance::Pending => {}
         dsp::Advance::Failed(code) => {
             let (rec, idx) = {
@@ -505,7 +509,7 @@ pub(crate) unsafe fn dsp_step_with<L: ServiceList>() {
                 let p = &dsp::ds().pending;
                 (p.rec as usize, p.boot_idx)
             };
-            L::on_loaded(rec);
+            l.on_loaded(rec);
             crate::boot::note_result(idx, OK);
             dsp::loaded_done();
         }

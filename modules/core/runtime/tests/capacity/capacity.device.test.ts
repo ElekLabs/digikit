@@ -12,7 +12,7 @@ import {
   block,
   CODE,
   COLLECT_BLOCK,
-  DKM_HEADER,
+  DKM_FIXTURE_HEADER,
   DSP_GRANULE,
   E_NOMEM,
   fullSet,
@@ -110,7 +110,7 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
       const got = await bootEntries(rig, 'files', entries);
       const mods = await expectBoot(rig, g, entries, got);
       expect(mods[1]!.cf_size, 'the module of the staging buffer size is in the arena with its whole image').toBe(
-        g.stageBytes - DKM_HEADER,
+        g.stageBytes - DKM_FIXTURE_HEADER,
       );
       expect(got.cap.ARENA!.used, 'the arena holds the two loaded blocks and nothing of the refused files').toBe(
         mods.reduce((n, m) => n + block(m.cf_size), 0),
