@@ -1,8 +1,8 @@
 # Test speed (plan, 2026-11-09)
 
 Goal: the merge gate and a module's own checks finish sooner, with less work rather than more parallel work, and the MacBook stays usable.
-Commands and tiers: [testing](../TESTING.md). Test layout: [test architecture](test-architecture.md). Build and cache work: [test-build workflow](test-build-workflow.md).
-Items 7 and 16 are inputs to T1d and T1b of [T1 test architecture](t1-test-architecture.md).
+Commands and tiers: [testing](../TESTING.md). Test layout and selection: [test architecture](test-architecture.md). Build and cache work: [test-build workflow](test-build-workflow.md).
+Items 7 and 16 are inputs to T1d and T1b of [test architecture](test-architecture.md).
 This plan replaces the gate-speed plan of 2026-10-30, whose router (`verify.py`) was deleted. Its open items are carried over below.
 
 ## Measurements

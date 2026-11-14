@@ -43,7 +43,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | 2 | S5 | SDK DSP contract: DSP rules, derived cycle cost, `DK_SPAN` | R4, P3, P4 | todo | |
 | 3 | R2 | Runtime deletions and split; sink slots; service anatomy: a service is a module with a role (settled before R7) | S4 | in progress: R2a done (PR 459), R2b done (this PR), R2c next | |
 | 3 | R3 | Platform adapter, layer rule | R2 | todo | |
-| 3 | T1 | [Test architecture](t1-test-architecture.md): tests follow layers, fakes and contract suites, service-scoped selection | T1a after R2c; T1c with R3 | todo | |
+| 3 | T1 | [Test architecture](test-architecture.md): tests follow layers, fakes and contract suites, service-scoped selection | T1a after R2c; T1c with R3 | todo | |
 | 3 | R6 | DSP transfer queue; dsp-link windows | R3 | todo | |
 | 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | todo | |
 | 3 | R8 | Spike, whole path | R7 | todo | |
@@ -72,4 +72,4 @@ Later, only when a feature needs it: the firmware tooling list in [profiling.md]
   are reviewed apart.
 - P3 was done in Rust (dksharc) instead of the Python sharcdb builder, because the workbench uses it through wasm. The sharcdb module mode was an oracle only and was not merged. Register def/use is dksharc slice 2, needed by S5.
 - R2b was split into moves only (proven identical with `patchkit objdiff`); the interfaces and the body splits (registry `check`/`apply`/`remove`, dsp `check`/`reserve`/`step`) are in R2c.
-- T1 (test architecture) was added: layers and fakes exist now, so test selection can follow layers ([t1-test-architecture.md](t1-test-architecture.md)).
+- T1 (test architecture) was added: layers and fakes exist now, so test selection can follow layers ([test-architecture.md](test-architecture.md)).
