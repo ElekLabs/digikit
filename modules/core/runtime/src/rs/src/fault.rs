@@ -3,7 +3,7 @@
 //! The firmware's default exception handler loads a function pointer from a RAM word (anchor `cf.rtos.site.exc_hook_lit` is the 4-byte literal of
 //! that load) and calls it with the stack pointer, which points at the hardware exception frame; the firmware's own function there prints
 //! `EXCEPTION ...` and executes `halt`, so a fault hangs the device until the power is cycled (finding 37). The runtime points the word at
-//! `dkrt_exc_hook` (src/cf/tramp.s: it saves d2-d7 and a2-a6, which are still the faulting code's, and calls `dkrt_exc`). `dkrt_exc` writes
+//! `dkrt_exc_hook` (core/platform, src/cf/platform.s: it saves d2-d7 and a2-a6, which are still the faulting code's, and calls `dkrt_exc`). `dkrt_exc` writes
 //! a crash record into the keep area (`KEEP_BASE`, above `cf.expansion`, which neither the firmware nor the boot code writes), flushes it to RAM
 //! and soft-resets, the way `dkrt_restart` does, instead of halting.
 //!
@@ -15,8 +15,10 @@
 //! Version 2 of the record (the fault trace): a kind word (`W_HKIND`: 1 CPU crash, 2 DSP stopped) and the DSP's site, id, step and diagnostic words after the
 //! last events. A DSP stop is written by `write_hang` (from the heartbeat watch in watch.rs) the same way, then the soft reset. At the next boot either kind is
 //! copied into the settings key `dk/fault` (`store_fault`), which stays until a newer fault replaces it; the ABOUT page reads that key.
-use crate::{dlog, watch};
-use crate::{dkrt_flush, dkrt_soft_reset, st};
+use crate::dlog;
+use dkrt_sdk::fault::Hang;
+use crate::{st, PLATFORM};
+use dkrt_abi::platform::Platform;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::device::{DDR_BYTES, DDR_CACHED_BASE, KEEP_BASE, KEEP_BYTES};
 use dkrt_sdk::store::crc32_of;
@@ -57,14 +59,9 @@ const W_HSTEP: usize = W_HKIND + 4; // the module step (DK_STEP), 0: none
 const W_HLAST: usize = W_HKIND + 5; // the site's raw last word
 const W_HRT: usize = W_HKIND + 6; // runtime version
 const W_HDIAG: usize = W_HKIND + 7; // the DSP diagnostic words (DIAG_WORDS)
-const W_HNAME: usize = W_HDIAG + watch::DIAG_WORDS; // 4 words: the module's name after its last `/` (16 bytes), what ABOUT shows
+const W_HNAME: usize = W_HDIAG + dkrt_sdk::fault::DIAG_WORDS; // 4 words: the module's name after its last `/` (16 bytes), what ABOUT shows
 const W_CRC: usize = W_HNAME + 4;
 const REC_WORDS: usize = W_CRC + 1;
-
-extern "C" {
-    /// `src/cf/tramp.s`.
-    fn dkrt_exc_hook();
-}
 
 fn rec() -> *mut u32 {
     KEEP_BASE as usize as *mut u32
@@ -85,7 +82,7 @@ pub struct CrashSeen {
     pub stable: u32,
     /// The probe word of the boot before was in RAM.
     pub ram_kept: u32,
-    /// The hook word has been pointed at `dkrt_exc_hook` (1) / the anchor did not lead to a RAM word (0).
+    /// The hook word has been pointed at `dkrt_exc_hook` of core/platform (1) / the anchor did not lead to a RAM word (0).
     pub installed: u32,
     /// A record was there but failed its CRC.
     pub bad: u32,
@@ -103,34 +100,17 @@ pub fn seen() -> &'static CrashSeen {
     unsafe { &*addr_of!(DKRT_CRASH) }
 }
 
-/// The address of the hook word the anchor's literal holds, when it lies in DDR and is word aligned.
-unsafe fn hook_word() -> Option<*mut u32> {
-    // `EXC_HOOK_LIT`: the 4-byte literal in the firmware's default exception handler whose value is the address of the hook word.
-    let lit = core::hint::black_box(addr_of!(dkfw::rtos::EXC_HOOK_LIT) as usize) as u32;
-    if lit == 0 {
-        return None;
-    }
-    let a = read_volatile(lit as *const u32);
-    if !(DDR_CACHED_BASE..DDR_CACHED_BASE + DDR_BYTES).contains(&a) || a & 3 != 0 {
-        return None;
-    }
-    Some(a as usize as *mut u32)
-}
-
-/// Point the firmware's exception hook word at `dkrt_exc_hook`. Called every UI pass: the firmware sets the word in its own boot, so the first
+/// Point the firmware's exception hook word at the platform adapter's `dkrt_exc_hook`. Called every UI pass: the firmware sets the word in its own boot, so the first
 /// call must come after that, and a second setting would be caught by the next pass.
 pub unsafe fn install() {
-    let Some(w) = hook_word() else { return };
-    let ours = core::hint::black_box(dkrt_exc_hook as usize) as u32;
-    if read_volatile(w) != ours {
-        write_volatile(w, ours);
+    if PLATFORM.install_exception_hook() {
         (*addr_of_mut!(DKRT_CRASH)).installed = 1;
     }
 }
 
 static mut IN_EXC: u32 = 0;
 
-/// The exception handler proper (from `dkrt_exc_hook`): `frame` is the hardware exception frame (format/vector/status word, then the PC); the
+/// The exception handler proper (from `dkrt_exc_hook` of core/platform): `frame` is the hardware exception frame (format/vector/status word, then the PC); the
 /// four words below it are d0, d1, a0, a1 as the firmware's default handler saved them; `saved` points at d2-d7, a2-a6 as saved by the hook.
 /// Never returns.
 #[no_mangle]
@@ -141,8 +121,8 @@ pub unsafe extern "C" fn dkrt_exc(frame: *const u32, saved: *const u32) -> ! {
     if faults != 0 {
         // a fault inside the handler: keep the first record (with the count) and reset
         write_volatile(r.add(W_FAULTS), faults + 1);
-        dkrt_flush(KEEP_BASE, 64);
-        dkrt_soft_reset()
+        PLATFORM.flush(KEEP_BASE, 64);
+        PLATFORM.soft_reset()
     }
     write_volatile(r.add(W_MAGIC), 0); // an older record is not valid while this one is written
     let w0 = *frame;
@@ -274,9 +254,9 @@ unsafe fn seal(reset: bool) {
     let crc = crc32_of(v.as_ptr() as *const u8, W_CRC * 4);
     write_volatile(r.add(W_CRC), crc);
     write_volatile(r.add(W_MAGIC), MAGIC); // the record is valid from here
-    dkrt_flush(KEEP_BASE, (REC_WORDS * 4) as u32);
+    PLATFORM.flush(KEEP_BASE, (REC_WORDS * 4) as u32);
     if reset {
-        dkrt_soft_reset()
+        PLATFORM.soft_reset()
     }
 }
 
@@ -326,22 +306,15 @@ pub fn panic() -> ! {
             k += 1;
         }
         // in safe mode a reset would loop; during an OS upgrade the device must not reset
-        let reset = crate::boot::info().safe == 0 && !crate::os_upgrade_active();
+        let reset = panic_resets(&PLATFORM, crate::boot::info().safe);
         seal(reset);
         loop {}
     }
 }
 
-/// What the heartbeat watch knows when the DSP has stopped (dlog.rs).
-pub struct Hang {
-    pub site: u32,
-    pub id: u32,
-    pub stage: u32,
-    pub step: u32,
-    pub last: u32,
-    /// Module record index that owns the site's machine type or effect row (`usize::MAX`: none).
-    pub module: usize,
-    pub diag: [u32; watch::DIAG_WORDS],
+/// Does a panic end in a soft reset? Not in safe mode (a reset would loop) and not during an OS upgrade (the device must not reset).
+pub(crate) fn panic_resets<P: Platform>(p: &P, safe: u32) -> bool {
+    safe == 0 && !p.os_upgrade_active()
 }
 
 /// Write the hang record of a stopped DSP (version 2, kind 2) into the keep area and soft-reset. Never returns.
@@ -365,7 +338,7 @@ pub unsafe fn write_hang(h: &Hang) -> ! {
     write_volatile(r.add(W_HSTEP), h.step);
     write_volatile(r.add(W_HLAST), h.last);
     i = 0;
-    while i < watch::DIAG_WORDS {
+    while i < dkrt_sdk::fault::DIAG_WORDS {
         write_volatile(r.add(W_HDIAG + i), h.diag[i]);
         i += 1;
     }
@@ -416,7 +389,7 @@ pub unsafe fn at_boot() -> bool {
     }
     // clear first: a record that crashes the boot again must not be found a third time
     write_volatile(rec().add(W_MAGIC), 0);
-    dkrt_flush(KEEP_BASE, 64);
+    PLATFORM.flush(KEEP_BASE, 64);
     if v[W_VERSION] != VERSION || crc32_of(v.as_ptr() as *const u8, W_CRC * 4) != v[W_CRC] {
         c.bad = 1;
         dlog::ev(logk::CRASH_FOUND, logk::F_ERROR, [0, 0, 0, 0, 0xbad]);
@@ -486,8 +459,8 @@ unsafe fn log_detail(v: &[u32; REC_WORDS]) {
     let kind = v[W_HKIND];
     let mut k = 0;
     if kind == dkrt_sdk::fault::KIND_DSP {
-        while k < watch::DIAG_WORDS {
-            dlog::ev(logk::DSP_DIAG, e, [(watch::DIAG_WORDS as u32) << 8 | (k / 4) as u32, v[W_HDIAG + k], v[W_HDIAG + k + 1], v[W_HDIAG + k + 2], v[W_HDIAG + k + 3]]);
+        while k < dkrt_sdk::fault::DIAG_WORDS {
+            dlog::ev(logk::DSP_DIAG, e, [(dkrt_sdk::fault::DIAG_WORDS as u32) << 8 | (k / 4) as u32, v[W_HDIAG + k], v[W_HDIAG + k + 1], v[W_HDIAG + k + 2], v[W_HDIAG + k + 3]]);
             k += 4;
         }
     } else {
@@ -554,6 +527,6 @@ pub unsafe fn keep_probe() {
     write_volatile(p, PROBE_MAGIC);
     write_volatile(p.add(1), ngen);
     write_volatile(p.add(2), !ngen);
-    dkrt_flush(KEEP_BASE + PROBE_AT, 16);
+    PLATFORM.flush(KEEP_BASE + PROBE_AT, 16);
     let _ = KEEP_BYTES;
 }

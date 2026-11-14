@@ -1,8 +1,9 @@
 //! The upload commands about modules: MODULES, LOADS and SELECT, and the commands that modules register (`dk_host_register`).
 
+use crate::handlers::{ServiceList, Services};
 use crate::store_writer::copy;
 use crate::platform::wr32;
-use crate::{boot, card, dlog, watch};
+use crate::{boot, card, dlog};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::OK;
@@ -85,8 +86,10 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
         let mut j = 0;
         while j < nt {
             *rb.add(at + 66 + j) = types[j];
-            faults = faults.wrapping_add(watch::guard_faults(types[j] as u32));
-            off |= watch::guard_disabled(types[j] as u32);
+            if let Some(g) = Services::guard_state(types[j] as u32) {
+                faults = faults.wrapping_add(g.faults);
+                off |= g.disabled;
+            }
             j += 1;
         }
         wr32(rb.add(at + 66 + nt), faults);

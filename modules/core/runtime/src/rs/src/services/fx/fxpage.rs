@@ -21,14 +21,17 @@
 //! The array is the live kit's (`[fx] kit_ptr` of the device file): the kit accessor of the firmware (`fw_kit_of`) answers another object, the project's.
 //!
 //! Everything runs in the UI task. No float arithmetic runs in an interrupt; the arithmetic is the compiler's soft float.
-use crate::{cstr_len, rd32, registry};
+use super::dsp as fxdsp;
+use super::fxsend;
+use crate::core_api::{CoreApi, LinkWriter, Platform, PLATFORM, REAL_CORE};
+use dkrt_abi::mem::{cstr_len, iw, rd, rd16, rd32, wr, wr16};
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
 pub const KIND_EFFECT: u32 = 4;
 pub const LEN_EFFECT: u32 = 0x1a4;
 const INFO_MAGIC: u32 = 0x4658_5047; // "FXPG"
-use crate::dsp::MAX_FX;
+use dkrt_abi::dsp::MAX_FX;
 const KNOBS: usize = 7;
 const WORDS: usize = 8; // the knobs and MIX
 const TEXT: usize = 24;
@@ -123,22 +126,10 @@ pub(crate) unsafe fn info() -> *const u32 {
         return core::ptr::null();
     }
     let p = a as *const u32;
-    if read_volatile(p.add(w::MAGIC)) != INFO_MAGIC || read_volatile(p.add(w::DEVICE)) != crate::device() {
+    if read_volatile(p.add(w::MAGIC)) != INFO_MAGIC || read_volatile(p.add(w::DEVICE)) != PLATFORM.device_id() {
         return core::ptr::null();
     }
     p
-}
-
-pub(crate) unsafe fn iw(i: *const u32, k: usize) -> u32 {
-    read_volatile(i.add(k))
-}
-
-pub(crate) unsafe fn rd(a: u32) -> u32 {
-    read_volatile(a as *const u32)
-}
-
-pub(crate) unsafe fn wr(a: u32, v: u32) {
-    write_volatile(a as *mut u32, v)
 }
 
 /// The kit's value array index of word `j` of effect row `k`.
@@ -257,7 +248,7 @@ unsafe fn rebuild_list(inf: *const u32) {
     while pass < 2 {
         let mut k = 0;
         while k < iw(inf, w::PAGES) as usize && k < MAX_FX {
-            if s.owner[k] != 0 && n < cap && crate::fxsend::is_send(k) == (pass == 0) {
+            if s.owner[k] != 0 && n < cap && fxsend::is_send(k) == (pass == 0) {
                 wr(list + 4 * n, iw(inf, w::FIRST) + k as u32);
                 n += 1;
             }
@@ -306,7 +297,7 @@ pub unsafe fn apply(owner: u8, b: *const u8) -> i32 {
         return E_NO_REGISTRY;
     }
     let s = fs();
-    let Some(k) = crate::dsp::fx_row_of(owner, rd32(b)) else {
+    let Some(k) = fxdsp::fx_row_of(owner, rd32(b)) else {
         return E_FORMAT; // no such effect in the module's DSP section
     };
     if k >= iw(inf, w::PAGES) as usize || k >= MAX_FX || (iw(inf, w::VALUES_N) as usize) < (k + 1) * WORDS {
@@ -321,8 +312,8 @@ pub unsafe fn apply(owner: u8, b: *const u8) -> i32 {
     // strings
     copy_text(s.tab[k].as_mut_ptr(), b.add(16), 8);
     copy_text(s.title[k].as_mut_ptr(), b.add(24), TEXT);
-    let tab = registry::make_rep(s.rep_tab[k].as_mut_ptr(), s.tab[k].as_ptr(), false);
-    let title = registry::make_rep(s.rep_title[k].as_mut_ptr(), s.title[k].as_ptr(), false);
+    let tab = REAL_CORE.make_rep(s.rep_tab[k].as_mut_ptr(), s.tab[k].as_ptr(), false);
+    let title = REAL_CORE.make_rep(s.rep_title[k].as_mut_ptr(), s.title[k].as_ptr(), false);
     // the page's nine codes: 0 where no knob stands
     let mut codes = [0u32; 9];
     let mut j = 0;
@@ -350,19 +341,7 @@ pub unsafe fn apply(owner: u8, b: *const u8) -> i32 {
             continue; // a word without a knob
         };
         let idx = value_index(inf, k, j);
-        registry::write_fx_param_row(
-            code,
-            tpl,
-            idx,
-            0,
-            RAW_MAX as u32,
-            def_n as u32,
-            s.name[wi].as_ptr() as u32,
-            s.short[wi].as_ptr() as u32,
-        );
-        s.cur[k][j] = def_n;
-        s.def[k][j] = def_n;
-        s.dsp[k][j] = def_n; // the DSP row gets the record's defaults (p words) and the mix below
+        write_knob_row(&REAL_CORE, s, k, j, code, tpl, idx, def_n);
         j += 1;
     }
     s.nknob[k] = n as u8;
@@ -374,7 +353,7 @@ pub unsafe fn apply(owner: u8, b: *const u8) -> i32 {
         mark(inf, live + iw(inf, w::ARRAY_OFF));
         s.seeds += 1;
     }
-    crate::dsp::fx_set_mix(k, mix_value(rd32(b.add(4)) as i32 * 256));
+    fxdsp::fx_set_mix(k, mix_value(rd32(b.add(4)) as i32 * 256));
     // the page row: codes, then the strings; the owner and the list publish it
     let mut c = 0;
     while c < 9 {
@@ -385,7 +364,7 @@ pub unsafe fn apply(owner: u8, b: *const u8) -> i32 {
     wr(row + 4, title);
     s.owner[k] = owner;
     rebuild_list(inf);
-    crate::fxsend::apply(k, owner, s.tab[k].as_ptr());
+    fxsend::apply(k, owner, s.tab[k].as_ptr());
     OK
 }
 
@@ -421,14 +400,14 @@ pub unsafe fn remove(owner: u8) {
             let mut j = 0;
             publish_row(inf, k, 0);
             while j < WORDS {
-                registry::reset_param_row(iw(inf, w::P_FIRST) + (k * WORDS + j) as u32);
+                REAL_CORE.reset_param_row(iw(inf, w::P_FIRST) + (k * WORDS + j) as u32);
                 s.cur[k][j] = 0;
                 s.def[k][j] = 0;
                 s.dsp[k][j] = -1;
                 j += 1;
             }
             s.nknob[k] = 0;
-            crate::fxsend::remove(k);
+            fxsend::remove(k);
         }
         k += 1;
     }
@@ -482,25 +461,9 @@ pub(crate) unsafe fn kit(inf: *const u32) -> u32 {
     k
 }
 
-pub(crate) unsafe fn rd16(a: u32) -> i32 {
-    let hi = read_volatile(a as *const u8) as u16;
-    let lo = read_volatile((a + 1) as *const u8) as u16;
-    ((hi << 8 | lo) as i16) as i32
-}
-
-pub(crate) unsafe fn wr16(a: u32, v: i32) {
-    write_volatile(a as *mut u8, (v >> 8) as u8);
-    write_volatile((a + 1) as *mut u8, v as u8);
-}
-
 /// Words of effect row `k` that exist: its knobs and MIX.
 fn has_word(s: &FxpState, k: usize, j: usize) -> bool {
     j == WORDS - 1 || j < s.nknob[k] as usize
-}
-
-/// Is a value transfer in flight (the send amounts wait for it: one transfer at a time).
-pub fn busy() -> bool {
-    fs().busy != 0
 }
 
 /// Once per UI-loop pass: finish the transfer in flight, put the values in a new kit's array, and send the next changed value; then the send effects' amounts.
@@ -520,7 +483,7 @@ pub unsafe fn tick() {
         return;
     }
     if s.busy != 0 {
-        match crate::dsp::fx_word_poll() {
+        match REAL_CORE.link_poll(LinkWriter::FxPage) {
             None => return,
             Some(ok) => {
                 let (bk, bw) = (s.busy_k as usize, s.busy_w as usize);
@@ -536,7 +499,7 @@ pub unsafe fn tick() {
         }
     }
     values(inf);
-    crate::fxsend::tick();
+    fxsend::tick();
 }
 
 /// The effect pages' values: the kit's array against the DSP rows.
@@ -582,24 +545,41 @@ unsafe fn values(inf: *const u32) {
                         s.changes += 1;
                     }
                     // one word per pass, and only when the row is in the DSP and no load is going on
-                    if n != s.dsp[k][j] && s.busy == 0 && !crate::fxsend::busy() && crate::dsp::fx_live(k) {
-                        let (word, bits) = if j == WORDS - 1 {
-                            (crate::dsp::FXW_MIX, mix_value(n))
-                        } else {
-                            (4 + j as u32, knob_value(s.min[k][j], s.span[k][j], n))
-                        };
-                        if crate::dsp::fx_word_start(k, word, bits) {
-                            s.busy = 1;
-                            s.busy_k = k as u8;
-                            s.busy_w = j as u8;
-                            s.busy_v = n;
-                        }
+                    if n != s.dsp[k][j] && s.busy == 0 && !REAL_CORE.link_busy() && fxdsp::fx_live(k) {
+                        send_knob(&REAL_CORE, s, k, j, n);
                     }
                 }
                 j += 1;
             }
         }
         k += 1;
+    }
+}
+
+/// The parameter row of word `j` of effect row `k` (the code is the row's), and the record's default as the value in force, in the kit and in the DSP row.
+unsafe fn write_knob_row<C: CoreApi>(c: &C, s: &mut FxpState, k: usize, j: usize, code: u32, tpl: u32, idx: u32, def_n: i32) {
+    let wi = k * WORDS + j;
+    c.write_fx_param_row(code, tpl, idx, 0, RAW_MAX as u32, def_n as u32, s.name[wi].as_ptr() as u32, s.short[wi].as_ptr() as u32);
+    s.cur[k][j] = def_n;
+    s.def[k][j] = def_n;
+    s.dsp[k][j] = def_n; // the DSP row gets the record's defaults (p words) and the mix below
+}
+
+/// Start the write of word `j` of effect row `k` for the raw value `n`; the transfer is in flight when the link accepts it.
+unsafe fn send_knob<C: CoreApi>(c: &C, s: &mut FxpState, k: usize, j: usize, n: i32) -> bool {
+    let (word, bits) = if j == WORDS - 1 {
+        (dkrt_abi::dsp::FXW_MIX, mix_value(n))
+    } else {
+        (4 + j as u32, knob_value(s.min[k][j], s.span[k][j], n))
+    };
+    if fxdsp::fx_word_start(c, LinkWriter::FxPage, k, word, bits) {
+        s.busy = 1;
+        s.busy_k = k as u8;
+        s.busy_w = j as u8;
+        s.busy_v = n;
+        true
+    } else {
+        false
     }
 }
 
@@ -619,4 +599,57 @@ pub unsafe fn counts() -> (u32, u32) {
         k += 1;
     }
     (iw(inf, w::PAGES), used)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core_api::{Call, FakeCore};
+
+    /// A knob of effect row 2 is declared with a default, then its value changes: the parameter row is written first, then the DSP word goes out and holds the link.
+    #[test]
+    fn a_knob_gets_its_row_then_a_change_goes_to_the_dsp() {
+        let mut s: std::boxed::Box<FxpState> = unsafe { std::boxed::Box::new(core::mem::zeroed()) };
+        let core = FakeCore::new();
+        unsafe {
+            s.min[2][1] = 0f32.to_bits();
+            s.span[2][1] = 1f32.to_bits();
+            write_knob_row(&core, &mut s, 2, 1, 120, 7, 33, 0x4000);
+            assert_eq!((s.cur[2][1], s.def[2][1], s.dsp[2][1]), (0x4000, 0x4000, 0x4000));
+            assert!(!core.link_busy());
+            assert!(send_knob(&core, &mut s, 2, 1, 0x7f00));
+            assert_eq!((s.busy, s.busy_k, s.busy_w, s.busy_v), (1, 2, 1, 0x7f00));
+            assert!(core.link_busy(), "the transfer holds the link for the other writers");
+            // a refused submission starts nothing
+            let other = FakeCore::new();
+            other.accept.set(false);
+            s.busy = 0;
+            assert!(!send_knob(&other, &mut s, 2, 1, 0x100));
+            assert_eq!(s.busy, 0);
+            assert!(!other.link_busy());
+            // a knob is word 4 + j of its row, MIX word 13, whatever its place among the knobs; the rows are 24 words apart
+            send_knob(&core, &mut s, 3, WORDS - 1, 0x7f00);
+        }
+        let calls = core.calls();
+        assert_eq!(calls[0], Call::FxRow { code: 120, mirror: 33, def: 0x4000 });
+        assert!(matches!(calls[1], Call::Word { who: LinkWriter::FxPage, win: dkrt_abi::dsp::WIN_FX, word: 53, .. }));
+        assert!(matches!(calls[2], Call::Word { who: LinkWriter::FxPage, win: dkrt_abi::dsp::WIN_FX, word: 85, .. }));
+    }
+
+    /// The claim of the fx page writer is the one `busy` was: set with the accepted transfer, cleared when its result is taken.
+    #[test]
+    fn the_link_is_busy_from_submission_to_result() {
+        let core = FakeCore::new();
+        unsafe {
+            assert!(!core.link_busy());
+            core.link_word(LinkWriter::FxPage, dkrt_abi::dsp::WIN_FX, 4, 1);
+            assert!(core.link_busy());
+            core.poll.set(None);
+            assert_eq!(core.link_poll(LinkWriter::FxPage), None);
+            assert!(core.link_busy(), "a running transfer keeps the claim");
+            core.poll.set(Some(false));
+            core.link_poll(LinkWriter::FxPage);
+            assert!(!core.link_busy(), "a failed transfer releases it too");
+        }
+    }
 }

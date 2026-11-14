@@ -160,7 +160,7 @@ pub unsafe extern "C" fn dkrt_boot() {
     assign::plan(&r);
     let mut k = 0;
     while k < r.count as usize {
-        loader::BOOT_IDX = k as u32;
+        crate::selection::BOOT_IDX = k as u32;
         loader::MISSING = [0; NEEDS_LEN];
         let res = loader::load(r.paths[k].as_ptr());
         st().last_result = res;
@@ -200,7 +200,7 @@ pub unsafe extern "C" fn dkrt_boot() {
         k += 1;
     }
     loader::EARLY = false;
-    loader::BOOT_IDX = u32::MAX;
+    crate::selection::BOOT_IDX = u32::MAX;
     // core/introblank: no module took the intro, so the black intro has nothing to wait for
     crate::intro::end_blank();
     // the sticky map: written once, after the loads, and only when this boot changed it

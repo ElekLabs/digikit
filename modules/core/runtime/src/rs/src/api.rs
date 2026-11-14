@@ -1,9 +1,10 @@
 //! The public C ABI of the runtime: load, poll functions, module and effect listings, the selection, boot info and restart.
 
-use crate::platform::{dkrt_irq_mask, dkrt_irq_restore, dkrt_soft_reset};
 use crate::platform::st;
+use crate::PLATFORM;
+use dkrt_abi::platform::Platform;
 use crate::state::{init_once, DKRT_POLLS, MAX_MODULES, POLLS, DKRT_MENUS, DKRT_PATHS};
-use crate::{boot, dlog, dsp, entry, fxsend, loader, scan, settings};
+use crate::{boot, dlog, dsp, entry, loader, scan, settings};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
 
@@ -109,7 +110,7 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_fx(index: u32, out: *mut DkrtFx) -> i32 {
     init_once();
-    fxsend::fx_entry(index, &mut *out)
+    crate::handlers::exports::fx_entry(index, &mut *out)
 }
 
 
@@ -153,10 +154,10 @@ pub struct Aligned4(pub u32);
 unsafe fn save_working_state() {
     let mode = read_volatile(addr_of!(DKRT_SAVE_MODE.0));
     if mode & 1 != 0 {
-        dkfw::project::serialize();
+        crate::platform::project_serialize();
     }
     if mode & 2 != 0 {
-        dkfw::storage::boot_record_write();
+        crate::platform::boot_record_write();
     }
 }
 
@@ -182,10 +183,10 @@ pub unsafe extern "C" fn dkrt_restart() -> i32 {
     settings::flush_if_dirty();
     dlog::ev(logk::MENU, dlog::INFO, [logk::MENU_RESTART, 0, 0, 0, 0]);
     save_working_state();
-    let sr = dkrt_irq_mask();
+    let sr = PLATFORM.irq_mask();
     if card_busy() {
-        dkrt_irq_restore(sr);
+        PLATFORM.irq_restore(sr);
         return E_CARD_BUSY;
     }
-    dkrt_soft_reset()
+    PLATFORM.soft_reset()
 }

@@ -1,6 +1,8 @@
 //! The `.dkm` loader (docs/design/digikit-dkm.md). Every check runs before anything is written to the arena.
 
 use crate::dsp;
+use crate::handlers::{ServiceList, Services};
+use crate::selection::BOOT_IDX;
 use crate::sha256::Sha;
 use crate::entry::Ctx;
 use crate::{
@@ -10,14 +12,14 @@ use crate::{
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
 
-const MAGIC: u32 = 0x444b_4d46; // "DKMF"
+const MAGIC: u32 = crate::collect::dkm::MAGIC;
 /// The header size. `init`, `fini`, `menu` and `tick` are image offsets in it (NONE for a missing one): the fields of the module's `dk_module` constant
 /// (`dk_module_def`), called with a `dk_module_ctx *` (`entry.rs`).
-const HEADER: u32 = 0xa0;
+const HEADER: u32 = crate::collect::dkm::HEADER;
 const NONE: u32 = 0xffff_ffff;
 
 // header field offsets (big endian)
-const H_SIZE: usize = 0x08;
+const H_SIZE: usize = crate::collect::dkm::H_SIZE;
 const H_HDRSIZE: usize = 0x0c;
 const H_SHA: usize = 0x10;
 const H_RUNTIME: usize = 0x30; // the runtime version the module needs (bit 31: built with DK_TRACE)
@@ -35,46 +37,13 @@ const H_INIT: usize = 0x80;
 const H_FINI: usize = 0x84;
 const H_MENU: usize = 0x88;
 const H_TICK: usize = 0x8c;
-const H_REG_OFF: usize = 0x90;
-const H_REG_SIZE: usize = 0x94;
+const H_REG_OFF: usize = crate::collect::dkm::H_REG_OFF;
+const H_REG_SIZE: usize = crate::collect::dkm::H_REG_SIZE;
 const H_DSP_OFF: usize = 0x98;
 const H_DSP_SIZE: usize = 0x9c;
 
 unsafe fn in_file(off: u32, len: u32, size: u32) -> bool {
     off <= size && len <= size - off
-}
-
-/// The machine keys of the keys table of the `.dkm` at `path`, for the boot's type assignment
-/// (`assign::plan`): at most 8, the count returned. Reads the file into the staging buffer, so it runs before the first load. A file that is
-/// missing, torn or not a `.dkm` has none (its load reports the error).
-pub unsafe fn machine_keys(path: *const u8, out: &mut [u32; 8]) -> usize {
-    let found = match store::find(path) {
-        Ok(f) => f,
-        Err(_) => return 0,
-    };
-    if store::load_to_stage(&found) != OK {
-        return 0;
-    }
-    let f = store::stage() as *const u8;
-    let size = found.size;
-    if size < HEADER || rd32(f) != MAGIC || rd32(f.add(H_SIZE)) != size {
-        return 0;
-    }
-    let (off, len) = (rd32(f.add(H_REG_OFF)), rd32(f.add(H_REG_SIZE)));
-    // the keys table of the header (the pair at 0x90 is keys_off, keys_size)
-    if !in_file(off, len, size) {
-        return 0;
-    }
-    let k = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(f.add(off as usize), len as usize)) {
-        Ok(k) => k,
-        Err(_) => return 0,
-    };
-    let mut n = 0;
-    while n < k.nm && n < 8 {
-        out[n] = k.mk[n];
-        n += 1;
-    }
-    n
 }
 
 /// Validate and load the `.dkm` at `path`. See `dkrt_load`. The tables are checked after every attempt, and none starts once a check has
@@ -334,7 +303,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
             reg_size: 0,
             init: 0,
             early: 1,
-            boot_idx: BOOT_IDX,
+            boot_idx: read_volatile(addr_of!(BOOT_IDX)),
             send_base: 0,
             send_len: 0,
             send_buf: 0,
@@ -362,6 +331,7 @@ unsafe fn complete(rec: usize, keys: &crate::collect::KeysCopy, init: u32, tick:
         crate::intro::discard(rec);
         let held = !crate::files::retire(rec) | !retire_sdk(rec);
         crate::module_cmds::release_cmds(owner);
+        crate::dlog::release_sinks(rec);
         crate::registry::remove(owner);
         if !dsp::release(rec) || held {
             return E_BUSY;
@@ -433,7 +403,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         let mut voice = [false; limits::MACHINE_ROWS];
         let mut m = 0;
         while m < c.nm {
-            voice[m] = dsp::voice_row(rec, crate::assign::resolve(col::machine_key(keys, &c.machines[m]))).is_some();
+            voice[m] = Services::has_voice(rec, crate::assign::resolve(col::machine_key(keys, &c.machines[m])));
             m += 1;
         }
         size = match col::lower(c, &p, keys, &voice, base, core::ptr::null_mut(), 0, &mut plan) {
@@ -457,7 +427,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
         let mut m = 0;
         while m < c.nm {
             let t = crate::assign::resolve(col::machine_key(keys, &c.machines[m]));
-            if let Some(row) = dsp::voice_row(rec, t) {
+            if Services::has_voice(rec, t) {
                 let (rng, latched) = col::voice_declared(c, &plan, m);
                 if latched != 0 {
                     crate::dlog::ev(
@@ -466,7 +436,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
                         [read_volatile(addr_of!(BOOT_IDX)), m as u32, latched, 0, 0],
                     );
                 }
-                let r = dsp::set_declared(row, rng, latched);
+                let r = Services::declare_voice(rec, t, rng, latched).unwrap_or(OK);
                 if r != OK {
                     arena::free(block);
                     return r;
@@ -481,7 +451,7 @@ unsafe fn commit(rec: usize, c: &crate::collect::Collect, keys: &crate::collect:
             // without `dk_fx_routes` the effect runs on the master only (the rule of the old `routes` field: unset means the default route)
             let flags = Some(col::fx_flags_of_decl(fx));
             let par = if fx.page >= 0 { Some(col::fx_defaults(c, f)) } else { None };
-            if (flags.is_some() || par.is_some()) && !dsp::fx_set_declared(rec, ord, flags, par) {
+            if (flags.is_some() || par.is_some()) && !Services::declare_fx(rec, ord, flags, par).unwrap_or(false) {
                 arena::free(block);
                 return E_FORMAT; // no such effect in the module's DSP section
             }
@@ -510,6 +480,38 @@ pub unsafe fn undo_early(rec: usize) -> i32 {
     unload_rec(rec)
 }
 
+/// One UI-loop pass of the DSP loader. `dsp` only advances its state and reports what it found; the module teardown, the machine
+/// listing and the boot result belong here, so `dsp` depends on neither the loader nor the boot.
+pub unsafe fn dsp_step() {
+    dsp_step_with::<Services>()
+}
+
+/// `dsp_step` over a given list of services.
+pub(crate) unsafe fn dsp_step_with<L: ServiceList>() {
+    match dsp::step_with::<L>() {
+        dsp::Advance::Pending => {}
+        dsp::Advance::Failed(code) => {
+            let (rec, idx) = {
+                let p = &dsp::ds().pending;
+                (p.rec as usize, p.boot_idx)
+            };
+            // Teardown invalidates once, after the tick is stopped, before any fini/free.
+            let reclaimed = undo_early(rec) == OK;
+            crate::boot::note_result(idx, code);
+            dsp::fail_done(reclaimed, code);
+        }
+        dsp::Advance::Loaded => {
+            let (rec, idx) = {
+                let p = &dsp::ds().pending;
+                (p.rec as usize, p.boot_idx)
+            };
+            L::on_loaded(rec);
+            crate::boot::note_result(idx, OK);
+            dsp::loaded_done();
+        }
+    }
+}
+
 /// While the boot hook loads the selection: the CF part of a module with DSP code is published at once (the machine view is built
 /// soon after the hook, and the frames that carry DSP code do not flow yet); the DSP part follows over the UI-loop passes.
 pub static mut EARLY: bool = false;
@@ -536,8 +538,6 @@ pub fn stub_missing(provider: &'static str) {
         }
     }
 }
-/// The selection index of the module being loaded by the boot hook (`u32::MAX`: none).
-pub static mut BOOT_IDX: u32 = u32::MAX;
 
 extern "C" {
     /// `core/dsp-link`: clears the per-block callback when it points into [lo, hi). Resolves to 0 when the module is not in the image.
@@ -594,6 +594,9 @@ unsafe fn unload_rec_inner(rec: usize) -> i32 {
             crate::dlog::call_fini(rec as usize, call, ctx);
         }
     }
+    // a sink it set is released with it, with or without a `fini`; nothing may point into its range
+    crate::dlog::release_sinks(rec);
+    crate::dlog::sink_drop(m.base, m.base.wrapping_add(m.size));
     // the SysEx commands it registered are released with it
     crate::module_cmds::release_cmds(rec as u8 + 1);
     drop_tick_cb(m.base, m.size);

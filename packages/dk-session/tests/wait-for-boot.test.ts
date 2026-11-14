@@ -110,6 +110,59 @@ test('a probe timeout longer than the default lets a slow host show the boot', a
   await s.waitForBoot(async () => {}, 20000, { probeTimeoutMs: 5000 });
 });
 
+/** A device that loses the first request (sent while it restarts); a receive ends at its wait or when `signal` fires. */
+class LostDevice extends Device {
+  lose = true;
+  send(msg: Uint8Array) {
+    if (this.lose) return void (this.lose = false);
+    return super.send(msg);
+  }
+  async recv(waitMs?: number, signal?: AbortSignal) {
+    if (this.queue.length > 0) return this.queue.shift()!;
+    await new Promise<void>((r) => {
+      const t = setTimeout(r, waitMs ?? 1000);
+      signal?.addEventListener('abort', () => (clearTimeout(t), r()), { once: true });
+    });
+    return this.queue.shift() ?? null;
+  }
+}
+
+test('a probe lost during the restart ends with the caller signal, and the next probe sees the new boot', async () => {
+  const dev = new LostDevice();
+  dev.debug = true;
+  dev.rebooted = true;
+  const s = new DkSession(dev, { timeoutMs: 60_000, retries: 0 });
+  const started = Date.now();
+  let probes = 0;
+  await s.waitForBoot(async () => {}, 20_000, {
+    // the harness's emulated bound: the first probe ends after 40 ms of the fake clock, far below the wall guard
+    probe: async (run) => {
+      probes++;
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 40);
+      try {
+        return await run({ signal: ctl.signal, ms: 60_000 });
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  });
+  assert.equal(probes, 3, 'the lost info probe, then info and the log read of the second try');
+  assert.ok(Date.now() - started < 5000, 'a lost probe did not wait for the wall guard');
+});
+
+test('a slow reply still succeeds while the signal has not fired', async () => {
+  const dev = new SlowDevice();
+  dev.debug = true;
+  dev.rebooted = true;
+  const s = new DkSession(dev, { timeoutMs: 200, retries: 0 });
+  await s.restart();
+  dev.delayMs = 1300; // wall-slow, as on a loaded host; the harness clock (emulated) has not reached its bound
+  const ctl = new AbortController();
+  await s.waitForBoot(async () => {}, 20_000, { probe: (run) => run({ signal: ctl.signal, ms: 60_000 }) });
+  assert.equal(ctl.signal.aborted, false);
+});
+
 test('a cancelled read ends the wait', async () => {
   const dev = new Device();
   const s = new DkSession(dev, { timeoutMs: 50, retries: 0 });

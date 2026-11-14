@@ -68,6 +68,16 @@ port = true
 dsp = { image = "dn2-1.12", idle_start = 0xb88a49, idle_end = 0xb88abb, idle_head = 0xb88aab, sample_link = "lp0" }
 
 
+# What this device can do (the names and values of the device-registry schema). dsp: "sharc" | "none"; seal: the container seal;
+# sample_pool: how run-time samples get memory ("stock" borrows the stock sample slots, "ddr" reserves a DDR range, "none"); card:
+# "path-fs" (a folder filesystem on the card: the samples are the firmware's +Drive files) or "slots" (card slots only: the samples
+# are files of the digikit store), "none", "unknown". `patchkit gen` reads `card` (SAMPLES_IN_STORE of the runtime's device object).
+[capabilities]
+dsp = "sharc"
+seal = "hmac"
+sample_pool = "ddr"
+card = "slots"
+
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
 # constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: a fact it uses as a
 # constant must be the same in every device file, and `patchkit gen` refuses a difference. Register offsets inside a peripheral
@@ -98,6 +108,9 @@ name = "dn2"
 default_modules = ["digikit/debug", "digikit/remote"]
 # The panel key held at power-on for safe mode: RECORD (a code of [[panel.group]] "transport", tools/patchkit/pk_harness.py BUTTONS).
 safe_key = 19
+# The longest sample path the runtime accepts for a `select` or a SysEx sample transfer, in bytes, relative to the samples root: the device's own
+# path limit (DT2: the +Drive filesystem, DN2: the store path limit 159 less the 8 bytes of the `samples/` prefix).
+sample_path_max = 151
 # core/dsp-link: the reserved DSP area in L2 (window 0; a chunk's offset field is 17 bits, so at most 524288 bytes), and the geometry of
 # the frame tail the link sends through.
 dsp_area_bytes = 327680

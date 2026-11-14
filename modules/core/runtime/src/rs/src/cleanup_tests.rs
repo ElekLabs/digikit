@@ -2,6 +2,7 @@
 //! No device ACK/block-tail/callback quiescence claim. All shared runtime state is
 //! serialized; fake CF addresses are logged at free/fini, never host-dereferenced.
 use super::*;
+use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
 use std::sync::Mutex;
 use std::vec::Vec;
 
@@ -175,7 +176,7 @@ fn voice_latch_mask_is_published_before_the_type() {
         d.row_latched[0] = 5;
         d.row_type[0] = 17;
         while LINK.events.len() < 4 {
-            dsp::step();
+            crate::loader::dsp_step();
         }
         let at = 24 * VOICE_INFO[6];
         assert_eq!(LINK.events, [Event::Word(1, at + 22, 5u32.swap_bytes()), Event::Word(1, at + 23, 0), Event::Word(1, at + 10, 0), Event::Word(1, at, 17u32.swap_bytes())]);
@@ -220,10 +221,10 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
         LINK.events.len(),
     );
     for _ in 0..3 {
-        dsp::step();
+        crate::loader::dsp_step();
     }
-    assert!(!dsp::fx_word_start(0, 0, 0xabcdef00));
-    assert_eq!(dsp::sample_send(0, core::ptr::null(), 4), -2);
+    assert!(!REAL_CORE.link_word(LinkWriter::FxPage, dsp::WIN_FX, 0, 0xabcdef00));
+    assert_eq!(REAL_CORE.link_sample_send(0, core::ptr::null(), 4), -2);
     assert_eq!(dsp::reserve(2, &dsp::Job::empty()), E_BUSY);
     dsp::cancel(0);
     dsp::release_range(0);
@@ -246,7 +247,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
 
 unsafe fn failure_case(completion: Completion) {
     seed(completion, false, true, true);
-    dsp::step();
+    crate::loader::dsp_step();
     assert_retained(false, 0);
     assert_eq!(
         dsp::ds().last_dl_err,
@@ -256,6 +257,21 @@ unsafe fn failure_case(completion: Completion) {
             91
         }
     );
+}
+#[test]
+fn dsp_step_reports_a_failure_without_acting_on_it() {
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, true);
+        let d = dsp::ds();
+        assert_eq!(dsp::step(), dsp::Advance::Failed(E_DSP_XFER));
+        // the module is still up and the DSP loader still counts nothing: the loader decides next
+        assert!(entry::has_tick(0));
+        assert_eq!((d.failures, st().modules[0].used, boot::info().results[0]), (0, 1, 0));
+        dsp::fail_done(false, E_DSP_XFER);
+        assert!(dsp::retained());
+        assert_eq!((d.failures, st().last_result), (1, E_DSP_XFER));
+    }
 }
 #[test]
 fn invalidation_refusal_retains_and_stops() {
@@ -286,7 +302,7 @@ fn fx_partial_cleanup_does_not_discard_publication() {
     let _g = LOCK.lock().unwrap();
     unsafe {
         seed(Completion::ErrorAt(3), true, true, true);
-        dsp::step();
+        crate::loader::dsp_step();
         assert_retained(true, 0);
         assert_eq!(LINK.accepted, 3); // no subsequent cleanup writes after failure
     }
@@ -297,14 +313,14 @@ fn missing_fx_info_retains_published_row() {
     unsafe {
         seed(Completion::Ack, true, true, true);
         LINK.no_fx_info = true;
-        dsp::step();
+        crate::loader::dsp_step();
         assert_retained(true, 0);
         assert_eq!(LINK.accepted, 0);
     }
 }
 unsafe fn successful_case(fx: bool, published: bool) {
     seed(Completion::Ack, fx, published, true);
-    dsp::step();
+    crate::loader::dsp_step();
     assert!(!dsp::retained());
     assert!(!entry::has_tick(0));
     assert_eq!(st().modules[0].used, 0);
@@ -356,6 +372,54 @@ fn never_started_cancel_is_reclaimable() {
         assert_eq!(dsp::ds().mod_len[0], 0);
         assert!(LINK.events.contains(&Event::Free(IMAGE)));
         assert!(!LINK.events.contains(&Event::Free(CF)));
+    }
+}
+
+#[test]
+fn on_loaded_runs_once_per_load_and_after_the_last_row() {
+    use crate::handlers::tests::{log, Call, Fake, LOCK as FAKE_LOCK};
+    let _f = FAKE_LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, false);
+        log().clear();
+        let d = dsp::ds();
+        d.row_owner = [0; dsp::MAX_ROWS];
+        d.fx_owner = [0; dsp::MAX_FX];
+        d.step = 0; // no row of module 0 in the fake's list: every row is in
+        type Two = (Fake<1>, (Fake<2>, ()));
+        crate::loader::dsp_step_with::<Two>();
+        // each service hears it once, in list order, and the load is over
+        assert_eq!(*log(), vec![Call::OnLoaded { svc: 1, rec: 0 }, Call::OnLoaded { svc: 2, rec: 0 }]);
+        assert_eq!(dsp::ds().phase, dsp::PH_IDLE);
+        assert_eq!(boot::info().loaded, 1);
+        // an idle loader has nothing to list
+        log().clear();
+        crate::loader::dsp_step_with::<Two>();
+        assert!(log().is_empty());
+    }
+}
+
+#[test]
+fn attribution_names_the_module_of_every_site_the_watch_reports() {
+    use crate::handlers::{ServiceList, Services};
+    use dkrt_sdk::fault::{SITE_FX_MASTER, SITE_FX_SEND, SITE_NONE, SITE_VOICE};
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, false);
+        let d = dsp::ds();
+        d.row_owner[0] = 2;
+        d.row_type[0] = 7;
+        d.fx_owner[1] = 3;
+        // a voice site: the module that owns the machine type
+        assert_eq!(Services::attribute(SITE_VOICE, 7), Some(1));
+        assert_eq!(Services::attribute(SITE_VOICE, 8), None);
+        // every other site is an effect row of the chain's table (first row 0 in the test table)
+        assert_eq!(Services::attribute(SITE_FX_MASTER, 1), Some(2));
+        assert_eq!(Services::attribute(SITE_FX_SEND, 1), Some(2));
+        assert_eq!(Services::attribute(SITE_NONE, 1), Some(2));
+        assert_eq!(Services::attribute(9, 1), Some(2));
+        assert_eq!(Services::attribute(SITE_FX_MASTER, 0), None);
     }
 }
 
@@ -449,7 +513,40 @@ pub extern "C" fn dl_tick_cb_drop(start: u32, end: u32) {
     unsafe { assert!(LINK.events.contains(&Event::Fini)); }
 }
 
+/// The other firmware anchors that the platform tests keep reachable: nothing in the host tests may write the card or send MIDI through them
+/// (the tests of platform behaviour use `FakePlatform`), and the effect pages' table is not in the image.
+#[export_name = "cf.storage.fn.block.write"]
+pub extern "C" fn block_write(_: u32, _: u32, _: *const u8) -> i32 {
+    panic!("host tests must not write firmware storage")
+}
+#[export_name = "cf.midi.fn.send"]
+pub extern "C" fn midi_send(_: u32, _: *const u8, _: u32) {
+    panic!("host tests must not send MIDI through the firmware")
+}
+#[no_mangle]
+pub extern "C" fn fxpages_info() {}
+
 #[export_name = "cf.storage.fn.block.read"]
 pub extern "C" fn block_read(_: u32, _: u32, _: *mut u8) -> i32 {
     panic!("host cleanup tests must not read firmware storage")
+}
+
+unsafe extern "C" fn test_sink(_: *const crate::dlog::Ev) {}
+
+/// A module without `fini` that set a sink: the unload releases the channel (it would point into freed memory).
+#[test]
+fn unload_of_a_module_without_fini_releases_its_sink() {
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, true);
+        st().modules[0].fini = 0;
+        LINK.events.push(Event::Fini); // the registry hook of this harness expects a fini before it; none runs
+        let prev = crate::dlog::enter_module(0, crate::dlog::PHASE_INIT);
+        assert_eq!(crate::dlog::dk_sink_set(0, test_sink as *const () as usize as *mut u8), OK);
+        crate::dlog::leave_module(prev);
+        assert!(crate::dlog::sink_on(0));
+        crate::loader::dsp_step();
+        assert_eq!(st().modules[0].used, 0);
+        assert!(!crate::dlog::sink_on(0));
+    }
 }

@@ -116,10 +116,7 @@ pub fn step_job() -> u32 {
 }
 
 unsafe fn locked<T>(f: impl FnOnce() -> T) -> T {
-    let sr = crate::irq_mask();
-    let result = f();
-    crate::irq_restore(sr);
-    result
+    dkrt_abi::platform::locked(&crate::PLATFORM, f)
 }
 
 fn next_seq() -> u32 {
@@ -147,37 +144,38 @@ static mut TASK_UP: u32 = 0;
 #[cfg(not(test))]
 mod kernel {
     use super::*;
+    use crate::PLATFORM;
+    use dkrt_abi::platform::Tasking;
 
     /// Create and start the task. False: the kernel refused.
     pub unsafe fn create() -> bool {
-        dkfw::rtos::sem_init(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32, 0);
+        PLATFORM.sem_init(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32, 0);
         let tcb = addr_of_mut!(DKRT_IO_TASK.tcb) as u32;
-        let ok = dkfw::rtos::task_create(tcb, entry as usize as u32, PRIORITY, addr_of_mut!(DKRT_IO_TASK.stack) as u32, STACK_BYTES as u32);
-        if ok != 1 {
+        if !PLATFORM.task_create(tcb, entry as usize as u32, PRIORITY, addr_of_mut!(DKRT_IO_TASK.stack) as u32, STACK_BYTES as u32) {
             return false;
         }
-        dkfw::rtos::task_start(tcb);
+        PLATFORM.task_start(tcb);
         true
     }
 
     /// The current task's TCB address (the kernel's pointer variable).
     pub unsafe fn current_task() -> u32 {
-        read_volatile(addr_of!(dkfw::rtos::CURRENT_TCB) as *const u32)
+        PLATFORM.current_task()
     }
 
     /// Sleep 1 ms (task context).
     pub unsafe fn pause() {
-        dkfw::rtos::sleep_us(1000);
+        PLATFORM.sleep_us(1000);
     }
 
     /// Sleep until a post (task context).
     pub unsafe fn pend() {
-        dkfw::rtos::sem_pend(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32);
+        PLATFORM.sem_pend(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32);
     }
 
     /// Wake the task: sets the flag and reschedules. ISR-safe.
     pub unsafe fn post() {
-        dkfw::rtos::sem_post(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32);
+        PLATFORM.sem_post(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32);
     }
 }
 

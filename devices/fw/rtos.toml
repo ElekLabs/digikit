@@ -26,7 +26,7 @@ was = ["dkrt.fw.queue_pop"]
 cpu = "cf"
 rule = { kind = "cf_func", hash = "5545f84fcc633b347034f629aa4858b9", offset = 0x0, len = 2 }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/platform"]
 doc = "The stock queue pop (blocking pend on the queue, returns the next item), the function the hook call goes to."
 
 [[fn]]
@@ -86,7 +86,7 @@ doc = "The reset code's two consecutive calls `jsr copy; jsr clear` (the .data c
 # The firmware's default exception handler (the code every vector points at until a specific handler is installed; DT2 1.16 0x40001252, not a
 # function of its own): `move #0x2700,sr; move.l sp,<save>; lea -16(sp),sp; movem.l d0-d1/a0-a1,(sp); movea.l <hook word>,a0; tst.l a0; beq +10;
 # move.l <save>,-(sp); jsr (a0); ...; rte`. The anchor is the 4-byte literal of `movea.l (<hook word>).l,a0` (finding 37: the word holds the function
-# that prints EXCEPTION and halts); the runtime points the word at its own hook, which records the fault and soft-resets (finding 46). The
+# that prints EXCEPTION and halts); core/platform points the word at the runtime's hook, which records the fault and soft-resets (finding 46). The
 # words are the code with the two address operands (they differ per firmware) and the `jsr`'s displaced bytes left open.
 [[site]]
 name = "cf.rtos.site.exc_hook_lit"
@@ -95,7 +95,7 @@ bind = "static"
 cpu = "cf"
 rule = { kind = "cf_words", as = "code", words = [0x270023cf, "*", 0x4feffff0, 0x48d70303, "*", "*", 0x670a2f39, "*", 0x4e90588f, 0x4cd70303, 0x4fef0010], offset = 0x12, len = 4 }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/platform"]
 doc = "The firmware's default exception handler (the code every vector points at until a specific handler is installed; DT2 1.16 0x40001252, not a function of its own): `move #0x2700,sr; move.l sp,<save>; lea -16(sp),sp; movem.l d0-d1/a0-a1,(sp); movea.l <hook word>,a0; tst.l a0; beq +10; move.l <save>,-(sp); jsr (a0); ...; rte`."
 
 # The boot thread: DT2 FUN_400cc864 (1.16; 1.17 0x400cc9c8), DN2 FUN_400cec98 (1.11; 1.12 0x400cedfc), the same code in both versions.
@@ -116,7 +116,7 @@ cpu = "cf"
 rule.dt2 = { kind = "cf_words", as = "code", words = ["*", 0xff5848d7, 0x3cfc49f9, "*", "*", "*", "*", 0x4e944e93, 0x2d40ff80, 0x4eb9400d], offset = 0x2, len = 8 }
 rule.dn2 = { kind = "cf_words", as = "code", words = [0x4e56ff58, 0x48d73cfc, 0x45f94018, "*", "*", 0x4e924e93, 0x2d40ff80, 0x4eb9400d], offset = 0x0, len = 8 }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/platform"]
 doc = "The entry of the main-OS task (`link a6,#-0xa8; movem.l ...; ...; jsr (a4); jsr (a3); move.l d0,-0x80(a6); jsr <next singleton>`), found by the words of its first 28 bytes: Digitakt II (the entry is 2 mod 4: the first word of the row is half of the previous function) and Digitone II (4-aligned)."
 
 [[value]]
@@ -154,7 +154,7 @@ regs = { in = [], clobbers = ["ccr"] }
 handler = { sig = "void ()", args = [] }
 devices = ["dt2", "dn2"]
 mark = "D"
-users = ["core/runtime"]
+users = ["core/platform"]
 doc = "Entry of the main-OS task, before the task builds its singletons; the hook point for boot-time module loading."
 
 [[hook]]

@@ -12,7 +12,9 @@
 //! table, which is not ColdFire code), no `core::fmt`, no slice indexing (a bounds panic hangs the task).
 use crate::store_writer::{self as sw, SCRATCH_AT};
 use crate::store_writer::{copy, DKRT_UPLOAD_WRITES};
-use crate::platform::{midi_send, tx_in_flight, wr32};
+use crate::platform::wr32;
+use crate::PLATFORM;
+use dkrt_abi::platform::Platform;
 use crate::dlog;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::proto::*;
@@ -139,8 +141,13 @@ pub(crate) const TX_RING: u32 = 0xff0;
 /// Is there room to send a reply of `wire` bytes without the firmware's TX function waiting? It packs 3 bytes of a SysEx message into
 /// each 4-byte event, and waits only when the bytes in flight plus what it queued reach the ring size (finding 43).
 pub(crate) unsafe fn tx_room(wire: usize) -> bool {
+    tx_room_with(&PLATFORM, wire)
+}
+
+/// `tx_room` over a platform.
+pub(crate) unsafe fn tx_room_with<P: Platform>(p: &P, wire: usize) -> bool {
     let need = ((wire as u32 + 2) / 3 + 1) * 4;
-    match tx_in_flight() {
+    match p.midi_tx_in_flight() {
         Some(f) => f <= TX_BUSY_MAX && f + need <= TX_RING,
         None => false, // the anchor does not point at a counter: no reply rather than a possible hang
     }
@@ -148,6 +155,11 @@ pub(crate) unsafe fn tx_room(wire: usize) -> bool {
 
 /// Send the reply for `cmd`/`seq`: status, then the `extra` bytes already in `RBODY[1..1+extra]`.
 pub(crate) unsafe fn reply(cmd: u8, seq: u32, status: i32, extra: usize) -> i32 {
+    reply_with(&PLATFORM, cmd, seq, status, extra)
+}
+
+/// `reply` over a platform (the host tests capture the MIDI output with `FakePlatform`).
+pub(crate) unsafe fn reply_with<P: Platform>(p: &P, cmd: u8, seq: u32, status: i32, extra: usize) -> i32 {
     let rb = addr_of_mut!(RBODY) as *mut u8;
     *rb = status as u8;
     let w = addr_of_mut!(RWIRE) as *mut u8;
@@ -164,11 +176,11 @@ pub(crate) unsafe fn reply(cmd: u8, seq: u32, status: i32, extra: usize) -> i32 
     if logged(cmd, status) {
         dlog::ev(logk::UPLOAD, if status == 0 { dlog::INFO } else { logk::F_ERROR }, [cmd as u32, status as u32, DKRT_UPLOAD_WRITES, 0, 0]);
     }
-    if !tx_room(8 + n) {
+    if !tx_room_with(p, 8 + n) {
         DKRT_UPLOAD_DROPPED = DKRT_UPLOAD_DROPPED.wrapping_add(1);
         return 1; // the host reads nothing, or slowly: its retry asks again
     }
-    midi_send((8 + n) as u32, w, 2);
+    p.midi_send(2, core::slice::from_raw_parts(w, 8 + n));
     DKRT_UPLOAD_COUNT = DKRT_UPLOAD_COUNT.wrapping_add(1);
     1
 }

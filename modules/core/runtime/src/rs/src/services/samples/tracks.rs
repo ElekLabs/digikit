@@ -22,7 +22,7 @@
 //!
 //! TODO (not wired yet): persistence of the selections to the digikit store (they live in memory per project now); a request mailbox
 //! so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
-use crate::{dlog, dsp, irq_mask, irq_restore};
+use crate::core_api::{CoreApi, LinkWriter, Platform, SamplePool, PLATFORM, REAL_CORE};
 use core::hint::black_box;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::files::{HASH_ELEKTRON32, SAMPLES};
@@ -32,7 +32,6 @@ use dkrt_sdk::sample_tracks::{
 };
 use dkrt_sdk::{logk, E_CONTRACT, E_DSP_XFER, E_NOT_FOUND, E_READ, E_SEL_PATH};
 
-pub const DKPOOL_VERSION: u32 = 1;
 pub(crate) const CLIENTS: usize = 2;
 const ENTRIES: usize = 16;
 const PROJECTS: usize = 4;
@@ -65,24 +64,14 @@ static mut LIVE: [bool; CLIENTS] = [false; CLIENTS];
 /// The client slot of a module that is taken down (`usize::MAX`: none): nothing reads its tracks any more, so close drains at once and
 /// writes are dropped. Other clients are stepped normally meanwhile.
 static mut FORCE: usize = usize::MAX;
-/// 0 not checked, 1 usable, 2 absent or wrong version.
-static mut POOL: u8 = 0;
 
 pub(crate) unsafe fn core_() -> &'static mut Core<CLIENTS, ENTRIES, PROJECTS> {
     &mut *addr_of_mut!(CORE)
 }
 
-/// Is a backing adapter of the right version in the image?
+/// Is a backing adapter of the right version in the image? (The platform's sample-pool provider.)
 unsafe fn pool_ok() -> bool {
-    if POOL == 0 {
-        let present = black_box(dkpool_version as *const () as usize) != 0
-            && black_box(dkpool_load as *const () as usize) != 0
-            && black_box(dkpool_release as *const () as usize) != 0
-            && black_box(dkpool_check as *const () as usize) != 0
-            && black_box(dkpool_free_frames as *const () as usize) != 0;
-        POOL = if present && dkpool_version() == DKPOOL_VERSION { 1 } else { 2 };
-    }
-    POOL == 1
+    SamplePool::present(&PLATFORM)
 }
 
 // ---- table writes over the DSP link -------------------------------------------------------------------------------------------
@@ -108,11 +97,6 @@ static mut OPS: [[Op; TRACKS]; CLIENTS] = [[OP0; TRACKS]; CLIENTS];
 /// The bytes of the write in flight (little-endian DSP words; the link reads them in place) and its track: client * TRACKS + track.
 static mut STAGE: [u8; 28] = [0; 28];
 static mut FLIGHT: usize = NO_FLIGHT;
-
-/// A table write is in flight: the fx word writers wait (one transfer on the link at a time).
-pub fn busy() -> bool {
-    unsafe { FLIGHT != NO_FLIGHT }
-}
 
 /// Little-endian bytes of `words` into `STAGE`; the byte count.
 unsafe fn stage(words: &[u32]) -> u32 {
@@ -161,9 +145,9 @@ unsafe fn next_write(c: usize, k: usize, op: &Op) -> Option<(u32, u32)> {
 }
 
 /// Finish the write in flight, then start the next one. Called twice per UI-loop pass.
-unsafe fn pump() {
+unsafe fn pump<C: CoreApi>(api: &C) {
     if FLIGHT != NO_FLIGHT {
-        let done = dsp::sample_poll();
+        let done = api.link_poll(LinkWriter::Sample);
         if done.is_none() {
             return;
         }
@@ -193,7 +177,7 @@ unsafe fn pump() {
         }
         c += 1;
     }
-    if !dsp::sample_idle() || crate::fxpage::busy() || crate::fxsend::busy() {
+    if !api.link_idle() || api.link_busy() {
         return;
     }
     c = 0;
@@ -203,7 +187,7 @@ unsafe fn pump() {
             let op = (*addr_of!(OPS))[c][k];
             if (op.kind == OP_CLOSE || op.kind == OP_PUBLISH) && LIVE[c] {
                 if let Some((dst, len)) = next_write(c, k, &op) {
-                    let r = dsp::sample_send(dst, addr_of!(STAGE) as *const u8, len);
+                    let r = api.link_sample_send(dst, addr_of!(STAGE) as *const u8, len);
                     if r == 0 {
                         FLIGHT = c * TRACKS + k;
                     } else if r == -2 {
@@ -228,7 +212,7 @@ type FsMeta = unsafe extern "C" fn(u32, *mut u32) -> i32;
 
 /// The device's sample root (`select` paths are root-relative; the runtime keeps the rooted form).
 fn root() -> &'static [u8] {
-    if crate::device() == 2 {
+    if PLATFORM.samples_in_store() {
         ROOT_DN2
     } else {
         ROOT_DT2
@@ -243,21 +227,15 @@ unsafe fn probe_store(path: &[u8], head: Option<&mut [u8; 64]>) -> Result<FileId
     }
     let mut z = [0u8; dkrt_sdk::sample_tracks::PATH + 1];
     z[..path.len()].copy_from_slice(path);
-    let f = crate::store::find(z.as_ptr())?;
-    if let Some(h) = head {
-        crate::store::read_head(&f, h)?;
-    }
-    Ok(store_identity(f.size, &f.sha))
+    let (size, sha) = REAL_CORE.store_probe(z.as_ptr(), head)?;
+    Ok(store_identity(size, &sha))
 }
 
 /// Open `path` (not NUL-terminated), take the identity of its listing row (size and the stored hash by entry id, as `files.rs` lists it)
 /// and, when `head` is given, read the 64 header bytes. DT2 only: the store route of DN2 is `probe_store`.
 unsafe fn probe(path: &[u8], head: Option<&mut [u8; 64]>) -> Result<FileId, i32> {
-    if crate::device() == 2 {
+    if PLATFORM.samples_in_store() {
         return probe_store(path, head);
-    }
-    if crate::device() != 1 {
-        return Err(E_CONTRACT);
     }
     if path.is_empty() || path.len() >= dkrt_sdk::sample_tracks::PATH {
         return Err(E_SEL_PATH);
@@ -314,7 +292,7 @@ impl Env for Device {
         let mut head = [0u8; 64];
         let id = unsafe { probe(path, Some(&mut head))? };
         // Size and format only: no PCM is read here (it can be megabytes), the pool adapter reads it.
-        if crate::device() == 2 {
+        if PLATFORM.samples_in_store() {
             return store_inspect(id.size, &id.hash, &head);
         }
         let (frames, channels) = dkrt_sdk::sample::native_header(&head, id.size)?;
@@ -380,17 +358,17 @@ impl Env for Device {
         unsafe {
             match n {
                 Note::Loaded { client, entry, frames, base_l, token } => {
-                    dlog::ev(logk::POOL_LOAD, dlog::INFO, [client << 8 | entry, 0, frames, base_l, token])
+                    REAL_CORE.log(logk::POOL_LOAD, dkrt_abi::core_api::LOG_INFO, [client << 8 | entry, 0, frames, base_l, token])
                 }
                 Note::Invalid { client, entry, reason, token, count } => {
-                    dlog::ev(logk::POOL_INVALID, dlog::INFO, [client << 8 | entry, reason, token, count, 0])
+                    REAL_CORE.log(logk::POOL_INVALID, dkrt_abi::core_api::LOG_INFO, [client << 8 | entry, reason, token, count, 0])
                 }
             }
         }
     }
     fn publish(&mut self, client: usize, track: usize, rec: &Strack) {
         unsafe {
-            dlog::ev(logk::POOL_PUBLISH, dlog::INFO, [(client as u32) << 8 | track as u32, rec.token, rec.frames, rec.base_l, rec.base_r]);
+            REAL_CORE.log(logk::POOL_PUBLISH, dkrt_abi::core_api::LOG_INFO, [(client as u32) << 8 | track as u32, rec.token, rec.frames, rec.base_l, rec.base_r]);
             if FORCE == client {
                 return;
             }
@@ -467,7 +445,7 @@ pub unsafe fn remove(rec: usize) {
             }
             FORCE = usize::MAX;
             (*addr_of_mut!(OPS))[i] = [OP0; TRACKS];
-            crate::peakwin::reset(i);
+            super::peakwin::reset(i);
             LIVE[i] = false;
             OWNER[i] = usize::MAX;
         }
@@ -488,7 +466,7 @@ pub unsafe fn has(rec: usize) -> bool {
 }
 
 pub unsafe fn tracks(local_id: u32) -> i32 {
-    let owner = crate::dlog::current_source();
+    let owner = REAL_CORE.current_source();
     if owner == 0 {
         return E_NOT_FOUND;
     }
@@ -506,7 +484,7 @@ pub unsafe fn tracks(local_id: u32) -> i32 {
 /// `dk_sample_pool_open`: the handle of the module's pool table with the lowest local id (the one table a module declares), as `tracks` gives it for
 /// that id; E_NOT_FOUND without a table.
 pub unsafe fn open_first() -> i32 {
-    let owner = crate::dlog::current_source();
+    let owner = REAL_CORE.current_source();
     if owner == 0 {
         return E_NOT_FOUND;
     }
@@ -564,9 +542,9 @@ pub unsafe fn pool_add(handle: u32, path: *const u8) -> i32 {
         Ok(n) => n,
         Err(e) => return e,
     };
-    let sr = irq_mask();
+    let sr = PLATFORM.irq_mask();
     let r = core_().pool_add(c, &full[..n]);
-    irq_restore(sr);
+    PLATFORM.irq_restore(sr);
     r
 }
 
@@ -587,9 +565,9 @@ pub unsafe fn pool_set(handle: u32, index: u32, path: *const u8) -> i32 {
         Ok(n) => n,
         Err(e) => return e,
     };
-    let sr = irq_mask();
+    let sr = PLATFORM.irq_mask();
     let r = core_().pool_set(c, index as usize, &full[..n]);
-    irq_restore(sr);
+    PLATFORM.irq_restore(sr);
     r
 }
 
@@ -597,9 +575,9 @@ pub unsafe fn pool_set(handle: u32, index: u32, path: *const u8) -> i32 {
 pub unsafe fn pool_clear(handle: u32, track: u32) -> i32 {
     match client(handle) {
         Ok(c) => {
-            let sr = irq_mask();
+            let sr = PLATFORM.irq_mask();
             let r = core_().unbind(c, track as usize);
-            irq_restore(sr);
+            PLATFORM.irq_restore(sr);
             r
         }
         Err(e) => e,
@@ -661,16 +639,16 @@ pub unsafe fn info(handle: u32, track: u32, out: *mut u8) -> i32 {
 
 /// One step of every track, in the UI loop. Without a backing adapter nothing runs.
 pub unsafe fn tick() {
-    if POOL == 2 || !pool_ok() {
+    if !pool_ok() {
         return;
     }
     // Optional on its own: the adapter delivers completions and finds a stock reset here, before the runtime steps the tracks.
     if black_box(dkpool_tick as *const () as usize) != 0 {
         dkpool_tick();
     }
-    pump();
+    pump(&REAL_CORE);
     core_().tick(&mut Device);
-    pump();
+    pump(&REAL_CORE);
 }
 
 /// Adapter to runtime: load `req` finished (`result` 0, E_POOL, E_READ or E_FORMAT).
@@ -684,7 +662,7 @@ pub unsafe extern "C" fn dkrt_pool_lost() {
     static mut LOST: u32 = 0;
     let n = read_volatile(addr_of!(LOST)).wrapping_add(1);
     *addr_of_mut!(LOST) = n;
-    dlog::ev(logk::POOL_LOST, logk::L_WARN << logk::LEVEL_SHIFT, [n, 0, 0, 0, 0]);
+    REAL_CORE.log(logk::POOL_LOST, logk::L_WARN << logk::LEVEL_SHIFT, [n, 0, 0, 0, 0]);
     core_().lost(&mut Device);
 }
 /// Project adapter to runtime: the current project slot changed.
@@ -712,5 +690,65 @@ pub unsafe fn peaks(handle: u32, track: u32, token: u32, out: *mut u8, capacity:
     match core_().peak_handle(c, track as usize, token) {
         Ok(h) => dkpool_peaks(&h, out, capacity),
         Err(e) => e,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core_api::{Call, FakeCore};
+    use std::sync::Mutex;
+
+    static LOCK: Mutex<()> = Mutex::new(());
+
+    /// Client 0, track 1 has an op `kind`; its records and control sets are at fixed L2 addresses.
+    unsafe fn seed(kind: u8, rec: [u32; 8]) {
+        *addr_of_mut!(OPS) = [[OP0; TRACKS]; CLIENTS];
+        FLIGHT = NO_FLIGHT;
+        LIVE = [false; CLIENTS];
+        LIVE[0] = true;
+        RECORDS[0] = 0x1000;
+        CONTROL[0] = 0x2000;
+        (*addr_of_mut!(OPS))[0][1] = Op { kind, step: 0, tries: 0, rec };
+    }
+
+    #[test]
+    fn a_publish_op_submits_its_three_writes_in_order() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            seed(OP_PUBLISH, [1, 2, 3, 4, 5, 6, 7, 8]);
+            let fake = FakeCore::new();
+            let words = |w: &[u32]| w.iter().flat_map(|v| v.to_le_bytes()).collect::<std::vec::Vec<u8>>();
+            // pass 1: the link is idle: step 0 (the record's words 1 to 7) goes out, and the write is in flight
+            pump(&fake);
+            assert_eq!(fake.calls(), [Call::SampleSend { dst: 0x1000 + 32 + 4, bytes: words(&[2, 3, 4, 5, 6, 7, 8]) }]);
+            assert_eq!(FLIGHT, 1);
+            // pass 2: the write is done: step 1 (the control set) goes out
+            pump(&fake);
+            // pass 3 and 4: step 2 (the record's first word), then the op is complete
+            pump(&fake);
+            let calls = fake.calls();
+            let sends: std::vec::Vec<_> = calls.iter().filter(|c| matches!(c, Call::SampleSend { .. })).collect();
+            assert_eq!(sends.len(), 3);
+            assert_eq!(sends[1], &Call::SampleSend { dst: 0x2000 + 16, bytes: words(&[0]) });
+            assert_eq!(sends[2], &Call::SampleSend { dst: 0x1000 + 32, bytes: words(&[1]) });
+            pump(&fake);
+            assert_eq!((*addr_of!(OPS))[0][1].kind, OP_NONE);
+        }
+    }
+
+    #[test]
+    fn a_busy_fx_transfer_holds_the_sample_writes() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            seed(OP_CLOSE, [0; 8]);
+            let fake = FakeCore::new();
+            fake.claim.set(1);
+            pump(&fake);
+            assert!(fake.calls().is_empty());
+            fake.claim.set(0);
+            pump(&fake);
+            assert_eq!(fake.calls().len(), 1);
+        }
     }
 }

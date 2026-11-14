@@ -16,7 +16,7 @@
 //! 2. else the lowest number that no map entry references and this boot has not given out; record the entry (rule 0);
 //! 3. else drop the lowest-index entry whose hash is not among this boot's machines (logged), take its number, record the entry (rule 0);
 //! 4. two machines with the same key in one boot: the second takes a fresh number and is not recorded.
-use crate::{dlog, loader};
+use crate::{collect, dlog, selection, store};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::sel::{Record, MAP_N};
 use dkrt_sdk::sticky::{assign, clean, in_range, Event, MAX_KEYS};
@@ -56,6 +56,19 @@ pub fn map_used() -> u32 {
     n
 }
 
+/// The machine keys of the `.dkm` at `path` (at most 8, the count returned): reads the file into the staging buffer, so it runs before the first
+/// load. A file that is missing, torn or not a `.dkm` has none (its load reports the error).
+unsafe fn keys_of(path: *const u8, out: &mut [u32; 8]) -> usize {
+    let found = match store::find(path) {
+        Ok(f) => f,
+        Err(_) => return 0,
+    };
+    if store::load_to_stage(&found) != OK {
+        return 0;
+    }
+    collect::machine_keys(core::slice::from_raw_parts(store::stage() as *const u8, found.size as usize), out)
+}
+
 /// Assign the numbers of every machine of the selected modules. Call once, at the start of the boot load, with the record the boot started from.
 pub unsafe fn plan(rec: &Record) {
     let a = st();
@@ -66,7 +79,7 @@ pub unsafe fn plan(rec: &Record) {
     let mut k = 0;
     while k < rec.count as usize {
         let mut keys = [0u32; 8];
-        let n = loader::machine_keys(rec.paths[k].as_ptr(), &mut keys);
+        let n = keys_of(rec.paths[k].as_ptr(), &mut keys);
         let mut i = 0;
         while i < n && a.n < MAX_KEYS {
             a.idx[a.n] = k as u32;
@@ -84,14 +97,14 @@ pub unsafe fn plan(rec: &Record) {
     });
 }
 
-/// The type number for machine key `key` of the module being loaded (selection index `loader::BOOT_IDX`): the number `plan` assigned, a pinned
+/// The type number for machine key `key` of the module being loaded (selection index `selection::BOOT_IDX`): the number `plan` assigned, a pinned
 /// number as it is (when it is in the run-time range), 0 when there is none.
 pub unsafe fn resolve(key: u32) -> u32 {
     if key >> 8 == 0 {
         return if in_range(key) { key } else { 0 }; // a pinned number (0: none)
     }
     let a = st();
-    let at = core::ptr::read_volatile(addr_of_mut!(loader::BOOT_IDX));
+    let at = core::ptr::read_volatile(addr_of_mut!(selection::BOOT_IDX));
     let mut i = 0;
     while i < a.n {
         if a.key[i] == key && a.idx[i] == at {

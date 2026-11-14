@@ -4,84 +4,28 @@
  "relocs": [
   {
    "addend": 0,
-   "offset": 10,
-   "section": ".text",
-   "symbol": "dkrt_tick",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 24,
-   "section": ".text",
-   "symbol": "fw_queue_pop",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 88,
-   "section": ".text",
-   "symbol": "dkrt_boot",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 102,
-   "section": ".text",
-   "symbol": "dkrt_boot_next",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 238,
-   "section": ".text",
-   "symbol": "dkrt_midi_rx",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 260,
-   "section": ".text",
-   "symbol": "dkrt_midi_next",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 266,
-   "section": ".text",
-   "symbol": "dkrt_midi_ret",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 286,
-   "section": ".text",
-   "symbol": "dkrt_exc",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 302,
+   "offset": 170,
    "section": ".text",
    "symbol": "dkrt_page_key",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 310,
+   "offset": 178,
    "section": ".text",
    "symbol": "dkrt_pagekey_next",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 324,
+   "offset": 192,
    "section": ".text",
    "symbol": "dkrt_page_turn",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 340,
+   "offset": 208,
    "section": ".text",
    "symbol": "dkrt_pageturn_next",
    "type": "cf.32"
@@ -90,91 +34,31 @@
  "sections": [
   {
    "align": 4,
-   "hex": "4feffff048d703034eb9000000004cd703034fef00104ef900000000206f0004222f0008200802800000000fd28020080280fffffff0204006810000000fe889670af4e841e80010538166f64e754feffff048d703034eb9000000004cd703034fef00104ef900000000428040c046fc27004e75202f000446c04e7546fc2700223c00030d401039ec070004080000036604538166f042b9480000004e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e71708013c0ec09000060fe4feffff048d703032f2f00182f2f00182f2f00184eb9000000004fef000c4a804cd703034fef001066064ef9000000004ef9000000004fefffd448d77cfc2f0f2f2f00344eb90000000060fe2f2f00082f2f00084eb900000000508f4ef9000000002f2f00082f2f00084eb900000000508f4a00670470014e754ef900000000",
+   "hex": "206f0004222f0008200802800000000fd28020080280fffffff0204006810000000fe889670af4e841e80010538166f64e75428040c046fc27004e75202f000446c04e7546fc2700223c00030d401039ec070004080000036604538166f042b9480000004e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e71708013c0ec09000060fe2f2f00082f2f00084eb900000000508f4ef9000000002f2f00082f2f00084eb900000000508f4a00670470014e754ef900000000",
    "kind": "text",
    "name": ".text",
-   "size": 344
+   "size": 212
   }
  ],
- "source_sha256": "c810fa67fef26850d17d2d74f99e6a083fc4552d78ac88b6a819304bd9a826ef",
+ "source_sha256": "2f8cedd28ac2d9b3f48e71299d4fd0150b4c05d5dc98748f072ef15e22dc9e6b",
  "symbols": [
-  {
-   "global": true,
-   "name": "dkrt_boot",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dkrt_boot_hook",
-   "section": ".text",
-   "value": 78
-  },
-  {
-   "global": true,
-   "name": "dkrt_boot_next",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dkrt_exc",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dkrt_exc_hook",
-   "section": ".text",
-   "value": 270
-  },
   {
    "global": true,
    "name": "dkrt_flush",
    "section": ".text",
-   "value": 28
+   "value": 0
   },
   {
    "global": true,
    "name": "dkrt_irq_mask",
    "section": ".text",
-   "value": 106
+   "value": 50
   },
   {
    "global": true,
    "name": "dkrt_irq_restore",
    "section": ".text",
-   "value": 116
-  },
-  {
-   "global": true,
-   "name": "dkrt_loop_hook",
-   "section": ".text",
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dkrt_midi_hook",
-   "section": ".text",
-   "value": 216
-  },
-  {
-   "global": true,
-   "name": "dkrt_midi_next",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dkrt_midi_ret",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "dkrt_midi_rx",
-   "section": null,
-   "value": 0
+   "value": 60
   },
   {
    "global": true,
@@ -192,7 +76,7 @@
    "global": true,
    "name": "dkrt_pagekey_hook",
    "section": ".text",
-   "value": 292
+   "value": 160
   },
   {
    "global": true,
@@ -204,7 +88,7 @@
    "global": true,
    "name": "dkrt_pageturn_hook",
    "section": ".text",
-   "value": 314
+   "value": 182
   },
   {
    "global": true,
@@ -216,27 +100,15 @@
    "global": true,
    "name": "dkrt_soft_reset",
    "section": ".text",
-   "value": 124
-  },
-  {
-   "global": true,
-   "name": "dkrt_tick",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "fw_queue_pop",
-   "section": null,
-   "value": 0
+   "value": 68
   }
  ],
  "toolchain": {
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "104",
-  "isa_check": "254bdc160e45e6f0711e7661c98d8b83dc4e3cc2b509da11dab566e57fa3d742",
+  "instructions_redecoded": "73",
+  "isa_check": "b51f2e7de81bf5574a6370c6fbd096e3640d0d2d9922465a41b7c5fdcd8098dc",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

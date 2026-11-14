@@ -6,7 +6,8 @@ import { parse } from 'smol-toml';
 /** The one reader of devices/<profile>.toml and devices/ports/<device>-<firmware>.toml. Only the keys read by the tests are typed. */
 export interface DeviceProfile {
   limits: { fx_slots: number } & Record<string, number>;
-  digikit: { peek: [number, number][]; dsp_area_bytes: number };
+  digikit: { id: number; name: string; peek: [number, number][]; dsp_area_bytes: number; sample_path_max: number };
+  capabilities: { card: 'path-fs' | 'slots' | 'none' | 'unknown' } & Record<string, string>;
   storage?: { samples?: string };
   card: {
     regions?: { role: string; sector: number }[];

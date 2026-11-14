@@ -3,6 +3,7 @@
 //! staging and from queued requests. No lock/model borrow spans firmware calls
 //! or module callbacks. DT2 calls can block; one operation is not a latency bound.
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
+use dkrt_abi::platform::Platform;
 use dkrt_sdk::{
     api::FilesEventFn,
     files::*,
@@ -100,6 +101,12 @@ pub unsafe fn client() -> i32 {
         }
     })
 }
+/// Is a path of `n` bytes too long for `root`? The store's limit is the store path (159 bytes); the samples root's is the device's own
+/// (`DeviceProfile::sample_path_max`, from the device file). The empty path is the root itself.
+pub(crate) fn path_too_big<P: dkrt_abi::platform::Platform>(p: &P, root: u32, n: usize) -> bool {
+    (root == STORE && n > 159) || (root == SAMPLES && n != 0 && n > p.sample_path_max() as usize)
+}
+
 pub unsafe fn list(
     client: u32,
     root: u32,
@@ -131,10 +138,7 @@ pub unsafe fn list(
         Some(n) => n,
         None => return E_SEL_PATH,
     };
-    if (root == STORE && n > 159)
-        || (root == SAMPLES && crate::device() == 2 && n != 0 && n + 8 > 159)
-        || (root == SAMPLES && crate::device() == 1 && n > 254)
-    {
+    if path_too_big(&crate::PLATFORM, root, n) {
         return E_TOO_BIG;
     }
     locked(|jobs| {
@@ -282,7 +286,7 @@ impl Backend {
         self.ticket = ticket;
         self.public_path = request.path;
         let n = path_len(&request.path).ok_or(E_SEL_PATH)?;
-        if request.root == SAMPLES && crate::device() == 1 {
+        if request.root == SAMPLES && !crate::PLATFORM.samples_in_store() {
             self.dt_path[0] = b'/';
             self.dt_path[1..1 + n].copy_from_slice(&request.path[..n]);
             self.phase = 10;

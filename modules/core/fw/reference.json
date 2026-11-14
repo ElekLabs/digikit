@@ -6040,7 +6040,7 @@
       "site": "cf.midi.site.rx",
       "subsystem": "midi",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": []
     },
@@ -6116,7 +6116,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The 6-byte router call `jsr (A0)` in the MIDI task for a gathered USB SysEx message (arguments on the stack); core/runtime hooks it to take the message or continue after the call.",
+      "doc": "The 6-byte router call `jsr (A0)` in the MIDI task for a gathered USB SysEx message (arguments on the stack); core/platform hooks it to give the message to the runtime or continue after the call.",
       "file": "devices/fw/midi.toml",
       "kind": "site",
       "mark": "D",
@@ -6135,7 +6135,7 @@
       },
       "subsystem": "midi",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "dkrt.hook.midi_rx"
@@ -9847,7 +9847,7 @@
       },
       "subsystem": "rtos",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "dkrt.fw.queue_pop"
@@ -10328,7 +10328,7 @@
       "site": "cf.rtos.site.main_os_task",
       "subsystem": "rtos",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": []
     },
@@ -10378,7 +10378,7 @@
       },
       "subsystem": "rtos",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "dkrt.fw.exc_hook_lit"
@@ -10517,7 +10517,7 @@
       },
       "subsystem": "rtos",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "cf.rtos.site.boot",
@@ -14363,7 +14363,7 @@
       "site": "cf.view.site.ui_loop",
       "subsystem": "view",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": []
     },
@@ -14389,7 +14389,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The `jsr` at the top of the UI task's event loop that pops the next event; core/runtime retargets it to run its per-pass tick.",
+      "doc": "The `jsr` at the top of the UI task's event loop that pops the next event; core/platform retargets it to run the runtime's per-pass tick.",
       "file": "devices/fw/view.toml",
       "kind": "site",
       "mark": "D",
@@ -14408,7 +14408,7 @@
       },
       "subsystem": "view",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "dkrt.hook.ui_loop"

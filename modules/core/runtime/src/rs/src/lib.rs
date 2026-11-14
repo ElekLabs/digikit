@@ -17,11 +17,11 @@ use dkrt_sdk::*;
 
 mod api;
 mod arena;
+pub mod core_api;
 pub mod services;
-pub use services::fx::{fxpage, fxsend};
-pub use services::machines::{assign, nativepage, pageclick, paramapi};
-pub use services::samples::{peakwin, tracks};
+pub mod assign;
 pub mod collect;
+mod handlers;
 pub mod boot;
 pub mod card;
 pub mod fault;
@@ -76,12 +76,6 @@ fn panic(_: &PanicInfo) -> ! {
     crate::fault::panic()
 }
 
-/// The effects the image takes at run time: CAPACITY's limit for `FX_SLOTS`. The free effect rows of `core/dynfx` (0 on an image without it, so a device
-/// that cannot load effects yet reports 0).
-pub fn fx_slots() -> u32 {
-    unsafe { dsp::fx_free_rows() }
-}
-
 extern "C" {
     /// The s16 words of a Sound array on this device (`[fx] sound_words`).
     static dkrt_sound_words: u32;
@@ -95,12 +89,7 @@ const SOUND_WORDS_AT: u32 = 0x14;
 /// own accessors, plain reads. The words are big-endian s16 at a byte address that may be odd on the Digitone II (stride 0x48b), so they are read byte by byte.
 /// -2: no project yet; -3: the track has no record (a kit is loading): `out` is not written.
 pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> i32 {
-    let p = dkfw::project::singleton();
-    if p == 0 {
-        return -2;
-    }
-    let track = dkfw::page::view_track(dkfw::project::settings(p) as *const u8).min(15);
-    let sound = dkfw::page::native_track_sound(dkfw::project::active_kit(p) as *mut u8, track) as u32;
+    let Some((track, sound)) = platform::selected_sound() else { return -2 };
     let vt = read_volatile(sound as *const u32);
     let record: unsafe extern "C" fn(u32) -> u32 = core::mem::transmute(read_volatile((vt + SOUND_VT_RECORD) as *const u32) as usize);
     let rec = record(sound);
@@ -110,24 +99,20 @@ pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> 
     let words = read_volatile(addr_of!(dkrt_sound_words));
     let mut i = 0;
     while i < n {
-        let v = if i < words { fxpage::rd16(rec + SOUND_WORDS_AT + 2 * i) } else { 0 };
+        let v = if i < words { dkrt_abi::mem::rd16(rec + SOUND_WORDS_AT + 2 * i) } else { 0 };
         write_volatile(out.add(i as usize), v as i16);
         i += 1;
     }
     track as i32
 }
 
-pub(crate) unsafe extern "C" fn imp_param_get(track: u32, word: u32) -> i32 { pageclick::param_get(track, word) }
-pub(crate) unsafe extern "C" fn imp_param_set(track: u32, word: u32, raw: i32) -> i32 { pageclick::param_set(track, word, raw) }
+pub(crate) unsafe extern "C" fn imp_param_get(track: u32, word: u32) -> i32 { handlers::exports::param_get(track, word) }
+pub(crate) unsafe extern "C" fn imp_param_set(track: u32, word: u32, raw: i32) -> i32 { handlers::exports::param_set(track, word, raw) }
 
 
 #[cfg(test)]
 mod cleanup_tests;
+#[cfg(test)]
+mod fake_platform;
 
-#[cfg(test)]
-pub fn irq_mask() -> u32 { 0 }
-#[cfg(test)]
-pub fn irq_restore(_: u32) {}
 
-#[cfg(test)]
-pub unsafe fn fw_blocks() -> Option<u32> { None }
