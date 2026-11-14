@@ -325,13 +325,13 @@ The contract is the ABI in `sdk.toml`, so a Rust service uses the generated bind
 
 **Slot.** A hook has two shapes ([finding 128](../findings/128-r4-hooks-in-services.md)). A movable ColdFire hook is installed by the service. A fixed site stays in the image or the runtime and calls through a pointer that a service registers: the SHARC stubs, the page key and turn hooks, and any hook that runs before main-OS entry. That fixed site plus its pointer is a **slot**. The registry treats slots and ColdFire hook sites alike in its one-owner check: a second claimant is refused while planning. A zero slot means the stock path, so a device with no service behaves as stock. The page key and turn hooks therefore stay in the runtime, and the `machines` service fills their slot.
 
-**Three interfaces.**
+**Three interfaces.** The layer picture, the rules between layers and the crossings to remove are in [ARCHITECTURE.md](../ARCHITECTURE.md); this section gives the detail.
 
 - **A, module to service.** As in [MODULES.md](../MODULES.md) section 4: imports named by service group in `sdk.toml`, `dk_<service>_open` handles, `DK_E_MISSING` for a service that is absent, and needs derived by the packer.
 - **B, runtime to service.** Derived and declarative, the same rule as S3 for modules. The service's `init` declares through builder calls (record kinds, slots, hooks, exports, resources), and these calls are the only source of truth. `module:check` and the packer write a static table into the file. Boot planning reads only that table (dependency order, fit with the service's needs added to the module needs, slot and hook conflicts) and runs no code. At `init` the runtime checks the declarations against the table and commits them; a mismatch means FAILED. The fixed entry points are: lifecycle, a handler table per record kind, slots and hooks, broker resources, and the log and span sinks (5.11). The kernel never names a service.
 - **C, service to runtime.** The same `sdk.toml` imports as modules, plus a small service-only set (registry queries, installing slots and hooks).
 
-`check:layers` enforces that the rest of the runtime reaches a service only through these interfaces.
+`check:layers` enforces that the rest of the runtime reaches a service only through these interfaces (added in R2c; [ARCHITECTURE.md](../ARCHITECTURE.md) says what it checks today).
 
 **Template.** In the runtime crate a service is a folder `src/services/<name>/` with `mod.rs`, `records.rs`, `slots.rs`, `dsp/` and `tests/`. It maps one to one to `modules/core/services/<name>/{module.toml, src/, adapter/, tests/}` when the services are linked in (R9 and R10), and `module:new service` generates it at R12. R2 moves code only: no behaviour change. R7 proves that interface B is generic.
 
