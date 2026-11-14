@@ -17,6 +17,7 @@ use dkrt_sdk::*;
 
 mod api;
 mod arena;
+pub mod core_api;
 pub mod services;
 pub use services::fx::{fxpage, fxsend};
 pub use services::machines::{assign, nativepage, pageclick, paramapi};
