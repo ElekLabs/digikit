@@ -16,7 +16,7 @@ const fake = vi.hoisted(() => ({
 vi.mock('node:timers/promises', () => ({
   setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 }));
-vi.mock('../runtime/patchkit-exec.ts', () => ({ patchkit: fake.exec }));
+vi.mock('../runtime/patchkit-exec.ts', () => ({ patchkit: fake.exec, patchkitCovered: fake.exec }));
 vi.mock('node:fs', async (original) => ({
   default: {
     ...(await original<{ default: typeof import('node:fs') }>()).default,

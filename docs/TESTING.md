@@ -391,13 +391,17 @@ merge key (the target of a file in `mergeTests`, and the narrow keys, see above)
 `patchkit:device-images` runs `patchkit apply` for each acceptance firmware (`CELLS` of `tools/nx/device-inputs.mjs`) with each patch set of
 its device file and writes `dist/bytes/images.sha256`, one line `<device>-<version> <set> image <sha256> plan <sha256> addrmap <sha256>`
 (the plan and the address map are what `runtime-plan.ts` reads). `digi-control:daemons` also writes `dist/bytes/daemon-test.key`, the
-daemon key without the sources that only patchkit reads (`emud_key.test_key_of`, written by `verify_build daemons`; it is part of the daemon store key recipe, so adding it rebuilt the daemons once).
+daemon key without the patchkit sources: the repository files the daemon build read (its cargo dependency file, kept as `files.txt` in
+the store entry), the crates of its dependency closure (`cargo tree`, not the whole `Cargo.lock`), the generated core, the profile, rustc and the
+flags (`emud_key.test_key_of`, written by `verify_build daemons`). An unrelated workspace member leaves it unchanged; an emulator source edit
+changes it. The daemon store key is not touched by it.
 So a patchkit edit that changes no packed byte (image, plan, address map, `.dkm`, core object) selects no merge target. A test that runs
-patchkit keeps `dist/patchkit/patchkit` in its key (merge and narrow). The rule is the import closure: it holds
-`tests/regression/runtime/patchkit.ts` (the helper every module that runs patchkit imports: `dkm.ts` for `needs` and `fit`, `synth.ts`,
-`addrmap.ts`, `runtime-plan-modules.ts` for `apply --modules`, the opt-in proofs through `optInPatchkit`) or
-`packages/test-support/src/commit-records.ts` (import it as `@digi/test-support/commit-records`), or the record patches fixture modules
-(`patchModules`). Only `runtime-plan.ts` is exempt: its `apply --set` result is in `images.sha256`.
+patchkit keeps `dist/patchkit/patchkit` in its key (merge and narrow) and runs with `DIGI_PATCHKIT_LIVE=1`. The rule is the import closure: it
+holds `tests/regression/runtime/patchkit.ts` (the helper every module that runs patchkit imports: `dkm.ts` for `needs` and `fit`, `synth.ts`,
+`addrmap.ts`, `runtime-plan-modules.ts` for `apply --modules`, the opt-in proofs through `optInPatchkit`), or the record patches fixture
+modules (`patchModules`). Only `runtime-plan.ts` is exempt: its `apply --set` result is in `images.sha256`. All test code starts patchkit in
+`runtime/patchkit-exec.ts`, which throws under Nx unless `DIGI_PATCHKIT_LIVE` is set (full keys, conformance and live closures set it);
+`pnpm lint` runs `tools/nx/check-patchkit-spawn.mjs`, which rejects any other patchkit spawn or binary lookup in test code.
 `fx-live.ts` reads the `needs` of the gain pack from `dist/bytes/pack-verdicts.json` (`patchkit:pack-verdicts`, packs listed in
 `tests/regression/runtime/needs-packs.json`; `pack-needs.ts`, no patchkit; a missing entry fails): the key of a test that imports it hashes that file.
 The static `--modules` root lists (`tests/regression/runtime/image-roots.json`: `rootsOf` in `image-roots.ts` gives `RT`, `COUPLED_ROOTS`, `IB` and the fx sets) are patched by `patchkit:device-images` too (lines `roots:<id>` in `images.sha256`; image, plan and address map kept in `dist/bytes/images/<device>/<id>.*`). `card-rig.ts` and `fx-session.ts` copy them through `prepareRuntimePlanListedOffline` (no patchkit; a list not in the file fails). A list built at test time uses `runtime-plan-modules.ts` and stays live.
@@ -418,6 +422,65 @@ the toolchain, the emulator env switches,
 `DIGI_PLUSDRIVE` (following binary symlinks). Nonempty `PATCHKIT_MODULES` or `DIGI_PK_ROOT`, or any
 explicit `DIGI_RUNTIME_MODULES` (including empty), deliberately prevent cache reuse with a fresh runtime nonce: arbitrary
 sources/includes, variant toolchains and mutable object caches have no proven bounded input closure.
+
+### Check what a change selects
+
+
+1. What the merge gate would run for your branch, without running it:
+
+   ```text
+   $ DIGI_GATE_BASE=origin/main mise run test:plan
+   gate: affected over the tier targets
+    NX   134 out of 164 lint, fmt-check, rust-fmt, typecheck, test-host, ... affected
+   Changing 46 files touches 1 lint task, ... 35 test-device tasks ...
+     tests/regression/runtime/needs-packs.json and tools/nx/pack-verdicts.mjs:
+       - patchkit:pack-verdicts
+   Touching those tasks changes outputs read by 35 test-device tasks, 12 test-conformance tasks, ... and 225 tasks they depend on.
+   ```
+
+   "Changing N files touches ..." counts the tasks whose declared inputs contain a changed file, by target. Under each changed file
+   or group of files the plan lists the tasks it selects. "Touching those tasks changes outputs read by ..." is the second step: a
+   selected build task (here `patchkit:pack-verdicts`) rewrites a file that device tasks hash, so they are selected too. A device
+   task whose inputs did not change is not in the list; its last result is replayed.
+
+2. Which byte files key one device test:
+
+   ```text
+   $ pnpm nx:pilot show target inputs core/dynfx:test-device--fx-reuse --json
+   "depOutputs": ["dist/bytes/pack-verdicts.json", "dist/modules/dn2/dyn-fx-gain.dkm", ... , "dist/plusdrive/plusdrive"]
+   ```
+
+   Read `depOutputs`. `dist/bytes/images.sha256` (patched images, plans and address maps) and `dist/bytes/daemon-test.key` (the
+   daemon without the patchkit sources) key a merge target; `dist/bytes/pack-verdicts.json` keys a test that reads the `needs`
+   of a committed pack; `dist/modules/*/*.dkm` are the packs it loads. `dist/patchkit/patchkit` and `dist/daemons.json` appear
+   only on a full key (`test-device-all--*`, `test-device-full`, conformance) and on tests that run patchkit (live). `files` in the
+   same output lists the source files in the key, including the test's import closure.
+
+3. Which tests are live, and why:
+
+   ```text
+   $ pnpm nx:pilot show target inputs core/runtime-tests:test-device--store-format --json
+   depOutputs: ["dist/bytes/pack-verdicts.json", "dist/patchkit/patchkit", "dist/plusdrive/plusdrive"]
+   files containing tests/regression/runtime/patchkit.ts
+   $ pnpm nx:pilot show project core/runtime-tests --json   # targets["test-device--store-format--dn2"].options.env
+   {"DIGI_PATCHKIT_LIVE": "1", "DIGI_DEVICE": "dn2"}      # test-device--safe-mode--dn2 has no DIGI_PATCHKIT_LIVE
+   ```
+
+   A test is live when its import closure holds `tests/regression/runtime/patchkit.ts` (it runs patchkit itself), or its record patches
+   fixture modules. The patchkit binary is then in its key and `DIGI_PATCHKIT_LIVE=1` is set. To find the import that made it live, look
+   for `patchkit.ts` in `files` and follow the imports of the test (`runtime-plan-modules.ts`, `dkm.ts`, `synth.ts` and `addrmap.ts`
+   each import it).
+
+4. What an undeclared use looks like. A task that is not live cannot start patchkit; the helper throws:
+
+   ```text
+   patchkit needs: this task's cache key does not hold the patchkit binary. Import runtime/patchkit.ts in the test (that marks it
+   live), or read the result from dist/bytes (images.sha256, pack-verdicts.json).
+   ```
+
+   `pnpm lint` also fails on a patchkit spawn or binary lookup outside `tests/regression/runtime/patchkit-exec.ts`
+   (`tools/nx/check-patchkit-spawn.mjs`).
+
 Overrides remain supported; these rare runs can write entries that will never be reused in local/remote
 caches. Default runs retain a deterministic digest and do not scan override trees.
 Specialized catalogue/files/LP0 card, patched-image, plan and boot-fixture overrides also prevent

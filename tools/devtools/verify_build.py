@@ -117,6 +117,13 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
         shutil.copyfile(built, tmp / "digi-emud")
     (tmp / "digi-emud").chmod(0o755)
     (tmp / "key.txt").write_text(key + "\n")
+    # the repository files the build read: the daemon part of the key of a device test that does not run patchkit
+    (tmp / "files.txt").write_text(
+        "".join(
+            f"{n}\n"
+            for n in emud_key.repo_files_of_depfile(depfile.read_text(), ROOT, target)
+        )
+    )
     shutil.copyfile(depfile, tmp / "depfile.d")
     try:
         os.rename(tmp, final)
@@ -137,7 +144,7 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
 
 def build_daemons(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
     """Provide the daemons of DEVICES from the store: the paths for downstream consumers, and the test key of each device
-    (the store key without the files that only patchkit reads)."""
+    (from the files the build read, see emud_key.test_key_of)."""
     env: dict[str, str] = {}
     test_keys: dict[str, str] = {}
     root = store_root()
@@ -148,8 +155,9 @@ def build_daemons(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
         except pk_harness.HarnessError as exc:
             print(f"SKIP {device}: {exc}", flush=True)
             continue
-        env[f"DIGI_EMUD_{device.upper()}"] = str(ensure_daemon(device, syx, root))
-        test_keys[device] = emud_key.test_key(device)
+        binary = ensure_daemon(device, syx, root)
+        env[f"DIGI_EMUD_{device.upper()}"] = str(binary)
+        test_keys[device] = emud_key.test_key(device, binary.parent)
     return env, test_keys
 
 

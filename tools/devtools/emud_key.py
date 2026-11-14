@@ -1,13 +1,13 @@
 """Cache key and input audit of the coupled PGO `digi-emud` daemon (the Nx `daemon-<dev>` targets).
 
     uv run python -m tools.devtools.emud_key key   --device dt2
-    uv run python -m tools.devtools.emud_key test-key --device dt2
+    uv run python -m tools.devtools.emud_key test-key --device dt2 --entry STORE_ENTRY
     uv run python -m tools.devtools.emud_key audit --device dt2 --depfile FILE [--target-dir DIR]
 
 `key` prints a sha256 over everything the daemon build reads: the source files (SOURCE_GLOBS, content
 hashes), the build recipe scripts (RECIPE_FILES), every file of the generated core directory (and of
 SHARC_GEN_DIR_2), the PGO profile (content), the Rust toolchain pin, `rustc -vV` and the build flags.
-`test-key` is the same key without the files that only patchkit reads; `verify_build daemons` writes it to dist/bytes/daemon-test.key.
+`test-key` is the key of a device test that does not run patchkit (see TEST_KEY_EXCLUDED); `verify_build daemons` writes it to dist/bytes/daemon-test.key.
 It resolves the generated core and the profile with the same calls as tools/patchkit/pk_emud_pgo.py.
 
 `audit` reads the dependency file cargo wrote (`digi-emud.d`) and fails when it lists a file that the key does
@@ -25,9 +25,10 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -117,23 +118,73 @@ def key_of(inputs: EmudInputs) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-# What only patchkit reads: its sources, and the files it embeds with include_str (sdk/sdk.toml in sdkgen.rs, the toolchain pins in
-# build/toolchain.rs), plus the cargo test sources of a package, which no binary build reads. The patched image bytes carry what
-# these change for a test (dist/bytes/images.sha256).
-TEST_KEY_EXCLUDED = ("packages/patchkit/", "sdk/sdk.toml", "tools/patchkit/toolchain/")
+# The daemon part of the cache key of a device test that does not run patchkit itself (dist/bytes/daemon-test.key). It follows what
+# the build read, not the source globs: the repository files in the cargo dependency file of the build (`files.txt` of the store
+# entry, written by verify_build from `repo_files_of_depfile`), the registry crates of the daemon's dependency closure (`cargo tree`,
+# not the whole Cargo.lock: an unrelated workspace member changes neither), the generated core, the profile, rustc and the flags. The
+# patchkit sources are left out: a test result follows the patched image bytes (dist/bytes/images.sha256). The store key (`key_of`)
+# is not touched.
+TEST_KEY_EXCLUDED = ("packages/patchkit/", "out/")
 
 
-def test_key_excluded(name: str) -> bool:
-    return name.startswith(TEST_KEY_EXCLUDED) or (
-        name.startswith("packages/") and "/tests/" in name
-    )
+def repo_files_of_depfile(depfile_text: str, root: Path, target_dir: Path) -> list[str]:
+    """The files of the repository (names relative to ROOT) that the build read: the dependency file entries below ROOT, outside the
+    cargo target directory."""
+    out_root = target_dir.resolve()
+    names: set[str] = set()
+    for dep in parse_depfile(depfile_text):
+        path = Path(dep).resolve()
+        if (
+            path.is_relative_to(out_root)
+            or not path.is_relative_to(root.resolve())
+            or not path.is_file()
+        ):
+            continue
+        names.add(path.relative_to(root.resolve()).as_posix())
+    return sorted(names)
 
 
-def test_key_of(inputs: EmudInputs) -> str:
-    """The key of INPUTS without the files that only patchkit reads: the daemon part of the cache key of a device test that
-    does not run patchkit itself. The store key (`key_of`) is unchanged."""
-    kept = {n: p for n, p in inputs.files.items() if not test_key_excluded(n)}
-    return key_of(dataclasses.replace(inputs, files=kept))
+def cargo_closure(root: Path = ROOT) -> str:
+    """The crates the daemon links, `name vVERSION` per line (workspace paths removed), from `cargo tree` on the pinned toolchain."""
+    from tools.emulator import digi_env
+
+    done = subprocess.run(
+        ["rustup", "run", digi_env.TOOLCHAIN, "cargo", "tree", "--manifest-path", MANIFEST, "--features", FEATURES, "--offline", "--locked", "-e", "normal,build", "--prefix", "none", "--no-dedupe",
+         "--format", "{p}"],
+        cwd=root, check=True, capture_output=True, text=True,
+    )  # fmt: skip
+    lines = {
+        re.sub(r" \(.*$", "", line.strip())
+        for line in done.stdout.splitlines()
+        if line.strip()
+    }
+    return "\n".join(sorted(lines))
+
+
+def test_key_of(
+    inputs: EmudInputs, names: Sequence[str], closure: str, root: Path = ROOT
+) -> str:
+    """The test key: see the comment above. NAMES are repository files (relative to ROOT)."""
+    record = {
+        "version": 2,
+        "files": sorted(
+            (name, sha256_file(root / name))
+            for name in names
+            if not name.startswith(TEST_KEY_EXCLUDED)
+        ),
+        "closure": closure,
+        "gen": {
+            label: sorted(
+                (name, sha256_file(p)) for name, p in tree_files(folder).items()
+            )
+            for label, folder in sorted(inputs.gen_dirs.items())
+        },
+        "profdata": sha256_file(inputs.profdata) if inputs.profdata else None,
+        "rustc": inputs.rustc,
+        "flags": dict(sorted(inputs.flags.items())),
+    }
+    text = json.dumps(record, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def covered_paths(inputs: EmudInputs) -> set[str]:
@@ -262,8 +313,10 @@ def key(device: str) -> str:
     return key_of(inputs(device))
 
 
-def test_key(device: str) -> str:
-    return test_key_of(inputs(device))
+def test_key(device: str, entry: Path) -> str:
+    """The test key of DEVICE from the store ENTRY (its `files.txt`)."""
+    names = (entry / "files.txt").read_text().split()
+    return test_key_of(inputs(device), names, cargo_closure())
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -272,6 +325,12 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("key", "test-key", "audit"):
         sp = sub.add_parser(name)
         sp.add_argument("--device", required=True, choices=("dt2", "dn2"))
+    sub.choices["test-key"].add_argument(
+        "--entry",
+        type=Path,
+        required=True,
+        help="the store entry directory (holds files.txt)",
+    )
     sub.choices["audit"].add_argument("--depfile", type=Path, required=True)
     sub.choices["audit"].add_argument(
         "--target-dir",
@@ -284,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
             print(key(args.device))
             return 0
         if args.cmd == "test-key":
-            print(test_key(args.device))
+            print(test_key(args.device, args.entry))
             return 0
         from tools.patchkit import pk_emud_pgo
 

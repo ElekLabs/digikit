@@ -243,7 +243,7 @@ export const createNodesV2 = [
           outputs: [],
           options: {
             command: `${EMU_SLOT} pnpm --filter @digi/regression test:conformance`,
-            env: { DIGI_CONFORMANCE_MODULES: m.id, DIGI_CONFORMANCE_MANIFEST: f },
+            env: { DIGI_CONFORMANCE_MODULES: m.id, DIGI_CONFORMANCE_MANIFEST: f, DIGI_PATCHKIT_LIVE: '1' },
             cwd: '.',
           },
         };

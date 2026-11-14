@@ -6,7 +6,7 @@ import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { dspBytes, word } from '@digi/regression/runtime/fx-live.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { patchkitBinary } from '@digi/regression/runtime/patchkit.ts';
+import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { dynType } from '@digi/regression/runtime/project-kit.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
@@ -109,7 +109,7 @@ cardRigs(
       const [event, ...more] = await ringEvents(session, rig.plan, 'MODULE_COMMIT');
       expect(event, 'a MODULE_COMMIT event').toBeDefined();
       expect(more, 'one commit').toEqual([]);
-      const { commit, records } = await committedRecords(event!, (a) => session.client.memPeek(a), patchkitBinary());
+      const { commit, records } = await committedRecords(event!, (a) => session.client.memPeek(a), patchkit);
       expect(commit.index, 'the selection index of the module').toBe(0);
       expect([commit.machineRows, commit.paramRows, commit.pageRows], 'the rows the declarations use').toEqual([
         1,

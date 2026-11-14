@@ -130,7 +130,7 @@ mise run scenario:all         # every DN2 scenario; fails when a pinned PCM hash
 mise run scenario trig1-taps --wav
 ```
 
-Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md). The most used:
+Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md); what a change selects and why a device test is keyed as it is: [TESTING.md, "Check what a change selects"](TESTING.md#check-what-a-change-selects). The most used:
 
 ```sh
 mise run test:changed         # lint, format, types, host tests and Python checks of the affected projects; no builds or devices

@@ -9,7 +9,7 @@ import {
   type PreparedRuntimeImage,
 } from '@digi/test-support';
 import { rootSets } from './image-roots.ts';
-import { patchkit } from './patchkit-exec.ts';
+import { patchkitCovered } from './patchkit-exec.ts';
 
 export interface RuntimePlan {
   base: { device: string; version: string; syx_sha256: string };
@@ -95,7 +95,7 @@ export function prepareRuntimePlanOffline(
   artifacts: string,
   symbols: string[],
 ): Promise<PreparedRuntimePlan> {
-  return prepareOfflineWith(patchkit, options, directory, artifacts, symbols);
+  return prepareOfflineWith(patchkitCovered, options, directory, artifacts, symbols);
 }
 
 /** What the offline preparation needs of the patch step: `patchkit apply ...`, or the copy of an image made ahead. */

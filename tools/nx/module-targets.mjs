@@ -200,10 +200,7 @@ export const MERGE_OUTPUTS = outputFiles([...SHARED_BUILT, ...MERGE_BYTES]);
 // A test whose import closure holds one of these runs patchkit (every module that executes it imports patchkit.ts, or is listed):
 // its key keeps the binary. Only runtime-plan.ts does not count: it runs `apply --set`, and its image, plan and address map are
 // hashed in dist/bytes/images.sha256. (An explicit module list goes through runtime-plan-modules.ts, which imports patchkit.ts.)
-export const PATCHKIT_LIVE = [
-  'tests/regression/runtime/patchkit.ts',
-  'packages/test-support/src/commit-records.ts',
-].map((file) => `{workspaceRoot}/${file}`);
+export const PATCHKIT_LIVE = ['tests/regression/runtime/patchkit.ts'].map((file) => `{workspaceRoot}/${file}`);
 export const DEVICE_INPUTS = [...READ_BY_TESTS, ...BUILT_OUTPUTS, ...DEVICE_COMMON];
 const mergeDeviceInputs = (imports, patchkitLive) => [
   ...sharedReads(imports, patchkitLive),
@@ -303,6 +300,8 @@ export const deviceTarget = (root, tests, recs, imageInput, importInputs, upload
     options: {
       command: `${EMU_SLOT} pnpm --filter @digi/regression test:runtime ${tests.map((t) => `../../${root}/${t}`).join(' ')}`,
       cwd: '.',
+      // the key holds the patchkit binary (a full key, or a live closure): runtime/patchkit-exec.ts runs patchkit only then
+      ...((!opts.narrow && !opts.merge) || patchkitLive ? { env: { DIGI_PATCHKIT_LIVE: '1' } } : {}),
     },
   };
 };

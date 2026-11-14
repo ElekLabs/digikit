@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { DkSession, EmuUsbTransport } from '@digi/dk-session';
-import { button, repoRoot } from '@digi/test-support';
+import { button } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { advance, analysisJson, bounded, frames, pickSine, rpc, word } from '@digi/regression/runtime/fx-live.ts';
@@ -11,13 +9,11 @@ import { withRouteFxSession } from '@digi/regression/runtime/fx-route-live.ts';
 import { inspectFxBoot, withPausedFxProtocol, tap } from '@digi/regression/runtime/fx-session.ts';
 import { MASTER, routeUi, SEND_ROUTE } from '@digi/regression/runtime/fx-routes-ui.ts';
 import { record } from '@digi/regression/runtime/artifacts.ts';
-import { patchkitBinary } from '@digi/regression/runtime/patchkit.ts';
+import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 
-const exec = promisify(execFile);
-const root = repoRoot();
 const routeKey = `fx/route/${SEND}`;
 
 interface PcmMetrics {
@@ -49,13 +45,11 @@ async function compareRoutePcm(base: string, sample: string, gain: number, artif
 async function storedRoute(runtime: PatchedSession, artifacts: string, tag: string) {
   const base = runtime.session.cardPath;
   if (!base) throw new Error('route persistence needs the loaded base card');
-  const binary = patchkitBinary();
   const overlay = path.join(artifacts, `${tag}.overlay.bin`);
   await rpc(runtime.session, 'card.overlay', { path: overlay });
-  const dumped = await exec(
-    binary,
+  const dumped = await patchkit(
     ['store', 'dump', base, '--device', runtime.session.options.device, '--overlay', overlay, '--json'],
-    { cwd: root, timeout: 30_000 },
+    { timeout: 30_000 },
   );
   const dump = JSON.parse(dumped.stdout) as {
     settings: { active: 'A' | 'B' | null; copies: { entries: { key: string; value: string }[] }[] };
