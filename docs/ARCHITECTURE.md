@@ -84,6 +84,25 @@ Today the runtime is one crate in which L2 and L3 code is mixed, and the service
 
 `core/expansion` is the reset-time installer: it runs at reset and copies all patched-in code to its place. `modules/core/fw` holds the generated firmware bindings (a library, not a module).
 
+## Boundaries and tests
+
+This section is the target. The interfaces and fakes below are not built yet: B and C (with `FakeService` and `FakeCore`) arrive with R2c, and the Platform interface (with `FakePlatform`) with R3. After R3, test-speed item 7 moves logic tests from the device to the host. The rule for review of deleted tests applies to each move: a host test replaces a device test only when it covers the same path.
+
+Each layer has entry points (what the layer above calls) and exit points (what the layer calls), and is tested at those points.
+
+| Layer | Entry points | Exit points | Tested how |
+| --- | --- | --- | --- |
+| L1 platform | The Platform interface: time and blocks, flush, MIDI send, raw memory, the `*_info` tables | Stock firmware | A contract suite, run once per device and firmware in the emulator. Everything above uses a `FakePlatform` |
+| L2 core | The C API `dkrt_*`, the boot and tick entries, the static service tables | Platform, the interface B handler tables, the DSP link | Host unit tests with `FakePlatform` and `FakeService` (it records handler calls): loader, boot plan, fit, refusals, registry walker, later the R6 queue |
+| L3 services | The interface B handlers | Interface C, a `CoreApi`: params, rows, link, settings, log | Host unit tests of each service against a `FakeCore` that records row writes and link submissions |
+| L4 modules | The `dk_module` lifecycle and the kind contract | `sdk.toml` imports | Conformance tests, and module host tests against fake services |
+
+Rules:
+
+- Parts inside a layer depend on small interfaces, not on each other's internals, so each part has its own unit tests.
+- Each interface has one contract test suite. It runs against the fake and against the real implementation, so the fake cannot drift.
+- Target pyramid: many host tests per layer, one contract suite per boundary (the only emulator part, once per device), and a small set of end-to-end device scenarios.
+
 ## Roles
 
 | Layer | Folder | `role` | Runs | May depend on |
