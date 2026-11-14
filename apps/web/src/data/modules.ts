@@ -1,5 +1,5 @@
 // The module gallery, read at build time from the committed modules/**/module.toml and each module's
-// gallery/icon.svg (line art on a 48 grid; apps/web/tests/icons.test.mjs checks what an icon may contain).
+// gallery/icon.svg (line art on a 48 grid; apps/web/tests/icons.test.ts checks what an icon may contain).
 import { parse } from 'smol-toml';
 import type { DeviceId } from './device-profiles';
 import { isShipped } from './shipped.mjs';
@@ -17,7 +17,7 @@ const icons = import.meta.glob('../../../../modules/**/gallery/icon.svg', {
 }) as Record<string, string>;
 
 // `patchkit gen` writes build/gen/gallery.json for a module with typed sections ([[machine]], [[param]]): the
-// machines it adds and their parameters, per device. Committed; apps/web/tests/gallery.test.mjs checks the shape.
+// machines it adds and their parameters, per device. Committed; apps/web/tests/gallery.test.ts checks the shape.
 const galleries = import.meta.glob('../../../../modules/**/build/gen/gallery.json', {
   query: '?raw',
   import: 'default',

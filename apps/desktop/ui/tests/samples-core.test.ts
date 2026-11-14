@@ -1,9 +1,10 @@
 // The pure logic of Samples mode of the desktop Transfer page (apps/desktop/ui/src/samples-core.ts): folders and breadcrumbs (device and local),
 // the rows with their upload states, the local rows and which files convert (the labels), and an upload run over a fake backend.
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { fileGroups, nameInGroup } from '../../desktop/ui/src/card-core.ts';
-import { sourceKind } from '@digi/dk-session/dksample';
+import { sourceKind, type Prepared } from '@digi/dk-session/dksample';
+import type { SampleEntry } from '@digi/dk-session/samples';
+import { test } from 'vitest';
+import { fileGroups, nameInGroup } from '../src/card-core.ts';
 import {
   applyUpload,
   confirmDeleteLabel,
@@ -32,10 +33,14 @@ import {
   uploadItems,
   uploadLines,
   uploadStatus,
-} from '../../desktop/ui/src/samples-core.ts';
+  type Upload,
+  type UploadEvent,
+  type UploadItem,
+  type Uploads,
+} from '../src/samples-core.ts';
 
-const file = (name, size = 10) => ({ name, kind: 'file', size });
-const folder = (name) => ({ name, kind: 'folder', size: 0 });
+const file = (name: string, size = 10): SampleEntry => ({ name, kind: 'file', size });
+const folder = (name: string): SampleEntry => ({ name, kind: 'folder', size: 0 });
 
 test('folder paths and the breadcrumb', () => {
   assert.equal(joinPath('', 'kick'), 'kick');
@@ -64,7 +69,7 @@ test('a new folder name', () => {
 });
 
 test('rows: folders first, then files by name; an upload that is not listed yet is a pending row', () => {
-  const uploads = {
+  const uploads: Uploads = {
     'drums/new': {
       folder: 'drums',
       name: 'new',
@@ -112,7 +117,7 @@ test('rows: folders first, then files by name; an upload that is not listed yet 
 });
 
 test('the state of an upload: waiting, uploading, verifying, ok, failed', () => {
-  const u = (state, sent = 0, bytes = 10, message = '') => ({
+  const u = (state: Upload['state'], sent = 0, bytes = 10, message = ''): Upload => ({
     folder: '',
     name: 'a',
     source: 'a',
@@ -123,16 +128,16 @@ test('the state of an upload: waiting, uploading, verifying, ok, failed', () => 
     message,
   });
   assert.equal(uploadStatus(undefined), undefined);
-  assert.equal(uploadStatus(u('waiting')).kind, 'waiting');
-  assert.equal(uploadStatus(u('uploading', 3)).kind, 'uploading');
-  assert.equal(uploadStatus(u('uploading', 10)).kind, 'uploading'); // all sent: still awaiting completion
-  assert.equal(uploadStatus(u('verifying', 10)).kind, 'verifying');
-  assert.equal(uploadStatus(u('ok', 10, 10, 'm')).message, 'm');
-  assert.equal(uploadStatus(u('failed', 0, 10, 'no space')).kind, 'failed');
+  assert.equal(uploadStatus(u('waiting'))!.kind, 'waiting');
+  assert.equal(uploadStatus(u('uploading', 3))!.kind, 'uploading');
+  assert.equal(uploadStatus(u('uploading', 10))!.kind, 'uploading'); // all sent: still awaiting completion
+  assert.equal(uploadStatus(u('verifying', 10))!.kind, 'verifying');
+  assert.equal(uploadStatus(u('ok', 10, 10, 'm'))!.message, 'm');
+  assert.equal(uploadStatus(u('failed', 0, 10, 'no space'))!.kind, 'failed');
 });
 
 test('events build the upload state, and a file that could not be prepared fails alone', () => {
-  let u = {};
+  let u: Uploads = {};
   u = applyUpload(u, {
     event: 'prepared',
     folder: 'd',
@@ -142,13 +147,16 @@ test('events build the upload state, and a file that could not be prepared fails
     bytes: 100,
   });
   u = applyUpload(u, { event: 'progress', folder: 'd', name: 'kick', sent: 40, bytes: 100 });
-  assert.equal(u['d/kick'].state, 'uploading');
+  assert.equal(u['d/kick']!.state, 'uploading');
   u = applyUpload(u, { event: 'verifying', folder: 'd', name: 'kick' });
-  assert.deepEqual([u['d/kick'].state, u['d/kick'].sent], ['verifying', 100]);
+  assert.deepEqual([u['d/kick']!.state, u['d/kick']!.sent], ['verifying', 100]);
   u = applyUpload(u, { event: 'verified', folder: 'd', name: 'kick', ok: false, message: 'device hash differs' });
-  assert.deepEqual([u['d/kick'].state, u['d/kick'].message], ['failed', 'device hash differs']);
+  assert.deepEqual([u['d/kick']!.state, u['d/kick']!.message], ['failed', 'device hash differs']);
   u = applyUpload(u, { event: 'failed', folder: 'd', name: 'bad.wav', source: 'bad.wav', message: 'not a usable WAV' });
-  assert.deepEqual([u['d/bad.wav'].kind, u['d/bad.wav'].state, u['d/bad.wav'].source], ['none', 'failed', 'bad.wav']);
+  assert.deepEqual(
+    [u['d/bad.wav']!.kind, u['d/bad.wav']!.state, u['d/bad.wav']!.source],
+    ['none', 'failed', 'bad.wav'],
+  );
   assert.deepEqual(Object.keys(dropUploads(u, ['d/kick'])), ['d/bad.wav']);
   // a folder takes its files with it, and not a sibling that only starts with the same letters
   const nested = { 'Foo/a': u['d/kick'], 'Foo/sub/b': u['d/kick'], 'Foobar/x': u['d/kick'] };
@@ -156,10 +164,10 @@ test('events build the upload state, and a file that could not be prepared fails
 });
 
 test('which files convert: the label says what was done', () => {
-  assert.equal(kindTag('converted').text, 'WAV→');
-  assert.equal(kindTag('native').text, 'native');
-  assert.equal(kindTag('unchanged').text, 'other');
-  assert.equal(kindTag('unchanged').title, "Won't play as a sample");
+  assert.equal(kindTag('converted')!.text, 'WAV→');
+  assert.equal(kindTag('native')!.text, 'native');
+  assert.equal(kindTag('unchanged')!.text, 'other');
+  assert.equal(kindTag('unchanged')!.title, "Won't play as a sample");
   assert.equal(kindTag('none'), undefined);
 });
 
@@ -174,27 +182,29 @@ test('delete: the selected rows that are on the device', () => {
 });
 
 /** A backend that keeps what it is given; `failPut` names a file whose put throws, `failVerify` one whose verify says no. */
+type Backend = Parameters<typeof uploadItems>[0];
+type Verify = Backend['verify'];
 const fakeBackend = ({ failPut = '', failVerify = '' } = {}) => {
-  const calls = [];
+  const calls: string[] = [];
   return {
     calls,
-    async put(folderName, p, onProgress) {
+    async put(folderName: string, p: Prepared, onProgress: (sent: number, total: number) => void) {
       calls.push(`put ${folderName}/${p.name}`);
       if (p.name === failPut) throw new Error('{"error":"E_FULL: no space","kind":"device"}');
       onProgress(p.stored.length / 2, p.stored.length);
       onProgress(p.stored.length, p.stored.length);
     },
-    async verify(folderName, p) {
+    async verify(folderName: string, p: Prepared) {
       calls.push(`verify ${folderName}/${p.name}`);
       return {
         ok: p.name !== failVerify,
         message: p.name === failVerify ? 'device hash differs' : 'device hash matches',
         compared: 'hash of the stored file',
-      };
+      } as Awaited<ReturnType<Verify>>;
     },
   };
 };
-const prepare = (name, data) => {
+const prepare = (name: string, data: Uint8Array): Prepared => {
   if (name.endsWith('.bad.wav')) throw new Error('not a usable WAV: no fmt chunk');
   const wav = name.endsWith('.wav');
   return {
@@ -204,8 +214,8 @@ const prepare = (name, data) => {
     kind: wav ? 'converted' : 'unchanged',
   };
 };
-const run = async (backend, names) => {
-  let u = {};
+const run = async (backend: Backend, names: string[]) => {
+  let u: Uploads = {};
   await uploadFiles(
     backend,
     prepare,
@@ -228,9 +238,9 @@ test('an upload run: prepare, put with progress, verify; a broken WAV fails alon
       ['notes.txt', 'unchanged', 'ok'],
     ],
   );
-  assert.equal(u['drums/kick'].message, 'device hash matches\nhash of the stored file');
-  assert.match(u['drums/x.bad.wav'].message, /not a usable WAV/);
-  assert.equal(u['drums/snare'].message, 'device hash differs\nhash of the stored file');
+  assert.equal(u['drums/kick']!.message, 'device hash matches\nhash of the stored file');
+  assert.match(u['drums/x.bad.wav']!.message, /not a usable WAV/);
+  assert.equal(u['drums/snare']!.message, 'device hash differs\nhash of the stored file');
   assert.deepEqual(b.calls, [
     'put drums/kick',
     'verify drums/kick',
@@ -252,8 +262,8 @@ test('a failed send stops the run: the files after it are marked not sent', asyn
       ['three.wav', 'failed'],
     ],
   );
-  assert.match(u['drums/two'].message, /E_FULL: no space/);
-  assert.equal(u['drums/three.wav'].message, 'not sent: the upload of two failed');
+  assert.match(u['drums/two']!.message, /E_FULL: no space/);
+  assert.equal(u['drums/three.wav']!.message, 'not sent: the upload of two failed');
   assert.deepEqual(b.calls, ['put drums/one', 'verify drums/one', 'put drums/two']);
 });
 
@@ -264,12 +274,12 @@ test('a run with a failed file has one error line with the first message and the
     uploadFailure(u, {}),
     'Uploading failed: E_FULL: no space (1 of 3 sent, 2 not sent)'.replace(
       'E_FULL: no space',
-      u['drums/two'].message.split('\n')[0],
+      u['drums/two']!.message.split('\n')[0],
     ),
   );
   assert.deepEqual(uploadLines(u, {}), [
     'one: verified',
-    `two: failed: ${u['drums/two'].message}`,
+    `two: failed: ${u['drums/two']!.message}`,
     'three.wav: not sent: the upload of two failed',
   ]);
   const ok = await run(fakeBackend({}), ['one.wav']);
@@ -278,7 +288,7 @@ test('a run with a failed file has one error line with the first message and the
 });
 
 const cancelError = () => Object.assign(new Error('cancelled'), { kind: 'cancelled' });
-const names = (u) => Object.values(u).map((x) => [x.name, x.state]);
+const names = (u: Uploads) => Object.values(u).map((x) => [x.name, x.state]);
 
 test('Cancel between files: the file after the cancel and all later files are not sent, none fails, a verified file stays ok', async () => {
   let stop = false;
@@ -289,7 +299,7 @@ test('Cancel between files: the file after the cancel and all later files are no
     if (p.name === 'one') stop = true; // the user presses Cancel while the first file ends
     return v;
   };
-  let u = {};
+  let u: Uploads = {};
   await uploadFiles(
     b,
     prepare,
@@ -327,8 +337,8 @@ test('Cancel in the middle of a file: its put fails as cancelled, it is cancelle
     ['two', 'cancelled'],
     ['three.wav', 'cancelled'],
   ]);
-  assert.equal(u['drums/two'].sent, 5, 'what went is kept on the row');
-  assert.equal(u['drums/two'].message, 'cancelled while sending');
+  assert.equal(u['drums/two']!.sent, 5, 'what went is kept on the row');
+  assert.equal(u['drums/two']!.message, 'cancelled while sending');
   assert.deepEqual(b.calls, ['put drums/one', 'verify drums/one', 'put drums/two']);
   assert.equal(uploadFailure(u, {}), undefined);
   assert.equal(uploadCancelled(u, {}), '1 of 3 uploaded, 2 not sent');
@@ -344,11 +354,11 @@ test('Cancel while a file is verified: it was sent, not verified, and cancelled'
     ['one', 'cancelled'],
     ['two.wav', 'cancelled'],
   ]);
-  assert.equal(u['drums/one'].message, 'sent, not verified: cancelled');
+  assert.equal(u['drums/one']!.message, 'sent, not verified: cancelled');
 });
 
 test('a real failure and a cancel in one run is still a failure', async () => {
-  let u = {};
+  let u: Uploads = {};
   await uploadFiles(
     fakeBackend({}),
     prepare,
@@ -358,7 +368,7 @@ test('a real failure and a cancel in one run is still a failure', async () => {
     () => false,
   );
   u = applyUpload(u, { event: 'cancelled', folder: 'drums', name: 'two', message: 'cancelled while sending' });
-  assert.match(uploadFailure(u, {}), /^Uploading failed: not a usable WAV/);
+  assert.match(uploadFailure(u, {}) ?? '', /^Uploading failed: not a usable WAV/);
   assert.equal(uploadCancelled(u, {}), undefined);
 });
 
@@ -390,7 +400,11 @@ test('the Card panel groups the store files by top folder', () => {
 
 test('the local list: folders first, then files by name, then the added files; folders have no kind tag; the selection takes folders too', () => {
   const entries = [file('snare.wav', 40), folder('z'), file('kick', 30), folder('a')];
-  const kinds = { 'drums/snare.wav': 'converted', 'drums/kick': 'native', '+x.txt': 'unchanged' };
+  const kinds: Record<string, Prepared['kind']> = {
+    'drums/snare.wav': 'converted',
+    'drums/kick': 'native',
+    '+x.txt': 'unchanged',
+  };
   const rows = localRows(
     'drums',
     entries,
@@ -457,7 +471,7 @@ test('the label of a local file comes from its first 64 bytes and its size, as p
 // ---- the explorer: the plan of an upload with folders, the queue, the folder rows ----------------------------------------------------
 
 /** A local tree for the plan: path -> entries of that level. */
-const tree = {
+const tree: Record<string, SampleEntry[]> = {
   '': [folder('loops'), folder('empty'), file('a.wav', 5)],
   loops: [file('z.wav', 3), folder('breaks'), file('b.wav', 4)],
   'loops/breaks': [file('x.wav', 1), folder('deep')],
@@ -465,15 +479,21 @@ const tree = {
   empty: [],
 };
 const lister =
-  (log = []) =>
-  async (rel) => {
+  (log: string[] = []) =>
+  async (rel: string) => {
     log.push(rel);
     return tree[rel] ?? [];
   };
-const row = (kind, name, path = name, size = 0, added = false) => ({ kind, name, path, size, added });
+const row = (kind: 'file' | 'folder', name: string, path = name, size = 0, added = false) => ({
+  kind,
+  name,
+  path,
+  size,
+  added,
+});
 
 test('the plan of an upload: a folder is made inside the open device folder, its contents follow, parents before children, structure kept', async () => {
-  const log = [];
+  const log: string[] = [];
   const plan = await planUpload([row('folder', 'loops'), row('file', 'a.wav', 'a.wav', 5)], 'drums', lister(log));
   assert.deepEqual(plan.mkdirs, ['drums/loops', 'drums/loops/breaks', 'drums/loops/breaks/deep']);
   assert.deepEqual(
@@ -515,35 +535,35 @@ test('messages: no folders on the device, a folder dragged in from outside', () 
 });
 
 /** A backend that has folders: `list` answers from `have` (folder path -> names), `mkdir` is recorded. */
-const folderBackend = (have = { '': [] }, failMkdir = '') => {
-  const calls = [];
+const folderBackend = (have: Record<string, string[]> = { '': [] }, failMkdir = '') => {
+  const calls: string[] = [];
   const base = fakeBackend();
   return {
     calls,
-    put: async (f, p, o) => {
+    put: async (f: string, p: Prepared, o: (sent: number, total: number) => void) => {
       calls.push(`put ${f}/${p.name}`);
       return base.put(f, p, o);
     },
     verify: base.verify,
-    async list(f) {
+    async list(f: string): Promise<SampleEntry[]> {
       calls.push(`list ${f}`);
-      return (have[f] ?? []).map((name) => ({ name, kind: 'folder', size: 0 }));
+      return (have[f] ?? []).map((name): SampleEntry => ({ name, kind: 'folder', size: 0 }));
     },
-    async mkdir(f) {
+    async mkdir(f: string) {
       calls.push(`mkdir ${f}`);
       if (f === failMkdir) throw new Error('{"error":"E_FULL: no space","kind":"device"}');
     },
   };
 };
-const item = (folderPath, name, size = 10) => ({
+const item = (folderPath: string, name: string, size = 10): UploadItem => ({
   folder: folderPath,
   name,
   size,
   read: async () => new Uint8Array(size),
 });
-const runItems = async (backend, mkdirs, items) => {
-  let u = {};
-  const events = [];
+const runItems = async (backend: Backend, mkdirs: string[], items: UploadItem[]) => {
+  let u: Uploads = {};
+  const events: string[] = [];
   await uploadItems(backend, prepare, mkdirs, items, (e) => {
     events.push(e.event);
     u = applyUpload(u, e);
@@ -578,14 +598,14 @@ test('a folder that cannot be made fails the files inside it (and below) and not
     ['loops', 'loops/breaks', 'loops/breaks/deep'],
     [item('loops/breaks/deep', 'y.wav'), item('loops', 'b.wav'), item('loops/breaks', 'x.wav')],
   );
-  const state = (key) => [u[key].state, u[key].message];
+  const state = (key: string) => [u[key]!.state, u[key]!.message];
   assert.deepEqual(state('loops/b').slice(0, 1), ['ok']);
-  assert.equal(u['loops/breaks/deep/y.wav'].state, 'failed');
+  assert.equal(u['loops/breaks/deep/y.wav']!.state, 'failed');
   assert.match(
-    u['loops/breaks/deep/y.wav'].message,
+    u['loops/breaks/deep/y.wav']!.message,
     /not sent: the folder loops\/breaks could not be made: E_FULL: no space/,
   );
-  assert.equal(u['loops/breaks/x.wav'].state, 'failed');
+  assert.equal(u['loops/breaks/x.wav']!.state, 'failed');
   assert.ok(!b.calls.includes('mkdir loops/breaks/deep'), 'a folder inside a lost one is not tried');
   assert.ok(!b.calls.includes('put loops/breaks/x'));
 });
@@ -599,16 +619,16 @@ test('a file that cannot be read fails alone and the run goes on', async () => {
     read: async () => Promise.reject(new Error('gone.wav: no such file')),
   };
   const { u } = await runItems(b, [], [bad, item('d', 'ok.wav')]);
-  assert.equal(u['d/gone.wav'].state, 'failed');
-  assert.match(u['d/gone.wav'].message, /no such file/);
-  assert.equal(u['d/ok'].state, 'ok');
+  assert.equal(u['d/gone.wav']!.state, 'failed');
+  assert.match(u['d/gone.wav']!.message, /no such file/);
+  assert.equal(u['d/ok']!.state, 'ok');
 });
 
 test('events: a queued file takes the name and size it has on the device in place; queued bytes count until then', () => {
-  let u = {};
+  let u: Uploads = {};
   u = applyUpload(u, { event: 'queued', folder: 'd', name: 'a.wav', bytes: 100 });
   u = applyUpload(u, { event: 'queued', folder: 'd', name: 'b.wav', bytes: 50 });
-  assert.deepEqual([u['d/a.wav'].state, u['d/a.wav'].bytes, u['d/a.wav'].kind], ['waiting', 100, 'none']);
+  assert.deepEqual([u['d/a.wav']!.state, u['d/a.wav']!.bytes, u['d/a.wav']!.kind], ['waiting', 100, 'none']);
   u = applyUpload(u, {
     event: 'prepared',
     folder: 'd',
@@ -619,7 +639,7 @@ test('events: a queued file takes the name and size it has on the device in plac
     queued: 'a.wav',
   });
   assert.deepEqual(Object.keys(u), ['d/a', 'd/b.wav'], 'the entry keeps its place');
-  assert.deepEqual([u['d/a'].bytes, u['d/a'].kind], [90, 'converted']);
+  assert.deepEqual([u['d/a']!.bytes, u['d/a']!.kind], [90, 'converted']);
   // a name that does not change (notes.txt) stays under its key
   u = applyUpload(u, {
     event: 'prepared',
@@ -634,7 +654,7 @@ test('events: a queued file takes the name and size it has on the device in plac
 });
 
 test('a folder row: pending while an upload fills it, with the state of the uploads inside it', () => {
-  const up = (path, state, sent, bytes) => {
+  const up = (path: string, state: Upload['state'], sent: number, bytes: number): Upload => {
     const i = path.lastIndexOf('/');
     return {
       folder: path.slice(0, i),
@@ -674,9 +694,9 @@ test('a folder row: pending while an upload fills it, with the state of the uplo
   // an upload of another folder does not make rows here
   assert.deepEqual(sampleRows('other', [], uploads), []);
   assert.equal(folderStatus(uploads, 'nothing'), undefined);
-  assert.equal(folderStatus({ 'f/a': up('f/a', 'waiting', 0, 5) }, 'f').kind, 'waiting');
-  assert.equal(folderStatus({ 'f/a': up('f/a', 'ok', 5, 5) }, 'f').kind, 'ok');
-  const mixed = folderStatus({ 'f/a': up('f/a', 'ok', 5, 5), 'f/b': up('f/b', 'failed', 0, 5) }, 'f');
+  assert.equal(folderStatus({ 'f/a': up('f/a', 'waiting', 0, 5) }, 'f')!.kind, 'waiting');
+  assert.equal(folderStatus({ 'f/a': up('f/a', 'ok', 5, 5) }, 'f')!.kind, 'ok');
+  const mixed = folderStatus({ 'f/a': up('f/a', 'ok', 5, 5), 'f/b': up('f/b', 'failed', 0, 5) }, 'f')!;
   assert.deepEqual([mixed.kind, mixed.message], ['failed', '1 of 2 files failed']);
 });
 
@@ -687,54 +707,57 @@ test('the delete texts: progress, what is left, and the armed button for a folde
   assert.equal(deletePartLine(0, 1), '0 of 1 file deleted, 1 left');
   assert.equal(confirmDeleteLabel([file('a')]), undefined);
   assert.equal(confirmDeleteLabel([folder('d')]), 'Delete this folder and everything in it?');
-  assert.match(confirmDeleteLabel([folder('d'), file('a')]), /^Delete 2 items, folders with everything/);
+  assert.match(confirmDeleteLabel([folder('d'), file('a')]) ?? '', /^Delete 2 items, folders with everything/);
 });
 
 // ---- skipping what the device holds already ----------------------------------------------------------------------------------------
 
 /** A backend with a device: `have` is folder -> name -> bytes. `sameOnDevice` compares size and bytes as the real backends compare size and hash. */
-const deviceBackend = (have = {}, { failList = null, cancelList = null } = {}) => {
-  const calls = [];
+const deviceBackend = (
+  have: Record<string, Record<string, Uint8Array>> = {},
+  { failList = null, cancelList = null }: { failList?: string | null; cancelList?: string | null } = {},
+) => {
+  const calls: string[] = [];
   const base = fakeBackend();
 
   return {
     calls,
-    put: async (f, p, o) => {
+    put: async (f: string, p: Prepared, o: (sent: number, total: number) => void) => {
       calls.push(`put ${f}/${p.name}`);
       return base.put(f, p, o);
     },
-    verify: async (f, p) => {
+    verify: async (f: string, p: Prepared) => {
       calls.push(`verify ${f}/${p.name}`);
       return base.verify(f, p);
     },
-    async list(f) {
+    async list(f: string): Promise<SampleEntry[]> {
       calls.push(`list ${f}`);
       if (f === failList) throw new Error('{"error":"E_BUSY: card busy","kind":"device"}');
       if (f === cancelList) throw cancelError();
-      return Object.entries(have[f] ?? {}).map(([name, b]) => ({
+      return Object.entries(have[f] ?? {}).map(([name, b]): SampleEntry => ({
         name,
         kind: 'file',
         size: b.length,
         hash: b.join(','),
       }));
     },
-    sameOnDevice: (p, listing) =>
+    sameOnDevice: (p: Prepared, listing: SampleEntry[]) =>
       listing.some((e) => e.name === p.name && e.size === p.stored.length && e.hash === p.stored.join(',')),
-    async mkdir(f) {
+    async mkdir(f: string) {
       calls.push(`mkdir ${f}`);
     },
   };
 };
-const bytesOf = (n, fill) => new Uint8Array(n).fill(fill);
-const filled = (folderPath, name, n, fill) => ({
+const bytesOf = (n: number, fill: number) => new Uint8Array(n).fill(fill);
+const filled = (folderPath: string, name: string, n: number, fill: number): UploadItem => ({
   folder: folderPath,
   name,
   size: n,
   read: async () => bytesOf(n, fill),
 });
-const runAll = async (backend, mkdirs, items, stop) => {
-  let u = {};
-  const events = [];
+const runAll = async (backend: Backend, mkdirs: string[], items: UploadItem[], stop?: () => boolean) => {
+  let u: Uploads = {};
+  const events: UploadEvent[] = [];
   await uploadItems(
     backend,
     prepare,
@@ -758,12 +781,12 @@ test('a file that the device holds with the same bytes is skipped: no put, no ve
     ['c', 'ok'],
   ]);
   assert.deepEqual(b.calls, ['list d', 'put d/b', 'verify d/b', 'put d/c', 'verify d/c']);
-  assert.equal(u['d/a'].sent, 10);
-  assert.match(u['d/a'].message, /delete it and upload it again/);
+  assert.equal(u['d/a']!.sent, 10);
+  assert.match(u['d/a']!.message, /delete it and upload it again/);
   assert.deepEqual(uploadLines(u, {}), ['a: already on the device', 'b: verified', 'c: verified']);
   assert.equal(uploadFailure(u, {}), undefined);
   assert.equal(uploadCancelled(u, {}), undefined);
-  assert.equal(uploadStatus(u['d/a']).kind, 'same');
+  assert.equal(uploadStatus(u['d/a']!)!.kind, 'same');
 });
 
 test('the same name with another size, or other bytes of the same size, uploads and replaces', async () => {

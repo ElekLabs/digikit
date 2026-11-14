@@ -1,11 +1,12 @@
 // The WAV converter and the +Drive content hash (dksample.wasm, packages/dksample) and what the upload does with a file. Skips when dksample.wasm is not built
 // (`mise run wasm:patchkit` builds it).
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Sample, isNative, prepareUpload } from '@digi/dk-session/dksample';
+import { test } from 'vitest';
+import { readBytes } from './support/patchkit-env.ts';
 
 const wasm = join(resolve(dirname(fileURLToPath(import.meta.url)), '..'), 'public/dksample.wasm');
 const skip = !existsSync(wasm);
@@ -17,7 +18,14 @@ const wav = ({
   frames = 100,
   bits = 16,
   float = false,
-  f = (i) => Math.sin(i / 7) * 0.5,
+  f = (i: number, _c: number) => Math.sin(i / 7) * 0.5,
+}: {
+  rate?: number;
+  ch?: number;
+  frames?: number;
+  bits?: number;
+  float?: boolean;
+  f?: (i: number, c: number) => number;
 } = {}) => {
   const width = bits / 8;
   const pcm = Buffer.alloc(frames * ch * width);
@@ -46,9 +54,9 @@ const wav = ({
   h.writeUInt32LE(pcm.length, 40);
   return Uint8Array.from(Buffer.concat([h, pcm]));
 };
-const sample = async () => Sample.create(readFileSync(wasm));
+const sample = async () => Sample.create(readBytes(wasm));
 
-test('the native file: header, big-endian PCM, trailer of zeros', { skip }, async () => {
+test.skipIf(skip)('the native file: header, big-endian PCM, trailer of zeros', async () => {
   const s = await sample();
   const c = s.convert(wav({ frames: 100 }));
   assert.equal(c.file.length, 0x40 + 200 + 16);
@@ -63,9 +71,9 @@ test('the native file: header, big-endian PCM, trailer of zeros', { skip }, asyn
   assert.deepEqual(c.info, { srcRate: 48000, channels: 1, srcFrames: 100, frames: 100, dataLen: 200 });
 });
 
-test('stereo is interleaved and flagged; other widths and floats convert', { skip }, async () => {
+test.skipIf(skip)('stereo is interleaved and flagged; other widths and floats convert', async () => {
   const s = await sample();
-  const st = s.convert(wav({ ch: 2, frames: 50, f: (_i, c) => (c ? 0.25 : -0.25) }));
+  const st = s.convert(wav({ ch: 2, frames: 50, f: (_i: number, c: number) => (c ? 0.25 : -0.25) }));
   assert.equal(st.file[1], 1);
   assert.equal(st.rpc.length, 0x40 + 50 * 4);
   const v = new DataView(st.file.buffer);
@@ -76,21 +84,21 @@ test('stereo is interleaved and flagged; other widths and floats convert', { ski
   }
 });
 
-test('a 44.1 kHz WAV is resampled to 48 kHz', { skip }, async () => {
+test.skipIf(skip)('a 44.1 kHz WAV is resampled to 48 kHz', async () => {
   const s = await sample();
   const c = s.convert(wav({ rate: 44100, frames: 4410 }));
   assert.equal(c.info.frames, 4800);
   assert.equal(new DataView(c.file.buffer).getUint32(8), 48000);
 });
 
-test('three channels and a broken file are refused', { skip }, async () => {
+test.skipIf(skip)('three channels and a broken file are refused', async () => {
   const s = await sample();
   assert.throws(() => s.convert(wav({ ch: 3 })), /not a usable WAV/);
   assert.throws(() => s.convert(Uint8Array.from(Buffer.from('RIFFxxxxWAVE'))), /not a usable WAV/);
   assert.throws(() => s.convert(new Uint8Array(0)), /not a usable WAV/);
 });
 
-test("the content hash is the firmware's: the empty file and a card vector", { skip }, async () => {
+test.skipIf(skip)("the content hash is the firmware's: the empty file and a card vector", async () => {
   const s = await sample();
   assert.equal(s.hash(new Uint8Array(0)), 0x43fa243b); // hash of nothing, |1 (finding 44)
   assert.equal(s.hash(new Uint8Array(16)) & 1, 1);
@@ -98,7 +106,7 @@ test("the content hash is the firmware's: the empty file and a card vector", { s
   assert.notEqual(s.hash(Uint8Array.of(1, 2, 3)), s.hash(Uint8Array.of(1, 2, 4)));
 });
 
-test('prepareUpload: a WAV is converted, a native file and any other file pass', { skip }, async () => {
+test.skipIf(skip)('prepareUpload: a WAV is converted, a native file and any other file pass', async () => {
   const s = await sample();
   const w = prepareUpload(s, 'Kick.WAV', wav({ frames: 10 }));
   assert.deepEqual([w.kind, w.name, w.bytes.length], ['converted', 'Kick', 0x40 + 20]);

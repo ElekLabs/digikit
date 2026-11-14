@@ -1,7 +1,7 @@
 //! Embeds the device files (`devices/*.toml`) so that the device list is data: a new device file is one more entry here after a
 //! rebuild, with no change to the Rust sources. The file list is written to `$OUT_DIR/device_files.rs` (see `src/devdata.rs`).
 //! The `[[firmware]]` tables are left out: patchkit does not read them, and the browser build must not carry stock-image hashes
-//! (they come with the port at run time; `apps/web/tests/patchkit.test.mjs`).
+//! (they come with the port at run time; `apps/web/tests/patchkit.wasm.test.ts`).
 
 use std::fmt::Write;
 use std::path::PathBuf;

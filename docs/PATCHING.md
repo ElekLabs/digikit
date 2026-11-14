@@ -287,7 +287,7 @@ in, checks the image and offers it as a download, flashes it over Web MIDI, or r
 starts the patched image in the browser core (screen and controls, no DSP audio yet). Machines and effects are installed over USB on
 `/transfer/`. The page reads module.toml at build time. `patchkit.wasm` reads
 `public/modules/bundle.json`, which `apps/web/scripts/gen-modules.mjs` generates from the committed `modules/` and
-`devices/ports/` (never from `out/`). `patchkit.wasm` produces the same bytes as the command line (`apps/web/tests/patchkit.test.mjs`). The
+`devices/ports/` (never from `out/`). `patchkit.wasm` produces the same bytes as the command line (`apps/web/tests/patchkit.wasm.test.ts`). The
 first `pnpm dev` in a fresh tree compiles the browser cores and takes several minutes.
 
 ## How it works
@@ -536,7 +536,7 @@ after that the button is gone. Flash is on only when every check
 passed and the device is the image's model. A small link, "Use the OS UPGRADE menu instead", brings back the old flow (the box "The device shows WAITING FOR
 SYSEX", paced sending, six steps). The page code is `apps/web/src/firmware/` (rules in `firmware-core.ts`, the runs in `firmware-flow.ts`); the checks, the
 2 ms sender and the RPC state machine (`patchkit::flash_rpc::RpcFlash`) are the Rust ones (`patchkit.wasm` in the browser and in the workbench).
-Proof: `apps/web/tests/firmware-core.test.ts`, `firmware-flow.wasm.test.ts`, `firmware-rpc-flow.wasm.test.ts`, `firmware-kit.test.mjs` (the wasm image equals `patchkit flash --save`), the
+Proof: `apps/web/tests/firmware-core.test.ts`, `firmware-flow.wasm.test.ts`, `firmware-rpc-flow.wasm.test.ts`, `firmware-kit.wasm.test.ts` (the wasm image equals `patchkit flash --save`), the
 state machine's tests in `packages/patchkit/src/flash_rpc.rs`, and `firmware-emulator.wasm.test.ts`, which runs the page's flash against an emulated device
 (`tools/emulator/os_upgrade_rig.py ... --rpc --exec`, finding 75). Screenshots of both apps: `node tools/devtools/firmware_shots.mjs --app web|desktop`.
 

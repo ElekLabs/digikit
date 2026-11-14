@@ -1,6 +1,6 @@
 // The pure logic of the Samples mode of the Transfer page (no DOM, no Tauri): folder paths and breadcrumbs, the rows of the local folder and of
 // the device's folder with the state of each upload, and the upload run over a samples backend (packages/dk-session/src/samples.ts).
-// Written without TS-only runtime syntax so node can import it (apps/web/tests/samples-page.test.mjs).
+// Written without TS-only runtime syntax so node can import it (apps/desktop/ui/tests/samples-core.test.ts).
 import { errorLine, isCancelled } from '../../../web/src/modules/backend.ts';
 import type { Prepared } from '@digi/dk-session/dksample';
 import type { SampleEntry, SamplesBackend } from '@digi/dk-session/samples';

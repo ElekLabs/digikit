@@ -1,37 +1,25 @@
-// The gallery's build step (scripts/gen-modules.mjs), the shipped modules and the patch worker's core.
-// The apply tests compare with the patchkit command line and skip when the wasm or a stock image is absent.
-import { test } from 'node:test';
+// The patch worker's core (`PatchKit`, patchkit-core.ts) over patchkit.wasm against the patchkit command line, the gallery bundle (its shape, and against the
+// command line's) and the shipped modules (`shipModules` packs them with the CLI). Skips when the wasm, a stock image or the CLI is absent. The rest
+// of the gallery's build step is gallery.test.ts.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { join, resolve, dirname, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, relative, sep } from 'node:path';
 import { parse } from 'smol-toml';
+import { test } from 'vitest';
 import { buildModuleData, shipModules } from '../scripts/gen-modules.mjs';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
-import { PatchKit, patchedFileName } from '../src/patch/patchkit-core.ts';
-
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const wasmPath = join(root, 'apps/web/public/patchkit.wasm');
-const images = {
-  dt2: join(root, 'firmware', 'Digitakt_II_OS1.17.syx'),
-  dn2: join(root, 'firmware', 'Digitone_II_OS1.12.syx'),
-};
-const have = [wasmPath, ...Object.values(images)].every(existsSync);
-const py = (module, ...args) =>
-  execFileSync('uv', ['run', 'python', '-m', module, ...args], {
-    cwd: root,
-    env: { ...process.env, PYTHONPATH: root },
-    encoding: 'utf8',
-    maxBuffer: 1 << 28,
-  });
-
-const manifestFiles = (dir = join(root, 'modules')) =>
-  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? manifestFiles(join(dir, e.name)) : e.name === 'module.toml' ? [join(dir, e.name)] : [],
-  );
+import { PatchKit } from '../src/patch/patchkit-core.ts';
+import {
+  haveWasmAndImages as have,
+  images,
+  manifestFiles,
+  py,
+  readBytes,
+  root,
+  wasmPath,
+  workDir,
+} from './support/patchkit-env.ts';
 
 test('bundle lists the committed modules and ports', () => {
   const { bundle } = buildModuleData(root);
@@ -48,44 +36,36 @@ test('bundle lists the committed modules and ports', () => {
 test('bundle carries the device knob models and the gallery JSON of typed modules', () => {
   const { bundle } = buildModuleData(root);
   assert.equal(bundle.devices.length, 2);
-  assert.ok(bundle.devices.every((t) => 'modules' in parse(t)));
-  const sine = bundle.modules.find((m) => m.manifest.includes('id = "test/sine"'));
+  assert.ok(bundle.devices.every((t: string) => 'modules' in parse(t)));
+  const sine = bundle.modules.find((m: { manifest: string }) => m.manifest.includes('id = "test/sine"'))!;
   assert.ok(!sine.manifest.includes('[[entry]]'));
-  const g = JSON.parse(sine.files['build/gen/gallery.json']);
+  const g = JSON.parse((sine.files as Record<string, string>)['build/gen/gallery.json']);
   assert.equal(g.module, 'test/sine');
   const m = g.machines[0];
   assert.deepEqual(Object.keys(m.devices).sort(), ['dn2', 'dt2']);
   assert.equal(m.devices.dt2.knobs[1].param, 'level');
   assert.equal(m.devices.dn2.knobs[1].slot, 26);
   assert.deepEqual(
-    g.params.dt2.map((p) => p.short),
+    g.params.dt2.map((p: { short: string }) => p.short),
     ['LEVEL'],
   );
-  for (const p of g.params.dt2) assert.ok(p.min <= p.default && p.default <= p.max, p.id);
+  for (const p of g.params.dt2 as { min: number; default: number; max: number; id: string }[])
+    assert.ok(p.min <= p.default && p.default <= p.max, p.id);
 });
 
-test('public module summaries are one short sentence', () => {
-  for (const file of manifestFiles()) {
-    const { module: m } = parse(readFileSync(file, 'utf8'));
-    if (m.category === 'core' || m.category === 'test') continue;
-    assert.ok(m.summary.length <= 120, `${m.id}: summary is longer than 120 characters`);
-    assert.ok(m.summary.endsWith('.'), `${m.id}: summary does not end with a full stop`);
-  }
-});
-
-test('bundle equals tools/patchkit/patchkit.py bundle', { skip: !existsSync(join(root, '.venv')) }, () => {
-  const out = join(mkdtempSync(join(tmpdir(), 'gal-')), 'bundle.json');
+test.skipIf(!existsSync(join(root, '.venv')))('bundle equals tools/patchkit/patchkit.py bundle', () => {
+  const out = join(workDir('gal-'), 'bundle.json');
   py('tools.patchkit.patchkit', 'bundle', '-o', out);
   assert.deepEqual(buildModuleData(root).bundle, JSON.parse(readFileSync(out, 'utf8')));
 });
 
 test('the shipped modules: the index describes them, the sources hold no build output', () => {
-  const out = mkdtempSync(join(tmpdir(), 'ship-'));
+  const out = workDir('ship-');
   const { modules } = shipModules(out, root);
   // what ships is the rule of isShipped over the manifests of modules/{machines,fx,tools} (a device-less module is left out)
   const expected = ['machines', 'fx', 'tools']
     .flatMap((r) => manifestFiles(join(root, 'modules', r)))
-    .map((file) => ({ file, d: parse(readFileSync(file, 'utf8')) }))
+    .map((file) => ({ file, d: parse(readFileSync(file, 'utf8')) as { module: { id: string } } }))
     .filter(
       ({ file, d }) => isShipped(d, relative(root, dirname(file)).split(sep).join('/')) && shippedDevices(d).length,
     )
@@ -110,20 +90,16 @@ test('the shipped modules: the index describes them, the sources hold no build o
   }
 });
 
-test('patched file names', () => {
-  assert.equal(patchedFileName('Digitakt II', '1.17', ['core/fx']), 'Digitakt_II_OS1.17+core-fx.syx');
-});
-
-test('worker core: check and apply equal the command line (core/fx)', { skip: !have }, async () => {
-  const work = mkdtempSync(join(tmpdir(), 'gal-'));
+test.skipIf(!have)('worker core: check and apply equal the command line (core/fx)', async () => {
+  const work = workDir('gal-');
   const { bundle } = buildModuleData(root);
-  const kit = await PatchKit.create(readFileSync(wasmPath), JSON.stringify(bundle));
+  const kit = await PatchKit.create(readBytes(wasmPath), JSON.stringify(bundle));
   for (const [name, path] of Object.entries(images)) {
     const fw = new Uint8Array(readFileSync(path));
     const checked = kit.check(fw);
     assert.equal(checked.device, name);
     assert.ok(checked.port?.startsWith(name));
-    assert.equal(checked.modules.find((m) => m.id === 'core/fx').ok, true);
+    assert.equal(checked.modules.find((m) => m.id === 'core/fx')!.ok, true);
     const out = join(work, `${name}.syx`);
     py('tools.patchkit.patchkit', 'patch', '--firmware', path, '--modules', 'core/fx', '-o', out);
     const r = kit.apply(fw, ['core/fx']);
@@ -136,20 +112,23 @@ test('worker core: check and apply equal the command line (core/fx)', { skip: !h
   }
 });
 
-test(
+test.skipIf(!have)(
   'the runtime set of each device file patches the stock image, byte for byte as the command line does',
-  { skip: !have },
   async () => {
-    const work = mkdtempSync(join(tmpdir(), 'gal-'));
+    const work = workDir('gal-');
     const { bundle } = buildModuleData(root);
-    const kit = await PatchKit.create(readFileSync(wasmPath), JSON.stringify(bundle));
-    const files = { dt2: 'digitakt-ii', dn2: 'digitone-ii' };
+    const kit = await PatchKit.create(readBytes(wasmPath), JSON.stringify(bundle));
+    const files: Record<string, string> = { dt2: 'digitakt-ii', dn2: 'digitone-ii' };
     for (const [name, path] of Object.entries(images)) {
-      const set = parse(readFileSync(join(root, 'devices', `${files[name]}.toml`), 'utf8')).patch_sets.device;
+      const set = (
+        parse(readFileSync(join(root, 'devices', `${files[name]!}.toml`), 'utf8')) as {
+          patch_sets: { device: string[] };
+        }
+      ).patch_sets.device;
       const fw = new Uint8Array(readFileSync(path));
       const checked = kit.check(fw);
       assert.ok(
-        set.every((id) => checked.modules.find((m) => m.id === id)?.ok === true),
+        set.every((id: string) => checked.modules.find((m) => m.id === id)?.ok === true),
         `${name}: the set fits`,
       );
       const out = join(work, `${name}-runtime.syx`);
@@ -159,25 +138,14 @@ test(
   },
 );
 
-test('worker core: a firmware of the other device, and garbage, are refused', { skip: !have }, async () => {
+test.skipIf(!have)('worker core: a firmware of the other device, and garbage, are refused', async () => {
   const { bundle } = buildModuleData(root);
-  const kit = await PatchKit.create(readFileSync(wasmPath), JSON.stringify(bundle));
+  const kit = await PatchKit.create(readBytes(wasmPath), JSON.stringify(bundle));
   assert.throws(() => kit.check(new Uint8Array(1000)), /./);
   const old = join(root, 'firmware', 'Digitakt_II_OS1.15C.syx');
   if (existsSync(old)) {
     const c = kit.check(new Uint8Array(readFileSync(old)));
     assert.equal(c.port, null);
-    assert.ok(c.modules.every((m) => !m.ok && /no port/.test(m.error)));
-  }
-});
-
-test('built site (when present) carries no firmware', { skip: !existsSync(join(root, 'apps/web/dist')) }, () => {
-  const walk = (d) =>
-    readdirSync(d, { withFileTypes: true }).flatMap((e) =>
-      e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)],
-    );
-  for (const f of walk(join(root, 'apps/web/dist'))) {
-    assert.ok(!/\.(syx|snap|mstate)$/i.test(f), f);
-    assert.ok(statSync(f).size < 5 * 1024 * 1024 || f.endsWith('emulator-core.wasm'), f);
+    assert.ok(c.modules.every((m) => !m.ok && /no port/.test(m.error ?? '')));
   }
 });

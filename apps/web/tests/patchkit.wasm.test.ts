@@ -1,38 +1,24 @@
 // patchkit.wasm and the patchkit command line apply the same modules to the same stock image and must
 // produce byte-identical output (and the same plan). Skips when the wasm, a stock image or the CLI is absent.
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, mkdtempSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { test } from 'vitest';
+import { haveWasmAndImages as need, images, py, root, wasmPath, workDir, writeBundle } from './support/patchkit-env.ts';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const wasmPath = join(root, 'apps/web/public/patchkit.wasm');
-const images = {
-  dt2: join(root, 'firmware', 'Digitakt_II_OS1.17.syx'),
-  dn2: join(root, 'firmware', 'Digitone_II_OS1.12.syx'),
-};
-const need = [wasmPath, ...Object.values(images)].every(existsSync);
-const py = (module, ...args) =>
-  execFileSync('uv', ['run', 'python', '-m', module, ...args], {
-    cwd: root,
-    env: { ...process.env, PYTHONPATH: root },
-    encoding: 'utf8',
-    maxBuffer: 1 << 28,
-  });
+type Registry = { name: string; entries: { id: string; index: number }[]; gaps?: number[]; count?: number };
 
+/** The raw exports of patchkit.wasm (`pk_*`), with the helpers that pass bytes in and read results out. */
 async function load() {
-  const { instance } = await WebAssembly.instantiate(readFileSync(wasmPath), {});
-  const x = instance.exports;
-  const put = (bytes) => {
+  const { instance } = await WebAssembly.instantiate(new Uint8Array(readFileSync(wasmPath)), {});
+  const x = instance.exports as Record<string, any> & { memory: WebAssembly.Memory };
+  const put = (bytes: ArrayLike<number>): [number, number] => {
     const p = x.pk_alloc(bytes.length);
     new Uint8Array(x.memory.buffer, p, bytes.length).set(bytes);
     return [p, bytes.length];
   };
-  const get = (ptr, len) => new Uint8Array(x.memory.buffer.slice(ptr(), ptr() + len()));
-  const text = (ptr, len) => new TextDecoder().decode(get(ptr, len));
+  const get = (ptr: () => number, len: () => number) => new Uint8Array(x.memory.buffer.slice(ptr(), ptr() + len()));
+  const text = (ptr: () => number, len: () => number) => new TextDecoder().decode(get(ptr, len));
   return { x, put, get, text };
 }
 
@@ -42,16 +28,14 @@ test('patchkit.wasm is small and carries no firmware', () => {
   assert.ok(statSync(wasmPath).size < 2.5 * 1024 * 1024); // carries the Selache assembler, the SHARC+ build
   // no stock-image hash and no port: those are passed in at run time
   for (const f of readdirSync(join(root, 'devices/ports'))) {
-    const sha = /syx_sha256 = "([0-9a-f]{64})"/.exec(readFileSync(join(root, 'devices/ports', f), 'utf8'))[1];
+    const sha = /syx_sha256 = "([0-9a-f]{64})"/.exec(readFileSync(join(root, 'devices/ports', f), 'utf8'))![1]!;
     assert.equal(Buffer.from(bytes).includes(Buffer.from(sha)), false, `${f} sha embedded`);
   }
 });
 
-test('wasm and CLI produce byte-identical output for core/fx', { skip: !need }, async () => {
-  const work = mkdtempSync(join(tmpdir(), 'pk-wasm-'));
-  const bundlePath = join(work, 'bundle.json');
-  py('tools.patchkit.patchkit', 'bundle', '-o', bundlePath);
-  const bundle = readFileSync(bundlePath);
+test.skipIf(!need)('wasm and CLI produce byte-identical output for core/fx', async () => {
+  const work = workDir('pk-wasm-');
+  const bundle = readFileSync(writeBundle(work));
   const { x, put, get, text } = await load();
   for (const [name, path] of Object.entries(images)) {
     const fw = readFileSync(path);
@@ -78,46 +62,38 @@ test('wasm and CLI produce byte-identical output for core/fx', { skip: !need }, 
   }
 });
 
-test(
-  'wasm and CLI produce byte-identical output for the machine framework (two machines)',
-  { skip: !need },
-  async () => {
-    const work = mkdtempSync(join(tmpdir(), 'pk-wasm-'));
-    const bundlePath = join(work, 'bundle.json');
-    py('tools.patchkit.patchkit', 'bundle', '-o', bundlePath);
-    const bundle = readFileSync(bundlePath);
-    const { x, put, get, text } = await load();
-    const mods = 'core/machines,test/machine-clone';
-    const fw = readFileSync(images.dt2);
-    const out = join(work, 'dt2-machines.syx');
-    const plan = join(work, 'dt2-machines.plan.json');
-    py('tools.patchkit.patchkit', 'patch', '--firmware', images.dt2, '--modules', mods, '-o', out, '--plan', plan);
-    const [fp, fl] = put(fw);
-    const [bp, bl] = put(bundle);
-    const [ip, il] = put(Buffer.from(mods));
-    assert.equal(x.pk_apply(fp, fl, bp, bl, ip, il), 0, text(x.pk_err_ptr, x.pk_err_len));
-    assert.ok(Buffer.from(get(x.pk_out_ptr, x.pk_out_len)).equals(readFileSync(out)), 'wasm and CLI output differ');
-    const report = JSON.parse(text(x.pk_plan_ptr, x.pk_plan_len));
-    const entries = (name) => report.registries.find((r) => r.name === name).entries.map((e) => [e.id, e.index]);
-    assert.deepEqual(entries('machines'), [['xclone', 8]]); // Digitone II has core/machines, but XClone clones a Digitakt machine (MANUAL SLICE, type 6)
-    const [dp, dl] = put(readFileSync(images.dn2));
-    const [mp, ml] = put(Buffer.from('core/machines,test/machine-clone'));
-    assert.equal(x.pk_apply(dp, dl, bp, bl, mp, ml), 1);
-    assert.match(
-      text(x.pk_err_ptr, x.pk_err_len),
-      /not compatible|outside the anchor|no registry|no number in the allocation table/,
-    );
-  },
-);
+test.skipIf(!need)('wasm and CLI produce byte-identical output for the machine framework (two machines)', async () => {
+  const work = workDir('pk-wasm-');
+  const bundle = readFileSync(writeBundle(work));
+  const { x, put, get, text } = await load();
+  const mods = 'core/machines,test/machine-clone';
+  const fw = readFileSync(images.dt2);
+  const out = join(work, 'dt2-machines.syx');
+  const plan = join(work, 'dt2-machines.plan.json');
+  py('tools.patchkit.patchkit', 'patch', '--firmware', images.dt2, '--modules', mods, '-o', out, '--plan', plan);
+  const [fp, fl] = put(fw);
+  const [bp, bl] = put(bundle);
+  const [ip, il] = put(Buffer.from(mods));
+  assert.equal(x.pk_apply(fp, fl, bp, bl, ip, il), 0, text(x.pk_err_ptr, x.pk_err_len));
+  assert.ok(Buffer.from(get(x.pk_out_ptr, x.pk_out_len)).equals(readFileSync(out)), 'wasm and CLI output differ');
+  const report = JSON.parse(text(x.pk_plan_ptr, x.pk_plan_len));
+  const entries = (name: string) =>
+    (report.registries as Registry[]).find((r) => r.name === name)!.entries.map((e) => [e.id, e.index]);
+  assert.deepEqual(entries('machines'), [['xclone', 8]]); // Digitone II has core/machines, but XClone clones a Digitakt machine (MANUAL SLICE, type 6)
+  const [dp, dl] = put(readFileSync(images.dn2));
+  const [mp, ml] = put(Buffer.from('core/machines,test/machine-clone'));
+  assert.equal(x.pk_apply(dp, dl, bp, bl, mp, ml), 1);
+  assert.match(
+    text(x.pk_err_ptr, x.pk_err_len),
+    /not compatible|outside the anchor|no registry|no number in the allocation table/,
+  );
+});
 
-test(
+test.skipIf(!need)(
   'wasm and CLI produce byte-identical output for core/params and a machine on each device',
-  { skip: !need },
   async () => {
-    const work = mkdtempSync(join(tmpdir(), 'pk-wasm-'));
-    const bundlePath = join(work, 'bundle.json');
-    py('tools.patchkit.patchkit', 'bundle', '-o', bundlePath);
-    const bundle = readFileSync(bundlePath);
+    const work = workDir('pk-wasm-');
+    const bundle = readFileSync(writeBundle(work));
     const { x, put, get, text } = await load();
     const mods = 'core/dsp-voice,core/machines,core/params,test/machine-clone';
     const fw = readFileSync(images.dt2);
@@ -130,10 +106,11 @@ test(
     assert.equal(x.pk_apply(fp, fl, bp, bl, ip, il), 0, text(x.pk_err_ptr, x.pk_err_len));
     assert.ok(Buffer.from(get(x.pk_out_ptr, x.pk_out_len)).equals(readFileSync(out)), 'wasm and CLI output differ');
     const report = JSON.parse(text(x.pk_plan_ptr, x.pk_plan_len));
-    const entries = (name) => report.registries.find((r) => r.name === name).entries.map((e) => [e.id, e.index]);
+    const entries = (name: string) =>
+      (report.registries as Registry[]).find((r) => r.name === name)!.entries.map((e) => [e.id, e.index]);
     // the clone's permanent type number is 8; 7 is a gap row (not a machine)
     assert.deepEqual(entries('machines'), [['xclone', 8]]);
-    assert.deepEqual(report.registries.find((r) => r.name === 'machines').gaps, [7]);
+    assert.deepEqual((report.registries as Registry[]).find((r) => r.name === 'machines')!.gaps, [7]);
     assert.deepEqual(entries('params'), []);
     // the Digitone II machine with its own page and parameters: the same parity there
     const modsDn2 = 'core/dsp-voice,core/machines,core/params,test/dn2-pages';
@@ -159,9 +136,10 @@ test(
       'DN2: wasm and CLI output differ',
     );
     const reportDn2 = JSON.parse(text(x.pk_plan_ptr, x.pk_plan_len));
-    const entriesDn2 = (name) => reportDn2.registries.find((r) => r.name === name).entries.map((e) => [e.id, e.index]);
+    const entriesDn2 = (name: string) =>
+      (reportDn2.registries as Registry[]).find((r) => r.name === name)!.entries.map((e) => [e.id, e.index]);
     assert.deepEqual(entriesDn2('machines'), [['pages', 6]]);
-    assert.deepEqual(reportDn2.registries.find((r) => r.name === 'machines').gaps, [5]);
+    assert.deepEqual((reportDn2.registries as Registry[]).find((r) => r.name === 'machines')!.gaps, [5]);
     assert.deepEqual(entriesDn2('params'), [
       ['pg_alpha', 321],
       ['pg_beta', 322],
@@ -173,14 +151,11 @@ test(
   },
 );
 
-test(
+test.skipIf(!need)(
   'wasm and CLI produce byte-identical output for the primitives (registry, section, hook)',
-  { skip: !need },
   async () => {
-    const work = mkdtempSync(join(tmpdir(), 'pk-wasm-'));
-    const bundlePath = join(work, 'bundle.json');
-    py('tools.patchkit.patchkit', 'bundle', '-o', bundlePath);
-    const bundle = readFileSync(bundlePath);
+    const work = workDir('pk-wasm-');
+    const bundle = readFileSync(writeBundle(work));
     const { x, put, get, text } = await load();
     const out = join(work, 'dt2-rd.syx');
     const plan = join(work, 'dt2-rd.plan.json');
@@ -214,16 +189,14 @@ test(
   },
 );
 
-test('wasm adds the requirements of the selection like the CLI', { skip: !need }, async () => {
-  const work = mkdtempSync(join(tmpdir(), 'pk-wasm-'));
-  const bundlePath = join(work, 'bundle.json');
-  py('tools.patchkit.patchkit', 'bundle', '-o', bundlePath);
+test.skipIf(!need)('wasm adds the requirements of the selection like the CLI', async () => {
+  const work = workDir('pk-wasm-');
   const { x, put, get, text } = await load();
-  const [bp, bl] = put(readFileSync(bundlePath));
+  const [bp, bl] = put(readFileSync(writeBundle(work)));
   for (const [dev, mod] of [
     ['dt2', 'test/machine-clone'],
     ['dn2', 'test/dn2-pages'],
-  ]) {
+  ] as const) {
     const out = join(work, `${dev}-machine-only.syx`);
     // the CLI prints what it added
     const said = py('tools.patchkit.patchkit', 'patch', '--firmware', images[dev], '--modules', mod, '-o', out);
@@ -243,8 +216,8 @@ test('wasm adds the requirements of the selection like the CLI', { skip: !need }
   assert.match(text(x.pk_err_ptr, x.pk_err_len), /unknown module machines\/nope/);
 });
 
-test('wasm refuses what the CLI refuses', { skip: !need }, async () => {
-  const work = mkdtempSync(join(tmpdir(), 'pk-wasm-'));
+test.skipIf(!need)('wasm refuses what the CLI refuses', async () => {
+  const work = workDir('pk-wasm-');
   const bundlePath = join(work, 'bundle.json');
   // the DN2-only oracle is generated under out/modules (it holds a firmware word, so it is not committed)
   py('tools.patchkit.pk_oracle_dn2_half');
@@ -258,12 +231,11 @@ test('wasm refuses what the CLI refuses', { skip: !need }, async () => {
 });
 
 // The SHARC+ build runs in the page: the sources of a module as texts in, the `.dko.json` text out, the bytes `patchkit build` writes.
-test(
+test.skipIf(!existsSync(wasmPath))(
   'wasm and CLI build byte-identical SHARC+ objects (a machine and an effect)',
-  { skip: !existsSync(wasmPath) },
   async () => {
     const { x, put, text } = await load();
-    const work = mkdtempSync(join(tmpdir(), 'pk-wasm-sharc-'));
+    const work = workDir('pk-wasm-sharc-');
     const modules = [
       ['tests/fixtures/modules/dyn-fx-gain', 'build/dyn-fx-gain-dsp.dko.json', 'src/dsp/dyn_fx_gain.s'],
       ['tests/fixtures/modules/sine', 'build/sine-dsp.dko.json', 'src/dsp/sine.s'],
@@ -279,8 +251,8 @@ test(
         join(root, 'sdk'),
         dirname(join(root, mod, source)),
       ];
-      const includes = {};
-      const collect = (t) => {
+      const includes: Record<string, string> = {};
+      const collect = (t: string) => {
         for (const m of t.matchAll(/^#include\s+"([^"]+)"[ \t]*$/gm)) {
           if (m[1] in includes) continue;
           const f = dirs.map((d) => join(d, m[1])).find((f) => existsSync(f));

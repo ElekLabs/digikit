@@ -14,43 +14,62 @@ const TABLE = Array.from({ length: 256 }, (_, n) => {
   return c >>> 0;
 });
 /** zlib's `crc32(data, 0xffffffff)`, the check the device makes. */
-export function crc32(data) {
+export function crc32(data: Iterable<number>): number {
   let c = 0;
   for (const b of data) c = TABLE[(c ^ b) & 255] ^ (c >>> 8);
   return ~c >>> 0;
 }
 
-const u32 = (b, at) => ((b[at] << 24) | (b[at + 1] << 16) | (b[at + 2] << 8) | b[at + 3]) >>> 0;
-const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
-const cstr = (s) => [...new TextEncoder().encode(s), 0];
+const u32 = (b: Uint8Array, at: number): number =>
+  ((b[at] << 24) | (b[at + 1] << 16) | (b[at + 2] << 8) | b[at + 3]) >>> 0;
+const be32 = (n: number): number[] => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+const cstr = (s: string): number[] => [...new TextEncoder().encode(s), 0];
+
+export interface FakeUpgradeOptions {
+  writeMs?: number;
+  checkMs?: number;
+  endMs?: number;
+  errorAt?: number | null;
+}
+
+export interface FakeUpgradeAnswer {
+  message: Uint8Array;
+  delayMs: number;
+  /** 1 or 0 for End. */
+  commit?: number;
+}
 
 export class FakeUpgrade {
+  endMs: number;
+  writeMs: number;
+  checkMs: number;
+  errorAt: number | null;
+  counter = 1;
+  total = 0;
+  taken = 0;
+  ends: number[] = [];
   /**
    * `writeMs`: how long each Write takes to answer; `checkMs`: the last Write (the device checks the image); `endMs`: End; `errorAt`: a fraction of the image
    * at which a Write is answered with a device error (null: never).
    */
-  constructor({ writeMs = 0, checkMs = 1200, endMs = 40, errorAt = null } = {}) {
+  constructor({ writeMs = 0, checkMs = 1200, endMs = 40, errorAt = null }: FakeUpgradeOptions = {}) {
     this.endMs = endMs;
     this.writeMs = writeMs;
     this.checkMs = checkMs;
     this.errorAt = errorAt;
-    this.counter = 1;
-    this.total = 0;
-    this.taken = 0;
-    this.ends = [];
   }
   /** Is this message one of the three requests? */
-  static is(msg) {
+  static is(msg: Uint8Array): boolean {
     if (msg[1] !== 0x00 || msg[2] !== 0x20) return false;
     const body = decode8in7(msg.subarray(6, msg.length - 1));
     return body[4] >= RPC_START && body[4] <= RPC_END;
   }
-  reply(seq, ty, payload) {
+  reply(seq: number, ty: number, payload: Iterable<number>): Uint8Array {
     const body = Uint8Array.from([0, ++this.counter & 255, seq >> 8, seq & 255, ty | 0x80, ...payload]);
     return Uint8Array.from([...ENVELOPE, ...encode8in7(body), 0xf7]);
   }
   /** `{message, delayMs, commit}` for a request (`commit`: 1 or 0 for End), or null for a message that is not one of the three. */
-  handle(msg) {
+  handle(msg: Uint8Array): FakeUpgradeAnswer | null {
     const body = decode8in7(msg.subarray(6, msg.length - 1));
     const seq = (body[0] << 8) | body[1];
     const ty = body[4];

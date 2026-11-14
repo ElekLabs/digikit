@@ -33,9 +33,8 @@
         "jsToolchain",
         "{workspaceRoot}/modules/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json",
-        "{workspaceRoot}/apps/web/tests/fakeflash.mjs",
-        "{workspaceRoot}/devices/*.toml",
-        "{workspaceRoot}/apps/web/tests/fakeflash.d.mts"
+        "{workspaceRoot}/apps/web/tests/support/fakeflash.ts",
+        "{workspaceRoot}/devices/*.toml"
       ],
       "outputs": []
     },

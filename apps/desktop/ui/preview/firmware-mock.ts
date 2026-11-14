@@ -1,13 +1,13 @@
 // The Firmware page in the preview (`?page=firmware`): the Tauri commands it calls, answered here. Patching and checking are the real Rust code,
 // patchkit.wasm with the site's module bundle (the page's `firmware_prepare` answer has the format of src-tauri/src/firmware.rs); the MIDI port is
 // a fake device that speaks the two protocols the page uses (SoftwareVersion of the stock firmware, INFO of the runtime), takes the OS UPGRADE
-// stream and the RPC flash route (Start, Write, End; apps/web/tests/fakeflash.mjs), and restarts after the last message: its port goes away and comes back with the runtime and the image id of the stream.
+// stream and the RPC flash route (Start, Write, End; apps/web/tests/support/fakeflash.ts), and restarts after the last message: its port goes away and comes back with the runtime and the image id of the stream.
 // State from the address: fwdev=dt2|dn2 (the device; default dn2), fwstate=stock|runtime|noreply|none, fwos=1.12; the RPC route: fwwrite=ms per Write
 // (default 0), fwforce=1 (all checks pass), fwerror=0..1 (the Write at this fraction of the image gets a device error).
 import { decode8in7, encode8in7 } from '@digi/dk-session';
 import { CMD } from '@digi/dk-session/gen_proto';
 import { PatchKit } from '../../../web/src/patch/patchkit-core';
-import { FakeUpgrade } from '../../../web/tests/fakeflash.mjs';
+import { FakeUpgrade } from '../../../web/tests/support/fakeflash.ts';
 import bundleUrl from '../../../web/public/modules/bundle.json?url';
 import wasmUrl from '../../../web/public/patchkit.wasm?url';
 
