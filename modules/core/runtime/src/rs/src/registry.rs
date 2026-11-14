@@ -1,5 +1,5 @@
 //! The run-time registry: machines and parameters that a loaded `.dkm` adds to the rows `core/dynreg` reserved at patch
-//! time (docs/design/digikit-registry.md). Everything here runs in the UI task, from the boot-time load (`loader::complete`) and its undo (`remove`).
+//! time (docs/design/digikit-registry.md). Everything here runs in the UI task. The loader calls it (`apply` from the completion step of the boot-time load, `remove` from the undo); it never calls the loader.
 //!
 //! The runtime does not link to `core/machines` or `core/params`. `core/dynreg` exports one table, `dynreg_info`, with the
 //! addresses of the rows and tables and the row layouts; the link is optional, so an image with the runtime and without
