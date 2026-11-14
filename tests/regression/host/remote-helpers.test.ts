@@ -274,18 +274,21 @@ test('pollEmulated fails after the emulated time, counts a lowered clock as a re
   ).rejects.toThrow('boom');
 });
 
-test('pollEmulated counts boot progress as movement only while a load or boot runs', async () => {
-  // The emulated clock stands still. A restart's cold boot moves boot.icount: no trip. A running ColdFire without a job or boot (a halted DSP) trips.
+test('pollEmulated counts boot progress as movement only while a job runs', async () => {
+  // The emulated clock stands still. A restart's cold boot moves job.icount: no trip. A running ColdFire without a job (a halted DSP) trips.
   let icount = 0;
   const booting = {
-    status: vi.fn(async () => ({ audio: { frames: 1000 }, boot: { icount: (icount += 1000) } })),
+    status: vi.fn(async () => ({
+      audio: { frames: 1000 },
+      job: { kind: 'boot', phase: 'booting', icount: (icount += 1000), progress: 0.5, wall_seconds: 1 },
+    })),
   } as unknown as Session;
   let reads = 0;
   const bootDone = async () => ++reads > 30;
   await expect(
     pollEmulated(booting, bootDone, Boolean, { emulatedMs: 1000, intervalMs: 5, hangMs: 40, message: 'm' }),
   ).resolves.toBe(true);
-  // Everything stands still and no load or boot runs (paused or dead): trip.
+  // Everything stands still and no job runs (paused or dead): trip.
   let cf = 0;
   const frozen = {
     status: vi.fn(async () => ({

@@ -2061,7 +2061,7 @@ impl Actor {
             "card.folder_set" => self.rpc_card_folder_set(&p).map(Some),
             "card.sync" => self.rpc_card_sync().map(Some),
             "card.reset_overlay" => self.rpc_card_reset_overlay().map(Some),
-            "card.cancel" => Ok(Some(json!({"cancelled": self.cancel_card()}))),
+            "job.cancel" => Ok(Some(json!({"cancelled": self.cancel_job()}))),
             "quit" => {
                 self.quit = true;
                 self.finish_card();
@@ -2185,18 +2185,29 @@ impl Actor {
                 "runtime": self.runtime_info,
             })
         });
-        let job = self
-            .job
-            .as_ref()
-            .map(|j| json!({"kind": j.label, "wall_seconds": j.started.elapsed().as_secs_f64()}));
-        // Progress of a cold boot in `firmware.load`. The count restarts at 0 when a soft reset
-        // reboots the job, so a client counts any change as progress.
-        let boot = self.patch_job.as_ref().map(|j| {
-            json!({"icount": j.progress.load(Ordering::Relaxed), "wall_s": j.started.elapsed().as_secs_f64()})
-        });
+        // One job: a cold boot, else a card load, else a stepping job.
+        let job = if let Some(j) = &self.patch_job {
+            // The count restarts at 0 when a soft reset reboots the job, so a client counts any change as progress.
+            Some(json!({
+                "kind": "boot", "phase": "booting",
+                "icount": j.progress.load(Ordering::Relaxed),
+                "progress": f64::from_bits(j.fraction.load(Ordering::Relaxed)),
+                "wall_seconds": j.started.elapsed().as_secs_f64(),
+            }))
+        } else if let Some(j) = &self.card_job {
+            let status = j.status.lock().map(|s| s.clone()).unwrap_or(Value::Null);
+            Some(json!({
+                "kind": "card", "phase": status["phase"], "progress": status["fraction"],
+                "wall_seconds": j.started.elapsed().as_secs_f64(),
+            }))
+        } else {
+            self.job.as_ref().map(
+                |j| json!({"kind": j.label, "wall_seconds": j.started.elapsed().as_secs_f64()}),
+            )
+        };
         let scheduled = self.schedule.len();
         let Some(runtime) = self.runtime.as_mut() else {
-            return Ok(json!({"firmware": null, "job": job, "boot": boot}));
+            return Ok(json!({"firmware": null, "job": job}));
         };
         let status = runtime.status();
         let cf = serde_json::to_value(&status).unwrap_or(Value::Null);
@@ -2212,7 +2223,7 @@ impl Actor {
         let frame = runtime.current_frame().map(|(revision, _)| revision);
         Ok(json!({
             "controller_cpu_ns": elektron_native_boot::thread_cpu_ns(),
-            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "job": job, "boot": boot,
+            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "job": job,
             "scheduled_inputs": scheduled, "frame_revision": frame,
             "heartbeat": {"mainloop_hits": cf["mainloop_hits"], "stalled": self.health.stalled(),
                           "stall_count": self.health.stall_count, "stall_ms": self.health.stall_ms,
@@ -4079,6 +4090,8 @@ struct PatchJob {
     /// Instruction count of the running boot, stored by the worker's progress callback.
     /// It restarts at 0 when a soft reset reboots the job, so a client counts any change as progress.
     progress: Arc<AtomicU64>,
+    /// Estimated boot fraction 0..1 (`f64` bits), stored with `progress`.
+    fraction: Arc<AtomicU64>,
     install: PatchInstall,
     /// The card writes of a boot that ended in a soft reset (see `digi_coupled::cold::SOFT_RESET`).
     reset_out: Arc<Mutex<Option<Vec<emmc_card::CardOverlaySector>>>>,
@@ -4357,6 +4370,8 @@ impl Actor {
         let cancel = Arc::new(AtomicBool::new(false));
         let progress = Arc::new(AtomicU64::new(0));
         let worker_progress = progress.clone();
+        let fraction = Arc::new(AtomicU64::new(0f64.to_bits()));
+        let worker_fraction = fraction.clone();
         let (done_tx, done) = mpsc::channel();
         let (worker_cancel, worker_bytes, worker_card, worker_base) = (
             cancel.clone(),
@@ -4395,7 +4410,10 @@ impl Actor {
                         &inputs,
                         &pair,
                         &worker_cancel,
-                        |p| worker_progress.store(p.icount, Ordering::Relaxed),
+                        |p| {
+                            worker_progress.store(p.icount, Ordering::Relaxed);
+                            worker_fraction.store(p.fraction.to_bits(), Ordering::Relaxed);
+                        },
                     )
                 });
                 let _ = done_tx.send(result.map(|r| PatchBooted {
@@ -4412,6 +4430,7 @@ impl Actor {
             reply: reply.clone(),
             started: Instant::now(),
             progress,
+            fraction,
             install,
             reset_out,
             keep_out,
@@ -4555,6 +4574,7 @@ impl Actor {
         }
         let seconds = job.started.elapsed().as_secs_f64();
         let result = match outcome {
+            Err(e) if e == "cancelled" => Err(RpcError::new(code::CANCELLED, "cancelled")),
             Err(e) => Err(RpcError::new(code::GUEST_FAULT, e)),
             Ok(booted) => {
                 self.boot_resets = 0;
@@ -4568,9 +4588,10 @@ impl Actor {
             }
         };
         let installed = result.is_ok();
+        let cancelled = matches!(&result, Err(e) if e.code == code::CANCELLED);
         self.emit(
             "firmware.loaded",
-            json!({"ok": result.is_ok(), "seconds": seconds,
+            json!({"ok": result.is_ok(), "seconds": seconds, "cancelled": cancelled,
                    "error": result.as_ref().err().map(|e| e.message.clone())}),
         );
         let _ = job.reply.send(result.map(|mut report| {
@@ -4770,10 +4791,30 @@ impl Actor {
         };
         job.cancel.store(true, Ordering::Relaxed);
         if let Some(reply) = job.reply {
-            let _ = reply.send(Err(RpcError::new(code::BUSY, "card load cancelled")));
+            let _ = reply.send(Err(RpcError::new(code::CANCELLED, "card load cancelled")));
         }
         self.card_last = json!({"state": "idle", "message": "Card load cancelled"});
         true
+    }
+
+    /// Cancel the long job that runs (`job.cancel`): a cold boot (its worker stops at the next chunk and the load answers
+    /// CANCELLED), a card load, or a stepping job. Returns the kind cancelled, or None.
+    fn cancel_job(&mut self) -> Option<&'static str> {
+        if let Some(j) = &self.patch_job {
+            // The job stays until `poll_patch` takes the worker's result.
+            j.cancel.store(true, Ordering::Relaxed);
+            return Some("boot");
+        }
+        if self.card_job.is_some() {
+            self.cancel_card();
+            return Some("card");
+        }
+        if let Some(j) = &self.job {
+            let label = j.label;
+            self.finish_job(Err(RpcError::new(code::CANCELLED, "cancelled")));
+            return Some(label);
+        }
+        None
     }
 
     fn rpc_card_load(&mut self, p: &Params, reply: &RpcReply) -> Result<Option<Value>, RpcError> {
@@ -5327,6 +5368,20 @@ mod initial_button_tests {
 #[cfg(test)]
 mod reset_tests {
     use super::*;
+
+    #[test]
+    fn job_cancel_ends_a_stepping_job_with_cancelled() {
+        let (_commands, rx) = mpsc::channel();
+        let mut controller = Actor::new(rx, Config::new(None));
+        let (reply, result) = mpsc::channel();
+        controller
+            .start_job(JobKind::Steps { end: 100 }, &reply, None, json!({}), "step")
+            .unwrap();
+        assert_eq!(controller.cancel_job(), Some("step"));
+        assert!(controller.job.is_none());
+        let error = result.try_recv().unwrap().unwrap_err();
+        assert_eq!(error.code, code::CANCELLED);
+    }
 
     #[test]
     #[ignore = "requires DT2 1.17 and DN2 1.12 firmware"]

@@ -13,10 +13,17 @@ export function errorLine(e: unknown): string {
   return raw;
 }
 
+/** The control error code `cancelled` (method `job.cancel`); see docs/CONTROL.md. */
+const CONTROL_CANCELLED = 10;
+
 /** Whether an error is the user's cancel. */
 export function isCancelled(e: unknown): boolean {
   const raw = e instanceof Error ? e.message : String(e);
-  return (e as { kind?: string })?.kind === 'cancelled' || /"kind":"cancelled"/.test(raw);
+  return (
+    (e as { kind?: string })?.kind === 'cancelled' ||
+    /"kind":"cancelled"/.test(raw) ||
+    raw.endsWith(`(code ${CONTROL_CANCELLED})`)
+  );
 }
 
 /** Whether an error is "no reply" (the device never answered). */

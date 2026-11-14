@@ -77,7 +77,8 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `mem.cf.peek`, `mem.cf.poke` | `peek32`, `poke32` | `call` |
 | `mem.cf.write {addr, hex}` | | `call` |
 | `dev.reload {modules_dir?, swap_modules?, auto_no?, build?}` | | `call`; `mise run dk:dev` |
-| `card.overlay`, `card.export`, `card.load`, `card.status`, `card.cancel`, `card.folder`, `card.sync`, `card.reset_overlay` | | `call` |
+| `card.overlay`, `card.export`, `card.load`, `card.status`, `card.folder`, `card.sync`, `card.reset_overlay` | | `call` |
+| `job.cancel` | | `call` |
 | `midi.in`, `midi.out` | `midi_in`, `midi_out` | `call` |
 | `midi.usb.in`, `midi.usb.out` | `usb_in`, `usb_out` | `call` |
 | `usb.bulk.in {bytes \| file, period?, connect?, zlp?}`, `usb.bulk.out {file?}`, `usb.phy {vbus?, run?}` | | `call` |
@@ -95,6 +96,12 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `guard.set`, `guard.report`, `guard.clear` | | `call` |
 | `events.subscribe` | `events`, `subscribe`, `drain_events` | `events` |
 | `quit` | `quit` | `quit` |
+
+`job.cancel`: cancel the long job that runs: a cold boot (`firmware.load`, `restart`, a soft-reset boot), a card load, or `step`/`run_until`.
+Answers `{cancelled: kind|null}`; the cancelled call answers error 10 `cancelled`. After a cancelled `firmware.load {replace: true}` no firmware is loaded.
+
+`status.job` is `null` or `{kind: "boot"|"card"|"step"|"run_until"|"firmware.load", wall_seconds, phase?, progress?, icount?}`.
+`progress` (0..1) is an estimate. `icount` restarts at 0 when a soft reset reboots the job. `status.boot` is gone.
 
 `firmware.load {syx, runtime?, patch_set?, ...}`: with `runtime: true` the controller patches the stock image in-process with the
 device's patch set (`patch_set`, default `emulator`; the roots are in `devices/*.toml` `[patch_sets]`, the modules they require are added)
@@ -273,7 +280,7 @@ same numbers). Each closed window is blended 50/50 into the shown value; a resto
 | -32602 | bad params | 7 | DSP halted |
 | 1 | no firmware | 8 | I/O |
 | 2 | stale session | 9 | timeout |
-| 3 | busy | | |
+| 3 | busy | 10 | cancelled |
 
 `card.folder`, `card.folder_set` and `card.sync`: the module store as a folder. **The folder belongs to the device, not to the process.** With
 `--device-folders` (the launcher passes it; the desktop app keeps the user's choices in its app data folder, `card-folders.json`) every load
