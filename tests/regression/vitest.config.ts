@@ -10,6 +10,10 @@ const at = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 // Files under modules/ and tests/conformance/ have no node_modules: resolve the workspace packages here.
 const alias = [
   { find: /^@digi\/regression\/(.*)$/, replacement: `${at('.').replace(/\/$/, '')}/$1` },
+  {
+    find: /^@digi\/test-support\/commit-records$/,
+    replacement: at('../../packages/test-support/src/commit-records.ts'),
+  },
   { find: /^@digi\/test-support$/, replacement: at('../../packages/test-support/src/index.ts') },
   { find: /^@digi\/control-client$/, replacement: at('../../packages/control-client/src/index.ts') },
   { find: /^@digi\/dkbs$/, replacement: at('../../packages/dkbs/src/index.ts') },

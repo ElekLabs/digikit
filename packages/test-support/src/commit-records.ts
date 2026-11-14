@@ -4,7 +4,6 @@
 //
 // `module:check` takes `[uses]` and the gallery param names from the output, and conformance its cases (slot, min, max, default).
 // The CLI that boots a device and calls this is tools/devtools/commit_records.ts.
-import { execFile } from 'node:child_process';
 import type { LogEvent } from './events.ts';
 
 /** What the `MODULE_COMMIT` event says of one committed module. */
@@ -71,15 +70,13 @@ export interface Records {
   effects: Record<string, unknown>[];
 }
 
-/** Decode a record block with the patchkit binary `patchkit`. */
-export function decodeRecords(patchkit: string, block: Uint8Array): Promise<Records> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(patchkit, ['records', '--json', '-'], { maxBuffer: 64 << 20 }, (error, stdout, stderr) => {
-      if (error) reject(new Error(`patchkit records: ${stderr.trim() || error.message}`));
-      else resolve(JSON.parse(stdout) as Records);
-    });
-    child.stdin!.end(block);
-  });
+/** Runs `patchkit records --json -` with BLOCK on stdin and returns stdout (the caller owns the patchkit spawn: runtime/patchkit.ts). */
+export type RecordsExec = (args: string[], options: { input: Uint8Array }) => Promise<{ stdout: string }>;
+
+/** Decode a record block with `patchkit records`. */
+export async function decodeRecords(exec: RecordsExec, block: Uint8Array): Promise<Records> {
+  const { stdout } = await exec(['records', '--json', '-'], { input: block });
+  return JSON.parse(stdout) as Records;
 }
 
 /**
@@ -89,10 +86,10 @@ export function decodeRecords(patchkit: string, block: Uint8Array): Promise<Reco
 export async function committedRecords(
   event: LogEvent,
   peek: (addr: number) => Promise<number | null>,
-  patchkit: string,
+  exec: RecordsExec,
 ): Promise<{ commit: CommitEvent; records: Records }> {
   const commit = decodeCommitEvent(event);
-  const records = await decodeRecords(patchkit, await readBlock(peek, commit.addr, commit.size));
+  const records = await decodeRecords(exec, await readBlock(peek, commit.addr, commit.size));
   const got = [records.counts.machine_rows, records.counts.param_rows, records.counts.page_rows];
   const want = [commit.machineRows, commit.paramRows, commit.pageRows];
   if (got.some((n, i) => n !== want[i])) {

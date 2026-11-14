@@ -9,10 +9,11 @@ import { describe, expect, test } from 'vitest';
 import { withSession } from '../support.ts';
 import { liveProtocol } from './protocol.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
+import { optInPatchkit } from './patchkit.ts';
 
 const root = repoRoot();
 const binary = process.env.DIGI_CATALOG_EMUD;
-const patchkit = process.env.DIGI_PATCHKIT_BIN;
+const patchkit = optInPatchkit();
 const enabled = Boolean(binary && patchkit);
 const card = process.env.DIGI_CATALOG_CARD;
 const exec = promisify(execFile);

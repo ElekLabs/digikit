@@ -24,7 +24,7 @@ vi.mock('node:child_process', () => ({
 vi.mock('../support.ts', () => ({ withReusablePatchedSession: fake.fixture, expectNoGuardHits: fake.noGuardHits }));
 vi.mock('../runtime/runtime-plan.ts', async (original) => ({
   ...(await original<object>()),
-  prepareRuntimePlanOffline: fake.prepare,
+  prepareRuntimePlanListedOffline: fake.prepare,
 }));
 vi.mock('../runtime/write-safety.ts', () => ({ runtimeWatchEnv: fake.watchEnv, runtimeSafety: fake.safety }));
 vi.mock('../runtime/fx-live.ts', async (original) => ({

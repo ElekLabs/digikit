@@ -1,0 +1,83 @@
+{
+  "_comment": "Static module root lists that tests patch into an image with `apply --modules` (card-rig roots, fx-session image.modules). patchkit:device-images patches each set on each acceptance device (devices limits it) and writes the image, plan and address map under dist/bytes/images/<device>/<id>.*, with their hashes in images.sha256; runtime-plan.ts copies them. A list that is not here fails loudly; a list built at test time goes through runtime-plan-modules.ts (patchkit live).",
+  "sets": [
+    {
+      "id": "rt",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp"]
+    },
+    {
+      "id": "rt-menu",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/digikit-menu"]
+    },
+    {
+      "id": "coupled",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/input", "core/dynfx", "core/fxpages"]
+    },
+    {
+      "id": "ib",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/introblank"]
+    },
+    {
+      "id": "rt-usb-bulk",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/usb-bulk"]
+    },
+    {
+      "id": "rt-usb-bulk-audio",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/usb-bulk", "core/usb-bulk-audio"]
+    },
+    {
+      "id": "rt-usb-bulk-sdhc",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/usb-bulk", "core/sdhc-large"]
+    },
+    {
+      "id": "rt-usb-bulk-sdhc-pd",
+      "roots": [
+        "core/runtime",
+        "core/dynreg",
+        "core/dyndsp",
+        "core/usb-bulk",
+        "core/sdhc-large",
+        "core/plusdrive-write"
+      ],
+      "devices": ["dt2"]
+    },
+    {
+      "id": "usb-fast",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/usb-bulk", "core/usb-bulk-audio", "core/sdhc-large"]
+    },
+    {
+      "id": "usb-fast-pd",
+      "roots": [
+        "core/runtime",
+        "core/dynreg",
+        "core/dyndsp",
+        "core/usb-bulk",
+        "core/usb-bulk-audio",
+        "core/sdhc-large",
+        "core/plusdrive-write"
+      ],
+      "devices": ["dt2"]
+    },
+    {
+      "id": "rt-pd",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/plusdrive-write"],
+      "devices": ["dt2"]
+    },
+    {
+      "id": "rt-dynfx",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx"]
+    },
+    {
+      "id": "rt-dynfx-fxpages",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages"]
+    },
+    {
+      "id": "rt-dynfx-fxpages-menu",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/digikit-menu"]
+    },
+    {
+      "id": "fx-kit-persist",
+      "roots": ["core/runtime", "core/dynfx", "core/fxpages"]
+    }
+  ]
+}
