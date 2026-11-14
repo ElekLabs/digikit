@@ -16,8 +16,11 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
 mod arena;
+pub mod services;
+pub use services::fx::{fxpage, fxsend};
+pub use services::machines::{assign, nativepage, pageclick, paramapi};
+pub use services::samples::{peakwin, tracks};
 pub mod collect;
-mod assign;
 pub mod boot;
 pub mod card;
 pub mod crash;
@@ -25,16 +28,10 @@ pub mod dlog;
 mod dsp;
 pub mod entry;
 mod gen_abi_check;
-pub mod fxpage;
-mod fxsend;
 mod loader;
-pub mod pageclick;
-pub mod nativepage;
-pub mod paramapi;
 pub mod registry;
 pub mod scan;
 pub mod settings;
-mod tracks;
 mod files;
 mod hash32;
 pub mod aux;
@@ -49,7 +46,6 @@ mod table;
 pub mod upload;
 mod watch;
 mod worker;
-mod peakwin;
 
 #[cfg(not(test))]
 #[panic_handler]
