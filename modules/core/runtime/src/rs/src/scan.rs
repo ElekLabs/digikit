@@ -2,7 +2,8 @@
 //! (accepted by this runtime and device, the needs, loaded), `dkrt_fit` judges a ticked set against the device's limits. The rules are the menu's
 //! of before (docs/plans/what-fits.md); the fit rule and its texts are `dkrt-fit`, the needs are `dkneeds`.
 
-use crate::{DKRT_PATHS, MAX_MODULES, device, init_once, st, store};
+use crate::{DKRT_PATHS, MAX_MODULES, PLATFORM, device, init_once, st, store};
+use dkrt_abi::platform::Tasking;
 use core::ptr::{addr_of, addr_of_mut, write_volatile};
 use dkneeds::{Bytes, needs_of};
 use dkrt_fit as fit;
@@ -22,7 +23,7 @@ const DKM_MAGIC: u32 = 0x444b_4d46; // "DKMF"
 
 unsafe fn sect() -> *mut u8 {
     if (*addr_of!(SECT)).is_null() {
-        *addr_of_mut!(SECT) = dkfw::mem::new(512);
+        *addr_of_mut!(SECT) = PLATFORM.alloc(512);
     }
     *addr_of!(SECT)
 }

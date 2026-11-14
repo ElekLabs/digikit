@@ -13,6 +13,10 @@ use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
 pub use dkrt_abi::core_api::{CoreApi, LinkWriter, JOB_E_CANCELLED, LOG_INFO};
 
+// The platform facts a service may read (the device profile, the interrupt mask, the sample-pool provider): the only platform names a service has.
+pub use crate::platform::PLATFORM;
+pub use dkrt_abi::platform::{Platform, SamplePool};
+
 // The C-API glue of the services' imports (`dk_sample_pool_*`): the handle a module holds and the record behind a context.
 pub(crate) use crate::entry::{client, give, own_rec};
 
@@ -33,15 +37,6 @@ pub struct RealCore;
 pub const REAL_CORE: RealCore = RealCore;
 
 impl CoreApi for RealCore {
-    fn device(&self) -> u32 {
-        crate::device()
-    }
-    fn irq_mask(&self) -> u32 {
-        crate::irq_mask()
-    }
-    fn irq_restore(&self, sr: u32) {
-        crate::irq_restore(sr)
-    }
     unsafe fn dynreg(&self) -> *const u32 {
         registry::info()
     }
@@ -195,7 +190,6 @@ mod fake {
         pub claim: Cell<u8>,
         pub name: String,
         pub fx_table: Vec<u32>,
-        pub device: u32,
         reg: *mut RegState,
         dsp: *mut DspState,
     }
@@ -217,7 +211,6 @@ mod fake {
                 claim: Cell::new(0),
                 name: String::from("fake\0"),
                 fx_table: std::vec![0; 8],
-                device: 1,
                 reg,
                 dsp,
             }
@@ -231,13 +224,6 @@ mod fake {
     }
 
     impl CoreApi for FakeCore {
-        fn device(&self) -> u32 {
-            self.device
-        }
-        fn irq_mask(&self) -> u32 {
-            0
-        }
-        fn irq_restore(&self, _sr: u32) {}
         unsafe fn dynreg(&self) -> *const u32 {
             core::ptr::null()
         }

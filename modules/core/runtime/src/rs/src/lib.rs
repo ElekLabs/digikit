@@ -89,12 +89,7 @@ const SOUND_WORDS_AT: u32 = 0x14;
 /// own accessors, plain reads. The words are big-endian s16 at a byte address that may be odd on the Digitone II (stride 0x48b), so they are read byte by byte.
 /// -2: no project yet; -3: the track has no record (a kit is loading): `out` is not written.
 pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> i32 {
-    let p = dkfw::project::singleton();
-    if p == 0 {
-        return -2;
-    }
-    let track = dkfw::page::view_track(dkfw::project::settings(p) as *const u8).min(15);
-    let sound = dkfw::page::native_track_sound(dkfw::project::active_kit(p) as *mut u8, track) as u32;
+    let Some((track, sound)) = platform::selected_sound() else { return -2 };
     let vt = read_volatile(sound as *const u32);
     let record: unsafe extern "C" fn(u32) -> u32 = core::mem::transmute(read_volatile((vt + SOUND_VT_RECORD) as *const u32) as usize);
     let rec = record(sound);
@@ -117,11 +112,7 @@ pub(crate) unsafe extern "C" fn imp_param_set(track: u32, word: u32, raw: i32) -
 
 #[cfg(test)]
 mod cleanup_tests;
+#[cfg(test)]
+mod fake_platform;
 
-#[cfg(test)]
-pub fn irq_mask() -> u32 { 0 }
-#[cfg(test)]
-pub fn irq_restore(_: u32) {}
 
-#[cfg(test)]
-pub unsafe fn fw_blocks() -> Option<u32> { None }

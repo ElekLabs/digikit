@@ -17,7 +17,8 @@
 //! copied into the settings key `dk/fault` (`store_fault`), which stays until a newer fault replaces it; the ABOUT page reads that key.
 use crate::dlog;
 use dkrt_sdk::fault::Hang;
-use crate::{dkrt_flush, dkrt_soft_reset, st};
+use crate::{st, PLATFORM};
+use dkrt_abi::platform::Platform;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::device::{DDR_BYTES, DDR_CACHED_BASE, KEEP_BASE, KEEP_BYTES};
 use dkrt_sdk::store::crc32_of;
@@ -107,7 +108,7 @@ pub fn seen() -> &'static CrashSeen {
 /// The address of the hook word the anchor's literal holds, when it lies in DDR and is word aligned.
 unsafe fn hook_word() -> Option<*mut u32> {
     // `EXC_HOOK_LIT`: the 4-byte literal in the firmware's default exception handler whose value is the address of the hook word.
-    let lit = core::hint::black_box(addr_of!(dkfw::rtos::EXC_HOOK_LIT) as usize) as u32;
+    let lit = core::hint::black_box(crate::platform::exc_hook_literal()) as u32;
     if lit == 0 {
         return None;
     }
@@ -142,8 +143,8 @@ pub unsafe extern "C" fn dkrt_exc(frame: *const u32, saved: *const u32) -> ! {
     if faults != 0 {
         // a fault inside the handler: keep the first record (with the count) and reset
         write_volatile(r.add(W_FAULTS), faults + 1);
-        dkrt_flush(KEEP_BASE, 64);
-        dkrt_soft_reset()
+        PLATFORM.flush(KEEP_BASE, 64);
+        PLATFORM.soft_reset()
     }
     write_volatile(r.add(W_MAGIC), 0); // an older record is not valid while this one is written
     let w0 = *frame;
@@ -275,9 +276,9 @@ unsafe fn seal(reset: bool) {
     let crc = crc32_of(v.as_ptr() as *const u8, W_CRC * 4);
     write_volatile(r.add(W_CRC), crc);
     write_volatile(r.add(W_MAGIC), MAGIC); // the record is valid from here
-    dkrt_flush(KEEP_BASE, (REC_WORDS * 4) as u32);
+    PLATFORM.flush(KEEP_BASE, (REC_WORDS * 4) as u32);
     if reset {
-        dkrt_soft_reset()
+        PLATFORM.soft_reset()
     }
 }
 
@@ -327,10 +328,15 @@ pub fn panic() -> ! {
             k += 1;
         }
         // in safe mode a reset would loop; during an OS upgrade the device must not reset
-        let reset = crate::boot::info().safe == 0 && !crate::os_upgrade_active();
+        let reset = panic_resets(&PLATFORM, crate::boot::info().safe);
         seal(reset);
         loop {}
     }
+}
+
+/// Does a panic end in a soft reset? Not in safe mode (a reset would loop) and not during an OS upgrade (the device must not reset).
+pub(crate) fn panic_resets<P: Platform>(p: &P, safe: u32) -> bool {
+    safe == 0 && !p.os_upgrade_active()
 }
 
 /// Write the hang record of a stopped DSP (version 2, kind 2) into the keep area and soft-reset. Never returns.
@@ -405,7 +411,7 @@ pub unsafe fn at_boot() -> bool {
     }
     // clear first: a record that crashes the boot again must not be found a third time
     write_volatile(rec().add(W_MAGIC), 0);
-    dkrt_flush(KEEP_BASE, 64);
+    PLATFORM.flush(KEEP_BASE, 64);
     if v[W_VERSION] != VERSION || crc32_of(v.as_ptr() as *const u8, W_CRC * 4) != v[W_CRC] {
         c.bad = 1;
         dlog::ev(logk::CRASH_FOUND, logk::F_ERROR, [0, 0, 0, 0, 0xbad]);
@@ -543,6 +549,6 @@ pub unsafe fn keep_probe() {
     write_volatile(p, PROBE_MAGIC);
     write_volatile(p.add(1), ngen);
     write_volatile(p.add(2), !ngen);
-    dkrt_flush(KEEP_BASE + PROBE_AT, 16);
+    PLATFORM.flush(KEEP_BASE + PROBE_AT, 16);
     let _ = KEEP_BYTES;
 }

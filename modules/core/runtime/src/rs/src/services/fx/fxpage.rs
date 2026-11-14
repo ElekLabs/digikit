@@ -23,7 +23,7 @@
 //! Everything runs in the UI task. No float arithmetic runs in an interrupt; the arithmetic is the compiler's soft float.
 use super::dsp as fxdsp;
 use super::fxsend;
-use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
+use crate::core_api::{CoreApi, LinkWriter, Platform, PLATFORM, REAL_CORE};
 use dkrt_abi::mem::{cstr_len, iw, rd, rd16, rd32, wr, wr16};
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
@@ -126,7 +126,7 @@ pub(crate) unsafe fn info() -> *const u32 {
         return core::ptr::null();
     }
     let p = a as *const u32;
-    if read_volatile(p.add(w::MAGIC)) != INFO_MAGIC || read_volatile(p.add(w::DEVICE)) != REAL_CORE.device() {
+    if read_volatile(p.add(w::MAGIC)) != INFO_MAGIC || read_volatile(p.add(w::DEVICE)) != PLATFORM.device_id() {
         return core::ptr::null();
     }
     p

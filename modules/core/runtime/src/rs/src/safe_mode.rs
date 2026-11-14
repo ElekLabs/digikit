@@ -5,6 +5,7 @@ use crate::boot::{info, INFO_MAGIC};
 use crate::dlog;
 use crate::selection::{current, update, Choice};
 use core::ptr::addr_of;
+use dkrt_abi::platform::Platform;
 use dkrt_sdk::*;
 
 /// The stable period in DSP blocks (`STABLE_BLOCKS`). A static so that the scenarios can shorten it (they poke it; nothing else writes it).
@@ -25,7 +26,7 @@ const DEAD_CLOCK_PASSES: u32 = 1800;
 /// Is the safe-mode key down? Reads the stock key state byte. REC is key 0x13, panel channel 2 bit 2. Returns 0 before the first
 /// channel-2 report. Hardware timing not yet proved **[O]**.
 pub(crate) unsafe fn key_held() -> bool {
-    dkfw::input::key_down(SAFE_KEY_CODE) != 0
+    crate::PLATFORM.key_down(SAFE_KEY_CODE)
 }
 
 /// Every pass of the UI loop (`dkrt_tick`). The first pass notes the block count; the boot counter goes back to 0 when the session has run

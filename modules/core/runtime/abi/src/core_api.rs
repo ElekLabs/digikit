@@ -11,7 +11,7 @@
 //! sample writer checks it before it starts one); `link_claimed` asks for one writer (the effect writers check the sample writer). Interim until the R6
 //! transfer queue.
 //!
-//! Marked R3: `device`, `irq_mask` and `irq_restore` are platform calls. They move to the Platform interface when the platform adapter exists.
+//! Platform facts (the device profile, the interrupt mask) are not here: they belong to `platform::Platform`. A service names them through `crate::core_api::PLATFORM`.
 use crate::dsp::DspState;
 use crate::registry::RegState;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
@@ -48,13 +48,6 @@ impl LinkWriter {
 pub const FX_CLAIMS: u8 = 3;
 
 pub trait CoreApi {
-    // ---- platform (R3) ---------------------------------------------------------------------------------------------------
-    /// The digikit id of the device (1 Digitakt II, 2 Digitone II).
-    fn device(&self) -> u32;
-    /// Mask interrupts; the old status register.
-    fn irq_mask(&self) -> u32;
-    fn irq_restore(&self, sr: u32);
-
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
     /// The words of `dynreg_info` (`registry::w`); null without a registry.
     unsafe fn dynreg(&self) -> *const u32;

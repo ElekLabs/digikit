@@ -3,6 +3,7 @@
 use crate::handlers::{ServiceList, Services};
 use crate::dlog::{ev, sink_present, word_of, INFO};
 use crate::{arena, fw_blocks, st};
+use dkrt_abi::platform::Platform;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::fault::{Hang, DIAG_HEARTBEAT, DIAG_MAGIC, DIAG_WORDS};
 use dkrt_sdk::*;
@@ -113,6 +114,11 @@ const HANG_WAIT_PASSES: u32 = 40;
 #[no_mangle]
 pub static mut DKRT_DSP_STOPPED: u32 = 0;
 
+/// May a stopped DSP end in the hang record and a soft reset? Not while the firmware takes or flashes an OS upgrade (finding 77, section 5).
+pub(crate) fn hang_may_reset<P: Platform>(p: &P) -> bool {
+    !p.os_upgrade_active()
+}
+
 fn due(now: u32, at: u32) -> bool {
     (now.wrapping_sub(at) as i32) >= 0
 }
@@ -154,7 +160,7 @@ pub unsafe fn tick() {
             w.hang_wait -= 1;
             // not while the firmware takes or flashes an OS upgrade: a reset in the flash write would leave the container half written (finding 77, section 5);
             // the stop stays in the log
-            if w.hang_wait == 0 && !crate::os_upgrade_active() {
+            if w.hang_wait == 0 && hang_may_reset(&crate::PLATFORM) {
                 write_hang(w);
             }
         }

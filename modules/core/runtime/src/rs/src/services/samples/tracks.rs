@@ -22,7 +22,7 @@
 //!
 //! TODO (not wired yet): persistence of the selections to the digikit store (they live in memory per project now); a request mailbox
 //! so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
-use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
+use crate::core_api::{CoreApi, LinkWriter, Platform, SamplePool, PLATFORM, REAL_CORE};
 use core::hint::black_box;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::files::{HASH_ELEKTRON32, SAMPLES};
@@ -32,7 +32,6 @@ use dkrt_sdk::sample_tracks::{
 };
 use dkrt_sdk::{logk, E_CONTRACT, E_DSP_XFER, E_NOT_FOUND, E_READ, E_SEL_PATH};
 
-pub const DKPOOL_VERSION: u32 = 1;
 pub(crate) const CLIENTS: usize = 2;
 const ENTRIES: usize = 16;
 const PROJECTS: usize = 4;
@@ -65,24 +64,14 @@ static mut LIVE: [bool; CLIENTS] = [false; CLIENTS];
 /// The client slot of a module that is taken down (`usize::MAX`: none): nothing reads its tracks any more, so close drains at once and
 /// writes are dropped. Other clients are stepped normally meanwhile.
 static mut FORCE: usize = usize::MAX;
-/// 0 not checked, 1 usable, 2 absent or wrong version.
-static mut POOL: u8 = 0;
 
 pub(crate) unsafe fn core_() -> &'static mut Core<CLIENTS, ENTRIES, PROJECTS> {
     &mut *addr_of_mut!(CORE)
 }
 
-/// Is a backing adapter of the right version in the image?
+/// Is a backing adapter of the right version in the image? (The platform's sample-pool provider.)
 unsafe fn pool_ok() -> bool {
-    if POOL == 0 {
-        let present = black_box(dkpool_version as *const () as usize) != 0
-            && black_box(dkpool_load as *const () as usize) != 0
-            && black_box(dkpool_release as *const () as usize) != 0
-            && black_box(dkpool_check as *const () as usize) != 0
-            && black_box(dkpool_free_frames as *const () as usize) != 0;
-        POOL = if present && dkpool_version() == DKPOOL_VERSION { 1 } else { 2 };
-    }
-    POOL == 1
+    SamplePool::present(&PLATFORM)
 }
 
 // ---- table writes over the DSP link -------------------------------------------------------------------------------------------
@@ -223,7 +212,7 @@ type FsMeta = unsafe extern "C" fn(u32, *mut u32) -> i32;
 
 /// The device's sample root (`select` paths are root-relative; the runtime keeps the rooted form).
 fn root() -> &'static [u8] {
-    if REAL_CORE.device() == 2 {
+    if PLATFORM.samples_in_store() {
         ROOT_DN2
     } else {
         ROOT_DT2
@@ -245,11 +234,8 @@ unsafe fn probe_store(path: &[u8], head: Option<&mut [u8; 64]>) -> Result<FileId
 /// Open `path` (not NUL-terminated), take the identity of its listing row (size and the stored hash by entry id, as `files.rs` lists it)
 /// and, when `head` is given, read the 64 header bytes. DT2 only: the store route of DN2 is `probe_store`.
 unsafe fn probe(path: &[u8], head: Option<&mut [u8; 64]>) -> Result<FileId, i32> {
-    if REAL_CORE.device() == 2 {
+    if PLATFORM.samples_in_store() {
         return probe_store(path, head);
-    }
-    if REAL_CORE.device() != 1 {
-        return Err(E_CONTRACT);
     }
     if path.is_empty() || path.len() >= dkrt_sdk::sample_tracks::PATH {
         return Err(E_SEL_PATH);
@@ -306,7 +292,7 @@ impl Env for Device {
         let mut head = [0u8; 64];
         let id = unsafe { probe(path, Some(&mut head))? };
         // Size and format only: no PCM is read here (it can be megabytes), the pool adapter reads it.
-        if REAL_CORE.device() == 2 {
+        if PLATFORM.samples_in_store() {
             return store_inspect(id.size, &id.hash, &head);
         }
         let (frames, channels) = dkrt_sdk::sample::native_header(&head, id.size)?;
@@ -556,9 +542,9 @@ pub unsafe fn pool_add(handle: u32, path: *const u8) -> i32 {
         Ok(n) => n,
         Err(e) => return e,
     };
-    let sr = REAL_CORE.irq_mask();
+    let sr = PLATFORM.irq_mask();
     let r = core_().pool_add(c, &full[..n]);
-    REAL_CORE.irq_restore(sr);
+    PLATFORM.irq_restore(sr);
     r
 }
 
@@ -579,9 +565,9 @@ pub unsafe fn pool_set(handle: u32, index: u32, path: *const u8) -> i32 {
         Ok(n) => n,
         Err(e) => return e,
     };
-    let sr = REAL_CORE.irq_mask();
+    let sr = PLATFORM.irq_mask();
     let r = core_().pool_set(c, index as usize, &full[..n]);
-    REAL_CORE.irq_restore(sr);
+    PLATFORM.irq_restore(sr);
     r
 }
 
@@ -589,9 +575,9 @@ pub unsafe fn pool_set(handle: u32, index: u32, path: *const u8) -> i32 {
 pub unsafe fn pool_clear(handle: u32, track: u32) -> i32 {
     match client(handle) {
         Ok(c) => {
-            let sr = REAL_CORE.irq_mask();
+            let sr = PLATFORM.irq_mask();
             let r = core_().unbind(c, track as usize);
-            REAL_CORE.irq_restore(sr);
+            PLATFORM.irq_restore(sr);
             r
         }
         Err(e) => e,
@@ -653,7 +639,7 @@ pub unsafe fn info(handle: u32, track: u32, out: *mut u8) -> i32 {
 
 /// One step of every track, in the UI loop. Without a backing adapter nothing runs.
 pub unsafe fn tick() {
-    if POOL == 2 || !pool_ok() {
+    if !pool_ok() {
         return;
     }
     // Optional on its own: the adapter delivers completions and finds a stock reset here, before the runtime steps the tracks.

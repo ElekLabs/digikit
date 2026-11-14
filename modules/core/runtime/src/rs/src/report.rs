@@ -6,6 +6,7 @@ use crate::state::{init_once, MAX_MODULES, STAGE_BYTES};
 use crate::handlers::{CapSink, ServiceList, Services};
 use crate::{arena, boot, card, fault, dlog, dsp, settings, speed, store, watch};
 use core::ptr::{addr_of, read_volatile};
+use dkrt_abi::platform::Platform;
 use dkrt_sdk::*;
 
 extern "C" {
@@ -33,15 +34,10 @@ pub(crate) unsafe extern "C" fn debug_peek(i: u32, out: *mut u32) -> u32 {
 /// Import `dk_debug_track_type`: the machine type of a track of the active kit, from the firmware's own accessors (read-only); -1 past track 15 or when the
 /// firmware has no type for it, -2 when there is no project yet.
 pub(crate) unsafe extern "C" fn debug_track_type(track: u32) -> i32 {
-    // `Project *f(void)`, `Kit *f(Project *)` (the active kit), `int f(Kit *, int track)` (-1: no such track)
-    let p = dkfw::project::singleton();
-    if p == 0 {
-        return -2;
+    match crate::PLATFORM.track_type(track) {
+        None => -2,
+        Some(t) => t,
     }
-    if track >= 16 {
-        return -1;
-    }
-    dkfw::project::track_type(dkfw::project::active_kit(p), track as i32) as i32
 }
 
 

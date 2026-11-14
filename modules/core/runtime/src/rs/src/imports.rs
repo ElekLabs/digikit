@@ -85,9 +85,9 @@ import_table! {
     ("dk_log_event", dlog::dk_log_event),
     ("dk_sink_set", dlog::dk_sink_set),
     ("dk_time_blocks", dkrt_blocks),
-    ("dk_fw_alloc", dkfw::mem::new),
-    ("dk_fw_free", dkfw::mem::free),
-    ("dk_fw_block_read", dkfw::storage::block_read),
+    ("dk_fw_alloc", crate::platform::fw_alloc),
+    ("dk_fw_free", crate::platform::fw_free),
+    ("dk_fw_block_read", crate::platform::fw_block_read),
     ("dk_files_read", entry::dk_files_read),
     ("dk_host_register", imp_host_register),
     ("dk_module_ctx_device", entry::dk_module_ctx_device),
@@ -155,9 +155,9 @@ const _: dkrt_sdk::api::DkLogFn = imp_log;
 const _: dkrt_sdk::api::DkLogEventFn = dlog::dk_log_event;
 const _: dkrt_sdk::api::DkSinkSetFn = dlog::dk_sink_set;
 const _: dkrt_sdk::api::DkTimeBlocksFn = dkrt_blocks;
-const _: dkrt_sdk::api::DkFwAllocFn = dkfw::mem::new;
-const _: dkrt_sdk::api::DkFwFreeFn = dkfw::mem::free;
-const _: dkrt_sdk::api::DkFwBlockReadFn = dkfw::storage::block_read;
+const _: dkrt_sdk::api::DkFwAllocFn = crate::platform::fw_alloc;
+const _: dkrt_sdk::api::DkFwFreeFn = crate::platform::fw_free;
+const _: dkrt_sdk::api::DkFwBlockReadFn = crate::platform::fw_block_read;
 const _: dkrt_sdk::api::DkFilesReadFn = entry::dk_files_read;
 const _: dkrt_sdk::api::DkHostRegisterFn = imp_host_register;
 const _: dkrt_sdk::api::DkModuleCtxDeviceFn = entry::dk_module_ctx_device;

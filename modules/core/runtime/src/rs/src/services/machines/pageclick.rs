@@ -12,6 +12,8 @@
 //!
 //! Without any action or native page, the hooks return after their armed checks.
 use super::paramapi::{self, Ctx, Held};
+#[cfg(not(test))]
+use super::fw::PageFw;
 use crate::core_api::CoreApi;
 #[cfg(not(test))]
 use crate::core_api::REAL_CORE;
@@ -149,7 +151,7 @@ pub unsafe fn set_arg(k: usize, arg: u32) {
     }
 }
 
-unsafe fn word(p: *const u8, off: usize) -> u32 {
+pub(super) unsafe fn word(p: *const u8, off: usize) -> u32 {
     read_volatile(p.add(off) as *const u32)
 }
 
@@ -194,7 +196,7 @@ unsafe fn click(view: *const u8, enc: u32) {
     let code_of: unsafe extern "C" fn(*const u8, u32) -> i32 = core::mem::transmute(word(vt, 4 * VT_PARAM_CODE) as usize);
     let code = code_of(view, enc);
     let first = REAL_CORE.param_first();
-    let track = || dkfw::page::view_track(word(view, VIEW_TRACK_REF) as *const u8);
+    let track = || paramapi::Fw::view_track(&PageFw, word(view, VIEW_TRACK_REF) as usize);
     if let Some((callback, track)) = resolve(&*addr_of!(ACTIONS), first, code, track) {
         *addr_of_mut!(PENDING) = Pending { callback, track, view: view as usize, code: code as u32 };
     }
@@ -236,53 +238,6 @@ pub unsafe fn tick() {
 
 #[cfg(test)]
 pub unsafe fn tick() {}
-
-/// The page's own functions, as a knob turn uses them (docs/design/ui-rules.md, "Runtime API for parameter-driven flows").
-#[cfg(not(test))]
-struct PageFw;
-
-/// Vtable slots of the page (`view`) and of its parameter object.
-#[cfg(not(test))]
-const VT_PAGE_VALUE: usize = 0x54;
-#[cfg(not(test))]
-const VT_PAGE_OBJECT: usize = 0xc4;
-#[cfg(not(test))]
-const VT_OBJECT_VALUE: usize = 0x28;
-
-#[cfg(not(test))]
-unsafe fn vcall(obj: usize, off: usize) -> usize {
-    word(word(obj as *const u8, 0) as *const u8, off) as usize
-}
-
-#[cfg(not(test))]
-impl paramapi::Fw for PageFw {
-    fn mode_key_held(&self) -> bool {
-        paramapi::MODE_KEYS.iter().any(|&k| unsafe { dkfw::input::key_down(k) } != 0)
-    }
-    fn page_value(&self, view: usize, code: u32) -> i32 {
-        unsafe {
-            let f: unsafe extern "C" fn(usize, u32, i32) -> i32 = core::mem::transmute(vcall(view, VT_PAGE_VALUE));
-            f(view, code, -1)
-        }
-    }
-    fn object(&self, view: usize, code: u32, track: u32) -> usize {
-        unsafe {
-            let f: unsafe extern "C" fn(usize, u32, u32) -> usize = core::mem::transmute(vcall(view, VT_PAGE_OBJECT));
-            f(view, code, track)
-        }
-    }
-    fn object_value(&self, obj: usize, code: u32) -> i32 {
-        unsafe {
-            let f: unsafe extern "C" fn(usize, u32) -> i32 = core::mem::transmute(vcall(obj, VT_OBJECT_VALUE));
-            f(obj, code)
-        }
-    }
-    fn store(&self, obj: usize, code: u32, raw: i32, track: u32) {
-        unsafe {
-            dkfw::param::set_value(obj as *const u8, code, raw, track, 1, 1, 1);
-        }
-    }
-}
 
 /// `dk_param_get`.
 #[cfg(not(test))]

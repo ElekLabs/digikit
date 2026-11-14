@@ -12,7 +12,7 @@ Rules:
             apps/ -> app, runtime/ -> runtime, expansion/ -> installer.
   sources   Content modules (modules/machines, modules/fx, modules/tools, tests/fixtures/modules) and apps include only
             their own files and the SDK (sdk/include, sdk/dsp/contract). Apps may also include dkrt.h (runtime) and dk_ui_core.h
-            (core/ui). Only runtime, installer and adapters include the firmware bindings (dk_fw_* headers, the dkfw crate).
+            (core/ui). Only the runtime's platform file, the installer and adapters include the firmware bindings (dk_fw_* headers, the dkfw crate).
             C, ColdFire and SHARC assembly (`#include`, `.include`) and Rust (`dkfw`, path dependencies) are read.
   objects   The undefined symbols of the built objects of apps and content modules are SDK imports, dkrt_*, dk_ui_*,
             dk_app_* or the SHARC externs the SDK documents. A symbol never names a firmware anchor, and `[object.externs]`
@@ -26,6 +26,9 @@ Rules:
   arrows    Inside the runtime crate (modules/core/runtime/src/rs/src), a service (services/NAME) names no other service folder and no core
             module except `crate::core_api` (the interface to the core: CoreApi, RealCore, FakeCore and the few core functions it re-exports); pure types
             come from the crate dkrt-abi. The core reaches a service only through `handlers.rs` (`Services`, `exports`).
+  platform  Inside the runtime crate, only `platform.rs` (the real platform, L1) and an adapter file named `fw.rs` name the firmware crate dkfw; the rest
+            of the core and the services use the `Platform` trait (`dkrt-abi`). No runtime file but `platform.rs` compares the device id with a number
+            (`device() == 1`): the code asks the device profile (`samples_in_store()`), whose values come from the device files.
   imports   Every function of <dk/platform/ui.h> is an `[[import]]` of sdk/sdk.toml with `requires = "core/ui"`, and every import
             with `requires` is in the runtime's `optional` list, so the runtime can link it by name (or hand out its stub).
 
@@ -244,7 +247,7 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
         role = m.mod.get("role")
         is_app = (kind == "core" and role == "app") or m.id in APP_LIKE
         if kind == "core" and not is_app:
-            continue  # runtime, installer and adapters may use the firmware bindings
+            continue  # installer and adapters may use the firmware bindings; the runtime's own rule is `check_runtime_platform`
         who = "an app" if is_app else "a content module"
         own = m.dir.resolve()
         sdk = (root / "sdk").resolve()
@@ -650,6 +653,47 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
     return out
 
 
+# L1 files of the runtime crate: the real platform, and adapter files of a service (`fw.rs`), the only places that name the firmware crate.
+RT_PLATFORM_FILE = "platform.rs"
+RT_ADAPTER_FILE = "fw.rs"
+RT_DEVICE_COMPARE = re.compile(
+    r"\b(?:device|device_id)\s*\(\s*\)\s*[!=]=\s*\d|\bprofile\s*\(\s*\)\s*\.\s*id\s*[!=]=\s*\d"
+)
+
+
+def check_runtime_platform(root: Path) -> list[Violation]:
+    """The runtime has no firmware calls outside its L1 files (`platform.rs`, an adapter's `fw.rs`) and branches on no device id."""
+    src = root / RT_SRC
+    if not src.is_dir():
+        return []
+    out: list[Violation] = []
+    for f in sorted(src.rglob("*.rs")):
+        r = f.relative_to(src)
+        l1 = r.name == RT_ADAPTER_FILE or r.as_posix() == RT_PLATFORM_FILE
+        text = rust_without_comments(f.read_text(encoding="utf-8"))
+        for n, line in enumerate(text.splitlines(), 1):
+            where = f"{RT_SRC}/{r.as_posix()}:{n}"
+            if not l1 and RS_FW.search(line):
+                out.append(
+                    Violation(
+                        where,
+                        "platform",
+                        "the runtime names the firmware crate dkfw outside platform.rs",
+                        "call it through the Platform trait (dkrt-abi), or put it behind the service's adapter interface in its fw.rs",
+                    )
+                )
+            if r.as_posix() != RT_PLATFORM_FILE and RT_DEVICE_COMPARE.search(line):
+                out.append(
+                    Violation(
+                        where,
+                        "platform",
+                        "the runtime compares the device id outside platform.rs",
+                        "ask the device profile (Platform::samples_in_store, sample_path_max ...); add the fact to the device files and `patchkit gen`",
+                    )
+                )
+    return out
+
+
 def tracked_files(root: Path) -> list[str]:
     """Tracked files (`git ls-files`); outside a git repository, every file except build output."""
     try:
@@ -745,6 +789,7 @@ def check(root: Path = ROOT) -> list[Violation]:
         *check_apps(root, mods),
         *check_imports(root),
         *check_runtime_arrows(root),
+        *check_runtime_platform(root),
         *check_self_contained(root, mods),
     ]
 

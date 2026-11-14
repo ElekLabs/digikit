@@ -513,6 +513,19 @@ pub extern "C" fn dl_tick_cb_drop(start: u32, end: u32) {
     unsafe { assert!(LINK.events.contains(&Event::Fini)); }
 }
 
+/// The other firmware anchors that the platform tests keep reachable: nothing in the host tests may write the card or send MIDI through them
+/// (the tests of platform behaviour use `FakePlatform`), and the effect pages' table is not in the image.
+#[export_name = "cf.storage.fn.block.write"]
+pub extern "C" fn block_write(_: u32, _: u32, _: *const u8) -> i32 {
+    panic!("host tests must not write firmware storage")
+}
+#[export_name = "cf.midi.fn.send"]
+pub extern "C" fn midi_send(_: u32, _: *const u8, _: u32) {
+    panic!("host tests must not send MIDI through the firmware")
+}
+#[no_mangle]
+pub extern "C" fn fxpages_info() {}
+
 #[export_name = "cf.storage.fn.block.read"]
 pub extern "C" fn block_read(_: u32, _: u32, _: *mut u8) -> i32 {
     panic!("host cleanup tests must not read firmware storage")
