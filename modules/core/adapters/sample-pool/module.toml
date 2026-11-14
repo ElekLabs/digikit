@@ -12,8 +12,8 @@ ports = ["dt2-1.17", "dn2-1.12"]
 requires = ["core/runtime"]
 
 [targets]
-"dt2-1.17" = "untested"
-"dn2-1.12" = "untested"
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
 
 # One adapter, one object per device (docs/design/sample-api-1.5.md 2.3 and recommendation 9). Both export the same symbols of
 # src/dkrt_pool.h: dkpool_version, dkpool_load, dkpool_release, dkpool_check, dkpool_free_frames and dkpool_tick, and the optional dkpool_cancel. The runtime lists them as

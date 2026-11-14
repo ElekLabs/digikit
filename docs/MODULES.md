@@ -98,7 +98,7 @@ Today the `runtime`, `samples`, `machines` and `fx` imports resolve to code in t
 
 ### Registry, planned
 
-Plan items R2 "Runtime deletions and split" and R7 "Generic records and service registry" move code out of the runtime into services (`.dks` files). The design:
+Plan items R2 "Runtime deletions and split" and R7 "Generic records and service registry" move code out of the runtime into services (`.dks` files). The layers, the three interfaces and the rule that services do not call each other are in [ARCHITECTURE.md](ARCHITECTURE.md). The design:
 
 - A service declares its name, record kinds, resources, exports and hook table. The runtime fills a registry during boot planning, before any module code runs. There is no run-time registration call.
 - A service loads only when a selected module needs it. Load order follows dependencies.

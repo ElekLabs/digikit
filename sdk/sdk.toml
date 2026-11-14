@@ -695,7 +695,7 @@ service = "samples"
 since = "0.7.0"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, dk_sample_pool **out)"
-doc = "Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none, declares a bank too, or this is not init; `*out` is untouched then."
+doc = "Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none or this is not init; `*out` is untouched then."
 
 [[import]]
 name = "dk_sample_pool_add"
@@ -1488,21 +1488,22 @@ RENAME = 13         # the RENAME command (rename or move one store entry)
 READBACK = 14       # END (and the SDK file_close) read the written file back from the card and compare its content hash with the running hash and BEGIN's before the commit: a host may skip its VERIFY after a successful END
 LOADS = 15          # the LOADS command (the result of each module of the boot selection, and the missing module of an E_IMPORT)
 
-[capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused
-MODULES = 1         # module records; used: loaded; largest: 0
-SELECTION = 2       # paths of the selection record; used: paths this boot loaded
-ARENA = 3           # ColdFire arena bytes; used: taken (headers included); largest: the largest free block's payload
-STAGE = 4           # the staging buffer: the largest .dkm file; used: 0
-DSP_AREA = 5        # DSP run-time area bytes; used: taken, alignment gaps counted as free; largest: the largest free range
-MACHINE_ROWS = 6    # run-time machine types (registry machine rows) in use
-VOICE_ROWS = 7      # DSP voice rows in use
-PARAM_ROWS = 8      # parameter rows core/dynreg reserves, in use
-PAGE_ROWS = 9       # page rows core/dynreg reserves (Digitone II), in use
-FX_SLOTS = 10       # effects in the chain: the device's limit (`[limits] fx_slots`); used: run-time effects claimed (the effect rows of core/dynfx); largest: 0
-MAP_ENTRIES = 11    # sticky machine-type map entries in use
-STORE = 12          # the module and sample store, in KiB (a store can be 22 GiB); used: KiB taken; largest: 0 (BEGIN says E_FULL with the free bytes)
-SETTINGS = 13       # the settings record, in bytes: limit: the area of one copy (`[settings]`); used: the record's bytes (header and entries); largest: 0
-SEND_SLOTS = 14     # effects that run on a send bus: the device's limit (`[limits] send_slots`, 0 when the image has no send page); used: loaded effects with the send route; largest: 0
+[capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused.
+                   # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code); every kind is in CAP_KINDS
+MODULES = { id = 1, fit = true, label = "module records" }   # module records; used: loaded; largest: 0
+SELECTION = { id = 2, fit = true, label = "selection paths" }   # paths of the selection record; used: paths this boot loaded
+ARENA = { id = 3, fit = true, label = "CPU memory" }   # ColdFire arena bytes; used: taken (headers included); largest: the largest free block's payload
+STAGE = { id = 4, fit = true, label = "file" }   # the staging buffer: the largest .dkm file; used: 0
+DSP_AREA = { id = 5, fit = true, label = "DSP memory" }   # DSP run-time area bytes; used: taken, alignment gaps counted as free; largest: the largest free range
+MACHINE_ROWS = { id = 6, fit = true, label = "machine rows" }   # run-time machine types (registry machine rows) in use
+VOICE_ROWS = { id = 7, fit = true, label = "voice rows" }   # DSP voice rows in use
+PARAM_ROWS = { id = 8, fit = true, label = "parameter rows" }   # parameter rows core/dynreg reserves, in use
+PAGE_ROWS = { id = 9, fit = true, label = "page rows" }   # page rows core/dynreg reserves (Digitone II), in use
+FX_SLOTS = { id = 10, fit = true, label = "effect slots" }   # effects in the chain: the device's limit (`[limits] fx_slots`); used: run-time effects claimed (the effect rows of core/dynfx); largest: 0
+MAP_ENTRIES = { id = 11 }   # sticky machine-type map entries in use
+STORE = { id = 12 }   # the module and sample store, in KiB (a store can be 22 GiB); used: KiB taken; largest: 0 (BEGIN says E_FULL with the free bytes)
+SETTINGS = { id = 13 }   # the settings record, in bytes: limit: the area of one copy (`[settings]`); used: the record's bytes (header and entries); largest: 0
+SEND_SLOTS = { id = 14 }   # effects that run on a send bus: the device's limit (`[limits] send_slots`, 0 when the image has no send page); used: loaded effects with the send route; largest: 0
 
 [limits.max]        # contract maxima (capacity plan, docs/plans/capacity-isolation.md): a device's `[limits]` value in devices/*.toml may not exceed them
                     # (`patchkit gen` refuses it). Names are the keys of `[limits]` and, for dsp_area_bytes, of `[digikit]`.

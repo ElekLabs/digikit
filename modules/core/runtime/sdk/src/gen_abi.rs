@@ -245,7 +245,7 @@ const _: () = assert!(offset_of!(DkrtHealth, store_total) == 96, "DkrtHealth.sto
 const _: () = assert!(offset_of!(DkrtHealth, store_used) == 100, "DkrtHealth.store_used");
 const _: () = assert!(offset_of!(DkrtHealth, store_free) == 104, "DkrtHealth.store_free");
 
-/// A store file for the DIGIKIT menu (dkrt_store_list): its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes.
+/// A store file as the runtime lists it: its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes.
 #[repr(C)]
 pub struct DkrtStoreEntry {
     pub path: [u8; 64],
@@ -567,16 +567,10 @@ pub mod sig {
     /// DSP blocks since boot (a 1500 Hz clock); 0 without core/health.
     pub type dkrt_blocks = unsafe extern "C" fn() -> u32;
 
-    /// Register (or, with 0, remove) a function that the UI loop calls once per pass, in the UI task. One caller only.
-    pub type dkrt_poll_set = unsafe extern "C" fn(f: usize);
-
     /// The card check, the debug log, the DSP watch and the crash record (finding 46).
     pub type dkrt_diag = unsafe extern "C" fn(out: *mut DkrtDiag);
 
-    /// The files of the module store whose path starts with prefix (NUL-terminated), sorted by path, at most max into out: the count, or a negative code (E_NOT_FOUND: no store).
-    pub type dkrt_store_list = unsafe extern "C" fn(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32;
-
-    /// Add a function that the UI loop calls once per pass, in the UI task, next to the one of dkrt_poll_set (room for 4). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick.
+    /// Add a function that the UI loop calls once per pass, in the UI task (room for 4: the DIGIKIT menu's HEALTH page and core/ui's dk_ui_tick). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick.
     pub type dkrt_poll_add = unsafe extern "C" fn(f: usize) -> i32;
 
     /// Remove a function added with dkrt_poll_add; no effect when it is not in the table.

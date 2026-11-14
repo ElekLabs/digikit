@@ -227,7 +227,7 @@ typedef struct DkrtHealth {
     uint32_t store_free;                         /* KiB a new file may still take in all (the room for the table's next entry kept back; not one contiguous piece) */
 } DkrtHealth;
 
-/* A store file for the DIGIKIT menu (dkrt_store_list): its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes. */
+/* A store file as the runtime lists it: its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes. */
 typedef struct DkrtStoreEntry {
     uint8_t path[64];
     uint32_t first;
@@ -524,16 +524,10 @@ uint32_t dkrt_capacity(DkrtCap *out, uint32_t max);
 /* DSP blocks since boot (a 1500 Hz clock); 0 without core/health. */
 uint32_t dkrt_blocks(void);
 
-/* Register (or, with 0, remove) a function that the UI loop calls once per pass, in the UI task. One caller only. */
-void dkrt_poll_set(uintptr_t f);
-
 /* The card check, the debug log, the DSP watch and the crash record (finding 46). */
 void dkrt_diag(DkrtDiag *out);
 
-/* The files of the module store whose path starts with prefix (NUL-terminated), sorted by path, at most max into out: the count, or a negative code (E_NOT_FOUND: no store). */
-int32_t dkrt_store_list(const uint8_t *prefix, DkrtStoreEntry *out, uint32_t max);
-
-/* Add a function that the UI loop calls once per pass, in the UI task, next to the one of dkrt_poll_set (room for 4). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick. */
+/* Add a function that the UI loop calls once per pass, in the UI task (room for 4: the DIGIKIT menu's HEALTH page and core/ui's dk_ui_tick). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick. */
 int32_t dkrt_poll_add(uintptr_t f);
 
 /* Remove a function added with dkrt_poll_add; no effect when it is not in the table. */

@@ -304,8 +304,8 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
         return Err(Error::Dsp);
     }
     if version == 5 {
-        let bank_off = word(src, off + 0x3c)?;
-        if bank_off < DSP_HEADER || bank_off & 3 != 0 || !inside(bank_off, 32, image_off) {
+        let record_off = word(src, off + 0x3c)?;
+        if record_off < DSP_HEADER || record_off & 3 != 0 || !inside(record_off, 32, image_off) {
             return Err(Error::Dsp);
         }
         for (table, len) in [
@@ -314,81 +314,42 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
             (voice_off, nvoice * stride),
             (fx_off, nfx * FX_LEN),
         ] {
-            if len != 0 && table < bank_off + 32 && bank_off < table + len {
+            if len != 0 && table < record_off + 32 && record_off < table + len {
                 return Err(Error::Dsp);
             }
         }
-        let at = off + bank_off;
-        // The sample-bank record alone has little-endian words.
-        let bank_version = word(src, at)?.swap_bytes();
-        // Kind 2: the per-track sample table (two zero blocks of the initialized image, no relocations in them).
-        if bank_version == 2 {
-            let records = word(src, at + 8)?.swap_bytes();
-            let control = word(src, at + 12)?.swap_bytes();
-            for i in 4..8 {
-                if word(src, at + i * 4)? != 0 {
-                    return Err(Error::Dsp);
-                }
-            }
-            let blocks = [(records, 512u32), (control, 256u32)];
-            for (b, len) in blocks {
-                if b & 3 != 0 || !inside(b, len, image) {
-                    return Err(Error::Dsp);
-                }
-                for i in 0..len / 4 {
-                    if word(src, off + image_off + b + i * 4)? != 0 {
-                        return Err(Error::Dsp);
-                    }
-                }
-                for i in 0..nreloc {
-                    let r = word(src, off + reloc_off + i * 8)?;
-                    if u64::from(r) < u64::from(b) + u64::from(len)
-                        && u64::from(r) + 6 > u64::from(b)
-                    {
-                        return Err(Error::Dsp);
-                    }
-                }
-            }
-            if records < control + 256 && control < records + 512 {
+        let at = off + record_off;
+        // The record has little-endian words. Kind 2 is the per-track sample table (two zero blocks of the initialized image, no
+        // relocations in them), the only kind.
+        if word(src, at)?.swap_bytes() != 2 {
+            return Err(Error::Dsp);
+        }
+        let records = word(src, at + 8)?.swap_bytes();
+        let control = word(src, at + 12)?.swap_bytes();
+        for i in 4..8 {
+            if word(src, at + i * 4)? != 0 {
                 return Err(Error::Dsp);
             }
-        } else {
-            let bank = word(src, at + 8)?.swap_bytes();
-            let frames = word(src, at + 12)?.swap_bytes();
-            let descriptor = word(src, at + 16)?.swap_bytes();
-            let end = image.checked_add(bss).ok_or(Error::Dsp)?;
-            let bank_end = frames
-                .checked_mul(4)
-                .and_then(|n| bank.checked_add(n))
-                .ok_or(Error::Dsp)?;
-            if bank_version != 1
-                || !(1..=8192).contains(&frames)
-                || bank & 3 != 0
-                || bank < image
-                || bank_end > end
-                || descriptor & 3 != 0
-                || !inside(descriptor, 16, image)
-            {
+        }
+        let blocks = [(records, 512u32), (control, 256u32)];
+        for (b, len) in blocks {
+            if b & 3 != 0 || !inside(b, len, image) {
                 return Err(Error::Dsp);
             }
-            for i in 5..8 {
-                if word(src, at + i * 4)? != 0 {
-                    return Err(Error::Dsp);
-                }
-            }
-            for i in 0..4 {
-                if word(src, off + image_off + descriptor + i * 4)? != 0 {
+            for i in 0..len / 4 {
+                if word(src, off + image_off + b + i * 4)? != 0 {
                     return Err(Error::Dsp);
                 }
             }
             for i in 0..nreloc {
                 let r = word(src, off + reloc_off + i * 8)?;
-                if u64::from(r) < u64::from(descriptor) + 16
-                    && u64::from(r) + 6 > u64::from(descriptor)
-                {
+                if u64::from(r) < u64::from(b) + u64::from(len) && u64::from(r) + 6 > u64::from(b) {
                     return Err(Error::Dsp);
                 }
             }
+        }
+        if records < control + 256 && control < records + 512 {
+            return Err(Error::Dsp);
         }
     }
     // the range: image and bss to 8, then (version 3) every voice record's states, each rounded to 8

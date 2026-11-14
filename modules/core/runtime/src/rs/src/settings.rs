@@ -6,7 +6,7 @@
 //! record needs. A power cut in the write leaves the current copy valid. Unloaded modules keep their entries (nothing is removed but by `remove`).
 //!
 //! Callers: the UI task (the menu, `core/fxpages`) and the mailbox test commands. Not for interrupts or the MIDI task: the record is one buffer.
-//! The C ABI for core modules is `dkrt_settings_get`, `dkrt_settings_put`, `dkrt_settings_remove` and `dkrt_settings_flush` below.
+//! The C ABI for core modules is `dkrt_settings_put` and `dkrt_settings_flush` (the menu's).
 //! A `.dkm` module uses `dk_settings_open`, `dk_settings_get`, `dk_settings_put` and `dk_settings_remove` (`module_*` below): the runtime
 //! stores its keys as `<module name>/<key>`, so a module reaches its own prefix only. There is no task check: `dk_settings_put` and `dk_settings_remove`
 //! must be called from the UI task (a menu, `tick`, `init`), not from a host command handler (MIDI task) or an interrupt.
@@ -323,14 +323,6 @@ unsafe fn key_of<'a>(key: *const u8) -> &'a [u8] {
     core::slice::from_raw_parts(key, n)
 }
 
-/// `dkrt_settings_get(key, buf, cap)`: the value of `key` (NUL-terminated) into `buf` (`cap` bytes): its length, or `E_SET_NOKEY`, `E_SET_KEY`,
-/// `E_SET_VALUE` (`cap` too small). UI task.
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_settings_get(key: *const u8, buf: *mut u8, cap: u32) -> i32 {
-    crate::init_once();
-    get(key_of(key), core::slice::from_raw_parts_mut(buf, cap as usize))
-}
-
 /// `dkrt_settings_put(key, value, len)`: set `key` (NUL-terminated) to the `len` bytes at `value`: 0, or `E_SET_KEY`, `E_SET_VALUE`, `E_SET_FULL`.
 /// The card is written about 2 s after the last change. UI task.
 #[no_mangle]
@@ -340,13 +332,6 @@ pub unsafe extern "C" fn dkrt_settings_put(key: *const u8, value: *const u8, len
         return E_SET_VALUE;
     }
     put(key_of(key), core::slice::from_raw_parts(value, len as usize))
-}
-
-/// `dkrt_settings_remove(key)`: remove `key` (NUL-terminated): 0 (also when it was not there), or `E_SET_KEY`. UI task.
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_settings_remove(key: *const u8) -> i32 {
-    crate::init_once();
-    remove(key_of(key))
 }
 
 // ---- the API of a .dkm module (api 1.9) --------------------------------------------------------------------------------------

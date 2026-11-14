@@ -492,35 +492,39 @@ fn the_reads_stay_in_the_tables_the_loader_reads() {
 }
 
 #[test]
-fn sample_bank_v5_counts_owned_bss_and_rejects_bad_records() {
-    let mut dsp = dsp_section_v4(16, 32, &[8]);
-    let bank_off = DSP_HEADER as usize + FX_LEN as usize;
-    dsp.splice(bank_off..bank_off, [0u8; 32]);
+fn sample_track_record_v5_needs_kind_2_zero_blocks_and_no_overlap() {
+    let mut dsp = dsp_section_v4(768, 0, &[8]);
+    let record_off = DSP_HEADER as usize + FX_LEN as usize;
+    dsp.splice(record_off..record_off, [0u8; 32]);
     put(&mut dsp, 4, 5);
-    put(&mut dsp, 0x18, bank_off as u32 + 32);
-    put(&mut dsp, 0x3c, bank_off as u32);
-    for (i, w) in [1u32, 7, 16, 8, 0, 0, 0, 0].iter().enumerate() {
-        dsp[bank_off + i * 4..bank_off + i * 4 + 4].copy_from_slice(&w.to_le_bytes());
+    put(&mut dsp, 0x18, record_off as u32 + 32);
+    put(&mut dsp, 0x3c, record_off as u32);
+    for (i, w) in [2u32, 7, 0, 512, 0, 0, 0, 0].iter().enumerate() {
+        dsp[record_off + i * 4..record_off + i * 4 + 4].copy_from_slice(&w.to_le_bytes());
     }
-    let n = of(&dkm(4, 0, &[], &dsp)).unwrap();
-    assert_eq!((n.fx_slots, n.dsp_area), (1, 64));
+    assert_eq!(of(&dkm(4, 0, &[], &dsp)).unwrap().fx_slots, 1);
     for (word, value) in [
-        (0, 2u32),
-        (2, 0),
-        (2, u32::MAX - 3),
-        (3, 0),
-        (3, 9),
-        (4, 4),
-        (5, 1),
+        (0, 1u32),
+        (0, 3),
+        (2, 2),
+        (2, 520),
+        (3, 4),
+        (3, 520),
+        (4, 1),
+        (7, 1),
     ] {
         let mut bad = dsp.clone();
-        bad[bank_off + word * 4..bank_off + word * 4 + 4].copy_from_slice(&value.to_le_bytes());
-        assert_eq!(of(&dkm(4, 0, &[], &bad)), Err(Error::Dsp));
+        bad[record_off + word * 4..record_off + word * 4 + 4].copy_from_slice(&value.to_le_bytes());
+        assert_eq!(
+            of(&dkm(4, 0, &[], &bad)),
+            Err(Error::Dsp),
+            "word {word}: {value}"
+        );
     }
     let mut bad = dsp.clone();
     put(&mut bad, 0x3c, DSP_HEADER);
     assert_eq!(of(&dkm(4, 0, &[], &bad)), Err(Error::Dsp));
-    let image_off = bank_off + 32;
+    let image_off = record_off + 32;
     dsp[image_off] = 1;
     assert_eq!(of(&dkm(4, 0, &[], &dsp)), Err(Error::Dsp));
 }

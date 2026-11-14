@@ -8,8 +8,6 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, Deserialize)]
 pub struct Manifest {
     #[serde(skip)]
-    pub sample_bank: Option<crate::typed::SampleBankDef>,
-    #[serde(skip)]
     pub sample_tracks: Option<crate::typed::SampleTracksDef>,
     pub module: ModuleInfo,
     #[serde(default)]

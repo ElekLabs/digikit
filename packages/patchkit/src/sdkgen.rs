@@ -196,7 +196,24 @@ impl ProtoLimits {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Capacity {
-    kinds: BTreeMap<String, u8>,
+    kinds: BTreeMap<String, CapKind>,
+}
+/// One kind of `[capacity.kinds]`: its number, and for a resource a fit looks at (`fit = true`) what it is called to a person.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CapKind {
+    id: u8,
+    #[serde(default)]
+    fit: bool,
+    label: Option<String>,
+}
+/// The kind numbers by name.
+fn kind_ids(sdk: &Sdk) -> BTreeMap<String, u8> {
+    sdk.capacity
+        .kinds
+        .iter()
+        .map(|(n, k)| (n.clone(), k.id))
+        .collect()
 }
 /// `[settings]`: the settings record's area and its keys (docs/design/digikit-store.md, "The settings record").
 #[derive(Clone, Debug, Deserialize)]
@@ -534,9 +551,22 @@ fn parse(text: &str) -> Result<Sdk> {
             return Err(err!("{SOURCE}: protocol cap bit {v} ({n}) twice"));
         }
     }
-    for (i, (n, v)) in sdk.capacity.kinds.iter().enumerate() {
-        if *v == 0 || sdk.capacity.kinds.iter().skip(i + 1).any(|(_, w)| w == v) {
+    for (i, (n, k)) in sdk.capacity.kinds.iter().enumerate() {
+        let v = k.id;
+        if v == 0
+            || sdk
+                .capacity
+                .kinds
+                .iter()
+                .skip(i + 1)
+                .any(|(_, w)| w.id == v)
+        {
             return Err(err!("{SOURCE}: capacity kind {v} ({n}) is 0 or twice"));
+        }
+        if k.fit != k.label.is_some() {
+            return Err(err!(
+                "{SOURCE}: capacity kind {n}: a label belongs to a fit kind and a fit kind has one"
+            ));
         }
     }
     let st = &sdk.settings;
@@ -621,9 +651,39 @@ fn proto_consts(sdk: &Sdk, indent: &str, status_ty: &str) -> String {
     for (n, bit) in by_value(&p.caps) {
         let _ = writeln!(s, "{indent}pub const CAP_{n}: u32 = 1 << {bit};");
     }
-    for (n, k) in by_value(&sdk.capacity.kinds) {
+    for (n, k) in by_value(&kind_ids(sdk)) {
         let _ = writeln!(s, "{indent}pub const CAPK_{n}: u8 = {k};");
     }
+    let _ = writeln!(
+        s,
+        "{indent}/// Every CAPACITY kind in the order of its number: the runtime answers each one."
+    );
+    let ids = kind_ids(sdk);
+    let kinds = by_value(&ids);
+    let _ = writeln!(s, "{indent}pub const CAP_KINDS: [u8; {}] = [", kinds.len());
+    for (n, _) in &kinds {
+        let _ = writeln!(s, "{indent}    CAPK_{n},");
+    }
+    let _ = writeln!(s, "{indent}];");
+    let mut fit: Vec<_> = sdk.capacity.kinds.iter().filter(|(_, k)| k.fit).collect();
+    fit.sort_by_key(|(_, k)| k.id);
+    let _ = writeln!(
+        s,
+        "{indent}/// The resources a fit looks at: name, kind and what a person calls it."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const CAP_FIT: [(&str, u8, &str); {}] = [",
+        fit.len()
+    );
+    for (n, k) in &fit {
+        let _ = writeln!(
+            s,
+            "{indent}    ({n:?}, CAPK_{n}, {:?}),",
+            k.label.as_deref().unwrap_or("")
+        );
+    }
+    let _ = writeln!(s, "{indent}];");
     let _ = writeln!(
         s,
         "{indent}/// The command ranges a module may register, as (first, last)."
@@ -821,7 +881,7 @@ fn python_proto(sdk: &Sdk) -> String {
     }
     s.push_str("}\n");
     s.push_str("\nCAPACITY_KINDS: dict[str, int] = {\n");
-    for (n, k) in by_value(&sdk.capacity.kinds) {
+    for (n, k) in by_value(&kind_ids(sdk)) {
         let _ = writeln!(s, "    {n:?}: {k},");
     }
     let st = &sdk.settings;
@@ -901,7 +961,7 @@ fn ts_proto(sdk: &Sdk) -> String {
         let _ = writeln!(s, "  {n}: [{first:#04x}, {last:#04x}],");
     }
     s.push_str("} as const;\n\nexport const CAPACITY_KINDS = {\n");
-    for (n, k) in by_value(&sdk.capacity.kinds) {
+    for (n, k) in by_value(&kind_ids(sdk)) {
         let _ = writeln!(s, "  {n}: {k},");
     }
     s.push_str("} as const;\n\n/** The `kind` of a LOG event. */\nexport const LOG_KIND = {\n");
@@ -2103,7 +2163,7 @@ pub(crate) fn abi_inputs(text: &str) -> Result<AbiInputs> {
             .into_iter()
             .map(|(n, s)| (n.clone(), s.code, s.text.clone()))
             .collect(),
-        kinds: by_value(&sdk.capacity.kinds)
+        kinds: by_value(&kind_ids(&sdk))
             .into_iter()
             .map(|(n, k)| (n.clone(), k))
             .collect(),

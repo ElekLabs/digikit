@@ -335,7 +335,6 @@ pub mod sample_tracks;
 pub mod files;
 /// Internal fixed-memory listing work/notification lifecycle model.
 pub mod files_job;
-pub mod sample_stream;
 
 /// The sticky machine type assignment (docs/design/module-sdk.md 11.5 D7) as a pure function, tested on the host; the runtime's `assign` calls it.
 pub mod sticky;

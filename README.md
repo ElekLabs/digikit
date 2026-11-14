@@ -127,7 +127,7 @@ Start with `mise run module:new -- machine AUTHOR/NAME` (or `fx`, `service`) and
 
 - [Writing modules](docs/MODULE-AUTHORING.md), the [SDK](sdk/README.md) and the [module reference](modules/README.md)
 - [Patching, flashing and recovery in detail](docs/PATCHING.md)
-- [Architecture](docs/ARCHITECTURE.md): the layers and what each may depend on
+- [Architecture](docs/ARCHITECTURE.md): the layers, the interfaces between them and what each may depend on
 - [Developing digikit](docs/DEVELOPMENT.md): [previews](docs/DEVELOPMENT.md#visible-preview), [fast iteration](docs/DEVELOPMENT.md#fast-iteration-runtime-ui-and-modules), analysis tools, repository layout
 - [Contributing](CONTRIBUTING.md)
 - Project internals: [testing](docs/TESTING.md), [releasing](docs/RELEASING.md), [research findings](docs/FINDINGS.md)

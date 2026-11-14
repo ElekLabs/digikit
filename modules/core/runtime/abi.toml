@@ -358,7 +358,7 @@ fields = [
 
 [[struct]]
 name = "DkrtStoreEntry"
-doc = "A store file for the DIGIKIT menu (dkrt_store_list): its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes."
+doc = "A store file as the runtime lists it: its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes."
 fields = [
     "u8 path[64]",
     "u32 first",
@@ -546,24 +546,14 @@ sig = "u32 dkrt_blocks()"
 doc = "DSP blocks since boot (a 1500 Hz clock); 0 without core/health."
 
 [[fn]]
-name = "dkrt_poll_set"
-sig = "void dkrt_poll_set(usize f)"
-doc = "Register (or, with 0, remove) a function that the UI loop calls once per pass, in the UI task. One caller only."
-
-[[fn]]
 name = "dkrt_diag"
 sig = "void dkrt_diag(DkrtDiag *out)"
 doc = "The card check, the debug log, the DSP watch and the crash record (finding 46)."
 
 [[fn]]
-name = "dkrt_store_list"
-sig = "i32 dkrt_store_list(const u8 *prefix, DkrtStoreEntry *out, u32 max)"
-doc = "The files of the module store whose path starts with prefix (NUL-terminated), sorted by path, at most max into out: the count, or a negative code (E_NOT_FOUND: no store)."
-
-[[fn]]
 name = "dkrt_poll_add"
 sig = "i32 dkrt_poll_add(usize f)"
-doc = "Add a function that the UI loop calls once per pass, in the UI task, next to the one of dkrt_poll_set (room for 4). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick."
+doc = "Add a function that the UI loop calls once per pass, in the UI task (room for 4: the DIGIKIT menu's HEALTH page and core/ui's dk_ui_tick). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick."
 
 [[fn]]
 name = "dkrt_poll_remove"

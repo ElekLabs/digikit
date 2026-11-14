@@ -923,13 +923,13 @@ void dk_poll(void)
 {
     DK_POLLS++;
     if (!DK_HEALTH_MENU) {
-        dkrt_poll_set(0);
+        dkrt_poll_remove((uintptr_t)dk_poll);
         return;
     }
     if (dk_ui_menu_is_open(DK_HEALTH_MENU)) {
         g_seen = 1;
     } else if (g_seen) {
-        dkrt_poll_set(0);
+        dkrt_poll_remove((uintptr_t)dk_poll);
         g_seen = 0;
         return;
     } else {
@@ -958,7 +958,7 @@ static void open_health(void *ctx, int32_t arg)
     g_seen = 0;
     g_last = 0;
     g_calls = 0;
-    dkrt_poll_set((uintptr_t)dk_poll);
+    dkrt_poll_add((uintptr_t)dk_poll);
 }
 
 /* ---- MODULES --------------------------------------------------------------------------------------------------------- */

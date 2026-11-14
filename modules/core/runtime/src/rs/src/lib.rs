@@ -1,4 +1,4 @@
-//! core/runtime: the digikit runtime (dkrt) v0. Code, data and the module arena live in `cf.expansion`.
+//! core/runtime: the digikit runtime (dkrt). Code, data and the module arena live in `cf.expansion`.
 //!
 //! What it does (docs/plans/digikit-runtime.md, docs/design/digikit-runtime.md): reads `.dkm` module files from the card
 //! module store with the firmware's own block read, checks them, copies and relocates them into a private arena, flushes
@@ -747,11 +747,6 @@ const RAW_BAD: u32 = 8;
 /// The last result of the mailbox command `CMD_HEALTH` (the proof reads it).
 #[no_mangle]
 pub static mut DKRT_HEALTH: DkrtHealth = unsafe { core::mem::zeroed() };
-/// A function the UI-loop tick calls once per pass (0: none); set by `dkrt_poll_set`. The DIGIKIT menu's HEALTH page uses it to
-/// refresh itself.
-#[no_mangle]
-pub static mut DKRT_POLL: usize = 0;
-
 /// DSP blocks counted since boot (1500 per second; wraps): the firmware's own counter (anchor `cf.link.site.block_isr.counter_lit`), so a clock for
 /// a UI that refreshes at a bounded rate and for the stable period of safe mode. 0 when the anchor does not point at a counter and the
 /// image has no `core/health` (whose own count is the fallback). Any task; reads one word.
@@ -773,16 +768,11 @@ pub unsafe extern "C" fn dkrt_blocks() -> u32 {
     }
 }
 
-/// Register (or, with 0, remove) a function that `dkrt_tick` calls at the end of every UI-loop pass, in the UI task. One caller only (the
-/// DIGIKIT menu's HEALTH page); `dkrt_poll_add` has room for more.
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_poll_set(f: usize) {
-    write_volatile(addr_of_mut!(DKRT_POLL), f);
-}
-
-/// Functions of `dkrt_poll_add`, called after the one of `dkrt_poll_set`.
+/// Functions of `dkrt_poll_add`, called once per UI-loop pass (the DIGIKIT menu's HEALTH page and `core/ui`'s `dk_ui_tick` timers). The
+/// proofs read the table.
 const POLLS: usize = 4;
-static mut POLL_TABLE: [usize; POLLS] = [0; POLLS];
+#[no_mangle]
+pub static mut DKRT_POLLS: [usize; POLLS] = [0; POLLS];
 
 /// Add a function that `dkrt_tick` calls once per UI-loop pass, in the UI task (`core/ui` keeps its `dk_ui_tick` timers with one). Adding one
 /// that is in the table is OK; `E_NOMEM` when it is full. Task context.
@@ -791,7 +781,7 @@ pub unsafe extern "C" fn dkrt_poll_add(f: usize) -> i32 {
     if f == 0 {
         return E_CONTRACT;
     }
-    let t = &mut *addr_of_mut!(POLL_TABLE);
+    let t = &mut *addr_of_mut!(DKRT_POLLS);
     let mut free = POLLS;
     let mut i = 0;
     while i < POLLS {
@@ -813,7 +803,7 @@ pub unsafe extern "C" fn dkrt_poll_add(f: usize) -> i32 {
 /// Remove a function added with `dkrt_poll_add` (no effect when it is not there). Task context.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_poll_remove(f: usize) {
-    let t = &mut *addr_of_mut!(POLL_TABLE);
+    let t = &mut *addr_of_mut!(DKRT_POLLS);
     let mut i = 0;
     while i < POLLS {
         if f != 0 && t[i] == f {
@@ -840,14 +830,6 @@ pub unsafe extern "C" fn dkrt_health(out: *mut DkrtHealth) {
     init_once();
     dkrt_health_light(&mut *out, true);
     store::figures(&mut *out);
-}
-
-/// The module files of the store whose path starts with `prefix` (NUL-terminated), sorted by path, for the DIGIKIT menu: at most `max` entries into
-/// `out` (`DkrtStoreEntry`); the count, or a negative code (`E_NOT_FOUND`: no store on this card). Task context.
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_store_list(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32 {
-    init_once();
-    store::list(prefix, out, max)
 }
 
 /// The header fields of the `.dkm` at store sector `first` (`DkrtScan.first`) into `out`, for the INFO page of the DIGIKIT menu: 0, `E_FORMAT` when
@@ -987,6 +969,7 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         None => 0,
     };
     let (set_limit, set_used) = settings::capacity();
+    // the values of each kind (a table, not a `match`: a jump table would put data in .text)
     let entries: [(u8, u32, u32, u32); 14] = [
         (CAPK_MODULES, MAX_MODULES as u32, mods, 0),
         (CAPK_SELECTION, dkrt_sdk::SEL_MAX as u32, boot::selected(), 0),
@@ -1003,10 +986,19 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         (CAPK_SETTINGS, set_limit, set_used, 0),
         (CAPK_SEND_SLOTS, fxsend::slots(), fxsend::used(), 0),
     ];
+    // one entry per kind of `[capacity.kinds]`, in its order; a kind with no row above reports zeros
     let mut k = 0;
-    while k < entries.len() && (k as u32) < max {
-        let (kind, limit, used, largest) = entries[k];
-        *out.add(k) = DkrtCap { kind: kind as u32, limit, used, largest };
+    while k < CAP_KINDS.len() && (k as u32) < max {
+        let kind = CAP_KINDS[k];
+        let mut v = (kind, 0, 0, 0);
+        let mut e = 0;
+        while e < entries.len() {
+            if entries[e].0 == kind {
+                v = entries[e];
+            }
+            e += 1;
+        }
+        *out.add(k) = DkrtCap { kind: kind as u32, limit: v.1, used: v.2, largest: v.3 };
         k += 1;
     }
     k as u32
@@ -1221,14 +1213,9 @@ pub unsafe extern "C" fn dkrt_tick() {
     }
     // the tick of every loaded module (`dk_module.tick`)
     entry::tick_all();
-    let p = read_volatile(addr_of!(DKRT_POLL));
-    if p != 0 {
-        let call: unsafe extern "C" fn() = core::mem::transmute(p);
-        call();
-    }
     let mut i = 0;
     while i < POLLS {
-        let f = read_volatile(addr_of!(POLL_TABLE[i]));
+        let f = read_volatile(addr_of!(DKRT_POLLS[i]));
         if f != 0 {
             let call: unsafe extern "C" fn() = core::mem::transmute(f);
             call();

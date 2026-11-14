@@ -292,7 +292,6 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models, decl: Option<&Dko>) -> Res
                 });
             }
             DspSection {
-                sample_bank: None,
                 sample_tracks: None,
                 device,
                 image: vec![spec.fill; d.image as usize],

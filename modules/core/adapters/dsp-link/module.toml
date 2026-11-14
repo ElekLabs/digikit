@@ -13,8 +13,8 @@ requires = []
 conflicts = []
 
 [targets]
-"dt2-1.17" = "untested"
-"dn2-1.12" = "untested"
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
 
 # Constants of the DSP objects (tail geometry, area size) from the device files, written by `patchkit gen`.
 [[gen]]

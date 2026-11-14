@@ -180,7 +180,6 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
         crate::register::device_id(device)?,
         &voices,
         &fxs,
-        None,
         tracks.as_ref(),
     )?;
     let u = mf.uses.for_device(device);

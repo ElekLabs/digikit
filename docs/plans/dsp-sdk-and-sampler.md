@@ -2664,9 +2664,9 @@ channels and produces 48 kHz interleaved PCM16; the
 header, BE PCM and 16-byte trailer (header byte 1 stereo, +4 PCM bytes, +8 rate).
 The runtime [mono decoder](../../modules/core/runtime/sdk/src/sample.rs) and
 [job](../../modules/core/runtime/sdk/src/sample_job.rs) 8,192-frame bound are proof
-restrictions, not product caps. The allocation-free
-[stream parser](../../modules/core/runtime/sdk/src/sample_stream.rs) already checks
-mono/stereo extents, `pcm + 80` and a caller maximum, but is not wired to source/transport.
+restrictions, not product caps. An allocation-free
+stream parser (`sample_stream.rs`, deleted in R2a) checked
+mono/stereo extents, `pcm + 80` and a caller maximum, but was not wired to source/transport.
 [Source access](../../modules/core/runtime/src/rs/src/sample_source.rs) uses whole-file
 DT2 FS reads without a stable lease/same-length replacement check; DN2 store uses
 snapshot generation plus SHA. Stock DT2 pool planes differ from disk interleaving.

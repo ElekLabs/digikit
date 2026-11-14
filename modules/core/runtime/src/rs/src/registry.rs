@@ -366,7 +366,7 @@ pub unsafe fn check(reg: *const u8, size: u32, image_size: u32) -> i32 {
         at += len;
         i += 1;
     }
-    if at != size || np as usize > MAX_PARAM || nm as usize > MAX_MACH || ng as usize > MAX_PAGE || ne as usize > crate::fxpage::MAX_FX || nn > 2 * nm {
+    if at != size || np as usize > MAX_PARAM || nm as usize > MAX_MACH || ng as usize > MAX_PAGE || ne as usize > crate::dsp::MAX_FX || nn > 2 * nm {
         return E_FORMAT;
     }
     // an action names a parameter of the file and code inside the image; a parameter has at most one
