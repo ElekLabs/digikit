@@ -1054,12 +1054,20 @@ pub(crate) unsafe fn next_job() {
     }
 }
 
-pub(crate) unsafe fn fail(code: i32) {
+/// What one pass of `step` found: the loader (`loader::dsp_step`) acts on a result, then calls back `fail_done` or `loaded_done`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Advance {
+    /// Nothing to settle: idle, waiting for the DSP, or a step done.
+    Pending,
+    /// The load in progress failed with this code. The loader takes the module down, then calls `fail_done`.
+    Failed(i32),
+    /// Every row of the load in progress is in. The loader lists the module, then calls `loaded_done`.
+    Loaded,
+}
+
+/// The loader took the failed load's module down (`reclaimed`: it did, else the DSP state stays retained) and told the boot: finish the failure.
+pub(crate) unsafe fn fail_done(reclaimed: bool, code: i32) {
     let d = ds();
-    let rec = d.pending.rec as usize;
-    // Teardown invalidates once, after the tick is stopped, before any fini/free.
-    let reclaimed = crate::loader::undo_early(rec) == OK;
-    crate::boot::note_result(d.pending.boot_idx, code);
     d.failures += 1;
     crate::st().last_result = code;
     if !reclaimed {
@@ -1073,30 +1081,35 @@ pub(crate) unsafe fn fail(code: i32) {
     next_job();
 }
 
+/// The loader listed the loaded module and told the boot: start the next waiting load or go idle.
+pub(crate) unsafe fn loaded_done() {
+    crate::st().last_result = OK;
+    next_job();
+}
+
 /// Advance the load in progress by what is ready now. Called once per UI-loop pass.
-pub unsafe fn step() {
+pub unsafe fn step() -> Advance {
     let d = ds();
     if d.magic != STATE_MAGIC {
-        return;
+        return Advance::Pending;
     }
     if d.phase == PH_IDLE || d.phase == PH_RETAINED {
-        return;
+        return Advance::Pending;
     }
     d.ticks = d.ticks.saturating_add(1);
     if d.phase == PH_QUARANTINE {
         if poll_done().is_some() {
             d.started = 0;
-            fail(E_DSP_XFER);
+            return Advance::Failed(E_DSP_XFER);
         }
-        return;
+        return Advance::Pending;
     }
     if d.ticks > GUARD_TICKS {
         if d.started != 0 && poll_done().is_none() {
             d.phase = PH_QUARANTINE;
-            return;
+            return Advance::Pending;
         }
-        fail(E_DSP_XFER);
-        return;
+        return Advance::Failed(E_DSP_XFER);
     }
     loop {
         match d.phase {
@@ -1104,19 +1117,17 @@ pub unsafe fn step() {
                 if d.started == 0 {
                     let r = call_send(d.pending.send_base, d.pending.send_buf as *const u8, d.pending.send_len);
                     if r == -2 {
-                        fail(E_DSP_XFER);
-                        return;
+                        return Advance::Failed(E_DSP_XFER);
                     }
                     if r == 0 {
                         d.started = 1;
                     }
-                    return;
+                    return Advance::Pending;
                 }
                 match poll_done() {
-                    None => return,
+                    None => return Advance::Pending,
                     Some(false) => {
-                        fail(E_DSP_XFER);
-                        return;
+                        return Advance::Failed(E_DSP_XFER);
                     }
                     Some(true) => {
                         arena::free(d.pending.send_buf as *mut u8);
@@ -1163,11 +1174,7 @@ pub unsafe fn step() {
                 }
                 if row == MAX_ROWS && frow == MAX_FX {
                     // every row is in: list the machine
-                    crate::tracks::ready(rec);
-                    crate::boot::note_result(d.pending.boot_idx, OK);
-                    crate::st().last_result = OK;
-                    next_job();
-                    return;
+                    return Advance::Loaded;
                 }
                 if d.started == 0 && frow != MAX_FX {
                     let at = FX_ROW_WORDS * (fiw(F_FIRST) + frow as u32);
@@ -1195,7 +1202,7 @@ pub unsafe fn step() {
                             d.fx_pub[frow] = 1; // from here the amounts, the route or the pc word may be in the DSP: clear them on failure
                         }
                     }
-                    return;
+                    return Advance::Pending;
                 }
                 if d.started == 0 {
                     let at = ROW_WORDS * (first + row as u32);
@@ -1227,13 +1234,12 @@ pub unsafe fn step() {
                             d.row_pub[row] = 1; // from here the type word may be in the DSP: clear it on failure
                         }
                     }
-                    return;
+                    return Advance::Pending;
                 }
                 match poll_done() {
-                    None => return,
+                    None => return Advance::Pending,
                     Some(false) => {
-                        fail(E_DSP_XFER);
-                        return;
+                        return Advance::Failed(E_DSP_XFER);
                     }
                     Some(true) => {
                         d.step += 1;
@@ -1242,7 +1248,7 @@ pub unsafe fn step() {
                     }
                 }
             }
-            _ => return,
+            _ => return Advance::Pending,
         }
     }
 }

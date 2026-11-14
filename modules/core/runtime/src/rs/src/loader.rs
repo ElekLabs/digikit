@@ -510,6 +510,38 @@ pub unsafe fn undo_early(rec: usize) -> i32 {
     unload_rec(rec)
 }
 
+/// One UI-loop pass of the DSP loader. `dsp` only advances its state and reports what it found; the module teardown, the machine
+/// listing and the boot result belong here, so `dsp` depends on neither the loader nor the boot.
+pub unsafe fn dsp_step() {
+    match dsp::step() {
+        dsp::Advance::Pending => {}
+        dsp::Advance::Failed(code) => {
+            let (rec, idx) = {
+                let p = &dsp::ds().pending;
+                (p.rec as usize, p.boot_idx)
+            };
+            // Teardown invalidates once, after the tick is stopped, before any fini/free.
+            let reclaimed = undo_early(rec) == OK;
+            crate::boot::note_result(idx, code);
+            dsp::fail_done(reclaimed, code);
+        }
+        dsp::Advance::Loaded => {
+            let (rec, idx) = {
+                let p = &dsp::ds().pending;
+                (p.rec as usize, p.boot_idx)
+            };
+            on_loaded(rec);
+            crate::boot::note_result(idx, OK);
+            dsp::loaded_done();
+        }
+    }
+}
+
+/// Every row of module `rec` is in the DSP: list its machine. The one call from the loader into the track adapter (`tracks`).
+unsafe fn on_loaded(rec: usize) {
+    crate::tracks::ready(rec);
+}
+
 /// While the boot hook loads the selection: the CF part of a module with DSP code is published at once (the machine view is built
 /// soon after the hook, and the frames that carry DSP code do not flow yet); the DSP part follows over the UI-loop passes.
 pub static mut EARLY: bool = false;

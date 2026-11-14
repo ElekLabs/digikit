@@ -175,7 +175,7 @@ fn voice_latch_mask_is_published_before_the_type() {
         d.row_latched[0] = 5;
         d.row_type[0] = 17;
         while LINK.events.len() < 4 {
-            dsp::step();
+            crate::loader::dsp_step();
         }
         let at = 24 * VOICE_INFO[6];
         assert_eq!(LINK.events, [Event::Word(1, at + 22, 5u32.swap_bytes()), Event::Word(1, at + 23, 0), Event::Word(1, at + 10, 0), Event::Word(1, at, 17u32.swap_bytes())]);
@@ -220,7 +220,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
         LINK.events.len(),
     );
     for _ in 0..3 {
-        dsp::step();
+        crate::loader::dsp_step();
     }
     assert!(!dsp::fx_word_start(0, 0, 0xabcdef00));
     assert_eq!(dsp::sample_send(0, core::ptr::null(), 4), -2);
@@ -246,7 +246,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
 
 unsafe fn failure_case(completion: Completion) {
     seed(completion, false, true, true);
-    dsp::step();
+    crate::loader::dsp_step();
     assert_retained(false, 0);
     assert_eq!(
         dsp::ds().last_dl_err,
@@ -256,6 +256,21 @@ unsafe fn failure_case(completion: Completion) {
             91
         }
     );
+}
+#[test]
+fn dsp_step_reports_a_failure_without_acting_on_it() {
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, true);
+        let d = dsp::ds();
+        assert_eq!(dsp::step(), dsp::Advance::Failed(E_DSP_XFER));
+        // the module is still up and the DSP loader still counts nothing: the loader decides next
+        assert!(entry::has_tick(0));
+        assert_eq!((d.failures, st().modules[0].used, boot::info().results[0]), (0, 1, 0));
+        dsp::fail_done(false, E_DSP_XFER);
+        assert!(dsp::retained());
+        assert_eq!((d.failures, st().last_result), (1, E_DSP_XFER));
+    }
 }
 #[test]
 fn invalidation_refusal_retains_and_stops() {
@@ -286,7 +301,7 @@ fn fx_partial_cleanup_does_not_discard_publication() {
     let _g = LOCK.lock().unwrap();
     unsafe {
         seed(Completion::ErrorAt(3), true, true, true);
-        dsp::step();
+        crate::loader::dsp_step();
         assert_retained(true, 0);
         assert_eq!(LINK.accepted, 3); // no subsequent cleanup writes after failure
     }
@@ -297,14 +312,14 @@ fn missing_fx_info_retains_published_row() {
     unsafe {
         seed(Completion::Ack, true, true, true);
         LINK.no_fx_info = true;
-        dsp::step();
+        crate::loader::dsp_step();
         assert_retained(true, 0);
         assert_eq!(LINK.accepted, 0);
     }
 }
 unsafe fn successful_case(fx: bool, published: bool) {
     seed(Completion::Ack, fx, published, true);
-    dsp::step();
+    crate::loader::dsp_step();
     assert!(!dsp::retained());
     assert!(!entry::has_tick(0));
     assert_eq!(st().modules[0].used, 0);
