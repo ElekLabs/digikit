@@ -31,7 +31,7 @@ Five layers, L0 to L4. Calls go down. The diagram is the target; "today and targ
      loading    loader, collect (relocate, commit records),
                 registry walker + record-kind handler table, params (param-table writer)
      dsp core   DSP area allocator, dsp-link + windows, row table,
-                DSP load state machine   (→ R6 transfer queue)
+                DSP load state machine   (R6a: its transfers go through the link queue)
      storage    store, files, card, scan, arena, worker, settings (broker)
      transport  SysEx/USB: transport, store/admin/module commands
      diagnostics dlog, sinks log/span (R2d), fault (crash), watch, invariants,
@@ -72,7 +72,7 @@ The crossings of the R2b code, and what R2c made of them:
 
 | R2b crossing | Now |
 | --- | --- |
-| `tracks` checks `fxpage` and `fxsend` busy; `fx_live` checks `tracks::busy` | Claim bits on the DSP link: `link_busy` (effect writers) and `link_claimed(who)`. Interim until the R6 transfer queue |
+| `tracks` checks `fxpage` and `fxsend` busy; `fx_live` checks `tracks::busy` | The DSP link queue of the core (R6a, `link.rs`): live values with `link_set`, owner requests with `link_submit`. No writer asks whether the link is busy |
 | `fx` needs `machines` rows | Both use `CoreApi` rows (`reg_state`, `dynreg`, `write_param_row`, `make_rep`) and no function of the other |
 | `pageclick` reads registry rows | `CoreApi::param_first`, `param_owners` |
 | `fxsend` uses `settings` | `CoreApi::settings_get` and `settings_put` (a broker resource) |

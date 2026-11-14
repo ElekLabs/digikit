@@ -1,13 +1,13 @@
 //! The DSP side of run-time modules (docs/design/digikit-dkm.md "DSP section", docs/findings/32-runtime-dsp-machines.md).
 //!
 //! A `.dkm` may carry SHARC+ code and data for the DSP. The runtime places it in a range of the DSP area (the `_dl_area` of
-//! `core/dsp-link`, first fit, freed when the DSP part of a boot-time load fails), applies the relocations on the ColdFire, sends the bytes with `dl_send` and
+//! `core/dsp-link`, first fit, freed when the DSP part of a boot-time load fails), applies the relocations on the ColdFire, sends the bytes through the core's link queue (`link.rs`) and
 //! publishes the module's voice rows. The transfer takes many audio blocks, so a load is a state machine that the UI-loop hook
 //! advances (`step`); `dkrt_load` returns `LOADING` and the machine is listed only when the DSP code is acknowledged
 //! and the voice rows are in.
 //!
 //! Voice rows (the voices registry of `core/dsp-voice`, scanned by the DSP for every voice it renders) are 24 words
-//! (`ROW_WORDS`) and written one word per transfer through window 1 of `core/dsp-link`: the eight knob ranges (words 2 to 9: the
+//! (`ROW_WORDS`) and written as one sequence of word transfers through window 1 of `core/dsp-link`: the eight knob ranges (words 2 to 9: the
 //! runtime guard clamps the machine's parameter words to them), the pc, the note_on pc (16), the state base (17), the state stride
 //! (18) and the clear bytes (19), the latch mask (22), the zeroed-tracks mask (23) cleared, the guard's disabled-type word cleared, and the type
 //! last (the row is still free until then: its type is `0xffffffff`, which no machine type equals), so the render scan never sees a
@@ -15,7 +15,7 @@
 //! are not written yet (0).
 //!
 //! Effect rows (DSP section version 4, `core/dynfx`): the rows of the effect chain of `core/fx` (24 words each, window 2 of `core/dsp-link`). An effect
-//! record claims a free row (pc `0xffffffff`) when the range is reserved and publishes it after the code is acknowledged, one word per transfer: the
+//! record claims a free row (pc `0xffffffff`) when the range is reserved and publishes it after the code is acknowledged, as one sequence of word transfers: the
 //! eight parameter words (the record's defaults), desc, state, `enabled` (1) and the pc last, so the chain never sees a half-written row. A row is freed
 //! the other way round (the pc to `0xffffffff` first, then the adapter's `was`, `dis` and fault counters cleared). The effect's state is reserved in the
 //! module's range behind the image, bss and voice states (`state_bytes` of its `dk_fx_desc`).
@@ -24,6 +24,7 @@
 use crate::handlers::{Claim, ServiceList, Services};
 use crate::{arena, cstr_eq, cstr_len, rd32};
 use core::ptr::{addr_of_mut, read_volatile};
+use dkrt_abi::link::{LinkResult, Owner, Sequence, Stream, Ticket, SEQ_MAX};
 use dkrt_sdk::*;
 
 pub(crate) use dkrt_abi::dsp::*;
@@ -472,69 +473,16 @@ pub unsafe fn cancel(rec: usize) {
     unreserve(rec);
 }
 
-// ---- one-word writes into the voices registry ---------------------------------------------------------------------------------
-
-/// Start writing `value` into word `word` of window `win` (1 the voice rows, 2 the effect rows); false when the link refused (busy: try again).
-pub(crate) unsafe fn start_word(win: u32, word: u32, value: u32) -> bool {
-    if retained() { return false; }
-    let d = ds();
-    // the link sends the bytes of the buffer as little-endian DSP words; this is a big-endian ColdFire long
-    d.word = (value << 24) | ((value & 0xff00) << 8) | ((value >> 8) & 0xff00) | (value >> 24); // byte swap by hand: no libgcc here
-    call_send_win(win, word, &d.word as *const u32, 4) == 0
-}
-
-/// `Some(true)` done, `Some(false)` failed, `None` still running.
-pub(crate) unsafe fn poll_done() -> Option<bool> {
-    let mut s = DlStatus {
-        state: 0,
-        err: 0,
-        nchunks: 0,
-        acked: 0,
-        sent: 0,
-        resent: 0,
-        nerr: 0,
-    };
-    call_poll(&mut s);
-    match s.state {
-        DL_DONE => Some(true),
-        DL_ERROR => {
-            ds().last_dl_err = s.err;
-            Some(false)
-        }
-        _ => None,
-    }
-}
-
-/// Write one word and wait for it (the UI task spins; a few audio blocks). Used on the error paths.
-pub(crate) unsafe fn write_word_blocking(win: u32, word: u32, value: u32) -> bool {
-    let mut n = 0;
-    while !start_word(win, word, value) {
-        n += 1;
-        if n > SPIN {
-            return false;
-        }
-        core::hint::black_box(n);
-    }
-    ds().row_writes += 1;
-    n = 0;
-    loop {
-        match poll_done() {
-            Some(ok) => return ok,
-            None => {
-                n += 1;
-                if n > SPIN {
-                    return false;
-                }
-                core::hint::black_box(n);
-            }
-        }
-    }
-}
-
 /// Invalidate published DSP rows; does not release code/state or transfer sources.
 pub unsafe fn quiesce(rec: usize) -> bool {
     if retained() { return false; }
-    if ds().mod_len[rec] == 0 { return true; }
+    let d = ds();
+    if d.mod_len[rec] == 0 { return true; }
+    // the load of this module may have a transfer on the wire that reads its image buffer: wait for it before anything is freed
+    if d.phase != PH_IDLE && d.pending.rec as usize == rec {
+        if !crate::link::lk().drain(Owner::Loader) { return false; }
+        d.ticket = 0;
+    }
     Services::dsp_clear(rec)
 }
 
@@ -574,7 +522,7 @@ pub(crate) unsafe fn start(p: Pending) {
     d.phase = PH_SEND;
     d.ticks = 0;
     d.step = 0;
-    d.started = 0;
+    d.ticket = 0;
     d.transfers += 1;
 }
 
@@ -645,82 +593,107 @@ pub(crate) unsafe fn step_with<L: ServiceList>() -> Advance {
     }
     d.ticks = d.ticks.saturating_add(1);
     if d.phase == PH_QUARANTINE {
-        if poll_done().is_some() {
-            d.started = 0;
+        if loader_result() != LinkResult::Pending {
+            d.ticket = 0;
             return Advance::Failed(E_DSP_XFER);
         }
         return Advance::Pending;
     }
     if d.ticks > GUARD_TICKS {
-        if d.started != 0 && poll_done().is_none() {
+        if d.ticket != 0 && loader_result() == LinkResult::Pending {
             d.phase = PH_QUARANTINE;
             return Advance::Pending;
         }
+        d.ticket = 0;
         return Advance::Failed(E_DSP_XFER);
     }
     loop {
         match d.phase {
             PH_SEND => {
-                if d.started == 0 {
-                    let r = call_send(d.pending.send_base, d.pending.send_buf as *const u8, d.pending.send_len);
-                    if r == -2 {
-                        return Advance::Failed(E_DSP_XFER);
-                    }
-                    if r == 0 {
-                        d.started = 1;
+                if d.ticket == 0 {
+                    let stream = Stream::Bulk { dst: d.pending.send_base, src: d.pending.send_buf as *const u8, len: d.pending.send_len };
+                    if let Some(t) = crate::link::lk().submit(Owner::Loader, &stream) {
+                        d.ticket = t.id as u32;
                     }
                     return Advance::Pending;
                 }
-                match poll_done() {
-                    None => return Advance::Pending,
-                    Some(false) => {
-                        return Advance::Failed(E_DSP_XFER);
-                    }
-                    Some(true) => {
+                match loader_result() {
+                    LinkResult::Pending => return Advance::Pending,
+                    LinkResult::Done => {
+                        d.ticket = 0;
                         arena::free(d.pending.send_buf as *mut u8);
                         d.pending.send_buf = 0;
                         d.phase = PH_ROWS;
                         d.step = 0;
-                        d.started = 0;
                         d.ticks = 0;
+                    }
+                    _ => {
+                        d.ticket = 0;
+                        return Advance::Failed(E_DSP_XFER);
                     }
                 }
             }
             PH_ROWS => {
-                // the rows of the module in claim order, each a run of steps that the services declare (`Service::dsp_row_step`)
-                let mut want = d.step;
-                let write = match L::dsp_row_step(d.pending.rec as usize, &mut want, d.started == 0) {
-                    Some(w) => w,
-                    None => {
+                if d.ticket == 0 {
+                    // the next row of the module, in claim order, as one sequence (`Service::dsp_row_step` gives its steps; the last one publishes it)
+                    let mut seq = Sequence::new();
+                    let mut n = 0u32;
+                    loop {
+                        let mut want = d.step + n;
+                        match L::dsp_row_step(d.pending.rec as usize, &mut want, true) {
+                            None => break,
+                            Some(w) => {
+                                if let Some(undo) = w.undo {
+                                    seq.push_undo(w.win, w.word, w.value, undo);
+                                } else {
+                                    seq.push(w.win, w.word, w.value);
+                                }
+                                if let Some(flag) = w.published {
+                                    seq.set_mark(flag as *mut u8, n as usize);
+                                }
+                                n += 1;
+                                if w.last || n as usize >= SEQ_MAX {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if n == 0 {
                         // every row is in: list the machine
                         return Advance::Loaded;
                     }
-                };
-                if d.started == 0 {
-                    if start_word(write.win, write.word, write.value) {
-                        d.started = 1;
-                        d.row_writes += 1;
-                        if let Some(flag) = write.published {
-                            *flag = 1;
-                        }
+                    if let Some(t) = crate::link::lk().submit(Owner::Loader, &Stream::Sequence(seq)) {
+                        d.ticket = t.id as u32;
+                        d.row_steps = n;
                     }
                     return Advance::Pending;
                 }
-                match poll_done() {
-                    None => return Advance::Pending,
-                    Some(false) => {
-                        return Advance::Failed(E_DSP_XFER);
-                    }
-                    Some(true) => {
-                        d.step += 1;
-                        d.started = 0;
+                match loader_result() {
+                    LinkResult::Pending => return Advance::Pending,
+                    LinkResult::Done => {
+                        d.ticket = 0;
+                        d.step += d.row_steps;
+                        d.row_writes += d.row_steps;
                         d.ticks = 0;
+                    }
+                    _ => {
+                        d.ticket = 0;
+                        return Advance::Failed(E_DSP_XFER);
                     }
                 }
             }
             _ => return Advance::Pending,
         }
     }
+}
+
+/// The result of the loader's request in flight (`Gone` without one). A terminal result is taken.
+unsafe fn loader_result() -> LinkResult {
+    let d = ds();
+    if d.ticket == 0 {
+        return LinkResult::Gone;
+    }
+    crate::link::lk().result(Ticket { owner: Owner::Loader, id: d.ticket as u16 })
 }
 
 pub unsafe fn state() -> u32 {

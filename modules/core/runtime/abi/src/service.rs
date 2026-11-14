@@ -76,13 +76,16 @@ pub struct Claim<'a> {
     pub state_at: u32,
 }
 
-/// One word the DSP loader writes to publish a row: window, word index and value. `published` is set once the write is accepted, when
-/// from then on the row may have words in the DSP (so a failure must clear them).
+/// One word the DSP loader writes to publish a row: window, word index and value. The loader collects the steps of one row into a link `Sequence`.
+/// `published` is set once the write is accepted, when from then on the row may have words in the DSP (so a failure must clear them). `last` ends the
+/// row (its type or pc word, the one that makes it visible). `undo` is the word that takes a step back when the sequence fails.
 pub struct RowWrite {
     pub win: u32,
     pub word: u32,
     pub value: u32,
     pub published: Option<&'static mut u8>,
+    pub last: bool,
+    pub undo: Option<u32>,
 }
 
 /// What the guard counted for a machine type (`MODULES` reports it).

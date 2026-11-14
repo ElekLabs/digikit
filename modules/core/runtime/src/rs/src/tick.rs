@@ -22,6 +22,7 @@ pub unsafe extern "C" fn dkrt_tick() {
     admin_cmds::restart_poll();
     store_writer::tick();
     fault::install();
+    crate::link::pump();
     loader::dsp_step();
     worker::tick();
     io::tick();

@@ -44,7 +44,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | 3 | R2 | Runtime deletions and split; sink slots; service anatomy: a service is a module with a role (settled before R7) | S4 | R2a, R2b, R2c, R2d done; R2 done after the gate | |
 | 3 | R3 | R3a Platform trait; R3b adapter move (see runtime-and-services, Platform adapter) | R2 | R3a and R3b done (this PR); the image changes (two device words, the `core/platform` adapter object), so they gate together | |
 | 3 | T1 | [Test architecture](test-architecture.md): tests follow layers, fakes and contract suites, service-scoped selection | T1a after R2c; T1c with R3 | todo | |
-| 3 | R6 | DSP transfer queue; dsp-link windows | R3 | todo | |
+| 3 | R6 | DSP transfer queue; dsp-link windows | R3 | R6a done (this PR), R6b planned (trigger: modulation rate) | |
 | 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | todo | |
 | 3 | R8 | Spike, whole path | R7 | todo | |
 | 3 | P6 | Workbench: names in the Log pane, first utilisation pane (UI lane) | P2 | todo | |

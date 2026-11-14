@@ -9,8 +9,8 @@
 //! records and the 16 control sets in the module's DSP data). `dsp::reserve` calls `reserve` with their L2 byte addresses and
 //! `ready` when the DSP image is in; before that no DSP write is made.
 //!
-//! The DSP link is write-only, so close, drain and publish are queued writes, one in flight at a time (`pump`): a start needs an idle
-//! loader and no fx page or fx send transfer, and the fx word writers wait while a table write is in flight (`busy`).
+//! The DSP link is write-only, so close, drain and publish are queued writes, one in flight at a time (`pump`): each write is a request of the owner `Tracks` on the
+//! core's link queue (its bytes are copied there), and a start needs an idle loader.
 //!   close:   control CLOSED = 1, then record `ready` = 0. The DSP holds a track only between ACQUIRE and RELEASE inside one `render`
 //!            call, so a render that was inside when CLOSED landed ends within that block. The second write lands in a later block than
 //!            the first (one transfer at a time, each acknowledged), so its acknowledgement drains the track: no COUNT read-back
@@ -22,7 +22,9 @@
 //!
 //! TODO (not wired yet): persistence of the selections to the digikit store (they live in memory per project now); a request mailbox
 //! so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
-use crate::core_api::{CoreApi, LinkWriter, Platform, SamplePool, PLATFORM, REAL_CORE};
+use crate::core_api::{CoreApi, Platform, SamplePool, PLATFORM, REAL_CORE};
+use dkrt_abi::dsp::PH_IDLE;
+use dkrt_abi::link::{LinkResult, Owner, Stream, Ticket};
 use core::hint::black_box;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::files::{HASH_ELEKTRON32, SAMPLES};
@@ -94,51 +96,44 @@ struct Op {
 }
 const OP0: Op = Op { kind: OP_NONE, step: 0, tries: 0, rec: [0; 8] };
 static mut OPS: [[Op; TRACKS]; CLIENTS] = [[OP0; TRACKS]; CLIENTS];
-/// The bytes of the write in flight (little-endian DSP words; the link reads them in place) and its track: client * TRACKS + track.
-static mut STAGE: [u8; 28] = [0; 28];
+/// The write in flight: the id of its request and its track, client * TRACKS + track.
 static mut FLIGHT: usize = NO_FLIGHT;
-
-/// Little-endian bytes of `words` into `STAGE`; the byte count.
-unsafe fn stage(words: &[u32]) -> u32 {
-    let mut i = 0;
-    while i < words.len() {
-        let b = words[i].to_le_bytes();
-        let st = &mut *addr_of_mut!(STAGE);
-        st[i * 4] = b[0];
-        st[i * 4 + 1] = b[1];
-        st[i * 4 + 2] = b[2];
-        st[i * 4 + 3] = b[3];
-        i += 1;
-    }
-    (words.len() * 4) as u32
-}
+static mut FLIGHT_ID: u16 = 0;
 
 /// Has the op written everything?
 fn complete(op: &Op) -> bool {
     (op.kind == OP_CLOSE && op.step >= 2) || (op.kind == OP_PUBLISH && op.step >= 3)
 }
 
-/// The next write of an op: (destination L2 byte address, byte count), the bytes in `STAGE`. None when the op is complete.
+/// The next write of an op: (destination L2 byte address, the words, their count). None when the op is complete.
 /// If chains, not a `match`: dense arms become a PC-relative jump table, which is not ColdFire code.
-unsafe fn next_write(c: usize, k: usize, op: &Op) -> Option<(u32, u32)> {
+unsafe fn next_write(c: usize, k: usize, op: &Op) -> Option<(u32, [u32; 7], usize)> {
     let rec = RECORDS[c] + 32 * k as u32;
     let ctl = CONTROL[c] + 16 * k as u32;
+    let mut w = [0u32; 7];
     if op.kind == OP_CLOSE {
         if op.step == 0 {
-            return Some((ctl, stage(&[1])));
+            w[0] = 1;
+            return Some((ctl, w, 1));
         }
         if op.step == 1 {
-            return Some((rec, stage(&[0])));
+            return Some((rec, w, 1));
         }
     } else if op.kind == OP_PUBLISH {
         if op.step == 0 {
-            return Some((rec + 4, stage(&op.rec[1..8])));
+            let mut i = 0;
+            while i < 7 {
+                w[i] = op.rec[1 + i];
+                i += 1;
+            }
+            return Some((rec + 4, w, 7));
         }
         if op.step == 1 {
-            return Some((ctl, stage(&[0])));
+            return Some((ctl, w, 1));
         }
         if op.step == 2 {
-            return Some((rec, stage(&[op.rec[0]])));
+            w[0] = op.rec[0];
+            return Some((rec, w, 1));
         }
     }
     None
@@ -147,14 +142,14 @@ unsafe fn next_write(c: usize, k: usize, op: &Op) -> Option<(u32, u32)> {
 /// Finish the write in flight, then start the next one. Called twice per UI-loop pass.
 unsafe fn pump<C: CoreApi>(api: &C) {
     if FLIGHT != NO_FLIGHT {
-        let done = api.link_poll(LinkWriter::Sample);
-        if done.is_none() {
+        let done = api.link_result(Ticket { owner: Owner::Tracks, id: FLIGHT_ID });
+        if done == LinkResult::Pending {
             return;
         }
         let (c, k) = (FLIGHT / TRACKS, FLIGHT % TRACKS);
         FLIGHT = NO_FLIGHT;
         let op = &mut (*addr_of_mut!(OPS))[c][k];
-        if done == Some(true) {
+        if done == LinkResult::Done {
             op.step += 1;
             op.tries = 0;
         } else {
@@ -177,7 +172,9 @@ unsafe fn pump<C: CoreApi>(api: &C) {
         }
         c += 1;
     }
-    if !api.link_idle() || api.link_busy() {
+    // a table write waits for the loader: the rows of a module that loads are not in the DSP yet
+    let d = api.dsp();
+    if d.phase != PH_IDLE || d.nwait != 0 {
         return;
     }
     c = 0;
@@ -186,12 +183,12 @@ unsafe fn pump<C: CoreApi>(api: &C) {
         while k < TRACKS {
             let op = (*addr_of!(OPS))[c][k];
             if (op.kind == OP_CLOSE || op.kind == OP_PUBLISH) && LIVE[c] {
-                if let Some((dst, len)) = next_write(c, k, &op) {
-                    let r = api.link_sample_send(dst, addr_of!(STAGE) as *const u8, len);
-                    if r == 0 {
-                        FLIGHT = c * TRACKS + k;
-                    } else if r == -2 {
-                        (*addr_of_mut!(OPS))[c][k].tries += 1;
+                if let Some((dst, words, n)) = next_write(c, k, &op) {
+                    if let Some(stream) = Stream::owned(0, dst, &words[..n]) {
+                        if let Some(t) = api.link_submit(Owner::Tracks, &stream) {
+                            FLIGHT = c * TRACKS + k;
+                            FLIGHT_ID = t.id;
+                        }
                     }
                     return;
                 }
@@ -696,7 +693,7 @@ pub unsafe fn peaks(handle: u32, track: u32, token: u32, out: *mut u8, capacity:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core_api::{Call, FakeCore};
+    use crate::core_api::FakeCore;
     use std::sync::Mutex;
 
     static LOCK: Mutex<()> = Mutex::new(());
@@ -712,43 +709,65 @@ mod tests {
         (*addr_of_mut!(OPS))[0][1] = Op { kind, step: 0, tries: 0, rec };
     }
 
+    /// The writer's pass and the link's pass, `n` times (the model's time passes with each call).
+    unsafe fn passes(fake: &FakeCore, n: usize) {
+        for _ in 0..n {
+            pump(fake);
+            fake.link.borrow_mut().pump();
+        }
+    }
+
     #[test]
     fn a_publish_op_submits_its_three_writes_in_order() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             seed(OP_PUBLISH, [1, 2, 3, 4, 5, 6, 7, 8]);
             let fake = FakeCore::new();
+            passes(&fake, 60);
             let words = |w: &[u32]| w.iter().flat_map(|v| v.to_le_bytes()).collect::<std::vec::Vec<u8>>();
-            // pass 1: the link is idle: step 0 (the record's words 1 to 7) goes out, and the write is in flight
-            pump(&fake);
-            assert_eq!(fake.calls(), [Call::SampleSend { dst: 0x1000 + 32 + 4, bytes: words(&[2, 3, 4, 5, 6, 7, 8]) }]);
-            assert_eq!(FLIGHT, 1);
-            // pass 2: the write is done: step 1 (the control set) goes out
-            pump(&fake);
-            // pass 3 and 4: step 2 (the record's first word), then the op is complete
-            pump(&fake);
-            let calls = fake.calls();
-            let sends: std::vec::Vec<_> = calls.iter().filter(|c| matches!(c, Call::SampleSend { .. })).collect();
-            assert_eq!(sends.len(), 3);
-            assert_eq!(sends[1], &Call::SampleSend { dst: 0x2000 + 16, bytes: words(&[0]) });
-            assert_eq!(sends[2], &Call::SampleSend { dst: 0x1000 + 32, bytes: words(&[1]) });
-            pump(&fake);
+            let wire: std::vec::Vec<(u32, u32, std::vec::Vec<u8>)> = fake.link.borrow().t.wire.iter().map(|w| (w.win, w.dst, w.bytes.clone())).collect();
+            assert_eq!(
+                wire,
+                [
+                    (0, 0x1000 + 32 + 4, words(&[2, 3, 4, 5, 6, 7, 8])),
+                    (0, 0x2000 + 16, words(&[0])),
+                    (0, 0x1000 + 32, words(&[1])),
+                ]
+            );
             assert_eq!((*addr_of!(OPS))[0][1].kind, OP_NONE);
         }
     }
 
     #[test]
-    fn a_busy_fx_transfer_holds_the_sample_writes() {
+    fn a_load_in_progress_holds_the_table_writes() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             seed(OP_CLOSE, [0; 8]);
             let fake = FakeCore::new();
-            fake.claim.set(1);
-            pump(&fake);
-            assert!(fake.calls().is_empty());
-            fake.claim.set(0);
-            pump(&fake);
-            assert_eq!(fake.calls().len(), 1);
+            fake.dsp().phase = dkrt_abi::dsp::PH_SEND;
+            passes(&fake, 20);
+            assert!(fake.link.borrow().t.wire.is_empty());
+            fake.dsp().phase = PH_IDLE;
+            passes(&fake, 40);
+            assert_eq!(fake.link.borrow().t.wire.len(), 2);
+        }
+    }
+
+    #[test]
+    fn a_write_that_fails_is_tried_again_and_a_stuck_op_ends_failed() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            seed(OP_CLOSE, [0; 8]);
+            let fake = FakeCore::new();
+            fake.link.borrow_mut().t.script.push_back(Some(92));
+            passes(&fake, 80);
+            // the first write failed once and was sent again; both writes of the close then went out
+            assert_eq!(fake.link.borrow().t.wire.len(), 3);
+            assert_eq!((*addr_of!(OPS))[0][1].kind, OP_NONE);
+            seed(OP_CLOSE, [0; 8]);
+            fake.link.borrow_mut().t.script.extend(std::iter::repeat(Some(92)).take(TRIES as usize));
+            passes(&fake, 400);
+            assert_eq!((*addr_of!(OPS))[0][1].kind, OP_FAILED);
         }
     }
 }
