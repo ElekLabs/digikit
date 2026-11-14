@@ -36,14 +36,26 @@ async function load() {
   return { x, put, get, text };
 }
 
-test('patchkit.wasm is small and carries no firmware', () => {
+test('patchkit.wasm is small and carries the device files but no port', () => {
   if (!existsSync(wasmPath)) return;
   const bytes = readFileSync(wasmPath);
   assert.ok(statSync(wasmPath).size < 2.5 * 1024 * 1024); // carries the Selache assembler, the SHARC+ build
-  // no stock-image hash and no port: those are passed in at run time
+  // The device files (devices/*.toml) are embedded whole with their [[firmware]] stock-image hashes: the site identifies a user's firmware by
+  // them. The ports (patch anchors) are passed in at run time, so a hash that only a port holds must not be in the wasm.
+  const deviceText = readdirSync(join(root, 'devices'))
+    .filter((f) => f.endsWith('.toml'))
+    .map((f) => readFileSync(join(root, 'devices', f), 'utf8'))
+    .join('\n');
+  const firmwareHash = /\[\[firmware\]\][^[]*?sha256 = "([0-9a-f]{64})"/g;
+  for (const m of deviceText.matchAll(firmwareHash)) {
+    assert.equal(Buffer.from(bytes).includes(Buffer.from(m[1])), true, `device file hash ${m[1].slice(0, 12)} missing`);
+  }
   for (const f of readdirSync(join(root, 'devices/ports'))) {
-    const sha = /syx_sha256 = "([0-9a-f]{64})"/.exec(readFileSync(join(root, 'devices/ports', f), 'utf8'))[1];
-    assert.equal(Buffer.from(bytes).includes(Buffer.from(sha)), false, `${f} sha embedded`);
+    const text = readFileSync(join(root, 'devices/ports', f), 'utf8');
+    for (const m of text.matchAll(/_sha256 = "([0-9a-f]{64})"/g)) {
+      if (deviceText.includes(m[1])) continue;
+      assert.equal(Buffer.from(bytes).includes(Buffer.from(m[1])), false, `${f} ${m[1].slice(0, 12)} embedded`);
+    }
   }
 });
 

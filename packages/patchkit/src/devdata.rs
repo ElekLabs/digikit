@@ -150,7 +150,6 @@ struct BoardDoc {
     dsp_clock_hz: Option<u64>,
     dsp_blocks_per_second: Option<u64>,
 }
-/// The embedded copy has no `[[firmware]]` tables (`build.rs`); tests of the real files do.
 #[derive(Deserialize)]
 struct FirmwareDoc {
     dsp: Option<toml::Value>,
@@ -198,8 +197,8 @@ fn word(n: &str, what: &str, v: &str, allowed: &[&str]) -> Result<()> {
     }
 }
 
-/// The one validator: the capabilities agree with the tables of the file. A fact the table cannot show (`[[firmware]]` is not
-/// embedded) is checked only where the table is there.
+/// The one validator: the capabilities agree with the tables of the file. `[[firmware]]` tables are embedded with the rest of the file, so the
+/// same checks run in the browser build.
 fn validate(n: &str, f: &File, caps: &Capabilities, c: &Container, short: &str) -> Result<()> {
     word(n, "dsp", &caps.dsp, &DSP_WORDS)?;
     word(n, "seal", &caps.seal, &SEAL_WORDS)?;
