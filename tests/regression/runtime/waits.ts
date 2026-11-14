@@ -213,18 +213,11 @@ export async function expectPollEmulated<T>(
     intervalMs = 200,
   }: { emulatedMs?: number; message?: string; intervalMs?: number } = {},
 ): Promise<T> {
-  let miss: unknown;
   return pollEmulated(
     session,
     async () => {
       const value = await read();
-      try {
-        assertion(value);
-        miss = undefined;
-      } catch (error) {
-        miss = error;
-        throw error;
-      }
+      assertion(value);
       return value;
     },
     () => true,
