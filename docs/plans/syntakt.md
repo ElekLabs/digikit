@@ -153,6 +153,23 @@ read over USB MIDI.
       finding 129 "Audio". The launcher builds `cf-audio` for such a device and sets `DIGI_EMU_PEER_AUDIO=1`; the real workbench is not checked yet.
 - [x] Instruction rate per device (`[emulator] instructions_per_second`, default of `DIGI_CF_IPS`) and the frame period derived from it and the
       converter's sample rate and frame size (finding 129 "Peer CPU model"): no frame overrun.
+- [x] Native kernel slice (finding 133): `cfaot` translates the voice oscillator 0x4000290e of the peer program to Rust; a kernel runs when the PC is at its
+      entry, exactly as the interpreter would (compared on 47.3 M instructions of a real run and on random states), 3.4-3.6x faster on its own, 10 percent
+      of the peer's wall time, 1.75 percent of the whole run's host instructions. Next kernels and MAIN's vector 191 mixer: see the projection in the finding.
+      Design (P4 section of this plan, "Native kernels"):
+      - Input: a data file per firmware image (`devices/cf-native/*.toml`: image SHA-256, load address, function entries). `cfaot` (Rust, the
+        interpreter's own decoder, in `packages/emulator/coldfire`) follows the function's flow and writes `kernels.rs` into `out/native/cf-native/NAME`
+        (firmware-derived, never committed: same rule as `SHARC_GEN_DIR`); `CF_NATIVE_DIR` makes `coldfire/build.rs` include it. Rust, not Python, because the
+        decoder and every flag and EMAC helper exist once, in Rust; the SHARC generator is Python because its core semantics are.
+      - Output: `kernel_N(cpu, bus, insns, budget)` per function. Specialised forms (move, lea, add, sub, shifts, mac and msac with load, movclr, ACC moves,
+        branches, rts) call the interpreter's own helpers (`flags_*`, `mac_op`, `acc_to_reg`, `shift`); every other form runs through `native_exec`, the
+        interpreter's step after the fetch. CCR writes that nothing reads before the next full write and that no stop point can observe are dropped.
+      - Stop points: the budget at each block start, a failed bus access (before the instruction), a write over the kernel's own code. The interpreter
+        continues at `pc` with the state it would have there; `icount` is exact, so emulated time does not change.
+      - Match: entry address and FNV-1a of the code bytes, read through the bus at the first entry and again after any write over the guarded range
+        (`DecodeCache::guard`), so a different image or modified code never runs a kernel. No device branches: the data file is the key.
+      - Proof: `Cpu::check_native` (kernel and interpreter from one state on journalled buses: registers, CCR, EMAC, instruction count, every read and write in
+        order), used by `DIGI_CF_NATIVE=check` over a whole run and by `coldfire/tests/native_kernels.rs` on random states.
 - [ ] Peer state in snapshots; other output words (cue, FX out); one instruction rate for all devices.
 
 ### R Review before merge

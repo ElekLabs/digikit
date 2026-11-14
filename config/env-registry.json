@@ -41,6 +41,10 @@
    "owner": "rust:packages/emulator",
    "purpose": "Output directory: a cf-mix build of coupled-run writes one executed-instruction JSON per scenario"
   },
+  "DIGI_CF_NATIVE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Native ColdFire kernels in a build with CF_NATIVE_DIR: 0 turns them off, check compares each kernel run with the interpreter (a difference stops the CPU), anything else runs them (default)"
+  },
   "DIGI_CF_STATES": {
    "owner": "python:tools/patchkit",
    "purpose": "0 disables the cached ColdFire boot-state snapshots in the patchkit boot harness (flag)"
