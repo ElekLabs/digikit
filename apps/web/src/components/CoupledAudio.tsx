@@ -1,7 +1,7 @@
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { PcmSink, resumeOnNextGesture } from '../runtime/audio';
-import { fetchLocalInputs, localManifest } from '../runtime/local-inputs';
-import type { EmulatorRuntime, RuntimeSnapshot } from '../runtime/runtime';
+import { fetchLocalInputs, localManifest } from '@digi/workbench-core/runtime/local-inputs.ts';
+import type { EmulatorRuntime, RuntimeSnapshot } from '@digi/workbench-core/runtime/runtime.ts';
 
 /** Load logic shared by the panel's Start button and Faceplate's local-inputs path. The caller creates and resumes `sink` in its gesture and awaits that before calling; throws on failure and leaves closing `sink` to the caller. */
 export async function startCoupled(opts: {

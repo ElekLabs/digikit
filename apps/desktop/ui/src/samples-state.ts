@@ -1,8 +1,8 @@
-// The Samples mode's state, kept for the life of the window (the rest of the Transfer page's state is apps/web/src/transfer/transfer-state.ts).
+// The Samples mode's state, kept for the life of the window (the rest of the Transfer page's state is packages/workbench-core/src/transfer/transfer-state.ts).
 import { createSignal } from 'solid-js';
 import type { Prepared } from '@digi/dk-session/dksample';
 import type { SampleEntry } from '@digi/dk-session/samples';
-import { localStorageKeyValue, remembered } from '../../../web/src/storage';
+import { localStorageKeyValue, remembered } from '@digi/workbench-core/storage.ts';
 import type { LocalEntry, Uploads } from './samples-core';
 
 /** The folder on the computer that Samples mode lists ('' until one is chosen). */

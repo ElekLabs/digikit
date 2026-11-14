@@ -33,7 +33,45 @@
             "paths": [
               {
                 "name": "@tauri-apps/api/core",
-                "message": "Call the Tauri commands through the Host (apps/desktop/ui/src/host/host.ts); only host/tauri-host.ts imports invoke."
+                "message": "Call the Tauri commands through the Host (packages/workbench-core/src/host/host.ts); only host/tauri-host.ts imports invoke."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/apps/web/**", "**/web/src/**", "@digi/web"],
+                "message": "The apps do not import each other: shared code lives in packages/workbench-core."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/**/*.{ts,tsx,mjs}"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/apps/desktop/**", "**/desktop/ui/**", "@digi/desktop"],
+                "message": "The apps do not import each other: shared code lives in packages/workbench-core."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/workbench-core/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/apps/**", "@digi/web", "@digi/desktop"],
+                "message": "workbench-core is below the apps: it imports no app."
               }
             ]
           }
@@ -47,27 +85,35 @@
       }
     },
     {
-      "files": ["apps/web/src/**/*.{ts,tsx}", "apps/desktop/ui/**/*.{ts,tsx}"],
+      "files": [
+        "apps/web/src/**/*.{ts,tsx}",
+        "apps/desktop/ui/**/*.{ts,tsx}",
+        "packages/workbench-core/{src,ui}/**/*.{ts,tsx}"
+      ],
       "rules": {
         "eslint/no-restricted-globals": [
           "error",
           {
             "name": "localStorage",
-            "message": "Take a KeyValue (apps/web/src/storage.ts); only storage.ts reads localStorage."
+            "message": "Take a KeyValue (packages/workbench-core/src/storage.ts); only storage.ts reads localStorage."
           },
           {
             "name": "indexedDB",
-            "message": "Take a BlobStore (apps/web/src/blob-store.ts); only blob-store.ts opens IndexedDB."
+            "message": "Take a BlobStore (packages/workbench-core/src/blob-store.ts); only blob-store.ts opens IndexedDB."
           },
           {
             "name": "Worker",
-            "message": "Take a WorkerFactory (apps/web/src/workers.ts); only workers.ts calls new Worker."
+            "message": "Take a WorkerFactory (packages/workbench-core/src/workers.ts); only apps/web/src/browser-workers.ts calls new Worker."
           }
         ]
       }
     },
     {
-      "files": ["apps/web/src/storage.ts", "apps/web/src/blob-store.ts", "apps/web/src/workers.ts"],
+      "files": [
+        "packages/workbench-core/src/storage.ts",
+        "packages/workbench-core/src/blob-store.ts",
+        "apps/web/src/browser-workers.ts"
+      ],
       "rules": {
         "eslint/no-restricted-globals": "off"
       }

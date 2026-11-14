@@ -26,9 +26,9 @@ import {
   libraryModule,
   restartDevice,
   uploadProgress,
-} from '../src/modules/dktransfer.ts';
-import { setFitReader } from '../src/modules/fit.ts';
-import { parseSoftwareVersion } from '../src/transfer/connection-core.ts';
+} from '@digi/workbench-core/modules/dktransfer.ts';
+import { setFitReader } from '@digi/workbench-core/modules/fit.ts';
+import { parseSoftwareVersion } from '@digi/workbench-core/transfer/connection-core.ts';
 import { dkm, everythingFits, needsOf } from './support/dkm.ts';
 import { FakeDevice, concat, hex, sha } from './support/fakedevice.ts';
 

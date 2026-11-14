@@ -1,5 +1,5 @@
 /* The Card panel (CardPanel.tsx) and the Memory panel (MemoryPanel.tsx): panels in a narrow column beside the faceplate (SidePanels.tsx); tokens from
-   the site (apps/web/src/styles/site.css). */
+   the site (packages/workbench-core/ui/styles/site.css). */
 .card-panel {
   flex-shrink: 0;
   width: 260px;

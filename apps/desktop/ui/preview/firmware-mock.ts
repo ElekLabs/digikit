@@ -6,8 +6,8 @@
 // (default 0), fwforce=1 (all checks pass), fwerror=0..1 (the Write at this fraction of the image gets a device error).
 import { decode8in7, encode8in7 } from '@digi/dk-session';
 import { CMD } from '@digi/dk-session/gen_proto';
-import { PatchKit } from '../../../web/src/patch/patchkit-core';
-import { FakeUpgrade } from '../../../web/tests/support/fakeflash.ts';
+import { PatchKit } from '@digi/workbench-core/patch/patchkit-core.ts';
+import { FakeUpgrade } from '@digi/workbench-core/testing/fakeflash.ts';
 import bundleUrl from '../../../web/public/modules/bundle.json?url';
 import wasmUrl from '../../../web/public/patchkit.wasm?url';
 

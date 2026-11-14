@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'vitest';
-import { memoryBlobStore } from '../src/blob-store.ts';
+import { memoryBlobStore } from '@digi/workbench-core/blob-store.ts';
 import { ReadyCache, sha256Hex, type ReadyState } from '../src/ready-cache.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');

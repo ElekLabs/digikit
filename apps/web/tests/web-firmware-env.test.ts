@@ -2,9 +2,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createWebFirmwareEnv } from '../src/firmware/web-env.ts';
-import type { PatchKitLike, PreparedFlash } from '../src/patch/patchkit-core.ts';
-import { memoryWasmSource } from '../src/wasm-source.ts';
-import { createFakeWorkers, type FakeWorker } from '../src/workers-fake.ts';
+import type { PatchKitLike, PreparedFlash } from '@digi/workbench-core/patch/patchkit-core.ts';
+import { memoryWasmSource } from '@digi/workbench-core/wasm-source.ts';
+import { createFakeWorkers, type FakeWorker } from '@digi/workbench-core/workers-fake.ts';
 
 interface Request {
   type: string;

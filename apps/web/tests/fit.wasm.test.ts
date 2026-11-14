@@ -3,8 +3,8 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { DkNeeds } from '../src/modules/dkneeds.ts';
-import type { Caps, Needs } from '../src/modules/fit.ts';
+import { DkNeeds } from '@digi/workbench-core/modules/dkneeds.ts';
+import type { Caps, Needs } from '@digi/workbench-core/modules/fit.ts';
 import { WASM } from './fit-wasm.ts';
 import { readBytes } from './support/patchkit-env.ts';
 import { test } from 'vitest';

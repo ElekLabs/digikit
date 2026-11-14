@@ -1,7 +1,7 @@
 // The right-hand column of the Emulator and Remote pages (SidePanels.tsx): which tab it shows (Card, Memory, Metrics) and whether it is open or
 // folded to a rail. Both choices are kept in the profile's storage; a page that lacks the chosen tab (Remote has Memory only) shows its first one.
 import { createSignal, type Accessor } from 'solid-js';
-import { localStorageKeyValue } from '../../../web/src/storage';
+import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
 import { TABS, type InspectorTab } from './inspector-core';
 
 /** Below this window width the column starts folded, unless the user chose (it would take a quarter of the window). */

@@ -2,7 +2,7 @@
 // the warnings with their texts, the load failures. The rest of the Transfer logic runs in dktransfer.test.ts with a fit stand-in.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { headerInfo, libraryModule, mergeView } from '../src/modules/dktransfer.ts';
+import { headerInfo, libraryModule, mergeView } from '@digi/workbench-core/modules/dktransfer.ts';
 import { dkm, needsOf } from './support/dkm.ts';
 import { hex, sha } from './support/fakedevice.ts';
 import { useFitWasm } from './fit-wasm.ts';

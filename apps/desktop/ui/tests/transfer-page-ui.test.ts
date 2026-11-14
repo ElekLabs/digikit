@@ -2,13 +2,18 @@ import type { UploadEvent, Uploads } from '../src/samples-core.ts';
 type WithoutFolder<T> = T extends unknown ? Omit<T, 'folder'> : never;
 type UploadEventWithoutFolder = WithoutFolder<Exclude<UploadEvent, { event: 'note' }>>;
 // The pure logic behind the Transfer page's behaviour: select all, the speed and the time left, when the page reads by itself, when it says
-// "Waiting for ...", the bottom bar of both modes (apps/web/src/transfer: select-core, rate-core, refresh-core, wait-core, activity, transfer-core,
+// "Waiting for ...", the bottom bar of both modes (packages/workbench-core/src/transfer: select-core, rate-core, refresh-core, wait-core, activity, transfer-core,
 // samples-core). The pictures of the page are checked with `node tools/devtools/ui_shots.mjs` (docs/TESTING.md).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { instrument } from '../../../web/src/transfer/activity.ts';
-import { createRate, etaSeconds, fmtEta, fmtRate, statsLine } from '../../../web/src/transfer/rate-core.ts';
-import { FOCUS_GAP_MS, canAutoRefresh, focusReadDue, listingChanged } from '../../../web/src/transfer/refresh-core.ts';
+import { instrument } from '@digi/workbench-core/transfer/activity.ts';
+import { createRate, etaSeconds, fmtEta, fmtRate, statsLine } from '@digi/workbench-core/transfer/rate-core.ts';
+import {
+  FOCUS_GAP_MS,
+  canAutoRefresh,
+  focusReadDue,
+  listingChanged,
+} from '@digi/workbench-core/transfer/refresh-core.ts';
 import {
   applyUpload,
   folderStatus,
@@ -37,10 +42,10 @@ import {
   selectState,
   tickSelect,
   toggleAll,
-} from '../../../web/src/transfer/select-core.ts';
-import { countLabel, applyEvent, modulesBar, startProgress } from '../../../web/src/transfer/transfer-core.ts';
-import { createFakeTransferApp } from '../../../web/src/transfer/fake-app.ts';
-import { WAIT_QUIET_MS, createActivity, waitShown } from '../../../web/src/transfer/wait-core.ts';
+} from '@digi/workbench-core/transfer/select-core.ts';
+import { countLabel, applyEvent, modulesBar, startProgress } from '@digi/workbench-core/transfer/transfer-core.ts';
+import { createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
+import { WAIT_QUIET_MS, createActivity, waitShown } from '@digi/workbench-core/transfer/wait-core.ts';
 
 test('select all: none, some or all of the visible rows; a click ticks all, or clears them when all are ticked', () => {
   const keys = ['a', 'b', 'c'];
@@ -181,7 +186,7 @@ test('a transport reports its traffic: a message is activity, a recv in flight i
   assert.equal(sent.length, 1);
   const pending = t.recv(1000);
   // the module's tracker is shared: a request is now in flight
-  const { quietMs } = await import('../../../web/src/transfer/activity.ts');
+  const { quietMs } = await import('@digi/workbench-core/transfer/activity.ts');
   assert.notEqual(quietMs(), undefined, 'a recv in flight is a waiting request');
   reply = Uint8Array.of(2);
   release();

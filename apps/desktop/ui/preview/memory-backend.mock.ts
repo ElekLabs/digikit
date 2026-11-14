@@ -7,7 +7,7 @@
 //   split  as pluck, with the free CPU memory split in blocks (largest block 90 KiB)
 //   over   as dsp, with the DSP memory used above its limit
 // The figures go through the app's own `buildBars`, so the picture is what a device with these modules shows.
-import type { Caps } from '@web/modules/fit';
+import type { Caps } from '@digi/workbench-core/modules/fit.ts';
 import { buildBars, type KnownModule } from '../src/memory-core';
 import { PAUSED } from '../src/desktop-env';
 import { LIBRARY } from './sim';
