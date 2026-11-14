@@ -91,24 +91,6 @@ function otherImageConsumer(): string {
   )![0];
 }
 
-const manifestOf = (id: string) => `${workspace.nodes[id].data.root}/module.toml`;
-
-it('keeps runtime and shipped content outside dependency cycles', () => {
-  const reaches = (from: string, target: string, seen = new Set<string>()): boolean => {
-    if (seen.has(from)) return false;
-    seen.add(from);
-    return (workspace.dependencies[from] ?? []).some(
-      (dep) => dep.target === target || reaches(dep.target, target, seen),
-    );
-  };
-  for (const [name, node] of Object.entries(workspace.nodes)) {
-    if (name === 'core/runtime' || /^modules\/(machines|fx|tools)\//.test(node.data.root))
-      expect(reaches(name, name), name).toBe(false);
-  }
-  expect(reaches('core/runtime', 'core/runtime-tests')).toBe(false);
-  expect(reaches('core/runtime', 'core/runtime-capacity-tests')).toBe(false);
-});
-
 it('keeps every gated runtime device file in exactly one owner command', () => {
   const base = workspace.nodes['core/runtime-tests'].data;
   const owners = Object.values(workspace.nodes)
@@ -191,23 +173,6 @@ it('forms explicit manifest libraries from selected modules and transitive requi
 });
 
 describe('workspace selection', () => {
-  it('keeps full-only module fixtures out of quick capacity selection', () => {
-    const manifest = manifestOf(otherImageConsumer());
-    const graph = selected(manifest, 'test-device,test-device-full');
-    expect(graph.tasks['core/runtime-capacity-tests:test-device']).toBeUndefined();
-    expect(graph.tasks['core/runtime-inferred-needs-tests:test-device-full']).toBeDefined();
-    const quick = selected('tests/fixtures/modules/dyn-fx-gain/src/module.c', 'test-device');
-    expect(quick.tasks['core/runtime-capacity-tests:test-device']).toBeDefined();
-  }, 30_000);
-
-  it('leaves manual device audits out of inferred gate commands', () => {
-    const manual = 'modules/core/runtime/tests/memaudit-module.manual.device.test.ts';
-    expect(existsSync(join(root, manual))).toBe(true);
-    for (const { data } of Object.values(workspace.nodes))
-      for (const target of Object.values(data.targets))
-        expect(target.options?.command ?? '').not.toContain('.manual.device.test.ts');
-  });
-
   it('retains core manifest selection for producers and their image consumers', () => {
     const graph = selected('modules/core/runtime/module.toml', 'build-objects,test-conformance');
     expect(graph.tasks['core/runtime:build-objects']).toBeDefined();

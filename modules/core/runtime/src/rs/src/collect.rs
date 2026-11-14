@@ -457,7 +457,7 @@ unsafe fn active() -> Option<&'static mut Collect> {
     }
 }
 
-// the builder imports (registered in lib.rs)
+// the builder imports (registered in imports.rs)
 
 pub unsafe extern "C" fn dk_module_ctx_add_machine(ctx: *mut u8, index: u32, name: *const u8, short_name: *const u8) -> *mut u8 {
     match active() {

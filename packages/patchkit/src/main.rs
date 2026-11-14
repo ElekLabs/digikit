@@ -63,6 +63,9 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          stay). --status prints {module: \"unchanged\"|\"needs build\"} as JSON and builds nothing.
                                          --paths prints {module: {object path: stored file}} for the sources now and builds nothing.
                                          --tree DIR: every module under DIR only.
+  objdiff OLD.dko.json NEW.dko.json [--format text|json] [--strict]
+                                         do two objects hold the same code up to names, order and addresses? (proof for moves of Rust items;
+                                         docs/PATCHING.md); exit 1 and the differences when not
   dko show FILE.dko.json [--relocs]      arch, toolchain record, sections, symbols and relocations of an object
   dko isa-digest FILE.dko.json           the ISA check record the object's bytes need (toolchain.isa_check)
   dko isa-check FILE...                  ColdFire V4e ISA check of .dko.json (cf), ELF objects and ar archives
@@ -268,6 +271,12 @@ fn run(a: Args) -> Result<()> {
         "build" => build_cli::build(&a.root, rest)?,
         #[cfg(not(target_arch = "wasm32"))]
         "dko" => build_cli::dko(rest)?,
+        "objdiff" => {
+            let code = patchkit::objdiff::run(rest)?;
+            if code != 0 {
+                std::process::exit(code);
+            }
+        }
         #[cfg(not(target_arch = "wasm32"))]
         "cf-link" => build_cli::cf_link(&a.root, rest)?,
         #[cfg(not(target_arch = "wasm32"))]

@@ -22,7 +22,6 @@
           "tools/patchkit/pk_digikit_fxroute.py",
           "tools/patchkit/pk_digikit_fxroutes.py"
         ],
-        "pythonTools": true,
         "plusdrive": true
       },
       {
@@ -38,7 +37,6 @@
           "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxsend.py"
         ],
-        "pythonTools": true,
         "plusdrive": true
       },
       {

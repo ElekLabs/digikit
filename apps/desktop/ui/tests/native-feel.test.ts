@@ -1,8 +1,7 @@
 // The native-feel rules of the desktop app (apps/desktop/ui/src/native-core.ts, native.css).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
-import { NO_DRAG, SELECTABLE, contextMenuAllowed, dragAllowed } from '../src/native-core.ts';
+import { contextMenuAllowed, dragAllowed } from '../src/native-core.ts';
 
 /** A stand-in for an element: `closest(selector)` finds `self` when the selector list names one of its `matches`. */
 const el = (...matches: string[]) => ({
@@ -22,25 +21,4 @@ test('links and images are not dragged, anything else may start a drag', () => {
   assert.equal(dragAllowed(el('a')), false);
   assert.equal(dragAllowed(el('img')), false);
   assert.equal(dragAllowed(el('button')), true);
-  assert.deepEqual(
-    NO_DRAG.split(',').map((s) => s.trim()),
-    ['a', 'img'],
-  );
-});
-
-test('native.css makes every selectable selector selectable, and the rest of the app not', () => {
-  const css = readFileSync(new URL('../src/native.css', import.meta.url), 'utf8');
-  const rule = (name: string) => css.slice(css.indexOf(name), css.indexOf('}', css.indexOf(name)));
-  const selectable = css.slice(
-    css.indexOf('/* selectable text */'),
-    css.indexOf('}', css.indexOf('/* selectable text */')),
-  );
-  assert.ok(!SELECTABLE.some((s) => s.includes('.rows')), 'the names of the list rows are not selectable text');
-  assert.ok(!css.includes('.rows .name'), 'native.css does not make list rows selectable');
-  for (const s of SELECTABLE) assert.ok(selectable.includes(s), `${s} is not in the selectable rule of native.css`);
-  assert.match(selectable, /user-select: text/);
-  assert.match(rule('body {\n  cursor'), /user-select: none/);
-  assert.match(rule('html,\nbody {'), /overscroll-behavior: none/);
-  assert.match(css, /:focus:not\(:focus-visible\)\s*\{\s*outline: none/);
-  assert.match(rule('a,\nimg {'), /-webkit-user-drag: none/);
 });

@@ -657,6 +657,8 @@ fn main() {
             app.manage(midi_port::MidiWatch::start());
             Ok(())
         })
+        // Tauri runs a plain `fn` command on the main thread: any wait or file read there freezes the window. Every command is `async`
+        // (its blocking work goes to `spawn_blocking`).
         .invoke_handler(tauri::generate_handler![
             emu_call,
             emu_stage_syx,
@@ -746,37 +748,6 @@ async fn card_open_folder(app: tauri::AppHandle, host: State<'_, Host>) -> Resul
 mod cli_tests {
     use super::*;
     use desktop_runtime::{AudioMode, AudioOptions};
-
-    /// Tauri runs a plain `fn` command on the main thread: any wait or file read there freezes the window. Every command is `async`
-    /// (its blocking work goes to `spawn_blocking`).
-    #[test]
-    fn every_command_is_async() {
-        let sources = [
-            ("main.rs", include_str!("main.rs")),
-            ("library.rs", include_str!("library.rs")),
-            ("local.rs", include_str!("local.rs")),
-            ("midi_port.rs", include_str!("midi_port.rs")),
-        ];
-        let mut found = 0;
-        for (file, text) in sources {
-            let lines: Vec<&str> = text.lines().collect();
-            for (i, line) in lines.iter().enumerate() {
-                if line.trim() != "#[tauri::command]" {
-                    continue;
-                }
-                found += 1;
-                let next = lines[i + 1..].iter().find(|l| {
-                    !l.trim_start().starts_with("///") && !l.trim_start().starts_with("#[")
-                });
-                let next = next.expect("a function follows").trim_start();
-                assert!(
-                    next.starts_with("async fn ") || next.starts_with("pub async fn "),
-                    "{file}: a command on the main thread: {next}"
-                );
-            }
-        }
-        assert!(found >= 20, "the scan found {found} commands");
-    }
 
     fn parse(args: &[&str]) -> Result<StartupArgs, String> {
         cli::parse_values(

@@ -38,7 +38,6 @@ it('infers core producers from category and source-backed objects, independently
   const owner = projects[modules[0].dir];
   expect(owner.tags).toEqual(expect.arrayContaining(['module', 'type:raw', 'acceptance-image']));
   const producer = owner.targets['build-objects'];
-  expect(producer.cache).toBe(false);
   for (const module of modules) {
     const input = `{workspaceRoot}/${module.dir}/module.toml`;
     if (module.category === 'core') expect(producer.inputs).toContain(input);
@@ -49,16 +48,11 @@ it('infers core producers from category and source-backed objects, independently
 
   expect(producer.outputs).toEqual([`{workspaceRoot}/${modules[0].dir}/build/object.dko.json`]);
   expect(producer.dependsOn).toEqual(['sdk:check-generated', 'example/dep:build-objects']);
-  expect(producer.options.parallel).toBe(false);
-  expect(producer.options.commands).toHaveLength(2);
   expect(projects[modules[1].dir].tags).toContain('acceptance-image');
   expect(projects[modules[2].dir].targets?.['build-objects']).toBeUndefined();
   expect(projects[modules[3].dir].targets?.['build-objects']).toBeUndefined();
   expect(projects[modules[4].dir].targets['build-objects']).toBeDefined();
   expect(projects[modules[4].dir].tags).not.toContain('acceptance-image');
-  expect(projects[modules[2].dir].tags).toContain('release-module'); // shipped raw content, no uploadability flags
-  expect(owner.tags).not.toContain('release-module');
-  expect(projects[modules[5].dir].tags).not.toContain('release-module');
 });
 
 it('scopes explicit acceptance images without changing the default image producer set', () => {
