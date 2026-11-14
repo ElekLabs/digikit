@@ -2,7 +2,7 @@
 // answers `runtime.maps` for a small ship map and one module map; the load table is read through PEEK of the fake session (runtime-log-mock.ts).
 import dkprofUrl from '../../../web/public/dkprof.wasm?url';
 import { createDkProfLoader } from '../src/dkprof-env';
-import { createFakeHost } from '../src/host/fake-host';
+import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
 import { createEmulatorNames } from '../src/log-names-backend';
 import { PREVIEW_STATE } from './runtime-log-mock';
 

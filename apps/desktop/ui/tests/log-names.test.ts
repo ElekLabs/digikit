@@ -15,7 +15,7 @@ import type { LogInput } from '../src/log-core.ts';
 import { createDkProfLoader } from '../src/dkprof-env.ts';
 import { createDeviceNames, createEmulatorNames } from '../src/log-names-backend.ts';
 import { makeResolver, readLoadTable } from '../src/log-names.ts';
-import { createFakeHost } from '../src/host/fake-host.ts';
+import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
 
 let prof: DkProf;
 let wasm: Uint8Array<ArrayBuffer>;

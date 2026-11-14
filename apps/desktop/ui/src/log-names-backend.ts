@@ -4,7 +4,7 @@
 //   emulator  the controller call `runtime.maps` (the live image; it follows `dev.reload`)
 //   device    the ship map `firmware_prepare` kept for the image id the device reports in INFO (`library.readMaps`)
 // Maps of the built modules come from `library.readMaps` for both.
-import type { Host } from './host/host';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 import type { DkProf } from '@digi/dk-session/dkprof';
 import { createLogNames, type LogNames, type NameSources, type RuntimeMaps } from './log-names';
 import { deviceOfPort } from './remote-core';
