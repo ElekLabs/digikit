@@ -26,6 +26,7 @@ pub mod apply;
 pub mod bootrom;
 pub mod build;
 pub mod dkm;
+pub mod dkm_identity;
 pub mod dkmdsp;
 pub mod dkmsynth;
 pub mod dko;

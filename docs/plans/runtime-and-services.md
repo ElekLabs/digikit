@@ -194,7 +194,7 @@ The sticky type-number code is nearly generic. The runtime keeps "assign a numbe
 
 ### 4.1 R7 as built
 
-R7 changes the header table of the `.dkm` and nothing that runs. The image, relocations, imports and DSP section of every module are byte-identical before and after: `uv run python -m tools.patchkit.dkm_identity pack DIR` packs every run-time module on both devices and `compare BEFORE AFTER` checks the parts (102 files: identical). PCM pins and SHARC golden hashes cannot move.
+R7 changes the header table of the `.dkm` and nothing that runs. The image, relocations, imports and DSP section of every module are byte-identical before and after: `patchkit pack-all` packs every run-time module on each device and `patchkit dkm-identity BEFORE AFTER` checks the parts (102 files: identical). PCM pins and SHARC golden hashes cannot move.
 
 **One kind table.** `sdk/sdk.toml` has `[records.kinds]` (kind id, whole record length, owning service, `generic`), `[records.resources]` (resource ids, with a reserved `DSP_COST` for S5) and `[[service]]` (the in-crate services in call order, with their Rust type). `patchkit gen` writes `records::` (`KIND_*`, `LEN_*`, `KINDS`, `KINDS_<SERVICE>`, `RES_*`, `GENERIC_KINDS`, `KIND_NAMES`, `HANDLE_SERVICES`) into `gen_sdk.rs` and `packages/dkneeds/src/gen_limits.rs`, the static service table into `modules/core/runtime/src/rs/src/gen_services.rs`, the kind numbers for Python and TypeScript into `dkproto.py` and `gen_proto.ts`, and `sdk/include/dk/gen/records.h` for C. No kind number is written by hand any more (`collect.rs`, `machines/records.rs`, `register.rs` and the dkneeds tests lost their literals).
 

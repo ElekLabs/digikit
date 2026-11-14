@@ -44,6 +44,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   synth-dkm SPEC.toml --device SHORT -o OUT.dkm [--size]   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
   dkm-info FILE.dkm                      check a .dkm and list what it holds
+  dkm-identity BEFORE_DIR AFTER_DIR      do two sets of .dkm (patchkit pack-all) differ only in the header table? (image, relocs, imports, DSP section compared)
   fit     --json -                       the fit rule (dkrt-fit): {caps, needs, empty?} on stdin -> {each, set, line}; exit 1 on a bad request
   records --json FILE|-                  the decoded records (counts, params, machines, pages, effects) of a committed record block
   needs   [--json] FILE.dkm...           what a load of each file takes (arena, DSP area, rows), inferred from its contents; `-` reads stdin;
@@ -860,6 +861,21 @@ plan.json {}",
             std::io::Read::read_to_end(&mut std::io::stdin(), &mut req)
                 .map_err(|e| Error(format!("stdin: {e}")))?;
             println!("{}", patchkit::fit::fit_json(&req)?);
+        }
+        "dkm-identity" => {
+            let (b, a2) = (need(rest)?, rest.get(1).ok_or_else(|| Error(USAGE.into()))?);
+            let r = patchkit::dkm_identity::compare_dirs(Path::new(b), Path::new(a2))?;
+            for f in &r.failures {
+                println!("FAIL {f}");
+            }
+            println!(
+                "identical code and DSP: {} files; failures: {}",
+                r.identical,
+                r.failures.len()
+            );
+            if !r.failures.is_empty() {
+                std::process::exit(1);
+            }
         }
         "dkm-info" => {
             let raw = read(need(rest)?)?;
