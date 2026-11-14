@@ -1,7 +1,7 @@
 # Syntakt support
 
 Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1`), short id `st`. Findings:
-[70](../findings/70-syntakt-1-42.md). Branches: `syntakt/bringup` (lane `sweep-gen`), `device-registry` (lane `ts-py`).
+[70](../findings/70-syntakt-1-42.md). Branches: `syntakt/runtime` (lane `pages-deploy`, the integration branch), `device-registry` (draft PR 437); `syntakt/bringup` is merged into it.
 
 ## Facts that shape the plan
 
@@ -191,8 +191,41 @@ read over USB MIDI.
   - Nx per-device halves and ready env from the registry (registry slice S1).
   - One eDMA TCD helper in periph instead of two copies; document the zero-time shortcuts (image stream, whole
     major loops, the 1500 Hz frame source) and fix them when touched.
-  - Decisions for Em: stock-firmware hashes in the browser bundle (existing conflict with patchkit's rule);
-    `verify` requiring the base image for devices with read-only sections.
+  - [x] Stock-firmware hashes in the browser bundle are allowed: the web app ships device files with their `[[firmware]]` hashes to
+        identify a user's firmware. patchkit's build embeds the device files whole (the stripping had no other purpose).
+  - [x] `verify` requires the stock base image for a device whose `[container]` has read-only sections and fails with a clear message
+        without it; only an image whose SHA-256 is a known stock image needs no base. `inspect` identifies a file and proves nothing.
+
+### Follow-ups after the integration (branch `syntakt/runtime`, 2026-11-14)
+
+Order: runtime safety items first, then the Nx cache gap, speed, restructure, design follow-ups.
+
+- Open runtime items:
+  - [ ] Store write safety: the remote stream handler takes host offsets (finding 131). Bound them to the store range on the device side
+        before any hardware use.
+  - [ ] The `core/ui` HEALTH and MEMORY pages are unverified on the Syntakt.
+  - [ ] `dk_input_turn` is unverified on the Syntakt.
+- Nx cache gap: `core/input:test-device--dt2` replayed its cached result after `modules/core/adapters/ui/build/ui.dko.json` changed.
+  A declared input is missing; find it with `pnpm nx:pilot show target inputs core/input:test-device--dt2 --json` and add it.
+- Literal baseline: `tools/nx/device-literals.baseline.json` grew with the code merged from main; the owners of those files burn it down.
+- Speed (now 0.37 of real time with audio on the Syntakt; the peer thread and MAIN run in one thread in lock step):
+  - [ ] One thread per CPU (about 1.7x).
+  - [ ] Peer RAM fast path: the peer bus folds bytes on every read (about 1.25x).
+  - [ ] More native kernels (finding 133): the peer's other hot buckets, and MAIN's vector 191 mixer (handler 0x400a38ce).
+- Emulator restructure (one slice at a time, the Syntakt run and the DN2/DT2 pinned scenarios must stay identical):
+  - [ ] A `Companion` enum on the board (none, mailbox responder, ColdFire peer, DSP) instead of the peer special cases.
+  - [ ] `companion/` crates: the peer CPU model and the SHARC link as siblings of the board, not inside `machine`.
+  - [ ] Board options from the device file (instruction rate, frame source, audio path) in one struct.
+  - [ ] One audio session for every companion (the DSP session's output path takes PCM from the peer too).
+  - [ ] A framed handoff between the CPU threads (a frame of work per message, so the threads need no lock step per slice).
+  - [ ] Kernel sets: `devices/cf-native/*.toml` selected by image hash from the device file, loaded at run time or built in.
+  - [ ] Peer state in snapshots, and a ready snapshot that includes the peer.
+- Design follow-ups (from the review):
+  - [ ] Boot signatures as per-firmware rules in `devices/fw`.
+  - [ ] Split `[emulator]` into device facts and emulator choices.
+  - [ ] Nx per-device targets from the registry (registry slices S1 to S3).
+  - [ ] One eDMA TCD helper in `periph`.
+  - [ ] Document the zero-time shortcuts (image stream, whole major loops, the 1500 Hz frame source).
 
 ### Later
 
