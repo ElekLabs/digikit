@@ -337,6 +337,9 @@ importers:
 
   packages/workbench-core:
     dependencies:
+      '@digi/control-client':
+        specifier: workspace:*
+        version: link:../control-client
       '@digi/dk-session':
         specifier: workspace:*
         version: link:../dk-session

@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@digi/control-client": "workspace:*",
     "@digi/dk-session": "workspace:*",
     "@digi/dkbs": "workspace:*",
     "smol-toml": "1.9.0",
