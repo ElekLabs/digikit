@@ -253,14 +253,14 @@ mod tests {
                 "module",
                 Key::default(),
                 vec![
-                    entry(Cpu::Cf, 0, 0x80, "init", Layer::Our, Some("digikit/pluck")),
+                    entry(Cpu::Cf, 0, 0x80, "init", Layer::Our, Some("vendor/demo")),
                     entry(
                         Cpu::Cf,
                         0x80,
                         0x80,
                         "render",
                         Layer::Our,
-                        Some("digikit/pluck"),
+                        Some("vendor/demo"),
                     ),
                     entry(
                         Cpu::Sharc,
@@ -268,7 +268,7 @@ mod tests {
                         0x20,
                         "_pk_render",
                         Layer::Our,
-                        Some("digikit/pluck"),
+                        Some("vendor/demo"),
                     ),
                 ],
             ),
@@ -283,7 +283,7 @@ mod tests {
                 target: "dn2".into(),
                 loads: Some(LoadTable {
                     modules: vec![Load {
-                        id: "digikit/pluck".into(),
+                        id: "vendor/demo".into(),
                         base: 0x4700_0000,
                         size: 0x100,
                         dsp_base: Some(0xb8_1000),
@@ -350,7 +350,7 @@ mod tests {
             owners,
             [
                 ("runtime", 50),
-                ("digikit/pluck", 40),
+                ("vendor/demo", 40),
                 ("firmware", 5),
                 ("unnamed", 5)
             ]
@@ -400,7 +400,7 @@ mod tests {
         let mut p = profile(vec![raw(Cpu::Cf, 0x4700_0084, 1, "pc")]);
         p.run.loads = None;
         let r = build(&p, &maps(), &LoadTable::default(), 10).unwrap();
-        assert_eq!(r.unloaded, ["digikit/pluck"]);
+        assert_eq!(r.unloaded, ["vendor/demo"]);
         assert_eq!(r.series[0].functions[0].name, "0x47000084");
     }
 

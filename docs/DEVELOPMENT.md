@@ -66,6 +66,7 @@ The files go to `out/snapshots/<device>-audio-ready-cold-*`. Git ignores them.
 ```sh
 mise run workbench                # build once and run (`mise run workbench -- --build-only` builds only)
 mise run wasm:dksample            # only public/dksample.wasm (the workbench runs it first; 0.3 s when unchanged)
+mise run wasm:dkprof              # only public/dkprof.wasm (`wb` addrmap, module and profile commands load it)
 mise run workbench -- --cf-only --plus-drive DIR firmware/Digitakt_II_OS1.17.syx   # a +Drive folder (default: plus_drive/<device>/; --samples is the same option)
 mise run workbench -- --dsp-patch FILE  # overlay a DSP patch (DN2 audio)
 mise run workbench -- --cf-only   # ColdFire only: no DSP, no audio
@@ -163,8 +164,9 @@ Ghidra project, `tools/coldfire/cfdb.py build` makes a database from the dump, a
 queries it. Decoding uses only public manuals ([docs/sharc/SOURCES.md](sharc/SOURCES.md)).
 All tools are indexed in [docs/TOOLS.md](TOOLS.md).
 
-Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).
-Usage of the module DSP analysis (`cargo run -p dksharc --example analyse`): [packages/dksharc/README.md](../packages/dksharc/README.md#usage).
+Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, `wb addrmap lookup`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).
+Usage of the module DSP analysis (`wb module analyse`): [packages/dksharc/README.md](../packages/dksharc/README.md#usage).
+Usage of profiles (`wb profile report`, `wb profile record`, the `dk.profile/1` artifact): [INSTRUMENTATION.md](INSTRUMENTATION.md#profiles).
 
 ### ColdFire UI candidate review
 

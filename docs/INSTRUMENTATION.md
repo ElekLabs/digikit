@@ -508,6 +508,42 @@ script change; check the frames by eye first).
 
 Profiles, crash records and PC dumps name their addresses through the address map ([ADDRMAP.md](ADDRMAP.md)): `tools/devtools/addrnames.py` for tools, `patchkit addr` for everything else. `tools/devtools/cfprof.py` prints `cf.profile` by function, `tools/devtools/pcdump_names.py` adds a `func` column to `pcdump.csv`, `fastcov` and `snapread` use the same lookup.
 
+## Profiles
+
+A profile is one JSON file, schema `dk.profile/1` (design: [profiling.md](plans/profiling.md) section 9; model: `packages/dkprof/src/profile.rs`). JSON is the artifact; the text of a report is a view of it.
+
+- `run`: id, target (`dt2`, `dn2`), firmware, runtime and module hashes, source revision, binary hash, and the load table of the run (where each module sat).
+- `clock`: what the counts measure (`emu.cf.insn`), their unit and how they were sampled.
+- `raw`: counters `{cpu, addr, count, series}`. `series` is `pc` or a producer's own (`idle_pc`, `exit_pc`). Raw counters are kept as taken.
+- `metrics` and `overhead`: `{name, value, unit}`, or `{name, unit, na_reason}` for what a target cannot provide. N/A is never a zero.
+- `markers` (`{name, at}`) and `loss` (what the producer could not keep).
+
+`wb profile report FILE` names the raw counters through address maps and adds up self counts per function and per owner (a module id, `runtime`, `firmware`, `unnamed`) for each series and CPU.
+Callers are not credited with their callees. `--map F` (several times) and `--image X.syx` give the maps, `--loads F` a load table (the one in `run.loads` is used too), `--top N` the
+length of the function lists (default 30), `--format json` prints the report as JSON. From a synthetic file (the pluck module, loaded at `0x47e10000`, DSP image at `0xb81000`):
+
+```sh
+node tools/devtools/wb.mjs profile report out/try/synthetic.profile.json --map out/try/pluck.addrmap.json --top 5
+# run synthetic-1 target dn2 clock emu.cf.insn (insn)
+# metrics:
+#   path.run_fast.instructions         812345 insn
+#   host.cpu                           N/A (the device has no host CPU)
+# pc cf by function (top 5; 3 rows, total 175):
+#              160  91.4%  init
+#               15   8.6%  0x40000000
+# pc cf by owner:
+#              160  91.4%  digikit/pluck
+#               15   8.6%  unnamed
+# pc sharc by function (top 5; 2 rows, total 400):
+#              400 100.0%  _pk_render
+# pc sharc by owner:
+#              400 100.0%  digikit/pluck
+```
+
+`wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR]` reads `cf.profile` of the running emulator (the daemon needs the `cf-profile` feature, below) before and after N seconds
+and writes the difference as a profile; with `--image` it also reads the load table of the running image. `cf.profile` keeps the 400 heaviest rows of its cumulative tables, which the artifact records under `loss`.
+`wb addrmap lookup` and `wb module analyse` ([ADDRMAP.md](ADDRMAP.md#usage), [dksharc](../packages/dksharc/README.md#usage)) use the same `dkprof.wasm`.
+
 ## Cargo features
 
 | crate | feature | effect |

@@ -109,6 +109,19 @@ dist/patchkit/patchkit addr --map out/try/pluck.addrmap.json --load digikit/pluc
 
 Without `--dsp-base` the DSP address has no name (`0xb811ea ?`). Without `--format text` the output is JSON (see Lookup).
 
+`wb addrmap lookup` does the same through `dkprof.wasm` (the code the workbench uses; `mise run wasm:dkprof` builds it once, no patchkit binary is needed). It takes the same
+maps and load options; the default output is text, `--format json` prints the JSON of Lookup. An address is a number or `cpu:number`; `--image X.syx` adds the ship map `X.addrmap.json`;
+`--loads FILE` is a load table, `--snapshot FILE` a JSON object of runtime symbol to hex bytes:
+
+```sh
+node tools/devtools/wb.mjs addrmap lookup 0x47e10000 sharc:0xb811e7 sharc:0xb811ea --map out/try/pluck.addrmap.json --load digikit/pluck=47e10000 --dsp-base digikit/pluck=b81000
+# 0x47e10000 init
+# 0xb811e7 _pk_render
+# 0xb811ea _pk_render+0x3
+node tools/devtools/wb.mjs --format json addrmap lookup 0x47e10000 --map out/try/pluck.addrmap.json --load digikit/pluck=47e10000
+# {"results":[{"addr":1205927936,"cpu":"cf","layer":"our","module":"digikit/pluck","name":"init","offset":0,"size":156,"sym_addr":1205927936,"text":"init"}],"unloaded":[]}
+```
+
 Read the load table of a running emulator or device. This needs the stock firmware in `firmware/`. `patchkit apply --addrmap` writes the ship map, which says what to
 read; patchkit decodes the bytes:
 
