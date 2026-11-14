@@ -64,6 +64,8 @@ fn fixture() -> (Vec<AddrMap>, LoadTable) {
             id: "test/demo".into(),
             base: 0x2100_0000,
             size: 0x200,
+            dsp_base: None,
+            fini: None,
         }],
     };
     (vec![ship, module, dev], loads)
@@ -122,6 +124,8 @@ fn module_entries_follow_the_load_address() {
             id: "test/demo".into(),
             base: 0x2200_0000,
             size: 0x200,
+            dsp_base: None,
+            fini: None,
         }],
     };
     let r = Resolver::new(&maps, &moved).unwrap();
@@ -185,4 +189,148 @@ fn the_file_round_trips_and_is_canonical() {
     assert_eq!(shuffled.to_json(), text);
     assert!(AddrMap::parse(&text.replace("dk-addrmap", "other")).is_err());
     assert!(AddrMap::parse(&text.replace("\"version\":1", "\"version\":2")).is_err());
+}
+
+#[test]
+fn module_dsp_entries_are_rebased_by_the_dsp_base() {
+    let map = AddrMap::new(
+        "module",
+        Key::default(),
+        vec![
+            e(
+                Cpu::Cf,
+                0x30,
+                0x10,
+                "demo_tick",
+                Layer::Our,
+                Some("test/demo"),
+            ),
+            e(
+                Cpu::Sharc,
+                0x10,
+                0x20,
+                "demo_render",
+                Layer::Our,
+                Some("test/demo"),
+            ),
+        ],
+    );
+    let load = |dsp_base| LoadTable {
+        modules: vec![Load {
+            id: "test/demo".into(),
+            base: 0x2100_0000,
+            size: 0x200,
+            dsp_base,
+            fini: None,
+        }],
+    };
+    let r = Resolver::new(&[map.clone()], &load(Some(0xb8_1000))).unwrap();
+    let hit = r.lookup(Cpu::Sharc, 0xb8_1014).unwrap();
+    assert_eq!((hit.name.as_str(), hit.offset), ("demo_render", 4));
+    assert_eq!(hit.module.as_deref(), Some("test/demo"));
+    assert!(
+        r.lookup(Cpu::Sharc, 0x10).is_none(),
+        "not at the link-relative address"
+    );
+    assert_eq!(name(&r, Cpu::Cf, 0x2100_0030), Some("demo_tick".into()));
+    // a module without a DSP base keeps its ColdFire names and leaves its DSP names out; it is not reported as unloaded
+    let r = Resolver::new(&[map], &load(None)).unwrap();
+    assert!(r.lookup(Cpu::Sharc, 0xb8_1014).is_none());
+    assert_eq!(name(&r, Cpu::Cf, 0x2100_0030), Some("demo_tick".into()));
+    assert!(r.unloaded.is_empty());
+}
+
+#[test]
+fn an_old_load_table_without_dsp_base_parses() {
+    let l: LoadTable = serde_json::from_str(r#"{"modules":[{"id":"a","base":16}]}"#).unwrap();
+    assert_eq!(l.modules[0].dsp_base, None);
+    let l: LoadTable =
+        serde_json::from_str(r#"{"modules":[{"id":"a","base":16,"dsp_base":12058624}]}"#).unwrap();
+    assert_eq!(l.modules[0].dsp_base, Some(0xb8_0000));
+}
+
+fn words(w: &[u32]) -> Vec<u8> {
+    w.iter().flat_map(|x| x.to_be_bytes()).collect()
+}
+
+/// A State of 3 slots: slot 0 a module with a DSP part, slot 1 free, slot 2 a module without one.
+fn synthetic() -> (snapshot::Loader, snapshot::Snapshot) {
+    let loader = snapshot::Loader {
+        modules: 3,
+        l2_byte_base: 0x2000_0000,
+        l2_sw_base: 0xb8_0000,
+        dsp: true,
+    };
+    let record = |used: u32, name: &str, base: u32, size: u32, fini: u32| {
+        let mut n = name.as_bytes().to_vec();
+        n.resize(32, 0);
+        let mut r = words(&[used]);
+        r.extend(n);
+        r.extend(words(&[0x0001_0000, base, size, fini]));
+        r
+    };
+    let mut state = words(&[0; 10]);
+    state.extend(record(1, "test/dsp-demo", 0x4750_0000, 0x900, 0x4750_0040));
+    state.extend(record(0, "", 0, 0, 0));
+    state.extend(record(1, "test/dyn-demo", 0x4751_0000, 0x200, 0));
+    // DKRT_DSP: 13 header words, mod_off[3], mod_len[3]; slot 0 sits 0x400 bytes into the area and is 0x300 bytes long
+    let mut dsp = words(&[0; 13]);
+    dsp.extend(words(&[0x400, 0, 0, 0x300, 0, 0]));
+    // dyndsp_info: magic, version, device, area
+    let info = words(&[0x1234, 1, 2, 0x2001_0000]);
+    let snap = [
+        ("DKRT_STATE", state),
+        ("DKRT_DSP", dsp),
+        ("dyndsp_info", info),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect();
+    (loader, snap)
+}
+
+#[test]
+fn a_snapshot_decodes_to_loads_with_and_without_dsp_code() {
+    let (loader, snap) = synthetic();
+    let lens: Vec<_> = loader.reads().iter().map(|r| (r.symbol, r.len)).collect();
+    assert_eq!(
+        lens,
+        [
+            ("DKRT_STATE", 40 + 3 * 52),
+            ("DKRT_DSP", 52 + 24),
+            ("dyndsp_info", 16)
+        ],
+        "the reads match what the decoder needs"
+    );
+    let t = snapshot::decode_loads(&loader, &snap).unwrap();
+    assert_eq!(t.modules.len(), 2, "the free slot is skipped");
+    let pluck = &t.modules[0];
+    assert_eq!(
+        (pluck.id.as_str(), pluck.base, pluck.size),
+        ("test/dsp-demo", 0x4750_0000, 0x900)
+    );
+    assert_eq!(pluck.fini, Some(0x4750_0040));
+    // area 0x20010000 + 0x400 is 0x10400 bytes into L2: 0x8200 short words
+    assert_eq!(pluck.dsp_base, Some(0xb8_0000 + 0x8200));
+    let demo = &t.modules[1];
+    assert_eq!(
+        (demo.id.as_str(), demo.dsp_base, demo.fini),
+        ("test/dyn-demo", None, None)
+    );
+}
+
+#[test]
+fn a_snapshot_without_the_dsp_loader_gives_no_dsp_bases() {
+    let (mut loader, mut snap) = synthetic();
+    snap.remove("DKRT_DSP");
+    snap.remove("dyndsp_info");
+    loader.dsp = false;
+    assert_eq!(loader.reads().len(), 1);
+    let t = snapshot::decode_loads(&loader, &snap).unwrap();
+    assert!(t.modules.iter().all(|m| m.dsp_base.is_none()));
+    snap.insert("DKRT_STATE".into(), vec![0; 41]);
+    assert!(snapshot::decode_loads(&loader, &snap).is_err());
+    assert!(
+        snapshot::parse_hex("0aff").unwrap() == [10, 255] && snapshot::parse_hex("0a f").is_err()
+    );
 }

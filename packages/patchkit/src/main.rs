@@ -31,7 +31,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   isa-scan X.syx [--list]                stores in the DSP section (7) the SHARC+ ISA does not have, one per line; exit 1 when found
                                          (X.plan.json as for preflight)
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
-  addr    --map FILE... [--loads FILE | --load ID=BASE...] [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
+  addr    --map FILE... [--loads FILE | --load ID=BASE... --dsp-base ID=PC...] [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
                                          names for addresses from address maps and a module load table (docs/ADDRMAP.md); JSON by default
   pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
@@ -716,6 +716,7 @@ plan.json {}",
             };
             // a run-time module declares in `init`: `[[machine]]`/`[[fx]]` in module.toml; the table at 0x90 is the keys table
             let mut dsp: Vec<u8> = vec![];
+            let mut dsp_obj = None;
             let reg = if dynamic {
                 let dev = flag(rest, "--device").ok_or_else(|| {
                     Error(format!(
@@ -755,6 +756,7 @@ plan.json {}",
                     &dev,
                     sharc.first().map(|(o, _)| *o),
                 )?;
+                dsp_obj = sharc.first().map(|(o, _)| *o);
                 opts.stereo = s.stereo;
                 opts.gate = s.gate;
                 dsp = s.dsp;
@@ -767,18 +769,12 @@ plan.json {}",
             let d = patchkit::dkm::Dkm::parse(&file)?;
             if let Some(p) = flag(rest, "--addrmap") {
                 // the map of the code the loader places; a data-only module has none
-                let map = match cf.first().map(|c| c.0) {
-                    Some(o) => patchkit::addrmap::module_map(o, &opts.name, &d.sha256)?,
-                    None => dkaddrmap::AddrMap::new(
-                        "module",
-                        dkaddrmap::Key {
-                            module: Some(opts.name.clone()),
-                            dkm_sha256: Some(d.sha256.clone()),
-                            ..Default::default()
-                        },
-                        vec![],
-                    ),
-                };
+                let map = patchkit::addrmap::module_map(
+                    cf.first().map(|c| c.0),
+                    dsp_obj,
+                    &opts.name,
+                    &d.sha256,
+                )?;
                 write(&p, map.to_json().as_bytes())?;
             }
             println!(

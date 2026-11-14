@@ -163,6 +163,9 @@ Ghidra project, `tools/coldfire/cfdb.py build` makes a database from the dump, a
 queries it. Decoding uses only public manuals ([docs/sharc/SOURCES.md](sharc/SOURCES.md)).
 All tools are indexed in [docs/TOOLS.md](TOOLS.md).
 
+Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).
+Usage of the module DSP analysis (`cargo run -p dksharc --example analyse`): [packages/dksharc/README.md](../packages/dksharc/README.md#usage).
+
 ### ColdFire UI candidate review
 
 After building both atlases and their catalogues, generate the complete inventories:
