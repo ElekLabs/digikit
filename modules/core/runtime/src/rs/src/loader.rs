@@ -331,6 +331,7 @@ unsafe fn complete(rec: usize, keys: &crate::collect::KeysCopy, init: u32, tick:
         crate::intro::discard(rec);
         let held = !crate::files::retire(rec) | !retire_sdk(rec);
         crate::module_cmds::release_cmds(owner);
+        crate::dlog::release_sinks(rec);
         crate::registry::remove(owner);
         if !dsp::release(rec) || held {
             return E_BUSY;
@@ -593,6 +594,9 @@ unsafe fn unload_rec_inner(rec: usize) -> i32 {
             crate::dlog::call_fini(rec as usize, call, ctx);
         }
     }
+    // a sink it set is released with it, with or without a `fini`; nothing may point into its range
+    crate::dlog::release_sinks(rec);
+    crate::dlog::sink_drop(m.base, m.base.wrapping_add(m.size));
     // the SysEx commands it registered are released with it
     crate::module_cmds::release_cmds(rec as u8 + 1);
     drop_tick_cb(m.base, m.size);

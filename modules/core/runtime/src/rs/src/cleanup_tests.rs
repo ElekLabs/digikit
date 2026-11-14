@@ -517,3 +517,23 @@ pub extern "C" fn dl_tick_cb_drop(start: u32, end: u32) {
 pub extern "C" fn block_read(_: u32, _: u32, _: *mut u8) -> i32 {
     panic!("host cleanup tests must not read firmware storage")
 }
+
+unsafe extern "C" fn test_sink(_: *const crate::dlog::Ev) {}
+
+/// A module without `fini` that set a sink: the unload releases the channel (it would point into freed memory).
+#[test]
+fn unload_of_a_module_without_fini_releases_its_sink() {
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, true);
+        st().modules[0].fini = 0;
+        LINK.events.push(Event::Fini); // the registry hook of this harness expects a fini before it; none runs
+        let prev = crate::dlog::enter_module(0, crate::dlog::PHASE_INIT);
+        assert_eq!(crate::dlog::dk_sink_set(0, test_sink as *const () as usize as *mut u8), OK);
+        crate::dlog::leave_module(prev);
+        assert!(crate::dlog::sink_on(0));
+        crate::loader::dsp_step();
+        assert_eq!(st().modules[0].used, 0);
+        assert!(!crate::dlog::sink_on(0));
+    }
+}

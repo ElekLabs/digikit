@@ -255,9 +255,18 @@ pub unsafe fn span_emit(owner: u32, cycles: u32) {
     irq_restore(sr);
 }
 
-/// After a module's `fini`: the sink and the tick may not point into its memory [lo, hi) (a module that forgot to clear them).
+/// After a module's `fini`, or when its range is freed: the sink, the tick and the channels may not point into its memory [lo, hi) (a module that forgot to clear them).
 pub unsafe fn sink_drop(lo: u32, hi: u32) {
     let sr = irq_mask();
+    let mut i = 0;
+    while i < SINKS {
+        let c = &mut (*addr_of_mut!(CHAN))[i];
+        if c.f as u32 >= lo && (c.f as u32) < hi {
+            write_volatile(addr_of_mut!(c.f), 0);
+            write_volatile(addr_of_mut!(c.owner), 0);
+        }
+        i += 1;
+    }
     let f = read_volatile(addr_of!(SINK)) as u32;
     if f >= lo && f < hi {
         write_volatile(addr_of_mut!(SINK), 0);
@@ -422,6 +431,22 @@ mod tests {
             // no module code is running: no owner
             release_sinks(3);
             assert_eq!(dk_sink_set(SINK_LOG, fake_log as *const () as usize as *mut u8), E_CONTEXT);
+        }
+    }
+
+    #[test]
+    fn freeing_a_range_drops_the_channels_that_point_into_it() {
+        unsafe {
+            let _g = fresh();
+            let f = fake_log as *const () as usize;
+            assert_eq!(set_as(2, SINK_LOG, f), OK);
+            assert_eq!(set_as(3, SINK_SPAN, fake_span as *const () as usize), OK);
+            // a range that holds only the log sink: the span sink stays
+            sink_drop(f as u32, f as u32 + 1);
+            assert!(!sink_on(SINK_LOG));
+            assert!(sink_on(SINK_SPAN));
+            // its owner can set it again: the owner slot was cleared too
+            assert_eq!(set_as(3, SINK_LOG, f), OK);
         }
     }
 

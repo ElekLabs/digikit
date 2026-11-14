@@ -109,11 +109,6 @@ static mut OPS: [[Op; TRACKS]; CLIENTS] = [[OP0; TRACKS]; CLIENTS];
 static mut STAGE: [u8; 28] = [0; 28];
 static mut FLIGHT: usize = NO_FLIGHT;
 
-/// A table write is in flight: the fx word writers wait (one transfer on the link at a time).
-pub fn busy() -> bool {
-    unsafe { FLIGHT != NO_FLIGHT }
-}
-
 /// Little-endian bytes of `words` into `STAGE`; the byte count.
 unsafe fn stage(words: &[u32]) -> u32 {
     let mut i = 0;
