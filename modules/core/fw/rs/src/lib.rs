@@ -68,15 +68,13 @@ pub mod link {
     pub type BlockIsrHook = unsafe extern "C" fn();
 
     /// The jsr abs.l with which the block interrupt handler calls the stock frame driver (four arguments on the stack); the hook point for the DSP link's per-block sender.
-    pub type BlockIsrFrameCallHook =
-        unsafe extern "C" fn(len: i32, src: *const u16, reclen: i32, rec: *const u16);
+    pub type BlockIsrFrameCallHook = unsafe extern "C" fn(len: i32, src: *const u16, reclen: i32, rec: *const u16);
 
     /// Private boot-only replacement for the wire-length getter call.
     pub type BootWireSizeHook = unsafe extern "C" fn() -> u32;
 
     /// Private wrapper preserves the original copy and return value, then copies the isolated extension before DMA rearming.
-    pub type ReplyCopyHook =
-        unsafe extern "C" fn(destination: *mut u8, source: *const u8, length: u32) -> *mut u8;
+    pub type ReplyCopyHook = unsafe extern "C" fn(destination: *mut u8, source: *const u8, length: u32) -> *mut u8;
 }
 
 pub mod machine {
@@ -288,17 +286,7 @@ pub mod menu {
     unsafe extern "C" {
         /// `CompactVerticalMenuView(this, name cstr, reserve, x0, y0, x1, y1, pitch, sub_rows)` (mislabelled `Font::ctor_dtor` in the database): a Menu with `(abs(y1-y0)+1)/pitch - sub_rows` visible rows, the View sub-object at +0x38, the rectangle at +0x198, `pitch` at +0x1a8 and `sub_rows` stored at +0x1b8 (the title-bar flag). Sets the focus bytes +0x1ac and +0x1ad to 1. Object size 0x1c0.
         #[link_name = "cf.menu.fn.compact_ctor"]
-        pub fn compact_ctor(
-            this: *mut u8,
-            name: *const u8,
-            reserve: u32,
-            x0: i32,
-            y0: i32,
-            x1: i32,
-            y1: i32,
-            pitch: i32,
-            sub_rows: u8,
-        );
+        pub fn compact_ctor(this: *mut u8, name: *const u8, reserve: u32, x0: i32, y0: i32, x1: i32, y1: i32, pitch: i32, sub_rows: u8);
     }
 
     unsafe extern "C" {
@@ -322,27 +310,13 @@ pub mod menu {
     unsafe extern "C" {
         /// Constructs a MenuItem in `item` from a label, an action function, an icon and a second function; copies both functions.
         #[link_name = "cf.menu.fn.item_builder"]
-        pub fn item_builder(
-            item: *mut u8,
-            label: *const u8,
-            action: *const crate::string::std_function,
-            icon: *const u8,
-            fn4: *const crate::string::std_function,
-        );
+        pub fn item_builder(item: *mut u8, label: *const u8, action: *const crate::string::std_function, icon: *const u8, fn4: *const crate::string::std_function);
     }
 
     unsafe extern "C" {
         /// `MenuItem(this, label, action, draw, adjust, id, arg7)`: copies the four `std::function`s (an empty one stays empty), stores `id` at +4 (-1 = none) and `arg7*2` at +0x4c (the encoder divisor; stock passes 8). The caller keeps and destroys its own functions afterwards.
         #[link_name = "cf.menu.fn.item_ctor"]
-        pub fn item_ctor(
-            this: *mut u8,
-            label: *const crate::string::std_function,
-            action: *const crate::string::std_function,
-            draw: *const crate::string::std_function,
-            adjust: *const crate::string::std_function,
-            id: i32,
-            arg7: i32,
-        );
+        pub fn item_ctor(this: *mut u8, label: *const crate::string::std_function, action: *const crate::string::std_function, draw: *const crate::string::std_function, adjust: *const crate::string::std_function, id: i32, arg7: i32);
     }
 
     unsafe extern "C" {
@@ -360,14 +334,7 @@ pub mod menu {
     unsafe extern "C" {
         /// `MenuWithPopoutSideBarsView(this, name cstr, reserve, has_left, has_right, sub_rows)`: the main list is a CompactVerticalMenuView at +0 with the rectangle x 0 (2 with a left panel) to 0x7f (0x7d with a right panel), y 0 to 0x3f, pitch 8; it builds the panels `leftPanel` (+0x1c0, x 0 to 0x2b) and `rightPanel` (+0x380, x 0x43 to 0x7f), both 0x28 reserve, pitch 8, no title row; sets the active part (+0x540) to the main list, stores has_left at +0x544 and has_right at +0x545, enables multi-select and calls `popout_set_active(this, this)`. Subclasses (SoundManager, KitManager, ProjectManager) start their own fields at +0x548.
         #[link_name = "cf.menu.fn.popout_ctor"]
-        pub fn popout_ctor(
-            this: *mut u8,
-            name: *const u8,
-            reserve: u32,
-            has_left: u8,
-            has_right: u8,
-            sub_rows: u8,
-        );
+        pub fn popout_ctor(this: *mut u8, name: *const u8, reserve: u32, has_left: u8, has_right: u8, sub_rows: u8);
     }
 
     unsafe extern "C" {
@@ -409,13 +376,7 @@ pub mod menu {
     unsafe extern "C" {
         /// `VerticalMenuView(this, name cstr, reserve, const std::string *title, icon)`; `title` points at the one-pointer COW string.
         #[link_name = "cf.menu.fn.vertical_menu_view_ctor"]
-        pub fn vertical_menu_view_ctor(
-            this: *mut u8,
-            name: *const u8,
-            reserve: u32,
-            title: *const u32,
-            icon: *const u8,
-        );
+        pub fn vertical_menu_view_ctor(this: *mut u8, name: *const u8, reserve: u32, title: *const u32, icon: *const u8);
     }
 
     unsafe extern "C" {
@@ -524,15 +485,7 @@ pub mod param {
     unsafe extern "C" {
         /// The absolute parameter setter the stock page uses after a turn and the sample list uses after a pick: (obj, code, raw, track, 1, 1, 1). Clamps raw to the row range, stores it in the sound, notifies the project and the observers. obj is the parameter object of the page (view vtable 0xc4 (view, code, track)). DT2 0x4003b570, DN2 0x40037326.
         #[link_name = "cf.param.fn.set_value"]
-        pub fn set_value(
-            obj: *const u8,
-            code: u32,
-            raw: i32,
-            track: u32,
-            notify: u32,
-            record: u32,
-            redraw: u32,
-        ) -> u32;
+        pub fn set_value(obj: *const u8, code: u32, raw: i32, track: u32, notify: u32, record: u32, redraw: u32) -> u32;
     }
 
     // cf.param.fn.value_class: no sig yet
@@ -693,12 +646,7 @@ pub mod samples {
     unsafe extern "C" {
         /// Queue a job on a worker: `job` and `done` are std::function objects (storage, manager, invoker), as ReloadAllSamples passes them. The job runs in the worker task.
         #[link_name = "cf.samples.fn.worker.queue"]
-        pub fn worker_queue(
-            worker: u32,
-            name: *const u8,
-            job: *mut core::ffi::c_void,
-            done: *mut core::ffi::c_void,
-        ) -> u32;
+        pub fn worker_queue(worker: u32, name: *const u8, job: *mut core::ffi::c_void, done: *mut core::ffi::c_void) -> u32;
     }
 
     unsafe extern "C" {
@@ -959,10 +907,7 @@ pub mod string {
     unsafe extern "C" {
         /// Moves a `shared_ptr` from `src` to `dst`. core/digikit-menu uses it when it pushes a popup view.
         #[link_name = "cf.string.fn.shared_ptr.move"]
-        pub fn shared_ptr_move(
-            dst: *mut crate::string::shared_ptr,
-            src: *mut crate::string::shared_ptr,
-        );
+        pub fn shared_ptr_move(dst: *mut crate::string::shared_ptr, src: *mut crate::string::shared_ptr);
     }
 
     unsafe extern "C" {
@@ -1004,38 +949,19 @@ pub mod text {
     unsafe extern "C" {
         /// Draws the plain string `s` at x, y: a 36-byte wrapper of the text routine 0x40113a84 with flags 0. Returns the advance. `maxw` is the fifth argument of the wrapper; its exact meaning is not read.
         #[link_name = "cf.text.fn.draw"]
-        pub fn draw(bitmap: *mut u8, font: *mut u8, x: i32, y: i32, maxw: i32, s: *const u8)
-            -> i32;
+        pub fn draw(bitmap: *mut u8, font: *mut u8, x: i32, y: i32, maxw: i32, s: *const u8) -> i32;
     }
 
     unsafe extern "C" {
         /// Draws printf-formatted text in a cleared box next to `x`, `y`: `align` 0 left, 1 centre, 2 right of x; `prefix` is an optional C string (0 = none) measured with the text; a frame is cleared first with fill_rect. The meaning of `arg6` is not read; the signature is from the entry code only.
         #[link_name = "cf.text.fn.draw_box"]
-        pub fn draw_box(
-            bitmap: *mut u8,
-            font: *mut u8,
-            x: i32,
-            y: i32,
-            align: i32,
-            arg6: i32,
-            prefix: *const u8,
-            fmt: *const u8,
-            ...
-        ) -> i32;
+        pub fn draw_box(bitmap: *mut u8, font: *mut u8, x: i32, y: i32, align: i32, arg6: i32, prefix: *const u8, fmt: *const u8, ...) -> i32;
     }
 
     unsafe extern "C" {
         /// Draws printf-formatted text (vsnprintf into 128 bytes) and returns the advance. `flags`: bit 0 proportional path, 1 centre, 2 right-align, 3 outline after, 4 clear box before (bits 3 and 4 = 0x18), 5 centre vertically, 6 bottom-align, 7 translate (finding 71 section 3).
         #[link_name = "cf.text.fn.draw_fmt"]
-        pub fn draw_fmt(
-            bitmap: *mut u8,
-            font: *mut u8,
-            x: i32,
-            y: i32,
-            flags: u32,
-            fmt: *const u8,
-            ...
-        ) -> i32;
+        pub fn draw_fmt(bitmap: *mut u8, font: *mut u8, x: i32, y: i32, flags: u32, fmt: *const u8, ...) -> i32;
     }
 }
 
@@ -1147,20 +1073,13 @@ pub mod view {
     unsafe extern "C" {
         /// Converting copy `shared_ptr<View>(const shared_ptr<Derived> &)` for a class with its View sub-object at +0x38 (the Menu views): out.ptr = src.ptr + 0x38 (0 stays 0), out.ctl = src.ctl, and the use count of the control block is incremented. It does not make a new control block; a raw pointer cannot be wrapped with it. The caller releases `out` afterwards.
         #[link_name = "cf.view.fn.shared_ptr_as_view"]
-        pub fn shared_ptr_as_view(
-            out: *mut crate::string::shared_ptr,
-            src: *const crate::string::shared_ptr,
-        );
+        pub fn shared_ptr_as_view(out: *mut crate::string::shared_ptr, src: *const crate::string::shared_ptr);
     }
 
     unsafe extern "C" {
         /// `ViewController::push(mgr, shared_ptr<View> *, exclusive)`.
         #[link_name = "cf.view.fn.view_controller_push"]
-        pub fn view_controller_push(
-            mgr: *mut u8,
-            sp: *const crate::string::shared_ptr,
-            exclusive: u32,
-        ) -> u32;
+        pub fn view_controller_push(mgr: *mut u8, sp: *const crate::string::shared_ptr, exclusive: u32) -> u32;
     }
 
     unsafe extern "C" {
@@ -1234,25 +1153,13 @@ pub mod window {
     unsafe extern "C" {
         /// `ConfirmWindow(this, title, text, cb, flag)`: `title` and `text` point at COW `std::string`s (each cut to 80 chars; an empty `text` gives one line), `cb` is a `std::function<void(bool)>` that the constructor clones into +0x5c, `flag` is stored at +0x6c (0: the TRIG keys 0x19 to 0x28 are swallowed). The key handler (0x401114f0) closes the window on press of key 10 (YES) and calls cb(true), on key 12 (NO) and calls cb(false); it sets +0x4c to 1 or 2, and every other key is handled (modal). Allocate 0x8c bytes as a make_shared block: 0x10 control block, then the object at +0x10; push with `cf.view.fn.view_controller_push(brain view manager, &sp, 0)` (as the stock call sites that use 0x4011c08a do) or with `cf.view.fn.view_push` on a view that is on the stack. The shared_ptr is {object, control block}; release your own count after the push (`cf.string.fn.shared_ptr.release`). core/ui does the first.
         #[link_name = "cf.window.fn.confirm_ctor"]
-        pub fn confirm_ctor(
-            this: *mut u8,
-            title: *const u32,
-            text: *const u32,
-            cb: *const crate::string::std_function,
-            flag: u8,
-        );
+        pub fn confirm_ctor(this: *mut u8, title: *const u32, text: *const u32, cb: *const crate::string::std_function, flag: u8);
     }
 
     unsafe extern "C" {
         /// `MultiChoiceWindow(this, items, title, cb, vertical)`: `items` points at a vector of COW `std::string` (begin, end, capacity; copied), `title` at a `std::string` (split at line breaks into the title lines at +0x80), `cb` is a `std::function<void(int)>` cloned into +0x8c, `vertical` is stored at +0xac (nonzero: items stacked and UP 11 / DOWN 14 move the selection; 0: items side by side and LEFT 13 / RIGHT 15). The selection index is at +0x9c. The key handler (0x40116e44) calls cb(index) and closes on press of key 10 (YES) or 0x31, and closes without a callback on key 12 (NO). The window is 0x40 x 0x20 pixels before sizing. Allocate 0xe8 bytes as a make_shared block (0x10 control block, object at +0x10); push with `cf.view.fn.view_push`.
         #[link_name = "cf.window.fn.multichoice_ctor"]
-        pub fn multichoice_ctor(
-            this: *mut u8,
-            items_vector: *const u32,
-            title: *const u32,
-            cb: *const crate::string::std_function,
-            vertical: u8,
-        );
+        pub fn multichoice_ctor(this: *mut u8, items_vector: *const u32, title: *const u32, cb: *const crate::string::std_function, vertical: u8);
     }
 
     // cf.window.fn.popup_make: no sig yet
