@@ -496,7 +496,7 @@ pub fn run(rest: &[String]) -> Result<i32> {
         return Err(Error(U.into()));
     }
     let read = |f: &str| -> Result<Dko> {
-        Dko::parse(&std::fs::read_to_string(f).map_err(|e| Error(format!("{f}: {e}")))?)
+        Ok(Dko::parse(&std::fs::read_to_string(f).map_err(|e| Error(format!("{f}: {e}")))?)?)
     };
     let rep = diff(&read(&files[0])?, &read(&files[1])?)?;
     if format == "json" {
