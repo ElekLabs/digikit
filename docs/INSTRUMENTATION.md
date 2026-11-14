@@ -463,6 +463,22 @@ Stock DN2 1.12, `trig1-tap-release` from the ready snapshot, `--dsp sharc`, `--s
 So a test can check that a build survives a lost note-off. It drops the frame with the note-off, and checks that no
 voice sounds at the end.
 
+## Sink channels of the runtime (a sink owner)
+
+The runtime has two numbered sink channels, `DK_SINK_LOG` (0) and `DK_SINK_SPAN` (1) (`<dk/core/sink.h>`). A module or service becomes the owner of
+a channel by calling `dk_sink_set(channel, sink)` (an import, runtime 0.7.1). The runtime names no owner and no producer kind.
+
+- `log`: the sink gets `void sink(const dk_log_ev *e)` for every event the runtime logs, before any filter. The old `dk_debug_log_sink_set` still works and
+  is independent; the debug module may move to this channel later (it is not changed now).
+- `span`: the sink gets `void sink(const dk_span *s)`, a record `{owner, cycles}`. The runtime has the channel and the emit function (`dlog::span_emit`); no
+  producer calls it yet (`DK_SPAN` is sdk.md section 9).
+- A sink runs in the producer's task with interrupts masked: short, no waiting, no logging, no imports.
+- One owner per channel. `dk_sink_set` returns 0, `DK_E_BUSY` (another module owns it, nothing changes), `DK_E_RANGE` (no such channel) or `DK_E_CONTEXT`
+  (called outside module code). Setting 0 clears the channel (only its owner may).
+- The runtime clears a channel after its owner's `fini` (and after a failed `init`), so an unload leaves no pointer into freed code. A module that
+  sets a sink in `init` may still clear it in `fini` itself.
+- Cost with no sink: a producer tests one word per channel and calls nothing.
+
 ## Cost when off
 
 - Interpreter loop: `cov`, `hist`, `wwatch` and `pcdump` are tested through one

@@ -303,14 +303,16 @@ A new plug-in point starts as an experimental `.dks` with its own hook table, an
 
 ### 5.11 Sink slots
 
-**Proposal.** The runtime has one observer mechanism today: the log sink. `digikit/debug` sets it with `dkrt_log_sink_set`; without a sink, error events go to the small ring and the rest is dropped, at the cost of one pointer test ([debug-mode-and-probes.md](debug-mode-and-probes.md), phase 1). Make this one generic mechanism with numbered channels, `log` and `span` first:
+**Built (R2d, runtime 0.7.1).** The runtime has numbered sink channels, `log` (0) and `span` (1), in `dlog.rs`. The import is `dk_sink_set(channel, sink)` ([sdk.md](sdk.md) section 5.1, `<dk/core/sink.h>`).
 
-- The runtime keeps one pointer per channel and names no service or kind. Producers pass opaque owner ids (`owner_of_row`).
-- A module or service sets a channel's sink by import. One owner per channel; a second claimant is refused while planning, like a hook site.
-- The slot is cleared after the owner's `fini`. Only `log` replays its ring to a new sink, as today.
-- With no sink set, a producer pays one pointer test.
+- The runtime keeps one pointer and one owner per channel and names no service or kind. The owner is the calling module (its source index). Producers pass opaque owner ids (`owner_of_row`) in span records.
+- One owner per channel. A second owner gets `DK_E_BUSY` from `dk_sink_set` at the call, not while planning (a module sets its sink in `init` or later, so the table cannot know it).
+- The channel is cleared after the owner's `fini` and after a failed `init`.
+- `log` receives every event the runtime logs, in addition to the older `dk_debug_log_sink_set` pointer, which is unchanged (the debug module has not moved to the channel; there is no ring replay on the channel).
+- `span` receives `(owner, cycles)` records from `dlog::span_emit`; no producer exists yet (`DK_SPAN`, S5).
+- With no sink set, a producer pays one word test per channel and calls nothing.
 
-Users: `digikit/debug` (`log`), `profile.dks` (`span`, [profiling plan](profiling.md) section 7). The probe's per-block `dl_set_tick_cb` slot in dsp-link can follow the same rule later.
+Users: `digikit/debug` (`log`, later), `profile.dks` (`span`, [profiling plan](profiling.md) section 7). The probe's per-block `dl_set_tick_cb` slot in dsp-link can follow the same rule later. Usage for a sink owner: [INSTRUMENTATION.md](../INSTRUMENTATION.md).
 
 ### 5.12 Service anatomy
 
