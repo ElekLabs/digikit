@@ -5,12 +5,18 @@
 // unsupported) the caller falls back to the single-thread core in
 // runtime-worker.ts. No firmware or derived data ships with the site; the .syx
 // and everything made from it stay in the visitor's browser.
-import { ReadyCache, idbStore, sha256Hex, type ReadyState } from './ready-cache.ts';
+import type { BlobStore } from './blob-store.ts';
+import { ReadyCache, sha256Hex, type ReadyState } from './ready-cache.ts';
 import { createLinkBuffer, LinkServer } from './sab-link.ts';
 import type { CfStart } from './cf-worker.ts';
 import type { DspStart } from './dsp-worker.ts';
+import type { WorkerFactory, WorkerPort } from './workers.ts';
 
 export interface SessionOptions {
+  /** The page's workers (`browserWorkers()`; a test gives fakes). */
+  workers: WorkerFactory;
+  /** Where the ready state is kept (`indexedDbBlobStore('digi-ready-state', 'states')` in the browser). */
+  store: BlobStore;
   /** URL of the generic core (`emulator-core-generic.wasm`: no firmware in it). */
   coreUrl: string;
   /** DSP fast tier: threshold, min insns, follow; default 256,64,0 (see 6f819d9^:docs/notes/laneB.md). */
@@ -21,8 +27,8 @@ export interface SessionOptions {
 }
 
 export interface Session {
-  cf: Worker;
-  dsp: Worker;
+  cf: WorkerPort;
+  dsp: WorkerPort;
   stop(): void;
   /** Where the ready state came from. */
   source: 'cache' | 'cold-boot';
@@ -48,7 +54,7 @@ export async function coldBoot(_syx: Uint8Array, _progress?: (fraction: number) 
 
 export async function startSession(syx: Uint8Array, o: SessionOptions): Promise<Session> {
   if (!canSplit()) throw new Error('not cross-origin isolated: use the single-thread core');
-  const cache = new ReadyCache(idbStore());
+  const cache = new ReadyCache(o.store);
   const key = await sha256Hex(syx as BufferSource);
   let state = await cache.load(key);
   const source = state ? 'cache' : 'cold-boot';
@@ -57,9 +63,9 @@ export async function startSession(syx: Uint8Array, o: SessionOptions): Promise<
     void cache.save(key, state);
   }
   const link = createLinkBuffer();
-  const dsp = new Worker(new URL('./dsp-worker.ts', import.meta.url), { type: 'module' });
-  const cf = new Worker(new URL('./cf-worker.ts', import.meta.url), { type: 'module' });
-  const ready = (w: Worker) =>
+  const dsp = o.workers.create('dsp');
+  const cf = o.workers.create('cf');
+  const ready = (w: WorkerPort) =>
     new Promise<void>((resolve, reject) => {
       w.onmessage = ({ data }) =>
         data.type === 'ready' ? resolve() : data.type === 'error' ? reject(new Error(data.error)) : o.onStatus?.(data);

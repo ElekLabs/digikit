@@ -18,13 +18,10 @@ import {
 import Segmented from '../components/Segmented';
 import AutoRefresh from '../transfer/AutoRefresh';
 import ConnectionBadge from '../transfer/ConnectionBadge';
-import TargetSelect, { rescanTargets } from '../transfer/TargetSelect';
-import { transferEnv } from '../transfer/env';
-import { target } from '../transfer/target';
+import TargetSelect from '../transfer/TargetSelect';
+import { useFirmwareApp } from '../transfer/app-context';
 import DefaultModules from './DefaultModules';
 import { CUSTOM_BOOT_SCREEN_HELP } from './default-modules-core';
-import { customBootScreen, postRun } from './default-modules-state';
-import { firmwareEnv } from './env';
 import { createEffectOn } from './on-change';
 import {
   DEVICE_NAMES,
@@ -46,27 +43,6 @@ import {
   groups,
   type StepMark,
 } from './firmware-core';
-import {
-  ack,
-  cancelFlash,
-  chooseFile,
-  device,
-  downloadImage,
-  forgetDevice,
-  notice,
-  prepared,
-  probeDevice,
-  resetRun,
-  restore,
-  route,
-  runInEmulator,
-  run,
-  setAck,
-  setCustomBoot,
-  setRestore,
-  setRoute,
-  startFlash,
-} from './firmware-state';
 import './firmware-page.css';
 
 const SEND_OPTIONS = [
@@ -130,6 +106,30 @@ function Step(props: {
 }
 
 export default function FirmwarePage(): JSX.Element {
+  const fw = useFirmwareApp();
+  const { rescanTargets, target } = fw.transfer.target;
+  const { customBootScreen, postRun } = fw.defaults;
+  const {
+    ack,
+    cancelFlash,
+    chooseFile,
+    device,
+    downloadImage,
+    forgetDevice,
+    notice,
+    prepared,
+    probeDevice,
+    resetRun,
+    restore,
+    route,
+    runInEmulator,
+    run,
+    setAck,
+    setCustomBoot,
+    setRestore,
+    setRoute,
+    startFlash,
+  } = fw.state;
   const [reload, setReload] = createSignal(0);
   const [dragging, setDragging] = createSignal(false);
   let input: HTMLInputElement | undefined;
@@ -355,7 +355,7 @@ export default function FirmwarePage(): JSX.Element {
           aside={
             <Show when={ready()?.p.ok}>
               <>
-                <Show when={firmwareEnv().runInEmulator && !ready()!.p.restore}>
+                <Show when={fw.env.runInEmulator && !ready()!.p.restore}>
                   <button type="button" class="act small" onClick={() => void runInEmulator()}>
                     Run in emulator
                   </button>
@@ -416,7 +416,7 @@ export default function FirmwarePage(): JSX.Element {
           title="Device"
           mark={marks()[2]!}
           summary={match().state === 'match' ? match().text : undefined}
-          aside={transferEnv().targets.inHeader ? undefined : <TargetSelect reload={reload} />}
+          aside={fw.transfer.env.targets.inHeader ? undefined : <TargetSelect reload={reload} />}
         >
           <div class="devrow">
             <ConnectionBadge />
@@ -597,6 +597,7 @@ export default function FirmwarePage(): JSX.Element {
 
 /** The default modules that follow a flash: the progress, the lines, or the module that failed. */
 function PostRunView(): JSX.Element {
+  const { postRun } = useFirmwareApp().defaults;
   return (
     <Switch>
       <Match when={postRun().kind === 'working' && (postRun() as { text: string; done: number; total: number })}>

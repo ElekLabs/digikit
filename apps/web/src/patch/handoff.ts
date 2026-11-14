@@ -1,9 +1,9 @@
 // Hand-off of a patched firmware from /patch to the emulator page, inside this browser only:
 // the bytes go into IndexedDB (too big for sessionStorage) and the emulator page takes and deletes them.
-// Nothing is sent over the network.
-const DB = 'digikit-handoff',
-  STORE = 'firmware',
-  KEY = 'pending';
+// Nothing is sent over the network. The store is a BlobStore (blob-store.ts): a test gives `memoryBlobStore()`.
+import { indexedDbBlobStore, type BlobStore } from '../blob-store';
+
+const KEY = 'pending';
 
 export interface Handoff {
   name: string;
@@ -11,36 +11,31 @@ export interface Handoff {
   bytes: ArrayBuffer;
 }
 
-const open = () =>
-  new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB is not available'));
-  });
+/** The browser's store for the hand-off. */
+export const handoffStore = (): BlobStore => indexedDbBlobStore('digikit-handoff', 'firmware');
 
-const run = async <T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> => {
-  const db = await open();
-  try {
-    return await new Promise<T>((resolve, reject) => {
-      const tx = db.transaction(STORE, mode);
-      const request = work(tx.objectStore(STORE));
-      tx.oncomplete = () => resolve(request.result);
-      tx.onerror = () => reject(tx.error ?? new Error('IndexedDB write failed'));
-      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB aborted'));
-    });
-  } finally {
-    db.close();
-  }
-};
+/** A hand-off as bytes: 4 bytes of header length (big endian), the header as JSON (name, device), the firmware. */
+function encode(value: Handoff): Uint8Array {
+  const header = new TextEncoder().encode(JSON.stringify({ name: value.name, device: value.device }));
+  const out = new Uint8Array(4 + header.length + value.bytes.byteLength);
+  new DataView(out.buffer).setUint32(0, header.length);
+  out.set(header, 4);
+  out.set(new Uint8Array(value.bytes), 4 + header.length);
+  return out;
+}
 
-export const putHandoff = async (value: Handoff): Promise<void> => {
-  await run('readwrite', (s) => s.put(value, KEY));
-};
+function decode(bytes: Uint8Array): Handoff {
+  const n = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
+  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + n))) as { name: string; device?: string };
+  return { ...header, bytes: bytes.slice(4 + n).buffer };
+}
+
+export const putHandoff = (store: BlobStore, value: Handoff): Promise<void> => store.put(KEY, encode(value));
 
 /** Reads and deletes the pending hand-off (undefined when there is none). */
-export async function takeHandoff(): Promise<Handoff | undefined> {
-  const value = await run<Handoff | undefined>('readonly', (s) => s.get(KEY));
-  if (value) await run('readwrite', (s) => s.delete(KEY));
-  return value;
+export async function takeHandoff(store: BlobStore): Promise<Handoff | undefined> {
+  const stored = await store.get(KEY);
+  if (!stored) return undefined;
+  await store.delete(KEY);
+  return decode(stored);
 }

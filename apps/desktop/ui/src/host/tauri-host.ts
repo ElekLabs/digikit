@@ -1,14 +1,14 @@
 // The real Host: the only module that imports Tauri's `invoke` (a lint rule keeps it so). Bytes go as the raw request body with the
 // small arguments in headers, as the Rust commands take them (`tauri::ipc::Request`); the names and arguments follow the Rust signatures.
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { EmuRpc, Host } from './host';
 
 const timeout = (ms: number) => ({ timeoutMs: Math.max(1, Math.round(ms)) });
 
 export function createTauriHost(): Host {
   const rpc: EmuRpc = {
-    call: <T>(method: string, params: Record<string, unknown> = {}) =>
-      invoke<T>('emu_call', { method, params, session: null }),
+    call: <T>(method: string, params: Record<string, unknown> = {}, session?: number) =>
+      invoke<T>('emu_call', { method, params, session: session ?? null }),
   };
   return {
     rpc,
@@ -58,6 +58,19 @@ export function createTauriHost(): Host {
       sourceInfo: () => invoke('emu_source_info'),
       buildInfo: <T>() => invoke<T>('emu_build_info'),
       launch: () => invoke('emu_launch'),
+      inApp: () => isTauri(),
+      startup: <T>() => invoke<T>('emu_startup'),
+      step: <T>(sessionId: number, budget: number) => invoke<T>('emu_step', { sessionId, budget }),
+      tap: <T>(sessionId: number, code: number, hold?: number) => invoke<T>('emu_tap', { sessionId, code, hold }),
+      stop: (sessionId) => invoke('emu_stop', { sessionId }),
+      audioStatus: <T>(sessionId: number) => invoke<T | null>('emu_audio_status', { sessionId }),
+      saveDiagnostics: (name, json) => invoke('emu_save_diagnostics', { name, json }),
+      stageSyx: (bytes, name) => invoke('emu_stage_syx', bytes, { headers: { 'x-name': encodeURIComponent(name) } }),
+      card: {
+        reset: () => invoke('emu_card_reset'),
+        stage: (name, bytes) => invoke('emu_card_stage', bytes, { headers: { 'x-name': encodeURIComponent(name) } }),
+        load: <T>(name: string | null) => invoke<T>('emu_card_load', { name }),
+      },
     },
     shell: {
       openCardFolder: () => invoke('card_open_folder'),

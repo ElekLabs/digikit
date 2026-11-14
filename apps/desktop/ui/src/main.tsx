@@ -7,14 +7,22 @@ import './console.css';
 import './native.css';
 import './tooltip.css';
 import Console from './Console';
-import { installDesktopEnv } from './desktop-env';
+import { createDesktopApps } from './desktop-app';
 import { createTauriHost } from './host/tauri-host';
 import { installNativeFeel } from './native';
 import { installTooltips } from './tooltip';
+import AppProvider from '@web/transfer/AppProvider';
 
 const host = createTauriHost();
-installDesktopEnv(host);
+const apps = createDesktopApps(host);
 installNativeFeel();
 installTooltips();
 
-render(() => <Console host={host} />, document.getElementById('app')!);
+render(
+  () => (
+    <AppProvider app={apps.app} firmware={apps.firmware}>
+      <Console host={host} />
+    </AppProvider>
+  ),
+  document.getElementById('app')!,
+);

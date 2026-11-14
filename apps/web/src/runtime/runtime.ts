@@ -1,14 +1,13 @@
-import { hostMetrics } from './runtime-metrics';
 import { createLinkBuffer, LinkServer } from '../sab-link.ts';
+import { wasmModule, type WasmSource } from '../wasm-source';
+import type { WorkerFactory, WorkerPort } from '../workers';
 import type { DspStart } from '../dsp-worker.ts';
 import type { DspStats, FastDefault, FastRegions } from '../split-session.ts';
 import fastRegionTable from '../../../../config/emulator.json';
 import { sha256Hex } from './local-inputs';
-import type { CardBridge, CardStatus } from './cards';
+import type { CardBridge } from './cards';
 import type { ReloadReport } from './reload';
 import type { ControllerJob } from '../jobs/jobs-core';
-
-const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 
 const pcs = (list: string | undefined) =>
   (list ?? '')
@@ -243,14 +242,21 @@ export const splitAvailable = () =>
   (globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated === true &&
   new URLSearchParams(location.search).get('split') !== '0';
 
-export function browserRuntime(onUpdate: (update: RuntimeUpdate) => void): EmulatorRuntime {
-  const worker = new Worker(new URL('./runtime-worker.ts', import.meta.url), { type: 'module' });
+/** What the browser runtime takes from the page: where its workers and its emulator core come from. */
+export interface BrowserRuntimeDeps {
+  workers: WorkerFactory;
+  /** `emulator-core-sharc.wasm`, compiled once for the DSP worker of a split session. */
+  wasm: WasmSource;
+}
+
+export function browserRuntime(onUpdate: (update: RuntimeUpdate) => void, deps: BrowserRuntimeDeps): EmulatorRuntime {
+  const worker = deps.workers.create('runtime');
   let generation = 0,
     paused = true,
     source: Uint8Array | undefined,
     name = '';
   // Two-worker session: the DSP worker, its link and its latest statistics.
-  let dsp: Worker | undefined,
+  let dsp: WorkerPort | undefined,
     link: SharedArrayBuffer | undefined,
     dspStats:
       | (DspStats & {
@@ -267,14 +273,14 @@ export function browserRuntime(onUpdate: (update: RuntimeUpdate) => void): Emula
     link = undefined;
     dspStats = undefined;
   };
-  const coreModule = () => (modulePromise ??= WebAssembly.compileStreaming(fetch(`${base}emulator-core-sharc.wasm`)));
+  const coreModule = () => (modulePromise ??= wasmModule(deps.wasm, 'emulator-core-sharc.wasm'));
   /** Starts the DSP worker; resolves with its link and the compiled core, or undefined when the core cannot be split. */
   const startDsp = async (files: CoupledFiles, audioPort: MessagePort) => {
     const module = await coreModule();
     if (!WebAssembly.Module.exports(module).some((e) => e.name === 'digi_dsp_reply')) return undefined;
     const fast = await fastConfig(files.syx);
     const buffer = createLinkBuffer(),
-      thread = new Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
+      thread = deps.workers.create('dsp');
     await new Promise<void>((resolve, reject) => {
       thread.onmessage = ({ data }) => {
         if (data.type === 'ready') resolve();
@@ -303,7 +309,7 @@ export function browserRuntime(onUpdate: (update: RuntimeUpdate) => void): Emula
     link = buffer;
     return { buffer, module };
   };
-  worker.onmessage = ({ data }: MessageEvent<RuntimeUpdate & { generation?: number }>) => {
+  worker.onmessage = ({ data }: { data: RuntimeUpdate & { generation?: number } }) => {
     if (data.generation === generation) onUpdate(data);
   };
   const request = <T>(type: string, payload: Record<string, unknown> = {}) =>
@@ -412,294 +418,6 @@ export function browserRuntime(onUpdate: (update: RuntimeUpdate) => void): Emula
       generation += 1;
       paused = true;
       worker.terminate();
-    },
-  };
-}
-
-export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): Promise<EmulatorRuntime | undefined> {
-  let api: typeof import('@tauri-apps/api/core');
-  try {
-    api = await import('@tauri-apps/api/core');
-  } catch {
-    return undefined;
-  }
-  if (!api.isTauri()) return undefined;
-  const metrics = hostMetrics('native_ipc');
-  // A refused load leaves the controller's current session intact. Keep enough state to resume that session.
-  let accepted: { session: number; snapshot: RuntimeSnapshot; paused: boolean } | undefined;
-  let generation = 0,
-    activeSession: number | undefined,
-    loaded = false,
-    paused = true,
-    disposed = false,
-    epoch = 0,
-    timer: number | undefined,
-    input = Promise.resolve(),
-    lifecycle = Promise.resolve();
-  const clearPump = () => {
-    paused = true;
-    epoch += 1;
-    metrics.invalidatePumpGap();
-    if (timer) window.clearTimeout(timer);
-    timer = undefined;
-  };
-  const fault = (error: unknown) => {
-    clearPump();
-    loaded = false;
-    accepted = undefined;
-    onUpdate({ type: 'error', error: String(error) });
-  };
-  // One protocol method of the controller (docs/CONTROL.md). With a session, the controller refuses the call when the webview's
-  // session is no longer the current one; `firmware.load` and `restart` start the session they carry.
-  const call = <T>(method: string, params: Record<string, unknown> = {}, session?: number) =>
-    api.invoke<T>('emu_call', { method, params, session: session ?? null }).catch((e: unknown) => {
-      // the bridge passes a string like "cancelled (code 10)": the code becomes data, the message loses the suffix
-      const m = /^([\s\S]*) \(code (-?\d+)\)$/.exec(e instanceof Error ? e.message : String(e));
-      if (!m) throw e;
-      throw Object.assign(new Error(m[1]), { code: Number(m[2]) });
-    });
-  // A new session: stop the pump, run the call that starts it (`firmware.load` or `restart`, with the new token), take the
-  // snapshot of what came up, and start pumping it. A newer session wins over an older one that is still starting.
-  const newSession = (starts: (token: number) => Promise<void>) => {
-    const token = ++generation;
-    clearPump();
-    loaded = false;
-    activeSession = undefined;
-    const work = lifecycle
-      .catch(() => {})
-      .then(async () => {
-        await starts(token);
-        metrics.reset();
-        const snapshot = await api.invoke<RuntimeSnapshot>('emu_startup');
-        if (disposed) return snapshot;
-        accepted = { session: token, snapshot, paused: false };
-        if (token !== generation) return snapshot;
-        metrics.loaded();
-        activeSession = token;
-        loaded = true;
-        onUpdate({ type: 'snapshot', snapshot });
-        start(token);
-        return snapshot;
-      });
-    lifecycle = work.then(
-      () => {},
-      () => {},
-    );
-    return work.catch((error) => {
-      const refused = String(error).includes('a job is running; wait for it before loading firmware');
-      if (!refused) accepted = undefined;
-      if (!disposed && token === generation) {
-        if (refused && accepted) {
-          activeSession = accepted.session;
-          loaded = true;
-          onUpdate({ type: 'snapshot', snapshot: accepted.snapshot });
-          if (!accepted.paused) start(accepted.session);
-          onUpdate({ type: 'error', error: String(error) });
-        } else fault(error);
-      }
-      throw error;
-    });
-  };
-  const pump = async (token: number, run: number) => {
-    if (disposed || paused || run !== epoch || activeSession !== token) return;
-    await input.catch(() => {});
-    if (disposed || paused || run !== epoch || activeSession !== token) return;
-    try {
-      const begin = performance.now();
-      const snapshot = await api.invoke<RuntimeSnapshot>('emu_step', { sessionId: token, budget: 250_000 });
-      if (disposed || paused || run !== epoch || activeSession !== token) return;
-      if (!snapshot.polled) metrics.step(begin, performance.now(), snapshot);
-      if (accepted?.session === token) accepted.snapshot = snapshot;
-      onUpdate({ type: 'snapshot', snapshot });
-      if (snapshot.status.error) {
-        fault(snapshot.status.error);
-        return;
-      }
-      // The controller steps the guest itself: poll once per display frame (a stale callback returns on the epoch check).
-      if (snapshot.polled)
-        window.requestAnimationFrame(() => {
-          void pump(token, run);
-        });
-      else
-        timer = window.setTimeout(() => {
-          void pump(token, run);
-        }, 0);
-    } catch (error) {
-      if (activeSession === token && run === epoch) fault(error);
-    }
-  };
-  const start = (token: number) => {
-    metrics.invalidatePumpGap();
-    paused = false;
-    const run = ++epoch;
-    timer = window.setTimeout(() => {
-      void pump(token, run);
-    }, 0);
-  };
-  const queueInput = (operation: (session: number) => Promise<void>) => {
-    const token = generation,
-      session = activeSession;
-    metrics.invalidatePumpGap();
-    const next = input
-      .catch(() => {})
-      .then(async () => {
-        if (!disposed && loaded && token === generation && session === activeSession && session !== undefined)
-          await operation(session);
-      });
-    input = next.then(
-      () => {
-        if (!disposed && token === generation && session === activeSession) metrics.invalidatePumpGap();
-      },
-      (error) => {
-        if (!disposed && token === generation && session === activeSession) metrics.invalidatePumpGap();
-        throw error;
-      },
-    );
-    return input.catch((error) => {
-      if (token === generation) fault(error);
-      throw error;
-    });
-  };
-  try {
-    metrics.reset();
-    const startup = await api.invoke<RuntimeSnapshot>('emu_startup');
-    metrics.loaded();
-    generation = 1;
-    activeSession = 1;
-    loaded = true;
-    accepted = { session: 1, snapshot: startup, paused: false };
-    onUpdate({ type: 'snapshot', snapshot: startup });
-    start(1);
-  } catch (error) {
-    if (!String(error).includes('No startup firmware selected')) onUpdate({ type: 'error', error: String(error) });
-  }
-  return {
-    saveDiagnostics: (name: string, json: string) => api.invoke<string>('emu_save_diagnostics', { name, json }),
-    cards: {
-      reset: () => api.invoke<void>('emu_card_reset'),
-      stage: (name, bytes) =>
-        api.invoke<void>('emu_card_stage', bytes, { headers: { 'x-name': encodeURIComponent(name) } }),
-      load: (name) => api.invoke<unknown>('emu_card_load', { name: name ?? null }),
-      status: () => call<CardStatus>('card.status'),
-    },
-    async diagnostics() {
-      const session = activeSession;
-      if (session === undefined) throw new Error('No firmware selected');
-      const report = await call<RuntimeDiagnostics>('diagnostics', {}, session);
-      if (disposed || activeSession !== session) throw new Error('Firmware session changed during diagnostic export');
-      return { ...report, host: metrics.report() };
-    },
-    async nativeAudio() {
-      const session = activeSession;
-      if (session === undefined) return undefined;
-      const report = await api.invoke<NativeAudioStatus | null>('emu_audio_status', { sessionId: session });
-      if (disposed || activeSession !== session) throw new Error('Firmware session changed while reading audio status');
-      return (
-        report ?? {
-          sink_connected: false,
-          playback_requested: false,
-          flow_started: false,
-          source_audio_seconds: 0,
-          session_wall_seconds: 0,
-          device_error: null,
-          setup_needed: true,
-        }
-      );
-    },
-    // Open...: the app puts the picked bytes in a file, then `firmware.load` reads it like any other.
-    load: (bytes, name, options) =>
-      newSession(async (token) => {
-        const syx = await api.invoke<string>('emu_stage_syx', bytes, {
-          headers: { 'x-name': encodeURIComponent(name) },
-        });
-        await call('firmware.load', { syx, replace: true, runtime: !!options?.runtime }, token);
-      }),
-    loadPath: (syx, options) =>
-      newSession(async (token) => {
-        await call(
-          'firmware.load',
-          { syx, replace: true, runtime: !!options?.runtime, ...(options?.card ? { card: options.card } : {}) },
-          token,
-        );
-      }),
-    async firmwareInfo() {
-      const status = await call<{ firmware: { runtime?: RuntimePatch | null } | null }>('status');
-      return { runtime: status.firmware?.runtime ?? null };
-    },
-    async controllerStatus() {
-      const status = await call<{ heartbeat?: RuntimeHealth; job?: ControllerJob | null }>('status');
-      return { heartbeat: status.heartbeat, job: status.job ?? null };
-    },
-    cancelJob: async () => {
-      await call('job.cancel');
-    },
-    async restart() {
-      if (!loaded || activeSession === undefined) throw new Error('No firmware selected');
-      return newSession(async (token) => {
-        await call('restart', {}, token);
-      });
-    },
-    // The session stays the same (the call carries its token); the pump stops while the controller loads or restores, a cold boot
-    // is a job that refuses steps.
-    async reloadModules() {
-      const session = activeSession;
-      if (!loaded || session === undefined) throw new Error('No firmware selected');
-      const resume = !paused;
-      clearPump();
-      const work = lifecycle
-        .catch(() => {})
-        .then(async () => {
-          try {
-            const report = await call<ReloadReport>('dev.reload', { build: true }, session);
-            if (disposed || activeSession !== session) return report;
-            onUpdate({ type: 'snapshot', snapshot: await api.invoke<RuntimeSnapshot>('emu_startup') });
-            return report;
-          } finally {
-            if (!disposed && activeSession === session && resume) start(session);
-          }
-        });
-      lifecycle = work.then(
-        () => {},
-        () => {},
-      );
-      return work;
-    },
-    pause() {
-      if (accepted) accepted.paused = true;
-      clearPump();
-    },
-    resume() {
-      if (loaded && activeSession !== undefined && paused) {
-        if (accepted) accepted.paused = false;
-        start(activeSession);
-      }
-    },
-    press: (code) => queueInput((session) => call<void>('input.button', { code, down: true }, session)),
-    release: (code) => queueInput((session) => call<void>('input.button', { code, down: false }, session)),
-    turn: (encoder, detents) => queueInput((session) => call<void>('input.turn', { encoder, detents }, session)),
-    tap: (code, hold) => {
-      const token = generation;
-      return queueInput(async (session) => {
-        const snapshot = await api.invoke<RuntimeSnapshot>('emu_tap', { sessionId: session, code, hold });
-        if (!disposed && token === generation && activeSession === session) onUpdate({ type: 'snapshot', snapshot });
-      });
-    },
-    async stop() {
-      const token = ++generation;
-      clearPump();
-      loaded = false;
-      activeSession = undefined;
-      accepted = undefined;
-      await (lifecycle = lifecycle.catch(() => {}).then(() => api.invoke<void>('emu_stop', { sessionId: token })));
-    },
-    dispose() {
-      disposed = true;
-      const token = ++generation;
-      clearPump();
-      loaded = false;
-      activeSession = undefined;
-      accepted = undefined;
-      void api.invoke<void>('emu_stop', { sessionId: token });
     },
   };
 }

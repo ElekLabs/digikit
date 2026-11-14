@@ -3,27 +3,25 @@
 // list is read again when that number changes, and the button is left out); the port in use stays in the list.
 import { For, Show, createEffect, createSignal, on, onMount, type JSX } from 'solid-js';
 import { errorLine } from '../modules/backend';
-import { noteConnection } from './connection-state';
-import { transferEnv } from './env';
-import { selectTarget, target, targetLabel, type Target } from './target';
+import { useTransferApp } from './app-context';
+import { targetLabel, type Target } from './target';
 import './target-select.css';
 
 const VALUE_EMU = 'emulator';
 const VALUE_NONE = '';
-
-/** Read the ports again in every selector shown (the desktop's title bar has the one selector; its pages' Refresh asks through this). */
-const [portScan, setPortScan] = createSignal(0);
-export const rescanTargets = (): void => void setPortScan((n) => n + 1);
 
 export default function TargetSelect(props: {
   disabled?: boolean;
   onError?: (m: string) => void;
   reload?: () => number;
 }): JSX.Element {
+  const app = useTransferApp();
+  const { noteConnection } = app.connection;
+  const { selectTarget, target, portScan } = app.target;
   const [ports, setPorts] = createSignal<string[]>([]);
   const rescan = async () => {
     try {
-      const names = await transferEnv().targets.ports();
+      const names = await app.env.targets.ports();
       setPorts(names);
       // the port of the target is not listed any more: the device was unplugged
       const t = target();
@@ -75,7 +73,7 @@ export default function TargetSelect(props: {
           <Show when={target().kind === 'none'}>
             <option value={VALUE_NONE}>{options().length ? 'Pick a MIDI port' : 'No MIDI port found'}</option>
           </Show>
-          <Show when={transferEnv().targets.emulator}>
+          <Show when={app.env.targets.emulator}>
             <option value={VALUE_EMU}>Emulator</option>
           </Show>
           <For each={options()}>
@@ -94,7 +92,7 @@ export default function TargetSelect(props: {
           Rescan
         </button>
       </Show>
-      <Show when={transferEnv().targets.emulator && target().kind === 'midi'}>
+      <Show when={app.env.targets.emulator && target().kind === 'midi'}>
         <span class="dim">a real device</span>
       </Show>
     </span>

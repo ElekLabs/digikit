@@ -18,17 +18,8 @@ import {
 } from './remote-core';
 import { windowShown } from './log-follow-core';
 import SidePanels from './SidePanels';
-import { asked, noteReply } from '@web/transfer/connection-state';
-import {
-  cancelPending,
-  checkRuntime,
-  resetSession,
-  sameTarget,
-  session,
-  target,
-  targetLabel,
-} from '@web/transfer/target';
-import { busy } from '@web/transfer/transfer-state';
+import { useTransferApp } from '@web/transfer/app-context';
+import { sameTarget, targetLabel } from '@web/transfer/target';
 import { failureLine } from '@web/transfer/wait-core';
 import './remote-page.css';
 
@@ -40,6 +31,10 @@ const HIDDEN_MS = 500;
 const HINT = 'Click keys; drag or scroll knobs. Shift: ×10.';
 
 export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2'; emulatorLoaded: boolean }): JSX.Element {
+  const app = useTransferApp();
+  const { asked, noteReply } = app.connection;
+  const { cancelPending, checkRuntime, resetSession, session, target } = app.target;
+  const { busy } = app.state;
   const [state, setState] = createSignal<RemoteState>();
   const [stateError, setStateError] = createSignal<unknown>();
   const [screenError, setScreenError] = createSignal('');

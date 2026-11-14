@@ -1,15 +1,15 @@
 // The desktop workbench's side of the Transfer pane (apps/web/src/transfer/env.ts): the library folder of built modules, the MIDI ports and
-// the emulator through the Host (host/host.ts), the samples mode and the Card panel. Installed first by main.tsx (`installDesktopEnv`).
+// the emulator through the Host (host/host.ts), the samples mode and the Card panel. main.tsx builds it with `createDesktopApps`.
 import { createComponent } from 'solid-js';
 import { EmuBulkLink } from '@digi/dk-session';
 import { listingChanged } from '../../../web/src/transfer/refresh-core';
-import { setTransferEnv, type SamplesSlot, type TransferEnv } from '../../../web/src/transfer/env';
+import type { TransferApp } from '../../../web/src/transfer/app';
+import type { SamplesSlot, TransferEnv } from '../../../web/src/transfer/env';
 import { MODULE_FILES } from '../../../web/src/transfer/module-files.generated';
-import { target, targetLabel, type Target } from '../../../web/src/transfer/target';
-import { sampleLink, setSampleLink } from '../../../web/src/transfer/transfer-state';
+import { targetLabel, type Target } from '../../../web/src/transfer/target';
 import { failureLine } from '../../../web/src/transfer/wait-core';
-import { installDesktopFirmware } from './desktop-firmware';
 import { bumpCardRefresh } from './card-state';
+import { hostWasmSource } from './desktop-wasm';
 import { reloadWithRuntime } from './emulator-actions';
 import { TauriBulkLink } from './bulk-link';
 import { EmuUsbTransport, emulatorMode } from './desktop-transport';
@@ -37,35 +37,38 @@ import { readSamplePanes } from './samples-read';
 export const PAUSED =
   'The emulator is paused: nothing would run the transfer. Resume it (the Run button of the workbench), then try again.';
 
-function samplesSlot(backend: SamplesBackendApi): SamplesSlot {
-  const { readLocal, readSamples, listLocalNow } = backend;
+/** The Samples slot of the pane. `app` and `backend` are functions: the app is built from the environment that holds this slot. */
+function samplesSlot(app: () => TransferApp, backend: () => SamplesBackendApi): SamplesSlot {
   return {
     Mode: (p) =>
       createComponent(SamplesMode, {
         get ctx() {
           return p.ctx;
         },
-        backend,
+        get backend() {
+          return backend();
+        },
       }),
-    readLocal,
+    readLocal: () => backend().readLocal(),
     async read() {
-      await readSamplePanes(readLocal, readSamples, (e) => failureLine(e, targetLabel(target())));
+      const { readLocal, readSamples } = backend();
+      await readSamplePanes(readLocal, readSamples, (e) => failureLine(e, targetLabel(app().target.target())));
     },
     reset() {
       setSampleEntries(undefined);
       setSampleFolder('');
       setSampleTicks(new Set<string>());
       setUploads({});
-      setSampleLink(undefined);
+      app().state.setSampleLink(undefined);
     },
     bar(busy) {
-      const info = samplesBar(uploads(), uploadBase(), busy === 'Uploading', uploadAverage(), sampleLink());
+      const info = samplesBar(uploads(), uploadBase(), busy === 'Uploading', uploadAverage(), app().state.sampleLink());
       return info ? { info, running: busy === 'Uploading' } : undefined;
     },
     lines: () => [...uploadNotes(), ...uploadLines(uploads(), uploadBase())],
     async localChanged() {
       if (!localFolder()) return false;
-      const now = await listLocalNow();
+      const now = await backend().listLocalNow();
       return !!now && listingChanged(localEntries(), now);
     },
   };
@@ -92,9 +95,13 @@ function logBuild(device: string, report: LibBuildReport): void {
   }
 }
 
-/** The Transfer environment of the desktop app over `host`. */
-export function createDesktopEnv(host: Host): TransferEnv {
-  const backend = createSamplesBackend(host);
+/**
+ * The Transfer environment of the desktop app over `host`. `app` is the app that will own it (the samples backend and the bulk link use its
+ * target and page state); it is a function because the app is built from the environment.
+ */
+export function createDesktopEnv(host: Host, app: () => TransferApp): TransferEnv {
+  let backend: SamplesBackendApi | undefined;
+  const samples = (): SamplesBackendApi => (backend ??= createSamplesBackend(host, app()));
   const emulatorBulk = EmuBulkLink.opener((method, params) => host.rpc.call(method, params));
   const builds = new Map<string, Promise<void>>();
   /** Build and pack the device's run-time modules (`lib_build`) before the library is read; callers that ask together share one build. */
@@ -110,7 +117,7 @@ export function createDesktopEnv(host: Host): TransferEnv {
     return run;
   };
 
-  return {
+  const env: TransferEnv = {
     libraryDevices: ['dt2', 'dn2'],
     library: {
       scan: async (device) => {
@@ -120,16 +127,20 @@ export function createDesktopEnv(host: Host): TransferEnv {
       read: async (device, path) => new Uint8Array(await host.library.read(device, path)),
     },
     moduleFiles: (id) => MODULE_FILES[id],
-    patchkitWasm: () => host.firmware.patchkitWasm(),
-    deviceName: async (device) => (await backend.deviceStorage(device)).name,
+    wasm: hostWasmSource(host),
+    deviceName: async (device) => (await samples().deviceStorage(device)).name,
     // the Emulator target has its own bulk link (the daemon's usb.bulk.in/out), so the pill and the transfers there follow the same path as a device
     bulk: {
       candidates: () =>
-        target().kind === 'emulator' ? emulatorBulk.candidates() : TauriBulkLink.candidates(host.ports.bulk),
+        app().target.target().kind === 'emulator'
+          ? emulatorBulk.candidates()
+          : TauriBulkLink.candidates(host.ports.bulk),
       open: (id) => (id === 'emulator' ? emulatorBulk.open(id) : TauriBulkLink.open(host.ports.bulk, id)),
       // the OUT-only interface of a real device (USB AUDIO/MIDI mode); the Emulator target has none here
       outOnlyCandidates: () =>
-        target().kind === 'emulator' ? Promise.resolve([]) : TauriBulkLink.outOnlyCandidates(host.ports.bulk),
+        app().target.target().kind === 'emulator'
+          ? Promise.resolve([])
+          : TauriBulkLink.outOnlyCandidates(host.ports.bulk),
       openOutOnly: (id, poll) => TauriBulkLink.openOutOnly(host.ports.bulk, id, poll),
     },
     targets: {
@@ -151,7 +162,7 @@ export function createDesktopEnv(host: Host): TransferEnv {
     },
     logRun: (run) => logInput(transferEntry(run)),
     extras: {
-      samples: samplesSlot(backend),
+      samples: samplesSlot(app, samples),
       reloadWithRuntime,
       onJobEnd() {
         // the Card panel reads the folder now and again after the emulator's quiet period (the folder follows the card about 2 s later)
@@ -160,10 +171,5 @@ export function createDesktopEnv(host: Host): TransferEnv {
       },
     },
   };
-}
-
-/** Set the environments of the Transfer and Firmware pages (loaded first by main.tsx). */
-export function installDesktopEnv(host: Host): void {
-  installDesktopFirmware(host);
-  setTransferEnv(createDesktopEnv(host));
+  return env;
 }

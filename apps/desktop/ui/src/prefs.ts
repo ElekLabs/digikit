@@ -1,16 +1,16 @@
-// Values kept per browser profile of the app (localStorage). Storage can be unavailable: a read gives null, a write lasts until the window closes.
-export function readPref(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-export function writePref(key: string, value: string | null): void {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    /* the value lasts until the window closes */
-  }
+// Values kept per profile of the app, over the app's KeyValue (apps/web/src/storage.ts). A storage that cannot be used reads as nothing and
+// drops writes: the value lasts until the window closes (the signal that holds it).
+import type { KeyValue } from '../../../web/src/storage';
+
+export function createPrefs(storage: KeyValue): {
+  readPref(key: string): string | null;
+  writePref(key: string, value: string | null): void;
+} {
+  return {
+    readPref: (key) => storage.get(key),
+    writePref(key, value) {
+      if (value === null) storage.remove(key);
+      else storage.set(key, value);
+    },
+  };
 }

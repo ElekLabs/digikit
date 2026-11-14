@@ -8,15 +8,15 @@ import '@web/styles/site.css';
 import '../src/console.css';
 import '../src/native.css';
 import '../src/tooltip.css';
-import { installDesktopEnv } from '../src/desktop-env';
+import { createDesktopApps } from '../src/desktop-app';
 import { createTauriHost } from '../src/host/tauri-host';
-import { desktopDefaultModules } from '../src/default-modules';
 import { CHART, FOLDER, Icon, MODULES, PAUSE, RELOAD, RESTART } from '../src/icons';
 import { installNativeFeel } from '../src/native';
 import { installTooltips } from '../src/tooltip';
 import DefaultModules from '@web/firmware/DefaultModules';
 import { DefaultModuleError } from '@web/firmware/default-modules-core';
-import { firmwareEnv, setFirmwareEnv } from '@web/firmware/env';
+import { createFirmwareApp } from '@web/firmware/app';
+import AppProvider from '@web/transfer/AppProvider';
 import LivePanel from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
 import FirmwarePage from '@web/firmware/FirmwarePage';
@@ -25,7 +25,6 @@ import SidePanels from '../src/SidePanels';
 import TitleBar from '../src/TitleBar';
 import { setLocalFolder } from '../src/samples-state';
 import TransferPage from '@web/transfer/TransferPage';
-import { setMode } from '@web/transfer/transfer-state';
 import { deviceFromName, bootingStatus, booting as startBoot, loadFailure } from '../src/boot-core';
 import { cardDevice, reloadCard } from './card-mock';
 import { installRemoteMock, testPattern } from './remote-mock';
@@ -34,9 +33,10 @@ import { createLogFollow } from '../src/log-follow';
 import LogPanel from '../src/LogPanel';
 import { setLogOpen } from '../src/log-state';
 import { logMode, previewLog } from './runtime-log-mock';
-import { SAMPLES_ROOT, control, sim } from './sim';
+import { SAMPLES_ROOT, bindSimApp, control, sim } from './sim';
 const host = createTauriHost();
-installDesktopEnv(host);
+const apps = createDesktopApps(host);
+bindSimApp(apps.app);
 
 // ?page=transfer (default) | remote | emulator | firmware (state: fwdev, fwstate, fwos; see firmware-mock.ts): the Emulator page shows the faceplate only (the real one needs the emulator) with the same
 // markup as ../src/Console.tsx, to put its screen next to the Remote page's.
@@ -147,178 +147,186 @@ function LogPage() {
 
 // The default modules install on a fake device: ?defmods=ok (default) | slow (each step takes 3 s) | fail (the module cannot be uploaded)
 const defmods = new URLSearchParams(location.search).get('defmods') ?? 'ok';
-setFirmwareEnv({
-  ...firmwareEnv(),
-  defaultModules: {
-    entries: desktopDefaultModules.entries,
-    async install(where, _device, ids, progress, _opts) {
-      const wait = (ms: number) => new Promise((r) => setTimeout(r, defmods === 'slow' ? ms * 4 : ms));
-      progress({ text: 'Waiting for the runtime to answer', done: 0, total: ids.length + 2 });
-      await wait(700);
-      for (const [i, id] of ids.entries()) {
-        progress({ text: `Installing ${id} (${i + 1} of ${ids.length})`, done: i + 1, total: ids.length + 2 });
-        await wait(900);
-        if (defmods === 'fail') throw new DefaultModuleError(id, 'E_NO_SPACE: the card has no room for it');
-      }
-      progress({
-        text: `Enabling ${ids.join(', ')}: restarting the runtime`,
-        done: ids.length + 1,
-        total: ids.length + 2,
-      });
-      await wait(1200);
-      return [...ids.map((id) => `${id}: uploaded`), `enabled ${ids.join(', ')} (restarted once, ${where})`];
+const firmware = createFirmwareApp(
+  {
+    ...apps.firmware.env,
+    defaultModules: {
+      entries: apps.firmware.env.defaultModules!.entries,
+      async install(where, _device, ids, progress, _opts) {
+        const wait = (ms: number) => new Promise((r) => setTimeout(r, defmods === 'slow' ? ms * 4 : ms));
+        progress({ text: 'Waiting for the runtime to answer', done: 0, total: ids.length + 2 });
+        await wait(700);
+        for (const [i, id] of ids.entries()) {
+          progress({ text: `Installing ${id} (${i + 1} of ${ids.length})`, done: i + 1, total: ids.length + 2 });
+          await wait(900);
+          if (defmods === 'fail') throw new DefaultModuleError(id, 'E_NO_SPACE: the card has no room for it');
+        }
+        progress({
+          text: `Enabling ${ids.join(', ')}: restarting the runtime`,
+          done: ids.length + 1,
+          total: ids.length + 2,
+        });
+        await wait(1200);
+        return [...ids.map((id) => `${id}: uploaded`), `enabled ${ids.join(', ')} (restarted once, ${where})`];
+      },
     },
   },
-});
+  apps.app,
+);
 
 installNativeFeel();
 installTooltips();
-setMode(sim.mode);
+apps.app.state.setMode(sim.mode);
 setLocalFolder(sim.folder === 'none' ? '' : SAMPLES_ROOT);
 (window as unknown as { __sim: typeof control }).__sim = control;
 
 render(
   () => (
-    <div class="console" style={{ '--accent': panels.dn2.accent, '--func-legend': panels.dn2.func_legend }}>
-      <TitleBar />
-      <div class="shell">
-        <nav class="sidebar" aria-label="Pages">
-          <button type="button" class="side toggle" aria-label="Collapse the sidebar">
-            <span>«</span>
-          </button>
-          <span class="side-group">Run</span>
-          <button type="button" class={page === 'emulator' ? 'side on' : 'side'}>
-            <span>Emulator</span>
-          </button>
-          <span class="side-group">Device</span>
-          <button type="button" class={page === 'transfer' ? 'side on' : 'side'}>
-            <span>Transfer</span>
-          </button>
-          <button type="button" class={page === 'remote' ? 'side on' : 'side'}>
-            <span>Remote</span>
-          </button>
-          <button type="button" class={page === 'firmware' ? 'side on' : 'side'}>
-            <span>Firmware</span>
-          </button>
-        </nav>
-        <div class="content">
-          {page === 'log' ? (
-            <p class="note" style={{ padding: '24px' }}>
-              Log preview ({logMode}): the drawer below follows the fake emulator and the fake device.
-            </p>
-          ) : page === 'remote' ? (
-            <RemotePage fallbackDevice="dn2" emulatorLoaded={true} />
-          ) : page === 'emulator' ? (
-            <div class="emu-page">
-              {/* the header of the Emulator page in ../src/Console.tsx: the file, the runtime option and the button groups */}
-              <header class="page-head emu-head">
-                <h2>Emulator</h2>
-                <span class="file-chip">
-                  <span class="path">{bootState ? bootFile : 'Digitone_II_OS1.12.syx'}</span>
-                  {bootState ? null : <span class="tag device">dn2 1.12</span>}
-                  {bootState ? null : (
-                    <span class="tag watch">
-                      <i />
-                      watching
-                    </span>
-                  )}
-                </span>
-                <span class="sp" />
-                <label class="tag opt">
-                  <input type="checkbox" checked />
-                  <span class="long">Boot with runtime</span>
-                  {bootState ? null : <span class="rt on">core/dynreg</span>}
-                </label>
-                <span class="tb-group">
-                  <button type="button" class="tb" aria-label="Open firmware file" title="Open a firmware file">
-                    <Icon d={FOLDER} />
-                    <span class="lbl">Open…</span>
-                  </button>
-                  <DefaultModules device="dn2" note="Uploaded and enabled in the emulator after the firmware loads." />
-                </span>
-                <span class="tb-group">
-                  <button type="button" class="tb" aria-label="Reload" title="Reload the startup file (⌘R)">
-                    <Icon d={RELOAD} />
-                    <span class="lbl">Reload</span>
-                    <kbd class="lbl">⌘R</kbd>
-                  </button>
-                  <button
-                    type="button"
-                    class="tb"
-                    disabled={!!bootState}
-                    aria-label="Reload modules"
-                    title="Build the stale module objects, then apply the modules (⇧⌘R)"
-                  >
-                    <Icon d={MODULES} />
-                    <span class="lbl">Modules</span>
-                    <kbd class="lbl">⇧⌘R</kbd>
-                  </button>
-                </span>
-                {/* no status while booting: the three buttons are disabled, as in the app */}
-                <span class="tb-group">
-                  <button
-                    type="button"
-                    class="tb icon"
-                    disabled={!!bootState}
-                    aria-label="Pause"
-                    title="Pause the emulator"
-                  >
-                    <Icon d={PAUSE} />
-                  </button>
-                  <button
-                    type="button"
-                    class="tb icon"
-                    disabled={!!bootState}
-                    aria-label="Reset (emulator)"
-                    title="Reset the running firmware to its ready state"
-                  >
-                    <Icon d={RESTART} />
-                  </button>
-                  <button
-                    type="button"
-                    class="tb icon"
-                    disabled={!!bootState}
-                    aria-label="Save diagnostics"
-                    title="Save diagnostics"
-                  >
-                    <Icon d={CHART} />
-                  </button>
-                </span>
-              </header>
-              {emulatorFaceplate()}
-            </div>
-          ) : page === 'firmware' ? (
-            <FirmwarePage />
-          ) : (
-            <TransferPage />
-          )}
+    <AppProvider app={apps.app} firmware={firmware}>
+      <div class="console" style={{ '--accent': panels.dn2.accent, '--func-legend': panels.dn2.func_legend }}>
+        <TitleBar />
+        <div class="shell">
+          <nav class="sidebar" aria-label="Pages">
+            <button type="button" class="side toggle" aria-label="Collapse the sidebar">
+              <span>«</span>
+            </button>
+            <span class="side-group">Run</span>
+            <button type="button" class={page === 'emulator' ? 'side on' : 'side'}>
+              <span>Emulator</span>
+            </button>
+            <span class="side-group">Device</span>
+            <button type="button" class={page === 'transfer' ? 'side on' : 'side'}>
+              <span>Transfer</span>
+            </button>
+            <button type="button" class={page === 'remote' ? 'side on' : 'side'}>
+              <span>Remote</span>
+            </button>
+            <button type="button" class={page === 'firmware' ? 'side on' : 'side'}>
+              <span>Firmware</span>
+            </button>
+          </nav>
+          <div class="content">
+            {page === 'log' ? (
+              <p class="note" style={{ padding: '24px' }}>
+                Log preview ({logMode}): the drawer below follows the fake emulator and the fake device.
+              </p>
+            ) : page === 'remote' ? (
+              <RemotePage fallbackDevice="dn2" emulatorLoaded={true} />
+            ) : page === 'emulator' ? (
+              <div class="emu-page">
+                {/* the header of the Emulator page in ../src/Console.tsx: the file, the runtime option and the button groups */}
+                <header class="page-head emu-head">
+                  <h2>Emulator</h2>
+                  <span class="file-chip">
+                    <span class="path">{bootState ? bootFile : 'Digitone_II_OS1.12.syx'}</span>
+                    {bootState ? null : <span class="tag device">dn2 1.12</span>}
+                    {bootState ? null : (
+                      <span class="tag watch">
+                        <i />
+                        watching
+                      </span>
+                    )}
+                  </span>
+                  <span class="sp" />
+                  <label class="tag opt">
+                    <input type="checkbox" checked />
+                    <span class="long">Boot with runtime</span>
+                    {bootState ? null : <span class="rt on">core/dynreg</span>}
+                  </label>
+                  <span class="tb-group">
+                    <button type="button" class="tb" aria-label="Open firmware file" title="Open a firmware file">
+                      <Icon d={FOLDER} />
+                      <span class="lbl">Open…</span>
+                    </button>
+                    <DefaultModules
+                      device="dn2"
+                      note="Uploaded and enabled in the emulator after the firmware loads."
+                    />
+                  </span>
+                  <span class="tb-group">
+                    <button type="button" class="tb" aria-label="Reload" title="Reload the startup file (⌘R)">
+                      <Icon d={RELOAD} />
+                      <span class="lbl">Reload</span>
+                      <kbd class="lbl">⌘R</kbd>
+                    </button>
+                    <button
+                      type="button"
+                      class="tb"
+                      disabled={!!bootState}
+                      aria-label="Reload modules"
+                      title="Build the stale module objects, then apply the modules (⇧⌘R)"
+                    >
+                      <Icon d={MODULES} />
+                      <span class="lbl">Modules</span>
+                      <kbd class="lbl">⇧⌘R</kbd>
+                    </button>
+                  </span>
+                  {/* no status while booting: the three buttons are disabled, as in the app */}
+                  <span class="tb-group">
+                    <button
+                      type="button"
+                      class="tb icon"
+                      disabled={!!bootState}
+                      aria-label="Pause"
+                      title="Pause the emulator"
+                    >
+                      <Icon d={PAUSE} />
+                    </button>
+                    <button
+                      type="button"
+                      class="tb icon"
+                      disabled={!!bootState}
+                      aria-label="Reset (emulator)"
+                      title="Reset the running firmware to its ready state"
+                    >
+                      <Icon d={RESTART} />
+                    </button>
+                    <button
+                      type="button"
+                      class="tb icon"
+                      disabled={!!bootState}
+                      aria-label="Save diagnostics"
+                      title="Save diagnostics"
+                    >
+                      <Icon d={CHART} />
+                    </button>
+                  </span>
+                </header>
+                {emulatorFaceplate()}
+              </div>
+            ) : page === 'firmware' ? (
+              <FirmwarePage />
+            ) : (
+              <TransferPage />
+            )}
+          </div>
         </div>
+        {page === 'log' ? <LogPage /> : null}
+        {page === 'emulator' && bootState ? (
+          <>
+            {bootState === 'failed' ? (
+              <p class="alert" role="alert">
+                {bootError}
+              </p>
+            ) : null}
+            <footer class="statusbar">
+              <span>
+                <i class="dot paused" />
+                {bootState === 'loading' ? bootingStatus(startBoot(bootFile)) : 'no firmware'}
+              </span>
+              <span class="sp" />
+              {bootState === 'failed' ? <span class="muted">{loadFailure(bootFile, bootError)}</span> : null}
+              <button type="button" class="sb">
+                Log
+              </button>
+              <button type="button" class="sb">
+                Metrics
+              </button>
+            </footer>
+          </>
+        ) : null}
       </div>
-      {page === 'log' ? <LogPage /> : null}
-      {page === 'emulator' && bootState ? (
-        <>
-          {bootState === 'failed' ? (
-            <p class="alert" role="alert">
-              {bootError}
-            </p>
-          ) : null}
-          <footer class="statusbar">
-            <span>
-              <i class="dot paused" />
-              {bootState === 'loading' ? bootingStatus(startBoot(bootFile)) : 'no firmware'}
-            </span>
-            <span class="sp" />
-            {bootState === 'failed' ? <span class="muted">{loadFailure(bootFile, bootError)}</span> : null}
-            <button type="button" class="sb">
-              Log
-            </button>
-            <button type="button" class="sb">
-              Metrics
-            </button>
-          </footer>
-        </>
-      ) : null}
-    </div>
+    </AppProvider>
   ),
   document.getElementById('app')!,
 );

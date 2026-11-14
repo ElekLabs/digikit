@@ -56,7 +56,7 @@ import { ROWS_TYPE, dropFolder } from '@web/transfer/select-core';
 import { noteActivity } from '@web/transfer/activity';
 import { countLabel } from '@web/transfer/transfer-core';
 import SplitPane from '@web/transfer/SplitPane';
-import { askStop, deviceInfo, stopWasAsked } from '@web/transfer/transfer-state';
+import { useTransferApp } from '@web/transfer/app-context';
 import {
   addedFiles,
   localEntries,
@@ -82,6 +82,7 @@ import {
 } from './samples-state';
 
 export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBackendApi }): JSX.Element {
+  const { askStop, deviceInfo, stopWasAsked } = useTransferApp().state;
   const { busy, run, setError } = props.ctx;
   const { openDeviceSamples, listLocalAt, pickFolder, readLocal, readLocalFile } = props.backend;
   const [note, setNote] = createSignal('');

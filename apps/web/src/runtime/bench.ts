@@ -6,6 +6,7 @@
  * No AudioContext: the PCM port is drained and counted. Driven by
  * tools/devtools/browser_bench.mjs (`mise run web:bench`).
  */
+import { browserRuntimeDeps } from './browser-deps';
 import { browserRuntime, type CoupledStats } from './runtime';
 import { fetchLocalFirmware, fetchLocalInputs } from './local-inputs';
 
@@ -41,7 +42,7 @@ export async function runBench() {
     const [inputs, syx] = await Promise.all([fetchLocalInputs(), fetchLocalFirmware()]);
     if (!inputs) throw new Error('local DSP inputs are missing (dev server only)');
     if (!syx) throw new Error('local firmware is missing (set DIGI_EMU_SYX)');
-    const runtime = browserRuntime(() => {});
+    const runtime = browserRuntime(() => {}, browserRuntimeDeps());
     if (!runtime.loadCoupled || !(await runtime.coupledAvailable?.()))
       throw new Error('no coupled core (apps/web/.local/emulator-core-sharc.wasm)');
     const channel = new MessageChannel();

@@ -101,11 +101,38 @@ disabled ("desktop only for now"). Headless: the control socket's `card.load {di
 
 ### Host and EmuRpc (desktop UI)
 
-The desktop UI never calls Tauri's `invoke`. `apps/desktop/ui/src/host/host.ts` types every Tauri command the UI uses, in groups (`fs`, `library`, `ports.midi`, `ports.bulk`, `firmware`, `emu`, `shell`), and `rpc` is `EmuRpc`: `call(method, params)` over `emu_call`. `host/tauri-host.ts` is the only module that imports `invoke` (oxlint `no-restricted-imports` fails any other file). `main.tsx` makes the host and passes it to `installDesktopEnv(host)` and `<Console host={host}>`; modules take the host (or one group of it) as an argument. The folder has no UI types so it can move to a shared package.
+The desktop UI never calls Tauri's `invoke`. `apps/desktop/ui/src/host/host.ts` types every Tauri command the UI uses, in groups (`fs`, `library`, `ports.midi`, `ports.bulk`, `firmware`, `emu`, `shell`), and `rpc` is `EmuRpc`: `call(method, params)` over `emu_call`. `host/tauri-host.ts` is the only module that imports `invoke` (oxlint `no-restricted-imports` fails any other file). `main.tsx` makes the host and passes it to `createDesktopApps(host)` and `<Console host={host}>`; modules take the host (or one group of it) as an argument. The folder has no UI types so it can move to a shared package.
 
-Add a command: write the Rust command, then add a method to the group in `host.ts`, its `invoke` line in `tauri-host.ts` and its `leaf(...)` line in `fake-host.ts`. Ten commands are not typed yet because the UI does not call them (`emu_stage_syx`, `emu_save_diagnostics`, `emu_audio_status`, `emu_startup`, `emu_step`, `emu_tap`, `emu_stop`, `emu_card_reset`, `emu_card_stage`, `emu_card_load`).
+Add a command: write the Rust command, then add a method to the group in `host.ts`, its `invoke` line in `tauri-host.ts` and its `leaf(...)` line in `fake-host.ts`. The emulator session commands (`emu_startup`, `emu_step`, `emu_tap`, `emu_stop`, `emu_audio_status`, `emu_stage_syx`, `emu_save_diagnostics`, `emu_card_*`) are in `host.emu` for `createNativeRuntime`.
 
 Tests use `createFakeHost(replies)` from `host/fake-host.ts`: it records `calls` (command as `group.method`, arguments, order) and answers from `replies` (a value, or a function of the arguments). A command with no reply fails, except the ones that answer nothing (open, close, send, cancel). Examples: `ui/tests/samples-backend.test.ts`, `card-api.test.ts`, `links.test.ts`. The browser preview (`mise run ui:preview`) still replaces `@tauri-apps/api/core` with `ui/preview/tauri-mock.ts` behind `TauriHost`.
+
+### The app object, KeyValue and BlobStore (desktop UI and site)
+
+The Transfer pane, the Firmware page and the target selector keep no module-level state. `createTransferApp(env, { storage, sessions })` (`apps/web/src/transfer/app.ts`) builds one app from the environment (`TransferEnv`): `app.target` (selected target, its sessions and transports), `app.connection`, `app.jobs`, `app.state` (the Transfer page's signals), `app.backend` and `app.loadLibrary`. `createFirmwareApp(env, transferApp)` (`apps/web/src/firmware/app.ts`) adds `defaults` (default modules) and `state` (the flash). An entry point builds the apps once and wraps its pages in `<AppProvider app firmware>`; a component takes them with `useTransferApp()` or `useFirmwareApp()` and destructures what it uses. Code that is not a component takes the app (or the part it needs) as an argument.
+
+- Desktop: `createDesktopApps(host)` in `apps/desktop/ui/src/desktop-app.ts`, called by `main.tsx`.
+- Site: `createWebTransferApp()` in `apps/web/src/transfer/web-env.ts` (Transfer) and `createWebFirmwareApp()` in `apps/web/src/firmware/web-env.ts` (Firmware), called by the Astro islands `WebTransfer.tsx` and `WebFirmware.tsx`.
+- An environment needs the app it will belong to (its ports and transports call `app.target`, `app.connection`): its factory takes `app: () => TransferApp`, a function because the app is built from the environment.
+
+What an app is given, so that a test gives something else:
+
+- `storage: KeyValue` (`apps/web/src/storage.ts`): `get`, `set`, `remove` of small strings. `localStorageKeyValue()` is the browser's (every call guarded); `memoryKeyValue(initial)` is the fake (`.data` shows what was written). `remembered(storage, key, parse)` is a signal kept in it.
+- `sessions: SessionHub` (`transfer/session-core.ts`): `get(key, transport)`, `drop`, `cancel`. `createSessionHub(make)` makes one `DkSession` per target; `createFakeSessions(make)` (`transfer/fake-app.ts`) makes whatever the test returns and records `made`, `dropped` and `cancelled`.
+- `BlobStore` (`apps/web/src/blob-store.ts`): `get`, `put`, `delete` of bytes. `indexedDbBlobStore(database, objectStore)` is the browser's; `memoryBlobStore()` is the fake. The ready-state cache (`ReadyCache`) and the firmware hand-off (`patch/handoff.ts`) take one.
+
+`createFakeTransferApp({ env, storage, sessions })` (`apps/web/src/transfer/fake-app.ts`) is the real `createTransferApp` over those fakes and a stub `TransferEnv` that a test overrides in part. Examples: `apps/web/tests/transfer-app.test.ts` (target and session selection, remembered values), `apps/desktop/ui/tests/module-loading.test.ts`, `samples-backend.test.ts`. Only `storage.ts` touches `localStorage`, `blob-store.ts` touches `indexedDB` and `workers.ts` calls `new Worker` (oxlint `no-restricted-globals`).
+
+### WorkerFactory, WasmSource and the two runtimes
+
+Code that needs a Web Worker takes a `WorkerFactory` (`apps/web/src/workers.ts`): `create(kind)` returns a `WorkerPort` (`postMessage`, `onmessage`, `onerror`, `addEventListener`, `terminate`) for the kind `runtime`, `dsp`, `cf` or `patch`. `browserWorkers()` is the browser's (the only `new Worker` in the apps; oxlint `no-restricted-globals` fails any other); `createFakeWorkers({ runtime: handler })` (`workers-fake.ts`) runs a function of the test instead of a thread: the handler gets each posted message and answers with `worker.reply(data)`; `made` and `posted` show what happened. A worker cannot be given the page's objects, so `patch-worker.ts`, `dsp-worker.ts` and `cf-worker.ts` build what they need from the URL or base in their start message.
+
+Wasm files come from a `WasmSource` (`apps/web/src/wasm-source.ts`): `bytes(name)` for `patchkit.wasm`, `emulator-core-sharc.wasm` and (desktop only) `dksample.wasm`. The site's is `fetchWasmSource(BASE)` (it also compiles while it downloads); the desktop's is `hostWasmSource(host)` (`desktop-wasm.ts`, over `Host.firmware`); a test gives `memoryWasmSource(files)` and `EMPTY_WASM`. `TransferEnv.wasm` is the Transfer pane's. Where real wasm is not the subject, a test gives a stub of what it does: `PatchKitLike` (`patch/patchkit-core.ts`; `senderKit(wasm, create)` and `createWebFirmwareEnv({ createKit })` take one) and `NeedsLike` (`modules/dkneeds.ts`; `createFakeTransferApp` uses a stub). The tests that need the real wasm stay in `test-wasm` (`*.wasm.test.ts` and the node tests).
+
+`EmulatorRuntime` (`apps/web/src/runtime/runtime.ts`) has two implementations that share no code:
+
+- `createNativeRuntime(host, onUpdate)` (`apps/desktop/ui/src/native-runtime.ts`): the controller's session and pump through `Host.emu` and `Host.rpc`; it resolves with `undefined` when `host.emu.inApp()` is false (a plain browser). `Console.tsx` makes it. Test it with `createFakeHost` (`ui/tests/native-runtime.test.ts`).
+- `browserRuntime(onUpdate, { workers, wasm })`: the worker or the two-worker split session; `browserRuntimeDeps()` (`runtime/browser-deps.ts`) makes the browser's `deps`. Test it with fake workers (`apps/web/tests/browser-runtime.test.ts`).
 
 ## Web panel
 

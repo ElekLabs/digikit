@@ -168,6 +168,9 @@ interface Exports {
   pk_err_len(): number;
 }
 
+/** What the apps use of PatchKit (the wasm behind it is `PatchKit.create`); a test gives a stub of it where real wasm is not needed. */
+export type PatchKitLike = Pick<PatchKit, 'check' | 'prepare' | 'sender' | 'rpcFlash' | 'apply'>;
+
 export class PatchKit {
   private x: Exports;
   private bundle: Uint8Array;

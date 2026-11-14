@@ -4,6 +4,9 @@ import { cardCall, pickFolder } from './card-mock';
 import * as firmware from './firmware-mock';
 import { sim } from './sim';
 
+/** The preview is a plain browser, outside the app: the native runtime is not offered. */
+export const isTauri = (): boolean => false;
+
 export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: Record<string, string> }): Promise<T> {
   switch (cmd) {
     case 'local_pick_folder':

@@ -9,9 +9,8 @@ import { ListRow, LocalPane, DevicePane, createConfirm, DeleteButton, writing, t
 import type { ModuleFilesSpec } from './env';
 import { createPaneSelect } from './pane-select';
 import SplitPane from './SplitPane';
-import { transferBackend } from './transfer-backend';
 import { countLabel } from './transfer-core';
-import { lastView } from './transfer-state';
+import { useTransferApp } from './app-context';
 
 const SENT_NOTE = "Choose it in the device's module settings; it applies on next restart.";
 
@@ -23,6 +22,8 @@ interface Local {
 
 export default function ModuleFilesArea(props: { ctx: PageCtx; id: string; spec: ModuleFilesSpec }): JSX.Element {
   const { busy, run, setError } = props.ctx;
+  const { lastView } = useTransferApp().state;
+  const transferBackend = useTransferApp().backend;
   let input: HTMLInputElement | undefined;
   const [local, setLocal] = createSignal<Local[]>([]);
   const [device, setDevice] = createSignal<{ name: string; size: number }[]>([]);

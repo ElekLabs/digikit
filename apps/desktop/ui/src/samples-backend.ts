@@ -7,12 +7,9 @@ import { failureModule, fmtVersion, hasCap, type DkSession, type LoadFailure } f
 import { Sample, prepareUpload, sourceKind, type Prepared } from '@digi/dk-session/dksample';
 import { openSamples, type SamplesBackend } from '@digi/dk-session/samples';
 import { chooseBulk, type BulkChoice } from '@digi/dk-session/bulk-select';
-import { transferEnv } from '@web/transfer/env';
-import { asked, noteConnection } from '@web/transfer/connection-state';
-import { session as running, target } from '@web/transfer/target';
+import type { TransferApp } from '@web/transfer/app';
 import type { Host } from './host/host';
 import { joinPath, type LocalEntry, type Prepare } from './samples-core';
-import { setDeviceInfo, setSampleLink } from '@web/transfer/transfer-state';
 import type { LinkState } from '@web/transfer/link-core';
 import {
   localFolder,
@@ -59,8 +56,11 @@ export async function labelOf(read: () => Promise<Uint8Array>, size: number): Pr
   }
 }
 
-/** The desktop Samples backend over `host`. Each backend keeps its own caches (the device's storage, the converter, the session's samples backend). */
-export function createSamplesBackend(host: Host) {
+/** The desktop Samples backend over `host` and the app's target, connection and page state. Each backend keeps its own caches (the device's storage, the converter, the session's samples backend). */
+export function createSamplesBackend(host: Host, app: TransferApp) {
+  const { asked, noteConnection } = app.connection;
+  const { session: running, target } = app.target;
+  const { setDeviceInfo, setSampleLink } = app.state;
   /** What the device profile says about the device with this id (`dt2`): its name and the backend of its samples. */
   const storages = new Map<string, Promise<{ name: string; samples: string }>>();
   function deviceStorage(device: string): Promise<{ name: string; samples: string }> {
@@ -130,7 +130,7 @@ export function createSamplesBackend(host: Host) {
     }
     if (!last.bulk && !last.failure) last.failure = { usbFast: await usbFastFailure(s) };
     if (!last.bulk) {
-      const env = transferEnv().bulk;
+      const env = app.env.bulk;
       last.bulk = env && target().kind !== 'none' ? await chooseBulk(s, env, note) : undefined;
       // chooseBulk finds the USB MIDI pair or the OUT-only interface of USB AUDIO/MIDI. A device in USB AUDIO/MIDI with neither (older firmware) stays on
       // SysEx and the pill says how to get Fast USB.
