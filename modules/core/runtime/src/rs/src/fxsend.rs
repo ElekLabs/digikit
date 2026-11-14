@@ -72,12 +72,12 @@ pub struct SendState {
     /// The tracks (bit mask) whose Sound array gets the stored amounts before it is read.
     pub restore: u32,
     /// Per effect row: the routes the effect allows (`ROUTE_*` bits) and its default route (`ROUTE_*`), from its record.
-    pub allow: [u8; fxpage::MAX_FX],
-    pub dflt: [u8; fxpage::MAX_FX],
+    pub allow: [u8; dsp::MAX_FX],
+    pub dflt: [u8; dsp::MAX_FX],
     /// Per effect row: 1 when it runs on a send bus, its cell + 1, the length of its module id and the id.
-    pub route: [u8; fxpage::MAX_FX],
-    pub cell: [u8; fxpage::MAX_FX],
-    pub idlen: [u8; fxpage::MAX_FX],
+    pub route: [u8; dsp::MAX_FX],
+    pub cell: [u8; dsp::MAX_FX],
+    pub idlen: [u8; dsp::MAX_FX],
     /// Per cell: its effect row + 1.
     pub row: [u8; SEND_MAX],
     /// The transfer in flight: the effect row, the amount word (0 .. 3) and its value.
@@ -85,11 +85,11 @@ pub struct SendState {
     pub busy_k: u8,
     pub busy_w: u8,
     pub busy_v: u32,
-    pub id: [[u8; 32]; fxpage::MAX_FX],
+    pub id: [[u8; 32]; dsp::MAX_FX],
     /// The amounts, one byte for each track.
-    pub amt: [[u8; TRACKS]; fxpage::MAX_FX],
+    pub amt: [[u8; TRACKS]; dsp::MAX_FX],
     /// The amount words the DSP row has.
-    pub dsp: [[u32; 4]; fxpage::MAX_FX],
+    pub dsp: [[u32; 4]; dsp::MAX_FX],
     /// The live kit object last seen (the 16 Sound objects lie in it), and for each cell and track the raw value last written to or read from `Sound[idx]` (-1: none).
     pub kit: u32,
     pub shown: [[i32; TRACKS]; SEND_MAX],
@@ -155,7 +155,7 @@ pub unsafe fn fx_entry(index: u32, out: &mut DkrtFx) -> i32 {
     let s = ss();
     let mut seen = 0;
     let mut k = 0;
-    while k < fxpage::MAX_FX {
+    while k < dsp::MAX_FX {
         if fxpage::page_owner(k) != 0 {
             if seen == index {
                 out.row = k as u32;
@@ -177,7 +177,7 @@ pub unsafe fn fx_entry(index: u32, out: &mut DkrtFx) -> i32 {
 
 /// Does effect row `k` run on a send bus (the FX view lists the send effects before the master effects).
 pub fn is_send(k: usize) -> bool {
-    k < fxpage::MAX_FX && ss().route[k] != 0
+    k < dsp::MAX_FX && ss().route[k] != 0
 }
 
 /// Send effects loaded (CAPACITY `used`).
@@ -236,7 +236,7 @@ unsafe fn publish_count(inf: *const u32) {
 /// Effect row `k` (module record `owner - 1`, tab string `tab`) has been registered: read its route and amounts from the settings and, for a send effect within the limit, give it a
 /// cell of the send page. The route and the four amount words go to the DSP with the row (`dsp::fx_set_route`).
 pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
-    if k >= fxpage::MAX_FX || owner == 0 {
+    if k >= dsp::MAX_FX || owner == 0 {
         return;
     }
     let s = ss();
@@ -347,7 +347,7 @@ unsafe fn release(inf: *const u32, k: usize) {
 
 /// The effect row `k` is gone (its module was removed): its cell and its state.
 pub unsafe fn remove(k: usize) {
-    if k >= fxpage::MAX_FX {
+    if k >= dsp::MAX_FX {
         return;
     }
     let inf = info();
@@ -416,7 +416,7 @@ pub unsafe fn tick() {
     // one DSP word a pass
     if s.busy == 0 && !fxpage::busy() {
         let mut k = 0;
-        while k < fxpage::MAX_FX {
+        while k < dsp::MAX_FX {
             if s.route[k] != 0 && dsp::fx_live(k) {
                 let want = words_of(&s.amt[k]);
                 let mut j = 0;
@@ -492,7 +492,7 @@ unsafe fn tracks(inf: *const u32) {
         t += 1;
     }
     let mut k = 0;
-    while k < fxpage::MAX_FX {
+    while k < dsp::MAX_FX {
         if changed & (1 << k) != 0 {
             put_amounts(k);
         }

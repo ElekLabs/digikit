@@ -28,7 +28,7 @@ use dkrt_sdk::*;
 pub const KIND_EFFECT: u32 = 4;
 pub const LEN_EFFECT: u32 = 0x1a4;
 const INFO_MAGIC: u32 = 0x4658_5047; // "FXPG"
-pub const MAX_FX: usize = 4;
+use crate::dsp::MAX_FX;
 const KNOBS: usize = 7;
 const WORDS: usize = 8; // the knobs and MIX
 const TEXT: usize = 24;

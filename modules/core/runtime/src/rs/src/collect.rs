@@ -17,7 +17,7 @@ use dkrt_sdk::*;
 
 pub const MAX_RECORDS: usize = dkneeds::MAX_RECORDS as usize;
 const MAX_M: usize = limits::MACHINE_ROWS;
-const MAX_F: usize = crate::fxpage::MAX_FX;
+const MAX_F: usize = crate::dsp::MAX_FX;
 const MAX_PG: usize = 16;
 const MAX_PA: usize = MAX_RECORDS;
 const TEXT: usize = 24;
