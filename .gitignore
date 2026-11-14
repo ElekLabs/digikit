@@ -55,6 +55,7 @@ apps/web/public/emulator-core*.wasm
 apps/web/public/patchkit.wasm
 apps/web/public/dkupload.wasm
 apps/web/public/dksample.wasm
+apps/web/public/dkprof.wasm
 # Contains DSP code generated from firmware: never commit.
 apps/web/public/emulator-core-sharc.wasm
 # Directories here, symlinks in lane worktrees (tools/devtools/worktree-setup.sh): no trailing slash.

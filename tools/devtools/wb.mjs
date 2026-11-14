@@ -11,6 +11,10 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store put LOCAL REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store rm REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
+//     node tools/devtools/wb.mjs [--format json|text] addrmap lookup ADDR... | module analyse DKM DKO | profile report FILE | profile record --seconds N --out FILE
+//
+// The last line is the offline group (no device, no dkmidi): names for addresses, module DSP analysis and profiles, through dkprof.wasm (`mise run wasm:dkprof`).
+// Its options and output are in tools/devtools/wb_prof.mjs and docs/ADDRMAP.md, docs/INSTRUMENTATION.md and packages/dksharc/README.md.
 //
 // `log card` prints the card log state of the debug module (the log written to data/digikit/debug on the card, kept across restarts); `on` / `off` switch it;
 // `get` reads the card log files and writes each raw (.bin) and decoded (.txt) to DIR (default out/runs/cardlog/<YYYYmmdd-HHMMSS>/), the older boot first.
@@ -39,6 +43,7 @@ import {
 import { ProcessTransport } from '../../packages/dk-session/src/process-transport.ts';
 import { Sample, prepareUpload } from '../../packages/dk-session/src/dksample.ts';
 import { openSamples, skipVerifyAfterBulk } from '../../packages/dk-session/src/samples.ts';
+import { profCommand } from './wb_prof.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 // the patchkit rule (tools/emulator/native_target.py): a worktree builds into its own target dir; no generated core is the "nogen" key
@@ -58,7 +63,12 @@ const opts = {
   verify: 'auto',
   speed: undefined,
   'bulk-bin': process.env.DKBULK_BIN || path.join(targetRoot, 'nogen/release/dkbulk'),
+  format: undefined,
+  ret: false,
 };
+// the offline group takes these several times
+const REPEATED = new Set(['map', 'load', 'dsp-base']);
+const OFFLINE = ['addrmap', 'module', 'profile'];
 const words = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
@@ -70,11 +80,27 @@ for (let i = 0; i < args.length; i++) {
     a === '--verify' ||
     a === '--bulk-bin' ||
     a === '--speed' ||
-    a === '--out'
+    a === '--out' ||
+    [
+      '--format',
+      '--map',
+      '--image',
+      '--loads',
+      '--snapshot',
+      '--load',
+      '--dsp-base',
+      '--cpu',
+      '--top',
+      '--seconds',
+      '--run-dir',
+    ].includes(a)
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);
-    opts[a.slice(2)] = args[++i];
-  } else if (a.startsWith('--')) fail(`unknown option ${a}\n${usage}`);
+    const key = a.slice(2);
+    if (REPEATED.has(key)) (opts[key] ??= []).push(args[++i]);
+    else opts[key] = args[++i];
+  } else if (a === '--ret') opts.ret = true;
+  else if (a.startsWith('--')) fail(`unknown option ${a}\n${usage}`);
   else words.push(a);
 }
 
@@ -107,7 +133,8 @@ function fail(msg, code = 2) {
   process.exit(code);
 }
 
-if (!existsSync(opts.bin)) fail(`no dkmidi binary at ${opts.bin} (run: mise run dkmidi:build)`);
+if (!OFFLINE.includes(words[0]) && !existsSync(opts.bin))
+  fail(`no dkmidi binary at ${opts.bin} (run: mise run dkmidi:build)`);
 
 /** Start the bridge on the port and open a session on it. */
 function connect(timeoutMs = 60000) {
@@ -291,7 +318,9 @@ async function cardLogGet(session, outDir) {
 
 const [cmd, sub, ...rest] = words;
 let status = 0;
-if (cmd === 'ports') {
+if (OFFLINE.includes(cmd)) {
+  status = await profCommand({ cmd, sub, rest, opts, root, fail });
+} else if (cmd === 'ports') {
   const r = spawnSync(opts.bin, ['ports'], { stdio: 'inherit' });
   status = r.status ?? 1;
 } else if (cmd === 'info') {

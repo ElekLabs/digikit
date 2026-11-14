@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // Build the portable native runtime for the browser without changing toolchains.
 //
-// Writes five files:
+// Writes six files:
 //   apps/web/public/patchkit.wasm
 //       The patch tool of packages/patchkit (C ABI, no firmware inside: ports and modules are passed in at run time).
 //   apps/web/public/dkupload.wasm
 //       The module upload protocol of packages/dkupload (C ABI, no firmware inside).
 //   apps/web/public/dksample.wasm
 //       The WAV to native sample converter of packages/dksample (plusdrive-format's, C ABI, no firmware inside).
+//   apps/web/public/dkprof.wasm
+//       The profile model, address lookup and module DSP analysis of packages/dkprof (C ABI, JSON in and out, no firmware inside).
 //   apps/web/public/emulator-core.wasm
 //       CF-only core (small), used for the normal boot.
 //   apps/web/.local/emulator-core-sharc.wasm
@@ -72,6 +74,7 @@ try {
       sharc: { type: 'boolean', default: false },
       'patchkit-only': { type: 'boolean', default: false },
       'dksample-only': { type: 'boolean', default: false },
+      'dkprof-only': { type: 'boolean', default: false },
       'no-fast': { type: 'boolean', default: false },
       out: { type: 'string' },
       'wasm-opt': { type: 'string', default: '-O3' },
@@ -251,7 +254,11 @@ if (args['dksample-only']) {
   buildSmalls(['dksample']);
   process.exit(0);
 }
-buildSmalls(['patchkit', 'dkupload', 'dksample']);
+if (args['dkprof-only']) {
+  buildSmalls(['dkprof']);
+  process.exit(0);
+}
+buildSmalls(['patchkit', 'dkupload', 'dksample', 'dkprof']);
 if (args['patchkit-only']) {
   process.exit(0);
 }
