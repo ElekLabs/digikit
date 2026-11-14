@@ -1,6 +1,7 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { panels } from '../data/faceplates';
 import { deviceProfiles, localReadyFirmwareSha256, type DeviceId } from '../data/device-profiles';
+import { browserRuntimeDeps } from '../runtime/browser-deps';
 import { browserRuntime, type EmulatorRuntime, type RuntimeUpdate } from '../runtime/runtime';
 import { parseLeds } from '../runtime/leds';
 import { PcmSink, resumeOnNextGesture } from '../runtime/audio';
@@ -12,7 +13,7 @@ import SyxFile from './SyxFile';
 import { benchRequested, runBench } from '../runtime/bench';
 import { devEnabled } from '../dev';
 import { identify } from '../patch/identify';
-import { takeHandoff } from '../patch/handoff';
+import { handoffStore, takeHandoff } from '../patch/handoff';
 import './faceplate.css';
 
 function BenchStatus() {
@@ -97,7 +98,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   };
   let disposed = false;
   onMount(() => {
-    runtimeReady = Promise.resolve(props.runtime ?? browserRuntime(update)).then((selected) => {
+    runtimeReady = Promise.resolve(props.runtime ?? browserRuntime(update, browserRuntimeDeps())).then((selected) => {
       if (disposed) {
         selected.dispose();
         return undefined;
@@ -191,7 +192,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   onMount(() => {
     if (new URLSearchParams(location.search).get('handoff') !== '1') return;
     setStage('run');
-    void takeHandoff()
+    void takeHandoff(handoffStore())
       .then((item) => {
         if (!item) {
           setStatus('Nothing to boot: open the patch page and press Boot in emulator.');

@@ -443,3 +443,47 @@ impl<H: Service, T: ServiceList> ServiceList for (H, T) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_kind_two_services_declare_is_the_sum_of_their_counts() {
+        let mut c = CapSink::new();
+        c.add(3, 10, 2);
+        c.add(4, 5, 5);
+        c.add(3, 6, 1);
+        assert_eq!(c.get(3), Some((16, 3)));
+        assert_eq!(c.get(4), Some((5, 5)));
+        assert_eq!(c.get(9), None);
+    }
+
+    struct A;
+    impl Service for A {
+        fn len(kind: u32) -> Option<u32> {
+            (kind == 1).then_some(8)
+        }
+    }
+    struct B;
+    impl Service for B {
+        fn len(kind: u32) -> Option<u32> {
+            (kind == 2).then_some(12)
+        }
+        unsafe fn dsp_clear(_: usize) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn a_list_asks_each_service_and_ands_the_clears() {
+        type L = (A, (B, ()));
+        assert_eq!(<L as ServiceList>::len(1), Some(8));
+        assert_eq!(<L as ServiceList>::len(2), Some(12));
+        assert_eq!(<L as ServiceList>::len(3), None);
+        unsafe {
+            assert!(!<L as ServiceList>::dsp_clear(0));
+            assert!(<(A, ()) as ServiceList>::dsp_clear(0));
+        }
+    }
+}

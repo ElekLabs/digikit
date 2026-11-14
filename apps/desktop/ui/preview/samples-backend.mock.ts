@@ -1,11 +1,11 @@
 // The Samples backend of the preview (replaces ../src/samples-backend.ts): the folder on the computer and the device's sample folders come
 // from sim.ts. Same exports as the real module; an upload is paced by `sim.speed` through the real `uploadFiles` of samples-core.ts.
 import { noteActivity } from '@web/transfer/activity';
-import { asked, noteConnection } from '@web/transfer/connection-state';
+import type { LinkState } from '@web/transfer/link-core';
+import type { DeviceInfo } from '@web/transfer/transfer-state';
 import { sourceKind, type Prepared } from '@digi/dk-session/dksample';
 import type { SampleEntry, SamplesBackend } from '@digi/dk-session/samples';
 import { joinPath, type LocalEntry, type Prepare } from '../src/samples-core';
-import { setDeviceInfo, setSampleLink } from '@web/transfer/transfer-state';
 import {
   localFolder,
   localPath,
@@ -14,7 +14,21 @@ import {
   setLocalKinds,
   setSampleEntries,
 } from '../src/samples-state';
-import { SAMPLES_ROOT, control, delay, deviceRead, listLocal, localKindOf, localSizeOf, sampleTree, sim } from './sim';
+import {
+  SAMPLES_ROOT,
+  control,
+  delay,
+  deviceRead,
+  listLocal,
+  localKindOf,
+  localSizeOf,
+  sampleTree,
+  sim,
+  simApp,
+} from './sim';
+
+const setSampleLink = (l: LinkState | undefined): void => void simApp.app!.state.setSampleLink(l);
+const setDeviceInfo = (i: DeviceInfo | undefined): void => void simApp.app!.state.setDeviceInfo(i);
 
 const NAME = 'Digitakt II';
 export function deviceStorage(_device: string): Promise<{ name: string; samples: string }> {
@@ -149,6 +163,7 @@ const backend: SamplesBackend = {
 };
 
 export async function openDeviceSamples(_forRun = false): Promise<OpenedSamples> {
+  const { asked, noteConnection } = simApp.app!.connection;
   await asked(deviceRead);
   if (sim.link !== 'none' && !(sim.link === 'fallback' && sent > 1))
     setSampleLink(
@@ -236,3 +251,15 @@ export async function readLocal(): Promise<void> {
     }
   setLocalKinds((k) => ({ ...Object.fromEntries(Object.entries(k).filter(([key]) => key.startsWith('+'))), ...kinds }));
 }
+
+/** The same bag as the real `createSamplesBackend` (src/samples-backend.ts); the preview has no host to ask. */
+export const createSamplesBackend = (_host: unknown, _app?: unknown) => ({
+  deviceStorage,
+  openDeviceSamples,
+  readSamples,
+  pickFolder,
+  readLocalFile,
+  listLocalAt,
+  listLocalNow,
+  readLocal,
+});

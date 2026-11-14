@@ -4,11 +4,12 @@ import { Show, onCleanup, type JSX } from 'solid-js';
 import { createBarRate } from './bar-rate';
 import { createCheckingHint } from './checking-hint';
 import { statsLine } from './rate-core';
-import { setLiveRate } from './transfer-state';
+import { useTransferApp } from './app-context';
 import type { BarInfo } from './transfer-core';
 
 /** `onCancel`: the job can be stopped; the Cancel button shows while it runs. */
 export default function TransferBar(props: { bar: BarInfo; running: boolean; onCancel?: () => void }): JSX.Element {
+  const { setLiveRate } = useTransferApp().state;
   const speed = createBarRate(
     () => props.bar.sent,
     () => props.running,

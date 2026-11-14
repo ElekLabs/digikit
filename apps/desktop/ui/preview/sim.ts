@@ -7,11 +7,18 @@ import { setFitReader, type Caps, type Needs } from '@web/modules/fit';
 import wasmUrl from '../../../web/public/patchkit.wasm?url';
 import { fitWarnings } from '@web/modules/dktransfer';
 import { noteActivity } from '@web/transfer/activity';
+import type { TransferApp } from '@web/transfer/app';
 import type { LocalEntry } from '../src/samples-core';
 import type { TransferRow, TransferView } from '@web/transfer/transfer-core';
 
 // the rows' fit verdicts come from the Rust rule in patchkit.wasm, as in the app
 setFitReader(await DkNeeds.create(await (await fetch(wasmUrl)).arrayBuffer()));
+
+/** The app the preview mocks talk to (main.tsx sets it right after building it): their connection indicator, job and page state are the app's. */
+export const simApp: { app?: TransferApp } = {};
+export const bindSimApp = (app: TransferApp): void => {
+  simApp.app = app;
+};
 
 /** dev: ok (answers), empty (nothing stored), noreply (never answers: the wait notice), error (every read fails), slow (2.5 s per read).
  *  folder: files (the samples folder of ~20 WAVs), empty, none (no folder chosen yet). speed: MiB/s of an upload. */
@@ -67,8 +74,7 @@ export async function deviceRead(): Promise<void> {
   switch (sim.dev) {
     case 'noreply': {
       // a real session over the mocked emulator capture, which never answers: the request waits, Cancel works, a timeout follows
-      const { session } = await import('@web/transfer/target');
-      await (await session()).info();
+      await (await simApp.app!.target.session()).info();
       return;
     }
     case 'error':

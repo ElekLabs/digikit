@@ -25,6 +25,54 @@
   },
   "overrides": [
     {
+      "files": ["apps/desktop/ui/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@tauri-apps/api/core",
+                "message": "Call the Tauri commands through the Host (apps/desktop/ui/src/host/host.ts); only host/tauri-host.ts imports invoke."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/desktop/ui/src/host/tauri-host.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["apps/web/src/**/*.{ts,tsx}", "apps/desktop/ui/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "localStorage",
+            "message": "Take a KeyValue (apps/web/src/storage.ts); only storage.ts reads localStorage."
+          },
+          {
+            "name": "indexedDB",
+            "message": "Take a BlobStore (apps/web/src/blob-store.ts); only blob-store.ts opens IndexedDB."
+          },
+          {
+            "name": "Worker",
+            "message": "Take a WorkerFactory (apps/web/src/workers.ts); only workers.ts calls new Worker."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/src/storage.ts", "apps/web/src/blob-store.ts", "apps/web/src/workers.ts"],
+      "rules": {
+        "eslint/no-restricted-globals": "off"
+      }
+    },
+    {
       "files": ["**/*.tsx"],
       "rules": {
         "eslint/no-unassigned-vars": "off"

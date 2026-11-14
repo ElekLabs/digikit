@@ -5,9 +5,7 @@ import type { DkSession } from '@digi/dk-session';
 import { installDefaults, type DefaultOps, type DefaultProgress } from '../../../web/src/firmware/default-modules-core';
 import type { FirmwareEnv } from '../../../web/src/firmware/env';
 import { install, restartDevice, type LibraryModule } from '../../../web/src/modules/dktransfer';
-import { asked } from '../../../web/src/transfer/connection-state';
-import { emulatorSession, resetSession, session } from '../../../web/src/transfer/target';
-import { loadLibrary } from '../../../web/src/transfer/transfer-backend';
+import type { TransferApp } from '../../../web/src/transfer/app';
 import { entries, waitForRuntime } from './default-modules-data';
 
 /** The operations of the install run over a session and the library of built modules. */
@@ -28,13 +26,17 @@ export function sessionOps(s: DkSession, library: LibraryModule[]): DefaultOps {
   };
 }
 
-export const desktopDefaultModules: NonNullable<FirmwareEnv['defaultModules']> = {
-  entries,
-  async install(where, device, ids, progress: (p: DefaultProgress) => void, opts) {
-    // after a flash the old session may be of the port before the restart
-    if (where === 'device') resetSession();
-    const s = await (where === 'emulator' ? emulatorSession() : session());
-    const library = await loadLibrary(device);
-    return asked(() => installDefaults(sessionOps(s, library), ids, progress, opts));
-  },
-};
+/** The default modules of the desktop app over the session of the flashed device or of the emulator (`app` is the app that owns the sessions). */
+export function createDesktopDefaultModules(app: () => TransferApp): NonNullable<FirmwareEnv['defaultModules']> {
+  return {
+    entries,
+    async install(where, device, ids, progress: (p: DefaultProgress) => void, opts) {
+      const { target, connection, loadLibrary } = app();
+      // after a flash the old session may be of the port before the restart
+      if (where === 'device') target.resetSession();
+      const s = await (where === 'emulator' ? target.emulatorSession() : target.session());
+      const library = await loadLibrary(device);
+      return connection.asked(() => installDefaults(sessionOps(s, library), ids, progress, opts));
+    },
+  };
+}

@@ -16,6 +16,9 @@ interface Exports {
   pk_err_len(): number;
 }
 
+/** What the apps use of the needs reader; a test gives a stub of it where real wasm is not needed. */
+export type NeedsLike = Pick<DkNeeds, 'read' | 'fit' | 'of'>;
+
 /** The needs reader: one instance of patchkit.wasm (no bundle is needed: the function reads the bytes it is given and nothing else). */
 export class DkNeeds {
   private x: Exports;

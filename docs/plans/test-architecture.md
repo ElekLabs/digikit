@@ -1,98 +1,117 @@
-# Test architecture: four levels, native module tests, TypeScript (plan, 2026-10-21)
+# Test architecture: tests follow layers (plan)
 
-One PR per item, branch `<area>/<topic>`. Related plans (outside the repo, in ~/src/digi):
-TEST-SELECTION-PLAN-2026-10-20.md (routing; this plan replaces its Phases 3 and 4 and Phase 2's representative set and
-`module:test`), WORKBENCH-AND-MODULES-PLAN-2026-10-19.md (P3d FX contract carries T2).
+Roadmap item T1 in [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md). Related: [test-speed.md](test-speed.md) (items 7, 16 to 18) and [TESTING.md](../TESTING.md).
 
-## Status at end of session
-- 2026-10-21: plan written. No code changed. Order: TEST-SELECTION Phase 2 PR 1 (gate routing) first, then the modules
-  plan; T1 when module work needs it, T2 with P3d.
+Layers and fakes now exist (runtime layers in [ARCHITECTURE.md](../ARCHITECTURE.md); `FakeCore` and `FakeService` from R2c; `FakePlatform` from R3). Test selection can follow them.
 
 ## Goal
 
-Each test runs at the cheapest level that answers its question. Module tests, including sound, run in seconds on the
-native SHARC engine. Tests that do not listen to audio do not run the DSP. Long term, tests and non-RE tools are
-TypeScript (vitest); Python stays for reverse engineering (tools/sharc_dev, tools/coldfire, Ghidra, firmware analysis).
+- A change runs only the tests that its code can affect.
+- Emulator runs are reserved for what needs them.
+- Each test runs at the cheapest level that answers its question. Tests that do not listen to audio do not run the DSP.
+- Confidence stays at least as high as today. `test:full` per batch is the safety net.
+- Tests and non-RE tools are TypeScript (Vitest) or Rust. Python stays for reverse engineering (`tools/sharc_dev`, `tools/coldfire`, Ghidra, firmware analysis).
 
-## Decisions (Em, 2026-10-21)
+## Principles
 
-1. Local only. No CI for now.
-2. Four test levels (below). Split unit and integration tests.
-3. TypeScript and vitest for tests and non-RE tools, long term. Migrate by replacement, not by a bulk port: new levels
-   are written in TS; a Python test is deleted when its TS replacement checks the same oracle. No new Python test code
-   outside the RE tooling.
-4. Little change for the sake of tests: do this work where module or plan work needs it.
-5. The Python SHARC core stays the reference for the instruction semantics and generates the Rust core.
-6. PCM pins (`tests/scenarios/*.json`, module pins) change only with Em's approval.
+- (a) mise tasks stay the entry points. Nx does selection and caching.
+- (b) Every Nx project has build targets and test targets. Build targets are cached and declare their outputs. Test targets depend on the build and key on its outputs, not on its sources (early cutoff). Test-speed item 16 did this for device tests. PR 461 started the general split with module-build, device-tests and device-test-keys.
+- (c) Layer-scoped host tests run against fakes: `FakeCore` and `FakeService` (R2c), `FakePlatform` (R3).
+- (d) One contract suite per interface. It runs against the fake and against the real implementation. The real side runs in the emulator once per device.
+- (e) Device smoke per service: boot, load, play, edit.
+- (f) Module DSP tests run on a SHARC-only rig without a ColdFire boot (`tests/support/machine_rig.py` exists).
+- (g) `test:full` once per batch catches interaction effects.
+- (h) Migrate by replacement, not by bulk port: a Python test is deleted when its TypeScript replacement checks the same oracle. Little change for the sake of tests: do the work where module or plan work needs it.
+- (i) The Python SHARC core stays the reference for instruction semantics and generates the Rust core. PCM pins (`tests/scenarios/*.json`, module pins) change only with Em's approval.
 
-## The four levels
+## Levels
 
-| Level | Question | Runs on | Speed |
-|---|---|---|---|
-| unit | Is the logic right (packing, manifests, routing, tables)? | Rust and TS (Python until moved), no emulator | ms to s |
-| module | Is the machine or FX right, and does it sound right? | the module routine alone, through its contract, on the native SHARC engine | s |
-| device-cf | Does the firmware handle it (menus, parameters, save and load, upload, type numbers, memory audit)? | ColdFire emulator, DSP stubbed | about 1.1x real time |
-| device-coupled | Does it sound right inside the device (stock filter, envelope, FX, master; the hook glue)? | both CPUs | DT2 about 1x, DN2 0.62-0.66x real time at load 9-12 (2026-11-07, [finding 18](../findings/18-dsp-performance.md)) |
+| Level | What | Runs on | When it runs |
+| --- | --- | --- | --- |
+| Host unit tests per layer | Logic of one layer (packing, manifests, routing, tables) against fakes | Rust and TS, no emulator | Every change that reaches the layer |
+| Contract tests per interface | Same suite on the fake and the real implementation | Fake: host. Real: emulator, once per device | Fake: with the layer. Real: when the interface or its implementation changes |
+| Device smoke per service | Boot, load, play, edit for one service. Checks the firmware handles it (menus, parameters, save and load, upload, memory audit) | ColdFire emulator; DSP only when the test needs audio | When the service or a layer below it changes |
+| Module DSP tests | Is the machine or FX right, and does it sound right? Pitch, decay, RMS, DC, parameter response, pinned PCM hash | The module routine alone, through its contract, on the native SHARC engine | When the module or its DSP code changes |
+| Coupled device tests | Does it sound right inside the device (stock filter, envelope, FX, master, hook glue)? One per module type per device | Both CPUs | When the module, the hook glue or a layer below changes |
+| `test:full` | Everything | All of the above | Once per batch of merges |
 
-Each module type keeps one coupled test per device. Everything else moves down a level where it can.
+Everything moves down a level where it can.
 
-## Evidence (2026-10-21)
+## Work packages
 
-- Replay of the last 25 merged PRs (static, verify's routing against the import graph): 12 touched verify.py or
-  verify_route.py and ran everything (about 1,350 file-seconds); 5 Rust or `core/*` PRs expand to tests/patchkit and
-  tests/digikit (860-1,335 file-seconds even with the import graph); 8 Python-only PRs drop from 100-1,270 to 3-92.
-- The Python SHARC core runs every isolated routine test (MachineRig, dsp_voice_rig, pk_sharc): test_pluck 322 s,
-  test_dsp_voice 99, test_patchkit (part) 73, test_machine_conformance 65, test_sine 60, the pluck tune and range files 67,
-  others about 15 (medians). About 700 of the 1,350 s of a full python-tests run, and every `module:check`.
-- The smoke step costs about 380 s on 4 cores on every non-docs change (17 cells).
-- Coupled runs 0.21-0.24 emulated s per wall s; ColdFire-only 1.1 (finding 39). `digi-emud --dsp zero` exists; its
-  cost and whether the ColdFire side waits on DSP replies are not measured.
+### T1a Baseline
 
-## Items
+- Scope: static, right after R2c merges. For each change class, record what `test:plan` selects and the gate wall time. Classes: workbench TS edit, web TS edit, services/fx edit, core edit, SDK header edit, module C edit, module DSP asm edit, patchkit refactor with no byte change, Python tool edit, docs-only.
+- Find inputs that over-select.
+- Output: a table in this plan, plus target numbers per class.
+- Depends on: R2c.
 
-### T1. Native call harness for module routines (0.5-1 day; payoff high, confidence medium)
-- [ ] Scout: can the Rust SHARC engine run one routine outside the coupled loop? Does it have a store hook (needed by
-      the P4a write-set check)?
-- [ ] A Rust CLI or daemon with a plain request format: load the module objects, set the registers, call `note_on` and
-      `render` for N blocks, return the output, cycle counts and recorded stores. Language neutral: Python calls it now,
-      TS later. No Python dependency added.
-- [ ] MachineRig and dsp_voice_rig use it; the tests stay unchanged. A cross-check test runs a few cases on both engines
-      and compares the outputs.
-- [ ] Before/after: the files listed in Evidence.
+### T1b Uniform build/test split in Nx
 
-### T2. Module test kit (with P3d; 1-2 days; confidence medium-high)
-- [ ] TS/vitest harness over T1, for machines (`render`, `note_on`, `desc`) and FX (`dk_fx_process`).
-- [ ] Sound checks a module declares in its `tests/*.toml`: pitch against note, decay time, RMS, DC, parameter response
-      (direction per parameter), a pinned PCM hash.
-- [ ] `module:test NAME`: build check, conformance, sound checks, the smoke cells and quick scenarios that name it.
-- [ ] Retire the Python conformance suite and the pluck sweeps when the TS kit checks the same pins.
+- Scope: all projects get build and test targets as in principle (b). Continues PR 461 and test-speed item 16.
+- Proof: an `nx graph --file` dump diff, plus `test:plan` for the T1a classes.
+- Depends on: nothing.
 
-### T3. DSP stub for tests that do not listen (1 hour to measure, then about 1 day)
-- [ ] Measure `--dsp zero`: cost, and whether the ColdFire side needs DSP replies that a stub must answer. Stop if it does
-      not pay.
-- [ ] Move to ColdFire-only: menu, registry, upload, round trip, safe mode, cut, the table half of equiv. Only PCM compares
-      stay coupled.
+### T1c Host contract tests
 
-### T4. Device levels in TS (several days; by replacement)
-- [ ] vitest projects `unit`, `module`, `device-cf`, `device-coupled`; device tests drive `digi-emud` through
-      packages/control-client.
-- [ ] Each landed TS level deletes its Python counterpart (pk_harness cells, digikit scenario runners).
+- Scope: contract suites for `CoreApi` and `Service` now, and `Platform` with R3. Fake and real pass the same suite.
+- Proof: both implementations run the suite.
+- Depends on: R2c (`CoreApi`, `Service`), R3 (`Platform`).
 
-### T5. Smoke and scenario selection by module (0.5-1 day)
-- [ ] Filter the smoke matrix and the quick scenarios to the cells that contain a changed module.
-- [ ] `core/*` and runtime changes run a representative set (one cell and one quick scenario per module type per
-      device); the full sets run on request before a release.
+### T1d Device-test audit
 
-### T6. verify.py (last; about 1 day)
-- [ ] Python routing reduced to what vitest's related-test selection does not cover; keep the CPU budget.
+- Scope: test-speed item 7. Move logic checks to host tests. Tag each device test by the layer or service it exercises.
+- Move checks that need only the ColdFire (menu, registry, upload, round trip, safe mode, cut) to a ColdFire-only rig without the DSP. Measure `--dsp zero` first: its cost, and whether the ColdFire side needs DSP replies. Only PCM comparisons stay coupled.
+- Proof: deletions go through an independent review (rule: review test deletions).
+- Depends on: T1c.
+
+### T1e Service-scoped selection
+
+- Scope: map changed functions (patchkit `objdiff`) or changed files to a layer or service. Run that service's tagged device tests plus a fixed smoke set. Smoke cells and quick scenarios are filtered to the cells that contain a changed module. A `core/*` or runtime change runs a representative set (one cell and one quick scenario per module type per device).
+- Proof: measure against T1a before it becomes the default.
+- Depends on: T1c, T1d.
+
+### T1f SDK-surface fixtures and coverage
+
+- Scope: fixtures cover every `sdk.toml` import and builder call. Measure it: imports linked per fixture against `sdk.toml`, and ColdFire PC coverage with `cf.profile`.
+- A conforming module then needs the static checks (packer, `module:check`, needs and fit) plus one load-and-smoke test. Module-specific emulator tests remain for DSP behaviour.
+- Proof: the coverage numbers.
+- Depends on: nothing (own lane).
+
+### T1g SHARC-only rig
+
+- Scope: module DSP and PCM tests run on a SHARC-only rig. The rig is a native call harness for module routines: load the module objects, set registers, call `note_on` and `render` for N blocks, return output, cycle counts and recorded stores. Its request format is language neutral (Python now, TypeScript later). A Vitest kit over it checks machines (`render`, `note_on`, `desc`) and FX (`dk_fx_process`) against sound checks that a module declares in its `tests/*.toml`. The Python conformance suite and pluck sweeps are retired when the kit checks the same pins.
+- Proof: the same PCM results as the full-device tests, in less time.
+- Depends on: nothing (own lane).
+
+### T1h Workbench and web composability
+
+- Scope: TypeScript only. Clearer boundaries, mocked integration points.
+- Proof: `test:plan` shows that a TS-only change selects only Vitest targets.
+- Depends on: nothing (own lane, any time).
+- [x] Step 1, fix test selection for TypeScript changes: `patchkit:wasm` keyed on the Rust crates only, `@digi/web:test-host` without wasm (real-wasm tests moved to `test-wasm`: `*.wasm.test.ts` and the node tests), desktop `test-host`, `rust-tests` and web `check` with the inputs they read. Result: an edit in `apps/web/src/transfer` selected 13 tasks (patchkit wasm build, desktop `rust-tests`, web `test`) and now 11, with no wasm build and no cargo; an edit in `apps/desktop/ui/src` selected 9 (cargo `rust-tests`, web `check`) and now 7, desktop TS targets only.
+- [x] Step 2, Host and EmuRpc with FakeHost: typed `Host` (`apps/desktop/ui/src/host/host.ts`), `TauriHost` as the only `invoke` importer (oxlint rule), `EmuRpc` replacing both `emuCall` wrappers, a recording `FakeHost`; bulk-link, midi-transport, samples-backend, CardPanel, LogPanel, Console, desktop-env and desktop-firmware take the host. New Vitest files: samples-backend, card-api, log-save, links. [DEVELOPMENT.md](../DEVELOPMENT.md) "Host and EmuRpc".
+- [x] Step 3, no singletons: `createTransferApp(env, { storage, sessions })` and `createFirmwareApp` replace the module-level `target`, `transfer-state`, `connection-state`, `jobs`, `default-modules-state`, `firmware-state` and `prefs`; `KeyValue` and `BlobStore` with in-memory fakes (the ready-state cache and the hand-off take a `BlobStore`); `SessionHub` is built and passed in; `setTransferEnv` and `setFirmwareEnv` are gone. Desktop and site each build their apps at startup and pass them down through `<AppProvider>`. [DEVELOPMENT.md](../DEVELOPMENT.md) "The app object, KeyValue and BlobStore".
+- [x] Step 4, `WorkerFactory` and `WasmSource`: `browserWorkers()` and `createFakeWorkers()` replace the five `new Worker` calls (runtime, split session, patch worker); `WasmSource` (`fetchWasmSource`, `hostWasmSource`, `memoryWasmSource`) and the `PatchKitLike` and `NeedsLike` stubs replace the loading of `patchkit.wasm` and the core; `nativeRuntime` moved to the desktop as `createNativeRuntime(host)` over `Host.emu` (ten more typed commands, no dynamic `@tauri-apps/api/core` import), `browserRuntime(onUpdate, { workers, wasm })`. New Vitest files: browser-runtime, web-firmware-env, native-runtime. [DEVELOPMENT.md](../DEVELOPMENT.md) "WorkerFactory, WasmSource and the two runtimes".
+
+## Order
+
+- T1a after R2c merges.
+- T1b any time.
+- T1c alongside R3.
+- T1d after T1c.
+- T1e after T1c and T1d.
+- T1f, T1g and T1h in parallel lanes.
 
 ## Rules
 
-- One PR per item; design agreed with Em in chat before code.
-- Two test systems run side by side only per level, and only until that level's replacement passes: one Python file
-  deleted per TS file that replaces it.
-- Each item reports before/after (files, file-seconds, gate wall time) against the recorded runs.
-
+- No kept tests for tooling.
+- No new Python test infrastructure outside the RE tooling.
+- Deletions are reviewed.
+- The per-batch `test:full` stays.
+- Two test systems run side by side only per level, and only until that level's replacement passes: one Python file deleted per TypeScript file that replaces it.
+- Each package reports before and after (files, task-seconds, gate wall time) against T1a.
+- Design is agreed with Em in chat before code.
 
 ## FX consolidation design (2026-11-01)
 

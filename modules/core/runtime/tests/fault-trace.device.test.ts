@@ -15,7 +15,7 @@ import {
   RING_SYMBOLS,
 } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
-import { PROBE_TIMEOUT_MS, pollEmulated, waitEmulatedFrames } from '@digi/regression/runtime/waits.ts';
+import { pollEmulated, waitEmulatedFrames, withEmulatedProbe } from '@digi/regression/runtime/waits.ts';
 
 const SOURCE_SHIFT = 8;
 /** The watch declares a stop after 4500 blocks (3 s) without a heartbeat; the daemon emulates the DSP far slower than 1500 blocks a second. */
@@ -68,7 +68,7 @@ async function aboutRows(runtime: PatchedSession, plan: Awaited<ReturnType<typeo
 
 /** Wait for the device to restart itself into safe mode (the hang record is written about 20 s after the DSP stopped). */
 async function waitForSafeMode({ session, dk }: PatchedSession): Promise<void> {
-  await pollEmulated(session, async () => (await dk.info(PROBE_TIMEOUT_MS)).safe_mode, Boolean, {
+  await pollEmulated(session, async () => (await withEmulatedProbe(session, (q) => dk.info(q))).safe_mode, Boolean, {
     emulatedMs: 180_000,
     intervalMs: 2000,
     retry: true,
@@ -97,10 +97,10 @@ async function waitForSafeUi({ session }: PatchedSession, plan: Awaited<ReturnTy
 /** After a stop or a crash the boot is safe mode: INFO has no LOG capability (the debug module is not loaded). Returns the runtime's own ring. */
 async function expectNoDebugModule(runtime: PatchedSession, plan: Awaited<ReturnType<typeof prepareRuntimePlan>>) {
   const { session, dk } = runtime;
-  const info = await dk.info(PROBE_TIMEOUT_MS);
+  const info = await withEmulatedProbe(session, (q) => dk.info(q));
   expect(info.safe_mode).toBe(true);
   expect(info.caps !== null && (info.caps >>> CAP.LOG) & 1, 'no LOG capability without the debug module').toBe(0);
-  expect((await dk.request(SERVICE_CMD.LOG, Uint8Array.of(0, 0, 0, 0), PROBE_TIMEOUT_MS)).status).toBe(-60);
+  expect((await withEmulatedProbe(session, (q) => dk.request(SERVICE_CMD.LOG, Uint8Array.of(0, 0, 0, 0), q))).status).toBe(-60);
   return readSmallRing(session, plan);
 }
 
@@ -170,7 +170,7 @@ async function expectVoiceHang(runtime: PatchedSession): Promise<void> {
   await pollEmulated(
     session,
     async () =>
-      (await dk.readLog(PROBE_TIMEOUT_MS)).some(
+      (await withEmulatedProbe(session, (q) => dk.readLog(q))).some(
         (e) =>
           e.kind === LOG_KIND.MACHINE_CHANGE && e.args[0] === 0 && (e.args[2] ?? 0) >= 7 && e.args[2] !== 0xffffffff,
       ),

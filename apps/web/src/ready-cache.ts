@@ -8,17 +8,13 @@
 // Only erasable TypeScript (the logic is tested under Node, tools/devtools/wasm_split.mjs
 // users and apps/web/tests/ready-cache.test.mjs, with an in-memory store).
 
+import type { BlobStore } from './blob-store.ts';
+
 export interface ReadyState {
   /** Packed DSP image, DSP state (`DT2DSP01` file) and ColdFire snapshot (`DT2SNP01`). */
   image: Uint8Array;
   dsp: Uint8Array;
   snapshot: Uint8Array;
-}
-
-export interface Store {
-  get(key: string): Promise<Uint8Array | undefined>;
-  put(key: string, value: Uint8Array): Promise<void>;
-  delete(key: string): Promise<void>;
 }
 
 /** Bump when the core's state formats or its DSP initialisation change. */
@@ -70,8 +66,8 @@ function unpack(bytes: Uint8Array): ReadyState | undefined {
 }
 
 export class ReadyCache {
-  private store: Store;
-  constructor(store: Store) {
+  private store: BlobStore;
+  constructor(store: BlobStore) {
     this.store = store;
   }
 
@@ -95,52 +91,4 @@ export class ReadyCache {
     await this.store.put(ReadyCache.key(syxSha256), packed);
     return packed.length;
   }
-}
-
-/** The browser store: one IndexedDB object store of byte arrays. */
-export function idbStore(name = 'digi-ready-state'): Store {
-  const open = () =>
-    new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open(name, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore('states');
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  const run = async <T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> => {
-    const db = await open();
-    return new Promise<T>((resolve, reject) => {
-      const req = f(db.transaction('states', mode).objectStore('states'));
-      req.onsuccess = () => {
-        db.close();
-        resolve(req.result);
-      };
-      req.onerror = () => {
-        db.close();
-        reject(req.error);
-      };
-    });
-  };
-  return {
-    get: async (key) => (await run<Uint8Array | undefined>('readonly', (s) => s.get(key))) ?? undefined,
-    put: async (key, value) => {
-      await run('readwrite', (s) => s.put(value, key));
-    },
-    delete: async (key) => {
-      await run('readwrite', (s) => s.delete(key));
-    },
-  };
-}
-
-/** An in-memory store (tests, and the private-browsing fallback). */
-export function memoryStore(): Store {
-  const m = new Map<string, Uint8Array>();
-  return {
-    get: async (k) => m.get(k),
-    put: async (k, v) => {
-      m.set(k, v);
-    },
-    delete: async (k) => {
-      m.delete(k);
-    },
-  };
 }

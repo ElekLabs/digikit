@@ -21,10 +21,9 @@ import {
 } from './TransferParts';
 import { noteActivity } from './activity';
 import ModuleFilesArea from './ModuleFilesArea';
-import { transferEnv } from './env';
+import { useTransferApp } from './app-context';
 import { createPaneSelect } from './pane-select';
 import SplitPane from './SplitPane';
-import { transferBackend } from './transfer-backend';
 import {
   applyEvent,
   applyVerified,
@@ -46,30 +45,33 @@ import {
   type TransferEvent,
   type TransferRow,
 } from './transfer-core';
-import {
-  browseDevice,
-  browsing,
-  delTicks,
-  lastView,
-  progress,
-  setDelTicks,
-  setLog,
-  setBrowseDevice,
-  setProgress,
-  setShowTests,
-  setSourceId,
-  setTicks,
-  setVerified,
-  showTests,
-  ticks,
-  verified,
-} from './transfer-state';
 import './target-select.css';
 
 const BROWSE_NAMES: Record<string, string> = { dt2: 'Digitakt II', dn2: 'Digitone II' };
 
 export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
   const { busy, run, setError } = props.ctx;
+  const app = useTransferApp();
+  const { env } = app;
+  const transferBackend = app.backend;
+  const {
+    browseDevice,
+    browsing,
+    delTicks,
+    lastView,
+    progress,
+    setBrowseDevice,
+    setDelTicks,
+    setLog,
+    setProgress,
+    setShowTests,
+    setSourceId,
+    setTicks,
+    setVerified,
+    showTests,
+    ticks,
+    verified,
+  } = app.state;
   let input: HTMLInputElement | undefined;
 
   const onEvent = (e: TransferEvent) => {
@@ -124,7 +126,7 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
       setVerified({});
     });
   // the site keeps added files in the list (to install from there); the desktop puts them on the card at once
-  const addToList = () => transferEnv().library.addFiles;
+  const addToList = () => env.library.addFiles;
   const addFiles = (files: File[]) =>
     run(addToList() ? 'Adding' : 'Uploading', async () => {
       const picked = files.filter((f) => /\.dkm$/i.test(f.name));
@@ -159,7 +161,7 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
   /** The Source link of a library row, where the site has the module's source. */
   const sourceAction = (r: TransferRow) => {
     const id = r.id;
-    const src = transferEnv().source;
+    const src = env.source;
     return id && src?.files(id).length
       ? { label: 'Source', title: `Show the source of ${id}`, onClick: () => setSourceId(id) }
       : undefined;
@@ -208,11 +210,11 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
   const [selectedId, setSelectedId] = createSignal<string>();
   const filesId = (r: TransferRow) => {
     const id = r.id ?? (r.known ? r.name : undefined);
-    return id && transferEnv().moduleFiles?.(id) ? id : undefined;
+    return id && env.moduleFiles?.(id) ? id : undefined;
   };
 
   const browseOptions = (): SegmentedOption<string>[] =>
-    (transferEnv().libraryDevices ?? []).map((d) => ({ id: d, label: BROWSE_NAMES[d] ?? d }));
+    (env.libraryDevices ?? []).map((d) => ({ id: d, label: BROWSE_NAMES[d] ?? d }));
 
   const lists = (
     <SplitPane id="transfer">
@@ -464,7 +466,7 @@ export default function ModulesMode(props: { ctx: PageCtx }): JSX.Element {
       {lists}
       <Show when={selectedId()}>
         {(id) => (
-          <Show when={transferEnv().moduleFiles?.(id())}>
+          <Show when={env.moduleFiles?.(id())}>
             {(spec) => <ModuleFilesArea ctx={props.ctx} id={id()} spec={spec()} />}
           </Show>
         )}

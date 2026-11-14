@@ -156,3 +156,20 @@ pub trait CoreApi {
     /// `who` has a transfer in flight.
     fn link_claimed(&self, who: LinkWriter) -> bool;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_link_writer_has_its_own_claim_bit_and_the_effect_writers_are_the_mask() {
+        let (a, b, c) = (
+            LinkWriter::FxPage.claim(),
+            LinkWriter::FxSend.claim(),
+            LinkWriter::Sample.claim(),
+        );
+        assert_eq!(a & b | a & c | b & c, 0);
+        assert_eq!(a | b, FX_CLAIMS);
+        assert_eq!(c & FX_CLAIMS, 0);
+    }
+}

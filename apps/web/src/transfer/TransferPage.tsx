@@ -12,45 +12,20 @@ import { isCancelled, isNoRuntime, isTimeout } from '../modules/backend';
 import { noteActivity } from './activity';
 import AutoRefresh from './AutoRefresh';
 import ConnectionBadge from './ConnectionBadge';
-import { connection } from './connection-state';
-import { transferEnv } from './env';
-import { rescanTargets } from './TargetSelect';
+import type { TransferApp } from './app';
+import { useTransferApp } from './app-context';
 import ModulesMode from './ModulesMode';
-import { cancelPending, emulatorRuntime, target, targetLabel } from './target';
 import SourcePanel from './SourcePanel';
-import { transferBackend } from './transfer-backend';
 import TransferBar from './TransferBar';
 import { MODES, modulesBar, parseMode, rowKey, storageLine, type TransferView } from './transfer-core';
+import { targetLabel } from './target';
 import { writing, type CancelledRun, type PageCtx } from './TransferParts';
-import {
-  activeMode,
-  askStop,
-  beginJob,
-  browseDevice,
-  browsing,
-  busy,
-  endJob,
-  error,
-  jobProgress,
-  log,
-  lastView,
-  pendingAdd,
-  progress,
-  setBrowsing,
-  setBrowseDevice,
-  setDelTicks,
-  setDeviceInfo,
-  setError,
-  setLastView,
-  setMode,
-  setPendingAdd,
-  setTicks,
-} from './transfer-state';
 import { failureLine } from './wait-core';
 import './transfer-page.css';
 
 /** Tick the modules named in the page URL (`?add=`) once the list has them; a row's id is the full module id (`<author>/<name>`). */
-function applyPendingAdd(view: TransferView): void {
+function applyPendingAdd(app: TransferApp, view: TransferView): void {
+  const { pendingAdd, setTicks, setPendingAdd } = app.state;
   const pending = pendingAdd();
   if (!pending.length) return;
   const keys = view.modules.filter((r) => r.id && pending.some((p) => p === r.id)).map(rowKey);
@@ -59,8 +34,11 @@ function applyPendingAdd(view: TransferView): void {
 }
 
 /** Read what the mode shows, both sides: the device and the computer (the library, or the chosen samples folder). */
-async function read(): Promise<void> {
-  const env = transferEnv();
+async function read(app: TransferApp): Promise<void> {
+  const { env } = app;
+  const { target } = app.target;
+  const { activeMode, browseDevice, browsing, lastView, setBrowsing, setBrowseDevice, setDeviceInfo, setLastView } =
+    app.state;
   if (activeMode() === 'samples' && env.extras?.samples) return env.extras.samples.read();
   const readingTarget = target();
   const current = () => target() === readingTarget && activeMode() === 'modules';
@@ -69,11 +47,11 @@ async function read(): Promise<void> {
     setBrowsing(true);
     setLastView(library);
     setDeviceInfo(undefined);
-    applyPendingAdd(library);
+    applyPendingAdd(app, library);
   };
   let v: TransferView;
   try {
-    v = await transferBackend.list(browseDevice(), (library) => {
+    v = await app.backend.list(browseDevice(), (library) => {
       local = library;
       // Keep the previous device rows during a refresh; only a first read needs the library-only view.
       if (current() && (!lastView() || browsing())) showLocal(library);
@@ -86,23 +64,21 @@ async function read(): Promise<void> {
   setBrowsing(false);
   setBrowseDevice(v.device === 'dn2' ? 'dn2' : 'dt2');
   setLastView(v);
-  applyPendingAdd(v);
+  applyPendingAdd(app, v);
   const name = await env.deviceName(v.device);
   if (current()) setDeviceInfo({ name, runtime: v.runtime, storage: storageLine(v) });
 }
 
-// After "no reply" or "no runtime" the page does not read by itself; Try again, another target, a change of the emulator's runtime or a
-// reconnect lets it read again.
-const [halted, setHalted] = createSignal(false);
-const [noRuntime, setNoRuntime] = createSignal(false);
-const haltOn = (e: unknown): void => {
-  setHalted(isTimeout(e) || isNoRuntime(e));
-  setNoRuntime(isNoRuntime(e));
+const haltOn = (app: TransferApp, e: unknown): void => {
+  app.state.setHalted(isTimeout(e) || isNoRuntime(e));
+  app.state.setNoRuntime(isNoRuntime(e));
 };
 
 /** The one busy action. It is not made by the page: a job goes on when the page is left, and the old and the new page share it. */
-const run = async (what: string, f: () => Promise<void | CancelledRun>) => {
-  if (!beginJob(what, cancellable(what) ? cancelJob : undefined)) return;
+const run = async (app: TransferApp, what: string, f: () => Promise<void | CancelledRun>) => {
+  const { target } = app.target;
+  const { activeMode, beginJob, endJob, error, log, progress, setError, setHalted, setNoRuntime } = app.state;
+  if (!beginJob(what, cancellable(what) ? () => cancelJob(app) : undefined)) return;
   noteActivity();
   setError('');
   // after a cancel or a "no reply" the device is not asked again at once (that would wait the whole time a second time)
@@ -111,10 +87,10 @@ const run = async (what: string, f: () => Promise<void | CancelledRun>) => {
   const logRun = (failure?: unknown, cancelled?: string) => {
     if (what === 'Reading') return;
     const modules = activeMode() === 'modules';
-    transferEnv().logRun({
+    app.env.logRun({
       what,
       target: targetLabel(target()),
-      lines: modules ? log() : (transferEnv().extras?.samples?.lines?.() ?? []),
+      lines: modules ? log() : (app.env.extras?.samples?.lines?.() ?? []),
       message: modules ? progress()?.message : undefined,
       ...(failure === undefined
         ? cancelled === undefined
@@ -131,19 +107,19 @@ const run = async (what: string, f: () => Promise<void | CancelledRun>) => {
     logRun(undefined, result ? result.cancelled : undefined);
   } catch (e) {
     skipRead = isCancelled(e) || isTimeout(e) || isNoRuntime(e);
-    haltOn(e);
+    haltOn(app, e);
     setError(failureLine(e, targetLabel(target())));
     logRun(e);
   } finally {
     if (!skipRead)
       try {
-        await read();
+        await read(app);
       } catch (e) {
-        haltOn(e);
+        haltOn(app, e);
         if (!error()) setError(failureLine(e, targetLabel(target())));
       }
-    if (endJob()) void run('Reading', async () => {});
-    transferEnv().extras?.onJobEnd?.();
+    if (endJob()) void run(app, 'Reading', async () => {});
+    app.env.extras?.onJobEnd?.();
   }
 };
 
@@ -152,18 +128,40 @@ const run = async (what: string, f: () => Promise<void | CancelledRun>) => {
 const cancellable = (what: string): boolean => what === 'Uploading' || what === 'Installing';
 
 /** Stop the running job: no later file starts, and every request that waits on the session ends as cancelled. */
-const cancelJob = (): void => {
-  askStop();
-  cancelPending();
+const cancelJob = (app: TransferApp): void => {
+  app.state.askStop();
+  app.target.cancelPending();
 };
 
 export default function TransferPage(): JSX.Element {
+  const app = useTransferApp();
+  const { env } = app;
+  const { target, emulatorRuntime, rescanTargets } = app.target;
+  const { connection } = app.connection;
+  const {
+    activeMode,
+    browsing,
+    busy,
+    error,
+    halted,
+    jobProgress,
+    log,
+    noRuntime,
+    progress,
+    setDelTicks,
+    setDeviceInfo,
+    setError,
+    setHalted,
+    setLastView,
+    setMode,
+    setTicks,
+  } = app.state;
   const [reload, setReload] = createSignal(0);
 
-  const ctx: PageCtx = { busy, run, setError, reload };
+  const ctx: PageCtx = { busy, run: (what, f) => run(app, what, f), setError, reload };
   const readNow = () => {
     setHalted(false);
-    void run('Reading', async () => {});
+    void run(app, 'Reading', async () => {});
   };
   const autoRead = () => {
     if (!halted()) readNow();
@@ -190,7 +188,7 @@ export default function TransferPage(): JSX.Element {
 
   // back on the page during a job: that job's end reads; a read now would only wait behind it
   onMount(() => {
-    if (!busy()) void run('Reading', async () => {});
+    if (!busy()) void run(app, 'Reading', async () => {});
   });
   // another target: what was read from the old one is not shown; read the new one
   createEffect(
@@ -203,8 +201,8 @@ export default function TransferPage(): JSX.Element {
         // ticks made before a device was plugged in survive (the list shows the library alone then)
         if (!browsing()) setTicks(new Set<string>());
         setDelTicks(new Set<string>());
-        transferEnv().extras?.samples?.reset();
-        void run('Reading', async () => {});
+        env.extras?.samples?.reset();
+        void run(app, 'Reading', async () => {});
       },
       { defer: true },
     ),
@@ -214,7 +212,7 @@ export default function TransferPage(): JSX.Element {
     setMode(parseMode(value));
     setError('');
     setDeviceInfo(undefined);
-    void run('Reading', async () => {});
+    void run(app, 'Reading', async () => {});
   };
 
   // the bar along the bottom, for the install, delete or restart of Modules and the upload of Samples
@@ -223,9 +221,9 @@ export default function TransferPage(): JSX.Element {
       const p = progress();
       return p ? { info: modulesBar(p), running: writing(busy()) } : undefined;
     }
-    return transferEnv().extras?.samples?.bar(busy());
+    return env.extras?.samples?.bar(busy());
   });
-  const samples = () => transferEnv().extras?.samples;
+  const samples = () => env.extras?.samples;
   // the status bar shows the same fraction and line
   createEffect(() => {
     const b = bar();
@@ -268,8 +266,8 @@ export default function TransferPage(): JSX.Element {
           <button type="button" class="act small" disabled={!!busy()} onClick={readNow}>
             Try again
           </button>
-          <Show when={noRuntime() && target().kind === 'emulator' && transferEnv().extras?.reloadWithRuntime}>
-            <button type="button" class="act small" onClick={() => transferEnv().extras?.reloadWithRuntime?.()}>
+          <Show when={noRuntime() && target().kind === 'emulator' && env.extras?.reloadWithRuntime}>
+            <button type="button" class="act small" onClick={() => env.extras?.reloadWithRuntime?.()}>
               Reload with runtime
             </button>
           </Show>
@@ -287,7 +285,11 @@ export default function TransferPage(): JSX.Element {
 
       <Show when={bar()}>
         {(b) => (
-          <TransferBar bar={b().info} running={b().running} onCancel={cancellable(busy()) ? cancelJob : undefined} />
+          <TransferBar
+            bar={b().info}
+            running={b().running}
+            onCancel={cancellable(busy()) ? () => cancelJob(app) : undefined}
+          />
         )}
       </Show>
       <Show when={activeMode() === 'modules' && log().length && !bar()}>

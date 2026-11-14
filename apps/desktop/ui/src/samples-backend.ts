@@ -2,17 +2,14 @@
 // names (`[storage] samples`, read by the native `device_storage`; the page names no device). The converter is `dksample.wasm`, loaded once through
 // the native `sample_wasm`. The local side is the native `local_*` commands (local.rs): pick a folder, list a level, read a file.
 // Nothing is started and nothing is built here.
-import { invoke } from '@tauri-apps/api/core';
 import { errorLine } from '@web/modules/backend';
 import { failureModule, fmtVersion, hasCap, type DkSession, type LoadFailure } from '@digi/dk-session';
 import { Sample, prepareUpload, sourceKind, type Prepared } from '@digi/dk-session/dksample';
 import { openSamples, type SamplesBackend } from '@digi/dk-session/samples';
 import { chooseBulk, type BulkChoice } from '@digi/dk-session/bulk-select';
-import { transferEnv } from '@web/transfer/env';
-import { asked, noteConnection } from '@web/transfer/connection-state';
-import { session as running, target } from '@web/transfer/target';
+import type { TransferApp } from '@web/transfer/app';
+import type { Host } from './host/host';
 import { joinPath, type LocalEntry, type Prepare } from './samples-core';
-import { setDeviceInfo, setSampleLink } from '@web/transfer/transfer-state';
 import type { LinkState } from '@web/transfer/link-core';
 import {
   localFolder,
@@ -22,18 +19,6 @@ import {
   setLocalKinds,
   setSampleEntries,
 } from './samples-state';
-
-/** What the device profile says about the device with this id (`dt2`): its name and the backend of its samples. */
-const storages = new Map<string, Promise<{ name: string; samples: string }>>();
-export function deviceStorage(device: string): Promise<{ name: string; samples: string }> {
-  let p = storages.get(device);
-  if (!p) {
-    p = invoke<{ name: string; samples: string }>('device_storage', { device });
-    p.catch(() => storages.delete(device));
-    storages.set(device, p);
-  }
-  return p;
-}
 
 /** The device behind the target: its name, its runtime, the backend of its samples, and the open backend. */
 export interface OpenedSamples {
@@ -45,33 +30,6 @@ export interface OpenedSamples {
   /** Where the file bytes go: the USB bulk link (usb-fast) or the SysEx / MidiRpc backend. */
   link: 'bulk' | 'sysex';
 }
-
-let sample: Promise<Sample> | undefined;
-/** The converter, made once (a failed load is tried again at the next use). */
-function converter(): Promise<Sample> {
-  sample ??= invoke<ArrayBuffer>('sample_wasm')
-    .then((b) => Sample.create(b))
-    .catch((e) => {
-      sample = undefined;
-      throw e;
-    });
-  return sample;
-}
-
-let last:
-  | {
-      s: DkSession;
-      name: string;
-      runtime: string;
-      samples: string;
-      opened?: OpenedSamples;
-      /** Why usb-fast did not load at the last boot, read once per session when there is no bulk link (`usbFast` unset: it did load, or it is not selected). */
-      failure?: { usbFast?: LoadFailure };
-      bulk?: BulkChoice;
-      /** usb-fast is loaded but the device is in USB AUDIO/MIDI and no bulk route was found (firmware without core/usb-bulk-audio); read at each choice while there is no bulk link. */
-      wrongMode?: boolean;
-    }
-  | undefined;
 
 /** The load failure of the usb-fast module (the device's LOADS record), when the last boot selected it and it did not load; undefined when the runtime
  * cannot say (an older runtime) or the module loaded. */
@@ -86,98 +44,6 @@ async function usbFastFailure(s: DkSession): Promise<LoadFailure | undefined> {
 
 const note = (why: string) => console.info(`[samples] ${why}`);
 
-/**
- * The samples backend of the device on the target. The session part (INFO, the storage) is kept per session. The bulk choice is made again whenever there
- * is no bulk link or the last one failed during a run (it is not cached as broken for the session), so an interface that appears later is used at the next
- * run; with no candidate on the bus that costs one USB listing. SysEx stays the channel for LIST, MKDIR, DELETE and the rest.
- */
-export async function openDeviceSamples(forRun = false): Promise<OpenedSamples> {
-  const s = await asked(running);
-  if (last && last.s !== s) {
-    // another session: let go of the bulk link of the old one (the interface stays claimed until then)
-    await Promise.resolve(last.bulk?.link.close()).catch(() => {});
-    last = undefined;
-  }
-  if (!last) {
-    const info = await asked(() => s.info());
-    const storage = await deviceStorage(info.port);
-    noteConnection({
-      type: 'answered',
-      device: { id: info.port, name: storage.name, runtime: fmtVersion(info.runtime) },
-    });
-    last = { s, name: storage.name, runtime: fmtVersion(info.runtime), samples: storage.samples };
-  }
-  const had = last.bulk;
-  // only a run chooses again after a failure: a read between the failure and the next run keeps the fallback pill
-  if (forRun && had && last.opened?.backend.bulkState === 'fallback') {
-    await Promise.resolve(had.link.close()).catch(() => {});
-    last.bulk = undefined;
-  }
-  if (!last.bulk && !last.failure) last.failure = { usbFast: await usbFastFailure(s) };
-  if (!last.bulk) {
-    const env = transferEnv().bulk;
-    last.bulk = env && target().kind !== 'none' ? await chooseBulk(s, env, note) : undefined;
-    // chooseBulk finds the USB MIDI pair or the OUT-only interface of USB AUDIO/MIDI. A device in USB AUDIO/MIDI with neither (older firmware) stays on
-    // SysEx and the pill says how to get Fast USB.
-    last.wrongMode = !last.bulk && target().kind === 'midi' ? await s.usbFastWrongMode() : false;
-  }
-  if (last.opened && !had === !last.bulk && (!had || had === last.bulk)) {
-    // a new choice for the run (the last one had failed and the link is the same again): the pill follows it
-    if (forRun) setSampleLink(linkOf(last.opened.link));
-    return last.opened;
-  }
-  const conv = await converter();
-  last.opened = {
-    name: last.name,
-    runtime: last.runtime,
-    samples: last.samples,
-    backend: openSamples(last.samples, {
-      session: s,
-      hashOf: (d) => conv.hash(d),
-      bulk: last.bulk?.session,
-      note,
-      onFallback: (reason) => setSampleLink({ state: 'fallback', reason }),
-    }),
-    prepare: (name, bytes) => prepareUpload(conv, name, bytes),
-    link: last.bulk ? 'bulk' : 'sysex',
-  };
-  setSampleLink(linkOf(last.opened.link));
-  return last.opened;
-}
-
-/** The pill state for a link: a SysEx link says why usb-fast is not in use when the device reported it. */
-function linkOf(link: 'bulk' | 'sysex'): LinkState {
-  if (link === 'bulk') return { state: 'bulk' };
-  const failure = last?.failure?.usbFast;
-  if (failure) return { state: 'sysex', failure };
-  return last?.wrongMode ? { state: 'sysex', wrongMode: true } : { state: 'sysex' };
-}
-
-/** Read the device's open folder, its free space and what the backend can do (the On device column of Samples mode). */
-export async function readSamples(): Promise<void> {
-  const { name, runtime, samples, backend } = await openDeviceSamples();
-  const canMkdir = await backend.canMkdir();
-  setSampleEntries(await backend.list(sampleFolder()));
-  let free: number | undefined;
-  try {
-    free = (await backend.space()).free;
-  } catch {
-    // the listing is what counts; the free space is a line
-  }
-  setDeviceInfo({ name, runtime, samples, canMkdir, free });
-}
-
-// ---- the local folder ---------------------------------------------------------------------------------------------------------------
-
-/** The system's folder dialog; null when the user cancels. */
-export const pickFolder = (start: string): Promise<string | null> =>
-  invoke<string | null>('local_pick_folder', { start: start || null });
-
-/** The bytes of a file of the chosen folder (`head`: only the first bytes). */
-export async function readLocalFile(rel: string, head?: number): Promise<Uint8Array> {
-  return new Uint8Array(await invoke<ArrayBuffer>('local_read', { root: localFolder(), rel, head: head ?? null }));
-}
-
 /** How many files are labelled per read of the folder (the first bytes of each are read; a larger folder keeps the rest unlabelled). */
 const LABELLED = 400;
 
@@ -190,54 +56,207 @@ export async function labelOf(read: () => Promise<Uint8Array>, size: number): Pr
   }
 }
 
-/** One level of the chosen folder at `rel` (the listing only; an upload of a folder walks the folders with it). */
-export const listLocalAt = (rel: string): Promise<LocalEntry[]> =>
-  invoke<LocalEntry[]>('local_list', { root: localFolder(), rel });
+/** The desktop Samples backend over `host` and the app's target, connection and page state. Each backend keeps its own caches (the device's storage, the converter, the session's samples backend). */
+export function createSamplesBackend(host: Host, app: TransferApp) {
+  const { asked, noteConnection } = app.connection;
+  const { session: running, target } = app.target;
+  const { setDeviceInfo, setSampleLink } = app.state;
+  /** What the device profile says about the device with this id (`dt2`): its name and the backend of its samples. */
+  const storages = new Map<string, Promise<{ name: string; samples: string }>>();
+  function deviceStorage(device: string): Promise<{ name: string; samples: string }> {
+    let p = storages.get(device);
+    if (!p) {
+      p = host.library.deviceStorage(device);
+      p.catch(() => storages.delete(device));
+      storages.set(device, p);
+    }
+    return p;
+  }
 
-/** The open level of the chosen folder as it is now (the listing only, no file is read): the light poll compares it with what the page shows.
- * Undefined when no folder is chosen or it cannot be listed. */
-export async function listLocalNow(): Promise<LocalEntry[] | undefined> {
-  if (!localFolder()) return undefined;
-  try {
-    return await invoke<LocalEntry[]>('local_list', { root: localFolder(), rel: localPath() });
-  } catch {
-    return undefined;
+  let sample: Promise<Sample> | undefined;
+  /** The converter, made once (a failed load is tried again at the next use). */
+  function converter(): Promise<Sample> {
+    sample ??= host.firmware
+      .sampleWasm()
+      .then((b) => Sample.create(b))
+      .catch((e) => {
+        sample = undefined;
+        throw e;
+      });
+    return sample;
   }
-}
 
-let localReadGeneration = 0;
-/** Read the open level of the chosen folder and label its files. No folder chosen: an empty list. */
-export async function readLocal(): Promise<void> {
-  const generation = ++localReadGeneration;
-  const folder = localFolder();
-  if (!folder) {
-    setLocalEntries(undefined);
-    return;
-  }
-  const path = localPath();
-  const current = () => generation === localReadGeneration && localFolder() === folder && localPath() === path;
-  let entries: LocalEntry[];
-  try {
-    entries = await invoke<LocalEntry[]>('local_list', { root: folder, rel: path });
-  } catch (e) {
-    if (!current()) return;
-    setLocalEntries([]);
-    throw new Error(errorLine(e));
-  }
-  if (!current()) return;
-  setLocalEntries(entries);
-  const files = entries.filter((e) => e.kind === 'file').slice(0, LABELLED);
-  const kinds: Record<string, Prepared['kind']> = {};
-  for (let i = 0; i < files.length; i += 16) {
-    if (!current()) return;
-    await Promise.all(
-      files.slice(i, i + 16).map(async (f) => {
-        const rel = joinPath(path, f.name);
-        const kind = await labelOf(() => readLocalFile(rel, 64), f.size);
-        if (kind) kinds[rel] = kind;
+  let last:
+    | {
+        s: DkSession;
+        name: string;
+        runtime: string;
+        samples: string;
+        opened?: OpenedSamples;
+        /** Why usb-fast did not load at the last boot, read once per session when there is no bulk link (`usbFast` unset: it did load, or it is not selected). */
+        failure?: { usbFast?: LoadFailure };
+        bulk?: BulkChoice;
+        /** usb-fast is loaded but the device is in USB AUDIO/MIDI and no bulk route was found (firmware without core/usb-bulk-audio); read at each choice while there is no bulk link. */
+        wrongMode?: boolean;
+      }
+    | undefined;
+
+  /**
+   * The samples backend of the device on the target. The session part (INFO, the storage) is kept per session. The bulk choice is made again whenever there
+   * is no bulk link or the last one failed during a run (it is not cached as broken for the session), so an interface that appears later is used at the next
+   * run; with no candidate on the bus that costs one USB listing. SysEx stays the channel for LIST, MKDIR, DELETE and the rest.
+   */
+  async function openDeviceSamples(forRun = false): Promise<OpenedSamples> {
+    const s = await asked(running);
+    if (last && last.s !== s) {
+      // another session: let go of the bulk link of the old one (the interface stays claimed until then)
+      await Promise.resolve(last.bulk?.link.close()).catch(() => {});
+      last = undefined;
+    }
+    if (!last) {
+      const info = await asked(() => s.info());
+      const storage = await deviceStorage(info.port);
+      noteConnection({
+        type: 'answered',
+        device: { id: info.port, name: storage.name, runtime: fmtVersion(info.runtime) },
+      });
+      last = { s, name: storage.name, runtime: fmtVersion(info.runtime), samples: storage.samples };
+    }
+    const had = last.bulk;
+    // only a run chooses again after a failure: a read between the failure and the next run keeps the fallback pill
+    if (forRun && had && last.opened?.backend.bulkState === 'fallback') {
+      await Promise.resolve(had.link.close()).catch(() => {});
+      last.bulk = undefined;
+    }
+    if (!last.bulk && !last.failure) last.failure = { usbFast: await usbFastFailure(s) };
+    if (!last.bulk) {
+      const env = app.env.bulk;
+      last.bulk = env && target().kind !== 'none' ? await chooseBulk(s, env, note) : undefined;
+      // chooseBulk finds the USB MIDI pair or the OUT-only interface of USB AUDIO/MIDI. A device in USB AUDIO/MIDI with neither (older firmware) stays on
+      // SysEx and the pill says how to get Fast USB.
+      last.wrongMode = !last.bulk && target().kind === 'midi' ? await s.usbFastWrongMode() : false;
+    }
+    if (last.opened && !had === !last.bulk && (!had || had === last.bulk)) {
+      // a new choice for the run (the last one had failed and the link is the same again): the pill follows it
+      if (forRun) setSampleLink(linkOf(last.opened.link));
+      return last.opened;
+    }
+    const conv = await converter();
+    last.opened = {
+      name: last.name,
+      runtime: last.runtime,
+      samples: last.samples,
+      backend: openSamples(last.samples, {
+        session: s,
+        hashOf: (d) => conv.hash(d),
+        bulk: last.bulk?.session,
+        note,
+        onFallback: (reason) => setSampleLink({ state: 'fallback', reason }),
       }),
-    );
+      prepare: (name, bytes) => prepareUpload(conv, name, bytes),
+      link: last.bulk ? 'bulk' : 'sysex',
+    };
+    setSampleLink(linkOf(last.opened.link));
+    return last.opened;
   }
-  if (!current()) return;
-  setLocalKinds((k) => ({ ...Object.fromEntries(Object.entries(k).filter(([key]) => key.startsWith('+'))), ...kinds }));
+
+  /** The pill state for a link: a SysEx link says why usb-fast is not in use when the device reported it. */
+  function linkOf(link: 'bulk' | 'sysex'): LinkState {
+    if (link === 'bulk') return { state: 'bulk' };
+    const failure = last?.failure?.usbFast;
+    if (failure) return { state: 'sysex', failure };
+    return last?.wrongMode ? { state: 'sysex', wrongMode: true } : { state: 'sysex' };
+  }
+
+  /** Read the device's open folder, its free space and what the backend can do (the On device column of Samples mode). */
+  async function readSamples(): Promise<void> {
+    const { name, runtime, samples, backend } = await openDeviceSamples();
+    const canMkdir = await backend.canMkdir();
+    setSampleEntries(await backend.list(sampleFolder()));
+    let free: number | undefined;
+    try {
+      free = (await backend.space()).free;
+    } catch {
+      // the listing is what counts; the free space is a line
+    }
+    setDeviceInfo({ name, runtime, samples, canMkdir, free });
+  }
+
+  // ---- the local folder ---------------------------------------------------------------------------------------------------------------
+
+  /** The system's folder dialog; null when the user cancels. */
+  const pickFolder = (start: string): Promise<string | null> => host.fs.pickFolder({ start: start || null });
+
+  /** The bytes of a file of the chosen folder (`head`: only the first bytes). */
+  async function readLocalFile(rel: string, head?: number): Promise<Uint8Array> {
+    return new Uint8Array(await host.fs.read(localFolder(), rel, head ?? null));
+  }
+
+  /** One level of the chosen folder at `rel` (the listing only; an upload of a folder walks the folders with it). */
+  const listLocalAt = (rel: string): Promise<LocalEntry[]> => host.fs.list(localFolder(), rel);
+
+  /** The open level of the chosen folder as it is now (the listing only, no file is read): the light poll compares it with what the page shows.
+   * Undefined when no folder is chosen or it cannot be listed. */
+  async function listLocalNow(): Promise<LocalEntry[] | undefined> {
+    if (!localFolder()) return undefined;
+    try {
+      return await host.fs.list(localFolder(), localPath());
+    } catch {
+      return undefined;
+    }
+  }
+
+  let localReadGeneration = 0;
+  /** Read the open level of the chosen folder and label its files. No folder chosen: an empty list. */
+  async function readLocal(): Promise<void> {
+    const generation = ++localReadGeneration;
+    const folder = localFolder();
+    if (!folder) {
+      setLocalEntries(undefined);
+      return;
+    }
+    const path = localPath();
+    const current = () => generation === localReadGeneration && localFolder() === folder && localPath() === path;
+    let entries: LocalEntry[];
+    try {
+      entries = await host.fs.list(folder, path);
+    } catch (e) {
+      if (!current()) return;
+      setLocalEntries([]);
+      throw new Error(errorLine(e));
+    }
+    if (!current()) return;
+    setLocalEntries(entries);
+    const files = entries.filter((e) => e.kind === 'file').slice(0, LABELLED);
+    const kinds: Record<string, Prepared['kind']> = {};
+    for (let i = 0; i < files.length; i += 16) {
+      if (!current()) return;
+      await Promise.all(
+        files.slice(i, i + 16).map(async (f) => {
+          const rel = joinPath(path, f.name);
+          const kind = await labelOf(() => readLocalFile(rel, 64), f.size);
+          if (kind) kinds[rel] = kind;
+        }),
+      );
+    }
+    if (!current()) return;
+    setLocalKinds((k) => ({
+      ...Object.fromEntries(Object.entries(k).filter(([key]) => key.startsWith('+'))),
+      ...kinds,
+    }));
+  }
+
+  return {
+    deviceStorage,
+    openDeviceSamples,
+    readSamples,
+    pickFolder,
+    readLocalFile,
+    listLocalAt,
+    listLocalNow,
+    readLocal,
+  };
 }
+
+/** What the Samples mode and the Transfer environment use. */
+export type SamplesBackendApi = ReturnType<typeof createSamplesBackend>;

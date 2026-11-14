@@ -17,8 +17,8 @@ the patched image through the shared sender, compares the emulated flash with th
 then opens OS UPGRADE again on the patched image and runs `patchkit flash --restore` (the stock file back).
 
 With `--exec CMD` the rig runs CMD instead (arguments split like a shell, `{socket}` replaced by the control socket, `DIGI_FW_EMU_SOCKET` set), for
-example the Firmware page's own flash logic headless: the Vitest file apps/web/tests/firmware-emulator.test.ts, which reads the socket from
-`DIGI_FW_EMU_SOCKET` (`pnpm --filter @digi/web exec vitest run --root . --config ../../vitest.host.config.ts --project web-transfer FILE`).
+example the Firmware page's own flash logic headless: the Vitest file apps/web/tests/firmware-emulator.wasm.test.ts, which reads the socket from
+`DIGI_FW_EMU_SOCKET` (`pnpm --filter @digi/web exec vitest run --root . --config ../../vitest.host.config.ts --project web-wasm FILE`).
 `--exec-restore CMD` then opens OS UPGRADE again and runs that.
 
 With `--rpc` the rig does not open the menu: it sends OsUpgradeStart, Write chunks and End over midi.usb.in at the main screen (finding 75, "The RPC route"),

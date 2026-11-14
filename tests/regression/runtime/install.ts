@@ -5,7 +5,10 @@ import { repoRoot, type Device } from '@digi/test-support';
 import { expect } from 'vitest';
 import { type PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
-import { waitForBootEmulated } from './waits.ts';
+import { bootClockOf, pollEmulated, waitForBootEmulated } from './waits.ts';
+
+/** Emulated milliseconds the boot-time loads of the installed modules may take after the boot is seen. */
+const MODULES_LOADED_EMULATED_MS = 30_000;
 
 /** Prepared separately with patchkit pack; acceptance never builds a toolchain, module or daemon. */
 export function moduleArtifact(device: Device, id: string): string {
@@ -34,9 +37,19 @@ export async function installModules(dk: DkSession, modules: { id: string; artif
       await dk.select(paths);
       await timePhase('protocol.restart', () => dk.restart());
       await timePhase('protocol.waitForBoot', () => waitForBootEmulated(dk));
-      await expect
-        .poll(async () => (await dk.modules()).map((entry) => entry.name), { timeout: 30_000, interval: 500 })
-        .toEqual(expect.arrayContaining(modules.map((m) => m.id)));
+      const want = modules.map((m) => m.id);
+      const loaded = async () => (await dk.modules()).map((entry) => entry.name);
+      const clock = bootClockOf(dk);
+      if (clock) {
+        // the module loads (DSP parts take many blocks) run in emulated time: wait for them in emulated time
+        await pollEmulated(clock, loaded, (names) => want.every((id) => names.includes(id)), {
+          emulatedMs: MODULES_LOADED_EMULATED_MS,
+          message: `modules ${want.join(' ')} not listed`,
+          retry: true,
+        });
+      } else {
+        await expect.poll(loaded, { timeout: 30_000, interval: 500 }).toEqual(expect.arrayContaining(want));
+      }
     },
     { detail: modules.map((m) => m.id).join(' ') },
   );

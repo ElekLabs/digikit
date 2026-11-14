@@ -2,11 +2,14 @@
 // device, its runtime and its id, and the port. Rules and texts: connection-core.ts. The full text is the tooltip.
 import { For, type JSX } from 'solid-js';
 import { connectionView } from './connection-core';
-import { connection } from './connection-state';
-import { target, targetLabel } from './target';
+import { useTransferApp } from './app-context';
+import { targetLabel } from './target';
 import './connection-badge.css';
 
 export default function ConnectionBadge(): JSX.Element {
+  const app = useTransferApp();
+  const { connection } = app.connection;
+  const { target } = app.target;
   const view = () => connectionView(connection(), targetLabel(target()));
   return (
     <span class="conn" classList={{ [view().state]: true }} role="status" aria-label="Connection" title={view().title}>

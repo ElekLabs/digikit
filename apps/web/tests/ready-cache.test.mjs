@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { ReadyCache, memoryStore, sha256Hex, CORE_VERSION } from '../src/ready-cache.ts';
+import { ReadyCache, sha256Hex, CORE_VERSION } from '../src/ready-cache.ts';
+import { memoryBlobStore } from '../src/blob-store.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const ready = path.resolve(
@@ -24,7 +25,7 @@ const state = fs.existsSync(path.join(ready, 'digi-audio-m5.snap'))
   : { image: new Uint8Array([1, 2, 3]), dsp: new Uint8Array(1000).fill(7), snapshot: new Uint8Array(5000) };
 const syx = new Uint8Array([9, 9, 9]);
 
-const store = memoryStore();
+const store = memoryBlobStore();
 const cache = new ReadyCache(store);
 const key = await sha256Hex(syx);
 assert.equal(key.length, 64);

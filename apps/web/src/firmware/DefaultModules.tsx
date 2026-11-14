@@ -3,8 +3,7 @@
 // untick an entry; the choice is kept per device (default-modules-state.ts). Renders nothing where the app gives no default modules (the site).
 import { For, Show, createSignal, onCleanup, createEffect, type JSX } from 'solid-js';
 import { defaultsLabel } from './default-modules-core';
-import { entriesFor, setTick, tickedFor, unticked } from './default-modules-state';
-import { firmwareEnv } from './env';
+import { useFirmwareApp } from '../transfer/app-context';
 import './default-modules.css';
 
 export interface DefaultModulesProps {
@@ -17,6 +16,8 @@ export interface DefaultModulesProps {
 }
 
 export default function DefaultModules(props: DefaultModulesProps): JSX.Element {
+  const { env, defaults } = useFirmwareApp();
+  const { entriesFor, setTick, tickedFor, unticked } = defaults;
   const [open, setOpen] = createSignal(false);
   const [left, setLeft] = createSignal(false);
   let root: HTMLSpanElement | undefined;
@@ -48,7 +49,7 @@ export default function DefaultModules(props: DefaultModulesProps): JSX.Element 
     });
   });
   return (
-    <Show when={firmwareEnv().defaultModules}>
+    <Show when={env.defaultModules}>
       <span class="defmods" ref={root}>
         <button
           type="button"

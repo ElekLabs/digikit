@@ -1,8 +1,9 @@
 // The inside of the Log drawer: the header (Source, Errors only, Follow, the debug module state, Level, Save, Copy, Clear, Close) and the list. The dock around it (its height and
 // its handle) is in Console.tsx, and the preview puts it in a dock of its own. The rules are in log-core.ts, the runtime logs in log-follow.ts.
-import { invoke } from '@tauri-apps/api/core';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { copyText, filterEntries, formatTime, saveName, saveText, sourceMenu, type Origin } from './log-core';
+import { copyText, filterEntries, formatTime, sourceMenu, type Origin } from './log-core';
+import { saveLog as saveLogEntries } from './log-save';
+import type { Host } from './host/host';
 import { cardLogView } from './log-cardlog-core';
 import { levelOrigin, levelsOff } from './log-level-core';
 import LogLevelMenu from './LogLevelMenu';
@@ -11,6 +12,7 @@ import type { OriginStatus } from './log-follow-core';
 import { clearLog, followOn, logOpen, logState, setFollowOn, setLogOpen } from './log-state';
 
 export interface LogPanelProps {
+  host: Host;
   follow: LogFollow;
   /** Something is there to follow: the emulator runs, the MIDI port was chosen. */
   emulatorRunning(): boolean;
@@ -129,10 +131,7 @@ export default function LogPanel(props: LogPanelProps) {
   };
   const saveLog = async () => {
     try {
-      const bytes = new TextEncoder().encode(saveText(visibleLog(), Date.now()));
-      const where = await invoke<string | null>('log_save', bytes, {
-        headers: { 'x-name': encodeURIComponent(saveName(Date.now())) },
-      });
+      const where = await saveLogEntries(props.host.fs, visibleLog(), Date.now());
       if (where) flash('Saved', 2500);
     } catch {
       flash('Save failed', 3000);
