@@ -719,7 +719,7 @@ wait. The request body is at most 160 bytes. The reply body is at most 879 bytes
 | Check | `mise run module:check -- ID [--device dt2\|dn2]` | See below. |
 | Memory audit | `mise run module:audit -- NAME [--device dt2\|dn2]` | Packs the module and the run-time modules it requires, loads them on a ColdFire-only emulator, drives the UI and reports ColdFire stores outside the module's blocks (pc, address, the code it belongs to). It runs the Vitest device test `modules/core/runtime/tests/memaudit-module.device.test.ts` through `tools/devtools/module_audit.sh`, which first builds the patchkit CLI and the daemons when they are stale. About 1 to 2 minutes per device. |
 | Pack | `mise run module:pack -- ID --device dt2\|dn2 [-o FILE]` | Builds the objects that are stale and makes the `.dkm` from them in one command (no separate build step). Default: `out/patch/NAME-DEVICE.dkm`. It refuses a module that cannot be packed, for example one with no `dk_module`. |
-| Pack all | `mise run module:pack-all [-- --force]` | Packs every run-time module for every device into `out/modules/<device>/<id>.dkm`. |
+| Pack all | the workbench app | Builds and packs the run-time modules of a device in-process when its library is read (the Transfer page, the memory panel, the default modules), into `out/modules/<device>/<id>.dkm`. |
 | Emulator | `mise run workbench` | Starts the emulator. Run it in another shell. |
 | Run | `mise run dk:run -- ID --emu` | Builds, packs, uploads, selects, restarts and follows the log. |
 | Run on a device | `mise run dk:run -- ID --port Digitakt` | The same on a device that has the digikit runtime. The port is a part of the MIDI port name. |

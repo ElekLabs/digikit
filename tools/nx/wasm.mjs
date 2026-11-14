@@ -31,8 +31,8 @@ const USAGE = `usage: wasm.mjs [options]
   --cf-only         build only the CF-only browser core, even when a generated core is available
   --sharc           fail unless the coupled SHARC+ core (emulator-core-sharc.wasm) can be built
                     (needs SHARC_GEN_DIR or the default generated core)
-  --patchkit-only   build only public/patchkit.wasm
-  --dksample-only   build only public/dksample.wasm (\`mise run workbench\` runs this first)
+  --patchkit-only   build only public/patchkit.wasm, dkupload.wasm and dksample.wasm
+  --dksample-only   build only public/dksample.wasm
   --no-fast         leave the fast tier (feature fast-wasm, off until the page turns it on) out of the coupled core
   --out PATH        output path of the coupled SHARC+ core (default apps/web/.local/emulator-core-sharc.wasm)
   --wasm-opt STR    run wasm-opt with these flags on the coupled SHARC+ core only (default -O3;

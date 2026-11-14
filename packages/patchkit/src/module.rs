@@ -440,6 +440,25 @@ pub struct ModuleInfo {
     pub dynamic: bool,
 }
 
+impl ModuleInfo {
+    /// A module the run-time loader takes as a `.dkm`: not `core`, not a framework, and dynamic, raw or a service
+    /// (the rule of the workbench library and of `apps/web/src/data/shipped.mjs`).
+    pub fn is_runtime(&self) -> bool {
+        self.category != "core"
+            && !matches!(self.kind, ModuleKind::Framework)
+            && (self.dynamic || matches!(self.kind, ModuleKind::Raw | ModuleKind::Service))
+    }
+
+    /// Whether the module builds for the device `short` (`dt2`): no `ports`, or a port of that device.
+    pub fn builds_for(&self, short: &str) -> bool {
+        self.ports.is_empty()
+            || self
+                .ports
+                .iter()
+                .any(|p| p.split('-').next() == Some(short))
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct ObjectRef {
     pub path: String,
@@ -670,6 +689,97 @@ pub struct Build<'a> {
     pub only: Option<&'a [String]>,
     /// Build defines (`DK_TRACE`) for the objects built on demand; they are part of the cache key (`crate::build::toolchain::Env::defines`).
     pub defines: &'a [String],
+}
+
+/// Where a module library comes from, besides the repository's module roots and PATCHKIT_MODULES.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Default, Clone)]
+pub struct LibrarySource {
+    /// `--manifest PATH` values: extra module manifests.
+    pub manifests: Vec<std::path::PathBuf>,
+    /// `--modules-dir DIR`: extra module roots.
+    pub modules_dirs: Vec<std::path::PathBuf>,
+    /// `--trace`: builds with DK_TRACE defined.
+    pub trace: bool,
+}
+
+/// `modules/` and `tests/fixtures/modules/` of the repository, then the extra roots of `src.modules_dirs` and the PATCHKIT_MODULES
+/// environment variable (a path list), in that order. Generated modules (derived from a firmware) live there. Content modules get their
+/// objects from the cache `out/cache/dko`; a stale object is built.
+/// With `lenient`, a module whose object files are missing still loads (for `gen`); with `only`, the objects of these
+/// content modules only are loaded or built (`pack` and `apply`: the others load without objects).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn library_with(
+    root: &std::path::Path,
+    src: &LibrarySource,
+    lenient: bool,
+    only: Option<&[String]>,
+) -> Result<Library> {
+    // `--trace` builds the modules with DK_TRACE defined (C: -DDK_TRACE; SHARC+: `#ifdef DK_TRACE`)
+    let defines: Vec<String> = if src.trace {
+        vec!["DK_TRACE".into()]
+    } else {
+        vec![]
+    };
+    let mut lib = Library::scan_repo_defined(root, lenient, only, &defines)?;
+    let mut extra: Vec<std::path::PathBuf> = src.modules_dirs.clone();
+    if let Some(v) = std::env::var_os("PATCHKIT_MODULES") {
+        extra.extend(std::env::split_paths(&v));
+    }
+    let build = Build {
+        root,
+        only,
+        defines: &defines,
+    };
+    for d in extra {
+        if d.is_dir() {
+            lib.extend_unique(Library::scan_in(Some(build), &d, lenient)?.modules)?;
+        }
+    }
+    lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
+    Ok(lib)
+}
+
+/// Explicit manifests replace all discovery roots, including PATCHKIT_MODULES. They must include
+/// the selected IDs, their requires closure and any allocation providers used by generation.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn selected_library(
+    root: &std::path::Path,
+    src: &LibrarySource,
+    lenient: bool,
+    only: &[String],
+    selected: &[String],
+) -> Result<Library> {
+    if src.manifests.is_empty() {
+        return library_with(root, src, lenient, Some(only));
+    }
+    let defines = if src.trace {
+        vec!["DK_TRACE".to_string()]
+    } else {
+        vec![]
+    };
+    let mut lib = Library::from_manifests(
+        Build {
+            root,
+            only: Some(only),
+            defines: &defines,
+        },
+        &src.manifests,
+        lenient,
+        selected,
+    )?;
+    lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
+    if lenient && lib.get("core/machines").is_none() {
+        for id in selected {
+            let m = lib.get(id).unwrap();
+            if !m.manifest.gens.is_empty() || !m.manifest.machine.is_empty() {
+                return Err(Error(format!(
+                    "{id}: generation requires --manifest for core/machines (machine allocations)"
+                )));
+            }
+        }
+    }
+    Ok(lib)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -5,7 +5,7 @@
 // The objects of content modules (every module but category "core") are build output, not committed: `patchkit build` makes them
 // first (it needs the m68k-elf toolchain; nothing is built when they are current) and they are read from the cache out/cache/dko/<id>/<src12>/ (`patchkit build MODDIR --paths` names the files).
 // It also writes what the Transfer page ships (see shipModules): per device the prebuilt .dkm of each run-time content module
-// (public/modules/<dev>/<leaf>.dkm, the bytes `mise run module:pack-all` writes), public/modules/index.json and the sources of the
+// (public/modules/<dev>/<leaf>.dkm, the bytes the workbench app's `lib_build` writes to out/modules/<dev>/), public/modules/index.json and the sources of the
 // modules (public/modules/src/<id>/: module.toml, README.md, src/**; nothing of build/ or out/).
 //
 // The objects of `core/*` modules are committed in the module and are only read here, never rebuilt. The browser never builds: patchkit.wasm packs from the bundle.
@@ -146,7 +146,7 @@ function sourceFiles(dir) {
 
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
-/** `patchkit pack` of one module for one device (the packer `mise run module:pack-all` uses); throws when it fails. */
+/** `patchkit pack` of one module for one device (the packer `lib_build` uses); throws when it fails. */
 function pack(root, id, device, to) {
   const env = { ...process.env, PYTHONPATH: root };
   delete env.PATCHKIT_MODULES;

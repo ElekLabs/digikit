@@ -201,7 +201,7 @@ render(
               Log preview ({logMode}): the drawer below follows the fake emulator and the fake device.
             </p>
           ) : page === 'remote' ? (
-            <RemotePage fallbackDevice="dn2" />
+            <RemotePage fallbackDevice="dn2" emulatorLoaded={true} />
           ) : page === 'emulator' ? (
             <div class="emu-page">
               {/* the header of the Emulator page in ../src/Console.tsx: the file, the runtime option and the button groups */}

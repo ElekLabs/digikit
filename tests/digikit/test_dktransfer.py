@@ -2,7 +2,6 @@
 
 import struct
 import tomllib
-from pathlib import Path
 
 import pytest
 
@@ -573,51 +572,3 @@ def test_delete_fails_when_list_still_shows_the_file():
     up.stuck = True
     with pytest.raises(T.TransferError, match="still on the card after DELETE"):
         T.delete(up, ["modules/a.dkm"])
-
-
-def test_pack_all_writes_one_folder_per_device_and_only_what_changed(
-    tmp_path, monkeypatch
-):
-    from tools.device import dkpackall as P
-    from tools.device import dkrun as R
-
-    packed = tmp_path / "packed"
-    packed.mkdir()
-    state = {"a": b"A1", "b": b"B1"}
-    built = []
-
-    def fake_pack(mid, dev):
-        if mid == "test/b" and dev == "dn2":
-            raise R.RunError("nothing for device dn2")
-        f = packed / f"{mid.replace('/', '_')}-{dev}.dkm"
-        f.write_bytes(state[mid.split("/")[-1]])
-        return f
-
-    monkeypatch.setattr(P, "OUT", tmp_path / "out")
-    monkeypatch.setattr(P.T, "candidates", lambda: ["digikit/a", "test/b"])
-    monkeypatch.setattr(P.T, "pack_for_transfer", fake_pack)
-    monkeypatch.setattr(
-        P.patchkit,
-        "module_status",
-        lambda d: "needs build" if d.name == "a" else "unchanged",
-    )
-    monkeypatch.setattr(P.modroots, "module_dir", lambda mid: Path(mid.split("/")[-1]))
-    monkeypatch.setattr(R, "build_objects", built.append)
-    first = P.pack_all(devices=["dt2", "dn2"])
-    assert first == {
-        "dt2": {"digikit/a": "new", "test/b": "new"},
-        "dn2": {"digikit/a": "new"},
-    }
-    assert built == ["digikit/a"]  # only the module whose objects changed is built
-    assert (tmp_path / "out/dt2/test/b.dkm").read_bytes() == b"B1"
-    assert not (tmp_path / "out/dn2/test").exists()  # does not pack for dn2: not there
-    # nothing changed: every file the same, nothing rewritten
-    again = P.pack_all(devices=["dt2", "dn2"])
-    assert set(again["dt2"].values()) == {"same"}
-    # one module changes, one stops packing: its file is rewritten, the other removed (and its empty folder)
-    state["a"] = b"A2"
-    monkeypatch.setattr(P.T, "candidates", lambda: ["digikit/a"])
-    third = P.pack_all(devices=["dt2", "dn2"])
-    assert third == {"dt2": {"digikit/a": "changed"}, "dn2": {"digikit/a": "changed"}}
-    assert (tmp_path / "out/dt2/digikit/a.dkm").read_bytes() == b"A2"
-    assert not (tmp_path / "out/dt2/test").exists()

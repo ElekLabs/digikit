@@ -64,14 +64,15 @@ The files go to `out/snapshots/<device>-audio-ready-cold-*`. Git ignores them.
 ## Desktop emulator
 
 ```sh
-mise run workbench                # build once and run (`mise run workbench -- --build-only` builds only)
-mise run wasm:dksample            # only public/dksample.wasm (the workbench runs it first; 0.3 s when unchanged)
+mise run workbench                # build once and open the app with no firmware loaded (`-- --build-only` builds only)
+mise run workbench -- FILE.syx    # load that firmware at start (else the Emulator page's "Load on start" tick loads the last opened file)
+mise run workbench:inputs         # the UI dist and the wasm files, from the Nx cache when unchanged (the workbench runs it first)
 mise run workbench -- --cf-only --plus-drive DIR firmware/Digitakt_II_OS1.17.syx   # a +Drive folder (default: plus_drive/<device>/; --samples is the same option)
 mise run workbench -- --dsp-patch FILE  # overlay a DSP patch (DN2 audio)
 mise run workbench -- --cf-only   # ColdFire only: no DSP, no audio
 ```
 
-With the DN2 ready inputs present, `mise run workbench` plays DN2 audio. Without them it
+With the ready inputs present, a firmware loaded in `mise run workbench` plays audio. Without them it
 starts the ColdFire-only emulator. The DSP needs about 1.6 CPU seconds per audio second
 ([finding 18](findings/18-dsp-performance.md)), so real time is not reached yet.
 The +Drive comes from `plus_drive/dt2/` or `plus_drive/dn2/` (git ignores both) when it exists, or from `--plus-drive DIR` (`--samples DIR` is the same option): the launcher builds a card image from the folder and caches it by content ([docs/SAMPLES.md](SAMPLES.md)).
