@@ -75,6 +75,8 @@ import { tickedFor } from '@web/firmware/default-modules-state';
 import TransferPage from '@web/transfer/TransferPage';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
 import { reloadError, reloadLine } from '@web/runtime/reload';
+import type { ControllerJob } from '@web/jobs/jobs-core';
+import { isCancelled } from '@web/modules/backend';
 import { JobBusyError, type JobHandle, busy, currentJob, jobs, runJob, syncControllerJob } from '@web/jobs/jobs';
 
 type Source = { path: string; name: string; bytes: number; modified_ms: number };
@@ -121,6 +123,7 @@ function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }
 
 export default function Console() {
   const [runtime, setRuntime] = createSignal<EmulatorRuntime>();
+  const [controllerJob, setControllerJob] = createSignal<ControllerJob | null>(null);
   const [outsideApp, setOutsideApp] = createSignal(false);
   const [status, setStatus] = createSignal<Status>();
   const [error, setError] = createSignal('');
@@ -214,17 +217,32 @@ export default function Console() {
    */
   const installDefaultModules = async (deviceId: string): Promise<void> => {
     try {
-      await runJob('Installing default modules', { group: 'emulator' }, (job) => performDefaultInstall(deviceId, job));
+      const stop = new AbortController();
+      await runJob(
+        'Installing default modules',
+        {
+          group: 'emulator',
+          cancel: () => {
+            stop.abort();
+            void runtime()?.cancelJob?.();
+          },
+        },
+        (job) => performDefaultInstall(deviceId, job, stop.signal),
+      );
     } catch (e) {
       if (!(e instanceof JobBusyError)) setError(message(e));
     }
   };
-  const performDefaultInstall = async (deviceId: string, job: JobHandle) => {
+  const performDefaultInstall = async (deviceId: string, job: JobHandle, signal: AbortSignal) => {
     const ids = tickedFor(deviceId);
     if (ids.length === 0) return;
     try {
-      const lines = await desktopDefaultModules.install('emulator', deviceId, ids, (p) =>
-        job.progress(undefined, p.text),
+      const lines = await desktopDefaultModules.install(
+        'emulator',
+        deviceId,
+        ids,
+        (p) => job.progress(undefined, p.text),
+        { signal, stillBooting: () => controllerJob() !== null },
       );
       setReloadNote(`Default modules ready: ${ids.join(', ')}`);
       logInput({
@@ -234,6 +252,11 @@ export default function Console() {
         detail: lines.join('\n'),
       });
     } catch (e) {
+      if (isCancelled(e) || isCancelled((e as { cause?: unknown })?.cause)) {
+        logInput({ source: 'firmware', level: 'info', text: 'default modules cancelled' });
+        bumpCardRefresh();
+        return;
+      }
       const what = e instanceof DefaultModuleError ? `default module ${e.id}` : 'default modules';
       setReloadNote(`${what} failed`);
       logInput(failureEntry('firmware', what, e instanceof DefaultModuleError ? e.message : message(e)));
@@ -405,6 +428,7 @@ export default function Console() {
     try {
       const s = await runtime()?.controllerStatus?.();
       if (s?.heartbeat) watchHealth({ stalled: s.heartbeat.stalled, stallMs: s.heartbeat.stall_ms });
+      setControllerJob(s?.job ?? null);
       syncControllerJob(s?.job, () => void runtime()?.cancelJob?.());
     } catch {
       /* a replaced session has no status */

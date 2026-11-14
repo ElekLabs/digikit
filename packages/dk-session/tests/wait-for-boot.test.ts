@@ -1,8 +1,8 @@
 // waitForBoot after restart(): with the debug module the log shows the new boot (BOOT_START without the RESTART request); without it INFO has no LOG capability
 // and the device answering again after a silent spell does.
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
-import { DkSession, encode8in7 } from '@digi/dk-session';
+import { test, vi } from 'vitest';
+import { DkError, DkSession, encode8in7 } from '@digi/dk-session';
 import { CAP, CMD as GCMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 const concat = (...p: Uint8Array[]) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
@@ -83,6 +83,59 @@ test('with the debug module the log shows the new boot: BOOT_START and no RESTAR
     dev.rebooted = polls >= 2; // the old boot's log holds the RESTART request; after one more poll the log is the new boot's
   }, 5000);
   assert.equal(polls, 2);
+});
+
+test('a cancelled read ends the wait', async () => {
+  const dev = new Device();
+  const s = new DkSession(dev, { timeoutMs: 50, retries: 0 });
+  s.info = async () => {
+    throw new DkError({ error: 'cancelled', kind: 'cancelled' });
+  };
+  await assert.rejects(
+    s.waitForBoot(async () => {}, 5000),
+    (e: unknown) => e instanceof DkError && e.kind === 'cancelled',
+  );
+});
+
+test('the wait does not time out while the boot is reported', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const s = new DkSession(new Device(), { timeoutMs: 50, retries: 0 });
+    let reads = 0;
+    s.info = async () => {
+      if (++reads <= 5) throw new Error('no answer'); // the port is silent while the controller boots
+      return { caps: null } as Awaited<ReturnType<DkSession['info']>>;
+    };
+    let slept = 0;
+    // a fake sleep: the clock moves, no real time passes
+    const sleep = async (ms: number) => {
+      slept += ms;
+      vi.setSystemTime(Date.now() + ms);
+    };
+    // 5 passes of 500 ms are 2500 ms, more than the 1000 ms timeout; the reported boot keeps the wait alive
+    await s.waitForBoot(sleep, 1000, { stillBooting: () => reads < 5 });
+    assert.equal(reads, 6);
+    assert.ok(slept > 1000);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('an aborted signal ends the wait', async () => {
+  const dev = new Device();
+  const s = new DkSession(dev, { timeoutMs: 200, retries: 0 });
+  await s.restart();
+  const stop = new AbortController();
+  await assert.rejects(
+    s.waitForBoot(
+      async () => {
+        stop.abort();
+      },
+      5000,
+      { signal: stop.signal },
+    ),
+    (e: unknown) => e instanceof DkError && e.kind === 'cancelled',
+  );
 });
 
 test('a device that never restarts and has no log times out', async () => {
