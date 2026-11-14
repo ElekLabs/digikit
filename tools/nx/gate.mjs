@@ -11,7 +11,7 @@ const MERGE_TARGETS = [
   'rust-fmt',
   'typecheck',
   'test-host',
-  'test',
+  'test-wasm',
   'check',
   'build:ui',
   'check:ui',

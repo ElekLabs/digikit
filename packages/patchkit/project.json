@@ -8,7 +8,10 @@
         "default",
         "{workspaceRoot}/modules/**/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
-        { "dependentTasksOutputFiles": "**/*", "transitive": true }
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
       ],
       "dependsOn": ["cli"],
       "outputs": [],
@@ -42,12 +45,50 @@
         "{workspaceRoot}/.cargo/**/*",
         "{workspaceRoot}/rust-toolchain*",
         "{workspaceRoot}/mise.toml",
-        { "dependentTasksOutputFiles": "**/*", "transitive": true }
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
       ],
       "dependsOn": ["cli"],
       "outputs": [],
       "options": {
         "command": "dist/patchkit/patchkit --root . build --check --tree modules/core || { echo 'A committed core object is stale: run dist/patchkit/patchkit --root . build modules/core (or nx run <core module>:build-objects) and commit the result.' >&2; exit 1; }",
+        "cwd": "."
+      }
+    },
+    "wasm": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "description": "Builds patchkit.wasm, dkupload.wasm and dksample.wasm into apps/web/public/. Its inputs are the Rust crates of patchkit (default, ^production) and the build files; no TypeScript. The cargo wasm build recompiles on every call, so Nx replays it when the inputs are unchanged.",
+      "inputs": [
+        "default",
+        "^production",
+        "jsToolchain",
+        "{workspaceRoot}/tools/nx/wasm.mjs",
+        "{workspaceRoot}/tools/nx/rust-env.mjs",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/.cargo/**/*",
+        "{workspaceRoot}/rust-toolchain*",
+        "{workspaceRoot}/sdk/sdk.toml",
+        "{workspaceRoot}/modules/core/runtime/vectors/**/*",
+        "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/tools/patchkit/toolchain/**/*",
+        {
+          "runtime": "rustc -vV"
+        },
+        {
+          "runtime": "command -v wasm-opt >/dev/null && wasm-opt --version || echo no-wasm-opt"
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/apps/web/public/patchkit.wasm",
+        "{workspaceRoot}/apps/web/public/dkupload.wasm",
+        "{workspaceRoot}/apps/web/public/dksample.wasm"
+      ],
+      "options": {
+        "command": "node tools/nx/wasm.mjs --patchkit-only",
         "cwd": "."
       }
     }

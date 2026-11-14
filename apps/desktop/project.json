@@ -17,7 +17,13 @@
     },
     "workbench-inputs": {
       "executor": "nx:noop",
-      "dependsOn": ["build:ui", { "projects": ["@digi/web"], "target": "patchkit-wasm" }]
+      "dependsOn": [
+        "build:ui",
+        {
+          "projects": ["@digi/web"],
+          "target": "patchkit-wasm"
+        }
+      ]
     },
     "check:ui": {
       "cache": true,
@@ -33,24 +39,30 @@
       ],
       "outputs": []
     },
-    "rust-tests": {
-      "executor": "nx:run-commands",
-      "cache": false,
-      "parallelism": false,
-      "dependsOn": ["build:ui"],
-      "options": {
-        "command": "node tools/nx/rust-env.mjs --gen -- cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --target-dir .nx/target/check-desktop-clean",
-        "cwd": "."
-      }
-    },
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
       "inputs": [
-        "hostTests",
-        "^hostTests",
-        "{workspaceRoot}/devices/**/*.toml",
-        "{workspaceRoot}/modules/*/*/module.toml"
+        "{projectRoot}/ui/**/*",
+        "!{projectRoot}/ui/dist/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/ui/tsconfig.json",
+        "jsToolchain",
+        "{workspaceRoot}/vitest.host.config.ts",
+        "{workspaceRoot}/vitest.host.projects.json",
+        "{workspaceRoot}/tsconfig*.json",
+        {
+          "externalDependencies": ["vitest"]
+        },
+        "{workspaceRoot}/apps/web/src/**/*",
+        "{workspaceRoot}/apps/web/site.config.mjs",
+        "{workspaceRoot}/packages/dk-session/src/**/*",
+        "{workspaceRoot}/packages/dk-session/package.json",
+        "{workspaceRoot}/packages/dkbs/src/**/*",
+        "{workspaceRoot}/packages/dkbs/package.json",
+        "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/modules/*/*/module.toml",
+        "{workspaceRoot}/config/emulator.json"
       ],
       "outputs": [],
       "options": {
