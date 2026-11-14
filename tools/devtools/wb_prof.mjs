@@ -172,7 +172,7 @@ async function connectDaemon({ opts, root, fail }) {
 
 /** `--cpu sharc`: the DSP counts of `sharc.profile` as a profile. */
 async function recordSharc(ctx) {
-  const { opts, root, fail } = ctx;
+  const { opts, fail } = ctx;
   const seconds = Number(opts.seconds ?? 0);
   if (!opts.out || (!opts['since-boot'] && !(seconds > 0)))
     fail('profile record --cpu sharc --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot]');
