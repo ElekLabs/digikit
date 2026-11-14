@@ -420,3 +420,37 @@ fn an_effect_without_routes_runs_on_the_master_only_and_one_with_routes_follows_
     assert_eq!(fx_flags_of_decl(&f.fxs[1]), 0b101);
     assert_eq!(fx_flags_of_decl(&f.fxs[2]), 0b111);
 }
+
+/// A `.dkm` file of `size` bytes whose header points at a keys table with these machine keys.
+fn dkm_file(mk: &[u32], size: usize) -> std::vec::Vec<u8> {
+    let mut f = std::vec![0u8; size];
+    f[0..4].copy_from_slice(&dkm::MAGIC.to_be_bytes());
+    f[dkm::H_SIZE..][..4].copy_from_slice(&(size as u32).to_be_bytes());
+    let off = dkm::HEADER as usize;
+    let n = dkneeds::keys::write_keys((1, 1, 1), 0, mk, &[], &mut f[off..]).unwrap();
+    f[dkm::H_REG_OFF..][..4].copy_from_slice(&(off as u32).to_be_bytes());
+    f[dkm::H_REG_SIZE..][..4].copy_from_slice(&(n as u32).to_be_bytes());
+    f
+}
+
+#[test]
+fn machine_keys_reads_the_keys_table_of_a_file() {
+    let mut out = [0u32; 8];
+    let f = dkm_file(&[0x1234_5600, 0x0000_0007], 0xa0 + 64);
+    assert_eq!(machine_keys(&f, &mut out), 2);
+    assert_eq!(out[..2], [0x1234_5600, 7]);
+}
+
+#[test]
+fn machine_keys_of_a_torn_file_is_none() {
+    let mut out = [0u32; 8];
+    let f = dkm_file(&[0x1234_5600], 0xa0 + 64);
+    assert_eq!(machine_keys(&f[..0x40], &mut out), 0); // shorter than the header
+    assert_eq!(machine_keys(&f[..f.len() - 1], &mut out), 0); // size field does not match
+    let mut bad = f.clone();
+    bad[0] ^= 1; // not a .dkm
+    assert_eq!(machine_keys(&bad, &mut out), 0);
+    let mut past = f.clone();
+    past[dkm::H_REG_SIZE..][..4].copy_from_slice(&1000u32.to_be_bytes()); // table runs past the end
+    assert_eq!(machine_keys(&past, &mut out), 0);
+}

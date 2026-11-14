@@ -1,6 +1,7 @@
 //! The `.dkm` loader (docs/design/digikit-dkm.md). Every check runs before anything is written to the arena.
 
 use crate::dsp;
+use crate::selection::BOOT_IDX;
 use crate::sha256::Sha;
 use crate::entry::Ctx;
 use crate::{
@@ -10,14 +11,14 @@ use crate::{
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
 
-const MAGIC: u32 = 0x444b_4d46; // "DKMF"
+const MAGIC: u32 = crate::collect::dkm::MAGIC;
 /// The header size. `init`, `fini`, `menu` and `tick` are image offsets in it (NONE for a missing one): the fields of the module's `dk_module` constant
 /// (`dk_module_def`), called with a `dk_module_ctx *` (`entry.rs`).
-const HEADER: u32 = 0xa0;
+const HEADER: u32 = crate::collect::dkm::HEADER;
 const NONE: u32 = 0xffff_ffff;
 
 // header field offsets (big endian)
-const H_SIZE: usize = 0x08;
+const H_SIZE: usize = crate::collect::dkm::H_SIZE;
 const H_HDRSIZE: usize = 0x0c;
 const H_SHA: usize = 0x10;
 const H_RUNTIME: usize = 0x30; // the runtime version the module needs (bit 31: built with DK_TRACE)
@@ -35,46 +36,13 @@ const H_INIT: usize = 0x80;
 const H_FINI: usize = 0x84;
 const H_MENU: usize = 0x88;
 const H_TICK: usize = 0x8c;
-const H_REG_OFF: usize = 0x90;
-const H_REG_SIZE: usize = 0x94;
+const H_REG_OFF: usize = crate::collect::dkm::H_REG_OFF;
+const H_REG_SIZE: usize = crate::collect::dkm::H_REG_SIZE;
 const H_DSP_OFF: usize = 0x98;
 const H_DSP_SIZE: usize = 0x9c;
 
 unsafe fn in_file(off: u32, len: u32, size: u32) -> bool {
     off <= size && len <= size - off
-}
-
-/// The machine keys of the keys table of the `.dkm` at `path`, for the boot's type assignment
-/// (`assign::plan`): at most 8, the count returned. Reads the file into the staging buffer, so it runs before the first load. A file that is
-/// missing, torn or not a `.dkm` has none (its load reports the error).
-pub unsafe fn machine_keys(path: *const u8, out: &mut [u32; 8]) -> usize {
-    let found = match store::find(path) {
-        Ok(f) => f,
-        Err(_) => return 0,
-    };
-    if store::load_to_stage(&found) != OK {
-        return 0;
-    }
-    let f = store::stage() as *const u8;
-    let size = found.size;
-    if size < HEADER || rd32(f) != MAGIC || rd32(f.add(H_SIZE)) != size {
-        return 0;
-    }
-    let (off, len) = (rd32(f.add(H_REG_OFF)), rd32(f.add(H_REG_SIZE)));
-    // the keys table of the header (the pair at 0x90 is keys_off, keys_size)
-    if !in_file(off, len, size) {
-        return 0;
-    }
-    let k = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(f.add(off as usize), len as usize)) {
-        Ok(k) => k,
-        Err(_) => return 0,
-    };
-    let mut n = 0;
-    while n < k.nm && n < 8 {
-        out[n] = k.mk[n];
-        n += 1;
-    }
-    n
 }
 
 /// Validate and load the `.dkm` at `path`. See `dkrt_load`. The tables are checked after every attempt, and none starts once a check has
@@ -334,7 +302,7 @@ unsafe fn load_inner(path: *const u8) -> i32 {
             reg_size: 0,
             init: 0,
             early: 1,
-            boot_idx: BOOT_IDX,
+            boot_idx: read_volatile(addr_of!(BOOT_IDX)),
             send_base: 0,
             send_len: 0,
             send_buf: 0,
@@ -568,8 +536,6 @@ pub fn stub_missing(provider: &'static str) {
         }
     }
 }
-/// The selection index of the module being loaded by the boot hook (`u32::MAX`: none).
-pub static mut BOOT_IDX: u32 = u32::MAX;
 
 extern "C" {
     /// `core/dsp-link`: clears the per-block callback when it points into [lo, hi). Resolves to 0 when the module is not in the image.

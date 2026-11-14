@@ -582,6 +582,40 @@ impl KeysCopy {
     }
 }
 
+/// Header fields of a `.dkm` that the keys table lookup needs (the loader reads the rest; offsets are big endian).
+pub(crate) mod dkm {
+    pub const MAGIC: u32 = 0x444b_4d46; // "DKMF"
+    pub const HEADER: u32 = 0xa0;
+    pub const H_SIZE: usize = 0x08;
+    pub const H_REG_OFF: usize = 0x90;
+    pub const H_REG_SIZE: usize = 0x94;
+}
+
+/// The machine keys of the keys table of a whole `.dkm` file, for the boot's type assignment (`assign::plan`): at most 8, the count returned.
+/// A file that is torn or not a `.dkm` has none (its load reports the error).
+pub fn machine_keys(file: &[u8], out: &mut [u32; 8]) -> usize {
+    let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]);
+    let size = file.len() as u32;
+    if size < dkm::HEADER || be(0) != dkm::MAGIC || be(dkm::H_SIZE) != size {
+        return 0;
+    }
+    let (off, len) = (be(dkm::H_REG_OFF), be(dkm::H_REG_SIZE));
+    // the keys table of the header (the pair at 0x90 is keys_off, keys_size)
+    if !(off <= size && len <= size - off) {
+        return 0;
+    }
+    let k = match KeysCopy::from_bytes(&file[off as usize..(off + len) as usize]) {
+        Ok(k) => k,
+        Err(_) => return 0,
+    };
+    let mut n = 0;
+    while n < k.nm && n < 8 {
+        out[n] = k.mk[n];
+        n += 1;
+    }
+    n
+}
+
 // ---- lowering to records -----------------------------------------------------------------------------------------------------
 
 struct Out {
