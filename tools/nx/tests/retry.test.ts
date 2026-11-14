@@ -53,6 +53,7 @@ it('emu-slot reruns a command once after a symptom, records it, and the summary 
       env: {
         ...process.env,
         DIGI_EMU_SLOTS: '1',
+        DIGI_EMU_SLOT_DIR: join(dir, 'slots'),
         DIGI_TRACE_DIR: dir,
         NX_TASK_TARGET_PROJECT: 'p',
         NX_TASK_TARGET_TARGET: 't',
@@ -69,6 +70,7 @@ it('emu-slot reruns a command once after a symptom, records it, and the summary 
 });
 
 it('emu-slot keeps the exit status of a real failure with no rerun', () => {
+  const slots = mkdtempSync(join(tmpdir(), 'digikit-slot-'));
   const done = spawnSync(
     'node',
     [
@@ -80,9 +82,10 @@ it('emu-slot keeps the exit status of a real failure with no rerun', () => {
     ],
     {
       encoding: 'utf8',
-      env: { ...process.env, DIGI_EMU_SLOTS: '1', DIGI_EMU_SLOT_DIR: join(tmpdir(), `digikit-slot-${process.pid}`) },
+      env: { ...process.env, DIGI_EMU_SLOTS: '1', DIGI_EMU_SLOT_DIR: slots },
     },
   );
+  rmSync(slots, { recursive: true, force: true });
   expect(done.status).toBe(3);
   expect(done.stderr).not.toContain('RETRY');
 });
