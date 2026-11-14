@@ -1,21 +1,27 @@
 //! Effect-row part of the DSP loader: the chain rows, their owners, one-word writes and the clearing of a module's effect rows.
-use crate::dsp::*;
-use crate::handlers::{Claim, RowWrite};
-use crate::rd32;
+use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
+use dkrt_abi::dsp::*;
+use dkrt_abi::mem::{iw, rd32};
+use dkrt_abi::service::{Claim, RowWrite};
 use dkrt_sdk::*;
+
+/// Word `k` of `dynfx_info`.
+unsafe fn fxiw(k: usize) -> u32 {
+    iw(REAL_CORE.fx_info(), k)
+}
 
 /// Effect rows the image reserves for run-time effects (0 without `core/dynfx`).
 pub unsafe fn fx_free_rows() -> u32 {
-    if finfo().is_null() {
+    if REAL_CORE.fx_info().is_null() {
         0
     } else {
-        fiw(F_FREE).min(MAX_FX as u32)
+        fxiw(F_FREE).min(MAX_FX as u32)
     }
 }
 
 /// Effect rows in use (claimed by a module that is loaded or loading), for CAPACITY.
 pub unsafe fn fx_used() -> u32 {
-    let d = ds();
+    let d = REAL_CORE.dsp();
     let mut used = 0;
     let mut k = 0;
     while k < MAX_FX {
@@ -30,7 +36,7 @@ pub unsafe fn fx_used() -> u32 {
 /// The module record + 1 that owns effect row `k` (0: free) and the row's index in the chain's table (the registry `fx`), for the effect pages.
 pub unsafe fn fx_owner_of(k: usize) -> u8 {
     if k < MAX_FX {
-        ds().fx_owner[k]
+        REAL_CORE.dsp().fx_owner[k]
     } else {
         0
     }
@@ -38,7 +44,7 @@ pub unsafe fn fx_owner_of(k: usize) -> u8 {
 
 /// The effect row (0 ..) that module record `owner - 1` claimed for its `ordinal`-th effect record (rows are claimed in record order, lowest first).
 pub unsafe fn fx_row_of(owner: u8, ordinal: u32) -> Option<usize> {
-    let d = ds();
+    let d = REAL_CORE.dsp();
     let mut seen = 0;
     let mut k = 0;
     while k < MAX_FX {
@@ -57,7 +63,7 @@ pub unsafe fn fx_row_of(owner: u8, ordinal: u32) -> Option<usize> {
 pub unsafe fn fx_set_declared(rec: usize, ordinal: u32, flags: Option<u32>, par: Option<[u32; 8]>) -> bool {
     match fx_row_of(rec as u8 + 1, ordinal) {
         Some(k) => {
-            let d = ds();
+            let d = REAL_CORE.dsp();
             if let Some(f) = flags {
                 d.fx_flags[k] = f;
             }
@@ -73,7 +79,7 @@ pub unsafe fn fx_set_declared(rec: usize, ordinal: u32, flags: Option<u32>, par:
 /// The flags word of the record that effect row `k` was claimed for (`FXF_SEND`, `FXF_NOMASTER`, `FXF_DEFAULT_SEND`; 0 for a free row).
 pub unsafe fn fx_flags_of(k: usize) -> u32 {
     if k < MAX_FX {
-        ds().fx_flags[k]
+        REAL_CORE.dsp().fx_flags[k]
     } else {
         0
     }
@@ -82,14 +88,14 @@ pub unsafe fn fx_flags_of(k: usize) -> u32 {
 /// Set the MIX word an effect row publishes (before its rows go out) and the defaults of its parameter words are the record's.
 pub unsafe fn fx_set_mix(k: usize, bits: u32) {
     if k < MAX_FX {
-        ds().fx_mix[k] = bits;
+        REAL_CORE.dsp().fx_mix[k] = bits;
     }
 }
 
 /// Set the route and the four amount words an effect row publishes (before its rows go out; `fxsend::apply` does it from the settings).
 pub unsafe fn fx_set_route(k: usize, route: u32, amt: [u32; 4]) {
     if k < MAX_FX {
-        let d = ds();
+        let d = REAL_CORE.dsp();
         d.fx_route[k] = route;
         d.fx_amt[k] = amt;
     }
@@ -97,33 +103,29 @@ pub unsafe fn fx_set_route(k: usize, route: u32, amt: [u32; 4]) {
 
 /// An effect row whose words are in the DSP: claimed, published and no load in progress, so a one-word write can go out.
 pub unsafe fn fx_live(k: usize) -> bool {
-    let d = ds();
-    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0 && !crate::tracks::busy()
+    let d = REAL_CORE.dsp();
+    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0 && !REAL_CORE.link_claimed(LinkWriter::Sample)
 }
 
-/// The effect row's words in the chain: word `w` of row `k` (a one-word write through window 2).
-pub unsafe fn fx_word_start(k: usize, w: u32, value: u32) -> bool {
-    if finfo().is_null() {
+/// Start the write of word `w` of effect row `k` for `who` (a one-word write through window 2). `true` when the link accepted it.
+pub unsafe fn fx_word_start<C: CoreApi>(c: &C, who: LinkWriter, k: usize, w: u32, value: u32) -> bool {
+    let inf = c.fx_info();
+    if inf.is_null() {
         return false;
     }
-    start_word(WIN_FX, FX_ROW_WORDS * (fiw(F_FIRST) + k as u32) + w, value)
-}
-
-/// `Some(true)` done, `Some(false)` failed, `None` still running (a write started by `fx_word_start`).
-pub unsafe fn fx_word_poll() -> Option<bool> {
-    poll_done()
+    c.link_word(who, WIN_FX, FX_ROW_WORDS * (iw(inf, F_FIRST) + k as u32) + w, value)
 }
 
 /// The module record (index) that owns row `r` of the effect table (the registry `fx`), for an effect fault.
 pub unsafe fn module_of_fx_table_row(r: u32) -> Option<usize> {
-    if finfo().is_null() {
+    if REAL_CORE.fx_info().is_null() {
         return None;
     }
-    let first = fiw(F_FIRST);
+    let first = fxiw(F_FIRST);
     if r < first || ((r - first) as usize) >= MAX_FX {
         return None;
     }
-    let owner = ds().fx_owner[(r - first) as usize];
+    let owner = REAL_CORE.dsp().fx_owner[(r - first) as usize];
     if owner == 0 {
         None
     } else {
@@ -134,8 +136,8 @@ pub unsafe fn module_of_fx_table_row(r: u32) -> Option<usize> {
 /// Free the effect rows module record `rec` published: the pc first, so the chain skips the row at once; then the adapter's words (`was`, `dis`, the fault
 /// window and its count) back to 0, so the next effect on the row starts clean.
 pub(crate) unsafe fn clear_fx_rows(rec: usize) -> bool {
-    let d = ds();
-    if finfo().is_null() {
+    let d = REAL_CORE.dsp();
+    if REAL_CORE.fx_info().is_null() {
         // Missing info is harmless only when no owned row was published.
         let mut k = 0;
         while k < MAX_FX {
@@ -144,24 +146,24 @@ pub(crate) unsafe fn clear_fx_rows(rec: usize) -> bool {
         }
         return true;
     }
-    let first = fiw(F_FIRST);
+    let first = fxiw(F_FIRST);
     let mut k = 0;
     while k < MAX_FX {
         if d.fx_owner[k] == rec as u8 + 1 && d.fx_pub[k] != 0 {
             let at = FX_ROW_WORDS * (first + k as u32);
-            if !write_word_blocking(WIN_FX, at + FXW_PC, FX_FREE_PC) { return false; }
+            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_PC, FX_FREE_PC) { return false; }
             // the next effect on the row starts on the master route with no amounts (finding 62)
-            if !write_word_blocking(WIN_FX, at + FXW_ROUTE, 0) { return false; }
+            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_ROUTE, 0) { return false; }
             let mut w = 0;
             while w < 4 {
-                if !write_word_blocking(WIN_FX, at + FXW_AMT0 + w, 0) { return false; }
+                if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_AMT0 + w, 0) { return false; }
                 w += 1;
             }
-            if !write_word_blocking(WIN_FX, at + FXW_WAS, 0) { return false; }
-            if !write_word_blocking(WIN_FX, at + FXW_MIX, MIX_ONE) { return false; }
-            if !write_word_blocking(WIN_FX, at + FXW_DIS, 0) { return false; }
-            if !write_word_blocking(WIN_FX, at + FXW_WSTART, 0) { return false; }
-            if !write_word_blocking(WIN_FX, at + FXW_WCOUNT, 0) { return false; }
+            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_WAS, 0) { return false; }
+            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_MIX, MIX_ONE) { return false; }
+            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_DIS, 0) { return false; }
+            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_WSTART, 0) { return false; }
+            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_WCOUNT, 0) { return false; }
             d.fx_pub[k] = 0;
         }
         k += 1;
@@ -181,7 +183,7 @@ pub(crate) unsafe fn check_sections(sec: &DspSec) -> i32 {
             || desc & 3 != 0
             || !in_sec(desc, FX_DESC_BYTES, image_size)
             || state & 3 != 0
-            || state > iw(I_AREA_BYTES)
+            || state > iw(REAL_CORE.dsp_info(), I_AREA_BYTES)
             || np > FX_MAX_PARAMS
         {
             return E_DSP_FORMAT;
@@ -203,10 +205,10 @@ pub(crate) unsafe fn check_sections(sec: &DspSec) -> i32 {
 /// DSP section: the image must have the chain's table, and a free row for each record.
 pub(crate) unsafe fn check_rows(sec: &DspSec) -> i32 {
     let nfx = sec.nfx;
-    let d = ds();
+    let d = REAL_CORE.dsp();
     // effect rows: the image must have the chain's table, and a free row for each record
     if nfx > 0 {
-        if finfo().is_null() {
+        if REAL_CORE.fx_info().is_null() {
             return E_NO_DSP;
         }
         let r = capacity::dsp_rows(nfx, capacity::free_rows(&d.fx_owner, fx_free_rows()));
@@ -220,7 +222,7 @@ pub(crate) unsafe fn check_rows(sec: &DspSec) -> i32 {
 /// Claim the effect rows (lowest free ones first); the states follow the voice states, in record order.
 pub(crate) unsafe fn claim(c: &mut Claim) {
     let (rec, job, base) = (c.rec, c.job, c.base);
-    let d = ds();
+    let d = REAL_CORE.dsp();
     let mut state_at = c.state_at;
     let mut fclaimed = 0u32;
     let mut f = 0;
@@ -255,7 +257,7 @@ pub(crate) unsafe fn claim(c: &mut Claim) {
 
 /// Give back the effect rows module record `rec` claimed.
 pub(crate) unsafe fn release(rec: usize) {
-    let d = ds();
+    let d = REAL_CORE.dsp();
     let mut k = 0;
     while k < MAX_FX {
         if d.fx_owner[k] == rec as u8 + 1 {
@@ -278,7 +280,7 @@ pub(crate) unsafe fn release(rec: usize) {
 /// The effect-row word to publish at step `*want` of module `rec`: a row takes `FX_STEPS` steps (the 8 parameter words, desc, state,
 /// mix, enabled, the 4 amount words, the route, the pc).
 pub(crate) unsafe fn row_step(rec: usize, want: &mut u32, write: bool) -> Option<RowWrite> {
-    let d = ds();
+    let d = REAL_CORE.dsp();
     let mut frow = MAX_FX;
     let mut k = 0;
     while k < MAX_FX {
@@ -298,7 +300,7 @@ pub(crate) unsafe fn row_step(rec: usize, want: &mut u32, write: bool) -> Option
         return Some(RowWrite { win: 0, word: 0, value: 0, published: None });
     }
     let want = *want;
-    let at = FX_ROW_WORDS * (fiw(F_FIRST) + frow as u32);
+    let at = FX_ROW_WORDS * (fxiw(F_FIRST) + frow as u32);
     let (word, value) = if want < 8 {
         (at + FXW_P0 + want, d.fx_par[frow][want as usize])
     } else if want == 8 {

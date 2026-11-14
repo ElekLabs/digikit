@@ -1,7 +1,8 @@
 //! `samples` service, handlers (interface B): the track-table part of the DSP section and the listing of a loaded module's tracks.
 //! It owns no record kind of the `register` section.
-use crate::handlers::{Claim, Service};
-use crate::tracks;
+use super::tracks;
+use dkrt_abi::dsp::{DspSec, Job};
+use dkrt_abi::service::{tick_phase, Claim, Service};
 
 /// The samples service.
 pub struct Samples;
@@ -11,11 +12,17 @@ impl Service for Samples {
         tracks::ready(rec);
     }
 
-    unsafe fn dsp_check_sections(sec: &crate::dsp::DspSec) -> i32 {
+    unsafe fn tick(phase: u32) {
+        if phase == tick_phase::EARLY {
+            tracks::tick();
+        }
+    }
+
+    unsafe fn dsp_check_sections(sec: &DspSec) -> i32 {
         super::dsp::check_sections(sec)
     }
 
-    unsafe fn dsp_admit(job: &crate::dsp::Job) -> i32 {
+    unsafe fn dsp_admit(job: &Job) -> i32 {
         super::dsp::admit(job)
     }
 

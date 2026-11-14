@@ -1,11 +1,56 @@
 //! `machines` service, record handlers (interface B): the machine, parameter, page, click-action and native-page records of the
 //! `register` section, and the voice parts of the DSP section. The registry walker (`registry.rs`) calls them through
-//! `handlers::Service`; the rows and strings they fill are the registry's state (`registry::DKRT_REG`).
-use crate::handlers::{ApplyCtx, CapSink, CheckCtx, Claim, GuardState, RowWrite, Service};
-use crate::registry::{self, each, iw, make_rep, rd, rs, w, wr, write_param_row, DKRT_REG};
-use crate::{cstr_len, rd32};
+//! `handlers::Service`; the rows and strings they fill are the registry's state (`CoreApi::reg_state`).
+use super::{nativepage, pageclick};
+use crate::core_api::{CoreApi, REAL_CORE};
+use dkrt_abi::dsp::DspSec;
+use dkrt_abi::mem::{cstr_len, iw, rd, rd32, wr};
+use dkrt_abi::registry::{each, w, RegState, KIND_NATIVE, KIND_NATIVE_V2, MACH_TEXT};
+use dkrt_abi::service::{check_step, tick_phase, ApplyCtx, CapSink, CheckCtx, Claim, GuardState, RowWrite, Service};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::*;
+
+fn rs() -> &'static mut RegState {
+    REAL_CORE.reg_state()
+}
+
+unsafe fn info() -> *const u32 {
+    REAL_CORE.dynreg()
+}
+
+unsafe fn make_rep(rep: *mut u8, src: *const u8, upper: bool) -> u32 {
+    REAL_CORE.make_rep(rep, src, upper)
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn write_param_row(inf: *const u32, code: u32, template: u32, slot: u32, min: u32, max: u32, def: u32, name: u32, short: u32) {
+    REAL_CORE.write_param_row(inf, code, template, slot, min, max, def, name, short)
+}
+
+/// The reserved machine, parameter and page rows as (rows the registry has, rows in use); (0, 0) without a registry (for CAPACITY).
+unsafe fn counts() -> [(u32, u32); 3] {
+    let inf = info();
+    if inf.is_null() {
+        return [(0, 0); 3];
+    }
+    let s = rs();
+    let used = |o: &[u8]| {
+        let mut n = 0;
+        let mut k = 0;
+        while k < o.len() {
+            if o[k] != 0 {
+                n += 1;
+            }
+            k += 1;
+        }
+        n
+    };
+    [
+        (iw(inf, w::M_DYN_N), used(&s.mach_owner)),
+        (iw(inf, w::P_DYN_N), used(&s.param_owner)),
+        (iw(inf, w::PG_DYN_N), used(&s.page_owner)),
+    ]
+}
 
 pub(crate) const KIND_PARAM: u32 = 1;
 pub(crate) const KIND_MACHINE: u32 = 2;
@@ -21,7 +66,6 @@ const MAX_MACH: usize = limits::MACHINE_ROWS;
 const MAX_PARAM: usize = limits::PARAM_ROWS;
 const MAX_PAGE: usize = limits::PAGE_ROWS;
 const KNOBS: usize = limits::PAGE_KNOBS;
-const MACH_TEXT: usize = registry::MACH_TEXT;
 
 /// The machines service.
 pub struct Machines;
@@ -37,10 +81,10 @@ impl Service for Machines {
             Some(LEN_PAGE)
         } else if kind == KIND_ACTION {
             Some(LEN_ACTION)
-        } else if kind == crate::nativepage::KIND_V2 {
-            Some(crate::nativepage::LEN_V2)
-        } else if kind == crate::nativepage::KIND {
-            Some(crate::nativepage::LEN)
+        } else if kind == KIND_NATIVE_V2 {
+            Some(nativepage::LEN_V2)
+        } else if kind == KIND_NATIVE {
+            Some(nativepage::LEN)
         } else {
             None
         }
@@ -54,7 +98,7 @@ impl Service for Machines {
     }
 
     unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
-        use crate::handlers::check_step as st;
+        use check_step as st;
         if step == st::COUNTS {
             ck_counts(c)
         } else if step == st::ACTIONS {
@@ -86,15 +130,21 @@ impl Service for Machines {
         remove(owner)
     }
 
+    unsafe fn tick(phase: u32) {
+        if phase == tick_phase::LAST {
+            pageclick::tick();
+        }
+    }
+
     unsafe fn caps(out: &mut CapSink) {
         use dkrt_sdk::proto::*;
-        let [mach, param, page] = registry::counts();
-        let (vrows, vused) = crate::dsp::rows_counts();
+        let [mach, param, page] = counts();
+        let (vrows, vused) = super::dsp::rows_counts();
         out.add(CAPK_MACHINE_ROWS, mach.0, mach.1);
         out.add(CAPK_VOICE_ROWS, vrows, vused);
         out.add(CAPK_PARAM_ROWS, param.0, param.1);
         out.add(CAPK_PAGE_ROWS, page.0, page.1);
-        out.add(CAPK_MAP_ENTRIES, dkrt_sdk::sel::MAP_N as u32, crate::assign::map_used());
+        out.add(CAPK_MAP_ENTRIES, dkrt_sdk::sel::MAP_N as u32, REAL_CORE.type_map_used());
     }
 
     unsafe fn attribute(site: u32, id: u32) -> Option<usize> {
@@ -106,7 +156,7 @@ impl Service for Machines {
     }
 
     unsafe fn guard_state(ty: u32) -> Option<GuardState> {
-        Some(GuardState { faults: crate::watch::guard_faults(ty), disabled: crate::watch::guard_disabled(ty) })
+        Some(GuardState { faults: REAL_CORE.guard_faults(ty), disabled: REAL_CORE.guard_disabled(ty) })
     }
 
     unsafe fn has_voice(rec: usize, ty: u32) -> bool {
@@ -117,15 +167,15 @@ impl Service for Machines {
         super::dsp::voice_row(rec, ty).map(|row| super::dsp::set_declared(row, rng, latched))
     }
 
-    unsafe fn dsp_check_sections(sec: &crate::dsp::DspSec) -> i32 {
+    unsafe fn dsp_check_sections(sec: &DspSec) -> i32 {
         super::dsp::check_sections(sec)
     }
 
-    unsafe fn dsp_check_rows(sec: &crate::dsp::DspSec) -> i32 {
+    unsafe fn dsp_check_rows(sec: &DspSec) -> i32 {
         super::dsp::check_rows(sec)
     }
 
-    unsafe fn dsp_check_types(sec: &crate::dsp::DspSec) -> i32 {
+    unsafe fn dsp_check_types(sec: &DspSec) -> i32 {
         super::dsp::check_types(sec)
     }
 
@@ -185,7 +235,7 @@ unsafe fn counts_of(reg: *const u8) -> (u32, u32, u32, u32, u32) {
             nm += 1;
         } else if kind == KIND_ACTION {
             na += 1;
-        } else if crate::nativepage::is_kind(kind) {
+        } else if nativepage::is_kind(kind) {
             nn += 1;
         } else if kind == KIND_PAGE {
             ng += 1;
@@ -234,14 +284,14 @@ unsafe fn ck_actions(c: &CheckCtx) -> i32 {
 unsafe fn ck_native(c: &CheckCtx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
-    let mut native_set = crate::nativepage::PageSet::<MAX_MACH>::new();
+    let mut native_set = nativepage::PageSet::<MAX_MACH>::new();
     let mut bad_native = OK;
     each(reg, |kind, b| {
-        if !crate::nativepage::is_kind(kind) || bad_native != OK { return; }
-        bad_native = crate::nativepage::check(kind, b, np, image_size);
+        if !nativepage::is_kind(kind) || bad_native != OK { return; }
+        bad_native = nativepage::check(kind, b, np, image_size);
         if bad_native != OK { return; }
         let owner = rd32(b.add(4));
-        if !native_set.claim(kind, owner, crate::nativepage::page_index(kind, b)) {
+        if !native_set.claim(kind, owner, nativepage::page_index(kind, b)) {
             bad_native = E_FORMAT; return;
         }
         let mut machine = false;
@@ -269,7 +319,7 @@ unsafe fn ck_native(c: &CheckCtx) -> i32 {
         if snapshot.iter().filter(|&&used| used).count() > 8 { bad_native = E_FORMAT; return; }
         let mut i = 0;
         while i < 8 && bad_native == OK {
-            let binding = b.add(crate::nativepage::binding_offset(kind) + 12 * i);
+            let binding = b.add(nativepage::binding_offset(kind) + 12 * i);
             if rd32(binding) == 1 {
                 let param = KNOB_PARAM | rd32(binding.add(4));
                 let mut owned = false;
@@ -356,7 +406,7 @@ unsafe fn ck_records(c: &CheckCtx) -> i32 {
             }
         } else {
             // the first word is a machine key; `assign` has the number for it (0: none, which is out of range below)
-            let t = crate::assign::resolve(rd32(b));
+            let t = REAL_CORE.type_resolve(rd32(b));
             let clone = rd32(b.add(4));
             let own = rd32(b.add(12));
             if rd32(b.add(8)) != 255 || own > 1 || (own == 1 && !has_pages) || rd32(b.add(16)) > 0xffff {
@@ -421,10 +471,10 @@ unsafe fn ck_owners(c: &CheckCtx) -> i32 {
         if kind != KIND_PAGE || bad != OK {
             return;
         }
-        let t = crate::assign::resolve(rd32(b));
+        let t = REAL_CORE.type_resolve(rd32(b));
         let mut found = false;
         each(reg, |k, m| {
-            found |= k == KIND_MACHINE && crate::assign::resolve(rd32(m)) == t;
+            found |= k == KIND_MACHINE && REAL_CORE.type_resolve(rd32(m)) == t;
         });
         if !found {
             bad = E_FORMAT;
@@ -493,9 +543,9 @@ unsafe fn apply(ctx: &ApplyCtx) -> i32 {
     let mut ai = 0usize;
     each(reg, |kind, b| {
         if kind == KIND_ACTION {
-            crate::pageclick::set(rows[rd32(b) as usize], base + rd32(b.add(4)));
+            pageclick::set(rows[rd32(b) as usize], base + rd32(b.add(4)));
             if let Some(a) = args {
-                crate::pageclick::set_arg(rows[rd32(b) as usize], a.click[ai % 32]);
+                pageclick::set_arg(rows[rd32(b) as usize], a.click[ai % 32]);
             }
             ai += 1;
         }
@@ -532,7 +582,7 @@ unsafe fn apply(ctx: &ApplyCtx) -> i32 {
         wr(s0 + 4 * KNOBS as u32, 0);
         wr(row + iw(inf, w::PGO_NAME), name);
         wr(row + iw(inf, w::PGO_TITLE), title);
-        wr(row + iw(inf, w::PGO_MACH), crate::assign::resolve(rd32(b))); // the page belongs to its machine from this store on
+        wr(row + iw(inf, w::PGO_MACH), REAL_CORE.type_resolve(rd32(b))); // the page belongs to its machine from this store on
     });
     // machines
     let knobs = iw(inf, w::KNOBS) as usize;
@@ -540,7 +590,7 @@ unsafe fn apply(ctx: &ApplyCtx) -> i32 {
         if kind != KIND_MACHINE {
             return;
         }
-        let t = crate::assign::resolve(rd32(b));
+        let t = REAL_CORE.type_resolve(rd32(b));
         let clone = rd32(b.add(4));
         let k = (t - iw(inf, w::M_DYN0)) as usize;
         let row = iw(inf, w::M_ROWS) + (t - iw(inf, w::M_FIRST)) * iw(inf, w::M_ROW_SIZE);
@@ -596,7 +646,7 @@ static mut APPLIED: Applied = Applied { codes: [0; MAX_PARAM], np: 0, ni: 0 };
 
 /// A native page record, in file order after every machine row is in: its callbacks are registered. Other kinds: OK.
 unsafe fn apply_record(kind: u32, b: *const u8, c: &ApplyCtx) -> i32 {
-    if !crate::nativepage::is_kind(kind) {
+    if !nativepage::is_kind(kind) {
         return OK;
     }
     let (reg, base, args) = (c.reg, c.base, c.args);
@@ -624,14 +674,14 @@ unsafe fn apply_record(kind: u32, b: *const u8, c: &ApplyCtx) -> i32 {
             count += 1;
         }
     }
-    if rc == OK { rc = crate::nativepage::apply(kind, b, base, codes, &words[..count], args.map(|a| a.native[ni % 8])); }
+    if rc == OK { rc = nativepage::apply(kind, b, base, codes, &words[..count], args.map(|a| a.native[ni % 8])); }
     st.ni += 1;
     rc
 }
 
 /// Give back the machine rows `owner` filled (hidden, then reset to a gap row), then its pages, then its parameters.
 unsafe fn remove(owner: u8) {
-    let inf = registry::info();
+    let inf = info();
     if inf.is_null() {
         return;
     }
@@ -643,11 +693,11 @@ unsafe fn remove(owner: u8) {
     while k < MAX_MACH {
         if s.mach_owner[k] == owner {
             let t = iw(inf, w::M_DYN0) + k as u32;
-            crate::nativepage::remove(t); // callbacks must go before code/strings can be released
+            nativepage::remove(t); // callbacks must go before code/strings can be released
             let row = iw(inf, w::M_ROWS) + (t - first) * iw(inf, w::M_ROW_SIZE);
             wr(row + iw(inf, w::O_NAME), empty); // hide first
             s.empty_rep = [0, 0, 0xffff_ffff, 0];
-            let rep = addr_of!(DKRT_REG.empty_rep) as u32 + 12;
+            let rep = addr_of!(rs().empty_rep) as u32 + 12;
             wr(row + iw(inf, w::O_LONG), rep);
             wr(row + iw(inf, w::O_SHORT), rep);
             wr(row + iw(inf, w::O_SNAME), empty);
@@ -681,7 +731,7 @@ unsafe fn remove(owner: u8) {
                 + (iw(inf, w::PG_DYN0) + k as u32 - iw(inf, w::PG_FIRST)) * iw(inf, w::PG_ROW_SIZE);
             wr(row + iw(inf, w::PGO_MACH), iw(inf, w::PG_FREE));
             s.empty_rep = [0, 0, 0xffff_ffff, 0];
-            let rep = addr_of!(DKRT_REG.empty_rep) as u32 + 12;
+            let rep = addr_of!(rs().empty_rep) as u32 + 12;
             wr(row + iw(inf, w::PGO_NAME), rep);
             wr(row + iw(inf, w::PGO_TITLE), rep);
             let (c0, s0) = (row + iw(inf, w::PGO_C), row + iw(inf, w::PGO_S));
@@ -712,7 +762,7 @@ unsafe fn remove(owner: u8) {
                 empty,
             );
             s.param_owner[k] = 0;
-            crate::pageclick::set(k, 0);
+            pageclick::set(k, 0);
         }
         k += 1;
     }

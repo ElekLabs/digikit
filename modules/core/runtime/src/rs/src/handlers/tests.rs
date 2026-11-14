@@ -1,6 +1,7 @@
 //! `FakeService`: a `Service` that records what the core calls (record kind, owner, bytes of `check`, `apply` and `remove`; the
 //! declarations, attributions and `on_loaded`), and host tests of the core's walkers over it (docs/ARCHITECTURE.md "Boundaries and tests").
 use super::*;
+use dkrt_sdk::*;
 use crate::registry::{apply_with, check_with, each, remove_with, DKRT_REG};
 use dkrt_sdk::proto::CAPK_FX_SLOTS;
 use std::sync::Mutex;
@@ -19,6 +20,7 @@ pub(crate) enum Call {
     Attribute { svc: u8, site: u32, id: u32 },
     DeclareVoice { svc: u8, rec: usize, ty: u32 },
     OnLoaded { svc: u8, rec: usize },
+    Tick { svc: u8, phase: u32 },
 }
 
 static mut LOG: Vec<Call> = Vec::new();
@@ -106,6 +108,10 @@ impl<const N: u8> Service for Fake<N> {
 
     unsafe fn on_loaded(rec: usize) {
         log().push(Call::OnLoaded { svc: N, rec });
+    }
+
+    unsafe fn tick(phase: u32) {
+        log().push(Call::Tick { svc: N, phase });
     }
 
     unsafe fn declare_voice(rec: usize, ty: u32, _: [u32; 8], _: u32) -> Option<i32> {
@@ -268,5 +274,24 @@ fn attribution_asks_the_services_in_order_until_one_answers() {
         reset();
         assert_eq!(<Two as ServiceList>::declare_voice(0, 1, [0; 8], 0), Some(OK));
         assert_eq!(*log(), vec![Call::DeclareVoice { svc: 1, rec: 0, ty: 1 }]);
+    }
+}
+
+#[test]
+fn a_tick_phase_reaches_every_service_in_list_order() {
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        reset();
+        <Two as ServiceList>::tick(tick_phase::EARLY);
+        <Two as ServiceList>::tick(tick_phase::LATE);
+        assert_eq!(
+            *log(),
+            vec![
+                Call::Tick { svc: 1, phase: tick_phase::EARLY },
+                Call::Tick { svc: 2, phase: tick_phase::EARLY },
+                Call::Tick { svc: 1, phase: tick_phase::LATE },
+                Call::Tick { svc: 2, phase: tick_phase::LATE },
+            ]
+        );
     }
 }

@@ -120,40 +120,4 @@ pub unsafe fn midi_send(len: u32, msg: *const u8, port: u32) {
     dkfw::midi::send(len, msg, port)
 }
 
-pub unsafe fn rd32(p: *const u8) -> u32 {
-    ((*p as u32) << 24)
-        | ((*p.add(1) as u32) << 16)
-        | ((*p.add(2) as u32) << 8)
-        | (*p.add(3) as u32)
-}
-
-pub unsafe fn wr32(p: *mut u8, v: u32) {
-    *p = (v >> 24) as u8;
-    *p.add(1) = (v >> 16) as u8;
-    *p.add(2) = (v >> 8) as u8;
-    *p.add(3) = v as u8;
-}
-
-/// Compare two NUL-terminated strings.
-pub unsafe fn cstr_eq(a: *const u8, b: *const u8) -> bool {
-    let mut i = 0;
-    loop {
-        let x = *a.add(i);
-        if x != *b.add(i) {
-            return false;
-        }
-        if x == 0 {
-            return true;
-        }
-        i += 1;
-    }
-}
-
-/// Length of a NUL-terminated string, at most `max`.
-pub unsafe fn cstr_len(a: *const u8, max: usize) -> usize {
-    let mut i = 0;
-    while i < max && *a.add(i) != 0 {
-        i += 1;
-    }
-    i
-}
+pub use dkrt_abi::mem::{cstr_eq, cstr_len, rd32, wr32};

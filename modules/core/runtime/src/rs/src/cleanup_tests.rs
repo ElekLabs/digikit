@@ -2,6 +2,7 @@
 //! No device ACK/block-tail/callback quiescence claim. All shared runtime state is
 //! serialized; fake CF addresses are logged at free/fini, never host-dereferenced.
 use super::*;
+use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
 use std::sync::Mutex;
 use std::vec::Vec;
 
@@ -222,8 +223,8 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     for _ in 0..3 {
         crate::loader::dsp_step();
     }
-    assert!(!dsp::fx_word_start(0, 0, 0xabcdef00));
-    assert_eq!(dsp::sample_send(0, core::ptr::null(), 4), -2);
+    assert!(!REAL_CORE.link_word(LinkWriter::FxPage, dsp::WIN_FX, 0, 0xabcdef00));
+    assert_eq!(REAL_CORE.link_sample_send(0, core::ptr::null(), 4), -2);
     assert_eq!(dsp::reserve(2, &dsp::Job::empty()), E_BUSY);
     dsp::cancel(0);
     dsp::release_range(0);

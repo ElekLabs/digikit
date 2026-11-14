@@ -16,7 +16,6 @@
 //! 2. else the lowest number that no map entry references and this boot has not given out; record the entry (rule 0);
 //! 3. else drop the lowest-index entry whose hash is not among this boot's machines (logged), take its number, record the entry (rule 0);
 //! 4. two machines with the same key in one boot: the second takes a fresh number and is not recorded.
-use crate::core_api::{CoreApi, REAL_CORE};
 use crate::{collect, dlog, selection, store};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::sel::{Record, MAP_N};
@@ -94,7 +93,7 @@ pub unsafe fn plan(rec: &Record) {
     let n = a.n;
     a.dirty = assign(&rec.map, &mut a.map, &a.key, &mut a.ty, n, &mut |ev: &Event| {
         let flags = if ev.error { logk::F_ERROR } else { dlog::INFO };
-        REAL_CORE.log(ev.kind, flags, ev.args);
+        dlog::ev(ev.kind, flags, ev.args);
     });
 }
 

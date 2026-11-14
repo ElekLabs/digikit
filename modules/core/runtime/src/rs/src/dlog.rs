@@ -65,7 +65,7 @@ pub struct Span {
 }
 
 /// The flags of a non-error event at the info level (an error event is `logk::F_ERROR`: level 0).
-pub const INFO: u16 = logk::L_INFO << logk::LEVEL_SHIFT;
+pub const INFO: u16 = dkrt_abi::core_api::LOG_INFO;
 
 /// The module whose code is running (record index + 1; 0: the runtime).
 static mut CURRENT_SRC: u8 = 0;

@@ -20,7 +20,7 @@ use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 use dkrt_sdk::*;
 
 pub const JOB_MORE: i32 = 1;
-pub const JOB_E_CANCELLED: i32 = -80;
+pub use dkrt_abi::core_api::JOB_E_CANCELLED;
 
 /// The DT2 sample pool can have 16 requests queued at once (SP_REQS), plus module jobs.
 const JOBS: usize = 24;

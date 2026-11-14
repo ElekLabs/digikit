@@ -1,9 +1,10 @@
 //! `fx` service, record handlers (interface B): the effect records of the `register` section, and the effect parts of the DSP
 //! section. The registry walker (`registry.rs`) and the DSP loader (`dsp/mod.rs`) call them through `handlers::Service`.
-use crate::handlers::{ApplyCtx, CapSink, CheckCtx, Claim, RowWrite, Service};
-use crate::registry::each;
-use crate::rd32;
-use crate::services::fx::{fxpage, fxsend};
+use super::{fxpage, fxsend};
+use dkrt_abi::dsp::{DspSec, MAX_FX};
+use dkrt_abi::mem::rd32;
+use dkrt_abi::registry::each;
+use dkrt_abi::service::{tick_phase, ApplyCtx, CapSink, CheckCtx, Claim, RowWrite, Service};
 use dkrt_sdk::*;
 
 /// The fx service.
@@ -19,7 +20,7 @@ impl Service for Fx {
     }
 
     unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
-        use crate::handlers::check_step as st;
+        use dkrt_abi::service::check_step as st;
         if step == st::COUNTS {
             // the most effects the chain takes
             let mut ne = 0u32;
@@ -28,7 +29,7 @@ impl Service for Fx {
                     ne += 1;
                 }
             });
-            if ne as usize > crate::dsp::MAX_FX {
+            if ne as usize > MAX_FX {
                 return E_FORMAT;
             }
             OK
@@ -69,6 +70,12 @@ impl Service for Fx {
         fxpage::remove(owner);
     }
 
+    unsafe fn tick(phase: u32) {
+        if phase == tick_phase::LATE {
+            fxpage::tick();
+        }
+    }
+
     unsafe fn caps(out: &mut CapSink) {
         use dkrt_sdk::proto::*;
         out.add(CAPK_FX_SLOTS, super::dsp::fx_free_rows(), super::dsp::fx_used());
@@ -88,11 +95,11 @@ impl Service for Fx {
         Some(super::dsp::fx_set_declared(rec, ordinal, flags, par))
     }
 
-    unsafe fn dsp_check_sections(sec: &crate::dsp::DspSec) -> i32 {
+    unsafe fn dsp_check_sections(sec: &DspSec) -> i32 {
         super::dsp::check_sections(sec)
     }
 
-    unsafe fn dsp_check_rows(sec: &crate::dsp::DspSec) -> i32 {
+    unsafe fn dsp_check_rows(sec: &DspSec) -> i32 {
         super::dsp::check_rows(sec)
     }
 

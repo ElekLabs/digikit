@@ -11,7 +11,7 @@
 //! that follows the release (`tick`), in the UI task, with the track number: `void fn(u32 track)`.
 //!
 //! Without any action or native page, the hooks return after their armed checks.
-use crate::paramapi::{self, Ctx, Held};
+use super::paramapi::{self, Ctx, Held};
 use crate::core_api::CoreApi;
 #[cfg(not(test))]
 use crate::core_api::REAL_CORE;
@@ -179,7 +179,7 @@ pub unsafe extern "C" fn dkrt_page_turn(view: *const u8, ev: *const u8) -> u32 {
     }
     // PARAM continues through the native handler exactly once; LOCAL/unused is
     // consumed only after recording the turn above.
-    crate::nativepage::turn(view, ev)
+    super::nativepage::turn(view, ev)
 }
 
 pub fn turn_input(detector: &mut Detector, held: &mut Held, view: usize, encoder: u32) {

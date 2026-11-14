@@ -3,7 +3,7 @@
 use crate::platform::{dkrt_irq_mask, dkrt_irq_restore, dkrt_soft_reset};
 use crate::platform::st;
 use crate::state::{init_once, DKRT_POLLS, MAX_MODULES, POLLS, DKRT_MENUS, DKRT_PATHS};
-use crate::{boot, dlog, dsp, entry, fxsend, loader, scan, settings};
+use crate::{boot, dlog, dsp, entry, loader, scan, settings};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
 
@@ -109,7 +109,7 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_fx(index: u32, out: *mut DkrtFx) -> i32 {
     init_once();
-    fxsend::fx_entry(index, &mut *out)
+    crate::handlers::exports::fx_entry(index, &mut *out)
 }
 
 

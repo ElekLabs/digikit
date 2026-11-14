@@ -18,9 +18,11 @@
 //!   settings, written to the card 2 s after the last change, and the DSP words, one word per pass through window 2 like the effect pages' values).
 //!
 //! Everything runs in the UI task (the settings store is not for other tasks).
-use crate::fxpage::{self, iw, rd, rd16, wr, wr16};
+use super::dsp as fxdsp;
+use super::fxpage;
 use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
-use crate::dsp;
+use dkrt_abi::dsp;
+use dkrt_abi::mem::{cstr_len, iw, rd, rd16, wr, wr16};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::*;
 
@@ -240,7 +242,7 @@ pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
     if !inf.is_null() {
         release(inf, k);
     }
-    let (allow, dflt) = routes_of(dsp::fx_flags_of(k));
+    let (allow, dflt) = routes_of(fxdsp::fx_flags_of(k));
     s.allow[k] = allow;
     s.dflt[k] = dflt;
     let name = REAL_CORE.module_name(owner);
@@ -253,7 +255,7 @@ pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
         s.id[k][n] = 0;
         n += 1;
     }
-    s.idlen[k] = crate::cstr_len(name, 32) as u8;
+    s.idlen[k] = cstr_len(name, 32) as u8;
     // an image with no send page (no cells) has every effect on the master, whatever the settings say
     if inf.is_null() {
         return;
@@ -315,7 +317,7 @@ pub unsafe fn apply(k: usize, owner: u8, tab: *const u8) {
         s.kit = 0;
         publish_count(inf);
     }
-    dsp::fx_set_route(k, s.route[k] as u32, s.dsp[k]);
+    fxdsp::fx_set_route(k, s.route[k] as u32, s.dsp[k]);
     // the FX view lists the send effects first: the list is built again now that the route is known
     fxpage::relist();
 }
@@ -413,7 +415,7 @@ pub unsafe fn tick() {
     if s.busy == 0 && !REAL_CORE.link_busy() {
         let mut k = 0;
         while k < dsp::MAX_FX {
-            if s.route[k] != 0 && dsp::fx_live(k) {
+            if s.route[k] != 0 && fxdsp::fx_live(k) {
                 let want = words_of(&s.amt[k]);
                 let mut j = 0;
                 while j < 4 {
@@ -431,7 +433,7 @@ pub unsafe fn tick() {
 
 /// Start the write of send amount word `j` of effect row `k` on the link; the transfer is in flight when it is accepted.
 unsafe fn send_amount<C: CoreApi>(c: &C, s: &mut SendState, k: usize, j: usize, value: u32) -> bool {
-    if c.link_fx_word(LinkWriter::FxSend, k, dsp::FXW_AMT0 + j as u32, value) {
+    if fxdsp::fx_word_start(c, LinkWriter::FxSend, k, dsp::FXW_AMT0 + j as u32, value) {
         s.busy = 1;
         s.busy_k = k as u8;
         s.busy_w = j as u8;

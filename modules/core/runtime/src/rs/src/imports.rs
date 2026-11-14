@@ -131,15 +131,15 @@ import_table! {
     ("dk_page_bind_local", collect::dk_page_bind_local),
     ("dk_fx_routes", collect::dk_fx_routes),
     ("dk_fx_mix", collect::dk_fx_mix),
-    ("dk_sample_pool_open", entry::dk_sample_pool_open),
-    ("dk_sample_pool_add", entry::dk_sample_pool_add),
-    ("dk_sample_pool_clear", entry::dk_sample_pool_clear),
-    ("dk_sample_pool_status", entry::dk_sample_pool_status),
-    ("dk_sample_pool_info", entry::dk_sample_pool_info),
-    ("dk_sample_pool_path", entry::dk_sample_pool_path),
-    ("dk_sample_pool_set", entry::dk_sample_pool_set),
-    ("dk_sample_pool_peaks", entry::dk_sample_pool_peaks),
-    ("dk_sample_pool_peaks_window", entry::dk_sample_pool_peaks_window),
+    ("dk_sample_pool_open", crate::handlers::exports::dk_sample_pool_open),
+    ("dk_sample_pool_add", crate::handlers::exports::dk_sample_pool_add),
+    ("dk_sample_pool_clear", crate::handlers::exports::dk_sample_pool_clear),
+    ("dk_sample_pool_status", crate::handlers::exports::dk_sample_pool_status),
+    ("dk_sample_pool_info", crate::handlers::exports::dk_sample_pool_info),
+    ("dk_sample_pool_path", crate::handlers::exports::dk_sample_pool_path),
+    ("dk_sample_pool_set", crate::handlers::exports::dk_sample_pool_set),
+    ("dk_sample_pool_peaks", crate::handlers::exports::dk_sample_pool_peaks),
+    ("dk_sample_pool_peaks_window", crate::handlers::exports::dk_sample_pool_peaks_window),
     ("dk_debug_peek", debug_peek),
     ("dk_debug_track_type", debug_track_type),
     ("dk_debug_selected_params", debug_selected_params),
@@ -201,15 +201,15 @@ const _: dkrt_sdk::api::DkPageBindFn = collect::dk_page_bind;
 const _: dkrt_sdk::api::DkPageBindLocalFn = collect::dk_page_bind_local;
 const _: dkrt_sdk::api::DkFxRoutesFn = collect::dk_fx_routes;
 const _: dkrt_sdk::api::DkFxMixFn = collect::dk_fx_mix;
-const _: dkrt_sdk::api::DkSamplePoolOpenFn = entry::dk_sample_pool_open;
-const _: dkrt_sdk::api::DkSamplePoolAddFn = entry::dk_sample_pool_add;
-const _: dkrt_sdk::api::DkSamplePoolClearFn = entry::dk_sample_pool_clear;
-const _: dkrt_sdk::api::DkSamplePoolStatusFn = entry::dk_sample_pool_status;
-const _: dkrt_sdk::api::DkSamplePoolInfoFn = entry::dk_sample_pool_info;
-const _: dkrt_sdk::api::DkSamplePoolPathFn = entry::dk_sample_pool_path;
-const _: dkrt_sdk::api::DkSamplePoolSetFn = entry::dk_sample_pool_set;
-const _: dkrt_sdk::api::DkSamplePoolPeaksFn = entry::dk_sample_pool_peaks;
-const _: dkrt_sdk::api::DkSamplePoolPeaksWindowFn = entry::dk_sample_pool_peaks_window;
+const _: dkrt_sdk::api::DkSamplePoolOpenFn = crate::handlers::exports::dk_sample_pool_open;
+const _: dkrt_sdk::api::DkSamplePoolAddFn = crate::handlers::exports::dk_sample_pool_add;
+const _: dkrt_sdk::api::DkSamplePoolClearFn = crate::handlers::exports::dk_sample_pool_clear;
+const _: dkrt_sdk::api::DkSamplePoolStatusFn = crate::handlers::exports::dk_sample_pool_status;
+const _: dkrt_sdk::api::DkSamplePoolInfoFn = crate::handlers::exports::dk_sample_pool_info;
+const _: dkrt_sdk::api::DkSamplePoolPathFn = crate::handlers::exports::dk_sample_pool_path;
+const _: dkrt_sdk::api::DkSamplePoolSetFn = crate::handlers::exports::dk_sample_pool_set;
+const _: dkrt_sdk::api::DkSamplePoolPeaksFn = crate::handlers::exports::dk_sample_pool_peaks;
+const _: dkrt_sdk::api::DkSamplePoolPeaksWindowFn = crate::handlers::exports::dk_sample_pool_peaks_window;
 const _: dkrt_sdk::api::DkDebugPeekFn = debug_peek;
 const _: dkrt_sdk::api::DkDebugTrackTypeFn = debug_track_type;
 const _: dkrt_sdk::api::DkDebugSelectedParamsFn = debug_selected_params;

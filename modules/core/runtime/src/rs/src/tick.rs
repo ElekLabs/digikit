@@ -5,7 +5,8 @@ use crate::health::{dkrt_health, DKRT_HEALTH};
 use crate::mailbox::mailbox_select;
 use crate::platform::st;
 use crate::state::{init_once, DKRT_MAILBOX, DKRT_POLLS, POLLS};
-use crate::{admin_cmds, boot, card, fault, entry, files, fxpage, intro, io, loader, pageclick, settings, store_writer, tracks, watch, worker};
+use crate::handlers::{tick_phase, ServiceList, Services};
+use crate::{admin_cmds, boot, card, fault, entry, files, intro, io, loader, settings, store_writer, watch, worker};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
@@ -24,10 +25,10 @@ pub unsafe extern "C" fn dkrt_tick() {
     loader::dsp_step();
     worker::tick();
     io::tick();
-    tracks::tick();
+    Services::tick(tick_phase::EARLY);
     files::tick();
-    fxpage::tick();
-    pageclick::tick();
+    Services::tick(tick_phase::LATE);
+    Services::tick(tick_phase::LAST);
     settings::tick();
     watch::tick();
     let mb = &mut *addr_of_mut!(DKRT_MAILBOX);

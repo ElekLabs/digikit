@@ -10,7 +10,7 @@ use dkrt_sdk::*;
 pub const ARENA_BYTES: usize = dkrt_sdk::device::LIMIT_ARENA_BYTES as usize;
 /// Staging buffer for a `.dkm` file (and the store directory): files are at most this size in v0.
 pub const STAGE_BYTES: usize = dkrt_sdk::device::LIMIT_STAGE_BYTES as usize;
-pub const MAX_MODULES: usize = dkrt_sdk::device::LIMIT_MODULES as usize;
+pub use dkrt_abi::MAX_MODULES;
 pub const LOG_ENTRIES: usize = 16;
 pub const STATE_MAGIC: u32 = 0x444b_5254; // "DKRT"
 

@@ -16,7 +16,16 @@ version = "0.1.0"
 dependencies = [
  "dkfw",
  "dkneeds",
+ "dkrt-abi",
  "dkrt-fit",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-abi"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
  "dkrt-sdk",
 ]
 

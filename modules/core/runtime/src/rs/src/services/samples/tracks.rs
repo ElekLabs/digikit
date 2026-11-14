@@ -23,7 +23,6 @@
 //! TODO (not wired yet): persistence of the selections to the digikit store (they live in memory per project now); a request mailbox
 //! so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
 use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
-use crate::{dlog, irq_mask, irq_restore};
 use core::hint::black_box;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::files::{HASH_ELEKTRON32, SAMPLES};
@@ -229,7 +228,7 @@ type FsMeta = unsafe extern "C" fn(u32, *mut u32) -> i32;
 
 /// The device's sample root (`select` paths are root-relative; the runtime keeps the rooted form).
 fn root() -> &'static [u8] {
-    if crate::device() == 2 {
+    if REAL_CORE.device() == 2 {
         ROOT_DN2
     } else {
         ROOT_DT2
@@ -244,20 +243,17 @@ unsafe fn probe_store(path: &[u8], head: Option<&mut [u8; 64]>) -> Result<FileId
     }
     let mut z = [0u8; dkrt_sdk::sample_tracks::PATH + 1];
     z[..path.len()].copy_from_slice(path);
-    let f = crate::store::find(z.as_ptr())?;
-    if let Some(h) = head {
-        crate::store::read_head(&f, h)?;
-    }
-    Ok(store_identity(f.size, &f.sha))
+    let (size, sha) = REAL_CORE.store_probe(z.as_ptr(), head)?;
+    Ok(store_identity(size, &sha))
 }
 
 /// Open `path` (not NUL-terminated), take the identity of its listing row (size and the stored hash by entry id, as `files.rs` lists it)
 /// and, when `head` is given, read the 64 header bytes. DT2 only: the store route of DN2 is `probe_store`.
 unsafe fn probe(path: &[u8], head: Option<&mut [u8; 64]>) -> Result<FileId, i32> {
-    if crate::device() == 2 {
+    if REAL_CORE.device() == 2 {
         return probe_store(path, head);
     }
-    if crate::device() != 1 {
+    if REAL_CORE.device() != 1 {
         return Err(E_CONTRACT);
     }
     if path.is_empty() || path.len() >= dkrt_sdk::sample_tracks::PATH {
@@ -315,7 +311,7 @@ impl Env for Device {
         let mut head = [0u8; 64];
         let id = unsafe { probe(path, Some(&mut head))? };
         // Size and format only: no PCM is read here (it can be megabytes), the pool adapter reads it.
-        if crate::device() == 2 {
+        if REAL_CORE.device() == 2 {
             return store_inspect(id.size, &id.hash, &head);
         }
         let (frames, channels) = dkrt_sdk::sample::native_header(&head, id.size)?;
@@ -381,17 +377,17 @@ impl Env for Device {
         unsafe {
             match n {
                 Note::Loaded { client, entry, frames, base_l, token } => {
-                    REAL_CORE.log(logk::POOL_LOAD, dlog::INFO, [client << 8 | entry, 0, frames, base_l, token])
+                    REAL_CORE.log(logk::POOL_LOAD, dkrt_abi::core_api::LOG_INFO, [client << 8 | entry, 0, frames, base_l, token])
                 }
                 Note::Invalid { client, entry, reason, token, count } => {
-                    REAL_CORE.log(logk::POOL_INVALID, dlog::INFO, [client << 8 | entry, reason, token, count, 0])
+                    REAL_CORE.log(logk::POOL_INVALID, dkrt_abi::core_api::LOG_INFO, [client << 8 | entry, reason, token, count, 0])
                 }
             }
         }
     }
     fn publish(&mut self, client: usize, track: usize, rec: &Strack) {
         unsafe {
-            REAL_CORE.log(logk::POOL_PUBLISH, dlog::INFO, [(client as u32) << 8 | track as u32, rec.token, rec.frames, rec.base_l, rec.base_r]);
+            REAL_CORE.log(logk::POOL_PUBLISH, dkrt_abi::core_api::LOG_INFO, [(client as u32) << 8 | track as u32, rec.token, rec.frames, rec.base_l, rec.base_r]);
             if FORCE == client {
                 return;
             }
@@ -468,7 +464,7 @@ pub unsafe fn remove(rec: usize) {
             }
             FORCE = usize::MAX;
             (*addr_of_mut!(OPS))[i] = [OP0; TRACKS];
-            crate::peakwin::reset(i);
+            super::peakwin::reset(i);
             LIVE[i] = false;
             OWNER[i] = usize::MAX;
         }
@@ -565,9 +561,9 @@ pub unsafe fn pool_add(handle: u32, path: *const u8) -> i32 {
         Ok(n) => n,
         Err(e) => return e,
     };
-    let sr = irq_mask();
+    let sr = REAL_CORE.irq_mask();
     let r = core_().pool_add(c, &full[..n]);
-    irq_restore(sr);
+    REAL_CORE.irq_restore(sr);
     r
 }
 
@@ -588,9 +584,9 @@ pub unsafe fn pool_set(handle: u32, index: u32, path: *const u8) -> i32 {
         Ok(n) => n,
         Err(e) => return e,
     };
-    let sr = irq_mask();
+    let sr = REAL_CORE.irq_mask();
     let r = core_().pool_set(c, index as usize, &full[..n]);
-    irq_restore(sr);
+    REAL_CORE.irq_restore(sr);
     r
 }
 
@@ -598,9 +594,9 @@ pub unsafe fn pool_set(handle: u32, index: u32, path: *const u8) -> i32 {
 pub unsafe fn pool_clear(handle: u32, track: u32) -> i32 {
     match client(handle) {
         Ok(c) => {
-            let sr = irq_mask();
+            let sr = REAL_CORE.irq_mask();
             let r = core_().unbind(c, track as usize);
-            irq_restore(sr);
+            REAL_CORE.irq_restore(sr);
             r
         }
         Err(e) => e,

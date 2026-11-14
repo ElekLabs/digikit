@@ -1,21 +1,9 @@
-//! Sample part of the DSP loader: the serialized window-zero transfer for a sample job.
-use crate::dsp::*;
-use crate::handlers::Claim;
-use crate::rd32;
+//! Sample part of the DSP loader: the track-table record of a DSP section.
+use super::tracks;
+use dkrt_abi::dsp::{in_sec, rd32le, DspSec, Job, FX_REC};
+use dkrt_abi::mem::rd32;
+use dkrt_abi::service::Claim;
 use dkrt_sdk::*;
-
-/// Serialized window-zero transfer for an owned sample job.
-pub unsafe fn sample_send(dst: u32, src: *const u8, len: u32) -> i32 {
-    call_send(dst, src, len)
-}
-
-pub unsafe fn sample_poll() -> Option<bool> {
-    poll_done()
-}
-
-pub unsafe fn sample_idle() -> bool {
-    ds().phase == PH_IDLE && ds().nwait == 0
-}
 
 /// DSP section, version 5: the track-table record (`bank_off` is the record's offset in the section, validated here).
 pub(crate) unsafe fn check_sections(sec: &DspSec) -> i32 {
@@ -77,7 +65,7 @@ pub(crate) unsafe fn check_sections(sec: &DspSec) -> i32 {
 
 /// A track table needs a free client slot: refuse before anything is reserved.
 pub(crate) unsafe fn admit(job: &Job) -> i32 {
-    if !job.bank.is_null() && rd32le(job.bank) == 2 && !crate::tracks::can_reserve() {
+    if !job.bank.is_null() && rd32le(job.bank) == 2 && !tracks::can_reserve() {
         return E_TABLE_FULL;
     }
     OK
@@ -87,6 +75,6 @@ pub(crate) unsafe fn admit(job: &Job) -> i32 {
 pub(crate) unsafe fn claim(c: &mut Claim) {
     let (rec, job, base) = (c.rec, c.job, c.base);
     if !job.bank.is_null() {
-        crate::tracks::reserve(rec, rd32le(job.bank.add(4)), base + rd32le(job.bank.add(8)), base + rd32le(job.bank.add(12)));
+        tracks::reserve(rec, rd32le(job.bank.add(4)), base + rd32le(job.bank.add(8)), base + rd32le(job.bank.add(12)));
     }
 }

@@ -12,6 +12,7 @@
 //! Device facts (knob positions of a machine's words, stock rows by glyph, clone_of, level) come from `Profile`, read from the `dynreg_info` table
 //! (`registry::profile`); before builders the packer took them from the device file.
 use crate::{cstr_len, MAX_MODULES};
+use dkrt_abi::registry::{KIND_NATIVE, KIND_NATIVE_V2};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
@@ -965,10 +966,10 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             };
             taken |= 1 << index;
             if v1 {
-                o.head(crate::nativepage::KIND, record_len(crate::nativepage::KIND));
+                o.head(KIND_NATIVE, record_len(KIND_NATIVE));
                 o.p32(1);
             } else {
-                o.head(crate::nativepage::KIND_V2, record_len(crate::nativepage::KIND_V2));
+                o.head(KIND_NATIVE_V2, record_len(KIND_NATIVE_V2));
                 o.p32(2);
             }
             o.p32(machine_key(keys, &c.machines[m]));

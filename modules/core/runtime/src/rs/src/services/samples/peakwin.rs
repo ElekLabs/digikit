@@ -12,9 +12,9 @@
 //! `cursor`. The UI task does not touch these then. A new key meanwhile goes to `next`; the old job is cancelled and `done`
 //! (UI task) starts the job for `next` after the old one has ended. So two jobs never share a window. A window has at most one job,
 //! so `done` needs no job id.
-use crate::tracks::{client, core_, CLIENTS};
+use super::tracks::{client, core_, CLIENTS};
 use crate::core_api::{CoreApi, REAL_CORE};
-use crate::worker::JOB_E_CANCELLED;
+use dkrt_abi::core_api::JOB_E_CANCELLED;
 use core::ptr::{addr_of, addr_of_mut, write_volatile};
 use dkrt_sdk::sample_tracks::{Handle, PATH};
 use dkrt_sdk::{E_CONTRACT, E_RANGE};
@@ -85,12 +85,12 @@ static mut WIN: [Window; CLIENTS] = [WINDOW0; CLIENTS];
 
 #[cfg(not(test))]
 unsafe fn hook_present() -> bool {
-    crate::tracks::window_hook()
+    super::tracks::window_hook()
 }
 
 #[cfg(not(test))]
 unsafe fn hook_step(h: *const Handle, path: *const u8, first: u32, frames: u32, columns: u32, out: *mut i16, cursor: *mut u32) -> i32 {
-    crate::tracks::window_step(h, path, first, frames, columns, out, cursor)
+    super::tracks::window_step(h, path, first, frames, columns, out, cursor)
 }
 
 /// Does the slot of the key still hold the same load?
@@ -290,7 +290,7 @@ pub(crate) unsafe fn window(handle: u32, index: u32, token: u32, first: u32, fra
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::worker::{test_pump, test_reset, TEST_LOCK};
+    use crate::core_api::testing::{test_pump, test_reset, TEST_LOCK};
 
     fn key(first: u32) -> Key {
         Key { index: 1, token: 7, first, frames: 1000, columns: 4 }
@@ -417,7 +417,7 @@ mod tests {
             let mut w = WINDOW0;
             let mut out = [0u8; 16];
             lookup(&mut w, &req(0), out.as_mut_ptr());
-            assert_eq!(crate::worker::cancel(0, w.job), 0);
+            assert_eq!(crate::core_api::testing::cancel(0, w.job), 0);
             test_pump();
             assert_eq!(w.state, State::Idle);
         }

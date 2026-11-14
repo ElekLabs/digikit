@@ -13,7 +13,9 @@
 //! strings the rows point to live in this module's own state, never in the arena, so unload cannot leave a dangling pointer.
 use crate::handlers::{check_step, ApplyCtx, CheckCtx, ServiceList, Services};
 use crate::rd32;
-use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
+use core::ptr::{addr_of, addr_of_mut};
+#[cfg(not(test))]
+use core::ptr::read_volatile;
 use dkrt_sdk::*;
 
 const REG_MAGIC: u32 = 0x444b_5247; // "DKRG"
@@ -23,102 +25,13 @@ const MAX_MACH: usize = limits::MACHINE_ROWS;
 const MAX_PARAM: usize = limits::PARAM_ROWS;
 const MAX_PAGE: usize = limits::PAGE_ROWS;
 const KNOBS: usize = limits::PAGE_KNOBS;
-pub(crate) const MACH_TEXT: usize = 24;
-const REP_SIZE: usize = 48;
 
-// The parameter-row writers live in `params.rs` (core); these paths keep their callers.
-pub(crate) use crate::params::{make_rep, reset_param_row, write_fx_param_row, write_param_row, write_send_param_row};
+pub(crate) use dkrt_abi::mem::{iw, rd, wr};
+pub(crate) use dkrt_abi::registry::{each, w, ApplyArgs, RegState, MACH_TEXT};
 
 extern "C" {
     /// Data symbol of core/dynreg; resolves to 0 when the module is not in the image (`[object] optional`).
     fn dynreg_info();
-}
-
-/// Words of `dynreg_info` (byte offsets / 4). Words 48, 49 and 61 to 64 were the machine-view hook and the in-use functions of hot
-/// reload (archived, docs/plans/digikit-hot-reload.md); the table keeps them as zeros so the other offsets stay.
-pub(crate) mod w {
-    pub const MAGIC: usize = 0;
-    pub const DEVICE: usize = 2;
-    pub const M_ROWS: usize = 3;
-    pub const M_ROW_SIZE: usize = 4;
-    pub const M_FIRST: usize = 5;
-    pub const M_DYN0: usize = 7;
-    pub const M_DYN_N: usize = 8;
-    pub const NAMES: usize = 9;
-    pub const PERMIT: usize = 10;
-    pub const PERTYPE: usize = 11;
-    pub const O_LONG: usize = 12;
-    pub const O_SHORT: usize = 13;
-    pub const O_F0: usize = 14;
-    pub const O_CLONE: usize = 15;
-    pub const O_POS: usize = 16;
-    pub const O_OWN: usize = 17;
-    pub const O_NAME: usize = 18;
-    pub const O_SNAME: usize = 19;
-    pub const P_TABLE: usize = 20;
-    pub const P_ROWS: usize = 21;
-    pub const P_ROW_SIZE: usize = 22;
-    pub const P_FIRST: usize = 23;
-    pub const P_DYN0: usize = 25;
-    pub const P_DYN_N: usize = 26;
-    pub const PF_SIZE: usize = 27;
-    pub const P_TEMPLATE_OFF: usize = 28;
-    pub const EMPTY: usize = 29;
-    pub const SPEC: usize = 30; // 15 words
-    pub const KNOBS: usize = 45;
-    pub const SLOT_BASE: usize = 46;
-    pub const RESERVE_TEMPLATE: usize = 47;
-    pub const PG_ROWS: usize = 50; // 0: the device keeps its knobs in the machine row
-    pub const PG_ROW_SIZE: usize = 51;
-    pub const PG_FIRST: usize = 52;
-    pub const PG_DYN0: usize = 53;
-    pub const PG_DYN_N: usize = 54;
-    pub const PGO_NAME: usize = 55;
-    pub const PGO_TITLE: usize = 56;
-    pub const PGO_C: usize = 57;
-    pub const PGO_MACH: usize = 58;
-    pub const PGO_S: usize = 59;
-    pub const PG_FREE: usize = 60;
-    pub const VERSION: usize = 1;
-    // the builder profile (version 3): words 65 to 86
-    pub const P_CLONE: usize = 65;
-    pub const P_LEVEL: usize = 66;
-    pub const P_OWN: usize = 67;
-    pub const P_TUNE: usize = 68;
-    pub const P_TUNE_SLOT: usize = 69;
-    pub const P_LEVEL_CODE: usize = 70;
-    pub const P_LEVEL_KNOB: usize = 71;
-    pub const P_NSLOTS: usize = 72;
-    pub const P_SLOTS: usize = 73; // 8 words
-    pub const P_TPL: usize = 81; // 6 words
-}
-
-#[repr(C, align(4))]
-pub(crate) struct Strings {
-    pub(crate) mach_name: [[u8; MACH_TEXT]; MAX_MACH],
-    pub(crate) mach_short: [[u8; MACH_TEXT]; MAX_MACH],
-    pub(crate) rep_long: [[u8; REP_SIZE]; MAX_MACH],
-    pub(crate) rep_short: [[u8; REP_SIZE]; MAX_MACH],
-    pub(crate) param_name: [[u8; 32]; MAX_PARAM],
-    pub(crate) param_short: [[u8; 16]; MAX_PARAM],
-    pub(crate) page_name: [[u8; MACH_TEXT]; MAX_PAGE],
-    pub(crate) page_title: [[u8; MACH_TEXT]; MAX_PAGE],
-    pub(crate) rep_pname: [[u8; REP_SIZE]; MAX_PAGE],
-    pub(crate) rep_ptitle: [[u8; REP_SIZE]; MAX_PAGE],
-}
-
-/// The registry's state: who owns each reserved row (module record index + 1, 0 = free) and the strings the rows use.
-#[repr(C, align(4))]
-pub struct RegState {
-    pub magic: u32,
-    pub registers: u32,
-    pub removes: u32,
-    pub mach_owner: [u8; MAX_MACH],
-    pub param_owner: [u8; MAX_PARAM],
-    pub page_owner: [u8; MAX_PAGE],
-    /// An empty std::string representation (length 0, capacity 0, reference count -1, NUL) for a free machine row.
-    pub(crate) empty_rep: [u32; 4],
-    pub(crate) s: Strings,
 }
 
 #[no_mangle]
@@ -199,12 +112,6 @@ pub unsafe fn free_rows() -> Option<crate::collect::Free> {
     })
 }
 
-/// The arguments of the callbacks of the records `apply` is about to write (modules): the k-th ACTION record's `arg` and the k-th
-/// native page record's `arg`. Set by the commit just before `apply`, cleared by it.
-pub struct ApplyArgs {
-    pub click: [u32; 32],
-    pub native: [u32; 8],
-}
 static mut ARGS: Option<ApplyArgs> = None;
 
 pub unsafe fn set_args(a: Option<ApplyArgs>) {
@@ -223,31 +130,6 @@ pub fn param_first() -> u32 {
     }
 }
 
-pub(crate) unsafe fn iw(i: *const u32, k: usize) -> u32 {
-    read_volatile(i.add(k))
-}
-
-pub(crate) unsafe fn rd(a: u32) -> u32 {
-    read_volatile(a as *const u32)
-}
-
-pub(crate) unsafe fn wr(a: u32, v: u32) {
-    write_volatile(a as *mut u32, v)
-}
-
-/// Walk the records of a validated section. Calls `f(kind, body)` for each.
-pub(crate) unsafe fn each(reg: *const u8, mut f: impl FnMut(u32, *const u8)) {
-    let n = rd32(reg.add(12));
-    let mut at = 16usize;
-    let mut i = 0;
-    while i < n {
-        let kind = rd32(reg.add(at));
-        let len = rd32(reg.add(at + 4)) as usize;
-        f(kind, reg.add(at + 8));
-        at += len;
-        i += 1;
-    }
-}
 
 /// Validate the `register` records of a module file. `reg` points into the file (the staging buffer). Nothing is written.
 pub unsafe fn check(reg: *const u8, size: u32, image_size: u32) -> i32 {

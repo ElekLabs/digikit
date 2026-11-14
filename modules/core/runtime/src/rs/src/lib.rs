@@ -19,9 +19,7 @@ mod api;
 mod arena;
 pub mod core_api;
 pub mod services;
-pub use services::fx::{fxpage, fxsend};
-pub use services::machines::{assign, nativepage, pageclick, paramapi};
-pub use services::samples::{peakwin, tracks};
+pub mod assign;
 pub mod collect;
 mod handlers;
 pub mod boot;
@@ -106,15 +104,15 @@ pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> 
     let words = read_volatile(addr_of!(dkrt_sound_words));
     let mut i = 0;
     while i < n {
-        let v = if i < words { fxpage::rd16(rec + SOUND_WORDS_AT + 2 * i) } else { 0 };
+        let v = if i < words { dkrt_abi::mem::rd16(rec + SOUND_WORDS_AT + 2 * i) } else { 0 };
         write_volatile(out.add(i as usize), v as i16);
         i += 1;
     }
     track as i32
 }
 
-pub(crate) unsafe extern "C" fn imp_param_get(track: u32, word: u32) -> i32 { pageclick::param_get(track, word) }
-pub(crate) unsafe extern "C" fn imp_param_set(track: u32, word: u32, raw: i32) -> i32 { pageclick::param_set(track, word, raw) }
+pub(crate) unsafe extern "C" fn imp_param_get(track: u32, word: u32) -> i32 { handlers::exports::param_get(track, word) }
+pub(crate) unsafe extern "C" fn imp_param_set(track: u32, word: u32, raw: i32) -> i32 { handlers::exports::param_set(track, word, raw) }
 
 
 #[cfg(test)]
