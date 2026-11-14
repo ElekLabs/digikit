@@ -25,6 +25,9 @@ const ANSWERS_NOTHING = new Set([
   'ports.bulk.sendOutOnly',
   'ports.bulk.closeOutOnly',
   'shell.openCardFolder',
+  'emu.stop',
+  'emu.card.reset',
+  'emu.card.stage',
 ]);
 
 export interface FakeHost extends Host {
@@ -105,6 +108,23 @@ export function createFakeHost(replies: Record<string, Reply> = {}): FakeHost {
       sourceInfo: leaf('emu.sourceInfo'),
       buildInfo: leaf('emu.buildInfo'),
       launch: leaf('emu.launch'),
+      // synchronous, and recorded like the others: the replies say whether the app is native (default: yes)
+      inApp: () => {
+        calls.push({ command: 'emu.inApp', args: [] });
+        return 'emu.inApp' in table
+          ? Boolean(
+              typeof table['emu.inApp'] === 'function' ? (table['emu.inApp'] as () => unknown)() : table['emu.inApp'],
+            )
+          : true;
+      },
+      startup: leaf('emu.startup'),
+      step: leaf('emu.step'),
+      tap: leaf('emu.tap'),
+      stop: leaf('emu.stop'),
+      audioStatus: leaf('emu.audioStatus'),
+      saveDiagnostics: leaf('emu.saveDiagnostics'),
+      stageSyx: leaf('emu.stageSyx'),
+      card: { reset: leaf('emu.card.reset'), stage: leaf('emu.card.stage'), load: leaf('emu.card.load') },
     },
     shell: { openCardFolder: leaf('shell.openCardFolder') },
   };

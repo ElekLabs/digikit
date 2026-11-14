@@ -3,8 +3,11 @@
 // pane's (../transfer/web-env.ts). Every URL goes through BASE_URL.
 import { SHOW_EMULATOR } from '../../site.config.mjs';
 import { handoffStore, putHandoff } from '../patch/handoff';
-import { PatchKit, type PreparedFlash } from '../patch/patchkit-core';
+import type { PatchKitLike, PreparedFlash } from '../patch/patchkit-core';
+import { senderKit } from '../patch/sender-kit';
 import { createWebTransferApp, type WebTransfer } from '../transfer/web-env';
+import { fetchWasmSource, type WasmSource } from '../wasm-source';
+import { browserWorkers, type WorkerFactory, type WorkerPort } from '../workers';
 import { createFirmwareApp, type FirmwareApp } from './app';
 import type { FirmwareEnv } from './env';
 import './firmware-site.css';
@@ -18,19 +21,34 @@ interface Reply {
   prepared?: Omit<PreparedFlash, 'image'> & { image: ArrayBuffer };
 }
 
+/** What the site's Firmware environment takes: where its workers and wasm come from (a test gives fakes), and how the sender kit is made. */
+export interface WebFirmwareDeps {
+  workers?: WorkerFactory;
+  wasm?: WasmSource;
+  /** The base URL the patch worker fetches the wasm and the module bundle from. */
+  base?: string;
+  /** Makes the sender kit from the wasm bytes (default: `PatchKit.create`); a test gives a stub kit. */
+  createKit?: (bytes: ArrayBuffer, bundle: string) => Promise<PatchKitLike>;
+}
+
 /** The site's Firmware environment: patchkit.wasm in a worker, a second instance for the sender, a download link. */
-export function createWebFirmwareEnv(): FirmwareEnv {
-  let worker: Worker | undefined;
+export function createWebFirmwareEnv({
+  workers = browserWorkers(),
+  base = BASE,
+  wasm = fetchWasmSource(base),
+  createKit,
+}: WebFirmwareDeps = {}): FirmwareEnv {
+  let worker: WorkerPort | undefined;
   let nextId = 1;
   const pending = new Map<number, { resolve: (r: Reply) => void; reject: (e: Error) => void }>();
   let ready: Promise<void> | undefined;
 
-  function patchWorker(): Promise<Worker> {
+  function patchWorker(): Promise<WorkerPort> {
     if (!worker) {
-      const w = new Worker(new URL('../patch/patch-worker.ts', import.meta.url), { type: 'module' });
+      const w = workers.create('patch');
       worker = w;
       ready = new Promise<void>((resolve, reject) => {
-        w.onmessage = ({ data }: MessageEvent<Reply>) => {
+        w.onmessage = ({ data }: { data: Reply }) => {
           if (data.type === 'ready') return resolve();
           const waiter = data.id === undefined ? undefined : pending.get(data.id);
           if (!waiter) return reject(new Error(data.error ?? 'The patch tool failed to start.'));
@@ -39,7 +57,7 @@ export function createWebFirmwareEnv(): FirmwareEnv {
           else waiter.resolve(data);
         };
         w.onerror = (e) => reject(new Error(`The patch tool failed to start: ${e.message}`));
-        w.postMessage({ type: 'init', wasmUrl: `${BASE}patchkit.wasm`, bundleUrl: `${BASE}modules/bundle.json` });
+        w.postMessage({ type: 'init', base });
       });
       ready.catch(() => {
         worker = undefined;
@@ -49,21 +67,8 @@ export function createWebFirmwareEnv(): FirmwareEnv {
     return ready!.then(() => worker!);
   }
 
-  let senderKit: Promise<PatchKit> | undefined;
   /** The sender needs no firmware or modules: an empty bundle. */
-  function kit(): Promise<PatchKit> {
-    senderKit ??= fetch(`${BASE}patchkit.wasm`)
-      .then((r) => {
-        if (!r.ok) throw new Error('patch tool files are missing from this site');
-        return r.arrayBuffer();
-      })
-      .then((b) => PatchKit.create(b, '{"ports":[],"modules":[]}'))
-      .catch((e) => {
-        senderKit = undefined;
-        throw e;
-      });
-    return senderKit;
-  }
+  const kit = senderKit(wasm, createKit);
 
   const webFirmwareEnv: FirmwareEnv = {
     async prepare(stock, restore, set = '') {

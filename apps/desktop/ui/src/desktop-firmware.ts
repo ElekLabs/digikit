@@ -3,8 +3,10 @@
 // the system's save dialog, and the Log panel. The MIDI port is the Transfer pane's (desktop-env.ts).
 import type { TransferApp } from '../../../web/src/transfer/app';
 import type { FirmwareEnv } from '../../../web/src/firmware/env';
-import { PatchKit, preparedFromSummary, type FlashSummary } from '../../../web/src/patch/patchkit-core';
+import { preparedFromSummary, type FlashSummary } from '../../../web/src/patch/patchkit-core';
+import { senderKit } from '../../../web/src/patch/sender-kit';
 import { createDesktopDefaultModules } from './default-modules';
+import { hostWasmSource } from './desktop-wasm';
 import { flashEntry } from './log-core';
 import { logInput } from './log-state';
 import type { Host } from './host/host';
@@ -23,18 +25,8 @@ export function unpack(buf: Uint8Array): { summary: FlashSummary; image: Uint8Ar
  * Transfer app whose sessions the default modules install over (a function: the apps are built from the environments).
  */
 export function createDesktopFirmwareEnv(host: Host, app: () => TransferApp): FirmwareEnv {
-  let sender: Promise<PatchKit> | undefined;
   /** The sender needs no firmware or modules: an empty bundle. */
-  const kit = (): Promise<PatchKit> => {
-    sender ??= host.firmware
-      .patchkitWasm()
-      .then((b) => PatchKit.create(b, '{"ports":[],"modules":[]}'))
-      .catch((e) => {
-        sender = undefined;
-        throw e;
-      });
-    return sender;
-  };
+  const kit = senderKit(hostWasmSource(host));
   return {
     async prepare(stock, restore, set = '') {
       const raw = new Uint8Array(await host.firmware.prepare(stock, { restore, set }));

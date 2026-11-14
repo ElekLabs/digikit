@@ -8,7 +8,7 @@ import { createConnection, type ConnectionApp } from './connection-state';
 import type { TransferEnv } from './env';
 import type { SessionHub } from './session-core';
 import { createTarget, type TargetApp } from './target';
-import { createTransferBackend, type TransferBackendApp } from './transfer-backend';
+import { createTransferBackend, type BackendDeps, type TransferBackendApp } from './transfer-backend';
 import { createTransferState, type TransferState } from './transfer-state';
 
 export interface TransferApp {
@@ -26,12 +26,15 @@ export interface TransferApp {
   loadLibrary: TransferBackendApp['loadLibrary'];
 }
 
-export function createTransferApp(env: TransferEnv, deps: { storage: KeyValue; sessions: SessionHub }): TransferApp {
+export function createTransferApp(
+  env: TransferEnv,
+  deps: { storage: KeyValue; sessions: SessionHub; needs?: BackendDeps['needs'] },
+): TransferApp {
   const { storage, sessions } = deps;
   const connection = createConnection(env);
   const jobs = createJobs();
   const target = createTarget({ env, storage, sessions, connection });
   const state = createTransferState({ env, storage, jobs });
-  const { transferBackend, loadLibrary } = createTransferBackend({ env, target, connection });
+  const { transferBackend, loadLibrary } = createTransferBackend({ env, target, connection, needs: deps.needs });
   return { env, storage, connection, jobs, target, state, backend: transferBackend, loadLibrary };
 }

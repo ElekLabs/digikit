@@ -6,6 +6,7 @@
 import type { JSX } from 'solid-js';
 import type { BulkOpener } from '@digi/dk-session/bulk-select';
 import type { DkTransport } from '@digi/dk-session';
+import type { WasmSource } from '../wasm-source';
 import type { Target } from './target';
 import type { BarInfo } from './transfer-core';
 import type { PageCtx } from './TransferParts';
@@ -110,8 +111,8 @@ export interface TransferBulk extends BulkOpener {
 
 export interface TransferEnv {
   library: TransferLibrary;
-  /** The bytes of patchkit.wasm (its `pk_needs` tells what a .dkm takes of the device). */
-  patchkitWasm(): Promise<ArrayBuffer>;
+  /** The wasm files of the app (`patchkit.wasm`: its `pk_needs` tells what a .dkm takes of the device). */
+  wasm: WasmSource;
   /** The name of the device with this id (`dt2`: "Digitakt II"). */
   deviceName(device: string): Promise<string>;
   targets: TransferTargets;

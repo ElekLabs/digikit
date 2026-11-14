@@ -1,7 +1,7 @@
 // The Transfer backend of one app (createTransferBackend): the protocol client and the Transfer logic of apps/web/src/modules (TypeScript), over the selected target (target.ts).
 // What differs between the apps comes from the environment (env.ts): the library of built modules, patchkit.wasm and the transports.
 // Nothing is built here and no process is started.
-import { DkNeeds } from '../modules/dkneeds';
+import { DkNeeds, type NeedsLike } from '../modules/dkneeds';
 import { setFitReader } from '../modules/fit';
 import { fileHashHex, fmtVersion, storePath } from '@digi/dk-session';
 import type { DkInfoFull, DkSession } from '@digi/dk-session';
@@ -25,6 +25,7 @@ import {
 } from '../modules/dktransfer';
 import { RPC_SOFTWARE_VERSION, parseSoftwareVersion } from './connection-core';
 import type { ConnectionApp } from './connection-state';
+import type { WasmSource } from '../wasm-source';
 import type { TransferEnv } from './env';
 import { targetLabel, type TargetApp } from './target';
 
@@ -32,17 +33,22 @@ export interface BackendDeps {
   env: TransferEnv;
   target: Pick<TargetApp, 'target' | 'checkRuntime' | 'session'>;
   connection: Pick<ConnectionApp, 'asked' | 'noteConnection'>;
+  /** Makes the needs reader from the app's wasm (default: patchkit.wasm in `DkNeeds`); a test gives a stub. */
+  needs?: (wasm: WasmSource) => Promise<NeedsLike>;
 }
 
-export function createTransferBackend({ env, target: targetApp, connection }: BackendDeps) {
+export function createTransferBackend({
+  env,
+  target: targetApp,
+  connection,
+  needs: makeNeeds = async (wasm) => DkNeeds.create(await wasm.bytes('patchkit.wasm')),
+}: BackendDeps) {
   const { target, checkRuntime, session: running } = targetApp;
   const { asked, noteConnection } = connection;
-  let needsReader: Promise<DkNeeds> | undefined;
+  let needsReader: Promise<NeedsLike> | undefined;
   /** What a .dkm takes of the device and whether it fits: patchkit.wasm's `pk_needs` and `pk_fit`, loaded once (a failed load is tried again at the next use). */
-  function needs(): Promise<DkNeeds> {
-    needsReader ??= env
-      .patchkitWasm()
-      .then((b) => DkNeeds.create(b))
+  function needs(): Promise<NeedsLike> {
+    needsReader ??= makeNeeds(env.wasm)
       .then((r) => {
         setFitReader(r); // the fit rule of the rows comes from the same wasm
         return r;

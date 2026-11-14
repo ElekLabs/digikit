@@ -10,6 +10,7 @@ import { createTransferApp, type TransferApp } from './app';
 import type { TransferEnv } from './env';
 import { createSessionHub } from './session-core';
 import type { Target } from './target';
+import { fetchWasmSource } from '../wasm-source';
 import { MODULE_FILES } from './module-files.generated';
 import { createWebLibrary } from './web-library';
 import {
@@ -67,6 +68,7 @@ export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usable
   }
 
   const open = new Map<string, WebMidiTransport>();
+  const wasm = fetchWasmSource(BASE);
 
   const { library, source } = createWebLibrary({
     bytes: async (path) => new Uint8Array(await (await fetchOk(`${BASE}modules/${path}`)).arrayBuffer()),
@@ -77,7 +79,7 @@ export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usable
     library,
     source,
     moduleFiles: (id) => MODULE_FILES[id],
-    patchkitWasm: async () => (await fetchOk(`${BASE}patchkit.wasm`)).arrayBuffer(),
+    wasm,
     deviceName: async (device) => deviceNameOf(device),
     libraryDevices: ['dt2', 'dn2'],
     // only where the browser has WebUSB; devices the user already allowed are used, `requestAccess` (from a click) asks for another

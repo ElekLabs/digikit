@@ -83,6 +83,8 @@ Iterate with `dk:dev` ([testing](docs/TESTING.md) "Fast iteration"), not with ha
 
 A PR that adds or changes a tool a developer runs documents its use in the tool's owning doc (commands that work from a clean checkout, expected output) and links it from docs/DEVELOPMENT.md.
 
+The desktop UI and the site keep no module-level state: they build an app object at startup and take the Host, `KeyValue`, `BlobStore`, `WorkerFactory` and `WasmSource` as arguments, so a test gives fakes ([DEVELOPMENT.md](docs/DEVELOPMENT.md) "Host and EmuRpc", "The app object", "WorkerFactory"). oxlint fails `invoke` outside `tauri-host.ts` and `localStorage`, `indexedDB` or `new Worker` outside `storage.ts`, `blob-store.ts` and `workers.ts`.
+
 Run Python tools from the repository root as `uv run python -m tools.<owner>.<module>`. Import through `tools`; never modify `sys.path`. Child tools use `[sys.executable, "-m", ...]` with `env=tools.python_env()`. Find tasks with `mise tasks` and options with `mise run TASK -- --help`.
 
 Use existing database helpers before one-off queries: `tools/coldfire/cf.py` and `tools/sharc_dev/sharc.py`. Read dumps first. Ghidra uses one JVM per project and language `68000:BE:32:ColdfireEMAC`; check apparent missing callers with `tools/coldfire/refscan.py`.

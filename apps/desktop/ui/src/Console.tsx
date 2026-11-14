@@ -5,7 +5,6 @@ import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
 import {
-  nativeRuntime,
   type EmulatorRuntime,
   type FirmwareInfo,
   type NativeAudioStatus,
@@ -41,6 +40,7 @@ import {
   reloadFailureEntry,
   unseenErrors,
 } from './log-core';
+import { createNativeRuntime } from './native-runtime';
 import { createPrefs } from './prefs';
 import { pgoWarning, type BuildInfo } from './pgo-warning';
 import { createLogFollow, followSession } from './log-follow';
@@ -476,7 +476,7 @@ export default function Console(props: { host: Host }) {
     }
   };
   onMount(() => {
-    void nativeRuntime(update).then((r) => {
+    void createNativeRuntime(props.host, update).then((r) => {
       if (!r) {
         setOutsideApp(true);
         return;

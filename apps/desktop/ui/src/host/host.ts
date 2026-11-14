@@ -2,13 +2,11 @@
 // real implementation is tauri-host.ts (the only module that calls `invoke`), tests use fake-host.ts. The Rust side is
 // apps/desktop/src-tauri/src/main.rs (`generate_handler!`) and its command modules. The shapes here follow the Rust signatures and
 // carry no UI types, so the folder can move into a shared package (the browser app would implement the same interface).
-//
-// Not listed: the commands the UI does not call today (emu_stage_syx, emu_save_diagnostics, emu_audio_status, emu_startup, emu_step,
-// emu_tap, emu_stop, emu_card_reset, emu_card_stage, emu_card_load). Add a method here, in TauriHost and in FakeHost when the UI starts to use one.
 
 /** The emulator control RPC (`emu_call`): one protocol method of the controller (docs/CONTROL.md). */
 export interface EmuRpc {
-  call<T>(method: string, params?: Record<string, unknown>): Promise<T>;
+  /** `session`: the session token of the webview; the controller refuses the call when it is no longer the current one (`firmware.load` and `restart` start the session they carry). */
+  call<T>(method: string, params?: Record<string, unknown>, session?: number): Promise<T>;
 }
 
 /** A file or folder of a listing of the chosen local folder (`local_list`). */
@@ -119,6 +117,27 @@ export interface EmuHost {
   /** The build of the native emulator (the PGO warning reads it); the shape is the UI's (pgo-warning.ts). */
   buildInfo<T>(): Promise<T>;
   launch(): Promise<EmuLaunch>;
+  /** The page runs inside the desktop app (false in a plain browser, such as the preview). */
+  inApp(): boolean;
+  /** The snapshot of the startup firmware, or a refusal when none is selected (the shapes are the UI's: native-runtime.ts). */
+  startup<T>(): Promise<T>;
+  /** Run the guest for `budget` instructions of the session; the snapshot after it. */
+  step<T>(sessionId: number, budget: number): Promise<T>;
+  /** Press a key, release it after `hold` instructions; the snapshot after it. */
+  tap<T>(sessionId: number, code: number, hold?: number): Promise<T>;
+  stop(sessionId: number): Promise<void>;
+  /** The status of the default audio output, or null when there is none yet. */
+  audioStatus<T>(sessionId: number): Promise<T | null>;
+  /** Save a diagnostics report; the path written. */
+  saveDiagnostics(name: string, json: string): Promise<string>;
+  /** Put a firmware file the user picked in the page into a file the controller reads; its path. */
+  stageSyx(bytes: Uint8Array, name: string): Promise<string>;
+  /** The card of the Digitakt II built from files (`CardBridge`). */
+  card: {
+    reset(): Promise<void>;
+    stage(name: string, bytes: Uint8Array): Promise<void>;
+    load<T>(name: string | null): Promise<T>;
+  };
 }
 
 /** The operating system's shell. */

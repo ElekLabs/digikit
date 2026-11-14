@@ -3,7 +3,6 @@ import type { DkSession } from '@digi/dk-session';
 import { createFakeSessions, createFakeTransferApp, type FakeTransferApp } from '../../../web/src/transfer/fake-app';
 
 const mocks = vi.hoisted(() => ({ info: vi.fn(), scan: vi.fn(), buildView: vi.fn() }));
-vi.mock('../../../web/src/modules/dkneeds', () => ({ DkNeeds: { create: async () => ({}) } }));
 vi.mock('../../../web/src/modules/dktransfer', async (original) => ({
   ...(await original<object>()),
   buildView: mocks.buildView,

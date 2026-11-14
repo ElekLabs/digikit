@@ -1,6 +1,7 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { panels } from '../data/faceplates';
 import { deviceProfiles, localReadyFirmwareSha256, type DeviceId } from '../data/device-profiles';
+import { browserRuntimeDeps } from '../runtime/browser-deps';
 import { browserRuntime, type EmulatorRuntime, type RuntimeUpdate } from '../runtime/runtime';
 import { parseLeds } from '../runtime/leds';
 import { PcmSink, resumeOnNextGesture } from '../runtime/audio';
@@ -97,7 +98,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   };
   let disposed = false;
   onMount(() => {
-    runtimeReady = Promise.resolve(props.runtime ?? browserRuntime(update)).then((selected) => {
+    runtimeReady = Promise.resolve(props.runtime ?? browserRuntime(update, browserRuntimeDeps())).then((selected) => {
       if (disposed) {
         selected.dispose();
         return undefined;

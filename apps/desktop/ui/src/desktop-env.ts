@@ -9,6 +9,7 @@ import { MODULE_FILES } from '../../../web/src/transfer/module-files.generated';
 import { targetLabel, type Target } from '../../../web/src/transfer/target';
 import { failureLine } from '../../../web/src/transfer/wait-core';
 import { bumpCardRefresh } from './card-state';
+import { hostWasmSource } from './desktop-wasm';
 import { reloadWithRuntime } from './emulator-actions';
 import { TauriBulkLink } from './bulk-link';
 import { EmuUsbTransport, emulatorMode } from './desktop-transport';
@@ -126,7 +127,7 @@ export function createDesktopEnv(host: Host, app: () => TransferApp): TransferEn
       read: async (device, path) => new Uint8Array(await host.library.read(device, path)),
     },
     moduleFiles: (id) => MODULE_FILES[id],
-    patchkitWasm: () => host.firmware.patchkitWasm(),
+    wasm: hostWasmSource(host),
     deviceName: async (device) => (await samples().deviceStorage(device)).name,
     // the Emulator target has its own bulk link (the daemon's usb.bulk.in/out), so the pill and the transfers there follow the same path as a device
     bulk: {

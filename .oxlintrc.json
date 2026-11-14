@@ -58,12 +58,16 @@
           {
             "name": "indexedDB",
             "message": "Take a BlobStore (apps/web/src/blob-store.ts); only blob-store.ts opens IndexedDB."
+          },
+          {
+            "name": "Worker",
+            "message": "Take a WorkerFactory (apps/web/src/workers.ts); only workers.ts calls new Worker."
           }
         ]
       }
     },
     {
-      "files": ["apps/web/src/storage.ts", "apps/web/src/blob-store.ts"],
+      "files": ["apps/web/src/storage.ts", "apps/web/src/blob-store.ts", "apps/web/src/workers.ts"],
       "rules": {
         "eslint/no-restricted-globals": "off"
       }

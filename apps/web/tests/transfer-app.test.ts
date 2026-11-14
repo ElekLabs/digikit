@@ -61,7 +61,11 @@ test('leaving a MIDI port closes it, cancels its requests and drops its session;
   await app.target.session();
   await app.target.selectTarget({ kind: 'emulator' });
   assert.deepEqual(closed, ['Digitakt II']);
-  assert.deepEqual(sessions.cancelled, ['emulator', 'midi:Digitakt II'], 'each change cancels the requests of the target it leaves');
+  assert.deepEqual(
+    sessions.cancelled,
+    ['emulator', 'midi:Digitakt II'],
+    'each change cancels the requests of the target it leaves',
+  );
   assert.deepEqual(sessions.dropped, ['midi:Digitakt II']);
   assert.equal(app.storage.data.get('digikit.target'), JSON.stringify({ kind: 'emulator' }));
   assert.equal(app.target.lastMidiPort(), 'Digitakt II', 'the Log still follows the last port');
