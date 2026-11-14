@@ -26,7 +26,7 @@ Start from `docs/plans/sdk-runtime-roadmap.md`, then this file. Results are in t
 - `prof/p4-cost`: P4 sharc.profile (feature `sharc-profile`), `dkprof::budget` and `check_selection`, pk_conform on Rust.
 - `ui/p6-names`: P6 Log-pane names over dk-session plus debug PEEK (emulator `runtime.maps`, device ship map from firmware prepare), Memory per-module rows.
 
-Next step: merge `rt/r7-registry` into `gate/batch4` once its follow-ups land, then run one gate (`DIGI_GATE_BASE=origin/main mise run test`, about 100 min). Its failures name tests; a fix agent gets only the failure list. Then push and merge each branch as its own PR, in this order: noise fixes, R6a, P4, P6, R7.
+R7 is merged into `gate/batch4` and the combined gate is running (`DIGI_GATE_BASE=origin/main mise run test`, about 100 min). Its failures name tests; a fix agent gets only the failure list. Then push and merge each branch as its own PR, in this order: noise fixes, R6a, P4, P6, R7.
 
 ## In progress
 
@@ -62,6 +62,10 @@ Next step: merge `rt/r7-registry` into `gate/batch4` once its follow-ups land, t
   - One .dkm format change carrying the R12 entries, gated by a named list.
   - The storage interface and files memory split into their own item.
   - R7 defines the Verdict type; R11 builds the states on it.
+- **S5 split:**
+  - S5a: derived cost in the header as two ids (DSP_COST_VOICE per voice, DSP_COST_FX summed); one shared no_std check_selection for the planner, menu, Transfer and patchkit; headroom, voices and the 85% margin from the generated profile; note-on checked in module:check only; delete max_cycles_* and the overrides (in R7's release); the DK_SPAN definition with a no-sink proof (insn ratio within 0.02%).
+  - S5b: dksharc slice 2 (def/use), the stock save-set finding with a second-agent [V], one rules section in sdk/, and the Rust rules check (warn first, then refuse).
+  - S5a starts after P4 and R7 merge; S5b's static parts can start any time.
 - **R3:**
   - Device facts come from devices/*.toml (`[capabilities]` from the device-registry branch, plus `[digikit] sample_path_max`), generated into the device objects.
   - No device-id comparisons above L1 (layer rule 7).
