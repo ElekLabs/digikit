@@ -568,7 +568,9 @@ SC_HINT = (
 
 
 RT_SRC = "modules/core/runtime/src/rs/src"
-RT_CRATE_REF = re.compile(r"\bcrate::(?:\{([^}]*)\}|([A-Za-z_]\w*)(?:::([A-Za-z_]\w*))?)")
+RT_CRATE_REF = re.compile(
+    r"\bcrate::(?:\{([^}]*)\}|([A-Za-z_]\w*)(?:::([A-Za-z_]\w*))?)"
+)
 RT_BARE_SERVICES = re.compile(r"(?<![\w:])services::")
 ARROW_SERVICE_HINT = (
     "call the core through CoreApi (crate::core_api) and take pure types from dkrt-abi; a service reaches another service through the core "
@@ -598,21 +600,53 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
             line = text.count("\n", 0, m.start()) + 1
             where = f"{RT_SRC}/{r.as_posix()}:{line}"
             if m.group(1) is not None:
-                names = [(n.strip().split("::") + [""])[:2] for n in m.group(1).split(",") if n.strip()]
+                names = [
+                    (n.strip().split("::") + [""])[:2]
+                    for n in m.group(1).split(",")
+                    if n.strip()
+                ]
             else:
                 names = [[m.group(2), m.group(3) or ""]]
             for first, second in names:
                 if own is not None:
                     if first == "services" and second != own:
-                        out.append(Violation(where, "arrows", f"service {own} names {first}::{second or '*'}", ARROW_SERVICE_HINT))
+                        out.append(
+                            Violation(
+                                where,
+                                "arrows",
+                                f"service {own} names {first}::{second or '*'}",
+                                ARROW_SERVICE_HINT,
+                            )
+                        )
                     elif first not in ("services", "core_api"):
-                        out.append(Violation(where, "arrows", f"service {own} names core module crate::{first}", ARROW_SERVICE_HINT))
+                        out.append(
+                            Violation(
+                                where,
+                                "arrows",
+                                f"service {own} names core module crate::{first}",
+                                ARROW_SERVICE_HINT,
+                            )
+                        )
                 elif first == "services" and r.as_posix() != "handlers.rs":
-                    out.append(Violation(where, "arrows", f"the core names crate::services::{second or '*'}", ARROW_CORE_HINT))
+                    out.append(
+                        Violation(
+                            where,
+                            "arrows",
+                            f"the core names crate::services::{second or '*'}",
+                            ARROW_CORE_HINT,
+                        )
+                    )
         if own is None and r.as_posix() != "handlers.rs":
             for m in RT_BARE_SERVICES.finditer(text):
                 line = text.count("\n", 0, m.start()) + 1
-                out.append(Violation(f"{RT_SRC}/{r.as_posix()}:{line}", "arrows", "the core names services::", ARROW_CORE_HINT))
+                out.append(
+                    Violation(
+                        f"{RT_SRC}/{r.as_posix()}:{line}",
+                        "arrows",
+                        "the core names services::",
+                        ARROW_CORE_HINT,
+                    )
+                )
     return out
 
 
