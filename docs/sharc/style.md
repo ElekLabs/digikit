@@ -15,7 +15,7 @@ One `.s` file per module (later, one per SDK kernel in a DSP folder under `sdk`)
 3. Module `#define` constants: `PK_STATE`, `PK_VOICES` (prefix with the module's two or three letters).
 4. `.SECTION/PM seg_pmco;` code, then `.GLOBAL` and `.EXTERN` lines.
 5. Private helpers first, entry points last or first, each with a header comment: inputs, outputs, clobbers.
-6. `.SECTION/DM seg_dmda;` data: `.VAR` tables, then the descriptor (`_xx_desc`) at the end.
+6. `.SECTION/DM seg_dmda;` data: single `.VAR` words, then the descriptor (`_xx_desc`) at the end. Tables are `.PKHEX` (section 8).
 
 Label rules:
 - Public: `_xx_render`, `_xx_note_on`, `_xx_desc`. Private: `_xx_name`. Loop labels: `_xx_name_loop`, `_xx_name_end`.
@@ -212,3 +212,27 @@ After the loop, write F1 (not F0) to the state so rounding drift does not accumu
   (section 5). It does not say that B registers other than B3 are preserved: say whether they are **[O]**.
 - `dk_machine.inc` provides `DK_IN_W_*` (word offsets) and `DK_DESC_*`. It has no names for register roles or
   state words; that is left to each module.
+
+## 8. Assembler facts met while writing kernels
+
+Met while writing `khan/md` (eight FM drum kernels) with the pinned Selache (`02d6d785`). Each was tried with `selas` on a file of
+a few lines; the module source keeps the forms that work.
+
+- **Tables: `.PKHEX`, not a `.VAR` array [D].** `.VAR _tab[2] = 0x3f800000, 0x40000000;` does not assemble as a table: `selas`
+  keeps one data word and writes a relocation (type 1) to an undefined symbol whose name is the initializer text
+  (`0x3f800000, 0x40000000`), and `patchkit build` then stops with `relocation in unexpected section seg_dmda`. The message
+  does not name the line. Single-word `.VAR`s work, and code may read one by its absolute address (pluck's `DM(_pk_rng)`).
+  For a table, use `.PKHEX name, HEX;` (packages/patchkit/src/build/sharc_obj.rs, step 1), written by a generator as tb303's
+  `gen_tables.py` does, and read it through an I register.
+- **No constant operand in a compute [D].** `R1 = R1 + 112;` and `F1 = F1 + 1.0;` stop with `unknown register: 112` (or `1.0`).
+  Load the constant into a register first (`R2 = 112; R1 = R1 + R2;`). Shifts take a constant, negative ones too
+  (`R1 = LSHIFT R0 BY -6;`).
+- **Fn and Rn are one register.** A macro or helper that writes F4 also destroys R4, which holds the state pointer at entry
+  (section 5); one that writes F9 destroys a counter kept in R9. Give each macro a clobber list in register numbers
+  (`clobbers R0-R4, I5`), whichever view it writes, and copy entry registers that must survive it into an I or M register.
+- **A float-to-integer overflow does not saturate.** With ALUSAT off (the MODE1 entry value, section 5), finding 103 measured
+  `FIX` of an out-of-range float or an infinity on a Digitakt II: `0xFFFFFFFF` (-1), not `0x7FFFFFFF`, for both signs. The
+  emulator gives `TRUNC` the same result; `TRUNC` itself was not in that probe **[O]**. A phase increment or phase-modulation
+  term that can leave the 32-bit range becomes a step of -1. Clip the float first (`CLIP Fx BY Fy`), or compute the term at a
+  quarter of its scale, convert, and shift left by 2, so that it wraps like the phase itself.
+
