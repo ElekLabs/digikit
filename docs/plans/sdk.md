@@ -463,6 +463,15 @@ These come from the profiling work and land after the steps in section 12 that t
 - **Cycle cost.** `max_cycles_*` stops being written by hand. The packer writes a DSP cycles-per-block use into the header and the report,
   from the `module:check` emulator measurement at the device's voice count or a static estimate over the module's sharcdb tables, scaled
   by the emulator-to-device calibration ([profiling.md](profiling.md) 6 and 7.3). The broker checks it (runtime-and-services 5.3).
+  P4 measures and names the cost; this item puts it into the header and the broker. The unit is **instructions** per block (SHARC+
+  instructions the emulator counts) until the device calibration (P9); the name "cycles" waits for it. `dkprof::budget` holds the rule,
+  filled from `devices/*.toml` and `devices/cycle-factors.json` (`patchkit budget` prints it; `module:check` reads that). The headroom of a
+  device is what is left of the block between the stock firmware (`stock_busy`) and 85 percent of the block, with instructions projected to
+  cycles by the "high" factor (the 15 percent are the safety margin until P9). A machine's cost is its own worst steady block for one
+  voice, measured by `module:check`; the check is `voice-block <= headroom / voices`. The note-on block is checked on its own against the
+  whole headroom, never added to the other voices' steady blocks. The selection rule the broker applies (`dkprof::budget::check_selection`):
+  `max(machine costs) * voices + sum(FX costs) + stock baseline <= block at 85 percent`, which is `own <= headroom`. Every voice may run
+  any selected machine, so the largest one counts for all voices.
 - **`DK_SPAN`.** `DK_SPAN_BEGIN(owner)` and `DK_SPAN_END(owner)` in `core/trace.h` and `dsp/contract/dk_trace.inc`. They read the cycle
   counter and emit `(owner, cycles)` to the `span` sink (runtime-and-services 5.11). With no sink set they cost one flag test. Only
   service dispatchers use them (runtime-and-services 6.1). In the emulator a counter read can change the execution tier

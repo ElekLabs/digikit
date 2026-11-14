@@ -699,6 +699,8 @@ struct Actor {
     events: Events,
     on_quit: Option<Box<dyn Fn() + Send>>,
     runtime: Option<Runtime>,
+    /// DSP blocks, instructions and idle-skipped instructions the worker had counted when `sharc.profile` started counting.
+    sharc_profile_base: (u64, u64, u64),
     /// The session id the webview protocol checks.
     session: u64,
     /// Raised whenever the runtime is replaced, whoever asked.
@@ -828,6 +830,7 @@ impl Actor {
             events: config.events,
             on_quit: config.on_quit,
             runtime: None,
+            sharc_profile_base: (0, 0, 0),
             session: 0,
             epoch: 0,
             loaded: None,
@@ -2051,6 +2054,7 @@ impl Actor {
                     }
                 })
                 .map(Some),
+            "sharc.profile" => self.rpc_sharc_profile(&p).map(Some),
             "dsp.peek" => self.rpc_dsp_peek(&p).map(Some),
             "dsp.peek_word" => self.rpc_dsp_peek_word(&p).map(Some),
             "dsp.patch" => self.rpc_dsp_patch(&p).map(Some),
@@ -3318,6 +3322,73 @@ impl Actor {
             Err(RpcError::new(
                 code::AUDIO_UNAVAILABLE,
                 "this build has no coupled audio",
+            ))
+        }
+    }
+
+    /// `sharc.profile {enable?}`: DSP instruction counts as raw `dk.profile/1` counters (docs/CONTROL.md). `enable: true` starts (and clears) the
+    /// counting, `enable: false` stops and clears it; no `enable` reads the cumulative counts. Only with the `sharc-profile` feature.
+    fn rpc_sharc_profile(&mut self, p: &Params) -> RpcResult {
+        #[cfg(feature = "sharc-profile")]
+        {
+            let enable = p.opt_bool("enable")?;
+            let started = self.sharc_profile_base;
+            let mut now = None;
+            let answer = self.with_runtime(|r| {
+                let unavailable = |m: &str| RpcError::new(code::AUDIO_UNAVAILABLE, m);
+                if let Some(on) = enable {
+                    if !r.set_sharc_profile(on) {
+                        return Err(unavailable("no DSP audio session"));
+                    }
+                    let frames = r.frames_sent();
+                    now = r.worker_report().map(|w| {
+                        let t = w.tiers.as_ref();
+                        (
+                            frames,
+                            t.map_or(0, |t| t.icount),
+                            t.map_or(0, |t| t.idle_skipped),
+                        )
+                    });
+                    return Ok(json!({"enabled": on}));
+                }
+                let w = r
+                    .worker_report()
+                    .ok_or_else(|| unavailable("no DSP audio session"))?;
+                let (Some(regions), Some(hist)) = (w.region_profile.as_ref(), w.pc_hist.as_ref())
+                else {
+                    return Err(unavailable(
+                        "the DSP profile is off (call sharc.profile with enable: true)",
+                    ));
+                };
+                let counts = crate::sharc_profile::SharcCounts {
+                    blocks: r.frames_sent().saturating_sub(started.0),
+                    icount: w
+                        .tiers
+                        .as_ref()
+                        .map_or(0, |t| t.icount.saturating_sub(started.1)),
+                    idle_skipped: w
+                        .tiers
+                        .as_ref()
+                        .map_or(0, |t| t.idle_skipped.saturating_sub(started.2)),
+                    regions: regions
+                        .entries()
+                        .map(|(pc, e)| (pc, e.fast.instructions, e.aot.instructions))
+                        .collect(),
+                    hist: hist.clone(),
+                };
+                Ok(crate::sharc_profile::profile_json(&counts))
+            })?;
+            if let Some(base) = now {
+                self.sharc_profile_base = base;
+            }
+            Ok(answer)
+        }
+        #[cfg(not(feature = "sharc-profile"))]
+        {
+            let _ = p;
+            Err(RpcError::new(
+                code::METHOD_NOT_FOUND,
+                "built without sharc-profile",
             ))
         }
     }

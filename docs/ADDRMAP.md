@@ -142,7 +142,7 @@ The second command is an all-zero module table: no module loaded. With real byte
 | Tool | Use |
 | --- | --- |
 | `tools/device/dklog.py crash --image X.syx [--module M.dkm]` | pc, registers and return-address-looking stack words of a crash record |
-| `wb profile record`, `wb profile report` | `cf.profile` of the emulator (feature `cf-profile`) by function and module ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)); `--map out/addrmap/<device>-<version>.dev.json` adds firmware names |
+| `wb profile record`, `wb profile report` | `cf.profile` (feature `cf-profile`) or, with `--cpu sharc`, `sharc.profile` (feature `sharc-profile`) of the emulator by function, loop and module ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)); `--map out/addrmap/<device>-<version>.dev.json` adds firmware names |
 | `tools/devtools/fastcov.py` | SHARC function names of the interpreter report |
 | `tools/emulator/snapread.py` | ColdFire names for `regs` and `tasks` (the image comes from the snapshot path or `--image`) |
 | `tools/devtools/pcdump_names.py` | a `func` column and names in the `#stack-max` line of a `pcdump.csv` |

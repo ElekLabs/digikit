@@ -33,6 +33,8 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   rebuild X.syx -o OUT.syx               codec round trip (an unchanged image reproduces itself)
   addr    --map FILE... [--loads FILE | --load ID=BASE... --dsp-base ID=PC...] [--cpu cf|sharc] [--ret] [--format json|text] (ADDR... | --stdin)
                                          names for addresses from address maps and a module load table (docs/ADDRMAP.md); JSON by default
+  budget  [--device SHORT]... [--fx-max N] [--budget-pct P]   the DSP budget of each device in instructions per block (headroom, voice-block, note-on-block;
+                                         with --fx-max the effect budget of the tightest device): JSON from devices/*.toml and devices/cycle-factors.json
   pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm;
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
                                          (a `dynamic = true` module: its machine and param records for --device)
@@ -807,6 +809,7 @@ plan.json {}",
         }
         "records" => patchkit::records_cli::run(rest)?,
         "addr" => patchkit::addrmap::run(rest)?,
+        "budget" => patchkit::budget_cli::run(rest)?,
         "needs" => {
             let json = rest.iter().any(|a| a == "--json");
             let files: Vec<&String> = rest.iter().filter(|a| *a != "--json").collect();

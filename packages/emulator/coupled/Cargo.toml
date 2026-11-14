@@ -17,8 +17,8 @@ coupled-audio = ["elektron-native-boot/sharc", "elektron-native-boot/play", "dep
 # A second generated core (SHARC_GEN_DIR_2) next to the first: the firmware's device picks the core
 # (src/dsp_core.rs). Implies coupled-audio.
 second-core = ["coupled-audio", "elektron-native-boot/second-core", "dep:sharc-native-2", "dep:sharc-fast-cl-2"]
-# Enable this with coupled-audio; it forwards only to the optional native core.
-region-profile = ["sharc-native?/region-profile"]
+# Enable this with coupled-audio; it forwards to the optional native cores.
+region-profile = ["sharc-native?/region-profile", "sharc-native-2?/region-profile"]
 # Exact ColdFire instruction mix per PC (boot/src/cfmix.rs); DIGI_CF_MIX_OUT=DIR makes coupled-run write it.
 cf-mix = ["elektron-native-boot/cf-mix"]
 # SHARC_FAST_DUMP kernel and call capture (--diag dump); the hooks are absent otherwise.

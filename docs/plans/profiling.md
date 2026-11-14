@@ -110,7 +110,7 @@ P2 design:
 - **`wb:cli`:** a global `--format json|text`, and the commands `addrmap lookup`, `module analyse`, `profile record` (emulator: `cf.profile` through control-client) and
   `profile report`. All go through `dkprof.wasm`; `wb` starts no child process for them.
 - **Python:** `tools/devtools/cfprof.py` is deleted (done): on one paused emulator, `wb profile record --since-boot` and `cfprof.py` gave equal path counters and equal function, idle and exit rows.
-- **Not in P2:** the SHARC profile source (a new daemon call) is P4, the device source is P8, the panes are P6.
+- **Not in P2:** the SHARC profile source (a new daemon call; done in P4: `sharc.profile`), the device source is P8, the panes are P6.
 - **patchkit:** it uses the dksharc DKDS and `.dko` readers (done; packed bytes unchanged).
 
 ## 5. Track A: emulator host speed
@@ -146,13 +146,16 @@ TCOUNT in `UNSAFE_READ_NAMES`. Per-function detail comes from PC counts plus the
 
 1. **Names everywhere.** `fastcov`, `--diag hist`, `--profile-regions`, `pcdump`, `wwatch`, `SHARC_UNINIT_TRAP`, `--span`, `cf-profile` output,
    crash records and SHARC halts go through the address map.
-2. **Per-module cost.** For one module: instructions per block, split by function and loop, from PC counts. Runs are deterministic, so
-   counts repeat. These are instruction counts, not hardware cycles; section 7.3 calibrates them.
-3. **Machine budget check in `module:check`.** Run the machine at 16 voices on both devices and compare its worst block with the device
-   headroom (about 450k instructions on DT2, 330k on DN2, `digikit-module` skill `references/devices.md`). Effects already have
-   `fx_budget`. The measured number feeds the packer-derived cycle need ([sdk.md](sdk.md) section 9).
-4. **Fast-tier refusals per module.** List the module instructions the fast tier refuses, which keep it in the interpreter. This matters
-   for emulator and browser speed, not for hardware. Input for an SDK warning and for fast-tier lowering work.
+2. **Per-module cost (P4, done).** `sharc.profile` ([CONTROL.md](../CONTROL.md)) returns executed instructions per software PC as `dk.profile/1` raw counters; `wb profile record --cpu sharc` writes them and
+   `wb profile report` names them by module and function (address map, P3b load table) and by DO loop (`dksharc`), with instructions per DSP block. The source is the dispatch profile of the fast
+   and block tiers (an entry PC carries the whole region that starts there) plus the interpreter's per-PC counts, behind the `sharc-profile` feature (default build unchanged). Runs are
+   deterministic, so counts repeat. These are instruction counts, not hardware cycles; section 7.3 calibrates them.
+3. **Machine budget check (P4, done).** The rule is Rust: `dkprof::budget`, run by `patchkit budget` and read by `module:check` (`pk_conform.budget`, `fx_budget`; the numbers equal the former
+   Python's). Units are instructions per block. Per device the headroom is the block at 85 percent (projected with the "high" factor of `devices/cycle-factors.json`) minus the stock baseline
+   (`stock_busy`); today 194,244 instructions on DT2 and 92,796 on DN2 (`patchkit budget`, from `devices/*.toml` and `devices/cycle-factors.json`). The machine check is
+   `voice-block <= headroom / voices` for the steady worst block and `note-on <= headroom` apart; `check_selection` is the rule S5's broker uses ([sdk.md](sdk.md) section 9).
+4. **Fast-tier refusals per module: moved to P5** (emulator speed track, parked). It lists the module instructions the fast tier refuses, which keep it in the interpreter. This matters
+   for emulator and browser speed, not for hardware; it is input for an SDK warning and for fast-tier lowering work.
 
 ## 7. Track B: device profiling
 
@@ -296,7 +299,7 @@ Item numbers are ids, not an order. The order lives in [sdk-runtime-roadmap.md](
 | 1 | Address map v1, emulator only: `.dko` symbols kept, map export, names in emulator tools and crash records. **Done** (docs/ADDRMAP.md) | B | 1-2 days | Nothing. Runs in parallel with runtime-and-services item 4 |
 | 2 | Shared Rust library and `wb:cli` profile and addrmap commands with JSON output | B | 1-2 days | 1 |
 | 3 | Module DSP analysis: the Rust crate `dksharc` (slice 1 done; slice 2 register def/use) | B | 1 day | 1 |
-| 4 | Per-module cost, machine budget check, fast-tier refusals per module | B | 1-2 days | 1, 3 |
+| 4 | Per-module cost, machine budget check (fast-tier refusals moved to item 5's track). **Done** | B | 1-2 days | 1, 3 |
 | 5 | Host profiles named from sharcdb, first ranking | A | 1-2 days | Nothing; in a lane |
 | 6 | Workbench: names in the Log pane, first utilisation pane | B | 2-3 days | 2 |
 | 7 | Clock audit | B | 1 day | Nothing (static) |
