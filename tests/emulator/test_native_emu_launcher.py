@@ -149,7 +149,6 @@ def test_normal_launcher_arguments_get_audio_without_replacing_firmware(
     monkeypatch.setattr(digi_env, "DEFAULT_GENERATED", generated)
     monkeypatch.delenv("SHARC_GEN_DIR", raising=False)
     monkeypatch.setenv("DIGI_EMU_PGO", "0")
-    monkeypatch.setitem(scope["main"].__globals__, "build_panel", lambda environ: None)
     calls = []
     monkeypatch.setattr(
         "subprocess.run", lambda command, **_kwargs: calls.append(command)
@@ -270,7 +269,6 @@ def test_main_sets_fast_regions_for_the_coupled_run(monkeypatch, tmp_path):
     monkeypatch.setenv("DIGI_EMU_PGO", "0")
     monkeypatch.delenv("SHARC_FAST_REGIONS", raising=False)
     monkeypatch.delenv("DIGI_EMU_FAST", raising=False)
-    monkeypatch.setitem(scope["main"].__globals__, "build_panel", lambda environ: None)
     calls = []
     monkeypatch.setattr("subprocess.run", lambda command, **kw: calls.append(command))
     scope["main"](["x.syx", "--coupled", "--audio-profile-syx", str(syx)])
@@ -281,7 +279,6 @@ def test_main_sets_fast_regions_for_the_coupled_run(monkeypatch, tmp_path):
 def _build_run_setup(monkeypatch):
     scope = launcher()
     monkeypatch.setenv("DIGI_EMU_PGO", "0")
-    monkeypatch.setitem(scope["main"].__globals__, "build_panel", lambda environ: None)
     calls = []
 
     def run(command, **_kwargs):
@@ -570,7 +567,13 @@ def test_desktop_defaults_to_both_devices_with_per_core_fast_settings(
     other = "dt2" if first == "dn2" else "dn2"
     scope["main"]([str(inputs[first]["firmware"])] if positional else [])
     forwarded = calls[-1][1:]
-    assert forwarded[0] == str(inputs[first]["firmware"])
+    if positional:
+        assert forwarded[0] == str(inputs[first]["firmware"])
+    else:
+        assert forwarded[0].startswith("--")
+        assert forwarded[forwarded.index("--audio-profile-syx") + 1] == str(
+            inputs[first]["firmware"]
+        )
     at = forwarded.index("--also-coupled")
     assert forwarded[at + 1 : at + 5] == [
         str(inputs[other][label])

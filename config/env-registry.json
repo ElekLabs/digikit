@@ -173,10 +173,6 @@
    "owner": "python:tests/emulator",
    "purpose": "0 turns off the SHARC fast regions (no region list is added)"
   },
-  "DIGI_EMU_PANEL": {
-   "owner": "python:tools/emulator",
-   "purpose": "1 forces a rebuild of the desktop panel (otherwise rebuilt only when its sources change)"
-  },
   "DIGI_EMU_PCM_F32LE": {
    "owner": "rust:packages/emulator",
    "purpose": "Output file path: the desktop emulator captures its audio as f32 little-endian PCM"
