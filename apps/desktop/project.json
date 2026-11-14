@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "name": "@digi/desktop",
-  "implicitDependencies": ["@digi/workbench-core", "@digi/dk-session", "digiemu-desktop", "dkui-host"],
+  "implicitDependencies": ["@digi/workbench-core", "@digi/dk-session", "digiemu-desktop", "dkui-host", "dkprof"],
   "targets": {
     "build:ui": {
       "cache": true,
@@ -40,6 +40,8 @@
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
+      "description": "Host tests; the Log names tests load the real dkprof.wasm (dkprof:wasm, built on demand, keyed on the Rust crates below).",
+      "dependsOn": [{ "projects": ["dkprof"], "target": "wasm" }],
       "inputs": [
         "{projectRoot}/ui/**/*",
         "!{projectRoot}/ui/dist/**/*",
@@ -59,6 +61,12 @@
         "{workspaceRoot}/packages/dk-session/package.json",
         "{workspaceRoot}/packages/dkbs/src/**/*",
         "{workspaceRoot}/packages/dkbs/package.json",
+        "{workspaceRoot}/packages/dkprof/src/**/*",
+        "{workspaceRoot}/packages/dkprof/Cargo.toml",
+        "{workspaceRoot}/packages/dkaddrmap/src/**/*",
+        "{workspaceRoot}/packages/dkaddrmap/Cargo.toml",
+        "{workspaceRoot}/packages/dksharc/src/**/*",
+        "{workspaceRoot}/packages/dksharc/Cargo.toml",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/modules/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json"

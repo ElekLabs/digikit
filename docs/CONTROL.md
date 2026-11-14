@@ -57,7 +57,7 @@ Global options: `--socket PATH` (default: discover), `--run-dir DIR` (where to l
 ## Methods
 
 Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports an incomplete method list (it omits
-`mem.cf.peek`, `mem.cf.poke`, `mem.cf.write`, `dev.reload`, `card.*` and `watchdog.config`); use this table.
+`mem.cf.peek`, `mem.cf.poke`, `mem.cf.write`, `dev.reload`, `runtime.maps`, `card.*` and `watchdog.config`); use this table.
 
 | Method | Wrapper | CLI |
 |---|---|---|
@@ -77,6 +77,7 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `mem.cf.peek`, `mem.cf.poke` | `peek32`, `poke32` | `call` |
 | `mem.cf.write {addr, hex}` | | `call` |
 | `dev.reload {modules_dir?, swap_modules?, auto_no?, build?}` | | `call`; `mise run dk:dev` |
+| `runtime.maps {modules_dir?}` | | `call`; the workbench Log |
 | `card.overlay`, `card.export`, `card.load`, `card.status`, `card.folder`, `card.sync`, `card.reset_overlay` | | `call` |
 | `job.cancel` | | `call` |
 | `midi.in`, `midi.out` | `midi_in`, `midi_out` | `call` |
@@ -124,6 +125,12 @@ exact stock firmware (desktop only), else none; an image of another device never
 
 `mem.cf.write {addr, hex}` writes a byte range (any alignment, hex text) of SDRAM in one call, with one decode-cache invalidation for the range: code
 written this way runs as new code. Unmapped pages are mapped zeroed. Like `mem.cf.poke` it is a host write, not part of the replay record.
+
+`runtime.maps {modules_dir?}` answers what a host needs to name addresses of the image that runs now: `{image_sha256, matches, ship, symbols}`. `ship` is the
+ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` (the ones the image has) to byte addresses: the memory a host reads
+with `mem.cf.peek` and passes to `dkprof` (`loadTable`) to get the load table. The map is made from the running image's patch record and the stock image, as `dev.reload`
+makes its plan, so it follows a module swap: ask again after a `dev.reload`. The answer is kept for the image's SHA-256. `matches` is false when the modules on disk give other bytes
+than the running image (a hot DSP injection, or an object changed since): the names may then be wrong. An image with no patch record, or no stock image in `firmware/`, is an error.
 
 `dev.reload {modules_dir?, swap_modules?, auto_no?, build?}` brings the running session to the module objects as they are on disk now. Without
 `build` it never builds. With `build: true` (the workbench button sets it) it first builds the stale objects of the session's modules in
