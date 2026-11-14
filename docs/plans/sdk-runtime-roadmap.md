@@ -37,12 +37,13 @@ Status: `todo`, `active`, `done`, `parked`.
 | 1 | P1 | Address map v1, emulator only (own lane) | - | done | PR 444 |
 | 2 | R4 | Spike, static part: can SHARC hooks move into a `.dks` | S4 | done | finding 128 |
 | Stop | | Review the R4 answer with Em: it decides the owner of DSP dispatch and where `DK_SPAN` lives | R4 | reviewed | DSP dispatch is owned by the `machines` and `fx` services; `DK_SPAN` lives in the image stub |
-| 2 | P2 | Shared Rust library, `wb:cli` profile and addrmap commands, JSON output | P1 | in progress | phase A (host): dkprof, dkprof.wasm, `wb` addrmap, module and profile commands, patchkit on the dksharc readers; phase B (one real emulator profile; `cfprof.py` removed after equal numbers) done on this branch; done after merge |
+| 2 | P2 | Shared Rust library, `wb:cli` profile and addrmap commands, JSON output | P1 | done | PR 457; phase A (host): dkprof, dkprof.wasm, `wb` addrmap, module and profile commands, patchkit on the dksharc readers; phase B (one real emulator profile; `cfprof.py` removed after equal numbers) |
 | 2 | P3 | sharcdb tables for module DSP sections | P1 | done | PR 450 (dksharc, Rust static analysis of module DSP sections, slice 1); this PR (P3b, DSP names in the address map: pack writes sharc entries, dkaddrmap decodes the load table from the DKRT_STATE/DKRT_DSP/dyndsp_info snapshot, readers are thin callers) |
 | 2 | P4 | Per-module cost, machine budget check, fast-tier refusals per module | P2, P3 | todo | |
 | 2 | S5 | SDK DSP contract: DSP rules, derived cycle cost, `DK_SPAN` | R4, P3, P4 | todo | |
 | 3 | R2 | Runtime deletions and split; sink slots; service anatomy: a service is a module with a role (settled before R7) | S4 | R2a, R2b, R2c, R2d done; R2 done after the gate | |
 | 3 | R3 | Platform adapter, layer rule | R2 | todo | |
+| 3 | T1 | [Test architecture](test-architecture.md): tests follow layers, fakes and contract suites, service-scoped selection | T1a after R2c; T1c with R3 | todo | |
 | 3 | R6 | DSP transfer queue; dsp-link windows | R3 | todo | |
 | 3 | R7 | Generic records and service registry; then the new-kind proof (an LFO shape, no runtime edits) | R6 | todo | |
 | 3 | R8 | Spike, whole path | R7 | todo | |
@@ -71,3 +72,4 @@ Later, only when a feature needs it: the firmware tooling list in [profiling.md]
   are reviewed apart.
 - P3 was done in Rust (dksharc) instead of the Python sharcdb builder, because the workbench uses it through wasm. The sharcdb module mode was an oracle only and was not merged. Register def/use is dksharc slice 2, needed by S5.
 - R2b was split into moves only (proven identical with `patchkit objdiff`); the interfaces and the body splits (registry `check`/`apply`/`remove`, dsp `check`/`reserve`/`step`) are in R2c.
+- T1 (test architecture) was added: layers and fakes exist now, so test selection can follow layers ([test-architecture.md](test-architecture.md)).

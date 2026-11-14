@@ -1,7 +1,8 @@
 # Test speed (plan, 2026-11-09)
 
 Goal: the merge gate and a module's own checks finish sooner, with less work rather than more parallel work, and the MacBook stays usable.
-Commands and tiers: [testing](../TESTING.md). Test layout: [test architecture](test-architecture.md). Build and cache work: [test-build workflow](test-build-workflow.md).
+Commands and tiers: [testing](../TESTING.md). Test layout and selection: [test architecture](test-architecture.md). Build and cache work: [test-build workflow](test-build-workflow.md).
+Items 7 and 16 are inputs to T1d and T1b of [test architecture](test-architecture.md).
 This plan replaces the gate-speed plan of 2026-10-30, whose router (`verify.py`) was deleted. Its open items are carried over below.
 
 ## Measurements
@@ -171,6 +172,9 @@ Highest payoff first. Each step states its proof.
     - Merge keys hold these three files and not the patchkit binary or `dist/daemons.json`. A task whose import closure holds `runtime/patchkit.ts` is live: its key keeps the binary and `DIGI_PATCHKIT_LIVE=1` is set; `runtime/patchkit-exec.ts` refuses to run patchkit in any other Nx task, and `pnpm lint` (`tools/nx/check-patchkit-spawn.mjs`) rejects patchkit spawns outside that file.
     - `test-device-all` is a real run on the full key for every test (merge tests included); `test-device-full` and conformance keep the full key.
     - Counts for a patchkit edit that changes no packed byte (non-all targets, both devices): targets with the binary 40 to 50, with `dist/daemons.json` 40 to 14, live tests 20 of 79. No mergeTests target carries the binary. Python tool sources 34 to 34, compile inputs 6 to 4.
+
+17. [x] **Progress-based hang guard for device-test steps** (this PR). `core/dynreg:test-device--roundtrip--dt2` failed twice under gate load: `advance` and `bounded` in `tests/regression/runtime/fx-live.ts` gave each step a fixed 30 s of wall time, and `loadProject` makes one 6000 ms emulated advance that took longer on a loaded host. `stepWithProgress` and `runUntilFramesWithProgress` (`packages/test-support/src/session.ts`) now run a wait in slices of 0.5 emulated seconds, each bounded by `PROGRESS_HANG_S` (30 s, `DIGI_PROGRESS_HANG_S` overrides), so the total bound grows with the emulated time and a slice that makes no progress still fails as `RuntimeDeadlineError`. `advance`, `captureNote` and the equiv note use them.
+18. [ ] **Emulator slot count above the machine-usability cap** (open). `tools/nx/resources.mjs` sets the ceiling to 12 on a 12P+4E machine (`EMULATOR_CORES` 1) and Nx runs 24 tasks; the gate boots slowed from 21 s to 36 s. The agreed cap is 4 concurrent emulator runs with load under 12. Proposal: `EMULATOR_CORES = 3` gives a ceiling of 4 on 12 performance cores. Needs Em's decision.
 
 ## Later (deferred, 2026-11-10)
 

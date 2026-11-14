@@ -14,17 +14,21 @@ import '@fontsource/jetbrains-mono/500.css';
 import '@web/styles/site.css';
 import '../src/console.css';
 import '../src/native.css';
-import '../src/desktop-env';
+import { createDesktopApps } from '../src/desktop-app';
+import { createTauriHost } from '../src/host/tauri-host';
 import { installNativeFeel } from '../src/native';
 import LivePanel from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
 import RemotePage from '../src/RemotePage';
 import SidePanels from '../src/SidePanels';
-import { emulatorSession } from '@web/transfer/target';
+import AppProvider from '@web/transfer/AppProvider';
 import { createLogFollow, followSession } from '../src/log-follow';
 import LogPanel from '../src/LogPanel';
 import TransferPage from '@web/transfer/TransferPage';
 
+const host = createTauriHost();
+const apps = createDesktopApps(host);
+const { emulatorSession } = apps.app.target;
 type Page = 'emulator' | 'transfer' | 'remote';
 const query = new URLSearchParams(location.search);
 const start = (query.get('page') as Page | null) ?? 'emulator';
@@ -104,7 +108,7 @@ function Shell() {
               </div>
             </main>
             <Show when={!idle}>
-              <SidePanels visible={shown()} card session={emulatorSession} where={() => 'the emulator'} />
+              <SidePanels host={host} visible={shown()} card session={emulatorSession} where={() => 'the emulator'} />
             </Show>
           </div>
           <Show when={page() === 'transfer'}>
@@ -117,7 +121,13 @@ function Shell() {
       </div>
       <Show when={follow}>
         <section class="log-drawer" aria-label="Log" style={{ height: '420px' }}>
-          <LogPanel follow={follow!} emulatorRunning={() => !!status()} devicePort={() => undefined} toggleKey="⌘J" />
+          <LogPanel
+            host={host}
+            follow={follow!}
+            emulatorRunning={() => !!status()}
+            devicePort={() => undefined}
+            toggleKey="⌘J"
+          />
         </section>
       </Show>
     </div>
@@ -125,4 +135,11 @@ function Shell() {
 }
 
 installNativeFeel();
-render(() => <Shell />, document.getElementById('app')!);
+render(
+  () => (
+    <AppProvider app={apps.app} firmware={apps.firmware}>
+      <Shell />
+    </AppProvider>
+  ),
+  document.getElementById('app')!,
+);

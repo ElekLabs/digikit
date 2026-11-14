@@ -1,9 +1,9 @@
 import path from 'node:path';
 import { DkSession, EmuUsbTransport } from '@digi/dk-session';
-import { button } from '@digi/test-support';
+import { button, stepWithProgress } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
-import { advance, analysisJson, bounded, frames, pickSine, rpc, word } from '@digi/regression/runtime/fx-live.ts';
+import { advance, analysisJson, bounded, frames, pickSine, rpc, runToFrame, word } from '@digi/regression/runtime/fx-live.ts';
 import { SEND, SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import { withRouteFxSession } from '@digi/regression/runtime/fx-route-live.ts';
 import { inspectFxBoot, withPausedFxProtocol, tap } from '@digi/regression/runtime/fx-session.ts';
@@ -105,11 +105,11 @@ for (const device of DEVICES) {
         record(artifacts, `${tag}-timing`, { currentFrame: current, triggerFrame: trigger });
         const file = path.join(artifacts, `${tag}.wav`);
         try {
-          await bounded(() => session.client.runUntil({ frames: trigger, timeout_wall_s: 30 }));
-          await bounded(() => session.client.step(44_000, { timeout_wall_s: 30 }));
+          await runToFrame(session, trigger);
+          await stepWithProgress(session.client, 44_000);
           await rpc(session, 'pcm.tap', { action: 'capture', path: file });
           await bounded(() => session.client.inputButton(button('TRIG 1'), true));
-          await bounded(() => session.client.runUntil({ frames: trigger + 1500, timeout_wall_s: 30 }));
+          await runToFrame(session, trigger + 1500);
         } finally {
           try {
             await rpc(session, 'pcm.tap', { action: 'capture_stop' });

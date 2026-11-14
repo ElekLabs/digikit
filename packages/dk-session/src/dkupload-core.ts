@@ -258,6 +258,9 @@ export interface DkOptions {
 /** The wait for the INFO probe that finds out whether a runtime answers at all. */
 export const QUICK_TIMEOUT_MS = 1000;
 
+/** A probe: `true` is one try of QUICK_TIMEOUT_MS; a number is one try with that wait in ms (a loaded host answers late). */
+export type Quick = boolean | number;
+
 export class DkClient {
   private dk: Dk;
   private t: DkTransport;
@@ -852,7 +855,7 @@ export class DkSession {
   }
 
   /** One request and its reply (any status), after the requests queued before it. A timeout sends the request again with a new seq. */
-  request(cmd: number, body: Uint8Array = new Uint8Array(), quick = false): Promise<RawReply> {
+  request(cmd: number, body: Uint8Array = new Uint8Array(), quick: Quick = false): Promise<RawReply> {
     return this.withTurn((signal) => this.exchange(cmd, body, quick, signal));
   }
 
@@ -930,9 +933,10 @@ export class DkSession {
     if (failure) throw deviceError(`data at ${chunks[failure.i]!.off}`, failure.r.status, failure.r.body);
   }
 
-  private async exchange(cmd: number, body: Uint8Array, quick: boolean, signal: AbortSignal): Promise<RawReply> {
+  private async exchange(cmd: number, body: Uint8Array, quick: Quick, signal: AbortSignal): Promise<RawReply> {
     const retries = quick ? 0 : this.retries;
-    const timeoutMs = quick ? Math.min(this.timeoutMs, QUICK_TIMEOUT_MS) : this.timeoutMs;
+    const timeoutMs =
+      typeof quick === 'number' ? quick : quick ? Math.min(this.timeoutMs, QUICK_TIMEOUT_MS) : this.timeoutMs;
     const retryBusy = !quick && STORE_COMMANDS.has(cmd);
     let busy = 0;
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -957,7 +961,12 @@ export class DkSession {
     throw new DkError({ error: 'no reply from the device', kind: 'timeout' });
   }
 
-  private async ok(cmd: number, what: string, body: Uint8Array = new Uint8Array(), quick = false): Promise<Uint8Array> {
+  private async ok(
+    cmd: number,
+    what: string,
+    body: Uint8Array = new Uint8Array(),
+    quick: Quick = false,
+  ): Promise<Uint8Array> {
     const r = await this.request(cmd, body, quick);
     if (r.status !== 0) throw deviceError(what, r.status, r.body);
     return r.body;
@@ -971,7 +980,7 @@ export class DkSession {
   }
 
   /** `quick`: one INFO with a short timeout and no retries (a probe for a device that may not run the runtime). */
-  async info(quick = false): Promise<DkInfoFull> {
+  async info(quick: Quick = false): Promise<DkInfoFull> {
     const b = await this.ok(GCMD.INFO, 'info', undefined, quick);
     const protocol = u16(b, 0);
     let runtime = u16(b, 2);
@@ -1174,7 +1183,7 @@ export class DkSession {
     await this.ok(GCMD.RESTART, 'restart');
   }
   /** LOG (the debug module `digikit/debug`): events from `from` on (the log of this boot), `[oldest, newest, events]`. */
-  async logPage(from: number, quick = false): Promise<[number, number, DkLogEvent[]]> {
+  async logPage(from: number, quick: Quick = false): Promise<[number, number, DkLogEvent[]]> {
     const b = await this.ok(SERVICE_CMD.LOG, 'log', be32(from), quick);
     const n = b[8]!;
     const events: DkLogEvent[] = [];
@@ -1191,14 +1200,14 @@ export class DkSession {
     return [u32(b, 0), u32(b, 4), events];
   }
   /** LOGCFG (read): the default log level, the level of each module record (0xff: the default), and whether the debug module is loaded. */
-  async logConfig(quick = false): Promise<LogConfig> {
+  async logConfig(quick: Quick = false): Promise<LogConfig> {
     return parseLogConfig(await this.ok(SERVICE_CMD.LOGCFG, 'logcfg', Uint8Array.of(0), quick));
   }
   /**
    * LOGCFG (set): the default level (0 to 4) and the level of each of the 8 module records (0 to 4, or 0xff for the default). The levels are
    * in RAM only and start again at each boot. The reply is the state after the set. Needs the debug module (`digikit/debug`).
    */
-  async setLogConfig(level: number, modules: number[], quick = false): Promise<LogConfig> {
+  async setLogConfig(level: number, modules: number[], quick: Quick = false): Promise<LogConfig> {
     const bad = (v: number, allowDefault: boolean) =>
       !Number.isInteger(v) || v < 0 || (v > 4 && !(allowDefault && v === 0xff));
     if (bad(level, false) || modules.length !== 8 || modules.some((v) => bad(v, true)))
@@ -1209,12 +1218,12 @@ export class DkSession {
     return parseLogConfig(await this.ok(SERVICE_CMD.LOGCFG, 'logcfg', Uint8Array.of(1, level, ...modules), quick));
   }
   /** LOGCFG op 2: the card log state, or null when the device answers with an error status (a debug module without the card log). */
-  async cardLog(quick = false): Promise<CardLogState | null> {
+  async cardLog(quick: Quick = false): Promise<CardLogState | null> {
     const r = await this.request(SERVICE_CMD.LOGCFG, Uint8Array.of(2), quick);
     return r.status === 0 ? parseCardLogState(r.body) : null;
   }
   /** LOGCFG op 3: switch the card log on or off; the reply is the state after the set. */
-  async setCardLog(on: boolean, quick = false): Promise<CardLogState> {
+  async setCardLog(on: boolean, quick: Quick = false): Promise<CardLogState> {
     return parseCardLogState(await this.ok(SERVICE_CMD.LOGCFG, 'logcfg', Uint8Array.of(3, on ? 1 : 0), quick));
   }
   /** The four card log files of the store that exist (rolling and incident, a and b), the older boot first (by the boot_seq in the header), rolling before incident. */
@@ -1261,7 +1270,7 @@ export class DkSession {
     return out.sort((x, y) => x.bootSeq - y.bootSeq || rank(x) - rank(y));
   }
   /** Every event of the log. */
-  async readLog(quick = false): Promise<DkLogEvent[]> {
+  async readLog(quick: Quick = false): Promise<DkLogEvent[]> {
     const out: DkLogEvent[] = [];
     let from = 0;
     for (;;) {
@@ -1414,23 +1423,24 @@ export class DkSession {
    * (an UPLOAD event whose first argument is the command), the new boot's log starts with BOOT_START and never saw it. Without it there is no log (INFO has no LOG
    * capability): the device is then taken as booted when it answers again after a failed read (the port is silent while it resets). The port may be silent for
    * a while (the emulator boots on a worker): a failed read is a reason to wait and try again.
-   * `opts.signal` cancels the wait. While `opts.stillBooting()` is true the deadline moves on: the wait gives up only after `timeoutMs` without a reported boot.
+   * `opts.probeTimeoutMs` is the wait of each probe (default: the 1 s quick probe); a harness on a loaded host sets it high. `opts.signal` cancels the wait. While `opts.stillBooting()` is true the deadline moves on: the wait gives up only after `timeoutMs` without a reported boot.
    */
   async waitForBoot(
     sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
     timeoutMs = 90000,
-    opts: { signal?: AbortSignal; stillBooting?: () => boolean } = {},
+    opts: { signal?: AbortSignal; stillBooting?: () => boolean; probeTimeoutMs?: number } = {},
   ): Promise<void> {
     let end = Date.now() + timeoutMs;
     let last = 'no answer';
     let silent = false;
+    const probe: Quick = opts.probeTimeoutMs ?? true;
     while (Date.now() < end) {
       if (opts.signal?.aborted) throw cancelledError();
       if (opts.stillBooting?.()) end = Math.max(end, Date.now() + timeoutMs);
       try {
-        const info = await this.info(true);
+        const info = await this.info(probe);
         if (info.caps !== null && ((info.caps >>> GCAP.LOG) & 1) === 1) {
-          if (restarted(await this.readLog(true))) return;
+          if (restarted(await this.readLog(probe))) return;
         } else if (silent) return;
         last = 'the old boot still runs';
       } catch (e) {

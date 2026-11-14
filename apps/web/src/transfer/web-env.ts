@@ -1,10 +1,16 @@
 // The site's side of the Transfer pane (env.ts): the modules the site ships and the .dkm files the user adds (web-library.ts), the Web MIDI ports
-// as targets (no emulator), patchkit.wasm from the site, and a console log. `startWebTransfer` asks for MIDI access and picks the first target.
+// as targets (no emulator), patchkit.wasm from the site, and a console log. `createWebTransferApp` builds the site's app; `startWebTransfer` asks
+// for MIDI access and picks the first target.
 // Every URL goes through BASE_URL (GitHub Pages serves the site under a sub-path).
+import { DkSession } from '@digi/dk-session';
 import type { DkTransport } from '@digi/dk-session';
-import { noteConnection } from './connection-state';
-import { setTransferEnv, type TransferEnv } from './env';
-import { portLost, selectTarget, startOn, target, type Target } from './target';
+import type { KeyValue } from '../storage';
+import { localStorageKeyValue } from '../storage';
+import { createTransferApp, type TransferApp } from './app';
+import type { TransferEnv } from './env';
+import { createSessionHub } from './session-core';
+import type { Target } from './target';
+import { fetchWasmSource } from '../wasm-source';
 import { MODULE_FILES } from './module-files.generated';
 import { createWebLibrary } from './web-library';
 import {
@@ -46,93 +52,119 @@ export function firstTarget(ports: string[], current: Target): Target {
   return first ? { kind: 'midi', port: first } : { kind: 'none' };
 }
 
-let accessPromise: Promise<MidiAccessLike> | undefined;
-/** The Web MIDI access, asked for once; a failure is asked again at the next call. */
-function access(): Promise<MidiAccessLike> {
-  accessPromise ??= requestAccess().catch((e) => {
-    accessPromise = undefined;
-    throw e;
+/**
+ * The site's Transfer environment. `app` is the app that will own it (the environment's ports and transports call its target and connection);
+ * it is a function because the app is built from the environment.
+ */
+export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usablePorts: () => Promise<string[]> } {
+  let accessPromise: Promise<MidiAccessLike> | undefined;
+  /** The Web MIDI access, asked for once; a failure is asked again at the next call. */
+  function access(): Promise<MidiAccessLike> {
+    accessPromise ??= requestAccess().catch((e) => {
+      accessPromise = undefined;
+      throw e;
+    });
+    return accessPromise;
+  }
+
+  const open = new Map<string, WebMidiTransport>();
+  const wasm = fetchWasmSource(BASE);
+
+  const { library, source } = createWebLibrary({
+    bytes: async (path) => new Uint8Array(await (await fetchOk(`${BASE}modules/${path}`)).arrayBuffer()),
+    text: async (path) => (await fetchOk(`${BASE}modules/${path}`)).text(),
   });
-  return accessPromise;
+
+  const webEnv: TransferEnv = {
+    library,
+    source,
+    moduleFiles: (id) => MODULE_FILES[id],
+    wasm,
+    deviceName: async (device) => deviceNameOf(device),
+    libraryDevices: ['dt2', 'dn2'],
+    // only where the browser has WebUSB; devices the user already allowed are used, `requestAccess` (from a click) asks for another
+    ...(webUsbAvailable() ? { bulk: { ...webUsbOpener(), requestAccess: () => WebUsbBulkLink.requestAccess() } } : {}),
+    targets: {
+      emulator: false,
+      async ports() {
+        const a = await access();
+        const names = usablePorts(a);
+        // a device that was plugged in after the page opened: use it when there is no target yet
+        if (app().target.target().kind === 'none') {
+          const next = firstTarget(names, { kind: 'none' });
+          if (next.kind === 'midi')
+            void app()
+              .target.selectTarget(next)
+              .catch(() => {});
+        }
+        return names;
+      },
+      async whyNone() {
+        // asks again: the user may have allowed MIDI, or plugged the device in, since the page opened
+        const names = await access().then(usablePorts);
+        return names.length
+          ? 'Pick a MIDI port under Target.'
+          : 'No MIDI port. Connect the device by USB, set its USB mode to MIDI, then pick it under Target.';
+      },
+      async open(t: Target): Promise<DkTransport> {
+        if (t.kind !== 'midi') throw new Error('No MIDI port.');
+        const a = await access();
+        const { inputs, outputs } = listPorts(a);
+        const input: MidiInputLike | undefined = inputs.find((p) => (p.name ?? p.id) === t.port);
+        const output: MidiOutputLike | undefined = outputs.find((p) => (p.name ?? p.id) === t.port);
+        if (!input || !output)
+          throw new Error(`The MIDI port "${t.port}" is not there. Connect the device and pick the port again.`);
+        open.get(t.port)?.close();
+        const transport = await WebMidiTransport.open(input, output, a, (e) => {
+          app().connection.noteConnection({ type: 'closed', reason: e.message });
+          app().target.portLost(t.port);
+        });
+        open.set(t.port, transport);
+        return transport;
+      },
+      async close(t: Target) {
+        if (t.kind !== 'midi') return;
+        open.get(t.port)?.close();
+        open.delete(t.port);
+      },
+    },
+    logRun(run) {
+      const head = `${run.what} on ${run.target}`;
+      if (run.error) console.warn(`[transfer] ${head}: ${run.cancelled ? 'cancelled' : run.error}`);
+      else console.info(`[transfer] ${head}${run.message ? `: ${run.message}` : ''}`, ...run.lines);
+    },
+  };
+  return { env: webEnv, usablePorts: () => access().then(usablePorts) };
 }
 
-const open = new Map<string, WebMidiTransport>();
+/** The site's app: the web environment over the browser's storage and one DkSession per MIDI port. */
+export interface WebTransfer {
+  app: TransferApp;
+  /**
+   * Ask for MIDI access and start on the first device port. Throws the reason (no Web MIDI in this browser, no SysEx permission); the page shows it
+   * and the target stays on none. Called again by the page's retry button.
+   */
+  start(): Promise<void>;
+}
 
-const { library, source } = createWebLibrary({
-  bytes: async (path) => new Uint8Array(await (await fetchOk(`${BASE}modules/${path}`)).arrayBuffer()),
-  text: async (path) => (await fetchOk(`${BASE}modules/${path}`)).text(),
-});
-
-export const webEnv: TransferEnv = {
-  library,
-  source,
-  moduleFiles: (id) => MODULE_FILES[id],
-  patchkitWasm: async () => (await fetchOk(`${BASE}patchkit.wasm`)).arrayBuffer(),
-  deviceName: async (device) => deviceNameOf(device),
-  libraryDevices: ['dt2', 'dn2'],
-  // only where the browser has WebUSB; devices the user already allowed are used, `requestAccess` (from a click) asks for another
-  ...(webUsbAvailable() ? { bulk: { ...webUsbOpener(), requestAccess: () => WebUsbBulkLink.requestAccess() } } : {}),
-  targets: {
-    emulator: false,
-    async ports() {
-      const a = await access();
-      const names = usablePorts(a);
-      // a device that was plugged in after the page opened: use it when there is no target yet
-      if (target().kind === 'none') {
-        const next = firstTarget(names, { kind: 'none' });
-        if (next.kind === 'midi') void selectTarget(next).catch(() => {});
+export function createWebTransferApp(storage: KeyValue = localStorageKeyValue()): WebTransfer {
+  let app!: TransferApp;
+  const web = createWebEnv(() => app);
+  app = createTransferApp(web.env, {
+    storage,
+    sessions: createSessionHub((transport) => new DkSession(transport, { timeoutMs: 6000 })),
+  });
+  return {
+    app,
+    async start() {
+      let names: string[];
+      try {
+        names = await web.usablePorts();
+      } catch (e) {
+        app.target.startOn({ kind: 'none' });
+        throw e;
       }
-      return names;
+      app.target.startOn(firstTarget(names, app.target.target()));
     },
-    async whyNone() {
-      // asks again: the user may have allowed MIDI, or plugged the device in, since the page opened
-      const names = await access().then(usablePorts);
-      return names.length
-        ? 'Pick a MIDI port under Target.'
-        : 'No MIDI port. Connect the device by USB, set its USB mode to MIDI, then pick it under Target.';
-    },
-    async open(t: Target): Promise<DkTransport> {
-      if (t.kind !== 'midi') throw new Error('No MIDI port.');
-      const a = await access();
-      const { inputs, outputs } = listPorts(a);
-      const input: MidiInputLike | undefined = inputs.find((p) => (p.name ?? p.id) === t.port);
-      const output: MidiOutputLike | undefined = outputs.find((p) => (p.name ?? p.id) === t.port);
-      if (!input || !output)
-        throw new Error(`The MIDI port "${t.port}" is not there. Connect the device and pick the port again.`);
-      open.get(t.port)?.close();
-      const transport = await WebMidiTransport.open(input, output, a, (e) => {
-        noteConnection({ type: 'closed', reason: e.message });
-        portLost(t.port);
-      });
-      open.set(t.port, transport);
-      return transport;
-    },
-    async close(t: Target) {
-      if (t.kind !== 'midi') return;
-      open.get(t.port)?.close();
-      open.delete(t.port);
-    },
-  },
-  logRun(run) {
-    const head = `${run.what} on ${run.target}`;
-    if (run.error) console.warn(`[transfer] ${head}: ${run.cancelled ? 'cancelled' : run.error}`);
-    else console.info(`[transfer] ${head}${run.message ? `: ${run.message}` : ''}`, ...run.lines);
-  },
-};
-
-setTransferEnv(webEnv);
-
-/**
- * Ask for MIDI access and start on the first device port. Throws the reason (no Web MIDI in this browser, no SysEx permission); the page shows it
- * and the target stays on none. Called again by the page's retry button.
- */
-export async function startWebTransfer(): Promise<void> {
-  let a: MidiAccessLike;
-  try {
-    a = await access();
-  } catch (e) {
-    startOn({ kind: 'none' });
-    throw e;
-  }
-  startOn(firstTarget(usablePorts(a), target()));
+  };
 }

@@ -1,13 +1,10 @@
 // The desktop developer console: the file the app runs, the live panel, and the audio and CPU meters.
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
-import { setBrowseDevice } from '@web/transfer/transfer-state';
-import { invoke } from '@tauri-apps/api/core';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
 import {
-  nativeRuntime,
   type EmulatorRuntime,
   type FirmwareInfo,
   type NativeAudioStatus,
@@ -43,57 +40,38 @@ import {
   reloadFailureEntry,
   unseenErrors,
 } from './log-core';
-import { desktopDefaultModules } from './default-modules';
-import { readPref, writePref } from './prefs';
+import { createNativeRuntime } from './native-runtime';
+import { createPrefs } from './prefs';
 import { pgoWarning, type BuildInfo } from './pgo-warning';
 import { createLogFollow, followSession } from './log-follow';
 import { windowShown } from './log-follow-core';
 import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import LogPanel from './LogPanel';
+import type { EmuSource as Source, Host } from './host/host';
 import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
 import { setInspectorOpen, setInspectorTab } from './panel-open';
 import RemotePage from './RemotePage';
-import {
-  EMULATOR_NO_RUNTIME,
-  emulatorRuntime,
-  emulatorSession,
-  lastMidiPort,
-  lastMidiSession,
-  setEmulatorRuntime,
-  target,
-} from '@web/transfer/target';
-import { noteConnection } from '@web/transfer/connection-state';
+import { useFirmwareApp, useTransferApp } from '@web/transfer/app-context';
+import { EMULATOR_NO_RUNTIME } from '@web/transfer/target';
 import { setReloadWithRuntime } from './emulator-actions';
-import { transferEnv } from '@web/transfer/env';
-import { run as flashRun } from '@web/firmware/firmware-state';
 import { running as flashRunning } from '@web/firmware/firmware-core';
 import FirmwarePage from '@web/firmware/FirmwarePage';
 import DefaultModules from '@web/firmware/DefaultModules';
 import { DefaultModuleError } from '@web/firmware/default-modules-core';
-import { tickedFor } from '@web/firmware/default-modules-state';
 import TransferPage from '@web/transfer/TransferPage';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
 import { reloadError, reloadLine } from '@web/runtime/reload';
 import type { ControllerJob } from '@web/jobs/jobs-core';
 import { isCancelled } from '@web/modules/backend';
-import { JobBusyError, type JobHandle, busy, currentJob, jobs, runJob, syncControllerJob } from '@web/jobs/jobs';
+import { JobBusyError, type JobHandle } from '@web/jobs/jobs';
 
-type Source = { path: string; name: string; bytes: number; modified_ms: number };
-interface Launch {
-  syx: string | null;
-  card: string | null;
-  runtime: boolean | null;
-  loaded: boolean;
-}
 type Status = RuntimeSnapshot['status'];
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // "Boot with digikit runtime": on unless the user turned it off; kept per browser profile of the app.
 const RUNTIME_KEY = 'digikit.bootRuntime';
-const readRuntimePref = () => readPref(RUNTIME_KEY) !== 'off';
-const writeRuntimePref = (on: boolean) => writePref(RUNTIME_KEY, on ? 'on' : 'off');
 
 // "Load on start": boot the last opened firmware file when the app opens (off unless ticked), and that file's path.
 const LOAD_ON_START_KEY = 'digikit.loadOnStart';
@@ -101,13 +79,9 @@ const LAST_FIRMWARE_KEY = 'digikit.lastFirmware';
 
 // The height of the Log dock in px; kept per browser profile of the app (none saved: a share of the window).
 const DOCK_KEY = 'digikit.logHeight';
-const readDockPref = () => parseDock(readPref(DOCK_KEY));
-const writeDockPref = (px: number | undefined) => writePref(DOCK_KEY, px === undefined ? null : String(px));
 
 // The sidebar is open unless the user collapsed it; kept per browser profile of the app.
 const SIDEBAR_KEY = 'digikit.sidebar';
-const readSidebarPref = () => readPref(SIDEBAR_KEY) !== 'closed';
-const writeSidebarPref = (open: boolean) => writePref(SIDEBAR_KEY, open ? 'open' : 'closed');
 
 function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }) {
   const pct = (v: number) => `${Math.max(0, Math.min(100, v))}%`;
@@ -121,7 +95,22 @@ function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }
   );
 }
 
-export default function Console() {
+export default function Console(props: { host: Host }) {
+  const app = useTransferApp();
+  const fw = useFirmwareApp();
+  const { readPref, writePref } = createPrefs(app.storage);
+  const readRuntimePref = () => readPref(RUNTIME_KEY) !== 'off';
+  const writeRuntimePref = (on: boolean) => writePref(RUNTIME_KEY, on ? 'on' : 'off');
+  const readDockPref = () => parseDock(readPref(DOCK_KEY));
+  const writeDockPref = (px: number | undefined) => writePref(DOCK_KEY, px === undefined ? null : String(px));
+  const readSidebarPref = () => readPref(SIDEBAR_KEY) !== 'closed';
+  const writeSidebarPref = (open: boolean) => writePref(SIDEBAR_KEY, open ? 'open' : 'closed');
+  const { emulatorRuntime, emulatorSession, lastMidiPort, lastMidiSession, setEmulatorRuntime, target } = app.target;
+  const { noteConnection } = app.connection;
+  const { busy, currentJob, jobs, runJob, syncControllerJob } = app.jobs;
+  const { setBrowseDevice } = app.state;
+  const { tickedFor } = fw.defaults;
+  const flashRun = fw.state.run;
   const [runtime, setRuntime] = createSignal<EmulatorRuntime>();
   const [controllerJob, setControllerJob] = createSignal<ControllerJob | null>(null);
   const [outsideApp, setOutsideApp] = createSignal(false);
@@ -237,7 +226,7 @@ export default function Console() {
     const ids = tickedFor(deviceId);
     if (ids.length === 0) return;
     try {
-      const lines = await desktopDefaultModules.install(
+      const lines = await fw.env.defaultModules!.install(
         'emulator',
         deviceId,
         ids,
@@ -331,7 +320,7 @@ export default function Console() {
         `Loading ${base}`,
         { group: 'emulator', cancel: () => void runtime()?.cancelJob?.() },
         async () => {
-          const file = await invoke<Source | null>('emu_set_source', { path });
+          const file = await props.host.emu.setSource(path);
           setSource(file ?? undefined);
           lastModified = file?.modified_ms;
           const ok = await boot(
@@ -364,7 +353,7 @@ export default function Console() {
   };
   /** The native picker; the picked file becomes the console's file and boots. */
   const openFirmware = async () => {
-    const path = await invoke<string | null>('emu_pick_syx', { start: source()?.path ?? readPref(LAST_FIRMWARE_KEY) });
+    const path = await props.host.emu.pickSyx(source()?.path ?? readPref(LAST_FIRMWARE_KEY));
     if (path) await bootPath(path, 'Opened at');
   };
   /** `dev.reload {build: true}`: the controller builds the stale ColdFire objects, applies the modules again from the objects on disk
@@ -407,7 +396,7 @@ export default function Console() {
   });
   const pollSource = async () => {
     try {
-      const file = await invoke<Source | null>('emu_source_info');
+      const file = await props.host.emu.sourceInfo();
       setSource(file ?? undefined);
       if (!file) return;
       const changed = lastModified !== undefined && file.modified_ms !== lastModified;
@@ -487,17 +476,18 @@ export default function Console() {
     }
   };
   onMount(() => {
-    void nativeRuntime(update).then((r) => {
+    void createNativeRuntime(props.host, update).then((r) => {
       if (!r) {
         setOutsideApp(true);
         return;
       }
       setRuntime(r);
-      void invoke<BuildInfo>('emu_build_info')
+      void props.host.emu
+        .buildInfo<BuildInfo>()
         .then(setBuildInfo)
         .catch(() => setBuildInfo(undefined));
       void (async () => {
-        const launch = await invoke<Launch>('emu_launch');
+        const launch = await props.host.emu.launch();
         if (launch.loaded) {
           await pollSource();
           await refreshInfo();
@@ -635,7 +625,7 @@ export default function Console() {
     device: {
       port: lastMidiPort,
       session: async () => followSession(await lastMidiSession()),
-      present: async () => (await transferEnv().targets.ports()).includes(lastMidiPort() ?? ''),
+      present: async () => (await app.env.targets.ports()).includes(lastMidiPort() ?? ''),
     },
   });
 
@@ -983,6 +973,7 @@ export default function Console() {
                 </div>
               </main>
               <SidePanels
+                host={props.host}
                 visible={sidePanelsShown()}
                 active={panelsActive()}
                 card
@@ -1038,6 +1029,7 @@ export default function Console() {
             }}
           />
           <LogPanel
+            host={props.host}
             follow={logFollow}
             emulatorRunning={() => !!status()}
             devicePort={lastMidiPort}

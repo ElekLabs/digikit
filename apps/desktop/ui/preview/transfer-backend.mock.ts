@@ -1,10 +1,9 @@
-// The Modules backend of the preview (replaces ../src/transfer-backend.ts): the library and the device come from sim.ts; an install, a delete
+// The Modules backend of the preview (replaces web/src/transfer/transfer-backend.ts): the library and the device come from sim.ts; an install, a delete
 // and a restart emit the same events as dktransfer.ts, paced by `sim.speed`.
 import { moduleFilePath, moduleFilesFolder, type TransferEvent, type TransferView } from '@web/modules/dktransfer';
 import { noteActivity } from '@web/transfer/activity';
-import { asked, noteConnection } from '@web/transfer/connection-state';
 import { PAUSED } from '../src/desktop-env';
-import { LIBRARY, delay, deviceFiles, deviceRead, libraryById, pathOf, sim, view, control } from './sim';
+import { LIBRARY, delay, deviceFiles, deviceRead, libraryById, pathOf, sim, simApp, view, control } from './sim';
 
 export { PAUSED };
 
@@ -26,6 +25,7 @@ export const transferBackend = {
   async list(device: string, showLibrary: (view: TransferView) => void): Promise<TransferView> {
     showLibrary(await this.listLibrary(device));
     control.counts.deviceRead++;
+    const { asked, noteConnection } = simApp.app!.connection;
     await asked(deviceRead);
     noteConnection({ type: 'answered', device: { id: 'dt2', name: 'Digitakt II', runtime: '0.5.2' } });
     return view();
@@ -103,3 +103,6 @@ export const transferBackend = {
     return files.map((f) => `Added modules/${f.name}`);
   },
 };
+
+/** The same bag as the real `createTransferBackend` (../../../web/src/transfer/transfer-backend.ts); the preview reads the library from sim.ts. */
+export const createTransferBackend = (_deps: unknown) => ({ transferBackend, loadLibrary: async () => [] });

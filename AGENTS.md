@@ -2,7 +2,7 @@
 
 Reverse engineering and emulation of the Elektron Digitakt II and Digitone II, with a ColdFire MCF5441x CPU and SHARC+ DSP, for desktop and browser (Wasm).
 
-Use **DT2 OS 1.17** and **DN2 OS 1.12** for analysis, patches, tests and reported addresses. DN2 1.11 is a secondary patch port (the health proof and its tests run on it); analysis and reported addresses stay on 1.17/1.12. DT2 1.16 and older images are references only: resolve their addresses on the current image before use. Patchkit anchors resolve by hash through `devices/ports/`.
+Use **DT2 OS 1.17** and **DN2 OS 1.12** for analysis, patches, tests and reported addresses. DN2 1.11 remains a patch port for patchkit; the health proof runs on DN2 1.12 and DT2 1.17. Analysis and reported addresses stay on 1.17/1.12. DT2 1.16 and older images are references only: resolve their addresses on the current image before use. Patchkit anchors resolve by hash through `devices/ports/`.
 
 Start with [README.md](README.md) for setup and the newest `docs/handovers/HANDOVER-*.md` for current work. Detailed guides: [layout](docs/LAYOUT.md), [testing](docs/TESTING.md), [regression acceptance](tests/regression/README.md), [instrumentation](docs/INSTRUMENTATION.md), and [findings index](docs/FINDINGS.md).
 
@@ -61,7 +61,7 @@ not complete verification. Do not use `--skip-nx-cache` to rerun a failed test: 
 | JS/TS host helpers | `pnpm nx:pilot run <project>:test-host` and `<project>:typecheck`. |
 | Desktop UI | `pnpm nx:pilot run @digi/desktop:test-host` and `@digi/desktop:check:ui`; `@digi/desktop:typecheck` checks its test sources. |
 | Runtime Rust | `pnpm nx:pilot run core/runtime:rust-tests`: standalone host units, no generated core or daemon prerequisites. |
-| Web Node tests | `pnpm --filter @digi/web test` |
+| Web tests | `pnpm nx:pilot run @digi/web:test-host` (Vitest, no wasm); `@digi/web:test-wasm` loads the real `public/*.wasm` (node tests and `tests/*.wasm.test.ts`) |
 | Python tools | Named pytest files under `tests/<owner>/` (never a directory) and `mise run lint:py`. Typed files are listed in pyproject `[tool.mypy] files`. |
 | Device tests | One module: `pnpm nx:pilot run <module-id>:test-device` (packs, CLIs and daemons are `dependsOn` targets built on demand into `dist/`); a project with several test files also has `<module-id>:test-device--<file>` for one file; each run target is split in two device halves, `<target>--dt2` and `<target>--dn2` (env `DIGI_DEVICE`; the plain name is a no-op parent that runs both), so `<module-id>:test-device--<file>--dn2` runs only DN2 while iterating (`-- -t 'DN2 1.12'` on a per-file target still works). After a shared edit (SDK, profile, patchkit, another core module) the full-input form is `<module-id>:test-device-all` (and `test-device-all--<file>`). Suites: `mise run test:stock`, `test:fx`, `test:fx:dt2`; `pnpm nx:pilot run-many -t test-conformance` runs the conformance tests. Prerequisites (daemons, ready inputs) are in [testing](docs/TESTING.md); these three suites run through Nx, which builds the prerequisites and reuses cached results. No ad-hoc proof scripts. |
 | One module | `mise run module:check ID`: conformance and own tests; may build or emulate. This does not prove all-module loads. |
@@ -82,6 +82,8 @@ Wait without polling. Run a long command with a long tool timeout, up to 2 hours
 Iterate with `dk:dev` ([testing](docs/TESTING.md) "Fast iteration"), not with harness runs or fresh boots; run the harness once for the proof. Respect the layers in docs/ARCHITECTURE.md; `mise run check:layers`. Prefer existing tooling and shared helpers over custom runners or wrappers. Use fast unit tests for logic and integration tests for real boundaries. New host/device scenarios use TypeScript/Vitest; analysis, decompilation and devtools use Python. Avoid unrelated refactors.
 
 A PR that adds or changes a tool a developer runs documents its use in the tool's owning doc (commands that work from a clean checkout, expected output) and links it from docs/DEVELOPMENT.md.
+
+The desktop UI and the site keep no module-level state: they build an app object at startup and take the Host, `KeyValue`, `BlobStore`, `WorkerFactory` and `WasmSource` as arguments, so a test gives fakes ([DEVELOPMENT.md](docs/DEVELOPMENT.md) "Host and EmuRpc", "The app object", "WorkerFactory"). oxlint fails `invoke` outside `tauri-host.ts` and `localStorage`, `indexedDB` or `new Worker` outside `storage.ts`, `blob-store.ts` and `workers.ts`.
 
 Run Python tools from the repository root as `uv run python -m tools.<owner>.<module>`. Import through `tools`; never modify `sys.path`. Child tools use `[sys.executable, "-m", ...]` with `env=tools.python_env()`. Find tasks with `mise tasks` and options with `mise run TASK -- --help`.
 

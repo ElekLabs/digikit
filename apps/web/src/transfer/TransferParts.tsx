@@ -2,14 +2,13 @@
 // progress bar or verified/failed chip, the breadcrumb, and the two-click Delete button.
 import { For, Show, createEffect, createSignal, type JSX } from 'solid-js';
 import TargetSelect from './TargetSelect';
-import { transferEnv } from './env';
+import { useTransferApp } from './app-context';
 import { fmtRate } from './rate-core';
 import { createCheckingHint } from './checking-hint';
 import type { PaneSelect } from './pane-select';
 import { dragKind, selectState, toggleAll } from './select-core';
 import { linkTag } from './link-core';
 import { deleteLabel, freeLine, writing, type RowTag } from './transfer-core';
-import { activeMode, deviceInfo, liveRate, sampleLink } from './transfer-state';
 
 /** What the page gives each mode: the one busy action, and the error line. */
 export interface PageCtx {
@@ -37,6 +36,7 @@ export interface ChipStatus {
 }
 
 export function Chip(props: { status: ChipStatus }): JSX.Element {
+  const { liveRate } = useTransferApp().state;
   const checking = createCheckingHint(() => props.status.checking);
   const progress = () =>
     props.status.kind === 'uploading' || (props.status.kind === 'verifying' && props.status.bytes !== undefined);
@@ -423,6 +423,8 @@ export function DevicePane(props: {
   hideTarget?: boolean;
   children: JSX.Element;
 }): JSX.Element {
+  const app = useTransferApp();
+  const { activeMode, deviceInfo, sampleLink } = app.state;
   const [over, setOver] = createSignal(false);
   const clear = () => {
     setOver(false);
@@ -466,7 +468,7 @@ export function DevicePane(props: {
       </div>
       <Show when={!props.hideTarget}>
         <div class="devhead">
-          <Show when={!transferEnv().targets.inHeader}>
+          <Show when={!app.env.targets.inHeader}>
             <TargetSelect disabled={writing(props.ctx.busy())} onError={props.ctx.setError} reload={props.ctx.reload} />
           </Show>
           <Show when={deviceInfo()}>

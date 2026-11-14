@@ -1,10 +1,12 @@
 // Runs patchkit.wasm off the main thread. Messages in: init, check, apply, prepare; out: ready, checked, patched, prepared, error.
 // The firmware arrives as an ArrayBuffer and never leaves this page: there is no network call here except
-// fetching the (firmware-free) wasm and module bundle that the site itself serves.
+// fetching the (firmware-free) wasm and module bundle that the site itself serves. The wasm comes from a WasmSource over `base` (a worker
+// cannot be given the page's objects, so it builds its own from the base URL in `init`).
+import { fetchWasmSource } from '../wasm-source.ts';
 import { PatchKit } from './patchkit-core.ts';
 
 export type PatchRequest =
-  | { type: 'init'; wasmUrl: string; bundleUrl: string }
+  | { type: 'init'; base: string }
   | { type: 'check'; id: number; firmware: ArrayBuffer }
   | { type: 'apply'; id: number; firmware: ArrayBuffer; modules: string[] }
   | { type: 'prepare'; id: number; firmware: ArrayBuffer; restore: boolean; set?: string };
@@ -17,9 +19,9 @@ self.onmessage = async ({ data }: MessageEvent<PatchRequest>) => {
   try {
     if (data.type === 'init') {
       kit = (async () => {
-        const [wasm, bundle] = await Promise.all([fetch(data.wasmUrl), fetch(data.bundleUrl)]);
-        if (!wasm.ok || !bundle.ok) throw new Error('patch tool files are missing from this site');
-        return PatchKit.create(await wasm.arrayBuffer(), await bundle.text());
+        const bundle = await fetch(`${data.base}modules/bundle.json`);
+        if (!bundle.ok) throw new Error('patch tool files are missing from this site');
+        return PatchKit.create(await fetchWasmSource(data.base).bytes('patchkit.wasm'), await bundle.text());
       })();
       await kit;
       post({ type: 'ready' });

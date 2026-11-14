@@ -10,7 +10,7 @@
     "prebuild": "node scripts/prebuild.mjs",
     "build": "astro build",
     "check": "node scripts/gen-modules.mjs --check && astro check",
-    "test": "node --test \"tests/*.test.mjs\""
+    "test-wasm": "node --test \"tests/*.test.mjs\" && pnpm exec vitest run --config ../../vitest.host.config.ts --project web-wasm"
   },
   "dependencies": {
     "@astrojs/solid-js": "7.0.2",
