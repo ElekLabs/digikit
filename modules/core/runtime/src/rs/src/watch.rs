@@ -413,7 +413,7 @@ unsafe fn write_hang(w: &mut Watch) {
     };
     ev(logk::FAULT_FOUND, logk::F_ERROR, [KIND_DSP | site << 8 | stage << 16, id, w.m_step, last, module.map_or(u32::MAX, |m| m as u32)]);
     crate::settings::flush_if_dirty();
-    crate::crash::write_hang(&crate::crash::Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
+    crate::fault::write_hang(&crate::fault::Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
 }
 
 /// The effect guard's words (28 and 31): a new fault is an `FX_FAULT`, a row switched off an `FX_DISABLED`, each with the source of the module that owns the row.

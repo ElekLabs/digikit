@@ -21,7 +21,7 @@ pub mod collect;
 mod assign;
 pub mod boot;
 pub mod card;
-pub mod crash;
+pub mod fault;
 pub mod dlog;
 mod dsp;
 pub mod entry;
@@ -46,7 +46,7 @@ mod sha256;
 pub mod store;
 pub mod store_writer;
 mod io;
-mod table;
+mod invariants;
 mod watch;
 mod worker;
 mod peakwin;
@@ -76,7 +76,7 @@ pub use tick::*;
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
-    crate::crash::panic()
+    crate::fault::panic()
 }
 
 /// The effects the image takes at run time: CAPACITY's limit for `FX_SLOTS`. The free effect rows of `core/dynfx` (0 on an image without it, so a device

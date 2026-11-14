@@ -29,7 +29,7 @@ pub(crate) unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
         | if sw::is_open() { 2 } else { 0 }
         | if card::writable() { 0 } else { 4 }
         | if dlog::sink_present() { 8 } else { 0 }
-        | if crate::crash::seen().found != 0 { 16 } else { 0 };
+        | if crate::fault::seen().found != 0 { 16 } else { 0 };
     *rb.add(16) = flags as u8;
     // the log range (bytes 17 to 24) stays zero: the log is the debug module's, whose LOG command has the range
     wr32(rb.add(17), 0);

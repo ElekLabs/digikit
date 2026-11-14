@@ -78,14 +78,14 @@ pub unsafe fn machine_keys(path: *const u8, out: &mut [u32; 8]) -> usize {
 }
 
 /// Validate and load the `.dkm` at `path`. See `dkrt_load`. The tables are checked after every attempt, and none starts once a check has
-/// failed (`table::check`).
+/// failed (`invariants::check`).
 pub unsafe fn load(path: *const u8) -> i32 {
-    if crate::table::bad() {
+    if crate::invariants::bad() {
         return E_TABLE;
     }
     let r = load_inner(path);
     #[cfg(not(test))]
-    crate::table::check();
+    crate::invariants::check();
     r
 }
 
@@ -555,11 +555,11 @@ unsafe fn drop_tick_cb(base: u32, size: u32) {
 
 /// Take module record `rec` down: its tick, `fini`, machine rows, DSP voice rows and range, memory. Used only
 /// by the DSP loader when the DSP part of a module published at boot fails (`undo_early`). The run-time `unload` that also called
-/// it (with the in-use scan) is archived with hot reload. The tables are checked after it (`table::check`).
+/// it (with the in-use scan) is archived with hot reload. The tables are checked after it (`invariants::check`).
 pub unsafe fn unload_rec(rec: usize) -> i32 {
     let r = unload_rec_inner(rec);
     #[cfg(not(test))]
-    crate::table::check();
+    crate::invariants::check();
     r
 }
 

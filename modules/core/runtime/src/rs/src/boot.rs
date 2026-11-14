@@ -14,7 +14,7 @@
 use crate::platform::st;
 use crate::safe_mode::{key_held, DKRT_STABLE_BLOCKS, LATE_FLOOR};
 use crate::selection::{current, update, Choice, REC, REC_COPY, REC_VALID};
-use crate::{assign, card, crash, dlog, loader};
+use crate::{assign, card, fault, dlog, loader};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::sel::{self, Record};
 use dkrt_sdk::*;
@@ -85,9 +85,9 @@ pub unsafe extern "C" fn dkrt_boot() {
     // the settings record (the fx routes and send amounts): into RAM before the UI starts
     crate::settings::load();
     // the crash record and the RAM probe of the boot before
-    crash::keep_probe();
-    if crash::at_boot() {
-        let seen = crash::seen();
+    fault::keep_probe();
+    if fault::at_boot() {
+        let seen = fault::seen();
         if seen.found != 0 && seen.stable != 0 {
             // the crashed boot had already cleared its counter: count it as bad now, and keep that one count until a boot with no crash
             // behind it has run 30 s (`ui_pass`)
@@ -112,10 +112,10 @@ pub unsafe extern "C" fn dkrt_boot() {
         SAFE_FLAG
     } else if key_held() {
         SAFE_KEY
-    } else if crash::seen().hang != 0 {
+    } else if fault::seen().hang != 0 {
         // the boot before stopped because the DSP stopped (a hang record): one stop is enough, even after a stable boot; the selection stays as it is
         SAFE_DSP
-    } else if crash::seen().panic != 0 {
+    } else if fault::seen().panic != 0 {
         // the boot before panicked (a panic record): one panic is enough, like a stop
         SAFE_PANIC
     } else if r.boot_counter >= SAFE_AFTER {

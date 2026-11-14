@@ -16,7 +16,7 @@
 //! no logger (`dlog::CURRENT_SRC` is one global and tasks preempt each other). The module's `done` runs once in the UI task at the first
 //! UI pass (`ui_pass`), with the module as the log source: the module frees its buffer there, never in `frame`.
 //!
-//! A fault in `frame` reaches the stock exception handler: `crash::install` runs only from the UI loop, so no runtime handler is set yet.
+//! A fault in `frame` reaches the stock exception handler: `fault::install` runs only from the UI loop, so no runtime handler is set yet.
 //! The boot counter stays armed until the stable period of the UI loop, so repeated failed boots end in safe mode (no module loads).
 use crate::dlog;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};

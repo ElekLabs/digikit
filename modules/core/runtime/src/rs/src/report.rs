@@ -3,7 +3,7 @@
 use crate::platform::device;
 use crate::platform::st;
 use crate::state::{init_once, MAX_MODULES, STAGE_BYTES};
-use crate::{arena, assign, boot, card, crash, dlog, dsp, fx_slots, fxsend, registry, settings, speed, store, watch};
+use crate::{arena, assign, boot, card, fault, dlog, dsp, fx_slots, fxsend, registry, settings, speed, store, watch};
 use core::ptr::{addr_of, read_volatile};
 use dkrt_sdk::*;
 
@@ -150,7 +150,7 @@ pub unsafe extern "C" fn dkrt_diag(out: *mut DkrtDiag) {
     let o = &mut *out;
     let c = card::info();
     let (dsp_ok, hb) = watch::heartbeat();
-    let k = crash::seen();
+    let k = fault::seen();
     *o = DkrtDiag {
         magic: DIAG_MAGIC,
         version: 1,
