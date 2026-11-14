@@ -128,7 +128,7 @@ pub struct CParam {
 
 /// The most generic records (`dk_record_add`) and the bytes of their bodies one `init` may emit.
 pub const MAX_G: usize = 8;
-pub const G_BYTES: usize = 512;
+pub const G_BYTES: usize = 640;
 
 /// A generic record: its kind and where its body is in `Collect::gbytes`.
 #[derive(Clone, Copy)]

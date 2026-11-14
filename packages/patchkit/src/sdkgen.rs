@@ -33,6 +33,8 @@ pub const C_PAGE_CONSTS_OUT: &str = "sdk/include/dk/gen/page_consts.h";
 pub const C_LIMITS_OUT: &str = "sdk/include/dk/gen/limits.h";
 /// The generated C header of the status codes (`DK_E_*`), relative to the repository root.
 pub const C_STATUS_OUT: &str = "sdk/include/dk/core/status.h";
+/// The generated C header of the record kinds, relative to the repository root.
+pub const C_RECORDS_OUT: &str = "sdk/include/dk/gen/records.h";
 /// The generated C header of the sample pool numbers, relative to the repository root.
 pub const C_SAMPLE_OUT: &str = "sdk/include/dk/gen/sample.h";
 /// The generated SHARC+ include of the sample pool record layout, relative to the repository root.
@@ -2350,6 +2352,34 @@ fn fx_h(sdk: &Sdk) -> Result<String> {
     ))
 }
 
+/// `sdk/include/dk/gen/records.h`: the record kinds (`[records.kinds]`) for `dk_record_add`.
+fn records_h(sdk: &Sdk) -> String {
+    let mut s = format!(
+        "/* {HEADER} */\n/* sdk/include/dk/gen/records.h -- the record kinds of the `register` section; a module passes a generic one to dk_record_add. */\n#ifndef DK_GEN_RECORDS_H\n#define DK_GEN_RECORDS_H\n\n"
+    );
+    let mut kinds: Vec<_> = sdk.records.kinds.iter().collect();
+    kinds.sort_by_key(|(_, k)| k.id);
+    for (n, k) in kinds {
+        let _ = writeln!(
+            s,
+            "#define DK_RECORD_KIND_{n} {}{}",
+            k.id,
+            if k.generic {
+                ""
+            } else {
+                " /* not generic: a builder writes it */"
+            }
+        );
+        let _ = writeln!(
+            s,
+            "#define DK_RECORD_LEN_{n} {} /* with the 8-byte record header */",
+            k.len
+        );
+    }
+    s.push_str("\n#endif /* DK_GEN_RECORDS_H */\n");
+    s
+}
+
 /// `sdk/include/dk/gen/page_consts.h`: the constants of `[page] consts`.
 fn page_consts_h(sdk: &Sdk) -> String {
     let mut s = format!(
@@ -2393,6 +2423,7 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (C_FX_VIEW_OUT.to_string(), fx_h(&sdk)?),
         (C_IMPORTS_OUT.to_string(), imports_h(&sdk)?),
         (C_PAGE_CONSTS_OUT.to_string(), page_consts_h(&sdk)),
+        (C_RECORDS_OUT.to_string(), records_h(&sdk)),
     ])
 }
 
