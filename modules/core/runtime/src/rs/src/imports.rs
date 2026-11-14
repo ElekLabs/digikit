@@ -83,6 +83,7 @@ import_table! {
     ("dk_free", imp_free),
     ("dk_log", imp_log),
     ("dk_log_event", dlog::dk_log_event),
+    ("dk_sink_set", dlog::dk_sink_set),
     ("dk_time_blocks", dkrt_blocks),
     ("dk_fw_alloc", dkfw::mem::new),
     ("dk_fw_free", dkfw::mem::free),
@@ -152,6 +153,7 @@ const _: dkrt_sdk::api::DkAllocFn = imp_alloc;
 const _: dkrt_sdk::api::DkFreeFn = imp_free;
 const _: dkrt_sdk::api::DkLogFn = imp_log;
 const _: dkrt_sdk::api::DkLogEventFn = dlog::dk_log_event;
+const _: dkrt_sdk::api::DkSinkSetFn = dlog::dk_sink_set;
 const _: dkrt_sdk::api::DkTimeBlocksFn = dkrt_blocks;
 const _: dkrt_sdk::api::DkFwAllocFn = dkfw::mem::new;
 const _: dkrt_sdk::api::DkFwFreeFn = dkfw::mem::free;
