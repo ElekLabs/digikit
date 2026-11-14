@@ -96,7 +96,8 @@ export function groupOf(f: Uint8Array): Group {
   if (f.length < HEADER_BYTES) return 'Tools';
   const off = v.getUint32(0x90);
   const size = v.getUint32(0x94);
-  if (size < 8 || off + size > f.length || v.getUint32(off) !== TABLE_MAGIC || v.getUint16(off + 4) !== TABLE_VERSION) return 'Tools';
+  if (size < 8 || off + size > f.length || v.getUint32(off) !== TABLE_MAGIC || v.getUint16(off + 4) !== TABLE_VERSION)
+    return 'Tools';
   const kinds = new Set<number>();
   let at = off + 8;
   for (let i = v.getUint16(off + 6); i > 0 && at + 8 <= off + size; i--) {
