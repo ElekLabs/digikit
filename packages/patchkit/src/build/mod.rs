@@ -147,6 +147,10 @@ pub fn cache_dir(root: &Path) -> PathBuf {
 /// Entries of one object kept in the cache (the newest by modification time; a use touches its entry).
 const KEEP_ENTRIES: usize = 3;
 
+/// An entry used within this time is never evicted: another process (a gate job, another lane that shares `out/`) may have just chosen
+/// it and be about to read it.
+const EVICT_MIN_AGE: std::time::Duration = std::time::Duration::from_secs(3600);
+
 /// The directory of a content module's objects in the cache. A build with defines has its own directory, so objects of different
 /// define sets never share a file.
 fn module_cache_dir(env: &Env, m: &ModuleToml) -> PathBuf {
@@ -194,7 +198,14 @@ fn evict(dir: &Path, rel: &str) {
         .filter_map(|f| Some((f.metadata().ok()?.modified().ok()?, f)))
         .collect();
     entries.sort_by(|a, b| b.0.cmp(&a.0));
-    for (_, f) in entries.into_iter().skip(KEEP_ENTRIES) {
+    let now = std::time::SystemTime::now();
+    for (used, f) in entries.into_iter().skip(KEEP_ENTRIES) {
+        if now
+            .duration_since(used)
+            .is_ok_and(|age| age < EVICT_MIN_AGE)
+        {
+            continue;
+        }
         let _ = std::fs::remove_file(&f);
         // the key directory, when nothing else is in it
         let mut d = f.parent();
@@ -351,8 +362,12 @@ fn build_object(
     }
 }
 
-/// Write an object file in one step (a rename), so a reader that runs at the same time never sees half a file.
+/// Write an object file in one step (a rename), so a reader that runs at the same time never sees half a file. A file that already has
+/// this text is left alone, so a complete cache entry is never replaced.
 fn write_object(path: &Path, text: &str) -> Result<()> {
+    if std::fs::read_to_string(path).is_ok_and(|t| t == text) {
+        return Ok(());
+    }
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d).map_err(|e| err!("{}: {e}", d.display()))?;
     }
@@ -468,7 +483,12 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
                 Some(v) => comparable(v) == comparable(serde_json::to_value(&obj)?),
                 None => false,
             };
-            if !current {
+            // A cache entry is output, keyed by the hash of its sources: a missing one (another process may have evicted it) is made,
+            // not reported stale. Only a stored object that differs from a fresh build is stale.
+            let missing = !out.exists();
+            if !current && missing && m.is_content() && opts.out.is_none() {
+                write_object(&out, &to_text(&obj)?)?;
+            } else if !current {
                 return Err(err!(
                     "{} is stale: mise run module:build -- {}",
                     out.display(),
@@ -601,4 +621,78 @@ pub fn link_sources(
     let linked = cf::link(&proto, base, symmap)?;
     let hist = cf::check_isa(&linked)?;
     Ok((linked, hist))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    fn scratch(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("pk-build-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn a_reader_never_sees_a_partial_object() {
+        let dir = scratch("atomic");
+        let text = "x".repeat(8 << 20);
+        let stop = Arc::new(AtomicBool::new(false));
+        let reader = {
+            let (dir, text, stop) = (dir.clone(), text.clone(), stop.clone());
+            std::thread::spawn(move || {
+                let mut seen = 0;
+                while !stop.load(Ordering::Relaxed) {
+                    for i in 0..20 {
+                        if let Ok(t) = std::fs::read_to_string(dir.join(format!("e{i}/o.json"))) {
+                            assert_eq!(t.len(), text.len(), "partial entry e{i}");
+                            seen += 1;
+                        }
+                    }
+                }
+                seen
+            })
+        };
+        for i in 0..20 {
+            write_object(&dir.join(format!("e{i}/o.json")), &text).unwrap();
+        }
+        stop.store(true, Ordering::Relaxed);
+        reader.join().unwrap();
+        // no temp file is left behind
+        for i in 0..20 {
+            assert_eq!(
+                std::fs::read_dir(dir.join(format!("e{i}")))
+                    .unwrap()
+                    .count(),
+                1
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn evict_keeps_entries_used_recently() {
+        let dir = scratch("evict");
+        for i in 0..6 {
+            write_object(&dir.join(format!("k{i}/o.json")), "{}").unwrap();
+        }
+        evict(&dir, "o.json");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 6);
+        // the entries beyond the newest three go once they are old
+        let old = std::time::SystemTime::now() - EVICT_MIN_AGE * 2;
+        for i in 0..6 {
+            let f = std::fs::File::options()
+                .append(true)
+                .open(dir.join(format!("k{i}/o.json")))
+                .unwrap();
+            f.set_modified(old + std::time::Duration::from_secs(i))
+                .unwrap();
+        }
+        evict(&dir, "o.json");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), KEEP_ENTRIES);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

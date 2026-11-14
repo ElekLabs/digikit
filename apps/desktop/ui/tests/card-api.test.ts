@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { CardFolder } from '../src/card-core.ts';
 import { cardApi } from '../src/card-api.ts';
-import { createFakeHost } from '../src/host/fake-host.ts';
+import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
 
 const folder = (path: string): CardFolder => ({
   folder: path,

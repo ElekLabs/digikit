@@ -1,12 +1,12 @@
-// A flash from the first message to the verdict (apps/web/src/firmware/firmware-flow.ts), over a fake device on a virtual clock. The pacing is
+// A flash from the first message to the verdict (packages/workbench-core/src/firmware/firmware-flow.ts), over a fake device on a virtual clock. The pacing is
 // the Rust sender's (patchkit.wasm); the tests skip when the wasm is not built.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { PatchKit, type PreparedFlash } from '../src/patch/patchkit-core.ts';
-import type { Answer, FlashState } from '../src/firmware/firmware-core.ts';
-import { runFlash, type FlowLimits, type FlowOps } from '../src/firmware/firmware-flow.ts';
+import { PatchKit, type PreparedFlash } from '@digi/workbench-core/patch/patchkit-core.ts';
+import type { Answer, FlashState } from '@digi/workbench-core/firmware/firmware-core.ts';
+import { runFlash, type FlowLimits, type FlowOps } from '@digi/workbench-core/firmware/firmware-flow.ts';
 
 const wasm = fileURLToPath(new URL('../public/patchkit.wasm', import.meta.url));
 const have = existsSync(wasm);

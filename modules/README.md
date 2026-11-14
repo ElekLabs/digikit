@@ -54,7 +54,7 @@ Sources may sit in subfolders (`src/cf/dt2/`, `src/cf/dn2/`) when one module ser
   command line prints `added by requires: ...`); a missing module or a `requires` cycle is refused.
 - **`summary` and `gallery/icon.svg`**: what the gallery card shows. `summary` is one short sentence for players (at
   most 120 characters, ending with a full stop). The icon is line art on a 48 grid: `currentColor` lines and one
-  highlight in `style="stroke: var(--icon-accent)"`. `apps/web/tests/icons.test.mjs` checks it.
+  highlight in `style="stroke: var(--icon-accent)"`. `apps/web/tests/icons.test.ts` checks it.
 - **`README.md`**: the module's notes. Write for a player: what it adds, which firmware, how to hear it, limits,
   "emulator only". No firmware bytes, no vendor tool names.
 - **Comments in sources** say what the code does at each firmware site and which registers are free there, and cite

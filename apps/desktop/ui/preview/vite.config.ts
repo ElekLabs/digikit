@@ -14,7 +14,6 @@ export default defineConfig({
   plugins: [solid()],
   resolve: {
     alias: [
-      { find: '@web', replacement: here('../../../web/src') },
       { find: '@tauri-apps/api/core', replacement: here('./tauri-mock.ts') },
       // the pages import their backends by these two relative names; the mocks answer instead
       { find: /^\.\/transfer-backend$/, replacement: here('./transfer-backend.mock.ts') },

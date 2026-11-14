@@ -1,6 +1,6 @@
 // Follows the runtime log of the emulator and of the device on the MIDI port chosen last, and puts what it finds in the workbench log.
 // One poll loop per origin, once a second while the drawer is open, every 5 s for the device while it is closed, none while the window is hidden (log-follow-core.ts has the rules). Both read through the shared sessions of
-// apps/web/src/transfer/target.ts, so their requests take their turn with the Transfer pane's.
+// packages/workbench-core/src/transfer/target.ts, so their requests take their turn with the Transfer pane's.
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { readFault, type CardLogState, type DkSession, type LogConfig } from '@digi/dk-session';
 import type { LogInput, Origin } from './log-core.ts';

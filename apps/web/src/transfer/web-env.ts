@@ -4,14 +4,14 @@
 // Every URL goes through BASE_URL (GitHub Pages serves the site under a sub-path).
 import { DkSession } from '@digi/dk-session';
 import type { DkTransport } from '@digi/dk-session';
-import type { KeyValue } from '../storage';
-import { localStorageKeyValue } from '../storage';
-import { createTransferApp, type TransferApp } from './app';
-import type { TransferEnv } from './env';
-import { createSessionHub } from './session-core';
-import type { Target } from './target';
-import { fetchWasmSource } from '../wasm-source';
-import { MODULE_FILES } from './module-files.generated';
+import type { KeyValue } from '@digi/workbench-core/storage.ts';
+import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
+import { createTransferApp, type TransferApp } from '@digi/workbench-core/transfer/app.ts';
+import type { TransferEnv } from '@digi/workbench-core/transfer/env.ts';
+import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts';
+import type { Target } from '@digi/workbench-core/transfer/target.ts';
+import { fetchWasmSource } from '@digi/workbench-core/wasm-source.ts';
+import { MODULE_FILES } from '@digi/workbench-core/transfer/module-files.generated.ts';
 import { createWebLibrary } from './web-library';
 import {
   WebMidiTransport,

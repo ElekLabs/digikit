@@ -3,7 +3,7 @@ import { For, Show, createMemo, createSignal } from 'solid-js';
 import type { Category } from '../data/module-labels';
 import type { ModuleInfo } from '../data/modules';
 import ModuleCard from './ModuleCard';
-import Segmented from './Segmented';
+import Segmented from '@digi/workbench-core/ui/components/Segmented.tsx';
 import './module-card.css';
 
 export interface ModuleBrowserProps {

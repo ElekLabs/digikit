@@ -1,7 +1,7 @@
 // The workbench log: one list for the window, written by every part of the app (`logEvent`) and shown by the Log drawer in Console.tsx.
 // In memory only; the rules are in log-core.ts.
 import { createSignal } from 'solid-js';
-import { localStorageKeyValue } from '../../../web/src/storage';
+import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
 import {
   addEntries,
   addEntry,

@@ -1,10 +1,10 @@
 // The title bar of the workbench, over every page: the name, then the one target selector the pages share (target.ts). Transfer, Remote, Firmware
 // and the Memory panel all talk to the target picked here, so it sits above them rather than in each page (env.ts `targets.inHeader`).
 import { onCleanup, onMount, Show, type JSX } from 'solid-js';
-import ConnectionBadge from '@web/transfer/ConnectionBadge';
-import { useTransferApp } from '@web/transfer/app-context';
-import TargetSelect from '@web/transfer/TargetSelect';
-import { canAutoRefresh, focusReadDue } from '@web/transfer/refresh-core';
+import ConnectionBadge from '@digi/workbench-core/ui/transfer/ConnectionBadge.tsx';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
+import TargetSelect from '@digi/workbench-core/ui/transfer/TargetSelect.tsx';
+import { canAutoRefresh, focusReadDue } from '@digi/workbench-core/transfer/refresh-core.ts';
 
 // the title bar reads the ports by itself on every page, slower than the Transfer page's poll
 const RESCAN_MS = 10_000;

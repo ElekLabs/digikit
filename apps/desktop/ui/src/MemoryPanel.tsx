@@ -9,18 +9,18 @@
 // times with a growing gap (a device that is still booting after a restart). A panel whose tab is not shown reads nothing. Nothing pending or
 // ticked is shown.
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type JSX } from 'solid-js';
-import { panels } from '@web/data/faceplates';
-import { isCancelled, isNoRuntime } from '@web/modules/backend';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import { isCancelled, isNoRuntime } from '@digi/workbench-core/modules/backend.ts';
 import type { DkSession } from '@digi/dk-session';
 import { cardRefresh } from './card-state';
 import { deviceOfPort } from './remote-core';
 import { freeTitle, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
 import { readMemory, type MemoryReading } from './memory-backend';
 import { createReadGate } from './read-gate-core';
-import { focusReadDue } from '@web/transfer/refresh-core';
-import { useTransferApp } from '@web/transfer/app-context';
-import { sameTarget } from '@web/transfer/target';
-import { failureLine } from '@web/transfer/wait-core';
+import { focusReadDue } from '@digi/workbench-core/transfer/refresh-core.ts';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
+import { sameTarget } from '@digi/workbench-core/transfer/target.ts';
+import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import { reloadWithRuntime } from './emulator-actions';
 import './card-panel.css';
 import './memory-panel.css';

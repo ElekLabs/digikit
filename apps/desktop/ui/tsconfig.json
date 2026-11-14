@@ -11,8 +11,7 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
-    "types": ["vite/client"],
-    "paths": { "@web/*": ["../../web/src/*"] }
+    "types": ["vite/client"]
   },
   "include": ["src", "preview", "vite.config.ts"]
 }

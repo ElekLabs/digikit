@@ -3,13 +3,14 @@
 // pane's (../transfer/web-env.ts). Every URL goes through BASE_URL.
 import { SHOW_EMULATOR } from '../../site.config.mjs';
 import { handoffStore, putHandoff } from '../patch/handoff';
-import type { PatchKitLike, PreparedFlash } from '../patch/patchkit-core';
-import { senderKit } from '../patch/sender-kit';
+import type { PatchKitLike, PreparedFlash } from '@digi/workbench-core/patch/patchkit-core.ts';
+import { senderKit } from '@digi/workbench-core/patch/sender-kit.ts';
 import { createWebTransferApp, type WebTransfer } from '../transfer/web-env';
-import { fetchWasmSource, type WasmSource } from '../wasm-source';
-import { browserWorkers, type WorkerFactory, type WorkerPort } from '../workers';
-import { createFirmwareApp, type FirmwareApp } from './app';
-import type { FirmwareEnv } from './env';
+import { fetchWasmSource, type WasmSource } from '@digi/workbench-core/wasm-source.ts';
+import { browserWorkers } from '../browser-workers';
+import type { WorkerFactory, WorkerPort } from '@digi/workbench-core/workers.ts';
+import { createFirmwareApp, type FirmwareApp } from '@digi/workbench-core/firmware/app.ts';
+import type { FirmwareEnv } from '@digi/workbench-core/firmware/env.ts';
 import './firmware-site.css';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/?$/, '/');

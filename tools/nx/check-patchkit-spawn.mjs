@@ -21,7 +21,7 @@ const DIRS = [
   'packages/dk-session/src/**',
   'packages/control-client/src/**',
   'packages/dkbs/src/**',
-  'apps/web/src/modules/**',
+  'packages/workbench-core/src/modules/**',
 ];
 const files = globSync(
   DIRS.flatMap((dir) => [`${dir}/*.ts`, `${dir}/*.mjs`]),
