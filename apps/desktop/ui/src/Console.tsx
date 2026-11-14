@@ -306,6 +306,12 @@ export default function Console() {
       window.setTimeout(bumpCardRefresh, 2500);
       return true;
     } catch (e) {
+      if (isCancelled(e) || isCancelled((e as { cause?: unknown })?.cause)) {
+        setReloadNote(`Load cancelled: ${name}`);
+        logInput({ source: 'firmware', level: 'info', text: `loading ${name} cancelled` });
+        if (status()) await refreshInfo();
+        return false;
+      }
       setError(message(e));
       setFailed(startBoot(name));
       setReloadNote(loadFailure(name, message(e)));
@@ -379,6 +385,11 @@ export default function Console() {
           setPaused(false);
           await refreshInfo();
         } catch (e) {
+          if (isCancelled(e)) {
+            setReloadNote('Module reload cancelled');
+            logInput({ source: 'firmware', level: 'info', text: 'module reload cancelled' });
+            return;
+          }
           const failure = reloadError(e);
           setReloadNote(failure.status);
           logInput(reloadFailureEntry(failure));
@@ -434,6 +445,14 @@ export default function Console() {
       /* a replaced session has no status */
     }
   };
+
+  // an error banner goes away by itself after 8 s, unless the message changed meanwhile
+  createEffect(() => {
+    const text = error();
+    if (!text) return;
+    const timer = window.setTimeout(() => setError((current) => (current === text ? '' : current)), 8000);
+    onCleanup(() => window.clearTimeout(timer));
+  });
 
   const toggleLog = () => setLogOpen(!logOpen());
   const showMetrics = () => {
@@ -582,6 +601,11 @@ export default function Console() {
       );
     } catch (e) {
       if (e instanceof JobBusyError) return;
+      if (isCancelled(e)) {
+        setReloadNote('Sample card load cancelled');
+        logEvent('card', 'info', 'sample folder: cancelled');
+        return;
+      }
       setCard({ state: 'error', message: message(e) });
       logInput(failureEntry('card', 'sample folder', message(e)));
     }
@@ -715,7 +739,14 @@ export default function Console() {
 
       <Show when={error() || outsideApp()}>
         <p class="alert" role="alert">
-          {outsideApp() ? 'This page is the desktop app’s console; start it with mise run workbench.' : error()}
+          <span>
+            {outsideApp() ? 'This page is the desktop app’s console; start it with mise run workbench.' : error()}
+          </span>
+          <Show when={error()}>
+            <button type="button" class="dismiss" aria-label="Dismiss" onClick={() => setError('')}>
+              ×
+            </button>
+          </Show>
         </p>
       </Show>
 

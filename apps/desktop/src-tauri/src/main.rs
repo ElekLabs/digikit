@@ -240,7 +240,8 @@ fn call_method(
     if let Some(session) = session {
         fields.insert("session".into(), session.into());
     }
-    handle.call(method, params).map_err(|e| e.message)
+    // the "(code N)" suffix stays: the webview turns it into `Error.code`
+    handle.call(method, params).map_err(|e| e.to_string())
 }
 
 /// Put the bytes of a firmware file the webview picked (Open...) where the controller can read them: `<run dir>/open/<name>`
@@ -1041,12 +1042,12 @@ mod emu_call_tests {
         assert!(call_method(&handle, "status", None, Some(0)).is_ok());
         assert_eq!(
             call_method(&handle, "diagnostics", None, Some(4)).unwrap_err(),
-            "stale emulator session"
+            "stale emulator session (code 2)"
         );
         // `firmware.load` and `restart` start a session: the token must be newer than the current one.
         assert_eq!(
             call_method(&handle, "restart", None, Some(0)).unwrap_err(),
-            "stale emulator session"
+            "stale emulator session (code 2)"
         );
         // A start that fails does not take the token.
         let missing = json!({"syx": "/nonexistent/none.syx"});

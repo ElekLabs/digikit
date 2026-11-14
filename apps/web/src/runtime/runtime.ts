@@ -452,7 +452,12 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
   // One protocol method of the controller (docs/CONTROL.md). With a session, the controller refuses the call when the webview's
   // session is no longer the current one; `firmware.load` and `restart` start the session they carry.
   const call = <T>(method: string, params: Record<string, unknown> = {}, session?: number) =>
-    api.invoke<T>('emu_call', { method, params, session: session ?? null });
+    api.invoke<T>('emu_call', { method, params, session: session ?? null }).catch((e: unknown) => {
+      // the bridge passes a string like "cancelled (code 10)": the code becomes data, the message loses the suffix
+      const m = /^([\s\S]*) \(code (-?\d+)\)$/.exec(e instanceof Error ? e.message : String(e));
+      if (!m) throw e;
+      throw Object.assign(new Error(m[1]), { code: Number(m[2]) });
+    });
   // A new session: stop the pump, run the call that starts it (`firmware.load` or `restart`, with the new token), take the
   // snapshot of what came up, and start pumping it. A newer session wins over an older one that is still starting.
   const newSession = (starts: (token: number) => Promise<void>) => {

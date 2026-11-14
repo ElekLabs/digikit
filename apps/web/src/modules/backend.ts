@@ -21,6 +21,7 @@ export function isCancelled(e: unknown): boolean {
   const raw = e instanceof Error ? e.message : String(e);
   return (
     (e as { kind?: string })?.kind === 'cancelled' ||
+    (e as { code?: number })?.code === CONTROL_CANCELLED ||
     /"kind":"cancelled"/.test(raw) ||
     raw.endsWith(`(code ${CONTROL_CANCELLED})`)
   );
