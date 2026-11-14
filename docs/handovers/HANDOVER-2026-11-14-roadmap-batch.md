@@ -88,3 +88,14 @@ R7 is merged into `gate/batch4` and the combined gate is running (`DIGI_GATE_BAS
 - Design inputs from today's scouts (not in the repo) are under the session scratchpad: r2c, r6, p4, p6, p8, r7 and t1h inputs, and the T1d audit. The decisions above are the parts that matter.
 - Lanes: `sdk-design` (R7), `sdk-gen` (gate/batch4), `sdk-fixtures` (prof/p4-cost), `sdk-ui` (new; TS work and this handover).
 - Em removes merged branches and lanes.
+
+## Update: batch merged
+
+The batch gate passed after fixes. Main now has #474 (noise fixes), #475 (R6a), #476 (P4), #477 (P6) and #478 (R7, runtime 0.8.0). Bugs the host pre-stage and the gate caught before merge:
+- the daemon store key missed packages/dkprof;
+- patchkit.wasm went over its size limit (dkprof is now native-only);
+- the R7 table magic;
+- TS and Python readers of the old header;
+- a boot-planner selection-count bug that would refuse full selections;
+- runtime_patch listing bare ids on a cache hit.
+Practice now: run a host pre-stage (all merge-gate targets except device and conformance tests, plus daemons and patchkit:wasm) before every device gate. The PGO profiles are being retrained on the new main. Next: S5a, P8a, the Profile pane, S5b static parts, and the T1a over-selection fixes.
