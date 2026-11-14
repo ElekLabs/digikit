@@ -5,18 +5,16 @@ import ConnectionBadge from '@web/transfer/ConnectionBadge';
 import TargetSelect, { rescanTargets } from '@web/transfer/TargetSelect';
 import { canAutoRefresh, focusReadDue } from '@web/transfer/refresh-core';
 import { target } from '@web/transfer/target';
-import { writing } from '@web/transfer/transfer-core';
-import { busy } from '@web/transfer/transfer-state';
-import { running } from '@web/firmware/firmware-core';
-import { run } from '@web/firmware/firmware-state';
+import { busy as transferBusy } from '@web/transfer/transfer-state';
+import { busy as jobBusy } from '@web/jobs/jobs';
 
 // the title bar reads the ports by itself on every page, slower than the Transfer page's poll
 const RESCAN_MS = 10_000;
 
 export default function TitleBar(props: { onError?: (message: string) => void }): JSX.Element {
-  const locked = () => writing(busy()) || running(run());
+  const locked = () => jobBusy('target');
   let lastFocus: number | undefined;
-  const free = () => canAutoRefresh(document.visibilityState === 'visible', busy()) && !running(run());
+  const free = () => canAutoRefresh(document.visibilityState === 'visible', transferBusy()) && !jobBusy('target');
   const back = () => {
     const now = Date.now();
     if (!free() || !focusReadDue(lastFocus, now)) return;

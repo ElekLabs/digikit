@@ -6,6 +6,7 @@ type UploadEventWithoutFolder = WithoutFolder<Exclude<UploadEvent, { event: 'not
 // samples-core). The pictures of the page are checked with `node tools/devtools/ui_shots.mjs` (docs/TESTING.md).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { jobs } from '../../../web/src/jobs/jobs.ts';
 import { instrument } from '../../../web/src/transfer/activity.ts';
 import { createRate, etaSeconds, fmtEta, fmtRate, statsLine } from '../../../web/src/transfer/rate-core.ts';
 import { FOCUS_GAP_MS, canAutoRefresh, focusReadDue, listingChanged } from '../../../web/src/transfer/refresh-core.ts';
@@ -485,6 +486,20 @@ test('the busy action outlives the page: a page that comes back during an upload
   assert.equal(endJob(), false, 'the read is asked for once');
   assert.equal(busy(), '');
   setError('');
+});
+
+test('a write job is a target job in the shared store, a read is not', () => {
+  assert.equal(beginJob('Uploading'), true);
+  assert.deepEqual(
+    jobs().list.map((j) => [j.group, j.label]),
+    [['target', 'Uploading']],
+  );
+  endJob();
+  assert.equal(jobs().list.length, 0);
+  assert.equal(beginJob('Reading'), true);
+  assert.equal(jobs().list.length, 0);
+  assert.equal(busy(), 'Reading');
+  endJob();
 });
 
 test('the bar of a resumed upload: files on the device are done at once, but add nothing to the bytes behind the speed and the time left', () => {
