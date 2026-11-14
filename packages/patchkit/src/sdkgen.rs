@@ -385,6 +385,19 @@ fn records_consts(sdk: &Sdk, indent: &str) -> String {
         let _ = writeln!(s, "{indent}    {n:?},");
     }
     let _ = writeln!(s, "{indent}];");
+    let _ = writeln!(
+        s,
+        "{indent}/// The kind names of `[records.kinds]` in lower case with their numbers: the `kind` of a `[[record]]` of a module.toml."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const KIND_NAMES: [(&str, u32); {}] = [",
+        kinds.len()
+    );
+    for (n, _) in &kinds {
+        let _ = writeln!(s, "{indent}    ({:?}, KIND_{n}),", n.to_lowercase());
+    }
+    let _ = writeln!(s, "{indent}];");
     let generic: Vec<_> = kinds.iter().filter(|(_, k)| k.generic).collect();
     let _ = writeln!(
         s,

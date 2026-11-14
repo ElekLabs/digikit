@@ -130,6 +130,16 @@ pub mod records {
         "dsp_link",
         "sdhc_large",
     ];
+    /// The kind names of `[records.kinds]` in lower case with their numbers: the `kind` of a `[[record]]` of a module.toml.
+    pub const KIND_NAMES: [(&str, u32); 7] = [
+        ("param", KIND_PARAM),
+        ("machine", KIND_MACHINE),
+        ("page", KIND_PAGE),
+        ("effect", KIND_EFFECT),
+        ("action", KIND_ACTION),
+        ("native_page", KIND_NATIVE_PAGE),
+        ("native_page_v2", KIND_NATIVE_PAGE_V2),
+    ];
     /// The kinds a module emits with `dk_record_add`.
     pub const GENERIC_KINDS: [u32; 0] = [
     ];

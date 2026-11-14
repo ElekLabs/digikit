@@ -74,6 +74,80 @@ fn desc_flags(obj: &Dko, desc: &str) -> Result<bool> {
     Ok(w & dkmdsp::DESC_STEREO != 0)
 }
 
+/// The header table (`dkneeds::keys`) of a module for `device`: the `[uses]` counts, the machine and effect keys and the keys of the `[[record]]` entries (generic
+/// kinds), grouped by kind in the order of the kind numbers. The packer adds the needs of the linked imports.
+fn header_table(
+    mf: &crate::module::Manifest,
+    device: &str,
+    mk: Vec<u32>,
+    fk: Vec<u32>,
+) -> Result<Vec<u8>> {
+    let id = &mf.module.id;
+    let u = mf.uses.for_device(device);
+    let rows = (
+        u32::from(u.machine_rows),
+        u32::from(u.param_rows),
+        u32::from(u.page_rows),
+    );
+    // the keys by kind: machines, effects, and the records of generic kinds (`[[record]]`), in the order of the kind numbers
+    let mut groups: std::collections::BTreeMap<u32, Vec<u32>> = std::collections::BTreeMap::new();
+    if !mk.is_empty() {
+        groups.insert(dkneeds::KIND_MACHINE, mk);
+    }
+    if !fk.is_empty() {
+        groups.insert(dkneeds::KIND_EFFECT, fk);
+    }
+    for r in &mf.records {
+        let kind = dkneeds::KIND_NAMES
+            .iter()
+            .find(|(n, _)| *n == r.kind)
+            .map(|k| k.1)
+            .ok_or_else(|| {
+                err!(
+                    "{id}: [[record]] kind {:?} is not in [records.kinds] of sdk/sdk.toml",
+                    r.kind
+                )
+            })?;
+        if !dkneeds::GENERIC_KINDS.contains(&kind) {
+            return Err(err!(
+                "{id}: [[record]] kind {:?} is not generic: its records come from builder calls",
+                r.kind
+            ));
+        }
+        let keys = groups.entry(kind).or_default();
+        if keys.contains(&r.key) {
+            return Err(err!(
+                "{id}: [[record]] kind {:?} key {} twice",
+                r.kind,
+                r.key
+            ));
+        }
+        keys.push(r.key);
+    }
+    let key_groups: Vec<dkneeds::keys::KeyGroup> = groups
+        .iter()
+        .map(|(kind, keys)| dkneeds::keys::KeyGroup { kind: *kind, keys })
+        .collect();
+    let uses: Vec<dkneeds::keys::Use> = [
+        (dkneeds::RES_MACHINE_ROWS, rows.0),
+        (dkneeds::RES_PARAM_ROWS, rows.1),
+        (dkneeds::RES_PAGE_ROWS, rows.2),
+        (dkneeds::RES_RECORD_BYTES, u32::from(u.record_bytes)),
+    ]
+    .into_iter()
+    .filter(|(_, count)| *count != 0)
+    .map(|(resource, count)| dkneeds::keys::Use { resource, count })
+    .collect();
+    let table = dkneeds::keys::Table {
+        uses: &uses,
+        keys: &key_groups,
+        ..Default::default()
+    };
+    let mut keys = vec![0u8; dkneeds::keys::table_size(&table)];
+    dkneeds::keys::write_table(&table, &mut keys).map_err(|e| err!("{id}: header table: {e:?}"))?;
+    Ok(keys)
+}
+
 /// The keys table and the DSP section of a new-style module for `device`. `name` is the packed module name (`pack --name`, else the module id): the keys hash it with
 /// the `[[machine]]` and `[[fx]]` ids, so an alias made with another name has keys of its own. `dsp_obj` is its DSP object (none: refused, a machine or an effect
 /// needs one).
@@ -82,9 +156,9 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
     let id = &mf.module.id;
     let Some(obj) = dsp_obj else {
         if mf.machines.is_empty() && mf.fxs.is_empty() {
-            // a tool or a service: no keys, no DSP section
+            // a tool or a service: no machine or effect keys, no DSP section (a header table with the records and the uses it has)
             return Ok(Sections {
-                keys: vec![],
+                keys: header_table(mf, device, vec![], vec![])?,
                 dsp: vec![],
                 stereo: false,
                 gate: false,
@@ -182,7 +256,6 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
         &fxs,
         tracks.as_ref(),
     )?;
-    let u = mf.uses.for_device(device);
     let mk: Vec<u32> = mf
         .machines
         .iter()
@@ -193,15 +266,7 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
         .iter()
         .map(|y| crate::register::effect_id(name, &y.id))
         .collect();
-    let rows = (
-        u32::from(u.machine_rows),
-        u32::from(u.param_rows),
-        u32::from(u.page_rows),
-    );
-    let mut keys =
-        vec![0u8; dkneeds::keys::keys_size(rows, u32::from(u.record_bytes), mk.len(), fk.len())];
-    dkneeds::keys::write_keys(rows, u32::from(u.record_bytes), &mk, &fk, &mut keys)
-        .map_err(|e| err!("{id}: keys table: {e:?}"))?;
+    let keys = header_table(mf, device, mk, fk)?;
     Ok(Sections {
         keys,
         dsp,
@@ -289,9 +354,20 @@ mod tests {
     const MACHINE: &str = "[[machine]]\nid = \"foo\"\n[uses.dn2]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\nrecord_bytes = 560\n";
 
     #[test]
-    fn a_tool_without_tables_has_an_empty_keys_table_and_no_dsp() {
+    fn a_tool_without_tables_has_a_head_only_header_table_and_no_dsp() {
         let s = sections(&module(""), "test/m", "dn2", None).unwrap();
-        assert!(s.keys.is_empty() && s.dsp.is_empty());
+        assert_eq!(s.keys.len(), dkneeds::keys::HEAD);
+        assert!(s.dsp.is_empty());
+    }
+
+    #[test]
+    fn a_record_entry_puts_its_key_in_the_keys_entry_and_a_typed_or_unknown_kind_is_refused() {
+        let m = module("[[record]]\nkind = \"effect\"\nkey = 1\n");
+        let e = sections(&m, "test/m", "dn2", None).unwrap_err().to_string();
+        assert!(e.contains("not generic"), "{e}");
+        let m = module("[[record]]\nkind = \"nothing\"\nkey = 1\n");
+        let e = sections(&m, "test/m", "dn2", None).unwrap_err().to_string();
+        assert!(e.contains("not in [records.kinds]"), "{e}");
     }
 
     #[test]
