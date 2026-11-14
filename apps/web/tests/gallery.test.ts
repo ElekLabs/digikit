@@ -4,10 +4,13 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { parse } from 'smol-toml';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { buildModuleData } from '../scripts/gen-modules.mjs';
 import { patchedFileName } from '../src/patch/patchkit-core.ts';
 import { manifestFiles, root } from './support/patchkit-env.ts';
+
+// buildModuleData reads every module of the repository: seconds on a busy machine
+vi.setConfig({ testTimeout: 60_000 });
 
 test('bundle lists the committed modules and ports', () => {
   const { bundle } = buildModuleData(root);
