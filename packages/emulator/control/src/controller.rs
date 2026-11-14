@@ -3340,10 +3340,11 @@ impl Actor {
                     if !r.set_sharc_profile(on) {
                         return Err(unavailable("no DSP audio session"));
                     }
+                    let frames = r.frames_sent();
                     now = r.worker_report().map(|w| {
                         let t = w.tiers.as_ref();
                         (
-                            w.periods,
+                            frames,
                             t.map_or(0, |t| t.icount),
                             t.map_or(0, |t| t.idle_skipped),
                         )
@@ -3360,7 +3361,7 @@ impl Actor {
                     ));
                 };
                 let counts = crate::sharc_profile::SharcCounts {
-                    blocks: w.periods.saturating_sub(started.0),
+                    blocks: r.frames_sent().saturating_sub(started.0),
                     icount: w
                         .tiers
                         .as_ref()

@@ -197,9 +197,11 @@ async function recordSharc(ctx) {
         { name: 'sharc.insn.counted.fast', value: a.counted.fast, unit: 'insn' },
         { name: 'sharc.insn.counted.block', value: a.counted.block, unit: 'insn' },
         { name: 'sharc.insn.counted.interpreted', value: a.counted.interpreted, unit: 'insn' },
-        a.icount > a.idle_skipped
-          ? { name: 'sharc.coverage', value: counted / (a.icount - a.idle_skipped), unit: 'ratio' }
-          : { name: 'sharc.coverage', unit: 'ratio', na_reason: 'no busy instruction ran since the counting started' },
+        {
+          name: 'sharc.coverage',
+          unit: 'ratio',
+          na_reason: 'sharc.insn.executed and the per-PC counts do not reconcile in the DN2 proof run (open, profiling plan P4)',
+        },
       ],
       markers: [{ name: 'record.start', at: 0 }],
       loss: [],

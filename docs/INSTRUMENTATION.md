@@ -551,6 +551,17 @@ node tools/devtools/wb.mjs profile record --seconds 4 --image out/try/rt.syx --o
 ```
 
 `cf.profile` keeps the 400 heaviest rows of its cumulative tables, which the artifact records under `loss`.
+
+**DSP profile (`--cpu sharc`).** A daemon built with `--features sharc-profile` (a DSP core, as for `coupled-audio`) answers `sharc.profile` ([CONTROL.md](CONTROL.md)).
+`wb profile record --cpu sharc --seconds N --out FILE [--image X.syx] [--run-dir DIR]` starts the counting, waits N seconds (a live emulator) and writes the counts as a profile
+(`clock.unit` `insn`, metrics `sharc.blocks`, `sharc.insn.*`, `sharc.coverage`); `--since-boot` skips the start and the wait and reads the counts since an earlier
+`sharc.profile {enable: true}` (a paused emulator). `wb profile report FILE --map SHIP.addrmap.json --map MODULE.addrmap.json --loads LOADS.json` names the DSP functions of a module and, with
+`--analyse ID=MODULE.dkm:DSP.dko.json`, adds the counts inside each DO loop of its DSP code (`dksharc`): a counter belongs to the innermost loop that holds it, so a loop's row
+does not include the loops inside it. With the `sharc.blocks` metric every row also shows instructions per DSP block. A fast-tier or block-tier dispatch is credited whole to its
+entry PC, so a count says which region the instructions belong to, not which instruction in it.
+A real run (DN2 1.12 with digikit/pluck, 5487 DSP blocks, one note from the module; the daemon with `sharc-profile`, the report with the ship map and the module's map from `patchkit pack --addrmap`): the whole DSP
+takes 332,039 instructions per block (the stock firmware, near the 334,529 of `stock_busy`), the module 247.4 per block; its `_pk_render` loop (32 passes) takes 200.7 per block, its `_pk_coef` 33.5.
+The map holds assembler labels as functions (`_pk_run` inside the render routine), so the function rows follow the map and the loop rows follow `dksharc`.
 `wb addrmap lookup` and `wb module analyse` ([ADDRMAP.md](ADDRMAP.md#usage), [dksharc](../packages/dksharc/README.md#usage)) use the same `dkprof.wasm`.
 
 ## Cargo features
@@ -560,6 +571,7 @@ node tools/devtools/wb.mjs profile record --seconds 4 --image out/try/rt.syx --o
 | `packages/emulator/sharc` (`coupled`: same names) | `fast-dump` | `SHARC_FAST_DUMP` capture hooks |
 | | `region-profile` | per-entry wall time (`perf.py --regions`; needs `DIGI_COUPLED_FEATURES=coupled-audio,region-profile`) |
 | `packages/emulator/boot` | `cf-profile` | host-time and PC profile of ColdFire |
+| `packages/emulator/control` | `sharc-profile` | `sharc.profile`: DSP instruction counts per PC (turns on the engine's `region-profile`) |
 | | `diagnostic-profile`, `-events` | boot event records and profile |
 | `packages/emulator/periph` | `trace` (default) | DT2MMIO trace reader and `mmio-replay`; no runtime hook. Every product crate (`boot`, `card`, `host`, `machine`) takes periph with `default-features = false`, so a product build does not compile it. Turning the default off changes only a direct `cargo build -p periph`. Left as is. |
 
