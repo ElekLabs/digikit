@@ -374,6 +374,54 @@ fn never_started_cancel_is_reclaimable() {
     }
 }
 
+#[test]
+fn on_loaded_runs_once_per_load_and_after_the_last_row() {
+    use crate::handlers::tests::{log, Call, Fake, LOCK as FAKE_LOCK};
+    let _f = FAKE_LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, false);
+        log().clear();
+        let d = dsp::ds();
+        d.row_owner = [0; dsp::MAX_ROWS];
+        d.fx_owner = [0; dsp::MAX_FX];
+        d.step = 0; // no row of module 0 in the fake's list: every row is in
+        type Two = (Fake<1>, (Fake<2>, ()));
+        crate::loader::dsp_step_with::<Two>();
+        // each service hears it once, in list order, and the load is over
+        assert_eq!(*log(), vec![Call::OnLoaded { svc: 1, rec: 0 }, Call::OnLoaded { svc: 2, rec: 0 }]);
+        assert_eq!(dsp::ds().phase, dsp::PH_IDLE);
+        assert_eq!(boot::info().loaded, 1);
+        // an idle loader has nothing to list
+        log().clear();
+        crate::loader::dsp_step_with::<Two>();
+        assert!(log().is_empty());
+    }
+}
+
+#[test]
+fn attribution_names_the_module_of_every_site_the_watch_reports() {
+    use crate::handlers::{ServiceList, Services};
+    use dkrt_sdk::fault::{SITE_FX_MASTER, SITE_FX_SEND, SITE_NONE, SITE_VOICE};
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, false);
+        let d = dsp::ds();
+        d.row_owner[0] = 2;
+        d.row_type[0] = 7;
+        d.fx_owner[1] = 3;
+        // a voice site: the module that owns the machine type
+        assert_eq!(Services::attribute(SITE_VOICE, 7), Some(1));
+        assert_eq!(Services::attribute(SITE_VOICE, 8), None);
+        // every other site is an effect row of the chain's table (first row 0 in the test table)
+        assert_eq!(Services::attribute(SITE_FX_MASTER, 1), Some(2));
+        assert_eq!(Services::attribute(SITE_FX_SEND, 1), Some(2));
+        assert_eq!(Services::attribute(SITE_NONE, 1), Some(2));
+        assert_eq!(Services::attribute(9, 1), Some(2));
+        assert_eq!(Services::attribute(SITE_FX_MASTER, 0), None);
+    }
+}
+
 // Optional diagnostic firmware link boundary, absent in this host fixture.
 #[no_mangle]
 pub extern "C" fn dl_diag(_: *mut u32, _: u32) -> i32 {

@@ -15,6 +15,11 @@ use crate::{cstr_len, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
+/// The length of a record of `kind`, as the service that owns the kind declares it.
+fn record_len(kind: u32) -> usize {
+    crate::handlers::len(kind).unwrap_or(0) as usize
+}
+
 pub const MAX_RECORDS: usize = dkneeds::MAX_RECORDS as usize;
 const MAX_M: usize = limits::MACHINE_ROWS;
 const MAX_F: usize = crate::dsp::MAX_FX;
@@ -27,17 +32,12 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 const KNOB_PARAM: u32 = 0x8000_0000;
 const FX_KNOBS: usize = 7;
 
-// record kinds and lengths of the `register` section (registry.rs, nativepage.rs, fxpage.rs)
+// record kinds of the `register` section; the lengths come from the services' declarations (`handlers::len`)
 const KIND_PARAM: u32 = 1;
 const KIND_MACHINE: u32 = 2;
 const KIND_PAGE: u32 = 3;
 const KIND_EFFECT: u32 = 4;
 const KIND_ACTION: u32 = 5;
-const LEN_PARAM: usize = 0x50;
-const LEN_MACHINE: usize = 0x6c;
-const LEN_PAGE: usize = 0x60;
-const LEN_EFFECT: usize = 0x1a4;
-const LEN_ACTION: usize = 0x10;
 const REG_MAGIC: u32 = 0x444b_5247;
 const HEADER: usize = 16;
 const POS_END: u32 = 255;
@@ -771,7 +771,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             return Err(E_FORMAT); // the range does not fit the glyph
         }
         let tpl = p.tpl[q.glyph as usize];
-        o.head(KIND_PARAM, LEN_PARAM);
+        o.head(KIND_PARAM, record_len(KIND_PARAM));
         o.p32(k as u32);
         o.p32(tpl);
         o.p32(p.slot_base + plan.pos[i] as u32);
@@ -802,7 +802,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                 i += 1;
             }
         }
-        o.head(KIND_MACHINE, LEN_MACHINE);
+        o.head(KIND_MACHINE, record_len(KIND_MACHINE));
         o.p32(machine_key(keys, mc));
         o.p32(p.clone_of);
         o.p32(POS_END);
@@ -844,7 +844,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                     (&mc.name, &upper)
                 }
             };
-            o.head(KIND_PAGE, LEN_PAGE);
+            o.head(KIND_PAGE, record_len(KIND_PAGE));
             o.p32(machine_key(keys, mc));
             let mut j = 0;
             while j < KNOBS {
@@ -883,7 +883,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                 }
                 i += 1;
             }
-            o.head(KIND_EFFECT, LEN_EFFECT);
+            o.head(KIND_EFFECT, record_len(KIND_EFFECT));
             o.p32(fx.index); // the effect record of the DSP section: the keys table order
             o.p32(fx.mix); // MIX default
             o.p32(n as u32);
@@ -924,7 +924,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
     while i < c.nparam {
         let q = &c.params[i];
         if q.click != 0 && plan.file[i] != u8::MAX {
-            o.head(KIND_ACTION, LEN_ACTION);
+            o.head(KIND_ACTION, record_len(KIND_ACTION));
             o.p32(plan.file[i] as u32);
             o.p32(q.click.wrapping_sub(base));
             if q.fx {
@@ -965,10 +965,10 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             };
             taken |= 1 << index;
             if v1 {
-                o.head(crate::nativepage::KIND, crate::nativepage::LEN as usize);
+                o.head(crate::nativepage::KIND, record_len(crate::nativepage::KIND));
                 o.p32(1);
             } else {
-                o.head(crate::nativepage::KIND_V2, crate::nativepage::LEN_V2 as usize);
+                o.head(crate::nativepage::KIND_V2, record_len(crate::nativepage::KIND_V2));
                 o.p32(2);
             }
             o.p32(machine_key(keys, &c.machines[m]));

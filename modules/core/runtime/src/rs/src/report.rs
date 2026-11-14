@@ -3,7 +3,8 @@
 use crate::platform::device;
 use crate::platform::st;
 use crate::state::{init_once, MAX_MODULES, STAGE_BYTES};
-use crate::{arena, assign, boot, card, fault, dlog, dsp, fx_slots, fxsend, registry, settings, speed, store, watch};
+use crate::handlers::{CapSink, ServiceList, Services};
+use crate::{arena, boot, card, fault, dlog, dsp, settings, speed, store, watch};
 use core::ptr::{addr_of, read_volatile};
 use dkrt_sdk::*;
 
@@ -98,8 +99,6 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         }
         i += 1;
     }
-    let (vrows, vused) = dsp::rows_counts();
-    let [mach, param, page] = registry::counts();
     let stage = STAGE_BYTES as u32;
     // the store: its area in KiB (0 when the card is too small for it), and what the headers say is used (a card with no header: nothing)
     let st_total = if card::state() == CARD_TOO_SMALL { 0 } else { store::layout().limit() / 2 };
@@ -108,22 +107,18 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         None => 0,
     };
     let (set_limit, set_used) = settings::capacity();
+    // the services declare their own counts (machine, voice, parameter and page rows, effect and send slots, map entries)
+    let mut declared = CapSink::new();
+    Services::caps(&mut declared);
     // the values of each kind (a table, not a `match`: a jump table would put data in .text)
-    let entries: [(u8, u32, u32, u32); 14] = [
+    let entries: [(u8, u32, u32, u32); 7] = [
         (CAPK_MODULES, MAX_MODULES as u32, mods, 0),
         (CAPK_SELECTION, dkrt_sdk::SEL_MAX as u32, boot::selected(), 0),
         (CAPK_ARENA, arena, arena - af, al),
         (CAPK_STAGE, stage, 0, stage),
         (CAPK_DSP_AREA, area, area - df, dl),
-        (CAPK_MACHINE_ROWS, mach.0, mach.1, 0),
-        (CAPK_VOICE_ROWS, vrows, vused, 0),
-        (CAPK_PARAM_ROWS, param.0, param.1, 0),
-        (CAPK_PAGE_ROWS, page.0, page.1, 0),
-        (CAPK_FX_SLOTS, fx_slots(), dsp::fx_used(), 0),
-        (CAPK_MAP_ENTRIES, dkrt_sdk::sel::MAP_N as u32, assign::map_used(), 0),
         (CAPK_STORE, st_total, st_used, 0),
         (CAPK_SETTINGS, set_limit, set_used, 0),
-        (CAPK_SEND_SLOTS, fxsend::slots(), fxsend::used(), 0),
     ];
     // one entry per kind of `[capacity.kinds]`, in its order; a kind with no row above reports zeros
     let mut k = 0;
@@ -136,6 +131,9 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
                 v = entries[e];
             }
             e += 1;
+        }
+        if let Some((limit, used)) = declared.get(kind) {
+            v = (kind, limit, used, 0);
         }
         *out.add(k) = DkrtCap { kind: kind as u32, limit: v.1, used: v.2, largest: v.3 };
         k += 1;
