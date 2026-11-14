@@ -119,6 +119,20 @@ export function groupOf(f: Uint8Array): Group {
   return 'Tools';
 }
 
+/** What to tell a person about a file with no header table or another table version: it was built for an older runtime (the loader's E_CONTRACT). */
+export const OLDER_RUNTIME_TEXT = 'module built for an older runtime: rebuild it';
+
+/** Whether the bytes (the header and the table behind it, as `groupOf` reads them) carry the header table of this runtime; false means `OLDER_RUNTIME_TEXT`. */
+export function hasHeaderTable(f: Uint8Array): boolean {
+  if (f.length < HEADER_BYTES) return false;
+  const v = new DataView(f.buffer, f.byteOffset, f.length);
+  const off = v.getUint32(0x90);
+  const size = v.getUint32(0x94);
+  return (
+    size >= 8 && off + size <= f.length && v.getUint32(off) === TABLE_MAGIC && v.getUint16(off + 4) === TABLE_VERSION
+  );
+}
+
 /** The header fields of a .dkm (its first 0xa0 bytes, or the whole file for the group); null when the bytes are not one. */
 export function headerInfo(h: Uint8Array): HeaderInfo | null {
   if (h.length < HEADER_BYTES || MAGIC.some((b, i) => h[i] !== b)) return null;
