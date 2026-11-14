@@ -14,6 +14,7 @@ import {
   MAX_CHUNK,
   PROTO_VERSION,
   READ_MAX,
+  PEEK_MAX,
   SERVICE_CMD,
   STATUS as GSTATUS,
 } from './gen_proto.ts';
@@ -1198,6 +1199,24 @@ export class DkSession {
       });
     }
     return [u32(b, 0), u32(b, 4), events];
+  }
+  /**
+   * PEEK (the debug module `digikit/debug`): `length` bytes of RAM from `addr`, inside the ranges of the device file (`[digikit] peek`); longer
+   * reads are made of requests of PEEK_MAX bytes. The same call serves the emulator and a device: only the transport differs.
+   */
+  async peek(addr: number, length: number, quick: Quick = false): Promise<Uint8Array> {
+    const out = new Uint8Array(length);
+    for (let at = 0; at < length; at += PEEK_MAX) {
+      const n = Math.min(PEEK_MAX, length - at);
+      const body = new Uint8Array(6);
+      new DataView(body.buffer).setUint32(0, addr + at);
+      new DataView(body.buffer).setUint16(4, n);
+      const b = await this.ok(SERVICE_CMD.PEEK, 'peek', body, quick);
+      if (b.length < 6 + n || u32(b, 0) !== addr + at || u16(b, 4) !== n)
+        throw new DkError({ error: 'peek: malformed reply', kind: 'protocol' });
+      out.set(b.subarray(6, 6 + n), at);
+    }
+    return out;
   }
   /** LOGCFG (read): the default log level, the level of each module record (0xff: the default), and whether the debug module is loaded. */
   async logConfig(quick: Quick = false): Promise<LogConfig> {
