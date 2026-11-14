@@ -361,7 +361,7 @@ unsafe fn complete(rec: usize, keys: &crate::collect::KeysCopy, init: u32, tick:
     let fail = |r: i32| -> i32 {
         crate::intro::discard(rec);
         let held = !crate::files::retire(rec) | !retire_sdk(rec);
-        crate::upload::release_cmds(owner);
+        crate::module_cmds::release_cmds(owner);
         crate::registry::remove(owner);
         if !dsp::release(rec) || held {
             return E_BUSY;
@@ -595,7 +595,7 @@ unsafe fn unload_rec_inner(rec: usize) -> i32 {
         }
     }
     // the SysEx commands it registered are released with it
-    crate::upload::release_cmds(rec as u8 + 1);
+    crate::module_cmds::release_cmds(rec as u8 + 1);
     drop_tick_cb(m.base, m.size);
     // the machine row first, then the DSP voice rows, then the range in the DSP area
     #[cfg(test)] crate::cleanup_tests::registry_remove(rec as u8 + 1);

@@ -47,7 +47,6 @@ pub mod store;
 pub mod store_writer;
 mod io;
 mod table;
-pub mod upload;
 mod watch;
 mod worker;
 mod peakwin;
@@ -60,6 +59,10 @@ mod selection;
 mod report;
 mod state;
 mod tick;
+mod transport;
+mod store_cmds;
+mod admin_cmds;
+mod module_cmds;
 
 // The items that moved out of this file are still reachable as `crate::name`.
 pub use api::*;

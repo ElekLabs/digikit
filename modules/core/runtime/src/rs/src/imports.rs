@@ -3,7 +3,7 @@
 
 use crate::platform::cstr_eq;
 use crate::state::log_at;
-use crate::{arena, collect, dlog, entry, hash32, intro, io, upload, worker};
+use crate::{arena, collect, dlog, entry, hash32, intro, io, worker};
 use crate::{debug_selected_params, imp_param_get, imp_param_set};
 use crate::health::dkrt_blocks;
 use crate::report::{debug_peek, debug_speed_flags, debug_track_type};
@@ -291,7 +291,7 @@ unsafe extern "C" fn imp_log(level: u32, msg: *const u8, value: u32) {
     log_at(level, msg, value);
 }
 unsafe extern "C" fn imp_host_register(first: u32, count: u32, handler: Option<dkrt_sdk::HostCmdFn>) -> i32 {
-    upload::host_register(first, count, handler)
+    crate::module_cmds::host_register(first, count, handler)
 }
 
 unsafe extern "C" fn imp_job_post(step: Option<dkrt_sdk::api::JobStepFn>, done: Option<dkrt_sdk::api::JobDoneFn>, arg: *mut u8) -> i32 { worker::post(dlog::current_source(), step, done, arg) }
