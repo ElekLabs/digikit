@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import {
+  deadlineExpired,
   describeRestart,
   restartProgress,
   withinRuntimeDeadline as beforeReadinessDeadline,
@@ -185,7 +186,7 @@ export function waitEmulated(session: Session, ms: number, opts: { hangMs?: numb
 }
 
 /** Shared lifecycle deadline; preserve the existing readiness-helper export for its callers. */
-export { beforeReadinessDeadline };
+export { beforeReadinessDeadline, deadlineExpired };
 
 /** Press, hold, release (also when the press fails), then let the UI settle. */
 export async function tap(

@@ -1163,6 +1163,16 @@ name = "dkneeds"
 version = "0.1.0"
 
 [[package]]
+name = "dkprof"
+version = "0.1.0"
+dependencies = [
+ "dkaddrmap",
+ "dksharc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "dkrt-fit"
 version = "0.1.0"
 dependencies = [
@@ -1185,6 +1195,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sha2",
  "sharc-rt",
 ]
 
@@ -3167,6 +3178,7 @@ dependencies = [
  "dkneeds",
  "dkrt-fit",
  "dkrt-sdk",
+ "dksharc",
  "dkupload",
  "dt2-firmware-loader",
  "emmc-card",

@@ -37,7 +37,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | 1 | P1 | Address map v1, emulator only (own lane) | - | done | PR 444 |
 | 2 | R4 | Spike, static part: can SHARC hooks move into a `.dks` | S4 | done | finding 128 |
 | Stop | | Review the R4 answer with Em: it decides the owner of DSP dispatch and where `DK_SPAN` lives | R4 | reviewed | DSP dispatch is owned by the `machines` and `fx` services; `DK_SPAN` lives in the image stub |
-| 2 | P2 | Shared Rust library, `wb:cli` profile and addrmap commands, JSON output | P1 | todo | |
+| 2 | P2 | Shared Rust library, `wb:cli` profile and addrmap commands, JSON output | P1 | in progress | phase A (host): dkprof, dkprof.wasm, `wb` addrmap, module and profile commands, patchkit on the dksharc readers; phase B (one real emulator profile; `cfprof.py` removed after equal numbers) done on this branch; done after merge |
 | 2 | P3 | sharcdb tables for module DSP sections | P1 | done | PR 450 (dksharc, Rust static analysis of module DSP sections, slice 1); this PR (P3b, DSP names in the address map: pack writes sharc entries, dkaddrmap decodes the load table from the DKRT_STATE/DKRT_DSP/dyndsp_info snapshot, readers are thin callers) |
 | 2 | P4 | Per-module cost, machine budget check, fast-tier refusals per module | P2, P3 | todo | |
 | 2 | S5 | SDK DSP contract: DSP rules, derived cycle cost, `DK_SPAN` | R4, P3, P4 | todo | |

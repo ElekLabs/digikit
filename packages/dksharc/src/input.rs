@@ -3,17 +3,14 @@
 //! [`Input::from_dkds`] reads the DKDS section of a `.dkm` (layout: `packages/patchkit/src/dkmdsp.rs`) and the `.dko.json` of the DSP
 //! object (symbols and the size of the text section). Other callers fill the struct themselves.
 
+use crate::dkds::{Dkds, FX_LEN};
+use crate::dko::Dko;
 use serde::{Deserialize, Serialize};
 
 /// First byte of L2 as the linker places a module (`L2_BYTE_BASE` of patchkit): the image is linked here.
 pub const L2_BYTE_BASE: u32 = 0x2000_0000;
 /// Short-word pc of the first byte of L2 (`L2_SW_BASE` of patchkit): text at image byte `b` has pc `L2_SW_BASE + b / 2`.
 pub const L2_SW_BASE: u32 = 0x00B8_0000;
-
-const MAGIC: u32 = 0x444b_4453; // "DKDS"
-const HEADER: usize = 0x40;
-const IMPORT_LEN: usize = 32;
-const RELOC_LEN: usize = 8;
 
 /// A relocation inside the text: it patches the instruction that starts at `parcel`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,64 +54,13 @@ pub struct Input {
     pub entries: Vec<Entry>,
 }
 
-#[derive(Deserialize)]
-struct Dko {
-    sections: Vec<DkoSection>,
-    symbols: Vec<DkoSymbol>,
-}
-#[derive(Deserialize)]
-struct DkoSection {
-    name: String,
-    kind: String,
-    size: u32,
-}
-#[derive(Deserialize)]
-struct DkoSymbol {
-    name: String,
-    section: Option<String>,
-    value: u64,
-    #[serde(default)]
-    global: bool,
-}
-
-fn be32(b: &[u8], off: usize) -> Result<u32, String> {
-    b.get(off..off + 4)
-        .map(|s| u32::from_be_bytes(s.try_into().unwrap()))
-        .ok_or_else(|| format!("DKDS: read at {off:#x} is past the end"))
-}
-
-fn span<'a>(
-    b: &'a [u8],
-    off: u32,
-    count: u32,
-    each: usize,
-    what: &str,
-) -> Result<&'a [u8], String> {
-    let len = (count as usize)
-        .checked_mul(each)
-        .ok_or_else(|| format!("DKDS: {what} count"))?;
-    b.get(off as usize..(off as usize).saturating_add(len))
-        .ok_or_else(|| format!("DKDS: {what} table is past the end"))
-}
-
 impl Input {
     /// Read the DKDS section `dkds` (header at byte 0) and the DSP object `dko_json`. The text is the first `text` section of the object:
     /// the image starts with it, so its size says where the data begins.
     pub fn from_dkds(dkds: &[u8], dko_json: &[u8]) -> Result<Input, String> {
-        if be32(dkds, 0)? != MAGIC {
-            return Err("DKDS: bad magic".into());
-        }
-        let version = be32(dkds, 4)?;
-        if !(1..=5).contains(&version) {
-            return Err(format!("DKDS: version {version}"));
-        }
-        if dkds.len() < HEADER {
-            return Err("DKDS: short header".into());
-        }
-        let image_size = be32(dkds, 0x0c)?;
-        let image_off = be32(dkds, 0x18)?;
-        let image = span(dkds, image_off, image_size, 1, "image")?;
-        let dko: Dko = serde_json::from_slice(dko_json).map_err(|e| format!("dko: {e}"))?;
+        let d = Dkds::parse(dkds)?;
+        let image = d.image()?;
+        let dko = Dko::parse(std::str::from_utf8(dko_json).map_err(|e| format!("dko: {e}"))?)?;
         let mut texts = dko.sections.iter().filter(|s| s.kind == "text");
         let text_sec = texts.next().ok_or("dko: no text section")?;
         if texts.next().is_some() {
@@ -135,83 +81,41 @@ impl Input {
             .collect();
         let n_text = text.len() as u32;
 
-        let imports = span(
-            dkds,
-            be32(dkds, 0x24)?,
-            be32(dkds, 0x28)?,
-            IMPORT_LEN,
-            "import",
-        )?
-        .as_chunks::<IMPORT_LEN>()
-        .0
-        .iter()
-        .map(|c| {
-            let end = c.iter().position(|b| *b == 0).unwrap_or(IMPORT_LEN);
-            String::from_utf8_lossy(&c[..end]).into_owned()
-        })
-        .collect::<Vec<_>>();
-
+        let imports = d.imports()?;
         let mut relocs = vec![];
-        for r in span(
-            dkds,
-            be32(dkds, 0x1c)?,
-            be32(dkds, 0x20)?,
-            RELOC_LEN,
-            "reloc",
-        )?
-        .as_chunks::<RELOC_LEN>()
-        .0
-        {
-            let off = u32::from_be_bytes(r[..4].try_into().unwrap());
-            let w = u32::from_be_bytes(r[4..].try_into().unwrap());
-            if off % 2 != 0 {
-                return Err(format!("DKDS: reloc at odd byte {off:#x}"));
+        for r in d.relocs()? {
+            if r.offset % 2 != 0 {
+                return Err(format!("DKDS: reloc at odd byte {:#x}", r.offset));
             }
-            if off / 2 >= n_text {
+            if r.offset / 2 >= n_text {
                 continue; // a field of the data section
             }
-            let import = w & 0x00ff_ffff;
-            let class = ((w >> 24) & 0xf) as u8;
-            if class == 2 && import as usize >= imports.len() {
+            if r.class() == 2 && r.import() as usize >= imports.len() {
                 return Err(format!(
-                    "DKDS: reloc at {off:#x}: import {import} of {}",
+                    "DKDS: reloc at {:#x}: import {} of {}",
+                    r.offset,
+                    r.import(),
                     imports.len()
                 ));
             }
             relocs.push(TextReloc {
-                parcel: off / 2,
-                kind: (w >> 28) as u8,
-                class,
-                import,
+                parcel: r.offset / 2,
+                kind: r.kind() as u8,
+                class: r.class() as u8,
+                import: r.import(),
             });
         }
 
         let mut entries = vec![];
-        if version >= 2 || be32(dkds, 0x30)? > 0 {
-            let each = match version {
-                1 => 16,
-                2 => 48,
-                _ => 64,
-            };
-            let voices = span(dkds, be32(dkds, 0x2c)?, be32(dkds, 0x30)?, each, "voice")?;
-            for v in voices.chunks_exact(each) {
-                let render = u32::from_be_bytes(v[4..8].try_into().unwrap());
-                entries.push(("render", render));
-                if version >= 3 {
-                    let note_on = u32::from_be_bytes(v[8..12].try_into().unwrap());
-                    if note_on != 0 {
-                        entries.push(("note_on", note_on));
-                    }
-                }
+        for v in d.voices()?.chunks_exact(d.voice_len()) {
+            let word = |at: usize| u32::from_be_bytes(v[at..at + 4].try_into().unwrap());
+            entries.push(("render", word(4)));
+            if d.version >= 3 && word(8) != 0 {
+                entries.push(("note_on", word(8)));
             }
         }
-        if version >= 4 {
-            for f in span(dkds, be32(dkds, 0x34)?, be32(dkds, 0x38)?, 64, "fx")?
-                .as_chunks::<64>()
-                .0
-            {
-                entries.push(("fx_process", u32::from_be_bytes(f[..4].try_into().unwrap())));
-            }
+        for f in d.fxs()?.chunks_exact(FX_LEN) {
+            entries.push(("fx_process", u32::from_be_bytes(f[..4].try_into().unwrap())));
         }
         let entries = entries
             .into_iter()

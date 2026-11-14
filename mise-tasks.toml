@@ -64,6 +64,10 @@ description = "Build only the browser emulator core (WASM); the coupled core goe
 run = "pnpm nx:pilot run @digi/web:patchkit-wasm"
 description = "Build apps/web/public/patchkit.wasm (the patch tool; its `pk_needs` is the Transfer page's needs reader), dkupload.wasm and dksample.wasm through the cached Nx target (replayed when the inputs are unchanged)"
 
+["wasm:dkprof"]
+run = "node tools/nx/wasm.mjs --dkprof-only"
+description = "Build only apps/web/public/dkprof.wasm, the profile, address lookup and module analysis code that `wb` (tools/devtools/wb.mjs) loads for its profile, addrmap and module commands"
+
 ["wasm:dksample"]
 run = "node tools/nx/wasm.mjs --dksample-only"
 description = "Build only apps/web/public/dksample.wasm, the WAV to native sample converter the workbench's Samples tab needs (`mise run workbench` runs it first; cargo skips the work when nothing changed)"

@@ -6,6 +6,8 @@
 //! `Analysis::undecoded`, never guessed.
 
 mod analyze;
+pub mod dkds;
+pub mod dko;
 mod forms;
 mod input;
 mod model;

@@ -127,16 +127,36 @@ export interface RuntimeBaseline {
  */
 export const PRE_SOCKET_HANG_MS = 300_000;
 
+/** Thrown when `withinRuntimeDeadline` gives up on an operation. */
+export class RuntimeDeadlineError extends Error {
+  constructor() {
+    super('runtime lifecycle deadline exceeded');
+    this.name = 'RuntimeDeadlineError';
+  }
+}
+
+/**
+ * Whether a deadline has passed, given the error its operation ended with. A timer can fire up to 1 ms before `Date.now()`
+ * reaches the deadline it was set from (monotonic clock against wall clock), so a wall-clock comparison alone can call a
+ * deadline that did fire "not expired". A deadline error or a timed-out `expect.poll` is itself the proof.
+ */
+export function deadlineExpired(deadline: number, error?: unknown): boolean {
+  if (Date.now() >= deadline) return true;
+  if (error instanceof RuntimeDeadlineError) return true;
+  const cause = error instanceof Error ? error.cause : undefined;
+  return cause instanceof Error && cause.message === 'Matcher did not succeed in time.';
+}
+
 /** Bound awaited control RPCs to one absolute lifecycle deadline, including a peer that never answers. */
 export async function withinRuntimeDeadline<T>(deadline: number, operation: () => Promise<T>): Promise<T> {
   const remaining = deadline - Date.now();
-  if (remaining <= 0) throw new Error('runtime lifecycle deadline exceeded');
+  if (remaining <= 0) throw new RuntimeDeadlineError();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       operation(),
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error('runtime lifecycle deadline exceeded')), remaining);
+        timer = setTimeout(() => reject(new RuntimeDeadlineError()), remaining);
       }),
     ]);
   } finally {

@@ -10,18 +10,20 @@ let json = serde_json::to_string(&analysis)?;
 ```
 
 `Input` is a plain struct (text parcels, relocations, imports, symbols, entries); `from_dkds` fills it from the DKDS section of a `.dkm`
-(layout in `packages/patchkit/src/dkmdsp.rs`) and the `.dko.json` of the DSP object (text size and symbols). A caller that has the pieces
+(layout in `packages/patchkit/src/dkmdsp.rs`) and the `.dko.json` of the DSP object (text size and symbols).
+`dksharc::dkds` is the one reader of the DKDS container (header, tables, imports, relocations) and `dksharc::dko` the one model of the `.dko` object; patchkit's `DspSection::parse` and `Dko` build on them. A caller that has the pieces
 already can fill the struct itself.
 
 ## Usage
 
-The example `analyse` prints the analysis of a module. It takes a `.dkm` (its DKDS section is found by the magic) or a bare DKDS section, and the `.dko.json` of the
-module's DSP object. From the repository root, with the patchkit binary built (`pnpm nx:pilot run patchkit:cli`):
+`wb module analyse` prints the analysis of a module (`tools/devtools/wb.mjs`; it calls the same code through `dkprof.wasm`, so the workbench and the CLI agree). It takes a
+`.dkm` (its DKDS section is found by the magic) or a bare DKDS section, and the `.dko.json` of the module's DSP object. From the repository root, with the patchkit binary built
+(`pnpm nx:pilot run patchkit:cli`) and `mise run wasm:dkprof` run once:
 
 ```sh
 mkdir -p out/try
 dist/patchkit/patchkit --root . pack digikit/pluck -o out/try/pluck.dkm --device dn2
-cargo run -p dksharc --example analyse -- out/try/pluck.dkm packages/dksharc/tests/fixtures/pluck-dsp.dko.json --summary
+node tools/devtools/wb.mjs module analyse out/try/pluck.dkm packages/dksharc/tests/fixtures/pluck-dsp.dko.json
 # 306 instructions, 3 functions, 26 blocks, 4 loops, 6 calls (4 import), 0 undecoded
 # function _pk_coef     +0x0000..+0x00fd  0 loops  complete true
 # function _pk_note_on  +0x00fd..+0x01e7  3 loops  complete true
@@ -30,8 +32,8 @@ cargo run -p dksharc --example analyse -- out/try/pluck.dkm packages/dksharc/tes
 # ...
 ```
 
-Without `--summary` it prints the whole `Analysis` as JSON (the shape below). The `.dko.json` here is the crate's fixture of our pluck machine; the object of another module is in
-`out/cache/dko/<module>/<hash>/build/*-dsp.dko.json` after its build. `wb module analyse` replaces the example in P2 ([profiling.md](../../docs/plans/profiling.md)).
+`--format json` prints the whole `Analysis` as one JSON line (the shape below). The `.dko.json` here is the crate's fixture of our pluck machine; the object of another module is in
+`out/cache/dko/<module>/<hash>/build/*-dsp.dko.json` after its build.
 
 ## What it gives (`Analysis`, serde JSON)
 

@@ -40,16 +40,17 @@ use crate::dko::Dko;
 use crate::dsp::{L2_BYTE_BASE, L2_SW_BASE};
 use crate::error::*;
 use crate::link;
+use dksharc::dkds::Dkds;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: u32 = 0x444b_4453; // "DKDS"
 pub const VERSION: u32 = 2;
-/// The version with `note_on` entries and per-voice state (voices of `VOICE_LEN_V3` bytes).
-pub const VERSION_3: u32 = 3;
-/// The version with effect records (`FX_LEN` bytes each); its voices are those of version 3.
-pub const VERSION_4: u32 = 4;
-/// One module-owned sample bank; voices and effects retain version 4 layouts.
-pub const VERSION_5: u32 = 5;
+// The container layout is read by `dksharc::dkds`, the one reader; the constants are its. Version 3 has `note_on` entries and per-voice state (voices
+// of `VOICE_LEN_V3` bytes); 4 adds effect records (`FX_LEN` bytes each); 5 one module-owned sample bank; version 1 has voices of `VOICE_LEN_V1`
+// bytes without ranges (the runtime still loads it, with every range undeclared).
+pub use dksharc::dkds::{
+    FX_LEN, HEADER, IMPORT_LEN, MAGIC, RELOC_LEN, VERSION_1, VERSION_3, VERSION_4, VERSION_5,
+    VOICE_LEN, VOICE_LEN_V1, VOICE_LEN_V3,
+};
 /// Little-endian words: version 1, local id, bank byte offset, capacity frames,
 /// descriptor byte offset, then three reserved zero words. Offsets are relative
 /// to the module DSP image base; unlike this record the enclosing header is BE.
@@ -62,12 +63,6 @@ pub const SAMPLE_POOL_RECORD_BYTES: u32 =
     (dkrt_sdk::sample_pool::ENTRIES * dkrt_sdk::sample_pool::ENTRY_WORDS * 4) as u32;
 pub const SAMPLE_POOL_CONTROL_BYTES: u32 =
     (dkrt_sdk::sample_pool::ENTRIES * dkrt_sdk::sample_pool::CTL_WORDS * 4) as u32;
-/// The version without voice ranges (voices of `VOICE_LEN_V1` bytes); the runtime still loads it, with every range undeclared.
-pub const VERSION_1: u32 = 1;
-pub const HEADER: usize = 0x40;
-pub const RELOC_LEN: usize = 8;
-pub const VOICE_LEN: usize = 48;
-pub const VOICE_LEN_V3: usize = 64;
 /// `dk_machine_desc` (SDK contract): magic "DKMA" and the contract number the packer accepts, and its size in u32 words.
 pub const DESC_MAGIC: u32 = 0x444b_4d41;
 pub const DESC_CONTRACT: u32 = 1;
@@ -76,8 +71,6 @@ pub const DESC_STEREO: u32 = 0x100;
 /// Bit 9 of the desc's contract word: a machine that reads `gate` in `dk_voice_in` (contract 1.6, `DK_MACHINE_GATE`).
 pub const DESC_GATE: u32 = 0x200;
 pub const DESC_WORDS: usize = 10;
-pub const VOICE_LEN_V1: usize = 16;
-pub const FX_LEN: usize = 64;
 /// The routes of an effect (the manifest's `route` and `routes`): the master chain and a send bus. `Effect::routes` is a mask of them.
 pub const ROUTE_MASTER: u32 = 1;
 pub const ROUTE_SEND: u32 = 2;
@@ -92,7 +85,6 @@ pub const FX_DESC_MAGIC: u32 = 0x444b_4658;
 pub const FX_DESC_CONTRACT: u32 = 1;
 pub const FX_DESC_WORDS: usize = 7;
 pub const FX_MAX_PARAMS: u32 = 8;
-pub const IMPORT_LEN: usize = 32;
 pub const MAX_RELOCS: usize = dkneeds::MAX_RELOCS as usize;
 pub const MAX_IMPORTS: usize = dkneeds::MAX_IMPORTS as usize;
 pub const MAX_VOICES: usize = dkneeds::MAX_VOICES as usize;
@@ -891,31 +883,12 @@ impl DspSection {
 
     /// Parse and check a section the way the runtime does.
     pub fn parse(f: &[u8]) -> Result<DspSection> {
-        if f.len() < HEADER || get(f, 0) != MAGIC {
-            return Err(err!("not a DSP section (magic)"));
-        }
-        let version = get(f, 4);
-        if version != VERSION
-            && version != VERSION_1
-            && version != VERSION_3
-            && version != VERSION_4
-            && version != VERSION_5
-        {
-            return Err(err!("DSP section version {version}"));
-        }
+        let d = Dkds::parse(f)?;
+        let version = d.version;
         let v3 = version >= VERSION_3;
-        let vlen = match version {
-            VERSION_1 => VOICE_LEN_V1,
-            VERSION_3 | VERSION_4 | VERSION_5 => VOICE_LEN_V3,
-            _ => VOICE_LEN,
-        };
-        let rng = |off: u32, n: usize| -> Result<&[u8]> {
-            let off = off as usize;
-            f.get(off..off.checked_add(n).ok_or_else(|| err!("overflow"))?)
-                .ok_or_else(|| err!("DSP section table at {off:#x}+{n:#x} is outside the section"))
-        };
-        let image_size = get(f, 0x0c) as usize;
-        let align = get(f, 0x14);
+        let vlen = d.voice_len();
+        let image_size = d.image_size() as usize;
+        let align = d.align();
         if image_size == 0
             || image_size % 4 != 0
             || !align.is_power_of_two()
@@ -925,37 +898,24 @@ impl DspSection {
                 "DSP section: image size {image_size}, alignment {align}"
             ));
         }
-        let image = rng(get(f, 0x18), image_size)?.to_vec();
-        let nrel = get(f, 0x20) as usize;
-        let nimp = get(f, 0x28) as usize;
-        let nvoice = get(f, 0x30) as usize;
-        let (fx_off, nfx) = if version >= VERSION_4 {
-            (get(f, 0x34), get(f, 0x38) as usize)
-        } else {
-            (0, 0)
-        };
+        let image = d.image()?.to_vec();
+        let nrel = d.reloc_count();
+        let nimp = d.import_count();
+        let nvoice = d.voice_count();
+        let (fx_off, nfx) = d.fx();
         if nrel > MAX_RELOCS || nimp > MAX_IMPORTS || nvoice > MAX_VOICES || nfx > MAX_FX {
             return Err(err!(
                 "DSP section: too many relocations, imports, voices or effects"
             ));
         }
-        let imp = rng(get(f, 0x24), nimp * IMPORT_LEN)?;
-        let imports = (0..nimp)
-            .map(|i| {
-                let e = &imp[i * IMPORT_LEN..(i + 1) * IMPORT_LEN];
-                let l = e.iter().position(|b| *b == 0).unwrap_or(IMPORT_LEN);
-                String::from_utf8_lossy(&e[..l]).into_owned()
-            })
-            .collect::<Vec<_>>();
-        let rel = rng(get(f, 0x1c), nrel * RELOC_LEN)?;
+        let imports = d.imports()?;
         let mut relocs = vec![];
-        for i in 0..nrel {
-            let off = get(rel, i * RELOC_LEN);
-            let w = get(rel, i * RELOC_LEN + 4);
+        for (i, raw) in d.relocs()?.into_iter().enumerate() {
+            let (off, w) = (raw.offset, raw.word);
             let r = Reloc {
                 offset: off,
-                kind: w >> 28,
-                class: w >> 24 & 15,
+                kind: raw.kind(),
+                class: raw.class(),
                 import: w & 0xffff,
             };
             if off as usize + 6 > image_size
@@ -967,7 +927,7 @@ impl DspSection {
             }
             relocs.push(r);
         }
-        let vo = rng(get(f, 0x2c), nvoice * vlen)?;
+        let vo = d.voices()?;
         let voices = (0..nvoice)
             .map(|i| {
                 let at = i * vlen;
@@ -1000,7 +960,7 @@ impl DspSection {
         }) {
             return Err(err!("DSP voice entry outside the image"));
         }
-        let fo = rng(fx_off, nfx * FX_LEN)?;
+        let fo = d.fxs()?;
         let fxs = (0..nfx)
             .map(|i| {
                 let at = i * FX_LEN;
@@ -1071,7 +1031,7 @@ impl DspSection {
             {
                 return Err(err!("sample bank record overlaps header, tables or image"));
             }
-            let raw = rng(off, SAMPLE_BANK_LEN)?;
+            let raw = d.range(off, SAMPLE_BANK_LEN)?;
             let w = |i: usize| u32::from_le_bytes(raw[i * 4..i * 4 + 4].try_into().unwrap());
             if w(0) == SAMPLE_TRACKS_KIND {
                 if (4..8).any(|i| w(i) != 0) {
