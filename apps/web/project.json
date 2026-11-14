@@ -43,7 +43,8 @@
         "{projectRoot}/src/**/*",
         "{projectRoot}/tests/**/*",
         "!{projectRoot}/tests/*.wasm.test.ts",
-        "!{projectRoot}/tests/*.test.mjs",
+        "{projectRoot}/scripts/**/*",
+        "{projectRoot}/public/pcm-worklet.js",
         "{projectRoot}/package.json",
         "{projectRoot}/tsconfig.json",
         "{projectRoot}/site.config.mjs",
@@ -59,6 +60,10 @@
         "{workspaceRoot}/packages/dkbs/src/**/*",
         "{workspaceRoot}/packages/dkbs/package.json",
         "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/devices/ports/*",
+        "{workspaceRoot}/modules/**/module.toml",
+        "{workspaceRoot}/modules/**/gallery/icon.svg",
+        "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
         "{workspaceRoot}/config/emulator.json"
       ],
       "outputs": [],
@@ -72,15 +77,9 @@
       }
     },
     "test-wasm": {
-      "description": "Tests that load the real public/*.wasm: the node --test files and the Vitest project web-wasm (tests/*.wasm.test.ts).",
+      "description": "Tests that load the real public/*.wasm or run the patchkit command line: the Vitest project web-wasm (tests/*.wasm.test.ts).",
       "dependsOn": ["patchkit-wasm"],
-      "inputs": [
-        "default",
-        "^production",
-        "jsToolchain",
-        "{workspaceRoot}/apps/desktop/ui/src/card-core.ts",
-        "{workspaceRoot}/apps/desktop/ui/src/samples-core.ts"
-      ]
+      "inputs": ["default", "^production", "jsToolchain"]
     }
   }
 }

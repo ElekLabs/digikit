@@ -2,17 +2,17 @@
 // section 12): framing, ReadDir entries, StorageSpace of 17 and 20 bytes, folders, a write in chunks with the byte count at close, one writer at a time (a fake assumption),
 // the device's hash over the file plus a 16-byte trailer, and a verify that fails when the device stores something else.
 import assert from 'node:assert/strict';
-import test from 'node:test';
 import { DkSession, decode8in7 } from '@digi/dk-session';
 import { RPC_CHUNK, RPC_FILE, RpcFiles, pathBytes, putVerified, verifyWritten } from '@digi/dk-session/rpcfiles';
-import { FakeDrive, hashOf } from './fakedrive.mjs';
+import { test } from 'vitest';
+import { FakeDrive, hashOf } from './support/fakedrive.ts';
 
-const setup = (opts) => {
+const setup = (opts?: ConstructorParameters<typeof FakeDrive>[0]) => {
   const dev = new FakeDrive(opts);
   const session = new DkSession(dev, { timeoutMs: 50 });
   return { dev, session, files: new RpcFiles(session, { chunk: 100, timeoutMs: 50 }) };
 };
-const data = (n) => Uint8Array.from({ length: n }, (_, i) => (i * 7 + 3) & 255);
+const data = (n: number) => Uint8Array.from({ length: n }, (_, i) => (i * 7 + 3) & 255);
 
 test('paths are absolute C-strings under 256 bytes', () => {
   assert.deepEqual([...pathBytes('a/b')], [...Buffer.from('/a/b\0')]);
@@ -60,7 +60,7 @@ test('mkdir -p, ReadDir entries, rename, remove, rmdir', async () => {
 test('write: chunks at sequential offsets, the byte count at close, the size without the trailer', async () => {
   const { files, dev } = setup();
   const d = data(250);
-  const seen = [];
+  const seen: number[][] = [];
   const closed = await files.write('s/take', d, (sent, total) => seen.push([sent, total]));
   assert.deepEqual(seen, [
     [100, 250],
@@ -69,15 +69,19 @@ test('write: chunks at sequential offsets, the byte count at close, the size wit
   ]);
   assert.deepEqual(closed, { id: 6, size: 250 });
   assert.equal(dev.seen.filter((t) => t === RPC_FILE.WRITE_V1).length, 3);
-  assert.equal(dev.files.get('/s/take').length, 266);
-  assert.deepEqual(await files.info('/s/take'), { found: true, size: 250, hash: hashOf(dev.files.get('/s/take')) });
+  assert.equal(dev.files.get('/s/take')?.length, 266);
+  assert.deepEqual(await files.info('/s/take'), {
+    found: true,
+    size: 250,
+    hash: hashOf(dev.files.get('/s/take') as Uint8Array),
+  });
   assert.deepEqual(await files.info('/s/none'), { found: false, size: 0, hash: 0 });
   // an empty file
   assert.equal((await files.write('s/empty', new Uint8Array(0))).size, 0);
 });
 
 test("the chunk of a write: the default, the link's own (rpcChunk of the transport), or the one asked for", async () => {
-  const writes = async (rpcChunk, options) => {
+  const writes = async (rpcChunk: number | undefined, options?: { chunk?: number }) => {
     const dev = new FakeDrive();
     if (rpcChunk !== undefined) dev.rpcChunk = rpcChunk;
     const session = new DkSession(dev, { timeoutMs: 50 });
@@ -101,7 +105,7 @@ test('a failed write closes its writer (the fake allows one at a time) so the ne
   const { files, dev } = setup();
   const real = dev.send.bind(dev);
   let writes = 0;
-  dev.send = (msg) => {
+  dev.send = (msg: Uint8Array) => {
     const body = decode8in7(msg.subarray(6, msg.length - 1));
     if (body[4] === RPC_FILE.WRITE_V1 && ++writes === 2) return; // the second chunk is never answered
     real(msg);

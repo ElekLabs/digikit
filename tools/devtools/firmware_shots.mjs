@@ -14,8 +14,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { closeTab, connect, evaluate, launchChrome, sleep } from './cdp.mjs';
-import { FakeDevice, be32, concat, cs } from '../../apps/web/tests/fakedevice.mjs';
-import { FakeUpgrade } from '../../apps/web/tests/fakeflash.mjs';
+import { FakeDevice, be32, concat, cs } from '../../apps/web/tests/support/fakedevice.ts';
+import { FakeUpgrade } from '../../apps/web/tests/support/fakeflash.ts';
 import { PatchKit } from '../../apps/web/src/patch/patchkit-core.ts';
 import { CAP, CMD } from '../../packages/dk-session/src/gen_proto.ts';
 

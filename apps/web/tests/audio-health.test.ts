@@ -1,29 +1,35 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import test from 'node:test';
-import { hostMetrics, pcmMetrics } from '../src/runtime/runtime-metrics.ts';
 import ts from 'typescript';
+import { test } from 'vitest';
+import type { RuntimeSnapshot } from '../src/runtime/runtime.ts';
+import { hostMetrics, pcmMetrics } from '../src/runtime/runtime-metrics.ts';
+
+/** The AudioWorkletProcessor of public/pcm-worklet.js as the tests reach into it. */
+type Worklet = {
+  port: { onmessage: (e: { data: unknown }) => void };
+  process(inputs: unknown[], outputs: Float32Array[][]): boolean;
+  [field: string]: any; // the counters the worklet keeps (silence, underruns, played, ...)
+};
 
 function processor() {
-  let Processor;
-  const reports = [];
+  let Processor: (new () => Worklet) | undefined;
+  const reports: any[] = [];
   const context = {
     sampleRate: 48000,
     Float32Array,
     AudioWorkletProcessor: class {
-      constructor() {
-        this.port = { postMessage: (value) => reports.push(value) };
-      }
+      port = { postMessage: (value: unknown) => reports.push(value) };
     },
-    registerProcessor: (_name, ctor) => {
+    registerProcessor: (_name: string, ctor: new () => Worklet) => {
       Processor = ctor;
     },
   };
   vm.runInNewContext(fs.readFileSync(new URL('../public/pcm-worklet.js', import.meta.url), 'utf8'), context);
-  const p = new Processor();
-  const send = (data) => p.port.onmessage({ data });
-  const render = (n) => {
+  const p = new Processor!();
+  const send = (data: unknown) => p.port.onmessage({ data });
+  const render = (n: number) => {
     const left = new Float32Array(n),
       right = new Float32Array(n);
     assert.equal(p.process([], [[left, right]]), true);
@@ -33,19 +39,19 @@ function processor() {
 }
 
 function workerHarness({ ordinaryHasCoupling = false } = {}) {
-  let result = {};
+  let result: unknown = {};
   let icount = 0;
-  const buttons = [];
-  const timers = [];
-  const replies = new Map();
+  const buttons: number[][] = [];
+  const timers: (() => unknown)[] = [];
+  const replies = new Map<string, (message: { error?: string; value?: unknown; reply?: string }) => void>();
   const memory = new WebAssembly.Memory({ initial: 1 });
-  const writeResult = (value) => {
+  const writeResult = (value: unknown) => {
     result = value;
     const bytes = new TextEncoder().encode(JSON.stringify(value));
     new Uint8Array(memory.buffer).set(bytes, 0);
     return 0;
   };
-  const abi = {
+  const abi: Record<string, unknown> = {
     memory,
     digi_result_ptr: () => 0,
     digi_result_len: () => new TextEncoder().encode(JSON.stringify(result)).length,
@@ -57,7 +63,7 @@ function workerHarness({ ordinaryHasCoupling = false } = {}) {
       icount += 100;
       return writeResult({ snapshot: { status: { icount } } });
     },
-    digi_button: (code, down) => {
+    digi_button: (code: number, down: number) => {
       buttons.push([code, down]);
       return writeResult({});
     },
@@ -75,12 +81,12 @@ function workerHarness({ ordinaryHasCoupling = false } = {}) {
   const context = {
     WebAssembly: {
       Memory: WebAssembly.Memory,
-      instantiateStreaming: async (response) => {
+      instantiateStreaming: async (response: unknown) => {
         await response;
         return { instance: { exports: abi } };
       },
     },
-    fetch: async (url) => {
+    fetch: async (url: unknown) => {
       if (String(url).includes('sharc')) throw new Error('missing sharc core');
       return {};
     },
@@ -89,37 +95,34 @@ function workerHarness({ ordinaryHasCoupling = false } = {}) {
     Uint8Array,
     Float32Array,
     performance: { now: () => 0 },
-    setTimeout: (fn) => {
+    setTimeout: (fn: () => unknown) => {
       timers.push(fn);
       return timers.length;
     },
     // The pump yields through a MessageChannel: each port2 post queues one port1 task, like a timer.
     MessageChannel: class {
-      constructor() {
-        const port1 = {};
-        this.port1 = port1;
-        this.port2 = {
-          postMessage: () => {
-            timers.push(() => port1.onmessage?.({}));
-          },
-        };
-      }
+      port1: { onmessage?: (e: object) => unknown } = {};
+      port2 = {
+        postMessage: () => {
+          timers.push(() => this.port1.onmessage?.({}));
+        },
+      };
     },
-    postMessage: (message) => {
+    postMessage: (message: { reply?: string; error?: string; value?: unknown }) => {
       if (message.reply) replies.get(message.reply)?.(message);
     },
-    self: {},
+    self: {} as { onmessage?: (e: { data: unknown }) => void },
     console,
   };
   vm.runInNewContext(js, context);
-  const send = (data) =>
-    new Promise((resolve, reject) => {
+  const send = (data: { id: string; [field: string]: unknown }) =>
+    new Promise<unknown>((resolve, reject) => {
       replies.set(data.id, (message) => {
         replies.delete(data.id);
         if (message.error) reject(new Error(message.error));
         else resolve(message.value);
       });
-      context.self.onmessage({ data });
+      context.self.onmessage?.({ data });
     });
   return {
     send,
@@ -143,9 +146,9 @@ test('PCM rate is emitted stereo duration over this session wall time', () => {
 test('host response histogram is bounded, resettable and exported by value', () => {
   const m = hostMetrics('wasm_abi');
   m.reset();
-  const snapshot = { status: { ready: false } };
+  const snapshot = { status: { ready: false } } as RuntimeSnapshot;
   for (const n of [0, 1, 2, 5, 10, 20, 50, 100, 101]) m.step(0, n, snapshot);
-  const report = m.report();
+  const report: any = m.report();
   assert.deepEqual(report.step_response_wall_ms_buckets.counts, [2, 1, 1, 1, 1, 1, 1, 1]);
   assert.equal(report.chunks, 9);
   m.reset();
@@ -157,14 +160,14 @@ test('host response histogram is bounded, resettable and exported by value', () 
 test('desktop pump gaps exclude input queued while a step response is in flight', () => {
   const m = hostMetrics('native_ipc');
   m.reset();
-  const snapshot = { status: { ready: false } };
+  const snapshot = { status: { ready: false } } as RuntimeSnapshot;
   m.step(10, 14, snapshot);
   m.invalidatePumpGap(); // input queues while the preceding emu_step is in flight
   m.step(17, 22, snapshot); // that response must not bridge to post-input work
   m.invalidatePumpGap(); // input completes before the following pump iteration
   m.step(100, 110, snapshot);
   m.step(115, 120, snapshot);
-  const scheduling = m.report().measured_pump_scheduling;
+  const scheduling = m.report().measured_pump_scheduling!;
   assert.equal(scheduling.gaps, 1);
   assert.equal(scheduling.gap_wall_ms, 5);
   assert.deepEqual(scheduling.gap_wall_ms_buckets.counts, [0, 0, 1, 0, 0, 0, 0, 0]);
@@ -199,9 +202,9 @@ test('buffer threshold has a 0.25 s minimum; stereo output is faded in; initial 
 test('underrun duration includes the partial quantum and subsequent rebuffering', () => {
   const { p, send, render, reports } = processor();
   send({ type: 'config', startSeconds: 0 });
-  const port = {};
+  const port: { onmessage?: (e: { data: unknown }) => void } = {};
   send({ port });
-  port.onmessage({ data: new Float32Array(2 * 12000).fill(1) });
+  port.onmessage?.({ data: new Float32Array(2 * 12000).fill(1) });
   for (let q = 0; q < 93; q += 1) render(128);
   render(128);
   assert.equal(p.underruns, 1);

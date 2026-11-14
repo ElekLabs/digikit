@@ -1,49 +1,52 @@
 // A fake digikit device that speaks the SysEx protocol of docs/design/digikit-upload.md byte for byte (framing included), as a `DkTransport` for
-// `DkSession`: files, a selection, a log, modules, and a RESTART that is silent for a while and then boots again. Shared by dktransfer.test.mjs and
-// the screenshot run of the site's Transfer page (tools/devtools/web_transfer_shots.mjs).
-import { decode8in7, encode8in7, fileHash } from '@digi/dk-session';
+// `DkSession`: files, a selection, a log, modules, and a RESTART that is silent for a while and then boots again. Shared by dktransfer.test.ts and
+// the screenshot runs of the site's Transfer page (tools/devtools/web_transfer_shots.mjs).
+import { decode8in7, encode8in7, fileHash, type DkTransport } from '@digi/dk-session';
 import { CAP, CAPACITY_KINDS, CMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 /** The store's hash slot of a file (the host's `fileHash`: what the real runtime keeps in its table). */
-export const sha = fileHash;
-export const hex = (b) => Buffer.from(b).toString('hex');
-export const concat = (...p) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
-export const be32 = (n) => Uint8Array.of((n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255);
-export const cs = (s) => concat(Buffer.from(s), Uint8Array.of(0));
+export const sha: (data: Uint8Array) => Uint8Array = fileHash;
+export const hex = (b: ArrayLike<number>): string => Buffer.from(b).toString('hex');
+export const concat = (...p: ArrayLike<number>[]): Uint8Array =>
+  Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
+export const be32 = (n: number): Uint8Array =>
+  Uint8Array.of((n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255);
+export const cs = (s: string): Uint8Array => concat(Buffer.from(s), Uint8Array.of(0));
 
 export const ST = { E_STATE: -53, E_NOFILE: -59, E_HASH: -56, E_FULL: -52, E_OFFSET: -54 };
 
-export class FakeDevice {
-  constructor() {
-    this.files = new Map();
-    this.dirs = new Set(); // folders with nothing in them
-    this.selection = [];
-    this.seen = []; // the commands received, by name
-    this.corrupt = false; // VERIFY answers a wrong hash
-    this.pageSize = 2; // LIST entries per reply
-    this.silent = 0; // requests to ignore (the reboot)
-    this.loaded = []; // the names MODULES lists
-    this.staged = null;
-    this.log = [{ seq: 1, kind: LOG_KIND.BOOT_START, flags: 0, args: [516, 2, 0, 0, 0] }];
-    this.queue = [];
-    this.free = 1 << 20; // INFO's u32 free_bytes
-    this.storeKib = null; // CAPACITY's STORE limit in KiB (null: the entry is left out); 1024 KiB are used
-    this.caps = null; // INFO's capability word (null: every capability)
-    this.loadFailures = []; // LOADS: the modules of the boot selection that failed, `{ name, result, needs? }`
-    this.imageId = null; // INFO's image id as 16 hex digits (null: the runtime before 0.5.2, which sends none)
-    this.arenaLimit = 1000; // CAPACITY's ARENA and DSP_AREA limits (bytes)
-    this.dspLimit = 1000;
-    this.arenaLargest = 300; // the largest free block of each
-    this.dspLargest = 50;
-    this.os = null; // the OS version the stock MidiRpc SoftwareVersion answers (null: the request gets no answer)
-    this.pending = 0; // after a RESTART: requests that are still answered by the old boot before the reset
-  }
-  reply(cmd, seq, status, body = new Uint8Array()) {
+type LogEvent = { seq: number; kind: number; flags: number; args: number[] };
+type Staged = { path: string; size: number; sha: Uint8Array; data: Uint8Array; last: number };
+
+export class FakeDevice implements DkTransport {
+  files = new Map<string, Uint8Array>();
+  dirs = new Set<string>(); // folders with nothing in them
+  selection: string[] = [];
+  seen: string[] = []; // the commands received, by name
+  corrupt = false; // VERIFY answers a wrong hash
+  pageSize = 2; // LIST entries per reply
+  silent = 0; // requests to ignore (the reboot)
+  loaded: string[] = []; // the names MODULES lists
+  staged: Staged | null = null;
+  log: LogEvent[] = [{ seq: 1, kind: LOG_KIND.BOOT_START, flags: 0, args: [516, 2, 0, 0, 0] }];
+  queue: Uint8Array[] = [];
+  free = 1 << 20; // INFO's u32 free_bytes
+  storeKib: number | null = null; // CAPACITY's STORE limit in KiB (null: the entry is left out); 1024 KiB are used
+  caps: number | null = null; // INFO's capability word (null: every capability)
+  loadFailures: { name: string; result: number; needs?: string }[] = []; // LOADS: the modules of the boot selection that failed
+  imageId: string | null = null; // INFO's image id as 16 hex digits (null: the runtime before 0.5.2, which sends none)
+  arenaLimit = 1000; // CAPACITY's ARENA and DSP_AREA limits (bytes)
+  dspLimit = 1000;
+  arenaLargest = 300; // the largest free block of each
+  dspLargest = 50;
+  os: string | null = null; // the OS version the stock MidiRpc SoftwareVersion answers (null: the request gets no answer)
+  pending = 0; // after a RESTART: requests that are still answered by the old boot before the reset
+  reply(cmd: number, seq: number, status: number, body: Uint8Array = new Uint8Array()): Uint8Array {
     const packed = encode8in7(concat(Uint8Array.of(status & 255), body));
     return concat([0xf0, 0x7d, 0x64, 0x6b, 1, cmd | 0x40, seq], packed, [0xf7]);
   }
   /** A stock MidiRpc request (`f0 00 20 3c 10 00`, 8-in-7 body `seq seq 00 00 type payload`): only SoftwareVersion (type 2) is answered. */
-  rpc(msg) {
+  rpc(msg: Uint8Array): void {
     const body = decode8in7(msg.subarray(6, msg.length - 1));
     if (body[4] !== 2 || this.os === null) return;
     const seq = body.subarray(0, 2);
@@ -52,7 +55,7 @@ export class FakeDevice {
       concat([0xf0, 0x00, 0x20, 0x3c, 0x10, 0x00], encode8in7(concat(seq, seq, [2 | 0x80], strings)), [0xf7]),
     );
   }
-  send(msg) {
+  send(msg: Uint8Array): void {
     if (msg[1] === 0x00) return this.rpc(msg);
     const cmd = msg[5];
     const seq = msg[6];
@@ -68,19 +71,19 @@ export class FakeDevice {
     if (r) this.queue.push(r);
     if (this.pending > 0 && cmd !== CMD.RESTART && --this.pending === 0) this.silent = 2; // the guest is resetting: two requests get no answer
   }
-  boot() {
+  boot(): void {
     this.log = [{ seq: 1, kind: LOG_KIND.BOOT_START, flags: 0, args: [516, 2, 0, 0, 0] }];
   }
-  async recv() {
+  async recv(_timeoutMs?: number): Promise<Uint8Array | null> {
     return this.queue.shift() ?? null;
   }
-  pathOf(body) {
+  pathOf(body: Uint8Array): [string, number] {
     const end = body.indexOf(0);
     return [Buffer.from(body.subarray(0, end)).toString(), end + 1];
   }
-  handle(cmd, seq, body) {
-    const ok = (b) => this.reply(cmd, seq, 0, b);
-    const err = (code, b) => this.reply(cmd, seq, code, b);
+  handle(cmd: number, seq: number, body: Uint8Array): Uint8Array | undefined {
+    const ok = (b?: Uint8Array) => this.reply(cmd, seq, 0, b);
+    const err = (code: number, b?: Uint8Array) => this.reply(cmd, seq, code, b);
     switch (cmd) {
       case CMD.INFO: {
         const flags = this.staged ? 2 : 0;
@@ -94,7 +97,7 @@ export class FakeDevice {
             be32(1),
             be32(this.log.length),
             be32(0x000204),
-            be32(this.caps ?? Object.values(CAP).reduce((a, bit) => a | (1 << bit), 0)),
+            be32(this.caps ?? Object.values(CAP).reduce((a: number, bit) => a | (1 << bit), 0)),
             this.imageId ? Uint8Array.from(Buffer.from(this.imageId, 'hex')) : [],
           ),
         );
@@ -102,7 +105,10 @@ export class FakeDevice {
       case CMD.LIST: {
         const first = new DataView(body.buffer, body.byteOffset).getUint32(0);
         const prefix = body.length > 4 ? Buffer.from(body.subarray(4, body.length - 1)).toString() : '';
-        const all = [...this.files, ...[...this.dirs].map((d) => [d, new Uint8Array(0), true])]
+        const all: [string, Uint8Array, boolean?][] = [
+          ...this.files,
+          ...[...this.dirs].map((d): [string, Uint8Array, boolean] => [d, new Uint8Array(0), true]),
+        ]
           .filter(([p]) => p.startsWith(prefix))
           .sort(([a], [b]) => (a < b ? -1 : 1));
         const page = all.slice(first, first + this.pageSize);
@@ -194,7 +200,7 @@ export class FakeDevice {
         this.loaded = this.selection.map((p) => `mod:${p}`);
         return ok();
       case CMD.MODULES: {
-        const entry = (name, i) => {
+        const entry = (name: string, i: number) => {
           const nm = new Uint8Array(32);
           nm.set(Buffer.from(name));
           return concat(
@@ -225,7 +231,7 @@ export class FakeDevice {
         );
       }
       case CMD.LOADS: {
-        const fixed = (str, n) => Uint8Array.from({ length: n }, (_, i) => str.charCodeAt(i) || 0);
+        const fixed = (str: string, n: number) => Uint8Array.from({ length: n }, (_, i) => str.charCodeAt(i) || 0);
         return ok(
           concat(
             [1, this.loadFailures.length],
