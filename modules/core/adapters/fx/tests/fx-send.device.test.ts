@@ -6,11 +6,10 @@ import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { triggerFrame as triggerFor } from '@digi/regression/runtime/fixtures.ts';
 import {
   analysisJson,
-  bounded,
   capture,
   compare,
   dspWords,
-  frames,
+  runFrames,
   inspect,
   rows,
   rpc,
@@ -69,9 +68,7 @@ for (const device of DEVICES) {
           expect(after[14], 'send effect remains active').toBe(0);
           expect(after[17], 'send effect has no fault').toBe(0);
           const n0 = (await dspWords(runtime.session, after[2]!, 1))[0]!;
-          await bounded(async () =>
-            runtime.session.client.runUntil({ frames: (await frames(runtime.session)) + 100, timeout_wall_s: 30 }),
-          );
+          await runFrames(runtime.session, 100);
           const n1 = (await dspWords(runtime.session, after[2]!, 1))[0]!;
           expect(n0).toBeGreaterThan(1000);
           expect(n1 - n0, 'send runs once per block, without a second master-chain call').toBeGreaterThanOrEqual(90);

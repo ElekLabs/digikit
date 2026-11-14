@@ -3,13 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { bytesOfHex, concat, be32, fileHash, hexOf, type DkEntry, type DkSession } from '@digi/dk-session';
-import { repoRoot, resolveInputs, type Device, type Session } from '@digi/test-support';
+import { repoRoot, resolveInputs, stepWithProgress, type Device, type Session } from '@digi/test-support';
 import { parse } from 'smol-toml';
 import { describe, expect, test } from 'vitest';
 import { CMD as GCMD } from '../../../packages/dk-session/src/gen_proto.ts';
 import { listing, plusdriveBinary, storeList, type Files, type Listing } from './card-kit.ts';
 import { cardRig, type CardRig } from './card-rig.ts';
-import { bounded, rpc } from './fx-live.ts';
+import { rpc } from './fx-live.ts';
 import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
 import { overlayRecords } from './write-safety.ts';
 
@@ -105,7 +105,7 @@ const walk = (dir: string, base = dir): Files =>
 /** Hand one message to the emulated USB input (high-speed delivery) and run 16 M ColdFire instructions (Python: 40 steps of 400,000). */
 export async function usbSend(session: Session, msg: Uint8Array): Promise<void> {
   await rpc(session, 'midi.usb.in', { bytes: hexOf(msg), chunk: 384, period: 16_500 });
-  await bounded(() => session.client.step(16_000_000, { timeout_wall_s: 120 }));
+  await stepWithProgress(session.client, 16_000_000);
 }
 /** Everything the firmware sent since the last take. */
 export async function usbTake(session: Session): Promise<Uint8Array> {

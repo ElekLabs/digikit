@@ -163,6 +163,11 @@ export async function runToFrame(session: Session, target: number): Promise<void
   await runUntilFramesWithProgress(session.client, () => frames(session), target);
 }
 
+/** Run `n` more DSP frames with the same progress guard. */
+export async function runFrames(session: Session, n: number): Promise<void> {
+  await runToFrame(session, (await frames(session)) + n);
+}
+
 /** Choose the original device list hint or a numeric override without asserting selected-track identity.
  * The BASIC chain uses selectSine for DT2 type readback; gain/deselect retains its audible-input contract. */
 export async function pickSine(session: Session, selection?: number, ups = 0): Promise<void> {
