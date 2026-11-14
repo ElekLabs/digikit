@@ -24,6 +24,7 @@ coldfire = { path = "../emulator/coldfire" }
 dkaddrmap = { path = "../dkaddrmap" }
 dksharc = { path = "../dksharc" }
 dkneeds = { path = "../dkneeds" }
+dkprof = { path = "../dkprof" }
 dkupload = { path = "../dkupload" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

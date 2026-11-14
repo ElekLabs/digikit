@@ -24,6 +24,7 @@ pub mod abigen;
 pub mod addrmap;
 pub mod apply;
 pub mod bootrom;
+pub mod budget_cli;
 pub mod build;
 pub mod dkm;
 pub mod dkmdsp;

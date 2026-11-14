@@ -34,6 +34,11 @@ pub struct DeviceInfo {
     pub fx_slots: Option<u64>,
     /// `[patch_sets]`: named module sets as roots (the modules they require are added), e.g. `emulator` and `device`.
     pub patch_sets: BTreeMap<String, Vec<String>>,
+    /// `[board] dsp_clock_hz` and `dsp_blocks_per_second`: the DSP block length the budget starts from.
+    pub dsp_clock_hz: Option<u64>,
+    pub dsp_blocks_per_second: Option<u64>,
+    /// `[adapter.machine] voices`: voices of the machine adapter.
+    pub machine_voices: Option<u64>,
 }
 
 impl DeviceInfo {
@@ -67,8 +72,23 @@ struct File {
     digikit: Option<Digikit>,
     patch: Option<Patch>,
     limits: Option<LimitsDoc>,
+    board: Option<BoardDoc>,
+    adapter: Option<AdapterDoc>,
     #[serde(default)]
     patch_sets: BTreeMap<String, Vec<String>>,
+}
+#[derive(Deserialize)]
+struct BoardDoc {
+    dsp_clock_hz: Option<u64>,
+    dsp_blocks_per_second: Option<u64>,
+}
+#[derive(Deserialize)]
+struct AdapterDoc {
+    machine: Option<MachineDoc>,
+}
+#[derive(Deserialize)]
+struct MachineDoc {
+    voices: Option<u64>,
 }
 #[derive(Deserialize)]
 struct LimitsDoc {
@@ -137,6 +157,9 @@ fn parse(files: &[(&str, &str)]) -> Result<Vec<DeviceInfo>> {
             modules: f.limits.as_ref().and_then(|l| l.modules),
             fx_slots: f.limits.and_then(|l| l.fx_slots),
             patch_sets: f.patch_sets,
+            dsp_clock_hz: f.board.as_ref().and_then(|b| b.dsp_clock_hz),
+            dsp_blocks_per_second: f.board.as_ref().and_then(|b| b.dsp_blocks_per_second),
+            machine_voices: f.adapter.and_then(|a| a.machine).and_then(|m| m.voices),
         });
     }
     Ok(out)
