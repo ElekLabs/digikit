@@ -5,6 +5,7 @@
 import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
 import type { DkSession } from '@digi/dk-session';
 import CardPanel from './CardPanel';
+import type { Host } from './host/host';
 import MemoryPanel from './MemoryPanel';
 import { TAB_LABEL, shownTab, type InspectorTab } from './inspector-core';
 import { inspectorOpen, inspectorTab, setInspectorOpen, setInspectorTab } from './panel-open';
@@ -16,6 +17,8 @@ import './card-panel.css';
  * Memory panel's (memory-panel props).
  */
 export default function SidePanels(props: {
+  /** The host of the Card panel: needed with `card`. */
+  host?: Host;
   visible: boolean;
   active?: boolean;
   card?: boolean;
@@ -147,8 +150,8 @@ export default function SidePanels(props: {
       <Show when={props.visible && inspectorOpen() && !(props.active ?? true) && tab() !== 'metrics'}>
         <p class="side-empty">The emulator is not running.</p>
       </Show>
-      <Show when={props.card}>
-        <CardPanel visible={reads('card')} reload={props.reload} tabpanel={tabpanel('card')} />
+      <Show when={props.card && props.host}>
+        <CardPanel host={props.host!} visible={reads('card')} reload={props.reload} tabpanel={tabpanel('card')} />
       </Show>
       <MemoryPanel
         visible={reads('memory')}

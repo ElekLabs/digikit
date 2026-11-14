@@ -2,7 +2,6 @@
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
 import { setBrowseDevice } from '@web/transfer/transfer-state';
-import { invoke } from '@tauri-apps/api/core';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
 import { panels } from '@web/data/faceplates';
@@ -50,6 +49,7 @@ import { createLogFollow, followSession } from './log-follow';
 import { windowShown } from './log-follow-core';
 import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import LogPanel from './LogPanel';
+import type { EmuSource as Source, Host } from './host/host';
 import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
 import { setInspectorOpen, setInspectorTab } from './panel-open';
@@ -79,13 +79,6 @@ import type { ControllerJob } from '@web/jobs/jobs-core';
 import { isCancelled } from '@web/modules/backend';
 import { JobBusyError, type JobHandle, busy, currentJob, jobs, runJob, syncControllerJob } from '@web/jobs/jobs';
 
-type Source = { path: string; name: string; bytes: number; modified_ms: number };
-interface Launch {
-  syx: string | null;
-  card: string | null;
-  runtime: boolean | null;
-  loaded: boolean;
-}
 type Status = RuntimeSnapshot['status'];
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -121,7 +114,7 @@ function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }
   );
 }
 
-export default function Console() {
+export default function Console(props: { host: Host }) {
   const [runtime, setRuntime] = createSignal<EmulatorRuntime>();
   const [controllerJob, setControllerJob] = createSignal<ControllerJob | null>(null);
   const [outsideApp, setOutsideApp] = createSignal(false);
@@ -331,7 +324,7 @@ export default function Console() {
         `Loading ${base}`,
         { group: 'emulator', cancel: () => void runtime()?.cancelJob?.() },
         async () => {
-          const file = await invoke<Source | null>('emu_set_source', { path });
+          const file = await props.host.emu.setSource(path);
           setSource(file ?? undefined);
           lastModified = file?.modified_ms;
           const ok = await boot(
@@ -364,7 +357,7 @@ export default function Console() {
   };
   /** The native picker; the picked file becomes the console's file and boots. */
   const openFirmware = async () => {
-    const path = await invoke<string | null>('emu_pick_syx', { start: source()?.path ?? readPref(LAST_FIRMWARE_KEY) });
+    const path = await props.host.emu.pickSyx(source()?.path ?? readPref(LAST_FIRMWARE_KEY));
     if (path) await bootPath(path, 'Opened at');
   };
   /** `dev.reload {build: true}`: the controller builds the stale ColdFire objects, applies the modules again from the objects on disk
@@ -407,7 +400,7 @@ export default function Console() {
   });
   const pollSource = async () => {
     try {
-      const file = await invoke<Source | null>('emu_source_info');
+      const file = await props.host.emu.sourceInfo();
       setSource(file ?? undefined);
       if (!file) return;
       const changed = lastModified !== undefined && file.modified_ms !== lastModified;
@@ -493,11 +486,12 @@ export default function Console() {
         return;
       }
       setRuntime(r);
-      void invoke<BuildInfo>('emu_build_info')
+      void props.host.emu
+        .buildInfo<BuildInfo>()
         .then(setBuildInfo)
         .catch(() => setBuildInfo(undefined));
       void (async () => {
-        const launch = await invoke<Launch>('emu_launch');
+        const launch = await props.host.emu.launch();
         if (launch.loaded) {
           await pollSource();
           await refreshInfo();
@@ -983,6 +977,7 @@ export default function Console() {
                 </div>
               </main>
               <SidePanels
+                host={props.host}
                 visible={sidePanelsShown()}
                 active={panelsActive()}
                 card
@@ -1038,6 +1033,7 @@ export default function Console() {
             }}
           />
           <LogPanel
+            host={props.host}
             follow={logFollow}
             emulatorRunning={() => !!status()}
             devicePort={lastMidiPort}

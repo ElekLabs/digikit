@@ -8,7 +8,8 @@ import '@web/styles/site.css';
 import '../src/console.css';
 import '../src/native.css';
 import '../src/tooltip.css';
-import '../src/desktop-env';
+import { installDesktopEnv } from '../src/desktop-env';
+import { createTauriHost } from '../src/host/tauri-host';
 import { desktopDefaultModules } from '../src/default-modules';
 import { CHART, FOLDER, Icon, MODULES, PAUSE, RELOAD, RESTART } from '../src/icons';
 import { installNativeFeel } from '../src/native';
@@ -34,6 +35,8 @@ import LogPanel from '../src/LogPanel';
 import { setLogOpen } from '../src/log-state';
 import { logMode, previewLog } from './runtime-log-mock';
 import { SAMPLES_ROOT, control, sim } from './sim';
+const host = createTauriHost();
+installDesktopEnv(host);
 
 // ?page=transfer (default) | remote | emulator | firmware (state: fwdev, fwstate, fwos; see firmware-mock.ts): the Emulator page shows the faceplate only (the real one needs the emulator) with the same
 // markup as ../src/Console.tsx, to put its screen next to the Remote page's.
@@ -58,6 +61,7 @@ const emulatorFaceplate = () =>
         </div>
       </main>
       <SidePanels
+        host={host}
         visible
         active={false}
         card
@@ -85,6 +89,7 @@ const emulatorFaceplate = () =>
         </div>
       </main>
       <SidePanels
+        host={host}
         visible
         card
         reload={reloadCard}
@@ -130,6 +135,7 @@ function LogPage() {
       style={{ height: `${Number(new URLSearchParams(location.search).get('logh') ?? 360)}px` }}
     >
       <LogPanel
+        host={host}
         follow={follow}
         emulatorRunning={previewLog.emulatorRunning}
         devicePort={previewLog.devicePort}

@@ -99,6 +99,14 @@ disabled ("desktop only for now"). Headless: the control socket's `card.load {di
 
 **Log panel (desktop app).** The "Log" button in the status bar, or ⌘J (Ctrl+J on other systems), opens a panel with the events of this window: module reloads and builds, firmware loads, card changes, Transfer runs, emulator resets, and guest faults, stalls and DSP halts. Each entry has a time, a source, one line, and for long output (a compiler log) a ▸ button that shows it in full. The panel has a source filter, "Errors only", "Copy" (the entries shown, with details) and "Clear". It keeps the last 500 entries in memory. It opens by itself for a failed reload or build and for a guest fault, stall or DSP halt; other errors add to the badge on the Log button. The Log is a panel docked along the bottom of the window, full width: the page above it gets smaller, nothing is covered. Drag its top edge to change the height (double click resets it; the height is remembered). Metrics stays a small popover above the status bar. The app polls the controller for stalls and halts once a second, so they can show up to a second late.
 
+### Host and EmuRpc (desktop UI)
+
+The desktop UI never calls Tauri's `invoke`. `apps/desktop/ui/src/host/host.ts` types every Tauri command the UI uses, in groups (`fs`, `library`, `ports.midi`, `ports.bulk`, `firmware`, `emu`, `shell`), and `rpc` is `EmuRpc`: `call(method, params)` over `emu_call`. `host/tauri-host.ts` is the only module that imports `invoke` (oxlint `no-restricted-imports` fails any other file). `main.tsx` makes the host and passes it to `installDesktopEnv(host)` and `<Console host={host}>`; modules take the host (or one group of it) as an argument. The folder has no UI types so it can move to a shared package.
+
+Add a command: write the Rust command, then add a method to the group in `host.ts`, its `invoke` line in `tauri-host.ts` and its `leaf(...)` line in `fake-host.ts`. Ten commands are not typed yet because the UI does not call them (`emu_stage_syx`, `emu_save_diagnostics`, `emu_audio_status`, `emu_startup`, `emu_step`, `emu_tap`, `emu_stop`, `emu_card_reset`, `emu_card_stage`, `emu_card_load`).
+
+Tests use `createFakeHost(replies)` from `host/fake-host.ts`: it records `calls` (command as `group.method`, arguments, order) and answers from `replies` (a value, or a function of the arguments). A command with no reply fails, except the ones that answer nothing (open, close, send, cancel). Examples: `ui/tests/samples-backend.test.ts`, `card-api.test.ts`, `links.test.ts`. The browser preview (`mise run ui:preview`) still replaces `@tauri-apps/api/core` with `ui/preview/tauri-mock.ts` behind `TauriHost`.
+
 ## Web panel
 
 ```sh
