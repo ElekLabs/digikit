@@ -1414,15 +1414,19 @@ export class DkSession {
    * (an UPLOAD event whose first argument is the command), the new boot's log starts with BOOT_START and never saw it. Without it there is no log (INFO has no LOG
    * capability): the device is then taken as booted when it answers again after a failed read (the port is silent while it resets). The port may be silent for
    * a while (the emulator boots on a worker): a failed read is a reason to wait and try again.
+   * `opts.signal` cancels the wait. While `opts.stillBooting()` is true the deadline moves on: the wait gives up only after `timeoutMs` without a reported boot.
    */
   async waitForBoot(
     sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
     timeoutMs = 90000,
+    opts: { signal?: AbortSignal; stillBooting?: () => boolean } = {},
   ): Promise<void> {
-    const end = Date.now() + timeoutMs;
+    let end = Date.now() + timeoutMs;
     let last = 'no answer';
     let silent = false;
     while (Date.now() < end) {
+      if (opts.signal?.aborted) throw cancelledError();
+      if (opts.stillBooting?.()) end = Math.max(end, Date.now() + timeoutMs);
       try {
         const info = await this.info(true);
         if (info.caps !== null && ((info.caps >>> GCAP.LOG) & 1) === 1) {
@@ -1430,12 +1434,14 @@ export class DkSession {
         } else if (silent) return;
         last = 'the old boot still runs';
       } catch (e) {
+        if (e instanceof DkError && e.kind === 'cancelled') throw e;
         silent = true;
         if (e instanceof DkError && e.kind === 'device' && e.status === 'E_PROTO') throw e;
         last = e instanceof Error ? e.message : String(e);
         if (e instanceof DkError && e.kind === 'refused') throw e;
       }
       await sleep(500);
+      if (opts.signal?.aborted) throw cancelledError();
     }
     throw new DkError({ error: `no new boot within ${Math.round(timeoutMs / 1000)} s (${last})`, kind: 'timeout' });
   }

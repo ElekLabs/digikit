@@ -74,12 +74,21 @@ pub struct KeepRam {
 /// The error of a cold boot that the guest cut short with a soft reset.
 pub const SOFT_RESET: &str = "soft reset";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColdPhase {
+    /// The DSP runs its cold start before the ColdFire starts (a boot with a changed DSP section); no estimate of its length.
+    Dsp,
+    /// The ColdFire boots towards the ready screen; `fraction` is an estimate.
+    ColdFire,
+}
+
 #[derive(Clone, Debug)]
 pub struct ColdProgress {
     pub icount: u64,
     pub frames: usize,
     /// 0..1, a guess from the usual boot length.
     pub fraction: f64,
+    pub phase: ColdPhase,
     pub wall_seconds: f64,
 }
 
@@ -203,6 +212,7 @@ pub fn boot_emulator_to_ready(
                     icount: dsp_steps,
                     frames: 0,
                     fraction: 0.0,
+                    phase: ColdPhase::Dsp,
                     wall_seconds: started.elapsed().as_secs_f64(),
                 })
             },
@@ -311,6 +321,7 @@ pub fn boot_emulator_to_ready(
                 icount: status.icount,
                 frames,
                 fraction: (status.icount as f64 / READY_ESTIMATE as f64).min(0.99),
+                phase: ColdPhase::ColdFire,
                 wall_seconds: started.elapsed().as_secs_f64(),
             });
         }

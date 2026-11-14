@@ -6,6 +6,7 @@ import fastRegionTable from '../../../../config/emulator.json';
 import { sha256Hex } from './local-inputs';
 import type { CardBridge, CardStatus } from './cards';
 import type { ReloadReport } from './reload';
+import type { ControllerJob } from '../jobs/jobs-core';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 
@@ -200,8 +201,10 @@ export interface EmulatorRuntime {
   loadPath?(path: string, options?: LoadOptions): Promise<RuntimeSnapshot>;
   /** Native desktop only: what the running image got from the digikit runtime patch (`status.firmware.runtime`). */
   firmwareInfo?(): Promise<FirmwareInfo | undefined>;
-  /** Native desktop only: the heartbeat of the running image (`status.heartbeat`), or undefined while a job runs. */
-  health?(): Promise<RuntimeHealth | undefined>;
+  /** Native desktop only: the controller's heartbeat and running job (one `status` call). */
+  controllerStatus?(): Promise<{ heartbeat?: RuntimeHealth; job?: ControllerJob | null }>;
+  /** Native desktop only: cancel the controller's long job (`job.cancel`); the cancelled call fails with error 10. */
+  cancelJob?(): Promise<void>;
   /** The emulator's own reset of the running firmware (the browser worker boots the file again). Not the device RESTART command. */
   restart(): Promise<RuntimeSnapshot>;
   /** Native desktop only: `dev.reload`. The controller applies the modules again from the objects on disk and brings the running
@@ -449,7 +452,12 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
   // One protocol method of the controller (docs/CONTROL.md). With a session, the controller refuses the call when the webview's
   // session is no longer the current one; `firmware.load` and `restart` start the session they carry.
   const call = <T>(method: string, params: Record<string, unknown> = {}, session?: number) =>
-    api.invoke<T>('emu_call', { method, params, session: session ?? null });
+    api.invoke<T>('emu_call', { method, params, session: session ?? null }).catch((e: unknown) => {
+      // the bridge passes a string like "cancelled (code 10)": the code becomes data, the message loses the suffix
+      const m = /^([\s\S]*) \(code (-?\d+)\)$/.exec(e instanceof Error ? e.message : String(e));
+      if (!m) throw e;
+      throw Object.assign(new Error(m[1]), { code: Number(m[2]) });
+    });
   // A new session: stop the pump, run the call that starts it (`firmware.load` or `restart`, with the new token), take the
   // snapshot of what came up, and start pumping it. A newer session wins over an older one that is still starting.
   const newSession = (starts: (token: number) => Promise<void>) => {
@@ -618,9 +626,12 @@ export async function nativeRuntime(onUpdate: (update: RuntimeUpdate) => void): 
       const status = await call<{ firmware: { runtime?: RuntimePatch | null } | null }>('status');
       return { runtime: status.firmware?.runtime ?? null };
     },
-    async health() {
-      const status = await call<{ heartbeat?: RuntimeHealth }>('status');
-      return status.heartbeat;
+    async controllerStatus() {
+      const status = await call<{ heartbeat?: RuntimeHealth; job?: ControllerJob | null }>('status');
+      return { heartbeat: status.heartbeat, job: status.job ?? null };
+    },
+    cancelJob: async () => {
+      await call('job.cancel');
     },
     async restart() {
       if (!loaded || activeSession === undefined) throw new Error('No firmware selected');

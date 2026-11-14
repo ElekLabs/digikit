@@ -23,6 +23,8 @@ pub mod code {
     pub const DSP_HALTED: i64 = 7;
     pub const IO: i64 = 8;
     pub const TIMEOUT: i64 = 9;
+    /// A long job was cancelled (`job.cancel`).
+    pub const CANCELLED: i64 = 10;
 }
 
 #[derive(Clone, Debug, PartialEq)]

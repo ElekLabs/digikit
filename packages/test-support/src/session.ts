@@ -386,7 +386,7 @@ export class Session {
       // The card's own `overlay.bin` (its test writes) is part of the baseline: the daemon applies it on load.
       if (!fs.statSync(image).isFile()) throw new Error('runtime baseline must be a card image file');
       if (!baseline.guard) throw new Error('runtime baseline requires an explicit scenario guard policy');
-      // The visible job can finish; a hidden patch job may still reject load as BUSY, which discards this daemon.
+      // The visible job can finish; a job (a cold boot included) that still runs would reject load as BUSY, which discards this daemon.
       let before = (lastStatus = await checked('status.before-load', () => this.client.status()));
       statusPhase = 'before-load';
       while (before.job) {

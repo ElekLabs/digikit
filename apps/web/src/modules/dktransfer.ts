@@ -453,17 +453,19 @@ export async function restartDevice(
   emit: Emit = () => {},
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   loadedTimeoutMs = 20000,
+  opts: { signal?: AbortSignal; stillBooting?: () => boolean } = {},
 ): Promise<{ loaded: string[]; missing: string[] }> {
   const info = await s.info();
   requireRuntime(info);
   emit({ event: 'restart' });
   await s.restart();
   emit({ event: 'wait', modules: [] });
-  await s.waitForBoot(sleep);
+  await s.waitForBoot(sleep, undefined, opts);
   // MODULES answers once the runtime is up; the modules of the selection load at the start of the boot
   const end = Date.now() + loadedTimeoutMs;
   let loaded: string[] = [];
   for (;;) {
+    if (opts.signal?.aborted) throw new DkError({ error: 'cancelled', kind: 'cancelled' });
     try {
       loaded = (await s.modules()).map((m) => m.name);
       break;
