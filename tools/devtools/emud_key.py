@@ -123,9 +123,56 @@ def key_of(inputs: EmudInputs) -> str:
 # the build read, not the source globs: the repository files in the cargo dependency file of the build (`files.txt` of the store
 # entry, written by verify_build from `repo_files_of_depfile`), the registry crates of the daemon's dependency closure (`cargo tree`,
 # not the whole Cargo.lock: an unrelated workspace member changes neither), the generated core, the profile, rustc and the flags. The
-# patchkit sources are left out: a test result follows the patched image bytes (dist/bytes/images.sha256). The store key (`key_of`)
-# is not touched.
+# patchkit sources are left out: a test result follows the patched image bytes (dist/bytes/images.sha256). So are the workspace crates the
+# daemon reaches only through patchkit (`patchkit_only_dirs`, for example dksharc): their effect is in the image and pack bytes too. A crate
+# the daemon also reaches by another path stays. The store key (`key_of`) is not touched.
 TEST_KEY_EXCLUDED = ("packages/patchkit/", "out/")
+
+
+def patchkit_only_dirs(root: Path = ROOT) -> tuple[str, ...]:
+    """Repository directories (with a trailing slash) of the workspace crates in the daemon's dependency closure that are reached only through
+    patchkit: reachable from the daemon crate with patchkit, not without it. From `cargo metadata` (normal and build edges)."""
+    from tools.emulator import digi_env
+
+    done = subprocess.run(
+        ["rustup", "run", digi_env.TOOLCHAIN, "cargo", "metadata", "--format-version", "1", "--manifest-path", MANIFEST, "--features", FEATURES, "--offline", "--locked"],
+        cwd=root, check=True, capture_output=True, text=True,
+    )  # fmt: skip
+    meta = json.loads(done.stdout)
+    graph = {
+        n["id"]: [
+            d["pkg"]
+            for d in n["deps"]
+            if any(k["kind"] in (None, "build") for k in d["dep_kinds"])
+        ]
+        for n in meta["resolve"]["nodes"]
+    }
+    packages = {p["id"]: p for p in meta["packages"]}
+    start = next(
+        i
+        for i, p in packages.items()
+        if p["manifest_path"] == str((root / MANIFEST).resolve())
+    )
+
+    def reach(skip: str | None) -> set[str]:
+        seen, todo = set(), [start]
+        while todo:
+            node = todo.pop()
+            if node in seen or (skip and packages[node]["name"] == skip):
+                continue
+            seen.add(node)
+            todo.extend(graph.get(node, []))
+        return seen
+
+    only = reach(None) - reach("patchkit")
+    dirs = []
+    for node in only:
+        manifest = Path(packages[node]["manifest_path"])
+        if manifest.is_relative_to(root.resolve()):
+            rel = manifest.parent.relative_to(root.resolve()).as_posix() + "/"
+            if rel != "./":
+                dirs.append(rel)
+    return tuple(sorted(dirs))
 
 
 def repo_files_of_depfile(depfile_text: str, root: Path, target_dir: Path) -> list[str]:
@@ -192,7 +239,11 @@ def cargo_closure(root: Path = ROOT) -> str:
 
 
 def test_key_of(
-    inputs: EmudInputs, names: Sequence[str], closure: str, root: Path = ROOT
+    inputs: EmudInputs,
+    names: Sequence[str],
+    closure: str,
+    root: Path = ROOT,
+    patchkit_only: Sequence[str] = (),
 ) -> str:
     """The test key: see the comment above. NAMES are repository files (relative to ROOT)."""
     record = {
@@ -200,7 +251,7 @@ def test_key_of(
         "files": sorted(
             (name, sha256_file(root / name))
             for name in names
-            if not name.startswith(TEST_KEY_EXCLUDED)
+            if not name.startswith((*TEST_KEY_EXCLUDED, *patchkit_only))
         ),
         "closure": closure,
         "gen": {
@@ -346,7 +397,9 @@ def key(device: str) -> str:
 def test_key(device: str, entry: Path) -> str:
     """The test key of DEVICE from the store ENTRY (its `files.txt`)."""
     names = (entry / "files.txt").read_text().split()
-    return test_key_of(inputs(device), names, cargo_closure())
+    return test_key_of(
+        inputs(device), names, cargo_closure(), patchkit_only=patchkit_only_dirs()
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
