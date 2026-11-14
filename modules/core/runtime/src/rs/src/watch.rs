@@ -390,10 +390,11 @@ unsafe fn write_hang(w: &mut Watch) {
     use dkrt_sdk::fault::*;
     let mut diag = w.seen[0];
     diag[D_STEP] = w.m_step;
+    // the site word names the route an effect ran on; the module behind its row is the same for both
     let (site, stage, id, last, module) = if w.m_fx != 0 {
         let site = (w.m_fx >> 8) & 0xff;
         let off = w.m_fx >> 16;
-        (site, w.m_fx & 0xff, off, w.m_fx, Services::attribute(site, off / FX_ROW_BYTES))
+        (site, w.m_fx & 0xff, off, w.m_fx, Services::attribute(SITE_FX_MASTER, off / FX_ROW_BYTES))
     } else if w.m_voice != 0 {
         let ty = w.m_voice >> 16;
         (SITE_VOICE, w.m_voice & 0xff, ty, w.m_voice, Services::attribute(SITE_VOICE, ty))

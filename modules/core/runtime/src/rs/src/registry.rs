@@ -11,7 +11,7 @@
 //! Rules: all checks run before the first write (`check`); rows are written in an order that a reader never sees a
 //! half-filled machine (the name pointer, which marks a row as used, is the last store, one aligned 32-bit word); the
 //! strings the rows point to live in this module's own state, never in the arena, so unload cannot leave a dangling pointer.
-use crate::handlers::{ApplyCtx, CheckCtx, ServiceList, Services};
+use crate::handlers::{check_step, ApplyCtx, CheckCtx, ServiceList, Services};
 use crate::rd32;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
@@ -295,7 +295,17 @@ pub(crate) unsafe fn check_with<L: ServiceList>(reg: *const u8, size: u32, image
     if at != size {
         return E_FORMAT;
     }
-    L::check(&CheckCtx { reg, image_size, inf })
+    // the steps of the old single body, each over every service's records in file order
+    let c = CheckCtx { reg, image_size, inf };
+    let mut step = 0;
+    while step < check_step::COUNT {
+        let r = L::check(step, &c);
+        if r != OK {
+            return r;
+        }
+        step += 1;
+    }
+    OK
 }
 
 /// Fill the reserved rows from the (checked) records. `owner` = module record index + 1.
@@ -312,7 +322,16 @@ pub(crate) unsafe fn apply_with<L: ServiceList>(owner: u8, reg: *const u8, size:
     if inf.is_null() {
         return E_NO_REGISTRY;
     }
-    let rc = L::apply(&ApplyCtx { owner, reg, base, inf, args: (*addr_of!(ARGS)).as_ref() });
+    let c = ApplyCtx { owner, reg, base, inf, args: (*addr_of!(ARGS)).as_ref() };
+    let mut rc = L::apply(&c);
+    if rc == OK {
+        // the records that register callbacks and pages, in file order; the first failure stops the walk
+        each(reg, |kind, b| {
+            if rc == OK {
+                rc = L::apply_record(kind, b, &c);
+            }
+        });
+    }
     *addr_of_mut!(ARGS) = None;
     if rc != OK {
         return rc;

@@ -18,46 +18,51 @@ impl Service for Fx {
         }
     }
 
-    unsafe fn check(c: &CheckCtx) -> i32 {
-        // the most effects the chain takes
-        let mut ne = 0u32;
-        each(c.reg, |kind, _| {
-            if kind == fxpage::KIND_EFFECT {
-                ne += 1;
+    unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
+        use crate::handlers::check_step as st;
+        if step == st::COUNTS {
+            // the most effects the chain takes
+            let mut ne = 0u32;
+            each(c.reg, |kind, _| {
+                if kind == fxpage::KIND_EFFECT {
+                    ne += 1;
+                }
+            });
+            if ne as usize > crate::dsp::MAX_FX {
+                return E_FORMAT;
             }
-        });
-        if ne as usize > crate::dsp::MAX_FX {
-            return E_FORMAT;
+            OK
+        } else if step == st::EFFECTS {
+            // effect pages need core/fxpages; each record is checked on its own, and an effect has one page
+            let mut fx_seen = 0u32;
+            let mut bad_fx = OK;
+            each(c.reg, |kind, b| {
+                if kind == fxpage::KIND_EFFECT && bad_fx == OK {
+                    let r = fxpage::check_record(b);
+                    let fx = rd32(b);
+                    if r == OK && fx < 32 && fx_seen & (1 << fx) != 0 {
+                        bad_fx = E_FORMAT;
+                    } else if r != OK {
+                        bad_fx = r;
+                    }
+                    if fx < 32 {
+                        fx_seen |= 1 << fx;
+                    }
+                }
+            });
+            bad_fx
+        } else {
+            OK
         }
-        // effect pages need core/fxpages; each record is checked on its own, and an effect has one page
-        let mut fx_seen = 0u32;
-        let mut bad_fx = OK;
-        each(c.reg, |kind, b| {
-            if kind == fxpage::KIND_EFFECT && bad_fx == OK {
-                let r = fxpage::check_record(b);
-                let fx = rd32(b);
-                if r == OK && fx < 32 && fx_seen & (1 << fx) != 0 {
-                    bad_fx = E_FORMAT;
-                } else if r != OK {
-                    bad_fx = r;
-                }
-                if fx < 32 {
-                    fx_seen |= 1 << fx;
-                }
-            }
-        });
-        bad_fx
     }
 
-    unsafe fn apply(c: &ApplyCtx) -> i32 {
-        // effect pages (Digitakt II): the effect's row in the chain is claimed, so its page, parameter rows and list entry can be written
-        let mut rc = OK;
-        each(c.reg, |kind, b| {
-            if kind == fxpage::KIND_EFFECT && rc == OK {
-                rc = fxpage::apply(c.owner, b);
-            }
-        });
-        rc
+    /// An effect record, in file order: its page, parameter rows and list entry are written (the effect's row in the chain is claimed).
+    unsafe fn apply_record(kind: u32, body: *const u8, c: &ApplyCtx) -> i32 {
+        if kind == fxpage::KIND_EFFECT {
+            fxpage::apply(c.owner, body)
+        } else {
+            OK
+        }
     }
 
     unsafe fn remove(owner: u8) {
@@ -71,7 +76,8 @@ impl Service for Fx {
     }
 
     unsafe fn attribute(site: u32, id: u32) -> Option<usize> {
-        if site == dkrt_sdk::fault::SITE_FX_MASTER || site == dkrt_sdk::fault::SITE_FX_SEND {
+        // every site but the voice's names an effect row (the master route, the send route, or a site this runtime does not know)
+        if site != dkrt_sdk::fault::SITE_VOICE {
             super::dsp::module_of_fx_table_row(id)
         } else {
             None

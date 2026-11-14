@@ -4,7 +4,7 @@
 use crate::handlers::{ApplyCtx, CapSink, CheckCtx, Claim, GuardState, RowWrite, Service};
 use crate::registry::{self, each, iw, make_rep, rd, rs, w, wr, write_param_row, DKRT_REG};
 use crate::{cstr_len, rd32};
-use core::ptr::addr_of;
+use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::*;
 
 pub(crate) const KIND_PARAM: u32 = 1;
@@ -53,12 +53,33 @@ impl Service for Machines {
             || iw(inf, w::PG_DYN_N) as usize > MAX_PAGE)
     }
 
-    unsafe fn check(c: &CheckCtx) -> i32 {
-        check(c)
+    unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
+        use crate::handlers::check_step as st;
+        if step == st::COUNTS {
+            ck_counts(c)
+        } else if step == st::ACTIONS {
+            ck_actions(c)
+        } else if step == st::NATIVE {
+            ck_native(c)
+        } else if step == st::DEVICE {
+            ck_device(c)
+        } else if step == st::RECORDS {
+            ck_records(c)
+        } else if step == st::OWNERS {
+            ck_owners(c)
+        } else if step == st::ROWS {
+            ck_rows(c)
+        } else {
+            OK
+        }
     }
 
     unsafe fn apply(c: &ApplyCtx) -> i32 {
         apply(c)
+    }
+
+    unsafe fn apply_record(kind: u32, body: *const u8, c: &ApplyCtx) -> i32 {
+        apply_record(kind, body, c)
     }
 
     unsafe fn remove(owner: u8) {
@@ -102,6 +123,10 @@ impl Service for Machines {
 
     unsafe fn dsp_check_rows(sec: &crate::dsp::DspSec) -> i32 {
         super::dsp::check_rows(sec)
+    }
+
+    unsafe fn dsp_check_types(sec: &crate::dsp::DspSec) -> i32 {
+        super::dsp::check_types(sec)
     }
 
     unsafe fn dsp_claim(c: &mut Claim) {
@@ -150,9 +175,8 @@ unsafe fn copy_text(dst: *mut u8, src: *const u8, n: usize) {
     }
 }
 
-/// Validate the machine, parameter, page, action and native-page records of the section. Nothing is written.
-unsafe fn check(c: &CheckCtx) -> i32 {
-    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+/// The record counts of the section: parameters, machines, pages, actions, native pages.
+unsafe fn counts_of(reg: *const u8) -> (u32, u32, u32, u32, u32) {
     let (mut np, mut nm, mut ng, mut na, mut nn) = (0u32, 0u32, 0u32, 0u32, 0u32);
     each(reg, |kind, _| {
         if kind == KIND_PARAM {
@@ -167,9 +191,25 @@ unsafe fn check(c: &CheckCtx) -> i32 {
             ng += 1;
         }
     });
+    (np, nm, ng, na, nn)
+}
+
+/// The most rows of each kind the registry has.
+#[allow(unused_variables)]
+unsafe fn ck_counts(c: &CheckCtx) -> i32 {
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     if np as usize > MAX_PARAM || nm as usize > MAX_MACH || ng as usize > MAX_PAGE || nn > 2 * nm {
         return E_FORMAT;
     }
+    OK
+}
+
+/// An action names a parameter of the file and code inside the image; a parameter has at most one.
+#[allow(unused_variables)]
+unsafe fn ck_actions(c: &CheckCtx) -> i32 {
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     // an action names a parameter of the file and code inside the image; a parameter has at most one
     let mut acted = 0u32;
     let mut bad_act = OK;
@@ -186,6 +226,14 @@ unsafe fn check(c: &CheckCtx) -> i32 {
     if bad_act != OK || na > np {
         return E_FORMAT;
     }
+    OK
+}
+
+/// Native pages: each record, the claimed pages, the bindings against the machine's parameters.
+#[allow(unused_variables)]
+unsafe fn ck_native(c: &CheckCtx) -> i32 {
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     let mut native_set = crate::nativepage::PageSet::<MAX_MACH>::new();
     let mut bad_native = OK;
     each(reg, |kind, b| {
@@ -239,15 +287,32 @@ unsafe fn check(c: &CheckCtx) -> i32 {
     });
     if bad_native != OK { return bad_native; }
     if !native_set.complete() { return E_FORMAT; }
+    OK
+}
+
+/// Pages need a device that has page rows.
+#[allow(unused_variables)]
+unsafe fn ck_device(c: &CheckCtx) -> i32 {
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     // pages need a device that has page rows
     let has_pages = iw(inf, w::PG_ROWS) != 0;
     if ng != 0 && !has_pages {
         return E_FORMAT;
     }
+    OK
+}
+
+/// The parameter, page and machine records, in file order.
+#[allow(unused_variables)]
+unsafe fn ck_records(c: &CheckCtx) -> i32 {
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
+    let s = rs();
     // pass 2: the records
+    let has_pages = iw(inf, w::PG_ROWS) != 0;
     let (p_first, knobs, slot_base) = (iw(inf, w::P_FIRST), iw(inf, w::KNOBS), iw(inf, w::SLOT_BASE));
     let (dyn0, dyn_n, m_first) = (iw(inf, w::M_DYN0), iw(inf, w::M_DYN_N), iw(inf, w::M_FIRST));
-    let s = rs();
     let mut seen_types = [0u32; MAX_MACH];
     let mut ns = 0usize;
     let mut bad = OK;
@@ -342,18 +407,25 @@ unsafe fn check(c: &CheckCtx) -> i32 {
     if bad != OK {
         return bad;
     }
+    OK
+}
+
+/// A page belongs to a machine of the same file.
+#[allow(unused_variables)]
+unsafe fn ck_owners(c: &CheckCtx) -> i32 {
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     // a page belongs to a machine of the same file
+    let mut bad = OK;
     each(reg, |kind, b| {
         if kind != KIND_PAGE || bad != OK {
             return;
         }
         let t = crate::assign::resolve(rd32(b));
-        let mut j = 0;
         let mut found = false;
-        while j < ns {
-            found |= seen_types[j] == t;
-            j += 1;
-        }
+        each(reg, |k, m| {
+            found |= k == KIND_MACHINE && crate::assign::resolve(rd32(m)) == t;
+        });
         if !found {
             bad = E_FORMAT;
         }
@@ -361,17 +433,25 @@ unsafe fn check(c: &CheckCtx) -> i32 {
     if bad != OK {
         return bad;
     }
+    OK
+}
+
+/// Free reserved page and parameter rows.
+#[allow(unused_variables)]
+unsafe fn ck_rows(c: &CheckCtx) -> i32 {
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
+    let s = rs();
     // free reserved page and parameter rows
-    capacity::registry_rows(
+    return capacity::registry_rows(
         ng,
         capacity::free_rows(&s.page_owner, iw(inf, w::PG_DYN_N)),
         np,
         capacity::free_rows(&s.param_owner, iw(inf, w::P_DYN_N)),
-    )
+    );
 }
 
-
-/// Fill the reserved machine, parameter, page and native-page rows from the (checked) records.
+/// Fill the reserved parameter, action, page and machine rows from the (checked) records.
 unsafe fn apply(ctx: &ApplyCtx) -> i32 {
     let (owner, reg, base, inf, args) = (ctx.owner, ctx.reg, ctx.base, ctx.inf, ctx.args);
     let s = rs();
@@ -497,36 +577,55 @@ unsafe fn apply(ctx: &ApplyCtx) -> i32 {
         s.mach_owner[k] = owner;
         wr(row + iw(inf, w::O_NAME), s.s.mach_name[k].as_ptr() as u32);
     });
-    // native pages: a page's callbacks are registered once its machine's rows are in place
+    // what the native pages need when the walker reaches them in file order
+    let st = &mut *addr_of_mut!(APPLIED);
+    st.codes = codes;
+    st.np = np;
+    st.ni = 0;
+    OK
+}
+
+/// The parameter codes of the records `apply` has written and the native pages seen so far: state between `apply` and `apply_record`
+/// of one section (the registry applies one module at a time, in the UI task).
+struct Applied {
+    codes: [u32; MAX_PARAM],
+    np: usize,
+    ni: usize,
+}
+static mut APPLIED: Applied = Applied { codes: [0; MAX_PARAM], np: 0, ni: 0 };
+
+/// A native page record, in file order after every machine row is in: its callbacks are registered. Other kinds: OK.
+unsafe fn apply_record(kind: u32, b: *const u8, c: &ApplyCtx) -> i32 {
+    if !crate::nativepage::is_kind(kind) {
+        return OK;
+    }
+    let (reg, base, args) = (c.reg, c.base, c.args);
+    let st = &mut *addr_of_mut!(APPLIED);
+    let (codes, np, ni) = (&st.codes, st.np, st.ni);
     let mut rc = OK;
-    let mut ni = 0usize;
-    each(reg, |kind, b| {
-        if crate::nativepage::is_kind(kind) && rc == OK {
-            // Snapshot only this machine's existing parameters, independently of
-            // its page2 encoder bindings. Registry order is declaration order.
-            let machine = rd32(b.add(4));
-            let mut words = [0u32; 8];
-            let mut count = 0;
-            for (index, code) in codes[..np].iter().enumerate() {
-                let mut owned = false;
-                each(reg, |k, row| {
-                    if (k == KIND_MACHINE || k == KIND_PAGE) && rd32(row) == machine {
-                        let offset = if k == KIND_MACHINE { 20 } else { 4 };
-                        for j in 0..8 {
-                            if rd32(row.add(offset + 4 * j)) == (KNOB_PARAM | index as u32) { owned = true; }
-                        }
-                    }
-                });
-                if owned {
-                    if count == words.len() { rc = E_FORMAT; break; }
-                    words[count] = *code;
-                    count += 1;
+    // Snapshot only this machine's existing parameters, independently of
+    // its page2 encoder bindings. Registry order is declaration order.
+    let machine = rd32(b.add(4));
+    let mut words = [0u32; 8];
+    let mut count = 0;
+    for (index, code) in codes[..np].iter().enumerate() {
+        let mut owned = false;
+        each(reg, |k, row| {
+            if (k == KIND_MACHINE || k == KIND_PAGE) && rd32(row) == machine {
+                let offset = if k == KIND_MACHINE { 20 } else { 4 };
+                for j in 0..8 {
+                    if rd32(row.add(offset + 4 * j)) == (KNOB_PARAM | index as u32) { owned = true; }
                 }
             }
-            if rc == OK { rc = crate::nativepage::apply(kind, b, base, &codes, &words[..count], args.map(|a| a.native[ni % 8])); }
-            ni += 1;
+        });
+        if owned {
+            if count == words.len() { rc = E_FORMAT; break; }
+            words[count] = *code;
+            count += 1;
         }
-    });
+    }
+    if rc == OK { rc = crate::nativepage::apply(kind, b, base, codes, &words[..count], args.map(|a| a.native[ni % 8])); }
+    st.ni += 1;
     rc
 }
 

@@ -2,7 +2,6 @@
 //! declarations, attributions and `on_loaded`), and host tests of the core's walkers over it (docs/ARCHITECTURE.md "Boundaries and tests").
 use super::*;
 use crate::registry::{apply_with, check_with, each, remove_with, DKRT_REG};
-use crate::rd32;
 use dkrt_sdk::proto::CAPK_FX_SLOTS;
 use std::sync::Mutex;
 use std::vec::Vec;
@@ -12,7 +11,9 @@ pub(crate) static LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Call {
-    Check { svc: u8, kind: u32, body: Vec<u8> },
+    Check { svc: u8, step: u32, kind: u32, body: Vec<u8> },
+    /// The rows a service writes before the per-record pass.
+    Bulk { svc: u8, owner: u8 },
     Apply { svc: u8, owner: u8, kind: u32, body: Vec<u8> },
     Remove { svc: u8, owner: u8 },
     Attribute { svc: u8, site: u32, id: u32 },
@@ -24,7 +25,7 @@ static mut LOG: Vec<Call> = Vec::new();
 /// `(svc, kind)`: the service that refuses a record of that kind in `check`.
 static mut REFUSE: (u8, u32) = (0, 0);
 /// The service whose `apply` fails.
-static mut FAIL_APPLY: u8 = 0;
+static mut FAIL_APPLY: (u8, u32) = (0, 0);
 
 pub(crate) fn log() -> &'static mut Vec<Call> {
     unsafe { &mut *core::ptr::addr_of_mut!(LOG) }
@@ -51,11 +52,16 @@ impl<const N: u8> Service for Fake<N> {
         }
     }
 
-    unsafe fn check(c: &CheckCtx) -> i32 {
+    /// Service 1 checks its records at the step of native pages, service 2 at the step of effects: the order of the old body.
+    unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
+        let mine = if N == 1 { check_step::NATIVE } else { check_step::EFFECTS };
         let mut r = OK;
+        if step != mine {
+            return r;
+        }
         each(c.reg, |kind, b| {
             if kind == kind_of(N) && r == OK {
-                log().push(Call::Check { svc: N, kind, body: body(c.reg, kind, b) });
+                log().push(Call::Check { svc: N, step, kind, body: body(c.reg, kind, b) });
                 if REFUSE == (N, kind) {
                     r = E_FORMAT;
                 }
@@ -65,16 +71,20 @@ impl<const N: u8> Service for Fake<N> {
     }
 
     unsafe fn apply(c: &ApplyCtx) -> i32 {
-        let mut r = OK;
-        each(c.reg, |kind, b| {
-            if kind == kind_of(N) && r == OK {
-                log().push(Call::Apply { svc: N, owner: c.owner, kind, body: body(c.reg, kind, b) });
-                if FAIL_APPLY == N {
-                    r = E_FORMAT;
-                }
-            }
-        });
-        r
+        log().push(Call::Bulk { svc: N, owner: c.owner });
+        OK
+    }
+
+    unsafe fn apply_record(kind: u32, b: *const u8, c: &ApplyCtx) -> i32 {
+        if kind != kind_of(N) {
+            return OK;
+        }
+        log().push(Call::Apply { svc: N, owner: c.owner, kind, body: body(c.reg, kind, b) });
+        if FAIL_APPLY == (N, kind) {
+            E_FORMAT
+        } else {
+            OK
+        }
     }
 
     unsafe fn remove(owner: u8) {
@@ -141,7 +151,7 @@ fn section(kinds: &[u32]) -> Vec<u8> {
 unsafe fn reset() {
     log().clear();
     REFUSE = (0, 0);
-    FAIL_APPLY = 0;
+    FAIL_APPLY = (0, 0);
     (*core::ptr::addr_of_mut!(DKRT_REG)).registers = 0;
     (*core::ptr::addr_of_mut!(DKRT_REG)).removes = 0;
 }
@@ -151,10 +161,11 @@ fn rec(svc: u8, i: u8) -> (u32, Vec<u8>) {
 }
 
 #[test]
-fn the_walker_applies_in_list_order_and_removes_in_reverse() {
+fn a_mixed_file_checks_in_step_order_applies_in_file_order_and_removes_in_reverse() {
     let _g = LOCK.lock().unwrap();
     unsafe {
         reset();
+        // mixed kinds: service 1, 2, 1
         let sec = section(&[kind_of(1), kind_of(2), kind_of(1)]);
         assert_eq!(check_with::<Two>(sec.as_ptr(), sec.len() as u32, 0), OK);
         assert_eq!(apply_with::<Two>(5, sec.as_ptr(), sec.len() as u32, 0x1000), OK);
@@ -162,17 +173,21 @@ fn the_walker_applies_in_list_order_and_removes_in_reverse() {
         let (k1, b1) = rec(1, 1);
         let (k1b, b1b) = rec(1, 3);
         let (k2, b2) = rec(2, 2);
+        let n = check_step::NATIVE;
+        let e = check_step::EFFECTS;
         assert_eq!(
             *log(),
             vec![
-                // check: the services in list order, each over its own records
-                Call::Check { svc: 1, kind: k1, body: b1.clone() },
-                Call::Check { svc: 1, kind: k1b, body: b1b.clone() },
-                Call::Check { svc: 2, kind: k2, body: b2.clone() },
-                // apply: the same order, with the owner
+                // check: step by step, so service 1's step (native pages) before service 2's (effects), its records in file order
+                Call::Check { svc: 1, step: n, kind: k1, body: b1.clone() },
+                Call::Check { svc: 1, step: n, kind: k1b, body: b1b.clone() },
+                Call::Check { svc: 2, step: e, kind: k2, body: b2.clone() },
+                // apply: every service's rows first, then each record in file order across the kinds
+                Call::Bulk { svc: 1, owner: 5 },
+                Call::Bulk { svc: 2, owner: 5 },
                 Call::Apply { svc: 1, owner: 5, kind: k1, body: b1 },
-                Call::Apply { svc: 1, owner: 5, kind: k1b, body: b1b },
                 Call::Apply { svc: 2, owner: 5, kind: k2, body: b2 },
+                Call::Apply { svc: 1, owner: 5, kind: k1b, body: b1b },
                 // remove: the last service first
                 Call::Remove { svc: 2, owner: 5 },
                 Call::Remove { svc: 1, owner: 5 },
@@ -184,22 +199,27 @@ fn the_walker_applies_in_list_order_and_removes_in_reverse() {
 }
 
 #[test]
-fn a_refused_check_stops_the_walk_and_a_failed_apply_stops_the_apply() {
+fn the_first_fault_is_the_first_step_that_finds_one_and_a_failed_apply_stops_the_file() {
     let _g = LOCK.lock().unwrap();
     unsafe {
         reset();
-        let sec = section(&[kind_of(2), kind_of(1)]);
+        // an effect-step fault precedes nothing: the native step runs first, as in the old body, wherever the records sit in the file
+        let sec = section(&[kind_of(2), kind_of(1), kind_of(2)]);
+        REFUSE = (2, kind_of(2));
+        assert_eq!(check_with::<Two>(sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
+        assert_eq!(log().len(), 2); // service 1's record, then service 2's first (refused) record; the second is not looked at
+        assert!(matches!(log()[0], Call::Check { svc: 1, .. }));
+        reset();
         REFUSE = (1, kind_of(1));
         assert_eq!(check_with::<Two>(sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
-        // service 1 refused, so service 2 was never asked
-        assert!(log().iter().all(|c| matches!(c, Call::Check { svc: 1, .. })));
-        assert_eq!(log().len(), 1);
+        assert_eq!(log().len(), 1, "service 1 refused at its step, so service 2's step never ran");
 
+        // apply stops at the first failing record in file order; later records of any kind are not applied
         reset();
-        FAIL_APPLY = 1;
+        FAIL_APPLY = (1, kind_of(1));
         assert_eq!(apply_with::<Two>(5, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
-        assert_eq!(log().len(), 1);
-        assert!(matches!(log()[0], Call::Apply { svc: 1, .. }));
+        let applied: Vec<_> = log().iter().filter(|c| matches!(c, Call::Apply { .. })).collect();
+        assert_eq!(applied.len(), 2, "the effect record before the failing one was applied, the one after was not");
         assert_eq!((*core::ptr::addr_of!(DKRT_REG)).registers, 0, "a failed apply is not a registration");
     }
 }

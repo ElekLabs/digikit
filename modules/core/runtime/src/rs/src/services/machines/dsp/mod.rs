@@ -78,15 +78,18 @@ pub(crate) unsafe fn check_sections(sec: &DspSec) -> i32 {
     OK
 }
 
-/// DSP section: voice rows are free for the module's voices, their types are in the run-time range, their entries are inside the
-/// image, and no loaded or loading module or earlier voice of this file has the type.
+/// DSP section: voice rows are free for the module's voices.
 pub(crate) unsafe fn check_rows(sec: &DspSec) -> i32 {
+    let nvoice = sec.nvoice;
+    let d = ds();
+    capacity::dsp_rows(nvoice, capacity::free_rows(&d.row_owner, iw(I_VFREE)))
+}
+
+/// DSP section: the voices' types are in the run-time range, their entries are inside the image, and no loaded or loading module or
+/// earlier voice of this file has the type.
+pub(crate) unsafe fn check_types(sec: &DspSec) -> i32 {
     let (s, voice_off, vstride, nvoice, image_size) = (sec.s, sec.voice_off, sec.vstride, sec.nvoice, sec.image_size);
     let d = ds();
-    let r = capacity::dsp_rows(nvoice, capacity::free_rows(&d.row_owner, iw(I_VFREE)));
-    if r != OK {
-        return r;
-    }
     let mut i = 0;
     while i < nvoice {
         let e = s.add(voice_off as usize + vstride as usize * i as usize);

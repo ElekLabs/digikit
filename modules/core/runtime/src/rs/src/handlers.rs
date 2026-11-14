@@ -15,6 +15,29 @@ use crate::dsp::{DspSec, Job};
 use crate::registry::ApplyArgs;
 use dkrt_sdk::*;
 
+/// The steps of the validation of a `register` section, in the order the registry ran them when it was one body. The walker runs
+/// each step over the whole list of services before the next, and a service does the steps for its kinds over its records in file
+/// order, so the first fault is the one the old body reported.
+pub mod check_step {
+    /// The most records of each kind.
+    pub const COUNTS: u32 = 0;
+    /// Records that name another record of the file (click actions).
+    pub const ACTIONS: u32 = 1;
+    /// Native pages.
+    pub const NATIVE: u32 = 2;
+    /// Effect records.
+    pub const EFFECTS: u32 = 3;
+    /// Records the device must support (pages).
+    pub const DEVICE: u32 = 4;
+    /// The parameter, page and machine records.
+    pub const RECORDS: u32 = 5;
+    /// Records that need an owner record of the file (a page needs its machine).
+    pub const OWNERS: u32 = 6;
+    /// Free rows for what the file adds.
+    pub const ROWS: u32 = 7;
+    pub const COUNT: u32 = 8;
+}
+
 /// What the registry walker gives `check`: the `register` section (its layout is validated) and the registry's table.
 pub struct CheckCtx {
     pub reg: *const u8,
@@ -110,12 +133,17 @@ pub trait Service {
     unsafe fn fits(inf: *const u32) -> bool {
         true
     }
-    /// Validate this service's records of the section. Writes nothing.
-    unsafe fn check(c: &CheckCtx) -> i32 {
+    /// One step of the validation (`check_step`) for this service's records. Writes nothing.
+    unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
         OK
     }
-    /// Write this service's records of the (checked) section.
+    /// Write this service's rows that the old body wrote before its per-record pass (parameters, actions, pages, machines).
     unsafe fn apply(c: &ApplyCtx) -> i32 {
+        OK
+    }
+    /// Write one record of this service's kinds, in file order after every `apply` (native pages and effect pages interleave as in the
+    /// file). A kind this service does not own: OK.
+    unsafe fn apply_record(kind: u32, body: *const u8, c: &ApplyCtx) -> i32 {
         OK
     }
     /// Give back everything module record `owner - 1` filled.
@@ -152,8 +180,12 @@ pub trait Service {
     unsafe fn dsp_check_sections(sec: &DspSec) -> i32 {
         OK
     }
-    /// DSP section: rows and types available for this service's entries.
+    /// DSP section: free rows for this service's entries.
     unsafe fn dsp_check_rows(sec: &DspSec) -> i32 {
+        OK
+    }
+    /// DSP section: the machine types of the voices (after every service's rows were checked).
+    unsafe fn dsp_check_types(sec: &DspSec) -> i32 {
         OK
     }
     /// Refuse a reservation before anything is reserved (`OK` or an `E_*`).
@@ -180,9 +212,10 @@ pub trait Service {
 pub trait ServiceList {
     fn len(kind: u32) -> Option<u32>;
     unsafe fn fits(inf: *const u32) -> bool;
-    /// The first failure of the services in list order.
-    unsafe fn check(c: &CheckCtx) -> i32;
+    /// One step of the validation over the services in list order; the first failure.
+    unsafe fn check(step: u32, c: &CheckCtx) -> i32;
     unsafe fn apply(c: &ApplyCtx) -> i32;
+    unsafe fn apply_record(kind: u32, body: *const u8, c: &ApplyCtx) -> i32;
     /// Last service first.
     unsafe fn remove(owner: u8);
     unsafe fn caps(out: &mut CapSink);
@@ -194,6 +227,7 @@ pub trait ServiceList {
     unsafe fn declare_fx(rec: usize, ordinal: u32, flags: Option<u32>, par: Option<[u32; 8]>) -> Option<bool>;
     unsafe fn dsp_check_sections(sec: &DspSec) -> i32;
     unsafe fn dsp_check_rows(sec: &DspSec) -> i32;
+    unsafe fn dsp_check_types(sec: &DspSec) -> i32;
     unsafe fn dsp_admit(job: &Job) -> i32;
     unsafe fn dsp_claim(c: &mut Claim);
     unsafe fn dsp_release(rec: usize);
@@ -208,10 +242,13 @@ impl ServiceList for () {
     unsafe fn fits(_: *const u32) -> bool {
         true
     }
-    unsafe fn check(_: &CheckCtx) -> i32 {
+    unsafe fn check(_: u32, _: &CheckCtx) -> i32 {
         OK
     }
     unsafe fn apply(_: &ApplyCtx) -> i32 {
+        OK
+    }
+    unsafe fn apply_record(_: u32, _: *const u8, _: &ApplyCtx) -> i32 {
         OK
     }
     unsafe fn remove(_: u8) {}
@@ -238,6 +275,9 @@ impl ServiceList for () {
     unsafe fn dsp_check_rows(_: &DspSec) -> i32 {
         OK
     }
+    unsafe fn dsp_check_types(_: &DspSec) -> i32 {
+        OK
+    }
     unsafe fn dsp_admit(_: &Job) -> i32 {
         OK
     }
@@ -261,12 +301,12 @@ impl<H: Service, T: ServiceList> ServiceList for (H, T) {
     unsafe fn fits(inf: *const u32) -> bool {
         H::fits(inf) && T::fits(inf)
     }
-    unsafe fn check(c: &CheckCtx) -> i32 {
-        let r = H::check(c);
+    unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
+        let r = H::check(step, c);
         if r != OK {
             return r;
         }
-        T::check(c)
+        T::check(step, c)
     }
     unsafe fn apply(c: &ApplyCtx) -> i32 {
         let r = H::apply(c);
@@ -274,6 +314,13 @@ impl<H: Service, T: ServiceList> ServiceList for (H, T) {
             return r;
         }
         T::apply(c)
+    }
+    unsafe fn apply_record(kind: u32, body: *const u8, c: &ApplyCtx) -> i32 {
+        let r = H::apply_record(kind, body, c);
+        if r != OK {
+            return r;
+        }
+        T::apply_record(kind, body, c)
     }
     unsafe fn remove(owner: u8) {
         T::remove(owner);
@@ -327,6 +374,13 @@ impl<H: Service, T: ServiceList> ServiceList for (H, T) {
             return r;
         }
         T::dsp_check_rows(sec)
+    }
+    unsafe fn dsp_check_types(sec: &DspSec) -> i32 {
+        let r = H::dsp_check_types(sec);
+        if r != OK {
+            return r;
+        }
+        T::dsp_check_types(sec)
     }
     unsafe fn dsp_admit(job: &Job) -> i32 {
         let r = H::dsp_admit(job);

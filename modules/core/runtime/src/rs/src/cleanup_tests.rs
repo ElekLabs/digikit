@@ -399,6 +399,29 @@ fn on_loaded_runs_once_per_load_and_after_the_last_row() {
     }
 }
 
+#[test]
+fn attribution_names_the_module_of_every_site_the_watch_reports() {
+    use crate::handlers::{ServiceList, Services};
+    use dkrt_sdk::fault::{SITE_FX_MASTER, SITE_FX_SEND, SITE_NONE, SITE_VOICE};
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        seed(Completion::Ack, false, true, false);
+        let d = dsp::ds();
+        d.row_owner[0] = 2;
+        d.row_type[0] = 7;
+        d.fx_owner[1] = 3;
+        // a voice site: the module that owns the machine type
+        assert_eq!(Services::attribute(SITE_VOICE, 7), Some(1));
+        assert_eq!(Services::attribute(SITE_VOICE, 8), None);
+        // every other site is an effect row of the chain's table (first row 0 in the test table)
+        assert_eq!(Services::attribute(SITE_FX_MASTER, 1), Some(2));
+        assert_eq!(Services::attribute(SITE_FX_SEND, 1), Some(2));
+        assert_eq!(Services::attribute(SITE_NONE, 1), Some(2));
+        assert_eq!(Services::attribute(9, 1), Some(2));
+        assert_eq!(Services::attribute(SITE_FX_MASTER, 0), None);
+    }
+}
+
 // Optional diagnostic firmware link boundary, absent in this host fixture.
 #[no_mangle]
 pub extern "C" fn dl_diag(_: *mut u32, _: u32) -> i32 {

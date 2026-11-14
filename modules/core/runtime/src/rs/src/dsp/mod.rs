@@ -615,8 +615,12 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         }
         i += 1;
     }
-    // voice and effect rows, and the voices' types
+    // voice and effect rows, then the voices' types
     let r = Services::dsp_check_rows(&sec);
+    if r != OK {
+        return r;
+    }
+    let r = Services::dsp_check_types(&sec);
     if r != OK {
         return r;
     }
