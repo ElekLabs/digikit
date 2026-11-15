@@ -45,15 +45,17 @@ const packVersion = (v: string): number => {
   return (major! << 16) | (minor! << 8) | patch!;
 };
 
-/** The newest `since` among the imports of sdk/sdk.toml that the `.dkm` `file` links, packed: the runtime version the packer writes into its header (0x30). */
+/** The newest `since` among the imports of sdk/sdk.toml that the `.dkm` `file` links, and at least `[runtime] table`, packed: the runtime version the packer writes into its header (0x30). */
 export function linkedRuntimeNeed(file: Buffer): number {
   const toml = parse(fs.readFileSync(path.join(repoRoot(), 'sdk/sdk.toml'), 'utf8')) as {
     import: { name: string; since?: string }[];
+    runtime: { table: string };
   };
   const since = new Map(toml.import.map((i) => [i.name, i.since ? packVersion(i.since) : 0]));
   const off = file.readUInt32BE(0x78);
   const n = file.readUInt32BE(0x7c);
-  let need = 0;
+  // at least the version that introduced the header table (`[runtime] table`): a module of an older format needs another minor
+  let need = packVersion(toml.runtime.table);
   for (let i = 0; i < n; i++) {
     const rec = file.subarray(off + i * 32, off + i * 32 + 32);
     const name = rec.toString('latin1', 0, rec.indexOf(0));

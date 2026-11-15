@@ -116,3 +116,30 @@
   height: 9px;
   border-radius: 3px;
 }
+/* The per-module rows under a bar: swatch, module, amount. */
+.memory-panel .mem-mods {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+  color: var(--ink-2, #b3b7be);
+}
+.memory-panel .mem-mods li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.memory-panel .mem-mods .name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memory-panel .mem-mods .amount {
+  font-family: var(--font-mono);
+  color: var(--ink-3, #868b94);
+}

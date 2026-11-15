@@ -5,22 +5,23 @@ core through the wrapper (core/dsp-voice) by tests/support/machine_rig.py. This 
 
   * `spec(module_id, device)`: the module's DSP sources, entry symbol, machine type, parameters (knob slots, min, max, default)
     and the frame layout of the device, all read from the manifests;
-  * `budget(device, spec)`: the instruction budget of one voice-block (rule below);
+  * `budget(device, spec)`: the instruction budget of one voice-block (rule below; the numbers come from `patchkit budget`, packages/dkprof);
   * `cases(spec)`: the cases (`Case`) of tests/modules/test_machine_conformance.py, generated from the parameters.
 
 Parameter kinds do not exist in the manifest yet, so every parameter is treated as possibly pitch-like.
 
 The budget rule. A machine shares the DSP block with the stock firmware. The block is `dsp_clock_hz / dsp_blocks_per_second`
 cycles (devices/*.toml `[board]`). The stock firmware with one held note uses `stock_busy` instructions per block
-(devices/cycle-factors.json); tools/patchkit/pk_dsp_budget.py projects instructions to cycles with the
-"high" factor of the same file, and a patched image stays under DEFAULT_BUDGET_PCT of the block. The headroom
+(devices/cycle-factors.json); instructions are projected to cycles with the "high" factor of the same file, and a patched image
+stays under DEFAULT_BUDGET_PCT (85) of the block (packages/dkprof/src/budget.rs, run by `patchkit budget`). The headroom
 (instructions) is what is left between the stock load and that limit. The `voices` of the device's `[adapter.machine]` share it:
 
     voice-block budget  = headroom / voices        (every block that is not a note-on)
     note-on budget      = headroom                 (the block of a trigger may take the whole headroom once)
 
-The manifest may declare `[conformance] voice_block = N` and `note_on_block = M` (instructions) to replace either number; no
-manifest does yet (the schema of module.toml does not know the table).
+No manifest replaces either number. `module:check` writes the module's own cost (the worst steady block of one voice, or of one effect
+call) into the manifest's `[uses.<device>]` (`dsp_cost_voice`, `dsp_cost_fx`), and the broker checks the selection with it
+(docs/plans/sdk.md section 9).
 """
 
 from __future__ import annotations
@@ -30,13 +31,13 @@ import json
 import random
 import struct
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-from tools.patchkit import modroots, pk_device, pk_dsp_budget  # noqa: E402
+from tools.patchkit import modroots, pk_device  # noqa: E402
 
 DEVICES = ("dt2", "dn2")
 # Stock rows of the knob list that a DSP routine reads (a code in `knobs`, not a `[[param]]` id): name, min, max, default.
@@ -124,11 +125,16 @@ class MachineSpec:
     machine_type: int
     params: tuple[Param, ...]
     frame: Frame
-    declared: dict = field(default_factory=dict)  # the manifest's [conformance] table
     note_on: str | None = (
         None  # a contract voice (docs/design/module-sdk.md 4.1): the note_on routine's symbol and the `dk_machine_desc` symbol
     )
     desc: str | None = None
+    fixtures: tuple[
+        str, ...
+    ] = ()  # `[conformance] fixtures` of module.toml: what the rig sets up before a case
+    sample_records: str | None = (
+        None  # `[conformance] sample_records`: the data symbol of the module's sample pool records
+    )
 
     @property
     def label(self) -> str:
@@ -317,8 +323,9 @@ def spec(mid: str, device: str) -> MachineSpec | None:
         _type_number(mid, man, device, row[1]),
         _params(moddir, man, device),
         frame,
-        dict(man.get("conformance", {})),
         *_contract(mid, man),
+        tuple(man.get("conformance", {}).get("fixtures", ())),
+        man.get("conformance", {}).get("sample_records"),
     )
 
 
@@ -354,25 +361,34 @@ class Budget:
     headroom: int
 
 
-def budget(device: str, sp: MachineSpec | None = None) -> Budget:
-    block_cycles = (
-        pk_device.load(device)["board"]["dsp_clock_hz"]
-        // pk_device.load(device)["board"]["dsp_blocks_per_second"]
+@cache
+def _device_budgets() -> dict:
+    """`patchkit budget`: the Rust computation (packages/dkprof budget), one process per run; every device and the effect budget."""
+    import subprocess
+
+    from tools.patchkit import patchkit
+
+    r = subprocess.run(
+        [
+            str(patchkit.binary()),
+            "--root",
+            str(ROOT),
+            "budget",
+            "--fx-max",
+            str(FX_MAX),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
     )
-    high = pk_dsp_budget.FACTORS[device]["high"]
-    stock_pct = (
-        100.0 * pk_dsp_budget.FACTORS[device]["stock_busy"] * high / block_cycles
-    )
-    voices = pk_device.load(device)["adapter"]["machine"]["voices"]
-    headroom = int(
-        (pk_dsp_budget.DEFAULT_BUDGET_PCT - stock_pct) / 100.0 * block_cycles / high
-    )
-    declared = sp.declared if sp else {}
-    return Budget(
-        int(declared.get("voice_block", headroom // voices)),
-        int(declared.get("note_on_block", headroom)),
-        headroom,
-    )
+    if r.returncode:
+        raise RuntimeError(f"patchkit budget failed: {r.stderr.strip()}")
+    return json.loads(r.stdout)
+
+
+def budget(device: str) -> Budget:
+    d = _device_budgets()["devices"][device]
+    return Budget(int(d["voice_block"]), int(d["note_on_block"]), d["headroom"])
 
 
 # ---- cases ----------------------------------------------------------------------------------------------------------------
@@ -391,6 +407,12 @@ class Case:
     ]  # per block: (param id, word) pairs set before the block
     blocks: int
     trig: tuple[int, ...] = (0,)
+    setup: str | None = (
+        None  # a fixture the worker sets up before the first block ("sample-pool")
+    )
+    sample: tuple[int, int, int] | None = (
+        None  # (frames, source rate in Hz, channels) of the sample the "sample-pool" setup publishes
+    )
 
 
 def _defaults(sp: MachineSpec) -> dict[str, int]:
@@ -476,6 +498,105 @@ def cases(sp: MachineSpec) -> list[Case]:
                 tuple(range(0, RETRIG_BLOCKS, RETRIG_EVERY)),
             )
         )
+    # 5. a machine that plays a pool sample: the same shapes with a sample published (setup "sample-pool"), so the render path runs
+    if "sample-pool" in sp.fixtures and sp.sample_records:
+        out += _sample_cases(sp, dflt)
+    return out
+
+
+# The `sample` group. PLAY words are mode * 256 (the module README): REV 0, REV.L 1, FWD.L 2, FWD 3.
+SAMPLE_RATE_HZ = 48000
+SAMPLE_FRAMES = (
+    16000  # 8000 packed words per plane: the two test planes are 0x8000 bytes apart
+)
+SAMPLE_PLAY = {"rev-loop": 1 << 8, "fwd-loop": 2 << 8, "fwd": 3 << 8}
+
+
+def _sample_cases(sp: MachineSpec, dflt: dict[str, int]) -> list[Case]:
+    by_id = {p.id: p for p in sp.params}
+    if not {"sample", "start", "end", "play", "pitch"} <= by_id.keys():
+        return []
+    out: list[Case] = []
+
+    def case(
+        name: str,
+        note: int,
+        words: tuple[tuple[tuple[str, int], ...], ...],
+        blocks: int,
+        vel: int = 100,
+        trig: tuple[int, ...] = (0,),
+        channels: int = 2,
+        frames: int = SAMPLE_FRAMES,
+    ) -> None:
+        out.append(
+            Case(
+                "sample",
+                name,
+                note,
+                vel,
+                words,
+                blocks,
+                trig,
+                "sample-pool",
+                (frames, SAMPLE_RATE_HZ, channels),
+            )
+        )
+
+    def one(blocks_words: dict[str, int]) -> tuple[tuple[tuple[str, int], ...], ...]:
+        # sample 0 (the pool index the worker publishes), the rest of the module's parameters at their defaults
+        return (tuple({**dflt, "sample": 0, **blocks_words}.items()),)
+
+    end = by_id["end"].hi
+    fwd = {"start": 0, "end": end, "play": SAMPLE_PLAY["fwd"], "pitch": 0x4000}
+    case("stereo-fwd-oneshot/note60", 60, one(fwd), 300)
+    case("mono-fwd-oneshot/note60", 60, one(fwd), 300, channels=1)
+    # frame = round(frames * word / 0x7f00); a block is 32 frames. END 2000 is frame 984: the cursor passes it after about 31 blocks, so the end ramp runs
+    case("fwd-end-reached/note60", 60, one({**fwd, "end": 2000}), 120)
+    # START 256..END 512 is frames 126..252: the cursor wraps every 4 blocks
+    loop = {"start": 256, "end": 512}
+    case(
+        "fwd-loop/note60",
+        60,
+        one({**fwd, **loop, "play": SAMPLE_PLAY["fwd-loop"]}),
+        300,
+    )
+    case(
+        "rev-loop/note60",
+        60,
+        one({**fwd, **loop, "play": SAMPLE_PLAY["rev-loop"]}),
+        300,
+    )
+    pitch = by_id["pitch"]
+    case("pitch-min/note0", 0, one({**fwd, "pitch": pitch.lo}), 200)
+    case("pitch-max/note127", 127, one({**fwd, "pitch": pitch.hi}), 200)
+    for vel in (1, 127):
+        case(
+            f"retrigger-every-{RETRIG_EVERY}/vel{vel}",
+            60,
+            one(fwd),
+            RETRIG_BLOCKS,
+            vel,
+            tuple(range(0, RETRIG_BLOCKS, RETRIG_EVERY)),
+        )
+    # the random walk of group 3, over every parameter but the sample index (a walk of it would leave the published pool entry)
+    for note in (24, 100):
+        rng = random.Random(0xC0FFEE + note)
+        pos = {p.id: float(p.default) for p in sp.params}
+        walk = []
+        for _ in range(WALK_BLOCKS):
+            row = [("sample", 0)]
+            for p in sp.params:
+                if p.id == "sample":
+                    continue
+                pos[p.id] += rng.uniform(-0.6, 0.6) * (p.hi - p.lo)
+                if pos[p.id] < p.lo:
+                    pos[p.id] = 2 * p.lo - pos[p.id]
+                if pos[p.id] > p.hi:
+                    pos[p.id] = 2 * p.hi - pos[p.id]
+                pos[p.id] = min(max(pos[p.id], p.lo), p.hi)
+                row.append((p.id, int(pos[p.id])))
+            walk.append(tuple(row))
+        case(f"random-walk/note{note}", note, tuple(walk), WALK_BLOCKS)
     return out
 
 
@@ -581,7 +702,7 @@ def is_fx_module(mid: str) -> bool:
 
 def fx_budget() -> int:
     """Instructions of one process call: the headroom of the tighter device shared by FX_MAX effects (module.toml may not override yet)."""
-    return min(budget(d).headroom for d in DEVICES) // FX_MAX
+    return _device_budgets()["fx_budget"]
 
 
 @dataclass(frozen=True)

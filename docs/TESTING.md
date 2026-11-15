@@ -197,12 +197,25 @@ Tests that lack an input skip with a reason; `pytest -rs` lists them.
 | SHARC database `out/sharcdb/<image>.sqlite` | `uv run python -m tools.sharc_dev.sharcdb build out/sections/*/section_7_BLOB.bin`. |
 | ColdFire dump `out/ghidra/<image>-emac` and cfdb | Needs Ghidra: `tools.coldfire.ghidradump`, then `tools.coldfire.cfdb build`. |
 | Native SHARC library, shared core | `mise run gen:native-lib` (firmware-free); `SHARC_NATIVE_LIB` overrides. `mise run gen:core` builds the generated core. |
-| Module toolchains in `out/tools` | `mise run patch:toolchains` (about 15 min); `uv run python -m tools.patchkit.pk_toolchains status`. |
+| Module toolchains in `out/tools` | `mise run patch:toolchains` (about 15 min); `uv run python -m tools.patchkit.pk_toolchains status`. Selache builds `selas`, `seld` and `seldump` only: `selcc` does not compile at the pinned revision, and only two tests use it (they skip without it). On Apple silicon with an Intel Homebrew in `/usr/local`, the m68k build compiles for x86_64 (`CC`/`CXX` with `-arch x86_64`) so it links the Homebrew libraries; set `CC` and `CXX` yourself to override. |
 | Objects of content modules and fixtures in `out/cache/dko` | Not committed. The Rust tests that scan the repository (`Library::scan_repo`), `module:pack`, the workbench app's library read (it packs the run-time modules of a device in-process), `dk:run`, `dk:dev` and the web gallery build the stale ones on demand (`patchkit build` does it by hand). Without the m68k-elf toolchain the Rust tests that need them print `SKIP` and return. A checkout with an empty `out/` passes after the first build. |
-| Ready inputs | `mise run emu:ready -- dt2` or `-- dn2` (about 2 min). |
+| Ready inputs | `mise run emu:ready -- dt2` or `-- dn2` (about 2 min). Its helpers build against the shared core (`mise run gen:core` first; `SHARC_GEN_DIR` overrides). It writes to the directories in `tools/emulator/ready_inputs.json`; the patchkit harness and the device tests read the same file. `DIGI_PK_READY_<DEV>_<VER>` overrides the directory for the harness and the tests. |
 | Device generated cores `out/native/{dn2,dt2}-audio/gen` (AOT blocks) | `mise run perf:aot -- dn2` (about 4 min, then about 6 min for the first coupled build against it) or `-- dt2 --card-image IMG`; from the ready inputs, the SHARC database is built when missing. A DN2 core made otherwise (`sharc_dn2_aot`, from a capture) is kept: the tool refuses to overwrite it. Regenerate after a `CORE_FINGERPRINT` change. |
 | Captures `out/captures/*.dt2cap` | Not reproducible from the repository; those tests stay skipped. |
 | Opt-in switches | `LIVE_AUDIO_DEVICE_TESTS=1` opens a real audio device; `--slow` runs long firmware runs. |
+
+On a fresh clone, prepare the inputs in this order (DN2 shown; DT2 is the same with `dt2` and its `.syx`):
+
+```sh
+mise run patch:toolchains            # module compilers (about 15 min)
+mise run gen:core                    # shared generated core
+mise run emu:ready -- dn2            # ready inputs, built against the shared core (about 2 min)
+mise run perf:aot -- dn2             # device generated core (about 4 min)
+pnpm nx:pilot run digi-control:daemons   # daemons for the device tests
+```
+
+A contributor with one device's firmware only can run `mise run module:check ID --device dn2` (or `dt2`): it resolves the
+daemon of that device and runs only its halves of the device tests.
 
 Device suites (`test:stock`, `test:fx*`, the Nx `test-device` and `test-conformance` targets) also need:
 
@@ -346,7 +359,7 @@ without running it.
   the harness only (see `tests/regression/project.json`). So a change to a stock test, a golden, an FX
   scenario, a host test or another module's tests still selects the dependent modules, but their device
   results replay from the cache. Packs still run (they are not cached).
-- Build and pack inputs share `sdk/sdk.toml`, public `sdk/include`, `sdk/dsp` (including `sdk/dsp/contract`) and `modules/core/runtime/vectors`. Full-input device tasks do not
+- Build and pack inputs share `sdk/sdk.toml`, `sdk/dsp` (including `sdk/dsp/contract`) and `modules/core/runtime/vectors`. From `sdk/include` a pack or object build reads only the headers its sources include: `packSourceInputs` (`tools/nx/pack-inputs.mjs`) scans `#include` and `.include` over the build sources and the headers they reach, with the lookup order of the build (the including file's directory, the modules' `build/gen`, `src`, `include`, then the dirs of `tools/patchkit/toolchain/pins.toml`). A computed include is not seen. An object build (`build-objects`) reads the same source inputs plus the patchkit production, not the production of every graph dependency. Full-input device tasks do not
   hash them; they hash the built bytes (see "Cached targets"). `tools/devtools/emu-slot.mjs` is no device input: it only schedules.
   The SDK sources under `sdk/src` are linked into every content module with C sources (the packer builds them into one library and
   keeps the functions the module calls), so `sdk/src/**/*` is an input of the pack of each such module, and the stored object of
@@ -561,7 +574,7 @@ checked in every block of every case:
 - M5, M6, M7, M13, M14, M15, L0 to L5 and MODE1 are preserved;
 - all 32 output samples are finite and at most 8.0 in magnitude;
 - instructions per block stay within the DSP budget headroom: `headroom / 16` per block, `headroom`
-  for a note-on block. A manifest `[conformance] voice_block`, `note_on_block` replaces either number.
+  for a note-on block. No manifest replaces either number. After the run `module:check` writes the worst steady block as the module's `dsp_cost_voice` (a machine) or `dsp_cost_fx` (an effect) into `[uses.<device>]`; the boot planner, the menu and `patchkit fit` check a selection with it.
 
 FX rules (`tests/modules/test_fx_conformance.py`, rig `tests/support/fx_rig.py`): the hook returns
 within 200,000 instructions; registers the stock function expects are preserved; the core/fx fault
@@ -630,8 +643,8 @@ Formatting an emulator crate or `dkneeds` changes the daemon key and the PGO key
   moves no counter and is not covered: a daemon is not asked to progress then, and only the Vitest limit applies.
 - Tests have no wall-time limit of their own for runtime start, baseline reload, boot, restart and safe-mode waits. The
   watchdog catches a stopped emulator; a wait on firmware state uses emulated time (`pollEmulated` and `waitEmulated` in
-  `tests/regression/runtime/waits.ts`, `events.until(kind, predicate, { emulatedMs })`). Vitest's `testTimeout` (30 min) and
-  `hookTimeout` (10 min) of the `runtime` and `conformance` projects are the only wall limits: do not repeat them in a test.
+  `tests/regression/runtime/waits.ts`, `events.until(kind, predicate, { emulatedMs })`). `expectPollEmulated(session, read, assertion, { emulatedMs })` replaces `expect.poll(read, { timeout })` in device tests: a wall `timeout` there is cut by a loaded host. Wall limits that remain are readiness deadlines (`expectRemoteEnabled`, the runtime-menu rows) and polls of host processes. Vitest's `testTimeout` (30 min) and
+  `hookTimeout` (10 min) of the `runtime`, `proofs` and `conformance` projects are outer safety nets, not hang detectors: hangs are caught by the progress guard and the emulated-time waits above. `runtimeTests` takes no `timeout` option, so a test cannot set a shorter wall budget that host load then cuts. The emulator-slot wait happens in `emu-slot.mjs` before Vitest starts and never counts against them.
   Hang guards that never fail a healthy slow run: a clock that stands still for 60 s (`DIGI_CLOCK_STUCK_MS`) fails `pollEmulated`
   (a paused daemon, a halted DSP); the phases before the daemon has a socket (environment preparation, the startup load of a
   non-reused session) nothing can be asked, so each has a 300 s guard (`PRE_SOCKET_HANG_MS`); `waitReset` stops after 200 steps
@@ -719,8 +732,8 @@ Three keys exist:
 `mise run test` selects affected targets with merge keys. `mise run test:full` runs every file with full keys.
 
 Inputs computed from code:
-- The TypeScript import closure of the test file.
-- The Python import closure of the `.py` tools that a record lists in `sources`. A test that runs a new Python tool must list it in the `sources` of its record.
+- The TypeScript import closure of the test file. A barrel (a file of only `export ... from`, for example `packages/dk-session/src/index.ts`) is followed per imported name: `import { A } from '@digi/dk-session'` reaches the file that exports A. A namespace, default, side-effect, dynamic or `require` import takes the whole file. A file that a test loads through a barrel without using one of its names is not an input.
+- The Python import closure of the `.py` tools that a record lists in `sources`. A test that runs a new Python tool must list it in the `sources` of its record. `tools.devtools.benchlock` is skipped (`NO_RESULT_MODULES` in `tools/nx/py-imports.mjs`): it only serialises runs and changes no result. The gate roots (`tools/gate/*/project.json`) list their Python by hand and leave it out too.
 
 Inputs listed by hand are files that a test reads by path. No import walk sees them. They are in `READ_BY_TESTS` and `TEST_READS` in `tools/nx/device-test-keys.mjs`. Add an entry when a test reads a new file by path.
 
@@ -774,7 +787,7 @@ content of the repository files in `SOURCE_GLOBS` and `RECIPE_FILES`, every file
 directory (resolved as `pk_emud_pgo` does), the PGO profile, the `tools.rust` pin from `mise.toml`,
 `rustc -vV` of that toolchain, and the build flags. Task definitions in `mise-tasks.toml` are excluded.
 Narrowing this input changes the key once, so existing stored daemons miss on the next request.
-A device without its stock firmware or ready directory is skipped.
+A device without its stock firmware or ready directory is skipped (`SKIP` on stderr); the command fails when no daemon is built.
 
 Each build audits itself: `verify_build` compares the dependency file cargo wrote (`digi-emud.d`) with
 the key. A dependency that the key does not cover (and that is not under the cargo target dir) fails the
@@ -920,7 +933,20 @@ under one exclusive benchlock, using the same validated sample helper as
 `coupled_ab.py`. Each timing sample must also match its earlier correctness result.
 The JSON summary records B/A ratios and tier counts; it makes no performance
 acceptance decision or automatic rollback. DSP patch experiments remain available
-through `coupled_ab.py --patch LABEL=FILE`. The matrix requires strict full-state
+through `coupled_ab.py --patch LABEL=FILE`. Two patched ColdFire images (for
+example `main` against a branch with a changed runtime) run with
+`coupled_ab.py --image A=MAIN.syx --image B=BRANCH.syx`: build each with
+`pnpm nx:pilot run patchkit:device-images` in its lane (the files are
+`dist/bytes/images/<device>/<id>.syx`; check `dist/bytes/images/<device>/` for the id), copy them
+away, then
+
+    mkdir -p out/ab    # copy main.syx and branch.syx there
+    uv run python -m tools.devtools.coupled_ab A=BIN B=BIN \
+        --image A=out/ab/main.syx --image B=out/ab/branch.syx -s trig1-taps --pairs 6
+
+Both labels need an image. Each image boots once with `coupled-run --cold-base`
+and keeps its ready pair under `out/runs/coupled_ab/image-*/cold`; the timed
+runs restore it. PCM must be identical across all runs and both labels, or the run fails. The matrix requires strict full-state
 equivalence and does not support arbitrary firmware patches that intentionally
 change the exported state.
 

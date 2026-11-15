@@ -1,0 +1,36 @@
+[module]
+id = "test/lfo-shape-dup"
+version = "0.1.0"
+name = "LFO shape, second owner"
+category = "test"
+type = "service"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: emits one lfo_shape record with dk_record_add (shape id 7); no firmware effect. It has the same shape id as test/lfo-shape, so only one of the two loads."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The record the module emits and its key (the shape id): the packer writes the key into the header table, where the boot planner checks the kind has an owner
+# and that no other module has the key.
+[[record]]
+kind = "lfo_shape"
+key = 7
+
+# The record block `init` commits: the register section header (16 bytes) and one record (76 bytes).
+[uses.dt2]
+record_bytes = 92
+
+[uses.dn2]
+record_bytes = 92
+
+# C, built by `patchkit build`; the runtime loads it from the card store.
+[[object]]
+path = "build/lfo-shape-dup.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"

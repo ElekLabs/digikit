@@ -1,6 +1,7 @@
 //! Voice-row part of the DSP loader: the voice row of a machine type, its declared ranges and the clearing of a module's voice rows.
 use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::dsp::*;
+use dkrt_abi::link::{Owner, Sequence};
 use dkrt_abi::mem::{iw, rd32};
 use dkrt_abi::service::{Claim, RowWrite};
 use dkrt_sdk::*;
@@ -60,7 +61,9 @@ pub(crate) unsafe fn clear_rows(rec: usize) -> bool {
     let mut k = 0;
     while k < MAX_ROWS {
         if d.row_owner[k] == rec as u8 + 1 && d.row_pub[k] != 0 {
-            if !REAL_CORE.link_word_blocking(WIN_VOICES, ROW_WORDS * (first + k as u32), FREE_TYPE) { return false; }
+            let mut seq = Sequence::new();
+            seq.push(WIN_VOICES, ROW_WORDS * (first + k as u32), FREE_TYPE);
+            if !REAL_CORE.link_run(Owner::Core, &seq) { return false; }
             d.row_pub[k] = 0;
         }
         k += 1;
@@ -223,7 +226,7 @@ pub(crate) unsafe fn row_step(rec: usize, want: &mut u32, write: bool) -> Option
         return None;
     }
     if !write {
-        return Some(RowWrite { win: 0, word: 0, value: 0, published: None });
+        return Some(RowWrite { win: 0, word: 0, value: 0, published: None, last: false, undo: None });
     }
     let first = iw(REAL_CORE.dsp_info(), I_VFIRST);
     let want = *want;
@@ -251,5 +254,7 @@ pub(crate) unsafe fn row_step(rec: usize, want: &mut u32, write: bool) -> Option
     };
     // from the last step on, the type word may be in the DSP: clear it on failure
     let published = if want == ROW_STEPS - 1 { Some(&mut d.row_pub[row]) } else { None };
-    Some(RowWrite { win: WIN_VOICES, word, value, published })
+    // the type word makes the row visible: it ends the row, and a failed sequence frees it again
+    let last = want == ROW_STEPS - 1;
+    Some(RowWrite { win: WIN_VOICES, word, value, published, last, undo: if last { Some(FREE_TYPE) } else { None } })
 }

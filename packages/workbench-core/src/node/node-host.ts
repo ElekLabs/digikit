@@ -134,6 +134,7 @@ function nodeLibrary(root: string): LibraryHost {
   };
   return {
     build: unsupported('library.build'),
+    readMaps: unsupported('library.readMaps'),
     async scan(device) {
       const dir = deviceDir(device);
       const out: { path: string; size: number }[] = [];
@@ -306,6 +307,7 @@ function nodeFirmware(root: string, outDir: string | undefined): FirmwareHost {
     save: (bytes, name) => saveTo(outDir, 'firmware.save', bytes, name),
     patchkitWasm: () => wasm('patchkit.wasm'),
     sampleWasm: () => wasm('dksample.wasm'),
+    dkprofWasm: () => wasm('dkprof.wasm'),
   };
 }
 

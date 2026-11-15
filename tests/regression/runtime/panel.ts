@@ -1,5 +1,6 @@
 import { button, encoder, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
+import { expectPollEmulated } from './waits.ts';
 
 /** ColdFire instructions per emulated millisecond. */
 const MS = 132_000;
@@ -12,7 +13,10 @@ export function panel(session: Session) {
     return value;
   }
   async function until(target: number): Promise<void> {
-    await expect.poll(elapsed, { timeout: 20_000, interval: 50 }).toBeGreaterThanOrEqual(target);
+    await expectPollEmulated(session, elapsed, (value) => expect(value).toBeGreaterThanOrEqual(target), {
+      emulatedMs: 20000,
+      intervalMs: 50,
+    });
   }
   async function settle(ms: number): Promise<void> {
     await until((await elapsed()) + ms * MS);

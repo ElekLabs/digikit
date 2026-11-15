@@ -34,5 +34,5 @@ It becomes reachable once any live load or unload path exists. Related: [99-ster
 
 ## Fix
 
-- Proper: owner-tagged results, the `submit(owner, ...)` FIFO of the DSP transfer queue (roadmap R6). Each request keeps its own result until its owner takes it.
+- R6a (the DSP link queue) removes the hazard by construction: every request has a `Ticket` and only its owner takes its result, live values have no result to take, and no writer checks another writer's `busy()`.
 - Minimum: the blocking path waits until the `fxpage`, `fxsend` and `tracks` busy flags are clear.

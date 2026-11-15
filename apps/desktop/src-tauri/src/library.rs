@@ -77,6 +77,118 @@ pub fn read(root: &Path, device: &str, rel: &str) -> Result<Vec<u8>, String> {
     std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// The address map file of a library path: `<author/name>.dkm` has `<author/name>.addrmap.json`.
+fn map_rel(dkm: &str) -> String {
+    format!("{}.addrmap.json", dkm.strip_suffix(".dkm").unwrap_or(dkm))
+}
+
+/// One module's address map as `lib_build` wrote it.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct LibMap {
+    /// The module's library path without `.dkm` (`author/name`).
+    pub id: String,
+    /// The map file's JSON text.
+    pub json: String,
+}
+
+/// Where the ship maps of prepared firmware images are kept, one folder per device: `out/addrmap/<device>/<image id>.ship.json`.
+const SHIP_DIR: &str = "out/addrmap";
+
+/// The ship map of a firmware image and the addresses of its load-table symbols (`firmware_prepare` writes it; docs/ADDRMAP.md "Workbench").
+#[derive(Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
+pub struct ShipRecord {
+    /// The id the image reports in INFO after the flash, 16 hex digits.
+    pub image_id: String,
+    /// The ship map as JSON text.
+    pub ship: String,
+    /// Symbol name to byte address.
+    pub symbols: std::collections::BTreeMap<String, u64>,
+}
+
+fn ship_file(root: &Path, device: &str, image_id: &str) -> Result<PathBuf, String> {
+    if image_id.is_empty() || !image_id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("not an image id: {image_id:?}"));
+    }
+    if device.is_empty()
+        || !device
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+    {
+        return Err(format!("not a device id: {device:?}"));
+    }
+    Ok(root
+        .join(SHIP_DIR)
+        .join(device)
+        .join(format!("{image_id}.ship.json")))
+}
+
+/// Keep the ship map of a prepared image for the workbench (written when its bytes changed).
+pub fn store_ship(root: &Path, device: &str, record: &ShipRecord) -> Result<(), String> {
+    let path = ship_file(root, device, &record.image_id)?;
+    let text = serde_json::to_string(record).map_err(|e| e.to_string())?;
+    if std::fs::read(&path).ok().as_deref() == Some(text.as_bytes()) {
+        return Ok(());
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// What `lib_maps` answers: the ship maps kept for the device's images and the address maps of its built modules.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct LibMaps {
+    pub ships: Vec<ShipRecord>,
+    pub modules: Vec<LibMap>,
+}
+
+/// The kept ship maps of a device, by image id; a file that does not parse is left out.
+fn read_ships(root: &Path, device: &str) -> Result<Vec<ShipRecord>, String> {
+    let dir = ship_file(root, device, "0")?
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or("no folder")?;
+    let mut out: Vec<ShipRecord> = vec![];
+    match std::fs::read_dir(&dir) {
+        Ok(entries) => {
+            for e in entries.flatten() {
+                if e.path().to_string_lossy().ends_with(".ship.json")
+                    && let Ok(text) = std::fs::read_to_string(e.path())
+                    && let Ok(r) = serde_json::from_str::<ShipRecord>(&text)
+                {
+                    out.push(r);
+                }
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("{}: {e}", dir.display())),
+    }
+    out.sort_by(|a, b| a.image_id.cmp(&b.image_id));
+    Ok(out)
+}
+
+/// The address maps of the device: the ship maps of its prepared images, and the maps of the modules that have a `.dkm` in the library. A module
+/// without a map file (built before maps were written) is left out; a missing folder is an empty list.
+pub fn read_maps(root: &Path, device: &str) -> Result<LibMaps, String> {
+    let mut modules = vec![];
+    for file in scan(root, device)? {
+        let rel = map_rel(&file.path);
+        let path = device_dir(root, device)?.join(&rel);
+        match std::fs::read_to_string(&path) {
+            Ok(json) => modules.push(LibMap {
+                id: file.path.trim_end_matches(".dkm").to_string(),
+                json,
+            }),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("{}: {e}", path.display())),
+        }
+    }
+    Ok(LibMaps {
+        ships: read_ships(root, device)?,
+        modules,
+    })
+}
+
 fn root() -> Result<PathBuf, String> {
     digi_control::runtime_patch::find_root(None)
 }
@@ -139,6 +251,25 @@ fn record(
         }
         report.changed.push(id.to_string());
     }
+    // the module's address map (docs/ADDRMAP.md) goes beside the .dkm; the workbench names addresses with it (`lib_maps`)
+    let map_path = dir.join(map_rel(&rel));
+    match packed.addrmap() {
+        Ok(map) => {
+            let text = map.to_json();
+            if std::fs::read(&map_path).ok().as_deref() != Some(text.as_bytes())
+                && let Err(e) = std::fs::write(&map_path, text)
+            {
+                report.failed.push(LibFailure {
+                    id: format!("{id} (address map)"),
+                    error: format!("{}: {e}", map_path.display()),
+                });
+            }
+        }
+        Err(e) => report.failed.push(LibFailure {
+            id: format!("{id} (address map)"),
+            error: e.to_string(),
+        }),
+    }
     report.packed += 1;
     kept.insert(rel);
 }
@@ -169,6 +300,7 @@ fn build(root: &Path, device: &str) -> Result<LibBuildReport, String> {
     for file in scan(root, device)? {
         if !kept.contains(&file.path) {
             let path = dir.join(&file.path);
+            let _ = std::fs::remove_file(dir.join(map_rel(&file.path)));
             match std::fs::remove_file(&path) {
                 Ok(()) => report.removed.push(file.path),
                 Err(e) => report.failed.push(LibFailure {
@@ -194,6 +326,14 @@ pub async fn lib_build(device: String) -> Result<LibBuildReport, String> {
 #[tauri::command]
 pub async fn lib_scan(device: String) -> Result<Vec<LibFile>, String> {
     tauri::async_runtime::spawn_blocking(move || scan(&root()?, &device))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The address maps of a device: its prepared images' ship maps (`firmware_prepare`) and its built modules' maps (`lib_build` writes each beside its `.dkm`).
+#[tauri::command]
+pub async fn lib_maps(device: String) -> Result<LibMaps, String> {
+    tauri::async_runtime::spawn_blocking(move || read_maps(&root()?, &device))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -231,6 +371,19 @@ pub async fn patchkit_wasm() -> Result<tauri::ipc::Response, String> {
         std::fs::read(&path)
             .map(tauri::ipc::Response::new)
             .map_err(|e| format!("{}: {e} (build it: mise run wasm:patchkit)", path.display()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The profile and address-lookup code of the Log pane: `apps/web/public/dkprof.wasm` (built by `mise run wasm:dkprof`), as raw bytes.
+#[tauri::command]
+pub async fn dkprof_wasm() -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let path = root()?.join("apps/web/public/dkprof.wasm");
+        std::fs::read(&path)
+            .map(tauri::ipc::Response::new)
+            .map_err(|e| format!("{}: {e} (build it: mise run wasm:dkprof)", path.display()))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -305,6 +458,50 @@ mod tests {
         assert_eq!(scan(&root, "dn2").unwrap(), vec![]);
         assert!(scan(&root, "../x").is_err());
         assert_eq!(read(&root, "dt2", "acme/synth.dkm").unwrap(), b"SYNTH");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_maps_are_the_files_beside_the_built_modules_and_the_kept_ship_maps() {
+        let root = library("maps");
+        let dir = root.join(LIBRARY_DIR).join("dt2");
+        std::fs::write(
+            dir.join("acme/synth.addrmap.json"),
+            b"{\"kind\":\"module\"}",
+        )
+        .unwrap();
+        let ship = ShipRecord {
+            image_id: "0123456789abcdef".into(),
+            ship: "{\"kind\":\"ship\"}".into(),
+            symbols: [("DKRT_STATE".to_string(), 0x4010_0000)].into(),
+        };
+        store_ship(&root, "dt2", &ship).unwrap();
+        store_ship(&root, "dt2", &ship).unwrap(); // unchanged: not written again
+        // sine has no map file (built before maps were written): left out
+        let maps = read_maps(&root, "dt2").unwrap();
+        assert_eq!(
+            maps.modules,
+            vec![LibMap {
+                id: "acme/synth".into(),
+                json: "{\"kind\":\"module\"}".into()
+            }]
+        );
+        assert_eq!(maps.ships, vec![ship.clone()]);
+        // another device has neither
+        let none = read_maps(&root, "dn2").unwrap();
+        assert!(none.modules.is_empty() && none.ships.is_empty());
+        assert!(read_maps(&root, "../x").is_err());
+        assert!(
+            store_ship(
+                &root,
+                "dt2",
+                &ShipRecord {
+                    image_id: "../x".into(),
+                    ..ship
+                }
+            )
+            .is_err()
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -8,7 +8,7 @@
 //! | --- | --- | --- |
 //! | `dp_addr_lookup` | `{maps, loads?, snapshot?, dsp_base?, ret?, addrs: [{cpu, addr}]}` | `{unloaded, results}` ([`crate::lookup`]) |
 //! | `dp_load_table` | `{maps, snapshot?}` | the load table, or `{reads}` without a snapshot |
-//! | `dp_profile_report` | `{profile, maps?, loads?, top?}` | [`crate::report::Report`] |
+//! | `dp_profile_report` | `{profile, maps?, loads?, analyses?, top?}` (`analyses`: module id to the `dksharc::Analysis` of its DSP code) | [`crate::report::Report`] |
 //! | `dp_module_analyse` | the `.dkm` bytes and the `.dko.json` bytes as two buffers, and a text flag | `dksharc::Analysis`, or the text view |
 
 use crate::lookup::{self, LoadTableReq, LookupReq};
@@ -18,6 +18,7 @@ use dkaddrmap::{AddrMap, LoadTable};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 
 thread_local! {
     static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
@@ -72,6 +73,9 @@ struct ReportReq {
     maps: Vec<AddrMap>,
     #[serde(default)]
     loads: LoadTable,
+    /// Module id to the static analysis of its DSP code: SHARC counters are also added per loop.
+    #[serde(default)]
+    analyses: BTreeMap<String, dksharc::Analysis>,
     #[serde(default = "default_top")]
     top: usize,
 }
@@ -83,7 +87,7 @@ fn default_top() -> usize {
 pub fn profile_report(req: &[u8]) -> Result<String, String> {
     let (r, v): (ReportReq, Value) = parse(req, "profile_report")?;
     let p = Profile::parse(&r.profile.to_string())?;
-    let rep = report::build(&p, &r.maps, &r.loads, r.top)?;
+    let rep = report::build_with(&p, &r.maps, &r.loads, &r.analyses, r.top)?;
     Ok(if wants_text(&v) {
         text_of(report::text(&rep, r.top))
     } else {

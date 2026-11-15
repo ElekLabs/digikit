@@ -18,11 +18,15 @@ import {
 } from '@digi/dk-session';
 import { CAP, LOG_KIND, LOG_LEVELS } from '@digi/dk-session/gen_proto';
 import type { LogInput, Origin } from './log-core.ts';
+import type { LogNames } from './log-names.ts';
 import { hasLogcfg } from './log-level-core.ts';
 
 /** What the follower needs of a protocol session (a `DkSession` with `followSession`, or a fake). */
 export interface FollowSession {
-  info(quick?: boolean): Promise<{ caps: number | null }>;
+  /** INFO: the capabilities, and the port name and image id the names need. */
+  info(quick?: boolean): Promise<{ caps: number | null; image_id?: string | null; port?: string }>;
+  /** PEEK of the debug module (`DkSession.peek`): the load table for the names. */
+  peek?(addr: number, len: number): Promise<Uint8Array>;
   logPage(from: number, quick?: boolean): Promise<[number, number, DkLogEvent[]]>;
   logConfig(quick?: boolean): Promise<LogConfig>;
   /** LOGCFG set (the Level menu of the Log drawer). */
@@ -70,6 +74,8 @@ export interface FollowOptions {
   present?(): Promise<boolean>;
   now(): number;
   out: FollowOut;
+  /** Names for the addresses of crashes and faults, read through PEEK of the debug module: the same path for the emulator and a device. */
+  names?: LogNames;
 }
 
 /** No answer for this long: the device may be frozen. */
@@ -95,6 +101,9 @@ export function pace(
 }
 /** The events of the current boot that are kept for the detail of a fault. */
 const KEEP = 1100;
+
+/** The events whose text has an address to name. */
+const NAMED_KINDS: ReadonlySet<number> = new Set([LOG_KIND.CRASH_FOUND, LOG_KIND.FAULT_FOUND]);
 
 const isCancelled = (e: unknown): boolean => (e as { kind?: string } | null)?.kind === 'cancelled';
 const hasLog = (caps: number | null): boolean => caps !== null && ((caps >>> CAP.LOG) & 1) === 1;
@@ -122,6 +131,9 @@ export class LogFollower {
   /** The runtime answers but has no debug module: only the fault record is read. */
   private noDebug = false;
   private listed = '';
+  /** The maps and the load table are read again before the next entry that names an address: at the start, and when the module list changes. */
+  private namesDue = true;
+  private lastNamesNote = '';
 
   constructor(private o: FollowOptions) {
     this.lastAnswer = o.now();
@@ -226,10 +238,11 @@ export class LogFollower {
           this.next = 0;
           this.seenNewest = 0;
           this.boot = [];
-          this.faultDue = this.configDue = this.modulesDue = true;
+          this.faultDue = this.configDue = this.modulesDue = this.namesDue = true;
           continue;
         }
         if (events.length === 0) break;
+        if (events.some((e) => NAMED_KINDS.has(e.kind))) await this.refreshNames(s);
         if (events[0]!.seq > this.next && this.next)
           rows.push(this.note(`${events[0]!.seq - this.next} events lost (the ring held from ${oldest})`));
         for (const ev of events) this.take(ev, rows);
@@ -272,10 +285,32 @@ export class LogFollower {
     rows.push({
       source: this.o.origin,
       level: d.error ? 'error' : 'info',
-      text: eventText(d, this.names),
+      text: eventText(d, this.names, this.o.names?.resolve()),
       detail: eventDetail(d),
-      rt: { origin: this.o.origin, module: moduleOf(d.source, this.names), event: d, line: eventLine(d, this.names) },
+      rt: {
+        origin: this.o.origin,
+        module: moduleOf(d.source, this.names),
+        event: d,
+        line: eventLine(d, this.names, this.o.names?.resolve()),
+      },
     });
+  }
+
+  /** Read the maps and the load table when they are due. The read is made for a crash or a fault only: it asks the controller to patch the image once. */
+  private async refreshNames(s: FollowSession): Promise<void> {
+    const names = this.o.names;
+    if (!names || !this.namesDue) return;
+    this.namesDue = false;
+    let why: string | undefined;
+    try {
+      await names.refresh(s);
+      why = names.unavailable();
+    } catch (e) {
+      if (isCancelled(e)) throw e;
+      why = `the load table could not be read (${e instanceof Error ? e.message : String(e)})`;
+    }
+    if (why && why !== this.lastNamesNote) this.say(`${this.o.origin}: names unavailable: ${why}`);
+    this.lastNamesNote = why ?? '';
   }
 
   /** Keep the call from stopping the round: a runtime without the command is a runtime without it. */
@@ -295,6 +330,7 @@ export class LogFollower {
     const names = [...this.names].sort(([a], [b]) => a - b).map(([, name]) => name);
     if (names.join('\n') === this.listed) return;
     this.listed = names.join('\n');
+    this.namesDue = true; // the modules sit at other addresses now
     this.noCardLog = false; // a debug module loaded later may have the card log
     this.o.out.modules(names);
   }
@@ -315,6 +351,7 @@ export class LogFollower {
     const f = await this.aux(() => s.fault());
     if (!f || sameFault(f, this.lastFault)) return;
     this.lastFault = f;
-    this.say(`fault: ${faultSummary(f)}`, 'error', faultDetail(f, this.boot, this.names));
+    await this.refreshNames(s);
+    this.say(`fault: ${faultSummary(f)}`, 'error', faultDetail(f, this.boot, this.names, this.o.names?.resolve()));
   }
 }

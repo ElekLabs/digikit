@@ -54,6 +54,16 @@ pub struct Prepared {
     pub sha_stock: String,
     pub sha_image: String,
     pub restore: bool,
+    /// The ship map of the patch (docs/ADDRMAP.md) as JSON text, and the addresses of the symbols the load table is read from: what a host needs to
+    /// name addresses of this image. `None` for a restore.
+    pub ship_map: Option<ShipMap>,
+}
+
+/// The ship map of a prepared image with the symbol addresses of its load table.
+#[derive(Clone, Debug)]
+pub struct ShipMap {
+    pub json: String,
+    pub symbols: std::collections::BTreeMap<String, u64>,
 }
 
 impl Prepared {
@@ -194,6 +204,10 @@ pub fn prepare(stock: &[u8], reg: &Registry, lib: &Library, set: &str) -> Result
     p.os = os;
     p.sha_stock = stock_sha;
     p.image_id = applied.image_id;
+    p.ship_map = Some(ShipMap {
+        json: crate::addrmap::ship_map(&applied.plan).to_json(),
+        symbols: crate::addrmap::load_symbols(&applied.plan),
+    });
     // the id the image carries is the id the patch made (`image id` check: it also matches the sections)
     let carried = read_id(&p.image)?;
     match (carried, p.image_id) {
@@ -329,6 +343,7 @@ fn finish(
         sha_stock: String::new(),
         sha_image,
         restore,
+        ship_map: None,
     })
 }
 

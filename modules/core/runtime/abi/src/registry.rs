@@ -3,11 +3,6 @@
 use crate::mem::rd32;
 use dkrt_sdk::*;
 
-/// The record kinds of native callback pages (`register` section): version 1 and version 2 (`services/machines/nativepage.rs` has their lengths). The builder
-/// lowering (`collect`) writes them, the machines service reads them.
-pub const KIND_NATIVE: u32 = 6;
-pub const KIND_NATIVE_V2: u32 = 7;
-
 const MAX_MACH: usize = limits::MACHINE_ROWS;
 const MAX_PARAM: usize = limits::PARAM_ROWS;
 const MAX_PAGE: usize = limits::PAGE_ROWS;

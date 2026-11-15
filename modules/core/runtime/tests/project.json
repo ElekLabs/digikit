@@ -105,6 +105,10 @@
         "modules": ["digikit/debug", "test/dyn-demo"]
       },
       {
+        "files": ["log-names.device.test.ts"],
+        "modules": ["digikit/debug", "test/dyn-demo"]
+      },
+      {
         "files": ["memaudit.device.test.ts"],
         "modules": ["test/c-demo", "test/dyn-demo", "test/dyn-demo-stray", "test/dyn-dn2", "test/sine"],
         "plusdrive": true

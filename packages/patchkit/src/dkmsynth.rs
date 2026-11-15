@@ -243,17 +243,11 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models, decl: Option<&Dko>) -> Res
             }
         }
     }
-    let mut keys = vec![0u8; dkneeds::keys::keys_size(machine_keys.len(), 0)];
-    if !keys.is_empty() {
-        dkneeds::keys::write_keys(
-            (spec.machines as u16, spec.params as u16, spec.pages as u16),
-            record_bytes(spec, dev) as u16,
-            &machine_keys,
-            &[],
-            &mut keys,
-        )
+    let rows = (spec.machines as u32, spec.params as u32, spec.pages as u32);
+    let rbytes = record_bytes(spec, dev);
+    let mut keys = vec![0u8; dkneeds::keys::keys_size(rows, rbytes, machine_keys.len(), 0)];
+    dkneeds::keys::write_keys(rows, rbytes, &machine_keys, &[], &mut keys)
         .map_err(|e| err!("{}: keys table: {e:?}", spec.name))?;
-    }
     let reg_bytes = keys;
 
     let dsp_bytes = match &spec.dsp {
@@ -389,7 +383,7 @@ mod tests {
         assert_eq!(&d.image[..4], &[0x70, 0x00, 0x4e, 0x75]);
         assert!(d.image[4..].iter().all(|b| *b == 0xa5));
         assert_eq!(d.init, Some(0));
-        assert!(d.register.is_empty() && d.dsp.is_empty());
+        assert!(d.register.len() == dkneeds::keys::HEAD && d.dsp.is_empty());
         // deterministic
         assert_eq!(
             f,

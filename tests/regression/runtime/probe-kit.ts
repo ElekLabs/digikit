@@ -3,7 +3,7 @@ import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
 import { moduleArtifact } from './install.ts';
 import { expectRuntimeReady } from './ready.ts';
-import { waitForBootEmulated } from './waits.ts';
+import { waitForBootEmulated, expectPollEmulated } from './waits.ts';
 
 /** The probe transport (with remote also selected): the SHARC probe effect sends one framed word per block through the module step word, and the ColdFire collector keeps it. */
 export const PROBE = 'test/sharc-probe';
@@ -48,9 +48,12 @@ export async function installProbe({ session, dk }: PatchedSession, effect: stri
   await dk.select(paths);
   await dk.restart();
   await waitForBootEmulated(dk);
-  await expect
-    .poll(async () => (await dk.modules()).map((m) => m.name), { timeout: 30_000, interval: 500 })
-    .toEqual(expect.arrayContaining([REMOTE, effect, COLLECTOR]));
+  await expectPollEmulated(
+    session,
+    async () => (await dk.modules()).map((m) => m.name),
+    (value) => expect(value).toEqual(expect.arrayContaining([REMOTE, effect, COLLECTOR])),
+    { emulatedMs: 30000, intervalMs: 500 },
+  );
 }
 
 export async function readRing(dk: PatchedSession['dk'], count: number): Promise<number[]> {

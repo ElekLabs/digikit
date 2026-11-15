@@ -1,5 +1,6 @@
 //! Effect-row part of the DSP loader: the chain rows, their owners, one-word writes and the clearing of a module's effect rows.
-use crate::core_api::{CoreApi, LinkWriter, REAL_CORE};
+use crate::core_api::{CoreApi, REAL_CORE};
+use dkrt_abi::link::{Owner, Sequence, Slot};
 use dkrt_abi::dsp::*;
 use dkrt_abi::mem::{iw, rd32};
 use dkrt_abi::service::{Claim, RowWrite};
@@ -101,19 +102,26 @@ pub unsafe fn fx_set_route(k: usize, route: u32, amt: [u32; 4]) {
     }
 }
 
-/// An effect row whose words are in the DSP: claimed, published and no load in progress, so a one-word write can go out.
+/// An effect row whose words are in the DSP: claimed, published and no load in progress, so a live value can be set.
 pub unsafe fn fx_live(k: usize) -> bool {
     let d = REAL_CORE.dsp();
-    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0 && !REAL_CORE.link_claimed(LinkWriter::Sample)
+    k < MAX_FX && d.fx_owner[k] != 0 && d.fx_pub[k] != 0 && d.phase == PH_IDLE && d.nwait == 0
 }
 
-/// Start the write of word `w` of effect row `k` for `who` (a one-word write through window 2). `true` when the link accepted it.
-pub unsafe fn fx_word_start<C: CoreApi>(c: &C, who: LinkWriter, k: usize, w: u32, value: u32) -> bool {
+/// The link slot of word `w` of effect row `k` (window 2); `None` without the effect table.
+pub unsafe fn fx_slot<C: CoreApi>(c: &C, k: usize, w: u32) -> Option<Slot> {
     let inf = c.fx_info();
     if inf.is_null() {
-        return false;
+        return None;
     }
-    c.link_word(who, WIN_FX, FX_ROW_WORDS * (iw(inf, F_FIRST) + k as u32) + w, value)
+    Some(Slot::new(WIN_FX, FX_ROW_WORDS * (iw(inf, F_FIRST) + k as u32) + w))
+}
+
+/// Drop the live values of effect row `k` (its module is gone): the link sends nothing more to the row.
+pub unsafe fn fx_forget<C: CoreApi>(c: &C, k: usize) {
+    if let Some(s) = fx_slot(c, k, 0) {
+        c.link_forget(WIN_FX, s.word, FX_ROW_WORDS);
+    }
 }
 
 /// The module record (index) that owns row `r` of the effect table (the registry `fx`), for an effect fault.
@@ -151,19 +159,23 @@ pub(crate) unsafe fn clear_fx_rows(rec: usize) -> bool {
     while k < MAX_FX {
         if d.fx_owner[k] == rec as u8 + 1 && d.fx_pub[k] != 0 {
             let at = FX_ROW_WORDS * (first + k as u32);
-            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_PC, FX_FREE_PC) { return false; }
-            // the next effect on the row starts on the master route with no amounts (finding 62)
-            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_ROUTE, 0) { return false; }
+            // one sequence per row: the pc first, so the chain skips the row at once, then the rest; the next effect on the row starts on the master route with
+            // no amounts (finding 62)
+            let mut seq = Sequence::new();
+            seq.push(WIN_FX, at + FXW_PC, FX_FREE_PC);
+            seq.push(WIN_FX, at + FXW_ROUTE, 0);
             let mut w = 0;
             while w < 4 {
-                if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_AMT0 + w, 0) { return false; }
+                seq.push(WIN_FX, at + FXW_AMT0 + w, 0);
                 w += 1;
             }
-            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_WAS, 0) { return false; }
-            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_MIX, MIX_ONE) { return false; }
-            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_DIS, 0) { return false; }
-            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_WSTART, 0) { return false; }
-            if !REAL_CORE.link_word_blocking(WIN_FX, at + FXW_WCOUNT, 0) { return false; }
+            seq.push(WIN_FX, at + FXW_WAS, 0);
+            seq.push(WIN_FX, at + FXW_MIX, MIX_ONE);
+            seq.push(WIN_FX, at + FXW_DIS, 0);
+            seq.push(WIN_FX, at + FXW_WSTART, 0);
+            seq.push(WIN_FX, at + FXW_WCOUNT, 0);
+            fx_forget(&REAL_CORE, k); // no live value may reach the row after its clear
+            if !REAL_CORE.link_run(Owner::Core, &seq) { return false; }
             d.fx_pub[k] = 0;
         }
         k += 1;
@@ -297,7 +309,7 @@ pub(crate) unsafe fn row_step(rec: usize, want: &mut u32, write: bool) -> Option
         return None;
     }
     if !write {
-        return Some(RowWrite { win: 0, word: 0, value: 0, published: None });
+        return Some(RowWrite { win: 0, word: 0, value: 0, published: None, last: false, undo: None });
     }
     let want = *want;
     let at = FX_ROW_WORDS * (fxiw(F_FIRST) + frow as u32);
@@ -320,5 +332,7 @@ pub(crate) unsafe fn row_step(rec: usize, want: &mut u32, write: bool) -> Option
     };
     // from the amounts on, the amounts, the route or the pc word may be in the DSP: clear them on failure
     let published = if want >= FX_STEP_ROUTE { Some(&mut d.fx_pub[frow]) } else { None };
-    Some(RowWrite { win: WIN_FX, word, value, published })
+    // the pc word makes the row visible: it ends the row, and a failed sequence frees it again
+    let last = want == FX_STEPS - 1;
+    Some(RowWrite { win: WIN_FX, word, value, published, last, undo: if last { Some(FX_FREE_PC) } else { None } })
 }

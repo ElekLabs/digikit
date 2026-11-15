@@ -334,24 +334,64 @@ export function loadFailureShort(f: LoadFailure): string {
 export const moduleOf = (source: number, names: ReadonlyMap<number, string>): string =>
   source === 0 ? '' : (names.get(source) ?? `mod#${source - 1}`);
 
+/**
+ * Names an address of the running image, `module: function+0xNN` (or `function+0xNN` for the runtime and the firmware), or null when no map
+ * holds it. `ret`: the address is a return address, looked up one instruction earlier. The workbench makes it from the address maps and the
+ * load table (apps/desktop/ui/src/log-names.ts); without one every address stays hex.
+ */
+export type AddrNamer = (cpu: 'cf' | 'sharc', addr: number, ret?: boolean) => string | null;
+
+/**
+ * A name for an address of a record from an earlier boot (a crash, a fault): code of a module is placed by the load addresses of the boot that
+ * reads the record, so a module name is marked `unverified` (the crash boot may have loaded the modules elsewhere; docs/ADDRMAP.md). The
+ * runtime's and the firmware's names do not move and are not marked.
+ */
+function recordName(resolve: AddrNamer, cpu: 'cf' | 'sharc', addr: number, ret = false): string | null {
+  const n = resolve(cpu, addr, ret);
+  return n && n.includes(': ') ? `${n}, unverified` : n;
+}
+
+/**
+ * The names of the addresses an event carries, by field: the pc of a crash, and where a stopped DSP was. Best effort: whether the DSP's
+ * last word of the fault record is a SHARC PC is not verified [O], so it is named only when a loaded module's DSP map holds it, and it
+ * stays hex otherwise.
+ */
+function addressNames(d: RuntimeEvent, resolve?: AddrNamer): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!resolve) return out;
+  if (d.kind === 'CRASH_FOUND') {
+    const n = recordName(resolve, 'cf', d.args[0]!);
+    if (n) out.pc = n;
+  } else if (d.kind === 'FAULT_FOUND' && (d.args[0]! & 0xff) === 2) {
+    const n = recordName(resolve, 'sharc', d.args[3]!);
+    if (n) out.at = n;
+  }
+  return out;
+}
+
 const fieldText = (v: FieldValue): string => (v === null ? '-' : Array.isArray(v) ? v.join(',') : String(v));
-const pairs = (fields: Record<string, FieldValue>) => Object.entries(fields).map(([k, v]) => `${k}=${fieldText(v)}`);
+const pairs = (fields: Record<string, FieldValue>, named: Record<string, string> = {}) =>
+  Object.entries(fields).map(([k, v]) => `${k}=${fieldText(v)}${named[k] ? ` (${named[k]})` : ''}`);
 
 /** The text of an event for a log row: the kind, the module when a module wrote it, then `name=value` pairs. A module's own message
  * (MOD_LOG) is the module, the message in quotes and the value in hex. */
-export function eventText(d: RuntimeEvent, names: ReadonlyMap<number, string>): string {
+export function eventText(d: RuntimeEvent, names: ReadonlyMap<number, string>, resolve?: AddrNamer): string {
   const who = moduleOf(d.source, names);
   if (d.kind === 'MOD_LOG') {
     return [who || 'runtime', `"${d.fields.msg}"`, `value=0x${hex8(d.args[4]!)}`].join('  ');
   }
-  return [d.kind, who, ...pairs(d.fields)].filter(Boolean).join('  ');
+  return [d.kind, who, ...pairs(d.fields, addressNames(d, resolve))].filter(Boolean).join('  ');
 }
 
 /** The readable line of dklog (`text_of`): sequence, device time, level, module, `!` for an error, kind, pairs. */
-export function eventLine(d: RuntimeEvent, names: ReadonlyMap<number, string> = new Map()): string {
+export function eventLine(
+  d: RuntimeEvent,
+  names: ReadonlyMap<number, string> = new Map(),
+  resolve?: AddrNamer,
+): string {
   const who = moduleOf(d.source, names);
   const mark = d.error ? '!' : ' ';
-  return `${String(d.seq).padStart(6)} ${d.t.toFixed(3).padStart(10)}s ${d.level.padEnd(5)} ${who.padEnd(10)}${mark}${d.kind.padEnd(13)} ${pairs(d.fields).join(' ')}`;
+  return `${String(d.seq).padStart(6)} ${d.t.toFixed(3).padStart(10)}s ${d.level.padEnd(5)} ${who.padEnd(10)}${mark}${d.kind.padEnd(13)} ${pairs(d.fields, addressNames(d, resolve)).join(' ')}`;
 }
 
 /** Device time as the detail of a row shows it: `12.410s`. */
@@ -414,7 +454,12 @@ const hexWords = (words: number[]) => words.map(hex8).join(' ');
  * it (the vector, the registers and the stack of a crash; the stack of a panic; the place of a stopped DSP), and the events before the stop.
  * `events` are the events the log held at the boot that found the fault.
  */
-export function faultDetail(f: Fault, events: DkLogEvent[], names: ReadonlyMap<number, string> = new Map()): string {
+export function faultDetail(
+  f: Fault,
+  events: DkLogEvent[],
+  names: ReadonlyMap<number, string> = new Map(),
+  resolve?: AddrNamer,
+): string {
   const lines = [...faultRows(f), '', 'kept on the card as dk/fault (survives power cycles)'];
   const want = (e: DkLogEvent) =>
     f.kind === 'cpu'
@@ -436,10 +481,15 @@ export function faultDetail(f: Fault, events: DkLogEvent[], names: ReadonlyMap<n
         `vector ${vec} (${VECTORS[vec] ?? '?'}), format ${a[1]! >>> 8}, sr ${hex4(a[2]!)}`,
         `pc ${hex8(a[0]!)}   a7 ${hex8(a[3]!)}   crashed ${(a[4]! / BLOCKS_PER_SECOND).toFixed(1)} s after the boot before started`,
       );
+      const at = resolve && recordName(resolve, 'cf', a[0]!);
+      if (at) lines.push(`in ${at}`);
     } else if (f.kind === 'panic') {
       lines.push(`a7 ${hex8(a[1]!)}; the file and line are not kept, the stack holds the way to it`);
     } else {
-      lines.push(`core step ${coreStep((a[0]! >>> 16) & 0xff)}, module step ${a[2]}, last word ${hex8(a[3]!)}`);
+      const place = addressNames(runtimeEvent(first), resolve).at;
+      lines.push(
+        `core step ${coreStep((a[0]! >>> 16) & 0xff)}, module step ${a[2]}, last word ${hex8(a[3]!)}${place ? ` (${place})` : ''}`,
+      );
     }
     const mod = rest.find((e) => e.kind === LOG_KIND.CRASH_MOD && e.args[0] !== 0x100);
     // the crashed module is named by its CRASH_MOD event: use it for the lines below, but keep the names of the current boot's list
@@ -472,6 +522,12 @@ export function faultDetail(f: Fault, events: DkLogEvent[], names: ReadonlyMap<n
       lines.push('stack from a7:');
       for (let i = 0; i < words.length; i += 8)
         lines.push(`  +${(4 * i).toString(16).padStart(3, '0')}  ${hexWords(words.slice(i, i + 8))}`);
+      // a stack word that names code is probably a return address: the call is the instruction before it
+      const code = words.flatMap((w, i) => {
+        const n = w % 2 === 0 && resolve ? recordName(resolve, 'cf', w, true) : null;
+        return n ? [`  +${(4 * i).toString(16).padStart(3, '0')}  ${hex8(w)}  ${n}`] : [];
+      });
+      if (code.length) lines.push('stack words that point into code (return addresses?):', ...code);
     }
     const tail = tailEvents(rest);
     if (tail.length) {

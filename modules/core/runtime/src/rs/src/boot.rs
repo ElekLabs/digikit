@@ -158,11 +158,17 @@ pub unsafe extern "C" fn dkrt_boot() {
     loader::EARLY = true;
     // the type numbers of every machine of the selection, before the first load (reads the files; the staging buffer is free)
     assign::plan(&r);
-    let mut k = 0;
-    while k < r.count as usize {
+    // the boot plan over the header tables that read gave: the order to load in, and a module the plan refuses is not loaded
+    let planned = crate::plan::run(r.count as usize);
+    let mut pos = 0;
+    while pos < r.count as usize {
+        let k = planned.order[pos] as usize;
         crate::selection::BOOT_IDX = k as u32;
         loader::MISSING = [0; NEEDS_LEN];
-        let res = loader::load(r.paths[k].as_ptr());
+        let res = match planned.verdicts[k] {
+            dkrt_abi::plan::Verdict::Accepted => loader::load(r.paths[k].as_ptr()),
+            dkrt_abi::plan::Verdict::Refused(why) => why.code(),
+        };
         st().last_result = res;
         b.results[k] = res;
         if res == OK {
@@ -197,7 +203,7 @@ pub unsafe extern "C" fn dkrt_boot() {
                 [k as u32, dlog::word_of(m.as_ptr(), 0, NEEDS_LEN), dlog::word_of(m.as_ptr(), 4, NEEDS_LEN), dlog::word_of(m.as_ptr(), 8, NEEDS_LEN), 0],
             );
         }
-        k += 1;
+        pos += 1;
     }
     loader::EARLY = false;
     crate::selection::BOOT_IDX = u32::MAX;

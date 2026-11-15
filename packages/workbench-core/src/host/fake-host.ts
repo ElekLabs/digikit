@@ -73,6 +73,7 @@ export function createFakeHost(replies: Record<string, Reply> = {}): FakeHost {
       build: leaf('library.build'),
       scan: leaf('library.scan'),
       read: leaf('library.read'),
+      readMaps: leaf('library.readMaps'),
       deviceStorage: leaf('library.deviceStorage'),
     },
     ports: {
@@ -100,6 +101,7 @@ export function createFakeHost(replies: Record<string, Reply> = {}): FakeHost {
       prepare: leaf('firmware.prepare'),
       save: leaf('firmware.save'),
       patchkitWasm: leaf('firmware.patchkitWasm'),
+      dkprofWasm: leaf('firmware.dkprofWasm'),
       sampleWasm: leaf('firmware.sampleWasm'),
     },
     emu: {

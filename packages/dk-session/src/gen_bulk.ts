@@ -97,4 +97,9 @@ export const BULK_STATUS = {
   L_E_TABLE: -49,
   L_E_MISSING: -73,
   L_E_DECL_FULL: -74,
+  L_E_PLAN_KIND: -75,
+  L_E_PLAN_OWNER: -76,
+  L_E_PLAN_KEY: -77,
+  L_E_PLAN_FIT: -78,
+  L_E_DECL_KIND: -79,
 } as const;

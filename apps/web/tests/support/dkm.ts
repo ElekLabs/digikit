@@ -25,12 +25,31 @@ export function dkm(
   new DataView(b.buffer).setUint32(0x68, 20);
   new DataView(b.buffer).setUint32(0x9c, dsp);
   for (let i = 0xa0; i < size; i++) b[i] = (i * 31 + salt) & 255;
-  // the keys table (header 0x90/0x94): u16 words at +6 and +8 count machines and effects
-  new DataView(b.buffer).setUint32(0x90, 0xa0);
-  new DataView(b.buffer).setUint32(0x94, 12);
-  b.fill(0, 0xa0, 0xac);
-  new DataView(b.buffer).setUint16(0xa0 + 6, machine);
-  new DataView(b.buffer).setUint16(0xa0 + 8, fx);
+  // the header table (header 0x90/0x94): magic DKTB, version 1, then a KEYS entry (tag 3) with a group for each kind that has keys (machine kind 2, effect kind 4)
+  const groups: [number, number][] = [];
+  if (machine) groups.push([2, machine]);
+  if (fx) groups.push([4, fx]);
+  const v = new DataView(b.buffer);
+  let at = 0xa0;
+  v.setUint32(at, 0x444b5442);
+  v.setUint16(at + 4, 1);
+  v.setUint16(at + 6, groups.length ? 1 : 0);
+  at += 8;
+  if (groups.length) {
+    const len = groups.reduce((n, g) => n + 8 + 4 * g[1], 0);
+    v.setUint16(at, 3);
+    v.setUint16(at + 2, groups.length);
+    v.setUint32(at + 4, len);
+    at += 8;
+    b.fill(0, at, at + len);
+    for (const [kind, n] of groups) {
+      v.setUint32(at, kind);
+      v.setUint32(at + 4, n);
+      at += 8 + 4 * n;
+    }
+  }
+  v.setUint32(0x90, 0xa0);
+  v.setUint32(0x94, at - 0xa0);
   return b;
 }
 

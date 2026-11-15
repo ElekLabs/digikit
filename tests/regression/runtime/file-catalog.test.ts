@@ -10,6 +10,7 @@ import { withSession } from '../support.ts';
 import { liveProtocol } from './protocol.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { optInPatchkit } from './patchkit.ts';
+import { expectPollEmulated } from './waits.ts';
 
 const root = repoRoot();
 const binary = process.env.DIGI_CATALOG_EMUD;
@@ -109,7 +110,12 @@ describe.skipIf(!enabled)('DT2 1.17 private UI-task file catalogue', () => {
       }
       expect(load.syx_sha256).toBe(plan.output?.syx_sha256);
       await session.client.call('run.mode', { mode: 'free' });
-      await expect.poll(async () => (await session.status()).cf.ready, { timeout: 30000 }).toBe(true);
+      await expectPollEmulated(
+        session,
+        async () => (await session.status()).cf.ready,
+        (value) => expect(value).toBe(true),
+        { emulatedMs: 30000 },
+      );
       await session.expectNoFault(phase);
       save('patched-load.json', load);
       const mail = planSymbol(plan, 'catalog_mail');
@@ -146,7 +152,12 @@ describe.skipIf(!enabled)('DT2 1.17 private UI-task file catalogue', () => {
         }
         await session.client.call('mem.cf.poke', { addr: mail + 4, value: 0 });
         await session.client.call('mem.cf.poke', { addr: mail, value: command }); // command last
-        await expect.poll(() => word(mail + 4), { timeout: 20000, interval: 20 }).toBe(2);
+        await expectPollEmulated(
+          session,
+          () => word(mail + 4),
+          (value) => expect(value).toBe(2),
+          { emulatedMs: 20000, intervalMs: 20 },
+        );
         const values = await read(mail, 32);
         const result = {
           command,

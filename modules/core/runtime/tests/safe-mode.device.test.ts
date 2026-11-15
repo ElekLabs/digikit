@@ -8,7 +8,7 @@ import { rpc } from '@digi/regression/runtime/fx-live.ts';
 import { drainInputs } from '@digi/regression/runtime/fx-session.ts';
 import { introNow, safeFrame } from '@digi/regression/runtime/intro-frame.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { waitEmulatedFrames, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
+import { waitEmulatedFrames, waitForBootEmulated, expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
  * Safe mode and power cuts (the Python scenarios, deleted: safe-fault, safe-late-fault and cut-selection, all full
@@ -147,7 +147,7 @@ for (const held of [true, false]) {
       test(
         held ? 'REC held: safe mode (key), no module loaded' : 'REC released: no safe mode, the module loads',
         async () => {
-          await expect.poll(async () => (await bootInfo(h.session, h.plan)).uiReached, { timeout: 30_000 }).toBe(1);
+          await expectPollEmulated(h.session, async () => (await bootInfo(h.session, h.plan)).uiReached, (value) => expect(value).toBe(1), { emulatedMs: 30000 });
           // Check the first decision, not a later boot: a wrong safe result must fail here.
           const first = await bootInfo(h.session, h.plan);
           expect(first).toMatchObject({ safe: held ? 1 : 0, reason: held ? SAFE_KEY : 0, count: 1 });

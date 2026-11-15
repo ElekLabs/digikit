@@ -51,7 +51,7 @@ pub const FXW_AMT0: u32 = 19;
 pub const FX_STEP_ROUTE: u32 = 12;
 /// `dk_fx_desc` (<dk/fx/fx.h>): magic "DKFX", contract, and its size in bytes.
 pub const FX_DESC_MAGIC: u32 = 0x444b_4658;
-pub const FX_DESC_BYTES: u32 = 28;
+pub const FX_DESC_BYTES: u32 = 24; // DK_FX_DESC_BYTES in sdk/include/dk/gen/fx_consts.h
 pub const FX_MAX_PARAMS: u32 = 8;
 /// The windows of `core/dsp-link`.
 pub const WIN_VOICES: u32 = 1;
@@ -127,10 +127,10 @@ pub struct DspState {
     pub phase: u32,
     pub ticks: u32,
     pub step: u32,
-    /// A transfer has been started in this step.
-    pub started: u32,
-    /// The buffer of one-word transfers (`dl_send_win` reads it in place).
-    pub word: u32,
+    /// The link request of the loader in flight (the id of its `Ticket`; 0: none).
+    pub ticket: u32,
+    /// The steps of the row sequence that request carries.
+    pub row_steps: u32,
     /// Byte address, bytes and arena block of the image `reserve` has prepared and `launch` has not taken yet.
     pub send_base: u32,
     pub send_len: u32,

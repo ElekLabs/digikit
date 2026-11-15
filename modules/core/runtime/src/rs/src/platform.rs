@@ -22,6 +22,9 @@ extern "C" {
     static dkrt_device_name: u32;
     static dkrt_samples_in_store: u32;
     static dkrt_sample_path_max: u32;
+    /// The DSP headroom (instructions per block) and the voices (`DSP_HEADROOM`, `DSP_VOICES`).
+    static dkrt_dsp_headroom: u32;
+    static dkrt_dsp_voices: u32;
     /// The image id patchkit stamps into the image (`src/cf/<dev>/device.s`; `packages/patchkit/src/imageid.rs`): 8 bytes, zero in an object.
     static dkrt_image_id: [u8; 8];
     /// `cpushl` over a byte range (both caches), `src/cf/tramp.s`.
@@ -93,6 +96,8 @@ impl Platform for RealPlatform {
                 name: read_volatile(addr_of!(dkrt_device_name)),
                 samples_in_store: read_volatile(addr_of!(dkrt_samples_in_store)) != 0,
                 sample_path_max: read_volatile(addr_of!(dkrt_sample_path_max)),
+                dsp_headroom: read_volatile(addr_of!(dkrt_dsp_headroom)),
+                dsp_voices: read_volatile(addr_of!(dkrt_dsp_voices)),
             }
         }
     }
@@ -117,6 +122,14 @@ impl Platform for RealPlatform {
     #[cfg(not(test))]
     fn sample_path_max(&self) -> u32 {
         unsafe { read_volatile(addr_of!(dkrt_sample_path_max)) }
+    }
+    #[cfg(not(test))]
+    fn dsp_headroom(&self) -> u32 {
+        unsafe { read_volatile(addr_of!(dkrt_dsp_headroom)) }
+    }
+    #[cfg(not(test))]
+    fn dsp_voices(&self) -> u32 {
+        unsafe { read_volatile(addr_of!(dkrt_dsp_voices)) }
     }
 
     #[cfg(not(test))]
@@ -285,6 +298,48 @@ impl SamplePool for RealPlatform {
     }
     unsafe fn worker_queue(&self, worker: u32, name: *const u8, job: *mut c_void, done: *mut c_void) {
         dkfw::samples::worker_queue(worker, name, job, done);
+    }
+}
+
+impl RealPlatform {
+    /// The profile facts the storage routes need.
+    fn storage_facts(&self) -> crate::storage_adapter::Facts {
+        crate::storage_adapter::Facts { in_store: Platform::samples_in_store(self), sample_path_max: Platform::sample_path_max(self) }
+    }
+}
+
+// The routes (store, DT2 firmware file system) are in storage_adapter.rs.
+impl dkrt_abi::storage::Storage for RealPlatform {
+    fn path_max(&self, root: u32) -> u32 {
+        match root {
+            dkrt_abi::storage::ROOT_SAMPLES => Platform::sample_path_max(self),
+            dkrt_abi::storage::ROOT_STORE => dkrt_sdk::store::PATH_MAX as u32,
+            _ => 0,
+        }
+    }
+    unsafe fn stat(&self, root: u32, path: &[u8]) -> Result<dkrt_abi::storage::Stat, i32> {
+        crate::storage_adapter::stat(root, &self.storage_facts(), path)
+    }
+    unsafe fn read_head(&self, root: u32, path: &[u8], out: &mut [u8; 64]) -> Result<(), i32> {
+        crate::storage_adapter::read_head(root, &self.storage_facts(), path, out)
+    }
+    unsafe fn stat_head(&self, root: u32, path: &[u8], out: &mut [u8; 64]) -> Result<(dkrt_abi::storage::Stat, usize), i32> {
+        crate::storage_adapter::stat_head(root, &self.storage_facts(), path, out)
+    }
+    unsafe fn read_range(&self, root: u32, path: &[u8], offset: u32, out: &mut [u8]) -> Result<usize, i32> {
+        crate::storage_adapter::read_range(root, &self.storage_facts(), path, offset, out)
+    }
+    unsafe fn read_all(&self, root: u32, path: &[u8], dst: *mut u8, cap: u32) -> Result<u32, i32> {
+        crate::storage_adapter::read_all(root, &self.storage_facts(), path, dst, cap)
+    }
+    fn list_state_bytes(&self, _root: u32) -> usize {
+        crate::storage_adapter::list_state_bytes()
+    }
+    unsafe fn list_open(&self, root: u32, dir: &[u8], state: *mut u8) -> Result<(), i32> {
+        crate::storage_adapter::list_open(root, &self.storage_facts(), dir, state)
+    }
+    unsafe fn list_next(&self, state: *mut u8, out: &mut dkrt_abi::storage::DirEntry) -> Result<dkrt_abi::storage::ListStep, i32> {
+        crate::storage_adapter::list_next(state, out)
     }
 }
 

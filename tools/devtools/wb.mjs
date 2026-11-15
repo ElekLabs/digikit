@@ -13,7 +13,7 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store put LOCAL REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store rm REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
-//     node tools/devtools/wb.mjs [--format json|text] addrmap lookup ADDR... | module analyse DKM DKO | profile report FILE | profile record --seconds N --out FILE
+//     node tools/devtools/wb.mjs [--format json|text] addrmap lookup ADDR... | module analyse DKM DKO | profile report FILE | profile record --seconds N --out FILE [--cpu cf|sharc]
 //
 // The last line is the offline group (no device, no dkmidi): names for addresses, module DSP analysis and profiles, through dkprof.wasm (`mise run wasm:dkprof`).
 // Its options and output are in tools/devtools/wb_prof.mjs and docs/ADDRMAP.md, docs/INSTRUMENTATION.md and packages/dksharc/README.md.
@@ -70,7 +70,7 @@ const opts = {
   ret: false,
 };
 // the offline group takes these several times
-const REPEATED = new Set(['map', 'load', 'dsp-base']);
+const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse']);
 const OFFLINE = ['addrmap', 'module', 'profile'];
 const words = [];
 for (let i = 0; i < args.length; i++) {
@@ -92,6 +92,7 @@ for (let i = 0; i < args.length; i++) {
       '--snapshot',
       '--load',
       '--dsp-base',
+      '--analyse',
       '--cpu',
       '--top',
       '--seconds',

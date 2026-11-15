@@ -108,6 +108,12 @@ impl DspEngine for NativeDsp {
     fn region_profile(&self) -> Option<sharc_native::RegionProfile> {
         self.0.region_profile()
     }
+    fn set_pc_hist(&mut self, enabled: bool) {
+        self.0.set_pc_hist(enabled);
+    }
+    fn pc_hist(&self) -> Option<Vec<(u32, u64)>> {
+        self.0.pc_hist()
+    }
     fn apply_dsp_patch(&mut self, patch: &crate::dsp_patch::DspPatch) -> Result<(), String> {
         apply_dsp_patch(&mut self.0, patch)
     }
@@ -213,6 +219,12 @@ impl DspEngine for SharedDsp {
     fn region_profile(&self) -> Option<sharc_native::RegionProfile> {
         self.0.borrow().region_profile()
     }
+    fn set_pc_hist(&mut self, enabled: bool) {
+        self.0.borrow_mut().set_pc_hist(enabled);
+    }
+    fn pc_hist(&self) -> Option<Vec<(u32, u64)>> {
+        self.0.borrow().pc_hist()
+    }
     fn set_execution_profile(&mut self, enabled: bool) -> bool {
         self.0.borrow_mut().set_option(26, enabled as i64) == 0
     }
@@ -248,7 +260,7 @@ impl DspEngine for SharedDsp {
 ///    read as known zero instead of unknown. This is a modelling choice for
 ///    memory the snapshot does not hold; the owner decided it reads zero.
 fn concretise_import(e: &mut sharc_native::Engine) {
-    use sharc_native::rt::{Spec, MR, MR_MASK, V};
+    use sharc_native::rt::{MR, MR_MASK, Spec, V};
     for i in 0..e.s.special.len() {
         let present = e.s.special_present[i];
         let new = match e.s.special[i] {

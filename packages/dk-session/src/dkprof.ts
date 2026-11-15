@@ -60,6 +60,8 @@ export interface ProfileReportRequest {
   profile: unknown;
   maps?: AddrMapJson[];
   loads?: LoadTableJson;
+  /** Module id to the `dksharc::Analysis` of its DSP code (`moduleAnalyse`): SHARC counters are also added per loop. */
+  analyses?: Record<string, unknown>;
   top?: number;
 }
 

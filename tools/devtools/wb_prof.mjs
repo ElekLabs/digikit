@@ -3,10 +3,13 @@
 //
 //     wb [--format json|text] addrmap lookup ADDR... [--map F]... [--image X.syx] [--loads F | --snapshot F] [--load ID=BASE] [--dsp-base ID=PC] [--cpu cf|sharc] [--ret]
 //     wb [--format json|text] module analyse MODULE.dkm DSP.dko.json
-//     wb [--format json|text] profile report FILE [--top N] [--map F]... [--image X.syx] [--loads F]
-//     wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot]
+//     wb [--format json|text] profile report FILE [--top N] [--map F]... [--image X.syx] [--loads F] [--analyse ID=MODULE.dkm:DSP.dko.json]...
+//     wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot] [--cpu cf|sharc]
 //
 // `record` reads `cf.profile` before and after N seconds and keeps the difference; `--since-boot` keeps the cumulative counters (the state of a paused emulator).
+// `--cpu sharc` records `sharc.profile` (the daemon needs the `sharc-profile` cargo feature): it starts the DSP counting, waits N seconds and reads it;
+// `--since-boot` skips the start and the wait and reads what the counting has gathered since a `sharc.profile {enable: true}` (a paused emulator).
+// `--analyse ID=MODULE.dkm:DSP.dko.json` adds the static analysis of a module's DSP code to `report`: SHARC counters are also added per loop.
 //
 // ADDR is a number (decimal or 0x hex), or `cpu:number` (`sharc:0xb80105`). A map is a `.addrmap.json` (docs/ADDRMAP.md); `--image X.syx` adds
 // the ship map `X.addrmap.json` beside the image. `--loads` is a load table JSON; `--snapshot` a JSON object of runtime symbol to hex bytes.
@@ -90,6 +93,15 @@ export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
     const req = { profile: readJson(rest[0]), maps: mapsOf(opts), format };
     if (opts.top !== undefined) req.top = Number(opts.top);
     if (opts.loads) req.loads = readJson(opts.loads);
+    for (const spec of opts.analyse ?? []) {
+      const at = spec.indexOf('=');
+      const [dkm, dko] = (at < 0 ? '' : spec.slice(at + 1)).split(':');
+      if (at < 0 || !dkm || !dko) fail('--analyse ID=MODULE.dkm:DSP.dko.json');
+      (req.analyses ??= {})[spec.slice(0, at)] = prof.moduleAnalyse(
+        Uint8Array.from(readFileSync(dkm)),
+        Uint8Array.from(readFileSync(dko)),
+      );
+    }
     show(prof.profileReport(req), format);
     return 0;
   }
@@ -126,22 +138,100 @@ async function readLoads(prof, client, ship, plan) {
   return prof.loadTable({ maps: [ship], snapshot });
 }
 
-async function record({ opts, root, fail }) {
-  const seconds = Number(opts.seconds);
-  if (!(seconds > 0) || !opts.out)
-    fail('profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot]');
+/** The identity of the run: id, target and, with `--image`, the hashes and the load table read from the running emulator. */
+async function runInfo({ opts, root, fail }, client) {
+  const run = { id: `emu-${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}`, target: 'unknown' };
+  try {
+    run.source_revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  } catch {
+    // not a git checkout: leave it out
+  }
+  if (opts.image) {
+    const ship = readJson(opts.image.replace(/\.syx$/, '') + '.addrmap.json');
+    const plan = readJson(opts.image.replace(/\.syx$/, '') + '.plan.json');
+    run.target = ship.key.device ?? run.target;
+    run.firmware_sha256 = ship.key.image_sha256;
+    run.runtime_sha256 = ship.key.output_sha256 ?? createHash('sha256').update(readFileSync(opts.image)).digest('hex');
+    run.module_sha256 = ship.key.modules ?? [];
+    if (ship.key.loader) run.loads = await readLoads(await loadProf(root, fail), client, ship, plan);
+  }
+  return run;
+}
+
+async function connectDaemon({ opts, root, fail }) {
   const { connect, readSocket } = await import('../../packages/control-client/src/index.ts');
   const runDir = path.resolve(root, opts['run-dir'] ?? 'out/native/run');
   const sock = readSocket(runDir);
   if (!sock)
     fail(
-      `no emulator socket in ${runDir} (start one: mise run emu:serve; the daemon needs the cf-profile cargo feature)`,
+      `no emulator socket in ${runDir} (start one: mise run emu:serve; the daemon needs the cf-profile or sharc-profile cargo feature)`,
       1,
     );
-  const client = await connect(sock);
+  return connect(sock);
+}
+
+/** `--cpu sharc`: the DSP counts of `sharc.profile` as a profile. */
+async function recordSharc(ctx) {
+  const { opts, fail } = ctx;
+  const seconds = Number(opts.seconds ?? 0);
+  if (!opts.out || (!opts['since-boot'] && !(seconds > 0)))
+    fail('profile record --cpu sharc --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot]');
+  const client = await connectDaemon(ctx);
+  try {
+    if (!opts['since-boot']) {
+      await client.call('sharc.profile', { enable: true });
+      await sleep(seconds * 1000);
+    }
+    const a = await client.call('sharc.profile');
+    const run = await runInfo(ctx, client);
+    const profile = {
+      schema: 'dk.profile/1',
+      run,
+      clock: a.clock,
+      raw: a.raw,
+      metrics: [
+        { name: 'sharc.blocks', value: a.blocks, unit: 'blocks' },
+        { name: 'sharc.insn.executed', value: a.icount, unit: 'insn' },
+        { name: 'sharc.insn.idle_skipped', value: a.idle_skipped, unit: 'insn' },
+        { name: 'sharc.insn.counted.fast', value: a.counted.fast, unit: 'insn' },
+        { name: 'sharc.insn.counted.block', value: a.counted.block, unit: 'insn' },
+        { name: 'sharc.insn.counted.interpreted', value: a.counted.interpreted, unit: 'insn' },
+        {
+          name: 'sharc.coverage',
+          unit: 'ratio',
+          na_reason:
+            'sharc.insn.executed and the per-PC counts do not reconcile in the DN2 proof run (open, profiling plan P4)',
+        },
+      ],
+      markers: [{ name: 'record.start', at: 0 }],
+      loss: [],
+      overhead: [
+        {
+          name: 'sharc-profile.feature',
+          unit: 'ratio',
+          na_reason: 'not measured: needs a paired run without the feature',
+        },
+      ],
+    };
+    writeFileSync(opts.out, `${JSON.stringify(profile)}\n`);
+    console.log(`${opts.out}: ${a.raw.length} counters over ${a.blocks} DSP blocks`);
+  } finally {
+    client.close();
+  }
+  return 0;
+}
+
+async function record(ctx) {
+  const { opts, fail } = ctx;
+  const cpu = opts.cpu ?? 'cf';
+  if (cpu === 'sharc') return recordSharc(ctx);
+  if (cpu !== 'cf') fail('--cpu is cf or sharc');
+  const seconds = Number(opts.seconds);
+  if (!(seconds > 0) || !opts.out)
+    fail('profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot] [--cpu cf|sharc]');
+  const client = await connectDaemon(ctx);
   try {
     const before = opts['since-boot'] ? { paths: [] } : await client.call('cf.profile');
-    const t0 = Date.now();
     await sleep(seconds * 1000);
     const after = await client.call('cf.profile');
     const raw = [
@@ -149,22 +239,7 @@ async function record({ opts, root, fail }) {
       ...deltaRows(before.idle_pc, after.idle_pc, 'idle_pc'),
       ...deltaRows(before.exit_pcs, after.exit_pcs, 'exit_pc'),
     ];
-    const run = { id: `emu-${new Date(t0).toISOString().replace(/[-:]/g, '').slice(0, 15)}`, target: 'unknown' };
-    try {
-      run.source_revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-    } catch {
-      // not a git checkout: leave it out
-    }
-    if (opts.image) {
-      const ship = readJson(opts.image.replace(/\.syx$/, '') + '.addrmap.json');
-      const plan = readJson(opts.image.replace(/\.syx$/, '') + '.plan.json');
-      run.target = ship.key.device ?? run.target;
-      run.firmware_sha256 = ship.key.image_sha256;
-      run.runtime_sha256 =
-        ship.key.output_sha256 ?? createHash('sha256').update(readFileSync(opts.image)).digest('hex');
-      run.module_sha256 = ship.key.modules ?? [];
-      if (ship.key.loader) run.loads = await readLoads(await loadProf(root, fail), client, ship, plan);
-    }
+    const run = await runInfo(ctx, client);
     const metrics = [];
     for (const p of PATHS) {
       const a = after.paths.find((x) => x.path === p) ?? {};
@@ -178,7 +253,7 @@ async function record({ opts, root, fail }) {
     metrics.push({
       name: 'sharc.pc',
       unit: 'insn',
-      na_reason: 'the SHARC profile source is a later item (profiling plan P4)',
+      na_reason: 'not recorded here: wb profile record --cpu sharc records the DSP counts (sharc.profile)',
     });
     const profile = {
       schema: 'dk.profile/1',

@@ -128,6 +128,8 @@ pub unsafe fn init_once() {
         return;
     }
     arena::init();
+    // the in-crate services declare their record kinds and the runtime compares them with the generated table (declare-check-commit)
+    crate::handlers::check_declarations();
     s.runtime = RUNTIME_VERSION;
     s.magic = STATE_MAGIC;
 }

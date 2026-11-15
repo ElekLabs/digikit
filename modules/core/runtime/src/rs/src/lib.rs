@@ -22,11 +22,14 @@ pub mod services;
 pub mod assign;
 pub mod collect;
 mod handlers;
+#[rustfmt::skip]
+mod gen_services;
 pub mod boot;
 pub mod card;
 pub mod fault;
 pub mod dlog;
 mod dsp;
+mod link;
 pub mod entry;
 mod gen_abi_check;
 mod loader;
@@ -36,6 +39,8 @@ pub mod scan;
 pub mod settings;
 mod files;
 mod hash32;
+// The file is not aux.rs: Windows does not allow a file named AUX, with any extension.
+#[path = "aux_task.rs"]
 pub mod aux;
 pub mod speed;
 mod intro;
@@ -50,7 +55,9 @@ mod worker;
 mod health;
 mod imports;
 mod mailbox;
+mod plan;
 mod platform;
+mod storage_adapter;
 mod safe_mode;
 mod selection;
 mod report;
@@ -113,6 +120,10 @@ pub(crate) unsafe extern "C" fn imp_param_set(track: u32, word: u32, raw: i32) -
 #[cfg(test)]
 mod cleanup_tests;
 #[cfg(test)]
+mod test_lock;
+#[cfg(test)]
 mod fake_platform;
+#[cfg(test)]
+mod fake_storage;
 
 

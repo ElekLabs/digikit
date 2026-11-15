@@ -128,6 +128,31 @@ export const segmentTitle = (bar: Bar, s: Segment): string =>
     ? `Other: ${amountText(bar, s.amount)} (not from a module of your library)`
     : `${s.label}: ${amountText(bar, s.amount)}`;
 
+/** One line of the per-module table under a bar: the module, its type and what it takes of the resource. */
+export interface ModuleRow {
+  id: string;
+  label: string;
+  kind: SegmentKind;
+  /** `259 KiB`, or `1` for a count. */
+  text: string;
+}
+
+/**
+ * The per-module rows of a bar, largest first, `Other` last: the same segments the bar draws, with their amounts in words. They come from the
+ * device's fixed capacity (CAPACITY) and the needs of each loaded module's file (`buildBars`); no other data source.
+ */
+export function moduleRows(bar: Bar): ModuleRow[] {
+  const rows = bar.segments.map((s) => ({
+    id: s.id,
+    label: s.label,
+    kind: s.kind,
+    text: amountText(bar, s.amount),
+    amount: s.amount,
+  }));
+  const named = rows.filter((r) => r.kind !== 'other').sort((a, b) => b.amount - a.amount || a.id.localeCompare(b.id));
+  return [...named, ...rows.filter((r) => r.kind === 'other')].map(({ amount: _amount, ...r }) => r);
+}
+
 /** The free text: the total, and the largest block when memory is split so that it is smaller than the total. */
 export const freeText = (bar: Bar): string =>
   bar.split

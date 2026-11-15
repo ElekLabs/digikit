@@ -12,6 +12,7 @@ import { liveProtocol } from './protocol.ts';
 import { linkedRuntimeNeed, runtimeVersion } from './upload-kit.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 import { optInPatchkit } from './patchkit.ts';
+import { expectPollEmulated } from './waits.ts';
 
 const root = repoRoot();
 
@@ -152,7 +153,12 @@ for (const profile of profiles) {
           clearTimeout(timer);
         }
         await session.client.call('run.mode', { mode: 'free' });
-        await expect.poll(async () => (await session.status()).cf.ready, { timeout: 30000 }).toBe(true);
+        await expectPollEmulated(
+          session,
+          async () => (await session.status()).cf.ready,
+          (value) => expect(value).toBe(true),
+          { emulatedMs: 30000 },
+        );
         protocol = liveProtocol(session);
         const fixture = fs.readFileSync(artifact!);
         await protocol.put('modules/files-proof.dkm', fixture);
@@ -162,9 +168,12 @@ for (const profile of profiles) {
         protocol.cancelPending();
         protocol = liveProtocol(session);
         await protocol.waitForBoot();
-        await expect
-          .poll(async () => (await protocol!.modules()).map((m) => m.name), { timeout: 30000 })
-          .toContain('test/files-proof');
+        await expectPollEmulated(
+          session,
+          async () => (await protocol!.modules()).map((m) => m.name),
+          (value) => expect(value).toContain('test/files-proof'),
+          { emulatedMs: 30000 },
+        );
         const request = async (cmd: number, body = Buffer.alloc(0)) => {
           const reply = await protocol!.request(cmd, body);
           expect(reply.status, `public fixture command0x${cmd.toString(16)}`).toBe(0);
@@ -208,15 +217,15 @@ for (const profile of profiles) {
         };
         const collected = async (rootId: number, directory: string) => {
           const ticket = await begin(rootId, directory);
-          await expect
-            .poll(
-              async () => {
-                const s = await status();
-                return s.ticket === ticket ? s.terminal : 0;
-              },
-              { timeout: 45000, interval: 50 },
-            )
-            .toBe(2);
+          await expectPollEmulated(
+            session,
+            async () => {
+              const s = await status();
+              return s.ticket === ticket ? s.terminal : 0;
+            },
+            (value) => expect(value).toBe(2),
+            { emulatedMs: 45000, intervalMs: 50 },
+          );
           const entries = await rows(ticket);
           save(`listing-${rootId}-${directory.replaceAll('/', '_') || 'root'}-${ticket}.json`, {
             ticket,
@@ -296,15 +305,15 @@ for (const profile of profiles) {
         ).toBe(samples.entries[0]!.raw);
         phase = 'capacity validation preserves ready row';
         const manual = await begin(2, 'files-proof-store', 5); // notification hint, no auto-poll
-        await expect
-          .poll(
-            async () => {
-              const s = await status();
-              return s.ticket === manual ? s.hint : 0;
-            },
-            { timeout: 45000 },
-          )
-          .toBe(1);
+        await expectPollEmulated(
+          session,
+          async () => {
+            const s = await status();
+            return s.ticket === manual ? s.hint : 0;
+          },
+          (value) => expect(value).toBe(1),
+          { emulatedMs: 45000 },
+        );
         expect(await poll(manual, true)).toMatchObject({ rc: -5, untouched: 1 });
         expect(await poll(manual)).toMatchObject({ rc: 1, entry: store.entries[0]!.entry });
         phase = 'supersede and cancel identities';
@@ -316,15 +325,15 @@ for (const profile of profiles) {
         expect(await poll(current)).toMatchObject({ rc: -1, untouched: 1 });
         phase = 'reentrant callback cancel';
         const canceled = await begin(2, 'files-proof-store', 3);
-        await expect
-          .poll(
-            async () => {
-              const s = await status();
-              return s.ticket === canceled ? s.terminal : 0;
-            },
-            { timeout: 45000 },
-          )
-          .toBe(-1);
+        await expectPollEmulated(
+          session,
+          async () => {
+            const s = await status();
+            return s.ticket === canceled ? s.terminal : 0;
+          },
+          (value) => expect(value).toBe(-1),
+          { emulatedMs: 45000 },
+        );
         expect(await poll(canceled)).toMatchObject({ rc: -1, untouched: 1 });
         expect((await rows(canceled)).map((row) => row.entry)).toEqual([store.entries[0]!.entry]);
         expect((await status()).callbacks).toBeGreaterThan(0);

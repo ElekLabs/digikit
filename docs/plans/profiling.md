@@ -36,7 +36,7 @@ Native and browser speed are separate questions. A native gain proves no browser
   every 64 instructions). No exact coverage, no breakpoints, no symbol lookup in the daemon.
 - **Names:** `fastcov` and `perf_calls.py` name stock SHARC PCs only; module PCs print as `?`. `snapread.py` names ColdFire addresses from the
   hand-made 1.16 `cf_names` list. Many hot SHARC functions have no name ([finding 18](../findings/18-dsp-performance.md)).
-- **Module cost:** authors declare `max_cycles_*` by hand. `module:check` checks a worst-block limit for effects only (`pk_conform.fx_budget`).
+- **Module cost:** derived since S5a. `module:check` writes the worst steady block (a machine, per voice) or process call (an effect) into the header as `DSP_COST_VOICE` and `DSP_COST_FX`; the `max_cycles_*` descriptor words are gone.
   HEALTH shows the whole DSP block time, not per module.
 - **Module DSP code is never AOT.** It loads into L2 at run time and runs in the fast tier or the interpreter.
 - **Device:** the debug module answers host polls (LOG, PEEK, LOGCFG); a 512-event ring, at most 27 events per read. The probe module owns
@@ -76,8 +76,8 @@ decodes the text with the decoder of `sharc_rt`. It gives functions (named from 
 or register count, nesting), calls inside the module, import calls resolved through relocations (`import:<symbol>`) and the memory
 operands of each instruction at form level. A decode that is not confident is reported and never guessed. On the pluck module for the
 Digitone II it gives 306 instructions, 3 functions, 4 DO loops (one literal count of 32, three register counts) and 4 import calls; the Python
-module mode of sharcdb, an oracle only and not merged, gave the same numbers. Slice 2 adds register def/use per instruction, from a table
-generated from `tools/sharc_dev/sharc_core`, so the instruction semantics stay in one place. Uses: static loop cost, the DSP rule check
+module mode of sharcdb, an oracle only and not merged, gave the same numbers. Slice 2 (done) adds register def/use per instruction and per function (registers written on any path to a return, MODE1 net effect), from a
+table generated from `tools/sharc_dev/sharc_core` (`tools/sharc_dev/sharc_defuse_gen.py`), so the instruction semantics stay in one place. Uses: static loop cost, the DSP rule check
 ([sdk.md](sdk.md) section 9), and naming in profiles.
 
 ### 3.4 Export
@@ -95,9 +95,10 @@ workbench call the same code (`mise run wb:cli` runs workbench actions through t
 - **Artifact:** one schema for emulator and device runs (section 9). The pane, the CLI and replay readers read the same artifact and reach the
   same numbers.
 - **Workbench consumers:**
-  - The Log pane ([workbench-device-log.md](workbench-device-log.md)) shows names for addresses in log events and crash records.
-  - New panes: DSP and ColdFire utilisation per module or owner over time, per block, and per function in the emulator. Interval graphs,
-    markers, record and stop, export.
+  - The Log pane ([workbench-device-log.md](workbench-device-log.md)) shows names for addresses in log events and crash records (P6, done: ADDRMAP.md "Workbench"; the same dk-session and debug-module PEEK path serves the emulator and
+    hardware, and hardware proof is a later explicit step). The Memory panel lists what each module takes of each resource (P6, done).
+  - The Profile pane (P8): DSP and ColdFire utilisation per module or owner over time, per block, and per function in the emulator. Interval
+    graphs, markers, record and stop, export. The same dk-session path (the debug module and its PEEK, the remote module) will carry the device's profile data; the pane shows "needs P8" for the device until its source exists.
 - The workbench never runs Python.
 
 P2 design:
@@ -110,7 +111,7 @@ P2 design:
 - **`wb:cli`:** a global `--format json|text`, and the commands `addrmap lookup`, `module analyse`, `profile record` (emulator: `cf.profile` through control-client) and
   `profile report`. All go through `dkprof.wasm`; `wb` starts no child process for them.
 - **Python:** `tools/devtools/cfprof.py` is deleted (done): on one paused emulator, `wb profile record --since-boot` and `cfprof.py` gave equal path counters and equal function, idle and exit rows.
-- **Not in P2:** the SHARC profile source (a new daemon call) is P4, the device source is P8, the panes are P6.
+- **Not in P2:** the SHARC profile source (a new daemon call; done in P4: `sharc.profile`), the device source and the Profile pane are P8; P6 (Log names, Memory per-module rows) is done.
 - **patchkit:** it uses the dksharc DKDS and `.dko` readers (done; packed bytes unchanged).
 
 ## 5. Track A: emulator host speed
@@ -146,13 +147,16 @@ TCOUNT in `UNSAFE_READ_NAMES`. Per-function detail comes from PC counts plus the
 
 1. **Names everywhere.** `fastcov`, `--diag hist`, `--profile-regions`, `pcdump`, `wwatch`, `SHARC_UNINIT_TRAP`, `--span`, `cf-profile` output,
    crash records and SHARC halts go through the address map.
-2. **Per-module cost.** For one module: instructions per block, split by function and loop, from PC counts. Runs are deterministic, so
-   counts repeat. These are instruction counts, not hardware cycles; section 7.3 calibrates them.
-3. **Machine budget check in `module:check`.** Run the machine at 16 voices on both devices and compare its worst block with the device
-   headroom (about 450k instructions on DT2, 330k on DN2, `digikit-module` skill `references/devices.md`). Effects already have
-   `fx_budget`. The measured number feeds the packer-derived cycle need ([sdk.md](sdk.md) section 9).
-4. **Fast-tier refusals per module.** List the module instructions the fast tier refuses, which keep it in the interpreter. This matters
-   for emulator and browser speed, not for hardware. Input for an SDK warning and for fast-tier lowering work.
+2. **Per-module cost (P4, done).** `sharc.profile` ([CONTROL.md](../CONTROL.md)) returns executed instructions per software PC as `dk.profile/1` raw counters; `wb profile record --cpu sharc` writes them and
+   `wb profile report` names them by module and function (address map, P3b load table) and by DO loop (`dksharc`), with instructions per DSP block. The source is the dispatch profile of the fast
+   and block tiers (an entry PC carries the whole region that starts there) plus the interpreter's per-PC counts, behind the `sharc-profile` feature (default build unchanged). Runs are
+   deterministic, so counts repeat. These are instruction counts, not hardware cycles; section 7.3 calibrates them.
+3. **Machine budget check (P4, done).** The rule is Rust: `dkprof::budget`, run by `patchkit budget` and read by `module:check` (`pk_conform.budget`, `fx_budget`; the numbers equal the former
+   Python's). Units are instructions per block. Per device the headroom is the block at 85 percent (projected with the "high" factor of `devices/cycle-factors.json`) minus the stock baseline
+   (`stock_busy`); today 194,244 instructions on DT2 and 92,796 on DN2 (`patchkit budget`, from `devices/*.toml` and `devices/cycle-factors.json`). The machine check is
+   `voice-block <= headroom / voices` for the steady worst block and `note-on <= headroom` apart; `dkrt_fit::check_selection` (integers, `no_std`; `dkprof` re-exports it) is the rule the broker applies since S5a: the planner, the menu and `patchkit fit` use it with the cost that `module:check` writes into the header ([sdk.md](sdk.md) section 9).
+4. **Fast-tier refusals per module: moved to P5** (emulator speed track, parked). It lists the module instructions the fast tier refuses, which keep it in the interpreter. This matters
+   for emulator and browser speed, not for hardware; it is input for an SDK warning and for fast-tier lowering work.
 
 ## 7. Track B: device profiling
 
@@ -245,8 +249,8 @@ Every artifact has: schema version, run id, firmware, runtime and module hashes,
 binary hash, source revision, PGO treatment, target, phase markers, loss and overhead. Keep raw counters. Never add overlapping inclusive
 costs, or host wall waits to thread CPU, as if they were separate work.
 
-Known limits: HEALTH rejects block deltas of 0 or at least 4,000,000; report the invalid count. SDK `max_cycles` values are budgets, not
-measurements. Sink underrun events are not DSP missed deadlines.
+Known limits: HEALTH rejects block deltas of 0 or at least 4,000,000; report the invalid count. The cost in a header is the worst case of the conformance cases, not a
+measurement of a real song. Sink underrun events are not DSP missed deadlines.
 
 ## 10. Proof discipline for optimisations
 
@@ -295,12 +299,12 @@ Item numbers are ids, not an order. The order lives in [sdk-runtime-roadmap.md](
 | --- | --- | --- | --- | --- |
 | 1 | Address map v1, emulator only: `.dko` symbols kept, map export, names in emulator tools and crash records. **Done** (docs/ADDRMAP.md) | B | 1-2 days | Nothing. Runs in parallel with runtime-and-services item 4 |
 | 2 | Shared Rust library and `wb:cli` profile and addrmap commands with JSON output | B | 1-2 days | 1 |
-| 3 | Module DSP analysis: the Rust crate `dksharc` (slice 1 done; slice 2 register def/use) | B | 1 day | 1 |
-| 4 | Per-module cost, machine budget check, fast-tier refusals per module | B | 1-2 days | 1, 3 |
+| 3 | Module DSP analysis: the Rust crate `dksharc` (slices 1 and 2 done: register def/use) | B | 1 day | 1 |
+| 4 | Per-module cost, machine budget check (fast-tier refusals moved to item 5's track). **Done** | B | 1-2 days | 1, 3 |
 | 5 | Host profiles named from sharcdb, first ranking | A | 1-2 days | Nothing; in a lane |
-| 6 | Workbench: names in the Log pane, first utilisation pane | B | 2-3 days | 2 |
+| 6 | Workbench: names in the Log pane (emulator and device, one dk-session/debug-module PEEK path; hardware proof later), per-module rows in the Memory panel. **Done** (docs/ADDRMAP.md "Workbench"); the Profile pane moved to item 8 | B | 2-3 days | 2 |
 | 7 | Clock audit | B | 1 day | Nothing (static) |
-| 8 | `DK_SPAN`, sink slot, `profile.dks`, DSP stats window | B | 3-4 days | runtime-and-services sink slots, dsp-link windows, the owner of DSP dispatch |
+| 8 | `DK_SPAN`, sink slot, `profile.dks`, DSP stats window, Profile pane (emulator `cf.profile` and device, over the same dk-session path as the Log names) | B | 3-4 days | runtime-and-services sink slots, dsp-link windows, the owner of DSP dispatch |
 | 9 | Device calibration | B | 1 day | 8; the device transport proven on hardware |
 | 10 | ColdFire PC sampling on the device | B | 2 days | 9 |
 

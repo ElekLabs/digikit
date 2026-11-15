@@ -30,21 +30,19 @@ use crate::typed::{DevResolved, Knob};
 pub const MAGIC: u32 = 0x444b_5247; // "DKRG"
 pub const VERSION: u32 = 1;
 pub const HEADER: usize = 16;
-pub const KIND_PARAM: u32 = 1;
-pub const KIND_MACHINE: u32 = 2;
-pub const KIND_PAGE: u32 = 3;
-pub const LEN_PARAM: usize = 0x50;
-pub const LEN_MACHINE: usize = 0x6c;
-pub const LEN_PAGE: usize = 0x60;
-pub const KIND_EFFECT: u32 = 4;
-pub const LEN_EFFECT: usize = 0x1a4;
-/// kind 5 ACTION (0x10): u32 param, offset. The click callback of the file's PARAM record `param`: `offset` is its image offset (the runtime adds the load address).
-pub const KIND_ACTION: u32 = 5;
-pub const LEN_ACTION: usize = 0x10;
-pub const KIND_NATIVE_PAGE: u32 = 6;
-pub const LEN_NATIVE_PAGE: usize = 0x90;
-pub const KIND_NATIVE_PAGE_V2: u32 = 7;
-pub const LEN_NATIVE_PAGE_V2: usize = 0x98;
+/// The record kinds and their lengths come from `[records.kinds]` of sdk/sdk.toml (`dkneeds`, written by `patchkit gen`).
+pub use dkneeds::{
+    KIND_ACTION, KIND_EFFECT, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE,
+    KIND_PARAM,
+};
+pub const LEN_PARAM: usize = dkneeds::LEN_PARAM as usize;
+pub const LEN_MACHINE: usize = dkneeds::LEN_MACHINE as usize;
+pub const LEN_PAGE: usize = dkneeds::LEN_PAGE as usize;
+pub const LEN_EFFECT: usize = dkneeds::LEN_EFFECT as usize;
+/// kind ACTION: u32 param, offset. The click callback of the file's PARAM record `param`: `offset` is its image offset (the runtime adds the load address).
+pub const LEN_ACTION: usize = dkneeds::LEN_ACTION as usize;
+pub const LEN_NATIVE_PAGE: usize = dkneeds::LEN_NATIVE_PAGE as usize;
+pub const LEN_NATIVE_PAGE_V2: usize = dkneeds::LEN_NATIVE_PAGE_V2 as usize;
 /// Knobs of an effect page (the 8th word of its parameters is MIX), the text fields, and the MIX default's range (the knob's raw 0 .. 127).
 pub const EFFECT_KNOBS: usize = 7;
 pub const EFFECT_TAB: usize = 8;

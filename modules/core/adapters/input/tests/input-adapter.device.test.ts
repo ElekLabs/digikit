@@ -10,7 +10,7 @@ import { DEVICES, FIRMWARE, liveOptions } from '@digi/regression/runtime/devices
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { liveProtocol } from '@digi/regression/runtime/protocol.ts';
 import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
-import { tap as holdTap } from '@digi/regression/runtime/waits.ts';
+import { tap as holdTap, expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /** Two fresh daemons with identical probe installation and exactly one protocol restart. */
 async function expectInputAdapter(device: Device): Promise<void> {
@@ -43,13 +43,7 @@ async function expectInputAdapter(device: Device): Promise<void> {
           protocol.cancelPending();
           protocol = liveProtocol(session);
           await timePhase('protocol.waitForBoot', () => protocol.waitForBoot());
-          await expect
-            .poll(async () => (await protocol.modules()).map((module) => module.name), {
-              timeout: 20_000,
-              interval: 500,
-              message: 'input probe imports core/input',
-            })
-            .toContain('test/input-probe');
+          await expectPollEmulated(session, async () => (await protocol.modules()).map((module) => module.name), (value) => expect(value).toContain('test/input-probe'), { emulatedMs: 20000, intervalMs: 500, message: 'input probe imports core/input' });
           await expectRuntimeUi(session, plan, artifacts, { afterEpoch: epoch });
           const tap = async (name: string, settleMs = 1200) => {
             const code = button(name);
@@ -74,16 +68,11 @@ async function expectInputAdapter(device: Device): Promise<void> {
               statuses.push(before);
               expect(typeof before.cf.input_irqs).toBe('number');
               await session.client.inputTurn(1, delta);
-              await expect
-                .poll(
-                  async () => {
+              await expectPollEmulated(session, async () => {
                     const after = await session.status();
                     statuses.push(after);
                     return after.cf.input_pending === 0 && Number(after.cf.input_irqs) > Number(before.cf.input_irqs);
-                  },
-                  { timeout: 8000, interval: 400, message: `panel TURN ${delta} delivered through UART` },
-                )
-                .toBe(true);
+                  }, (value) => expect(value).toBe(true), { emulatedMs: 8000, intervalMs: 400, message: `panel TURN ${delta} delivered through UART` });
             } else {
               const status = (await protocol.request(0x39, Uint8Array.of(1, delta & 255))).status;
               answers.push(status);

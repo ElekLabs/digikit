@@ -8,6 +8,7 @@ import { tap } from '@digi/regression/runtime/fx-session.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { packSynth, type SynthSpec } from '@digi/regression/runtime/synth.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
  * The MODULES page of SETTINGS > DIGIKIT tells before a selection whether a module will load (docs/plans/what-fits.md; ledger
@@ -84,7 +85,7 @@ cardRigs('MODULES page: what fits', { dsp: 'sharc', roots: [...RT, 'core/digikit
       await openDigikitMenu(async (name, settle) => press(name, Math.min(settle ?? 300, 800)));
       await presses('DOWN', 3);
       await press('YES', 1500);
-      await expect.poll(async () => (await advance(session, 100), await peek(at('DK_LOAD_N'))), { timeout: 60_000, interval: 10 }).toBe(names.length);
+      await expectPollEmulated(session, async () => (await advance(session, 100), await peek(at('DK_LOAD_N'))), (value) => expect(value).toBe(names.length), { emulatedMs: 60000, intervalMs: 10 });
       expect({ rows: await rows(), ticked: await ticked() }, 'a row for each file with its name, kind and the memory it takes; nothing is ticked').toEqual({
         rows: want,
         ticked: names.map(() => 0),

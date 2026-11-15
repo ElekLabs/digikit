@@ -44,6 +44,7 @@ SOURCE_GLOBS = (
     "packages/dkaddrmap/**",
     "packages/dksharc/**",
     "packages/dkneeds/**",
+    "packages/dkprof/**",
     "packages/dksample/**",
     "packages/dkupload/**",
     "packages/patchkit/**",

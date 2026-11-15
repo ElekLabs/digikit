@@ -33,12 +33,20 @@ pub const C_PAGE_CONSTS_OUT: &str = "sdk/include/dk/gen/page_consts.h";
 pub const C_LIMITS_OUT: &str = "sdk/include/dk/gen/limits.h";
 /// The generated C header of the status codes (`DK_E_*`), relative to the repository root.
 pub const C_STATUS_OUT: &str = "sdk/include/dk/core/status.h";
+/// The generated C header of the record kinds, relative to the repository root.
+pub const C_RECORDS_OUT: &str = "sdk/include/dk/gen/records.h";
 /// The generated C header of the sample pool numbers, relative to the repository root.
 pub const C_SAMPLE_OUT: &str = "sdk/include/dk/gen/sample.h";
 /// The generated SHARC+ include of the sample pool record layout, relative to the repository root.
 pub const SAMPLE_INC_OUT: &str = "sdk/dsp/contract/dk_sample_pool.inc";
+/// The generated register classes of the DSP contract for the rules check of `dksharc`, relative to the repository root.
+pub const RULES_RS_OUT: &str = "packages/dksharc/src/rules_table.rs";
+/// The generated document of the DSP register contract, relative to the repository root.
+pub const REGISTERS_MD_OUT: &str = "sdk/dsp/REGISTERS.md";
 /// The generated Rust format limits of the `.dkm` loader (re-exported by `dkneeds`), relative to the repository root.
 pub const LIMITS_RS_OUT: &str = "packages/dkneeds/src/gen_limits.rs";
+/// The generated static table of the runtime's in-crate services, relative to the repository root.
+pub const SERVICES_RS_OUT: &str = "modules/core/runtime/src/rs/src/gen_services.rs";
 /// The generated Python protocol numbers, relative to the repository root.
 pub const PROTO_PY_OUT: &str = "tools/device/dkproto.py";
 /// The generated Rust protocol numbers of the host client, relative to the repository root.
@@ -66,13 +74,70 @@ struct Sdk {
     protocol: Protocol,
     limits: LimitsSection,
     capacity: Capacity,
+    records: Records,
+    service: Vec<ServiceDecl>,
     settings: Settings,
     load: Load,
     sample: SampleToml,
     handle: Handle,
     import: Vec<Import>,
     page: PageToml,
+    dsp: DspToml,
 }
+/// `[dsp]` of `sdk/sdk.toml`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DspToml {
+    registers: DspRegisters,
+}
+/// `[dsp.registers]`: the register contract of module DSP code. Entries are names (`B3`), ranges (`R0-R15`) or groups (`MR`, `ASTAT`, `STKY`, `LCNTR`).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DspRegisters {
+    clobber: Vec<String>,
+    keep: Vec<String>,
+    stack: Vec<String>,
+    never_write: Vec<String>,
+    entry: DspEntry,
+}
+/// The registers of the entry convention: the entry address (free to use: both adapters restore it) and the return address (keep).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DspEntry {
+    entry: String,
+    #[serde(rename = "return")]
+    ret: String,
+}
+impl DspRegisters {
+    /// (class, rule, entries) in table order.
+    fn classes(&self) -> [(&'static str, &'static str, &Vec<String>); 4] {
+        [
+            ("clobber", "free to use", &self.clobber),
+            (
+                "keep",
+                "save before the first write, restore before every return",
+                &self.keep,
+            ),
+            (
+                "stack",
+                "the stack pointer: changes only by balanced pushes and pops (post-modify with M6 or M7, or MODIFY by a constant), holds its entry value at every return, is never loaded with another address",
+                &self.stack,
+            ),
+            (
+                "never_write",
+                "no write at all: the stock interrupt code reads these at any instruction",
+                &self.never_write,
+            ),
+        ]
+    }
+}
+/// Group names of `[dsp.registers]`: the registers `dksharc::defuse::reg_name` prints for one name of the manual.
+const REG_GROUPS: [(&str, &[&str]); 4] = [
+    ("MR", &["MRF", "MRB", "MSF", "MSB"]),
+    ("ASTAT", &["ASTATX", "ASTATY"]),
+    ("STKY", &["STKYX", "STKYY"]),
+    ("LCNTR", &["LCNTR", "CURLCNTR", "LADDR"]),
+];
 /// The page constants: `[page]` of `sdk/sdk.toml`.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -207,6 +272,39 @@ struct CapKind {
     fit: bool,
     label: Option<String>,
 }
+/// `[records]`: the record kinds of the `register` section and the resources of a module's `uses` (R7).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Records {
+    kinds: BTreeMap<String, RecKind>,
+    resources: BTreeMap<String, Resource>,
+}
+/// One in-crate service of the runtime: `[[service]]`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ServiceDecl {
+    name: String,
+    /// The type that implements `Service`, from the runtime crate's root.
+    rust: String,
+}
+/// One record kind: its number, the whole record's length (header included) and the in-crate service that owns it.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecKind {
+    id: u32,
+    len: u32,
+    service: String,
+    /// A module emits the record with `dk_record_add`.
+    #[serde(default)]
+    generic: bool,
+}
+/// One resource of a module's `uses`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Resource {
+    id: u32,
+    capacity: Option<String>,
+}
 /// The kind numbers by name.
 fn kind_ids(sdk: &Sdk) -> BTreeMap<String, u8> {
     sdk.capacity
@@ -265,6 +363,8 @@ struct FormatLimits {
     dsp_slack: u32,
     arena_hdr: u32,
     collect_bytes: u32,
+    table_magic: u32,
+    table_version: u32,
 }
 /// The format limits in file order, then the ones that come from other keys: (generated name, value).
 /// `MAX_VOICES` and `MAX_FX` are the contract maxima `machine_rows` and `fx_slots`.
@@ -283,9 +383,138 @@ fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
         ("DSP_SLACK", f.dsp_slack),
         ("ARENA_HDR", f.arena_hdr),
         ("COLLECT_BYTES", f.collect_bytes),
+        ("TABLE_MAGIC", f.table_magic),
+        ("TABLE_VERSION", f.table_version),
         ("MAX_VOICES", sdk.limits.max.machine_rows as u32),
         ("MAX_FX", sdk.limits.max.fx_slots as u32),
     ]
+}
+
+/// The record kinds and resources (`[records]`), one `KIND_`, `LEN_` and `RES_` constant each and the tables `KINDS` (kind, length,
+/// owning service) and `RESOURCES` (id, name), with `indent`. The runtime (`gen_sdk.rs`) and dkneeds (`gen_limits.rs`) carry the same text.
+fn records_consts(sdk: &Sdk, indent: &str) -> String {
+    let mut s = String::new();
+    let mut kinds: Vec<_> = sdk.records.kinds.iter().collect();
+    kinds.sort_by_key(|(_, k)| k.id);
+    for (n, k) in &kinds {
+        let _ = writeln!(s, "{indent}pub const KIND_{n}: u32 = {};", k.id);
+        let _ = writeln!(s, "{indent}pub const LEN_{n}: u32 = {:#x};", k.len);
+    }
+    let _ = writeln!(
+        s,
+        "{indent}/// Every record kind in the order of its number: (kind, record length with its header, owning service)."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const KINDS: [(u32, u32, &str); {}] = [",
+        kinds.len()
+    );
+    for (n, k) in &kinds {
+        let _ = writeln!(s, "{indent}    (KIND_{n}, LEN_{n}, {:?}),", k.service);
+    }
+    let _ = writeln!(s, "{indent}];");
+    for d in &sdk.service {
+        let own: Vec<_> = kinds.iter().filter(|(_, k)| k.service == d.name).collect();
+        let _ = writeln!(
+            s,
+            "{indent}/// The kinds of the `{}` service: (kind, record length).",
+            d.name
+        );
+        let _ = writeln!(
+            s,
+            "{indent}pub const KINDS_{}: [(u32, u32); {}] = [",
+            d.name.to_uppercase(),
+            own.len()
+        );
+        for (n, _) in &own {
+            let _ = writeln!(s, "{indent}    (KIND_{n}, LEN_{n}),");
+        }
+        let _ = writeln!(s, "{indent}];");
+    }
+    let _ = writeln!(
+        s,
+        "{indent}/// The services of `[handle] services`: the names a module's `NEEDS` may carry (hashed by `dkneeds::keys::name_hash`)."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const HANDLE_SERVICES: [&str; {}] = [",
+        sdk.handle.services.len()
+    );
+    for n in &sdk.handle.services {
+        let _ = writeln!(s, "{indent}    {n:?},");
+    }
+    let _ = writeln!(s, "{indent}];");
+    let _ = writeln!(
+        s,
+        "{indent}/// The kind names of `[records.kinds]` in lower case with their numbers: the `kind` of a `[[record]]` of a module.toml."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const KIND_NAMES: [(&str, u32); {}] = [",
+        kinds.len()
+    );
+    for (n, _) in &kinds {
+        let _ = writeln!(s, "{indent}    ({:?}, KIND_{n}),", n.to_lowercase());
+    }
+    let _ = writeln!(s, "{indent}];");
+    let generic: Vec<_> = kinds.iter().filter(|(_, k)| k.generic).collect();
+    let _ = writeln!(
+        s,
+        "{indent}/// The kinds a module emits with `dk_record_add`."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const GENERIC_KINDS: [u32; {}] = [",
+        generic.len()
+    );
+    for (n, _) in &generic {
+        let _ = writeln!(s, "{indent}    KIND_{n},");
+    }
+    let _ = writeln!(s, "{indent}];");
+    let mut res: Vec<_> = sdk.records.resources.iter().collect();
+    res.sort_by_key(|(_, r)| r.id);
+    for (n, r) in &res {
+        let _ = writeln!(s, "{indent}pub const RES_{n}: u32 = {};", r.id);
+    }
+    let _ = writeln!(
+        s,
+        "{indent}/// The resources of a module's `uses` in the order of their ids: (id, name)."
+    );
+    let _ = writeln!(
+        s,
+        "{indent}pub const RESOURCES: [(u32, &str); {}] = [",
+        res.len()
+    );
+    for (n, _) in &res {
+        let _ = writeln!(s, "{indent}    (RES_{n}, {:?}),", n.to_lowercase());
+    }
+    let _ = writeln!(s, "{indent}];");
+    s
+}
+
+/// `modules/core/runtime/src/rs/src/gen_services.rs`: the static table of the in-crate services (`[[service]]`).
+fn rust_services(sdk: &Sdk) -> String {
+    let mut s = format!("// {HEADER}\n\n");
+    s.push_str("use dkrt_abi::service::{ServiceRow, ServiceTable};\n\n");
+    s.push_str("/// The in-crate services in the order the core calls them (`[[service]]` of sdk/sdk.toml), each with the record kinds it owns.\n");
+    let _ = writeln!(
+        s,
+        "pub static SERVICES: [ServiceRow; {}] = [",
+        sdk.service.len()
+    );
+    for d in &sdk.service {
+        let _ = writeln!(
+            s,
+            "    ServiceRow::of::<crate::{}>({:?}, &dkrt_sdk::records::KINDS_{}),",
+            d.rust,
+            d.name,
+            d.name.to_uppercase()
+        );
+    }
+    s.push_str(
+        "];\n\npub const TABLE: ServiceTable = ServiceTable { rows: &SERVICES, failed: 0 };\n",
+    );
+    s
 }
 
 /// `packages/dkneeds/src/gen_limits.rs`: the format limits as `u32`. The `.dkm` header is `HEADER` here (`dkneeds::HEADER`).
@@ -295,6 +524,8 @@ fn rust_limits(sdk: &Sdk) -> String {
         let n = if n == "DKM_HEADER" { "HEADER" } else { n };
         let _ = writeln!(s, "pub const {n}: u32 = {v};");
     }
+    s.push('\n');
+    s.push_str(&records_consts(sdk, ""));
     s
 }
 /// The contract maxima of the capacity limits: `[limits.max]` of `sdk/sdk.toml`. A device's `[limits]` value (and its `[digikit]`
@@ -413,6 +644,8 @@ pub fn machine(text: &str) -> Result<Machine> {
 #[serde(deny_unknown_fields)]
 struct Runtime {
     version: String,
+    /// The runtime version that introduced the header table of a `.dkm`.
+    table: String,
 }
 /// The runtime version of a parsed file as (major, minor, patch).
 fn runtime_parts(sdk: &Sdk) -> Result<(u8, u8, u8)> {
@@ -453,6 +686,12 @@ fn pack_runtime((a, b, c): (u8, u8, u8)) -> u32 {
 }
 
 /// The runtime version of the `sdk/sdk.toml` this crate was built with, packed major << 16 | minor << 8 | patch.
+/// The runtime version that introduced the header table of a `.dkm` (`[runtime] table`), packed: the least version a packed module needs.
+pub fn table_runtime() -> u32 {
+    let sdk = parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses");
+    parse_runtime(&sdk.runtime.table).expect("sdk/sdk.toml [runtime] table")
+}
+
 pub fn embedded_runtime() -> u32 {
     let sdk = parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses");
     pack_runtime(runtime_parts(&sdk).expect("sdk/sdk.toml runtime version"))
@@ -504,6 +743,7 @@ fn parse(text: &str) -> Result<Sdk> {
     runtime_parts(&sdk)?;
     guards(&sdk)?;
     sample_checked(&sdk)?;
+    registers_checked(&sdk)?;
     let p = &sdk.protocol;
     for (i, (n, v)) in p.commands.iter().enumerate() {
         if p.commands.iter().skip(i + 1).any(|(_, w)| w == v) {
@@ -566,6 +806,51 @@ fn parse(text: &str) -> Result<Sdk> {
         if k.fit != k.label.is_some() {
             return Err(err!(
                 "{SOURCE}: capacity kind {n}: a label belongs to a fit kind and a fit kind has one"
+            ));
+        }
+    }
+    match (
+        parse_runtime(&sdk.runtime.table),
+        parse_runtime(&sdk.runtime.version),
+    ) {
+        (Ok(t), Ok(v)) if t <= v => {}
+        _ => {
+            return Err(err!(
+                "{SOURCE}: [runtime] table is not a version, or is newer than version"
+            ));
+        }
+    }
+    for (i, (n, k)) in sdk.records.kinds.iter().enumerate() {
+        if k.id == 0
+            || k.len < 8
+            || k.len % 4 != 0
+            || !sdk.service.iter().any(|d| d.name == k.service)
+            || sdk
+                .records
+                .kinds
+                .iter()
+                .skip(i + 1)
+                .any(|(_, w)| w.id == k.id)
+        {
+            return Err(err!(
+                "{SOURCE}: record kind {n}: the number is 0 or twice, the length is not a multiple of 4 from 8, or the service is not a [[service]]"
+            ));
+        }
+    }
+    for (i, (n, r)) in sdk.records.resources.iter().enumerate() {
+        if r.id == 0
+            || sdk
+                .records
+                .resources
+                .iter()
+                .skip(i + 1)
+                .any(|(_, w)| w.id == r.id)
+            || r.capacity
+                .as_ref()
+                .is_some_and(|c| !sdk.capacity.kinds.contains_key(c))
+        {
+            return Err(err!(
+                "{SOURCE}: resource {n}: the number is 0 or twice, or its capacity kind is unknown"
             ));
         }
     }
@@ -764,6 +1049,9 @@ fn rust(sdk: &Sdk) -> String {
         page_knobs_of(sdk)
     );
     s.push_str("}\n\n");
+    s.push_str("/// The record kinds of the `register` section and the resources of `uses` (`[records]`).\npub mod records {\n");
+    s.push_str(&records_consts(sdk, "    "));
+    s.push_str("}\n\n");
     s.push_str(&rust_sample_pool(sdk));
     s.push_str(&rust_settings(sdk));
     s.push_str("\npub mod proto {\n");
@@ -850,6 +1138,19 @@ fn python_proto(sdk: &Sdk) -> String {
         let _ = writeln!(s, "{n} = {v}");
     }
     s.push('\n');
+    s.push_str("# the record kinds of a .dkm ([records.kinds])\nRECORD_KIND: dict[str, int] = {\n");
+    let mut kinds: Vec<_> = sdk.records.kinds.iter().collect();
+    kinds.sort_by_key(|(_, k)| k.id);
+    for (n, k) in &kinds {
+        let _ = writeln!(s, "    {n:?}: {},", k.id);
+    }
+    s.push_str("}\n\n# the resources of a module's uses ([records.resources])\nRESOURCE: dict[str, int] = {\n");
+    let mut res: Vec<_> = sdk.records.resources.iter().collect();
+    res.sort_by_key(|(_, r)| r.id);
+    for (n, r) in &res {
+        let _ = writeln!(s, "    {n:?}: {},", r.id);
+    }
+    s.push_str("}\n\n");
     s.push_str("CMD: dict[str, int] = {\n");
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "    {n:?}: 0x{v:02X},");
@@ -920,7 +1221,19 @@ fn ts_proto(sdk: &Sdk) -> String {
     for (n, v) in format_limits(sdk) {
         let _ = writeln!(s, "export const {n} = {v};");
     }
-    s.push('\n');
+    s.push_str("\n/** The record kinds of a `.dkm` (`[records.kinds]`). */\nexport const RECORD_KIND = {\n");
+    let mut kinds: Vec<_> = sdk.records.kinds.iter().collect();
+    kinds.sort_by_key(|(_, k)| k.id);
+    for (n, k) in &kinds {
+        let _ = writeln!(s, "  {n}: {},", k.id);
+    }
+    s.push_str("} as const;\n\n/** The resources of a module's `uses` (`[records.resources]`). */\nexport const RESOURCE = {\n");
+    let mut res: Vec<_> = sdk.records.resources.iter().collect();
+    res.sort_by_key(|(_, r)| r.id);
+    for (n, r) in &res {
+        let _ = writeln!(s, "  {n}: {},", r.id);
+    }
+    s.push_str("} as const;\n\n");
     s.push_str("export const CMD = {\n");
     for (n, v) in by_value(&p.commands) {
         let _ = writeln!(s, "  {n}: {v:#04x},");
@@ -1713,6 +2026,8 @@ fn imports(sdk: &Sdk) -> Result<Vec<(&Import, Option<Sig>)>> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportInfo {
     pub service: String,
+    /// The import has a stub for an absent provider (`absent`): a module may load without it.
+    pub optional: bool,
     /// The runtime version that added it, packed major << 16 | minor << 8 | patch.
     pub since: u32,
     pub context: String,
@@ -1729,6 +2044,7 @@ pub fn import_infos() -> BTreeMap<String, ImportInfo> {
                 i.name.clone(),
                 ImportInfo {
                     service: s.clone(),
+                    optional: i.absent.is_some(),
                     since: parse_runtime(since).expect("parse checked since"),
                     context: c.clone(),
                 },
@@ -2032,6 +2348,7 @@ fn view_h(
     structs: [(&str, &str, &[CField]); 2],
     fns: &[(String, Sig, String)],
     c: &CView,
+    regs: &str,
 ) -> String {
     let mut s = format!("/* {HEADER} */\n/* sdk/include/dk/gen/{file} -- {purpose} */\n");
     if let Some(t) = &c.intro {
@@ -2048,9 +2365,11 @@ fn view_h(
         };
         c_struct(&mut s, name, comment, fields);
     }
-    if let Some(t) = &c.rules {
-        let _ = writeln!(s, "/* {} */\n", t.trim());
-    }
+    let rules = match &c.rules {
+        Some(t) => format!("{}\n{regs}", t.trim()),
+        None => regs.trim_start().to_string(),
+    };
+    let _ = writeln!(s, "/* {rules} */\n");
     for (name, sig, doc) in fns {
         let _ = writeln!(s, "/* {doc} */");
         let _ = writeln!(
@@ -2081,6 +2400,7 @@ fn machine_h(sdk: &Sdk) -> Result<String> {
         ],
         &v.fns,
         &sdk.machine.c,
+        &register_comment(sdk),
     ))
 }
 
@@ -2098,7 +2418,184 @@ fn fx_h(sdk: &Sdk) -> Result<String> {
         ],
         &v.fns,
         &sdk.fx.c,
+        &register_comment(sdk),
     ))
+}
+
+/// One name, range (`R0-R15`) or group (`MR`) of `[dsp.registers]` as register names.
+fn expand_register(spec: &str) -> std::result::Result<Vec<String>, String> {
+    if let Some((_, names)) = REG_GROUPS.iter().find(|(g, _)| *g == spec) {
+        return Ok(names.iter().map(|n| n.to_string()).collect());
+    }
+    let Some((lo, hi)) = spec.split_once('-') else {
+        return Ok(vec![spec.to_string()]);
+    };
+    let at = lo.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+    let (prefix, from, to) = (
+        &lo[..at],
+        lo[at..].parse::<u32>(),
+        hi.strip_prefix(&lo[..at]).unwrap_or(hi).parse::<u32>(),
+    );
+    match (from, to) {
+        (Ok(a), Ok(b)) if !prefix.is_empty() && a <= b => {
+            Ok((a..=b).map(|n| format!("{prefix}{n}")).collect())
+        }
+        _ => Err(format!("bad register range {spec:?}")),
+    }
+}
+
+/// The register names of a list of `[dsp.registers]` entries, in order. The one expansion of ranges and groups: every name must be one
+/// that `dksharc::defuse::reg_name` prints, and none may appear twice.
+fn expand_registers(what: &str, specs: &[String]) -> Result<Vec<String>> {
+    let known: std::collections::BTreeSet<String> = (0..dksharc::defuse_table::NUREG
+        + dksharc::defuse_table::SPECIAL_NAMES.len())
+        .map(|c| dksharc::defuse::reg_name(c as u8))
+        .collect();
+    let mut out: Vec<String> = vec![];
+    for spec in specs {
+        let names =
+            expand_register(spec).map_err(|e| err!("{SOURCE}: [dsp.registers] {what}: {e}"))?;
+        for n in names {
+            if !known.contains(&n) {
+                return Err(err!(
+                    "{SOURCE}: [dsp.registers] {what}: {n} is not a register name of dksharc"
+                ));
+            }
+            if out.contains(&n) {
+                return Err(err!("{SOURCE}: [dsp.registers] {what}: {n} twice"));
+            }
+            out.push(n);
+        }
+    }
+    Ok(out)
+}
+
+/// `[dsp.registers]` checked once at the parse: known names, no register in two classes, the entry address register in `clobber` and the
+/// return address register in no class (it is keep by the entry convention).
+fn registers_checked(sdk: &Sdk) -> Result<()> {
+    let r = &sdk.dsp.registers;
+    let mut seen: Vec<(&str, Vec<String>)> = vec![];
+    for (name, _, specs) in r.classes() {
+        let names = expand_registers(name, specs)?;
+        for (other, o) in &seen {
+            if let Some(n) = names.iter().find(|n| o.contains(n)) {
+                return Err(err!(
+                    "{SOURCE}: [dsp.registers] {n} is in {other} and in {name}"
+                ));
+            }
+        }
+        seen.push((name, names));
+    }
+    let entry = expand_registers("entry", std::slice::from_ref(&r.entry.entry))?;
+    let ret = expand_registers("entry", std::slice::from_ref(&r.entry.ret))?;
+    if let Some(n) = entry
+        .iter()
+        .find(|n| !seen.iter().any(|(c, v)| *c == "clobber" && v.contains(n)))
+    {
+        return Err(err!(
+            "{SOURCE}: [dsp.registers] {n} is the entry address register and not in clobber"
+        ));
+    }
+    if let Some(n) = ret.iter().find(|n| seen.iter().any(|(_, v)| v.contains(n))) {
+        return Err(err!(
+            "{SOURCE}: [dsp.registers] {n} is the return address register and in a class"
+        ));
+    }
+    Ok(())
+}
+
+/// The register rules as lines of the block comment of the generated C views, one line per class.
+fn register_comment(sdk: &Sdk) -> String {
+    let r = &sdk.dsp.registers;
+    let mut s = String::from("   Registers (the table is sdk/dsp/REGISTERS.md):");
+    for (name, rule, specs) in r.classes() {
+        let _ = write!(s, "\n   {name} ({rule}): {}", specs.join(", "));
+    }
+    let _ = write!(
+        s,
+        "\n   entry: {} is the entry address (it may be overwritten), {} the return address (keep).",
+        r.entry.entry, r.entry.ret
+    );
+    s
+}
+
+/// `packages/dksharc/src/rules_table.rs`: the classes as expanded register names.
+fn rules_rs(sdk: &Sdk) -> Result<String> {
+    let r = &sdk.dsp.registers;
+    let mut s = String::from(
+        "//! Generated by `patchkit gen` from sdk/sdk.toml ([dsp.registers]). Do not edit.\n//! The register classes of the DSP contract (sdk/dsp/REGISTERS.md) as the names `defuse::reg_name` prints.\n",
+    );
+    for (name, rule, specs) in r.classes() {
+        let list = expand_registers(name, specs)?
+            .iter()
+            .map(|n| format!("{n:?}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let _ = write!(
+            s,
+            "\n/// {name}: {rule}.\npub const {}: &[&str] = &[{list}];\n",
+            name.to_uppercase()
+        );
+    }
+    let _ = write!(
+        s,
+        "\n/// The register that holds the entry address (it is in clobber).\npub const ENTRY: &str = {:?};\n\n/// The register that holds the return address (it is keep).\npub const RETURN: &str = {:?};\n",
+        r.entry.entry, r.entry.ret
+    );
+    Ok(s)
+}
+
+/// `sdk/dsp/REGISTERS.md`: the table of the register contract.
+fn registers_md(sdk: &Sdk) -> String {
+    let r = &sdk.dsp.registers;
+    let mut s = format!(
+        "<!-- {HEADER} -->\n\n# DSP register contract\n\n\
+         The one register contract for module DSP code, on both devices. The table is `[dsp.registers]` in `sdk/sdk.toml`.\n\
+         `patchkit gen` writes this file, the rule comments of `sdk/include/dk/gen/machine.h` and `fx.h`, and `packages/dksharc/src/rules_table.rs`.\n\
+         The check in `dksharc::rules` runs in `patchkit build` for module code. It only warns for now.\n\n\
+         | Class | Registers | Rule |\n| --- | --- | --- |\n"
+    );
+    for (name, rule, specs) in r.classes() {
+        let _ = writeln!(s, "| {name} | `{}` | {rule} |", specs.join(", "));
+    }
+    let _ = write!(
+        s,
+        "\n## Entry\n\nThe adapter enters a module function with `{e}` = the entry address and `{t}` = the return address, and the module returns with `JUMP (M13, {t})`. `{e}` may be overwritten (both adapters restore it); `{t}` is treated as keep.\n\n\
+         ## Why never_write\n\nThe stock interrupt code reads {list} at any instruction. A save before the write and a restore after it do not help: an interrupt between the two reads the changed value. So a module does not write these registers at all.\n\n\
+         ## Names\n\nA range such as `R0-R15` stands for the registers one by one. A group stands for the registers that `dksharc` names separately: `MR` is MRF, MRB, MSF and MSB; `ASTAT` is ASTATX and ASTATY; `STKY` is STKYX and STKYY; `LCNTR` is LCNTR, CURLCNTR and LADDR (the loop registers).\n",
+        e = r.entry.entry,
+        t = r.entry.ret,
+        list = r.never_write.join(", ")
+    );
+    s
+}
+
+/// `sdk/include/dk/gen/records.h`: the record kinds (`[records.kinds]`) for `dk_record_add`.
+fn records_h(sdk: &Sdk) -> String {
+    let mut s = format!(
+        "/* {HEADER} */\n/* sdk/include/dk/gen/records.h -- the record kinds of the `register` section; a module passes a generic one to dk_record_add. */\n#ifndef DK_GEN_RECORDS_H\n#define DK_GEN_RECORDS_H\n\n"
+    );
+    let mut kinds: Vec<_> = sdk.records.kinds.iter().collect();
+    kinds.sort_by_key(|(_, k)| k.id);
+    for (n, k) in kinds {
+        let _ = writeln!(
+            s,
+            "#define DK_RECORD_KIND_{n} {}{}",
+            k.id,
+            if k.generic {
+                ""
+            } else {
+                " /* not generic: a builder writes it */"
+            }
+        );
+        let _ = writeln!(
+            s,
+            "#define DK_RECORD_LEN_{n} {} /* with the 8-byte record header */",
+            k.len
+        );
+    }
+    s.push_str("\n#endif /* DK_GEN_RECORDS_H */\n");
+    s
 }
 
 /// `sdk/include/dk/gen/page_consts.h`: the constants of `[page] consts`.
@@ -2139,10 +2636,14 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (BULK_RS_OUT.to_string(), rust_bulk(&sdk)),
         (BULK_TS_OUT.to_string(), ts_bulk(&sdk)),
         (LIMITS_RS_OUT.to_string(), rust_limits(&sdk)),
+        (SERVICES_RS_OUT.to_string(), rust_services(&sdk)),
         (C_MACHINE_VIEW_OUT.to_string(), machine_h(&sdk)?),
         (C_FX_VIEW_OUT.to_string(), fx_h(&sdk)?),
         (C_IMPORTS_OUT.to_string(), imports_h(&sdk)?),
         (C_PAGE_CONSTS_OUT.to_string(), page_consts_h(&sdk)),
+        (C_RECORDS_OUT.to_string(), records_h(&sdk)),
+        (RULES_RS_OUT.to_string(), rules_rs(&sdk)?),
+        (REGISTERS_MD_OUT.to_string(), registers_md(&sdk)),
     ])
 }
 

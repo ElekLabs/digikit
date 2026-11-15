@@ -107,8 +107,8 @@ export async function pageState(runtime: PatchedSession, plan: RuntimePlan) {
     owner: [...owner],
     sent: await word(runtime.session, base + 16),
     errors: await word(runtime.session, base + 20),
-    current: await words(44, 8),
-    dsp: await words(172, 8),
+    current: await words(36, 8),
+    dsp: await words(292, 8),
   };
 }
 

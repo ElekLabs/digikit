@@ -17,6 +17,8 @@ Rules:
   objects   The undefined symbols of the built objects of apps and content modules are SDK imports, dkrt_*, dk_ui_*,
             dk_app_* or the SHARC externs the SDK documents. A symbol never names a firmware anchor, and `[object.externs]`
             never maps one to an anchor.
+  spans     No content module and no app uses `DK_SPAN_BEGIN` or `DK_SPAN_END` (<dk/core/trace.h>, dk_trace.inc). A span is a measurement the owner of a kind's
+            dispatcher takes around its per-row call: the runtime's services and the image's stub (adapters) use them, and the runtime measures every module that way.
   apps      An app has no `[[op]]` and no `[[claim]]`: it never patches the firmware.
   self-contained
             No tracked file outside a user content module's own directory (modules/machines|fx|tools) names its id
@@ -25,7 +27,8 @@ Rules:
             its protocol).
   arrows    Inside the runtime crate (modules/core/runtime/src/rs/src), a service (services/NAME) names no other service folder and no core
             module except `crate::core_api` (the interface to the core: CoreApi, RealCore, FakeCore and the few core functions it re-exports); pure types
-            come from the crate dkrt-abi. The core reaches a service only through `handlers.rs` (`Services`, `exports`).
+            come from the crate dkrt-abi. The core reaches a service only through `handlers.rs` (`exports`) and the generated table `gen_services.rs`. A service's own
+            host tests (`tests.rs` or a `tests/` folder in the service) may name core modules: they drive the walkers and the planner over the service.
   platform  Inside the runtime crate, only `platform.rs` (the real platform, L1) and an adapter file named `fw.rs` name the firmware crate dkfw; the rest
             of the core and the services use the `Platform` trait (`dkrt-abi`). No runtime file but `platform.rs` compares the device id with a number
             (`device() == 1`): the code asks the device profile (`samples_in_store()`), whose values come from the device files. The runtime
@@ -80,6 +83,7 @@ INC_ASM = re.compile(r'^\s*\.include\s+"([^"]+)"')
 RS_FW = re.compile(r"\bdkfw\s*::|\bextern\s+crate\s+dkfw\b")
 EXTERN_DOC = re.compile(r"\.EXTERN\s+([A-Za-z_][A-Za-z0-9_]*)")
 SOURCE_SUFFIXES = {".c", ".h", ".s", ".S", ".inc", ".rs"}
+SPAN = re.compile(r"\bDK_SPAN_(?:BEGIN|END)\b")
 
 
 @dataclass(frozen=True)
@@ -362,6 +366,28 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
     return out
 
 
+def check_spans(root: Path, mods: list[Module]) -> list[Violation]:
+    """Content modules and apps do not measure spans: the dispatcher of each kind does (docs/plans/sdk.md section 9)."""
+    out = []
+    for m in mods:
+        if classify(root, m) == "core" and m.mod.get("role") != "app":
+            continue
+        for f in module_sources(m):
+            for n, line in enumerate(
+                f.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            ):
+                if SPAN.search(line):
+                    out.append(
+                        Violation(
+                            f"{rel(root, f)}:{n}",
+                            "spans",
+                            f"{m.id} uses DK_SPAN_*",
+                            "leave the measurement to the service that owns the kind: its dispatcher already takes a span around each call of a module",
+                        )
+                    )
+    return out
+
+
 def stored_objects(root: Path) -> dict[str, dict[str, Path]] | None:
     """`patchkit build --paths`: the cache entry of each object for the sources of this tree (nothing is built), by module
     directory (the resolved path, as patchkit names it). None when ROOT is not this checkout (the tests' trees) or patchkit
@@ -599,6 +625,7 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
         r = f.relative_to(src)
         text = rust_without_comments(f.read_text(encoding="utf-8"))
         own = r.parts[1] if r.parts[0] == "services" and len(r.parts) > 2 else None
+        is_test = r.name == "tests.rs" or "tests" in r.parts
         if own is None and r.parts[0] == "services":
             continue  # services/mod.rs: the list of service folders
         for m in RT_CRATE_REF.finditer(text):
@@ -623,7 +650,7 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                                 ARROW_SERVICE_HINT,
                             )
                         )
-                    elif first not in ("services", "core_api"):
+                    elif first not in ("services", "core_api") and not is_test:
                         out.append(
                             Violation(
                                 where,
@@ -632,7 +659,10 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                                 ARROW_SERVICE_HINT,
                             )
                         )
-                elif first == "services" and r.as_posix() != "handlers.rs":
+                elif first == "services" and r.as_posix() not in (
+                    "handlers.rs",
+                    "gen_services.rs",
+                ):
                     out.append(
                         Violation(
                             where,
@@ -641,7 +671,7 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                             ARROW_CORE_HINT,
                         )
                     )
-        if own is None and r.as_posix() != "handlers.rs":
+        if own is None and r.as_posix() not in ("handlers.rs", "gen_services.rs"):
             for m in RT_BARE_SERVICES.finditer(text):
                 line = text.count("\n", 0, m.start()) + 1
                 out.append(
@@ -809,6 +839,7 @@ def check(root: Path = ROOT) -> list[Violation]:
         *check_committed_objects(root, mods),
         *check_objects(root, mods),
         *check_apps(root, mods),
+        *check_spans(root, mods),
         *check_imports(root),
         *check_runtime_arrows(root),
         *check_runtime_platform(root),

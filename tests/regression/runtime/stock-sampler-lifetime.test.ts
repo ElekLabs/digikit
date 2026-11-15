@@ -9,7 +9,7 @@ import { expect, test } from 'vitest';
 import { withSession } from '../support.ts';
 import { record } from './artifacts.ts';
 import { memory, panel } from './panel.ts';
-import { pollEmulated } from './waits.ts';
+import { pollEmulated, expectPollEmulated } from './waits.ts';
 
 // Current DT2 1.17 observations in finding81. All diagnostic accesses are reads.
 const CF = { slotBlock: 0x405b5368, slotRef: 0x405b1368, slotLength: 0x405ba768, blocks: 0x405a0f64 };
@@ -151,12 +151,12 @@ async function discovery(session: Session, dk: DkSession): Promise<{ out: string
     await session.client.call('pcm.tap', { action: 'capture', path: file });
     try {
       await session.client.inputButton(button('TRIG 1'), true);
-      await expect
-        .poll(
-          async () => ((await session.client.call('pcm.tap', { action: 'report' })) as { samples: number }).samples,
-          { timeout: 60_000, interval: 250 },
-        )
-        .toBeGreaterThanOrEqual(96000);
+      await expectPollEmulated(
+        session,
+        async () => ((await session.client.call('pcm.tap', { action: 'report' })) as { samples: number }).samples,
+        (value) => expect(value).toBeGreaterThanOrEqual(96000),
+        { emulatedMs: 60000, intervalMs: 250 },
+      );
     } finally {
       await session.client.inputButton(button('TRIG 1'), false);
       await session.client.call('pcm.tap', { action: 'capture_stop' });
@@ -289,9 +289,12 @@ async function discovery(session: Session, dk: DkSession): Promise<{ out: string
     };
     const expectedA = Buffer.from(toneWav(330)).subarray(44, 108);
     const expectedB = Buffer.from(toneWav(990)).subarray(44, 108);
-    await expect
-      .poll(async () => (await slotSource())?.head.hex, { timeout: 30_000, interval: 50 })
-      .toBe(expectedA.toString('hex'));
+    await expectPollEmulated(
+      session,
+      async () => (await slotSource())?.head.hex,
+      (value) => expect(value).toBe(expectedA.toString('hex')),
+      { emulatedMs: 30000, intervalMs: 50 },
+    );
     executed.transferredSamplesLoadedIntoProject = true;
     await observe('a-ready');
     await ui.chord('FUNC', 50); // leave assignment browser
@@ -355,9 +358,12 @@ async function discovery(session: Session, dk: DkSession): Promise<{ out: string
       const after100ms = await critical('after-b-additional100ms');
       // Equal-length A and B cannot be distinguished by a ready length alone.
       // Resolve the new slot view independently of any retained old voice pointer.
-      await expect
-        .poll(async () => (await slotSource())?.head.hex, { timeout: 30_000, interval: 50 })
-        .toBe(expectedB.toString('hex'));
+      await expectPollEmulated(
+        session,
+        async () => (await slotSource())?.head.hex,
+        (value) => expect(value).toBe(expectedB.toString('hex')),
+        { emulatedMs: 30000, intervalMs: 50 },
+      );
       const readySlot = await slotSource();
       expect(readySlot).not.toBeNull();
       record(out, 'b-ready-slot', readySlot);
@@ -487,9 +493,12 @@ async function unloadEarlierWhilePlaying(session: Session, out: string, rootTitl
   await ui.tap('YES');
   await shot('slot2-browser-folder'); // a is the first row
   await ui.tap('YES');
-  await expect
-    .poll(async () => (await slotState(session, 2)).pcmHead, { timeout: 30_000, interval: 50 })
-    .toBe(expectedA);
+  await expectPollEmulated(
+    session,
+    async () => (await slotState(session, 2)).pcmHead,
+    (value) => expect(value).toBe(expectedA),
+    { emulatedMs: 30000, intervalMs: 50 },
+  );
   await leaveSamples();
 
   // Play slot 2.
@@ -515,9 +524,12 @@ async function unloadEarlierWhilePlaying(session: Session, out: string, rootTitl
   const slot2Before = await slotState(session, 2);
   const slot1Before = await slotState(session, 1);
   // The voice binds the slot at note start; the earlier note's pointer can still be there for a moment.
-  await expect
-    .poll(async () => (await voice()).readUInt32LE(0), { timeout: 10_000, interval: 50 })
-    .toBe(slot2Before.ptr);
+  await expectPollEmulated(
+    session,
+    async () => (await voice()).readUInt32LE(0),
+    (value) => expect(value).toBe(slot2Before.ptr),
+    { emulatedMs: 10000, intervalMs: 50 },
+  );
   const v0 = await voice();
   expect(v0.readUInt32LE(0), 'voice reads slot 2').toBe(slot2Before.ptr);
   expect(v0[0x1b8], 'voice active').toBe(1);

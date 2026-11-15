@@ -818,6 +818,21 @@ impl Engine {
         }
     }
 
+    /// Enable or clear the interpreter's instruction counts per PC (the `SHARC_FAST_HIST` map, `--diag hist`). It adds work to
+    /// interpreted instructions only; the tiers are not changed.
+    pub fn set_pc_hist(&mut self, enabled: bool) {
+        self.hist = enabled.then(Default::default);
+        self.refresh_diag();
+    }
+
+    /// Interpreted instructions per PC (short word), by PC; `None` when the counts are off.
+    pub fn pc_hist(&self) -> Option<Vec<(u32, u64)>> {
+        let h = self.hist.as_ref()?;
+        let mut v: Vec<(u32, u64)> = h.iter().map(|(pc, n)| (*pc, *n)).collect();
+        v.sort_unstable();
+        Some(v)
+    }
+
     /// Install (or remove) the fast tier.
     pub fn set_fast(&mut self, fast: Option<Box<dyn fast::FastTier>>) {
         self.fast_has_fallback = fast.as_ref().is_some_and(|f| f.has_fallback());

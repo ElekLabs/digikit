@@ -11,7 +11,7 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 
-from tools.device import dkneeds  # noqa: E402
+from tools.device import dkneeds, dkproto  # noqa: E402
 from tools.patchkit import (  # noqa: E402
     modroots,
     pk_device,
@@ -62,15 +62,33 @@ def test_the_header_has_no_contract_pairs(packed):
         int(a) << 16 | int(b_) << 8 | int(c)
         for a, b_, c in (since[n].split(".") for n in linked)
     )
+    # ... and at least the version that introduced the header table (`[runtime] table`): a module of the 0.7 format needs another minor
+    a, b_, c = tomllib.loads((ROOT / "sdk/sdk.toml").read_text())["runtime"][
+        "table"
+    ].split(".")
+    want = max(want, int(a) << 16 | int(b_) << 8 | int(c))
     assert int.from_bytes(b[0x30:0x34], "big") & 0x7FFFFFFF == want
 
 
 def effect_ids(dkm: bytes) -> list[int]:
-    """The effect ids of the file's keys table (the header's 0x90 pair): after the row counts and the machine keys."""
+    """The effect ids of the file's header table (the header's 0x90 pair): the keys of the effect kind in the KEYS entry (tag 3)."""
     off, size = struct.unpack_from(">II", dkm, 0x90)
-    nm, nf = struct.unpack_from(">HH", dkm, off + 6)
-    assert size == 12 + 4 * (nm + nf)
-    return list(struct.unpack_from(f">{nf}I", dkm, off + 12 + 4 * nm))
+    magic, version, entries = struct.unpack_from(">IHH", dkm, off)
+    assert (magic, version) == (dkproto.TABLE_MAGIC, dkproto.TABLE_VERSION)
+    ids: list[int] = []
+    at = off + 8
+    for _ in range(entries):
+        tag, count, length = struct.unpack_from(">HHI", dkm, at)
+        if tag == 3:
+            g = at + 8
+            for _ in range(count):
+                kind, n = struct.unpack_from(">II", dkm, g)
+                if kind == dkproto.RECORD_KIND["EFFECT"]:
+                    ids += struct.unpack_from(f">{n}I", dkm, g + 8)
+                g += 8 + 4 * n
+        at += 8 + length
+    assert at == off + size
+    return ids
 
 
 def fnv_effect_id(module: str, effect: str) -> int:

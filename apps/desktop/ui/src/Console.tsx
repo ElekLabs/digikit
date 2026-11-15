@@ -44,6 +44,8 @@ import { createNativeRuntime } from './native-runtime';
 import { createPrefs } from './prefs';
 import { pgoWarning, type BuildInfo } from './pgo-warning';
 import { createLogFollow, followSession } from './log-follow';
+import { createDkProfLoader } from './dkprof-env';
+import { createDeviceNames, createEmulatorNames } from './log-names-backend';
 import { windowShown } from './log-follow-core';
 import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import LogPanel from './LogPanel';
@@ -613,6 +615,7 @@ export default function Console(props: { host: Host }) {
     if (logOpen()) setSeenId(entries.at(-1)?.id ?? 0);
   });
   // the runtime logs of the emulator and of the device on the MIDI port chosen last (nothing is read while the emulator is paused)
+  const dkprof = createDkProfLoader(props.host);
   const logFollow = createLogFollow({
     follow: followOn,
     flashing: () => flashRunning(flashRun()),
@@ -621,11 +624,13 @@ export default function Console(props: { host: Host }) {
     emulator: {
       running: () => !!status() && !paused(),
       session: async () => followSession(await emulatorSession()),
+      names: createEmulatorNames(props.host, dkprof),
     },
     device: {
       port: lastMidiPort,
       session: async () => followSession(await lastMidiSession()),
       present: async () => (await app.env.targets.ports()).includes(lastMidiPort() ?? ''),
+      names: createDeviceNames(props.host, dkprof),
     },
   });
 

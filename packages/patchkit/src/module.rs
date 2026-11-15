@@ -49,6 +49,10 @@ pub struct Manifest {
     /// `[[fx]] id = "..."`: the same for effects (`dk_module_ctx_add_fx`).
     #[serde(default, rename = "fx")]
     pub fxs: Vec<IdRef>,
+    /// `[[record]] kind = "lfo_shape", key = 7`: a record of a generic kind (`[records.kinds]` `generic = true`) that `init` emits with `dk_record_add`, with its key (the first
+    /// word of the record's body). The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
+    #[serde(default, rename = "record")]
+    pub records: Vec<RecordKey>,
     /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
     /// builds different rows per device (DT2 has no page rows).
     #[serde(default)]
@@ -121,6 +125,14 @@ impl Manifest {
     }
 }
 
+/// An entry of `[[record]]`: the kind by its lower-case name (`dkneeds::KIND_NAMES`) and the key of one record of it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecordKey {
+    pub kind: String,
+    pub key: u32,
+}
+
 /// An entry of `[[machine]]` or `[[fx]]`: the id and an optional DSP symbol prefix (any other key is refused).
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -177,6 +189,12 @@ pub struct Uses {
     /// Payload bytes of the record block `init` commits (the `module_commit` event's `records_size`): the keys table's `record_bytes`.
     #[serde(default)]
     pub record_bytes: u16,
+    /// DSP instructions per block of one voice of the module's machines, the worst steady block `module:check` measured (the keys table's `DSP_COST_VOICE`).
+    #[serde(default)]
+    pub dsp_cost_voice: u32,
+    /// DSP instructions per block of the module's effects, summed (the keys table's `DSP_COST_FX`).
+    #[serde(default)]
+    pub dsp_cost_fx: u32,
 }
 
 /// One generated file of device data: `kind` is `rust` (constants every device agrees on, one file), `gas-shared` (the same as `.equ` lines), `gas` (a ColdFire assembler
@@ -1127,7 +1145,7 @@ mod manifest_tests {
 
     #[test]
     fn machine_fx_and_uses_are_read() {
-        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses.dt2]\nmachine_rows = 2\npage_rows = 3\nrecord_bytes = 700\n[uses.dn2]\nmachine_rows = 2\npage_rows = 4\n").unwrap();
+        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses.dt2]\nmachine_rows = 2\npage_rows = 3\nrecord_bytes = 700\ndsp_cost_voice = 6239\ndsp_cost_fx = 4200\n[uses.dn2]\nmachine_rows = 2\npage_rows = 4\n").unwrap();
         let ids = |v: &[IdRef]| v.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
         assert_eq!(ids(&m.machines), ["analog", "b-2_x"]);
         assert_eq!(ids(&m.fxs), ["fshift"]);
@@ -1137,7 +1155,9 @@ mod manifest_tests {
                 machine_rows: 2,
                 param_rows: 0,
                 page_rows: 3,
-                record_bytes: 700
+                record_bytes: 700,
+                dsp_cost_voice: 6239,
+                dsp_cost_fx: 4200
             }
         );
         assert_eq!(m.uses.for_device("dn2").page_rows, 4);

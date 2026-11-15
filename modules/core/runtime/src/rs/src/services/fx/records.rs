@@ -4,19 +4,15 @@ use super::{fxpage, fxsend};
 use dkrt_abi::dsp::{DspSec, MAX_FX};
 use dkrt_abi::mem::rd32;
 use dkrt_abi::registry::each;
-use dkrt_abi::service::{tick_phase, ApplyCtx, CapSink, CheckCtx, Claim, RowWrite, Service};
+use dkrt_abi::service::{tick_phase, ApplyCtx, CheckCtx, Claim, Declare, RowWrite, Service};
 use dkrt_sdk::*;
 
 /// The fx service.
 pub struct Fx;
 
 impl Service for Fx {
-    fn len(kind: u32) -> Option<u32> {
-        if kind == fxpage::KIND_EFFECT {
-            Some(fxpage::LEN_EFFECT)
-        } else {
-            None
-        }
+    unsafe fn declare(d: &mut Declare) {
+        d.kind(fxpage::KIND_EFFECT, fxpage::LEN_EFFECT);
     }
 
     unsafe fn check(step: u32, c: &CheckCtx) -> i32 {
@@ -76,10 +72,15 @@ impl Service for Fx {
         }
     }
 
-    unsafe fn caps(out: &mut CapSink) {
+    unsafe fn cap(kind: u8) -> Option<(u32, u32)> {
         use dkrt_sdk::proto::*;
-        out.add(CAPK_FX_SLOTS, super::dsp::fx_free_rows(), super::dsp::fx_used());
-        out.add(CAPK_SEND_SLOTS, fxsend::slots(), fxsend::used());
+        if kind == CAPK_FX_SLOTS {
+            Some((super::dsp::fx_free_rows(), super::dsp::fx_used()))
+        } else if kind == CAPK_SEND_SLOTS {
+            Some((fxsend::slots(), fxsend::used()))
+        } else {
+            None
+        }
     }
 
     unsafe fn attribute(site: u32, id: u32) -> Option<usize> {

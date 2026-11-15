@@ -6,6 +6,7 @@ import { advance } from '@digi/regression/runtime/fx-live.ts';
 import { tap } from '@digi/regression/runtime/fx-session.ts';
 import { openDigikitMenu, ofKind, readAboutRows, readSmallRing } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
  * A module whose imports belong to a module that is not in the image says which one (docs/plans/sdk-runtime-roadmap.md, "show why a module did not load").
@@ -50,12 +51,7 @@ cardRigs('a module that needs a missing module', { dsp: 'sharc', roots: [...RT, 
     // SETTINGS > DIGIKIT > ABOUT (the first row): the BOOT lines
     await openDigikitMenu(async (name, settle) => tap(session, name, Math.min(settle ?? 300, 800)));
     await tap(session, 'YES', 1500);
-    await expect
-      .poll(async () => (await advance(session, 100), (await readAboutRows(session, rig.plan)).some((row) => row === '- NEEDS USB-BULK')), {
-        timeout: 60_000,
-        interval: 10,
-      })
-      .toBe(true);
+    await expectPollEmulated(session, async () => (await advance(session, 100), (await readAboutRows(session, rig.plan)).some((row) => row === '- NEEDS USB-BULK')), (value) => expect(value).toBe(true), { emulatedMs: 60000, intervalMs: 10 });
     expect((await readAboutRows(session, rig.plan)).join('\n')).not.toContain('NO IMPORT');
 
     // BACK, then MODULES (the fourth row): RIGHT on the dashed row shows the detail line last in the side panel
@@ -63,9 +59,7 @@ cardRigs('a module that needs a missing module', { dsp: 'sharc', roots: [...RT, 
     for (let i = 0; i < 3; i++) await tap(session, 'DOWN', 200);
     await tap(session, 'YES', 1500);
     await tap(session, 'RIGHT', 1000);
-    await expect
-      .poll(async () => (await advance(session, 100), await text('DK_PANEL', 2)), { timeout: 60_000, interval: 10 })
-      .toBe('NEEDS USB-BULK');
+    await expectPollEmulated(session, async () => (await advance(session, 100), await text('DK_PANEL', 2)), (value) => expect(value).toBe('NEEDS USB-BULK'), { emulatedMs: 60000, intervalMs: 10 });
     await session.expectNoFault('usb-fast without core/usb-bulk');
   });
 });

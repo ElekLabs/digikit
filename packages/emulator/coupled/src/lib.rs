@@ -532,6 +532,13 @@ impl CoupledRuntime {
             .as_ref()
             .is_some_and(|audio| audio.handle.set_region_profile(enabled))
     }
+    /// Start (or clear and stop) the DSP profile of `sharc.profile`: per-entry dispatch costs of the fast and block tiers (needs the
+    /// engine's `region-profile` feature) and the interpreter's instruction counts per PC.
+    pub fn set_sharc_profile(&self, enabled: bool) -> bool {
+        self.audio.as_ref().is_some_and(|audio| {
+            audio.handle.set_region_profile(enabled) && audio.handle.set_pc_hist(enabled)
+        })
+    }
     /// Enable the Engine's existing execution-frequency maps. The call waits
     /// for the worker acknowledgement so later probes are ordered after it.
     pub fn set_execution_profile(&self, enabled: bool) -> bool {

@@ -11,6 +11,7 @@ import { DEBUG_MODULE, installModules, installWithDebug, moduleArtifact } from '
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { ofKind, readSmallRing, RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 const text = (words: number[]) =>
   String.fromCharCode(...words.flatMap((w) => [w >>> 24, (w >>> 16) & 255, (w >>> 8) & 255, w & 255]).filter(Boolean));
@@ -52,12 +53,7 @@ async function expectWithDebugModule(runtime: PatchedSession): Promise<void> {
   const modules = await dk.modules();
   const probe = modules.find((m) => m.name === 'digikit/probe')!;
   expect(modules.map((m) => m.name)).toEqual(['digikit/debug', 'digikit/probe']);
-  await expect
-    .poll(async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), {
-      timeout: 60_000,
-      interval: 1000,
-    })
-    .toBe(true);
+  await expectPollEmulated(session, async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), (value) => expect(value).toBe(true), { emulatedMs: 60000, intervalMs: 1000 });
   const log = await dk.readLog();
   const first = (kind: number) => log.find((e) => e.kind === kind);
   expect(first(LOG_KIND.BOOT_START), 'the boot events were handed over').toBeDefined();
@@ -222,12 +218,7 @@ async function expectEarlyModuleLog(runtime: PatchedSession): Promise<void> {
     ['digikit/remote', DEBUG_MODULE].map((id) => ({ id, artifact: moduleArtifact(device, id) })),
   );
   expect((await dk.modules()).map((m) => m.name)).toEqual(['digikit/remote', 'digikit/debug']);
-  await expect
-    .poll(async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), {
-      timeout: 60_000,
-      interval: 1000,
-    })
-    .toBe(true);
+  await expectPollEmulated(session, async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), (value) => expect(value).toBe(true), { emulatedMs: 60000, intervalMs: 1000 });
   const log = await dk.readLog();
   const line = log.find((e) => e.kind === LOG_KIND.MOD_LOG && text(e.args.slice(0, 4)).startsWith('remote registere'));
   expect(line, 'the log line of the module that loaded before the debug module').toBeDefined();

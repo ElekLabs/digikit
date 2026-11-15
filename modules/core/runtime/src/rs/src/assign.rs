@@ -58,7 +58,7 @@ pub fn map_used() -> u32 {
 
 /// The machine keys of the `.dkm` at `path` (at most 8, the count returned): reads the file into the staging buffer, so it runs before the first
 /// load. A file that is missing, torn or not a `.dkm` has none (its load reports the error).
-unsafe fn keys_of(path: *const u8, out: &mut [u32; 8]) -> usize {
+unsafe fn keys_of(k: usize, path: *const u8, out: &mut [u32; 8]) -> usize {
     let found = match store::find(path) {
         Ok(f) => f,
         Err(_) => return 0,
@@ -66,7 +66,10 @@ unsafe fn keys_of(path: *const u8, out: &mut [u32; 8]) -> usize {
     if store::load_to_stage(&found) != OK {
         return 0;
     }
-    collect::machine_keys(core::slice::from_raw_parts(store::stage() as *const u8, found.size as usize), out)
+    let file = core::slice::from_raw_parts(store::stage() as *const u8, found.size as usize);
+    // the boot planner keeps the header table of the file it has just read (one read of each file serves both)
+    crate::plan::capture(k, file);
+    collect::machine_keys(file, out)
 }
 
 /// Assign the numbers of every machine of the selected modules. Call once, at the start of the boot load, with the record the boot started from.
@@ -76,10 +79,11 @@ pub unsafe fn plan(rec: &Record) {
     a.n = 0;
     a.map = clean(&rec.map);
     // the machines of the selection, in load order
+    crate::plan::reset();
     let mut k = 0;
     while k < rec.count as usize {
         let mut keys = [0u32; 8];
-        let n = keys_of(rec.paths[k].as_ptr(), &mut keys);
+        let n = keys_of(k, rec.paths[k].as_ptr(), &mut keys);
         let mut i = 0;
         while i < n && a.n < MAX_KEYS {
             a.idx[a.n] = k as u32;
