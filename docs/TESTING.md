@@ -1166,7 +1166,7 @@ import `@digi/sharc-rig-kit/pins`). A hash alone never sets a pin.
 
 `exact`: the pin also needs the SHA-256 of the analysed float32 words (the fingerprint differences are listed all the same, or
 "only bits differ"). Use it only where the test proves identical output: the two `freqshift` state-independence cases
-(`exact = true` on the `same-as` check). The machine note pins (`equiv-note.toml`) and the device pins are tolerant: a refactor that keeps
+(`exact = true` on the `same-as` check) and the device pin `equiv-dn2-set` (exact RECIPS output, finding 102; written with `--exact`). The machine note pins (`equiv-note.toml`) and `equiv-dt2-sine` are tolerant: a refactor that keeps
 the sound within tolerance passes without a re-pin.
 
 **Rig pins**: `tests/rig/fingerprint/<key>.json` (key: `rigKey`). A `same-as` check with a v2 file is compared with its tolerances;

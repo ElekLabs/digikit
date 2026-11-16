@@ -387,9 +387,6 @@ importers:
       '@digi/dk-session':
         specifier: workspace:*
         version: link:../../packages/dk-session
-      '@digi/sharc-rig-kit':
-        specifier: workspace:*
-        version: link:../../packages/sharc-rig-kit
       '@digi/test-support':
         specifier: workspace:*
         version: link:../../packages/test-support

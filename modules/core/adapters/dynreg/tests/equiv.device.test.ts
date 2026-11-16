@@ -22,7 +22,7 @@ const SCENARIOS: Equiv[] = [
     trigFrame: 7000,
     voices: 2,
     ignoreRunMachines: ['DynSyn', 'Sine'],
-    // onset 400, 12000 frames (DN2 1.12, note 60, 261.65 Hz); approved by Em 2026-11-01 as a hash (exact RECIPS, finding 102)
+    // onset 400, 12000 frames (DN2 1.12, note 60, 261.65 Hz); exact pin (exact RECIPS output, finding 102): write it with `pin-cli.ts write --exact`
     pcmPin: pcmPinFile(import.meta.dirname, 'equiv-dn2-set'),
   },
 ];
