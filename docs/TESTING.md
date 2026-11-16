@@ -61,6 +61,7 @@ iteration checks do not replace this gate. `mise run test:plan` explains task se
 | SHARC core or transpiler | regenerate the cores, then `test:changed` |
 | Emulator crates | `test:changed`; the crates' Rust tests |
 | PCM pins (`tests/scenarios/*.json`) | only with Em's approval |
+| Rig and device PCM pins (fingerprints) | from the numeric report of a capture; a sound change goes to Em ("PCM pins") |
 
 ## Commands
 
@@ -809,8 +810,9 @@ The machine note pins of analog, bd, pd and pluck are `tests/rig/equiv-note.toml
 
 #### Classifying a changed pin (fingerprint, report, plots)
 
-The `sha256` of a `same-as` check stays the strict gate: bit-exact. Next to it each pinned case has a fingerprint in `tests/rig/fingerprint/<key>.json`
-(plain numbers: peak, onset sample, RMS per 32-sample block, 64 log-spaced band levels from 40 Hz to 22 kHz; no audio). `<key>` is
+A `same-as` check is gated by the pin's fingerprint with its tolerances, or by the `sha256` (bit-exact) when the check has `exact = true` or the pin is a v1
+fingerprint (format and tolerances: "PCM pins"). Each pinned case has a fingerprint in `tests/rig/fingerprint/<key>.json`
+(plain numbers; v1: peak, onset sample, RMS per 32-sample block, 64 log-spaced band levels from 40 Hz to 22 kHz; no audio; v2 adds more). `<key>` is
 `<module>.<device>.<case name>` in lower case (`rigKey` in `packages/sharc-rig-kit/src/fingerprint.ts`). Writing a pin (`DIGI_RIG_PIN=1`, above) writes the
 fingerprint and the local cache `out/rig/<key>/ref.f32` (the pinned output; not committed; `out/` is shared by the worktrees, so keys name module, device and case).
 
@@ -1133,9 +1135,60 @@ To clear the Nx cache: `pnpm nx:pilot reset`.
 
 ## PCM pins
 
-PCM pins in `tests/scenarios/*.json` change only with Em's approval. `tests/sharc/integration/test_sharc_golden.py`
-hashes six SHARC core outputs: a refactor keeps them; an intended change updates them with
+PCM pins in `tests/scenarios/*.json` (Python readers: `expect_sha256`) change only with Em's approval.
+`tests/sharc/integration/test_sharc_golden.py` hashes six SHARC core outputs: a refactor keeps them; an intended change updates them with
 `--update` and says why.
+
+Rig pins and device pins are numeric fingerprints compared with tolerances by one comparer (`packages/sharc-rig-kit/src/pcmpin.ts`,
+import `@digi/sharc-rig-kit/pins`). A hash alone never sets a pin.
+
+**Fingerprint v2** (plain numbers, no audio; the reader still accepts v1, comparing its onset, peak, bands and block levels):
+
+| Field | Meaning |
+| --- | --- |
+| `rate`, `channels`, `frames`, `window_frames` | the format; `window_frames` is the number of frames analysed from the onset (device pins: 12000 = 0.25 s; rig pins: null, the whole output) |
+| `onset` | first frame with a sample above 1e-6 |
+| `peak_db` | peak, dBFS |
+| `stereo` | `identical` (L = R) and `max_diff` (largest abs(L-R)); two channels only |
+| `rms_db` | level of each 10 ms window, dBFS |
+| `bandHz`, `bandDb` | 64 log-spaced band levels, 40 Hz to 22 kHz, of the channel mix |
+| `periodic` | only when the fundamental and harmonics 1..6 hold 90 % of the energy: `pitch` {`hz`, `midi`} from the parabolic peak of the zero-padded Hann spectrum, `crest` (peak over RMS) and `harmonics_db` (2..6, dB re the fundamental) |
+| `block`, `block_rms` | rig pins: RMS per 32-sample block (the sample classifier below reads it) |
+| `tolerance` | the fields below that differ from the defaults |
+| `exact` | `{ sha256 }`: the pin is exact |
+
+**Tolerances** (defaults tight enough that a change you can hear fails): `onset` 0 frames, `level_db` 0.1 (peak and each 10 ms window),
+`band_db` 0.5 (bands more than `band_floor_db` = 60 dB under the loudest band are skipped), `pitch_cents` 1, `harmonic_db` 1
+(harmonics under `harmonic_floor_db` = -80 dB in both signals are skipped), `crest_pct` 0.5, `rms_floor_db` -90 (a 10 ms window under it in both is skipped).
+`compare(pin, capture)` returns the differences in plain words and an empty list when the capture is within tolerance:
+`pitch +14.0 cents`, `level -3.1 dB from 200 ms to 250 ms`, `harmonic 3 rose to -38 dB`, `onset moved 32 frames`,
+`bands moved: 102-20942 Hz -2.0 dB`, `L and R differ now`. A test fails with that list.
+
+`exact`: the pin also needs the SHA-256 of the analysed float32 words (the fingerprint differences are listed all the same, or
+"only bits differ"). Use it only where the test proves identical output: the two `freqshift` state-independence cases
+(`exact = true` on the `same-as` check). The machine note pins (`equiv-note.toml`) and the device pins are tolerant: a refactor that keeps
+the sound within tolerance passes without a re-pin.
+
+**Rig pins**: `tests/rig/fingerprint/<key>.json` (key: `rigKey`). A `same-as` check with a v2 file is compared with its tolerances;
+`exact = true` on the check, a v1 file or no file keeps the hash as the gate. The `sha256` line of the toml stays as the record of the last pin.
+`DIGI_RIG_PIN=1` (above) writes the v2 file; a tolerance in the old file stays, and an exact check stores the hash in it.
+
+**Device pins**: `modules/core/adapters/dynreg/tests/pins/<case>.pcm.json` (`pcmPinFile`), checked by `defineEquiv` over 12000 stereo frames
+from the onset (`checkCapture`). Cases of a plain sine (`sine: { note }`) also assert properties that hold whatever the pin says:
+pitch within 5 cents of the note, crest factor within 1 % of sqrt(2), harmonics under -60 dB, level steady within 0.5 dB.
+
+**Failure and report**: a failed or missing pin prints the differences and the full report, expected beside measured (format, onset, peak,
+stereo, level range, loudest bands, pitch, crest factor, harmonics), and writes `<case>.plot.png` (the window and the pin's band curve) and
+`<case>.window.wav` beside the capture (`out/runs/...` of the case for a device pin, `out/rig/<key>/plot.png` and `out.wav` for a rig pin) for listening.
+
+**Approving a pin**: read the report; Claude approves a pin that states the fixture's own facts (for the DT2 sine: 261.67 Hz = MIDI 60, crest
+1.420, harmonics -119 dB, peak -23.9 dBFS, steady level, L = R) and a change that keeps the sound; a change of the sound goes to Em. Then write it from the capture
+(the WAV the device test keeps beside the run, `run.wav`, or the window WAV) with the CLI:
+
+```sh
+node packages/sharc-rig-kit/src/pin-cli.ts show  --wav CAPTURE.wav --pin PIN.json   # report and differences, exit 1 on a difference
+node packages/sharc-rig-kit/src/pin-cli.ts write --wav CAPTURE.wav --pin PIN.json [--window 12000] [--exact] [--tol pitch_cents=3,level_db=0.2]
+```
 
 ## Desktop UI preview
 

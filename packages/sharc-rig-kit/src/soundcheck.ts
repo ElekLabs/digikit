@@ -28,15 +28,13 @@ import {
 import { signalBlock } from './checks.ts';
 import {
   classify,
-  fingerprint,
   fingerprintFile,
-  readFingerprint,
   readRef,
   rigKey,
-  writeFingerprint,
   writeRef,
   cacheDir,
 } from './fingerprint.ts';
+import { asV1, compare, measure, readPin, writePin } from './pcmpin.ts';
 import { plotPng, writePng, writeWav } from './plot.ts';
 import { REC, RECORDS, f2w, nw } from './context.ts';
 import { PLANE_L, PLANE_R, TOKEN, publish, writePlanes } from './samplepool.ts';
@@ -387,6 +385,14 @@ function signal(t: Trace, c: Check): number[] {
   return slice(t.out.map(part), c.blocks);
 }
 
+/** Writes `out.wav` and `plot.png` of a rig output that differs from its pin into `out/rig/<key>/`; returns the line that names them. */
+function rigArtifacts(key: string, x: readonly number[], pinBands: readonly number[], verdict: string): string {
+  const out = cacheDir(key);
+  writeWav(path.join(out, 'out.wav'), x);
+  writePng(path.join(out, 'plot.png'), plotPng(key, `PIN DIFFERS  ${verdict}`, x, readRef(key), pinBands));
+  return `plot and WAV: ${out}/plot.png, out.wav`;
+}
+
 /** The first message of a check that fails, or null. */
 export function evaluate(t: Trace, c: Check, dir: string, key?: string): string | null {
   const x = (): number[] => signal(t, c);
@@ -431,11 +437,21 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
         : `the largest difference to ${String(c.file)} is ${d} (limit ${num(c, 'atol')})`;
     }
     case 'same-as': {
+      // Tolerant pin (fingerprint v2, `exact` not set): the fingerprint with its tolerances decides. Exact pin, a v1 fingerprint or none: the hash decides.
       const h = wordsHash(x());
+      const pin = key ? readPin(fingerprintFile(dir, key)) : null;
+      const exact = c.exact === true || (pin?.version === 2 && pin.exact !== undefined);
+      if (pin?.version === 2 && !exact) {
+        const diffs = compare(pin, measure(x(), { blockRms: true }).fp);
+        if (diffs.length === 0) return null;
+        return `${diffs.join('; ')}\n  ${rigArtifacts(key!, x(), pin.bandDb, diffs[0]!)}`;
+      }
       if (h === String(c.sha256)) return null;
       const mismatch = `the words hash is ${h}, the pin is ${String(c.sha256)}`;
       if (!key) return mismatch;
-      return `${mismatch}\n  ${classify(x(), readRef(key), readFingerprint(fingerprintFile(dir, key))).line}`;
+      const diffs = pin?.version === 2 ? compare(pin, measure(x(), { blockRms: true }).fp) : [];
+      const more = diffs.length ? `\n  fingerprint: ${diffs.join('; ')}` : pin?.version === 2 ? '\n  fingerprint: equal within tolerance (only bits differ)' : '';
+      return `${mismatch}${more}\n  ${classify(x(), readRef(key), asV1(pin)).line}`;
     }
     case 'instructions': {
       const b =
@@ -649,7 +665,9 @@ export async function pinRigFile(module: string, file: string, o: RunOptions = {
         const x = signal(t, k);
         const h = wordsHash(x);
         const key = rigKey(module, devices[0]!, c.name);
-        writeFingerprint(fingerprintFile(dir, key), fingerprint(x));
+        const file = fingerprintFile(dir, key);
+        // the tolerance of the pin that is replaced stays; `exact = true` on the check keeps the hash in the pin
+        writePin(file, measure(x, { blockRms: true }).fp, { exactSha256: k.exact === true ? h : undefined });
         writeRef(key, x);
         hashes.push(h);
         lines.push(`${c.name} [${devices[0]}] ${h}`);
@@ -689,15 +707,19 @@ export async function reportRigFile(module: string, file: string, o: RunOptions 
       const x = signal(t, pins[0]!);
       const ref = readRef(key);
       const same = wordsHash(x) === String(pins[0]!.sha256);
-      const v = classify(x, ref, readFingerprint(fingerprintFile(dir, key)));
+      const pin = readPin(fingerprintFile(dir, key));
+      const v = classify(x, ref, asV1(pin));
+      const diffs = pin?.version === 2 ? compare(pin, measure(x, { blockRms: true }).fp) : [];
+      const tolerant = pin?.version === 2 && pin.exact === undefined && pins[0]!.exact !== true;
+      const verdict = tolerant ? (diffs.length ? `PIN DIFFERS: ${diffs.join('; ')}` : 'within the tolerances') : '';
       const out = cacheDir(key);
       writeWav(path.join(out, 'out.wav'), x);
       if (ref) writeWav(path.join(out, 'ref.wav'), ref);
       writePng(
         path.join(out, 'plot.png'),
-        plotPng(`${module} ${device} ${c.name}`, `${same ? 'PIN MATCHES' : 'PIN DIFFERS'}  ${v.line}`, x, ref),
+        plotPng(`${module} ${device} ${c.name}`, `${same ? 'PIN MATCHES' : 'PIN DIFFERS'}  ${v.line}`, x, ref, pin?.bandDb ?? null),
       );
-      lines.push(`${key}: ${same ? 'pin matches' : 'PIN DIFFERS'}; ${v.line}\n  ${path.join(out, 'plot.png')}`);
+      lines.push(`${key}: ${same ? 'pin matches' : 'PIN DIFFERS'}; ${v.line}${verdict ? `\n  fingerprint: ${verdict}` : ''}\n  ${path.join(out, 'plot.png')}`);
     } catch (e) {
       lines.push(`${key}: not run: ${(e as Error).message}`);
     }

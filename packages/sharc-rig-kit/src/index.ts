@@ -6,6 +6,7 @@ export * from './context.ts';
 export * from './fx.ts';
 export * from './machine.ts';
 export * from './ops.ts';
+export * from './pcmpin.ts';
 export * from './place.ts';
 export * from './pool.ts';
 export * from './prng.ts';
