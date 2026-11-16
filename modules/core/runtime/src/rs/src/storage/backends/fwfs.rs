@@ -154,20 +154,6 @@ pub(crate) unsafe fn stat(path: &[u8]) -> Result<Stat, i32> {
     })
 }
 
-/// The firmware file system's half of `storage_adapter::read_head`.
-pub(crate) unsafe fn read_head(path: &[u8], out: &mut [u8; 64]) -> Result<(), i32> {
-    let mut z = [0u8; 258];
-    fs_key(path, &mut z)?;
-    let fs = fs_table()?;
-    fs_with(&fs, &z, |fs, handle| {
-        let size = fs_size(fs, handle)?;
-        if size < 64 {
-            return Err(E_READ);
-        }
-        fs_read_exact(fs, handle, out.as_mut_ptr(), 64).map_err(|_| E_READ)
-    })
-}
-
 /// The firmware file system's half of `storage_adapter::stat_head`.
 pub(crate) unsafe fn stat_head(path: &[u8], out: &mut [u8; 64]) -> Result<(Stat, usize), i32> {
     let mut z = [0u8; 258];
@@ -189,29 +175,6 @@ pub(crate) unsafe fn stat_head(path: &[u8], out: &mut [u8; 64]) -> Result<(Stat,
         }
         fs_read_exact(fs, handle, out.as_mut_ptr(), 64).map_err(|_| E_READ)?;
         Ok((st, 64))
-    })
-}
-
-/// The firmware file system's half of `storage_adapter::read_range`.
-pub(crate) unsafe fn read_range(path: &[u8], offset: u32, out: &mut [u8]) -> Result<usize, i32> {
-    let mut z = [0u8; 258];
-    fs_key(path, &mut z)?;
-    let fs = fs_table()?;
-    fs_with(&fs, &z, |fs, handle| {
-        let size = fs_size(fs, handle)?;
-        if offset >= size || out.is_empty() {
-            return Ok(0);
-        }
-        let mut skip = offset as usize;
-        let mut junk = [0u8; 256];
-        while skip != 0 {
-            let step = core::cmp::min(skip, junk.len());
-            fs_read_exact(fs, handle, junk.as_mut_ptr(), step)?;
-            skip -= step;
-        }
-        let n = core::cmp::min(out.len(), (size - offset) as usize);
-        fs_read_exact(fs, handle, out.as_mut_ptr(), n)?;
-        Ok(n)
     })
 }
 

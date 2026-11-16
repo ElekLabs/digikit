@@ -38,6 +38,7 @@ pub unsafe extern "C" fn dkrt_tick() {
     intro::ui_pass();
     boot::ui_pass();
     admin_cmds::restart_poll();
+    crate::storage::backends::plusdrive::tick();
     store_writer::tick();
     fault::install();
     crate::link::pump();

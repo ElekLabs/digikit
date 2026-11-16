@@ -22,10 +22,6 @@ fn dir_stat() -> Stat {
 
 // ---- store route -------------------------------------------------------------------------------------------------------------
 
-/// 512 bytes, 16-byte aligned: the buffer of one store sector read.
-#[repr(C, align(16))]
-struct Sector([u8; 512]);
-
 #[repr(C, align(16))]
 struct Scratch([u8; 4096]);
 #[repr(C, align(16))]
@@ -60,24 +56,9 @@ pub(crate) unsafe fn stat(root: u32, f: &Facts, path: &[u8]) -> Result<Stat, i32
     fwfs::stat(path)
 }
 
-/// The first 64 bytes. A file under 64 bytes (0 included) or a short read is `E_READ` on both routes.
-pub(crate) unsafe fn read_head(root: u32, f: &Facts, path: &[u8], out: &mut [u8; 64]) -> Result<(), i32> {
-    let r = prepare(root, f, path)?;
-    if path.is_empty() {
-        return Err(E_SEL_PATH);
-    }
-    if r == Backend::Store {
-        let mut z = [0u8; PATH_BYTES];
-        store_key(root, path, &mut z)?;
-        let file = crate::store::find(z.as_ptr())?;
-        return crate::store::read_head(&file, out);
-    }
-    fwfs::read_head(path, out)
-}
-
-/// `stat` and `read_head` with one lookup: the store route does one `store::find` and reads the head of that entry; the DT2 route opens the file once, takes
+/// `stat` and the head of the file with one lookup: the store route does one `store::find` and reads the head of that entry; the DT2 route opens the file once, takes
 /// its size and metadata and reads 64 bytes. The root itself (empty path) gives its `Stat` and 0 head bytes; a folder does not open on either route. The head
-/// count of a success is 64 (a file under 64 bytes is `E_READ`, as in `read_head`). Errors are those of `read_head`.
+/// count of a success is 64 (a file under 64 bytes is `E_READ`, as in `store::read_head`).
 pub(crate) unsafe fn stat_head(root: u32, f: &Facts, path: &[u8], out: &mut [u8; 64]) -> Result<(Stat, usize), i32> {
     let r = prepare(root, f, path)?;
     if path.is_empty() {
@@ -92,50 +73,6 @@ pub(crate) unsafe fn stat_head(root: u32, f: &Facts, path: &[u8], out: &mut [u8;
         return Ok((st, 64));
     }
     fwfs::stat_head(path, out)
-}
-
-/// Read up to `out.len()` bytes from `offset`. Store: one lookup that also leases the file's extent (`store::lease`, owner 0) for the whole read, so a commit
-/// cannot give its sectors to another file between two sector reads; the lease ends on every exit path. Then one store sector read at a time
-/// (`store::read_sector` takes the store lock for each sector, the same lock every store read takes, and waits for it as `store_writer::acquire` does);
-/// the table's file hash is not checked (only `read_all` does). DT2: the firmware file system has no seek in the device table, so the bytes before `offset` are read and dropped (cost grows
-/// with `offset`).
-pub(crate) unsafe fn read_range(root: u32, f: &Facts, path: &[u8], offset: u32, out: &mut [u8]) -> Result<usize, i32> {
-    let r = prepare(root, f, path)?;
-    if path.is_empty() {
-        return Err(E_SEL_PATH);
-    }
-    if r == Backend::Store {
-        let mut z = [0u8; PATH_BYTES];
-        store_key(root, path, &mut z)?;
-        let mut file = dkrt_sdk::DkrtStoreFile { first: 0, size: 0, sha: [0; 32] };
-        let id = crate::store::lease(0, z.as_ptr(), &mut file);
-        if id <= 0 {
-            return Err(if id == 0 { E_NOT_FOUND } else { id });
-        }
-        let result = (|| {
-            if offset >= file.size || out.is_empty() {
-                return Ok(0);
-            }
-            let n = core::cmp::min(out.len(), (file.size - offset) as usize);
-            let mut sector = Sector([0; 512]);
-            let mut done = 0usize;
-            while done < n {
-                let at = offset as usize + done;
-                let within = at % 512;
-                let take = core::cmp::min(512 - within, n - done);
-                let rc = crate::store::read_sector(file.first + (at / 512) as u32, sector.0.as_mut_ptr());
-                if rc != OK {
-                    return Err(rc);
-                }
-                out[done..done + take].copy_from_slice(&sector.0[within..within + take]);
-                done += take;
-            }
-            Ok(n)
-        })();
-        crate::store::dkrt_store_unlease(id);
-        return result;
-    }
-    fwfs::read_range(path, offset, out)
 }
 
 /// Read the whole file into `dst` (`cap` bytes); the size. A file over `cap` is `E_TOO_BIG` and nothing is written. Store: `store::read_file` (checks the

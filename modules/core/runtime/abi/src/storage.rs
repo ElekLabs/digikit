@@ -65,26 +65,16 @@ pub trait Storage {
     fn path_max(&self, root: u32) -> u32;
     /// Kind, size and hash of `path` (empty: the root itself, a `Dir`). A directory below the root and a missing path give `E_NOT_FOUND`.
     unsafe fn stat(&self, root: u32, path: &[u8]) -> Result<Stat, i32>;
-    /// The first 64 bytes of a file. An empty path is `E_SEL_PATH`; a missing path or a directory `E_NOT_FOUND`; a file under 64 bytes (0 included) `E_READ`.
-    unsafe fn read_head(&self, root: u32, path: &[u8], out: &mut [u8; 64]) -> Result<(), i32>;
-    /// `stat` and `read_head` of a file with one lookup (one find or open). The root (empty path) gives its `Stat` and 0 head bytes; for a file, `out` holds
-    /// the first 64 bytes and the count is 64. Errors are those of `read_head`, except that the empty path is the root.
+    /// `stat` and the first 64 bytes of a file with one lookup (one find or open). The root (empty path) gives its `Stat` and 0 head bytes; for a file, `out`
+    /// holds the first 64 bytes and the count is 64. A missing path or a directory is `E_NOT_FOUND`; a file under 64 bytes (0 included) `E_READ`.
     unsafe fn stat_head(
         &self,
         root: u32,
         path: &[u8],
         out: &mut [u8; 64],
     ) -> Result<(Stat, usize), i32>;
-    /// Read up to `out.len()` bytes from `offset`; the count read (0 at or past the end). Errors of the path are those of `read_head`.
-    unsafe fn read_range(
-        &self,
-        root: u32,
-        path: &[u8],
-        offset: u32,
-        out: &mut [u8],
-    ) -> Result<usize, i32>;
     /// Read a whole file into `dst`, which holds `cap` bytes; the file size. The caller takes the buffer from the arena after `stat`; a file larger than `cap`
-    /// gives `E_TOO_BIG` and writes nothing. Errors of the path are those of `read_head`.
+    /// gives `E_TOO_BIG` and writes nothing. An empty path is `E_SEL_PATH`; a missing path or a directory `E_NOT_FOUND`.
     unsafe fn read_all(&self, root: u32, path: &[u8], dst: *mut u8, cap: u32) -> Result<u32, i32>;
     /// Bytes of listing state for `root`; the caller provides a block of at least this size, 16-byte aligned (an arena block), for the whole listing. The
     /// block starts with a small header the provider writes (a route tag): the caller must not touch it.

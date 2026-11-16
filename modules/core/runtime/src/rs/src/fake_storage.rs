@@ -134,26 +134,12 @@ pub(crate) fn answer<S: Storage>(s: &S, case: &Row) -> String {
         match case["call"].as_str() {
             "path_max" => s.path_max(root).to_string(),
             "stat" => s.stat(root, &path).map_or_else(err_name, |st| kind(&st)),
-            "read_head" => match s.read_head(root, &path, &mut out) {
-                Ok(()) => {
-                    assert_eq!(out.to_vec(), ramp(64), "{}: the head is the ramp", case["id"]);
-                    "ok".to_string()
-                }
-                Err(e) => err_name(e),
-            },
             "stat_head" => s.stat_head(root, &path, &mut out).map_or_else(err_name, |(st, n)| {
                 if n == 64 {
                     assert_eq!(out.to_vec(), ramp(64), "{}: the head is the ramp", case["id"]);
                 }
                 std::format!("{} head={n}", kind(&st))
             }),
-            "read_range" => {
-                let mut buf = std::vec![0xaau8; num("len") as usize];
-                s.read_range(root, &path, num("offset"), &mut buf).map_or_else(err_name, |n| {
-                    assert_eq!(buf[..n], ramp(num("offset") as usize + n)[num("offset") as usize..], "{}: the bytes are the ramp", case["id"]);
-                    std::format!("n={n}")
-                })
-            }
             "read_all" => {
                 let cap = num("cap") as usize;
                 let mut buf = std::vec![0xeeu8; cap];

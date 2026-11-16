@@ -22,61 +22,60 @@ use dkrt_sdk::proto::*;
 use dkrt_sdk::store::lease::{self, Leases};
 use dkrt_sdk::store::{self, Edit, Entry, Hdr, Io, Layout, Table, KIND_DIR, KIND_FILE};
 pub use super::lock::*;
-use super::route::root_route;
 use dkrt_sdk::{CARD_TOO_SMALL, E_BUSY, E_CONTEXT, E_CONTRACT, E_EXISTS, E_NOT_FOUND, OK};
 
 /// Largest piece of one SDK write: `store::MAX_WRITE_SECTORS` sectors, the largest card command of core/sdhc-large (the firmware's block write
 /// splits a piece into 64 KiB commands itself when the module is not in the image). The SDK path writes from the caller's buffer, so this needs no
 /// scratch (the SysEx path stays at `MAX_CHUNK`, the size of its body region).
-const WRITE_PIECE: usize = store::MAX_WRITE_SECTORS as usize * 512;
+pub(crate) const WRITE_PIECE: usize = store::MAX_WRITE_SECTORS as usize * 512;
 
 // ---- the session --------------------------------------------------------------------------------------------------------------
 
-const NONE: u8 = 0;
+pub(crate) const NONE: u8 = 0;
 pub const SYSEX: u8 = 1;
 pub const SDK: u8 = 2;
 
 #[repr(C)]
-struct Up {
+pub(crate) struct Up {
     /// `NONE`, `SYSEX` or `SDK`: who holds the one write session.
-    kind: u8,
-    have_last: bool,
+    pub(crate) kind: u8,
+    pub(crate) have_last: bool,
     /// The SDK session's owner (source index of the module whose I/O step created it) and handle.
-    owner: u8,
-    have_want: bool,
-    handle: i32,
+    pub(crate) owner: u8,
+    pub(crate) have_want: bool,
+    pub(crate) handle: i32,
     /// The I/O job that opened the SDK session (`io::step_job`): the session ends with it.
-    job: u32,
+    pub(crate) job: u32,
     /// The block clock (1500 a second) at the last BEGIN or write: an idle session expires (`tick`).
-    last: u32,
-    path: [u8; 160],
-    size: u32,
+    pub(crate) last: u32,
+    pub(crate) path: [u8; 160],
+    pub(crate) size: u32,
     /// The expected hash slot (BEGIN's, or `hash4` of `file_create`); valid when `have_want`.
-    sha: [u8; 32],
+    pub(crate) sha: [u8; 32],
     /// The hash of the bytes received so far (not fed when `skip_rx`).
-    run: Hash32,
+    pub(crate) run: Hash32,
     /// Lever A (`speed::HASH_ONCE`, decided at BEGIN): the received bytes are not hashed; the close's card read-back is the only hash and is compared with
     /// the expected one (`have_want`).
-    skip_rx: bool,
+    pub(crate) skip_rx: bool,
     /// The session writes the +Drive through `core/plusdrive-write` (DT2 samples root): no store lock, no table, the adapter holds the file.
-    pd: bool,
+    pub(crate) pd: bool,
     /// Next expected byte offset.
-    next: u32,
-    last_off: u32,
-    last_len: u32,
+    pub(crate) next: u32,
+    pub(crate) last_off: u32,
+    pub(crate) last_len: u32,
     /// First sector of the file's extent, relative to the store (a gap of the store at BEGIN; 0 for a file with no data).
-    start: u32,
+    pub(crate) start: u32,
     /// What BEGIN found for the commit (`Hint`).
-    hint: Hint,
+    pub(crate) hint: Hint,
     /// The file is closed as a pending file (`DK_FILE_DEFER`), not named in the table at once.
-    defer: bool,
+    pub(crate) defer: bool,
 }
 
 /// The table's place that BEGIN found for the commit of the session. It is used only when the commit sees the same header (every commit changes
 /// `seq`, so any other writer in between makes it differ) and the same kept-out extents (a lease, the capacity knob or the file's extent that
 /// changed): then the table, the extents and the size of the table are those BEGIN looked at, so the gap BEGIN found is what a new search gives.
 #[derive(Clone, Copy)]
-struct Hint {
+pub(crate) struct Hint {
     valid: bool,
     h: Hdr,
     extra: [(u32, u32); EXTRA_MAX],
@@ -113,9 +112,9 @@ static mut UP: Up = Up {
     hint: NO_HINT,
     defer: false,
 };
-static mut NEXT_HANDLE: i32 = 0;
+pub(crate) static mut NEXT_HANDLE: i32 = 0;
 
-fn up() -> &'static mut Up {
+pub(crate) fn up() -> &'static mut Up {
     unsafe { &mut *addr_of_mut!(UP) }
 }
 
@@ -157,20 +156,19 @@ pub static mut DKRT_SESSION_IDLE: u32 = 0;
 const IDLE_BLOCKS: u32 = 20 * 1500;
 
 #[cfg(not(test))]
-unsafe fn now() -> u32 {
+pub(crate) unsafe fn now() -> u32 {
     crate::fw_blocks().unwrap_or(0)
 }
 #[cfg(test)]
 pub static mut TEST_NOW: u32 = 0;
 #[cfg(test)]
-unsafe fn now() -> u32 {
+pub(crate) unsafe fn now() -> u32 {
     TEST_NOW
 }
 
 /// UI task, once per pass: a write session (SysEx or SDK) with no BEGIN or write for 20 s is dropped (its extent was never in the table) and logged.
 /// Skipped while the store lock is held (a write is in progress) and when the block clock is not there.
 pub unsafe fn tick() {
-    pd_tick();
     pend_tick();
     let u = up();
     if u.kind == NONE {
@@ -180,7 +178,7 @@ pub unsafe fn tick() {
     if crate::fw_blocks().is_none() {
         return;
     }
-    if u.pd && pd_busy() {
+    if u.pd && read_volatile(addr_of!(PD_BUSY)) {
         return; // an adapter call is running in the I/O task
     }
     let knob = read_volatile(addr_of!(DKRT_SESSION_IDLE));
@@ -218,6 +216,32 @@ pub fn retire(owner: u8) {
         i += 1;
     }
     lease_drop_owner(owner);
+}
+
+/// An adapter call is running (the I/O task, or the UI task in `pd_tick`): the adapter has one set of state and runs one call at a time.
+pub(crate) static mut PD_BUSY: bool = false;
+/// The adapter holds a staged file that the runtime no longer tracks (a session dropped by idle expiry, job end or unload): `pd_tick` aborts it.
+pub(crate) static mut PD_DIRTY: bool = false;
+
+/// Drop an SDK session that nobody ends any more; a +Drive session leaves a staged file that `pd_tick` removes.
+fn drop_sdk(u: &mut Up) {
+    if u.pd {
+        unsafe { write_volatile(addr_of_mut!(PD_DIRTY), true) };
+    }
+    u.kind = NONE;
+}
+
+/// An SDK result: E_BUSY tells the I/O task that the step met a busy store, so that it sleeps a moment before it runs a step that returns DK_IO_MORE.
+pub(crate) fn busy(r: i32) -> i32 {
+    if r == E_BUSY {
+        crate::io::note_busy();
+    }
+    r
+}
+
+/// A file call of the SDK front end: the owner's last call, from which the idle time of its pending files counts.
+pub(crate) unsafe fn note_owner_call() {
+    pf().last = now();
 }
 
 // ---- test knobs ---------------------------------------------------------------------------------------------------------------
@@ -526,7 +550,7 @@ static mut PEND: Pending = Pending {
     retrying: false,
 };
 
-fn pf() -> &'static mut Pending {
+pub(crate) fn pf() -> &'static mut Pending {
     unsafe { &mut *addr_of_mut!(PEND) }
 }
 
@@ -547,7 +571,7 @@ fn pend_extents(buf: &mut [(u32, u32); EXTRA_MAX], mut n: usize) -> usize {
 }
 
 /// Pending files of `owner`.
-fn pend_count(owner: u8) -> i32 {
+pub(crate) fn pend_count(owner: u8) -> i32 {
     let p = pf();
     let mut n = 0;
     let mut i = 0;
@@ -617,7 +641,7 @@ fn room_needed(n: usize, bytes: u32, size: u32) -> bool {
 
 /// A deferred create of a file of `size` bytes: when the pending files are at the limit (16 files) or would pass 16 MiB with this one, commit them first.
 /// An error (or leftovers that stay pending, E_BUSY) is the create's result, before any data is sent. The caller holds the store lock.
-unsafe fn make_room(b: &Bufs, size: u32) -> i32 {
+pub(crate) unsafe fn make_room(b: &Bufs, size: u32) -> i32 {
     let p = pf();
     if !room_needed(p.n, p.bytes(), size) {
         return OK;
@@ -900,7 +924,7 @@ pub fn handle() -> i32 {
 }
 
 /// Is the open session the one of `kind` that the caller owns?
-fn mine(kind: u8, owner: u8, handle: i32) -> bool {
+pub(crate) fn mine(kind: u8, owner: u8, handle: i32) -> bool {
     let u = up();
     u.kind == kind && (kind == SYSEX || (u.owner == owner && u.handle == handle))
 }
@@ -1280,497 +1304,6 @@ pub unsafe fn delete(b: &Bufs, path: *const u8, drop_sysex: bool) -> i32 {
     r
 }
 
-// ---- the SDK front end (`file_*`, api 1.10) -----------------------------------------------------------------------------------
-
-/// `DK_FILES_*` of `<dk/platform/files.h>`.
-pub(crate) const ROOT_SAMPLES: u32 = 1;
-pub(crate) const ROOT_STORE: u32 = 2;
-/// `DK_FILE_REPLACE` of `<dk/platform/file.h>`.
-pub const FILE_REPLACE: u32 = 1;
-/// `DK_FILE_DEFER`: the file is verified at close and named in the table at the next commit of pending files.
-pub const FILE_DEFER: u32 = 2;
-/// A store path with its root prefix: at most `store::PATH_MAX` bytes and the NUL.
-const FULL_MAX: usize = 168;
-
-/// The SDK calls run in an I/O step only: the running task is the I/O task and a step is running. The owner is the module whose job it is.
-unsafe fn sdk_owner() -> Result<u8, i32> {
-    match crate::io::step_owner() {
-        Some(o) => {
-            pf().last = now(); // the owner's last file call: the idle time of the pending files counts from here
-            Ok(o)
-        }
-        None => Err(E_CONTEXT),
-    }
-}
-
-/// An SDK result: E_BUSY tells the I/O task that the step met a busy store, so that it sleeps a moment before it runs a step that returns DK_IO_MORE.
-fn busy(r: i32) -> i32 {
-    if r == E_BUSY {
-        crate::io::note_busy();
-    }
-    r
-}
-
-/// `root`/`path` as one path in `full` (the store's: `store::path_ok`; the +Drive's: the same rules without a root prefix). `pd` is set for the
-/// DT2 samples root, which the +Drive adapter serves. `E_CONTRACT`: no such root; `E_PATH`: no NUL in 160 bytes, or the path breaks the rules, or
-/// (+Drive) it starts in the adapter's staging folder. Returns the length.
-unsafe fn sdk_path(root: u32, path: *const u8, full: &mut [u8; FULL_MAX], pd: &mut bool) -> Result<usize, i32> {
-    let (prefix, via_pd) = root_route(&PLATFORM, root)?;
-    *pd = via_pd;
-    if path.is_null() {
-        return Err(E_PATH);
-    }
-    let mut n = 0;
-    while n < 160 && *path.add(n) != 0 {
-        n += 1;
-    }
-    if n >= 160 {
-        return Err(E_PATH);
-    }
-    zero(full.as_mut_ptr(), FULL_MAX);
-    copy(full.as_mut_ptr(), prefix.as_ptr(), prefix.len());
-    copy(full.as_mut_ptr().add(prefix.len()), path, n);
-    match store::path_ok(full.as_ptr(), FULL_MAX) {
-        Some(l) => {
-            if *pd && pd_staging(full.as_ptr(), l) {
-                return Err(E_PATH);
-            }
-            Ok(l)
-        }
-        None => Err(E_PATH),
-    }
-}
-
-/// `file_create`: a write session for a new file; the handle (> 0) or a status. `hash4`: null, or the expected `hash | 1`, big-endian.
-/// `flags`: `FILE_REPLACE` or 0.
-pub unsafe fn sdk_create(root: u32, path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32 {
-    let owner = match sdk_owner() {
-        Ok(o) => o,
-        Err(e) => return e,
-    };
-    if flags & !(FILE_REPLACE | FILE_DEFER) != 0 {
-        return E_CONTRACT;
-    }
-    let mut full = [0u8; FULL_MAX];
-    let mut pd = false;
-    let pl = match sdk_path(root, path, &mut full, &mut pd) {
-        Ok(l) => l,
-        Err(e) => return e,
-    };
-    if pd {
-        return pd_create(owner, full.as_ptr(), size, hash4, flags & FILE_REPLACE); // the +Drive names its files at close
-    }
-    let want = if hash4.is_null() {
-        None
-    } else {
-        let mut w = [0u8; 32];
-        copy(w.as_mut_ptr(), hash4, 4);
-        Some(w)
-    };
-    if !acquire() {
-        return busy(E_BUSY);
-    }
-    let mut free = 0;
-    if flags & FILE_DEFER != 0 {
-        let m = make_room(&sdk_bufs(), size);
-        if m != OK {
-            unlock();
-            return busy(m);
-        }
-    }
-    let r = begin(&sdk_bufs(), SDK, owner, full.as_ptr(), pl, size, want, flags & FILE_REPLACE == 0, &mut free);
-    unlock();
-    if r != OK {
-        return busy(r);
-    }
-    up().defer = flags & FILE_DEFER != 0;
-    handle()
-}
-
-/// `dk_files_commit`: name the calling module's pending files in one commit. The DT2 samples root: finish the adapter's table rebuild.
-pub unsafe fn sdk_commit() -> i32 {
-    let owner = match sdk_owner() {
-        Ok(o) => o,
-        Err(e) => return e,
-    };
-    if !acquire() {
-        return busy(E_BUSY);
-    }
-    let r = commit_pending(&sdk_bufs(), Some(owner));
-    unlock();
-    if r != OK {
-        return busy(r);
-    }
-    if !PLATFORM.samples_in_store() && pd_present() {
-        if up().pd || !pd_enter() {
-            return busy(E_BUSY); // a +Drive file is open, or the adapter is in a call
-        }
-        let r = pd_commit();
-        pd_leave();
-        return r;
-    }
-    OK
-}
-
-/// `dk_files_pending`: the calling module's pending files.
-pub unsafe fn sdk_pending() -> i32 {
-    match sdk_owner() {
-        Ok(o) => pend_count(o),
-        Err(e) => e,
-    }
-}
-
-/// `file_write`: `len` bytes of `buf` (16-byte aligned) at `offset`, the next byte, in pieces of `WRITE_PIECE`. The store lock is taken once for the
-/// whole call: `E_BUSY` only when it could not be taken, before anything was written. A status, 0 when all went in.
-pub unsafe fn sdk_write(h: i32, offset: u32, buf: *const u8, len: u32) -> i32 {
-    let owner = match sdk_owner() {
-        Ok(o) => o,
-        Err(e) => return e,
-    };
-    if buf.is_null() || (buf as usize) & 15 != 0 {
-        return E_CONTRACT;
-    }
-    if up().pd {
-        return pd_write(owner, h, offset, buf, len);
-    }
-    if !acquire() {
-        return busy(E_BUSY);
-    }
-    let mut done = 0u32;
-    let mut r = OK;
-    while done < len && r == OK {
-        let n = if len - done > WRITE_PIECE as u32 { WRITE_PIECE as u32 } else { len - done };
-        r = write(&sdk_bufs(), SDK, owner, h, offset.wrapping_add(done), buf.add(done as usize) as *mut u8, n, false);
-        done += n;
-    }
-    unlock();
-    r
-}
-
-/// `file_close`: end and commit; `out` (4 bytes, may be null) gets the device's file hash.
-pub unsafe fn sdk_close(h: i32, out: *mut u8) -> i32 {
-    let owner = match sdk_owner() {
-        Ok(o) => o,
-        Err(e) => return e,
-    };
-    if up().pd {
-        return pd_close(owner, h, out);
-    }
-    if !acquire() {
-        return busy(E_BUSY);
-    }
-    let r = close(&sdk_bufs(), SDK, owner, h, out);
-    unlock();
-    r
-}
-
-pub unsafe fn sdk_abort(h: i32) -> i32 {
-    let owner = match sdk_owner() {
-        Ok(o) => o,
-        Err(e) => return e,
-    };
-    if up().pd {
-        return pd_abort(owner, h);
-    }
-    if !acquire() {
-        return busy(E_BUSY);
-    }
-    let r = abort(SDK, owner, h);
-    unlock();
-    r
-}
-
-pub unsafe fn sdk_delete(root: u32, path: *const u8) -> i32 {
-    if let Err(e) = sdk_owner() {
-        return e;
-    }
-    let mut full = [0u8; FULL_MAX];
-    let mut pd = false;
-    if let Err(e) = sdk_path(root, path, &mut full, &mut pd) {
-        return e;
-    }
-    if pd {
-        return pd_delete(full.as_ptr());
-    }
-    if !acquire() {
-        return busy(E_BUSY);
-    }
-    let r = delete(&sdk_bufs(), full.as_ptr(), false);
-    unlock();
-    busy(r)
-}
-
-
-// ---- the +Drive route (DT2 samples root, `core/plusdrive-write`) --------------------------------------------------------------
-
-extern "C" {
-    // Optional symbols of the adapter (`dkrt_pdw.h`; `[object] optional` in module.toml): 0 when it is not in the image.
-    fn dkpw_version() -> u32;
-    fn dkpw_begin(path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32;
-    fn dkpw_write(buf: *const u8, len: u32) -> i32;
-    fn dkpw_close(hash_out: *mut u8) -> i32;
-    fn dkpw_abort();
-    fn dkpw_delete(path: *const u8) -> i32;
-    fn dkpw_recover(out: *mut u32) -> i32;
-    fn dkpw_commit() -> i32;
-    fn dkpw_staging() -> *const u8;
-}
-
-/// An adapter call is running (the I/O task, or the UI task in `pd_tick`): the adapter has one set of state and runs one call at a time.
-static mut PD_BUSY: bool = false;
-/// The adapter holds a staged file that the runtime no longer tracks (a session dropped by idle expiry, job end or unload): `pd_tick` aborts it.
-static mut PD_DIRTY: bool = false;
-/// The adapter may hold a staged file (`dkpw_begin` succeeded and no close or abort since).
-static mut PD_ACTIVE: bool = false;
-/// Test knob: when not 0, the adapter stops dead at that step of the next +Drive write (`dkrt_pdw.h`), as a power cut would; 0 at every boot.
-#[no_mangle]
-pub static mut DKRT_PD_CUT: u32 = 0;
-/// The boot recovery of the staging folder ran.
-static mut PD_RECOVERED: bool = false;
-/// The staging folder may exist: the adapter keeps it for a whole upload session. `pd_tick` removes it (the adapter's recovery call removes an
-/// empty folder) once no write session has run for `PD_STAGE_IDLE` blocks.
-static mut PD_STAGE: bool = false;
-/// Block clock at the last start or end of a +Drive write session.
-static mut PD_STAGE_AT: u32 = 0;
-/// 2 s (1500 blocks a second): longer than the gap between the files of one upload, short enough that the folder is gone soon after it.
-const PD_STAGE_IDLE: u32 = 2 * 1500;
-
-fn pd_present() -> bool {
-    StagedWriter::present(&PLATFORM)
-}
-
-/// Take the adapter for one call while no write session is open (the UI pass). The session test and the claim of the adapter are one step under
-/// the irq mask, so a `pd_create` that claims the session meanwhile finds the adapter busy and gives up.
-fn pd_enter_idle() -> bool {
-    let sr = crate::irq_mask();
-    let ok = unsafe { !read_volatile(addr_of!(PD_BUSY)) && up().kind == NONE };
-    if ok {
-        unsafe { write_volatile(addr_of_mut!(PD_BUSY), true) };
-    }
-    crate::irq_restore(sr);
-    ok
-}
-
-/// Take the adapter for one call. False: another call is running.
-fn pd_enter() -> bool {
-    let sr = crate::irq_mask();
-    let free = unsafe { !read_volatile(addr_of!(PD_BUSY)) };
-    if free {
-        unsafe { write_volatile(addr_of_mut!(PD_BUSY), true) };
-    }
-    crate::irq_restore(sr);
-    free
-}
-
-fn pd_leave() {
-    unsafe { write_volatile(addr_of_mut!(PD_BUSY), false) };
-}
-
-fn pd_busy() -> bool {
-    unsafe { read_volatile(addr_of!(PD_BUSY)) }
-}
-
-/// Drop an SDK session that nobody ends any more; a +Drive session leaves a staged file that `pd_tick` removes.
-fn drop_sdk(u: &mut Up) {
-    if u.pd {
-        unsafe { write_volatile(addr_of_mut!(PD_DIRTY), true) };
-    }
-    u.kind = NONE;
-}
-
-/// Is `full` (`l` bytes) the adapter's staging folder or inside it?
-unsafe fn pd_staging(full: *const u8, l: usize) -> bool {
-    let st = dkpw_staging();
-    let mut n = 0;
-    while *st.add(n) != 0 {
-        n += 1;
-    }
-    // `staging` is the folder name with its leading '/': the path has none, so compare from the second byte
-    let name = st.add(1);
-    let m = n - 1;
-    if l < m {
-        return false;
-    }
-    let mut i = 0;
-    while i < m {
-        if *full.add(i) != *name.add(i) {
-            return false;
-        }
-        i += 1;
-    }
-    l == m || *full.add(m) == b'/'
-}
-
-/// UI task, once per pass: remove the staged file of a dropped session, and run the staging recovery once after the filesystem is up.
-unsafe fn pd_tick() {
-    if PLATFORM.samples_in_store() || !pd_present() {
-        return;
-    }
-    if read_volatile(addr_of!(PD_DIRTY)) && pd_enter_idle() {
-        dkpw_abort();
-        write_volatile(addr_of_mut!(PD_DIRTY), false);
-        write_volatile(addr_of_mut!(PD_ACTIVE), false);
-        write_volatile(addr_of_mut!(PD_STAGE_AT), now());
-        pd_leave();
-    }
-    // The upload session is over: remove the empty staging folder. `pd_enter_idle` holds the adapter and checks that no write session is open.
-    let idle = read_volatile(addr_of!(PD_STAGE)) && now().wrapping_sub(read_volatile(addr_of!(PD_STAGE_AT))) >= PD_STAGE_IDLE;
-    if (!read_volatile(addr_of!(PD_RECOVERED)) || idle) && pd_enter_idle() {
-        let mut out = [0u32; 4];
-        let r = dkpw_recover(out.as_mut_ptr());
-        pd_leave();
-        if r >= 0 {
-            write_volatile(addr_of_mut!(PD_STAGE), false);
-            write_volatile(addr_of_mut!(PD_RECOVERED), true);
-            if out[0] != 0 || out[1] != 0 || out[2] != 0 || out[3] != 0 {
-                // renamed into place, deleted, our leftovers that stayed, entries that are not ours (left alone)
-                crate::dlog::ev(dkrt_sdk::logk::UPLOAD, 0, [0xb7, out[0], out[1], out[2], out[3]]);
-            }
-        }
-    }
-}
-
-/// The adapter's deferred table rebuild (`dkpw_commit`); the caller holds the adapter (`pd_enter`).
-unsafe fn pd_commit() -> i32 {
-    dkpw_commit()
-}
-
-/// Claim the one write session for the +Drive. `E_BUSY`: a session is open or the store is in use.
-unsafe fn pd_create(owner: u8, path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32 {
-    if !pd_present() {
-        return E_CONTRACT;
-    }
-    if !read_volatile(addr_of!(PD_RECOVERED)) {
-        return busy(E_BUSY); // the boot recovery of the staging folder has not run yet
-    }
-    if !acquire() {
-        return busy(E_BUSY);
-    }
-    let u = up();
-    if u.kind != NONE {
-        unlock();
-        return busy(E_BUSY);
-    }
-    // the claim is made before the adapter call (which can take long): a SysEx BEGIN meanwhile finds an SDK session and says E_BUSY
-    u.pd = true;
-    u.size = size;
-    u.next = 0;
-    u.owner = owner;
-    NEXT_HANDLE = NEXT_HANDLE.wrapping_add(1) & 0x7fff;
-    u.handle = NEXT_HANDLE + 1;
-    u.job = crate::io::step_job();
-    u.last = now();
-    u.kind = SDK;
-    unlock();
-    if !pd_enter() {
-        u.kind = NONE;
-        u.pd = false;
-        return busy(E_BUSY);
-    }
-    if read_volatile(addr_of!(PD_ACTIVE)) {
-        dkpw_abort(); // a staged file that no session owns
-        write_volatile(addr_of_mut!(PD_ACTIVE), false);
-    }
-    let r = dkpw_begin(path, size, hash4, flags | (read_volatile(addr_of!(DKRT_PD_CUT)) << 8));
-    if r == OK {
-        write_volatile(addr_of_mut!(PD_ACTIVE), true);
-    }
-    // the adapter may have created the folder, also when the BEGIN failed
-    write_volatile(addr_of_mut!(PD_STAGE), true);
-    write_volatile(addr_of_mut!(PD_STAGE_AT), now());
-    pd_leave();
-    if r != OK {
-        u.kind = NONE;
-        u.pd = false;
-        return busy(r);
-    }
-    u.last = now();
-    u.handle
-}
-
-unsafe fn pd_write(owner: u8, h: i32, offset: u32, buf: *const u8, len: u32) -> i32 {
-    if !mine(SDK, owner, h) {
-        return E_STATE;
-    }
-    let u = up();
-    if offset != u.next {
-        return E_OFFSET;
-    }
-    let end = offset as u64 + len as u64;
-    if end > u.size as u64 || (len & 511 != 0 && end != u.size as u64) {
-        return E_LENGTH;
-    }
-    if len == 0 {
-        return OK;
-    }
-    if !pd_enter() {
-        return busy(E_BUSY);
-    }
-    let r = dkpw_write(buf, len);
-    pd_leave();
-    if r == OK {
-        u.last = now();
-        u.next = end as u32;
-    }
-    r
-}
-
-unsafe fn pd_close(owner: u8, h: i32, out: *mut u8) -> i32 {
-    if !mine(SDK, owner, h) {
-        return E_STATE;
-    }
-    if !pd_enter() {
-        return busy(E_BUSY);
-    }
-    let u = up();
-    let r = if u.next != u.size {
-        dkpw_abort();
-        E_LENGTH
-    } else {
-        dkpw_close(out)
-    };
-    write_volatile(addr_of_mut!(PD_ACTIVE), false);
-    write_volatile(addr_of_mut!(PD_STAGE_AT), now());
-    pd_leave();
-    u.kind = NONE;
-    u.pd = false;
-    if r != OK {
-        // a failed close can leave a journal and a staged file (a rename that failed after the destination was deleted): the UI pass runs the
-        // recovery again before the next file is accepted
-        write_volatile(addr_of_mut!(PD_RECOVERED), false);
-    }
-    r
-}
-
-unsafe fn pd_abort(owner: u8, h: i32) -> i32 {
-    if !mine(SDK, owner, h) {
-        return E_STATE;
-    }
-    if !pd_enter() {
-        return busy(E_BUSY);
-    }
-    dkpw_abort();
-    write_volatile(addr_of_mut!(PD_ACTIVE), false);
-    write_volatile(addr_of_mut!(PD_STAGE_AT), now());
-    pd_leave();
-    let u = up();
-    u.kind = NONE;
-    u.pd = false;
-    OK
-}
-
-unsafe fn pd_delete(path: *const u8) -> i32 {
-    if !pd_present() {
-        return E_CONTRACT;
-    }
-    if is_open() || !read_volatile(addr_of!(PD_RECOVERED)) || !pd_enter() {
-        return busy(E_BUSY);
-    }
-    let r = dkpw_delete(path);
-    pd_leave();
-    r
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2014,13 +1547,6 @@ mod tests {
             pend_clear();
             assert!(!pf().flush);
         }
-    }
-
-    #[test]
-    fn the_sdk_accepts_the_defer_flag_and_nothing_else() {
-        assert_eq!(FILE_DEFER & FILE_REPLACE, 0);
-        assert_eq!((FILE_REPLACE | FILE_DEFER) & !(FILE_REPLACE | FILE_DEFER), 0);
-        assert_eq!(PENDING_MAX, 16);
     }
 
     #[test]

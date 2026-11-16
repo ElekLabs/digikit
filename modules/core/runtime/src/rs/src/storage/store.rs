@@ -224,6 +224,37 @@ pub unsafe fn seen() -> Option<(u32, u32)> {
     STORE_SEEN
 }
 
+/// What a listing of a prefix includes: `All` is every table entry (folders, empty files, paths up to the store's 159 bytes: the SysEx LIST, which a host
+/// tool shows whole); `Modules` is what the loader and the module scan want (files with data, a path that fits the 64 bytes of `DkrtStoreEntry`).
+/// `Storage::list` (`storage_adapter`) is the directory view of the same table and keeps its resumable cursor.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Filter {
+    All,
+    Modules,
+}
+
+/// Does the table entry `e` (its path first) belong to the listing of `prefix` (`plen` bytes, no NUL) under `filter`? The one rule of the listers.
+pub unsafe fn listed(e: *const u8, prefix: *const u8, plen: usize, filter: Filter) -> bool {
+    let len = store::path_len(e);
+    if len < plen {
+        return false;
+    }
+    if filter == Filter::Modules {
+        let en = store::entry_of(e);
+        if en.kind != KIND_FILE || en.size == 0 || len >= 64 {
+            return false;
+        }
+    }
+    let mut i = 0;
+    while i < plen {
+        if *e.add(i) != *prefix.add(i) {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
 /// `list(prefix, out, max)`: the files whose path starts with `prefix` (NUL-terminated, e.g. `modules/`), in path order, at most `max`
 /// into `out`; returns how many, or a negative code (`E_NOT_FOUND`: no store). A path that does not fit 63 bytes, a folder and an empty file are
 /// left out. A commit of an upload running at the same time makes the list start again (it is one header's table).
@@ -248,18 +279,11 @@ unsafe fn list_unlocked(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -
         let t = open()?;
         let mut n = 0u32;
         let r = store::scan(&io, &lay, &t.h, stage(), STAGE_BYTES, |_, e| {
-            let en = store::entry_of(e);
-            let len = store::path_len(e);
-            if en.kind != KIND_FILE || en.size == 0 || len >= 64 || len < plen {
+            if !listed(e, prefix, plen, Filter::Modules) {
                 return true;
             }
-            let mut i = 0;
-            while i < plen {
-                if *e.add(i) != *prefix.add(i) {
-                    return true;
-                }
-                i += 1;
-            }
+            let en = store::entry_of(e);
+            let len = store::path_len(e);
             if n >= max {
                 return false;
             }

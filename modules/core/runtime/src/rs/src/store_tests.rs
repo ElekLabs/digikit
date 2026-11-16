@@ -19,6 +19,7 @@ use crate::platform::{rd32, wr32, ProfileGuard};
 use crate::store::TEST_LAYOUT;
 use crate::store_cmds::{self, CLEAR_MAGIC};
 use crate::storage::route::root_route;
+use crate::storage::sdk_files as sf;
 use crate::store_writer::{self as sw};
 use crate::test_lock::LOCK;
 use crate::transport::{buffer, BODY_AT, DKRT_UPLOAD_LAST, RBODY};
@@ -304,7 +305,7 @@ fn in_step<R>(f: impl FnOnce() -> R) -> R {
 /// `file_create`: the handle or a status.
 fn sdk_open(root: u32, path: &str, size: usize, flags: u32) -> i32 {
     let z = zpath(path);
-    in_step(|| unsafe { sw::sdk_create(root, z.as_ptr(), size as u32, null(), flags) })
+    in_step(|| unsafe { sf::sdk_create(root, z.as_ptr(), size as u32, null(), flags) })
 }
 
 /// `file_create`, `file_write`, `file_close`: the first status that is not OK (the handle counts as OK).
@@ -317,19 +318,19 @@ fn sdk_put(root: u32, path: &str, bytes: &[u8], flags: u32) -> i32 {
         return h;
     }
     in_step(|| unsafe {
-        let r = sw::sdk_write(h, 0, buf.0.as_ptr(), bytes.len() as u32);
+        let r = sf::sdk_write(h, 0, buf.0.as_ptr(), bytes.len() as u32);
         if r != OK {
-            sw::sdk_abort(h);
+            sf::sdk_abort(h);
             return r;
         }
         let mut out = [0u8; 4];
-        sw::sdk_close(h, out.as_mut_ptr())
+        sf::sdk_close(h, out.as_mut_ptr())
     })
 }
 
 fn sdk_delete(root: u32, path: &str) -> i32 {
     let z = zpath(path);
-    in_step(|| unsafe { sw::sdk_delete(root, z.as_ptr()) })
+    in_step(|| unsafe { sf::sdk_delete(root, z.as_ptr()) })
 }
 
 const SAMPLES: u32 = dkrt_sdk::files::SAMPLES;
@@ -419,7 +420,7 @@ fn an_abort_leaves_nothing_and_a_later_end_has_no_session() {
     // an SDK session aborts the same way
     let h = sdk_open(STORE, "cases/b", 1000, 0);
     assert!(h > 0 && sw::is_open());
-    assert_eq!(in_step(|| unsafe { sw::sdk_abort(h) }), OK);
+    assert_eq!(in_step(|| unsafe { sf::sdk_abort(h) }), OK);
     assert!(!sw::is_open());
     assert_eq!(held().len(), 1);
 }
@@ -432,7 +433,7 @@ fn an_sdk_file_lists_and_replaces_only_with_the_replace_flag() {
     assert_eq!(held()["cases/a"], (3000, slot(&a)));
     assert_eq!(sdk_put(STORE, "cases/a", &pattern(10, 3), 0), dkrt_sdk::E_EXISTS, "a second create of the path is refused");
     assert_eq!(held()["cases/a"], (3000, slot(&a)), "and changes nothing");
-    assert_eq!(sdk_put(STORE, "cases/a", &pattern(10, 3), sw::FILE_REPLACE), OK);
+    assert_eq!(sdk_put(STORE, "cases/a", &pattern(10, 3), sf::FILE_REPLACE), OK);
     assert_eq!(held()["cases/a"], (10, slot(&pattern(10, 3))));
     assert!(!sw::is_open());
 }
@@ -443,11 +444,11 @@ fn an_sdk_file_lists_and_replaces_only_with_the_replace_flag() {
 fn deferred_files_are_pending_until_committed_and_then_listed_with_their_hashes() {
     let _f = Fixture::new();
     let (a, b) = (pattern(1500, 7), pattern(700, 3));
-    assert_eq!(sdk_put(STORE, "p/a", &a, sw::FILE_DEFER), OK);
-    assert_eq!(sdk_put(STORE, "p/b", &b, sw::FILE_DEFER), OK);
-    assert_eq!(in_step(|| unsafe { sw::sdk_pending() }), 2, "both are verified and named in no table yet");
-    assert_eq!(in_step(|| unsafe { sw::sdk_commit() }), OK);
-    assert_eq!(in_step(|| unsafe { sw::sdk_pending() }), 0);
+    assert_eq!(sdk_put(STORE, "p/a", &a, sf::FILE_DEFER), OK);
+    assert_eq!(sdk_put(STORE, "p/b", &b, sf::FILE_DEFER), OK);
+    assert_eq!(in_step(|| unsafe { sf::sdk_pending() }), 2, "both are verified and named in no table yet");
+    assert_eq!(in_step(|| unsafe { sf::sdk_commit() }), OK);
+    assert_eq!(in_step(|| unsafe { sf::sdk_pending() }), 0);
     let h = held();
     assert_eq!((h["p/a"], h["p/b"]), ((1500, slot(&a)), (700, slot(&b))));
     assert_eq!(verify_cmd("p/a", None), (OK, slot(&a)));
@@ -457,21 +458,21 @@ fn deferred_files_are_pending_until_committed_and_then_listed_with_their_hashes(
 fn a_sysex_table_change_names_the_pending_files_first() {
     let _f = Fixture::new();
     let a = pattern(1500, 7);
-    assert_eq!(sdk_put(STORE, "p/a", &a, sw::FILE_DEFER), OK);
+    assert_eq!(sdk_put(STORE, "p/a", &a, sf::FILE_DEFER), OK);
     assert_eq!(mkdir("other"), OK);
     let h = held();
     assert_eq!(h["p/a"], (1500, slot(&a)));
     assert!(h.contains_key("other"));
-    assert_eq!(in_step(|| unsafe { sw::sdk_pending() }), 0);
+    assert_eq!(in_step(|| unsafe { sf::sdk_pending() }), 0);
 }
 
 #[test]
 fn a_deleted_pending_path_is_gone_without_a_commit() {
     let _f = Fixture::new();
-    assert_eq!(sdk_put(STORE, "p/a", &pattern(1500, 7), sw::FILE_DEFER), OK);
+    assert_eq!(sdk_put(STORE, "p/a", &pattern(1500, 7), sf::FILE_DEFER), OK);
     assert_eq!(sdk_delete(STORE, "p/a"), OK);
-    assert_eq!(in_step(|| unsafe { sw::sdk_pending() }), 0);
-    assert_eq!(in_step(|| unsafe { sw::sdk_commit() }), OK);
+    assert_eq!(in_step(|| unsafe { sf::sdk_pending() }), 0);
+    assert_eq!(in_step(|| unsafe { sf::sdk_commit() }), OK);
     assert!(held().is_empty());
 }
 
@@ -567,7 +568,7 @@ fn an_open_sdk_session_makes_every_table_change_busy() {
     assert_eq!(clear_with(CLEAR_MAGIC), dkrt_sdk::E_BUSY);
     assert_eq!(sdk_open(STORE, "e/w", 10, 0), dkrt_sdk::E_BUSY, "one session at a time");
     assert_eq!(held().keys().collect::<Vec<_>>(), ["a/x"], "reads are not refused, and nothing changed");
-    assert_eq!(in_step(|| unsafe { sw::sdk_abort(h) }), OK);
+    assert_eq!(in_step(|| unsafe { sf::sdk_abort(h) }), OK);
     assert_eq!(mkdir("d"), OK, "free again");
 }
 
@@ -735,7 +736,10 @@ fn the_writer_routes_agree_with_the_route_table() {
 fn a_dt2_sample_write_goes_to_the_plusdrive_adapter_and_never_to_the_store() {
     let _f = Fixture::new();
     let _pd = PdwGuard::install();
-    unsafe { sw::tick() }; // the adapter's boot recovery runs in the UI pass
+    unsafe {
+        crate::storage::backends::plusdrive::tick();
+        sw::tick()
+    }; // the adapter's boot recovery runs in the UI pass
     let bytes = pattern(1000, 7);
     let writes = card(|c| c.writes);
     assert_eq!(sdk_put(SAMPLES, "KICKS/K1", &bytes, 0), OK);
@@ -792,12 +796,9 @@ fn a_dt2_sample_read_goes_to_the_firmware_file_system_and_never_to_the_store() {
     let mut all = vec![0u8; 300];
     assert_eq!(unsafe { PLATFORM.read_all(ROOT_SAMPLES, b"KICKS/K1", all.as_mut_ptr(), 300) }, Ok(300));
     assert_eq!(all, on_fs);
-    let mut part = [0u8; 50];
-    assert_eq!(unsafe { PLATFORM.read_range(ROOT_SAMPLES, b"KICKS/K1", 100, &mut part) }, Ok(50));
-    assert_eq!(part[..], on_fs[100..150]);
     assert_eq!(unsafe { PLATFORM.stat(ROOT_SAMPLES, b"KICKS/none") }, Err(dkrt_sdk::E_NOT_FOUND));
     assert_eq!(card(|c| c.reads), reads, "no card read: the firmware serves the samples");
-    fs(|f| assert!(f.opens.iter().all(|p| p.starts_with(b"/KICKS/")) && f.opens.len() >= 4, "{:?}", f.opens));
+    fs(|f| assert!(f.opens.iter().all(|p| p.starts_with(b"/KICKS/")) && f.opens.len() >= 3, "{:?}", f.opens));
     // the store root of the same device is the store
     let opens = fs(|f| f.opens.len());
     let st = unsafe { PLATFORM.stat(ROOT_STORE, b"samples/KICKS/K1") }.unwrap();

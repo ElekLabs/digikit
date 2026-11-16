@@ -9,6 +9,8 @@
 
 use crate::{dlog, files, settings, state::REC_MAX, store, store_writer, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
+use crate::PLATFORM;
+use dkrt_abi::storage::Storage;
 use dkrt_sdk::*;
 
 /// "DKCX": the first word of a live context.
@@ -207,37 +209,41 @@ pub unsafe extern "C" fn dk_files_cancel(f: *mut u8, ticket: u32) -> i32 {
 
 /// Read a store file into `buf` (init only, through the runtime's staging buffer). The handle names the owner and is not looked up yet.
 pub unsafe extern "C" fn dk_files_read(_f: *mut u8, path: *const u8, buf: *mut u8, cap: u32) -> i32 {
-    store::read_file(path, buf, cap)
+    let p = core::slice::from_raw_parts(path, dkrt_abi::mem::cstr_len(path, 160));
+    match PLATFORM.read_all(dkrt_abi::storage::ROOT_STORE, p, buf, cap) {
+        Ok(n) => n as i32,
+        Err(e) => e,
+    }
 }
 
 // The write calls take the same handle. The store has one write session in all, so the handle only names the owner: it is not looked up yet.
 
 pub unsafe extern "C" fn dk_files_create(_f: *mut u8, root: u32, path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32 {
-    store_writer::sdk_create(root, path, size, hash4, flags)
+    crate::storage::sdk_files::sdk_create(root, path, size, hash4, flags)
 }
 
 pub unsafe extern "C" fn dk_files_write(_f: *mut u8, h: i32, offset: u32, buf: *const u8, len: u32) -> i32 {
-    store_writer::sdk_write(h, offset, buf, len)
+    crate::storage::sdk_files::sdk_write(h, offset, buf, len)
 }
 
 pub unsafe extern "C" fn dk_files_close(_f: *mut u8, h: i32, hash_out: *mut u8) -> i32 {
-    store_writer::sdk_close(h, hash_out)
+    crate::storage::sdk_files::sdk_close(h, hash_out)
 }
 
 pub unsafe extern "C" fn dk_files_abort(_f: *mut u8, h: i32) -> i32 {
-    store_writer::sdk_abort(h)
+    crate::storage::sdk_files::sdk_abort(h)
 }
 
 pub unsafe extern "C" fn dk_files_delete(_f: *mut u8, root: u32, path: *const u8) -> i32 {
-    store_writer::sdk_delete(root, path)
+    crate::storage::sdk_files::sdk_delete(root, path)
 }
 
 pub unsafe extern "C" fn dk_files_commit(_f: *mut u8) -> i32 {
-    store_writer::sdk_commit()
+    crate::storage::sdk_files::sdk_commit()
 }
 
 pub unsafe extern "C" fn dk_files_pending(_f: *mut u8) -> i32 {
-    store_writer::sdk_pending()
+    crate::storage::sdk_files::sdk_pending()
 }
 
 #[cfg(test)]
