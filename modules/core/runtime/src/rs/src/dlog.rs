@@ -279,6 +279,11 @@ pub unsafe fn release_sinks(idx: usize) {
     irq_restore(sr);
 }
 
+/// The source index of the module that owns the span channel (record index + 1; 0: none does).
+pub fn span_owner() -> u8 {
+    unsafe { read_volatile(addr_of!((*addr_of!(CHAN))[SINK_SPAN as usize].owner)) }
+}
+
 /// Is a sink set on `channel`? (The one flag test of a producer.)
 #[inline]
 pub fn sink_on(channel: u32) -> bool {

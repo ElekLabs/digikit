@@ -191,6 +191,12 @@ uint32_t dk_debug_span_clock(uint32_t *out_hz);
 /* The poll function in slot 0 to 3 of `dkrt_poll_add` and its owner: returns 0 for an empty slot (or a slot past 3), 1 + the record index of the module whose loaded code holds the function, or 0xff for a function outside every module (the firmware image: the patched-in core modules). Writes the function's address to `*out_fn` when `out_fn` is not null and the slot is used. For a profiler that names the rows of the poll spans. Context: any. Since runtime 0.8.2. */
 uint32_t dk_debug_poll(uint32_t slot, uint32_t *out_fn);
 
+/* Control the DSP stats window (P8d): `on` 1 starts and 0 stops the counters and the stream of snapshots; `clear` is the clear generation, and the DSP clears its counters when it changes. Only the module that owns the span channel (`dk_span_sink_set`) may call it. Returns 0, DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the span channel, or none does). See <dk/core/trace.h>. Context: any. Since runtime 0.10.1. */
+int32_t dk_dsp_stats_ctl(uint32_t on, uint32_t clear);
+
+/* Copy the newest complete DSP stats sweep to `out` (at most `max` words; the window is 100 words: 4 header words, then 16 rows of 6) and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. See <dk/core/trace.h>. Context: any. Since runtime 0.10.1. */
+uint32_t dk_dsp_stats_read(uint32_t *out, uint32_t max);
+
 /* The machine type of track 0 to 15 of the active kit, read from the firmware (read-only); -1 for a track the firmware has no type for, -2 when there is no project yet. Context: ui. Since runtime 0.7.0. */
 int32_t dk_debug_track_type(uint32_t track);
 

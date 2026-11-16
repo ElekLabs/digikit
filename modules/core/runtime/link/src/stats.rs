@@ -57,7 +57,11 @@ impl Mirror {
             have_gen: false,
             next: WAIT,
             last_page: WAIT,
-            counts: Counts { sweeps: 0, gaps: 0, ignored: 0 },
+            counts: Counts {
+                sweeps: 0,
+                gaps: 0,
+                ignored: 0,
+            },
         }
     }
 
@@ -146,7 +150,11 @@ mod tests {
 
     /// Page `p` of generation `g` with data derived from `v` so a sweep of one `v` is recognisable.
     fn page(m: &mut Mirror, g: u8, p: u8, v: u32) -> bool {
-        m.feed(tag(g, p), v * 1000 + p as u32 * 2, v * 1000 + p as u32 * 2 + 1)
+        m.feed(
+            tag(g, p),
+            v * 1000 + p as u32 * 2,
+            v * 1000 + p as u32 * 2 + 1,
+        )
     }
 
     fn sweep(m: &mut Mirror, g: u8, v: u32) {
@@ -170,7 +178,14 @@ mod tests {
         page(&mut m, 1, PAGES as u8 - 1, 1);
         let (_, w) = snap(&m).unwrap();
         assert_eq!((w[0], w[1], w[99]), (1000, 1001, 1099));
-        assert_eq!(m.counts, Counts { sweeps: 1, gaps: 0, ignored: 0 });
+        assert_eq!(
+            m.counts,
+            Counts {
+                sweeps: 1,
+                gaps: 0,
+                ignored: 0
+            }
+        );
     }
 
     #[test]
@@ -184,7 +199,11 @@ mod tests {
         assert_eq!((s, w[0]), (1, 1000), "the torn sweep is not published");
         assert_eq!(m.counts.gaps, 1);
         sweep(&mut m, 1, 3);
-        assert_eq!(snap(&m).unwrap().1[0], 3000, "the next sweep from page 0 is");
+        assert_eq!(
+            snap(&m).unwrap().1[0],
+            3000,
+            "the next sweep from page 0 is"
+        );
     }
 
     #[test]
@@ -214,8 +233,19 @@ mod tests {
                 assert!(page(&mut m, 1, 7, 9), "a repeat is still a stats record");
             }
         }
-        assert_eq!(snap(&m).unwrap().1[14], 1014, "the first copy of page 7 stays");
-        assert_eq!(m.counts, Counts { sweeps: 1, gaps: 0, ignored: 1 });
+        assert_eq!(
+            snap(&m).unwrap().1[14],
+            1014,
+            "the first copy of page 7 stays"
+        );
+        assert_eq!(
+            m.counts,
+            Counts {
+                sweeps: 1,
+                gaps: 0,
+                ignored: 1
+            }
+        );
     }
 
     #[test]
