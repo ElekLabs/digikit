@@ -54,8 +54,9 @@ const fn fnv1a(s: &[u8]) -> u32 {
     h
 }
 
-/// Words of the table (byte offsets / 4); the value indices are bytes from byte 80. Words 0 to `IMAGE_WORDS` - 1 are the image's `fxpages_info` (version 3: data only,
-/// the firmware addresses, the indices, the device numbers and the stock return address of each hook); the words that point at state (the rows, the list, the counters)
+/// Words of the table (byte offsets / 4); the value indices are bytes from byte 80. Words 0 to `IMAGE_WORDS` - 1 are the image's `fxpages_info` (version 4: data only,
+/// the indices and the device numbers; the words 10, 11 and 49 to 60 held firmware addresses in version 3 and are 0 in the image: the service names the firmware and
+/// `patchkit bind` resolves it; `set_firmware` puts the two stock list words of the hooks' builder into 10 and 11); the words that point at state (the rows, the list, the counters)
 /// and the three computed words are this service's (`bind_table`): the state lives in this file's bss, next to the hooks that use it.
 mod w {
     pub const MAGIC: usize = 0;
@@ -93,8 +94,9 @@ mod w {
     pub const SEND_ROW: usize = 40;
     pub const SEND_COUNT: usize = 41;
     pub const NSOUND: usize = 48;
-    // version 3: where each hook returns to in the stock code, the stock key list, and three device numbers (words 49 to 63)
+    // words 49 to 60 were the return addresses and the stock key list (version 3); 61 to 63 are three device numbers
     pub const TRACK_PAGE: usize = 61;
+    pub const TAIL: usize = 62;
     pub const STORE_OFF: usize = 63;
     // computed by `bind_table`
     pub const ROWS_N: usize = 64; // effect rows with values in the kit (VALUES_N / 8)
@@ -102,11 +104,25 @@ mod w {
     pub const MARK_OFF: usize = 66; // byte offset of the mark in the array (2 * MARK_INDEX)
 }
 
+/// The byte offsets the assembler of the hooks (`fx.dks`, `hooks.rs`) names (`.equ T_NAME, offset`), for the test that compares them with `w`.
+pub const ASM_OFFSETS: &[(&str, usize)] = &[
+    ("T_FIRST", w::FIRST),
+    ("T_SLOTS", w::PAGES),
+    ("T_VIDX", w::INDICES / 4),
+    ("T_MARKVAL", w::MARK_VALUE),
+    ("T_TRACKPAGE", w::TRACK_PAGE),
+    ("T_TAIL", w::TAIL),
+    ("T_STORE_OFF", w::STORE_OFF),
+    ("T_ROWS_N", w::ROWS_N),
+    ("T_ID_OFF", w::ID_OFF),
+    ("T_MARK_OFF", w::MARK_OFF),
+];
+
 /// The words of the image table that the service copies, and of its own table.
 const IMAGE_WORDS: usize = 64;
 const TAB_WORDS: usize = 72;
-/// The version of the image table that has the words the hooks need (`w::VERSION`).
-const INFO_VERSION: u32 = 3;
+/// The version of the image table that has no firmware address in it (`w::VERSION`).
+const INFO_VERSION: u32 = 4;
 const ROW_BYTES: usize = 0x2c;
 const LIST_WORDS: usize = 8;
 const IDS_MAX: usize = 8;
@@ -197,6 +213,15 @@ fn fs() -> &'static mut FxpState {
     unsafe { &mut *addr_of_mut!(DKRT_FXP) }
 }
 
+/// The two firmware words the service file gives (`set_firmware`): the stock list of the FX view and the `moveq N,D1` of its builder (the byte at +1 is the stock count).
+static mut FW_WORDS: [u32; 2] = [0; 2];
+
+/// The firmware addresses the hooks' file resolved (its `dk_fw_` words): the stock page list and the address of the instruction whose byte at +1 is the stock count. The file
+/// calls it from its `setup`, before `info` binds the table.
+pub unsafe fn set_firmware(stock: u32, stock_n: u32) {
+    write_volatile(addr_of_mut!(FW_WORDS), [stock, stock_n]);
+}
+
 /// The table of the effect pages as this service reads it, or null (no `core/fxpages` in the image, another device, an older table than the hooks need). The first
 /// call copies the image table (`CoreApi::info`) into `DKRT_FXP_TAB` and fills the words that point at the state of the hooks; the service file's `init` makes that call
 /// before its hooks are installed (`setup`).
@@ -239,6 +264,9 @@ unsafe fn bind_table<C: CoreApi>(core: &C, src: *const u32, tab: *mut u32) -> bo
         i += 1;
     }
     let at = |p: usize| p as u32;
+    let fw = read_volatile(addr_of_mut!(FW_WORDS));
+    write_volatile(tab.add(w::STOCK), fw[0]);
+    write_volatile(tab.add(w::STOCK_N), fw[1]);
     let state = [
         (w::ROWS, addr_of_mut!(DKRT_FXP_ROWS) as usize),
         (w::LIST, addr_of_mut!(DKRT_FXP_LIST_BUF) as usize),

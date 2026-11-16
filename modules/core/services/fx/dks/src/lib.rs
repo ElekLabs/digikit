@@ -5,9 +5,7 @@
 #![cfg_attr(target_arch = "m68k", feature(asm_experimental_arch))]
 
 use dkrt_sdk::records::KINDS_FX;
-use dkrt_svc_fx::fxpage;
 use dkrt_svc_fx::records::Fx;
-use dkrt_svc_rt::ImportCore;
 
 mod hooks;
 
@@ -15,7 +13,7 @@ dkrt_svc_rt::service!(
     Fx,
     "fx",
     &KINDS_FX,
-    setup = fxpage::setup::<ImportCore>,
+    setup = hooks::setup,
     hooks = [
         ("cf.page.hook.page_desc", hooks::fxp_acc),
         ("cf.page.hook.tab_label_test", hooks::fxp_label),
