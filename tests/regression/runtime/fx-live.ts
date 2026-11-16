@@ -496,11 +496,17 @@ export async function evidence(
   const file = path.join(artifacts, `${tag}.overlay.bin`);
   const overlay = await rpc(session, 'card.overlay', { path: file });
   overlays.push(file);
-  const pcm = await rpc<{ non_finite: number; peak: number }>(session, 'pcm.tap', { action: 'report' });
+  // A case in which no tap ran (for example one a test replaced by a reload before it played anything) has no PCM
+  // evidence: guard, overlay and fault checks still run. After a recorded tap start, a failing report fails the case.
+  const pcm = session.pcmTapStarted
+    ? await rpc<{ non_finite: number; peak: number }>(session, 'pcm.tap', { action: 'report' })
+    : undefined;
   record(artifacts, `${tag}-closing`, { guard, overlay, pcm, status: await bounded(() => session.status()) });
   await bounded(() => expectNoGuardHits(session));
-  expect(pcm.non_finite).toBe(0);
-  if (requireAudible) expect(pcm.peak, 'input is audible').toBeGreaterThan(0.01);
+  if (pcm) {
+    expect(pcm.non_finite).toBe(0);
+    if (requireAudible) expect(pcm.peak, 'input is audible').toBeGreaterThan(0.01);
+  }
   await bounded(() => session.expectNoFault(tag));
 }
 
