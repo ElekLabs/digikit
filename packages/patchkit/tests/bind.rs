@@ -305,6 +305,12 @@ fn raw_hook(raw: &[u8], reg: &Registry) -> (String, Vec<String>, patchkit::apply
         else {
             continue;
         };
+        // a hook that declares exits already is left for the real services (the test adds its own `exits`)
+        let at = text.find(&key).unwrap();
+        let block = &text[at..text[at..].find("[[").map_or(text.len(), |e| at + e)];
+        if block.contains("exits =") {
+            continue;
+        }
         let mut decls = texts.clone();
         let i = decls.iter().position(|t| t == text).unwrap();
         decls[i] = text.replacen(&key, &format!("{key}tail = true\n"), 1);
@@ -672,4 +678,74 @@ fn fw_is_written_only_for_a_file_with_a_firmware_reference_or_a_hook() {
     let dks = refs_service(None, "dt2", &[]);
     let (file, _) = patchkit::bind::bind(&dks, &raw, &reg, &decls).unwrap();
     assert_eq!(file, dks);
+}
+
+/// The hooks whose exit 0 the services use (`dk_exit_<hook>_0`: the end of the site) end where the stock code they replaced continued before bind resolved it: the anchor plus
+/// the length the old image tables (`machines_info`, `fxpages_info` version 3) gave. The other exits are `exits` expressions of `devices/fw`.
+#[test]
+fn the_end_of_the_site_of_each_service_hook_is_where_the_stock_code_continues() {
+    let both: [(&str, &str, u64); 9] = [
+        ("cf.page.hook.page_desc", "cf.page.fn.page_desc", 6),
+        (
+            "cf.page.hook.fx_view_list.load",
+            "cf.page.site.fx_view_list.load",
+            6,
+        ),
+        (
+            "cf.page.hook.fx_key_list.load",
+            "cf.page.site.fx_key_list.load",
+            6,
+        ),
+        (
+            "cf.page.hook.sound_load_exit",
+            "cf.page.site.sound_load_exit",
+            8,
+        ),
+        (
+            "cf.page.hook.tab_label_test",
+            "cf.page.site.tab_label_test",
+            6,
+        ),
+        (
+            "cf.page.hook.filter_graph_test",
+            "cf.page.site.filter_graph_test",
+            6,
+        ),
+        (
+            "cf.page.hook.fx_array.load",
+            "cf.page.site.fx_array.load",
+            6,
+        ),
+        (
+            "cf.page.hook.fx_array.save",
+            "cf.page.site.fx_array.save",
+            6,
+        ),
+        (
+            "cf.page.hook.fx_array.init_exit",
+            "cf.page.site.fx_array.init_exit",
+            8,
+        ),
+    ];
+    let dn2_only: [(&str, &str, u64); 3] = [
+        ("cf.machine.hook.group", "cf.machine.site.group", 6),
+        (
+            "cf.machine.hook.owner_type_load",
+            "cf.machine.site.owner_type_load",
+            6,
+        ),
+        ("cf.machine.hook.frametype", "cf.machine.site.frametype", 6),
+    ];
+    let reg = registry();
+    for (img, extra) in [(DT2, &[][..]), (DN2, &dn2_only[..])] {
+        need_image!(img);
+        let raw = image(img).unwrap();
+        let f = Firmware::parse(&raw).unwrap();
+        let port = reg.find(&f.syx_sha256).unwrap();
+        for (hook, anchor, len) in both.iter().chain(extra) {
+            let site = patchkit::apply::resolve_hook_site(&raw, &reg, hook).unwrap();
+            let at = port.anchor(anchor).unwrap().addr;
+            assert_eq!(site.ret, at + len, "{img}: {hook}");
+        }
+    }
 }

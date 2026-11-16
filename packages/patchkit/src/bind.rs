@@ -534,6 +534,8 @@ struct RefCtx<'a> {
     reg: &'a Registry,
     port: &'a Port,
     view: &'a AnchorView<'a>,
+    /// The stock firmware image (a hook the file does not take is resolved from it).
+    fw: &'a [u8],
     decls: &'a [&'a str],
     device: &'a str,
     bound: &'a [BoundHook],
@@ -541,6 +543,15 @@ struct RefCtx<'a> {
     idle: &'a [u32],
     /// The image offset of the `rts` stub (made when the file refers to a `dk_ret_`).
     ret_stub: Option<u32>,
+}
+
+/// A hook a reference names, on this firmware.
+struct HookInfo {
+    name: String,
+    /// The first instruction after the site.
+    ret: u32,
+    /// The generated tail, for a hook the file takes.
+    tail_off: Option<u32>,
 }
 
 impl RefCtx<'_> {
@@ -551,50 +562,81 @@ impl RefCtx<'_> {
                 "{}: a tail reference is resolved with the tails",
                 name_of_hash(self.reg, self.decls, h)
             )),
-            FwRef::Stock(h) => match self.hook(h, "dk_stock")? {
+            FwRef::Stock(h) => match self.hook(h, "dk_stock", false)? {
                 None => Ok(Place::Rel(0)),
                 Some(b) => b.tail_off.map(Place::Rel).ok_or_else(|| {
                     err!(
-                        "{}: dk_stock needs a hook without a handler (a raw hook has the stock path as its tail)",
-                        b.hook
+                        "{}: dk_stock needs a hook the file takes, without a handler (a raw hook has the stock path as its tail)",
+                        b.name
                     )
                 }),
             },
-            FwRef::Ret(h) => match self.hook(h, "dk_ret")? {
+            FwRef::Ret(h) => match self.hook(h, "dk_ret", true)? {
                 None => Ok(Place::Rel(0)),
                 Some(_) => self
                     .ret_stub
                     .map(Place::Rel)
                     .ok_or_else(|| err!("no rts stub was made for dk_ret")),
             },
-            FwRef::Exit(h, n) => match self.hook(h, "dk_exit")? {
+            FwRef::Exit(h, n) => match self.hook(h, "dk_exit", true)? {
                 None => Ok(Place::Abs(0)),
                 Some(b) if n == 0 => Ok(Place::Abs(b.ret)),
                 Some(b) => {
-                    let exits = hook_exits(self.decls, self.device, &b.hook)?;
+                    let exits = hook_exits(self.decls, self.device, &b.name)?;
                     let text = exits.get(n as usize - 1).ok_or_else(|| {
                         err!(
                             "{}: dk_exit_{h:08x}_{n}: the hook declares {} exit(s) in `exits`",
-                            b.hook,
+                            b.name,
                             exits.len()
                         )
                     })?;
                     Ok(Place::Abs(
-                        eval_exit(text, self.view).map_err(|e| err!("{}: exit {n}: {e}", b.hook))?,
+                        eval_exit(text, self.view).map_err(|e| err!("{}: exit {n}: {e}", b.name))?,
                     ))
                 }
             },
         }
     }
 
-    /// The hook of a reference: bound on this device (`Some`), or listed by the file for another device (`None`: its references resolve to 0). Any other
-    /// hook is an error: the file refers to a hook it does not take.
-    fn hook(&self, h: u32, what: &str) -> Result<Option<&BoundHook>> {
+    /// The hook of a reference: bound on this device, or listed by the file for another device (`None`: its references resolve to 0). With `foreign`, a
+    /// hook of this firmware that the file does not take is found through the port, with its site resolved on the image (the exits and the `rts` of a hook that a
+    /// slot fill enters, such as the interrupt site of the Digitone II frame type); a hook that only another device has is `None`. Any other hook is an error.
+    fn hook(&self, h: u32, what: &str, foreign: bool) -> Result<Option<HookInfo>> {
         if let Some(b) = self.bound.iter().find(|b| b.site_hash == h) {
-            return Ok(Some(b));
+            return Ok(Some(HookInfo {
+                name: b.hook.clone(),
+                ret: b.ret,
+                tail_off: b.tail_off,
+            }));
         }
         if self.idle.contains(&h) {
             return Ok(None);
+        }
+        if foreign {
+            if let Some(ph) = self.port.hook.iter().find(|x| name_hash(&x.name) == h) {
+                let site = resolve_hook_site(self.fw, self.reg, &ph.name)?;
+                return Ok(Some(HookInfo {
+                    name: ph.name.clone(),
+                    ret: u32::try_from(site.ret)
+                        .map_err(|_| err!("{}: return address is not 32 bits", ph.name))?,
+                    tail_off: None,
+                }));
+            }
+            let elsewhere = self
+                .reg
+                .ports
+                .iter()
+                .filter(|p| p.port.device != self.device)
+                .any(|p| p.hook.iter().any(|x| name_hash(&x.name) == h));
+            let here = self
+                .reg
+                .ports
+                .iter()
+                .filter(|p| p.port.device == self.device)
+                .any(|p| p.hook.iter().any(|x| name_hash(&x.name) == h));
+            if elsewhere && !here {
+                return Ok(None);
+            }
         }
         Err(err!(
             "{what}: the file refers to the hook {}, which its HOOKS do not take",
@@ -953,6 +995,7 @@ pub fn bind(
             reg,
             port,
             view: &view,
+            fw,
             decls,
             device,
             bound: &bound,
