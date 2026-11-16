@@ -214,11 +214,16 @@ fn manifest(sdk: &Path, name: &str) -> Result<(BTreeSet<String>, Option<Option<S
     Ok((kinds, row))
 }
 
-/// The hooks of the `service!` call in `dks/src/lib.rs`: (hook name, device filter: `None` for every device, or `dt2` / `dn2`).
-fn service_hooks(lib: &str) -> Option<Vec<(String, Option<String>)>> {
+/// The entries of the list `key` (`hooks`, `fills` or `exports`) of the `service!` call in `dks/src/lib.rs`: (first string, device filter: `None` for every
+/// device, or `dt2` / `dn2`).
+fn service_list(lib: &str, key: &str) -> Option<Vec<(String, Option<String>)>> {
     let at = lib.find("service!(")?;
     let body = &lib[at..];
-    let open = Regex::new(r"\bhooks\s*=\s*\[").unwrap().find(body)?.end() - 1;
+    let open = Regex::new(&format!(r"\b{key}\s*=\s*\["))
+        .unwrap()
+        .find(body)?
+        .end()
+        - 1;
     let mut depth = 0usize;
     let mut end = body.len();
     for (i, c) in body[open..].char_indices() {
@@ -334,7 +339,36 @@ fn check_dks(dir: &Path, needs_dks: bool, neutral: &[(String, String)]) -> Vec<S
         .ok()
         .and_then(|t| t.parse().ok());
     let mut hooks: Vec<(String, Vec<String>)> = vec![];
+    let (mut fills, mut exports): (Vec<(String, Vec<String>)>, Vec<(String, Vec<String>)>) =
+        (vec![], vec![]);
     if let Some(m) = &manifest {
+        let list = |table: &str, key: &str| -> Vec<(String, Vec<String>)> {
+            m.get(table)
+                .and_then(|h| h.as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|h| h.as_table())
+                .map(|t| {
+                    let n = t
+                        .get(key)
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let d = t
+                        .get("devices")
+                        .and_then(|d| d.as_array())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|x| x.as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    (n, d)
+                })
+                .collect()
+        };
+        fills = list("fill", "slot");
+        exports = list("export", "name");
         let module = m.get("module").and_then(|t| t.as_table());
         let get = |k: &str| module.and_then(|t| t.get(k)).and_then(|v| v.as_str());
         let want = format!("core/services/{name}");
@@ -387,20 +421,30 @@ fn check_dks(dir: &Path, needs_dks: bool, neutral: &[(String, String)]) -> Vec<S
         if !only_service_call(lib) {
             out.push("dks/src/lib.rs is not the `service!(...)` call alone (attributes, `use` and `mod` lines are allowed)".into());
         }
-        let called: Vec<(String, Vec<String>)> = service_hooks(lib)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(n, d)| (n, d.into_iter().collect()))
-            .collect();
-        for dev in ["dt2", "dn2"] {
-            let (m, c) = (hook_set(&hooks, dev), hook_set(&called, dev));
-            for n in c.difference(&m) {
-                out.push(format!("dks/src/lib.rs: service! takes the hook `{n}` on {dev}, but dks/module.toml has no [[hook]] for it"));
-            }
-            for n in m.difference(&c) {
-                out.push(format!(
-                    "dks/module.toml: [[hook]] `{n}` on {dev} is not in the service! hook list"
-                ));
+        let called = |key: &str| -> Vec<(String, Vec<String>)> {
+            service_list(lib, key)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(n, d)| (n, d.into_iter().collect()))
+                .collect()
+        };
+        // (what the manifest calls it, the `service!` key, the manifest entries)
+        for (what, noun, key, entries) in [
+            ("[[hook]]", "hook", "hooks", &hooks),
+            ("[[fill]]", "fill", "fills", &fills),
+            ("[[export]]", "export", "exports", &exports),
+        ] {
+            let c = called(key);
+            for dev in ["dt2", "dn2"] {
+                let (m, c) = (hook_set(entries, dev), hook_set(&c, dev));
+                for n in c.difference(&m) {
+                    out.push(format!("dks/src/lib.rs: service! takes the {noun} `{n}` on {dev}, but dks/module.toml has no {what} for it"));
+                }
+                for n in m.difference(&c) {
+                    out.push(format!(
+                        "dks/module.toml: {what} `{n}` on {dev} is not in the service! {noun} list"
+                    ));
+                }
             }
         }
     }

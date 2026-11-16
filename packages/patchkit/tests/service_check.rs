@@ -357,6 +357,52 @@ fn service_hooks_equal_the_hook_entries_per_device() {
 }
 
 #[test]
+fn service_exports_and_fills_equal_the_manifest_entries() {
+    let call = |extra: &str| {
+        format!(
+            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, setup = hooks::setup, hooks = [], {extra});\n"
+        )
+    };
+    let (dir, sdk) = service("exports-fills", &[]);
+    fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call("fills = [(\"frametype\", hooks::f, dn2)], exports = [(\"dk_a\", fw::dk_a)]"),
+    )
+    .unwrap();
+    // the call has a fill and an export the manifest has not
+    let found = problems(&dir, &sdk);
+    assert!(
+        mentions(&found, "service! takes the fill `frametype` on dn2"),
+        "{found:?}"
+    );
+    assert!(
+        mentions(&found, "service! takes the export `dk_a` on dt2"),
+        "{found:?}"
+    );
+    // the manifest has them (the fill for dn2 only)
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[fill]]\nslot = \"frametype\"\nentry = \"f\"\ndevices = [\"dn2\"]\n\n[[export]]\nname = \"dk_a\"\n",
+    );
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // the manifest has an export the call has not
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call("fills = [(\"frametype\", hooks::f, dn2)], exports = []"),
+    )
+    .unwrap();
+    let found = problems(&dir, &sdk);
+    assert!(
+        mentions(
+            &found,
+            "[[export]] `dk_a` on dn2 is not in the service! export list"
+        ),
+        "{found:?}"
+    );
+}
+
+#[test]
 fn assembler_and_firmware_names_stay_in_their_place() {
     // assembler: only dks/src/hooks.rs; the neutral crate has none
     let (dir, sdk) = service("asm", &[]);

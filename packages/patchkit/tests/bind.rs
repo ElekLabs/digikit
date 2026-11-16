@@ -441,3 +441,235 @@ fn the_command_refuses_an_output_in_the_source_tree_outside_dist_and_out() {
     }
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ---- firmware references: dk_fw_, dk_exit_, dk_stock_, dk_ret_ and the FW item ---------------------------------------------
+
+/// The service fixture with the references `imports` in data words (after the four of `dk_module`); with `hook` it takes that raw hook, without it takes none.
+fn refs_service(hook: Option<&str>, device: &str, imports: &[String]) -> Vec<u8> {
+    let manifest = match hook {
+        Some(h) => SERVICE.replace(HOOK, h),
+        None => SERVICE.replace(
+            "[[hook]]\nname = \"cf.menu.hook.settings_list.tail\"\nentry = \"hooktest_settings_tail\"\n",
+            "",
+        ),
+    };
+    let mut obj = service_object();
+    obj.sections[1] = sec(".data", "data", 4, &vec![0; 24 + 4 * imports.len()]);
+    for (i, n) in imports.iter().enumerate() {
+        obj.relocs.push(rel(24 + 4 * i as u64, n));
+    }
+    obj.stamp_isa();
+    let lib = Library {
+        modules: vec![Module {
+            manifest: toml::from_str(&manifest).unwrap(),
+            objects: vec![obj],
+            alloc: Default::default(),
+            digest: String::new(),
+            dir: Default::default(),
+        }],
+    };
+    let o = PackOptions {
+        device: Some(device.into()),
+        ..Default::default()
+    };
+    pack_module(&lib, "test/svc-test", &o).unwrap().bytes
+}
+
+/// The image offset of the data section of the fixture (`dk_module` is 8 bytes into it).
+fn data_base() -> usize {
+    patchkit::dkm::image_symbols(&service_object()).unwrap()["dk_module"] as usize - 8
+}
+
+/// The word `at` bytes into the data section of the fixture.
+fn word_at(dkm: &Dkm, at: usize) -> u32 {
+    let at = data_base() + at;
+    u32::from_be_bytes(dkm.image[at..at + 4].try_into().unwrap())
+}
+
+/// The first ColdFire code anchor of the port of `raw`: its name and address.
+fn some_anchor(raw: &[u8], reg: &Registry) -> (String, u32) {
+    let f = Firmware::parse(raw).unwrap();
+    let port = reg.find(&f.syx_sha256).unwrap();
+    let a = port
+        .anchor
+        .iter()
+        .find(|a| a.cpu == "cf" && a.kind == "code" && a.name.starts_with("cf."))
+        .unwrap();
+    (a.name.clone(), a.addr as u32)
+}
+
+#[test]
+fn a_service_object_names_firmware_through_externs_and_cf_names() {
+    let hook = "cf.page.hook.source_draw";
+    let manifest = SERVICE.replace(
+        "place = \"cf.expansion\"\n",
+        &format!(
+            "place = \"cf.expansion\"\n[object.externs]\n_x_exit = \"hook.{hook}.exit.2\"\n_x_tail = \"hook.{hook}.tail\"\n_x_fn = \"cf.draw.fn.blit\"\n"
+        ),
+    );
+    let mut obj = service_object();
+    obj.sections[1] = sec(".data", "data", 4, &[0; 48]);
+    // `dkfw` links the firmware name itself; the aliases are the manifest's; dk_log stays an import of the runtime
+    for (i, n) in [
+        "_x_exit",
+        "_x_tail",
+        "_x_fn",
+        "cf.input.fn.key_down",
+        "dk_log",
+        "_x_fn",
+    ]
+    .iter()
+    .enumerate()
+    {
+        obj.relocs.push(rel(24 + 4 * i as u64, n));
+    }
+    obj.stamp_isa();
+    let lib = Library {
+        modules: vec![Module {
+            manifest: toml::from_str(&manifest).unwrap(),
+            objects: vec![obj],
+            alloc: Default::default(),
+            digest: String::new(),
+            dir: Default::default(),
+        }],
+    };
+    let o = PackOptions {
+        device: Some("dt2".into()),
+        ..Default::default()
+    };
+    let dkm = pack_module(&lib, "test/svc-test", &o).unwrap().dkm;
+    let mut want = vec![
+        patchkit::bind::exit_import(hook, 2),
+        patchkit::bind::tail_import(hook),
+        patchkit::bind::fw_import("cf.draw.fn.blit"),
+        patchkit::bind::fw_import("cf.input.fn.key_down"),
+        "dk_log".to_string(),
+    ];
+    want.sort();
+    let mut got = dkm.imports.clone();
+    got.sort();
+    assert_eq!(got, want);
+    // an extern that is no firmware reference is refused
+    let bad = manifest.replace("cf.draw.fn.blit", "machines.first");
+    let o = PackOptions {
+        device: Some("dt2".into()),
+        ..Default::default()
+    };
+    let lib = Library {
+        modules: vec![Module {
+            manifest: toml::from_str(&bad).unwrap(),
+            objects: vec![{
+                let mut x = service_object();
+                x.sections[1] = sec(".data", "data", 4, &[0; 28]);
+                x.relocs.push(rel(24, "_x_fn"));
+                x.stamp_isa();
+                x
+            }],
+            alloc: Default::default(),
+            digest: String::new(),
+            dir: Default::default(),
+        }],
+    };
+    let e = pack_module(&lib, "test/svc-test", &o)
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(e.contains("_x_fn"), "{e}");
+}
+
+#[test]
+fn bind_resolves_the_firmware_references_of_a_raw_hook() {
+    need_image!(DT2);
+    let raw = image(DT2).unwrap();
+    let reg = registry();
+    let (hook, mut decls, site) = raw_hook(&raw, &reg);
+    let (anchor, anchor_addr) = some_anchor(&raw, &reg);
+    // the hook gets an exit 1: the anchor plus 4
+    let key = format!("name = \"{hook}\"\n");
+    let i = decls
+        .iter()
+        .position(|t| t.contains(&key) && t.contains("[[hook]]"))
+        .unwrap();
+    decls[i] = decls[i].replacen(&key, &format!("{key}exits = [\"{anchor} + 4\"]\n"), 1);
+    let decls: Vec<&str> = decls.iter().map(String::as_str).collect();
+    let imports = vec![
+        patchkit::bind::fw_import(&anchor),
+        patchkit::bind::exit_import(&hook, 0),
+        patchkit::bind::exit_import(&hook, 1),
+        patchkit::bind::stock_import(&hook),
+        patchkit::bind::ret_import(&hook),
+        patchkit::bind::tail_import(&hook),
+    ];
+    let dks = refs_service(Some(&hook), "dt2", &imports);
+    let (file, hooks) = patchkit::bind::bind(&dks, &raw, &reg, &decls).unwrap();
+    let dkm = Dkm::parse(&file).unwrap();
+    assert!(
+        dkm.imports.iter().all(|n| !n.starts_with("dk_"))
+            || dkm.imports.iter().all(|n| n == "dk_log")
+    );
+    let tail = hooks[0].tail_off.unwrap();
+    // absolute: no relocation entry; base-relative: kind 0
+    assert_eq!(word_at(&dkm, 24), anchor_addr);
+    assert_eq!(word_at(&dkm, 28), site.ret as u32);
+    assert_eq!(word_at(&dkm, 32), anchor_addr + 4);
+    assert_eq!(
+        word_at(&dkm, 36),
+        tail,
+        "dk_stock is the stock path of the hook"
+    );
+    assert_eq!(word_at(&dkm, 44), tail);
+    let ret = word_at(&dkm, 40) as usize;
+    assert_eq!(&dkm.image[ret..ret + 2], [0x4e, 0x75]);
+    for at in [24usize, 28, 32] {
+        let at = (data_base() + at) as u32;
+        assert!(dkm.relocs.iter().all(|(o, _)| *o != at), "{at}");
+    }
+    for at in [36usize, 40, 44] {
+        let at = (data_base() + at) as u32;
+        assert!(
+            dkm.relocs.iter().any(|(o, k)| *o == at && k.is_none()),
+            "{at}"
+        );
+    }
+    // the file carries the identity of the firmware: the first 8 bytes of its SHA-256
+    let k = Keys::parse(&dkm.register).unwrap();
+    let id = patchkit::error::unhex(&Firmware::parse(&raw).unwrap().syx_sha256).unwrap();
+    assert_eq!((k.fw_count(), &k.fw(0).unwrap()[..]), (1, &id[..8]));
+    // an exit the hook does not declare, and a name no firmware has, are errors naming them
+    let dks = refs_service(Some(&hook), "dt2", &[patchkit::bind::exit_import(&hook, 2)]);
+    let e = patchkit::bind::bind(&dks, &raw, &reg, &decls).unwrap_err();
+    assert!(e.0.contains("1 exit"), "{e}");
+    let dks = refs_service(
+        Some(&hook),
+        "dt2",
+        &[patchkit::bind::fw_import("cf.no.such.name")],
+    );
+    let e = patchkit::bind::bind(&dks, &raw, &reg, &decls).unwrap_err();
+    assert!(e.0.contains("cf.no.such.name") || e.0.contains('#'), "{e}");
+}
+
+#[test]
+fn fw_is_written_only_for_a_file_with_a_firmware_reference_or_a_hook() {
+    need_image!(DT2);
+    let raw = image(DT2).unwrap();
+    let reg = registry();
+    let texts = patchkit::fwgen::fw_texts(&root()).unwrap();
+    let decls: Vec<&str> = texts.iter().map(String::as_str).collect();
+    let (anchor, addr) = some_anchor(&raw, &reg);
+    // a reference and no hook: bound, with FW and no BIND
+    let dks = refs_service(None, "dt2", &[patchkit::bind::fw_import(&anchor)]);
+    let (file, hooks) = patchkit::bind::bind(&dks, &raw, &reg, &decls).unwrap();
+    let dkm = Dkm::parse(&file).unwrap();
+    let k = Keys::parse(&dkm.register).unwrap();
+    assert_eq!((hooks.len(), k.bind_count(), k.fw_count()), (0, 0, 1));
+    assert_eq!(word_at(&dkm, 24), addr);
+    // a hook (BIND) with no references: FW too
+    let (file, _) = patchkit::bind::bind(&pack_service("dt2"), &raw, &reg, &decls).unwrap();
+    let bound = Dkm::parse(&file).unwrap();
+    let k = Keys::parse(&bound.register).unwrap();
+    assert_eq!((k.bind_count(), k.fw_count()), (1, 1));
+    // no hook and no reference: the file as built
+    let dks = refs_service(None, "dt2", &[]);
+    let (file, _) = patchkit::bind::bind(&dks, &raw, &reg, &decls).unwrap();
+    assert_eq!(file, dks);
+}

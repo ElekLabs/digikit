@@ -1560,7 +1560,7 @@ fn a_stub_loads_its_slot_and_falls_through_to_the_stock_path() {
     let tab = sym(&out, "t/s", "dkrt_info_table");
     let b = read_cf(&out, tab, 8 + 12);
     assert_eq!(be32(&b[0..]), 0x444b_4954);
-    assert_eq!(be32(&b[4..]), 1);
+    assert_eq!(be32(&b[4..]), 2, "the slot and fw_id");
     assert_eq!(be32(&b[8..]), dkneeds::keys::name_hash("frame_type"));
     assert_eq!(be32(&b[12..]) as u64, slot);
     assert_eq!(be32(&b[16..]), 1, "a slot entry has the slot kind");
@@ -1601,8 +1601,9 @@ fn info_entries_and_slots_share_one_table_and_a_duplicate_hash_is_refused() {
     let out = run_on(DN2, &registry(), &lib, &["t/s"]).unwrap();
     let slot = sym(&out, "t/s", "slot.frame_type");
     let tab = sym(&out, "t/s", "dkrt_info_table");
-    let b = read_cf(&out, tab, 8 + 24);
-    assert_eq!((be32(&b[0..]), be32(&b[4..])), (0x444b_4954, 2));
+    let b = read_cf(&out, tab, 8 + 36);
+    // the slot, the info entry and patchkit's own fw_id
+    assert_eq!((be32(&b[0..]), be32(&b[4..])), (0x444b_4954, 3));
     // the slot entry, then the info entry (here an address that is the slot word's)
     assert_eq!(be32(&b[8..]), dkneeds::keys::name_hash("frame_type"));
     assert_eq!(be32(&b[12..]) as u64, slot);
@@ -1610,6 +1611,8 @@ fn info_entries_and_slots_share_one_table_and_a_duplicate_hash_is_refused() {
     assert_eq!(be32(&b[20..]), dkneeds::keys::name_hash("frame_info"));
     assert_eq!(be32(&b[24..]) as u64, slot);
     assert_eq!(be32(&b[28..]), 0, "data kind");
+    assert_eq!(be32(&b[32..]), dkneeds::keys::name_hash("fw_id"));
+    assert_eq!(be32(&b[40..]), 0, "data kind");
     // an info entry with the name of a slot gives one hash twice
     let dup = body.replace("name = \"frame_info\"", "name = \"frame_type\"");
     let lib = library(vec![module("t/s", "", &dup, Some(cf_obj()))]);

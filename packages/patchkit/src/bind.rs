@@ -3,16 +3,19 @@
 //! hook may not clobber, calls the service's handler with the arguments the hook declares, restores, runs the displaced instructions
 //! and jumps back. The bound file holds firmware bytes (the stock bytes of each site): it is never committed.
 
-use crate::apply::{HookSite, resolve_hook_site};
+use crate::apply::{AnchorView, HookSite, resolve_hook_site};
 use crate::dkm::{Dkm, EmitParts, FLAG_TRACE, ROLE_SERVICE, emit, max_file};
 use crate::error::*;
 use crate::firmware::Firmware;
-use crate::fwgen::{HandlerArg, HandlerPlan, handler_plan, hook_has_handler, hook_has_tail};
-use crate::port::Registry;
+use crate::fwgen::{
+    HandlerArg, HandlerPlan, handler_plan, hook_exits, hook_has_handler, hook_has_tail,
+};
+use crate::port::{Port, Registry};
 use crate::prim::{self, CF_JMP_L, CfSite, cf_tail};
 use dkneeds::keys::{
     BIND_STOCK_MAX, Bind, KeyGroup, Keys, Pair, Table, name_hash, table_size, write_table,
 };
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// Most `BIND` items of one service (`[limits.format] bind_max` of sdk/sdk.toml; the runtime sizes its copy with it).
@@ -50,6 +53,104 @@ pub fn is_tail_import(import: &str) -> bool {
     import
         .strip_prefix("dk_tail_")
         .is_some_and(|h| h.len() == 8 && h.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')))
+}
+
+/// A reference of a service to the firmware, as an import name `patchkit bind` resolves. Every name carries the 8 hex digits of a `name_hash` and fits the 31
+/// characters of an import name (the longest, `dk_exit_<hash>_<n>` with a two-digit `n`, has 19). `patchkit pack` makes the names from the `[object.externs]` of a
+/// service module and from the firmware names (`cf.*`) that a Rust service takes from the `dkfw` crate.
+///
+/// | import | resolves to | word in the file |
+/// | --- | --- | --- |
+/// | `dk_fw_<H(name)>` | the address of the firmware anchor `name` (an offset is the addend of the reference) | absolute, no relocation |
+/// | `dk_exit_<H(hook)>_<n>` | `n` = 0: the end of the hook's site; `n` from 1: the expression `exits[n-1]` of the hook in `devices/fw` | absolute, no relocation |
+/// | `dk_tail_<H(hook)>` | the generated tail of the hook (its displaced instructions, then a jump behind the site) | base-relative |
+/// | `dk_stock_<H(hook)>` | the same code, called with `jsr` from inside the hook; control comes back | base-relative |
+/// | `dk_ret_<H(hook)>` | one `rts` that `bind` appends | base-relative |
+///
+/// A name that only another device has, and a hook the file lists only for another device, resolve to 0: the code is never entered on this firmware.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FwRef {
+    /// `dk_fw_`: the `name_hash` of the firmware name.
+    Name(u32),
+    /// `dk_tail_`: the `name_hash` of the hook name.
+    Tail(u32),
+    /// `dk_stock_`: the hook.
+    Stock(u32),
+    /// `dk_ret_`: the hook.
+    Ret(u32),
+    /// `dk_exit_`: the hook and the exit number.
+    Exit(u32, u32),
+}
+
+/// `dk_fw_<hash>`: the import for the firmware name `name` (`cf.draw.fn.blit`).
+pub fn fw_import(name: &str) -> String {
+    format!("dk_fw_{:08x}", name_hash(name))
+}
+
+/// `dk_stock_<hash>`: the import for the stock path of `hook`.
+pub fn stock_import(hook: &str) -> String {
+    format!("dk_stock_{:08x}", name_hash(hook))
+}
+
+/// `dk_ret_<hash>`: the import for leaving `hook` as `rts` does.
+pub fn ret_import(hook: &str) -> String {
+    format!("dk_ret_{:08x}", name_hash(hook))
+}
+
+/// `dk_exit_<hash>_<n>`: the import for exit `n` of `hook`.
+pub fn exit_import(hook: &str, n: u32) -> String {
+    format!("dk_exit_{:08x}_{n}", name_hash(hook))
+}
+
+/// The 8 lower-case hex digits of `s` as a number.
+fn hex8(s: &str) -> Option<u32> {
+    (s.len() == 8 && s.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')))
+        .then(|| u32::from_str_radix(s, 16).ok())
+        .flatten()
+}
+
+/// The reference an import name stands for; `None` for every other name (a function of the runtime, a service's import).
+pub fn parse_import(name: &str) -> Option<FwRef> {
+    if let Some(h) = name.strip_prefix("dk_fw_") {
+        return hex8(h).map(FwRef::Name);
+    }
+    if let Some(h) = name.strip_prefix("dk_tail_") {
+        return hex8(h).map(FwRef::Tail);
+    }
+    if let Some(h) = name.strip_prefix("dk_stock_") {
+        return hex8(h).map(FwRef::Stock);
+    }
+    if let Some(h) = name.strip_prefix("dk_ret_") {
+        return hex8(h).map(FwRef::Ret);
+    }
+    let rest = name.strip_prefix("dk_exit_")?;
+    let (h, n) = rest.split_at_checked(8)?;
+    let n = n.strip_prefix('_')?;
+    if n.is_empty() || n.len() > 2 || !n.bytes().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(FwRef::Exit(hex8(h)?, n.parse().ok()?))
+}
+
+/// The import a target of `[object.externs]` in a service module stands for: `cf.<name>` is the firmware name (`dk_fw_`), and `hook.<hook>.tail`, `.stock`,
+/// `.ret`, `.exit` (exit 0) and `.exit.<n>` are the hook references of the table above. `None` for a target that is no firmware reference.
+pub fn import_for_target(target: &str) -> Option<String> {
+    if target.starts_with("cf.") {
+        return Some(fw_import(target));
+    }
+    let rest = target.strip_prefix("hook.")?;
+    let (hook, last) = rest.rsplit_once('.')?;
+    if let Ok(n) = last.parse::<u32>() {
+        let hook = hook.strip_suffix(".exit")?;
+        return (n >= 1 && n <= crate::fwgen::MAX_EXITS as u32).then(|| exit_import(hook, n));
+    }
+    match last {
+        "tail" => Some(tail_import(hook)),
+        "stock" => Some(stock_import(hook)),
+        "ret" => Some(ret_import(hook)),
+        "exit" => Some(exit_import(hook, 0)),
+        _ => None,
+    }
 }
 
 fn put16(out: &mut Vec<u8>, w: u16) {
@@ -329,12 +430,233 @@ fn resolve_tail_refs(
     Ok(keep)
 }
 
+/// Where an import of [`FwRef`] points: an absolute address, or an offset in the image of the file (relocated with the file's base at load).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Place {
+    Abs(u32),
+    Rel(u32),
+}
+
+/// Replaces the references of [`FwRef`] other than the tails (`resolve_tail_refs` did those) with their places: `place` says where an import points. A word
+/// of the file that holds an addend keeps it (the address is added). An absolute place drops the relocation entry, a relative one makes it a base-relative
+/// entry. The resolved imports leave the list and the indices of the others move down. Returns the imports that stay.
+fn resolve_fw_refs(
+    image: &mut [u8],
+    relocs: &mut Vec<(u32, u32)>,
+    imports: &[String],
+    place: &mut dyn FnMut(FwRef) -> Result<Place>,
+) -> Result<Vec<String>> {
+    let mut keep: Vec<String> = vec![];
+    // per import: Err(new index) when it stays, Ok(place) when it is resolved
+    let mut fate: Vec<std::result::Result<Place, usize>> = vec![];
+    for n in imports {
+        match parse_import(n).filter(|r| !matches!(r, FwRef::Tail(_))) {
+            Some(r) => fate.push(Ok(place(r)?)),
+            None => {
+                fate.push(Err(keep.len()));
+                keep.push(n.clone());
+            }
+        }
+    }
+    let mut out: Vec<(u32, u32)> = Vec::with_capacity(relocs.len());
+    for (off, k) in relocs.iter().copied() {
+        if k >> 24 != 1 {
+            out.push((off, k));
+            continue;
+        }
+        let i = (k & 0x00ff_ffff) as usize;
+        let at = off as usize;
+        match fate.get(i) {
+            Some(Err(j)) => out.push((off, 1 << 24 | *j as u32)),
+            Some(Ok(p)) => {
+                let w = u32::from_be_bytes(image[at..at + 4].try_into().unwrap());
+                match *p {
+                    Place::Abs(to) => {
+                        image[at..at + 4].copy_from_slice(&to.wrapping_add(w).to_be_bytes());
+                    }
+                    Place::Rel(to) => {
+                        image[at..at + 4].copy_from_slice(&to.wrapping_add(w).to_be_bytes());
+                        out.push((off, 0));
+                    }
+                }
+            }
+            None => out.push((off, k)),
+        }
+    }
+    *relocs = out;
+    Ok(keep)
+}
+
+/// The anchors a hook exit expression names, with the view that checks them: an expression of `exits` is evaluated over the addresses of the port.
+struct ExitEnv<'a>(BTreeMap<&'a str, i64>);
+
+impl crate::expr::Env for ExitEnv<'_> {
+    fn symbol(&self, name: &str) -> Option<i64> {
+        self.0.get(name).copied()
+    }
+    fn field(&self, _: &str) -> Option<i64> {
+        None
+    }
+    fn image(&self, _: &str, _: i64, _: u8) -> Result<i64> {
+        Err(err!(
+            "an exit is an anchor and an offset: image reads are not allowed"
+        ))
+    }
+}
+
+/// The value of the exit expression `text` on this firmware: every anchor it names is checked against the image.
+fn eval_exit(text: &str, view: &AnchorView) -> Result<u32> {
+    let expr = crate::expr::parse(text)?;
+    let mut names = vec![];
+    expr.names(&mut names);
+    let mut known: Vec<(String, i64)> = vec![];
+    for n in names {
+        known.push((n.clone(), view.addr(&n)? as i64));
+    }
+    let env = ExitEnv(known.iter().map(|(n, v)| (n.as_str(), *v)).collect());
+    let v = expr.eval(&env)?;
+    u32::try_from(v).map_err(|_| err!("exit {text:?} is {v:#x}, not a 32-bit address"))
+}
+
+/// The name with `hash` for a message: a firmware name of a port, a name in the declarations, or the hash.
+fn name_of_hash(reg: &Registry, decls: &[&str], hash: u32) -> String {
+    reg.ports
+        .iter()
+        .flat_map(|p| p.anchor.iter().map(|a| a.name.as_str()))
+        .find(|n| name_hash(n) == hash)
+        .map(str::to_string)
+        .or_else(|| name_from_decls(decls, hash))
+        .unwrap_or_else(|| format!("#{hash:08x}"))
+}
+
+/// What `bind` knows to resolve the references of one file on one firmware.
+struct RefCtx<'a> {
+    reg: &'a Registry,
+    port: &'a Port,
+    view: &'a AnchorView<'a>,
+    decls: &'a [&'a str],
+    device: &'a str,
+    bound: &'a [BoundHook],
+    /// The name hashes of the hooks the file lists for other devices.
+    idle: &'a [u32],
+    /// The image offset of the `rts` stub (made when the file refers to a `dk_ret_`).
+    ret_stub: Option<u32>,
+}
+
+impl RefCtx<'_> {
+    fn place(&self, r: FwRef) -> Result<Place> {
+        match r {
+            FwRef::Name(h) => self.name(h),
+            FwRef::Tail(h) => Err(err!(
+                "{}: a tail reference is resolved with the tails",
+                name_of_hash(self.reg, self.decls, h)
+            )),
+            FwRef::Stock(h) => match self.hook(h, "dk_stock")? {
+                None => Ok(Place::Rel(0)),
+                Some(b) => b.tail_off.map(Place::Rel).ok_or_else(|| {
+                    err!(
+                        "{}: dk_stock needs a hook without a handler (a raw hook has the stock path as its tail)",
+                        b.hook
+                    )
+                }),
+            },
+            FwRef::Ret(h) => match self.hook(h, "dk_ret")? {
+                None => Ok(Place::Rel(0)),
+                Some(_) => self
+                    .ret_stub
+                    .map(Place::Rel)
+                    .ok_or_else(|| err!("no rts stub was made for dk_ret")),
+            },
+            FwRef::Exit(h, n) => match self.hook(h, "dk_exit")? {
+                None => Ok(Place::Abs(0)),
+                Some(b) if n == 0 => Ok(Place::Abs(b.ret)),
+                Some(b) => {
+                    let exits = hook_exits(self.decls, self.device, &b.hook)?;
+                    let text = exits.get(n as usize - 1).ok_or_else(|| {
+                        err!(
+                            "{}: dk_exit_{h:08x}_{n}: the hook declares {} exit(s) in `exits`",
+                            b.hook,
+                            exits.len()
+                        )
+                    })?;
+                    Ok(Place::Abs(
+                        eval_exit(text, self.view).map_err(|e| err!("{}: exit {n}: {e}", b.hook))?,
+                    ))
+                }
+            },
+        }
+    }
+
+    /// The hook of a reference: bound on this device (`Some`), or listed by the file for another device (`None`: its references resolve to 0). Any other
+    /// hook is an error: the file refers to a hook it does not take.
+    fn hook(&self, h: u32, what: &str) -> Result<Option<&BoundHook>> {
+        if let Some(b) = self.bound.iter().find(|b| b.site_hash == h) {
+            return Ok(Some(b));
+        }
+        if self.idle.contains(&h) {
+            return Ok(None);
+        }
+        Err(err!(
+            "{what}: the file refers to the hook {}, which its HOOKS do not take",
+            name_of_hash(self.reg, self.decls, h)
+        ))
+    }
+
+    /// `dk_fw_`: the anchor of this firmware with the name hash. A name that no firmware of this device has but another device has resolves to 0 (the code that
+    /// uses it is never entered here); a name that none has, or that this device has on another firmware only, is an error.
+    fn name(&self, h: u32) -> Result<Place> {
+        fn on(p: &Port, h: u32) -> Option<&crate::port::Anchor> {
+            p.anchor.iter().find(|a| name_hash(&a.name) == h)
+        }
+        if let Some(a) = on(self.port, h) {
+            let at = self.view.addr(&a.name)?;
+            return u32::try_from(at)
+                .map(Place::Abs)
+                .map_err(|_| err!("{}: address {at:#x} is not 32 bits", a.name));
+        }
+        let (mine, others) = (
+            |p: &&Port| p.port.device == self.device,
+            |p: &&Port| p.port.device != self.device,
+        );
+        if !self
+            .reg
+            .ports
+            .iter()
+            .filter(mine)
+            .any(|p| on(p, h).is_some())
+            && self
+                .reg
+                .ports
+                .iter()
+                .filter(others)
+                .any(|p| on(p, h).is_some())
+        {
+            return Ok(Place::Abs(0));
+        }
+        Err(err!(
+            "{}: no anchor of this name on {} {}",
+            name_of_hash(self.reg, self.decls, h),
+            self.port.port.device,
+            self.port.port.version
+        ))
+    }
+}
+
+/// The identity of the stock firmware a bound file records: the first 8 bytes of the SHA-256 of its `.syx`.
+fn fw_id_of(syx_sha256: &str) -> Result<[u8; 8]> {
+    let b = unhex(syx_sha256)?;
+    b.get(..8)
+        .and_then(|b| b.try_into().ok())
+        .ok_or_else(|| err!("firmware hash {syx_sha256:?} is not a SHA-256"))
+}
+
 /// The header table of `reg` with the `BIND` list `binds` (site hash, address, trampoline offset, stock bytes) and, when `hooks` is given, that `HOOKS` list
 /// (the hooks of this device); every other list is kept.
 fn table_with_bind(
     reg: &[u8],
     binds: &[(u32, u32, u32, Vec<u8>)],
     hooks: Option<&[Pair]>,
+    fw: &[[u8; 8]],
 ) -> Result<Vec<u8>> {
     let k = Keys::parse(reg).map_err(|e| err!("header table: {e:?}"))?;
     let needs: Vec<_> = k.needs().collect();
@@ -376,6 +698,7 @@ fn table_with_bind(
         resources: &resources,
         provides: &provides,
         bind: &bind,
+        fw,
     };
     let mut out = vec![0u8; table_size(&t)];
     write_table(&t, &mut out).map_err(|e| err!("header table: {e:?}"))?;
@@ -510,8 +833,9 @@ pub fn bind(
     }
     let keys = Keys::parse(&dkm.register).map_err(|e| err!("header table: {e:?}"))?;
     let hooks: Vec<Pair> = keys.hooks().collect();
-    // a service that hooks no firmware site (lfo) has nothing to bind: it is finished as built, and the firmware is not looked at
-    if hooks.is_empty() {
+    let refs: Vec<FwRef> = dkm.imports.iter().filter_map(|n| parse_import(n)).collect();
+    // a service that hooks no firmware site and refers to no firmware name (lfo) has nothing to bind: it is finished as built, and the firmware is not looked at
+    if hooks.is_empty() && refs.is_empty() {
         return Ok((dks.to_vec(), Vec::new()));
     }
     if hooks.len() > BIND_MAX {
@@ -521,7 +845,7 @@ pub fn bind(
             hooks.len()
         ));
     }
-    if keys.bind_count() != 0 {
+    if keys.bind_count() != 0 || keys.fw_count() != 0 {
         return Err(err!("{}: is already bound (it has BIND entries)", dkm.name));
     }
     let f = Firmware::parse(fw)?;
@@ -540,24 +864,37 @@ pub fn bind(
         .map(|(off, k)| (*off, k.map_or(0, |i| 1 << 24 | i as u32)))
         .collect();
     let mut bound = Vec::new();
-    let on_device = select_hooks(
-        &dkm.name,
-        &hooks,
-        &port
-            .hook
-            .iter()
-            .map(|x| x.name.as_str())
-            .collect::<Vec<_>>(),
-        decls,
-        device,
-    )?;
-    if on_device.is_empty() {
+    let on_device = if hooks.is_empty() {
+        vec![]
+    } else {
+        select_hooks(
+            &dkm.name,
+            &hooks,
+            &port
+                .hook
+                .iter()
+                .map(|x| x.name.as_str())
+                .collect::<Vec<_>>(),
+            decls,
+            device,
+        )?
+    };
+    if on_device.is_empty() && !hooks.is_empty() {
         return Err(err!(
             "{}: none of its {} hooks is declared for {device} on this firmware",
             dkm.name,
             hooks.len()
         ));
     }
+    // the hooks that need a stock path for a `dk_stock_` reference get a tail like the ones with `tail = true`
+    let stock_for: Vec<u32> = refs
+        .iter()
+        .filter_map(|r| match r {
+            FwRef::Stock(h) => Some(*h),
+            _ => None,
+        })
+        .collect();
+    let mut tail_declared: Vec<u32> = vec![];
     for h in &on_device {
         let name = find_hook(port.hook.iter().map(|x| x.name.as_str()), h.a)?;
         if h.b as usize >= dkm.image.len() {
@@ -573,11 +910,21 @@ pub fn bind(
             bound.push(bind_site(name, &site, &plan, h.b, &mut image, &mut relocs)?);
         } else {
             let tail = hook_has_tail(decls, device, name)?;
-            bound.push(bind_raw(name, &site, h.b, tail, &mut image)?);
+            if tail {
+                tail_declared.push(h.a);
+            }
+            bound.push(bind_raw(
+                name,
+                &site,
+                h.b,
+                tail || stock_for.contains(&h.a),
+                &mut image,
+            )?);
         }
     }
     let tails: Vec<(&str, u32)> = bound
         .iter()
+        .filter(|b| tail_declared.contains(&b.site_hash))
         .filter_map(|b| Some((b.hook.as_str(), b.tail_off?)))
         .collect();
     let idle: Vec<u32> = hooks
@@ -585,14 +932,51 @@ pub fn bind(
         .filter(|h| !on_device.iter().any(|d| d.a == h.a))
         .map(|h| h.a)
         .collect();
-    let imports_kept = resolve_tail_refs(&mut image, &mut relocs, &dkm.imports, &tails, &idle)?;
+    // one `rts` serves every `dk_ret_` reference
+    let ret_stub = if refs.iter().any(|r| matches!(r, FwRef::Ret(_))) {
+        while image.len() % 4 != 0 {
+            image.push(0);
+        }
+        let at = image.len() as u32;
+        image.extend_from_slice(&[0x4e, 0x75, 0x4e, 0x71]);
+        Some(at)
+    } else {
+        None
+    };
+    let after_tails = resolve_tail_refs(&mut image, &mut relocs, &dkm.imports, &tails, &idle)?;
+    let imports_kept = if after_tails
+        .iter()
+        .any(|n| parse_import(n).is_some_and(|r| !matches!(r, FwRef::Tail(_))))
+    {
+        let view = AnchorView::new(&f, port)?;
+        let ctx = RefCtx {
+            reg,
+            port,
+            view: &view,
+            decls,
+            device,
+            bound: &bound,
+            idle: &idle,
+            ret_stub,
+        };
+        resolve_fw_refs(&mut image, &mut relocs, &after_tails, &mut |r| ctx.place(r))?
+    } else {
+        after_tails
+    };
+    // the file holds a firmware address when it has a hook (BIND) or a reference that was resolved
+    let resolved = dkm.imports.len() - imports_kept.len();
+    let fw_items: Vec<[u8; 8]> = if !bound.is_empty() || resolved > 0 {
+        vec![fw_id_of(&f.syx_sha256)?]
+    } else {
+        vec![]
+    };
     shift_bss_words(&mut image, &dkm, old)?;
     relocs.sort();
     let items: Vec<(u32, u32, u32, Vec<u8>)> = bound
         .iter()
         .map(|b| (b.site_hash, b.site_addr, b.tramp_off, b.stock.clone()))
         .collect();
-    let table = table_with_bind(&dkm.register, &items, Some(&on_device))?;
+    let table = table_with_bind(&dkm.register, &items, Some(&on_device), &fw_items)?;
     let imports: Vec<&str> = imports_kept.iter().map(String::as_str).collect();
     let file = emit(&EmitParts {
         name: &dkm.name,
@@ -959,7 +1343,7 @@ mod tests {
             (h, 0x400a_5eac, 0x30, stock.clone()),
             (h ^ 1, 0x400a_6000, 0x58, vec![9; BIND_STOCK_MAX]),
         ];
-        let t = table_with_bind(&dkm.register, &items, None).unwrap();
+        let t = table_with_bind(&dkm.register, &items, None, &[]).unwrap();
         let k = Keys::parse(&t).unwrap();
         assert_eq!(k.bind_count(), 2);
         let b = k.bind(0).unwrap();
@@ -1061,6 +1445,129 @@ mod tests {
         .unwrap();
         assert_eq!(relocs, [(0, 1 << 24), (4, 0), (8, 0), (12, 0)]);
         assert_eq!(u32::from_be_bytes(image[8..12].try_into().unwrap()), 0);
+    }
+
+    #[test]
+    fn import_names_round_trip_and_fit_the_import_limit() {
+        let (n, hook) = ("cf.draw.fn.blit", "cf.page.hook.source_draw");
+        let h = name_hash(hook);
+        for (name, want) in [
+            (fw_import(n), FwRef::Name(name_hash(n))),
+            (tail_import(hook), FwRef::Tail(h)),
+            (stock_import(hook), FwRef::Stock(h)),
+            (ret_import(hook), FwRef::Ret(h)),
+            (exit_import(hook, 0), FwRef::Exit(h, 0)),
+            (exit_import(hook, 12), FwRef::Exit(h, 12)),
+        ] {
+            assert!(name.len() <= 19, "{name}");
+            assert_eq!(parse_import(&name), Some(want), "{name}");
+        }
+        for bad in [
+            "dk_log",
+            "dk_fw_xyz",
+            "dk_exit_00000000",
+            "dk_exit_00000000_",
+            "dk_exit_00000000_123",
+            "dk_ret_ABCDEF01",
+        ] {
+            assert_eq!(parse_import(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn extern_targets_map_to_the_import_families() {
+        let hook = "cf.page.hook.source_draw";
+        let t = |x: &str| import_for_target(x);
+        assert_eq!(t("cf.draw.fn.blit"), Some(fw_import("cf.draw.fn.blit")));
+        assert_eq!(t(&format!("hook.{hook}.tail")), Some(tail_import(hook)));
+        assert_eq!(t(&format!("hook.{hook}.stock")), Some(stock_import(hook)));
+        assert_eq!(t(&format!("hook.{hook}.ret")), Some(ret_import(hook)));
+        assert_eq!(t(&format!("hook.{hook}.exit")), Some(exit_import(hook, 0)));
+        assert_eq!(
+            t(&format!("hook.{hook}.exit.3")),
+            Some(exit_import(hook, 3))
+        );
+        assert_eq!(t(&format!("hook.{hook}.exit.0")), None);
+        assert_eq!(t(&format!("hook.{hook}.nope")), None);
+        assert_eq!(t("machines.first"), None);
+    }
+
+    /// Words at 0 (addend 2) and 4 and 8, each against another import; import 0 is a runtime function that stays.
+    fn refs_fixture() -> (Vec<u8>, Vec<(u32, u32)>, Vec<String>) {
+        let imports = vec![
+            "dk_log".to_string(),
+            fw_import("cf.a"),
+            exit_import("h", 0),
+            ret_import("h"),
+        ];
+        let image = vec![0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+        let relocs = vec![
+            (0, 1 << 24 | 1),
+            (4, 1 << 24 | 2),
+            (8, 1 << 24 | 3),
+            (12, 1 << 24),
+        ];
+        (image, relocs, imports)
+    }
+
+    #[test]
+    fn firmware_names_and_exits_are_absolute_words_and_rets_are_base_relative() {
+        let (mut image, mut relocs, imports) = refs_fixture();
+        let keep = resolve_fw_refs(&mut image, &mut relocs, &imports, &mut |r| {
+            Ok(match r {
+                FwRef::Name(_) => Place::Abs(0x4000_1000),
+                FwRef::Exit(..) => Place::Abs(0x4000_2000),
+                _ => Place::Rel(0x40),
+            })
+        })
+        .unwrap();
+        assert_eq!(keep, ["dk_log"]);
+        let word = |at: usize| u32::from_be_bytes(image[at..at + 4].try_into().unwrap());
+        // the addend of the reference stays: 0x4000_1000 + 2; an absolute word has no relocation entry; the rts stub is base-relative (kind 0)
+        assert_eq!(
+            (word(0), word(4), word(8)),
+            (0x4000_1002, 0x4000_2000, 0x41)
+        );
+        assert_eq!(relocs, [(8, 0), (12, 1 << 24)]);
+    }
+
+    #[test]
+    fn a_name_that_does_not_resolve_is_an_error_naming_it_and_another_device_resolves_to_zero() {
+        let (mut image, mut relocs, imports) = refs_fixture();
+        let e = resolve_fw_refs(&mut image, &mut relocs, &imports, &mut |r| match r {
+            FwRef::Name(_) => Err(err!("cf.a: no anchor of this name on dn2 1.12")),
+            _ => Ok(Place::Abs(0)),
+        })
+        .unwrap_err();
+        assert!(e.0.contains("cf.a"), "{e}");
+        // an idle hook or a name for another device is Abs(0)/Rel(0): the word is the addend only
+        let (mut image, mut relocs, imports) = refs_fixture();
+        resolve_fw_refs(&mut image, &mut relocs, &imports, &mut |r| {
+            Ok(if matches!(r, FwRef::Ret(_)) {
+                Place::Rel(0)
+            } else {
+                Place::Abs(0)
+            })
+        })
+        .unwrap();
+        assert_eq!(u32::from_be_bytes(image[0..4].try_into().unwrap()), 2);
+        assert_eq!(relocs, [(8, 0), (12, 1 << 24)]);
+    }
+
+    #[test]
+    fn the_fw_item_is_written_only_when_given() {
+        let dks = service_file(&[], &[]);
+        let dkm = Dkm::parse(&dks).unwrap();
+        let id = [1, 2, 3, 4, 5, 6, 7, 8];
+        let t = table_with_bind(&dkm.register, &[], None, &[]).unwrap();
+        assert_eq!(Keys::parse(&t).unwrap().fw_count(), 0);
+        let t = table_with_bind(&dkm.register, &[], None, &[id]).unwrap();
+        let k = Keys::parse(&t).unwrap();
+        assert_eq!((k.fw_count(), k.fw(0)), (1, Some(id)));
+        assert_eq!(
+            fw_id_of(&"0123456789abcdef".repeat(4)).unwrap(),
+            [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]
+        );
     }
 
     #[test]

@@ -234,7 +234,9 @@ fn table_with_needs(
     let mut groups: Vec<(u32, Vec<u32>)> = vec![];
     let mut provided: Vec<Pair> = vec![];
     let mut binds: Vec<Bind> = vec![];
+    let mut fw_items: Vec<[u8; 8]> = vec![];
     if let Some(k) = &keys {
+        fw_items.extend((0..k.fw_count()).filter_map(|i| k.fw(i)));
         provided.extend(k.provides().map(|(a, b)| Pair { a, b }));
         binds.extend((0..k.bind_count()).filter_map(|i| k.bind(i)).map(|b| Bind {
             site: b.site,
@@ -264,6 +266,7 @@ fn table_with_needs(
     let t = Table {
         provides: &provided,
         bind: &binds,
+        fw: &fw_items,
         needs: &needs,
         uses: &uses,
         keys: &key_groups,

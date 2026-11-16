@@ -444,6 +444,20 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   turns each reference into a base-relative relocation to it and drops the import. The `BIND` item carries the stock bytes of
   the site as for any hook, so the runtime refuses a firmware that differs with E_HOOK_STOCK before it installs anything. An
   unbound `.dks` has no firmware bytes.
+- **Firmware references.** A service names firmware in five ways, all resolved by `patchkit bind` (`bind::FwRef`); `patchkit pack` makes the import names
+  from the `[object.externs]` of the service module (`alias = "target"`) and renames the `cf.*` symbols a Rust service takes from the `dkfw` crate to `dk_fw_`.
+  H is the 8 hex digits of `name_hash`.
+
+  | import | extern target | resolves to |
+  | --- | --- | --- |
+  | `dk_fw_<H(name)>` | `cf.draw.fn.blit` | the address of the anchor; an offset is the addend; absolute word, no relocation |
+  | `dk_exit_<H(hook)>_<n>` | `hook.<hook>.exit` (n = 0), `hook.<hook>.exit.<n>` | n = 0: the end of the site; n >= 1: `exits[n-1]` of the hook; absolute word |
+  | `dk_tail_<H(hook)>` | `hook.<hook>.tail` | the generated tail (`tail = true`); base-relative |
+  | `dk_stock_<H(hook)>` | `hook.<hook>.stock` | the same code, called with `jsr`; control comes back; base-relative |
+  | `dk_ret_<H(hook)>` | `hook.<hook>.ret` | one `rts` that bind appends; base-relative |
+
+  A name that only another device has, and a hook listed only for another device, resolve to 0; any other unknown name is a bind error naming it. A file with a
+  hook or a resolved reference gets the table item `FW`; `patchkit apply` adds the info entry `fw_id`, and the loader refuses a file bound to another firmware with E_HOOK_STOCK.
 - **Hooks per device.** One `.dks` serves both devices. `[[hook]]` in the module's `module.toml` has `devices`; the `service!`
   call lists `(name, entry)` for every device, `(name, entry, dt2)` or `(name, entry, dn2)` for one, and declares at `init` those of
   the running device. The packer writes the device set of each hook into the unbound file: an item of `HOOKS` is `{name hash, word}`,
