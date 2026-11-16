@@ -113,7 +113,7 @@ fn stem_of(path: &[u8]) -> Option<&[u8]> {
 }
 
 #[inline(never)]
-/// Check the staged file `file` as a provider and put its table, without the BIND entry, into slot `k` of `out`; false when the file is not a usable provider.
+/// Check the staged file `file` as a provider and put its table, without the BIND and FW entries, into slot `k` of `out`; false when the file is not a usable provider.
 fn table_of(file: &[u8], k: usize, out: &mut Found) -> bool {
     let be = |p: usize| u32::from_be_bytes([file[p], file[p + 1], file[p + 2], file[p + 3]]);
     if file.len() < dkneeds::H_REG_SIZE as usize + 4 || be(dkneeds::H_ROLE as usize) != 1 {
@@ -136,15 +136,19 @@ fn table_of(file: &[u8], k: usize, out: &mut Found) -> bool {
     }
     let mut n_entries = u16::from_be_bytes([src[6], src[7]]) as usize;
     let mut end = len;
-    if full.count(tag::BIND) != 0 {
+    if full.count(tag::BIND) != 0 || full.count(tag::FW) != 0 {
+        // BIND and FW have the highest tags, so they are the last entries: the copy ends at the first entry of a tag from BIND up
         let mut pos = 8;
-        let mut e = 1;
+        let mut e = 0;
         while e < n_entries {
+            if u16::from_be_bytes([src[pos], src[pos + 1]]) >= tag::BIND {
+                break;
+            }
             pos += 8 + u32::from_be_bytes([src[pos + 4], src[pos + 5], src[pos + 6], src[pos + 7]]) as usize;
             e += 1;
         }
         end = pos;
-        n_entries -= 1;
+        n_entries = e;
     }
     if end > TABLE_MAX {
         return false; // the copy does not hold the table
@@ -304,7 +308,7 @@ mod tests {
     static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[] };
 
     /// A role `role` file with `table` as it is.
     fn raw_file(role: u32, table: &[u8]) -> Vec<u8> {
@@ -372,7 +376,7 @@ mod tests {
         let stock = [0xa5u8; 64];
         let binds: Vec<dkneeds::keys::Bind> =
             (0..n).map(|i| dkneeds::keys::Bind { site: i as u32 + 1, addr: 0x1000, tramp: 0x20, stock: &stock }).collect();
-        raw_file(1, &table_of_t(&Table { provides: &[Pair { a: name_hash(name), b: 0x010000 }], bind: &binds, ..KEEP }))
+        raw_file(1, &table_of_t(&Table { provides: &[Pair { a: name_hash(name), b: 0x010000 }], bind: &binds, fw: &[[7; 8]], ..KEEP }))
     }
 
     #[test]
@@ -383,10 +387,10 @@ mod tests {
         let mut fs = cards(vec![("services/big.dks".into(), f)]);
         let out = run(&mut fs, &["big"]);
         assert_eq!(out.n, 1);
-        // the planner's copy is the table without BIND, still version 2 with its one PROVIDES
+        // the planner's copy is the table without BIND and FW, still version 2 with its one PROVIDES
         let keys = Keys::parse(out.table(0)).unwrap();
         assert_eq!(keys.version(), 2);
-        assert_eq!(keys.count(tag::BIND), 0);
+        assert_eq!((keys.count(tag::BIND), keys.count(tag::FW)), (0, 0));
         assert_eq!(keys.count(tag::PROVIDES), 1);
         assert!(out.table(0).len() <= TABLE_MAX);
         let user = table_of_t(&Table { needs: &[Need { service: name_hash("big"), min_version: 0x010000, hard: true }], ..KEEP });

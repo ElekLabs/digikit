@@ -638,6 +638,84 @@ fn a_provider_with_another_abi_word_or_a_site_that_is_not_stock_is_refused_befor
     }
 }
 
+/// The identity of the firmware: the image (`patchkit apply`) has the entry `fw_id` and a bound service file (`patchkit bind`) the `FW` item, both the first 8 bytes of
+/// the SHA-256 of the stock image, so a file bound from the same firmware matches. The same file on an image of another firmware is refused as a site that is not stock,
+/// before anything is written (the check runs before the stock bytes and before `init`).
+#[test]
+fn a_bound_file_carries_the_identity_of_its_image_and_a_file_for_another_firmware_is_refused_before_anything_is_written()
+ {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        let id = image
+            .entries
+            .iter()
+            .find(|e| e.1 == name_hash("fw_id"))
+            .unwrap_or_else(|| panic!("{}: the image has no fw_id entry", dev.name));
+        assert_eq!(
+            (id.2, id.3.len() >= 2),
+            (0, true),
+            "{}: fw_id is a data entry of at least two words",
+            dev.name
+        );
+        let words = [id.3[0], id.3[1]];
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
+            let j = (0..plan.np)
+                .find(|j| l.found.path(*j) == b"services/fx.dks")
+                .unwrap();
+            let file =
+                l.m.files
+                    .iter()
+                    .find(|(n, _)| n == b"services/fx.dks")
+                    .unwrap()
+                    .1
+                    .clone();
+            let t = table_of(&file);
+            let keys = Keys::parse(&t).unwrap();
+            assert_eq!(
+                keys.fw_count(),
+                1,
+                "{}: fx.dks is bound and carries its firmware identity",
+                dev.name
+            );
+            let fw = keys.fw(0).unwrap();
+            let be32 = |b: &[u8]| u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
+            assert_eq!(
+                [be32(&fw[..4]), be32(&fw[4..])],
+                words,
+                "{}: the file is bound to the firmware of the image",
+                dev.name
+            );
+            // another firmware: the image's id differs by one bit
+            let h = name_hash("fw_id");
+            l.p.info_entries
+                .borrow_mut()
+                .iter_mut()
+                .find(|(x, _)| *x == h)
+                .unwrap()
+                .1[1] ^= 1;
+            l.phase = Phase::Boot;
+            assert_eq!(
+                l.load_provider(b"services/fx.dks\0".as_ptr(), j),
+                E_HOOK_STOCK,
+                "{}",
+                dev.name
+            );
+            assert!(l.m.live.is_empty(), "nothing is allocated");
+            assert!(
+                !l.p.calls
+                    .borrow()
+                    .iter()
+                    .any(|c| matches!(c, Call::Write { .. } | Call::Word { .. } | Call::Mask)),
+                "nothing is written"
+            );
+            assert_eq!(l.installer.count(), 0);
+        }
+        let _ = clean_state();
+    }
+}
+
 // ---- consistency of the generated artifacts (no firmware needed) ----------------------------------------------------------------
 
 /// The committed objects of the service files carry the ABI word the runtime object compares with (`dk_svc_abi` against the immediate of `abi_ok`), and the packed

@@ -453,6 +453,9 @@ fn service_file_of(mut v: Vec<u8>, table: &dkneeds::keys::Table, dsp: u32) -> Ve
 const SITE: u32 = 0x400a_5eac;
 const STOCK: [u8; 6] = [0x20, 0x52, 0x48, 0x78, 0x00, 0x02];
 const SVC: &str = "svc-test";
+/// The `FW` item of the service and the `fw_id` words of the image it matches (the first 8 bytes of the stock firmware's SHA-256, as two big endian words).
+const FW_ID: [u8; 8] = [0xd1, 0x5e, 0xa5, 0xe0, 0x11, 0x22, 0x33, 0x44];
+const FW_ITEMS: &[[u8; 8]] = &[FW_ID];
 
 /// The table of a service `SVC` that exports `ping` (image offset 8) and binds one hook at `SITE` (handler at 4, trampoline at 16).
 fn svc_table<'a>(bind: &'a [dkneeds::keys::Bind<'a>]) -> dkneeds::keys::Table<'a> {
@@ -465,6 +468,7 @@ fn svc_table<'a>(bind: &'a [dkneeds::keys::Bind<'a>]) -> dkneeds::keys::Table<'a
         exports: EXPORTS.get_or_init(|| [Pair { a: name_hash("dk_svctest_ping"), b: 8 }]),
         hooks: HOOKS.get_or_init(|| [Pair { a: name_hash("hook.a"), b: 4 }]),
         bind,
+        fw: FW_ITEMS,
         ..Default::default()
     }
 }
@@ -485,8 +489,21 @@ fn svc_init() -> Init {
 unsafe fn provider_loader(file: Vec<u8>, init: Init) -> Fake {
     let l = loader_of(init, file);
     l.p.put_code(SITE, &STOCK);
+    set_fw_id(&l, Some(FW_ID));
     l
 }
+
+/// The `fw_id` entry of the image's info table (a data table of two words): the first 8 bytes of the stock firmware's SHA-256; `None`: the image has none.
+fn set_fw_id(l: &Fake, id: Option<[u8; 8]>) {
+    let h = dkneeds::keys::name_hash("fw_id");
+    l.p.info_entries.borrow_mut().retain(|(x, _)| *x != h);
+    if let Some(id) = id {
+        let w = |i: usize| u32::from_be_bytes([id[i], id[i + 1], id[i + 2], id[i + 3]]);
+        l.p.info_entries.borrow_mut().push((h, vec![w(0), w(4)]));
+        l.p.info_data.borrow_mut().push(h);
+    }
+}
+
 
 fn site_bytes(l: &Fake, n: usize) -> Vec<u8> {
     let mut out = vec![0u8; n];
@@ -650,6 +667,78 @@ fn a_hook_site_that_is_not_stock_refuses_the_provider_before_anything_is_allocat
         assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Init(..))));
         assert_eq!(site_bytes(&l, 6), [0x20, 0x52, 0x48, 0x99, 0x00, 0x02]);
         assert_eq!((l.installer.count(), l.exports.count()), (0, 0));
+    }
+}
+
+/// A bound file holds the identity of the firmware it was bound to. A file for another firmware, or an image that has no `fw_id`, is refused as a site that is not
+/// stock (`E_HOOK_STOCK`), before anything is allocated and before `init`; the stock bytes of the sites are not even looked at.
+#[test]
+fn a_provider_bound_to_another_firmware_is_refused_before_anything_is_allocated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut other = FW_ID;
+        other[7] ^= 1;
+        for id in [Some(other), None] {
+            let bind = svc_bind(&STOCK);
+            let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+            set_fw_id(&l, id);
+            assert_eq!(
+                l.load_provider(PATH.as_ptr(), 0),
+                E_HOOK_STOCK,
+                "image id {id:?}"
+            );
+            assert_eq!(l.m.allocs, 0);
+            assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Init(..))));
+            assert_eq!(site_bytes(&l, 6), STOCK);
+            assert_eq!((l.installer.count(), l.exports.count()), (0, 0));
+        }
+        // the identity is checked before the stock bytes: the stock check never runs when the identity differs (a non-stock site and the right id is the other test)
+        let bind = svc_bind(&STOCK);
+        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+        set_fw_id(&l, Some(other));
+        l.p.put_code(SITE + 3, &[0x99]);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_HOOK_STOCK);
+        assert!(
+            !l.p.calls
+                .borrow()
+                .iter()
+                .any(|c| matches!(c, crate::fake_platform::Call::Mask))
+        );
+    }
+}
+
+/// `BIND` items without an `FW` item are `E_FORMAT` (a file bound by an older patchkit), and so are two `FW` items; both come before the stock check. A file with no
+/// `FW` and no `BIND` has no firmware address and loads on any image.
+#[test]
+fn the_fw_item_rules_are_format_errors_and_a_file_with_no_firmware_reference_loads_anywhere() {
+    use dkneeds::keys::Table;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let bind = svc_bind(&STOCK);
+        for (fw, what) in [
+            (&[][..], "BIND without FW"),
+            (&[FW_ID, FW_ID][..], "two FW items"),
+        ] {
+            let table = Table {
+                fw,
+                ..svc_table(&bind)
+            };
+            let mut l = provider_loader(service_file(&table, 0), svc_init());
+            l.p.put_code(SITE + 3, &[0x99]);
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT, "{what}");
+            assert_eq!(l.m.allocs, 0, "{what}");
+        }
+        // no FW and no BIND: accepted, whatever the image's fw_id is (or even if it has none)
+        let table = Table {
+            bind: &[],
+            hooks: &[],
+            exports: &[],
+            fw: &[],
+            ..svc_table(&bind)
+        };
+        let mut l = provider_loader(service_file(&table, 0), Init::Ok);
+        set_fw_id(&l, None);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
     }
 }
 
