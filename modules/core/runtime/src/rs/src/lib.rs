@@ -131,5 +131,9 @@ mod contract_tests;
 mod svc_contract_tests;
 #[cfg(test)]
 mod fake_storage;
+#[cfg(test)]
+mod host_io;
+#[cfg(test)]
+mod store_tests;
 
 

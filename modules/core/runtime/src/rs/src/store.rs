@@ -71,6 +71,12 @@ pub struct File {
 /// differs checks the table's CRC again (one pass over the table), so a lookup costs the headers and one scan.
 static mut CHECKED: Option<(u32, u32, u32)> = None;
 
+/// Host tests: a new card in the host model (or a changed one) has no table checked yet.
+#[cfg(test)]
+pub(crate) fn test_forget_checked() {
+    unsafe { write_volatile(addr_of_mut!(CHECKED), None) }
+}
+
 /// The upload committed `h`: its table is the one just written and read back.
 pub fn note_commit(h: &Hdr) {
     unsafe { write_volatile(addr_of_mut!(CHECKED), Some((h.seq, h.table_crc, h.table_first))) }

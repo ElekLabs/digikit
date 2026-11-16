@@ -8,12 +8,12 @@ use std::vec::Vec;
 
 /// A 16-byte aligned block as the arena gives it.
 #[repr(C, align(16))]
-struct Block([u8; 512]);
+pub(crate) struct Block([u8; 4096]);
 
 const H: [u8; 32] = [7; 32];
 
-fn list(s: &FakeStorage, root: u32, dir: &[u8]) -> Result<Vec<(Vec<u8>, Stat)>, i32> {
-    let mut block = Block([0; 512]);
+pub(crate) fn list<S: Storage>(s: &S, root: u32, dir: &[u8]) -> Result<Vec<(Vec<u8>, Stat)>, i32> {
+    let mut block = Block([0; 4096]);
     assert!(s.list_state_bytes(root) <= block.0.len());
     let cur = block.0.as_mut_ptr();
     let mut e = DirEntry::empty();
@@ -34,10 +34,10 @@ fn list(s: &FakeStorage, root: u32, dir: &[u8]) -> Result<Vec<(Vec<u8>, Stat)>, 
 // ---- the contract table (tests/storage/contract.toml) ------------------------------------------------------------------------
 
 /// One `[[file]]` or `[[case]]` of the table: its `key = value` lines.
-type Row = BTreeMap<String, String>;
+pub(crate) type Row = BTreeMap<String, String>;
 
 /// The rows of the table: the files and the cases. The format is line based: a header line `[[file]]` or `[[case]]`, then `key = value` lines.
-fn rows(table: &str) -> (Vec<Row>, Vec<Row>) {
+pub(crate) fn rows(table: &str) -> (Vec<Row>, Vec<Row>) {
     let (mut files, mut cases) = (Vec::new(), Vec::new());
     let mut current: Option<(bool, Row)> = None;
     let mut done = |c: &mut Option<(bool, Row)>| {
@@ -57,7 +57,7 @@ fn rows(table: &str) -> (Vec<Row>, Vec<Row>) {
     (files, cases)
 }
 
-fn root_of(name: &str) -> u32 {
+pub(crate) fn root_of(name: &str) -> u32 {
     match name {
         "samples" => ROOT_SAMPLES,
         "store" => ROOT_STORE,
@@ -67,7 +67,7 @@ fn root_of(name: &str) -> u32 {
 }
 
 /// The ramp every file of the table holds.
-fn ramp(n: usize) -> Vec<u8> {
+pub(crate) fn ramp(n: usize) -> Vec<u8> {
     (0..n).map(|i| (i * 31 + 7) as u8).collect()
 }
 
@@ -87,7 +87,7 @@ fn tree(files: &[Row], samples_max: u32) -> FakeStorage {
 }
 
 /// The path of a case: `path`, `path_len` (N times "a", or the root's limit `max` and `max+1`) or `path_nul`.
-fn path_of(case: &Row, limit: u32) -> Vec<u8> {
+pub(crate) fn path_of(case: &Row, limit: u32) -> Vec<u8> {
     if let Some(n) = case.get("path_len") {
         let n = match n.as_str() {
             "max" => limit as usize,
@@ -120,7 +120,7 @@ fn entry_text(name: &[u8], st: &Stat) -> String {
 }
 
 /// What `case` gives on `s`, in the words of the table's `expect`.
-fn answer(s: &FakeStorage, case: &Row) -> String {
+pub(crate) fn answer<S: Storage>(s: &S, case: &Row) -> String {
     let root = root_of(&case["root"]);
     let limit = s.path_max(root);
     let path = path_of(case, limit);
@@ -243,7 +243,7 @@ fn list_with_pending_gives_pending_before_each_entry() {
     let s = FakeStorage::new();
     s.add_dir(ROOT_SAMPLES, b"EMPTY");
     s.pending_every.set(1);
-    let mut block = Block([0; 512]);
+    let mut block = Block([0; 4096]);
     let cur = block.0.as_mut_ptr();
     let mut e = DirEntry::empty();
     unsafe {

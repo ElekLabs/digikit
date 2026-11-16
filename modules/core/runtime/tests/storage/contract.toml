@@ -1,6 +1,10 @@
 # The Storage contract: what the core expects of `Storage` (modules/core/runtime/abi/src/storage.rs). One table, two checkers:
 #   host    `FakeStorage` (src/rs/src/fake_storage.rs) answers every row; the real adapter answers the same rows
 #   device  `storage.device.test.ts` runs the rows with `device = "list"` on the real adapter of each device, through the listing of test/files-proof
+#   store   `store_tests.rs` writes the `[[file]]` tree through the real writer over a model of the card and answers every row of a device with its
+#           samples in the store (DN2), and the store-root rows of a device with the firmware file system (DT2), through `PLATFORM`. The same file holds the
+#           writer cases (write session, pending files, abort, rename, mkdir, delete, clear, verify, busy refusals, power cuts), the route cases and the
+#           one-lister case; they are host tests, not rows of this table.
 # A row with no device checker says why in `device_pending`. The rows are line based (`key = value`, one per line): the host test reads them without a
 # TOML crate, and a row has no other lines.
 #

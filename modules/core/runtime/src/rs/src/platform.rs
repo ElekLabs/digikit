@@ -77,6 +77,38 @@ pub const PLATFORM: RealPlatform = RealPlatform;
 static mut POOL_STATE: u8 = 0;
 static mut PD_STATE: u8 = 0;
 
+// Host tests: the profile of `PLATFORM` for this thread (DT2 unless a `ProfileGuard` says another), so the tests of the store and the writer can run
+// the routes of both devices over the one real platform.
+#[cfg(test)]
+thread_local! {
+    static TEST_PROFILE: core::cell::Cell<DeviceProfile> = const { core::cell::Cell::new(dkrt_abi::profiles::DT2) };
+}
+
+/// `PLATFORM` answers as `profile` while this lives.
+#[cfg(test)]
+pub(crate) struct ProfileGuard;
+
+#[cfg(test)]
+impl ProfileGuard {
+    pub(crate) fn set(profile: DeviceProfile) -> ProfileGuard {
+        TEST_PROFILE.with(|c| c.set(profile));
+        ProfileGuard
+    }
+}
+
+#[cfg(test)]
+impl Drop for ProfileGuard {
+    fn drop(&mut self) {
+        TEST_PROFILE.with(|c| c.set(dkrt_abi::profiles::DT2));
+    }
+}
+
+/// Host tests: ask `StagedWriter::present` again (it remembers its first answer).
+#[cfg(test)]
+pub(crate) fn test_forget_staged_writer() {
+    unsafe { write_volatile(addr_of_mut!(PD_STATE), 0) }
+}
+
 /// The word a firmware code literal points to, when the literal is a DDR address (a misplaced anchor reads nothing).
 #[cfg(not(test))]
 unsafe fn word_at_literal(lit: *const u32) -> Option<u32> {
@@ -107,7 +139,7 @@ impl Platform for RealPlatform {
     }
     #[cfg(test)]
     fn profile(&self) -> DeviceProfile {
-        dkrt_abi::profiles::DT2
+        TEST_PROFILE.with(|c| c.get())
     }
 
     // The facts one word each: a caller that needs one fact does not read the other three (the reads are volatile and stay).
