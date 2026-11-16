@@ -33,5 +33,8 @@ dkrt_svc_rt::service!(
         ("cf.page.hook.source_turn", hooks::mf_turn_hook),
     ],
     fills = [("frametype", hooks::mf_frametype, dn2)],
-    exports = [("dk_param_get", fw::dk_param_get), ("dk_param_set", fw::dk_param_set)]
+    exports = [
+        ("dk_param_get", fw::dk_param_get),
+        ("dk_param_set", fw::dk_param_set)
+    ]
 );

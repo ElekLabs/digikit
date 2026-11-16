@@ -173,25 +173,18 @@ mf_list_entry:
     jmp     _mf_t_list
 
 
-| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the image and the firmware (modules/core/services/machines/dks/src/
-| image.rs has the layout; the word index is the byte offset / 4). Addresses only: the file's hooks continue in the stock code through the tails `patchkit bind` makes, or
-| through the exits below. 2 = the Digitone II.
+| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (modules/core/services/machines/dks/src/
+| image.rs has the layout; the word index is the byte offset / 4): the registry, `mf_ensure`, the native page functions, the slot map and the page rows. The firmware
+| addresses are not here: the file names them and `patchkit bind` resolves them. 2 = the Digitone II.
     .section .rodata
     .balign 4
     .globl machines_info
 machines_info:
-    .long   0x4d414348, 1, 2                | magic MACH, version, device
-    .long   _mf_k_keydown, _mf_k_setvalue, _mf_k_viewtrack
+    .long   0x4d414348, 2, 2                | magic MACH, version, device
     .long   _mf_first, _mf_count, _mf_entries, _mf_rows
     .long   mf_ensure
     .long   mf_native_page_count, mf_native_descriptor, mf_native_code, mf_native_draw, mf_native_overlay
-    .long   0, 0, _mf_pgrows, _mf_pgn       | (current track type, slot map: Digitakt II), the page rows and their count
-    .long   0, 0                            | clone.5 (Digitakt II)
-    .long   0                               | parameter code exit (Digitakt II)
-    .long   0, 0                            | SRC page (Digitakt II)
-    .long   _mf_g + 6, _mf_ga               | group: behind the site, the target of its branch
-    .long   _mf_ft + 6, _mf_rd + 8, _mf_ow + 6    | frame type, type reader load, owner test
-    .long   _mf_rc0 + 4, _mf_rc1 + 4, _mf_rc2 + 6, _mf_rc3 + 6, _mf_rc4 + 6, _mf_rc5 + 6, _mf_rc6 + 6, _mf_rc7 + 6, _mf_rc8 + 6
+    .long   0, _mf_pgrows, _mf_pgn          | (the slot map: Digitakt II), the page rows and their count
 
     .bss
     .balign 4

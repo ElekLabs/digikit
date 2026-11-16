@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "dkfw"
+version = "0.1.0"
+
+[[package]]
 name = "dkneeds"
 version = "0.1.0"
 
@@ -39,6 +43,7 @@ dependencies = [
 name = "dkrt-svc-machines-dks"
 version = "0.1.0"
 dependencies = [
+ "dkfw",
  "dkrt-abi",
  "dkrt-sdk",
  "dkrt-svc-machines",
