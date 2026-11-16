@@ -7,7 +7,6 @@
 //! (profile of the first device file, no block clock, no MIDI counter). The tests that drive platform behaviour use `FakePlatform` (`fake_platform.rs`)
 //! through the generic functions.
 
-use crate::card;
 use crate::state::{State, DKRT_STATE};
 use core::ffi::c_void;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
@@ -516,27 +515,9 @@ pub unsafe fn block_read(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
     PLATFORM.block_read(sector, bytes, buf)
 }
 
-/// The firmware's block write, ungated. Only `block_write` and `card::claim` call it.
+/// The firmware's block write, ungated. Only `card::block_write` and `card::claim` call it.
 pub unsafe fn raw_block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
     PLATFORM.block_write_raw(sector, bytes, buf)
-}
-
-/// The one function that writes the card. Write `bytes` (a multiple of 512) from `buf` (16-byte aligned) to `sector`: refused with `E_RANGE`
-/// outside the store range of the device file, and with `E_CARD_RO` when the card's area is not ours (`card::admit`; finding 46). Every
-/// runtime card write goes through here: the selection record and the boot counter (boot.rs), uploads (store_cmds.rs), and the claim of a blank
-/// range (card.rs, which calls `raw_block_write` for its own headers after the same checks).
-pub unsafe fn block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
-    block_write_with(&PLATFORM, sector, bytes, buf)
-}
-
-/// `block_write` over a platform (the host tests drive it with `FakePlatform`).
-pub unsafe fn block_write_with<P: Platform>(p: &P, sector: u32, bytes: u32, buf: *const u8) -> i32 {
-    let g = card::admit_with(p, sector, bytes);
-    if g != OK {
-        return g;
-    }
-    card::info().writes = card::info().writes.wrapping_add(1);
-    p.block_write_raw(sector, bytes, buf)
 }
 
 /// Send one complete MIDI message (F0 .. F7 for SysEx) to `port` (2 = USB). The firmware takes the MIDI TX mutex itself and spins

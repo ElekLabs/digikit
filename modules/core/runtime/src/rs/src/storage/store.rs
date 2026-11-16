@@ -9,26 +9,9 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::store::{self, Hdr, Io, Layout, Table, KIND_FILE};
 use dkrt_sdk::*;
 
-extern "C" {
-    /// The store area of this device (`devices/*.toml [card.store]`, `src/cf/<dev>/device.s`): the first card sector and the number of sectors.
-    static dkrt_store_first: u32;
-    static dkrt_store_sectors: u32;
-}
-
-/// Host tests: a store layout for this thread (the device words of the host fixture are zero).
+pub use super::layout::layout;
 #[cfg(test)]
-thread_local! {
-    pub static TEST_LAYOUT: core::cell::Cell<Option<Layout>> = const { core::cell::Cell::new(None) };
-}
-
-/// Where the store is on this device.
-pub fn layout() -> Layout {
-    #[cfg(test)]
-    if let Some(l) = TEST_LAYOUT.with(|c| c.get()) {
-        return l;
-    }
-    unsafe { Layout { first: read_volatile(addr_of!(dkrt_store_first)), sectors: read_volatile(addr_of!(dkrt_store_sectors)) } }
-}
+pub(crate) use super::layout::TEST_LAYOUT;
 
 /// 512 bytes, 16-byte aligned: the header sectors (UI task or the mailbox; the upload has its own buffer).
 #[repr(C, align(16))]
@@ -107,11 +90,11 @@ pub unsafe fn open() -> Result<Table, i32> {
 
 /// Look `path` up. Leaves garbage in the staging buffer (the table is scanned through it); the result is by value.
 pub unsafe fn find(path: *const u8) -> Result<File, i32> {
-    if !crate::store_writer::acquire() {
+    if !super::lock::acquire() {
         return Err(E_BUSY);
     }
     let r = find_unlocked(path);
-    crate::store_writer::unlock();
+    super::lock::unlock();
     r
 }
 
@@ -152,11 +135,11 @@ pub unsafe fn load_to_stage(f: &File) -> i32 {
     let sectors = (f.size + 511) / 512;
     let buf = stage();
     // `first` is relative to the start of the store
-    if !crate::store_writer::acquire() {
+    if !super::lock::acquire() {
         return E_BUSY;
     }
     let r = store::read_sectors(&reader(), &layout(), f.first, sectors, buf, STAGE_BYTES);
-    crate::store_writer::unlock();
+    super::lock::unlock();
     if r != OK {
         return r;
     }
@@ -224,7 +207,7 @@ pub unsafe fn seen() -> Option<(u32, u32)> {
     }
     if core::ptr::read_volatile(addr_of!(STORE_DIRTY)) {
         // an SDK write or a SysEx command is inside the store: keep the last figures, the flag stays set for the next refresh
-        if !crate::store_writer::try_lock() {
+        if !super::lock::try_lock() {
             return STORE_SEEN;
         }
         // clear first: a header written while we read leaves the flag set for the next refresh
@@ -236,7 +219,7 @@ pub unsafe fn seen() -> Option<(u32, u32)> {
             }
             Err(_) => None,
         };
-        crate::store_writer::unlock();
+        super::lock::unlock();
     }
     STORE_SEEN
 }
@@ -245,11 +228,11 @@ pub unsafe fn seen() -> Option<(u32, u32)> {
 /// into `out`; returns how many, or a negative code (`E_NOT_FOUND`: no store). A path that does not fit 63 bytes, a folder and an empty file are
 /// left out. A commit of an upload running at the same time makes the list start again (it is one header's table).
 pub unsafe fn list(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32 {
-    if !crate::store_writer::acquire() {
+    if !super::lock::acquire() {
         return E_BUSY;
     }
     let r = list_unlocked(prefix, out, max);
-    crate::store_writer::unlock();
+    super::lock::unlock();
     r
 }
 
@@ -318,11 +301,11 @@ pub unsafe fn read_sector(rel: u32, out: *mut u8) -> i32 {
     if crate::card::state() == CARD_TOO_SMALL {
         return E_NOT_FOUND;
     }
-    if !crate::store_writer::acquire() {
+    if !super::lock::acquire() {
         return E_BUSY;
     }
     let r = store::read_sectors(&reader(), &layout(), rel, 1, out, 512);
-    crate::store_writer::unlock();
+    super::lock::unlock();
     r
 }
 
@@ -362,11 +345,11 @@ pub unsafe extern "C" fn dkrt_store_read(f: *const DkrtStoreFile, sector: u32, c
         Ok(r) => r,
         Err(e) => return e,
     };
-    if !crate::store_writer::acquire() {
+    if !super::lock::acquire() {
         return E_BUSY;
     }
     let r = store::read_sectors(&reader(), &layout(), rel, count, dst, count as usize * 512);
-    crate::store_writer::unlock();
+    super::lock::unlock();
     r
 }
 
@@ -376,12 +359,12 @@ pub unsafe extern "C" fn dkrt_store_read(f: *const DkrtStoreFile, sector: u32, c
 /// The table is scanned through the SDK buffers of the store writer, which the store lock guards: the staging buffer is not touched, so any task
 /// may lease (the sample pool's window step does, in the worker task).
 pub unsafe fn lease(owner: u8, path: *const u8, out: &mut DkrtStoreFile) -> i32 {
-    if !crate::store_writer::acquire() {
+    if !super::lock::acquire() {
         return E_BUSY;
     }
-    let b = crate::store_writer::sdk_bufs();
-    let found = match open_in(b.scr, b.tin, crate::store_writer::TBL_CAP) {
-        Ok(t) => match store::find(&reader(), &layout(), &t.h, b.tin, crate::store_writer::TBL_CAP, path) {
+    let b = super::lock::sdk_bufs();
+    let found = match open_in(b.scr, b.tin, super::lock::TBL_CAP) {
+        Ok(t) => match store::find(&reader(), &layout(), &t.h, b.tin, super::lock::TBL_CAP, path) {
             Ok(Some((_, e))) if e.kind == KIND_FILE => Ok(e),
             Ok(_) => Err(E_NOT_FOUND),
             Err(e) => Err(e),
@@ -390,7 +373,7 @@ pub unsafe fn lease(owner: u8, path: *const u8, out: &mut DkrtStoreFile) -> i32 
     };
     let r = match found {
         Ok(e) => {
-            let id = crate::store_writer::lease_take(owner, e.first, e.size);
+            let id = super::lock::lease_take(owner, e.first, e.size);
             if id > 0 {
                 out.first = e.first;
                 out.size = e.size;
@@ -400,7 +383,7 @@ pub unsafe fn lease(owner: u8, path: *const u8, out: &mut DkrtStoreFile) -> i32 
         }
         Err(e) => e,
     };
-    crate::store_writer::unlock();
+    super::lock::unlock();
     r
 }
 
@@ -418,7 +401,7 @@ pub unsafe extern "C" fn dkrt_store_lease(path: *const u8, out: *mut DkrtStoreFi
 /// `dkrt_store_unlease(id)`: end a lease (any task, no waiting). An id that is not live is ignored.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_store_unlease(id: i32) {
-    crate::store_writer::lease_end(id);
+    super::lock::lease_end(id);
 }
 
 #[cfg(test)]

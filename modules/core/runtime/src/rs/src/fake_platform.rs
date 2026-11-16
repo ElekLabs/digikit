@@ -8,8 +8,8 @@
 use crate::card;
 use crate::fake_storage::FakeStorage;
 use crate::files::path_too_big;
-use crate::platform::block_write_with;
-use crate::store::TEST_LAYOUT;
+use crate::card::block_write_with;
+use crate::storage::layout::TEST_LAYOUT;
 use crate::transport::{reply_with, tx_room_with, TX_RING};
 use core::cell::{Cell, RefCell};
 use core::ffi::c_void;

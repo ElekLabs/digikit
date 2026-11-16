@@ -72,7 +72,7 @@ pub fn writable() -> bool {
 }
 
 fn lay() -> store::Layout {
-    crate::store::layout()
+    super::layout::layout()
 }
 
 /// Sectors 128 at a time: 64 KiB, the most one block read takes.
@@ -323,9 +323,27 @@ pub unsafe fn admit_with<P: Platform>(p: &P, sector: u32, bytes: u32) -> i32 {
     E_CARD_RO
 }
 
+/// The one function that writes the card. Write `bytes` (a multiple of 512) from `buf` (16-byte aligned) to `sector`: refused with `E_RANGE`
+/// outside the store range of the device file, and with `E_CARD_RO` when the card's area is not ours (`card::admit`; finding 46). Every
+/// runtime card write goes through here: the selection record and the boot counter (boot.rs), uploads (store_cmds.rs), and the claim of a blank
+/// range (this file, which calls `raw_block_write` for its own headers after the same checks).
+pub unsafe fn block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
+    block_write_with(&PLATFORM, sector, bytes, buf)
+}
+
+/// `block_write` over a platform (the host tests drive it with `FakePlatform`).
+pub unsafe fn block_write_with<P: Platform>(p: &P, sector: u32, bytes: u32, buf: *const u8) -> i32 {
+    let g = admit_with(p, sector, bytes);
+    if g != OK {
+        return g;
+    }
+    info().writes = info().writes.wrapping_add(1);
+    p.block_write_raw(sector, bytes, buf)
+}
+
 /// `CMD_CARD_PROBE`: ask the one card-write function to write `bytes` at `sector` from the staging buffer; the answer is its result.
 pub unsafe fn probe(arg: *const u8) -> i32 {
-    crate::block_write(rd32(arg), rd32(arg.add(4)), addr_of!(DKRT_STAGE) as *const u8)
+    block_write(rd32(arg), rd32(arg.add(4)), addr_of!(DKRT_STAGE) as *const u8)
 }
 
 #[cfg(test)]

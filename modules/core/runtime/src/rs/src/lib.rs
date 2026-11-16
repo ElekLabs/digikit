@@ -24,6 +24,7 @@ pub mod collect;
 mod handlers;
 pub mod storage;
 pub(crate) use storage::storage_adapter;
+pub use storage::card::{block_write, block_write_with};
 pub use storage::{card, store, store_writer};
 #[rustfmt::skip]
 mod gen_services;
