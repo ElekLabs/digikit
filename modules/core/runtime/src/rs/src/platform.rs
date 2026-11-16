@@ -364,8 +364,8 @@ impl SamplePool for RealPlatform {
 
 impl RealPlatform {
     /// The profile facts the storage routes need.
-    fn storage_facts(&self) -> crate::storage_adapter::Facts {
-        crate::storage_adapter::Facts { in_store: Platform::samples_in_store(self), sample_path_max: Platform::sample_path_max(self) }
+    fn storage_facts(&self) -> crate::storage::route::Facts {
+        crate::storage::route::Facts { in_store: Platform::samples_in_store(self), sample_path_max: Platform::sample_path_max(self) }
     }
 }
 

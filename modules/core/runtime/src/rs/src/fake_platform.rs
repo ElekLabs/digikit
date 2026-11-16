@@ -728,7 +728,8 @@ fn files_samples() -> u32 {
 
 #[test]
 fn the_samples_root_follows_the_capability_and_the_staged_writer() {
-    use crate::store_writer::{root_route, ROOT_SAMPLES, ROOT_STORE};
+    use crate::storage::route::root_route;
+    use crate::store_writer::{ROOT_SAMPLES, ROOT_STORE};
     let store = |p: DeviceProfile| FakePlatform::new(p);
     // a device with its samples in the store: the `samples/` folder, no adapter needed (DN2 and an invented device alike)
     for p in [profiles::DN2, INVENTED] {

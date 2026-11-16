@@ -22,6 +22,7 @@ use dkrt_sdk::proto::*;
 use dkrt_sdk::store::lease::{self, Leases};
 use dkrt_sdk::store::{self, Edit, Entry, Hdr, Io, Layout, Table, KIND_DIR, KIND_FILE};
 pub use super::lock::*;
+use super::route::root_route;
 use dkrt_sdk::{CARD_TOO_SMALL, E_BUSY, E_CONTEXT, E_CONTRACT, E_EXISTS, E_NOT_FOUND, OK};
 
 /// Largest piece of one SDK write: `store::MAX_WRITE_SECTORS` sectors, the largest card command of core/sdhc-large (the firmware's block write
@@ -1308,20 +1309,6 @@ fn busy(r: i32) -> i32 {
         crate::io::note_busy();
     }
     r
-}
-
-/// Where the root's files live: the prefix that the store path takes, and whether the +Drive adapter serves it. The device's capabilities decide:
-/// the samples are files of the store (`samples/`), or the firmware's folder filesystem behind the staged writer (`E_CONTRACT` without it).
-pub(crate) fn root_route<P: Platform>(p: &P, root: u32) -> Result<(&'static [u8], bool), i32> {
-    if root == ROOT_STORE {
-        Ok((b"", false))
-    } else if root == ROOT_SAMPLES && p.samples_in_store() {
-        Ok((b"samples/", false))
-    } else if root == ROOT_SAMPLES && StagedWriter::present(p) {
-        Ok((b"", true))
-    } else {
-        Err(E_CONTRACT) // no such root, or no adapter in the image
-    }
 }
 
 /// `root`/`path` as one path in `full` (the store's: `store::path_ok`; the +Drive's: the same rules without a root prefix). `pd` is set for the

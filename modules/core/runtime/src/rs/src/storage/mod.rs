@@ -5,6 +5,7 @@
 pub mod card;
 pub mod layout;
 pub mod lock;
+pub mod route;
 pub mod storage_adapter;
 pub mod store;
 pub mod store_writer;

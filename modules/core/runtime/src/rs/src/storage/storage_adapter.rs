@@ -11,7 +11,8 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_abi::storage::{DirEntry, EntryKind, ListStep, Stat, HASH_ELEKTRON32, HASH_NONE, ROOT_SAMPLES, ROOT_STORE};
 use dkrt_sdk::store::catalog::{CatalogCursor, CatalogEntry, CatalogOpen};
 use dkrt_sdk::store::directory::DirectoryCollector;
-use dkrt_sdk::store::{PATH_BYTES, PATH_MAX};
+use dkrt_sdk::store::PATH_BYTES;
+use super::route::{prepare, store_key, Backend, Facts};
 use dkrt_sdk::{E_BAD_STORE, E_BUSY, E_FORMAT, E_NOT_FOUND, E_READ, E_SEL_PATH, E_TOO_BIG, OK};
 
 extern "C" {
@@ -28,74 +29,11 @@ type FsMeta = unsafe extern "C" fn(u32, *mut u32) -> i32;
 type DirOpen = unsafe extern "C" fn(*const u8, *mut u32) -> i32;
 type DirNext = unsafe extern "C" fn(*mut u32, *mut u8) -> i32;
 
-/// The device facts the routes need (`DeviceProfile::samples_in_store` and `sample_path_max`).
-#[derive(Clone, Copy)]
-pub(crate) struct Facts {
-    pub in_store: bool,
-    pub sample_path_max: u32,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Route {
-    Store,
-    Fs,
-}
-
-fn route(root: u32, f: &Facts) -> Result<Route, i32> {
-    if root == ROOT_STORE {
-        return Ok(Route::Store);
-    }
-    if root == ROOT_SAMPLES {
-        return Ok(if f.in_store { Route::Store } else { Route::Fs });
-    }
-    Err(E_FORMAT)
-}
-
-/// Longest root-relative path of `root` (0 for another root).
-fn limit(root: u32, f: &Facts) -> usize {
-    if root == ROOT_STORE {
-        return PATH_MAX;
-    }
-    if root == ROOT_SAMPLES {
-        return f.sample_path_max as usize;
-    }
-    0
-}
-
-/// The route of `root`, after the length check of `path` (the same `E_TOO_BIG` as the listing request).
-fn prepare(root: u32, f: &Facts, path: &[u8]) -> Result<Route, i32> {
-    let r = route(root, f)?;
-    if path.len() > limit(root, f) {
-        return Err(E_TOO_BIG);
-    }
-    Ok(r)
-}
-
 fn dir_stat() -> Stat {
     Stat { kind: EntryKind::Dir, size: 0, hash_kind: HASH_NONE, hash_valid: false, hash: [0; 32] }
 }
 
 // ---- store route -------------------------------------------------------------------------------------------------------------
-
-/// The store path of a root-relative `path`: `samples/` in front for `ROOT_SAMPLES`, NUL-terminated in `out`. Returns the length without the NUL.
-fn store_key(root: u32, path: &[u8], out: &mut [u8; PATH_BYTES]) -> Result<usize, i32> {
-    if path.contains(&0) {
-        return Err(E_SEL_PATH);
-    }
-    let prefix: &[u8] = if root == ROOT_SAMPLES { b"samples" } else { b"" };
-    let sep = if !prefix.is_empty() && !path.is_empty() { 1 } else { 0 };
-    let total = prefix.len() + sep + path.len();
-    if total > PATH_MAX {
-        return Err(E_TOO_BIG);
-    }
-    *out = [0; PATH_BYTES];
-    out[..prefix.len()].copy_from_slice(prefix);
-    if sep == 1 {
-        out[prefix.len()] = b'/';
-    }
-    out[prefix.len() + sep..total].copy_from_slice(path);
-    Ok(total)
-}
 
 /// 512 bytes, 16-byte aligned: the buffer of one store sector read.
 #[repr(C, align(16))]
@@ -234,7 +172,7 @@ pub(crate) unsafe fn stat(root: u32, f: &Facts, path: &[u8]) -> Result<Stat, i32
     if path.is_empty() {
         return Ok(dir_stat());
     }
-    if r == Route::Store {
+    if r == Backend::Store {
         let mut z = [0u8; PATH_BYTES];
         store_key(root, path, &mut z)?;
         let file = crate::store::find(z.as_ptr())?;
@@ -264,7 +202,7 @@ pub(crate) unsafe fn read_head(root: u32, f: &Facts, path: &[u8], out: &mut [u8;
     if path.is_empty() {
         return Err(E_SEL_PATH);
     }
-    if r == Route::Store {
+    if r == Backend::Store {
         let mut z = [0u8; PATH_BYTES];
         store_key(root, path, &mut z)?;
         let file = crate::store::find(z.as_ptr())?;
@@ -290,7 +228,7 @@ pub(crate) unsafe fn stat_head(root: u32, f: &Facts, path: &[u8], out: &mut [u8;
     if path.is_empty() {
         return Ok((dir_stat(), 0));
     }
-    if r == Route::Store {
+    if r == Backend::Store {
         let mut z = [0u8; PATH_BYTES];
         store_key(root, path, &mut z)?;
         let file = crate::store::find(z.as_ptr())?;
@@ -330,7 +268,7 @@ pub(crate) unsafe fn read_range(root: u32, f: &Facts, path: &[u8], offset: u32, 
     if path.is_empty() {
         return Err(E_SEL_PATH);
     }
-    if r == Route::Store {
+    if r == Backend::Store {
         let mut z = [0u8; PATH_BYTES];
         store_key(root, path, &mut z)?;
         let mut file = dkrt_sdk::DkrtStoreFile { first: 0, size: 0, sha: [0; 32] };
@@ -389,7 +327,7 @@ pub(crate) unsafe fn read_all(root: u32, f: &Facts, path: &[u8], dst: *mut u8, c
     if path.is_empty() {
         return Err(E_SEL_PATH);
     }
-    if r == Route::Store {
+    if r == Backend::Store {
         let mut z = [0u8; PATH_BYTES];
         store_key(root, path, &mut z)?;
         let n = crate::store::read_file(z.as_ptr(), dst, cap);
@@ -451,7 +389,7 @@ pub(crate) fn list_state_bytes() -> usize {
 /// Start listing `dir` into `state` (at least `list_state_bytes()` bytes, 16-byte aligned). The tag is written last, so a failed open leaves no valid state.
 pub(crate) unsafe fn list_open(root: u32, f: &Facts, dir: &[u8], state: *mut u8) -> Result<(), i32> {
     let r = prepare(root, f, dir)?;
-    if r == Route::Store {
+    if r == Backend::Store {
         return store_open(root, dir, state as *mut StoreList);
     }
     if dir.contains(&0) {
@@ -666,31 +604,6 @@ unsafe fn store_next(l: &mut StoreList, out: &mut DirEntry) -> Result<ListStep, 
 mod tests {
     use super::*;
 
-    const IN_STORE: Facts = Facts { in_store: true, sample_path_max: 150 };
-    const ON_FS: Facts = Facts { in_store: false, sample_path_max: 255 };
-
-    #[test]
-    fn store_key_prefixes_samples() {
-        let mut z = [0xffu8; PATH_BYTES];
-        let n = store_key(ROOT_SAMPLES, b"KICKS/K1", &mut z).unwrap();
-        assert_eq!(&z[..n], b"samples/KICKS/K1");
-        assert_eq!(z[n], 0);
-        let n = store_key(ROOT_SAMPLES, b"", &mut z).unwrap();
-        assert_eq!(&z[..n], b"samples");
-        let n = store_key(ROOT_STORE, b"modules/a.dkm", &mut z).unwrap();
-        assert_eq!(&z[..n], b"modules/a.dkm");
-    }
-
-    #[test]
-    fn store_key_limits_and_nul() {
-        let mut z = [0u8; PATH_BYTES];
-        assert_eq!(store_key(ROOT_SAMPLES, &[b'a'; 151], &mut z), Ok(159));
-        assert_eq!(store_key(ROOT_SAMPLES, &[b'a'; 152], &mut z), Err(E_TOO_BIG));
-        assert_eq!(store_key(ROOT_STORE, &[b'a'; 159], &mut z), Ok(159));
-        assert_eq!(store_key(ROOT_STORE, &[b'a'; 160], &mut z), Err(E_TOO_BIG));
-        assert_eq!(store_key(ROOT_STORE, b"a\0b", &mut z), Err(E_SEL_PATH));
-    }
-
     #[test]
     fn fs_key_is_rooted_and_terminated() {
         let mut z = [0xffu8; 258];
@@ -700,25 +613,6 @@ mod tests {
         assert_eq!(fs_key(b"a\0", &mut z), Err(E_SEL_PATH));
         assert!(fs_key(&[b'a'; 255], &mut z).is_ok());
         assert_eq!(fs_key(&[b'a'; 256], &mut z), Err(E_TOO_BIG));
-    }
-
-    #[test]
-    fn routes_follow_the_profile_facts() {
-        assert_eq!(route(ROOT_STORE, &IN_STORE), Ok(Route::Store));
-        assert_eq!(route(ROOT_STORE, &ON_FS), Ok(Route::Store));
-        assert_eq!(route(ROOT_SAMPLES, &IN_STORE), Ok(Route::Store));
-        assert_eq!(route(ROOT_SAMPLES, &ON_FS), Ok(Route::Fs));
-        assert_eq!(route(99, &ON_FS), Err(E_FORMAT));
-    }
-
-    #[test]
-    fn path_limits_per_root() {
-        assert_eq!(limit(ROOT_STORE, &IN_STORE), 159);
-        assert_eq!(limit(ROOT_SAMPLES, &IN_STORE), 150);
-        assert_eq!(limit(99, &IN_STORE), 0);
-        assert_eq!(prepare(ROOT_SAMPLES, &IN_STORE, &[b'a'; 150]), Ok(Route::Store));
-        assert_eq!(prepare(ROOT_SAMPLES, &IN_STORE, &[b'a'; 151]), Err(E_TOO_BIG));
-        assert_eq!(prepare(ROOT_STORE, &IN_STORE, &[b'a'; 160]), Err(E_TOO_BIG));
     }
 
     #[test]
@@ -743,33 +637,5 @@ mod tests {
         let h = fs_hash(&[1, 0x0102_0304, 9, 0]);
         assert_eq!(&h[..4], &[1, 2, 3, 4]);
         assert!(h[4..].iter().all(|b| *b == 0));
-    }
-
-    /// The route table (`dkrt_test_support::routes`) is the one answer to "who serves this root on this device"; the adapter's `route` and its keys must agree
-    /// with it for every read row.
-    #[test]
-    fn the_routes_agree_with_the_route_table() {
-        use dkrt_test_support::routes::{Backend, Op, ROUTES};
-        let mut rows = 0;
-        for r in ROUTES.iter().filter(|r| r.op == Op::Read) {
-            rows += 1;
-            let f = Facts { in_store: r.profile.samples_in_store, sample_path_max: r.profile.sample_path_max };
-            let (backend, key) = match route(r.root, &f) {
-                Ok(Route::Store) => {
-                    let mut z = [0u8; PATH_BYTES];
-                    let n = store_key(r.root, r.path.as_bytes(), &mut z).unwrap();
-                    (Backend::Store, std::string::String::from_utf8(z[..n].to_vec()).unwrap())
-                }
-                Ok(Route::Fs) => {
-                    let mut z = [0u8; 258];
-                    fs_key(r.path.as_bytes(), &mut z).unwrap();
-                    let n = z.iter().position(|b| *b == 0).unwrap();
-                    (Backend::Fs, std::string::String::from_utf8(z[..n].to_vec()).unwrap())
-                }
-                Err(_) => (Backend::Refused, std::string::String::new()),
-            };
-            assert_eq!((backend, key.as_str()), (r.backend, r.key), "{r:?}");
-        }
-        assert!(rows >= 8);
     }
 }
