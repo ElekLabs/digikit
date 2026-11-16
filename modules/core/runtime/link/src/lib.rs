@@ -19,6 +19,7 @@
 //! If chains, not a `match`: dense arms become a PC-relative jump table, which is not ColdFire code.
 #![cfg_attr(not(any(test, feature = "fake")), no_std)]
 use dkrt_abi::link::*;
+pub mod stats;
 
 /// Requests the queue holds at once (the loader, the track writer, the core's clears and one spare).
 pub const REQ_MAX: usize = 3;
@@ -250,6 +251,20 @@ impl<T: Transport> Link<T> {
         if slot.win >= WIN_RESERVED {
             return;
         }
+        self.set_live(slot, value);
+    }
+
+    /// Set a control word of the stats window (window 3, `STATS_ON` or `STATS_CLEAR`). Only the runtime calls this, for the owner of the span channel
+    /// (`dk_dsp_stats_ctl`); `set` and `submit` refuse window 3. Returns false for another word.
+    pub fn set_stats_ctl(&mut self, word: u32, value: u32) -> bool {
+        if word >= STATS_CTL_WORDS {
+            return false;
+        }
+        self.set_live(Slot::new(WIN_STATS as u32, word), value);
+        true
+    }
+
+    fn set_live(&mut self, slot: Slot, value: u32) {
         if let Some(i) = self.find_live(slot) {
             let e = &mut self.live[i];
             if e.value != value {
@@ -1275,6 +1290,19 @@ mod tests {
         l.set(Slot { win: 3, word: 0 }, 1);
         unsafe { settle_all(&mut l) };
         assert!(l.t.wire.is_empty());
+    }
+
+    #[test]
+    fn the_stats_control_words_reach_window_3_only_through_set_stats_ctl() {
+        let mut l = link();
+        assert!(l.set_stats_ctl(STATS_ON, 1));
+        assert!(l.set_stats_ctl(STATS_CLEAR, 7));
+        assert!(!l.set_stats_ctl(2, 1), "no third control word");
+        unsafe { settle_all(&mut l) };
+        let mut w = l.t.words();
+        w.sort();
+        assert_eq!(w, vec![(3, 0, 1), (3, 1, 7)]);
+        assert_eq!(l.confirmed(Slot::new(3, 1)), Some(7));
     }
 
     #[test]
