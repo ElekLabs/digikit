@@ -322,14 +322,14 @@ impl FsGuard {
             f.opens.clear();
             f.handles.clear();
         });
-        crate::storage_adapter::test_install_fs(fs_open, fs_read, fs_close, fs_size, Some(fs_meta));
+        crate::storage::backends::fwfs::test_install_fs(fs_open, fs_read, fs_close, fs_size, Some(fs_meta));
         FsGuard
     }
 }
 
 impl Drop for FsGuard {
     fn drop(&mut self) {
-        crate::storage_adapter::test_remove_fs();
+        crate::storage::backends::fwfs::test_remove_fs();
         fs(|f| {
             f.files.clear();
             f.opens.clear();

@@ -3,6 +3,7 @@
 //!
 //! Rules: no `match` on integers (a dense one becomes a jump table, which is not ColdFire code), no `core::fmt`, no slice indexing.
 
+#[cfg(not(test))]
 use crate::PLATFORM;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::store::lease::Leases;
