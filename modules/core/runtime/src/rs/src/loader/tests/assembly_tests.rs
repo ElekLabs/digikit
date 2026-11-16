@@ -599,6 +599,79 @@ fn a_card_without_the_service_file_refuses_its_user_naming_the_service() {
     }
 }
 
+/// The same refusal for an effect: its builder calls name the `fx` service, so a card with the machines and lfo services and no `fx.dks` refuses it.
+#[test]
+fn a_card_without_the_fx_service_file_refuses_an_effect_naming_the_service() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (_l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES[1..]); // machines, lfo and the test service
+            assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(name_hash("fx"))), "{}", dev.name);
+            assert_eq!(plan.verdicts[0].result(), E_MISSING);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// The builder imports of the machines service and of the fx service (`provided = true` in sdk/sdk.toml): a module links them to the exports of the file that owns them.
+const MACHINE_BUILDERS: [&str; 10] = [
+    "dk_module_ctx_add_machine",
+    "dk_machine_add_page",
+    "dk_page_add_param",
+    "dk_param_range",
+    "dk_param_glyph",
+    "dk_param_latched",
+    "dk_param_on_click",
+    "dk_page_canvas",
+    "dk_page_bind",
+    "dk_page_bind_local",
+];
+const FX_BUILDERS: [&str; 5] = ["dk_module_ctx_add_fx", "dk_fx_add_page", "dk_page_add_fx_param", "dk_fx_routes", "dk_fx_mix"];
+
+/// The names a file imports.
+fn import_names(file: &[u8]) -> Vec<String> {
+    let (off, n) = (be(file, dkneeds::H_IMPORT_OFF) as usize, be(file, dkneeds::H_IMPORT_N) as usize);
+    (0..n)
+        .map(|i| {
+            let at = off + i * dkneeds::CF_IMPORT_LEN as usize;
+            let name = &file[at..at + dkneeds::CF_IMPORT_LEN as usize];
+            String::from_utf8_lossy(&name[..name.iter().position(|c| *c == 0).unwrap()]).to_string()
+        })
+        .collect()
+}
+
+/// The seam of the builder calls: every builder import of a module is an export of the service file that owns it, published when that file loaded (the loader links
+/// it from the exports, not from the runtime's table). `test/sine` calls the machine builders, `test/dyn-fx-gain` the effect ones.
+#[test]
+fn the_builder_calls_of_a_module_resolve_to_the_exports_of_the_service_that_owns_them() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        for (module, service, builders) in [(&SINE, "machines", &MACHINE_BUILDERS[..]), (&FX_GAIN, "fx", &FX_BUILDERS[..])] {
+            let image = Image::read(*dev, "emulator");
+            unsafe {
+                let (mut l, plan) = planned(*dev, &image, &[], &[module], &SERVICES);
+                l.load_providers(&plan);
+                let file = packed(*dev, module.leaf, "dkm", module.nx);
+                let used: Vec<String> = import_names(&file).into_iter().filter(|n| builders.contains(&n.as_str())).collect();
+                assert!(used.len() >= 3, "{} {}: the module calls {used:?} of the {service} builders", dev.name, module.leaf);
+                for n in &used {
+                    assert!(l.exports.resolve(name_hash(n)).is_some(), "{} {}: {n} is no export of {service}.dks", dev.name, module.leaf);
+                }
+                // and the file that owns them lists them in its header table
+                let owner = service_file(*dev, service, if service == "fx" { "core/services/fx" } else { "core/services/machines" });
+                let t = table_of(&owner);
+                let keys = Keys::parse(&t).unwrap();
+                let listed: Vec<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
+                for n in &used {
+                    assert!(listed.contains(&name_hash(n)), "{} {service}.dks: the header table does not export {n}", dev.name);
+                }
+            }
+            let _ = clean_state();
+        }
+    }
+}
+
 /// A service file built for another ABI is refused by its own load; one whose hook site is not stock changes nothing.
 #[test]
 fn a_provider_with_another_abi_word_or_a_site_that_is_not_stock_is_refused_before_anything_is_written() {

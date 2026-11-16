@@ -580,3 +580,161 @@ fn a_service_file_declares_one_row_in_init_and_only_there() {
         assert_eq!(b.decl.n, 1);
     }
 }
+
+// ---- golden lowered records ---------------------------------------------------------------------------------------------------
+//
+// The records the builder calls of these cases lower to, as bytes (`tests/fixtures/records/lowered.golden`). The collect move (docs/plans/runtime-slimming.md, RS-C step C2)
+// puts the lowering into the machines and fx services; their tests read the same file and must produce the same records. The records are listed by the service that owns
+// them (machines: PARAM, MACHINE, PAGE, ACTION, native pages; fx: EFFECT; then the generic ones), each group in file order: the order across the groups is not part of the
+// golden, because each service writes its own part. The header (magic, version, device, count) is checked by the other tests; the count differs per block after the move.
+//
+// A change of the lowering changes this file on purpose: `DKRT_UPDATE_GOLDEN=1 cargo test golden` rewrites it, and the diff is the review.
+
+fn hex(b: &[u8]) -> std::string::String {
+    b.iter().map(|x| std::format!("{x:02x}")).collect()
+}
+
+/// 0 machines, 1 effects, 2 generic records: the service that owns a record kind of the register section.
+fn owner_group(kind: u32) -> u32 {
+    if kind == KIND_EFFECT {
+        1
+    } else if [KIND_PARAM, KIND_MACHINE, KIND_PAGE, KIND_ACTION, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2].contains(&kind) {
+        0
+    } else {
+        2
+    }
+}
+
+/// The text of one case: its records by owner, what the commit takes from the collection for the DSP rows (`voice_declared`, `fx_flags_of_decl`, `fx_defaults`) and the
+/// callback arguments (`apply_args`).
+fn golden_case(name: &str, c: &Collect, p: &Profile, k: &KeysCopy, base: u32) -> std::string::String {
+    use std::fmt::Write;
+    let mut plan = Plan::new();
+    let voice = [true; MAX_M];
+    let size = lower(c, p, k, &voice, base, core::ptr::null_mut(), 0, &mut plan).unwrap();
+    let mut buf = std::vec![0u8; size];
+    assert_eq!(lower(c, p, k, &voice, base, buf.as_mut_ptr(), size, &mut plan), Ok(size));
+    assert_eq!((rd(&buf, 0), rd(&buf, 4), rd(&buf, 8)), (0x444b_5247, 1, p.device));
+    let mut recs: std::vec::Vec<(u32, std::vec::Vec<u8>)> = std::vec::Vec::new();
+    let mut at = 16;
+    while at < size {
+        let (kind, len) = (rd(&buf, at), rd(&buf, at + 4) as usize);
+        recs.push((kind, buf[at..at + len].to_vec()));
+        at += len;
+    }
+    assert_eq!(at, size);
+    assert_eq!(rd(&buf, 12) as usize, recs.len());
+    let mut s = std::string::String::new();
+    writeln!(s, "case {name}").unwrap();
+    for group in 0..3 {
+        for (kind, r) in recs.iter().filter(|(kind, _)| owner_group(*kind) == group) {
+            writeln!(s, "record {kind} {}", hex(r)).unwrap();
+        }
+    }
+    for m in 0..c.nm {
+        let (rng, latched) = voice_declared(c, &plan, m);
+        writeln!(s, "voice {m} {} {latched:08x}", rng.iter().map(|w| std::format!("{w:08x}")).collect::<std::vec::Vec<_>>().join(" ")).unwrap();
+    }
+    for f in 0..c.nf {
+        let d = fx_defaults(c, f);
+        writeln!(s, "fx {f} flags {:08x} defaults {}", fx_flags_of_decl(&c.fxs[f]), d.iter().map(|w| std::format!("{w:08x}")).collect::<std::vec::Vec<_>>().join(" ")).unwrap();
+    }
+    let args = apply_args(c, &plan);
+    let clicks = recs.iter().filter(|(kind, _)| *kind == KIND_ACTION).count();
+    let natives = recs.iter().filter(|(kind, _)| *kind == KIND_NATIVE_PAGE || *kind == KIND_NATIVE_PAGE_V2).count();
+    writeln!(s, "args click {} native {}", args.click[..clicks].iter().map(|w| std::format!("{w:08x}")).collect::<std::vec::Vec<_>>().join(" "), args.native[..natives].iter().map(|w| std::format!("{w:08x}")).collect::<std::vec::Vec<_>>().join(" ")).unwrap();
+    s
+}
+
+/// The Digitone II machine of `a_digitone_machine_with_canvas_pages_lowers_pages_and_native_records`.
+fn shot() -> Box<Collect> {
+    let mut b = Box::new(Collect::new());
+    let m = b.add_machine(0, c(b"Shot\0"), c(b"SHOT\0"));
+    let knobs = b.machine_add_page(m, c(b"SHOT\0"), c(b"S\0"));
+    let smp = b.page_add_param(knobs, c(b"Sample\0"), c(b"SMP\0"), 0);
+    let start = b.page_add_param(knobs, c(b"Start\0"), c(b"START\0"), 0);
+    b.param_on_click(smp, 0x1100, 0x77);
+    let ctl = b.machine_add_page(m, c(b"SHOT\0"), c(b"S\0"));
+    b.page_canvas(ctl, 1, 0x1200, 0x1300, 0x88);
+    b.page_bind(ctl, start, 0);
+    let wave = b.machine_add_page(m, c(b"SHOT WAVE\0"), c(b"S\0"));
+    b.page_canvas(wave, 2, 0x1400, 0x1500, 0x99);
+    b.page_bind(wave, start, 4);
+    b.page_bind_local(wave, 0, 6);
+    assert_eq!(b.err, 0);
+    b
+}
+
+/// `tests/fixtures/modules/commit-demo/src/module.c`: a machine with three parameters (one latched, one with a click action) and an effect with routes and one page.
+fn commit_demo() -> Box<Collect> {
+    let mut b = Box::new(Collect::new());
+    let m = b.add_machine(0, c(b"Commit\0"), c(b"CMT\0"));
+    let p = b.machine_add_page(m, c(b"Commit\0"), c(b"CMT\0"));
+    b.page_add_param(p, c(b"Tone\0"), c(b"TONE\0"), 64);
+    let mode = b.page_add_param(p, c(b"Mode\0"), c(b"MODE\0"), 0);
+    b.param_range(mode, 0, 3);
+    b.param_latched(mode);
+    let go = b.page_add_param(p, c(b"Go\0"), c(b"GO\0"), 0);
+    b.param_on_click(go, 0x2000, 0);
+    let fx = b.add_fx(0, c(b"Commit FX\0"), c(b"CFX\0"));
+    b.fx_routes(fx, ROUTE_SEND | ROUTE_MASTER, ROUTE_SEND);
+    let fp = b.fx_add_page(fx, c(b"Commit FX\0"), c(b"CFX\0"));
+    b.page_add_fx_param(fp, c(b"Gain\0"), c(b"GAIN\0"), 1, 0.0, 1.27, 0.5);
+    assert_eq!(b.err, 0);
+    b
+}
+
+fn effect(mix: Option<u32>) -> Box<Collect> {
+    let mut f = Box::new(Collect::new());
+    let fx = f.add_fx(1, c(b"Freq shift\0"), c(b"FSH\0"));
+    f.fx_routes(fx, ROUTE_SEND | ROUTE_MASTER, ROUTE_SEND);
+    let pg = f.fx_add_page(fx, c(b"Freq shift\0"), c(b"FSH\0"));
+    f.page_add_fx_param(pg, c(b"Freq Shift\0"), c(b"SHIFT\0"), DK_BIPOLAR, -64.0, 63.0, 0.0);
+    if let Some(m) = mix {
+        f.fx_mix(fx, m);
+    }
+    f
+}
+
+fn golden_text() -> std::string::String {
+    let mut s = std::string::String::new();
+    let one = keys(&[KEY], &[], (1, 3, 1));
+    s += &golden_case("dt2-analog", &analog(), &DT2, &keys(&[KEY], &[], (1, 3, 0)), 0x1000);
+    s += &golden_case("dn2-analog", &analog(), &DN2, &one, 0x1000);
+    s += &golden_case("dn2-shot-canvas-pages", &shot(), &DN2, &keys(&[KEY], &[], (1, 2, 1)), 0x1000);
+    let mut v1 = analog();
+    let m = &mut v1.machines[0] as *mut CMachine as *mut u8;
+    let g = v1.machine_add_page(m, c(b"W\0"), c(b"S\0"));
+    v1.page_canvas(g, 0, 0x1400, 0x1500, 0);
+    v1.page_bind_local(g, 3, 5);
+    s += &golden_case("dn2-v1-canvas-page", &v1, &DN2, &one, 0);
+    let mut sine = Box::new(Collect::new());
+    let m = sine.add_machine(0, c(b"Sine\0"), c(b"SIN\0"));
+    let pg = sine.machine_add_page(m, c(b"Sine\0"), c(b"SNE\0"));
+    sine.page_add_param(pg, c(b"Level\0"), c(b"LEVEL\0"), 127);
+    s += &golden_case("dn2-sine-knob-page", &sine, &DN2, &keys(&[KEY], &[], (1, 1, 1)), 0);
+    let fk = keys(&[], &[0x77, FXID], (0, 0, 0));
+    s += &golden_case("dt2-effect", &effect(None), &DT2, &fk, 0);
+    s += &golden_case("dt2-effect-mix-64", &effect(Some(64)), &DT2, &fk, 0);
+    // the fixture of the device tests of the commit, on both devices
+    s += &golden_case("dt2-commit-demo", &commit_demo(), &DT2, &keys(&[KEY], &[FXID], (1, 3, 0)), 0x1000);
+    s += &golden_case("dn2-commit-demo", &commit_demo(), &DN2, &keys(&[KEY], &[FXID], (1, 3, 1)), 0x1000);
+    s
+}
+
+#[test]
+fn the_lowered_records_of_the_golden_cases_are_the_recorded_bytes() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../../tests/fixtures/records/lowered.golden");
+    let text = golden_text();
+    if std::env::var_os("DKRT_UPDATE_GOLDEN").is_some() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, &text).unwrap();
+        return;
+    }
+    let want = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}; record it with DKRT_UPDATE_GOLDEN=1 cargo test golden (before the collect move)", path.display()));
+    if text != want {
+        let (a, b): (std::vec::Vec<&str>, std::vec::Vec<&str>) = (text.lines().collect(), want.lines().collect());
+        let at = (0..a.len().max(b.len())).find(|i| a.get(*i) != b.get(*i)).unwrap();
+        panic!("the lowered records differ from {} at line {}:\n  now:      {}\n  recorded: {}", path.display(), at + 1, a.get(at).unwrap_or(&"(end)"), b.get(at).unwrap_or(&"(end)"));
+    }
+}
