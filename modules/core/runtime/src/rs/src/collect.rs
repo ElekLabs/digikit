@@ -585,11 +585,11 @@ pub unsafe extern "C" fn dk_record_add(ctx: *mut u8, kind: u32, bytes: *const u8
         _ => E_CONTEXT,
     }
 }
-/// One `dk_service_declare_*` call: the item goes to the declarations (they take one record of the bounded collection each).
+/// One `dk_service_declare_*` call: the item goes to the declarations, which have their own bound (`Declare::MAX`) apart from the records of the builder calls.
 unsafe fn declare(ctx: *mut u8, tag: u16, a: u32, b: u32, c: u32) -> i32 {
     match active() {
         Some(col) if crate::entry::is_ctx(ctx) => {
-            if col.decl.n >= Declare::MAX || !col.room() {
+            if col.decl.n >= Declare::MAX {
                 col.fail(E_DECL_FULL);
                 return E_DECL_FULL;
             }
@@ -609,7 +609,7 @@ pub unsafe extern "C" fn dk_service_declare_row(ctx: *mut u8, row: *const dkrt_a
                 col.fail(E_DECL_KIND);
                 return E_DECL_KIND;
             }
-            if col.decl.n >= Declare::MAX || !col.room() {
+            if col.decl.n >= Declare::MAX {
                 col.fail(E_DECL_FULL);
                 return E_DECL_FULL;
             }

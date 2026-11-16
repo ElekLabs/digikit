@@ -185,8 +185,8 @@ pub struct Declare {
 }
 
 impl Declare {
-    /// Most declarations of one `init`: the machines service takes 21 hooks and a few slots and exports.
-    pub const MAX: usize = 32;
+    /// Most declarations of one `init`: the machines service takes 13 hooks, 6 kinds, a slot, its builder exports and its row.
+    pub const MAX: usize = 64;
     pub const KIND: u16 = 4;
     pub const SLOT: u16 = 5;
     pub const HOOK: u16 = 6;

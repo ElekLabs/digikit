@@ -301,7 +301,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let name = f.add(H_NAME);
         let total = image_size + bss;
         // imports: every name must be in the runtime's table
-        let mut import_addrs = [0u32; 64];
+        let mut import_addrs = [0u32; dkneeds::MAX_CF_IMPORTS as usize];
         let mut i = 0;
         while i < import_n as usize {
             let p = f.add(import_off as usize + i * dkneeds::CF_IMPORT_LEN as usize);
