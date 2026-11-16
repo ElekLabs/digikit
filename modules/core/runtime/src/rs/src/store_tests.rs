@@ -822,7 +822,7 @@ fn a_dn2_sample_read_goes_to_the_store_and_never_to_the_firmware_file_system() {
 // ---- one lister -----------------------------------------------------------------------------------------------------------------------
 
 /// The same folder through every lister of the table: the SysEx LIST, the runtime's `store::list` (which the module scan and the loader's provider search
-/// use), and the `Storage` listing. The module scan (`dkrt_scan`) calls `store::list` too; it crashes when run on the host (SIGSEGV, not found yet), so it is not driven here. Files with a path that fits 63 bytes and at least one byte are what all of them give, so that is the
+/// use), and the `Storage` listing. The module scan (`dkrt_scan`) calls `store::list` too; dkrt_scan segfaults on the host (cause not found); covered again when RS-S S2b replaces the listers with one. Files with a path that fits 63 bytes and at least one byte are what all of them give, so that is the
 /// folder here.
 #[test]
 fn every_lister_gives_the_same_entries_for_the_same_folder() {
