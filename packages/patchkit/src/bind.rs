@@ -1133,4 +1133,89 @@ mod tests {
             .collect();
         assert_eq!(addrs, [4, 124, 100]);
     }
+    #[test]
+    fn the_bind_report_lists_each_hook_with_hex_site_fields() {
+        let hooks = [
+            BoundHook {
+                hook: "cf.menu.hook.a".into(),
+                site_hash: 0xabc,
+                site_addr: 0x400a_5eac,
+                site_len: 6,
+                stock: vec![0x20, 0x52],
+                tramp_off: 0x30,
+                displaced: vec!["move.l d0,d1".into()],
+                ret: 0x400a_5eb2,
+                tail_off: None,
+            },
+            BoundHook {
+                hook: "cf.menu.hook.b".into(),
+                site_hash: 1,
+                site_addr: 0x4000_0000,
+                site_len: 8,
+                stock: vec![],
+                tramp_off: 0,
+                displaced: vec![],
+                ret: 0x4000_0008,
+                tail_off: Some(0x40),
+            },
+        ];
+        let v: serde_json::Value = serde_json::from_str(&bind_json(&hooks)).unwrap();
+        assert_eq!(v.as_array().unwrap().len(), 2);
+        assert_eq!(v[0]["hook"], "cf.menu.hook.a");
+        assert_eq!(v[0]["site_hash"], "0x00000abc");
+        assert_eq!(v[0]["site_addr"], "0x400a5eac");
+        assert_eq!(v[0]["ret"], "0x400a5eb2");
+        assert_eq!((v[0]["site_len"].as_u64(), v[0]["tramp_off"].as_u64()), (Some(6), Some(0x30)));
+        assert_eq!(v[0]["stock"], "2052");
+        assert!(v[0]["tail_off"].is_null());
+        assert_eq!(v[1]["tail_off"].as_u64(), Some(0x40));
+        assert_eq!(v[1]["displaced"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn an_entry_or_a_table_item_at_or_past_the_code_end_refuses_the_shift() {
+        let image = vec![0u8; 8];
+        let old = image.len();
+        // the entry points must lie below the end of the code, the trampolines go after it
+        for (init, ok) in [(7u32, true), (8, false)] {
+            let mut dkm = synth_service(image.clone(), vec![], 0);
+            dkm.init = Some(init);
+            let mut img = image.clone();
+            img.extend_from_slice(&[0; 4]);
+            let r = shift_bss_words(&mut img, &dkm, old);
+            assert_eq!(r.is_ok(), ok, "init {init:#x}: {r:?}");
+            if !ok {
+                assert!(r.unwrap_err().0.contains("entry point 0x8 is not in the image"));
+            }
+        }
+        let mut dkm = synth_service(image.clone(), vec![], 0);
+        dkm.fini = Some(100);
+        assert!(shift_bss_words(&mut image.clone(), &dkm, old).is_err());
+        // an export offset, and a hook offset (its device mask is not part of the offset)
+        let table = |exports: &[Pair], hooks: &[Pair]| {
+            let t = Table { exports, hooks, ..Table::default() };
+            let mut b = vec![0u8; table_size(&t)];
+            write_table(&t, &mut b).unwrap();
+            b
+        };
+        let mut dkm = synth_service(image.clone(), vec![], 0);
+        dkm.register = table(&[Pair { a: 1, b: 8 }], &[]);
+        let e = shift_bss_words(&mut image.clone(), &dkm, old).unwrap_err();
+        assert!(e.0.contains("table entry 0x8 is not in the image"), "{e}");
+        dkm.register = table(&[], &[Pair { a: 2, b: 4 | 1 << 24 }]);
+        assert!(shift_bss_words(&mut image.clone(), &dkm, old).is_ok());
+        dkm.register = table(&[], &[Pair { a: 2, b: 8 | 1 << 24 }]);
+        assert!(shift_bss_words(&mut image.clone(), &dkm, old).is_err());
+    }
+
+    #[test]
+    fn a_file_that_is_no_service_is_refused_before_the_firmware_is_looked_at() {
+        let t = Table::default();
+        let mut table = vec![0u8; table_size(&t)];
+        write_table(&t, &mut table).unwrap();
+        let o = Options { name: "mod".into(), version: 0x010000, trace: false, stereo: false, gate: false, service: None };
+        let dkm = pack_keys(None, &table, &[], &o).unwrap();
+        let e = bind(&dkm, &[], &Registry::default(), &[]).unwrap_err();
+        assert!(e.0.contains("not a service"), "{e}");
+    }
 }

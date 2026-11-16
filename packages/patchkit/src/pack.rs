@@ -172,3 +172,83 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
         dsp: dsp_obj,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dko::{Dko, FORMAT};
+
+    const HEAD: &str = "[module]\nid = \"test/pk\"\nversion = \"0.1.0\"\nname = \"PK\"\ncategory = \"test\"\ntype = \"raw\"\nauthor = \"digikit\"\nstatus = \"experimental\"\nsummary = \"s\"\n";
+
+    /// An object of `arch` with no code: `pack_module` looks at the architecture before it reads anything else.
+    fn dko(arch: &str) -> String {
+        let o = Dko {
+            format: FORMAT,
+            arch: arch.into(),
+            source_sha256: "0".repeat(64),
+            toolchain: Default::default(),
+            sections: vec![],
+            symbols: vec![],
+            relocs: vec![],
+        };
+        serde_json::to_string(&o).unwrap()
+    }
+
+    /// A library of one module `test/pk` with the `[module]` keys `keys` and the objects `(arch, path)` in this order.
+    fn library(keys: &str, objects: &[(&str, &str)]) -> Library {
+        let mut text = format!("{HEAD}{keys}");
+        for (_, path) in objects {
+            text.push_str(&format!("[[object]]\npath = \"{path}\"\nplace = \"cf.expansion\"\n"));
+        }
+        let arch_of = |path: &str| objects.iter().find(|(_, p)| *p == path).map(|(a, _)| *a).unwrap();
+        let m = Module::from_parts(&text, &|p| Ok(dko(arch_of(p)))).unwrap();
+        Library { modules: vec![m] }
+    }
+
+    fn refused(lib: &Library, device: Option<&str>) -> String {
+        let o = PackOptions { device: device.map(String::from), ..Default::default() };
+        match pack_module(lib, "test/pk", &o) {
+            Ok(_) => panic!("the module must be refused"),
+            Err(e) => e.0,
+        }
+    }
+
+    #[test]
+    fn a_module_with_two_coldfire_objects_or_none_is_refused() {
+        let lib = library("", &[("cf", "a.dko.json"), ("cf", "b.dko.json")]);
+        assert!(refused(&lib, None).contains("2 ColdFire objects"));
+        // a module that is not dynamic and has none is refused the same way
+        let lib = library("", &[("sharc", "d.dko.json")]);
+        assert!(refused(&lib, None).contains("0 ColdFire objects"));
+    }
+
+    #[test]
+    fn a_run_time_module_needs_a_device_that_its_ports_include() {
+        let keys = "dynamic = true\nports = [\"dt2-1.17\"]\n";
+        let lib = library(keys, &[("cf", "a.dko.json")]);
+        assert!(refused(&lib, None).contains("needs --device"));
+        let e = refused(&lib, Some("dn2"));
+        assert!(e.contains("is not built for dn2") && e.contains("dt2-1.17"), "{e}");
+    }
+
+    #[test]
+    fn a_run_time_module_with_two_dsp_objects_for_the_device_is_refused() {
+        let keys = "dynamic = true\n";
+        let lib = library(keys, &[("cf", "a.dko.json"), ("sharc", "d1.dko.json"), ("sharc", "d2.dko.json")]);
+        assert!(refused(&lib, Some("dt2")).contains("2 DSP objects for dt2"));
+    }
+
+    #[test]
+    fn an_unknown_module_id_is_an_error_of_pack_module_and_an_error_entry_of_pack_all() {
+        let e = match pack_module(&Library::default(), "test/nope", &PackOptions::default()) {
+            Ok(_) => panic!("no such module"),
+            Err(e) => e.0,
+        };
+        assert!(e.contains("no module test/nope"), "{e}");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let packed = pack_all(&root, &["test/nope".to_string()], "dt2");
+        assert_eq!(packed.len(), 1);
+        assert_eq!(packed[0].0, "test/nope");
+        assert!(packed[0].1.is_err());
+    }
+}
