@@ -871,3 +871,273 @@ fn the_role_word_picks_the_steps() {
     // a word that is neither is a module, as the loader always took it
     assert!(Steps::of(7).check as usize == Steps::MODULE.check as usize);
 }
+
+// ---- refusals of the checks and the undo of the service role ----------------------------------------------------------------------
+
+/// Resets the loader's `TABLE_BAD` flag when a test that sets it ends, also when it fails.
+struct TableBadGuard;
+
+impl Drop for TableBadGuard {
+    fn drop(&mut self) {
+        unsafe { *core::ptr::addr_of_mut!(crate::invariants::DKRT_TABLE_BAD) = 0 };
+    }
+}
+
+#[test]
+fn no_load_starts_once_the_tables_were_marked_bad() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let _reset = TableBadGuard;
+        let mut l = loader(Init::Ok);
+        *core::ptr::addr_of_mut!(crate::invariants::DKRT_TABLE_BAD) = 1;
+        assert_eq!(l.load(PATH.as_ptr()), E_TABLE);
+        assert!(l.m.log.is_empty(), "the file is not even read");
+        assert_eq!(st().modules[0].used, 0);
+    }
+}
+
+#[test]
+fn an_import_name_without_a_nul_is_refused_before_anything_is_allocated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let name = vec![b'x'; dkneeds::CF_IMPORT_LEN as usize];
+        let mut l = loader_of(Init::Ok, module_file_with(&[], &[&name]));
+        assert_eq!(l.load(PATH.as_ptr()), E_FORMAT);
+        assert_eq!(l.m.allocs, 0);
+        assert_eq!(l.missing()[0], 0);
+    }
+}
+
+#[test]
+fn a_bad_relocation_a_register_section_outside_the_file_and_a_bad_keys_table_are_refused_before_anything_is_allocated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // a relocation past the last word of the image, and one of an unknown kind
+        for relocs in [[(30u32, 0u32)], [(8, 2 << 24)]] {
+            let mut l = loader_of(Init::Ok, module_file_with(&relocs, &[]));
+            assert_eq!(l.load(PATH.as_ptr()), E_FORMAT, "{relocs:?}");
+            assert_eq!(l.m.allocs, 0);
+        }
+        // the keys table lies outside the file
+        let mut f = module_file();
+        let end = f.len() as u32;
+        put(&mut f, dkneeds::H_REG_OFF, end + 16);
+        seal(&mut f);
+        let mut l = loader_of(Init::Ok, f);
+        assert_eq!(l.load(PATH.as_ptr()), E_FORMAT);
+        assert_eq!(l.m.allocs, 0);
+        // the keys table has another magic: a file of the format before the table
+        let mut f = module_file();
+        let at = f.len() as u32 - 8;
+        put(&mut f, at, 0);
+        seal(&mut f);
+        let mut l = loader_of(Init::Ok, f);
+        assert_eq!(l.load(PATH.as_ptr()), E_CONTRACT);
+        assert_eq!(l.m.allocs, 0);
+        assert!(l.r.log.is_empty());
+    }
+}
+
+#[test]
+fn a_provider_record_in_use_and_a_second_module_of_the_same_name_are_refused_as_loaded() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = loader_of(Init::DeclaresRow, row_service_file());
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
+        let allocs = l.m.allocs;
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_LOADED);
+        assert_eq!(l.m.allocs, allocs, "the second load takes nothing");
+        assert_eq!(records::module(MAX_MODULES).used, 1, "the first one stays");
+
+        let mut l = loader(Init::Ok);
+        assert_eq!(l.load(PATH.as_ptr()), OK);
+        let allocs = l.m.allocs;
+        assert_eq!(l.load(PATH.as_ptr()), E_LOADED);
+        assert_eq!((l.m.allocs, l.m.live.len()), (allocs, 1));
+        assert_eq!((st().modules[0].used, st().modules[1].used, st().loads), (1, 0, 1));
+    }
+}
+
+#[test]
+fn capture_keeps_a_table_that_fits_and_ignores_a_short_file_a_bad_index_an_empty_table_and_one_over_the_limit() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = loader(Init::Ok);
+        l.reset_plan();
+        let file = module_file();
+        l.capture(0, &file);
+        assert_eq!(l.table_len[0], 8);
+        assert_eq!(l.tables[0][..8], file[file.len() - 8..]);
+        // nothing is kept for a file shorter than the header, an index past the selection, an empty table or one that lies outside the file
+        l.reset_plan();
+        l.capture(1, &file[..dkneeds::HEADER as usize - 4]);
+        l.capture(SEL_MAX, &file);
+        l.capture(usize::MAX, &file);
+        let mut empty = file.clone();
+        put(&mut empty, dkneeds::H_REG_SIZE, 0);
+        l.capture(2, &empty);
+        let mut outside = file.clone();
+        let end = outside.len() as u32;
+        put(&mut outside, dkneeds::H_REG_OFF, end - 4);
+        l.capture(3, &outside);
+        assert_eq!(l.table_len, [0; SEL_MAX]);
+        // a table of the planner's limit is kept, one byte more is not (the loader decides about such a file)
+        let mut long = file.clone();
+        long.resize(long.len() + crate::plan::TABLE_MAX, 0);
+        put(&mut long, dkneeds::H_REG_SIZE, crate::plan::TABLE_MAX as u32);
+        l.capture(4, &long);
+        assert_eq!(l.table_len[4], crate::plan::TABLE_MAX);
+        put(&mut long, dkneeds::H_REG_SIZE, crate::plan::TABLE_MAX as u32 + 1);
+        l.capture(5, &long);
+        assert_eq!(l.table_len[5], 0);
+    }
+}
+
+#[test]
+fn a_provider_the_plan_refused_is_reported_and_never_staged_and_its_dependents_are_refused() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let bind = svc_bind(&STOCK);
+        let mut l = staged_boot(service_file(&svc_table(&bind), 0), consumer_file(&user_table()));
+        let mut plan = l.plan_with_caps(1, &wide_caps());
+        assert_eq!(plan.np, 1);
+        plan.provider_verdicts[0] = dkrt_abi::plan::Verdict::Refused(dkrt_abi::plan::Reason::Fit(dkrt_sdk::proto::CAPK_MACHINE_ROWS));
+        l.m.log.clear();
+        let allocs = l.m.allocs;
+        l.load_providers(&plan);
+        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Stage)), "the refused file is not read");
+        assert_eq!((l.loaded[0], l.m.allocs, records::module(MAX_MODULES).used), (false, allocs, 0));
+        assert!(l.phase == Phase::Closed);
+        l.settle(&mut plan, 1);
+        let hash = dkneeds::keys::name_hash(SVC);
+        assert_eq!(plan.verdicts[0], dkrt_abi::plan::Verdict::Refused(dkrt_abi::plan::Reason::NeedMissing(hash)));
+    }
+}
+
+/// The bytes of a header table that has only `needs`.
+fn needs_table(needs: &[dkneeds::keys::Need]) -> Vec<u8> {
+    let t = dkneeds::keys::Table { needs, ..Default::default() };
+    let mut b = vec![0u8; dkneeds::keys::table_size(&t)];
+    dkneeds::keys::write_table(&t, &mut b).unwrap();
+    b
+}
+
+#[test]
+fn the_search_list_keeps_the_first_24_distinct_hard_needs_the_runtime_does_not_meet() {
+    use dkneeds::keys::{name_hash, Need};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let need = |n: &str, hard: bool| Need { service: name_hash(n), min_version: 0, hard };
+    let svc = |i: usize| std::format!("svc{i}");
+    let mut tables = vec![needs_table(&[need("runtime", true), need("soft", false)]), needs_table(&[need(&svc(0), true), need(&svc(1), true)])];
+    for i in 2..30 {
+        tables.push(needs_table(&[need(&svc(i), true), need(&svc(0), true)]));
+    }
+    let mods: Vec<Option<Keys>> = tables.iter().map(|b| Some(Keys::parse(b).unwrap())).collect();
+    let mut out = [0u32; WANT_MAX];
+    let n = unmet_needs(&mods, &mut out);
+    assert_eq!(n, WANT_MAX);
+    let first: Vec<u32> = (0..WANT_MAX).map(|i| name_hash(&svc(i))).collect();
+    assert_eq!(out.to_vec(), first, "in the order of the selection, each once; the runtime's service and the soft need are not in it");
+    // a module with no table adds nothing
+    let none: [Option<Keys>; 2] = [None, None];
+    assert_eq!(unmet_needs(&none, &mut out), 0);
+}
+
+/// A service whose table holds `slots` (one `SLOTS` item of the entry `entry`) and whose `init` declares what the table says.
+unsafe fn slot_provider(entry: u32) -> Fake {
+    use dkneeds::keys::{name_hash, Slot, Table};
+    let slots: &'static [Slot] = Box::leak(Box::new([Slot { id: name_hash("the.entry"), flags: 0, entry }]));
+    let bind = svc_bind(&STOCK);
+    let table = Table { slots, ..svc_table(&bind) };
+    let mut items = vec![(dkrt_abi::service::Declare::SLOT, name_hash("the.entry"), entry)];
+    items.extend_from_slice(match svc_init() {
+        Init::Declare(i) => i,
+        _ => unreachable!(),
+    });
+    provider_loader(service_file(&table, 0), Init::Declare(Box::leak(items.into_boxed_slice())))
+}
+
+/// What a refused provider leaves behind: nothing allocated, nothing published or installed, the site stock and the record free.
+unsafe fn assert_provider_undone(l: &Fake, published: usize) {
+    assert!(l.m.live.is_empty(), "every block is free");
+    assert_eq!((l.installer.count(), l.exports.count()), (0, published));
+    assert_eq!(site_bytes(l, 6), STOCK);
+    assert_eq!(records::module(MAX_MODULES).used, 0);
+    assert!(l.provs[0].block.is_none());
+}
+
+#[test]
+fn a_service_file_with_a_table_outside_the_file_or_of_the_wrong_shape_is_refused_before_anything_is_allocated() {
+    use dkneeds::keys::{Pair, Table};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let bind = svc_bind(&STOCK);
+        // the table lies outside the file
+        let mut f = service_file(&svc_table(&bind), 0);
+        let end = f.len() as u32;
+        put(&mut f, dkneeds::H_REG_OFF, end + 64);
+        seal(&mut f);
+        let mut l = provider_loader(f, svc_init());
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT);
+        assert_eq!(l.m.allocs, 0);
+        // no PROVIDES item, and two of them: not the shape of a service
+        const TWO: [Pair; 2] = [Pair { a: 1, b: 0 }, Pair { a: 2, b: 0 }];
+        for table in [Table::default(), Table { provides: &TWO, ..Default::default() }] {
+            let mut l = provider_loader(service_file(&table, 0), svc_init());
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT);
+            assert_eq!(l.m.allocs, 0);
+            assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Init(..))));
+        }
+    }
+}
+
+#[test]
+fn a_provider_with_an_export_past_the_image_or_a_table_copy_that_does_not_fit_is_refused_and_undone() {
+    use dkneeds::keys::{name_hash, Pair, Table};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // the export entry is the image size (32): past the last byte
+        let exports: &'static [Pair] = Box::leak(Box::new([Pair { a: name_hash("dk_svctest_ping"), b: 32 }]));
+        let bind = svc_bind(&STOCK);
+        let mut l = provider_loader(service_file(&Table { exports, ..svc_table(&bind) }, 0), svc_init());
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT);
+        assert_provider_undone(&l, 0);
+        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Init(..))), "place runs before init");
+
+        // the arena has room for the image but not for the copy of the table
+        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+        l.m.fail_alloc = Some(2);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_NOMEM);
+        assert_eq!(l.m.allocs, 2);
+        assert_provider_undone(&l, 0);
+    }
+}
+
+#[test]
+fn a_slot_fill_past_the_image_or_of_a_slot_the_image_lacks_undoes_the_load() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // the entry is the image size
+        let mut l = slot_provider(32);
+        l.p.info_entries.borrow_mut().push((dkneeds::keys::name_hash("the.entry"), vec![0]));
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT);
+        assert_provider_undone(&l, 0);
+        // the image has no such slot
+        let mut l = slot_provider(4);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT);
+        assert_provider_undone(&l, 0);
+    }
+}
+
+#[test]
+fn an_export_name_another_provider_published_undoes_the_load_and_keeps_the_other_export() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let bind = svc_bind(&STOCK);
+        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+        l.exports.publish(MAX_MODULES + 1, dkneeds::keys::name_hash("dk_svctest_ping"), 0x7000).unwrap();
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_PLAN_OWNER);
+        assert_provider_undone(&l, 1);
+        assert_eq!(l.exports.resolve(dkneeds::keys::name_hash("dk_svctest_ping")), Some(0x7000));
+    }
+}

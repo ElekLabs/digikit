@@ -476,4 +476,98 @@ mod tests {
         let want: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
         assert_eq!(run(&mut store_with(&files), &want).n, PROVIDER_MAX);
     }
+    /// The store of `FakeCards` with a count of the listings and files that cannot be staged.
+    struct Counting {
+        inner: FakeCards,
+        lists: usize,
+        unreadable: Vec<Vec<u8>>,
+    }
+
+    impl Cards for Counting {
+        unsafe fn list(&mut self, prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32 {
+            self.lists += 1;
+            self.inner.list(prefix, out, max)
+        }
+        unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
+            let key = core::slice::from_raw_parts(path, crate::cstr_len(path, 64));
+            if self.unreadable.iter().any(|p| p == key) {
+                return Err(dkrt_sdk::E_NOT_FOUND);
+            }
+            self.inner.stage(path)
+        }
+    }
+
+    fn counting(files: &[(&str, u32, &[&str])], unreadable: &[&str]) -> Counting {
+        Counting { inner: store_with(files), lists: 0, unreadable: unreadable.iter().map(|n| std::format!("services/{n}.dks").into_bytes()).collect() }
+    }
+
+    fn run_counting(c: &mut Counting, want: &[&str]) -> Found {
+        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
+        let want: Vec<u32> = want.iter().map(|n| name_hash(n)).collect();
+        let mut out = Found::new();
+        unsafe { find(c, &services, &want, &mut out) };
+        out
+    }
+
+    #[test]
+    fn an_empty_search_does_not_list_the_folder_and_a_need_named_twice_finds_one_provider() {
+        let mut c = counting(&[("lfo", 1, &[])], &[]);
+        assert_eq!(run_counting(&mut c, &[]).n, 0);
+        assert_eq!(c.lists, 0, "no need, no listing");
+        let out = run_counting(&mut c, &["lfo", "lfo"]);
+        assert_eq!((out.n, c.lists), (1, 1), "one listing, one provider");
+    }
+
+    #[test]
+    fn only_a_file_services_stem_dks_is_a_candidate() {
+        assert_eq!(stem_of(b"services/lfo.dks"), Some(&b"lfo"[..]));
+        assert_eq!(stem_of(b"services/a.dks"), Some(&b"a"[..]));
+        // another extension, no stem, a path as short as the folder and the extension, a file in a subfolder, a stem over the limit
+        assert_eq!(stem_of(b"services/lfo.dkm"), None);
+        assert_eq!(stem_of(b"services/lfo.dks.bak"), None);
+        assert_eq!(stem_of(b"services/.dks"), None);
+        assert_eq!(stem_of(b"lfo.dks"), None);
+        assert_eq!(stem_of(b"services/a/b.dks"), None);
+        let long = std::format!("services/{}.dks", "n".repeat(STEM_MAX + 1));
+        assert_eq!(stem_of(long.as_bytes()), None);
+        // a file of the folder with another extension is not found, whatever its stem
+        let mut fs = cards(vec![("services/lfo.txt".into(), file(1, "lfo", &[]))]);
+        assert_eq!(run(&mut fs, &["lfo"]).n, 0);
+    }
+
+    #[test]
+    fn a_provider_whose_table_lies_outside_the_file_or_is_over_the_planner_limit_is_skipped() {
+        let one = [Pair { a: name_hash("bad"), b: 0x010000 }];
+        let good = raw_file(1, &table_bytes(&one));
+        let store = |f: Vec<u8>| cards(vec![("services/bad.dks".into(), f)]);
+        assert_eq!(run(&mut store(good.clone()), &["bad"]).n, 1);
+        // the table offset is past the file end, and the table runs past it
+        let mut past = good.clone();
+        let end = past.len() as u32;
+        past[dkneeds::H_REG_OFF as usize..][..4].copy_from_slice(&(end + 4).to_be_bytes());
+        assert_eq!(run(&mut store(past), &["bad"]).n, 0);
+        let mut runs_over = good.clone();
+        let len = u32::from_be_bytes(runs_over[dkneeds::H_REG_SIZE as usize..][..4].try_into().unwrap());
+        runs_over[dkneeds::H_REG_SIZE as usize..][..4].copy_from_slice(&(len + 4).to_be_bytes());
+        assert_eq!(run(&mut store(runs_over), &["bad"]).n, 0);
+        // a table of less than a head, and a file shorter than the header words
+        let mut tiny = good.clone();
+        tiny[dkneeds::H_REG_SIZE as usize..][..4].copy_from_slice(&4u32.to_be_bytes());
+        assert_eq!(run(&mut store(tiny), &["bad"]).n, 0);
+        assert_eq!(run(&mut store(good[..dkneeds::H_REG_SIZE as usize].to_vec()), &["bad"]).n, 0);
+        // a table over the planner's limit without a BIND entry to cut
+        let needs: Vec<Need> = (0..TABLE_MAX as u32 / 8).map(|k| Need { service: 1000 + k, min_version: 0, hard: false }).collect();
+        let big = table_of_t(&Table { needs: &needs, provides: &one, ..KEEP });
+        assert!(big.len() > TABLE_MAX);
+        assert_eq!(run(&mut store(raw_file(1, &big)), &["bad"]).n, 0);
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_staged_is_skipped_and_the_search_goes_on() {
+        let mut c = counting(&[("a", 1, &[]), ("b", 1, &[])], &["a"]);
+        let out = run_counting(&mut c, &["a", "b"]);
+        assert_eq!(out.n, 1);
+        assert_eq!(out.path(0), b"services/b.dks");
+        assert!(out.table_len[0] > 0, "the slot of the failed read holds the next provider");
+    }
 }
