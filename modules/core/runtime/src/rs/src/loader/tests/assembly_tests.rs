@@ -638,6 +638,60 @@ fn a_provider_with_another_abi_word_or_a_site_that_is_not_stock_is_refused_befor
     }
 }
 
+/// The boot's own loop (`Loader::boot`) over a plan of real files: the accepted module loads in plan order and is reported to the boot record, the refused one is
+/// reported with the planner's reason and detail words and its file is never staged.
+#[test]
+fn the_boot_loop_loads_accepted_modules_in_plan_order_and_reports_a_refused_one_without_loading_it() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        if be(&packed(*dev, SVC_USER.leaf, "dkm", SVC_USER.nx), dkneeds::H_DSP_SIZE) != 0 {
+            eprintln!("SKIP {}: {} has a DSP section, which the host cannot load", dev.name, SVC_USER.leaf);
+            continue;
+        }
+        unsafe {
+            // a machine row limit of 0 refuses `sine` (the plan names the resource); `svc-test-user` needs no machine row
+            let (mut l, mut plan) = planned(*dev, &image, &[(CAPK_MACHINE_ROWS, 0)], &[&SVC_USER, &SINE], &SERVICES);
+            l.load_providers(&plan);
+            l.settle(&mut plan, 2);
+            assert_eq!(plan.verdicts[0], Verdict::Accepted, "{}", dev.name);
+            assert_eq!(plan.verdicts[1], Verdict::Refused(Reason::Fit(CAPK_MACHINE_ROWS)), "{}", dev.name);
+
+            // the boot record as `dkrt_boot` leaves it before the loop: the verdicts are in
+            *crate::boot::info() = core::mem::zeroed();
+            crate::boot::info().count = 2;
+            crate::boot::states().begin();
+            for k in 0..2 {
+                crate::boot::states().planned(k, plan.verdicts[k]);
+            }
+            let mut rec = dkrt_sdk::sel::Record::empty();
+            rec.count = 2;
+            for (k, m) in [&SVC_USER, &SINE].iter().enumerate() {
+                let path = std::format!("modules/{}.dkm", m.leaf);
+                rec.paths[k][..path.len()].copy_from_slice(path.as_bytes());
+            }
+            l.boot(&rec, &plan);
+
+            let b = crate::boot::info();
+            assert_eq!(b.results[..2], [OK, E_PLAN_FIT], "{}", dev.name);
+            assert_eq!(b.loaded, 1, "{}", dev.name);
+            assert_eq!((b.states[0], b.states[1]), (STATE_ACTIVE, STATE_REFUSED), "{}", dev.name);
+            assert_eq!(b.detail[1], [CAPK_MACHINE_ROWS as u32, 0], "{}", dev.name);
+            // the accepted module is live in the first record; the refused file was never read from the store
+            assert_eq!((st().modules[0].used, st().modules[1].used, st().loads), (1, 0, 1), "{}", dev.name);
+            assert_eq!(l.m.staged_path, b"modules/svc-test-user.dkm".to_vec(), "{}: the last file staged", dev.name);
+            // each result names its file's leaf
+            let leaf = |k: usize| core::slice::from_raw_parts(crate::boot::boot_name(k), dkrt_abi::state::NAME_LEN).to_vec();
+            assert_eq!(&leaf(0)[..17], b"svc-test-user.dkm");
+            assert_eq!(&leaf(1)[..8], b"sine.dkm");
+            // the loop leaves the loader closed
+            assert!(l.phase == Phase::Closed);
+            assert_eq!(l.load(b"modules/svc-test-user.dkm\0".as_ptr()), E_BOOT_ONLY);
+        }
+        let _ = clean_state();
+    }
+}
+
 // ---- consistency of the generated artifacts (no firmware needed) ----------------------------------------------------------------
 
 /// The committed objects of the service files carry the ABI word the runtime object compares with (`dk_svc_abi` against the immediate of `abi_ok`), and the packed
