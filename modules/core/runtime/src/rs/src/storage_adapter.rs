@@ -139,6 +139,7 @@ fn fs_hash(values: &[u32; 4]) -> [u8; 32] {
     h
 }
 
+#[derive(Clone, Copy)]
 struct Fs {
     open: FsOpen,
     read: FsRead,
@@ -147,7 +148,29 @@ struct Fs {
     meta: Option<FsMeta>,
 }
 
+// Host tests: the firmware file system functions of this thread (the device table holds 32-bit code addresses, which a host function pointer does not fit).
+#[cfg(test)]
+thread_local! {
+    static TEST_FS: core::cell::Cell<Option<Fs>> = const { core::cell::Cell::new(None) };
+}
+
+/// Host tests: serve `ROOT_SAMPLES` of a device with the firmware file system from these functions instead of the device table.
+#[cfg(test)]
+pub(crate) fn test_install_fs(open: FsOpen, read: FsRead, close: FsClose, size: FsSize, meta: Option<FsMeta>) {
+    TEST_FS.with(|c| c.set(Some(Fs { open, read, close, size, meta })));
+}
+
+/// Host tests: back to the device table (zeros in the host fixture: `E_NOT_FOUND`).
+#[cfg(test)]
+pub(crate) fn test_remove_fs() {
+    TEST_FS.with(|c| c.set(None));
+}
+
 unsafe fn fs_table() -> Result<Fs, i32> {
+    #[cfg(test)]
+    if let Some(fs) = TEST_FS.with(|c| c.get()) {
+        return Ok(fs);
+    }
     let table = addr_of!(dkrt_sample_fs) as *const u32;
     let (open_addr, read_addr, close_addr, size_addr) =
         (read_volatile(table), read_volatile(table.add(1)), read_volatile(table.add(2)), read_volatile(table.add(3)));
@@ -720,5 +743,33 @@ mod tests {
         let h = fs_hash(&[1, 0x0102_0304, 9, 0]);
         assert_eq!(&h[..4], &[1, 2, 3, 4]);
         assert!(h[4..].iter().all(|b| *b == 0));
+    }
+
+    /// The route table (`dkrt_test_support::routes`) is the one answer to "who serves this root on this device"; the adapter's `route` and its keys must agree
+    /// with it for every read row.
+    #[test]
+    fn the_routes_agree_with_the_route_table() {
+        use dkrt_test_support::routes::{Backend, Op, ROUTES};
+        let mut rows = 0;
+        for r in ROUTES.iter().filter(|r| r.op == Op::Read) {
+            rows += 1;
+            let f = Facts { in_store: r.profile.samples_in_store, sample_path_max: r.profile.sample_path_max };
+            let (backend, key) = match route(r.root, &f) {
+                Ok(Route::Store) => {
+                    let mut z = [0u8; PATH_BYTES];
+                    let n = store_key(r.root, r.path.as_bytes(), &mut z).unwrap();
+                    (Backend::Store, std::string::String::from_utf8(z[..n].to_vec()).unwrap())
+                }
+                Ok(Route::Fs) => {
+                    let mut z = [0u8; 258];
+                    fs_key(r.path.as_bytes(), &mut z).unwrap();
+                    let n = z.iter().position(|b| *b == 0).unwrap();
+                    (Backend::Fs, std::string::String::from_utf8(z[..n].to_vec()).unwrap())
+                }
+                Err(_) => (Backend::Refused, std::string::String::new()),
+            };
+            assert_eq!((backend, key.as_str()), (r.backend, r.key), "{r:?}");
+        }
+        assert!(rows >= 8);
     }
 }

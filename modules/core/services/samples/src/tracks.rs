@@ -940,4 +940,30 @@ mod tests {
             assert_eq!(probe_with(&f, b"/", None), Err(E_SEL_PATH));
         }
     }
+
+    /// The route table (`dkrt_test_support::routes`) is the one answer to "who serves the samples root on this device"; the service's root and the key it
+    /// builds must agree with it for every read row of the samples root.
+    #[test]
+    fn the_sample_root_agrees_with_the_route_table() {
+        use dkrt_test_support::routes::{Backend, Op, ROUTES};
+        let mut rows = 0;
+        for r in ROUTES
+            .iter()
+            .filter(|r| r.op == Op::Read && r.root == dkrt_abi::storage::ROOT_SAMPLES)
+        {
+            rows += 1;
+            let host = FakeHost::new();
+            host.in_store.set(r.profile.samples_in_store);
+            let root = root_of(&host);
+            let mut out = [0u8; dkrt_sdk::sample_tracks::PATH];
+            let n = dkrt_sdk::sample_tracks::rooted(root, r.path.as_bytes(), &mut out).unwrap();
+            let backend = if root == ROOT_DN2 {
+                Backend::Store
+            } else {
+                Backend::Fs
+            };
+            assert_eq!((backend, &out[..n]), (r.backend, r.key.as_bytes()), "{r:?}");
+        }
+        assert!(rows >= 4);
+    }
 }

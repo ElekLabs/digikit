@@ -4,6 +4,7 @@
 //! `core/dsp-link`. It lives in a crate of its own, below the services and the runtime, so a service crate tests against it without naming the runtime.
 extern crate std;
 mod pool;
+pub mod routes;
 mod storage;
 use core::cell::{Cell, RefCell};
 use dkrt_abi::core_api::{CoreApi, SampleCore};
