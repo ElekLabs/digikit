@@ -10,7 +10,8 @@
 //! - the DSP section parts it owns: `dsp_check_*`, `dsp_admit`, `dsp_claim`, `dsp_release`, `dsp_clear`, `dsp_row_step`
 //!   (the DSP loader in `dsp/mod.rs` keeps the area, the row table and the state machine);
 //! - capacity counts (`caps`), the module behind a fault site (`attribute`), the guard's state of a machine type (`guard_state`);
-//! - the declarations of a module's DSP rows (`has_voice`, `declare_voice`, `declare_fx`) and `on_loaded`.
+//! - the declarations of a module's DSP rows (`has_voice`, `declare_voice`, `declare_fx`) and `on_loaded`;
+//! - the module lifecycle: `module_begin` before a module's `init`, `module_commit` after it (two passes over a `RecordSink`), and `remove`.
 use crate::core_api::CoreApi;
 use crate::dsp::{DspSec, Job};
 use crate::registry::ApplyArgs;
@@ -50,6 +51,9 @@ const fn svc_abi() -> u32 {
         size_of::<crate::link::Sequence>(),
         size_of::<crate::link::Stream>(),
         size_of::<DkrtFx>(),
+        size_of::<RecordSink>(),
+        size_of::<ModuleCommitCtx>(),
+        size_of::<crate::keys::KeysCopy>(),
     ];
     let mut h = crate::gen_svc_abi::FILES_HASH;
     let mut i = 0;
@@ -148,6 +152,88 @@ pub struct RowWrite {
 pub struct GuardState {
     pub faults: u32,
     pub disabled: bool,
+}
+
+/// The two passes of a module commit (`ModuleCommitCtx::phase`), run over every service in table order.
+pub mod commit_phase {
+    /// Check what the service collected for the module and measure the records it will write (`sink.at` grows). Changes nothing.
+    pub const PREPARE: u32 = 0;
+    /// Declare the DSP details of the module's rows and write the records into `sink.buf` (null when no service has records).
+    pub const WRITE: u32 = 1;
+}
+
+/// The bytes of the module's `register` section that the services write at a commit (`ModuleCommitCtx::sink`). The loader hands the block to the registry walker
+/// (`check` and `apply` of the services that own the kinds) after the `WRITE` pass. Writing to a sink without a buffer only measures.
+#[repr(C)]
+pub struct RecordSink {
+    pub buf: *mut u8,
+    pub cap: usize,
+    /// The bytes written or measured so far, the section header included.
+    pub at: usize,
+    /// The records written or measured so far.
+    pub count: u32,
+    /// The rows the module uses, as `[uses]` counts them (machine, parameter and page rows), added by the services in the `WRITE` pass (`MODULE_COMMIT` reports them).
+    pub rows: [u32; 3],
+}
+
+impl RecordSink {
+    /// The header of the section: magic, version, device, record count.
+    pub const HEADER: usize = 16;
+
+    /// A sink that only measures.
+    pub const fn measure() -> RecordSink {
+        RecordSink { buf: core::ptr::null_mut(), cap: 0, at: RecordSink::HEADER, count: 0, rows: [0; 3] }
+    }
+    /// A sink over `cap` bytes at `buf` (null: measures).
+    pub const fn over(buf: *mut u8, cap: usize) -> RecordSink {
+        RecordSink { buf, cap, at: RecordSink::HEADER, count: 0, rows: [0; 3] }
+    }
+    pub fn p32(&mut self, v: u32) {
+        if !self.buf.is_null() && self.at + 4 <= self.cap {
+            unsafe { crate::mem::wr32(self.buf.add(self.at), v) };
+        }
+        self.at += 4;
+    }
+    /// `s` padded with NUL to `field` bytes.
+    pub fn text(&mut self, s: &[u8], field: usize) {
+        let mut i = 0;
+        while i < field {
+            if !self.buf.is_null() && self.at + i < self.cap {
+                unsafe { *self.buf.add(self.at + i) = if i < s.len() { s[i] } else { 0 } };
+            }
+            i += 1;
+        }
+        self.at += field;
+    }
+    pub fn bytes(&mut self, s: &[u8]) {
+        let mut i = 0;
+        while i < s.len() {
+            if !self.buf.is_null() && self.at + i < self.cap {
+                unsafe { *self.buf.add(self.at + i) = s[i] };
+            }
+            i += 1;
+        }
+        self.at += s.len();
+    }
+    /// The head of a record of `kind` whose whole length (head included) is `len`.
+    pub fn head(&mut self, kind: u32, len: usize) {
+        self.p32(kind);
+        self.p32(len as u32);
+        self.count += 1;
+    }
+}
+
+/// What the loader gives `module_commit`: where the module is loaded, its keys table and the sink for its records.
+#[repr(C)]
+pub struct ModuleCommitCtx<'a> {
+    /// A `commit_phase`.
+    pub phase: u32,
+    /// The address the module's image was loaded at, and its size (callback addresses become image offsets).
+    pub base: u32,
+    pub image_size: u32,
+    /// The module's header table: `[uses]` rows, machine keys and effect ids.
+    pub keys: &'a crate::keys::KeysCopy,
+    pub sink: *mut RecordSink,
 }
 
 /// One declaration of `Declare`: (table tag, first word, second word, third word); an unused word is 0.
@@ -392,6 +478,14 @@ pub trait Service<C: CoreApi> {
         None
     }
 
+    /// The `init` of module record `rec` is about to run: forget what an earlier module collected. Called on every service that is loaded.
+    unsafe fn module_begin(core: &C, rec: usize) {}
+    /// The commit of module `rec`, after its `init` (`commit_phase`: a `PREPARE` pass, then a `WRITE` pass). A service checks what its builder calls collected, writes its
+    /// records into `c.sink` and returns `OK` or the refusal; the first refusal stops the commit and the loader gives every service its `remove`.
+    unsafe fn module_commit(core: &C, rec: usize, c: &ModuleCommitCtx) -> i32 {
+        OK
+    }
+
     /// DSP section: the entries of the tables this service owns (called in list order, after the header is validated).
     unsafe fn dsp_check_sections(core: &C, sec: &DspSec) -> i32 {
         OK
@@ -448,6 +542,8 @@ pub struct ServiceRow {
     attribute: unsafe extern "C" fn(*const c_void, u32, u32, *mut usize) -> bool,
     guard_state: unsafe extern "C" fn(*const c_void, u32, *mut GuardState) -> bool,
     on_loaded: unsafe extern "C" fn(*const c_void, usize),
+    module_begin: unsafe extern "C" fn(*const c_void, usize),
+    module_commit: unsafe extern "C" fn(*const c_void, usize, *const ModuleCommitCtx) -> i32,
     tick: unsafe extern "C" fn(*const c_void, u32),
     fx_entry: unsafe extern "C" fn(*const c_void, u32, *mut DkrtFx) -> i32,
     machine_types_of: unsafe extern "C" fn(*const c_void, u8, *mut u8) -> u32,
@@ -551,6 +647,16 @@ mod thunk {
     }
     pub unsafe extern "C" fn on_loaded<C: CoreApi, S: Service<C>>(core: *const c_void, rec: usize) {
         S::on_loaded(&*(core as *const C), rec)
+    }
+    pub unsafe extern "C" fn module_begin<C: CoreApi, S: Service<C>>(core: *const c_void, rec: usize) {
+        S::module_begin(&*(core as *const C), rec)
+    }
+    pub unsafe extern "C" fn module_commit<C: CoreApi, S: Service<C>>(
+        core: *const c_void,
+        rec: usize,
+        c: *const ModuleCommitCtx,
+    ) -> i32 {
+        S::module_commit(&*(core as *const C), rec, &*c)
     }
     pub unsafe extern "C" fn tick<C: CoreApi, S: Service<C>>(core: *const c_void, phase: u32) {
         S::tick(&*(core as *const C), phase)
@@ -708,6 +814,8 @@ impl ServiceRow {
             attribute: thunk::attribute::<C, S>,
             guard_state: thunk::guard_state::<C, S>,
             on_loaded: thunk::on_loaded::<C, S>,
+            module_begin: thunk::module_begin::<C, S>,
+            module_commit: thunk::module_commit::<C, S>,
             tick: thunk::tick::<C, S>,
             fx_entry: thunk::fx_entry::<C, S>,
             machine_types_of: thunk::machine_types_of::<C, S>,
@@ -969,6 +1077,28 @@ impl ServiceTable {
             (self.row(i).on_loaded)(self.core, rec);
             i += 1;
         }
+    }
+    /// `Service::module_begin` on every row, in table order.
+    #[inline]
+    pub unsafe fn module_begin(&self, rec: usize) {
+        let mut i = 0;
+        while i < self.rows.len() {
+            (self.row(i).module_begin)(self.core, rec);
+            i += 1;
+        }
+    }
+    /// `Service::module_commit` over the rows in table order; the first refusal stops the walk and is the result.
+    #[inline]
+    pub unsafe fn module_commit(&self, rec: usize, c: &ModuleCommitCtx) -> i32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.row(i).module_commit)(self.core, rec, c);
+            if r != OK {
+                return r;
+            }
+            i += 1;
+        }
+        OK
     }
     /// The machine type numbers of the rows module `owner` filled, from the first service that has any (the machines service file); 0 when none is loaded.
     #[inline]

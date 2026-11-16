@@ -649,68 +649,7 @@ pub unsafe extern "C" fn dk_fx_mix(f: *mut u8, def: u32) {
 
 // ---- the keys table of the header --------------------------------------------------------------------------------------------
 
-/// A copy of the keys table (the staged file is overwritten by anything `init` reads from the store).
-#[derive(Clone, Copy)]
-pub struct KeysCopy {
-    pub machine_rows: u32,
-    pub param_rows: u32,
-    pub page_rows: u32,
-    pub nm: usize,
-    pub nf: usize,
-    pub mk: [u32; MAX_RECORDS],
-    pub fk: [u32; MAX_RECORDS],
-    /// the KINDS, SLOTS, HOOKS, EXPORTS and RESOURCES entries of the table, as `init`'s declarations must repeat them (`decl_matches`)
-    pub decl: Declare,
-}
-
-impl KeysCopy {
-    pub const fn empty() -> KeysCopy {
-        KeysCopy { machine_rows: 0, param_rows: 0, page_rows: 0, nm: 0, nf: 0, mk: [0; MAX_RECORDS], fk: [0; MAX_RECORDS], decl: Declare::new() }
-    }
-
-    /// Parse the header table bytes. A file with no table, or another magic or version, is the format of runtime 0.7: `E_CONTRACT`; a damaged
-    /// table is `E_FORMAT`.
-    pub fn from_bytes(b: &[u8]) -> Result<KeysCopy, i32> {
-        let mut k = KeysCopy::empty();
-        let keys = dkneeds::keys::Keys::parse(b).map_err(|e| if e == dkneeds::keys::KeysError::Format { E_CONTRACT } else { E_FORMAT })?;
-        k.machine_rows = keys.machine_rows();
-        k.param_rows = keys.param_rows();
-        k.page_rows = keys.page_rows();
-        let mut g = 0;
-        while let Some((kind, list)) = keys.group(g) {
-            g += 1;
-            let mut j = 0;
-            while j < list.len() {
-                let v = list.get(j);
-                j += 1;
-                if kind == KIND_MACHINE {
-                    if k.nm >= MAX_RECORDS {
-                        return Err(E_FORMAT);
-                    }
-                    k.mk[k.nm] = v;
-                    k.nm += 1;
-                } else if kind == KIND_EFFECT {
-                    if k.nf >= MAX_RECORDS {
-                        return Err(E_FORMAT);
-                    }
-                    k.fk[k.nf] = v;
-                    k.nf += 1;
-                }
-            }
-        }
-        for tg in [dkneeds::keys::tag::KINDS, dkneeds::keys::tag::SLOTS, dkneeds::keys::tag::HOOKS, dkneeds::keys::tag::EXPORTS, dkneeds::keys::tag::RESOURCES] {
-            let mut i = 0;
-            while let Some(w) = keys.words(tg, i) {
-                k.decl.add(tg, w.0, w.1, w.2);
-                i += 1;
-            }
-        }
-        if k.decl.full {
-            return Err(E_FORMAT);
-        }
-        Ok(k)
-    }
-}
+pub use dkrt_abi::keys::KeysCopy;
 
 /// Header fields of a `.dkm` that the keys table lookup needs (the loader reads the rest; offsets are big endian).
 pub(crate) mod dkm {

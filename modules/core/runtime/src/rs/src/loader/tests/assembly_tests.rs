@@ -121,6 +121,12 @@ impl Registry for DeviceRegistry {
     unsafe fn remove(&mut self, rec: usize) {
         RealRegistry.remove(rec)
     }
+    unsafe fn module_begin(&mut self, rec: usize) {
+        RealRegistry.module_begin(rec)
+    }
+    unsafe fn module_commit(&mut self, rec: usize, c: &dkrt_abi::service::ModuleCommitCtx) -> i32 {
+        RealRegistry.module_commit(rec, c)
+    }
 }
 
 /// The info table of a patched image (`set-<set>.info`): name, hash, kind (0 data, 1 slot), address and the words of a data entry.

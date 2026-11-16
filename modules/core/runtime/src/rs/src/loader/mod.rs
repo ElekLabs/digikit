@@ -506,6 +506,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         };
         let block = blk.ptr;
         crate::collect::begin(block as *mut crate::collect::Collect);
+        self.r.module_begin(rec);
         if init != 0 {
             let ctx = crate::entry::ctx_addr(rec) as usize as *const Ctx;
             CALLED_NEED = [0; NEEDS_LEN];
@@ -587,7 +588,17 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return r;
         }
+        // the services' part of the commit (interface B): they check what their builder calls collected and write their records
+        let svc = match self.commit_services(rec, keys, base, image_size) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
         let declared = c.nm + c.nf + c.nparam + c.np + c.ng != 0;
+        if declared && svc.1 != 0 {
+            // one source of records for now: the collection of the core or the services
+            self.m.free(svc.0);
+            return E_FORMAT;
+        }
         // a provider adds no machine, effect or page row of its own (the machines and fx services move in R12-5 and R12-6)
         if rec >= MAX_MODULES && declared {
             return E_FORMAT;
@@ -681,6 +692,11 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             }
             rows = col::counts_of(c, &p);
         }
+        if svc.1 != 0 {
+            baddr = svc.0;
+            size = svc.1 as usize;
+            rows = svc.2;
+        }
         if rec < MAX_MODULES {
             col::keep(rec, baddr, size as u32, keys);
         }
@@ -692,6 +708,67 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         OK
     }
 
+
+    /// The commit of the services (`Service::module_commit`): a `PREPARE` pass measures the records, the loader takes one arena block for them, a `WRITE` pass fills it, and
+    /// the registry walker checks and applies it. Returns the block (address, size; 0, 0 when no service wrote a record) and the rows the module uses. Nothing stays
+    /// allocated on an error; the caller's undo gives the services their `remove`.
+    unsafe fn commit_services(&mut self, rec: usize, keys: &crate::collect::KeysCopy, base: u32, image_size: u32) -> Result<(u32, u32, (u32, u32, u32)), i32> {
+        use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
+        let mut sink = RecordSink::measure();
+        let ctx = ModuleCommitCtx { phase: commit_phase::PREPARE, base, image_size, keys, sink: &mut sink };
+        let r = self.r.module_commit(rec, &ctx);
+        if r != OK {
+            return Err(r);
+        }
+        let (size, count) = (sink.at, sink.count);
+        let blk = if size > RecordSink::HEADER {
+            match self.m.alloc(size as u32) {
+                Some(b) => Some(b),
+                None => return Err(E_NOMEM),
+            }
+        } else {
+            None
+        };
+        let mut out = match blk {
+            Some(b) => RecordSink::over(b.ptr, size),
+            None => RecordSink::over(core::ptr::null_mut(), 0),
+        };
+        let ctx = ModuleCommitCtx { phase: commit_phase::WRITE, base, image_size, keys, sink: &mut out };
+        let r = self.r.module_commit(rec, &ctx);
+        let free = |l: &mut Self| {
+            if let Some(b) = blk {
+                l.m.free(b.addr);
+            }
+        };
+        if r != OK {
+            free(self);
+            return Err(r);
+        }
+        let rows = (out.rows[0], out.rows[1], out.rows[2]);
+        let b = match blk {
+            Some(b) => b,
+            None => return Ok((0, 0, rows)),
+        };
+        if out.at != size || out.count != count {
+            free(self);
+            return Err(E_FORMAT); // a service wrote another size than it measured
+        }
+        wr32(b.ptr, 0x444b_5247);
+        wr32(b.ptr.add(4), 1);
+        wr32(b.ptr.add(8), self.p.device_id());
+        wr32(b.ptr.add(12), count);
+        let r = crate::registry::check(b.ptr, size as u32, image_size);
+        if r != OK {
+            free(self);
+            return Err(r);
+        }
+        let r = crate::registry::apply(rec as u8 + 1, b.ptr, size as u32, base);
+        if r != OK {
+            free(self);
+            return Err(r);
+        }
+        Ok((b.addr, size as u32, rows))
+    }
 
     /// The DSP part of a module published at boot failed (the machine rows and `init` are in already): take it down again.
     pub unsafe fn undo_early(&mut self, rec: usize) -> i32 {

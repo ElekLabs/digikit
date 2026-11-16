@@ -135,6 +135,7 @@ impl Images for FakeImages {
     }
     unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {
         self.log.push(Ev::Init(rec, init));
+        order("init");
         match self.init {
             Init::Ok => OK,
             // (`ctx` is the context address as a u32: not a host pointer)
@@ -170,11 +171,38 @@ impl Images for FakeImages {
     }
 }
 
+/// What the fake services were asked at a module's lifecycle (`module_begin`, `module_commit`): the record number, and for a commit its phase, base and image size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Svc {
+    Begin(usize),
+    Commit(usize, u32, u32, u32),
+}
+
+/// The order of lifecycle steps across the registry and the images: the fakes of both push here.
+static ORDER: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+fn order(step: &'static str) {
+    ORDER.lock().unwrap_or_else(|e| e.into_inner()).push(step);
+}
+
+/// What the fake service does in `module_commit`.
+#[derive(Clone, Copy)]
+struct FakeService {
+    /// Body bytes of the one record (kind 0xdead) it writes; 0: no record.
+    record: usize,
+    /// More body bytes in the `WRITE` pass than it measured.
+    skew: usize,
+    /// Refuse in this phase with this code.
+    refuse: Option<(u32, i32)>,
+}
+
 struct FakeRegistry {
     abi: bool,
     add_result: i32,
     log: Vec<Ev>,
     asked: core::cell::RefCell<Vec<Ev>>,
+    svc: Vec<Svc>,
+    service: FakeService,
 }
 
 impl Registry for FakeRegistry {
@@ -192,6 +220,27 @@ impl Registry for FakeRegistry {
     }
     unsafe fn remove(&mut self, rec: usize) {
         self.log.push(Ev::Remove(rec));
+    }
+    unsafe fn module_begin(&mut self, rec: usize) {
+        order("begin");
+        self.svc.push(Svc::Begin(rec));
+    }
+    unsafe fn module_commit(&mut self, rec: usize, c: &dkrt_abi::service::ModuleCommitCtx) -> i32 {
+        order("commit");
+        self.svc.push(Svc::Commit(rec, c.phase, c.base, c.image_size));
+        let f = self.service;
+        if let Some((phase, code)) = f.refuse {
+            if phase == c.phase {
+                return code;
+            }
+        }
+        if f.record != 0 {
+            let n = if c.phase == dkrt_abi::service::commit_phase::WRITE { f.record + f.skew } else { f.record };
+            let sink = &mut *c.sink;
+            sink.head(0xdead, 8 + f.record);
+            sink.bytes(&vec![0u8; n]);
+        }
+        OK
     }
 }
 
@@ -272,7 +321,15 @@ unsafe fn loader_of(init: Init, file: Vec<u8>) -> Fake {
     let mut files = BTreeMap::new();
     files.insert(PATH[..PATH.len() - 1].to_vec(), file);
     let imgs = FakeImages { files, staged: Vec::new(), live: Vec::new(), allocs: 0, fail_alloc: None, init, log: Vec::new() };
-    let reg = FakeRegistry { abi: true, add_result: OK, log: Vec::new(), asked: Default::default() };
+    let reg = FakeRegistry {
+        abi: true,
+        add_result: OK,
+        log: Vec::new(),
+        asked: Default::default(),
+        svc: Vec::new(),
+        service: FakeService { record: 0, skew: 0, refuse: None },
+    };
+    ORDER.lock().unwrap_or_else(|e| e.into_inner()).clear();
     let mut l = Loader::new(FakePlatform::new(profiles::DT2), imgs, reg);
     l.phase = Phase::Boot;
     l
@@ -953,4 +1010,68 @@ fn the_role_word_picks_the_steps() {
     assert!(Steps::of(0).check as usize == Steps::MODULE.check as usize);
     // a word that is neither is a module, as the loader always took it
     assert!(Steps::of(7).check as usize == Steps::MODULE.check as usize);
+}
+
+// ---- interface B: the module lifecycle with a fake service ------------------------------------------------------------------------
+
+#[test]
+fn the_services_are_told_before_init_and_commit_in_two_passes_after_it() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        use dkrt_abi::service::commit_phase::{PREPARE, WRITE};
+        let mut l = loader(Init::Ok);
+        assert_eq!(l.load(PATH.as_ptr()), OK);
+        // the module is the first block of the arena: its base is FIRST_ADDR, its image 32 bytes
+        assert_eq!(l.r.svc, vec![Svc::Begin(0), Svc::Commit(0, PREPARE, FIRST_ADDR, 32), Svc::Commit(0, WRITE, FIRST_ADDR, 32)]);
+        assert_eq!(*ORDER.lock().unwrap(), ["begin", "init", "commit", "commit"]);
+        // a service that wrote no record has no block of its own: the module block stays alone
+        assert_eq!(l.m.live.iter().map(|b| b.0).collect::<Vec<_>>(), vec![FIRST_ADDR]);
+    }
+}
+
+#[test]
+fn a_service_that_refuses_the_commit_undoes_the_load_for_every_service() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        use dkrt_abi::service::commit_phase::{PREPARE, WRITE};
+        // in the first pass: nothing was written, no second pass
+        let mut l = loader(Init::Ok);
+        l.r.service.refuse = Some((PREPARE, E_TYPE_USED));
+        assert_eq!(l.load(PATH.as_ptr()), E_TYPE_USED);
+        assert!(l.m.live.is_empty());
+        assert_eq!(st().modules[0].used, 0);
+        assert_eq!(l.r.log, vec![Ev::Add(0), Ev::Remove(0)], "the registry takes everything of the record down");
+        assert!(!l.r.svc.iter().any(|e| matches!(e, Svc::Commit(_, WRITE, ..))));
+        // in the second pass, with the record block allocated: the block is freed too
+        let mut l = loader(Init::Ok);
+        l.r.service = FakeService { record: 16, skew: 0, refuse: Some((WRITE, E_PARAM_FULL)) };
+        assert_eq!(l.load(PATH.as_ptr()), E_PARAM_FULL);
+        assert!(l.m.live.is_empty(), "the module block and the record block are free");
+        assert_eq!(l.r.log, vec![Ev::Add(0), Ev::Remove(0)]);
+        assert_eq!(st().loads, 0);
+        // the record can be used again
+        l.r.service = FakeService { record: 0, skew: 0, refuse: None };
+        assert_eq!(l.load(PATH.as_ptr()), OK);
+        assert_eq!(st().modules[0].used, 1);
+    }
+}
+
+#[test]
+fn the_records_a_service_writes_are_one_block_that_the_walker_checks() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // a record of a kind no service owns: the block was allocated, written and refused by the walker, and everything is given back
+        let mut l = loader(Init::Ok);
+        l.r.service = FakeService { record: 16, skew: 0, refuse: None };
+        let r = l.load(PATH.as_ptr());
+        assert_ne!(r, OK);
+        assert!(l.m.live.is_empty());
+        assert_eq!(l.m.log.iter().filter(|e| matches!(e, Ev::Alloc(..))).count(), 3, "module block, collect block, record block");
+        assert_eq!(l.r.log, vec![Ev::Add(0), Ev::Remove(0)]);
+        // a service that writes more in the second pass than it measured is refused before the walker runs
+        let mut l = loader(Init::Ok);
+        l.r.service = FakeService { record: 16, skew: 8, refuse: None };
+        assert_eq!(l.load(PATH.as_ptr()), E_FORMAT);
+        assert!(l.m.live.is_empty());
+    }
 }
