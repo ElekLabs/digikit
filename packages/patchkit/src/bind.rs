@@ -3,15 +3,15 @@
 //! hook may not clobber, calls the service's handler with the arguments the hook declares, restores, runs the displaced instructions
 //! and jumps back. The bound file holds firmware bytes (the stock bytes of each site): it is never committed.
 
-use crate::apply::{resolve_hook_site, HookSite};
-use crate::dkm::{emit, max_file, Dkm, EmitParts, FLAG_TRACE, ROLE_SERVICE};
+use crate::apply::{HookSite, resolve_hook_site};
+use crate::dkm::{Dkm, EmitParts, FLAG_TRACE, ROLE_SERVICE, emit, max_file};
 use crate::error::*;
 use crate::firmware::Firmware;
-use crate::fwgen::{handler_plan, hook_has_handler, hook_has_tail, HandlerArg, HandlerPlan};
+use crate::fwgen::{HandlerArg, HandlerPlan, handler_plan, hook_has_handler, hook_has_tail};
 use crate::port::Registry;
-use crate::prim::{self, cf_tail, CfSite, CF_JMP_L};
+use crate::prim::{self, CF_JMP_L, CfSite, cf_tail};
 use dkneeds::keys::{
-    name_hash, table_size, write_table, Bind, KeyGroup, Keys, Pair, Table, BIND_STOCK_MAX,
+    BIND_STOCK_MAX, Bind, KeyGroup, Keys, Pair, Table, name_hash, table_size, write_table,
 };
 use std::path::{Path, PathBuf};
 
@@ -666,7 +666,7 @@ pub fn output_allowed(root: &Path, out: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dkm::{pack_keys, Options, Provided};
+    use crate::dkm::{Options, Provided, pack_keys};
 
     fn plan(save: &[&'static str], args: &[&str]) -> HandlerPlan {
         HandlerPlan {
@@ -975,9 +975,10 @@ mod tests {
         assert!(k.bind(2).is_none());
         // the other lists stay
         assert!(k.hooks().eq(hooks.iter().copied()));
-        assert!(k
-            .provides()
-            .eq(Keys::parse(&dkm.register).unwrap().provides()));
+        assert!(
+            k.provides()
+                .eq(Keys::parse(&dkm.register).unwrap().provides())
+        );
     }
 
     #[test]
@@ -1187,10 +1188,11 @@ mod tests {
             let r = shift_bss_words(&mut img, &dkm, old);
             assert_eq!(r.is_ok(), ok, "init {init:#x}: {r:?}");
             if !ok {
-                assert!(r
-                    .unwrap_err()
-                    .0
-                    .contains("entry point 0x8 is not in the image"));
+                assert!(
+                    r.unwrap_err()
+                        .0
+                        .contains("entry point 0x8 is not in the image")
+                );
             }
         }
         let mut dkm = synth_service(image.clone(), vec![], 0);
