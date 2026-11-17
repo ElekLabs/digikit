@@ -161,9 +161,8 @@ async fn emu_set_source(
 /// The device short id of a firmware file, by content (never by name): a stock image by its SHA-256 against the device files'
 /// firmware rows, a patched image by the device byte of its SysEx framing. None for anything else, or when the file cannot be read.
 fn device_of_file(path: &std::path::Path) -> Option<String> {
-    use sha2::{Digest, Sha256};
     let bytes = std::fs::read(path).ok()?;
-    let sha = format!("{:x}", Sha256::digest(&bytes));
+    let sha = digi_control::firmware::sha256_hex(&bytes);
     let registry = device_profile::Registry::load().ok()?;
     if let Ok((device, _)) = registry.identify(&sha) {
         return Some(device.short.clone());
