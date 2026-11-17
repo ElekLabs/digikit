@@ -158,7 +158,7 @@ pub fn parse_values(
         return Err("--card-folder needs --card-image".into());
     }
     if !coupled_build && (scenario.is_some() || report.is_some()) {
-        return Err("--scenario needs a coupled-audio build".into());
+        return Err("--scenario needs a sharc build".into());
     }
     if syx.is_none() && audio_profile_syx.is_some() && !automatic {
         return Err("--audio-profile-syx requires --auto-coupled".into());

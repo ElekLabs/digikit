@@ -39,18 +39,18 @@ FIRST = 7
 ROWS = 0x47EC0000
 STOCK_LIST = 0x47EC1000
 NAMES = 0x47EC2000
-TYPEARG_EXIT = "_mf_x_typearg"
+TYPEARG_EXIT = "mf_x_typearg"
 
 STUBS = [
     "_mf_t_dispatch",
     "_mf_t_list",
     "_mf_t_rank",
     "dk_tail_09514a38",
-    "_mf_x_typearg",
-    "_mf_c5ne",
-    "_mf_c5eq",
-    ("_mf_sp", 8),
-    "_mf_spa",
+    "mf_x_typearg",
+    "mf_x_c5_ne",
+    "mf_x_c5_eq",
+    "mf_x_sp_stock",
+    "mf_x_sp_alt",
 ]
 
 pytestmark = [
@@ -122,12 +122,8 @@ def unit():
             "_mf_rows": ROWS,
             "_mf_list_stock": STOCK_LIST,
             "_mf_spt": TYPE_FN,
+            "mf_spt": TYPE_FN,
             # symbols of the info table of the image (not read by these tests)
-            "_mf_k_keydown": 0,
-            "_mf_k_setvalue": 0,
-            "_mf_k_viewtrack": 0,
-            "_mf_c5": 0,
-            "_mf_c5a": 0,
         },
         [
             "mf_srcpage",
@@ -258,11 +254,7 @@ def gap_unit():
             "_mf_rows": ROWS,
             "_mf_list_stock": STOCK_LIST,
             "_mf_spt": TYPE_FN,
-            "_mf_k_keydown": 0,
-            "_mf_k_setvalue": 0,
-            "_mf_k_viewtrack": 0,
-            "_mf_c5": 0,
-            "_mf_c5a": 0,
+            "mf_spt": TYPE_FN,
         },
         ["mf_list_entry", "mf_rank"],
     )
@@ -310,7 +302,7 @@ def test_masked_clone_test_maps_added_types_to_their_clone(unit):
     )
     for t, r in zip(ts, res, strict=True):
         want = ENTRIES[t - FIRST]["clone_of"] if FIRST <= t < FIRST + COUNT else t
-        assert r.stub == ("_mf_c5eq" if (want & ~2) == 4 else "_mf_c5ne") and r.d[
+        assert r.stub == ("mf_x_c5_eq" if (want & ~2) == 4 else "mf_x_c5_ne") and r.d[
             0
         ] == (want & ~2)
         assert (
@@ -476,13 +468,13 @@ def test_src_page_hook_gives_added_types_one_page_and_stock_types_two(unit):
     two-entry vector back and the stock path (page 1 = the sample view stays)."""
     for typ in (FIRST, 9, 18, 23):  # the first added type, the pluck, run-time rows
         for end_entries, idx in ((2, 0), (2, 1), (1, 0)):
-            assert run_src_page(unit, typ, end_entries, idx) == ("_mf_spa", 1, 0), (
+            assert run_src_page(unit, typ, end_entries, idx) == ("mf_x_sp_alt", 1, 0), (
                 typ,
                 end_entries,
                 idx,
             )
     for typ in (0, 3, 6, -1):  # SAMPLE, STRETCH, MANUAL SLICE, no track
         # page 0: the knob page; page 1: the sample view (stock continues at site + 8); a vector cut by an added type is restored
-        assert run_src_page(unit, typ, 2, 0) == ("_mf_spa", 2, 0), typ
-        assert run_src_page(unit, typ, 2, 1) == ("_mf_sp", 2, 1), typ
-        assert run_src_page(unit, typ, 1, 0) == ("_mf_spa", 2, 0), typ
+        assert run_src_page(unit, typ, 2, 0) == ("mf_x_sp_alt", 2, 0), typ
+        assert run_src_page(unit, typ, 2, 1) == ("mf_x_sp_stock", 2, 1), typ
+        assert run_src_page(unit, typ, 1, 0) == ("mf_x_sp_alt", 2, 0), typ

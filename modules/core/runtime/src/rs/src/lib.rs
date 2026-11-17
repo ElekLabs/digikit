@@ -18,14 +18,15 @@ use dkrt_sdk::*;
 mod api;
 mod arena;
 pub mod core_api;
-mod native;
-pub mod assign;
 pub mod collect;
 mod handlers;
+pub mod storage;
+pub(crate) use storage::storage_adapter;
+pub use storage::card::{block_write, block_write_with};
+pub use storage::{card, store, store_writer};
 #[rustfmt::skip]
 mod gen_services;
 pub mod boot;
-pub mod card;
 pub mod fault;
 pub mod dlog;
 mod dsp;
@@ -33,7 +34,6 @@ mod link;
 pub mod entry;
 mod gen_abi_check;
 mod loader;
-pub mod params;
 pub mod registry;
 pub mod scan;
 pub mod settings;
@@ -46,8 +46,6 @@ pub mod speed;
 mod intro;
 mod safe_screen;
 mod sha256;
-pub mod store;
-pub mod store_writer;
 mod io;
 mod invariants;
 mod watch;
@@ -59,7 +57,6 @@ mod svc_rows;
 mod mailbox;
 mod plan;
 mod platform;
-mod storage_adapter;
 mod safe_mode;
 mod selection;
 mod report;
@@ -131,5 +128,9 @@ mod contract_tests;
 mod svc_contract_tests;
 #[cfg(test)]
 mod fake_storage;
+#[cfg(test)]
+mod host_io;
+#[cfg(test)]
+mod store_tests;
 
 

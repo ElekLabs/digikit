@@ -10,6 +10,7 @@ import { memory } from '@digi/regression/runtime/memory.ts';
 import { panelKeys } from '@digi/regression/runtime/flows/panel-keys.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';
 import { RATE, selectDynamicMachine, trackApi, trackRecord, wav } from './shot-support.ts';
 
 // Shared setup of the DN2 SHOT device tests (shot-dn2-pool, shot-dn2-audio, shot-dn2-supersede): install, plan, the fixture
@@ -97,7 +98,6 @@ async function setup(runtime: Parameters<Parameters<typeof runtimeTests>[1]>[0],
   expect((await dk.modules()).map((m) => m.name)).toEqual(expect.arrayContaining(['digikit/shot', 'test/track-select', ...extraModules]));
   log.stage = 'plan';
   const plan = await prepareRuntimePlan(session, artifacts, [
-    'RECORDS',
     '_dv_params',
     '_sp_boot_status',
     '_sp_status',
@@ -136,7 +136,9 @@ async function setup(runtime: Parameters<Parameters<typeof runtimeTests>[1]>[0],
     const st = (await session.client.call('status')) as { elapsed: number; dsp_frames: number };
     return { elapsed: st.elapsed, dspFrames: st.dsp_frames };
   };
-  const rec = (track: number) => trackRecord(session, sym('RECORDS'), track);
+  // The track table lives in the samples service (a `.bss` of samples.dks): its address is the load address plus the map offset.
+  const recordsAt = await serviceSymbol({ session }, plan, 'samples', 'DKRT_SMP_RECORDS');
+  const rec = (track: number) => trackRecord(session, recordsAt, track);
   /** `length` bytes of DDR at the physical address, in 64 KiB reads. */
   async function ddr(phys: number, length: number): Promise<Buffer> {
     const parts: Buffer[] = [];

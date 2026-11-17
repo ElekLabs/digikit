@@ -6,7 +6,7 @@ import { emulatorClock, repoRoot, type Device, type Session } from '@digi/test-s
 import { expect } from 'vitest';
 import { type PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
-import { boundService, neededServices, servicePath, SERVICE_MODULES } from './service-files.ts';
+import { boundService, neededServices, servicePath } from './service-files.ts';
 import { bootClockOf, pollEmulated, waitForBootEmulated } from './waits.ts';
 
 /** Emulated milliseconds the boot-time loads of the installed modules may take after the boot is seen. */
@@ -27,7 +27,7 @@ export const DEBUG_MODULE = 'digikit/debug';
 
 /**
  * Native USB upload of prepared modules, one selection with all of them (in this order), one restart, then wait for their registration.
- * With `device`, the services that the modules need (`SERVICE_MODULES`: `fx.dks` for an effect) go on the card too, bound to the stock firmware (the Nx target
+ * With `device`, the services that the modules need (`patchkit services`: `fx.dks` for an effect) go on the card too, bound to the stock firmware (the Nx target
  * `<service id>:bind`; the runtime finds them by name at boot). With `session` and the debug module in the list, the wait ends on the log's FW_READY: the boot intro
  * is over and the stock MidiRpc service answers (without the log, the session's own probe before the first stock request covers it).
  */
@@ -48,10 +48,9 @@ export async function installModules(
         paths.push(storePath);
       }
       if (device) {
-        for (const name of neededServices(modules.map((m) => m.artifact))) {
-          const bound = fs.readFileSync(
-            await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
-          );
+        for (const needed of neededServices(modules.map((m) => m.artifact))) {
+          const name = needed.service;
+          const bound = fs.readFileSync(await boundService(device, needed, moduleArtifact(device, needed.moduleId)));
           await timePhase('service.upload', () => dk.put(servicePath(name), bound));
           expect(
             await dk.verifyFile(servicePath(name), bound),

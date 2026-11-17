@@ -50,6 +50,7 @@ import { withPreparedFxSession, readTextRows, inspectFxBoot, withPausedFxProtoco
 const directories: string[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
 });
 
@@ -75,7 +76,11 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
           : ['sine', 'dyn-fx-gain-both', 'dyn-fx-gain-both-2', 'dyn-fx-gain-both-3'];
     const modulesRoot = path.join(directory, 'modules');
     fs.mkdirSync(path.join(modulesRoot, 'dt2'), { recursive: true });
-    ids.forEach((id) => fs.writeFileSync(path.join(modulesRoot, 'dt2', `${id}.dkm`), id));
+    ids.forEach((id) => {
+      fs.writeFileSync(path.join(modulesRoot, 'dt2', `${id}.dkm`), id);
+      // the pack target's list of the services the module needs (`patchkit services`): none here
+      fs.writeFileSync(path.join(modulesRoot, 'dt2', `${id}.services.json`), '');
+    });
     vi.stubEnv('DIGI_RUNTIME_MODULES', modulesRoot);
     // The card cache and the card builder binary of this test (the cache hashes the binary).
     vi.stubEnv('DIGI_CARD_CACHE', path.join(directory, 'cards'));
@@ -152,7 +157,7 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       expect(fake.prepare).toHaveBeenCalledTimes(1);
       const requestedSymbols = fake.prepare.mock.calls[0]![3];
       const requestedRoots = fake.prepare.mock.calls[0]![4].modules;
-      const commonSymbols = ['DKRT_BOOT', 'DKRT_ASSIGN', 'fx.rows', '_dl_area'];
+      const commonSymbols = ['DKRT_BOOT', 'fx.rows', '_dl_area'];
       const roots = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
       const expectedSymbols = plain
         ? ['DKRT_BOOT']
@@ -246,6 +251,11 @@ for (const { afterEpoch, loaderResult } of [
   test(`route boot drains input and returns paused with ${afterEpoch === undefined ? 'strict fresh' : 'explicit restart'} readiness and loader result ${loaderResult}`, async () => {
     const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-route-inspect-'));
     directories.push(artifacts);
+    // the module list of this boot: a packed file and the pack target's list of the services it needs (none)
+    fs.mkdirSync(path.join(artifacts, 'modules', 'dt2'), { recursive: true });
+    fs.writeFileSync(path.join(artifacts, 'modules', 'dt2', 'sine.dkm'), 'sine');
+    fs.writeFileSync(path.join(artifacts, 'modules', 'dt2', 'sine.services.json'), '');
+    vi.stubEnv('DIGI_RUNTIME_MODULES', path.join(artifacts, 'modules'));
     const order: string[] = [];
     let mode = 'paused';
     let observations = 0;

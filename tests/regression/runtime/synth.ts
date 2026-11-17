@@ -5,6 +5,7 @@ import { repoRoot, type Device } from '@digi/test-support';
 import { parse } from 'smol-toml';
 import { deviceProfile } from './device-data.ts';
 import { patchkit } from './patchkit.ts';
+import { servicesSidecar } from './service-files.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 /**
@@ -75,6 +76,8 @@ export async function packSynth(device: Device, spec: SynthSpec, dir: string, fi
   const toml = `${out}.toml`;
   fs.writeFileSync(toml, synthToml(spec));
   await patchkit(['synth-dkm', toml, '--device', device, '-o', out]);
+  // the answer the Nx pack target writes for a shipped module (`neededServices` reads it); this module is packed here, so the live patchkit gives it
+  fs.writeFileSync(servicesSidecar(out), (await patchkit(['services', '--device', device, out])).stdout);
   return out;
 }
 

@@ -31,7 +31,7 @@ import { asV1, compare, measure, readPin, writePin } from './pcmpin.ts';
 import { plotPng, writePng, writeWav } from './plot.ts';
 import { REC, RECORDS, f2w, nw } from './context.ts';
 import { PLANE_L, PLANE_R, TOKEN, publish, writePlanes } from './samplepool.ts';
-import { P0, FxRig } from './fx.ts';
+import { MIX, P0, FxRig } from './fx.ts';
 import { MachineRig } from './machine.ts';
 import type { RigOpener } from './ops.ts';
 import { PyRandom } from './prng.ts';
@@ -326,6 +326,8 @@ async function runFx(module: string, c: RigCase, dir: string, o: RunOptions): Pr
     let k = 0;
     for (const [si, step] of steps.entries()) {
       ((step.params_f32 as number[] | undefined) ?? []).forEach((v, j) => rig.setRowWord(0, P0 + j, f2w(v)));
+      // `mix` of a step: a float32 word written to the row before the step's first block (the run-time change of the MIX knob)
+      if (typeof step.mix === 'number') rig.setRowWord(0, MIX, step.mix);
       for (let n = 0; n < (step.blocks ?? 1); n++, k++) {
         const x = inputBlock(input, k, table, rng);
         const last = k === total - 1;
@@ -428,6 +430,15 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
       return d <= num(c, 'atol')
         ? null
         : `the largest difference to ${String(c.file)} is ${d} (limit ${num(c, 'atol')})`;
+    }
+    case 'scales-input': {
+      // an effect's output is its input times `gain`: the largest error is within `rel_peak` (default 2**-20, the bound of tools/patchkit/hook_ab.py) of the peak of the reference
+      const ref = signal({ ...t, out: t.input }, c).map((v) => v * num(c, 'gain'));
+      const err = maxAbsDiff(x(), ref);
+      const bound = num(c, 'rel_peak', 2 ** -20) * peak(ref);
+      return err <= bound
+        ? null
+        : `the output is not the input times ${num(c, 'gain')}: error ${err} is above ${bound} (${num(c, 'rel_peak', 2 ** -20)} of the reference peak ${peak(ref)})`;
     }
     case 'same-as': {
       // Tolerant pin (fingerprint v2, `exact` not set): the fingerprint with its tolerances decides. Exact pin, a v1 fingerprint or none: the hash decides.

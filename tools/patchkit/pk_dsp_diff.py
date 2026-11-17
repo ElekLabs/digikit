@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The DSP difference of two .syx images as a DSP patch file (packages/emulator/boot/src/dsp_patch.rs).
+"""The DSP difference of two .syx images as a DSP patch file (packages/emulator/sharc-peer/src/dsp_patch.rs).
 
     uv run python -m tools.patchkit.pk_dsp_diff BASE.syx PATCHED.syx OUT.patch
 

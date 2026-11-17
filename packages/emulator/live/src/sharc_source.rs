@@ -248,7 +248,7 @@ impl LivePack {
             "stale native SHARC library: generated from tools/sharc_dev/sharc_core {lib}, but live pack {} \
              was built with {core}; regenerate and rebuild it (the command is in \
              tools/sharc_dev/sharc_transpile_run.py REGENERATE_HINT: tools/sharc_dev/sharc_rsgen.py, then \
-             cargo build --release --manifest-path packages/emulator/sharc/Cargo.toml with SHARC_GEN_DIR)",
+             cargo build --release --features c-abi --manifest-path packages/emulator/sharc/Cargo.toml with SHARC_GEN_DIR)",
             self.key
         ))
     }

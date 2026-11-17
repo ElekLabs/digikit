@@ -196,4 +196,70 @@ mod tests {
         assert_eq!(r.len(), PROVIDER_MAX);
         assert_eq!(names(&t, 1 + r.len()), ["a", "b", "c", "d", "e", "f", "g"]);
     }
+
+    // ---- the lifecycle walkers of interface B ----------------------------------------------------------------------------------
+
+    static SEEN: std::sync::Mutex<std::vec::Vec<(&'static str, &'static str)>> = std::sync::Mutex::new(std::vec::Vec::new());
+    fn seen(who: &'static str, what: &'static str) {
+        SEEN.lock().unwrap_or_else(|e| e.into_inner()).push((who, what));
+    }
+
+    struct First;
+    struct Refuses;
+    struct Last;
+    impl<C: CoreApi> Service<C> for First {
+        unsafe fn module_begin(_: &C, _: usize) {
+            seen("first", "begin");
+        }
+        unsafe fn module_commit(_: &C, _: usize, _: &dkrt_abi::service::ModuleCommitCtx) -> i32 {
+            seen("first", "commit");
+            OK
+        }
+    }
+    impl<C: CoreApi> Service<C> for Refuses {
+        unsafe fn module_begin(_: &C, _: usize) {
+            seen("refuses", "begin");
+        }
+        unsafe fn module_commit(_: &C, _: usize, _: &dkrt_abi::service::ModuleCommitCtx) -> i32 {
+            seen("refuses", "commit");
+            dkrt_sdk::E_TYPE_USED
+        }
+    }
+    impl<C: CoreApi> Service<C> for Last {
+        unsafe fn module_begin(_: &C, _: usize) {
+            seen("last", "begin");
+        }
+        unsafe fn module_commit(_: &C, _: usize, _: &dkrt_abi::service::ModuleCommitCtx) -> i32 {
+            seen("last", "commit");
+            OK
+        }
+    }
+
+    #[test]
+    fn begin_reaches_every_row_and_the_first_refused_commit_stops_the_walk() {
+        use dkrt_abi::keys::KeysCopy;
+        use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
+        static CORE: RealCore = RealCore;
+        static A: ServiceRow = ServiceRow::of::<First, RealCore>("first", &[]);
+        static B: ServiceRow = ServiceRow::of::<Refuses, RealCore>("refuses", &[]);
+        static D: ServiceRow = ServiceRow::of::<Last, RealCore>("last", &[]);
+        static NONE: ServiceRow = ServiceRow::of::<Nothing, RealCore>("none", &[]);
+        let rows: &'static [*const ServiceRow] = std::boxed::Box::leak(std::vec![&A as *const _, &NONE as *const _, &B as *const _, &D as *const _].into_boxed_slice());
+        let table = ServiceTable::new(rows, &CORE);
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        SEEN.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        let keys = KeysCopy::empty();
+        let mut sink = RecordSink::measure();
+        let ctx = ModuleCommitCtx { phase: commit_phase::PREPARE, base: 0x1000, image_size: 32, keys: &keys, sink: &mut sink };
+        unsafe {
+            table.module_begin(3);
+            assert_eq!(table.module_commit(3, &ctx), dkrt_sdk::E_TYPE_USED);
+        }
+        let log = SEEN.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        assert_eq!(
+            log,
+            [("first", "begin"), ("refuses", "begin"), ("last", "begin"), ("first", "commit"), ("refuses", "commit")],
+            "every row hears begin, in table order; the refusal stops the commit before the last row"
+        );
+    }
 }

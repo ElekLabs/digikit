@@ -935,6 +935,9 @@ pub struct St {
     pub probe: Option<Vec<(u32, u8, u8)>>,
     /// The probed iteration did something a replay cannot reproduce.
     pub probe_bad: bool,
+    /// Load record (the SHARC-only rig, `St::read_log_on`): the (address, width) of each
+    /// DM load of 1, 2 or 4 bytes, in order. Off (None) by default.
+    pub read_log: Option<std::cell::RefCell<Vec<(u32, u8)>>>,
     pub loop_depth: Int,
     pub loop_slots: Stk<(V, V), 6>,
     pub pc_stack_pending: Int,
@@ -1002,6 +1005,8 @@ pub struct St {
     /// on the stack ends at one of them (block code assumes it).
     pub loop_ends: &'static [i64],
     pub loops_ok: bool,
+    /// The generated core the engine runs on (`GenCore::NONE` until the engine sets it).
+    pub core: &'static crate::GenCore,
     /// Set by the Engine around a block call: stores the peripheral model
     /// acts on trap out of the block (TRAP_BLOCK_MODEL).
     pub in_block: bool,
@@ -1087,6 +1092,7 @@ impl St {
             timer_written: false,
             probe: None,
             probe_bad: false,
+            read_log: None,
             loop_depth: 0,
             loop_slots: Stk {
                 a: [(V::UNK, V::UNK); 6],
@@ -1131,6 +1137,7 @@ impl St {
             core_mmr_reset: Vec::new(),
             loop_ends: &[],
             loops_ok: true,
+            core: &crate::GenCore::NONE,
             in_block: false,
             mmr_windows: Vec::new(),
             mmr_page: vec![false; 1 << 16],
@@ -1183,6 +1190,23 @@ impl St {
             .items()
             .iter()
             .all(|l| ends.binary_search(&l.end_sw).is_ok());
+    }
+
+    /// Switch the load record on or off (it starts empty). The plain-RAM inline path of
+    /// `bnd::_dm_read` is bypassed while it is on (`Cfg::fast_mem` off), so the record sits in
+    /// `_dm_read_full` and a core without it pays nothing. Block code (`_dm_read_b`) is not recorded.
+    pub fn read_log_on(&mut self, on: bool) {
+        self.read_log = on.then(Default::default);
+        self.cfg.fast_mem =
+            !on && self.cfg.has_concrete && self.cfg.assume_nw32 && !self.cfg.data_memory_tainted;
+    }
+
+    /// The loads recorded since the last call, oldest first (empty when the record is off).
+    pub fn take_reads(&mut self) -> Vec<(u32, u8)> {
+        self.read_log
+            .as_mut()
+            .map(|l| std::mem::take(l.get_mut()))
+            .unwrap_or_default()
     }
 
     /// Idle-skip probe: note the finishing instruction's memory writes (an

@@ -513,6 +513,7 @@ name = "cf.machine.hook.group"
 site = "cf.machine.site.group"
 cpu = "cf"
 mode = "replace"
+exits = ["cf.machine.site.group.alt"]
 regs = { in = ["d0"], clobbers = ["d0", "d1", "ccr"] }   # d0 := 0 for an added type on purpose; d1 is set by the first displaced move
 devices = ["dn2"]
 mark = "D"
@@ -524,6 +525,7 @@ name = "cf.machine.hook.clone.5"
 site = "cf.machine.site.clone.5"
 cpu = "cf"
 mode = "replace"
+exits = ["cf.machine.site.clone.5 + 12", "cf.machine.site.clone.5.alt"]
 regs = { in = ["d0"], clobbers = ["d0", "ccr"] }   # d0 := clone_of for an added type on purpose
 devices = ["dt2"]
 mark = "D"
@@ -535,6 +537,7 @@ name = "cf.machine.hook.param_code.args"
 site = "cf.machine.site.param_code.args"
 cpu = "cf"
 mode = "replace"
+exits = ["cf.machine.site.param_code.exit"]
 tail = true
 regs = { in = ["a0"], clobbers = ["d0", "ccr"] }   # rewrites 0x10(sp) for slots 29/30; second exit cf.machine.site.param_code.exit with d0 = the field
 devices = ["dt2"]
@@ -547,6 +550,7 @@ name = "cf.machine.hook.srcpage"
 site = "cf.machine.site.srcpage"
 cpu = "cf"
 mode = "replace"
+exits = ["cf.machine.site.srcpage + 8", "cf.machine.site.srcpage.alt"]
 regs = { in = ["a2"], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # exits: site+8 and cf.machine.site.srcpage.alt
 devices = ["dt2"]
 mark = "D"
@@ -605,6 +609,7 @@ name = "cf.machine.hook.type_reader.load"
 site = "cf.machine.site.type_reader.load"
 cpu = "cf"
 mode = "replace"
+exits = ["cf.machine.site.type_reader.load + 8"]
 regs = { in = ["a0"], clobbers = ["d0", "d1", "a0", "ccr"] }   # continues at the epilogue, site+8; a0 dead there is [O]
 devices = ["dn2"]
 mark = "D"

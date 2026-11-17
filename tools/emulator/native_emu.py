@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Build the desktop emulator once, then run the binary.
 
-With local ready inputs and a generated core, the app gets coupled audio; it
+With local ready inputs and a generated core (built as a core library into the shared store, tools/devtools/core_store.py: the
+app and the daemon hold no generated core themselves), the app gets coupled audio; it
 opens with no firmware loaded unless a FILE is given (the daemon loads the
 default firmware). The private inputs stay out of the repository: every
 path is overridable, and unavailable inputs leave the ordinary CF diagnostic
@@ -48,20 +49,17 @@ def set_fast_regions(
         if "--audio-profile-syx" in args
         else digi_env.firmware(environ)
     )
-    # Slot 1's lists are SHARC_FAST_REGIONS and SHARC_BLOCKTRANS; slot 2 reads its own with a _2 suffix, since the
-    # addresses belong to one device's DSP image. In a two-core build (`--also-coupled`, whose firmware is the fourth
-    # value) slot 1 is always the DN2 core and slot 2 the DT2 core (see `second_core`), so the suffix follows the
-    # firmware's device, not the launch order.
+    # The addresses belong to one device's DSP image: the DN2 core reads SHARC_FAST_REGIONS and SHARC_BLOCKTRANS, the
+    # DT2 core the lists with a _2 suffix (`GenCore::env_suffix`), so the suffix follows the firmware's device, in a launch
+    # of one device and in one with `--also-coupled` (whose firmware is the fourth value).
     firmwares = [syx]
     if "--also-coupled" in args and (at := args.index("--also-coupled") + 4) < len(
         args
     ):
         firmwares.append(pathlib.Path(args[at]))
-    dt2_first = len(firmwares) == 2 and digi_env.device_for_syx(syx) == "dt2"
-    suffixes = ["_2", ""] if dt2_first else ["", "_2"]
     first = None
-    for suffix, firmware in zip(suffixes, firmwares, strict=False):
-        res = digi_env.resolve_tiers(None, firmware, suffix, environ)
+    for firmware in firmwares:
+        res = digi_env.resolve_tiers(None, firmware, None, environ)
         environ.update(res.add)
         first = first or res
     return first
@@ -80,39 +78,30 @@ def generated_core(
     return digi_env.generated_dir(image=image, device=device)
 
 
-def pgo_trained_core(device: str) -> pathlib.Path | None:
-    """The generated core the current PGO profile of DEVICE was trained on
-    (manifest `generated_dir`), so the launcher's default core matches the
-    profile without SHARC_GEN_DIR. None unless it exists and is current."""
-    try:
-        from tools.emulator import native_pgo
-    except ImportError:
-        return None
-    manifest = native_pgo.read_manifest(device)
-    value = manifest.get("generated_dir") if manifest else None
-    if not isinstance(value, str) or not value:
-        return None
-    path = pathlib.Path(value)
-    if not path.is_dir():
-        return None
-    try:
-        digi_env.check_generated(path)
-    except SystemExit:
-        return None
-    return path
-
+# The cargo features of a coupled host (digi-coupled, digi-control, the app).
+COUPLED_FEATURES = "sharc,play"
 
 # Launcher options that take a value: the value is not the firmware file (the first positional argument).
 VALUE_OPTIONS = {"--card-image", "--card-folder", "--audio-buffer", "--mirror-dir"}
 
 
+def other_core(device: str, dsp_image: pathlib.Path | str) -> pathlib.Path | None:
+    """The generated core of DEVICE for its DSP image: SHARC_GEN_DIR_<DEVICE>, else the one registered for the image, else
+    the DN2 default. Not `digi_env.generated_dir`: SHARC_GEN_DIR names the launch's own device and would win."""
+    if os.environ.get(f"SHARC_GEN_DIR_{device.upper()}"):
+        return pathlib.Path(os.environ[f"SHARC_GEN_DIR_{device.upper()}"])
+    return digi_env.gen_for_image(dsp_image) or (
+        digi_env.DEFAULT_GENERATED if device == "dn2" else None
+    )
+
+
 def second_core(
     device: str, *, enabled_by_default: bool = False
 ) -> tuple[list[str], pathlib.Path | None]:
-    """The other device's ready inputs for a binary with both generated cores (`--also-coupled`) and its generated core
-    (SHARC_GEN_DIR_<OTHER> names the other device's core; the caller then stores both in slot order). Desktop launches enable it by default; daemons opt in with
-    DIGI_EMU_SECOND_CORE=1. DIGI_EMU_SECOND_CORE=0 disables it. The two-core build has its own PGO profile (device
-    `both`). Nothing (a one-core launch) when it is off or the other device lacks a ready set or a core."""
+    """The other device's ready inputs for a second coupled engine in the same process (`--also-coupled`) and its generated
+    core (the launch provides its library, `core_library_env`). Desktop launches enable it by default; daemons opt in with
+    DIGI_EMU_SECOND_CORE=1. DIGI_EMU_SECOND_CORE=0 disables it. The profile of the build is device `both`.
+    Nothing (a one-device launch) when it is off or the other device lacks a ready set or a core."""
     if (
         os.environ.get("DIGI_EMU_SECOND_CORE", "1" if enabled_by_default else "0")
         != "1"
@@ -121,21 +110,15 @@ def second_core(
     other = "dt2" if device == "dn2" else "dn2"
     paths = digi_env.ready_inputs(device=other)
     missing = [label for label, path in paths.items() if not path.is_file()]
-    # Not `digi_env.generated_dir`: SHARC_GEN_DIR names the first core and would win over the image's registered one.
-    gen = (
-        pathlib.Path(os.environ[f"SHARC_GEN_DIR_{other.upper()}"])
-        if os.environ.get(f"SHARC_GEN_DIR_{other.upper()}")
-        else digi_env.gen_for_image(paths["DSP image"])
-        or (digi_env.DEFAULT_GENERATED if other == "dn2" else None)
-    )
+    gen = other_core(other, paths["DSP image"])
     if missing or gen is None or not gen.is_dir():
         print(
-            f"second core: no {other.upper()} inputs (missing {', '.join(missing) or 'generated core'}); one core only",
+            f"second engine: no {other.upper()} inputs (missing {', '.join(missing) or 'generated core'}); one device only",
             file=sys.stderr,
         )
         return [], None
     digi_env.check_generated(gen)
-    print(f"second core: {gen} ({other.upper()})", file=sys.stderr)
+    print(f"second engine: {gen} ({other.upper()})", file=sys.stderr)
     return [
         "--also-coupled",
         str(paths["DSP image"]),
@@ -183,10 +166,6 @@ def default_audio_args(
     own_var = f"SHARC_GEN_DIR_{device.upper()}"
     explicit = own_var if os.environ.get(own_var) else "SHARC_GEN_DIR"
     reason = explicit if os.environ.get(explicit) else "registered core"
-    if device == "dt2" and not os.environ.get(explicit):
-        trained = pgo_trained_core(device)
-        if trained is not None:
-            generated, reason = trained, "the core the DT2 PGO profile was trained on"
     if not generated.is_dir():
         missing.append(f"generated {device.upper()} core (set {own_var})")
     if missing:
@@ -199,19 +178,9 @@ def default_audio_args(
         )
         return []
     digi_env.check_generated(generated)
-    os.environ.setdefault("SHARC_GEN_DIR", str(generated))
     print(f"native core: {generated} ({reason})", file=sys.stderr)
-    also, second = second_core(device, enabled_by_default=second_core_by_default)
-    if second is not None:
-        # Slot order of a two-core build, whichever firmware launches: slot 1 (SHARC_GEN_DIR) is the DN2 core, slot 2
-        # (SHARC_GEN_DIR_2) the DT2 core. The engine is chosen by the firmware's device at run time, and the
-        # profile, the target dir and the region lists are keyed by slot.
-        dn2_core, dt2_core = (
-            (second, generated) if device == "dt2" else (generated, second)
-        )
-        os.environ["SHARC_GEN_DIR"] = str(dn2_core)
-        os.environ["SHARC_GEN_DIR_2"] = str(dt2_core)
-        args.extend(also)
+    also, _second = second_core(device, enabled_by_default=second_core_by_default)
+    args.extend(also)
     if positional is None and load_default:
         args.insert(0, str(paths["firmware"]))
     args.extend(
@@ -284,24 +253,19 @@ def ready_for(
     }
 
 
-def target_dir_for(gen: pathlib.Path | None, second: str | None = None) -> str:
-    """The shared cargo target dir for a generated core (tools/emulator/native_target.py); a second core (SHARC_GEN_DIR_2) is part of the key."""
+def target_dir_for(gen: pathlib.Path | None = None) -> str:
+    """The shared cargo target dir (tools/emulator/native_target.py) of a build against the generated core GEN. The app, the
+    daemon and the other hosts hold no generated core, so they all use the no-core dir (the default)."""
     from tools.emulator import native_target
 
     # "" means no generated core, whatever SHARC_GEN_DIR says.
-    return str(native_target.target_dir(gen if gen is not None else "", second=second))
-
-
-def coupled_features() -> str:
-    """The cargo feature of a coupled build: `second-core` when SHARC_GEN_DIR_2 names a second generated core."""
-    return "second-core" if os.environ.get("SHARC_GEN_DIR_2") else "coupled-audio"
+    return str(native_target.target_dir(gen if gen is not None else ""))
 
 
 def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
     """The cargo command line; pgo is a native_pgo.LaunchPlan for the PGO build.
 
-    The target dir is keyed by the generated core, so every build of the same
-    core (this app, tests, examples) reuses one compiled copy of it.
+    The app holds no generated core, so it builds into the no-core target dir.
     """
     command = [
         "cargo",
@@ -312,27 +276,20 @@ def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
         "apps/desktop/src-tauri/Cargo.toml",
     ]
     if "--coupled" in args or "--auto-coupled" in args:
-        command.extend(["--features", coupled_features()])
+        command.extend(["--features", COUPLED_FEATURES])
         if pgo is not None:
             command = [*pgo.prefix, *command, *pgo.cargo_args]  # type: ignore[attr-defined]
         else:
-            command.extend(
-                [
-                    "--target-dir",
-                    target_dir_for(
-                        generated_core(args), os.environ.get("SHARC_GEN_DIR_2")
-                    ),
-                ]
-            )
+            command.extend(["--target-dir", target_dir_for()])
     else:
         command.extend(["--target-dir", target_dir_for(None)])
     return [*command, "--", *args]
 
 
 def device_for_args(args: list[str]) -> str:
-    """The PGO profile device of a coupled launch: `both` for a two-core build (SHARC_GEN_DIR_2 is set), else the
+    """The PGO profile device of a coupled launch: `both` when it runs a second engine (`--also-coupled`), else the
     device of its firmware file (`dn2`, `dt2`)."""
-    if os.environ.get("SHARC_GEN_DIR_2"):
+    if "--also-coupled" in args:
         return "both"
     if "--audio-profile-syx" in args:
         position = args.index("--audio-profile-syx") + 1
@@ -386,8 +343,8 @@ def pgo_plan(args: list[str]) -> object | None:
     """Profile-use plan for the coupled build, or None for the ordinary build.
 
     Each single-core device has its own profile (`native_pgo.py train --device dt2`): a DN2
-    profile gives a DT2 build only the shared-engine 3%, a DT2 profile 19%. The two-core build (SHARC_GEN_DIR_2
-    set, the desktop default) has the profile of device `both` (`train --device both`), built in a target dir of its
+    profile gives a DT2 build only the shared-engine 3%, a DT2 profile 19%. A launch with a second engine (`--also-coupled`,
+    the desktop default) has the profile of device `both` (`train --device both`), built in a target dir of its
     own. The launcher never trains on its own. A stale or missing profile falls back
     to the ordinary build (its own target dir, not the launcher's pgo-use). DIGI_EMU_PGO_TRAIN=1 trains a stale or missing
     profile here when the training inputs exist (`mise run perf:pgo` is the usual
@@ -436,7 +393,7 @@ def pgo_plan(args: list[str]) -> object | None:
         if profile:
             note_pgo(status, detail)
             print(native_pgo.PARTIAL_NOTICE, file=sys.stderr)
-            return native_pgo.plan_for(profile, environ)
+            return native_pgo.plan_for(profile, environ, device)
         status, detail = "missing", "profile file is gone"
     if status != "ok":
         note_pgo(status, detail)
@@ -448,7 +405,7 @@ def pgo_plan(args: list[str]) -> object | None:
         + pathlib.Path(detail).name,
         file=sys.stderr,
     )
-    return native_pgo.plan_for(detail, environ)
+    return native_pgo.plan_for(detail, environ, device)
 
 
 PGO_MISMATCH_WARNING = (
@@ -526,9 +483,7 @@ def verify_pgo(
 def daemon_command(args: list[str]) -> list[str]:
     """`cargo run` for the windowless daemon `digi-emud` (packages/emulator/control).
 
-    Same target-dir rules as the desktop app, so a coupled daemon and the app
-    share one compiled copy of the generated core. No PGO: the profile is
-    trained on the desktop binary.
+    Same target dir as the desktop app. No PGO: the profile is trained on the desktop binary.
     """
     command = [
         "cargo",
@@ -542,12 +497,7 @@ def daemon_command(args: list[str]) -> list[str]:
     ]
     if "--coupled" in args or "--auto-coupled" in args:
         command.extend(
-            [
-                "--features",
-                coupled_features(),
-                "--target-dir",
-                target_dir_for(generated_core(args), os.environ.get("SHARC_GEN_DIR_2")),
-            ]
+            ["--features", COUPLED_FEATURES, "--target-dir", target_dir_for()]
         )
     else:
         command.extend(["--target-dir", target_dir_for(None)])
@@ -692,6 +642,54 @@ def syx_from_args(args: list[str]) -> pathlib.Path:
     return pathlib.Path(syx_arg) if syx_arg else digi_env.firmware(os.environ)
 
 
+def core_library_env(args: list[str], plan: object | None = None) -> dict[str, str]:
+    """`DIGI_SHARC_CORE_LIB_<DEV>` of both devices for a coupled launch, from the core library store
+    (tools/devtools/core_store.py: a hit takes about 0.2 s, a miss builds the library once), whichever device the firmware
+    is and with or without `--also-coupled`, so choosing a firmware of the other device in the app boots it coupled. A
+    profile-guided build works with either library (the header leaves the PGO flags out). Nothing for a launch without
+    coupled audio. When one device's library cannot be built the launch goes on with the other and one line names the
+    missing one and the build command; the launch stops when no library can be provided. An explicit
+    `DIGI_SHARC_CORE_LIB_<DEV>` wins. With a PGO PLAN (a fresh profile) the library of each device the profile covers is the
+    one built with that profile (its own store entry); the other device gets the plain library."""
+    if not ("--coupled" in args or "--auto-coupled" in args):
+        return {}
+    from tools.devtools import core_store
+    from tools.emulator import native_pgo
+
+    profiles = native_pgo.library_profiles(plan)  # type: ignore[arg-type]
+    own = digi_env.device_for_syx(syx_from_args(args))
+    second: dict[str, str] = {}
+    if "--also-coupled" in args:
+        at = args.index("--also-coupled")
+        if at + 4 < len(args) and (
+            other := digi_env.device_for_syx(pathlib.Path(args[at + 4]))
+        ):
+            second[other] = args[at + 1]
+    env: dict[str, str] = {}
+    missing: dict[str, str] = {}
+    for device in ("dn2", "dt2"):
+        if device == own:
+            gen = generated_core(args, device)
+        else:
+            image = (
+                second.get(device) or digi_env.ready_inputs(device=device)["DSP image"]
+            )
+            gen = other_core(device, image)
+        try:
+            env.update(core_store.library_env({device: gen}, profiles=profiles))
+        except core_store.CoreStoreError as exc:
+            missing[device] = str(exc)
+    if len(missing) == 2:
+        raise SystemExit(f"core library: {'; '.join(missing.values())}")
+    for device, reason in missing.items():
+        print(
+            f"{device.upper()} core library unavailable ({reason}): a {device.upper()} firmware will not run its DSP; "
+            f"build with: uv run python -m tools.devtools.verify_build cores --device {device}",
+            file=sys.stderr,
+        )
+    return env
+
+
 def main(args: list[str] | None = None) -> None:
     args = sys.argv[1:] if args is None else args
     force_cf = "--cf-only" in args
@@ -760,13 +758,12 @@ def main(args: list[str] | None = None) -> None:
         )
     fast = None
     if "--coupled" in args or "--auto-coupled" in args:
-        generated = generated_core(args)
+        generated = generated_core(args, known)
         if not generated.is_dir():
             raise SystemExit(
-                "--coupled needs SHARC_GEN_DIR pointing to a local generated DN2 core"
+                "--coupled needs a local generated core: SHARC_GEN_DIR_<DEV> (or SHARC_GEN_DIR) names it"
             )
         digi_env.check_generated(generated)
-        os.environ.setdefault("SHARC_GEN_DIR", str(generated))
         fast = set_fast_regions(args, os.environ)
     # The daemon has no window: no PGO.
     plan = None if daemon else pgo_plan(args)
@@ -783,6 +780,7 @@ def main(args: list[str] | None = None) -> None:
     if build_only:
         print(binary)
         return
+    env.update(core_library_env(args, plan))
     if not daemon:
         env.update(pgo_env())
         # Workbench default from config/emulator.json; an explicit value, including an empty one, still wins.

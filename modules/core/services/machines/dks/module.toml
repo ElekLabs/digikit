@@ -8,7 +8,7 @@ service = "machines"
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "The machines service of the runtime as a service file: machine types, parameters, pages, page clicks and native pages; it owns their record kinds, exports dk_param_get and dk_param_set and takes the hooks of the machine framework"
+summary = "The machines service of the runtime as a service file: machine types, parameters, pages, page clicks and native pages; it owns their record kinds, exports dk_param_get, dk_param_set and the builder calls of the machines and takes the hooks of the machine framework"
 requires = ["core/machines"]
 conflicts = []
 
@@ -22,6 +22,36 @@ name = "dk_param_get"
 
 [[export]]
 name = "dk_param_set"
+
+[[export]]
+name = "dk_module_ctx_add_machine"
+
+[[export]]
+name = "dk_machine_add_page"
+
+[[export]]
+name = "dk_page_add_param"
+
+[[export]]
+name = "dk_param_range"
+
+[[export]]
+name = "dk_param_glyph"
+
+[[export]]
+name = "dk_param_latched"
+
+[[export]]
+name = "dk_param_on_click"
+
+[[export]]
+name = "dk_page_canvas"
+
+[[export]]
+name = "dk_page_bind"
+
+[[export]]
+name = "dk_page_bind_local"
 
 # The hooks it takes (devices/fw/machine.toml and page.toml), for each device that has them. They have no `handler`: each is a routine of this file that runs in place of the
 # stock instructions at the site and continues in the stock code through the table `machines_info` of core/machines (`patchkit bind` makes the site jump straight to the entry).
@@ -99,3 +129,34 @@ devices = ["dn2"]
 path = "build/machines.dko.json"
 sources = ["Cargo.toml"]
 place = "cf.expansion"
+
+# The firmware names of the assembler files, as aliases (`patchkit pack` makes the imports `patchkit bind` resolves: docs/PATCHING.md "Firmware references"). The hooks leave
+# only by `jmp` to these: `exit.<n>` is the exit n of the hook in `devices/fw` (`exit` alone: the end of the site), `ret` is an `rts`, `stock` the stock path called from the hook.
+[object.externs]
+mf_stock_draw = "hook.cf.page.hook.source_draw.stock"
+mf_ret_draw = "hook.cf.page.hook.source_draw.ret"
+mf_ret_code = "hook.cf.page.hook.source_code.ret"
+mf_ret_turn = "hook.cf.page.hook.source_turn.ret"
+mf_x_c5_ne = "hook.cf.machine.hook.clone.5.exit.1"
+mf_x_c5_eq = "hook.cf.machine.hook.clone.5.exit.2"
+mf_x_typearg = "hook.cf.machine.hook.param_code.args.exit.1"
+mf_x_sp_stock = "hook.cf.machine.hook.srcpage.exit.1"
+mf_x_sp_alt = "hook.cf.machine.hook.srcpage.exit.2"
+mf_spt = "cf.machine.fn.current_track_type"
+mf_x_g_next = "hook.cf.machine.hook.group.exit"
+mf_x_g_taken = "hook.cf.machine.hook.group.exit.1"
+mf_ret_tm0 = "hook.cf.machine.hook.type_page.count.ret"
+mf_ret_tm1 = "hook.cf.machine.hook.type_page.desc.ret"
+mf_ret_tm2 = "hook.cf.machine.hook.param_code.map.ret"
+mf_x_ft = "hook.cf.machine.hook.frametype.exit"
+mf_x_rd = "hook.cf.machine.hook.type_reader.load.exit.1"
+mf_x_ow = "hook.cf.machine.hook.owner_type_load.exit"
+mf_rc0 = "cf.machine.site.type_reader.call.0"
+mf_rc1 = "cf.machine.site.type_reader.call.1"
+mf_rc2 = "cf.machine.site.type_reader.call.2"
+mf_rc3 = "cf.machine.site.type_reader.call.3"
+mf_rc4 = "cf.machine.site.type_reader.call.4"
+mf_rc5 = "cf.machine.site.type_reader.call.5"
+mf_rc6 = "cf.machine.site.type_reader.call.6"
+mf_rc7 = "cf.machine.site.type_reader.call.7"
+mf_rc8 = "cf.machine.site.type_reader.call.8"

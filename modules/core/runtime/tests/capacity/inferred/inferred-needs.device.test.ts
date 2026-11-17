@@ -10,7 +10,7 @@ import { bootEntries, COUPLED_ROOTS, expectBoot, popcount, SYMBOLS, type Entry }
 /** The arena of the providers of a module's services: their image blocks and the blocks of their keys tables (loader/role.rs). */
 const providerArena = async (device: Parameters<typeof boundPath>[0], file: string) => {
   let sum = 0;
-  for (const name of neededServices([file])) {
+  for (const { service: name } of neededServices([file])) {
     const service = boundPath(device, name);
     const [n] = await needsOf([service]);
     sum += n!.ARENA! + block(fs.readFileSync(service).readUInt32BE(0x94));

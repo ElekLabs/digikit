@@ -7,6 +7,7 @@ import type { PatchedSession } from '@digi/regression/support.ts';
 import { CARD_SYMBOLS, cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { derivedModule } from '@digi/regression/runtime/service-files.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
@@ -167,6 +168,7 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
     });
     const userBFile = path.join(path.dirname(bound.file), 'svc-test-user-b.dkm');
     fs.writeFileSync(userBFile, userB);
+    derivedModule(moduleArtifact(h.device, 'test/svc-test-user'), userBFile);
     const rt = await h.load('plan-owner', {
       modules: [
         debug,

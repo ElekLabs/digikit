@@ -148,7 +148,7 @@ def both_state(tree):
     return native_pgo.check_state(tree / "gen", "", "", "both", tree / "gen2")
 
 
-def test_both_key_covers_the_second_core_the_feature_and_the_slot_order(tree):
+def test_both_key_covers_the_second_core_and_the_workload(tree):
     hasher = native_pgo.FileHasher(tree / "state" / "hash-cache.json")
     (tree / "gen2").mkdir()
     (tree / "gen2/core.rs").write_text("dt2 core")
@@ -158,9 +158,9 @@ def test_both_key_covers_the_second_core_the_feature_and_the_slot_order(tree):
     )
     assert "generated2" not in one
     assert two["generated2"] != two["generated"]
-    assert two["features"] == "second-core"
+    assert two["features"] == one["features"]
     assert two["workload"] == "both-v1"
-    assert two["slots"] == "generated=dn2,generated2=dt2"
+    assert two["devices"] == "generated=dn2,generated2=dt2"
     assert native_pgo.key_of(one) != native_pgo.key_of(two)
 
 
@@ -173,25 +173,24 @@ def test_both_profile_is_current_until_either_core_changes(both):
     assert both_state(both)[:2] == ("stale", "changed: generated")
 
 
-def test_both_build_never_lands_in_the_single_core_pgo_use_dir(tmp_path, monkeypatch):
+def test_each_device_profile_builds_into_its_own_pgo_use_dir(tmp_path, monkeypatch):
     from tools.emulator import native_target
 
-    gens = {}
-    for name in ("dn2", "dt2"):
-        gens[name] = tmp_path / name
-        gens[name].mkdir()
-        (gens[name] / "image.rs").write_text("")
+    gen = tmp_path / "dn2"
+    gen.mkdir()
+    (gen / "image.rs").write_text("")
     monkeypatch.setattr(native_target, "TARGET_ROOT", tmp_path / "target")
     monkeypatch.setattr(native_pgo, "toolchain_rustc", lambda: "/fake/rustc")
-    single = {"SHARC_GEN_DIR": str(gens["dn2"])}
-    two = {**single, "SHARC_GEN_DIR_2": str(gens["dt2"])}
-    one_dir = native_pgo.plan_for("p", single).cargo_args[3]
-    two_dir = native_pgo.plan_for("p", two).cargo_args[3]
-    assert two_dir != one_dir
-    assert two_dir.endswith("/pgo-use")
-    assert pathlib.Path(two_dir).parent.name.count("+") == 1
-    assert str(native_pgo.pgo_binary(two)).startswith(two_dir)
-    assert not str(native_pgo.pgo_binary(single)).startswith(two_dir)
+    env = {"SHARC_GEN_DIR": str(gen)}
+    dirs = {
+        device: native_pgo.plan_for("p", env, device).cargo_args[3]
+        for device in ("dn2", "dt2", "both")
+    }
+    assert len(set(dirs.values())) == 3
+    assert dirs["dn2"].endswith("/pgo-use")  # the launcher's reserved dir
+    assert dirs["both"].endswith("/pgo-use-both")
+    for device, target in dirs.items():
+        assert str(native_pgo.pgo_binary(env, device)).startswith(target)
 
 
 def test_each_device_sets_the_region_lists_of_its_own_engine_slot():
@@ -206,6 +205,26 @@ def test_each_device_sets_the_region_lists_of_its_own_engine_slot():
         "SHARC_BLOCKTRANS_2": "0x2",
         "NOTE_EVENTS": "trig",
     }
+
+
+def test_run_env_gives_a_dt2_run_the_lists_of_the_dt2_core(monkeypatch, tmp_path):
+    from tools.devtools import core_store
+    from tools.emulator import coupled
+
+    monkeypatch.setattr(core_store, "library_env", lambda *a, **k: {})
+    monkeypatch.setattr(digi_env, "fast_env", lambda env, syx=None, **k: {})
+    syx = tmp_path / "dt2.syx"
+    syx.write_bytes(b"x")
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda path: "dt2")
+    monkeypatch.delenv("SHARC_FAST_REGIONS_2", raising=False)
+    env = coupled.run_env(
+        {"SHARC_FAST_REGIONS": "", "SHARC_BLOCKTRANS": "0x2"}, syx=syx
+    )
+    assert env["SHARC_FAST_REGIONS_2"] == "" and env["SHARC_BLOCKTRANS_2"] == "0x2"
+    assert "SHARC_FAST_REGIONS" not in env and "SHARC_BLOCKTRANS" not in env
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda path: "dn2")
+    env = coupled.run_env({"SHARC_BLOCKTRANS": "0x2"}, syx=syx)
+    assert env["SHARC_BLOCKTRANS"] == "0x2" and "SHARC_BLOCKTRANS_2" not in env
 
 
 # --- clean -------------------------------------------------------------------------------
@@ -295,3 +314,124 @@ def test_not_current_notice_names_the_command_per_device():
 )
 def test_decide_set_current(set_current, at_main, head, origin, expected):
     assert native_pgo.decide_set_current(set_current, at_main, head, origin) is expected
+
+
+def test_a_profile_covers_the_libraries_of_its_training_target():
+    assert native_pgo.profile_devices("dn2") == ("dn2",)
+    assert native_pgo.profile_devices("dt2") == ("dt2",)
+    assert native_pgo.profile_devices("both") == ("dn2", "dt2")
+    plan = native_pgo.LaunchPlan([], [], {}, profdata="/p.profdata", device="both")
+    assert native_pgo.library_profiles(plan) == {
+        "dn2": pathlib.Path("/p.profdata"),
+        "dt2": pathlib.Path("/p.profdata"),
+    }
+    # no plan, or no profile: the plain libraries
+    assert native_pgo.library_profiles(None) == {}
+    assert native_pgo.library_profiles(native_pgo.LaunchPlan([], [], {})) == {}
+
+
+def test_fresh_profiles_prefer_the_both_profile_and_fall_back_to_the_device(
+    monkeypatch,
+):
+    def launch_plan(environ, target):
+        profiles = {"dn2": "/dn2.p", "both": None, "dt2": "/dt2.p"}
+        path = profiles[target]
+        return (native_pgo.LaunchPlan([], [], {}, path, target) if path else None), ""
+
+    monkeypatch.setattr(native_pgo, "launch_plan", launch_plan)
+    assert native_pgo.fresh_profiles(["dn2", "dt2"], {}) == {
+        "dn2": pathlib.Path("/dn2.p"),
+        "dt2": pathlib.Path("/dt2.p"),
+    }
+    monkeypatch.setattr(
+        native_pgo,
+        "launch_plan",
+        lambda environ, target: (
+            native_pgo.LaunchPlan([], [], {}, "/both.p", target)
+            if target == "both"
+            else None,
+            "",
+        ),
+    )
+    assert native_pgo.fresh_profiles(["dn2"], {}) == {"dn2": pathlib.Path("/both.p")}
+
+
+def test_the_package_list_of_a_tree_is_computed_once_per_lock_state(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "Cargo.lock").write_text("lock 1")
+    (tmp_path / "Cargo.toml").write_text("[workspace]")
+    calls = []
+    monkeypatch.setattr(native_pgo, "ROOT", tmp_path)
+    monkeypatch.setattr(native_pgo, "_PACKAGES_MEMO", {})
+    monkeypatch.setattr(
+        native_pgo, "local_package_dirs", lambda: calls.append(1) or ["packages/a"]
+    )
+    assert native_pgo.tree_packages() == ["packages/a"]
+    assert native_pgo.tree_packages() == ["packages/a"] and len(calls) == 1
+    # a new process (no memo) reads dist/pgo-packages.json
+    monkeypatch.setattr(native_pgo, "_PACKAGES_MEMO", {})
+    assert native_pgo.tree_packages() == ["packages/a"] and len(calls) == 1
+    # a lock edit recomputes it
+    (tmp_path / "Cargo.lock").write_text("lock 2")
+    monkeypatch.setattr(native_pgo, "_PACKAGES_MEMO", {})
+    native_pgo.tree_packages()
+    assert len(calls) == 2
+
+
+def test_an_edit_of_native_pgo_changes_the_package_list_key(tmp_path, monkeypatch):
+    (tmp_path / "Cargo.lock").write_text("lock")
+    (tmp_path / "Cargo.toml").write_text("[workspace]")
+    monkeypatch.setattr(native_pgo, "ROOT", tmp_path)
+    source = tmp_path / "native_pgo.py"
+    source.write_text("LIBRARY_CRATES = ('a',)")
+    monkeypatch.setattr(native_pgo, "__file__", str(source))
+    before = native_pgo._packages_key()
+    source.write_text("LIBRARY_CRATES = ('a', 'b')")
+    assert native_pgo._packages_key() != before
+
+
+def test_resolve_falls_back_when_cargo_metadata_is_malformed(tmp_path, monkeypatch):
+    class Hasher:
+        def __init__(self, path):
+            pass
+
+        def save(self):
+            pass
+
+    def malformed():
+        raise ValueError("bad json")
+
+    monkeypatch.setattr(
+        native_pgo, "read_manifest", lambda device: {"components": {}, "packages": []}
+    )
+    monkeypatch.setattr(native_pgo, "toolchain_dir", lambda: tmp_path)
+    monkeypatch.setattr(native_pgo, "device_state", lambda device: tmp_path)
+    monkeypatch.setattr(native_pgo, "FileHasher", Hasher)
+    monkeypatch.setattr(native_pgo, "compute_components", lambda *a: ({}, 0))
+    monkeypatch.setattr(native_pgo, "desktop_digest", lambda hasher: "d")
+    monkeypatch.setattr(native_pgo, "read_by_key", lambda device, key: None)
+    monkeypatch.setattr(
+        native_pgo, "profdata_path", lambda manifest, device: tmp_path / "none.profdata"
+    )
+    monkeypatch.setattr(native_pgo, "tree_packages", malformed)
+    result = native_pgo.resolve("dn2", gen=tmp_path)
+    assert result.status == "missing"
+
+
+def test_a_failed_cache_write_keeps_the_list_and_leaves_no_part_file(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "Cargo.lock").write_text("lock")
+    (tmp_path / "Cargo.toml").write_text("[workspace]")
+    monkeypatch.setattr(native_pgo, "ROOT", tmp_path)
+    monkeypatch.setattr(native_pgo, "_PACKAGES_MEMO", {})
+    monkeypatch.setattr(native_pgo, "local_package_dirs", lambda: ["packages/a"])
+
+    def refuse(src, dst):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(native_pgo.os, "replace", refuse)
+    assert native_pgo.tree_packages() == ["packages/a"]
+    assert list((tmp_path / "dist").glob("*.part")) == []
+    assert not (tmp_path / "dist" / "pgo-packages.json").exists()

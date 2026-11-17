@@ -6,7 +6,7 @@
 
 use sharc_native::mem::Mem;
 use sharc_native::vectors::{self, Vector};
-use sharc_native::{EXIT_BUDGET, EXIT_NEXT, EXIT_TRAP, Engine, trap_name};
+use sharc_native::{EXIT_BUDGET, EXIT_NEXT, EXIT_TRAP, Engine};
 use std::collections::BTreeMap;
 
 fn run(e: &mut Engine, v: &Vector) -> Option<Vec<String>> {
@@ -27,7 +27,7 @@ fn run(e: &mut Engine, v: &Vector) -> Option<Vec<String>> {
     let done = code == EXIT_NEXT || (code == EXIT_BUDGET && e.s.icount == v.instructions);
     let mut diffs = Vec::new();
     if code == EXIT_TRAP {
-        let t = e.s.trap.map(trap_name).unwrap_or_default();
+        let t = e.s.trap.map(|t| e.s.core.trap_name(t)).unwrap_or_default();
         diffs.push(format!("trapped at {:#x}: {t}", e.s.pc_sw));
     } else if !done {
         diffs.push(format!("block did not run (exit code {code})"));
@@ -51,7 +51,7 @@ fn main() {
     let verbose = args.iter().any(|a| a == "-v");
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
     let vs = vectors::parse(&text).unwrap_or_else(|e| panic!("{path}: {e}"));
-    let mut e = Engine::new(Mem::new());
+    let mut e = Engine::new(Mem::new(), &sharc_gen::CORE);
     if e.dispatch.count == 0 {
         eprintln!(
             "no block code: build with SHARC_GEN_DIR (tools/sharc_dev/sharc_rsgen.py output)"

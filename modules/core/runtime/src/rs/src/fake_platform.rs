@@ -8,8 +8,8 @@
 use crate::card;
 use crate::fake_storage::FakeStorage;
 use crate::files::path_too_big;
-use crate::platform::block_write_with;
-use crate::store::TEST_LAYOUT;
+use crate::card::block_write_with;
+use crate::storage::layout::TEST_LAYOUT;
 use crate::transport::{reply_with, tx_room_with, TX_RING};
 use core::cell::{Cell, RefCell};
 use core::ffi::c_void;
@@ -289,14 +289,8 @@ impl Storage for FakePlatform {
     unsafe fn stat(&self, root: u32, path: &[u8]) -> Result<Stat, i32> {
         self.storage.stat(root, path)
     }
-    unsafe fn read_head(&self, root: u32, path: &[u8], out: &mut [u8; 64]) -> Result<(), i32> {
-        self.storage.read_head(root, path, out)
-    }
     unsafe fn stat_head(&self, root: u32, path: &[u8], out: &mut [u8; 64]) -> Result<(Stat, usize), i32> {
         self.storage.stat_head(root, path, out)
-    }
-    unsafe fn read_range(&self, root: u32, path: &[u8], offset: u32, out: &mut [u8]) -> Result<usize, i32> {
-        self.storage.read_range(root, path, offset, out)
     }
     unsafe fn read_all(&self, root: u32, path: &[u8], dst: *mut u8, cap: u32) -> Result<u32, i32> {
         self.storage.read_all(root, path, dst, cap)
@@ -728,7 +722,8 @@ fn files_samples() -> u32 {
 
 #[test]
 fn the_samples_root_follows_the_capability_and_the_staged_writer() {
-    use crate::store_writer::{root_route, ROOT_SAMPLES, ROOT_STORE};
+    use crate::storage::route::root_route;
+    use crate::storage::sdk_files::{ROOT_SAMPLES, ROOT_STORE};
     let store = |p: DeviceProfile| FakePlatform::new(p);
     // a device with its samples in the store: the `samples/` folder, no adapter needed (DN2 and an invented device alike)
     for p in [profiles::DN2, INVENTED] {

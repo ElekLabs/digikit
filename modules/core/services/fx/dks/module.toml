@@ -8,7 +8,7 @@ service = "fx"
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "The fx service of the runtime as a service file: effect pages, FX parameters, routes, send amounts and the kit values of run-time effects; it owns the effect record kind and takes the nine hooks of the effect pages"
+summary = "The fx service of the runtime as a service file: effect pages, FX parameters, routes, send amounts and the kit values of run-time effects; it owns the effect record kind, exports the builder calls of the effects and takes the nine hooks of the effect pages"
 requires = ["core/fxpages"]
 conflicts = []
 
@@ -16,8 +16,24 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
+# The functions the file exports: each is an [[import]] of its service in sdk/sdk.toml (`provided = true`): the builder calls of the effects.
+[[export]]
+name = "dk_module_ctx_add_fx"
+
+[[export]]
+name = "dk_fx_add_page"
+
+[[export]]
+name = "dk_page_add_fx_param"
+
+[[export]]
+name = "dk_fx_routes"
+
+[[export]]
+name = "dk_fx_mix"
+
 # The hooks it takes (the firmware sites of the effect pages, devices/fw/page.toml). They have no `handler`: each is a routine of this file that runs in place
-# of the stock instructions at the site and returns into the stock code through the table `fxpages_info` (`patchkit bind` makes the site jump straight to the
+# of the stock instructions at the site and leaves into the stock code through the exits `patchkit bind` resolves (it makes the site jump straight to the
 # entry; there is no trampoline). `init` repeats the hooks with dk_service_declare_hook (`service!`).
 [[hook]]
 name = "cf.page.hook.page_desc"
@@ -60,3 +76,23 @@ entry = "fxp_sound"
 path = "build/fx.dko.json"
 sources = ["Cargo.toml"]
 place = "cf.expansion"
+
+# The firmware names of the assembler (`hooks.rs`), as aliases that `patchkit pack` turns into the imports `patchkit bind` resolves (docs/PATCHING.md "Firmware references"): the hooks
+# leave by `jmp` to `exit` (the end of the site) or `exit.<n>` (the exit n of the hook in `devices/fw/page.toml`), `ret` is an `rts` and `stock` the stock path called from the hook.
+[object.externs]
+fx_x_acc = "hook.cf.page.hook.page_desc.exit"
+fx_ret_acc = "hook.cf.page.hook.page_desc.ret"
+fx_stock_acc = "hook.cf.page.hook.page_desc.stock"
+fx_x_list = "hook.cf.page.hook.fx_view_list.load.exit"
+fx_x_keylist = "hook.cf.page.hook.fx_key_list.load.exit"
+fx_x_sound = "hook.cf.page.hook.sound_load_exit.exit"
+fx_x_label = "hook.cf.page.hook.tab_label_test.exit"
+fx_x_label_tail = "hook.cf.page.hook.tab_label_test.exit.1"
+fx_x_graph = "hook.cf.page.hook.filter_graph_test.exit"
+fx_x_graph_skip = "hook.cf.page.hook.filter_graph_test.exit.1"
+fx_x_load = "hook.cf.page.hook.fx_array.load.exit"
+fx_x_save = "hook.cf.page.hook.fx_array.save.exit"
+fx_x_init = "hook.cf.page.hook.fx_array.init_exit.exit"
+fx_stock = "cf.page.data.fx_view_list"
+fx_stock_n = "cf.page.site.fx_view_list.count"
+fx_keystock = "cf.page.data.fx_key_list"

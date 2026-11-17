@@ -2409,6 +2409,7 @@ mod tests {
                     assert_eq!(flat_test_run(&*k, &mut mem, A), (1, 0xdead_beef));
                     assert_eq!(mem.first_ddr_access(), None);
                     let mut s = St::new(mem);
+                    s.core = crate::default_core();
                     // Simulate the normal instruction fallback after the
                     // kernel exits before its data access.
                     if write {

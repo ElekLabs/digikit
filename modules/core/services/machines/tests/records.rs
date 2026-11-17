@@ -1,21 +1,25 @@
 //! The service over a `FakeCore` and a `FakeFw`: the record checks, `apply` and `remove` of parameter rows and click actions, the native page
 //! record and the capacity counts. A machine or a page row is written at absolute addresses of the firmware's tables (`wr`), which a host cannot
 //! reach: those parts run in the device tests (`core/dynreg`, `core/input`).
-use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::registry::w;
+use dkneeds::keys::name_hash;
+use dkrt_abi::mem::FwMem;
 use dkrt_abi::service::*;
 use dkrt_sdk::records::*;
 use dkrt_sdk::*;
+use dkrt_svc_machines::info;
 use dkrt_svc_machines::records::*;
 use dkrt_svc_machines::slots;
+use dkrt_svc_params::dynreg::w;
 use dkrt_test_support::{Call, FakeCore, FakeFw};
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Mutex;
 use std::vec::Vec;
 
 /// The tests that drive the statics of the crate (the click state and `APPLIED`) take this lock.
 static TEST_LOCK: Mutex<()> = Mutex::new(());
 
-const P_FIRST: u32 = 1000;
+const P_FIRST: u32 = 100;
 const P_DYN0: u32 = 200;
 const SLOT_BASE: u32 = 10;
 const OWNER: u8 = 3;
@@ -31,13 +35,49 @@ fn table() -> Vec<u32> {
     t[w::PG_DYN_N] = 4;
     t[w::KNOBS] = 8;
     t[w::SLOT_BASE] = SLOT_BASE;
+    // the parameter table of the firmware (a fake: `FakeCore` keeps the words written there): rows of 0x40 bytes, the first three words are min, max and default
+    t[w::P_TABLE] = P_TABLE;
+    t[w::PF_SIZE] = 0x40;
+    t[w::SPEC] = 0x100;
+    t[w::SPEC + 1] = 0x101;
+    t[w::SPEC + 2] = 0x102;
+    t[w::P_ROWS] = 0x20000;
+    t[w::P_ROW_SIZE] = 0x20;
+    t[w::P_TEMPLATE_OFF] = 8;
+    t
+}
+
+const P_TABLE: u32 = 0x10000;
+
+/// The (min, max, default) words of the parameter table row `code`, as the writer left them.
+fn row_words(core: &FakeCore, code: u32) -> [u32; 3] {
+    let a = P_TABLE + code * 0x40;
+    unsafe { [core.rd(a), core.rd(a + 4), core.rd(a + 8)] }
+}
+
+const N_REGISTER: u32 = 0x6000_0010;
+const N_REMOVE: u32 = 0x6000_0030;
+const N_TURN: u32 = 0x6000_0040;
+
+/// The image table `machines_info` with the adapter's native page calls bound (`native_pages: false`: the words are 0).
+fn machines_info(native_pages: bool) -> Vec<u32> {
+    let mut t = std::vec![0u32; info::WORDS];
+    t[info::w::MAGIC] = info::MAGIC;
+    t[info::w::VERSION] = info::VERSION;
+    if native_pages {
+        t[info::w::N_REGISTER] = N_REGISTER;
+        t[info::w::N_REGISTER_V2] = N_REGISTER + 0x10;
+        t[info::w::N_REMOVE] = N_REMOVE;
+        t[info::w::N_TURN] = N_TURN;
+    }
     t
 }
 
 fn core() -> FakeCore {
     let mut c = FakeCore::new();
-    c.dynreg_table = table();
-    c.first = P_DYN0;
+    c.set_dynreg(table());
+    c.info_tables
+        .push((name_hash("machines_info"), machines_info(true)));
     c
 }
 
@@ -94,26 +134,22 @@ fn section(records: &[(u32, Vec<u8>)]) -> Vec<u8> {
     s
 }
 
-fn check_ctx<'a>(reg: &'a [u8], inf: &'a [u32]) -> CheckCtx {
+fn check_ctx(reg: &[u8]) -> CheckCtx {
     CheckCtx {
         reg: reg.as_ptr(),
         image_size: 0x100,
-        inf: inf.as_ptr(),
     }
 }
 
 fn run_check(core: &FakeCore, step: u32, reg: &[u8]) -> i32 {
-    let inf = table();
-    unsafe { <Machines as Service<FakeCore>>::check(core, step, &check_ctx(reg, &inf)) }
+    unsafe { <Machines as Service<FakeCore>>::check(core, step, &check_ctx(reg)) }
 }
 
-fn apply_ctx<'a>(reg: &'a [u8], inf: &'a [u32]) -> ApplyCtx<'a> {
+fn apply_ctx(reg: &[u8]) -> ApplyCtx {
     ApplyCtx {
         owner: OWNER,
         reg: reg.as_ptr(),
         base: BASE,
-        inf: inf.as_ptr(),
-        args: None,
     }
 }
 
@@ -192,11 +228,24 @@ fn a_bad_action_a_bad_parameter_or_a_page_without_page_rows_is_refused() {
 }
 
 #[test]
-fn fits_refuses_a_table_with_more_rows_than_the_state_has() {
+fn a_table_with_more_rows_than_the_state_has_or_no_table_refuses_the_records_that_need_it() {
+    let reg = section(&[param(0, SLOT_BASE, 0, 255, 17, "LEVEL")]);
+    let mut core = FakeCore::new();
+    // an image without `dynreg_info`: the section needs a registry, one without machine records does not
+    assert_eq!(run_check(&core, check_step::COUNTS, &reg), E_NO_REGISTRY);
+    assert_eq!(run_check(&core, check_step::COUNTS, &section(&[])), OK);
+    assert_eq!(
+        unsafe { <Machines as Service<FakeCore>>::apply(&core, &apply_ctx(&reg)) },
+        E_NO_REGISTRY
+    );
+    // a table that fits
+    core.set_dynreg(table());
+    assert_eq!(run_check(&core, check_step::COUNTS, &reg), OK);
+    // a table that says more parameter rows than the state has
     let mut inf = table();
-    assert!(unsafe { <Machines as Service<FakeCore>>::fits(inf.as_ptr()) });
     inf[w::P_DYN_N] = limits::PARAM_ROWS as u32 + 1;
-    assert!(!unsafe { <Machines as Service<FakeCore>>::fits(inf.as_ptr()) });
+    core.set_dynreg(inf);
+    assert_eq!(run_check(&core, check_step::COUNTS, &reg), E_NO_REGISTRY);
 }
 
 #[test]
@@ -210,34 +259,19 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
         action(1, 8),
     ]);
     assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::apply(&core, &apply_ctx(&reg, &inf)) },
+        unsafe { <Machines as Service<FakeCore>>::apply(&core, &apply_ctx(&reg)) },
         OK
     );
     // the parameters sit in the first free rows, with their ranges and the owner
-    assert_eq!(
-        core.calls(),
-        [
-            Call::ParamRow {
-                code: P_DYN0,
-                min: 0,
-                max: 255,
-                def: 17
-            },
-            Call::ParamRow {
-                code: P_DYN0 + 1,
-                min: -64i32 as u32,
-                max: 63,
-                def: 0
-            },
-        ]
-    );
-    assert_eq!(&core.reg_state().param_owner[..3], [OWNER, OWNER, 0]);
+    assert_eq!(row_words(&core, P_DYN0), [0, 255, 17]);
+    assert_eq!(row_words(&core, P_DYN0 + 1), [-64i32 as u32, 63, 0]);
+    assert_eq!(&rstate().param_owner[..3], [OWNER, OWNER, 0]);
     assert_eq!(
         unsafe { <Machines as Service<FakeCore>>::cap(&core, dkrt_sdk::proto::CAPK_PARAM_ROWS) },
         Some((16, 2))
     );
     // the first parameter has no action: the stock click, nothing is queued
-    core.owners = std::vec![OWNER, OWNER, 0];
+    assert_eq!(&rstate().param_owner[..3], [OWNER, OWNER, 0]);
     assert_eq!(click(&core, P_DYN0 as i32, 6, 1).callback, 0);
     // a click on the second parameter queues the callback at the module's load address plus its image offset
     let p = click(&core, (P_DYN0 + 1) as i32, 6, 0);
@@ -249,10 +283,10 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
     // remove: the rows are free, the action is disarmed and the queued click of the unloaded module is dropped
     core.calls.borrow_mut().clear();
     unsafe { <Machines as Service<FakeCore>>::remove(&core, OWNER) };
-    assert_eq!(&core.reg_state().param_owner[..3], [0, 0, 0]);
+    assert_eq!(&rstate().param_owner[..3], [0, 0, 0]);
     assert_eq!(
-        core.calls().len(),
-        2,
+        (row_words(&core, P_DYN0), row_words(&core, P_DYN0 + 1)),
+        ([0, 0, 0], [0, 0, 0]),
         "both parameter rows are written back as gap rows"
     );
     assert_eq!(unsafe { slots::pending() }.callback, 0);
@@ -265,13 +299,25 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
 }
 
 #[test]
-fn a_native_page_record_registers_its_callbacks_through_the_core_and_other_kinds_do_nothing() {
+fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kinds_do_nothing() {
     let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = core();
     let inf = table();
-    let (kind, body) = native(0x2a);
+    // the key of the machine is a pinned type number of the run-time range
+    let (kind, body) = native(0x12);
     let reg = section(&[(kind, body.clone())]);
-    let ctx = apply_ctx(&reg, &inf);
+    let ctx = apply_ctx(&reg);
+    // what the adapter's `mf_native_register` reads, taken while its arguments are valid: (owner, draw, event, snapshot words, arg, with_arg)
+    let seen: Rc<RefCell<Vec<(usize, usize, usize, Vec<u32>, usize, usize)>>> =
+        Rc::new(RefCell::new(Vec::new()));
+    let sink = seen.clone();
+    *core.on_call.borrow_mut() = Some(Box::new(move |addr, a| {
+        assert_eq!(addr, N_REGISTER, "version 1 records use the v1 function");
+        let words = unsafe { std::slice::from_raw_parts(a[5] as *const u32, a[6]) }.to_vec();
+        sink.borrow_mut()
+            .push((a[0], a[2], a[3], words, a[7], a[8]));
+        0
+    }));
     unsafe {
         assert_eq!(
             <Machines as Service<FakeCore>>::apply_record(&core, KIND_PARAM, body.as_ptr(), &ctx),
@@ -292,22 +338,11 @@ fn a_native_page_record_registers_its_callbacks_through_the_core_and_other_kinds
         );
     }
     assert_eq!(
-        core.calls(),
-        [Call::NativeRegister {
-            kind: KIND_NATIVE_PAGE,
-            owner: 0x2a,
-            page: 1,
-            flags: 0,
-            draw: BASE + 2,
-            event: BASE + 4,
-            words: Vec::new(),
-            arg: 0,
-            with_arg: 0
-        }]
+        *seen.borrow(),
+        [(0x12, BASE as usize + 2, BASE as usize + 4, Vec::new(), 0, 0)]
     );
     // a refusal of the firmware adapter is the record's status
-    let mut core = core;
-    core.native_status = E_NO_REGISTRY;
+    *core.on_call.borrow_mut() = Some(Box::new(|_, _| E_NO_REGISTRY as usize));
     assert_eq!(
         unsafe {
             <Machines as Service<FakeCore>>::apply_record(
@@ -319,12 +354,41 @@ fn a_native_page_record_registers_its_callbacks_through_the_core_and_other_kinds
         },
         E_NO_REGISTRY
     );
-    // and a firmware without the native page calls refuses the record when it is checked
-    core.native_available = false;
+    // a turn calls the adapter's turn function, and its answer says whether the turn was consumed
+    *core.on_call.borrow_mut() = None;
+    core.fw_result.set(1);
     assert_eq!(
-        run_check(&core, check_step::NATIVE, &section(&[(kind, body)])),
+        unsafe { dkrt_svc_machines::nativepage::turn(&core, std::ptr::null(), std::ptr::null()) },
+        1
+    );
+    // a firmware without the native page calls (the words are 0) refuses the record when it is checked, registers nothing and consumes no turn
+    let mut bare = core;
+    bare.info_tables
+        .retain(|(h, _)| *h != name_hash("machines_info"));
+    bare.info_tables
+        .push((name_hash("machines_info"), machines_info(false)));
+    assert_eq!(
+        run_check(&bare, check_step::NATIVE, &section(&[(kind, body.clone())])),
         E_NO_REGISTRY
     );
+    bare.calls.borrow_mut().clear();
+    assert_eq!(
+        unsafe {
+            <Machines as Service<FakeCore>>::apply_record(
+                &bare,
+                KIND_NATIVE_PAGE,
+                body.as_ptr(),
+                &ctx,
+            )
+        },
+        OK,
+        "an unbound word is not called (the check refused the record before; apply has nothing to register)"
+    );
+    assert_eq!(
+        unsafe { dkrt_svc_machines::nativepage::turn(&bare, std::ptr::null(), std::ptr::null()) },
+        0
+    );
+    assert!(bare.calls().iter().all(|c| !matches!(c, Call::Fw { .. })));
 }
 
 #[test]
@@ -347,7 +411,7 @@ fn the_capacity_counts_need_a_registry_and_the_ui_pass_runs_the_click_last() {
         None,
         "a kind another service counts"
     );
-    core.dynreg_table = table();
+    core.set_dynreg(table());
     assert_eq!(
         unsafe { <Machines as Service<FakeCore>>::cap(&core, dkrt_sdk::proto::CAPK_MACHINE_ROWS) },
         Some((8, 0))
@@ -363,27 +427,27 @@ fn the_capacity_counts_need_a_registry_and_the_ui_pass_runs_the_click_last() {
 #[test]
 fn the_machine_types_of_a_module_are_its_machine_rows_in_type_order() {
     let core = core();
-    let s = core.reg_state();
+    let s = rstate();
     s.mach_owner[1] = 4;
     s.mach_owner[5] = 4;
     s.mach_owner[2] = 9;
     let mut out = [0u8; limits::MACHINE_ROWS];
     let first = dkrt_sdk::device::DYN_TYPE_FIRST as u8;
-    assert_eq!(types_of(&core, 4, &mut out), 2);
+    assert_eq!(types_of(4, &mut out), 2);
     assert_eq!(&out[..2], [first + 1, first + 5]);
-    assert_eq!(types_of(&core, 7, &mut out), 0);
+    assert_eq!(types_of(7, &mut out), 0);
 }
 
 #[test]
 fn the_machine_types_are_a_row_method_of_the_service() {
     let core = core();
-    core.reg_state().mach_owner[3] = 2;
+    rstate().mach_owner[3] = 2;
     let mut out = [0u8; 8];
-    let n = unsafe { <Machines as Service<FakeCore>>::machine_types_of(&core, 2, &mut out) };
+    let n = unsafe { <Machines as Service<FakeCore>>::owned_ids(&core, 2, &mut out) };
     assert_eq!(n, 1);
     assert_eq!(out[0], dkrt_sdk::device::DYN_TYPE_FIRST as u8 + 3);
     assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::machine_types_of(&core, 5, &mut out) },
+        unsafe { <Machines as Service<FakeCore>>::owned_ids(&core, 5, &mut out) },
         0
     );
 }

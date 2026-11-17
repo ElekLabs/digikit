@@ -4,10 +4,10 @@
 //! disables banking and supplies unknown shadows.
 //! and the image blob tools/sharc_dev/sharc_transpile_run.py `pack_image` writes.
 
-use crate::CfgRefresh;
 use crate::mem::Mem;
 use crate::rt::*;
 use crate::sha256::Sha256;
+use crate::{CfgRefresh, GenCore};
 pub use sharc_rt::insn_table::{InsnTable, Rd, insn_table};
 
 pub const STATE_FORMAT_VERSION: u32 = 4;
@@ -219,7 +219,7 @@ pub fn import_state(s: &mut St, blob: &[u8]) -> Result<(), i32> {
         // Older snapshots cannot reconstruct packed loop resource contents.
         return Err(-5);
     }
-    s.cfg.refresh();
+    s.cfg.refresh(s.core);
     s.sync_snapshot();
     s.check_loops();
     s.trap = None;
@@ -363,27 +363,27 @@ pub fn set_option(s: &mut St, key: u32, value: i64) -> i32 {
         22 => s.cfg.peripheral_model = b,
         _ => return -1,
     }
-    s.cfg.refresh();
+    s.cfg.refresh(s.core);
     0
 }
 
 /// One instruction for sharc_native_exec_insn: magic "SHIN", type name,
 /// length_bytes (i32, -1 for None), kind, then u16 field count and
 /// (key, value:i64) pairs, strings as u16 length + UTF-8.
-pub fn parse_insn(b: &[u8]) -> Result<Insn, i32> {
+pub fn parse_insn(core: &GenCore, b: &[u8]) -> Result<Insn, i32> {
     let mut r = Rd { b, off: 0 };
     if r.take(4)? != b"SHIN" {
         return Err(-1);
     }
-    let type_name = crate::sym_of(r.str()?).ok_or(-7)?;
+    let type_name = (core.sym_of)(r.str()?).ok_or(-7)?;
     let length = r.i32()?;
-    let kind = crate::sym_of(r.str()?).ok_or(-7)?;
+    let kind = (core.sym_of)(r.str()?).ok_or(-7)?;
     let n = r.u16()?;
     let mut entries = Vec::with_capacity(n as usize);
     for _ in 0..n {
         let key = r.str()?;
         let value = r.i64()? as Int;
-        entries.push(field_entry(key, value).ok_or(-7)?);
+        entries.push(field_entry(core, key, value).ok_or(-7)?);
     }
     if entries.len() > MAX_INSN_FIELDS {
         return Err(-8);
@@ -402,13 +402,13 @@ pub fn parse_insn(b: &[u8]) -> Result<Insn, i32> {
 }
 
 /// A field entry for KEY (e.g. "data[31:16]"): its stem and bit range.
-pub fn field_entry(key: &str, value: Int) -> Option<FieldEntry> {
-    let k = crate::sym_of(key)?;
+pub fn field_entry(core: &GenCore, key: &str, value: Int) -> Option<FieldEntry> {
+    let k = (core.sym_of)(key)?;
     let (stem, range) = match key.find('[') {
         Some(i) => (&key[..i], &key[i..]),
         None => (key, ""),
     };
-    let st = crate::sym_of(stem)?;
+    let st = (core.sym_of)(stem)?;
     let (mut hi, mut lo) = (-1i8, -1i8);
     if let Some(inner) = range.strip_prefix('[').and_then(|x| x.strip_suffix(']'))
         && let Some((h, l)) = inner.split_once(':')

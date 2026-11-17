@@ -56,18 +56,20 @@ fn without_a_table_or_with_one_that_does_not_fit_the_file_refuses_to_load() {
         fxpage::unbind();
         // no `core/fxpages` in the image
         assert_eq!(fxpage::setup(&FakeCore::new()), E_NO_REGISTRY);
-        // an older table has no words for the hooks
-        assert_eq!(
-            fxpage::setup(&core_with(table(2, DEVICE, 2))),
-            E_NO_REGISTRY
-        );
+        // an older table has no words for the hooks, and version 3 still has firmware addresses in it
+        for old in [2, 3] {
+            assert_eq!(
+                fxpage::setup(&core_with(table(old, DEVICE, 2))),
+                E_NO_REGISTRY
+            );
+        }
         // a table of another device
         assert_eq!(
-            fxpage::setup(&core_with(table(3, DEVICE + 1, 2))),
+            fxpage::setup(&core_with(table(4, DEVICE + 1, 2))),
             E_NO_REGISTRY
         );
         // a table that asks for more rows than the service holds state for
-        let mut big = table(3, DEVICE, 2);
+        let mut big = table(4, DEVICE, 2);
         big[6] = 99;
         assert_eq!(fxpage::setup(&core_with(big)), E_NO_REGISTRY);
         assert!(!fxpage::available(&FakeCore::new()));
@@ -79,7 +81,7 @@ fn a_current_table_binds_and_gives_the_pages_and_the_send_limit() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         fxpage::unbind();
-        let core = core_with(table(3, DEVICE, 2));
+        let core = core_with(table(4, DEVICE, 2));
         assert_eq!(fxpage::setup(&core), OK);
         assert!(fxpage::available(&core));
         // pages reserved by the image, none in use
@@ -99,7 +101,7 @@ fn the_send_limit_is_the_cells_of_the_table_up_to_what_the_service_holds() {
     unsafe {
         for (cells, limit) in [(0, 0), (1, 1), (2, 2), (5, 2)] {
             fxpage::unbind();
-            let core = core_with(table(3, DEVICE, cells));
+            let core = core_with(table(4, DEVICE, cells));
             assert_eq!(fxpage::setup(&core), OK);
             assert_eq!(
                 dkrt_svc_fx::fxsend::slots(&core),
@@ -118,7 +120,7 @@ fn the_fx_row_method_answers_no_fx_when_the_service_has_no_page() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         fxpage::unbind();
-        let core = core_with(table(3, DEVICE, 2));
+        let core = core_with(table(4, DEVICE, 2));
         assert_eq!(fxpage::setup(&core), OK);
         let mut out: dkrt_sdk::DkrtFx = core::mem::zeroed();
         assert_eq!(
@@ -126,5 +128,48 @@ fn the_fx_row_method_answers_no_fx_when_the_service_has_no_page() {
             dkrt_sdk::E_NOT_FOUND
         );
         let _ = core.device_id();
+    }
+}
+
+/// The byte offsets the assembler of the hooks names (`.equ T_NAME, offset` in `dks/src/hooks.rs`) are the word indexes of the table (`fxpage::ASM_OFFSETS`).
+#[test]
+fn the_offsets_the_hooks_name_are_the_word_indexes_of_the_table() {
+    let text = include_str!("../dks/src/hooks.rs");
+    let mut seen = 0;
+    for l in text.lines() {
+        let Some(rest) = l.trim().strip_prefix(".equ T_") else {
+            continue;
+        };
+        let (name, value) = rest.split_once(',').unwrap();
+        let value: usize = value.split('|').next().unwrap().trim().parse().unwrap();
+        let name = format!("T_{}", name.trim());
+        let index = fxpage::ASM_OFFSETS
+            .iter()
+            .find(|(n, _)| *n == name)
+            .unwrap_or_else(|| panic!("{name} is not in ASM_OFFSETS"))
+            .1;
+        assert_eq!(value, 4 * index, "{name}");
+        seen += 1;
+    }
+    assert_eq!(
+        seen,
+        fxpage::ASM_OFFSETS.len(),
+        "every offset of ASM_OFFSETS is named in the assembler"
+    );
+}
+
+/// The two firmware words of the hooks' file land in the words 10 and 11 of the bound table (the stock list and the builder's `moveq N,D1`).
+#[test]
+fn the_firmware_words_of_the_file_are_put_into_the_table() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        fxpage::unbind();
+        fxpage::set_firmware(0x4010_0000, 0x4011_2230);
+        let core = core_with(table(4, DEVICE, 2));
+        assert_eq!(fxpage::setup(&core), OK);
+        let tab = std::ptr::addr_of!(fxpage::DKRT_FXP_TAB) as *const u32;
+        assert_eq!((*tab.add(10), *tab.add(11)), (0x4010_0000, 0x4011_2230));
+        fxpage::unbind();
+        fxpage::set_firmware(0, 0);
     }
 }

@@ -21,7 +21,7 @@ site for your device; the repository never includes them.
 | Digitakt II | 1.15C | `Digitakt_II_OS1.15C.syx` | `62d588456e47194bd56dfee9568fb9dd4521c4ff1e8b5427eb461355532e8c6c` |
 | Digitone II | 1.10E | `Digitone_II_OS1.10E.syx` | `9881ee5ca4624be2b833e5eb94e294f2f8425371e6729781baccd1c256cac504` |
 
-Put the files in `firmware/`; the tools look there first (`tools/firmware/config.py`).
+Put the files in `firmware/`, or set `DIGI_FIRMWARE_DIR` to the folder that holds them (`tools/firmware/config.py`).
 `firmware/README.md` lists the images and their SHA-256 values. `DIGI_EMU_SYX`
 (Digitone II) and `DIGI_EMU_SYX_DT2` (Digitakt II) override the paths.
 
@@ -91,9 +91,10 @@ same folder restores in well under a second. It needs the DT2 ready inputs (`mis
 dt2` once: the DSP image and `cold-idle.dsp` come from there). The app remembers the last card
 (`<run dir>/cards/last.json`) and mounts it again when a DT2 starts without `--card-image`, in
 well under a second; the toolbar shows "Samples: NAME (N files)", or "Choose samples to load a
-folder of WAVs" when nothing is cached. A DT2 launch without `SHARC_GEN_DIR` uses the generated
-core its PGO profile was trained on (the launcher prints which core and why), so no environment
-settings are needed. To choose a core: `SHARC_GEN_DIR_DN2` sets the DN2 core, `SHARC_GEN_DIR_DT2`
+folder of WAVs" when nothing is cached. The app holds no generated core: the launcher builds
+the core library of each device into the shared store (first time only, minutes) and passes it as
+`DIGI_SHARC_CORE_LIB_<DEV>` (`uv run python -m tools.devtools.verify_build cores` does the same by hand).
+To choose the core a library is built from: `SHARC_GEN_DIR_DN2` sets the DN2 core, `SHARC_GEN_DIR_DT2`
 sets the DT2 core, and `SHARC_GEN_DIR` sets one core for both devices (the device variable wins).
 Without any of them the core registered for the DSP image is used (`out/native/gen-index.json`). The browser shows the button
 disabled ("desktop only for now"). Headless: the control socket's `card.load {dir}`,
@@ -231,9 +232,10 @@ All tools are indexed in [docs/TOOLS.md](TOOLS.md).
 
 Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, `wb addrmap lookup`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).
 Usage of the object compare for moves of runtime code (`patchkit objdiff OLD NEW`): [PATCHING.md](PATCHING.md#compare-two-objects-after-a-move).
-Usage of the service binder (`patchkit bind IN.dks --firmware FW.syx -o OUT.dks`): [PATCHING.md](PATCHING.md#bind-a-service-to-your-firmware).
-Usage of Transfer install and delete with services (`wb transfer install`, `wb transfer delete`): [MODULES.md](MODULES.md#install-with-services-from-the-command-line).
+Usage of the service binder (`patchkit bind IN.dks --firmware FW.syx -o OUT.dks`): [PATCHING.md](PATCHING.md#bind-a-service-to-your-firmware). Which services a module needs (`patchkit services`): [PATCHING.md](PATCHING.md#which-services-a-module-needs).
+Usage of Transfer install, restart and delete with services (`mise run transfer`, `wb transfer install --restart`, `wb transfer delete`): [MODULES.md](MODULES.md#install-with-services-from-the-command-line).
 
+Core library store (`verify_build cores`, `tools/devtools/store.py`, shared with the daemon store): [TESTING.md](TESTING.md#core-library-store).
 Owner hashes of the runtime object (`patchkit owners`, `objdiff --owners`, `modules/core/runtime/owners.toml`): [TESTING.md](TESTING.md#owner-hashes-patchkit-owners).
 Usage of the SDK-surface coverage (`patchkit imports`, `patchkit coverage`, `patchkit:sdk-coverage`): [TESTING.md](TESTING.md#sdk-surface-coverage).
 Usage of the module DSP analysis (`wb module analyse`): [packages/dksharc/README.md](../packages/dksharc/README.md#usage).

@@ -20,6 +20,7 @@
 //! response {"build": "...", "results": [{"instructions": n, "halt": "breakpoint", "final_pc": pc,
 //!                                        "regs": {"I6": v|null}, "reads": [[v|null, ...]],
 //!                                        "stores": [[pc, address, width], ...],
+//!                                        "loads": [[pc, address, width], ...],   // only for a call with "loads": true
 //!                                        "stock": ["hex"|null, ...],   // only for a call with "stock_reads"
 //!                                        "specials": {"MSF": ["mask","bits"]|null},   // only for "read_specials"
 //!                                        "profile": [[pc, count], ...]}]}   // only for a call with "profile": true
@@ -31,10 +32,14 @@
 //! instructions executed. `halt` is `breakpoint`, `max-steps` or `trap: <reason>`. `stores` lists, in execution order, the
 //! runs of bytes that instructions at a `watch` pc stored (addresses as the core keeps them: a byte that nothing loaded
 //! or poked is at 0x2800_0000 + its address). Nothing is recorded, and nothing costs, without `watch`.
+//! A call with `"loads": true` also answers `loads`: the DM loads (1, 2 or 4 bytes; a long-word or SIMD load is one entry per word) of
+//! instructions at a `watch` pc as `[pc, address, width]` in execution order, addresses as for `stores`. It is a read analogue of
+//! `watch`: the runtime records the loads (`St::read_log_on`), which takes the plain-RAM fast path of the call off; a call without
+//! the option pays nothing and has no `loads` key.
 //! A call with `"profile": true` also answers `profile`: one `[pc, count]` row per pc the call executed, in pc order (the counts
 //! add up to `instructions`; no key without the option, and the loop only counts when it is on).
 //!
-//! `image` is a boot stream as the firmware keeps it (section 7 of an image): it is parsed by the boot crate's own
+//! `image` is a boot stream as the firmware keeps it (section 7 of an image): it is parsed by the sharc-peer crate's own
 //! `LoadedMemory::from_stream` (later blocks win, FILL blocks repeat their argument) and loaded before `code`, so the code
 //! is placed over the stock bytes as `CallSession(base_memory=...)` does. `stock_reads` answers bytes of that image as it
 //! was loaded (before any `code`, poke or store), `null` for a range the stream does not fully write.
@@ -57,13 +62,13 @@
 
 mod json;
 
-// The boot crate's stream reader, compiled in place (a dependency on the crate would change Cargo.lock, which is an
+// The sharc-peer crate's stream reader, compiled in place (a dependency on the crate would change Cargo.lock, which is an
 // input of the device tests). `dsp_stream` uses `crate::dsp_patch`.
 #[allow(dead_code)]
-#[path = "../../emulator/boot/src/dsp_patch.rs"]
+#[path = "../../emulator/sharc-peer/src/dsp_patch.rs"]
 mod dsp_patch;
 #[allow(dead_code)]
-#[path = "../../emulator/boot/src/dsp_stream.rs"]
+#[path = "../../emulator/sharc-peer/src/dsp_stream.rs"]
 mod dsp_stream;
 
 use dsp_stream::LoadedMemory;
@@ -71,7 +76,7 @@ use json::Json;
 use sharc_native::mem::Mem;
 use sharc_native::rt::bnd;
 use sharc_native::rt::{Int, MR, Spec, V, VI};
-use sharc_native::{Engine, exec_insn, trap_name, vectors};
+use sharc_native::{Engine, exec_insn, vectors};
 
 /// Registers a fresh core holds (tools/sharc_dev/sharc_run.py `make_state`: every register 0, then these).
 const START_REGS: [(&str, i64); 6] = [
@@ -94,6 +99,8 @@ pub struct Call {
     pub read_regs: Vec<(String, usize)>,
     /// count the instructions executed at each pc (`CallResult::profile`)
     pub profile: bool,
+    /// record the loads of instructions in the request's `watch` ranges (`CallResult::loads`)
+    pub loads: bool,
     /// (loader byte address, count) of the image bytes to answer (`CallResult::stock`)
     pub stock_reads: Vec<(u32, u32)>,
     /// pcs that end this call instead of the request's `breaks`
@@ -133,6 +140,8 @@ pub struct CallResult {
     pub reads: Vec<Vec<Option<u32>>>,
     /// (pc, address, width) of the stores of instructions in the request's `watch` ranges
     pub stores: Vec<(u32, u32, u32)>,
+    /// (pc, address, width) of the loads of instructions in the request's `watch` ranges, for a call with `loads`; empty otherwise
+    pub loads: Vec<(u32, u32, u32)>,
     /// (pc, instructions executed there) in pc order, for a call with `profile`; empty otherwise
     pub profile: Vec<(u32, u64)>,
     /// the `stock_reads` of the call: the bytes, or None when the stream does not write all of them
@@ -270,6 +279,11 @@ pub fn parse_ops(list: &Json) -> Result<Vec<Op>, String> {
                     Some(_) => return Err("profile is true or false".into()),
                     None => false,
                 },
+                loads: match c.get("loads") {
+                    Some(Json::Bool(b)) => *b,
+                    Some(_) => return Err("loads is true or false".into()),
+                    None => false,
+                },
                 stock_reads,
                 breaks,
                 specials,
@@ -344,7 +358,7 @@ pub fn new_engine(
         mem.load(*address, bytes);
     }
     mem.reset();
-    let mut e = Engine::new(mem);
+    let mut e = Engine::new(mem, &sharc_gen::CORE);
     e.use_blocks = false;
     // options of tools/sharc_dev/sharc_transpile_run.py `to_native` for a fresh `Runner`
     for (key, value) in [
@@ -483,6 +497,10 @@ pub fn run_call(
     let start = e.s.icount;
     let mut halt = String::from("max-steps");
     let mut stores = Vec::new();
+    let mut loads = Vec::new();
+    if call.loads {
+        e.s.read_log_on(true);
+    }
     let mut profile: std::collections::BTreeMap<u32, u64> = Default::default();
     while e.s.icount - start < call.max_steps {
         let pc = e.s.pc_sw as u32;
@@ -490,10 +508,11 @@ pub fn run_call(
             halt = "breakpoint".into();
             break;
         }
-        let insn = match bnd::decode_at(&mut e.s, (), None, pc as Int) {
+        let sym_of = e.s.core.sym_of;
+        let insn = match bnd::decode_at_with(&mut e.s, pc as Int, sym_of) {
             Ok(i) => i,
             Err(t) => {
-                halt = format!("trap: {}", trap_name(t));
+                halt = format!("trap: {}", e.s.core.trap_name(t));
                 break;
             }
         };
@@ -506,13 +525,22 @@ pub fn run_call(
         }
         let done = exec_insn(&mut e.s, insn);
         let log = e.s.probe.take();
+        if call.loads {
+            let reads = e.s.take_reads();
+            if watched {
+                loads.extend(reads.into_iter().map(|(a, w)| (pc, a, w as u32)));
+            }
+        }
         if let Err(t) = done {
-            halt = format!("trap: {}", trap_name(t));
+            halt = format!("trap: {}", e.s.core.trap_name(t));
             break;
         }
         if let Some(log) = log {
             note_stores(&mut stores, pc, log.into_iter().map(|(a, _, _)| a));
         }
+    }
+    if call.loads {
+        e.s.read_log_on(false);
     }
     CallResult {
         instructions: e.s.icount - start,
@@ -532,6 +560,7 @@ pub fn run_call(
             .map(|&(a, n)| (0..n).map(|k| peek_word(e, a + k)).collect())
             .collect(),
         stores,
+        loads,
         profile: profile.into_iter().collect(),
         specials: call
             .read_specials
@@ -636,6 +665,7 @@ fn results_json(results: Vec<CallResult>) -> Json {
             .into_iter()
             .map(|r| {
                 let profile = r.profile;
+                let loads = r.loads;
                 let stock = (!r.stock.is_empty()).then_some(r.stock);
                 let specials = r.specials;
                 let mut fields = vec![
@@ -671,6 +701,23 @@ fn results_json(results: Vec<CallResult>) -> Json {
                         ),
                     ),
                 ];
+                if !loads.is_empty() {
+                    fields.push((
+                        "loads".into(),
+                        Json::Arr(
+                            loads
+                                .into_iter()
+                                .map(|(pc, a, w)| {
+                                    Json::Arr(vec![
+                                        Json::Int(pc as i64),
+                                        Json::Int(a as i64),
+                                        Json::Int(w as i64),
+                                    ])
+                                })
+                                .collect(),
+                        ),
+                    ));
+                }
                 if !specials.is_empty() {
                     fields.push((
                         "specials".into(),
@@ -727,7 +774,10 @@ fn results_json(results: Vec<CallResult>) -> Json {
 fn response_line(results: Json) -> String {
     let mut out = String::new();
     Json::Obj(vec![
-        ("build".into(), Json::Str(sharc_native::build_info())),
+        (
+            "build".into(),
+            Json::Str(sharc_native::build_info(&sharc_gen::CORE)),
+        ),
         ("results".into(), results),
     ])
     .write(&mut out);

@@ -10,7 +10,7 @@ description = "Bounded Oracle cold-boot diagnostic runner"
 
 [lib]
 name = "elektron_native_boot"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [features]
 default = []
@@ -20,14 +20,6 @@ diagnostic-events = []
 cf-profile = []
 # Exact executed-instruction mix per PC and operand references per region (src/cfmix.rs).
 cf-mix = []
-# Opt-in live ColdFire<->SHARC+ coupling (SharcPeer). Needs SHARC_GEN_DIR at
-# build time for real DSP execution (see packages/emulator/sharc/build.rs).
-sharc = ["dep:sharc-native"]
-# The engine of a second generated core (SHARC_GEN_DIR_2) next to the first: sharc_peer::second.
-second-core = ["sharc", "dep:sharc-native-2"]
-# The browser core runs the DSP fast tier as wasm kernels the page compiles
-# (packages/emulator/sharc-fast-wasm `host`): digi_sharc_fast.
-fast-wasm = ["sharc", "dep:sharc-fast-wasm"]
 # Opt-in PCM playback through packages/emulator/live (cpal output ring).
 play = ["dep:live-audio"]
 
@@ -43,15 +35,4 @@ plusdrive-format = { path = "../plusdrive" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-sharc-native = { path = "../sharc", optional = true }
-sharc-native-2 = { path = "../sharc-2", optional = true }
-sharc-fast-wasm = { path = "../sharc-fast-wasm", optional = true }
 live-audio = { path = "../live", optional = true }
-
-[[example]]
-name = "sharc_live"
-required-features = ["sharc"]
-
-[[example]]
-name = "dsp_cold"
-required-features = ["sharc"]

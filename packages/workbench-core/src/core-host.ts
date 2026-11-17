@@ -1,4 +1,4 @@
-// Instantiates the browser core (`elektron_native_boot.wasm` built with the
+// Instantiates the browser core (`digi_wasm_core.wasm` built with the
 // `sharc` and `fast-wasm` features) and provides what it imports:
 //
 // * `host_wasm_compile/run/free`: the DSP fast tier emits one wasm module per
