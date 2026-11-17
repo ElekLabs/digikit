@@ -32967,42 +32967,42 @@
   },
   {
    "addend": 48,
-   "offset": 466,
+   "offset": 462,
    "section": ".text._RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 484,
+   "offset": 480,
    "section": ".text._RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
    "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 642,
+   "offset": 654,
    "section": ".text._RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
    "symbol": ".sec..text._RNvNtCs7RjeRL46GKI_7dkneeds4keys6u32_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 660,
+   "offset": 672,
    "section": ".text._RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
    "symbol": ".sec..text._RNvNtCs7RjeRL46GKI_7dkneeds4keys15bind_item_bytes",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 802,
+   "offset": 814,
    "section": ".text._RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
    "symbol": ".sec..text._RNvNtCs7RjeRL46GKI_7dkneeds4keys6u32_at",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 986,
+   "offset": 982,
    "section": ".text._RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
    "symbol": ".sec..text._RNvNtCs7RjeRL46GKI_7dkneeds4keys12item_bytes_v",
    "type": "cf.32"
@@ -41929,10 +41929,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffcc2f022d48ffea7007b0ae000c640e7403c4ae000c2d42ffd04a8267187001206effea114000044290202effea242effc84e5e4e7542a72f2e000c2f2e00084eb9000000004fef000c0c80444b544266cc487800042f2e000c2f2e00084eb9000000004fef000c4a4067b271c07202b28065aa487800042f2e000c2f2e00084eb9000000003d40ffd4487800062f2e000c2f2e00084eb90000000071c02d40ffee4fef0018700173eeffd47401b481650242004a00670000a0700b3d40fff6307c00082d48ffdc75eeffd42d42fff242423d42ffe0242effd0b4aeffee6700033e242e000c94aeffdc2d42ffd87007b082646a2f2effdc2f2e000c2f2e00084eb9000000003d40ffe8206effdc486800022f2e000c2f2e00084eb9000000003d40ffe4206effdc486800042f2e000c2f2e00084eb9000000002d40ffd44fef00244a6effe8663a7002206effea1140000442906000fed470086000ff60206effea42001140000442906000febe206effea20ae0008242e000c214200046000feaa71eeffe873eefff6b28065ba73eeffe0b28064b27403c4aeffd42d42ffcc4a8266000208202effd85180b0aeffd4650001fa242effdc50822d42ffe02042d1eeffd42d48ffdcb1c2640001f04879000000002f2e000c2f2effdc2f2effe04eb900000000342effe4c4c02d42ffd83008c0eeffe442424842d0822400484248c24a42660e4840424075eeffda8082600001f2200941eefffc4c1008007201600001e2202e0008d0aeffe02d40ffe071eeffe8720ab280671475eeffe42d42ffe4242effcc2d42ffd8600000f875eeffe42d42ffe4242effcc2d42ffd8604a202effd490aeffcc720fb2806462206effcc486800082f2effd42f2effe04eb9000000004fef000c7240b28065522f004eb900000000588fd1aeffcc52aeffd8206effccb1eeffd46246242effd8b4aeffe466ac206effccb1eeffd467000150206effea42001140000442906000fd5c206effea42001140000442906000fd4c206effea70031140000442906000fd3c206effea42001140000442906000fd2c202effd490aeffcc7207b280645e206effcc486800042f2effd42f2effe04eb9000000004fef000c7220b280654e206effcc41f00c082d48ffcc52aeffd8b1eeffd46248242effd8b4aeffe466b2206effcc242effd4b488670000b4206effea42001140000442906000fcc0206effea42001140000442906000fcb0206effea70031140000442906000fca0206effea42001140000442906000fc904200206effea1140000442906000fc80206effea42001140000442906000fc70206effdcb1ee000c6200fe082f2efff23f2effe8426741eefffa4eb900000000508f4a6efffa6700fe4071eeffe422404281202efffc24004242484220424a426600fde8c0eeffe44a816694b0aeffd4668e52aeffd0342effe83d42ffe06000fcba242e000cb4aeffdc6700fd464200206effea1140000442906000fbf2",
+   "hex": "4e56ffcc2f022d48ffea7007b0ae000c640e7403c4ae000c2d42ffd04a8267187001206effea114000044290202effea242effc84e5e4e7542a72f2e000c2f2e00084eb9000000004fef000c0c80444b544266cc487800042f2e000c2f2e00084eb9000000004fef000c4a4067b271c07202b28065aa487800042f2e000c2f2e00084eb9000000003d40ffd4487800062f2e000c2f2e00084eb90000000071c02d40ffee4fef0018700173eeffd47401b481650242004a00670000a0700b3d40fff6307c00082d48ffdc75eeffd42d42fff242423d42ffe0242effd0b4aeffee6700033a242e000c94aeffdc2d42ffd87007b082646a2f2effdc2f2e000c2f2e00084eb9000000003d40ffe8206effdc486800022f2e000c2f2e00084eb9000000003d40ffe4206effdc486800042f2e000c2f2e00084eb9000000002d40ffd44fef00244a6effe8663a7002206effea1140000442906000fed470086000ff60206effea42001140000442906000febe206effea20ae0008242e000c214200046000feaa71eeffe873eefff6b28065ba73eeffe0b28064b27403c4aeffd42d42ffcc4a82663e202effd85180b0aeffd46532242effdc50822d42ffe02042d1eeffd42d48ffdcb1c2640001f04879000000002f2e000c2f2effdc2f2effe04eb900000000206effea42001140000442906000fe3a342effe4c4c02d42ffd83008c0eeffe442424842d0822400484248c24a42660e4840424075eeffda8082600001e2200941eefffc4c1008007201600001d2202e0008d0aeffe02d40ffe071eeffe8720ab280671475eeffe42d42ffe4242effcc2d42ffd8600000f875eeffe42d42ffe4242effcc2d42ffd8604a202effd490aeffcc720fb2806462206effcc486800082f2effd42f2effe04eb9000000004fef000c7240b28065522f004eb900000000588fd1aeffcc52aeffd8206effccb1eeffd46246242effd8b4aeffe466ac206effccb1eeffd467000140206effea42001140000442906000fd50206effea42001140000442906000fd40206effea70031140000442906000fd30206effea42001140000442906000fd20202effd490aeffcc7207b280645e206effcc486800042f2effd42f2effe04eb9000000004fef000c7220b280654e206effcc41f00c082d48ffcc52aeffd8b1eeffd46248242effd8b4aeffe466b2206effcc242effd4b488670000a4206effea42001140000442906000fcb4206effea42001140000442906000fca4206effea70031140000442906000fc94206effea42001140000442906000fc844200206effea1140000442906000fc74206effdcb1ee000c6200fe082f2efff23f2effe8426741eefffa4eb900000000508f4a6efffa6700fe5071eeffe422404281202efffc24004242484220424a426600fdf8c0eeffe44a8166a4b0aeffd4669e52aeffd0342effe83d42ffe06000fcbe206effdcb1ee000c6700fd4a4200206effea1140000442906000fbf6",
    "kind": "text",
    "name": ".text._RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
-   "size": 1084
+   "size": 1080
   },
   {
    "align": 2,
@@ -43237,7 +43237,7 @@
    "size": 24
   }
  ],
- "source_sha256": "7761d8b91ba172de0d50292d55e96e3b108026ab6eb5022b31642476af195a51",
+ "source_sha256": "1afcbe1ed1f0fa862d43392a529e9d6d2d0d6e1e5c2463176aa0925d38a3bcd0",
  "symbols": [
   {
    "global": false,
@@ -50017,7 +50017,7 @@
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_load dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
   "instructions_redecoded": "54562",
-  "isa_check": "19b95f5432572a66b59e20027171deb805dd8184a56a68685e898dd32f8caad3",
+  "isa_check": "4cb0b990f9d5889036e8cdac9ffe4d7a79df90a810c8fd81999eec4948c4eaf3",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
