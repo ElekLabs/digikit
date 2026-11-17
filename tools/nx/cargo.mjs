@@ -276,6 +276,16 @@ export const HERMETIC = {
   dkbulk: [],
 };
 
+// The shared fixtures (`tests/fixtures/modules`) whose `init` the contract suite of a service crate mirrors with a call list (`tests/contract.rs`): a change of a
+// fixture selects the crate's tests, so the call list is read against it.
+const FIXTURE_SOURCE = {
+  'dkrt-svc-lfo': ['{workspaceRoot}/tests/fixtures/modules/lfo-shape/src/**/*'],
+  'dkrt-svc-fx': [
+    '{workspaceRoot}/tests/fixtures/modules/dyn-fx-gain/src/**/*',
+    '{workspaceRoot}/tests/fixtures/modules/dyn-fx-gain-b/src/**/*',
+  ],
+};
+
 // Files outside the crate embedded by patchkit's source, unit tests and build.rs.
 const COMPILE_SOURCE = {
   patchkit: [
@@ -379,7 +389,12 @@ export const createNodesV2 = [
           : {
               executor: 'nx:run-commands',
               cache: false,
-              inputs: [...inputs, '{workspaceRoot}/tools/nx/rust-env.mjs', ...(COMPILE_SOURCE[name] ?? [])],
+              inputs: [
+                ...inputs,
+                '{workspaceRoot}/tools/nx/rust-env.mjs',
+                ...(COMPILE_SOURCE[name] ?? []),
+                ...(FIXTURE_SOURCE[name] ?? []),
+              ],
               options: {
                 command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
                 cwd: '.',

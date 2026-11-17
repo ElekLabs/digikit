@@ -25,7 +25,7 @@ use crate::dsp as fxdsp;
 use crate::fxsend;
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::mem::{cstr_len, iw, rd, rd16, rd32, wr, wr16};
+use dkrt_abi::mem::{cstr_len, iw, rd32};
 use dkrt_sdk::*;
 
 pub use dkrt_sdk::records::{KIND_EFFECT, LEN_EFFECT};
@@ -430,16 +430,16 @@ fn mix_value(raw: i32) -> u32 {
     (raw as f32 / RAW_F).to_bits()
 }
 
-unsafe fn rebuild_list(inf: *const u32) {
+unsafe fn rebuild_list<C: CoreApi>(core: &C, inf: *const u32) {
     let s = fs();
     let list = iw(inf, w::LIST);
     let stock = iw(inf, w::STOCK);
     // the stock count is the byte of `moveq N,D1` in the view builder
-    let n_stock = read_volatile((iw(inf, w::STOCK_N) + 1) as *const u8) as u32;
+    let n_stock = core.rd8(iw(inf, w::STOCK_N) + 1);
     let cap = iw(inf, w::LIST_CAP);
     let mut n = 0;
     while n < n_stock && n < cap {
-        wr(list + 4 * n, rd(stock + 4 * n));
+        core.wr(list + 4 * n, core.rd(stock + 4 * n));
         n += 1;
     }
     // the send effects first, then the master effects, each in row order (FX routing: the send effects are the ones the track FX key has a page for)
@@ -448,7 +448,7 @@ unsafe fn rebuild_list(inf: *const u32) {
         let mut k = 0;
         while k < iw(inf, w::PAGES) as usize && k < MAX_FX {
             if s.owner[k] != 0 && n < cap && fxsend::is_send(k) == (pass == 0) {
-                wr(list + 4 * n, iw(inf, w::FIRST) + k as u32);
+                core.wr(list + 4 * n, iw(inf, w::FIRST) + k as u32);
                 n += 1;
             }
             k += 1;
@@ -456,14 +456,14 @@ unsafe fn rebuild_list(inf: *const u32) {
         pass += 1;
     }
     // no page of ours: the count 0 keeps the stock list (the hook in the builder)
-    wr(iw(inf, w::COUNT), if n == n_stock { 0 } else { n });
+    core.wr(iw(inf, w::COUNT), if n == n_stock { 0 } else { n });
 }
 
 /// Build the page list again (a route changed the order).
 pub unsafe fn relist<C: CoreApi>(core: &C) {
     let inf = info(core);
     if !inf.is_null() {
-        rebuild_list(inf);
+        rebuild_list(core, inf);
     }
 }
 
@@ -560,25 +560,25 @@ pub unsafe fn apply<C: CoreApi>(core: &C, owner: u8, b: *const u8) -> i32 {
         j += 1;
     }
     s.nknob[k] = n as u8;
-    publish_row(inf, k, rd32(b.add(12)));
+    publish_row(core, inf, k, rd32(b.add(12)));
     let live = kit(core, inf);
     if live != 0 {
         // a kit object is live already and holds nothing of this effect (the init hook ran before the effect was here): its defaults now
-        seed_row(inf, k, live + iw(inf, w::ARRAY_OFF));
-        mark(inf, live + iw(inf, w::ARRAY_OFF));
+        seed_row(core, inf, k, live + iw(inf, w::ARRAY_OFF));
+        mark(core, inf, live + iw(inf, w::ARRAY_OFF));
         s.seeds += 1;
     }
     fxdsp::fx_set_mix(core, k, mix_value(rd32(b.add(4)) as i32 * 256));
     // the page row: codes, then the strings; the owner and the list publish it
     let mut c = 0;
     while c < 9 {
-        wr(row + 8 + 4 * c as u32, codes[c]);
+        core.wr(row + 8 + 4 * c as u32, codes[c]);
         c += 1;
     }
-    wr(row, tab);
-    wr(row + 4, title);
+    core.wr(row, tab);
+    core.wr(row + 4, title);
     s.owner[k] = owner;
-    rebuild_list(inf);
+    rebuild_list(core, inf);
     fxsend::apply(core, k, owner, s.tab[k].as_ptr());
     OK
 }
@@ -602,18 +602,18 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     if gone == 0 {
         return;
     }
-    rebuild_list(inf);
+    rebuild_list(core, inf);
     k = 0;
     while k < MAX_FX {
         if gone & (1 << k) != 0 {
             let row = iw(inf, w::ROWS) + k as u32 * iw(inf, w::ROW_SIZE);
             let mut c = 0;
             while c < 9 {
-                wr(row + 8 + 4 * c as u32, 0);
+                core.wr(row + 8 + 4 * c as u32, 0);
                 c += 1;
             }
             let mut j = 0;
-            publish_row(inf, k, 0);
+            publish_row(core, inf, k, 0);
             while j < WORDS {
                 dkrt_svc_params::reset_param_row(
                     core,
@@ -636,42 +636,39 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
 
 /// Hand the kit hooks of `core/fxpages` the effect ID of row `k` (0: none) and its defaults. An effect's defaults go first and its ID after them, so a kit
 /// load between the two stores cannot restore values against defaults that are not there yet; a row's ID goes to 0 first for the same reason.
-unsafe fn publish_row(inf: *const u32, k: usize, id: u32) {
+unsafe fn publish_row<C: CoreApi>(core: &C, inf: *const u32, k: usize, id: u32) {
     let s = fs();
     let (ids, defs) = (iw(inf, w::IDS), iw(inf, w::DEFS));
     if id == 0 {
-        write_volatile((ids + 2 * k as u32) as *mut u16, 0);
+        core.wr_half(ids + 2 * k as u32, 0);
     }
     let mut j = 0;
     while j < WORDS {
-        write_volatile(
-            (defs + 2 * (k * WORDS + j) as u32) as *mut u16,
-            s.def[k][j] as u16,
-        );
+        core.wr_half(defs + 2 * (k * WORDS + j) as u32, s.def[k][j] as u32);
         j += 1;
     }
     if id != 0 {
-        write_volatile((ids + 2 * k as u32) as *mut u16, id as u16);
+        core.wr_half(ids + 2 * k as u32, id);
     }
     s.id[k] = id;
 }
 
 /// Put the mark of `core/fxpages` into the kit array `arr`: its effect rows hold values.
 #[inline]
-unsafe fn mark(inf: *const u32, arr: u32) {
-    wr16(
+unsafe fn mark<C: CoreApi>(core: &C, inf: *const u32, arr: u32) {
+    core.wr16(
         arr + 2 * iw(inf, w::MARK_INDEX),
         iw(inf, w::MARK_VALUE) as i32,
     );
 }
 
 /// The defaults of effect row `k` into the kit array `arr`.
-unsafe fn seed_row(inf: *const u32, k: usize, arr: u32) {
+unsafe fn seed_row<C: CoreApi>(core: &C, inf: *const u32, k: usize, arr: u32) {
     let s = fs();
     let mut j = 0;
     while j < WORDS {
         if has_word(s, k, j) {
-            wr16(arr + 2 * value_index(inf, k, j), s.def[k][j]);
+            core.wr16(arr + 2 * value_index(inf, k, j), s.def[k][j]);
             s.cur[k][j] = s.def[k][j];
         }
         j += 1;
@@ -687,7 +684,7 @@ fn in_ddr<C: CoreApi>(core: &C, a: u32) -> bool {
 /// The live kit object (0 while the firmware has none); a pointer in a DDR cell, checked to lie in DDR. Any alignment: the Digitone II's kit objects are allocated at odd
 /// addresses (its sound arrays have an odd stride), so the array's halfwords are read and written a byte at a time.
 pub(crate) unsafe fn kit<C: CoreApi>(core: &C, inf: *const u32) -> u32 {
-    let k = rd(iw(inf, w::KIT_PTR));
+    let k = core.rd(iw(inf, w::KIT_PTR));
     if !in_ddr(core, k) {
         return 0;
     }
@@ -730,17 +727,17 @@ unsafe fn values<C: CoreApi>(core: &C, inf: *const u32) {
         return;
     }
     let arr = kit + iw(inf, w::ARRAY_OFF);
-    if rd16(arr + 2 * iw(inf, w::MARK_INDEX)) != iw(inf, w::MARK_VALUE) as i32 {
+    if core.rd16(arr + 2 * iw(inf, w::MARK_INDEX)) != iw(inf, w::MARK_VALUE) as i32 {
         // no mark: the hooks of core/fxpages have not given this kit object its rows (a kit that was there before the effect was loaded: another pattern's, or one the
         // firmware cleared without them): the defaults, and the mark, before anything is read from it (a zero is never sent)
         k = 0;
         while k < MAX_FX {
             if s.owner[k] != 0 {
-                seed_row(inf, k, arr);
+                seed_row(core, inf, k, arr);
             }
             k += 1;
         }
-        mark(inf, arr);
+        mark(core, inf, arr);
         s.seeds += 1;
         s.kit = kit;
         return;
@@ -757,7 +754,7 @@ unsafe fn values<C: CoreApi>(core: &C, inf: *const u32) {
             let mut j = 0;
             while j < WORDS {
                 if has_word(s, k, j) {
-                    let raw = rd16(arr + 2 * value_index(inf, k, j));
+                    let raw = core.rd16(arr + 2 * value_index(inf, k, j));
                     let n = if raw < 0 {
                         0
                     } else if raw > RAW_MAX {
