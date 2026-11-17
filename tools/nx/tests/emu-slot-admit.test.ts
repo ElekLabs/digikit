@@ -54,3 +54,31 @@ it('a fresh admit lock of a live process still makes a waiter wait', async () =>
   release(got.lock);
   release(got.admit);
 });
+
+it('keeps tasks inside the core budget and serves the longer expected run first', async () => {
+  const dir = slotDir();
+  const quiet = () => {};
+  const task = (priority: number) => ({ cores: 3, priority, capacity: 3 });
+  const first = await acquire(dir, 4, true, quiet, task(0));
+  const order: string[] = [];
+  const take = (name: string, priority: number) =>
+    acquire(dir, 4, true, quiet, task(priority)).then((got) => {
+      order.push(name);
+      return got;
+    });
+  // both wait: 3 busy cores of 3 leave no room. The one that arrived first is the shorter run.
+  const short = take('short', 10);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const long = take('long', 500);
+  await new Promise((resolve) => setTimeout(resolve, 1_500));
+  expect(order).toEqual([]);
+  release(first.lock);
+  release(first.admit);
+  const got = await long;
+  expect(order).toEqual(['long']);
+  release(got.lock);
+  release(got.admit);
+  const next = await short;
+  release(next.lock);
+  release(next.admit);
+}, 30_000);
