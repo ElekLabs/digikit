@@ -4,6 +4,7 @@ import { moduleStateText, type ModuleState } from '@digi/dk-session';
 import { CAPACITY_KINDS, RECORD_KIND, RESOURCE } from '@digi/dk-session/gen_proto';
 import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { rawModule } from '@digi/regression/runtime/service-files.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { loadCode, stateName } from '@digi/regression/runtime/load-states.ts';
 import { LOADED } from '@digi/regression/runtime/synth.ts';
@@ -75,6 +76,7 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `${name.split('/').at(-1)}.dkm`);
     fs.writeFileSync(file, f);
+    rawModule(file);
     return { name, file, want };
   };
 

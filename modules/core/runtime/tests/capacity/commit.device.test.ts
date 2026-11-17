@@ -7,6 +7,7 @@ import { committedRecords, decodeCommitEvent } from '@digi/test-support/commit-r
 import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { dspBytes, word } from '@digi/regression/runtime/fx-live.ts';
+import { rawModule } from '@digi/regression/runtime/service-files.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { dynType } from '@digi/regression/runtime/project-kit.ts';
@@ -150,7 +151,7 @@ cardRigs(
       const file = path.join(rig.artifacts, name);
       fs.mkdirSync(rig.artifacts, { recursive: true });
       fs.writeFileSync(file, rehash(f));
-      return file;
+      return rawModule(file);
     };
 
     test('the commit logs its rows, writes the voice row ranges and latch mask and commits the effect page', async () => {

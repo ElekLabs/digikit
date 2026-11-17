@@ -16,7 +16,7 @@ export type CardService = { service: string; moduleId: string };
 export function neededServices(files: string[]): CardService[] {
   const found = new Map<string, CardService>();
   for (const file of files) {
-    const list = file.replace(/\.dk[ms]$/, '.services.json');
+    const list = servicesSidecar(file);
     if (!fs.existsSync(list)) throw new Error(`missing ${list}: run nx run <module id>:pack`);
     for (const line of fs.readFileSync(list, 'utf8').split('\n').filter(Boolean)) {
       const v = JSON.parse(line) as { service: string; module_id: string };
@@ -24,6 +24,18 @@ export function neededServices(files: string[]): CardService[] {
     }
   }
   return [...found.values()].sort((x, y) => x.service.localeCompare(y.service));
+}
+
+/** The sidecar `<leaf>.services.json` that `neededServices` reads, for a packed `.dkm`/`.dks` (the Nx pack target writes it for shipped modules). */
+export const servicesSidecar = (file: string) => file.replace(/\.dk[ms]$/, '.services.json');
+
+/**
+ * A card file under `modules/` that a test wrote as bytes (a blob, or a byte-edited copy of a packed fixture): no packer made it, so no NEEDS answer exists.
+ * This declares that it needs no service, in the same sidecar; a module packed at test time gets its answer from `patchkit services` instead (synth.ts).
+ */
+export function rawModule(file: string): string {
+  fs.writeFileSync(servicesSidecar(file), '');
+  return file;
 }
 
 /** The store path of a service file. */
