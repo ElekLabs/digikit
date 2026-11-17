@@ -274,11 +274,13 @@ pub unsafe fn report_provider(path: &[u8], res: i32, hash: u32, base: u32) {
 pub unsafe fn report_dsp(idx: u32, r: i32) {
     dlog::ev(logk::MOD_DSP, if r == OK { dlog::INFO } else { logk::F_ERROR }, [idx, r as u32, 0, 0, 0]);
     if (idx as usize) < SEL_MAX {
-        let b = info();
-        b.results[idx as usize] = r;
-        states().dsp_done(idx as usize, r);
-        if r == OK {
-            b.loaded += 1;
+        // only a module that waits for its DSP part takes the result; an active or failed module keeps its record
+        if states().dsp_done(idx as usize, r) {
+            let b = info();
+            b.results[idx as usize] = r;
+            if r == OK {
+                b.loaded += 1;
+            }
         }
     }
 }
@@ -415,6 +417,28 @@ mod tests {
             // an index past the selection changes nothing
             let before = (info().results, info().states, info().loaded);
             report_dsp(SEL_MAX as u32, E_INIT);
+            assert_eq!((info().results, info().states, info().loaded), before);
+        }
+    }
+
+    #[test]
+    fn a_dsp_report_for_a_module_that_is_not_waiting_for_its_dsp_changes_nothing() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            info().count = 2;
+            for k in 0..2 {
+                states().planned(k, Verdict::Accepted);
+                states().init(k);
+            }
+            // module 0 is active (no DSP part); module 1 failed in its init
+            states().finished(0, OK);
+            report_module(0, sel_path(b"a.dkm").as_ptr(), OK, &[0; NEEDS_LEN]);
+            states().finished(1, E_INIT);
+            report_module(1, sel_path(b"b.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN]);
+            let before = (info().results, info().states, info().loaded);
+            report_dsp(0, E_INIT);
+            report_dsp(1, OK);
             assert_eq!((info().results, info().states, info().loaded), before);
         }
     }
