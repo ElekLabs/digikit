@@ -12,7 +12,7 @@ import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { plusdriveBinary } from './card-kit.ts';
 import { FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices, SERVICE_MODULES } from './service-files.ts';
+import { boundService, neededServices } from './service-files.ts';
 import { bindServiceSymbols, rememberShipMap } from './service-symbols.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { moduleResultsNote } from './runtime-menu.ts';
@@ -199,7 +199,10 @@ export async function inspectFxBoot(
   const fields = await Promise.all(Array.from({ length: 10 }, (_, i) => word(session, boot + i * 4)));
   // the symbols of the fx service file for this boot (`symbolsOf`): the runtime loads the file only when a selected module needs it, so a boot of machines
   // alone (or a preset with `noServices`) has none; any other boot without them fails here
-  const needsFx = neededServices(expectedNames.map((id) => moduleArtifact(session.options.device, id))).includes('fx');
+  const needsFx = neededServices(
+    session.options.device,
+    expectedNames.map((id) => moduleArtifact(session.options.device, id)),
+  ).some((s) => s.service === 'fx');
   await bindServiceSymbols(runtime, plan, 'fx', { expected: !dropsService(readiness.noServices, 'fx') && needsFx });
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([expectedResults.length, expectedNames.length, 1]);
@@ -296,11 +299,14 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
           const files = inventory.map((id, index) => ({ name: `m${index}.dkm`, file: moduleArtifact(device, id) }));
           // the services the inventory needs (fx.dks), bound to the stock firmware, go to digikit/services; a preset with `noServices` leaves out all (`true`) or the named ones (the effect is refused)
           const services = await Promise.all(
-            neededServices(files.map((f) => f.file))
-              .filter((name) => !dropsService(preset.noServices, name))
-              .map(async (name) => ({
-                name: `${name}.dks`,
-                file: await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
+            neededServices(
+              device,
+              files.map((f) => f.file),
+            )
+              .filter((needed) => !dropsService(preset.noServices, needed.service))
+              .map(async (needed) => ({
+                name: `${needed.service}.dks`,
+                file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
               })),
           );
           // The card is built in WORK (`<work>/card/card.img`).

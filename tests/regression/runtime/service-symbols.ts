@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { Session } from '@digi/test-support';
 import { readLoadTable } from './addrmap.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
-import { boundMapPath, SERVICE_MODULES } from './service-files.ts';
+import { boundMapPath, serviceModuleId } from './service-files.ts';
 
 /** What a lookup needs of a runtime: its session (`PatchedSession`, `TestRuntime` and `Rt` all have it). */
 type WithSession = { readonly session: Session };
@@ -28,8 +28,7 @@ async function loadAddress(
   service: string,
   opts: LookupOptions,
 ): Promise<number> {
-  const id = SERVICE_MODULES[service];
-  if (!id) throw new Error(`unknown service ${service}`);
+  const id = serviceModuleId(runtime.session.options.device, service);
   const shipMap = opts.shipMap ?? shipMaps.get(plan);
   if (!shipMap)
     throw new Error(
@@ -49,7 +48,7 @@ async function loadAddress(
  */
 export function serviceMapEntries(device: Session['options']['device'], service: string): Map<string, number> {
   const file = boundMapPath(device, service);
-  if (!fs.existsSync(file)) throw new Error(`${file}: run nx run ${SERVICE_MODULES[service]}:bind`);
+  if (!fs.existsSync(file)) throw new Error(`${file}: run nx run ${serviceModuleId(device, service)}:bind`);
   const map = JSON.parse(fs.readFileSync(file, 'utf8')) as { entries: { cpu: string; addr: number; name: string }[] };
   return new Map(map.entries.filter((e) => e.cpu === 'cf').map((e) => [e.name, e.addr]));
 }

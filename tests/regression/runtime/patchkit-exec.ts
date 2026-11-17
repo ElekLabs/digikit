@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -54,4 +54,32 @@ export function patchkit(args: string[], options: Options = {}) {
 export function patchkitCovered(args: string[], options: Options = {}) {
   if (args[0] !== 'apply' || !args.includes('--set')) throw new Error('patchkitCovered runs only `apply --set`');
   return run(args, options);
+}
+
+/** A service the card needs: its name (`services/<name>.dks`) and the module that provides it. */
+export type CardService = { service: string; moduleId: string };
+
+/**
+ * `patchkit services` without a bound file: which card services the packed `.dkm` files need (`files`) or which module provides the service `name`s, from the NEEDS
+ * of the files and the manifests (the one rule, packages/patchkit/src/services.rs). This is no live run: the answer is a function of the packed files and the manifests,
+ * which are already in the key of every test that installs a module, so the binary stays out of the key. Binding (`--bind-dir`) is refused here: the Nx target
+ * `<service id>:bind` makes the bound files.
+ */
+export function patchkitServices(
+  device: string,
+  { files = [], names = [] }: { files?: string[]; names?: string[] },
+): CardService[] {
+  const args = ['services', '--device', device, ...names.flatMap((n) => ['--service', n]), ...files];
+  const out = execFileSync(patchkitBinary(), ['--root', process.env.DIGI_PK_ROOT || root, ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 1 << 20,
+  });
+  return out
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const v = JSON.parse(line) as { service: string; module_id: string };
+      return { service: v.service, moduleId: v.module_id };
+    });
 }
