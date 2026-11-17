@@ -521,6 +521,20 @@ fn a_param_beyond_the_devices_knob_positions_or_outside_its_glyph_range_is_refus
 }
 
 #[test]
+fn a_second_knob_page_of_a_machine_is_refused_at_the_commit() {
+    // a machine has one knob page for now: a second page without a canvas is E_FORMAT on both device kinds
+    let mut b = Box::new(Build::new());
+    let m = b.add_machine(0, c(b"Two\0"), c(b"TWO\0"));
+    let p1 = b.machine_add_page(m, c(b"One\0"), c(b"S\0"));
+    b.page_add_param(p1, c(b"Tone\0"), c(b"TONE\0"), 64);
+    let p2 = b.machine_add_page(m, c(b"Two\0"), c(b"S\0"));
+    b.page_add_param(p2, c(b"Decay\0"), c(b"DECAY\0"), 80);
+    assert_eq!(b.err, 0, "the calls themselves succeed; the commit refuses");
+    assert_eq!(lower_err(&b, &DT2, &keys(&[KEY], (1, 2, 0))), Err(E_FORMAT));
+    assert_eq!(lower_err(&b, &DN2, &keys(&[KEY], (1, 2, 2))), Err(E_FORMAT));
+}
+
+#[test]
 fn a_digitone_knob_page_has_the_short_name_and_title_it_was_given() {
     let b = sine();
     let (buf, _, _) = lowered(&b, &DN2, &keys(&[KEY], (1, 1, 1)), 0);
