@@ -38,7 +38,7 @@ Sources may sit in subfolders (`src/cf/dt2/`, `src/cf/dn2/`) when one module ser
   extra roots of `--modules-dir` and `PATCHKIT_MODULES`.
 - **Categories**: `core` (frameworks other modules require), `fx`, `machines`, `ui`, `tools`, `test` (fixtures and
   research probes; they are not for users). `mise run module:new` makes run-time content modules only (`machine`, `fx` or `tool`; guide section 3). A patched-in
-  module starts as a copy of a similar one, for example `tests/fixtures/modules/machine-clone`.
+  module starts as a copy of a similar one, for example `tests/fixtures/modules/registry-demo`.
 - **Entry ids** (in `[[entry]]`): `[a-z][a-z0-9_]*`. They become symbols (`machines.pluck.index`).
 - **Symbols** in expressions: `[A-Za-z_.][A-Za-z0-9_.]*`.
 - **Version**: `major.minor.patch`; raise it when the module's behaviour or its interface to other modules changes.
@@ -295,6 +295,8 @@ every entry.
 patchkit defines `<reg>.first`, `<reg>.count`, `<reg>.entries`, `<reg>.rows`, `<reg>.row_size` and
 `<reg>.<id>.index` (= first + k, entries in canonical module order; with an `index_table` see below).
 
+**Refusing entries (`refuse_entries`).** A `[[registry]]` with `refuse_entries = "reason"` takes no `[[entry]]` from a patched-in module: patchkit stops with the reason and the module that adds one (`core/machines`: a machine is a run-time module). `refuse_entries_except = ["module id"]` names modules that may still add entries (`core/dynreg` reserves the rows that run-time machines fill).
+
 **Permanent numbers (`index_table`).** A project stores only a machine's type number, so the number must not depend
 on which other modules are selected. `core/machines` therefore ships `types.toml`:
 
@@ -302,7 +304,7 @@ on which other modules are selected. `core/machines` therefore ships `types.toml
 [dt2]
 last = 23                          # the highest number the framework supports on this device
 [dt2.alloc]
-"test/machine-clone:xclone" = 8       # "<module id>:<entry id>" = number
+"core/dynreg:dyn16" = 16              # "<module id>:<entry id>" = number
 ```
 
 The numbers are allocated by hand (the next free number on each device) and committed with the module. A number is never reused or changed, also not
@@ -450,7 +452,7 @@ main-loop stall. The complete list is the docstring of `tools/patchkit/pk_harnes
 
 Workflow:
 
-1. Copy a similar patched-in module (`tests/fixtures/modules/machine-clone`) and fill in the manifest and the sources.
+1. Copy a similar patched-in module (`tests/fixtures/modules/registry-demo`) and fill in the manifest and the sources.
 2. `mise run module:dev -- --modules category/name`: edit, see one summary line per save.
 3. Add module tests; a `smoke.toml` like the one of `modules/core/adapters/fx` only checks that the patched firmware is audible and does not fault.
 4. Add a cell to `tests/patchkit/smoke/matrix.toml` for each device and firmware you support, then
@@ -485,41 +487,17 @@ mise run module:dev -- --modules core/fx
 mise run patch:test -- --cell "dt2-1.17:core/fx"
 ```
 
-## Worked example 2: `test/machine-clone` (a machine row on a framework)
+## Worked example 2: a machine
 
-`tests/fixtures/modules/machine-clone/` adds one machine to the Digitakt II, a clone of SAMPLE (stock type 0) with the descriptor fields of MANUAL SLICE, written by hand. It needs no code of its own:
-`core/machines` does the firmware work, and the module only adds data.
+A machine is a run-time module, not a patch-time row: write it with the builder calls in `init` (`dk_module_ctx_add_machine`, `dk_machine_add_page`, `dk_page_add_param`; the fixtures `tests/fixtures/modules/sine` and `dyn-dn2` show them) and pack it as a `.dkm`. `machines.dks` on the card gives it its type, its page and its knobs. patchkit refuses an `[[entry]]` row of the `machines` registry in a patched-in module. The permanent numbers in `types.toml` are of the framework's own rows only. Device proof: `modules/core/runtime/tests/machines/`.
 
-- **`requires = ["core/machines"]`** and `ports = ["dt2-1.17"]`. Patch it with both modules: `--modules core/machines,test/machine-clone`.
-- **The machine.** One `[[entry]]` in the `machines` registry of `core/machines` has `name` and `short` (list and page header), `clone_of` (take that stock
-  machine's permission, per-type byte and DSP selector), and `f0` to `f8`, the nine descriptor fields that choose which parameter occupies each knob of the SRC
-  page. Fields are stock descriptor ids (`f0 = 0xf8`) or `"params.<id>.index"` for a parameter this module adds (`core/params` rows: `name`, `short`, a
-  `template` stock row, `slot`, `min`, `max`, `default`; `tests/fixtures/modules/dn2-pages` shows them on the Digitone II with its own pages).
-- **The number.** The machine's type number is permanent: its row in `modules/core/adapters/machines/types.toml` (`"test/machine-clone:xclone" = 8`), added by hand.
-  Parameter indices are assigned in canonical module order. A machine with its own DSP voice adds a `voices` row for `core/dsp-voice` (`type = machines.<id>.index`,
-  `pc` = the render routine); the project's PLUCK (`modules/machines/pluck/`) is a run-time module instead.
+### An effect: run-time module
 
-### An effect: `[[entry]] registry = "fx"`
-
-An effect module requires `core/fx` (the effects adapter, `modules/core/adapters/fx/`) and adds one row to its registry `fx`; the chain runs in module order, at most
-`DK_FX_MAX` (4) effects. The routine, its `dk_fx_desc` and its state block are symbols of the module's DSP object (`<dk/gen/fx.h>`,
-[docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), section 7.2):
-
-```toml
-[[entry]]
-registry = "fx"
-id = "gain"
-pc = "_fg_process"       # process(R4 = state, R8 = dk_fx_in, R12 = parameter words)
-desc = "_fg_desc"        # dk_fx_desc
-state = "_fg_state"      # .PKBSS _fg_state, <state_bytes>;
-```
-
-`tests/fixtures/modules/fx-gain` (0.5 gain) is the example and the fixture of `core/fx`'s tests; `fx-nan` is the negative one. An empty chain plays the stock audio.
-
-A run-time effect (`dynamic = true`, a `.dkm`) builds its effect in `init` with builder calls (`modules/fx/freqshift/src/module.c`, `[[fx]]` in `module.toml`)
-instead of the `[[entry]]` row. It takes one of the 3 free rows that `core/dynfx`
-reserves, and `core/fxpages` reserves the pages. Its manifest, pages and routes are in [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md),
-sections 5.4 and 7.2. The format is `docs/design/digikit-dkm.md`; the design of the pages is "Effect pages" in `docs/design/digikit-registry.md`.
+An effect is a run-time module (`dynamic = true`, a `.dkm`), like a machine. It builds its effect in `init` with builder calls (`dk_module_ctx_add_fx`, `dk_fx_routes`; `modules/fx/freqshift/src/module.c`, `[[fx]]` in `module.toml`)
+and takes one of the 3 free rows that `core/dynfx` reserves in the registry `fx` of `core/fx` (the effects adapter, `modules/core/adapters/fx/`); `core/fxpages` reserves the pages. The chain runs in module order, at most
+`DK_FX_MAX` (4) effects. patchkit refuses an `[[entry]] registry = "fx"` of any module except `core/dynfx`. The routine, its `dk_fx_desc` and its state block are symbols of the module's DSP object
+(`<dk/gen/fx.h>`, [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), sections 5.4 and 7.2). An empty chain plays the stock audio.
+The format is `docs/design/digikit-dkm.md`; the design of the pages is "Effect pages" in `docs/design/digikit-registry.md`.
 Example and fixture: `tests/fixtures/modules/dyn-fx-gain`.
 
 The frameworks themselves are ordinary modules: `modules/core/adapters/machines/` (about 24 ColdFire anchors, six copied
