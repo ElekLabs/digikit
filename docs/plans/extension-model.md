@@ -624,9 +624,19 @@ What:
    - UI-task sites, as `lfo.dks` hooks (B1 bind resolves the addresses): the name formatter (DT2 one; DN2 two, 4- and 3-character names), the
      graph clamp and the unipolar table, and the T1 maximum of codes 79, 89, 99 so the panel can reach the new values.
 2. The slot code: for an extended wave value, compute signed Q31 from the 32-bit phase with the module's 32-sample table and integer linear
-   interpolation; mark unipolar shapes in the service's own table. Cost ceiling: the tick runs at 1,500 Hz and evaluates 48 LFOs; the estimate
-   is 20-30 instructions per extended LFO, at most 1.5-2 M instructions per second with all 48 extended. Measure with the instruction counts
-   before the PR; stop if above the ceiling.
+   interpolation (the service keeps a delta table of 32 cells `{ v = s[i] << 16, d = s[i+1] - s[i] }`, built when the shape loads, so the tick makes
+   `v + ((d * f) << 1)`); mark unipolar shapes in the service's own table. Cost budget, from the CPU and the tick period: the core runs at 264 MHz
+   (the bus constant 132 MHz of the firmware, core = 2 x bus: findings 07, "ColdFire instruction rate", and 08), at 1.5 to 3 cycles per
+   instruction (finding 07). The tick runs at 1,500 Hz (finding 04), so one tick is 667 us = 176,000 cycles = 59,000 to 117,000 instructions.
+   The stock handler already uses 56.7% of a frame when stopped and 91 to 100% on step frames (DN2 1.11 unit, finding 04 "the stock handler
+   on a unit"), so the budget is small: **all 48 LFOs extended may cost at most 3% of the tick period over stock** (5,280 cycles), and a few
+   shape LFOs well under 0.5%. Static counts from the built object (finding 143, "Interrupt context and rate"): a wave of 0 to 5 costs 2 `jmp.l`
+   more than stock per LFO (96 per tick); an extended LFO costs 54 instructions (stub 8, routine 18, `dk_lfo_eval` 28) against 22 (TRI) to 42
+   (SINE) for the stock table wave, so +12 to +32 each. Worst case, 48 extended LFOs at 1,500 Hz: 2,592 instructions per tick (3.9 M per
+   second), 576 to 1,536 over stock, which is 0.5% to 2.6% of the period at 1.5 to 3 cycles per instruction: inside the budget, but a step frame
+   that already reaches 100% has no room for it, so the all-48 case is not a goal. One extended LFO is 0.05% to 0.09% of the period. These are
+   static counts: the final check is one paired A/B with `tools/devtools/coupled_ab.py` (stock against the lfo service with shape LFOs) at E6's
+   device check; stop if the A/B shows more than the budget. The stack of the extended path is 28 bytes at most (24 on the DN2 tick).
 3. `SHAPES` writes happen under the interrupt mask (lfo `records.rs:153-161`), so the tick never reads a half-written shape.
 4. Stored value (rule 7): the extended wave value goes into the sound. Every stock reader clamps it, so without the module it shows "ERR" and
    behaves like RAND, with no fault, and it survives save and load.
@@ -637,12 +647,16 @@ What:
    the slot falls back to TRI.
 8. Builder: `dk_record_add` with the generic LFO_SHAPE record; a typed `dk_lfo_add_shape` only if writing the fixture shows `dk_record_add`
    is awkward in C.
-8b. The lfo service checks a record's body key against the module's KEYS entry. Today nothing ties them: a literal body id bypasses the planner's key rule, so the check refuses a record whose key is not in the module's table.
+8b. The lfo service checks a record's body key against the module's KEYS entry. Today nothing ties them: a literal body id bypasses the planner's key rule, so the check refuses a record whose key is not in the module's table. The service reads the keys with the kind-free `CoreApi::keys_of(at, kind, out)` (the keys of record kind `kind` in the header table of the accepted module at selection index `at`); the `Service` ABI names no LFO field (rule 12).
 9. Template `sdk/templates/lfo/` and a fixture `tests/fixtures/modules/test/lfo-shape`.
 
-Tests: unit (lfo service: lookup, interpolation, fallback, contract suite); assembly (one case, the lfo fixture binds its hooks and the image
+Tests: unit (lfo service: lookup, interpolation, the delta table against the plain formula, fallback, contract suite); assembly (one case, the lfo fixture binds its hooks and the image
 stub slot is filled); device (one test per device: choose the new wave, read the firmware's LFO output in the parameter value array, not the
 screen; and one stock-firmware or safe-mode check that the saved project loads without a fault).
+
+`sdk/sdk.toml` is a shared input of every device test (the `[runtime]` table and version feed the runtime and patchkit), so the E6 PR does not run
+the whole device set: it names a targeted subset (`mise run test:subset -- ...` with the lfo and loading tags, gate-smoke and gate-pins, on DT2
+and DN2) and says what it skips; `mise run test:full` covers the batch.
 
 Done when: a module adds a waveform that shows its name on the MOD page, draws, and modulates, on DT2 and DN2, and a project saved with it
 loads safely without the module.
