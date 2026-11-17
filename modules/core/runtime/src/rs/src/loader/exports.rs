@@ -6,7 +6,7 @@
 use dkrt_sdk::{E_PLAN_OWNER, E_TABLE_FULL};
 
 /// Most exports published at once, over all providers.
-pub const EXPORTS_MAX: usize = 32;
+pub const EXPORTS_MAX: usize = 64;
 
 #[derive(Clone, Copy)]
 struct Row {

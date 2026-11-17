@@ -86,6 +86,10 @@ pub struct PlanInfo {
 /// The most words of a data entry the plan records.
 const INFO_WORDS: usize = 16;
 
+/// The info table entry patchkit adds to every table it builds: the first 8 bytes of the SHA-256 of the stock `.syx` this image was made from (two words, a data
+/// entry). The loader compares it with the `FW` item of a bound service file.
+pub const FW_ID_ENTRY: &str = "fw_id";
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PlanBase {
     pub device: String,
@@ -909,6 +913,64 @@ pub fn resolve_hook_site(fw: &[u8], reg: &Registry, hook: &str) -> Result<HookSi
     })
 }
 
+/// The anchors of the port of a stock image, resolved to their addresses with the check `resolve_hook_site` makes: the port must match the image's MAIN OS section
+/// and the bytes an anchor names must hash to what the port records.
+pub struct AnchorView<'a> {
+    port: &'a Port,
+    main: &'a [u8],
+    base: u64,
+}
+
+impl<'a> AnchorView<'a> {
+    /// The view of `fw` through `port` (the port found for `fw` in the registry).
+    pub fn new(fw: &'a Firmware, port: &'a Port) -> Result<AnchorView<'a>> {
+        let main_sec = fw
+            .section(3)
+            .ok_or_else(|| err!("image has no MAIN OS section"))?;
+        if sha256_hex(&main_sec.data) != port.port.main_sha256 {
+            return Err(err!(
+                "port {} does not match the MAIN OS section of this image",
+                port.id()
+            ));
+        }
+        Ok(AnchorView {
+            port,
+            main: &main_sec.data,
+            base: main_sec.dest as u64,
+        })
+    }
+
+    /// The address of the ColdFire anchor `name` (for a `value` anchor, the number it holds). An unknown name, a SHARC anchor or bytes that do not hash to the
+    /// port's value are errors naming the anchor.
+    pub fn addr(&self, name: &str) -> Result<u64> {
+        let a = self
+            .port
+            .anchor(name)
+            .ok_or_else(|| err!("no anchor {name} on {}", self.port.port.device))?;
+        if a.cpu == SHARC {
+            return Err(err!("anchor {name} is a SHARC anchor"));
+        }
+        let at = if a.kind == "value" {
+            a.src
+                .ok_or_else(|| err!("anchor {name}: value without src"))?
+        } else {
+            a.addr
+        };
+        let bytes = at
+            .checked_sub(self.base)
+            .map(|o| o as usize)
+            .filter(|o| o + a.len as usize <= self.main.len())
+            .map(|o| &self.main[o..o + a.len as usize])
+            .ok_or_else(|| err!("anchor {name} {at:#x}+{}: outside the MAIN OS image", a.len))?;
+        if sha256_hex(bytes) != a.sha256 {
+            return Err(err!(
+                "anchor {name} at {at:#x}: the bytes do not hash to what the port expects"
+            ));
+        }
+        Ok(a.addr)
+    }
+}
+
 pub fn apply_with(
     fw_bytes: &[u8],
     reg: &Registry,
@@ -1145,10 +1207,12 @@ pub fn apply_with(
                 .map(move |i| (m, i))
         })
         .collect();
-    let n_info = slot_defs.iter().map(|(_, d)| d.len()).sum::<usize>() + info_defs.len();
+    // the entries of the modules, and patchkit's own `fw_id` (the first 8 bytes of the stock image's SHA-256: a bound service file is checked against it) in every table that exists
+    let n_modules = slot_defs.iter().map(|(_, d)| d.len()).sum::<usize>() + info_defs.len();
+    let n_info = n_modules + usize::from(n_modules > 0);
     if n_info > dkneeds::INFO_MAX as usize {
         return Err(err!(
-            "{n_info} [[slot]] and [[info]] entries on {dev}, over the {} of `[limits.format] info_max`",
+            "{n_info} [[slot]] and [[info]] entries (with fw_id) on {dev}, over the {} of `[limits.format] info_max`",
             dkneeds::INFO_MAX
         ));
     }
@@ -1161,7 +1225,8 @@ pub fn apply_with(
                 info_defs
                     .iter()
                     .map(|(m, i)| (m.id().to_string(), i.name.as_str())),
-            );
+            )
+            .chain((n_modules > 0).then(|| ("patchkit".to_string(), FW_ID_ENTRY)));
         for (owner, name) in names {
             let h = dkneeds::keys::name_hash(name);
             if let Some((_, other)) = seen.iter().find(|(x, _)| *x == h) {
@@ -1173,6 +1238,7 @@ pub fn apply_with(
         }
     }
     let mut info_at: Option<(u64, &'static str)> = None;
+    let mut fw_id_at: Option<(u64, &'static str)> = None;
 
     // Allocate every object first-fit in its region, then link with everyone's exports visible.
     let mut allocs: BTreeMap<String, Alloc> = BTreeMap::new();
@@ -1313,6 +1379,7 @@ pub fn apply_with(
             4,
             "the info table",
         )?);
+        fw_id_at = Some(take_region(&mut allocs, port, &region, 8, 4, "fw_id")?);
     }
     let mut globals: BTreeMap<String, u64> = BTreeMap::new();
     for p in &placed {
@@ -1583,6 +1650,26 @@ pub fn apply_with(
                     names.push(d.name.clone());
                 }
             }
+            if let Some((fw_addr, fw_cpu)) = fw_id_at {
+                // the id of the stock image this image is made from: two words after the info table's own chunk, entered last
+                let sha = unhex(&fw.syx_sha256)?;
+                chunks.push(Chunk {
+                    owner: slot_defs
+                        .first()
+                        .map(|(m, _)| m.tag())
+                        .unwrap_or_else(|| info_defs[0].0.tag()),
+                    cpu: fw_cpu,
+                    region: slot_defs
+                        .first()
+                        .map(|(_, d)| slot_place(d[0]))
+                        .unwrap_or_else(|| "cf.expansion".into()),
+                    addr: fw_addr,
+                    image: sha[..8].to_vec(),
+                    code: vec![],
+                    bss: 0,
+                    what: "the firmware id (fw_id of the info table)".into(),
+                });
+            }
             for (m, inf) in &info_defs {
                 let text = inf.symbol.as_deref().unwrap_or(&inf.name);
                 let v = crate::expr::eval_str(text, &scope)
@@ -1596,6 +1683,14 @@ pub fn apply_with(
                 })?;
                 entries.push((dkneeds::keys::name_hash(&inf.name), v, prim::INFO_KIND_DATA));
                 names.push(inf.name.clone());
+            }
+            if let Some((fw_addr, _)) = fw_id_at {
+                entries.push((
+                    dkneeds::keys::name_hash(FW_ID_ENTRY),
+                    fw_addr as u32,
+                    prim::INFO_KIND_DATA,
+                ));
+                names.push(FW_ID_ENTRY.to_string());
             }
             for ((hash, addr, kind), name) in entries.iter().zip(&names) {
                 let words = if *kind == prim::INFO_KIND_DATA {

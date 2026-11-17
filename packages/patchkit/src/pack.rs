@@ -92,6 +92,59 @@ pub fn pack_all(
     }
 }
 
+/// The object of a service with its firmware references renamed to the import names `patchkit bind` resolves. An undefined symbol that has an entry in
+/// `externs` takes the name of its target (`cf.<name>`, `hook.<hook>.tail|stock|ret|exit|exit.<n>`); an undefined symbol named like a firmware name (`cf.*`: what the
+/// `dkfw` crate links) takes `dk_fw_<hash>`. Every other undefined symbol stays an import of the runtime.
+pub fn firmware_imports(
+    obj: &crate::dko::Dko,
+    externs: &std::collections::BTreeMap<String, String>,
+) -> Result<crate::dko::Dko> {
+    // the ISA record covers the symbol names: check the object as built, then stamp the renamed one
+    obj.require_isa_checked()?;
+    let defined: std::collections::BTreeSet<&str> = obj
+        .symbols
+        .iter()
+        .filter(|s| s.section.is_some())
+        .map(|s| s.name.as_str())
+        .collect();
+    let map = |n: &str| -> Result<Option<String>> {
+        if defined.contains(n) {
+            return Ok(None);
+        }
+        match externs.get(n) {
+            Some(t) => crate::bind::import_for_target(t).map(Some).ok_or_else(|| {
+                Error(format!(
+                    "extern {n} = {t:?}: a service names `cf.<name>` or `hook.<hook>.tail|stock|ret|exit|exit.<n>`"
+                ))
+            }),
+            None if n.starts_with("cf.") => Ok(Some(crate::bind::fw_import(n))),
+            None => Ok(None),
+        }
+    };
+    let mut out = obj.clone();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut symbols = vec![];
+    for s in &obj.symbols {
+        let mut s = s.clone();
+        if s.section.is_none()
+            && let Some(n) = map(&s.name)?
+        {
+            s.name = n;
+        }
+        if s.section.is_some() || seen.insert(s.name.clone()) {
+            symbols.push(s);
+        }
+    }
+    out.symbols = symbols;
+    for r in &mut out.relocs {
+        if let Some(n) = map(&r.symbol)? {
+            r.symbol = n;
+        }
+    }
+    out.stamp_isa();
+    Ok(out)
+}
+
 /// Packs the objects of module `id` as they are in memory in `lib`.
 pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
     let m = lib
@@ -162,13 +215,25 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
     } else {
         vec![]
     };
-    let bytes = crate::dkm::pack_keys(cf.first().map(|c| c.0), &reg, &dsp, &opts)?;
+    // a service file names firmware through import names that `patchkit bind` resolves (`bind::import_for_target`)
+    let service_obj = match cf.first() {
+        Some((dko, r)) if m.manifest.module.role == Some(crate::module::ModuleRole::Service) => {
+            Some(firmware_imports(dko, &r.externs)?)
+        }
+        _ => None,
+    };
+    let bytes = crate::dkm::pack_keys(
+        service_obj.as_ref().or(cf.first().map(|c| c.0)),
+        &reg,
+        &dsp,
+        &opts,
+    )?;
     let dkm = crate::dkm::Dkm::parse(&bytes)?;
     Ok(Packed {
         bytes,
         dkm,
         name: opts.name,
-        cf: cf.first().map(|c| c.0.clone()),
+        cf: service_obj.or(cf.first().map(|c| c.0.clone())),
         dsp: dsp_obj,
     })
 }

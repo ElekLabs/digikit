@@ -140,7 +140,7 @@ cardRigs(
     dsp: 'sharc',
     roots: COUPLED_ROOTS,
     hold: true,
-    symbols: [...SYMBOLS, 'voices.rows', 'dyndsp_info', 'DKRT_ASSIGN'],
+    symbols: [...SYMBOLS, 'voices.rows', 'dyndsp_info'],
   },
   (rig) => {
     const fixture = () => fs.readFileSync(moduleArtifact(rig.device, ID));

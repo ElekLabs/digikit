@@ -135,6 +135,7 @@ impl Images for FakeImages {
     }
     unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {
         self.log.push(Ev::Init(rec, init));
+        order("init");
         match self.init {
             Init::Ok => OK,
             // (`ctx` is the context address as a u32: not a host pointer)
@@ -170,11 +171,38 @@ impl Images for FakeImages {
     }
 }
 
+/// What the fake services were asked at a module's lifecycle (`module_begin`, `module_commit`): the record number, and for a commit its phase, base and image size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Svc {
+    Begin(usize),
+    Commit(usize, u32, u32, u32),
+}
+
+/// The order of lifecycle steps across the registry and the images: the fakes of both push here.
+static ORDER: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+fn order(step: &'static str) {
+    ORDER.lock().unwrap_or_else(|e| e.into_inner()).push(step);
+}
+
+/// What the fake service does in `module_commit`.
+#[derive(Clone, Copy)]
+struct FakeService {
+    /// Body bytes of the one record (kind 0xdead) it writes; 0: no record.
+    record: usize,
+    /// More body bytes in the `WRITE` pass than it measured.
+    skew: usize,
+    /// Refuse in this phase with this code.
+    refuse: Option<(u32, i32)>,
+}
+
 struct FakeRegistry {
     abi: bool,
     add_result: i32,
     log: Vec<Ev>,
     asked: core::cell::RefCell<Vec<Ev>>,
+    svc: Vec<Svc>,
+    service: FakeService,
 }
 
 impl Registry for FakeRegistry {
@@ -192,6 +220,27 @@ impl Registry for FakeRegistry {
     }
     unsafe fn remove(&mut self, rec: usize) {
         self.log.push(Ev::Remove(rec));
+    }
+    unsafe fn module_begin(&mut self, rec: usize) {
+        order("begin");
+        self.svc.push(Svc::Begin(rec));
+    }
+    unsafe fn module_commit(&mut self, rec: usize, c: &dkrt_abi::service::ModuleCommitCtx) -> i32 {
+        order("commit");
+        self.svc.push(Svc::Commit(rec, c.phase, c.base, c.image_size));
+        let f = self.service;
+        if let Some((phase, code)) = f.refuse {
+            if phase == c.phase {
+                return code;
+            }
+        }
+        if f.record != 0 {
+            let n = if c.phase == dkrt_abi::service::commit_phase::WRITE { f.record + f.skew } else { f.record };
+            let sink = &mut *c.sink;
+            sink.head(0xdead, 8 + f.record);
+            sink.bytes(&vec![0u8; n]);
+        }
+        OK
     }
 }
 
@@ -272,7 +321,15 @@ unsafe fn loader_of(init: Init, file: Vec<u8>) -> Fake {
     let mut files = BTreeMap::new();
     files.insert(PATH[..PATH.len() - 1].to_vec(), file);
     let imgs = FakeImages { files, staged: Vec::new(), live: Vec::new(), allocs: 0, fail_alloc: None, init, log: Vec::new() };
-    let reg = FakeRegistry { abi: true, add_result: OK, log: Vec::new(), asked: Default::default() };
+    let reg = FakeRegistry {
+        abi: true,
+        add_result: OK,
+        log: Vec::new(),
+        asked: Default::default(),
+        svc: Vec::new(),
+        service: FakeService { record: 0, skew: 0, refuse: None },
+    };
+    ORDER.lock().unwrap_or_else(|e| e.into_inner()).clear();
     let mut l = Loader::new(FakePlatform::new(profiles::DT2), imgs, reg);
     l.phase = Phase::Boot;
     l
@@ -453,6 +510,9 @@ fn service_file_of(mut v: Vec<u8>, table: &dkneeds::keys::Table, dsp: u32) -> Ve
 const SITE: u32 = 0x400a_5eac;
 const STOCK: [u8; 6] = [0x20, 0x52, 0x48, 0x78, 0x00, 0x02];
 const SVC: &str = "svc-test";
+/// The `FW` item of the service and the `fw_id` words of the image it matches (the first 8 bytes of the stock firmware's SHA-256, as two big endian words).
+const FW_ID: [u8; 8] = [0xd1, 0x5e, 0xa5, 0xe0, 0x11, 0x22, 0x33, 0x44];
+const FW_ITEMS: &[[u8; 8]] = &[FW_ID];
 
 /// The table of a service `SVC` that exports `ping` (image offset 8) and binds one hook at `SITE` (handler at 4, trampoline at 16).
 fn svc_table<'a>(bind: &'a [dkneeds::keys::Bind<'a>]) -> dkneeds::keys::Table<'a> {
@@ -465,6 +525,7 @@ fn svc_table<'a>(bind: &'a [dkneeds::keys::Bind<'a>]) -> dkneeds::keys::Table<'a
         exports: EXPORTS.get_or_init(|| [Pair { a: name_hash("dk_svctest_ping"), b: 8 }]),
         hooks: HOOKS.get_or_init(|| [Pair { a: name_hash("hook.a"), b: 4 }]),
         bind,
+        fw: FW_ITEMS,
         ..Default::default()
     }
 }
@@ -485,8 +546,21 @@ fn svc_init() -> Init {
 unsafe fn provider_loader(file: Vec<u8>, init: Init) -> Fake {
     let l = loader_of(init, file);
     l.p.put_code(SITE, &STOCK);
+    set_fw_id(&l, Some(FW_ID));
     l
 }
+
+/// The `fw_id` entry of the image's info table (a data table of two words): the first 8 bytes of the stock firmware's SHA-256; `None`: the image has none.
+fn set_fw_id(l: &Fake, id: Option<[u8; 8]>) {
+    let h = dkneeds::keys::name_hash("fw_id");
+    l.p.info_entries.borrow_mut().retain(|(x, _)| *x != h);
+    if let Some(id) = id {
+        let w = |i: usize| u32::from_be_bytes([id[i], id[i + 1], id[i + 2], id[i + 3]]);
+        l.p.info_entries.borrow_mut().push((h, vec![w(0), w(4)]));
+        l.p.info_data.borrow_mut().push(h);
+    }
+}
+
 
 fn site_bytes(l: &Fake, n: usize) -> Vec<u8> {
     let mut out = vec![0u8; n];
@@ -656,6 +730,78 @@ fn a_hook_site_that_is_not_stock_refuses_the_provider_before_anything_is_allocat
         assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Init(..))));
         assert_eq!(site_bytes(&l, 6), [0x20, 0x52, 0x48, 0x99, 0x00, 0x02]);
         assert_eq!((l.installer.count(), l.exports.count()), (0, 0));
+    }
+}
+
+/// A bound file holds the identity of the firmware it was bound to. A file for another firmware, or an image that has no `fw_id`, is refused as a site that is not
+/// stock (`E_HOOK_STOCK`), before anything is allocated and before `init`; the stock bytes of the sites are not even looked at.
+#[test]
+fn a_provider_bound_to_another_firmware_is_refused_before_anything_is_allocated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut other = FW_ID;
+        other[7] ^= 1;
+        for id in [Some(other), None] {
+            let bind = svc_bind(&STOCK);
+            let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+            set_fw_id(&l, id);
+            assert_eq!(
+                l.load_provider(PATH.as_ptr(), 0),
+                E_HOOK_STOCK,
+                "image id {id:?}"
+            );
+            assert_eq!(l.m.allocs, 0);
+            assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Init(..))));
+            assert_eq!(site_bytes(&l, 6), STOCK);
+            assert_eq!((l.installer.count(), l.exports.count()), (0, 0));
+        }
+        // the identity is checked before the stock bytes: the stock check never runs when the identity differs (a non-stock site and the right id is the other test)
+        let bind = svc_bind(&STOCK);
+        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+        set_fw_id(&l, Some(other));
+        l.p.put_code(SITE + 3, &[0x99]);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_HOOK_STOCK);
+        assert!(
+            !l.p.calls
+                .borrow()
+                .iter()
+                .any(|c| matches!(c, crate::fake_platform::Call::Mask))
+        );
+    }
+}
+
+/// `BIND` items without an `FW` item are `E_FORMAT` (a file bound by an older patchkit), and so are two `FW` items; both come before the stock check. A file with no
+/// `FW` and no `BIND` has no firmware address and loads on any image.
+#[test]
+fn the_fw_item_rules_are_format_errors_and_a_file_with_no_firmware_reference_loads_anywhere() {
+    use dkneeds::keys::Table;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let bind = svc_bind(&STOCK);
+        for (fw, what) in [
+            (&[][..], "BIND without FW"),
+            (&[FW_ID, FW_ID][..], "two FW items"),
+        ] {
+            let table = Table {
+                fw,
+                ..svc_table(&bind)
+            };
+            let mut l = provider_loader(service_file(&table, 0), svc_init());
+            l.p.put_code(SITE + 3, &[0x99]);
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT, "{what}");
+            assert_eq!(l.m.allocs, 0, "{what}");
+        }
+        // no FW and no BIND: accepted, whatever the image's fw_id is (or even if it has none)
+        let table = Table {
+            bind: &[],
+            hooks: &[],
+            exports: &[],
+            fw: &[],
+            ..svc_table(&bind)
+        };
+        let mut l = provider_loader(service_file(&table, 0), Init::Ok);
+        set_fw_id(&l, None);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
     }
 }
 
@@ -870,4 +1016,68 @@ fn the_role_word_picks_the_steps() {
     assert!(Steps::of(0).check as usize == Steps::MODULE.check as usize);
     // a word that is neither is a module, as the loader always took it
     assert!(Steps::of(7).check as usize == Steps::MODULE.check as usize);
+}
+
+// ---- interface B: the module lifecycle with a fake service ------------------------------------------------------------------------
+
+#[test]
+fn the_services_are_told_before_init_and_commit_in_three_passes_after_it() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        use dkrt_abi::service::commit_phase::{DECLARE, PREPARE, WRITE};
+        let mut l = loader(Init::Ok);
+        assert_eq!(l.load(PATH.as_ptr()), OK);
+        // the module is the first block of the arena: its base is FIRST_ADDR, its image 32 bytes
+        assert_eq!(l.r.svc, vec![Svc::Begin(0), Svc::Commit(0, PREPARE, FIRST_ADDR, 32), Svc::Commit(0, WRITE, FIRST_ADDR, 32), Svc::Commit(0, DECLARE, FIRST_ADDR, 32)]);
+        assert_eq!(*ORDER.lock().unwrap(), ["begin", "init", "commit", "commit", "commit"]);
+        // a service that wrote no record has no block of its own: the module block stays alone
+        assert_eq!(l.m.live.iter().map(|b| b.0).collect::<Vec<_>>(), vec![FIRST_ADDR]);
+    }
+}
+
+#[test]
+fn a_service_that_refuses_the_commit_undoes_the_load_for_every_service() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        use dkrt_abi::service::commit_phase::{PREPARE, WRITE};
+        // in the first pass: nothing was written, no second pass
+        let mut l = loader(Init::Ok);
+        l.r.service.refuse = Some((PREPARE, E_TYPE_USED));
+        assert_eq!(l.load(PATH.as_ptr()), E_TYPE_USED);
+        assert!(l.m.live.is_empty());
+        assert_eq!(st().modules[0].used, 0);
+        assert_eq!(l.r.log, vec![Ev::Add(0), Ev::Remove(0)], "the registry takes everything of the record down");
+        assert!(!l.r.svc.iter().any(|e| matches!(e, Svc::Commit(_, WRITE, ..))));
+        // in the second pass, with the record block allocated: the block is freed too
+        let mut l = loader(Init::Ok);
+        l.r.service = FakeService { record: 16, skew: 0, refuse: Some((WRITE, E_PARAM_FULL)) };
+        assert_eq!(l.load(PATH.as_ptr()), E_PARAM_FULL);
+        assert!(l.m.live.is_empty(), "the module block and the record block are free");
+        assert_eq!(l.r.log, vec![Ev::Add(0), Ev::Remove(0)]);
+        assert_eq!(st().loads, 0);
+        // the record can be used again
+        l.r.service = FakeService { record: 0, skew: 0, refuse: None };
+        assert_eq!(l.load(PATH.as_ptr()), OK);
+        assert_eq!(st().modules[0].used, 1);
+    }
+}
+
+#[test]
+fn the_records_a_service_writes_are_one_block_that_the_walker_checks() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // a record of a kind no service owns: the block was allocated, written and refused by the walker, and everything is given back
+        let mut l = loader(Init::Ok);
+        l.r.service = FakeService { record: 16, skew: 0, refuse: None };
+        let r = l.load(PATH.as_ptr());
+        assert_ne!(r, OK);
+        assert!(l.m.live.is_empty());
+        assert_eq!(l.m.log.iter().filter(|e| matches!(e, Ev::Alloc(..))).count(), 3, "module block, collect block, record block");
+        assert_eq!(l.r.log, vec![Ev::Add(0), Ev::Remove(0)]);
+        // a service that writes more in the second pass than it measured is refused before the walker runs
+        let mut l = loader(Init::Ok);
+        l.r.service = FakeService { record: 16, skew: 8, refuse: None };
+        assert_eq!(l.load(PATH.as_ptr()), E_FORMAT);
+        assert!(l.m.live.is_empty());
+    }
 }

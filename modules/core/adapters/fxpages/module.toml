@@ -42,19 +42,7 @@ place = "cf.expansion"
 devices = ["dt2"]
 
 [object.externs]
-_fp_acc = "cf.page.fn.page_desc"
-_fp_label = "cf.page.site.tab_label_test"
-_fp_graph = "cf.page.site.filter_graph_test"
-_fp_list = "cf.page.site.fx_view_list.load"
-_fp_stock = "cf.page.data.fx_view_list"
-_fp_stock_n = "cf.page.site.fx_view_list.count"
 _fp_p_first = "params.fp0.index"
-_fp_load = "cf.page.site.fx_array.load"
-_fp_save = "cf.page.site.fx_array.save"
-_fp_init = "cf.page.site.fx_array.init_exit"
-_fp_keylist = "cf.page.site.fx_key_list.load"
-_fp_keystock = "cf.page.data.fx_key_list"
-_fp_sound = "cf.page.site.sound_load_exit"
 _fp_p_send = "params.fs0.index"
 
 [[object]]
@@ -64,19 +52,7 @@ place = "cf.expansion"
 devices = ["dn2"]
 
 [object.externs]
-_fp_acc = "cf.page.fn.page_desc"
-_fp_label = "cf.page.site.tab_label_test"
-_fp_graph = "cf.page.site.filter_graph_test"
-_fp_list = "cf.page.site.fx_view_list.load"
-_fp_stock = "cf.page.data.fx_view_list"
-_fp_stock_n = "cf.page.site.fx_view_list.count"
 _fp_p_first = "params.fp0.index"
-_fp_load = "cf.page.site.fx_array.load"
-_fp_save = "cf.page.site.fx_array.save"
-_fp_init = "cf.page.site.fx_array.init_exit"
-_fp_keylist = "cf.page.site.fx_key_list.load"
-_fp_keystock = "cf.page.data.fx_key_list"
-_fp_sound = "cf.page.site.sound_load_exit"
 _fp_p_send = "params.fs0.index"
 
 

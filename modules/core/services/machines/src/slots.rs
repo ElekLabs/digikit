@@ -206,7 +206,7 @@ pub fn turn_input(detector: &mut Detector, held: &mut Held, view: usize, encoder
 /// A click of encoder `enc` on `view`: queue the action of the parameter under it, if it has one.
 unsafe fn click<C: CoreApi, F: Fw>(core: &C, fw: &F, view: *const u8, enc: u32) {
     let code = fw.param_code(view as usize, enc);
-    let first = core.param_first();
+    let first = crate::records::param_first(core);
     let track = || fw.view_track(word(view, VIEW_TRACK_REF) as usize);
     if let Some((callback, track)) = resolve(&*addr_of!(ACTIONS), first, code, track) {
         *addr_of_mut!(PENDING) = Pending {
@@ -233,7 +233,11 @@ pub fn context(p: &Pending, owners: &[u8], first: u32) -> Option<Ctx> {
 
 /// The context of the queued click: the owner is read from the core's parameter rows.
 pub fn click_context<C: CoreApi>(c: &C, p: &Pending) -> Option<Ctx> {
-    context(p, c.param_owners(), c.param_first())
+    context(
+        p,
+        crate::records::param_owners(),
+        crate::records::param_first(c),
+    )
 }
 
 /// The UI loop pass: run the queued action (`void fn(u32 track)`). `param_get` and `param_set` serve the clicked view from here until the page
@@ -246,8 +250,9 @@ pub unsafe fn tick<C: CoreApi>(core: &C) {
             return;
         };
         (*addr_of_mut!(HELD)).begin(ctx);
-        let (with_arg, arg) = (*addr_of!(ARGS))
-            [(p.code.wrapping_sub(core.param_first())) as usize % limits::PARAM_ROWS];
+        let (with_arg, arg) =
+            (*addr_of!(ARGS))[(p.code.wrapping_sub(crate::records::param_first(core))) as usize
+                % limits::PARAM_ROWS];
         if with_arg {
             let call: unsafe extern "C" fn(u32, u32) = core::mem::transmute(p.callback as usize);
             call(arg, p.track);
@@ -263,8 +268,8 @@ pub unsafe fn param_get<C: CoreApi, F: Fw>(core: &C, fw: &F, track: u32, word: u
     paramapi::get(
         fw,
         (*addr_of!(HELD)).ctx(),
-        core.param_owners(),
-        core.param_first(),
+        crate::records::param_owners(),
+        crate::records::param_first(core),
         track,
         word,
     )
@@ -281,8 +286,8 @@ pub unsafe fn param_set<C: CoreApi, F: Fw>(
     paramapi::set(
         fw,
         (*addr_of!(HELD)).ctx(),
-        core.param_owners(),
-        core.param_first(),
+        crate::records::param_owners(),
+        crate::records::param_first(core),
         track,
         word,
         raw,
@@ -505,8 +510,11 @@ mod tests {
     #[test]
     fn a_click_reads_the_parameter_rows_through_the_core() {
         let mut core = FakeCore::new();
-        core.first = 200;
-        core.owners = std::vec![0, 0, 3, 0];
+        let mut t = std::vec![0; 96];
+        t[dkrt_svc_params::dynreg::w::P_DYN0] = 200;
+        core.set_dynreg(t);
+        crate::records::rstate().param_owner = [0; limits::PARAM_ROWS];
+        crate::records::rstate().param_owner[..4].copy_from_slice(&[0, 0, 3, 0]);
         let p = |code| Pending {
             callback: 1,
             track: 5,

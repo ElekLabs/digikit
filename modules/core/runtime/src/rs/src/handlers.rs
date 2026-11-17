@@ -9,7 +9,7 @@
 //! - the DSP section parts it owns: `dsp_check_*`, `dsp_admit`, `dsp_claim`, `dsp_release`, `dsp_clear`, `dsp_row_step`
 //!   (the DSP loader in `dsp/mod.rs` keeps the area, the row table and the state machine);
 //! - capacity counts (`cap`, per capacity kind), the module behind a fault site (`attribute`), the guard's state of a machine type (`guard_state`);
-//! - the declarations of a module's DSP rows (`has_voice`, `declare_voice`, `declare_fx`) and `on_loaded`.
+//! - `on_loaded` (every row of a module is in the DSP).
 pub use dkrt_abi::service::*;
 
 /// The table over the runtime's own core.
@@ -46,9 +46,9 @@ pub mod exports {
     pub unsafe fn fx_entry(index: u32, out: &mut dkrt_sdk::DkrtFx) -> i32 {
         super::services().fx_entry(index, out)
     }
-    /// Host tests only: the page set of the machines service, and its row as a loaded service file has it (`svc_rows::test_machines`).
+    /// Host tests only: the type numbers of the machines service for the module being loaded, and its row as a loaded service file has it (`svc_rows::test_machines`).
     #[cfg(test)]
-    pub(crate) use dkrt_svc_machines::nativepage::PageSet;
+    pub(crate) use dkrt_svc_machines::assign::seed_for_test;
     #[cfg(test)]
     pub(crate) fn machines_row() -> &'static dkrt_abi::service::ServiceRow {
         static ROW: dkrt_abi::service::ServiceRow =
@@ -56,8 +56,8 @@ pub mod exports {
         &ROW
     }
     /// The machine type numbers of the machine rows module `owner` filled (`module_cmds`: the module list); returns how many.
-    pub fn machine_types_of(owner: u8, out: &mut [u8; 8]) -> usize {
-        unsafe { super::services().machine_types_of(owner, out) }
+    pub fn owned_ids(owner: u8, out: &mut [u8; 8]) -> usize {
+        unsafe { super::services().owned_ids(owner, out) }
     }
     /// The shapes of the lfo service, for the runtime's own tests of the record path.
     #[cfg(test)]
@@ -143,7 +143,7 @@ pub fn len(kind: u32) -> Option<u32> {
 #[cfg(test)]
 pub(crate) mod tests;
 #[cfg(test)]
-mod lfo_tests;
+pub(crate) mod lfo_tests;
 #[cfg(test)]
 pub(crate) mod fx_fixture;
 #[cfg(test)]

@@ -199,8 +199,9 @@ fn order_of(mods: &[Option<Keys>], order: &mut [u8; SEL_MAX], cyclic: &mut [bool
     }
 }
 
-/// The most bytes of a header table the boot planner keeps (a module with eight machines, three effects and nine needs has about 260; a larger table is not planned and the loader decides).
-pub(crate) const TABLE_MAX: usize = 384;
+/// The most bytes of a header table the boot planner keeps (a module with eight machines, three effects and nine needs has about 260; a larger table is not planned and the loader decides). A service file's table without its BIND and FW entries
+/// holds its hooks and exports too: `machines.dks` with its builder exports needs about 480.
+pub(crate) const TABLE_MAX: usize = 640;
 
 /// The needs of a module, as the fit function counts them.
 fn needs_of_uses(t: &Keys) -> fit::Needs {
@@ -667,7 +668,7 @@ mod tests {
     }
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[] };
 
     #[test]
     fn a_module_with_no_table_and_a_module_with_nothing_to_share_are_accepted_in_selection_order() {

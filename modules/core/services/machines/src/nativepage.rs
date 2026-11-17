@@ -1,7 +1,10 @@
 //! Validated registration/lifetime for native callback page v1.
-//! Firmware view, bitmap and event details belong to core/machines: the registration calls go through `CoreApi` (`native_*`).
+//! Firmware view, bitmap and event details belong to core/machines: the registration calls are functions of the image, which the table `machines_info` names (`info::w`) and
+//! the service calls through `FwMem::call`; a word the adapter did not bind is not called.
+use crate::info;
+use dkneeds::keys::name_hash;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::mem::rd32;
+use dkrt_abi::mem::{iw, rd32};
 use dkrt_sdk::*;
 
 pub const KIND: u32 = records::KIND_NATIVE_PAGE;
@@ -72,8 +75,30 @@ impl<const N: usize> PageSet<N> {
     }
 }
 
+/// The word `k` of the image table `machines_info` (`info::w`), 0 when the image has no usable table (another magic or version) or the adapter did not bind the word.
+unsafe fn word<C: CoreApi>(core: &C, k: usize) -> u32 {
+    let t = core.info(name_hash("machines_info"));
+    if t.is_null()
+        || iw(t, info::w::MAGIC) != info::MAGIC
+        || iw(t, info::w::VERSION) != info::VERSION
+    {
+        return 0;
+    }
+    iw(t, k)
+}
+
+/// Whether the image has the native page calls of record kind `kind` (`KIND` or `KIND_V2`).
 pub fn available<C: CoreApi>(core: &C, kind: u32) -> bool {
-    core.native_available(kind)
+    unsafe {
+        word(
+            core,
+            if kind == KIND_V2 {
+                info::w::N_REGISTER_V2
+            } else {
+                info::w::N_REGISTER
+            },
+        ) != 0
+    }
 }
 
 /// Body excludes kind/length. PARAM indexes belong to this file; the caller also
@@ -189,40 +214,91 @@ pub unsafe fn apply<C: CoreApi>(
         };
         binding[2] = rd32(b.add(8));
     }
-    let owner = core.type_resolve(rd32(body.add(4)));
+    let owner = crate::assign::resolve(core, rd32(body.add(4)));
     let flags = if kind == KIND_V2 {
         rd32(body.add(44))
     } else {
         0
     };
-    core.native_register(
-        kind,
-        owner,
-        page_index(kind, body),
-        flags,
-        body.add(16),
-        base + rd32(body.add(8)),
-        base + rd32(body.add(12)),
-        bindings.as_ptr() as *const u32,
-        words.as_ptr(),
-        words.len() as u32,
-        arg,
-        with_arg,
-    )
+    let (title, draw, event) = (
+        body.add(16) as usize,
+        (base + rd32(body.add(8))) as usize,
+        (base + rd32(body.add(12))) as usize,
+    );
+    let (bindings, words, count) = (
+        bindings.as_ptr() as usize,
+        words.as_ptr() as usize,
+        words.len(),
+    );
+    let (arg, with_arg) = (arg as usize, with_arg as usize);
+    let r = if kind == KIND_V2 {
+        let f = word(core, info::w::N_REGISTER_V2);
+        let page = page_index(kind, body) as usize;
+        core.call(
+            f,
+            &[
+                owner as usize,
+                page,
+                flags as usize,
+                title,
+                draw,
+                event,
+                bindings,
+                words,
+                count,
+                arg,
+                with_arg,
+            ],
+        )
+    } else {
+        let f = word(core, info::w::N_REGISTER);
+        core.call(
+            f,
+            &[
+                owner as usize,
+                title,
+                draw,
+                event,
+                bindings,
+                words,
+                count,
+                arg,
+                with_arg,
+            ],
+        )
+    };
+    r as i32
 }
 
+/// Remove the native pages of machine type `kind` (before its callbacks and strings are released).
 pub unsafe fn remove<C: CoreApi>(core: &C, kind: u32) {
-    core.native_remove(kind)
+    core.call(word(core, info::w::N_REMOVE), &[kind as usize]);
 }
 
+/// The native handler of an encoder turn on `view`: nonzero when it consumed the turn.
 pub unsafe fn turn<C: CoreApi>(core: &C, view: *const u8, event: *const u8) -> u32 {
-    core.native_turn(view, event)
+    core.call(
+        word(core, info::w::N_TURN),
+        &[view as usize, event as usize],
+    ) as u32
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use dkrt_test_support::FakeCore;
+
+    /// A core whose image has the adapter's native page calls.
+    fn native_core() -> FakeCore {
+        let mut t = std::vec![0u32; info::WORDS];
+        t[info::w::MAGIC] = info::MAGIC;
+        t[info::w::VERSION] = info::VERSION;
+        t[info::w::N_REGISTER] = 0x6000_0010;
+        t[info::w::N_REGISTER_V2] = 0x6000_0020;
+        let mut c = FakeCore::new();
+        c.info_tables.push((name_hash("machines_info"), t));
+        c
+    }
 
     fn put(body: &mut [u8], offset: usize, value: u32) {
         body[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
@@ -245,7 +321,7 @@ mod tests {
 
     #[test]
     fn replacement_callback_checks_version_index_and_binding_bounds() {
-        let core = FakeCore::new();
+        let core = native_core();
         let mut body = [0u8; LEN_V2 as usize - 8];
         put(&mut body, 0, 2);
         put(&mut body, 8, 2);
@@ -281,7 +357,7 @@ mod tests {
 
     #[test]
     fn validates_callback_bounds_and_binding_records() {
-        let core = FakeCore::new();
+        let core = native_core();
         let mut body = [0u8; LEN as usize - 8];
         put(&mut body, 0, 1);
         put(&mut body, 8, 2);

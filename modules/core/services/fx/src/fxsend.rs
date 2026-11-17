@@ -318,7 +318,9 @@ pub unsafe fn apply<C: CoreApi>(core: &C, k: usize, owner: u8, tab: *const u8) {
         }
         copy(&mut s.name[c], name.as_ptr(), 16);
         let code = iw(inf, w::P_SEND) + c as u32;
-        core.write_send_param_row(
+        dkrt_svc_params::write_send_param_row(
+            core,
+            dkrt_svc_params::dynreg(core),
             code,
             iw(inf, w::TPL_PERCENT),
             iw(inf, w::TEMPLATE),
@@ -345,7 +347,11 @@ unsafe fn release<C: CoreApi>(core: &C, inf: *const u32, k: usize) {
     }
     let c = s.cell[k] as usize - 1;
     wr(iw(inf, w::ROW) + 8 + 4 * c as u32, 0);
-    core.reset_param_row(iw(inf, w::P_SEND) + c as u32);
+    dkrt_svc_params::reset_param_row(
+        core,
+        dkrt_svc_params::dynreg(core),
+        iw(inf, w::P_SEND) + c as u32,
+    );
     s.row[c] = 0;
     s.cell[k] = 0;
     s.route[k] = 0;

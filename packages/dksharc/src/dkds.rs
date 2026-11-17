@@ -142,7 +142,10 @@ impl<'a> Dkds<'a> {
 
     pub fn relocs(&self) -> Result<Vec<RawReloc>, String> {
         let n = self.reloc_count();
-        let raw = self.range(self.word(DSP_H_RELOC_OFF as usize), n.checked_mul(RELOC_LEN).ok_or("overflow")?)?;
+        let raw = self.range(
+            self.word(DSP_H_RELOC_OFF as usize),
+            n.checked_mul(RELOC_LEN).ok_or("overflow")?,
+        )?;
         Ok(raw
             .chunks_exact(RELOC_LEN)
             .map(|r| RawReloc {

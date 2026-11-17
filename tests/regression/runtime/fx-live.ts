@@ -29,6 +29,7 @@ import { expectRuntimeUi } from './ready.ts';
 import { deviceProfile } from './device-data.ts';
 import type { FxExpectations } from './dkm-parse.ts';
 import { committedFxExpectations } from './pack-needs.ts';
+import { serviceSymbol } from './service-symbols.ts';
 import { planSymbol, prepareRuntimePlanOffline, validateRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
 import { GAIN, SINE } from './fixtures.ts';
@@ -463,7 +464,7 @@ export async function inspect(
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([names.length, names.length, 1]);
   expect(fields.slice(10)).toEqual(names.map(() => 0));
-  const assigned = planSymbol(plan, 'DKRT_ASSIGN');
+  const assigned = await serviceSymbol({ session }, plan, 'machines', 'DKRT_ASSIGN');
   expect(await word(session, assigned)).toBe(0x444b4153);
   expect(await word(session, assigned + 4)).toBe(1);
   expect(modules[0]!.types).toHaveLength(1);
@@ -601,7 +602,7 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
           { device, firmware: FIRMWARE[device], runtime: { patchSet: config.patchSet } },
           artifacts,
           artifacts,
-          ['DKRT_BOOT', 'DKRT_ASSIGN', 'fx.rows', '_dl_area'],
+          ['DKRT_BOOT', 'fx.rows', '_dl_area'],
         );
         plan = prepared.plan;
         watchOutput = path.join(artifacts, 'writewatch.jsonl');

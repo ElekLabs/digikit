@@ -14,7 +14,7 @@
 use crate::platform::st;
 use crate::safe_mode::{key_held, DKRT_STABLE_BLOCKS, LATE_FLOOR};
 use crate::selection::{current, update, Choice, REC, REC_COPY, REC_VALID};
-use crate::{assign, card, fault, dlog, loader};
+use crate::{card, fault, dlog, loader, store};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::sel::{self, Record};
 use dkrt_sdk::*;
@@ -180,8 +180,8 @@ pub unsafe extern "C" fn dkrt_boot() {
     }
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
-    // the type numbers of every machine of the selection, before the first load (reads the files; the staging buffer is free)
-    assign::plan(&r);
+    // the header table of every file of the selection, before the first load (reads the files; the staging buffer is free): the plan reads them
+    read_tables(&r);
     // the boot plan over the header tables that read gave, with the providers the search found for the hard needs the runtime does not meet: the order to
     // load in, and a module the plan refuses is not loaded
     let mut planned = loader::plan_selection(r.count as usize);
@@ -197,11 +197,21 @@ pub unsafe extern "C" fn dkrt_boot() {
     crate::selection::BOOT_IDX = u32::MAX;
     // core/introblank: no module took the intro, so the black intro has nothing to wait for
     crate::intro::end_blank();
-    // the sticky map: written once, after the loads, and only when this boot changed it
-    if let Some(map) = assign::changed_map() {
-        let mut nr = REC;
-        nr.map = map;
-        update(nr, REC_COPY, REC_VALID);
+}
+
+/// Read the file of each selected module into the staging buffer and keep its header table for the boot plan (`loader::capture`). A file that is missing, torn or
+/// not a `.dkm` has none (its load reports the error).
+unsafe fn read_tables(rec: &Record) {
+    loader::reset_plan();
+    let mut k = 0;
+    while k < rec.count as usize {
+        if let Ok(found) = store::find(rec.paths[k].as_ptr()) {
+            if store::load_to_stage(&found) == OK {
+                let file = core::slice::from_raw_parts(store::stage() as *const u8, found.size as usize);
+                loader::capture(k, file);
+            }
+        }
+        k += 1;
     }
 }
 

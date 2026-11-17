@@ -17,7 +17,7 @@ fn table(device: u32) -> Vec<u32> {
     t[w::ROWS] = 0x4200_0000;
     t[w::FIRST] = 7;
     t[w::COUNT] = 3;
-    t[w::R_FT] = 0x4002_7582;
+    t[w::N_CODE] = 0x4000_2000;
     t
 }
 
@@ -137,6 +137,65 @@ fn the_tail_a_hook_names_is_the_hash_of_its_hook() {
                 .iter()
                 .any(|h| t == format!("dk_tail_{:08x}", name_hash(h))),
             "{t} is the tail of no hook"
+        );
+    }
+}
+
+/// The aliases the assembler files use for firmware (`mf_x_*` exits, `mf_ret_*`, `mf_stock_*`, `mf_spt`, `mf_rc<n>`) are exactly the `[object.externs]` of module.toml: an alias
+/// without an entry would stay an unresolved import, an entry without a use is stale. Each target resolves to an import family of `patchkit bind` (`hook.<hook>.exit[.n]|ret|stock|tail`
+/// or `cf.<name>`), and its hook is one the service takes or the fill (`frametype`) enters.
+#[test]
+fn the_firmware_aliases_of_the_assembler_are_the_externs_of_the_module() {
+    let toml = include_str!("../module.toml");
+    let externs: Vec<(String, String)> = toml
+        .split("[object.externs]")
+        .nth(1)
+        .unwrap()
+        .lines()
+        .skip(1)
+        .take_while(|l| !l.starts_with('['))
+        .filter_map(|l| {
+            let (k, v) = l.split_once('=')?;
+            Some((k.trim().to_string(), v.trim().trim_matches('"').to_string()))
+        })
+        .filter(|(k, _)| !k.starts_with('#') && !k.is_empty())
+        .collect();
+    assert!(externs.len() > 20);
+    let all = [
+        include_str!("../src/hooks-common.s"),
+        include_str!("../src/hooks-dt2.s"),
+        include_str!("../src/hooks-dn2.s"),
+    ]
+    .concat();
+    let code: String = all
+        .lines()
+        .map(|l| l.split('|').next().unwrap().split("/*").next().unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let words: std::collections::BTreeSet<&str> = code
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .filter(|w| {
+            w.starts_with("mf_x_")
+                || w.starts_with("mf_ret_")
+                || w.starts_with("mf_stock_")
+                || w == &"mf_spt"
+                || (w.starts_with("mf_rc") && w.len() == 6)
+        })
+        .collect();
+    for (alias, target) in &externs {
+        assert!(
+            words.contains(alias.as_str()),
+            "{alias} = {target:?} is never used"
+        );
+        assert!(
+            target.starts_with("cf.") || target.starts_with("hook."),
+            "{alias}: {target}"
+        );
+    }
+    for w in &words {
+        assert!(
+            externs.iter().any(|(k, _)| k == w),
+            "{w} has no entry in [object.externs]"
         );
     }
 }

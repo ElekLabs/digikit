@@ -1,28 +1,56 @@
 //! `machines` service, record handlers (interface B): the machine, parameter, page, click-action and native-page records of the
 //! `register` section, and the voice parts of the DSP section. The registry walker (`registry.rs`) calls them through
-//! `handlers::Service`; the rows and strings they fill are the registry's state (`CoreApi::reg_state`).
+//! `handlers::Service`; the rows and strings they fill are the registry's state (`DKRT_REG`, a static of this service).
 use crate::{dsp, nativepage, slots};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspSec;
 use dkrt_abi::mem::{cstr_len, iw, rd, rd32, wr};
-use dkrt_abi::registry::{each, w, MACH_TEXT};
+use dkrt_abi::registry::each;
 use dkrt_abi::service::{
-    check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, RowWrite, Service,
+    check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, ModuleCommitCtx,
+    RowWrite, Service, SettleCtx,
 };
 use dkrt_sdk::records::{
     KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
     LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
 };
 use dkrt_sdk::*;
+use dkrt_svc_params::dynreg::{w, RegState, MACH_TEXT};
+
+/// The registry's state: who owns each reserved machine, parameter and page row (module record index + 1, 0 free) and the strings the rows use. One machines
+/// service, one state: a static of this crate, so it lives in `machines.dks` (the symbol stays for the test tools).
+#[no_mangle]
+pub static mut DKRT_REG: RegState = unsafe { core::mem::zeroed() };
+
+pub fn rstate() -> &'static mut RegState {
+    unsafe { &mut *addr_of_mut!(DKRT_REG) }
+}
+
+/// The code of the first run-time parameter row (a row `k` has code `param_first + k`); `u32::MAX` without a registry.
+pub fn param_first<C: CoreApi>(core: &C) -> u32 {
+    unsafe {
+        let inf = dkrt_svc_params::dynreg(core);
+        if inf.is_null() {
+            u32::MAX
+        } else {
+            iw(inf, w::P_DYN0)
+        }
+    }
+}
+
+/// The owner of each run-time parameter row.
+pub fn param_owners() -> &'static [u8] {
+    unsafe { &(*addr_of!(DKRT_REG)).param_owner }
+}
 
 /// The reserved machine, parameter and page rows as (rows the registry has, rows in use); (0, 0) without a registry (for CAPACITY).
 unsafe fn counts<C: CoreApi>(core: &C) -> [(u32, u32); 3] {
-    let inf = core.dynreg();
+    let inf = dkrt_svc_params::dynreg(core);
     if inf.is_null() {
         return [(0, 0); 3];
     }
-    let s = core.reg_state();
+    let s = rstate();
     let used = |o: &[u8]| {
         let mut n = 0;
         let mut k = 0;
@@ -51,8 +79,8 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 pub struct Machines;
 
 impl<C: CoreApi> Service<C> for Machines {
-    unsafe fn machine_types_of(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
-        types_of(core, owner, out) as u32
+    unsafe fn owned_ids(_core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
+        types_of(owner, out) as u32
     }
 
     unsafe fn declare(d: &mut Declare) {
@@ -64,15 +92,27 @@ impl<C: CoreApi> Service<C> for Machines {
         d.kind(KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2);
     }
 
-    unsafe fn fits(inf: *const u32) -> bool {
-        // the table must fit this registry's state (a table that says more rows than the state has would index past it)
-        !(iw(inf, w::M_DYN_N) as usize > MAX_MACH
-            || iw(inf, w::P_DYN_N) as usize > MAX_PARAM
-            || iw(inf, w::PG_DYN_N) as usize > MAX_PAGE)
+    unsafe fn settle(core: &C, s: &SettleCtx) {
+        crate::assign::plan(core, s)
     }
 
     unsafe fn check(core: &C, step: u32, c: &CheckCtx) -> i32 {
         use check_step as st;
+        let inf = dkrt_svc_params::dynreg(core);
+        if inf.is_null() || !fits(inf) {
+            // the machine, parameter, page, action and native page records need this registry: a section without them does not
+            let none = counts_of(c.reg) == (0, 0, 0, 0, 0);
+            return if step == st::COUNTS && !none {
+                E_NO_REGISTRY
+            } else {
+                OK
+            };
+        }
+        let c = &Ctx {
+            reg: c.reg,
+            image_size: c.image_size,
+            inf,
+        };
         if step == st::COUNTS {
             ck_counts(c)
         } else if step == st::ACTIONS {
@@ -93,7 +133,23 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn apply(core: &C, c: &ApplyCtx) -> i32 {
-        apply(core, c)
+        let inf = dkrt_svc_params::dynreg(core);
+        if inf.is_null() {
+            return if counts_of(c.reg) == (0, 0, 0, 0, 0) {
+                OK
+            } else {
+                E_NO_REGISTRY
+            };
+        }
+        apply(
+            core,
+            &AppCtx {
+                owner: c.owner,
+                reg: c.reg,
+                base: c.base,
+                inf,
+            },
+        )
     }
 
     unsafe fn apply_record(core: &C, kind: u32, body: *const u8, c: &ApplyCtx) -> i32 {
@@ -101,7 +157,16 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn remove(core: &C, owner: u8) {
+        crate::build::end();
         remove(core, owner)
+    }
+
+    unsafe fn module_begin(_core: &C, rec: usize) {
+        crate::build::begin(rec)
+    }
+
+    unsafe fn module_commit(core: &C, rec: usize, c: &ModuleCommitCtx) -> i32 {
+        crate::build::commit(core, rec, c)
     }
 
     unsafe fn tick(core: &C, phase: u32) {
@@ -122,7 +187,7 @@ impl<C: CoreApi> Service<C> for Machines {
         } else if kind == CAPK_PAGE_ROWS {
             Some(counts(core)[2])
         } else if kind == CAPK_MAP_ENTRIES {
-            Some((dkrt_sdk::sel::MAP_N as u32, core.type_map_used()))
+            Some((dkrt_sdk::sel::MAP_N as u32, crate::assign::map_used()))
         } else {
             None
         }
@@ -141,20 +206,6 @@ impl<C: CoreApi> Service<C> for Machines {
             faults: core.guard_faults(ty),
             disabled: core.guard_disabled(ty),
         })
-    }
-
-    unsafe fn has_voice(core: &C, rec: usize, ty: u32) -> bool {
-        dsp::voice_row(core, rec, ty).is_some()
-    }
-
-    unsafe fn declare_voice(
-        core: &C,
-        rec: usize,
-        ty: u32,
-        rng: [u32; 8],
-        latched: u32,
-    ) -> Option<i32> {
-        dsp::voice_row(core, rec, ty).map(|row| dsp::set_declared(core, row, rng, latched))
     }
 
     unsafe fn dsp_check_sections(core: &C, sec: &DspSec) -> i32 {
@@ -184,6 +235,28 @@ impl<C: CoreApi> Service<C> for Machines {
     unsafe fn dsp_row_step(core: &C, rec: usize, want: &mut u32, write: bool) -> Option<RowWrite> {
         dsp::row_step(core, rec, want, write)
     }
+}
+
+/// What the checks read: the section and the words of `dynreg_info`.
+struct Ctx {
+    reg: *const u8,
+    image_size: u32,
+    inf: *const u32,
+}
+
+/// What `apply` reads: the owner, the section, the load address and the words of `dynreg_info`.
+struct AppCtx {
+    owner: u8,
+    reg: *const u8,
+    base: u32,
+    inf: *const u32,
+}
+
+/// The table must fit this registry's state (a table that says more rows than the state has would index past it).
+unsafe fn fits(inf: *const u32) -> bool {
+    !(iw(inf, w::M_DYN_N) as usize > MAX_MACH
+        || iw(inf, w::P_DYN_N) as usize > MAX_PARAM
+        || iw(inf, w::PG_DYN_N) as usize > MAX_PAGE)
 }
 
 /// A NUL-terminated printable-ASCII text of exactly `field` bytes, 1 to `field - 1` characters.
@@ -236,7 +309,7 @@ unsafe fn counts_of(reg: *const u8) -> (u32, u32, u32, u32, u32) {
 
 /// The most rows of each kind the registry has.
 #[allow(unused_variables)]
-unsafe fn ck_counts(c: &CheckCtx) -> i32 {
+unsafe fn ck_counts(c: &Ctx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
     if np as usize > MAX_PARAM || nm as usize > MAX_MACH || ng as usize > MAX_PAGE || nn > 2 * nm {
@@ -247,7 +320,7 @@ unsafe fn ck_counts(c: &CheckCtx) -> i32 {
 
 /// An action names a parameter of the file and code inside the image; a parameter has at most one.
 #[allow(unused_variables)]
-unsafe fn ck_actions(c: &CheckCtx) -> i32 {
+unsafe fn ck_actions(c: &Ctx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
     // an action names a parameter of the file and code inside the image; a parameter has at most one
@@ -271,7 +344,7 @@ unsafe fn ck_actions(c: &CheckCtx) -> i32 {
 
 /// Native pages: each record, the claimed pages, the bindings against the machine's parameters.
 #[allow(unused_variables)]
-unsafe fn ck_native<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
+unsafe fn ck_native<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
     let mut native_set = nativepage::PageSet::<MAX_MACH>::new();
@@ -358,7 +431,7 @@ unsafe fn ck_native<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
 
 /// Pages need a device that has page rows.
 #[allow(unused_variables)]
-unsafe fn ck_device(c: &CheckCtx) -> i32 {
+unsafe fn ck_device(c: &Ctx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
     // pages need a device that has page rows
@@ -371,10 +444,10 @@ unsafe fn ck_device(c: &CheckCtx) -> i32 {
 
 /// The parameter, page and machine records, in file order.
 #[allow(unused_variables)]
-unsafe fn ck_records<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
+unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
-    let s = core.reg_state();
+    let s = rstate();
     // pass 2: the records
     let has_pages = iw(inf, w::PG_ROWS) != 0;
     let (p_first, knobs, slot_base) = (
@@ -426,7 +499,7 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
             }
         } else {
             // the first word is a machine key; `assign` has the number for it (0: none, which is out of range below)
-            let t = core.type_resolve(rd32(b));
+            let t = crate::assign::resolve(core, rd32(b));
             let clone = rd32(b.add(4));
             let own = rd32(b.add(12));
             if rd32(b.add(8)) != 255
@@ -486,7 +559,7 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
 
 /// A page belongs to a machine of the same file.
 #[allow(unused_variables)]
-unsafe fn ck_owners<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
+unsafe fn ck_owners<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
     // a page belongs to a machine of the same file
@@ -495,10 +568,10 @@ unsafe fn ck_owners<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
         if kind != KIND_PAGE || bad != OK {
             return;
         }
-        let t = core.type_resolve(rd32(b));
+        let t = crate::assign::resolve(core, rd32(b));
         let mut found = false;
         each(reg, |k, m| {
-            found |= k == KIND_MACHINE && core.type_resolve(rd32(m)) == t;
+            found |= k == KIND_MACHINE && crate::assign::resolve(core, rd32(m)) == t;
         });
         if !found {
             bad = E_FORMAT;
@@ -512,10 +585,10 @@ unsafe fn ck_owners<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
 
 /// Free reserved page and parameter rows.
 #[allow(unused_variables)]
-unsafe fn ck_rows<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
+unsafe fn ck_rows<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
-    let s = core.reg_state();
+    let s = rstate();
     // free reserved page and parameter rows
     return capacity::registry_rows(
         ng,
@@ -526,9 +599,10 @@ unsafe fn ck_rows<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
 }
 
 /// Fill the reserved parameter, action, page and machine rows from the (checked) records.
-unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
-    let (owner, reg, base, inf, args) = (ctx.owner, ctx.reg, ctx.base, ctx.inf, ctx.args);
-    let s = core.reg_state();
+unsafe fn apply<C: CoreApi>(core: &C, ctx: &AppCtx) -> i32 {
+    let (owner, reg, base, inf, args) =
+        (ctx.owner, ctx.reg, ctx.base, ctx.inf, crate::build::args());
+    let s = rstate();
     // parameters first: their codes are what the machines' knobs name
     let mut codes = [0u32; MAX_PARAM];
     let mut rows = [0usize; MAX_PARAM]; // the file's parameter i sits in row rows[i]
@@ -551,7 +625,8 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
         np += 1;
         copy_text(s.s.param_name[k].as_mut_ptr(), b.add(24), 32);
         copy_text(s.s.param_short[k].as_mut_ptr(), b.add(56), 16);
-        core.write_param_row(
+        dkrt_svc_params::write_param_row(
+            core,
             inf,
             code,
             rd32(b.add(4)),
@@ -596,12 +671,12 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
             b.add(40 + MACH_TEXT),
             MACH_TEXT,
         );
-        let name = core.make_rep(
+        let name = dkrt_svc_params::make_rep(
             s.s.rep_pname[k].as_mut_ptr(),
             s.s.page_name[k].as_ptr(),
             false,
         );
-        let title = core.make_rep(
+        let title = dkrt_svc_params::make_rep(
             s.s.rep_ptitle[k].as_mut_ptr(),
             s.s.page_title[k].as_ptr(),
             false,
@@ -629,7 +704,10 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
         wr(s0 + 4 * KNOBS as u32, 0);
         wr(row + iw(inf, w::PGO_NAME), name);
         wr(row + iw(inf, w::PGO_TITLE), title);
-        wr(row + iw(inf, w::PGO_MACH), core.type_resolve(rd32(b))); // the page belongs to its machine from this store on
+        wr(
+            row + iw(inf, w::PGO_MACH),
+            crate::assign::resolve(core, rd32(b)),
+        ); // the page belongs to its machine from this store on
     });
     // machines
     let knobs = iw(inf, w::KNOBS) as usize;
@@ -637,7 +715,7 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
         if kind != KIND_MACHINE {
             return;
         }
-        let t = core.type_resolve(rd32(b));
+        let t = crate::assign::resolve(core, rd32(b));
         let clone = rd32(b.add(4));
         let k = (t - iw(inf, w::M_DYN0)) as usize;
         let row = iw(inf, w::M_ROWS) + (t - iw(inf, w::M_FIRST)) * iw(inf, w::M_ROW_SIZE);
@@ -666,12 +744,12 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
             b.add(52 + MACH_TEXT),
             MACH_TEXT,
         );
-        let long = core.make_rep(
+        let long = dkrt_svc_params::make_rep(
             s.s.rep_long[k].as_mut_ptr(),
             s.s.mach_name[k].as_ptr(),
             true,
         );
-        let short = core.make_rep(
+        let short = dkrt_svc_params::make_rep(
             s.s.rep_short[k].as_mut_ptr(),
             s.s.mach_short[k].as_ptr(),
             true,
@@ -722,7 +800,7 @@ unsafe fn apply_record<C: CoreApi>(core: &C, kind: u32, b: *const u8, c: &ApplyC
     if !nativepage::is_kind(kind) {
         return OK;
     }
-    let (reg, base, args) = (c.reg, c.base, c.args);
+    let (reg, base, args) = (c.reg, c.base, crate::build::args());
     let st = &mut *addr_of_mut!(APPLIED);
     let (codes, np, ni) = (&st.codes, st.np, st.ni);
     let mut rc = OK;
@@ -769,11 +847,11 @@ unsafe fn apply_record<C: CoreApi>(core: &C, kind: u32, b: *const u8, c: &ApplyC
 
 /// Give back the machine rows `owner` filled (hidden, then reset to a gap row), then its pages, then its parameters.
 unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
-    let inf = core.dynreg();
+    let inf = dkrt_svc_params::dynreg(core);
     if inf.is_null() {
         return;
     }
-    let s = core.reg_state();
+    let s = rstate();
     let empty = iw(inf, w::EMPTY);
     let knobs = iw(inf, w::KNOBS) as usize;
     let first = iw(inf, w::M_FIRST);
@@ -785,7 +863,7 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
             let row = iw(inf, w::M_ROWS) + (t - first) * iw(inf, w::M_ROW_SIZE);
             wr(row + iw(inf, w::O_NAME), empty); // hide first
             s.empty_rep = [0, 0, 0xffff_ffff, 0];
-            let rep = addr_of!(core.reg_state().empty_rep) as u32 + 12;
+            let rep = addr_of!(rstate().empty_rep) as u32 + 12;
             wr(row + iw(inf, w::O_LONG), rep);
             wr(row + iw(inf, w::O_SHORT), rep);
             wr(row + iw(inf, w::O_SNAME), empty);
@@ -819,7 +897,7 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
                 + (iw(inf, w::PG_DYN0) + k as u32 - iw(inf, w::PG_FIRST)) * iw(inf, w::PG_ROW_SIZE);
             wr(row + iw(inf, w::PGO_MACH), iw(inf, w::PG_FREE));
             s.empty_rep = [0, 0, 0xffff_ffff, 0];
-            let rep = addr_of!(core.reg_state().empty_rep) as u32 + 12;
+            let rep = addr_of!(rstate().empty_rep) as u32 + 12;
             wr(row + iw(inf, w::PGO_NAME), rep);
             wr(row + iw(inf, w::PGO_TITLE), rep);
             let (c0, s0) = (row + iw(inf, w::PGO_C), row + iw(inf, w::PGO_S));
@@ -838,7 +916,8 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     k = 0;
     while k < MAX_PARAM {
         if s.param_owner[k] == owner {
-            core.write_param_row(
+            dkrt_svc_params::write_param_row(
+                core,
                 inf,
                 iw(inf, w::P_DYN0) + k as u32,
                 iw(inf, w::RESERVE_TEMPLATE),
@@ -857,8 +936,8 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
 }
 
 /// The machine type numbers of the machine rows `owner` filled (at most 8), in type order; returns how many.
-pub fn types_of<C: CoreApi>(core: &C, owner: u8, out: &mut [u8; MAX_MACH]) -> usize {
-    let s = core.reg_state();
+pub fn types_of(owner: u8, out: &mut [u8; MAX_MACH]) -> usize {
+    let s = rstate();
     let first = dkrt_sdk::device::DYN_TYPE_FIRST;
     let mut n = 0;
     let mut k = 0;

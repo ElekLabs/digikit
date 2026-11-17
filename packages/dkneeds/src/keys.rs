@@ -9,8 +9,8 @@
 //!       u16 tag, u16 count, u32 payload_bytes (a multiple of 4), the payload
 //! ```
 //!
-//! The writer picks the version by content: 2 if and only if the table has `PROVIDES` or `BIND` items, else 1. A reader accepts both. `PROVIDES`
-//! and `BIND` are valid only in a version 2 table, and the `SLOTS` item has 12 bytes there (8 in version 1).
+//! The writer picks the version by content: 2 if and only if the table has `PROVIDES`, `BIND` or `FW` items, else 1. A reader accepts both. `PROVIDES`,
+//! `BIND` and `FW` are valid only in a version 2 table, and the `SLOTS` item has 12 bytes there (8 in version 1).
 //!
 //! Entries (the payload of each of `count` items):
 //! - `NEEDS` (12 bytes): u32 service name hash (`name_hash`), u32 minimum version (major << 16 | minor << 8 | patch), u32 flags (bit 0: hard).
@@ -26,6 +26,8 @@
 //! - `PROVIDES` (8, version 2): u32 service name hash, u32 version: the services the module provides.
 //! - `BIND` (`count` items of u32 site hash, u32 firmware address, u32 stock length, u32 trampoline offset (image offset), then the stock
 //!   bytes padded to 4; at most 64 stock bytes): the firmware sites a service is bound to. The entry is used up exactly.
+//! - `FW` (8, version 2): the first 8 bytes of the SHA-256 of the stock firmware image the file was bound to (`patchkit bind` writes it when the file holds a
+//!   firmware address). The loader compares it with the `fw_id` entry of the image's info table; a file has at most one.
 //!
 //! The packer always writes a table (a module that needs and keeps nothing has the 8-byte head). A file with no table or another magic is the
 //! format of runtime 0.7: the loader refuses it with `E_CONTRACT`.
@@ -57,7 +59,11 @@ pub mod tag {
     pub const RESOURCES: u16 = 8;
     pub const PROVIDES: u16 = 9;
     pub const BIND: u16 = 10;
+    pub const FW: u16 = 11;
 }
+
+/// Bytes of one `FW` item (the first 8 bytes of the stock firmware's SHA-256).
+pub const FW_BYTES: usize = 8;
 
 /// Most stock bytes of one `BIND` item.
 pub const BIND_STOCK_MAX: usize = 64;
@@ -188,12 +194,14 @@ pub struct Table<'a> {
     pub provides: &'a [Pair],
     /// A table with any is written as version 2.
     pub bind: &'a [Bind<'a>],
+    /// The firmware identity items (a file has at most one; the loader refuses more). A table with any is written as version 2.
+    pub fw: &'a [[u8; FW_BYTES]],
 }
 
 impl Table<'_> {
-    /// The version `write_table` writes: 2 if and only if the table has `PROVIDES` or `BIND` items.
+    /// The version `write_table` writes: 2 if and only if the table has `PROVIDES`, `BIND` or `FW` items.
     pub fn version(&self) -> u16 {
-        if self.provides.is_empty() && self.bind.is_empty() {
+        if self.provides.is_empty() && self.bind.is_empty() && self.fw.is_empty() {
             1
         } else {
             2
@@ -201,7 +209,7 @@ impl Table<'_> {
     }
 
     /// (tag, items, payload bytes) of each entry, in tag order.
-    fn entries(&self) -> [(u16, usize, usize); 10] {
+    fn entries(&self) -> [(u16, usize, usize); 11] {
         let kb: usize = self.keys.iter().map(|g| 8 + 4 * g.keys.len()).sum();
         let bb: usize = self
             .bind
@@ -224,6 +232,7 @@ impl Table<'_> {
             ),
             (tag::PROVIDES, self.provides.len(), 8 * self.provides.len()),
             (tag::BIND, self.bind.len(), bb),
+            (tag::FW, self.fw.len(), FW_BYTES * self.fw.len()),
         ]
     }
 }
@@ -317,6 +326,11 @@ pub fn write_table(t: &Table, out: &mut [u8]) -> Result<usize, KeysError> {
                 out[at..at + x.stock.len()].copy_from_slice(x.stock);
                 at += x.stock.len().div_ceil(4) * 4;
             }
+        } else if tg == tag::FW {
+            for x in t.fw {
+                out[at..at + FW_BYTES].copy_from_slice(x);
+                at += FW_BYTES;
+            }
         } else {
             let list = if tg == tag::HOOKS {
                 t.hooks
@@ -370,7 +384,7 @@ fn entry(bytes: &[u8], t: u16) -> Option<(usize, &[u8])> {
 
 impl<'a> Keys<'a> {
     /// `bytes` is exactly the table (`H_KEYS_SIZE` bytes from `H_KEYS_OFF`). Size 0, another magic or a version other than `1..=VERSION` is
-    /// `Format`: the file is from an older or a newer packer. `PROVIDES` and `BIND` in a version 1 table are `Tag`.
+    /// `Format`: the file is from an older or a newer packer. `PROVIDES`, `BIND` and `FW` in a version 1 table are `Tag`.
     pub fn parse(bytes: &'a [u8]) -> Result<Keys<'a>, KeysError> {
         if bytes.len() < HEAD
             || bytes.len() % 4 != 0
@@ -391,7 +405,7 @@ impl<'a> Keys<'a> {
             let count = u16_at(bytes, at + 2) as usize;
             let len = u32_at(bytes, at + 4) as usize;
             let top = if version >= 2 {
-                tag::BIND
+                tag::FW
             } else {
                 tag::RESOURCES
             };
@@ -675,6 +689,22 @@ impl<'a> Keys<'a> {
         self.count(tag::BIND)
     }
 
+    /// How many `FW` items the table has (a bound file has one).
+    pub fn fw_count(&self) -> usize {
+        self.count(tag::FW)
+    }
+
+    /// `FW` item `i`: the first 8 bytes of the stock firmware's SHA-256; `None` outside the entry.
+    pub fn fw(&self, i: usize) -> Option<[u8; FW_BYTES]> {
+        let (n, body) = entry(self.bytes, tag::FW)?;
+        if i >= n {
+            return None;
+        }
+        let mut out = [0u8; FW_BYTES];
+        out.copy_from_slice(&body[FW_BYTES * i..FW_BYTES * (i + 1)]);
+        Some(out)
+    }
+
     /// `BIND` item `i`; `None` outside the entry.
     pub fn bind(&self, i: usize) -> Option<BindRef<'a>> {
         let (n, body) = entry(self.bytes, tag::BIND)?;
@@ -951,6 +981,49 @@ mod tests {
         assert_eq!((b1.site, b1.addr, b1.len, b1.tramp), (6, 0x5678, 0, 0x40));
         assert!(b1.stock.is_empty());
         assert!(k.bind(2).is_none());
+    }
+
+    #[test]
+    fn an_fw_item_round_trips_and_makes_a_version_2_table() {
+        let id = [0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
+        let stock = [1u8, 2, 3, 4];
+        let binds = [Bind {
+            site: 5,
+            addr: 0x1234,
+            tramp: 0x20,
+            stock: &stock,
+        }];
+        let t = Table {
+            fw: &[id],
+            bind: &binds,
+            ..v2_table(&binds)
+        };
+        let mut out = [0u8; 512];
+        let n = write_table(&t, &mut out).unwrap();
+        assert_eq!(n, table_size(&t));
+        let k = Keys::parse(&out[..n]).unwrap();
+        // FW has the highest tag, so it is the last entry, behind BIND
+        assert_eq!((k.fw_count(), k.fw(0), k.fw(1)), (1, Some(id), None));
+        assert_eq!(k.bind_count(), 1);
+        assert_eq!(&out[n - 8..n], &id);
+        // a table whose only item is FW is version 2 too (a service that holds firmware addresses and no hook)
+        let only = Table {
+            fw: &[id],
+            ..Table::default()
+        };
+        assert_eq!(only.version(), 2);
+        let mut out = [0u8; 64];
+        let n = write_table(&only, &mut out).unwrap();
+        assert_eq!(Keys::parse(&out[..n]).unwrap().fw(0), Some(id));
+        // the same table in a version 1 head is refused (FW is a version 2 tag)
+        out[5] = 1;
+        assert_eq!(Keys::parse(&out[..n]).unwrap_err(), KeysError::Tag);
+        // without FW the table is as before: no entry, no bytes
+        let t = v2_table(&binds);
+        let mut a = [0u8; 512];
+        let n = write_table(&t, &mut a).unwrap();
+        let k = Keys::parse(&a[..n]).unwrap();
+        assert_eq!((k.fw_count(), k.fw(0)), (0, None));
     }
 
     #[test]

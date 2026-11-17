@@ -14,7 +14,6 @@
 use crate::dsp::DspState;
 use crate::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use crate::platform::SampleHost;
-use crate::registry::RegState;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
 /// The `done` status of a job that was cancelled (`sdk/include/dk/platform/job.h`).
@@ -31,56 +30,16 @@ pub trait SampleCore: CoreApi {
     fn host(&self) -> &Self::Host;
 }
 
-pub trait CoreApi {
+pub trait CoreApi: crate::mem::FwMem {
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
-    /// The words of `dynreg_info` (`registry::w`); null without a registry.
-    unsafe fn dynreg(&self) -> *const u32;
-    /// The ownership and string state of the reserved machine, parameter and page rows.
-    fn reg_state(&self) -> &'static mut RegState;
-    /// The code of the first run-time parameter row; `u32::MAX` without a registry.
-    fn param_first(&self) -> u32;
-    /// The owner (module record + 1, 0 free) of each run-time parameter row.
-    fn param_owners(&self) -> &[u8];
-    /// Write one parameter table row from its lowering spec (`inf` is `dynreg()`).
-    unsafe fn write_param_row(
-        &self,
-        inf: *const u32,
-        code: u32,
-        template: u32,
-        slot: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-        name: u32,
-        short: u32,
-    );
-    unsafe fn write_fx_param_row(
-        &self,
-        code: u32,
-        template: u32,
-        mirror: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-        name: u32,
-        short: u32,
-    );
-    unsafe fn write_send_param_row(
-        &self,
-        code: u32,
-        class: u32,
-        owner_of: u32,
-        mirror: u32,
-        name: u32,
-        short: u32,
-    );
-    unsafe fn reset_param_row(&self, code: u32);
-    /// A firmware string representation of `src` at `rep`; the address of its characters.
-    unsafe fn make_rep(&self, rep: *mut u8, src: *const u8, upper: bool) -> u32;
-    /// The machine type number for machine key `key` of the module being loaded (sticky assignment); 0 when there is none.
-    unsafe fn type_resolve(&self, key: u32) -> u32;
-    /// Entries of the sticky type map in use (for CAPACITY).
-    fn type_map_used(&self) -> u32;
+    /// The selection index of the module being loaded (`u32::MAX` outside a module load): a service that planned something per selected module (`Service::settle`) finds
+    /// the module's part by it.
+    fn boot_index(&self) -> u32;
+    /// The 32 bytes of the selection record's reserved area that a service kept its state in before it had a settings key (all 0: none), read once to migrate them. Removed one
+    /// release after the last service has migrated.
+    fn legacy_state(&self) -> [u8; 32];
+    /// Zero those bytes in the record on the card, once the service has its state in its own settings key; `OK` or an error (the service tries again at the next boot).
+    unsafe fn legacy_state_clear(&self) -> i32;
     /// What the DSP guard counted for machine type `ty`: faults and whether it disabled the type.
     unsafe fn guard_faults(&self, ty: u32) -> u32;
     unsafe fn guard_disabled(&self, ty: u32) -> bool;
@@ -92,6 +51,9 @@ pub trait CoreApi {
     // ---- the module table ------------------------------------------------------------------------------------------------
     /// The NUL-terminated id of module record `owner - 1` (`owner` is 1 or more).
     unsafe fn module_name(&self, owner: u8) -> *const u8;
+    /// The record of the module whose context is `ctx`, as record index + 1, when that module is the code running now (a call with another module's context, or
+    /// from no module, gives 0). The services use it for the handle a module opens.
+    unsafe fn module_of(&self, ctx: *const u8) -> u8;
 
     // ---- settings --------------------------------------------------------------------------------------------------------
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32;
@@ -111,31 +73,6 @@ pub trait CoreApi {
         ctx: *mut u8,
     ) -> i32;
     unsafe fn job_cancel(&self, owner: u8, id: u32) -> i32;
-
-    // ---- the native page adapter (core/machines) -----------------------------------------------------------------------------
-    /// Whether the firmware has the native page calls of record kind `kind` (`KIND_NATIVE_PAGE` or `KIND_NATIVE_PAGE_V2`).
-    fn native_available(&self, kind: u32) -> bool;
-    /// Register a native page for machine type `owner`: `title` (a NUL-terminated text), the absolute `draw` and `event` callbacks, eight `[kind, value, position]`
-    /// bindings, the `word_count` parameter codes of its snapshot and the callbacks' `arg` (`with_arg`: 1 when there is one). A status (`OK` or `E_*`).
-    unsafe fn native_register(
-        &self,
-        kind: u32,
-        owner: u32,
-        page: u32,
-        flags: u32,
-        title: *const u8,
-        draw: u32,
-        event: u32,
-        bindings: *const u32,
-        words: *const u32,
-        word_count: u32,
-        arg: u32,
-        with_arg: u32,
-    ) -> i32;
-    /// Remove the native pages of machine type `kind` (before its callbacks and strings are released).
-    unsafe fn native_remove(&self, kind: u32);
-    /// The native handler of an encoder turn on `view`: nonzero when it consumed the turn.
-    unsafe fn native_turn(&self, view: *const u8, event: *const u8) -> u32;
 
     // ---- the DSP loader's state and tables -------------------------------------------------------------------------------
     /// The DSP loader's state and row table.

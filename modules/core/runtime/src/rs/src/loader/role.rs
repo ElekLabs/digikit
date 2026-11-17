@@ -7,7 +7,7 @@ use super::image::Head;
 use super::{Images, Loader, ProvRec, Registry};
 use dkneeds::keys::{tag, BindRef, Keys};
 use dkrt_abi::platform::Platform;
-use dkrt_sdk::{E_FORMAT, E_NOMEM, E_SVC_ABI, OK};
+use dkrt_sdk::{E_FORMAT, E_HOOK_STOCK, E_NOMEM, E_SVC_ABI, OK};
 
 /// What a role step may need of the file besides the record: the staged file (valid until `init` runs) and where its table and image are.
 #[derive(Clone, Copy)]
@@ -87,6 +87,32 @@ fn binds_of<'a>(keys: &Keys<'a>, out: &mut [BindRef<'a>; BIND_MAX]) -> usize {
 const BIND_MAX: usize = dkneeds::BIND_MAX as usize;
 const NO_BIND: BindRef<'static> = BindRef { site: 0, addr: 0, len: 0, tramp: 0, stock: &[] };
 
+/// The `FW` item of a bound file against the `fw_id` entry of the image's info table (the first 8 bytes of the SHA-256 of the stock firmware, two words). A file
+/// with `BIND` items and no `FW` item, or with more than one, is `E_FORMAT`; a file with no `FW` and no `BIND` holds no firmware address and is accepted. An `FW`
+/// item that the image does not match (another firmware, or an image with no `fw_id`) is `E_HOOK_STOCK`, the text of a site that is not stock.
+#[inline(never)]
+unsafe fn fw_check<P: Platform>(p: &P, keys: &Keys) -> Result<(), i32> {
+    let n = keys.fw_count();
+    if n > 1 || (n == 0 && keys.bind_count() != 0) {
+        return Err(E_FORMAT);
+    }
+    let Some(id) = keys.fw(0) else {
+        return Ok(());
+    };
+    let at = p.info(dkneeds::keys::name_hash("fw_id"));
+    if at.is_null() {
+        return Err(E_HOOK_STOCK);
+    }
+    let want = [
+        u32::from_be_bytes([id[0], id[1], id[2], id[3]]),
+        u32::from_be_bytes([id[4], id[5], id[6], id[7]]),
+    ];
+    if core::ptr::read_volatile(at) != want[0] || core::ptr::read_volatile(at.add(1)) != want[1] {
+        return Err(E_HOOK_STOCK);
+    }
+    Ok(())
+}
+
 unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {
     if !l.r.abi_ok(crate::rd32(file.add(dkneeds::H_SVC_ABI as usize))) {
         return E_SVC_ABI;
@@ -109,6 +135,10 @@ unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
     }
     if keys.bind_count() > BIND_MAX || keys.count(tag::EXPORTS) > EXPORTS_MAX {
         return E_FORMAT;
+    }
+    // the firmware the file was bound to is the firmware this image was patched from: checked before the stock bytes of the sites and before `init`
+    if let Err(e) = fw_check(&l.p, &keys) {
+        return e;
     }
     // every hook site holds the stock bytes the bind recorded: checked here, before `init` runs, and again under the mask at the install
     let mut binds = [NO_BIND; BIND_MAX];
@@ -212,12 +242,12 @@ pub fn role_of(head: &[u8; 64]) -> u32 {
     u32::from_be_bytes([head[at], head[at + 1], head[at + 2], head[at + 3]])
 }
 
-/// Whether the header table `keys` fits the role: a module (0) has no PROVIDES, HOOKS or BIND item; a service (1) has table version 2 and exactly one
+/// Whether the header table `keys` fits the role: a module (0) has no PROVIDES, HOOKS, BIND or FW item; a service (1) has table version 2 and exactly one
 /// PROVIDES item. Another role is `E_FORMAT`, like the other refusals.
 pub fn role_ok(role: u32, keys: &Keys) -> Result<(), i32> {
     if role == 0 {
         // No packer writes HOOKS for a module (patchkit major3.rs writes only USES and KEYS, dkm.rs adds NEEDS): HOOKS are a service's (role 1).
-        if keys.count(tag::PROVIDES) != 0 || keys.count(tag::HOOKS) != 0 || keys.count(tag::BIND) != 0 {
+        if keys.count(tag::PROVIDES) != 0 || keys.count(tag::HOOKS) != 0 || keys.count(tag::BIND) != 0 || keys.count(tag::FW) != 0 {
             return Err(E_FORMAT);
         }
         Ok(())
@@ -239,7 +269,7 @@ mod tests {
     use std::vec::Vec;
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[] };
 
     fn bytes(t: &Table) -> Vec<u8> {
         let mut b = vec![0u8; dkneeds::keys::table_size(t)];
@@ -273,6 +303,7 @@ mod tests {
     fn a_module_with_a_provides_hooks_or_bind_item_is_refused() {
         assert_eq!(check(0, &Table { provides: ONE, ..KEEP }), Err(E_FORMAT));
         assert_eq!(check(0, &Table { hooks: &[Pair { a: 9, b: 4 }], ..KEEP }), Err(E_FORMAT));
+        assert_eq!(check(0, &Table { fw: &[[0; 8]], ..KEEP }), Err(E_FORMAT));
     }
 
     #[test]

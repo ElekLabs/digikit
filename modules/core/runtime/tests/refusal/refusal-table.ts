@@ -29,6 +29,7 @@ const COMMIT = 'modules/core/runtime/tests/capacity/commit.device.test.ts';
 const NEEDS = 'modules/core/apps/digikit-menu/tests/needs.device.test.ts';
 const SAFE = 'modules/core/runtime/tests/safe-mode.device.test.ts';
 const COLLECT = 'modules/core/runtime/src/rs/src/collect/tests.rs';
+const MACHINES_BUILD = 'modules/core/services/machines/tests/build.rs';
 const CAP_RS = 'modules/core/runtime/sdk/src/capacity/tests.rs';
 const STORE_RS = 'modules/core/runtime/sdk/src/store/tests.rs';
 const CLEANUP = 'modules/core/runtime/src/rs/src/cleanup_tests.rs';
@@ -64,14 +65,14 @@ export const ROWS: Record<string, Row> = {
   E_NO_REGISTRY: { kind: 'open', reason: 'needs an image without a registry' },
   E_REG_DEVICE: { kind: 'open', reason: 'needs a module whose register section names the other device' },
   E_TYPE_RANGE: { kind: 'host', reason: 'a patched record', covered: [{ file: CAP_RS, test: 'E_TYPE_RANGE' }] },
-  E_TYPE_USED: { kind: 'host', reason: 'the registry hands out fresh types', covered: [{ file: COLLECT, test: 'E_TYPE_USED' }] },
-  E_PARAM_FULL: { kind: 'host', reason: 'collect tests fill the rows', covered: [{ file: COLLECT, test: 'E_PARAM_FULL' }] },
-  E_PAGE_FULL: { kind: 'host', reason: 'collect tests fill the rows', covered: [{ file: COLLECT, test: 'E_PAGE_FULL' }] },
+  E_TYPE_USED: { kind: 'host', reason: 'the registry hands out fresh types', covered: [{ file: MACHINES_BUILD, test: 'E_TYPE_USED' }] },
+  E_PARAM_FULL: { kind: 'host', reason: 'collect tests fill the rows', covered: [{ file: MACHINES_BUILD, test: 'E_PARAM_FULL' }] },
+  E_PAGE_FULL: { kind: 'host', reason: 'collect tests fill the rows', covered: [{ file: MACHINES_BUILD, test: 'E_PAGE_FULL' }] },
   E_TYPE_IN_USE: { kind: 'reserved', reason: 'hot reload is archived; never returned' },
   E_DECL_ID: { fail: { file: COMMIT, test: 'a machine index that the keys table lacks is E_DECL_ID' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
   E_DECL_USES: { fail: { file: COMMIT, test: 'more rows than [uses] is E_DECL_USES' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
   E_FX_ID_DUP: { fail: { file: COMMIT, test: 'an effect id that a loaded module has is E_FX_ID_DUP' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
-  E_DECL_FULL: { kind: 'host', reason: 'more builder calls than the record limit', covered: [{ file: COLLECT, test: 'E_DECL_FULL' }] },
+  E_DECL_FULL: { kind: 'host', reason: 'more builder calls than the record limit', covered: [{ file: MACHINES_BUILD, test: 'E_DECL_FULL' }] },
   E_PLAN_KIND: { fail: mine('keys for a kind nobody owns are refused'), pass: loads },
   E_PLAN_OWNER: { fail: prov('two providers of one hook site are E_PLAN_OWNER'), pass: prov('a provider installs its hook and the consumer calls it') },
   E_PLAN_KEY: { fail: mine('a second owner of one key is E_PLAN_KEY'), pass: mine('the first owner of the key loads') },
