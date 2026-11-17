@@ -157,7 +157,7 @@ A new service or runtime mechanism adds an assembly case before its first device
 
 ### Named device subset
 
-`mise run test:subset -- <tag...>` is the merge gate for a change that reaches device tests only through shared inputs (SDK, profiles, patchkit, another core module): instead of every device test it runs the tests of the named record tags. The tags are the vocabulary of `metadata.runtimeAcceptance` (`tools/nx/acceptance-tags.mjs`: `S:` services, `C:` areas, `A:` core modules, `M:` tool modules); several tags are a union. The command reads the Nx project graph, resolves each tagged file to its leaf targets `test-device--<file>--dt2` and `--dn2` (the devices the file runs on), and adds `gate-smoke:smoke` and `gate-pins:pins`. Without `--run` it prints them. With `--run` it runs them through `pnpm nx:pilot run-many` (cached, with the remote cache); `DIGI_EMU_SLOTS` and the other emulator settings pass through the environment. An unknown tag fails with the vocabulary.
+`mise run test:subset -- <tag...> [--base REF]` is the merge gate for a change that reaches device tests only through shared inputs (SDK, profiles, patchkit, another core module): instead of every device test it runs the tests of the named record tags. The tags are the vocabulary of `metadata.runtimeAcceptance` (`tools/nx/acceptance-tags.mjs`: `S:` services, `C:` areas, `A:` core modules, `M:` tool modules); several tags are a union. The command reads the Nx project graph, resolves each tagged file to its leaf targets `test-device--<file>--dt2` and `--dn2` (the devices the file runs on), and adds `gate-smoke:smoke` and `gate-pins:pins`. Without `--run` it prints them. With `--run` it runs them through `pnpm nx:pilot run-many` (cached, with the remote cache); `DIGI_EMU_SLOTS` and the other emulator settings pass through the environment. `--base REF` adds the records whose inputs changed since REF. It sees the tracked diff against REF (commits and working tree) and the untracked files. A record is selected when a changed file is (a) source of its project or of a project in its `modules` (not tests, Markdown or project.json), (b) a test file it lists, or (c) in the import closure of one of its test files (a helper in `tests/regression/runtime`, a test-support package; the same closure walker as the cache keys, `tools/nx/ts-imports.mjs`). It does not see files that tests read by path without importing them, or a record that omits a module it loads in practice. A changed file that every device test depends on has no subject: the source of `patchkit`, the daemons (`digi-control`) and `core/runtime`, and the shared key inputs (`SHARED_INPUT_GLOBS` in `tools/nx/device-test-keys.mjs`: SDK, device profiles, toolchain, test reads). Without tags the command then fails and names the file ("name tags or run the full set"); it also fails when nothing changed or no record matches, so it never goes green with only the smoke and pin gates. With tags the tags decide and a note counts the shared files. The command also prints how many tasks are coupled and zero-DSP and how many start at once. An unknown tag fails with the vocabulary. Tags say what a test proves, not what it loads: a sample-pool test is `S:samples` even when it loads the machines service.
 
 ```text
 $ mise run test:subset -- S:lfo
@@ -906,23 +906,29 @@ B = the performance core count on Apple Silicon, otherwise cores - 2, with a min
 | Setting | Formula | B=4 | B=8 | B=12 | B=16 |
 | --- | --- | --- | --- | --- | --- |
 | Nx tasks (`NX_PARALLEL`) and emulator ceiling | max(1, min(B, floor(RAM GB/2))) | 4 | 8 | 12 | 16 |
+| Coupled (SHARC) emulators at once | floor(B/3) | 1 | 2 | 4 | 5 |
 | `REGRESSION_JOBS` (Vitest workers per task) | 1 | 1 | 1 | 1 | 1 |
 | `DIGI_JOBS` (emulator processes) | clamp(floor(B/2), 1, 6) | 2 | 4 | 6 | 6 |
 | `CARGO_BUILD_JOBS` | B | 4 | 8 | 12 | 16 |
 | `NEXTEST_TEST_THREADS` | 2 | 2 | 2 | 2 | 2 |
 
-The values assume at least 2 GB of RAM per emulator. On Apple Silicon B is the performance core count, so a 12P+4E machine has B 12: 12 tasks, a ceiling of 12 emulators; the idle-core admission keeps the efficiency cores and 2 more cores free, so load stays near 10 cores.
+The values assume at least 2 GB of RAM per emulator. On Apple Silicon B is the performance core count, so a 12P+4E machine has B 12.
+B is also the core budget of the emulators. A task has the cores of its DSP mode: a zero-DSP run (ColdFire only) uses about 1 core, a coupled run (`dsp: 'sharc'`) about 3 (measured on a 16-core M3 Max). The slot ceiling counts zero-DSP runs (12 slots at B 12); the core budget stops coupled runs from filling them: at most 4 coupled emulators, or 12 zero-DSP ones, or a mix with cores 3 x coupled + zero at most 12. (Counting 12 slots of mostly coupled tests put the load at 60 and made each emulator about 3 times slower.)
+The mode comes from the `metadata.runtimeAcceptance` record: `"dsp": "sharc"`, no field means zero. The Nx target passes it as `DIGI_EMU_DSP` (a conformance target takes it from the module: a dynamic non-service module is coupled). `tools/nx/dsp-mode.mjs` derives the mode from the test source (`dsp: 'sharc'` in the file, or in an exported helper it calls, such as `withRouteFxSession`; an option such as `sharc: true` of `uploadTests`) and fails the Nx graph load when a record disagrees with a file it lists: set `dsp` to the derived mode, one record per mode.
 `tools/nx/resources.mjs` holds this policy.
 
 Each launcher run has its own budget, so several lanes could start more emulators than the machine runs well.
 Module device targets and `test-conformance` therefore run behind `node tools/devtools/emu-slot.mjs --`. It takes one
 of N machine-wide slots (lock files in `<git common dir>/emu-slots/`, N = the ceiling above), runs the command, and
-passes on its exit status. A slot is taken only when the machine has idle cores. One waiter at a time holds the
-`admit` lock and decides: if the slots in use reach the ceiling it waits; if none is in use it admits at once (work
-never starves); otherwise it samples the idle cores twice, 1 s apart, and admits when at least 2 plus the reserve are
-idle. The reserve is the efficiency-core count on Apple Silicon, else max(2, floor(cores/4)); `DIGI_EMU_RESERVE=N`
+passes on its exit status. A slot is taken only when the task fits the machine. One waiter at a time holds the
+`admit` lock and decides: if the slots in use reach the ceiling it waits; the waiter with the longest expected run goes
+first (priority = seconds of the task's last passed run, kept per target in `<git common dir>/emu-slots/durations/` and shared by all worktrees, else a guess of 600 s for a coupled and
+120 s for a zero-DSP task, so long coupled tasks start first and do not end the gate alone; a head waiter that does not fit by cores yet may be overtaken by a smaller waiter that fits, at most 8 times, then nothing overtakes until it fits); if no emulator runs it admits at once (work
+never starves); otherwise it waits while the cores of the running tasks plus its own would exceed B, then samples the idle cores twice, 1 s apart, and admits when at least its own cores plus the reserve are
+idle (that guards against load that is no emulator of ours; the CPU times come from the OS, not the load average). The reserve is the efficiency-core count on Apple Silicon, else max(2, floor(cores/4)); `DIGI_EMU_RESERVE=N`
 sets it. After an admission the lock is kept for 3 s, so the next decision sees the new emulator's load. The log shows
-`emulator slot taken (M of ceiling, idle X.X cores), emulator slot waited N s`. With `DIGI_TRACE_DIR` set, it appends `wait` and `run` spans to `$DIGI_TRACE_DIR/slots-trace.json`. `DIGI_EMU_SLOTS=N` is a fixed count with no idle check, for an A/B.
+`emulator slot taken (M of ceiling, idle X.X cores), emulator slot waited N s`. With `DIGI_TRACE_DIR` set, it appends `wait` and `run` spans to `$DIGI_TRACE_DIR/slots-trace.json`. Overrides: `DIGI_BUDGET=N` sets B (cores and slots), `DIGI_EMU_SLOTS=N` is a fixed count with no core, idle or order check, for an A/B.
+Order limit: Nx starts twice as many tasks as slots, so the order holds among the tasks that Nx has started; `mise run test:subset` prints how many coupled and zero-DSP tasks start at once.
 A waiting task prints one line and waits without a limit; a lock of a dead process is taken over. The admit lock is stale after 30 s (`ADMIT_MAX_MS`) even when its pid lives, so a holder that never releases it cannot stop every waiter. The wait is outside
 Vitest, so it does not count against test timeouts. The emulator gate targets are wrapped too (see the job rule below).
 

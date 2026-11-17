@@ -5,6 +5,7 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/fits.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/digikit-menu", "C:loading"],
         "modules": [],
         "plusdrive": true

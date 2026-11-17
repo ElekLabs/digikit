@@ -13,6 +13,7 @@
       },
       {
         "files": ["settings-api.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["C:state", "C:storage"],
         "modules": ["test/settings-a", "test/settings-b"],
         "plusdrive": true

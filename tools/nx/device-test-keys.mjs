@@ -225,3 +225,9 @@ export const deviceInputs = (
   ];
   return { inputs, patchkitLive };
 };
+
+// Files that every device test's key holds (the shared reads, the test reads, the SDK and the toolchain), as repository globs.
+// `test:subset --base` cannot select by path for a change in them (tools/nx/test-subset.mjs).
+export const SHARED_INPUT_GLOBS = [...SHARED_READS.map(({ file }) => file), ...TEST_READS, ...COMPILE_INPUTS].map(
+  (glob) => glob.replace('{workspaceRoot}/', ''),
+);

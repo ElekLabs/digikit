@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { budget, workCores } from './resources.mjs';
+import { MODE_CORES, budget, workCores } from './resources.mjs';
 
 export function runsTasks(args) {
   const first = args[0];
@@ -104,7 +104,7 @@ function main() {
         ...command,
       ];
     console.error(
-      `nx: budget ${b.budget}: ${env.NX_PARALLEL} Nx tasks, ${b.workers} vitest workers, ${b.tasks} emulators, ${b.jobs} script jobs, ${b.budget} cargo jobs${remote ? ', remote' : ''}`,
+      `nx: budget ${b.budget}: ${env.NX_PARALLEL} Nx tasks, ${b.workers} vitest workers, ${b.tasks} emulators (at most ${Math.floor(b.budget / MODE_CORES.sharc)} coupled), ${b.jobs} script jobs, ${b.budget} cargo jobs${remote ? ', remote' : ''}`,
     );
   }
   const result = spawnSync(command[0], command.slice(1), { stdio: 'inherit', env });
