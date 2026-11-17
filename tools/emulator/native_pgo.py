@@ -624,6 +624,22 @@ def resolve(
     desktop = desktop_digest(hasher)
     hasher.save()
     exact = read_by_key(device, key_of(components))
+    if exact is None:
+        # The shared manifest may hold an older package list than this tree's training used (another tree trained last, or
+        # a crate was added): try the list of this tree's build graph before giving up the exact match.
+        fresh, _ = compute_components(
+            local_package_dirs(),
+            gen,
+            hasher,
+            fast,
+            blocktrans,
+            gen2 if device == BOTH else None,
+        )
+        if device == "dt2":
+            fresh["workload"] = DT2_WORKLOAD_NAME
+        if device == BOTH:
+            fresh["workload"] = both_workload_name(reset_fixture_present())
+        exact = read_by_key(device, key_of(fresh))
     if exact is not None and profdata_path(exact, device).is_file():
         return Resolved(
             exact,
