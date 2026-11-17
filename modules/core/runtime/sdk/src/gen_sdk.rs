@@ -760,7 +760,7 @@ pub mod api {
     /// `dk_fw_block_read`: The firmware's eMMC block read: `bytes` (a multiple of 512) from `sector` into `buf`; 0 = ok. Reads the whole card, not only the store.
     pub type DkFwBlockReadFn = unsafe extern "C" fn(sector: u32, bytes: u32, buf: *mut u8) -> i32;
 
-    /// `dk_files_read`: Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`.
+    /// `dk_files_read`: Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code: `E_NOT_FOUND` for a missing file or a folder, `E_SEL_PATH` for an empty path or one with a NUL, `E_TOO_BIG` for a path over 159 bytes or a file larger than `cap`. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`.
     pub type DkFilesReadFn = unsafe extern "C" fn(files: *mut u8, path: *const u8, buf: *mut u8, cap: u32) -> i32;
 
     /// `dk_host_register`: Register the SysEx commands `first .. first + count` with `fn`. The range must lie inside one of the ranges sdk/sdk.toml [protocol.ranges] reserves and overlap no registered one; else it returns DK_E_CMD_RANGE. The range is released with the module. Returns 0. See <dk/platform/host.h>.
