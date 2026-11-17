@@ -31,8 +31,8 @@
 //!   AUDIO_BUFFER=SECONDS: hold the audio back until that much has been
 //!   produced, then play it in real time (implies AUDIO=1); at the end of the
 //!   run whatever is left is played out. No device: a message, the run goes on.
-//! Build: SHARC_GEN_DIR=<generated dir> cargo build --release --features sharc
-//!   [,play] --example sharc_live
+//! Build: SHARC_GEN_DIR=<generated dir> cargo build --release -p sharc-peer
+//!   --features host[,play] --example sharc_live
 //! The DSP state is a mid-run continuation, so it does not match the
 //! ColdFire's boot-time view of the link; see the findings notes.
 

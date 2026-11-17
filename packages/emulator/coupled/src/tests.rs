@@ -46,6 +46,8 @@ impl Companion for Fake {
     }
 }
 
+/// A ColdFire emulator on the stock DT2 image. Skips (one line on stderr) only when the file is missing,
+/// as the boot tests do; an image that is there but does not load fails the test.
 fn emulator() -> Option<Emulator> {
     let path = std::env::var_os("DT2_SYX")
         .map(PathBuf::from)
@@ -53,8 +55,14 @@ fn emulator() -> Option<Emulator> {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../../../firmware/Digitakt_II_OS1.17.syx")
         });
-    let syx = std::fs::read(path).ok()?;
-    Emulator::new(&syx, None).ok()
+    let Ok(syx) = std::fs::read(&path) else {
+        eprintln!(
+            "SKIP unavailable firmware {} (set DT2_SYX or put the image in firmware/)",
+            path.display()
+        );
+        return None;
+    };
+    Some(Emulator::new(&syx, None).unwrap_or_else(|e| panic!("{}: {e}", path.display())))
 }
 
 fn runtime(kind: Kind) -> Option<(CoupledRuntime, Rc<RefCell<Log>>)> {
