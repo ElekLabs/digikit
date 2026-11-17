@@ -33,6 +33,7 @@ def make_plan(tmp_path: Path, **env: str) -> core_store.Plan:
     gen = tmp_path / "gen"
     gen.mkdir(exist_ok=True)
     (gen / "blocks_00.rs").write_text("fn a() {}")
+    (gen / "image.rs").write_text('pub const IMAGE: &str = "dn2-1.12";\n')
     return core_store.Plan(
         ["cargo", "build", "--target-dir", str(tmp_path / "t")],
         env,
@@ -116,6 +117,7 @@ class Stand:
             root,
             resolve=self.resolve,
             build=self.build,
+            header=lambda _library: {"abi_version": 2},
             worktrees=[] if worktrees is None else worktrees,
         )
 
@@ -125,7 +127,10 @@ def test_miss_hit_and_header(tmp_path: Path) -> None:
     root = tmp_path / "store"
     first = stand.ensure(root)
     assert first.read_bytes() == b"lib 1"
-    assert json.loads((first.parent / "header.json").read_text())["key"] == stand.key()
+    record = json.loads((first.parent / "header.json").read_text())
+    assert record["key"] == stand.key()
+    assert record["image"] == "dn2-1.12"
+    assert record["header"] == {"abi_version": 2}
     assert (first.parent / "key.txt").read_text().strip() == first.parent.name
     assert stand.ensure(root) == first
     assert stand.builds == 1
@@ -194,7 +199,7 @@ def test_eviction_keeps_four_and_the_keys_a_worktree_names(tmp_path: Path) -> No
         make_entry(group, f"k{n}", 1000 + n)
     tree = tmp_path / "tree"
     (tree / "dist").mkdir(parents=True)
-    pinned = {"DIGI_SHARC_CORE_DN2": str(group / "k0" / core_store.lib_name())}
+    pinned = {"DIGI_SHARC_CORE_LIB_DN2": str(group / "k0" / core_store.lib_name())}
     (tree / "dist" / "daemons.json").write_text(json.dumps(pinned))
     stand.ensure(root, [tree])
     names = sorted(p.name for p in group.iterdir())

@@ -23,8 +23,10 @@ entry used within the last hour. The build is `build_core`; the crate `sharc-cor
 
 from __future__ import annotations
 
+import ctypes
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 from tools.devtools import emud_key, store  # noqa: E402
 
 CRATE = "packages/emulator/sharc-core-lib"
+CRATE_NAME = "sharc-core-lib"
 LIB_STEM = "sharc_core_lib"
 PROFILE = "release"
 FEATURES: tuple[str, ...] = ()
@@ -91,28 +94,43 @@ def store_root() -> Path:
     return store.store_root(STORE_NAME, "DIGI_SHARC_CORE_STORE")
 
 
-def build_plan(device: str, environ: Mapping[str, str] | None = None) -> Plan:
+def device_gen(device: str, environ: Mapping[str, str] | None = None) -> Path:
+    """The generated core of DEVICE: SHARC_GEN_DIR_<DEV>, else (DN2 only: slot 1 of a two-core build) SHARC_GEN_DIR, else
+    out/native/<dev>-audio/gen."""
+    environ = os.environ if environ is None else environ
+    configured = environ.get(f"SHARC_GEN_DIR_{device.upper()}") or (
+        environ.get("SHARC_GEN_DIR") if device == "dn2" else None
+    )
+    if configured:
+        path = Path(configured)
+        return path if path.is_absolute() else ROOT / path
+    return ROOT / "out" / "native" / f"{device}-audio" / "gen"
+
+
+def build_plan(
+    device: str, environ: Mapping[str, str] | None = None, gen: Path | None = None
+) -> Plan:
     """The one description of the build of DEVICE: `key_inputs` hashes it and `build_core` runs it.
 
-    The one place to point at the real crate: change CRATE and LIB_STEM."""
-    from tools.emulator import digi_env, native_pgo, native_target
+    The command is the documented one (packages/emulator/README.md "Core libraries"): `cargo build --release --locked -p
+    sharc-core-lib` with SHARC_GEN_DIR set, in the target dir of that core (as tools/nx/rust-env.mjs --gen picks it, so the
+    compiled `sharc-gen` of the host builds is reused). The library is always a plain build (no PGO flags: the header
+    carries the rustflags, so a PGO host refuses a plain library and stays on its static core). GEN overrides the device's generated core (the launcher knows it)."""
+    from tools.emulator import digi_env, native_target
 
     environ = os.environ if environ is None else environ
-    gen = digi_env.generated_dir(environ, device=device)
-    target = native_target.target_dir(gen, "core-lib")
+    gen = device_gen(device, environ) if gen is None else gen
+    target = Path(native_target.target_dir(gen))
     env = {**digi_env.rust_env(environ), "SHARC_GEN_DIR": str(gen)}
-    profile = native_pgo.current_profile(device, gen)
-    profdata = Path(profile) if profile else None
-    if profdata and not any(env.get(k) for k in RUSTFLAG_VARS):
-        env["RUSTFLAGS"] = native_pgo.profile_use_flags(str(profdata))
+    env.pop("SHARC_GEN_DIR_2", None)  # a one-core library
     argv = [
         "rustup", "run", digi_env.TOOLCHAIN, "cargo", "build",
-        f"--{PROFILE}", "--locked", "--manifest-path", f"{CRATE}/Cargo.toml",
+        f"--{PROFILE}", "--locked", "-p", CRATE_NAME,
         "--target-dir", str(target),
     ]  # fmt: skip
     if FEATURES:
         argv += ["--features", ",".join(FEATURES)]
-    return Plan(argv, env, target / PROFILE / lib_name(), gen, profdata)
+    return Plan(argv, env, target / PROFILE / lib_name(), gen, None)
 
 
 def key_inputs(
@@ -143,10 +161,10 @@ def key_inputs(
     return emud_key.EmudInputs(names, {"gen": plan.gen}, plan.profdata, rustc, flags)
 
 
-def current(device: str) -> tuple[Plan, emud_key.EmudInputs]:
+def current(device: str, gen: Path | None = None) -> tuple[Plan, emud_key.EmudInputs]:
     from tools.emulator import digi_env
 
-    plan = build_plan(device)
+    plan = build_plan(device, gen=gen)
     return plan, key_inputs(plan, digi_env.TRIPLE, emud_key.rustc_version())
 
 
@@ -161,7 +179,11 @@ def build_core(plan: Plan, inputs: emud_key.EmudInputs) -> Path:
             f"the crate {CRATE} does not exist yet; the build would be: {' '.join(plan.argv)}"
         )
     from tools.devtools import benchlock
+    from tools.emulator import digi_env
 
+    digi_env.check_generated(
+        plan.gen
+    )  # refuses a stale generated core, as tools/nx/rust-env.mjs --gen does
     with benchlock.hold("shared", "sharc core library"):
         done = subprocess.run(plan.argv, cwd=ROOT, env=plan.env, check=False)
     if done.returncode != 0 or not plan.library.is_file():
@@ -180,6 +202,50 @@ def build_core(plan: Plan, inputs: emud_key.EmudInputs) -> Path:
     return plan.library
 
 
+class _Header(ctypes.Structure):
+    """`sharc_rt::header::CoreHeader` (`repr(C)`: u32, NUL-padded strings, u64 layout entries)."""
+
+    _fields_ = [
+        ("abi_version", ctypes.c_uint32),
+        ("sharc_rt_sha256", ctypes.c_char * 64),
+        ("rustc", ctypes.c_char * 96),
+        ("target", ctypes.c_char * 64),
+        ("flags", ctypes.c_char * 128),
+        ("layout", ctypes.c_uint64 * 52),
+    ]
+
+
+def read_header(library: Path) -> dict[str, object]:
+    """The header of a built library, read through ctypes (`sharc_core_header`). The layout length is checked by the
+    pointer arithmetic of the host loader; here a wrong `LAYOUT_LEN` shows as a different `abi_version`."""
+    try:
+        lib = ctypes.CDLL(str(library))
+        lib.sharc_core_header.restype = ctypes.POINTER(_Header)
+        header = lib.sharc_core_header().contents
+    except (OSError, AttributeError) as exc:
+        raise CoreStoreError(f"{library}: cannot read the core header: {exc}") from exc
+    return {
+        "abi_version": header.abi_version,
+        "sharc_rt_sha256": header.sharc_rt_sha256.decode(),
+        "rustc": header.rustc.decode(),
+        "target": header.target.decode(),
+        "flags": header.flags.decode(),
+        "layout": list(header.layout),
+    }
+
+
+def gen_image(gen: Path) -> str:
+    """The DSP image name of a generated core: the `IMAGE` const of its `image.rs` (`GenCore.image` of the library)."""
+    try:
+        text = (gen / "image.rs").read_text()
+    except OSError as exc:
+        raise CoreStoreError(f"{gen}: no image.rs: {exc}") from exc
+    found = re.search(r'pub const IMAGE: &str = "([^"]*)"', text)
+    if not found:
+        raise CoreStoreError(f"{gen}/image.rs has no IMAGE const")
+    return found[1]
+
+
 def whole(entry: Path) -> bool:
     """An entry is usable only with its library, `key.txt` and `header.json`."""
     return all((entry / n).is_file() for n in (lib_name(), "key.txt", "header.json"))
@@ -191,6 +257,7 @@ def ensure_core(
     *,
     resolve: Callable[[], tuple[Plan, emud_key.EmudInputs]] | None = None,
     build: Callable[[Plan, emud_key.EmudInputs], Path] = build_core,
+    header: Callable[[Path], dict[str, object]] = read_header,
     worktrees: list[Path] | None = None,
 ) -> Path:
     """The stored library of DEVICE: restored when its key is in ROOT, else built and inserted.
@@ -214,13 +281,14 @@ def ensure_core(
     def fill(tmp: Path) -> None:
         shutil.copyfile(built, tmp / lib_name())
         (tmp / lib_name()).chmod(0o755)
-        header = {
-            "image": device,
+        record = {
+            "device": device,
+            "image": gen_image(plan.gen),
             "key": key,
-            "rustc": inputs.rustc,
-            "flags": inputs.flags,
+            "build_flags": inputs.flags,
+            "header": header(tmp / lib_name()),
         }
-        (tmp / "header.json").write_text(json.dumps(header, indent=1) + "\n")
+        (tmp / "header.json").write_text(json.dumps(record, indent=1) + "\n")
 
     if store.insert(group, key, "header.json", fill):
         print(f"{device} core: built {key[:12]}", flush=True)

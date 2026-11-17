@@ -17,6 +17,7 @@ import {
   type StatusResult,
 } from '@digi/control-client';
 import {
+  coreLibEnv,
   coupledEnv,
   repoRoot,
   resolveInputs,
@@ -335,6 +336,7 @@ export class Session {
       controller?.signal.throwIfAborted();
       const env = {
         ...(options.dsp === 'sharc' ? coupledEnv(inp.syx) : {}),
+        ...(options.dsp === 'sharc' ? coreLibEnv(options.device) : {}),
         ...(options.snapshotDir ? { DIGI_SNAPSHOT_DIR: options.snapshotDir } : {}),
         ...extraEnv,
       };

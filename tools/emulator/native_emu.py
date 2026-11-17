@@ -692,6 +692,36 @@ def syx_from_args(args: list[str]) -> pathlib.Path:
     return pathlib.Path(syx_arg) if syx_arg else digi_env.firmware(os.environ)
 
 
+def core_library_env(args: list[str], plan: object | None) -> dict[str, str]:
+    """`DIGI_SHARC_CORE_LIB_<DEV>` for the cores of a coupled launch, from the core library store (tools/devtools/core_store.py:
+    a miss builds the library). Nothing for a launch without a generated core, and nothing for a profile-guided build: the
+    library is a plain build and its header carries the rustflags, so the host would refuse it (it keeps its static core).
+    The launch stops when a library cannot be built, with the build command in the message."""
+    if plan is not None or not ("--coupled" in args or "--auto-coupled" in args):
+        return {}
+    from tools.devtools import core_store
+
+    cores = {}
+    if os.environ.get("SHARC_GEN_DIR_2"):
+        cores = {
+            "dn2": pathlib.Path(os.environ["SHARC_GEN_DIR"]),
+            "dt2": pathlib.Path(os.environ["SHARC_GEN_DIR_2"]),
+        }
+    elif (device := digi_env.device_for_syx(syx_from_args(args))) is not None:
+        cores = {device: generated_core(args)}
+    env: dict[str, str] = {}
+    root = core_store.store_root()
+    try:
+        for device, gen in cores.items():
+            library = core_store.ensure_core(
+                device, root, resolve=lambda d=device, g=gen: core_store.current(d, g)
+            )
+            env[f"DIGI_SHARC_CORE_LIB_{device.upper()}"] = str(library)
+    except (core_store.CoreStoreError, FileNotFoundError) as exc:
+        raise SystemExit(f"core library: {exc}") from exc
+    return env
+
+
 def main(args: list[str] | None = None) -> None:
     args = sys.argv[1:] if args is None else args
     force_cf = "--cf-only" in args
@@ -783,6 +813,7 @@ def main(args: list[str] | None = None) -> None:
     if build_only:
         print(binary)
         return
+    env.update(core_library_env(args, plan))
     if not daemon:
         env.update(pgo_env())
         # Workbench default from config/emulator.json; an explicit value, including an empty one, still wins.

@@ -1151,21 +1151,35 @@ than an hour. `DIGI_SHARC_CORE_STORE` moves the store (tests only).
 Key and build come from one description, `core_store.build_plan` (the argv and environment of the cargo call). The key follows the
 daemon key's scheme (`emud_key.key_of`): the content of the repository files in `CORE_SOURCE_GLOBS` (the `sharc-core-lib`,
 `sharc-gen` and `sharc-rt` crates, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo`) and `CORE_RECIPE_FILES`, every file of
-the gen dir, the PGO profile content (or `plain`), `rustc -vV`, the target triple, the argv without the target dir (profile,
-features) and the rustc flag and `CARGO_PROFILE_*` variables of the build environment. The key is known before the first build, so
+the gen dir, `rustc -vV`, the target triple, the argv without the target dir (profile, `-p sharc-core-lib`, features) and the rustc flag, `CARGO_PROFILE_*` and `CARGO_TARGET_*` variables of the build environment. The key is known before the first build, so
 a lookup needs no build. After a build the dependency file of cargo is audited against the key: a file the build read that the key
 does not cover fails the build and stores nothing (add it to `CORE_SOURCE_GLOBS`).
 
 ```sh
-uv run python -m tools.devtools.verify_build cores --device dn2,dt2
-# dn2 core: built 040713e7aaac        (a miss: builds and inserts)
-# dn2 core: restored 040713e7aaac     (a hit)
+uv run python -m tools.devtools.verify_build cores --device dn2,dt2 [--env-out FILE]
+# dn2 core: built 959db07d28b2        (a miss: builds and inserts)
+# dn2 core: restored 959db07d28b2     (a hit)
 # dn2 core: evicted 91350c44d39f      (a key beyond the last 4 that no worktree names and that was not used within the hour)
 ```
 
-The build is `core_store.build_core`. The crate `sharc-core-lib` is not in the tree yet, so a miss stops with `the crate
-packages/emulator/sharc-core-lib does not exist yet; the build would be: ...` (exit 1). The Nx target and the `dist/daemons.json`
-entries come with the wiring PR. `tests/devtools/test_core_store.py` covers the key and the store with a stand-in library.
+The build is the documented one, `cargo build --release --locked -p sharc-core-lib` with `SHARC_GEN_DIR` set to the device's core
+(`SHARC_GEN_DIR_<DEV>`, for DN2 also `SHARC_GEN_DIR`, else `out/native/<dev>-audio/gen`), in the target dir of that core, so a
+host build's compiled `sharc-gen` is reused. A stale generated core is refused as `tools/nx/rust-env.mjs --gen` refuses it. The
+library is always a plain build: its header carries the rustflags, so a profile-guided host refuses it and keeps its static core.
+`header.json` holds the device, the image name (the `IMAGE` const of the gen dir's `image.rs`), the key, the build flags and the
+header of the built library (read through ctypes from `sharc_core_header`: ABI version, `sharc-rt` sha256, rustc, target, flags,
+layout). The audit of cargo's dependency file runs on every build.
+
+`verify_build daemons` also provides the library of each device whose daemon is a plain build (a profile-guided daemon, also with
+a stale profile, is skipped with a note) and writes `DIGI_SHARC_CORE_LIB_<DEV>` (the store path) into the same `--env-out` file
+(`dist/daemons.json`); the key of the library is part of the device's line in `dist/bytes/daemon-test.key`, so a core change
+invalidates the merge keys of device tests. The variables reach the daemons as follows: `packages/test-support` (`coreLibEnv`,
+used by `Session.start` for a session with DSP) reads them from the environment or `dist/daemons.json` and passes them to the
+daemon; `tools/nx/daemon-env.mjs` puts the whole file into the environment of the Python harnesses. `tools/emulator/native_emu.py`
+calls the same `ensure_core` for the cores of a coupled launch (the desktop app and `--daemon`; not for a profile-guided build)
+and sets the variables for the process it starts; a library that cannot be built stops the launch with the build command. The
+static core stays the default of every other host. `tests/devtools/test_core_store.py` covers the key and the store with a
+stand-in library.
 
 To clear the Nx cache: `pnpm nx:pilot reset`.
 

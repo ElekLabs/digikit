@@ -18,13 +18,15 @@ the result with one rename. The last 4 used keys per device stay, and every key 
 to --env-out (JSON); a stored file is never rewritten, so the test processes run it and ask cargo for nothing.
 `pk_harness.daemon_binary` takes that variable before anything else.
 
-`cores` provides the generated SHARC core of each device as a library from the same kind of store
+`daemons` also provides the core library of each device whose daemon is a plain build (`DIGI_SHARC_CORE_LIB_<DEV>` in the
+--env-out file, and the library key in the daemon test key). `cores` provides the generated SHARC core of each device as a library from the same kind of store
 (`sharc-core-cache`, tools/devtools/core_store.py); both use the mechanics of tools/devtools/store.py.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import sys
@@ -42,8 +44,9 @@ def cargo_target_dir(binary: Path) -> Path:
     return target.parent if target.name == pk_emud_pgo.digi_env.TRIPLE else target
 
 
-def build_one(device: str, syx: Path) -> tuple[Path, Path]:
-    """Build the daemon of DEVICE as `daemons` does: (release binary, cargo target dir)."""
+def daemon_pgo(device: str) -> tuple[object, str, str, bool]:
+    """How the daemon of DEVICE is built: the usable profile (None: no), the profile state, its message, and whether a stale
+    profile is applied anyway. A plain daemon has no profile and no stale one."""
     pgo = pk_emud_pgo.native_pgo
     gen = pk_emud_pgo.generated_core(device)
     profile, state, message = pgo.profile_for_tests(device, gen)
@@ -52,6 +55,13 @@ def build_one(device: str, syx: Path) -> tuple[Path, Path]:
         and state != "off"
         and pgo.current_profile(device, gen) is not None
     )
+    return profile, state, message, stale
+
+
+def build_one(device: str, syx: Path) -> tuple[Path, Path]:
+    """Build the daemon of DEVICE as `daemons` does: (release binary, cargo target dir)."""
+    pgo = pk_emud_pgo.native_pgo
+    profile, state, message, stale = daemon_pgo(device)
     pgo.report_profile(device, state, message, applied=stale)
     if profile is None and not stale:
         plain = pk_harness.daemon_binary(device, syx, pgo=False)
@@ -129,9 +139,35 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
     return binary
 
 
+CORE_LIB_VAR = "DIGI_SHARC_CORE_LIB_{}"
+
+
+def core_env(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
+    """Provide the core libraries of DEVICES from the store: the variables `DIGI_SHARC_CORE_LIB_<DEV>` (store paths) that
+    make a host load the library, and the store key of each device. A library is a plain build, so a device whose daemon is
+    profile-guided stays on its static core (the header carries the rustflags, the host would refuse the library)."""
+    env: dict[str, str] = {}
+    keys: dict[str, str] = {}
+    root = core_store.store_root()
+    for device in devices:
+        if device in pk_emud_pgo.FIRMWARE:
+            profile, _state, _message, stale = daemon_pgo(device)
+            if profile is not None or stale:
+                print(
+                    f"{device} core: skipped, the {device} daemon is profile-guided (static core)",
+                    flush=True,
+                )
+                continue
+        library = core_store.ensure_core(device, root)
+        env[CORE_LIB_VAR.format(device.upper())] = str(library)
+        keys[device] = library.parent.name
+    return env, keys
+
+
 def build_daemons(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
-    """Provide the daemons of DEVICES from the store: the paths for downstream consumers, and the test key of each device
-    (from the files the build read, see emud_key.test_key_of)."""
+    """Provide the daemons of DEVICES from the store: the paths for downstream consumers (with the core libraries, see
+    `core_env`), and the test key of each device (from the files the build read, see emud_key.test_key_of, and the key of
+    the device's core library)."""
     env: dict[str, str] = {}
     test_keys: dict[str, str] = {}
     root = store_root()
@@ -144,20 +180,32 @@ def build_daemons(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
             continue
         binary = ensure_daemon(device, syx, root)
         env[f"DIGI_EMUD_{device.upper()}"] = str(binary)
-        test_keys[device] = emud_key.test_key(device, binary.parent)
+        test_key = emud_key.test_key(device, binary.parent)
+        core, keys = core_env([device])
+        env.update(core)
+        if device in keys:
+            test_key = hashlib.sha256(
+                f"{test_key}\ncore {keys[device]}".encode()
+            ).hexdigest()
+        test_keys[device] = test_key
     return env, test_keys
 
 
-def build_cores(devices: list[str]) -> int:
-    """Provide the core libraries of DEVICES from the store (tools/devtools/core_store.py)."""
-    root = core_store.store_root()
+def build_cores(devices: list[str], env_out: Path | None = None) -> int:
+    """`verify_build cores`: the core libraries of DEVICES from the store (tools/devtools/core_store.py)."""
     try:
+        env: dict[str, str] = {}
         for device in devices:
+            # standalone: every library is built, whatever the daemon build of the device is
+            root = core_store.store_root()
             library = core_store.ensure_core(device, root)
+            env[CORE_LIB_VAR.format(device.upper())] = str(library)
             print(f"{device} core: {library}", flush=True)
-    except (core_store.CoreStoreError, FileNotFoundError) as exc:
+    except (core_store.CoreStoreError, FileNotFoundError, SystemExit) as exc:
         print(f"verify_build: {exc}", file=sys.stderr)
         return 1
+    if env_out:
+        env_out.write_text(json.dumps(env, indent=2) + "\n")
     return 0
 
 
@@ -170,12 +218,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--env-out",
         type=Path,
-        help="write the pinned DIGI_EMUD_<DEV> variables here (JSON)",
+        help="write the pinned DIGI_EMUD_<DEV> and DIGI_SHARC_CORE_LIB_<DEV> variables here (JSON)",
     )
     args = ap.parse_args(argv)
     devices = [d for d in args.device.split(",") if d]
     if args.what == "cores":
-        return build_cores(devices)
+        return build_cores(devices, args.env_out)
     unknown = sorted(set(devices) - set(pk_emud_pgo.FIRMWARE))
     if unknown:
         ap.error(f"unknown devices: {', '.join(unknown)}")

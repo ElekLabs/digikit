@@ -42,6 +42,20 @@ export function repoRoot(): string {
   }
 }
 
+/** `DIGI_SHARC_CORE_LIB_<DEV>`: the core library a daemon of this device loads (`verify_build daemons|cores` writes it to
+ * dist/daemons.json beside `DIGI_EMUD_<DEV>`). The environment wins over the file; none means the daemon's static core. */
+export function coreLibEnv(device: Device, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const key = `DIGI_SHARC_CORE_LIB_${device.toUpperCase()}`;
+  if (env[key]) return {};
+  const file = path.join(repoRoot(), 'dist/daemons.json');
+  try {
+    const value = (JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>)[key];
+    return value ? { [key]: value } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** The stock images: $DIGI_FIRMWARE_DIR (relative to the repository root), else firmware/. The same rule as
  * tools/firmware/config.py FIRMWARE_DIR, the control daemon and tools/nx/device-inputs.mjs. */
 export function firmwareDir(env: NodeJS.ProcessEnv = process.env): string {
