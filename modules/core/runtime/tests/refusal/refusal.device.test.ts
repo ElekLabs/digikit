@@ -25,7 +25,8 @@ import { edits, patched, unhashed } from './dkm-patch.ts';
  */
 const GOOD = 'test/lfo-shape';
 const LFO = 'test/lfo-shape';
-const LFO_DUP = 'test/lfo-shape-dup';
+/** The file of LFO under another module name: the same shape key. */
+const LFO_DUP = 'test/lfo-shape-copy';
 /** The service of the lfo_shape kind is a file of the card (`services/lfo.dks`), not a part of the image: every fixture here needs it. */
 const LFO_SERVICE = 'core/services/lfo';
 const UNOWNED_KIND = 90;
@@ -152,14 +153,14 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
     expect(moduleStateText(seen.loads[7]!)).toContain('refused: no room: the CPU memory');
   });
 
-  // the two failures that come after the plan, each in a boot of its own copy of the good module (they share its machine key and DSP part, so the good module is not in this boot)
+  // the two failures that come after the plan (an init that fails, a table that a module may not have), each in a boot of its own copy of the good module (they share its machine key and DSP part, so the good module is not in this boot)
   let failures: Promise<Seen> | undefined;
   const failuresSeen = (): Promise<Seen> => {
     failures ??= (async () => {
       await rig.first();
       const entries: Entry[] = [
         entryOf('test/c-init', patched(fixture(), 'test/c-init', withKey(107, edits.failInit)), loadCode('E_INIT')),
-        entryOf('test/c-decl', patched(fixture(), 'test/c-decl', withKey(108, edits.undeclaredKinds)), loadCode('E_DECL_KIND')),
+        entryOf('test/c-decl', patched(fixture(), 'test/c-decl', withKey(108, edits.moduleKinds)), loadCode('E_FORMAT')),
       ];
       return boot(rig, 'refusal-failures', entries);
     })();
@@ -173,10 +174,11 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
     expect(seen.modules, 'MODULES lists neither failed module').toEqual([]);
   });
 
-  test('kinds in the header table that init does not declare are E_DECL_KIND', async () => {
+  test('a module whose header table has KINDS is E_FORMAT: a module owns no record kinds', async () => {
+    // the loader's role check runs before `init`, so the file never declares anything (the E_DECL_KIND proof is a service file: lfo.device.test.ts)
     const seen = await failuresSeen();
-    expectModule(seen, 1, 'FAILED', loadCode('E_DECL_KIND'));
-    expect(moduleStateText(seen.loads[1]!)).toContain('not loaded: a service declared a record kind');
+    expectModule(seen, 1, 'FAILED', loadCode('E_FORMAT'));
+    expect(seen.modules, 'MODULES lists neither failed module').toEqual([]);
   });
 
   test('a selected file the card does not have is E_NOT_FOUND', async () => {
@@ -196,7 +198,7 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
       await rig.first();
       const entries: Entry[] = [
         { name: LFO, file: moduleArtifact(rig.device, LFO), want: LOADED },
-        { name: LFO_DUP, file: moduleArtifact(rig.device, LFO_DUP), want: loadCode('E_PLAN_KEY') },
+        entryOf(LFO_DUP, patched(fs.readFileSync(moduleArtifact(rig.device, LFO)), LFO_DUP), loadCode('E_PLAN_KEY')),
       ];
       return boot(rig, 'refusal-owners', entries);
     })();

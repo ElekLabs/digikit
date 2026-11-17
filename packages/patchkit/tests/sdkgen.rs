@@ -285,7 +285,11 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
     assert!(!machines.contains("fn dk_param_get"));
     assert!(machines.contains("const _: api::DkParamGetFn = crate::fw::dk_param_get;"));
     assert!(machines.contains("const _: api::DkPageCanvasFn = crate::builder::dk_page_canvas;"));
-    assert!(machines.contains("pub fn exports() -> [(u32, *const u8); 12]"));
+    // an `internal` export is in the list and has no `api` type (it is in no header): the two runtime-only exports of the machines file
+    assert!(machines.contains("crate::rt::dk_machines_guard_state as *const u8"));
+    assert!(machines.contains("crate::rt::dk_machines_owned_ids as *const u8"));
+    assert!(!machines.contains("api::DkMachinesGuardStateFn"));
+    assert!(machines.contains("pub fn exports() -> [(u32, *const u8); 14]"));
     assert!(
         machines.find("\"dk_param_get\"").unwrap()
             < machines.find("\"dk_page_bind_local\"").unwrap()
@@ -303,8 +307,10 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
                 .count()
         })
         .sum();
-    assert_eq!(total, 26);
+    // the three `internal` ones are exports of the files and no import of a module: 26 for modules, 29 in the files
+    assert_eq!(total, 29);
     assert!(get(sdkgen::RUST_OUT).contains("pub const PROVIDED: [(&str, &str); 26]"));
+    assert!(!get(sdkgen::RUST_OUT).contains("dk_fx_routes_entry"));
 }
 
 #[test]

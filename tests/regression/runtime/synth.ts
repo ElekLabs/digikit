@@ -272,8 +272,11 @@ export function fullSet(
     { spec: { name: 'cap/full-f', bss: fTotal - CODE }, want: LOADED },
     // X: a raw module that needs more than the largest free block (the hole of M is smaller than the block the `Collect` takes)
     { spec: { name: 'cap/full-x', bss: 2 * COLLECT_BLOCK }, want: E_NOMEM },
+    // Y is refused for want of voice rows (E_DSP_ROWS: V holds every row, and the rows are checked before the types). It pins the type just below the run-time
+    // range: no reference or M or V holds it (the references take the lowest numbers of the range, V the pinned numbers above them), so no key of the set is
+    // repeated and the plan (E_PLAN_KEY) lets Y through to the row check that the case names.
     ...(machines
-      ? [{ spec: { name: 'cap/full-y', dsp: { image: 64, voices: pinned([firstPinned]) } }, want: E_DSP_ROWS as Want }]
+      ? [{ spec: { name: 'cap/full-y', dsp: { image: 64, voices: pinned([g.typeFirst - 1]) } }, want: E_DSP_ROWS as Want }]
       : []),
     { spec: { name: 'cap/full-z', dsp: { image: 64, bss: zLen - 64 } }, want: E_DSP_NOSPACE },
   ];

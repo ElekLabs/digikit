@@ -13,9 +13,8 @@
 //! - Needs: a hard need of a service that is neither one of the runtime's (`[handle] services`) nor provided by an accepted provider is refused (`NeedMissing`);
 //!   a need of a newer version than the runtime, or than the provider provides, is refused (`NeedVersion`). A service of the image (core/ui and the like) that
 //!   is not there is the loader's `E_IMPORT`, with the missing module's name: the planner does not know the image.
-//! - Exclusive: one owner for each kind (a service of the table, or a module's `KINDS`), slot and hook site; keys of a *generic* kind (`[records.kinds]`
-//!   `generic`) are unique across the selection. The keys of the typed kinds (machines, effects) keep their own rules: a machine key twice takes a fresh type
-//!   number, an effect id twice is `E_FX_ID_DUP` at the load.
+//! - Exclusive: one owner for each kind (a service of the table, or a module's `KINDS`), slot and hook site; the keys of every kind (machines, effects, a
+//!   service's own kinds) are unique across the selection and inside each module (`key_refusal`, `E_PLAN_KEY`).
 //! - Fit: the module's `USES` (machine, parameter and page rows, the record block, the DSP cost) against the capacity the earlier accepted modules left, with the
 //!   same function the menu uses (`dkrt_fit::fits_now` and `take`). The DSP load is `max(per-voice machine cost) * voices + sum(effect costs)` against the
 //!   headroom of the device profile; the capacity's DSP entry keeps the running maximum and the sum. A module that takes the load over the headroom is
@@ -113,17 +112,6 @@ fn shared(a: &Keys, b: &Keys, tg: u16) -> Option<u32> {
         i += 1;
     }
     None
-}
-
-fn is_generic(kind: u32) -> bool {
-    let mut i = 0;
-    while i < dkrt_sdk::records::GENERIC_KINDS.len() {
-        if dkrt_sdk::records::GENERIC_KINDS[i] == kind {
-            return true;
-        }
-        i += 1;
-    }
-    false
 }
 
 /// Whether entry `j` has to load after entry `i`: it needs a service `i` provides, or has keys for a kind `i` owns.
@@ -361,8 +349,27 @@ fn owner_clash(
     None
 }
 
-/// The refusal for the keys of `t`, if any: a group of keys for a kind nobody owns (the runtime's table, `t` itself, an accepted module or provider), or a key of a
-/// generic kind that an accepted module (`done`, not index `skip_m`) or provider (`pdone`, not index `skip_p`) has too. One rule for modules and providers.
+/// The refusal for the keys of `t` against `others` (the accepted modules and providers, or the live set of a run-time load), or `None`: a key `t` provides twice
+/// or a key another table provides too, for any kind. One rule for every kind, for modules and providers (rule 8 of docs/plans/extension-model.md); a `None` entry
+/// is skipped.
+pub fn key_refusal(t: &Keys, others: &[Option<&Keys>]) -> Option<Reason> {
+    if let Some((kind, key)) = t.first_repeat() {
+        return Some(Reason::DuplicateKey(kind, key));
+    }
+    let mut i = 0;
+    while i < others.len() {
+        if let Some(o) = others[i] {
+            if let Some((kind, key)) = t.first_shared_key(o) {
+                return Some(Reason::DuplicateKey(kind, key));
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// The refusal for the keys of `t`, if any: a group of keys for a kind nobody owns (the runtime's table, `t` itself, an accepted module or provider), or a key
+/// that an accepted module (`done`, not index `skip_m`) or provider (`pdone`, not index `skip_p`) has too, or one that `t` has twice (`key_refusal`).
 #[allow(clippy::too_many_arguments)]
 fn keys_clash(
     env: &Env,
@@ -375,7 +382,7 @@ fn keys_clash(
     skip_p: usize,
 ) -> Option<Reason> {
     let mut gi = 0;
-    while let Some((kind, keys)) = t.group(gi) {
+    while let Some((kind, _)) = t.group(gi) {
         gi += 1;
         let mut owned = env.services.owner(kind).is_some();
         let mut i = 0;
@@ -400,37 +407,23 @@ fn keys_clash(
         if !owned {
             return Some(Reason::UnownedKind(kind));
         }
-        if is_generic(kind) {
-            let mut n = 0;
-            while n < keys.len() {
-                let k = keys.get(n);
-                n += 1;
-                let mut i = 0;
-                while i < mods.len() {
-                    if i != skip_m && done[i] {
-                        if let Some(ti) = &mods[i] {
-                            if ti.has_key(kind, k) {
-                                return Some(Reason::DuplicateKey(kind, k));
-                            }
-                        }
-                    }
-                    i += 1;
-                }
-                let mut p = 0;
-                while p < provs.len() {
-                    if p != skip_p && pdone[p] {
-                        if let Some(tp) = &provs[p] {
-                            if tp.has_key(kind, k) {
-                                return Some(Reason::DuplicateKey(kind, k));
-                            }
-                        }
-                    }
-                    p += 1;
-                }
-            }
-        }
     }
-    None
+    let mut others: [Option<&Keys>; SEL_MAX + PROVIDER_MAX] = [None; SEL_MAX + PROVIDER_MAX];
+    let mut i = 0;
+    while i < mods.len() && i < SEL_MAX {
+        if i != skip_m && done[i] {
+            others[i] = mods[i].as_ref();
+        }
+        i += 1;
+    }
+    let mut p = 0;
+    while p < provs.len() && p < PROVIDER_MAX {
+        if p != skip_p && pdone[p] {
+            others[SEL_MAX + p] = provs[p].as_ref();
+        }
+        p += 1;
+    }
+    key_refusal(t, &others)
 }
 
 /// The verdict of provider `j` against the accepted providers `pdone` (the ones before it in the order).
@@ -942,12 +935,56 @@ mod tests {
     }
 
     #[test]
-    fn the_keys_of_the_typed_kinds_are_not_exclusive_across_modules() {
-        // a machine key twice takes a fresh type number (assign rule 4) and an effect id twice is E_FX_ID_DUP at the load: not the planner's
-        let ms = [0x100u32];
+    fn a_machine_key_or_an_effect_id_in_two_modules_refuses_the_later_one() {
+        use dkneeds::KIND_EFFECT;
+        let (ms, fs) = ([0x100u32, 0x200], [7u32]);
         let m = Table { keys: &[KeyGroup { kind: KIND_MACHINE, keys: &ms }], ..KEEP };
-        let p = run(&[Some(bytes(&m)), Some(bytes(&m))]);
+        let f = Table { keys: &[KeyGroup { kind: KIND_EFFECT, keys: &fs }], ..KEEP };
+        // the same module twice, and another module with an effect id the first has
+        let p = run(&[Some(bytes(&m)), Some(bytes(&m)), Some(bytes(&f)), Some(bytes(&f))]);
+        assert_eq!(
+            p.verdicts[..4],
+            [
+                Verdict::Accepted,
+                Verdict::Refused(Reason::DuplicateKey(KIND_MACHINE, 0x100)),
+                Verdict::Accepted,
+                Verdict::Refused(Reason::DuplicateKey(KIND_EFFECT, 7))
+            ]
+        );
+        assert_eq!(p.verdicts[1].result(), dkrt_sdk::E_PLAN_KEY);
+        // one machine in common is enough, and the refused module keeps nothing for the next
+        let share = [0x200u32, 0x300];
+        let m2 = Table { keys: &[KeyGroup { kind: KIND_MACHINE, keys: &share }], ..KEEP };
+        let p = run(&[Some(bytes(&m)), Some(bytes(&m2))]);
+        assert_eq!(p.verdicts[1], Verdict::Refused(Reason::DuplicateKey(KIND_MACHINE, 0x200)));
+        // the same number for two kinds is no clash, and neither is the same local id in two modules (the keys derive from `<module>:<id>`)
+        let same_number = Table { keys: &[KeyGroup { kind: KIND_EFFECT, keys: &ms }], ..KEEP };
+        let p = run(&[Some(bytes(&m)), Some(bytes(&same_number))]);
         assert_eq!(p.verdicts[..2], [Verdict::Accepted; 2]);
+    }
+
+    #[test]
+    fn a_key_twice_inside_one_module_is_refused() {
+        let twice = [0x100u32, 0x100];
+        let m = Table { keys: &[KeyGroup { kind: KIND_MACHINE, keys: &twice }], ..KEEP };
+        let p = run(&[Some(bytes(&m))]);
+        assert_eq!(p.verdicts[0], Verdict::Refused(Reason::DuplicateKey(KIND_MACHINE, 0x100)));
+        // two groups of one kind count as one table
+        let one = [0x100u32];
+        let split = Table { keys: &[KeyGroup { kind: KIND_MACHINE, keys: &one }, KeyGroup { kind: KIND_MACHINE, keys: &one }], ..KEEP };
+        assert_eq!(run(&[Some(bytes(&split))]).verdicts[0], Verdict::Refused(Reason::DuplicateKey(KIND_MACHINE, 0x100)));
+    }
+
+    #[test]
+    fn key_refusal_checks_a_candidate_against_a_live_set() {
+        use dkneeds::KIND_EFFECT;
+        let (a, b) = ([1u32, 2], [3u32]);
+        let ta = bytes(&Table { keys: &[KeyGroup { kind: KIND_MACHINE, keys: &a }], ..KEEP });
+        let tb = bytes(&Table { keys: &[KeyGroup { kind: KIND_EFFECT, keys: &b }], ..KEEP });
+        let cand = bytes(&Table { keys: &[KeyGroup { kind: KIND_MACHINE, keys: &[2] }], ..KEEP });
+        let (ka, kb, kc) = (Keys::parse(&ta).unwrap(), Keys::parse(&tb).unwrap(), Keys::parse(&cand).unwrap());
+        assert_eq!(key_refusal(&kc, &[Some(&kb), None]), None);
+        assert_eq!(key_refusal(&kc, &[Some(&kb), Some(&ka)]), Some(Reason::DuplicateKey(KIND_MACHINE, 2)));
     }
 
     #[test]

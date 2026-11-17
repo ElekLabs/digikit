@@ -4,7 +4,7 @@ use super::*;
 use dkrt_sdk::*;
 use crate::registry::{apply_with, check_with, each, remove_with};
 use dkrt_sdk::proto::CAPK_FX_SLOTS;
-use crate::core_api::{CoreApi, RealCore, REAL_CORE};
+use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::service::ServiceRow;
 use std::vec::Vec;
 
@@ -104,16 +104,6 @@ impl<const N: u8, C: CoreApi> Service<C> for Fake<N> {
 
     unsafe fn tick(_: &C, phase: u32) {
         log().push(Call::Tick { svc: N, phase });
-    }
-
-    /// Service 2 lists two effects (rows 7 and 9); service 1 has none (the default).
-    unsafe fn fx_entry(_: &C, index: u32, out: &mut DkrtFx) -> i32 {
-        if N == 2 && index < 2 {
-            out.row = 7 + 2 * index;
-            OK
-        } else {
-            E_NOT_FOUND
-        }
     }
 }
 
@@ -366,24 +356,49 @@ mod table {
     }
 }
 
-/// The effect list of DIGIKIT > FX ROUTES is the row method of the first service that has effects: the effects of that service in order, "no fx" past its end,
-/// and "no fx" at once when no service in the table has effects (the fx service file is not on the card).
+/// What only the runtime asks of a service file goes through the loader's export table by name: the effect list of DIGIKIT > FX ROUTES, the guard counts and the
+/// machine types of the MODULES reply. With no file loaded (nothing published) the answers are "no fx", "no counts" and "no types"; with a file loaded the export answers.
 #[test]
-fn fx_entry_answers_from_the_service_that_has_effects_and_no_fx_without_one() {
+fn the_runtime_only_exports_answer_from_the_service_file_and_say_nothing_without_one() {
+    use super::exports::*;
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    extern "C" fn fx(index: u32, out: *mut u8) -> i32 {
+        if index < 2 {
+            unsafe { (*(out as *mut DkrtFx)).row = 7 + 2 * index };
+            OK
+        } else {
+            E_NOT_FOUND
+        }
+    }
+    extern "C" fn guard(ty: u32, out: *mut u8) -> u32 {
+        unsafe { *(out as *mut dkrt_abi::service::GuardState) = dkrt_abi::service::GuardState { faults: ty + 1, disabled: ty == 3 } };
+        (ty < 8) as u32
+    }
+    extern "C" fn owned(owner: u32, out: *mut u8) -> u32 {
+        unsafe { *out = 16 + owner as u8 };
+        1
+    }
     unsafe {
         let mut out: DkrtFx = core::mem::zeroed();
-        assert_eq!(TWO.fx_entry(0, &mut out), OK);
+        TEST_EXPORTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        assert_eq!(fx_entry(0, &mut out), E_NOT_FOUND, "no fx without the service file");
+        assert!(guard_state(0).is_none());
+        assert_eq!(owned_ids(1, &mut [0; 8]), 0);
+        {
+            let mut t = TEST_EXPORTS.lock().unwrap_or_else(|e| e.into_inner());
+            t.push((dkneeds::keys::name_hash(FX_ROUTES_ENTRY), fx as usize));
+            t.push((dkneeds::keys::name_hash(MACHINES_GUARD_STATE), guard as usize));
+            t.push((dkneeds::keys::name_hash(MACHINES_OWNED_IDS), owned as usize));
+        }
+        assert_eq!(fx_entry(0, &mut out), OK);
         assert_eq!(out.row, 7);
-        assert_eq!(TWO.fx_entry(1, &mut out), OK);
+        assert_eq!(fx_entry(1, &mut out), OK);
         assert_eq!(out.row, 9);
-        assert_eq!(TWO.fx_entry(2, &mut out), E_NOT_FOUND, "past the end");
-        // a table of services without effects, and an empty table
-        static ONE_ROW: [ServiceRow; 1] = [ServiceRow::of::<Fake<1>, RealCore>("fake1", &KINDS_1)];
-        static ONE_ROW_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ONE_ROW);
-        let one = ServiceTable::new(&ONE_ROW_P.0, &REAL_CORE);
-        assert_eq!(one.fx_entry(0, &mut out), E_NOT_FOUND);
-        let none = ServiceTable::new(&[], &REAL_CORE);
-        assert_eq!(none.fx_entry(0, &mut out), E_NOT_FOUND);
+        assert_eq!(fx_entry(2, &mut out), E_NOT_FOUND, "past the end");
+        assert_eq!(guard_state(3), Some(dkrt_abi::service::GuardState { faults: 4, disabled: true }));
+        assert!(guard_state(9).is_none(), "a type the service does not have");
+        let mut ids = [0u8; 8];
+        assert_eq!((owned_ids(2, &mut ids), ids[0]), (1, 18));
+        TEST_EXPORTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 }

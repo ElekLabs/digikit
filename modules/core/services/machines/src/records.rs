@@ -78,11 +78,20 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 /// The machines service.
 pub struct Machines;
 
-impl<C: CoreApi> Service<C> for Machines {
-    unsafe fn owned_ids(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
-        types_of(core, owner, out) as u32
+/// The guard's counts of machine type `ty` (the export `dk_machines_guard_state`, for the MODULES reply).
+pub unsafe fn guard_state<C: CoreApi>(core: &C, ty: u32) -> GuardState {
+    GuardState {
+        faults: core.guard_faults(ty),
+        disabled: core.guard_disabled(ty),
     }
+}
 
+/// The machine type numbers of the rows module record `owner` (1 ..) filled, into `out`; how many (the export `dk_machines_owned_ids`, for the MODULES reply).
+pub fn owned_ids<C: CoreApi>(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
+    types_of(core, owner, out) as u32
+}
+
+impl<C: CoreApi> Service<C> for Machines {
     unsafe fn declare(d: &mut Declare) {
         d.kind(KIND_PARAM, LEN_PARAM);
         d.kind(KIND_MACHINE, LEN_MACHINE);
@@ -199,13 +208,6 @@ impl<C: CoreApi> Service<C> for Machines {
         } else {
             None
         }
-    }
-
-    unsafe fn guard_state(core: &C, ty: u32) -> Option<GuardState> {
-        Some(GuardState {
-            faults: core.guard_faults(ty),
-            disabled: core.guard_disabled(ty),
-        })
     }
 
     unsafe fn dsp_check_sections(core: &C, sec: &DspSec) -> i32 {

@@ -120,6 +120,11 @@ fn loader() -> &'static mut Real {
     unsafe { &mut *addr_of_mut!(LOADER) }
 }
 
+/// The address a loaded service file published for the export `hash`, if any (`handlers::exports::find_export`).
+pub fn find_export(hash: u32) -> Option<u32> {
+    loader().exports.resolve(hash)
+}
+
 /// The boot's load loop over the selection in plan order (`Loader::boot`).
 pub unsafe fn boot(r: &dkrt_sdk::sel::Record, planned: &Plan) {
     loader().boot(r, planned)
@@ -980,15 +985,25 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let provs = parse_provs(&self.found, planned.np);
         plan::settle(&services(), planned, &mods[..n], &provs[..planned.np], &self.loaded[..planned.np]);
         // every service of the boot is loaded and no module yet: the services plan what they keep per selected module
-        let mut sel = dkrt_abi::service::SettleCtx::new();
-        sel.count = n;
-        let mut i = 0;
-        while i < n {
-            sel.nkeys[i] = table_keys(&self.tables[i][..self.table_len[i]], &mut sel.keys[i]) as u8;
-            i += 1;
-        }
+        let sel = settle_ctx(planned, &self.tables, &self.table_len, n);
         services().settle(&sel);
     }
+}
+
+/// What `settle` hands to the services: the keys of the modules the plan accepted. A module the plan refused (a repeated key, no room, a missing need) gives none, so
+/// it takes no number and a key that it repeats never reaches a service's assignment.
+#[inline(never)]
+pub(crate) fn settle_ctx(planned: &Plan, tables: &[[u8; TABLE_MAX]; SEL_MAX], lens: &[usize; SEL_MAX], n: usize) -> dkrt_abi::service::SettleCtx {
+    let mut sel = dkrt_abi::service::SettleCtx::new();
+    sel.count = n;
+    let mut i = 0;
+    while i < n {
+        if planned.verdicts[i].is_accepted() {
+            sel.nkeys[i] = table_keys(&tables[i][..lens[i]], &mut sel.keys[i]) as u8;
+        }
+        i += 1;
+    }
+    sel
 }
 
 /// The keys of a module's header table that `settle` hands to the services (`table` empty: none), at most 8; their count.

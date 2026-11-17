@@ -1,5 +1,5 @@
 //! The role of a `.dkm` or `.dks` file (docs/plans/runtime-and-services.md section 13.2): the role word of the header and what the header table may hold for it.
-//! `RoleSteps` are the steps that differ by role, chosen from the role word: a module has only a check (its table has no PROVIDES, HOOKS or BIND item), a service (`.dks`) checks, keeps its table, publishes its exports and
+//! `RoleSteps` are the steps that differ by role, chosen from the role word: a module has only a check (its table has no PROVIDES, HOOKS, KINDS, SLOTS, BIND or FW item), a service (`.dks`) checks, keeps its table, publishes its exports and
 //! installs its hooks (the row of the service is R12-4).
 //! The service search (`discover.rs`) uses `role_of` and `role_ok`; the loader runs the steps.
 use super::exports::EXPORTS_MAX;
@@ -48,7 +48,7 @@ impl<P: Platform, M: Images, R: Registry> RoleSteps<P, M, R> {
         }
     }
 
-    /// A module has only a check: its header table has no PROVIDES, HOOKS or BIND item.
+    /// A module has only a check: its header table has no PROVIDES, HOOKS, KINDS, SLOTS, BIND or FW item.
     pub const MODULE: Self = RoleSteps { check: module_check, place: no_place, activate: no_activate, undo: no_undo };
 
     /// A service (a provider record): the check refuses an unknown ABI, a bad table and a hook site that is not stock, all before anything is
@@ -274,12 +274,19 @@ pub fn role_of(head: &[u8; 64]) -> u32 {
     u32::from_be_bytes([head[at], head[at + 1], head[at + 2], head[at + 3]])
 }
 
-/// Whether the header table `keys` fits the role: a module (0) has no PROVIDES, HOOKS, BIND or FW item; a service (1) has table version 2 and exactly one
+/// Whether the header table `keys` fits the role: a module (0) has no PROVIDES, HOOKS, KINDS, SLOTS, BIND or FW item; a service (1) has table version 2 and exactly one
 /// PROVIDES item. Another role is `E_FORMAT`, like the other refusals.
 pub fn role_ok(role: u32, keys: &Keys) -> Result<(), i32> {
     if role == 0 {
-        // No packer writes HOOKS for a module (patchkit major3.rs writes only USES and KEYS, dkm.rs adds NEEDS): HOOKS are a service's (role 1).
-        if keys.count(tag::PROVIDES) != 0 || keys.count(tag::HOOKS) != 0 || keys.count(tag::BIND) != 0 || keys.count(tag::FW) != 0 {
+        // No packer writes HOOKS, KINDS or SLOTS for a module (patchkit major3.rs writes only USES and KEYS, dkm.rs adds NEEDS): they are a service's (role 1).
+        // A content module owns no firmware hook, record kind or plug-in point, so two modules can clash only on keys and capacity.
+        if keys.count(tag::PROVIDES) != 0
+            || keys.count(tag::HOOKS) != 0
+            || keys.count(tag::KINDS) != 0
+            || keys.count(tag::SLOTS) != 0
+            || keys.count(tag::BIND) != 0
+            || keys.count(tag::FW) != 0
+        {
             return Err(E_FORMAT);
         }
         Ok(())
@@ -296,7 +303,7 @@ pub fn role_ok(role: u32, keys: &Keys) -> Result<(), i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dkneeds::keys::{write_table, Pair, Table};
+    use dkneeds::keys::{write_table, KindDecl, Pair, Slot, Table};
     use std::vec;
     use std::vec::Vec;
 
@@ -332,9 +339,11 @@ mod tests {
     }
 
     #[test]
-    fn a_module_with_a_provides_hooks_or_bind_item_is_refused() {
+    fn a_module_with_a_provides_hooks_kinds_slots_or_fw_item_is_refused() {
         assert_eq!(check(0, &Table { provides: ONE, ..KEEP }), Err(E_FORMAT));
         assert_eq!(check(0, &Table { hooks: &[Pair { a: 9, b: 4 }], ..KEEP }), Err(E_FORMAT));
+        assert_eq!(check(0, &Table { kinds: &[KindDecl { kind: 90, len: 16, entry: 8 }], ..KEEP }), Err(E_FORMAT));
+        assert_eq!(check(0, &Table { slots: &[Slot { id: 7, flags: 0, entry: 0 }], ..KEEP }), Err(E_FORMAT));
         assert_eq!(check(0, &Table { fw: &[[0; 8]], ..KEEP }), Err(E_FORMAT));
     }
 

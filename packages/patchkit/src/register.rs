@@ -89,6 +89,12 @@ pub fn machine_key(module: &str, machine: &str) -> u32 {
     machine_hash(module, machine) << 8
 }
 
+/// The key of a record of a generic kind (an LFO shape): the same derivation as a machine key, from `<module id>:<record id>` (`[[record]] id` of `module.toml`).
+/// `patchkit gen` writes it as `DK_KEY_<ID>` and the packer puts it in the keys table.
+pub fn record_key(module: &str, record: &str) -> u32 {
+    machine_key(module, record)
+}
+
 /// A type field as `dkm-info` prints it: a machine key as `h<hash>` (six hex digits), a plain type number (hash 0) as decimal.
 pub fn fmt_type(t: u32) -> String {
     match t >> 8 {

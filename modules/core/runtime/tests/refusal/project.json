@@ -15,7 +15,6 @@
         ],
         "modules": [
           "test/lfo-shape",
-          "test/lfo-shape-dup",
           "core/services/lfo"
         ],
         "plusdrive": true,

@@ -1,1 +1,0 @@
-Test fixture of the R7 registry proof: the code of `test/lfo-shape` under another module name. Both emit an `lfo_shape` record with the shape id 7, so only one of the two loads (`E_PLAN_KEY` for the second owner of the key). Nothing in the firmware uses it.

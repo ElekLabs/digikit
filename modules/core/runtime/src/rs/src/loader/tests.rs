@@ -1361,3 +1361,33 @@ fn an_export_name_another_provider_published_undoes_the_load_and_keeps_the_other
         assert_eq!(l.exports.resolve(dkneeds::keys::name_hash("dk_svctest_ping")), Some(0x7000));
     }
 }
+
+#[test]
+fn settle_hands_the_services_the_keys_of_accepted_modules_only() {
+    use dkneeds::keys::{write_table, KeyGroup, Table};
+    use dkrt_abi::plan::{Reason, Verdict};
+    let keys = [0x100u32, 0x200];
+    let t = Table { keys: &[KeyGroup { kind: dkneeds::KIND_MACHINE, keys: &keys }], ..Default::default() };
+    let mut bytes = vec![0u8; dkneeds::keys::table_size(&t)];
+    write_table(&t, &mut bytes).unwrap();
+    let mut tables = [[0u8; crate::plan::TABLE_MAX]; SEL_MAX];
+    let mut lens = [0usize; SEL_MAX];
+    for k in 0..2 {
+        tables[k][..bytes.len()].copy_from_slice(&bytes);
+        lens[k] = bytes.len();
+    }
+    // module 1 repeats the keys of module 0: the plan refused it (E_PLAN_KEY), so its keys never reach the sticky assignment
+    let mut plan = Plan {
+        n: 2,
+        verdicts: [Verdict::Accepted; SEL_MAX],
+        order: [0; SEL_MAX],
+        dsp_load: (0, 0),
+        np: 0,
+        provider_verdicts: [Verdict::Accepted; dkrt_sdk::PROVIDER_MAX],
+        provider_order: [0; dkrt_sdk::PROVIDER_MAX],
+    };
+    plan.verdicts[1] = Verdict::Refused(Reason::DuplicateKey(dkneeds::KIND_MACHINE, 0x100));
+    let sel = settle_ctx(&plan, &tables, &lens, 2);
+    assert_eq!((sel.count, sel.nkeys[0], sel.nkeys[1]), (2, 2, 0));
+    assert_eq!(sel.keys[0][..2], keys);
+}

@@ -195,6 +195,10 @@ struct Import {
     /// wrapper that `patchkit gen` writes to `gen_exports.rs`: `build::<name without dk_ and module_ctx_>(&ImportCore, args...)`.
     #[serde(default)]
     wrapper: Option<String>,
+    /// With `provided`: an export that only the runtime calls by name (`handlers::exports`): it is in the file's export list and `gen_exports.rs`, and in no header, no
+    /// document and no import table of a module.
+    #[serde(default)]
+    internal: bool,
 }
 /// The opaque handle types, services and call contexts of the service imports: `[handle]` of `sdk/sdk.toml`.
 #[derive(Deserialize)]
@@ -2430,7 +2434,12 @@ fn imports_checked(sdk: &Sdk, with_test: bool) -> Result<Vec<(&Import, Option<Si
                 ));
             }
         }
-        if with_test || !im.test {
+        if im.internal && (!im.provided || im.wrapper.is_none()) {
+            return Err(err!(
+                "{SOURCE}: {what}: `internal` goes with `provided = true` and a `wrapper`"
+            ));
+        }
+        if with_test || !(im.test || im.internal) {
             v.push((im, sig));
         }
     }
@@ -2675,7 +2684,7 @@ fn gen_exports_rs(service: &str, imps: &[(&Import, Option<Sig>)]) -> String {
         None => im.name.clone(),
     };
     s.push_str("\n// the entries have the types sdk/sdk.toml gives the imports\n");
-    for (im, _) in &mine {
+    for (im, _) in mine.iter().filter(|(im, _)| !im.internal) {
         let _ = writeln!(s, "const _: api::{}Fn = {};", camel(&im.name), path(im));
     }
     let _ = writeln!(
