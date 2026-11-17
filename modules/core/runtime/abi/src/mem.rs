@@ -68,3 +68,14 @@ pub unsafe fn wr16(a: u32, v: i32) {
     write_volatile(a as *mut u8, (v >> 8) as u8);
     write_volatile((a + 1) as *mut u8, v as u8);
 }
+
+/// Word reads and writes of firmware memory by address: the rows and tables of the image that a service fills. A service takes the core as a `CoreApi`, which has this
+/// as a supertrait, so a host test gives a core that logs the writes (`FakeCore`) instead of dereferencing an address that is not a host pointer.
+pub trait FwMem {
+    unsafe fn rd(&self, a: u32) -> u32 {
+        rd(a)
+    }
+    unsafe fn wr(&self, a: u32, v: u32) {
+        wr(a, v)
+    }
+}

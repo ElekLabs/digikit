@@ -33,7 +33,6 @@ mod link;
 pub mod entry;
 mod gen_abi_check;
 mod loader;
-pub mod params;
 pub mod registry;
 pub mod scan;
 pub mod settings;

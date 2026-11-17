@@ -22,11 +22,6 @@ macro_rules! core_imports {
             fn dkc_param_first() -> u32;
             // The owner of each run-time parameter row: `*len` is set to the count.
             fn dkc_param_owners(len: *mut u32) -> *const u8;
-            fn dkc_write_param_row(inf: *const u32, code: u32, template: u32, slot: u32, min: u32, max: u32, def: u32, name: u32, short: u32);
-            fn dkc_write_fx_param_row(code: u32, template: u32, mirror: u32, min: u32, max: u32, def: u32, name: u32, short: u32);
-            fn dkc_write_send_param_row(code: u32, class: u32, owner_of: u32, mirror: u32, name: u32, short: u32);
-            fn dkc_reset_param_row(code: u32);
-            fn dkc_make_rep(rep: *mut u8, src: *const u8, upper: bool) -> u32;
             fn dkc_type_resolve(key: u32) -> u32;
             fn dkc_type_map_used() -> u32;
             fn dkc_guard_faults(ty: u32) -> u32;

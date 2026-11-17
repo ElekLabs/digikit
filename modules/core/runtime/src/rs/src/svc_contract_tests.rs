@@ -51,13 +51,6 @@ fn slices_and_status_results_are_converted_both_ways() {
         assert_eq!(x, y);
         let value = [1u8, 2, 3];
         assert_eq!(ic.settings_put(b"nokey", &value), REAL_CORE.settings_put(b"nokey", &value));
-        // a firmware string: the characters are where the core put them, relative to the buffer
-        let (mut r1, mut r2) = ([0u8; 64], [0u8; 64]);
-        // (the address is a `u32`: truncated on a 64-bit host, so compare the distance in 32 bits)
-        let a = ic.make_rep(r1.as_mut_ptr(), b"Name\0".as_ptr(), false).wrapping_sub(r1.as_ptr() as usize as u32);
-        let b = REAL_CORE.make_rep(r2.as_mut_ptr(), b"Name\0".as_ptr(), false).wrapping_sub(r2.as_ptr() as usize as u32);
-        assert_eq!(a, b);
-        assert_eq!(r1, r2);
         // the log takes five words
         ic.log(dkrt_sdk::logk::MODULE_COMMIT, LOG_INFO, [1, 2, 3, 4, 5]);
     }

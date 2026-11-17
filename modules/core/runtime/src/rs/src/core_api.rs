@@ -42,6 +42,8 @@ impl SampleCore for RealCore {
     }
 }
 
+impl dkrt_abi::mem::FwMem for RealCore {}
+
 impl CoreApi for RealCore {
     unsafe fn dynreg(&self) -> *const u32 {
         registry::info()
@@ -54,21 +56,6 @@ impl CoreApi for RealCore {
     }
     fn param_owners(&self) -> &[u8] {
         unsafe { &(*addr_of!(registry::DKRT_REG)).param_owner }
-    }
-    unsafe fn write_param_row(&self, inf: *const u32, code: u32, template: u32, slot: u32, min: u32, max: u32, def: u32, name: u32, short: u32) {
-        crate::params::write_param_row(inf, code, template, slot, min, max, def, name, short)
-    }
-    unsafe fn write_fx_param_row(&self, code: u32, template: u32, mirror: u32, min: u32, max: u32, def: u32, name: u32, short: u32) {
-        crate::params::write_fx_param_row(code, template, mirror, min, max, def, name, short)
-    }
-    unsafe fn write_send_param_row(&self, code: u32, class: u32, owner_of: u32, mirror: u32, name: u32, short: u32) {
-        crate::params::write_send_param_row(code, class, owner_of, mirror, name, short)
-    }
-    unsafe fn reset_param_row(&self, code: u32) {
-        crate::params::reset_param_row(code)
-    }
-    unsafe fn make_rep(&self, rep: *mut u8, src: *const u8, upper: bool) -> u32 {
-        crate::params::make_rep(rep, src, upper)
     }
     unsafe fn type_resolve(&self, key: u32) -> u32 {
         crate::assign::resolve(key)

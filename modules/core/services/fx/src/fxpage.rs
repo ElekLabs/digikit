@@ -516,8 +516,8 @@ pub unsafe fn apply<C: CoreApi>(core: &C, owner: u8, b: *const u8) -> i32 {
     // strings
     copy_text(s.tab[k].as_mut_ptr(), b.add(16), 8);
     copy_text(s.title[k].as_mut_ptr(), b.add(24), TEXT);
-    let tab = core.make_rep(s.rep_tab[k].as_mut_ptr(), s.tab[k].as_ptr(), false);
-    let title = core.make_rep(s.rep_title[k].as_mut_ptr(), s.title[k].as_ptr(), false);
+    let tab = dkrt_svc_params::make_rep(s.rep_tab[k].as_mut_ptr(), s.tab[k].as_ptr(), false);
+    let title = dkrt_svc_params::make_rep(s.rep_title[k].as_mut_ptr(), s.title[k].as_ptr(), false);
     // the page's nine codes: 0 where no knob stands
     let mut codes = [0u32; 9];
     let mut j = 0;
@@ -615,7 +615,11 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
             let mut j = 0;
             publish_row(inf, k, 0);
             while j < WORDS {
-                core.reset_param_row(iw(inf, w::P_FIRST) + (k * WORDS + j) as u32);
+                dkrt_svc_params::reset_param_row(
+                    core,
+                    core.dynreg(),
+                    iw(inf, w::P_FIRST) + (k * WORDS + j) as u32,
+                );
                 s.cur[k][j] = 0;
                 s.def[k][j] = 0;
                 s.dsp[k][j] = -1;
@@ -785,7 +789,9 @@ unsafe fn write_knob_row<C: CoreApi>(
     def_n: i32,
 ) {
     let wi = k * WORDS + j;
-    c.write_fx_param_row(
+    dkrt_svc_params::write_fx_param_row(
+        c,
+        c.dynreg(),
         code,
         tpl,
         idx,
@@ -881,7 +887,11 @@ mod tests {
     #[test]
     fn a_knob_gets_its_row_then_a_change_is_set_on_the_link() {
         let mut s: std::boxed::Box<FxpState> = unsafe { std::boxed::Box::new(core::mem::zeroed()) };
-        let core = FakeCore::new();
+        let mut core = FakeCore::new();
+        // the parameter table of the firmware, as a fake: rows of 0x40 bytes at 0x1000, the mirror index in the second word
+        core.dynreg_table = std::vec![0; 96];
+        core.dynreg_table[dkrt_abi::registry::w::P_TABLE] = 0x1000;
+        core.dynreg_table[dkrt_abi::registry::w::PF_SIZE] = 0x40;
         unsafe {
             s.min[2][1] = 0f32.to_bits();
             s.span[2][1] = 1f32.to_bits();
@@ -895,24 +905,25 @@ mod tests {
             // a knob is word 4 + j of its row, MIX word 13, whatever its place among the knobs; the rows are 24 words apart
             set_knob(&core, &mut s, 3, WORDS - 1, 0x7f00);
         }
-        let calls = core.calls();
         assert_eq!(
-            calls[0],
-            Call::FxRow {
-                code: 120,
-                mirror: 33,
-                def: 0x4000
-            }
+            unsafe { dkrt_abi::mem::FwMem::rd(&core, 0x1000 + 120 * 0x40 + 4) },
+            33,
+            "the effect knob's row has the kit's value index as its mirror index"
         );
+        let calls: std::vec::Vec<Call> = core
+            .calls()
+            .into_iter()
+            .filter(|c| !matches!(c, Call::Wr(..)))
+            .collect();
         assert!(matches!(
-            calls[1],
+            calls[0],
             Call::Set {
                 slot: dkrt_abi::link::Slot { win: 2, word: 53 },
                 ..
             }
         ));
         assert!(matches!(
-            calls[2],
+            calls[1],
             Call::Set {
                 slot: dkrt_abi::link::Slot { win: 2, word: 85 },
                 ..

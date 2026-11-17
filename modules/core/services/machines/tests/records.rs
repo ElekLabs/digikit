@@ -2,6 +2,7 @@
 //! record and the capacity counts. A machine or a page row is written at absolute addresses of the firmware's tables (`wr`), which a host cannot
 //! reach: those parts run in the device tests (`core/dynreg`, `core/input`).
 use dkrt_abi::core_api::CoreApi;
+use dkrt_abi::mem::FwMem;
 use dkrt_abi::registry::w;
 use dkrt_abi::service::*;
 use dkrt_sdk::records::*;
@@ -15,7 +16,7 @@ use std::vec::Vec;
 /// The tests that drive the statics of the crate (the click state and `APPLIED`) take this lock.
 static TEST_LOCK: Mutex<()> = Mutex::new(());
 
-const P_FIRST: u32 = 1000;
+const P_FIRST: u32 = 100;
 const P_DYN0: u32 = 200;
 const SLOT_BASE: u32 = 10;
 const OWNER: u8 = 3;
@@ -31,7 +32,24 @@ fn table() -> Vec<u32> {
     t[w::PG_DYN_N] = 4;
     t[w::KNOBS] = 8;
     t[w::SLOT_BASE] = SLOT_BASE;
+    // the parameter table of the firmware (a fake: `FakeCore` keeps the words written there): rows of 0x40 bytes, the first three words are min, max and default
+    t[w::P_TABLE] = P_TABLE;
+    t[w::PF_SIZE] = 0x40;
+    t[w::SPEC] = 0x100;
+    t[w::SPEC + 1] = 0x101;
+    t[w::SPEC + 2] = 0x102;
+    t[w::P_ROWS] = 0x20000;
+    t[w::P_ROW_SIZE] = 0x20;
+    t[w::P_TEMPLATE_OFF] = 8;
     t
+}
+
+const P_TABLE: u32 = 0x10000;
+
+/// The (min, max, default) words of the parameter table row `code`, as the writer left them.
+fn row_words(core: &FakeCore, code: u32) -> [u32; 3] {
+    let a = P_TABLE + code * 0x40;
+    unsafe { [core.rd(a), core.rd(a + 4), core.rd(a + 8)] }
 }
 
 fn core() -> FakeCore {
@@ -214,23 +232,8 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
         OK
     );
     // the parameters sit in the first free rows, with their ranges and the owner
-    assert_eq!(
-        core.calls(),
-        [
-            Call::ParamRow {
-                code: P_DYN0,
-                min: 0,
-                max: 255,
-                def: 17
-            },
-            Call::ParamRow {
-                code: P_DYN0 + 1,
-                min: -64i32 as u32,
-                max: 63,
-                def: 0
-            },
-        ]
-    );
+    assert_eq!(row_words(&core, P_DYN0), [0, 255, 17]);
+    assert_eq!(row_words(&core, P_DYN0 + 1), [-64i32 as u32, 63, 0]);
     assert_eq!(&core.reg_state().param_owner[..3], [OWNER, OWNER, 0]);
     assert_eq!(
         unsafe { <Machines as Service<FakeCore>>::cap(&core, dkrt_sdk::proto::CAPK_PARAM_ROWS) },
@@ -251,8 +254,8 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
     unsafe { <Machines as Service<FakeCore>>::remove(&core, OWNER) };
     assert_eq!(&core.reg_state().param_owner[..3], [0, 0, 0]);
     assert_eq!(
-        core.calls().len(),
-        2,
+        (row_words(&core, P_DYN0), row_words(&core, P_DYN0 + 1)),
+        ([0, 0, 0], [0, 0, 0]),
         "both parameter rows are written back as gap rows"
     );
     assert_eq!(unsafe { slots::pending() }.callback, 0);

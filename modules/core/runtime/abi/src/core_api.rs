@@ -31,7 +31,7 @@ pub trait SampleCore: CoreApi {
     fn host(&self) -> &Self::Host;
 }
 
-pub trait CoreApi {
+pub trait CoreApi: crate::mem::FwMem {
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
     /// The words of `dynreg_info` (`registry::w`); null without a registry.
     unsafe fn dynreg(&self) -> *const u32;
@@ -41,42 +41,6 @@ pub trait CoreApi {
     fn param_first(&self) -> u32;
     /// The owner (module record + 1, 0 free) of each run-time parameter row.
     fn param_owners(&self) -> &[u8];
-    /// Write one parameter table row from its lowering spec (`inf` is `dynreg()`).
-    unsafe fn write_param_row(
-        &self,
-        inf: *const u32,
-        code: u32,
-        template: u32,
-        slot: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-        name: u32,
-        short: u32,
-    );
-    unsafe fn write_fx_param_row(
-        &self,
-        code: u32,
-        template: u32,
-        mirror: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-        name: u32,
-        short: u32,
-    );
-    unsafe fn write_send_param_row(
-        &self,
-        code: u32,
-        class: u32,
-        owner_of: u32,
-        mirror: u32,
-        name: u32,
-        short: u32,
-    );
-    unsafe fn reset_param_row(&self, code: u32);
-    /// A firmware string representation of `src` at `rep`; the address of its characters.
-    unsafe fn make_rep(&self, rep: *mut u8, src: *const u8, upper: bool) -> u32;
     /// The machine type number for machine key `key` of the module being loaded (sticky assignment); 0 when there is none.
     unsafe fn type_resolve(&self, key: u32) -> u32;
     /// Entries of the sticky type map in use (for CAPACITY).

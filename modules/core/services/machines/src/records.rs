@@ -551,7 +551,8 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
         np += 1;
         copy_text(s.s.param_name[k].as_mut_ptr(), b.add(24), 32);
         copy_text(s.s.param_short[k].as_mut_ptr(), b.add(56), 16);
-        core.write_param_row(
+        dkrt_svc_params::write_param_row(
+            core,
             inf,
             code,
             rd32(b.add(4)),
@@ -596,12 +597,12 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
             b.add(40 + MACH_TEXT),
             MACH_TEXT,
         );
-        let name = core.make_rep(
+        let name = dkrt_svc_params::make_rep(
             s.s.rep_pname[k].as_mut_ptr(),
             s.s.page_name[k].as_ptr(),
             false,
         );
-        let title = core.make_rep(
+        let title = dkrt_svc_params::make_rep(
             s.s.rep_ptitle[k].as_mut_ptr(),
             s.s.page_title[k].as_ptr(),
             false,
@@ -666,12 +667,12 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
             b.add(52 + MACH_TEXT),
             MACH_TEXT,
         );
-        let long = core.make_rep(
+        let long = dkrt_svc_params::make_rep(
             s.s.rep_long[k].as_mut_ptr(),
             s.s.mach_name[k].as_ptr(),
             true,
         );
-        let short = core.make_rep(
+        let short = dkrt_svc_params::make_rep(
             s.s.rep_short[k].as_mut_ptr(),
             s.s.mach_short[k].as_ptr(),
             true,
@@ -838,7 +839,8 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     k = 0;
     while k < MAX_PARAM {
         if s.param_owner[k] == owner {
-            core.write_param_row(
+            dkrt_svc_params::write_param_row(
+                core,
                 inf,
                 iw(inf, w::P_DYN0) + k as u32,
                 iw(inf, w::RESERVE_TEMPLATE),

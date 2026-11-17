@@ -37,26 +37,6 @@ pub mod shims {
         o.as_ptr()
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_write_param_row(inf: *const u32, code: u32, template: u32, slot: u32, min: u32, max: u32, def: u32, name: u32, short: u32) {
-        REAL_CORE.write_param_row(inf, code, template, slot, min, max, def, name, short)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_write_fx_param_row(code: u32, template: u32, mirror: u32, min: u32, max: u32, def: u32, name: u32, short: u32) {
-        REAL_CORE.write_fx_param_row(code, template, mirror, min, max, def, name, short)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_write_send_param_row(code: u32, class: u32, owner_of: u32, mirror: u32, name: u32, short: u32) {
-        REAL_CORE.write_send_param_row(code, class, owner_of, mirror, name, short)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_reset_param_row(code: u32) {
-        REAL_CORE.reset_param_row(code)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_make_rep(rep: *mut u8, src: *const u8, upper: bool) -> u32 {
-        REAL_CORE.make_rep(rep, src, upper)
-    }
-    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_type_resolve(key: u32) -> u32 {
         REAL_CORE.type_resolve(key)
     }

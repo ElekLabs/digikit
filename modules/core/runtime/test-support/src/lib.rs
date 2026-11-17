@@ -23,22 +23,8 @@ pub use storage::FakeStorage;
 /// One call the service made, in order.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Call {
-    ParamRow {
-        code: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-    },
-    FxRow {
-        code: u32,
-        mirror: u32,
-        def: u32,
-    },
-    SendRow {
-        code: u32,
-        mirror: u32,
-    },
-    ResetRow(u32),
+    /// A word written to firmware memory by address (`FwMem::wr`): the rows and tables of the image. The fake keeps them (`FwMem::rd` reads them back).
+    Wr(u32, u32),
     SettingsPut(Vec<u8>, Vec<u8>),
     Log {
         kind: u16,
@@ -132,6 +118,8 @@ struct FakeJob {
 /// A core that records what services ask of it. Its link is the real queue over a model of `core/dsp-link` (`link::fake::FakeLink`): the tests read the
 /// wire from `link.borrow().t.wire` and let the model's time pass with `pump`. `fx_table` is the words of `dynfx_info` the fake hands out (first row 0).
 pub struct FakeCore {
+    /// The firmware words written so far, by address.
+    pub mem: RefCell<std::collections::BTreeMap<u32, u32>>,
     pub calls: RefCell<Vec<Call>>,
     pub first: u32,
     pub owners: Vec<u8>,
@@ -163,6 +151,7 @@ impl FakeCore {
         let reg: &'static mut RegState = Box::leak(Box::new(unsafe { core::mem::zeroed() }));
         let dsp: &'static mut DspState = Box::leak(Box::new(unsafe { core::mem::zeroed() }));
         FakeCore {
+            mem: RefCell::new(std::collections::BTreeMap::new()),
             calls: RefCell::new(Vec::new()),
             first: 100,
             owners: Vec::new(),
@@ -232,6 +221,16 @@ impl SampleCore for FakeCore {
     }
 }
 
+impl dkrt_abi::mem::FwMem for FakeCore {
+    unsafe fn rd(&self, a: u32) -> u32 {
+        self.mem.borrow().get(&a).copied().unwrap_or(0)
+    }
+    unsafe fn wr(&self, a: u32, v: u32) {
+        self.mem.borrow_mut().insert(a, v);
+        self.rec(Call::Wr(a, v));
+    }
+}
+
 impl CoreApi for FakeCore {
     unsafe fn dynreg(&self) -> *const u32 {
         if self.dynreg_table.is_empty() {
@@ -248,55 +247,6 @@ impl CoreApi for FakeCore {
     }
     fn param_owners(&self) -> &[u8] {
         &self.owners
-    }
-    unsafe fn write_param_row(
-        &self,
-        _inf: *const u32,
-        code: u32,
-        _t: u32,
-        _slot: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-        _n: u32,
-        _s: u32,
-    ) {
-        self.rec(Call::ParamRow {
-            code,
-            min,
-            max,
-            def,
-        })
-    }
-    unsafe fn write_fx_param_row(
-        &self,
-        code: u32,
-        _t: u32,
-        mirror: u32,
-        _min: u32,
-        _max: u32,
-        def: u32,
-        _n: u32,
-        _s: u32,
-    ) {
-        self.rec(Call::FxRow { code, mirror, def })
-    }
-    unsafe fn write_send_param_row(
-        &self,
-        code: u32,
-        _c: u32,
-        _o: u32,
-        mirror: u32,
-        _n: u32,
-        _s: u32,
-    ) {
-        self.rec(Call::SendRow { code, mirror })
-    }
-    unsafe fn reset_param_row(&self, code: u32) {
-        self.rec(Call::ResetRow(code))
-    }
-    unsafe fn make_rep(&self, rep: *mut u8, _src: *const u8, _upper: bool) -> u32 {
-        rep as u32
     }
     unsafe fn type_resolve(&self, key: u32) -> u32 {
         key & 0xff
