@@ -999,23 +999,28 @@ pub(crate) fn settle_ctx(planned: &Plan, tables: &[[u8; TABLE_MAX]; SEL_MAX], le
     let mut i = 0;
     while i < n {
         if planned.verdicts[i].is_accepted() {
-            sel.nkeys[i] = table_keys(&tables[i][..lens[i]], &mut sel.keys[i]) as u8;
+            let (m, l) = table_keys(&tables[i][..lens[i]], &mut sel.keys[i], &mut sel.shape_keys[i]);
+            sel.nkeys[i] = m as u8;
+            sel.shape_nkeys[i] = l as u8;
         }
         i += 1;
     }
     sel
 }
 
-/// The keys of a module's header table that `settle` hands to the services (`table` empty: none), at most 8; their count.
+/// The keys of a module's header table that `settle` hands to the services (`table` empty: none), at most 8 of each group: the machine keys into `out`, the LFO
+/// shape keys into `shapes`; their counts.
 #[inline(never)]
-pub(crate) fn table_keys(table: &[u8], out: &mut [u32; 8]) -> usize {
+pub(crate) fn table_keys(table: &[u8], out: &mut [u32; 8], shapes: &mut [u32; 8]) -> (usize, usize) {
     let k = match dkrt_abi::keys::KeysCopy::from_bytes(table) {
         Ok(k) => k,
-        Err(_) => return 0,
+        Err(_) => return (0, 0),
     };
     let n = k.nm.min(8);
     out[..n].copy_from_slice(&k.mk[..n]);
-    n
+    let l = k.ns.min(8);
+    shapes[..l].copy_from_slice(&k.sk[..l]);
+    (n, l)
 }
 
 /// The header tables of the first `n` providers the search found.

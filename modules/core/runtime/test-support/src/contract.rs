@@ -444,6 +444,8 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             sel.count = i + 1;
             sel.nkeys[i] = k.nm.min(8) as u8;
             sel.keys[i][..k.nm.min(8)].copy_from_slice(&k.mk[..k.nm.min(8)]);
+            sel.shape_nkeys[i] = k.ns.min(8) as u8;
+            sel.shape_keys[i][..k.ns.min(8)].copy_from_slice(&k.sk[..k.ns.min(8)]);
         }
         unsafe { S::settle(&l.core, &sel) };
         l

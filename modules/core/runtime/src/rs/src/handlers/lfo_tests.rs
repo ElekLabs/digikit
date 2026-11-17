@@ -1,6 +1,6 @@
 //! Host tests of the `lfo` service through the runtime (the crate `dkrt-svc-lfo` has its own over `FakeCore`): the proof that a kind the registry, the collector, the loader, dkneeds and patchkit do not name works end to end
 //! (R7): a fixture's record goes through `dk_record_add`'s collector, the `register` section, the registry walkers and the planner.
-use super::exports::{owner_of, shape, used, Lfo, MAX_SHAPES, SAMPLES};
+use super::exports::{number_of, owner_of, shape, used, Lfo, MAX_SHAPES, SAMPLES};
 use crate::collect::Collect;
 use super::tests::LOCK;
 use crate::plan::{self, Env};
@@ -9,16 +9,17 @@ use dkneeds::keys::{write_table, KeyGroup, Keys, Table};
 use crate::core_api::RealCore;
 use crate::svc_rows;
 use dkrt_abi::plan::{Reason, Verdict};
-use dkrt_abi::service::{RecordSink, ServiceRow};
+use dkrt_abi::service::{RecordSink, ServiceRow, SettleCtx};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::records::{KIND_LFO_SHAPE, KINDS_LFO, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
 use std::vec;
 use std::vec::Vec;
 
-/// The body of a shape record: the id, then the 32 samples (a ramp from `from`), big-endian.
+/// The body of a shape record: the key, the name, then the 32 samples (a ramp from `from`), big-endian.
 fn body(id: u32, from: i16) -> Vec<u8> {
     let mut b = id.to_be_bytes().to_vec();
+    b.extend_from_slice(b"TEST");
     for s in 0..SAMPLES as i16 {
         b.extend_from_slice(&(from + 100 * s).to_be_bytes());
     }
@@ -65,6 +66,18 @@ impl Drop for Loaded {
     }
 }
 
+/// The boot's settle over one module (selection index 0) that provides these shape keys, and that module loading.
+fn settle(keys: &[u32]) {
+    let mut sel = SettleCtx::new();
+    sel.count = 1;
+    sel.shape_nkeys[0] = keys.len() as u8;
+    sel.shape_keys[0][..keys.len()].copy_from_slice(keys);
+    unsafe {
+        <Lfo as dkrt_abi::service::Service<RealCore>>::settle(&crate::core_api::REAL_CORE, &sel);
+        crate::selection::BOOT_IDX = 0;
+    }
+}
+
 fn clear() {
     for owner in 1..=crate::MAX_MODULES as u8 {
         unsafe { registry::remove(owner) };
@@ -76,16 +89,17 @@ fn a_shape_record_goes_from_the_builder_call_to_the_table_and_back() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     clear();
-    let sec = section(&[(7, -1000)]);
+    settle(&[0x700]);
+    let sec = section(&[(0x700, -1000)]);
     // the section is the header and one record of the kind's length
     assert_eq!(sec.len(), 16 + LEN_LFO_SHAPE as usize);
     unsafe {
         assert_eq!(registry::check(sec.as_ptr(), sec.len() as u32, 0, 1), OK);
         assert_eq!(registry::apply(1, sec.as_ptr(), sec.len() as u32, 0x1000), OK);
     }
-    let s = shape(7).expect("the walker applied the record");
+    let s = shape(number_of(0, 0x700)).expect("the walker applied the record");
     assert_eq!((s[0], s[1], s[31]), (-1000, -900, -1000 + 3100));
-    assert_eq!((owner_of(7), used()), (1, 1));
+    assert_eq!((owner_of(number_of(0, 0x700)), used()), (1, 1));
     unsafe { registry::remove(1) };
     assert_eq!((shape(7), owner_of(7), used()), (None, 0, 0), "the walker removed what the module kept");
 }
@@ -95,23 +109,25 @@ fn a_second_owner_of_a_shape_id_and_an_id_twice_or_zero_are_refused() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     clear();
-    let a = section(&[(7, 0)]);
+    let keys: Vec<u32> = (1..=MAX_SHAPES as u32 + 1).map(|i| i << 8).collect();
+    settle(&keys[..8]);
+    let a = section(&[(0x100, 0)]);
     unsafe {
         assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0, 1), OK);
         assert_eq!(registry::apply(1, a.as_ptr(), a.len() as u32, 0x1000), OK);
         // another module with the same id is refused at the check, and what the first kept is unchanged
         assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0, 1), E_TYPE_USED);
-        let other = section(&[(8, 5)]);
+        let other = section(&[(0x200, 5)]);
         assert_eq!(registry::check(other.as_ptr(), other.len() as u32, 0, 1), OK);
         // an id twice in one file, and the id 0
-        let twice = section(&[(9, 0), (9, 1)]);
+        let twice = section(&[(0x300, 0), (0x300, 1)]);
         assert_eq!(registry::check(twice.as_ptr(), twice.len() as u32, 0, 1), E_TYPE_USED);
         let zero = section(&[(0, 0)]);
         assert_eq!(registry::check(zero.as_ptr(), zero.len() as u32, 0, 1), E_FORMAT);
-        // a table that cannot take the file's shapes
-        let many: Vec<(u32, i16)> = (100..100 + MAX_SHAPES as u32).map(|i| (i, 0)).collect();
-        let big = section(&many[..MAX_SHAPES]);
-        assert_eq!(registry::check(big.as_ptr(), big.len() as u32, 0, 1), E_TABLE_FULL);
+        // a table that cannot take the file's shapes: the first number is kept, so all eight do not fit
+        let many: Vec<(u32, i16)> = keys[..MAX_SHAPES].iter().map(|k| (*k, 0)).collect();
+        let big = section(&many);
+        assert_eq!(registry::check(big.as_ptr(), big.len() as u32, 0, 1), E_TYPE_USED);
         registry::remove(1);
     }
     assert_eq!(used(), 0);
@@ -120,6 +136,7 @@ fn a_second_owner_of_a_shape_id_and_an_id_twice_or_zero_are_refused() {
 #[test]
 fn a_record_of_a_kind_that_is_not_generic_or_has_the_wrong_length_never_reaches_the_service() {
     let b = body(1, 0);
+    assert_eq!(b.len() + 8, LEN_LFO_SHAPE as usize);
     let mut c = Collect::new();
     assert_eq!(c.add_record(KIND_LFO_SHAPE, b.as_ptr(), b.len() as u32 - 4), E_FORMAT);
     assert_eq!(c.ng, 0);

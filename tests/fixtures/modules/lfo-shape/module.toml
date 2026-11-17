@@ -22,12 +22,12 @@ conflicts = []
 kind = "lfo_shape"
 id = "shape"
 
-# The record block `init` commits: the register section header (16 bytes) and one record (76 bytes).
+# The record block `init` commits: the register section header (16 bytes) and one record (80 bytes).
 [uses.dt2]
-record_bytes = 92
+record_bytes = 96
 
 [uses.dn2]
-record_bytes = 92
+record_bytes = 96
 
 # C, built by `patchkit build`; the runtime loads it from the card store.
 [[object]]
