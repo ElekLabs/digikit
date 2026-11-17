@@ -16,34 +16,6 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The functions the file exports: each is an [[import]] of its service in sdk/sdk.toml.
-[[export]]
-name = "dk_sample_pool_open"
-
-[[export]]
-name = "dk_sample_pool_add"
-
-[[export]]
-name = "dk_sample_pool_clear"
-
-[[export]]
-name = "dk_sample_pool_status"
-
-[[export]]
-name = "dk_sample_pool_info"
-
-[[export]]
-name = "dk_sample_pool_path"
-
-[[export]]
-name = "dk_sample_pool_set"
-
-[[export]]
-name = "dk_sample_pool_peaks"
-
-[[export]]
-name = "dk_sample_pool_peaks_window"
-
 # The pointer slots of the sample-pool adapter (`[[slot]]` of its module.toml): the adapter calls a slot only when it is set; the file writes the address of its routine.
 [[fill]]
 slot = "pool_done"

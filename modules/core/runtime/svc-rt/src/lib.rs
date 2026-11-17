@@ -321,29 +321,32 @@ macro_rules! hook_device {
 /// The service file's glue: `service!(Lfo, "lfo", KINDS_LFO)` for `impl<C: CoreApi> Service<C> for Lfo`, the name of its `[[service]]` and the record kinds
 /// it owns (`&'static [(u32, u32)]`, as `dkrt_sdk::records::KINDS_*`). It emits `dk_module`, `dk_svc_abi` and (on the ColdFire) the panic handler.
 ///
-/// After the kinds: `setup = f`, `hooks = [...]`, `fills = [...]` and `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the hash of
-/// the name, as the `[[export]]` entries of `module.toml`), each optional list in this order. Every form also emits `dk_svc_declare(ctx, device)`: the declarations
+/// After the kinds: `setup = f`, `hooks = [...]`, `fills = [...]` and `exports = gen_exports::exports()` (the list `patchkit gen` writes for a service with `provided` imports in `sdk/sdk.toml`:
+/// `[(name hash, entry); N]`) or, for a test, `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the hash of the name), each optional list in this order. Every form also emits `dk_svc_declare(ctx, device)`: the declarations
 /// of `init` without `setup` (the host test of the assembly runs it and compares the result with the header table).
 ///
 /// The symbols are `no_mangle` on the ColdFire only: a host test links the service crates of all three files into one binary.
 #[macro_export]
 macro_rules! service {
     ($svc:ty, $name:literal, $kinds:expr) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = None, hooks = [], fills = [], exports = []);
+        $crate::service!(@emit $svc, $name, $kinds, setup = None, hooks = [], fills = [], exports = $crate::service!(@exports));
     };
     ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*]) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [], exports = []);
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [], exports = $crate::service!(@exports));
     };
     ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*]) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = []);
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports));
     };
     ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*]) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = [$($export)*]);
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*));
+    };
+    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = $exports:expr) => {
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $exports);
     };
     (@emit $svc:ty, $name:literal, $kinds:expr, setup = $setup:expr,
      hooks = [$(($site:literal, $entry:path $(, $dev:ident)?)),* $(,)?],
      fills = [$(($slot:literal, $fill:path $(, $fdev:ident)?)),* $(,)?],
-     exports = [$(($ename:literal, $efn:path)),* $(,)?]) => {
+     exports = $exports:expr) => {
         static DK_SVC_ROW: $crate::dkrt_abi::service::ServiceRow =
             $crate::dkrt_abi::service::ServiceRow::of::<$svc, $crate::ImportCore>($name, $kinds);
 
@@ -352,7 +355,7 @@ macro_rules! service {
         /// # Safety
         /// `ctx` is the module context of a collection; the entries are addresses of the file.
         pub unsafe fn dk_svc_declare(ctx: *mut u8, device: fn() -> u32) -> i32 {
-            $crate::declare(ctx, &DK_SVC_ROW, dk_svc_init as usize as *const u8, device, &$crate::service!(@hooks $(($site, $entry $(, $dev)?)),*), &$crate::service!(@hooks $(($slot, $fill $(, $fdev)?)),*), &$crate::service!(@exports $(($ename, $efn)),*))
+            $crate::declare(ctx, &DK_SVC_ROW, dk_svc_init as usize as *const u8, device, &$crate::service!(@hooks $(($site, $entry $(, $dev)?)),*), &$crate::service!(@hooks $(($slot, $fill $(, $fdev)?)),*), &$exports)
         }
 
         unsafe extern "C" fn dk_svc_init(ctx: *mut u8) -> i32 {
@@ -392,7 +395,7 @@ macro_rules! service {
             $crate::hook_device!($($dev)?),
         )),*]
     };
-    (@exports $(($ename:literal, $efn:path)),*) => {
+    (@exports $(($ename:literal, $efn:path)),* $(,)?) => {
         [$(($crate::name_hash($ename), $efn as usize as *const u8)),*]
     };
 }
