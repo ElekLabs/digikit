@@ -43,9 +43,6 @@ impl SampleCore for RealCore {
 impl dkrt_abi::mem::FwMem for RealCore {}
 
 impl CoreApi for RealCore {
-    unsafe fn dynreg(&self) -> *const u32 {
-        registry::info()
-    }
     fn boot_index(&self) -> u32 {
         unsafe { core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)) }
     }

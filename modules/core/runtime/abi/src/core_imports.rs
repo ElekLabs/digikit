@@ -17,7 +17,6 @@ macro_rules! core_imports {
     ($m:ident) => {
         $m! {
             // ---- the registry's rows
-            fn dkc_dynreg() -> *const u32;
             fn dkc_boot_index() -> u32;
             // `out` points at the eight words of the map
             fn dkc_legacy_type_map(out: *mut u32);

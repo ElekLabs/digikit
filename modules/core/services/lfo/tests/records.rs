@@ -47,7 +47,6 @@ fn check(core: &FakeCore, step: u32, sec: &[u8]) -> i32 {
     let c = CheckCtx {
         reg: sec.as_ptr(),
         image_size: 0x1000,
-        inf: core::ptr::null(),
     };
     unsafe { <Lfo as Service<FakeCore>>::check(core, step, &c) }
 }
@@ -57,7 +56,6 @@ fn apply(core: &FakeCore, owner: u8, kind: u32, body: &[u8]) -> i32 {
         owner,
         reg: core::ptr::null(),
         base: 0,
-        inf: core::ptr::null(),
     };
     unsafe { <Lfo as Service<FakeCore>>::apply_record(core, kind, body.as_ptr(), &c) }
 }

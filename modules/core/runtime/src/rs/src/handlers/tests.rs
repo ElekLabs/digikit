@@ -124,18 +124,6 @@ static TWO_ROWS: [ServiceRow; 2] = [ServiceRow::of::<Fake<1>, crate::core_api::R
 static TWO_ROWS_P: dkrt_abi::service::RowPtrs<2> = dkrt_abi::service::RowPtrs::of(&TWO_ROWS);
 pub(crate) const TWO: ServiceTable = ServiceTable::new(&TWO_ROWS_P.0, &REAL_CORE);
 
-/// The words of a `dynreg_info` that the walker reads: the magic and the device.
-static TABLE: [u32; 100] = {
-    let mut t = [0u32; 100];
-    t[0] = 0x4459_4e52;
-    t[2] = 1;
-    t
-};
-
-pub(crate) fn dynreg_table() -> *const u32 {
-    TABLE.as_ptr()
-}
-
 /// A `register` section of the given records `(kind, 4 * (kind - 100) body bytes filled with the record number)`.
 fn section(kinds: &[u32]) -> Vec<u8> {
     let mut v = Vec::new();
@@ -169,7 +157,7 @@ fn a_mixed_file_checks_in_step_order_applies_in_file_order_and_removes_in_revers
         reset();
         // mixed kinds: service 1, 2, 1
         let sec = section(&[kind_of(1), kind_of(2), kind_of(1)]);
-        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0), OK);
+        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0, 1), OK);
         assert_eq!(apply_with(TWO, 5, sec.as_ptr(), sec.len() as u32, 0x1000), OK);
         remove_with(TWO, 5);
         let (k1, b1) = rec(1, 1);
@@ -206,12 +194,12 @@ fn the_first_fault_is_the_first_step_that_finds_one_and_a_failed_apply_stops_the
         // an effect-step fault precedes nothing: the native step runs first, as in the old body, wherever the records sit in the file
         let sec = section(&[kind_of(2), kind_of(1), kind_of(2)]);
         REFUSE = (2, kind_of(2));
-        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
+        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0, 1), E_FORMAT);
         assert_eq!(log().len(), 2); // service 1's record, then service 2's first (refused) record; the second is not looked at
         assert!(matches!(log()[0], Call::Check { svc: 1, .. }));
         reset();
         REFUSE = (1, kind_of(1));
-        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
+        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0, 1), E_FORMAT);
         assert_eq!(log().len(), 1, "service 1 refused at its step, so service 2's step never ran");
 
         // apply stops at the first failing record in file order; later records of any kind are not applied
@@ -233,11 +221,11 @@ fn the_walker_refuses_a_kind_no_service_declared_and_a_wrong_length() {
         bad[12..16].copy_from_slice(&2u32.to_be_bytes());
         bad.extend_from_slice(&99u32.to_be_bytes());
         bad.extend_from_slice(&8u32.to_be_bytes());
-        assert_eq!(check_with(TWO, bad.as_ptr(), bad.len() as u32, 0), E_FORMAT);
+        assert_eq!(check_with(TWO, bad.as_ptr(), bad.len() as u32, 0, 1), E_FORMAT);
         assert!(log().is_empty());
         let mut wrong = section(&[kind_of(2)]);
         wrong[20..24].copy_from_slice(&12u32.to_be_bytes()); // the record's length word: a kind-1 length
-        assert_eq!(check_with(TWO, wrong.as_ptr(), wrong.len() as u32, 0), E_FORMAT);
+        assert_eq!(check_with(TWO, wrong.as_ptr(), wrong.len() as u32, 0, 1), E_FORMAT);
         assert!(log().is_empty());
     }
 }

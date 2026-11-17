@@ -32,8 +32,6 @@ pub trait SampleCore: CoreApi {
 
 pub trait CoreApi: crate::mem::FwMem {
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
-    /// The words of `dynreg_info` (`registry::w`); null without a registry.
-    unsafe fn dynreg(&self) -> *const u32;
     /// The selection index of the module being loaded (`u32::MAX` outside a module load): a service that planned something per selected module (`Service::settle`) finds
     /// the module's part by it.
     fn boot_index(&self) -> u32;

@@ -77,9 +77,6 @@ pub struct ImportCore;
 impl dkrt_abi::mem::FwMem for ImportCore {}
 
 impl CoreApi for ImportCore {
-    unsafe fn dynreg(&self) -> *const u32 {
-        dkc_dynreg()
-    }
     fn boot_index(&self) -> u32 {
         unsafe { dkc_boot_index() }
     }

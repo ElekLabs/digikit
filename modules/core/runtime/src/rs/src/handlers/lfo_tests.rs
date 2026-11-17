@@ -80,7 +80,7 @@ fn a_shape_record_goes_from_the_builder_call_to_the_table_and_back() {
     // the section is the header and one record of the kind's length
     assert_eq!(sec.len(), 16 + LEN_LFO_SHAPE as usize);
     unsafe {
-        assert_eq!(registry::check(sec.as_ptr(), sec.len() as u32, 0), OK);
+        assert_eq!(registry::check(sec.as_ptr(), sec.len() as u32, 0, 1), OK);
         assert_eq!(registry::apply(1, sec.as_ptr(), sec.len() as u32, 0x1000), OK);
     }
     let s = shape(7).expect("the walker applied the record");
@@ -97,21 +97,21 @@ fn a_second_owner_of_a_shape_id_and_an_id_twice_or_zero_are_refused() {
     clear();
     let a = section(&[(7, 0)]);
     unsafe {
-        assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0), OK);
+        assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0, 1), OK);
         assert_eq!(registry::apply(1, a.as_ptr(), a.len() as u32, 0x1000), OK);
         // another module with the same id is refused at the check, and what the first kept is unchanged
-        assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0), E_TYPE_USED);
+        assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0, 1), E_TYPE_USED);
         let other = section(&[(8, 5)]);
-        assert_eq!(registry::check(other.as_ptr(), other.len() as u32, 0), OK);
+        assert_eq!(registry::check(other.as_ptr(), other.len() as u32, 0, 1), OK);
         // an id twice in one file, and the id 0
         let twice = section(&[(9, 0), (9, 1)]);
-        assert_eq!(registry::check(twice.as_ptr(), twice.len() as u32, 0), E_TYPE_USED);
+        assert_eq!(registry::check(twice.as_ptr(), twice.len() as u32, 0, 1), E_TYPE_USED);
         let zero = section(&[(0, 0)]);
-        assert_eq!(registry::check(zero.as_ptr(), zero.len() as u32, 0), E_FORMAT);
+        assert_eq!(registry::check(zero.as_ptr(), zero.len() as u32, 0, 1), E_FORMAT);
         // a table that cannot take the file's shapes
         let many: Vec<(u32, i16)> = (100..100 + MAX_SHAPES as u32).map(|i| (i, 0)).collect();
         let big = section(&many[..MAX_SHAPES]);
-        assert_eq!(registry::check(big.as_ptr(), big.len() as u32, 0), E_TABLE_FULL);
+        assert_eq!(registry::check(big.as_ptr(), big.len() as u32, 0, 1), E_TABLE_FULL);
         registry::remove(1);
     }
     assert_eq!(used(), 0);

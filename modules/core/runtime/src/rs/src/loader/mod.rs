@@ -662,7 +662,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         wr32(b.ptr.add(4), 1);
         wr32(b.ptr.add(8), self.p.device_id());
         wr32(b.ptr.add(12), count);
-        let r = crate::registry::check(b.ptr, size as u32, image_size);
+        let r = crate::registry::check(b.ptr, size as u32, image_size, self.p.device_id());
         if r != OK {
             free(self);
             return Err(r);

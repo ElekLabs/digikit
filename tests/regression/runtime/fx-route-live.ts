@@ -25,7 +25,6 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
       inventory: config.image === 'routes' ? [SINE, GAIN, SEND, SENDONLY, SEND3] : [SINE, FX, `${FX}-2`, `${FX}-3`],
       symbols: [
         'DKRT_BOOT',
-        'DKRT_ASSIGN',
         'fx.rows',
         '_dl_area',
         ...(config.image === 'track' || config.image === 'track-base' ? ['dynreg_info'] : []),

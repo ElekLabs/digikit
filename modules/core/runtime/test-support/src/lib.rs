@@ -122,8 +122,6 @@ pub struct FakeCore {
     /// The info entries `CoreApi::info` hands out, by name hash: the words of each. Empty: the image has no table.
     pub info_tables: Vec<(u32, Vec<u32>)>,
     pub device: u32,
-    /// The words of `dynreg_info` the fake hands out (empty: no registry, `dynreg` is null).
-    pub dynreg_table: Vec<u32>,
     /// What a call of a firmware function (`FwMem::call`) answers when `on_call` is not set.
     pub fw_result: Cell<usize>,
     /// Runs at every `FwMem::call`, while the arguments (pointers into the caller's frame) are valid: a test reads what the function would have read, and answers.
@@ -136,6 +134,14 @@ pub struct FakeCore {
 }
 
 impl FakeCore {
+    /// The image has the table `dynreg_info` with these words (word 0, the magic, is set here): `dkrt_svc_params::dynreg` finds it through `CoreApi::info`.
+    pub fn set_dynreg(&mut self, mut table: Vec<u32>) {
+        table[0] = 0x4459_4e52;
+        let hash = fnv1a("dynreg_info");
+        self.info_tables.retain(|(h, _)| *h != hash);
+        self.info_tables.push((hash, table));
+    }
+
     pub fn new() -> Self {
         // zero is every state's valid initial value (the real objects are zeroed statics)
         let dsp: &'static mut DspState = Box::leak(Box::new(unsafe { core::mem::zeroed() }));
@@ -152,7 +158,6 @@ impl FakeCore {
             fx_table: std::vec![0; 8],
             info_tables: Vec::new(),
             device: 0,
-            dynreg_table: Vec::new(),
             fw_result: Cell::new(0),
             on_call: RefCell::new(None),
             host: FakeHost::new(),
@@ -230,13 +235,6 @@ impl dkrt_abi::mem::FwMem for FakeCore {
 }
 
 impl CoreApi for FakeCore {
-    unsafe fn dynreg(&self) -> *const u32 {
-        if self.dynreg_table.is_empty() {
-            core::ptr::null()
-        } else {
-            self.dynreg_table.as_ptr()
-        }
-    }
     fn boot_index(&self) -> u32 {
         self.boot_index.get()
     }
@@ -462,4 +460,14 @@ impl Fw for FakeFw {
         self.rec(FwCall::ParamCode { view, enc });
         self.param_code
     }
+}
+
+/// `dkneeds::keys::name_hash`: FNV-1a 32 of a name.
+fn fnv1a(name: &str) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for b in name.bytes() {
+        h ^= b as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    h
 }

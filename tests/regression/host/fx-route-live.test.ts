@@ -152,7 +152,7 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       expect(fake.prepare).toHaveBeenCalledTimes(1);
       const requestedSymbols = fake.prepare.mock.calls[0]![3];
       const requestedRoots = fake.prepare.mock.calls[0]![4].modules;
-      const commonSymbols = ['DKRT_BOOT', 'DKRT_ASSIGN', 'fx.rows', '_dl_area'];
+      const commonSymbols = ['DKRT_BOOT', 'fx.rows', '_dl_area'];
       const roots = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
       const expectedSymbols = plain
         ? ['DKRT_BOOT']

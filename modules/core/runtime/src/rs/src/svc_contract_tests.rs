@@ -21,7 +21,6 @@ fn plain_values_and_pointers_come_back_as_through_the_real_core() {
         assert_eq!(ic.boot_index(), REAL_CORE.boot_index());
         assert_eq!(ic.legacy_type_map(), REAL_CORE.legacy_type_map());
         assert_eq!(ic.current_source(), REAL_CORE.current_source());
-        assert_eq!(ic.dynreg(), REAL_CORE.dynreg());
         assert_eq!(ic.dsp_info(), REAL_CORE.dsp_info());
         assert_eq!(ic.fx_info(), REAL_CORE.fx_info());
         assert_eq!(ic.info(0x1111), REAL_CORE.info(0x1111));

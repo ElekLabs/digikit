@@ -18,10 +18,6 @@ pub mod shims {
     use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_dynreg() -> *const u32 {
-        REAL_CORE.dynreg()
-    }
-    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_boot_index() -> u32 {
         REAL_CORE.boot_index()
     }

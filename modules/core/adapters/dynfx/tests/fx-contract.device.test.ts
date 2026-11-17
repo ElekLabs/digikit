@@ -42,7 +42,7 @@ for (const device of DEVICES) {
     const slots = slotsFor(device);
     const effects = Array.from({ length: slots + 1 }, (_, index) => (index === 0 ? GAIN : `${GAIN}-${index + 1}`));
     const inventory = [SINE, ...effects];
-    const symbols = ['DKRT_BOOT', 'DKRT_ASSIGN', 'dynreg_info'];
+    const symbols = ['DKRT_BOOT', 'dynreg_info'];
     let plainPcm: string;
 
     const capture = async (runtime: TestRuntime, context: ReturnType<typeof withPreparedFxSession>, tag: string) => {

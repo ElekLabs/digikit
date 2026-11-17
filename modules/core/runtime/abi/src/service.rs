@@ -101,13 +101,11 @@ pub mod tick_phase {
     pub const LAST: u32 = 2;
 }
 
-/// What the registry walker gives `check`: the `register` section (its layout is validated) and the registry's table.
+/// What the registry walker gives `check`: the `register` section (its layout is validated).
 #[repr(C)]
 pub struct CheckCtx {
     pub reg: *const u8,
     pub image_size: u32,
-    /// The words of `dynreg_info` (not null).
-    pub inf: *const u32,
 }
 
 /// What the registry walker gives `apply`: the (checked) section of module record `owner - 1`, loaded at `base`.
@@ -116,7 +114,6 @@ pub struct ApplyCtx {
     pub owner: u8,
     pub reg: *const u8,
     pub base: u32,
-    pub inf: *const u32,
 }
 
 /// What `dsp::reserve` gives `dsp_claim`: the module's range is placed at `base` (byte address), and the states of its voices and
@@ -415,16 +412,12 @@ impl Declare {
 }
 
 /// A service. Every method has a default that declares nothing; a service implements the ones it owns.
-/// The core is passed by reference to every method that may touch it (`declare` and `fits` read nothing but their arguments); a service
+/// The core is passed by reference to every method that may touch it (`declare` reads nothing but its argument); a service
 /// that a host test drives is generic over `C: CoreApi` and the test passes a `FakeCore`.
 #[allow(unused_variables)]
 pub trait Service<C: CoreApi> {
     /// The service's declarations (`Declare`): called once at the runtime's init; the runtime compares them with the service's table.
     unsafe fn declare(d: &mut Declare) {}
-    /// Whether the registry's table fits this service's state (the walker refuses with `E_NO_REGISTRY` when not).
-    unsafe fn fits(inf: *const u32) -> bool {
-        true
-    }
     /// One step of the validation (`check_step`) for this service's records. Writes nothing.
     unsafe fn check(core: &C, step: u32, c: &CheckCtx) -> i32 {
         OK
@@ -461,8 +454,9 @@ pub trait Service<C: CoreApi> {
     unsafe fn fx_entry(core: &C, index: u32, out: &mut DkrtFx) -> i32 {
         E_NOT_FOUND
     }
-    /// The machine type numbers of the machine rows module `owner` (record number, 1 ..) filled, in type order, into `out`; how many (the default: none).
-    unsafe fn machine_types_of(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
+    /// The ids of the rows module `owner` (record number, 1 ..) filled, in row order, into `out`; how many (the default: none). The machines service gives the machine type numbers (the
+    /// MODULES reply lists them); the core knows no kind of id.
+    unsafe fn owned_ids(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
         0
     }
 
@@ -524,7 +518,6 @@ pub struct ServiceRow {
     pub kinds: *const (u32, u32),
     pub nkinds: u32,
     declare: unsafe extern "C" fn(*const c_void, *mut Declare),
-    fits: unsafe extern "C" fn(*const c_void, *const u32) -> bool,
     check: unsafe extern "C" fn(*const c_void, u32, *const CheckCtx) -> i32,
     apply: unsafe extern "C" fn(*const c_void, *const ApplyCtx) -> i32,
     apply_record: unsafe extern "C" fn(*const c_void, u32, *const u8, *const ApplyCtx) -> i32,
@@ -538,7 +531,7 @@ pub struct ServiceRow {
     module_commit: unsafe extern "C" fn(*const c_void, usize, *const ModuleCommitCtx) -> i32,
     tick: unsafe extern "C" fn(*const c_void, u32),
     fx_entry: unsafe extern "C" fn(*const c_void, u32, *mut DkrtFx) -> i32,
-    machine_types_of: unsafe extern "C" fn(*const c_void, u8, *mut u8) -> u32,
+    owned_ids: unsafe extern "C" fn(*const c_void, u8, *mut u8) -> u32,
     dsp_check_sections: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
     dsp_check_rows: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
     dsp_check_types: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
@@ -559,12 +552,6 @@ mod thunk {
 
     pub unsafe extern "C" fn declare<C: CoreApi, S: Service<C>>(_: *const c_void, d: *mut Declare) {
         S::declare(&mut *d)
-    }
-    pub unsafe extern "C" fn fits<C: CoreApi, S: Service<C>>(
-        _: *const c_void,
-        inf: *const u32,
-    ) -> bool {
-        S::fits(inf)
     }
     pub unsafe extern "C" fn check<C: CoreApi, S: Service<C>>(
         core: *const c_void,
@@ -658,12 +645,12 @@ mod thunk {
     ) -> i32 {
         S::fx_entry(&*(core as *const C), index, &mut *out)
     }
-    pub unsafe extern "C" fn machine_types_of<C: CoreApi, S: Service<C>>(
+    pub unsafe extern "C" fn owned_ids<C: CoreApi, S: Service<C>>(
         core: *const c_void,
         owner: u8,
         out: *mut u8,
     ) -> u32 {
-        S::machine_types_of(&*(core as *const C), owner, &mut *(out as *mut [u8; 8]))
+        S::owned_ids(&*(core as *const C), owner, &mut *(out as *mut [u8; 8]))
     }
     pub unsafe extern "C" fn dsp_check_sections<C: CoreApi, S: Service<C>>(
         core: *const c_void,
@@ -736,7 +723,6 @@ impl ServiceRow {
             kinds: kinds.as_ptr(),
             nkinds: kinds.len() as u32,
             declare: thunk::declare::<C, S>,
-            fits: thunk::fits::<C, S>,
             check: thunk::check::<C, S>,
             apply: thunk::apply::<C, S>,
             apply_record: thunk::apply_record::<C, S>,
@@ -750,7 +736,7 @@ impl ServiceRow {
             module_commit: thunk::module_commit::<C, S>,
             tick: thunk::tick::<C, S>,
             fx_entry: thunk::fx_entry::<C, S>,
-            machine_types_of: thunk::machine_types_of::<C, S>,
+            owned_ids: thunk::owned_ids::<C, S>,
             dsp_check_sections: thunk::dsp_check_sections::<C, S>,
             dsp_check_rows: thunk::dsp_check_rows::<C, S>,
             dsp_check_types: thunk::dsp_check_types::<C, S>,
@@ -898,18 +884,6 @@ impl ServiceTable {
         None
     }
     #[inline]
-    pub unsafe fn fits(&self, inf: *const u32) -> bool {
-        let mut i = 0;
-        while i < self.rows.len() {
-            if !(self.row(i).fits)(self.core, inf) {
-                return false;
-            }
-            i += 1;
-        }
-        true
-    }
-    /// One step of the validation over the services in table order; the first failure.
-    #[inline]
     pub unsafe fn check(&self, step: u32, c: &CheckCtx) -> i32 {
         let mut i = 0;
         while i < self.rows.len() {
@@ -1040,10 +1014,10 @@ impl ServiceTable {
     }
     /// The machine type numbers of the rows module `owner` filled, from the first service that has any (the machines service file); 0 when none is loaded.
     #[inline]
-    pub unsafe fn machine_types_of(&self, owner: u8, out: &mut [u8; 8]) -> usize {
+    pub unsafe fn owned_ids(&self, owner: u8, out: &mut [u8; 8]) -> usize {
         let mut i = 0;
         while i < self.rows.len() {
-            let n = (self.row(i).machine_types_of)(self.core, owner, out.as_mut_ptr());
+            let n = (self.row(i).owned_ids)(self.core, owner, out.as_mut_ptr());
             if n != 0 {
                 return n as usize;
             }

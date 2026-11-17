@@ -406,7 +406,7 @@ fn collect_analog(core: &FakeCore) {
 fn the_commit_measures_then_writes_the_same_records_declares_the_rows_and_closes_the_collection() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut core = FakeCore::new();
-    core.dynreg_table = dynreg(&DT2);
+    core.set_dynreg(dynreg(&DT2));
     collect_analog(&core);
     let k = keys(&[KEY], (1, 2, 0));
     let mut measured = RecordSink::measure();
@@ -440,7 +440,7 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
     unsafe { build::end() };
     // an error of the calls is the commit's result, before anything is checked
     let mut core = FakeCore::new();
-    core.dynreg_table = dynreg(&DT2);
+    core.set_dynreg(dynreg(&DT2));
     collect_analog(&core);
     unsafe {
         build::page_add_param(core::ptr::null_mut(), c(b"P\0"), c(b"P\0"), 0);
@@ -457,7 +457,7 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
     assert_eq!((sink.count, sink.at), (0, RecordSink::HEADER));
     // a provider adds no machine row of its own
     let mut core = FakeCore::new();
-    core.dynreg_table = dynreg(&DT2);
+    core.set_dynreg(dynreg(&DT2));
     collect_analog(&core);
     unsafe {
         build::begin(dkrt_abi::MAX_MODULES);

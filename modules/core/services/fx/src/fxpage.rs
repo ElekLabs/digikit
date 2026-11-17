@@ -617,7 +617,7 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
             while j < WORDS {
                 dkrt_svc_params::reset_param_row(
                     core,
-                    core.dynreg(),
+                    dkrt_svc_params::dynreg(core),
                     iw(inf, w::P_FIRST) + (k * WORDS + j) as u32,
                 );
                 s.cur[k][j] = 0;
@@ -791,7 +791,7 @@ unsafe fn write_knob_row<C: CoreApi>(
     let wi = k * WORDS + j;
     dkrt_svc_params::write_fx_param_row(
         c,
-        c.dynreg(),
+        dkrt_svc_params::dynreg(c),
         code,
         tpl,
         idx,
@@ -889,9 +889,10 @@ mod tests {
         let mut s: std::boxed::Box<FxpState> = unsafe { std::boxed::Box::new(core::mem::zeroed()) };
         let mut core = FakeCore::new();
         // the parameter table of the firmware, as a fake: rows of 0x40 bytes at 0x1000, the mirror index in the second word
-        core.dynreg_table = std::vec![0; 96];
-        core.dynreg_table[dkrt_abi::registry::w::P_TABLE] = 0x1000;
-        core.dynreg_table[dkrt_abi::registry::w::PF_SIZE] = 0x40;
+        let mut t = std::vec![0; 96];
+        t[dkrt_abi::registry::w::P_TABLE] = 0x1000;
+        t[dkrt_abi::registry::w::PF_SIZE] = 0x40;
+        core.set_dynreg(t);
         unsafe {
             s.min[2][1] = 0f32.to_bits();
             s.span[2][1] = 1f32.to_bits();

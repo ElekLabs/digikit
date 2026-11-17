@@ -1,79 +1,31 @@
-//! The run-time registry: machines and parameters that a loaded `.dkm` adds to the rows `core/dynreg` reserved at patch
-//! time (docs/design/digikit-registry.md). Everything here runs in the UI task. The loader calls it (`apply` from the completion step of the boot-time load, `remove` from the undo); it never calls the loader.
-//!
-//! The runtime does not link to `core/machines` or `core/params`. `core/dynreg` exports one table, `dynreg_info`, with the
-//! addresses of the rows and tables and the row layouts; the link is optional, so an image with the runtime and without
-//! `core/dynreg` loads modules that carry no `register` records and refuses the ones that do (`E_NO_REGISTRY`).
-//!
-//! Digitone II keeps a machine's knobs in page rows (`pages`), not in the machine row: a PAGE record fills one reserved page
-//! row; the machine record's `own_dsp` is written to the row (the frame builder then tells the DSP the machine's own type).
-//!
-//! Rules: all checks run before the first write (`check`); rows are written in an order that a reader never sees a
-//! half-filled machine (the name pointer, which marks a row as used, is the last store, one aligned 32-bit word); the
-//! strings the rows point to live in this module's own state, never in the arena, so unload cannot leave a dangling pointer.
+//! The registry walker of a module's `register` section: the records the services write at the commit (`Service::module_commit`) are checked and applied by the services that own
+//! their kinds. The walker checks the layout against the lengths the services declare (kind and length of each record, the section's header and device) and calls each service in
+//! table order: `check` once per step over all services (the order of the steps is the order of the old single body), `apply`, then `apply_record` for each record in file order,
+//! and `remove` in reverse order. It names no service and no table of an adapter; what a service needs of the image it finds itself (`CoreApi::info`). Everything here runs in the
+//! UI task. The loader calls it (`apply` from the completion step of the boot-time load, `remove` from the undo); it never calls the loader.
 use crate::handlers::{check_step, services, ApplyCtx, CheckCtx, ServiceTable};
 use crate::rd32;
-#[cfg(not(test))]
-use core::ptr::read_volatile;
 use dkrt_sdk::*;
 
 const REG_MAGIC: u32 = 0x444b_5247; // "DKRG"
-const INFO_MAGIC: u32 = 0x4459_4e52; // "DYNR"
 const MAX_RECORDS: u32 = dkneeds::MAX_RECORDS;
-const MAX_MACH: usize = limits::MACHINE_ROWS;
-const MAX_PARAM: usize = limits::PARAM_ROWS;
-const MAX_PAGE: usize = limits::PAGE_ROWS;
-const KNOBS: usize = limits::PAGE_KNOBS;
 
-pub(crate) use dkrt_abi::mem::iw;
-pub(crate) use dkrt_abi::registry::{each, w};
+pub(crate) use dkrt_abi::registry::each;
 
-extern "C" {
-    /// Data symbol of core/dynreg; resolves to 0 when the module is not in the image (`[object] optional`).
-    fn dynreg_info();
-}
-
-pub(crate) unsafe fn info() -> *const u32 {
-    #[cfg(test)]
-    {
-        return crate::handlers::tests::dynreg_table();
-    }
-    #[cfg(not(test))]
-    info_table()
-}
-
-#[cfg(not(test))]
-#[inline(always)]
-unsafe fn info_table() -> *const u32 {
-    let a = core::hint::black_box(dynreg_info as usize);
-    if a == 0 {
-        return core::ptr::null();
-    }
-    let p = a as *const u32;
-    if read_volatile(p.add(w::MAGIC)) != INFO_MAGIC {
-        return core::ptr::null();
-    }
-    p
-}
-
-/// Validate the `register` records of a module file. `reg` points into the file (the staging buffer). Nothing is written.
-pub unsafe fn check(reg: *const u8, size: u32, image_size: u32) -> i32 {
-    check_with(services(), reg, size, image_size)
+/// Validate the `register` records of a module file. `reg` points into the file (the staging buffer). `device` is the device id the section must name. Nothing is written.
+pub unsafe fn check(reg: *const u8, size: u32, image_size: u32, device: u32) -> i32 {
+    check_with(services(), reg, size, image_size, device)
 }
 
 /// The walker of `check`: the layout of the section against the lengths the services declare, then each service's own records.
-pub(crate) unsafe fn check_with(l: ServiceTable, reg: *const u8, size: u32, image_size: u32) -> i32 {
+pub(crate) unsafe fn check_with(l: ServiceTable, reg: *const u8, size: u32, image_size: u32, device: u32) -> i32 {
     if size == 0 {
         return OK;
-    }
-    let inf = info();
-    if inf.is_null() || !l.fits(inf) {
-        return E_NO_REGISTRY;
     }
     if size < 16 || rd32(reg) != REG_MAGIC || rd32(reg.add(4)) != 1 {
         return E_FORMAT;
     }
-    if rd32(reg.add(8)) != iw(inf, w::DEVICE) {
+    if rd32(reg.add(8)) != device {
         return E_REG_DEVICE;
     }
     let n = rd32(reg.add(12));
@@ -103,7 +55,7 @@ pub(crate) unsafe fn check_with(l: ServiceTable, reg: *const u8, size: u32, imag
         return E_FORMAT;
     }
     // the steps of the old single body, each over every service's records in file order
-    let c = CheckCtx { reg, image_size, inf };
+    let c = CheckCtx { reg, image_size };
     let mut step = 0;
     while step < check_step::COUNT {
         let r = l.check(step, &c);
@@ -125,11 +77,7 @@ pub(crate) unsafe fn apply_with(l: ServiceTable, owner: u8, reg: *const u8, size
     if size == 0 {
         return OK;
     }
-    let inf = info();
-    if inf.is_null() {
-        return E_NO_REGISTRY;
-    }
-    let c = ApplyCtx { owner, reg, base, inf };
+    let c = ApplyCtx { owner, reg, base };
     let mut rc = l.apply(&c);
     if rc == OK {
         // the records that register callbacks and pages, in file order; the first failure stops the walk

@@ -1,17 +1,13 @@
 import fs from 'node:fs';
 import type { Session } from '@digi/test-support';
 import { readLoadTable } from './addrmap.ts';
-import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
+import { planSymbol, rememberShipMap, shipMapOf, type RuntimePlan } from './runtime-plan.ts';
 import { boundMapPath, SERVICE_MODULES } from './service-files.ts';
 
 /** What a lookup needs of a runtime: its session (`PatchedSession`, `TestRuntime` and `Rt` all have it). */
 type WithSession = { readonly session: Session };
 
-const shipMaps = new WeakMap<RuntimePlan, string>();
-/** Remember the address map of the image of `plan` (`<plan>.addrmap.json`, written beside the plan by `patchkit apply --addrmap`). */
-export function rememberShipMap(plan: RuntimePlan, planFile: string): void {
-  shipMaps.set(plan, planFile.replace(/\.plan\.json$/, '.addrmap.json'));
-}
+export { rememberShipMap };
 
 /** How a lookup finds the service: the ship map of the image, which the load table is decoded with. */
 export interface LookupOptions {
@@ -30,7 +26,7 @@ async function loadAddress(
 ): Promise<number> {
   const id = SERVICE_MODULES[service];
   if (!id) throw new Error(`unknown service ${service}`);
-  const shipMap = opts.shipMap ?? shipMaps.get(plan);
+  const shipMap = opts.shipMap ?? shipMapOf(plan);
   if (!shipMap)
     throw new Error(
       `no address map for the image of this plan: call rememberShipMap(plan, planFile) when the plan is prepared`,

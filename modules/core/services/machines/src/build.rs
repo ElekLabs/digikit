@@ -910,7 +910,7 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
     if rec >= dkrt_abi::MAX_MODULES {
         return E_FORMAT;
     }
-    let inf = core.dynreg();
+    let inf = dkrt_svc_params::dynreg(core);
     if inf.is_null() || iw(inf, w::VERSION) < 3 {
         return E_NO_REGISTRY;
     }

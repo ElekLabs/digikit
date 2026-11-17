@@ -108,9 +108,9 @@ fn check(f: &[u8], device: u32) -> (i32, Job) {
     let n = machine_keys_of_file(f, &mut keys);
     unsafe {
         let _info = ct::VoiceInfoGuard::set(info.as_ptr());
-        dkrt_svc_machines::assign::seed_for_test(&keys[..n], dkrt_abi::core_api::CoreApi::boot_index(&crate::core_api::REAL_CORE));
+        crate::handlers::exports::seed_for_test(&keys[..n], dkrt_abi::core_api::CoreApi::boot_index(&crate::core_api::REAL_CORE));
         let r = dsp::check(f.as_ptr(), off, size, f.len() as u32, &mut job);
-        dkrt_svc_machines::assign::seed_for_test(&[], 0);
+        crate::handlers::exports::seed_for_test(&[], 0);
         (r, job)
     }
 }

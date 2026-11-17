@@ -437,7 +437,7 @@ export async function inspect(
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([names.length, names.length, 1]);
   expect(fields.slice(10)).toEqual(names.map(() => 0));
-  const assigned = planSymbol(plan, 'DKRT_ASSIGN');
+  const assigned = await serviceSymbol({ session }, plan, 'machines');
   expect(await word(session, assigned)).toBe(0x444b4153);
   expect(await word(session, assigned + 4)).toBe(1);
   expect(modules[0]!.types).toHaveLength(1);
@@ -546,7 +546,7 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
           { device, firmware: FIRMWARE[device], runtime: { patchSet: config.patchSet } },
           artifacts,
           artifacts,
-          ['DKRT_BOOT', 'DKRT_ASSIGN', 'fx.rows', '_dl_area'],
+          ['DKRT_BOOT', 'fx.rows', '_dl_area'],
         );
         plan = prepared.plan;
         watchOutput = path.join(artifacts, 'writewatch.jsonl');

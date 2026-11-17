@@ -108,7 +108,7 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
         });
         const base = {
           roots: [...RT, 'core/digikit-menu'],
-          symbols: [...CARD_SYMBOLS, 'DKRT_ASSIGN', 'DKRT_ARENA', '_dl_area'],
+          symbols: [...CARD_SYMBOLS, 'DKRT_ARENA', '_dl_area'],
           dsp: 'zero' as const,
         };
         // a negative control's guard hit is a fault event of the session: the case end must not fail on it (the test judges the faults itself)

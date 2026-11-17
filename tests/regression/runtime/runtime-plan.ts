@@ -28,6 +28,15 @@ export interface RuntimePlan {
   output: { syx_sha256: string } | null;
 }
 
+const shipMaps = new WeakMap<RuntimePlan, string>();
+/** Remember the address map of the image of `plan` (`<plan>.addrmap.json`, written beside the plan by `patchkit apply --addrmap`): every plan this file prepares has it, so the
+ * symbols of a loaded service file (`serviceSymbol`) resolve for it. */
+export function rememberShipMap(plan: RuntimePlan, planFile: string): void {
+  shipMaps.set(plan, planFile.replace(/\.plan\.json$/, '.addrmap.json'));
+}
+/** The address map of the image of `plan`, when it was prepared by `rememberShipMap`'s caller. */
+export const shipMapOf = (plan: RuntimePlan): string | undefined => shipMaps.get(plan);
+
 /** Same exact-one-address semantics as pk_harness.plan_symbol, including Rust statics. */
 export function planSymbol(plan: RuntimePlan, name: string): number {
   const addresses = new Set(
@@ -197,6 +206,7 @@ export async function prepareOfflineWith(
   );
   fs.writeFileSync(path.join(artifacts, 'patch.log'), `${patch.stdout}\n${patch.stderr}`);
   const plan: RuntimePlan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+  rememberShipMap(plan, planFile);
   for (const symbol of symbols) planSymbol(plan, symbol);
   if (selection) {
     const moduleIds = plan.modules.map((module) => module.split('@', 1)[0]!);

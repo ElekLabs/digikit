@@ -5,8 +5,22 @@
 //! the rows `core/dynreg` reserves (`P_DYN0` for `P_DYN_N` rows of `dynreg_info`), the fx service the rows `core/fxpages` reserves (`P_FIRST` for 9 per effect row and
 //! the send rows from `P_SEND` of `fxpages_info`). The two blocks of the one parameter table are disjoint (an assembly test reads both tables of the image).
 #![no_std]
+use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::{cstr_len, iw, wr32, FwMem};
 use dkrt_abi::registry::{w, MACH_TEXT};
+
+/// `DYNR`, the first word of `dynreg_info`.
+pub const DYNREG_MAGIC: u32 = 0x4459_4e52;
+
+/// The words of `dynreg_info` (`dkrt_abi::registry::w`), the table `core/dynreg` exports to the image's info table (`CoreApi::info`); null when the image has no such
+/// table or it is not one.
+pub unsafe fn dynreg<C: CoreApi>(core: &C) -> *const u32 {
+    let t = core.info(dkneeds::keys::name_hash("dynreg_info"));
+    if t.is_null() || iw(t, w::MAGIC) != DYNREG_MAGIC {
+        return core::ptr::null();
+    }
+    t
+}
 
 /// Write one 60-byte parameter table row from its lowering spec (the template's words, the record's values).
 pub unsafe fn write_param_row(

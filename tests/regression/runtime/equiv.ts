@@ -59,7 +59,6 @@ const NOTE_FRAMES = 1500; // 1 s of audio, captured from the trig on
 const FREE_TYPE = 0xffff_ffff;
 const SYMBOLS = [
   'DKRT_BOOT',
-  'DKRT_ASSIGN',
   'machines.rows',
   'machines.count',
   'machines.first',
@@ -104,7 +103,7 @@ export function defineEquiv(scenarios: Equiv[]): void {
           roots: RT,
           hold: true,
           env: sc.envRun,
-          symbols: [...SYMBOLS, 'voices.rows', 'dyndsp_info', 'DKRT_ASSIGN'],
+          symbols: [...SYMBOLS, 'voices.rows', 'dyndsp_info'],
           initial: () => ({
             modules: sc.modules,
             selection: sc.modules.map((id) => `modules/${id.split('/').at(-1)}.dkm`),

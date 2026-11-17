@@ -35,7 +35,6 @@ fn without_effect_pages_a_record_is_refused_and_the_tick_is_silent() {
         owner: REC as u8 + 1,
         reg: core::ptr::null(),
         base: 0,
-        inf: core::ptr::null(),
     };
     unsafe {
         assert_eq!(
