@@ -66,7 +66,11 @@ DT2 OS 1.17 and DN2 OS 1.12. Static reading of MAIN OS bytes, the Ghidra dumps a
 - The machine type indexes a neighbouring table at 0x2567c0 the same way (literal at 0x1c2731). **[D]**
 - Corrected earlier reading: the routines 0x1cdbb2, 0x1cd286, 0x1cc79e, 0x1cbf07 and 0x1ccd96 are not five filter types. 0x1cd286, 0x1cc79e, 0x1cbf07 (twice) and 0x1ccd96 are consecutive stages in FUN_1c71ec (calls at 0x1c73a2, 0x1c73bd, 0x1c73d5, 0x1c7434, 0x1c73f2). 0x1cdbb2 is called once from FUN_1c642a at 0x1c6ead. **[D]**
 - The 7-entry table at blob address 0x8055c874 holds `{0,0,1,2,3,4,0}`, followed by `{5,1}`. FUN_1c642a bounds its index at 7 (`R1=7; compu; JUMP IF GE 0x1c6eb7` at 0x1c6c10) and loads `I12=DM(I4,M4)`. **[V]** That the index is the machine type (7 types, 0..6) is **[O]**: R2 was not traced to its field. The table is not an exponential curve.
-- Open: what S3 selects downstream, and the table content for index 6 and above. **[O]** On DN2 the DSP side and the frame builder word are not examined. **[O]**
+- Table at DM 0x2567a0 after boot on DT2 1.17 (read once from the running emulator, run of 2026-11-18, **[D]**): words 0-15 are
+  `1 3 2 4 5 6 0 0 0 1 2 3 4 0 5 0`; words 16 and up are DSP addresses (`0x254478 0x2544f8 0x254578 0x2545f8 0x253f78 0x253ff8 0 0
+  0x253e78 ...`). So filter types 0-5 map to S3 = 1, 3, 2, 4, 5, 6, and types 6 and 7 map to 0. What words 8-15 and the address words
+  are for is **[O]**.
+- Open: what S3 selects downstream. **[O]** On DN2 the DSP side and the frame builder word are not examined. **[O]**
 
 ## Hook budget
 
@@ -97,4 +101,16 @@ All **[D]** except the rows marked in the sections above. DN2 anchors for the ma
 
 ## The decisive check still open
 
-One emulator run settles the DSP side. After boot, dump DM 0x2567a0..0x2567df. Then sweep sound+0xa3 = 0..7 under the DSP PC histogram. If S3 for 6 and 7 differs from 0 and the record slot feeds a dispatch, the filter stage is dispatched on S3. Otherwise the filter is inline, and the service needs a stub at 0x1c26e2 (replace the S3 load) plus a slot.
+One emulator run settles the DSP side: change the filter type through the firmware's own path (FUNC+SYN on the FLTR page, select a type,
+which runs the setter FUN_40051886) and compare the SHARC execution profile per type. If different routines run per S3 value, the filter
+stage is dispatched on S3 and a stub at the dispatch takes new types. Otherwise the filter is inline, and the service needs a stub at
+0x1c26e2 (replace the S3 load) plus a slot.
+
+A first attempt (2026-11-18, DT2 1.17, coupled session with the generated native DSP core) did not settle it:
+- A raw write of sound+0xa3 at the address the getter's probe gave (0x44fb9da0 + 0xa3) read back correctly but never reached the staged
+  row (0x80003cd0 + 1) or DM 0x255990. That address is probably not the live sound record. **[D]**
+- `sharc.profile` counted nothing under the native core (`counted` all zero, no per-PC counts), and the session ended with a DSP trap
+  (`native-trap: no decoded instruction at 0xb86372`) after profile enable and disable. **[D]**
+
+Before the next attempt: make `sharc.profile` count under the coupled native core (or run the DSP on a counted tier), check the trap, and
+drive the filter change through the UI chooser.
