@@ -221,6 +221,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   let cap: number | undefined;
   let stepping: { dk: DkSession; transport: EmuUsbTransport } | undefined;
   const overlays: string[] = [];
+  const cardServices = new Set<string>();
   const epochs = new Set<number>();
   const extra = new Set(o.storeExtra ?? []);
   const symbols = [...(o.plain ? [] : ['DKRT_BOOT']), ...(o.symbols ?? [])];
@@ -270,6 +271,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
           file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
         })),
     );
+    for (const needed of neededServices(files.map((m) => m.file))) cardServices.add(needed.service);
     const options = {
       ...(o.project ? { syx: resolveInputs(device, FIRMWARE[device]).syx } : {}),
       ...rest,
@@ -342,7 +344,15 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       tempDirs: () => [artifacts],
       afterClose: async (_session) => {
         if (o.plain) return;
-        const report = runtimeSafety(device, watchOutput, overlays, Math.max(1, epochs.size), 'default', [...extra]);
+        const report = runtimeSafety(
+          device,
+          watchOutput,
+          overlays,
+          Math.max(1, epochs.size),
+          'default',
+          [...extra],
+          [...cardServices],
+        );
         record(artifacts, 'lifetime-safety', report);
         expect(report.write_events, 'write-watch on cf.expansion over every boot: no stray write').toBe(0);
         expect(report.flush_hits, 'flush check over every boot: no hit').toBe(0);
@@ -359,8 +369,8 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
         else
           for (const card of report.overlays) {
             expect(
-              card.invalid_store.filter((s) => !extra.has(s)),
-              'card writes in the store range: only the two selection sectors and the sectors the scenario writes on purpose',
+              card.invalid_store,
+              'card writes in the store range: only the two selection sectors, the settings copies of a settings-writing service and the sectors the scenario writes on purpose',
             ).toEqual([]);
             expect(card.invalid_low, 'card writes elsewhere: only the firmware project sectors from 0x50000').toEqual(
               [],

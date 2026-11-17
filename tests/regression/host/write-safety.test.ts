@@ -33,9 +33,15 @@ function run(sectors: number[], count = 1, summary: object = { events: 0, flush_
   return { output: path.join(dir, 'writewatch.jsonl'), overlay };
 }
 
-const check = (device: Device, sectors: number[], policy: SafetyPolicy = 'default', storeExtra: number[] = []) => {
+const check = (
+  device: Device,
+  sectors: number[],
+  policy: SafetyPolicy = 'default',
+  storeExtra: number[] = [],
+  cardServices: string[] = [],
+) => {
   const { output, overlay } = run(sectors);
-  return runtimeSafety(device, output, [overlay], 1, policy, storeExtra);
+  return runtimeSafety(device, output, [overlay], 1, policy, storeExtra, cardServices);
 };
 
 describe.each(['dt2', 'dn2'] as const)('runtime safety on %s', (device) => {
@@ -89,6 +95,17 @@ describe.each(['dt2', 'dn2'] as const)('runtime safety on %s', (device) => {
     for (const sector of [kitLo - 1, kitHi, store.first, store.setA + 1, store.setB + 1]) {
       expect(check(device, [sector], 'fx-routes').pass, `sector ${sector}`).toBe(false);
     }
+  });
+
+  test('a card with the machines service allows the settings copies, and nothing else in the store', () => {
+    const withMachines = (sectors: number[], policy: SafetyPolicy = 'fx-kit') =>
+      check(device, sectors, policy, [], ['machines']);
+    expect(withMachines([kitLo, store.setA, store.setB]).pass).toBe(true);
+    expect(withMachines([store.setA], 'default').pass).toBe(true);
+    for (const sector of [kitLo - 1, kitHi, store.first, store.setA + 1, store.setB + 1, 7]) {
+      expect(withMachines([sector]).pass, `sector ${sector}`).toBe(false);
+    }
+    expect(check(device, [store.setA], 'fx-kit', [], ['fx']).pass).toBe(false);
   });
 
   test('outsideStore lists only sectors below the firmware project area', () => {

@@ -245,6 +245,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
   let closed = 0;
   const baselines = new Map<string, RuntimeBaseline>();
   const overlays: string[] = [];
+  const cardServices = new Set<string>();
   const epochs = new Set<number>();
   const rememberEpoch = (epoch: unknown) => {
     if (typeof epoch !== 'number') throw new Error('route status lacks epoch');
@@ -296,6 +297,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
           const services = await Promise.all(
             neededServices(files.map((f) => f.file))
               .filter((needed) => !dropsService(preset.noServices, needed.service))
+              .map((needed) => (cardServices.add(needed.service), needed))
               .map(async (needed) => ({
                 name: `${needed.service}.dks`,
                 file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
@@ -366,7 +368,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
       afterClose: async () => {
         const results = await Promise.allSettled([
           (async () => {
-            const report = runtimeSafety(device, watchOutput, overlays, epochs.size, policy);
+            const report = runtimeSafety(device, watchOutput, overlays, epochs.size, policy, [], [...cardServices]);
             record(artifacts, 'lifetime-safety', report);
             expect(report.pass, 'every route emulator and exported overlay meets legacy safety policy').toBe(true);
           })(),
