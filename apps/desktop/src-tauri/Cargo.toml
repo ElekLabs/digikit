@@ -7,6 +7,8 @@ edition = "2024"
 publish = false
 
 [features]
+# Run-time switchable ColdFire profile (`cf.profile {enable}`); off until asked, so every workbench build has it.
+cf-profile = ["digi-control/cf-profile"]
 # Local-only SHARC+ coupling: generated DSP code must never be distributed.
 sharc = ["digi-coupled/sharc", "digi-control/sharc"]
 # Playback through the default output device.

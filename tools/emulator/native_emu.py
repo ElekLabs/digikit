@@ -308,6 +308,12 @@ def coupled_features() -> str:
     return "second-core" if os.environ.get("SHARC_GEN_DIR_2") else "sharc,play"
 
 
+# Every workbench daemon has the run-time ColdFire profile (`cf.profile {enable}`, off until asked). The feature changes the
+# emulator crates, so these builds keep their own target dirs (variant suffix) and leave the plain ones as they are.
+CF_PROFILE = "cf-profile"
+CF_PROFILE_VARIANT = "cfprof"
+
+
 def has_peer_audio(data: device_data.Device) -> bool:
     """The device's MAIN mixes the voices of a peer CPU (`[emulator.peer_audio]` in its device file)."""
     return "peer_audio" in data.emulator
@@ -328,7 +334,7 @@ def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
         "apps/desktop/src-tauri/Cargo.toml",
     ]
     if "--coupled" in args or "--auto-coupled" in args:
-        command.extend(["--features", coupled_features()])
+        command.extend(["--features", f"{coupled_features()},{CF_PROFILE}"])
         if pgo is not None:
             command = [*pgo.prefix, *command, *pgo.cargo_args]  # type: ignore[attr-defined]
         else:
@@ -336,17 +342,21 @@ def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
                 [
                     "--target-dir",
                     target_dir_for(
-                        generated_core(args), os.environ.get("SHARC_GEN_DIR_2")
+                        generated_core(args),
+                        os.environ.get("SHARC_GEN_DIR_2"),
+                        variant=CF_PROFILE_VARIANT,
                     ),
                 ]
             )
     else:
         # A device whose audio comes from its peer CPU needs the audio output in a ColdFire-only build (no generated core).
         # It has its own target dir: switching devices does not rebuild the shared nogen one.
-        variant = ""
+        features = [CF_PROFILE]
+        variant = CF_PROFILE_VARIANT
         if has_peer_audio(launch_device(syx_from_args(args))):
-            command.extend(["--features", "play"])
-            variant = "play"
+            features.insert(0, "play")
+            variant = f"play-{CF_PROFILE_VARIANT}"
+        command.extend(["--features", ",".join(features)])
         command.extend(["--target-dir", target_dir_for(None, variant=variant)])
     return [*command, "--", *args]
 
@@ -566,13 +576,24 @@ def daemon_command(args: list[str]) -> list[str]:
         command.extend(
             [
                 "--features",
-                coupled_features(),
+                f"{coupled_features()},{CF_PROFILE}",
                 "--target-dir",
-                target_dir_for(generated_core(args), os.environ.get("SHARC_GEN_DIR_2")),
+                target_dir_for(
+                    generated_core(args),
+                    os.environ.get("SHARC_GEN_DIR_2"),
+                    variant=CF_PROFILE_VARIANT,
+                ),
             ]
         )
     else:
-        command.extend(["--target-dir", target_dir_for(None)])
+        command.extend(
+            [
+                "--features",
+                CF_PROFILE,
+                "--target-dir",
+                target_dir_for(None, variant=CF_PROFILE_VARIANT),
+            ]
+        )
     return [*command, "--", *args]
 
 

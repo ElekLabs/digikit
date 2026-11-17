@@ -2076,24 +2076,7 @@ impl Actor {
             "state.save" => self.rpc_state_save(&p).map(Some),
             "state.load" => self.rpc_state_load(&p).map(Some),
             "pcm.tap" => self.rpc_pcm_tap(&p).map(Some),
-            "cf.profile" => self
-                .with_runtime(|r| {
-                    #[cfg(feature = "cf-profile")]
-                    {
-                        let mut v = r.cf_profile();
-                        v["controller_cpu_ns"] = elektron_native_boot::thread_cpu_ns().into();
-                        Ok(v)
-                    }
-                    #[cfg(not(feature = "cf-profile"))]
-                    {
-                        let _ = r;
-                        Err(RpcError::new(
-                            code::METHOD_NOT_FOUND,
-                            "built without cf-profile",
-                        ))
-                    }
-                })
-                .map(Some),
+            "cf.profile" => self.rpc_cf_profile(&p).map(Some),
             "sharc.profile" => self.rpc_sharc_profile(&p).map(Some),
             "dsp.peek" => self.rpc_dsp_peek(&p).map(Some),
             "dsp.peek_word" => self.rpc_dsp_peek_word(&p).map(Some),
@@ -3435,6 +3418,32 @@ impl Actor {
             Err(RpcError::new(
                 code::AUDIO_UNAVAILABLE,
                 "this build has no coupled audio",
+            ))
+        }
+    }
+
+    /// `cf.profile {enable?}`: true starts the ColdFire profile and clears it, false stops and clears, no argument
+    /// reads the counters since the start (like `sharc.profile`).
+    fn rpc_cf_profile(&mut self, p: &Params) -> RpcResult {
+        #[cfg(feature = "cf-profile")]
+        {
+            let enable = p.opt_bool("enable")?;
+            self.with_runtime(|r| {
+                if let Some(on) = enable {
+                    r.set_cf_profile(on);
+                    return Ok(json!({"enabled": on}));
+                }
+                let mut v = r.cf_profile();
+                v["controller_cpu_ns"] = elektron_native_boot::thread_cpu_ns().into();
+                Ok(v)
+            })
+        }
+        #[cfg(not(feature = "cf-profile"))]
+        {
+            let _ = p;
+            Err(RpcError::new(
+                code::METHOD_NOT_FOUND,
+                "built without cf-profile",
             ))
         }
     }

@@ -207,7 +207,7 @@ describe('read', () => {
 });
 
 describe('the emulator', () => {
-  test('Start resets the counters, starts the DSP and ColdFire profiles, then starts the spans', async () => {
+  test('Start resets and starts the spans, then starts the ColdFire and DSP profiles the same way', async () => {
     const st = state();
     const rpcCalls: string[] = [];
     const rec = createRecorder({
@@ -217,7 +217,7 @@ describe('the emulator', () => {
     });
     await rec.start();
     assert.deepEqual(st.calls, ['state:reset', 'state:start']);
-    assert.deepEqual(rpcCalls, ['cf.profile', 'sharc.profile {"enable":true}']);
+    assert.deepEqual(rpcCalls, ['cf.profile {"enable":true}', 'sharc.profile {"enable":true}']);
   });
 
   test('the DSP view appears while recording, with the device headroom, and names no module without maps', async () => {
@@ -238,14 +238,13 @@ describe('the emulator', () => {
     assert.deepEqual(r.dsp?.modules, []);
   });
 
-  test('Stop keeps the instruction profiles for Export and switches the DSP count off', async () => {
+  test('Stop keeps the instruction profiles for Export and switches every profile off', async () => {
     const st = state({ elapsed: 5000n });
     const rpcCalls: string[] = [];
     const rec = createRecorder({
       session: async () => fakeSession(st),
       rpc: fakeRpc(rpcCalls, {
-        // the baseline at Start, then the answer at Stop
-        'cf.profile': [cfAnswer, { pc_samples: [['100', 10]], paths: [] }],
+        'cf.profile': { pc_samples: [['100', 10]], paths: [] },
         'sharc.profile': sharcAnswer,
       }),
       loadLibrary: library,
@@ -255,7 +254,12 @@ describe('the emulator', () => {
     st.elapsed = 5000n;
     rpcCalls.length = 0;
     await rec.stop();
-    assert.deepEqual(rpcCalls, ['cf.profile', 'sharc.profile', 'sharc.profile {"enable":false}']);
+    assert.deepEqual(rpcCalls, [
+      'cf.profile',
+      'sharc.profile',
+      'cf.profile {"enable":false}',
+      'sharc.profile {"enable":false}',
+    ]);
     rpcCalls.length = 0;
     const f = await rec.exportFile();
     assert.deepEqual(rpcCalls, [], 'the stopped recording is exported from what Stop kept');
@@ -267,8 +271,8 @@ describe('the emulator', () => {
     assert.equal(doc.span_clock_hz, HZ);
     assert.deepEqual(
       doc.raw.map((r: { cpu: string; count: number }) => [r.cpu, r.count]),
-      [['cf', 7]],
-      'cf.profile is the difference to the Start baseline',
+      [['cf', 10]],
+      'cf.profile is what the daemon counted since Start',
     );
     assert.ok(doc.metrics.some((m: { name: string }) => m.name === 'sharc.blocks'));
     assert.deepEqual(
@@ -310,6 +314,7 @@ describe('the emulator', () => {
     const r = await rec.read();
     assert.ok(!r.noDebug);
     if (!r.noDebug) assert.match(r.note ?? '', /no DSP on this device/);
+    if (!r.noDebug) assert.equal(r.noDsp, true);
     if (!r.noDebug) assert.doesNotMatch(r.note ?? '', /built without/);
   });
 
@@ -330,7 +335,7 @@ describe('the emulator', () => {
     assert.doesNotMatch(r.note ?? '', /built without/);
   });
 
-  test('Reset zeroes the span counters and counts the instruction profiles from now', async () => {
+  test('Reset zeroes the span counters and restarts the instruction profiles', async () => {
     const st = state();
     const rpcCalls: string[] = [];
     const rec = createRecorder({
@@ -343,7 +348,7 @@ describe('the emulator', () => {
     rpcCalls.length = 0;
     await rec.reset();
     assert.deepEqual(st.calls, ['state:reset']);
-    assert.deepEqual(rpcCalls, ['cf.profile', 'sharc.profile {"enable":true}']);
+    assert.deepEqual(rpcCalls, ['cf.profile {"enable":true}', 'sharc.profile {"enable":true}']);
   });
 });
 

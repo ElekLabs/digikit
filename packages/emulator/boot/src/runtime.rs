@@ -524,6 +524,10 @@ pub struct Emulator {
     pcm_clock: u64,
     #[cfg(feature = "cf-profile")]
     prof: crate::cfprof::CfProf,
+    /// Run-time switch of `prof` (off by default). The recording sites test
+    /// it once per `step_chunk`/`run_fast` call, never per instruction.
+    #[cfg(feature = "cf-profile")]
+    prof_on: bool,
 }
 
 impl Emulator {
@@ -965,6 +969,8 @@ impl Emulator {
             pcm_clock: 0,
             #[cfg(feature = "cf-profile")]
             prof: Default::default(),
+            #[cfg(feature = "cf-profile")]
+            prof_on: false,
         };
         emulator.rebuild_watch();
         // DIGI_WRITE_WATCH / DIGI_FLUSH_CHECK: off unless set (see watch.rs).
@@ -981,6 +987,8 @@ impl Emulator {
         self.input_attempted_in_chunk = false;
         self.learn_count_spin();
         let mut iterations = 0;
+        #[cfg(feature = "cf-profile")]
+        let prof_on = self.prof_on;
         while iterations < budget && self.error.is_none() {
             if self.peer_cpu.is_some() {
                 self.run_peer();
@@ -992,10 +1000,14 @@ impl Emulator {
                     .is_some_and(|clear| self.cpu.pc == clear.loop_pc)
             {
                 #[cfg(feature = "cf-profile")]
-                let t = crate::cputime::thread_cpu_ns();
+                let t = if prof_on {
+                    crate::cputime::thread_cpu_ns()
+                } else {
+                    0
+                };
                 let count = self.advance_ram_clear(budget - iterations);
                 #[cfg(feature = "cf-profile")]
-                if count != 0 {
+                if prof_on && count != 0 {
                     self.prof
                         .add(0, crate::cputime::thread_cpu_ns() - t, u64::from(count));
                 }
@@ -1005,7 +1017,11 @@ impl Emulator {
                 }
             }
             #[cfg(feature = "cf-profile")]
-            let t0 = crate::cputime::thread_cpu_ns();
+            let t0 = if prof_on {
+                crate::cputime::thread_cpu_ns()
+            } else {
+                0
+            };
             let fast = self.run_fast(if self.peer_cpu.is_some() {
                 (budget - iterations).min(self.peer_slice_limit())
             } else {
@@ -1013,26 +1029,36 @@ impl Emulator {
             });
             if fast != 0 {
                 #[cfg(feature = "cf-profile")]
-                self.prof
-                    .add(1, crate::cputime::thread_cpu_ns() - t0, u64::from(fast));
+                if prof_on {
+                    self.prof
+                        .add(1, crate::cputime::thread_cpu_ns() - t0, u64::from(fast));
+                }
                 iterations += fast;
                 continue;
             }
             let previous_pc = self.cpu.pc;
             #[cfg(feature = "cf-profile")]
-            let t1 = crate::cputime::thread_cpu_ns();
+            let t1 = if prof_on {
+                crate::cputime::thread_cpu_ns()
+            } else {
+                0
+            };
             self.step_once();
             #[cfg(feature = "cf-profile")]
-            {
+            if prof_on {
                 self.prof.add(2, crate::cputime::thread_cpu_ns() - t1, 1);
                 self.prof.sample(previous_pc, 1);
             }
             iterations += 1;
             #[cfg(feature = "cf-profile")]
-            let t2 = crate::cputime::thread_cpu_ns();
+            let t2 = if prof_on {
+                crate::cputime::thread_cpu_ns()
+            } else {
+                0
+            };
             let idle = self.advance_idle(previous_pc, budget - iterations);
             #[cfg(feature = "cf-profile")]
-            if idle != 0 {
+            if prof_on && idle != 0 {
                 self.prof
                     .add(3, crate::cputime::thread_cpu_ns() - t2, u64::from(idle));
                 self.prof.sample_idle(previous_pc, u64::from(idle));
@@ -1859,7 +1885,16 @@ impl Emulator {
         self.probe_hits.iter().map(|(&pc, &n)| (pc, n)).collect()
     }
 
-    /// The ColdFire path/PC profile (feature `cf-profile`).
+    /// Starts (`true`) or stops (`false`) the ColdFire profile and clears its
+    /// counters (feature `cf-profile`).
+    #[cfg(feature = "cf-profile")]
+    pub fn set_cf_profile(&mut self, on: bool) {
+        self.prof = Default::default();
+        self.prof_on = on;
+    }
+
+    /// The cumulative ColdFire path/PC profile since the last
+    /// `set_cf_profile` (feature `cf-profile`).
     #[cfg(feature = "cf-profile")]
     pub fn cf_profile(&self) -> serde_json::Value {
         self.prof.report()
@@ -2381,6 +2416,16 @@ impl Emulator {
     /// `finish_step`, so the machine is bit-identical to the one-instruction
     /// loop. Returns the instructions run (0: use `step_once`).
     fn run_fast(&mut self, budget: u32) -> u32 {
+        // Two copies of the loop: the profiling one is chosen once per call, so the
+        // plain one has no profile test at all.
+        #[cfg(feature = "cf-profile")]
+        if self.prof_on {
+            return self.run_fast_loop::<true>(budget);
+        }
+        self.run_fast_loop::<false>(budget)
+    }
+
+    fn run_fast_loop<const PROF: bool>(&mut self, budget: u32) -> u32 {
         if budget == 0
             || self.error.is_some()
             || self.rx_pending
@@ -2436,6 +2481,8 @@ impl Emulator {
         let start_icount = self.cpu.icount;
         let mut n = 0;
         #[cfg(feature = "cf-profile")]
+        let prof_on = PROF;
+        #[cfg(feature = "cf-profile")]
         let (mut next_sample, mut last_n) = (0u32, 0u32);
         while n < budget {
             let pc = self.cpu.pc;
@@ -2445,11 +2492,13 @@ impl Emulator {
                     || (self.observed_outside_main && self.observed_pcs.binary_search(&pc).is_ok()))
             {
                 #[cfg(feature = "cf-profile")]
-                self.prof.exit(1, pc);
+                if prof_on {
+                    self.prof.exit(1, pc);
+                }
                 break;
             }
             #[cfg(feature = "cf-profile")]
-            if n >= next_sample {
+            if prof_on && n >= next_sample {
                 self.prof.sample(pc, u64::from((n - last_n).max(1)));
                 last_n = n;
                 next_sample = n + 64;
@@ -2461,7 +2510,9 @@ impl Emulator {
                 match self.at_watched(pc, budget - n, limit, calls) {
                     None => {
                         #[cfg(feature = "cf-profile")]
-                        self.prof.exit(2, pc);
+                        if prof_on {
+                            self.prof.exit(2, pc);
+                        }
                         break;
                     }
                     Some(0) => {}
@@ -2500,7 +2551,7 @@ impl Emulator {
                 || ((self.cpu.sr >> 8) & 7) < u16::from(level)
             {
                 #[cfg(feature = "cf-profile")]
-                {
+                if prof_on {
                     let reason = if result.is_err() {
                         4
                     } else if done >= limit {
@@ -2584,14 +2635,20 @@ impl Emulator {
             return 0;
         }
         #[cfg(feature = "cf-profile")]
-        let tf = crate::cputime::thread_cpu_ns();
+        let tf = if self.prof_on {
+            crate::cputime::thread_cpu_ns()
+        } else {
+            0
+        };
         let iterations = self.cpu.run_fused(&mut self.bus, lp, max);
         #[cfg(feature = "cf-profile")]
-        self.prof.fused_add(
-            head,
-            u64::from(iterations) * u64::from(per),
-            crate::cputime::thread_cpu_ns() - tf,
-        );
+        if self.prof_on {
+            self.prof.fused_add(
+                head,
+                u64::from(iterations) * u64::from(per),
+                crate::cputime::thread_cpu_ns() - tf,
+            );
+        }
         if iterations == 0 {
             return 0;
         }

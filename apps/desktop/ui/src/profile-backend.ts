@@ -55,13 +55,15 @@ export type ProfileReading =
       dsp?: DspView;
       /** Hardware: the newest HEALTH event, when the ring holds one. */
       deviceDsp?: DeviceDsp;
+      /** The emulated device has no DSP: the pane has no DSP section. */
+      noDsp?: boolean;
       /** What the emulator's two instruction profiles could not give (the daemon lacks the feature), one line. */
       note?: string;
     };
 
 export interface ProfileDeps {
   session: () => Promise<ProfileSession>;
-  /** The controller's rpc: set when the target is the emulator (Start then also records `cf.profile` and `sharc.profile`). */
+  /** The controller's rpc: set when the target is the emulator (Start then also starts `cf.profile` and `sharc.profile`). */
   rpc?: EmuRpc;
   loadLibrary: (device: string) => Promise<LibraryModule[]>;
   prof?: () => Promise<DkProf>;
@@ -115,6 +117,17 @@ function noteOf(f: ProfileFaults): string | undefined {
   return lines.length ? lines.join(' ') : undefined;
 }
 
+/**
+ * One source of a recording. Every source starts, stops, resets and reads the same way; a source that cannot run on this target is simply not
+ * made (`absent`, with the reason the pane shows). `reset` zeroes the counters and keeps counting.
+ */
+interface Source<T> {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  reset(): Promise<void>;
+  read(): Promise<T>;
+}
+
 export interface Recorder {
   /** Read the state, the spans and the modules (and, on the emulator, the DSP per block). */
   read(): Promise<ProfileReading>;
@@ -132,11 +145,14 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   const now = deps.now ?? (() => new Date());
   let library: { port: string; modules: LibraryModule[] } | undefined;
   let device = 'unknown';
-  let cfBase: CfAnswer | undefined;
   /** The instruction profiles of the last recording, kept at Stop. */
   let kept: { cf?: Part; sharc?: Part } = {};
-  let counting = false; // the emulator counts cf.profile and sharc.profile for a recording
+  /** The emulator sources that started for the running recording (each one that failed to start is in `instructionNote`). */
+  let active: { cf?: Source<Part>; sharc?: Source<Part> } = {};
+  const counting = (): boolean => active.cf !== undefined || active.sharc !== undefined;
   let instructionNote: string | undefined;
+  /** What could not start for the running recording; read faults come on top. */
+  let startFaults: ProfileFaults = { without: [], other: [] };
 
   const libraryOf = async (port: string): Promise<LibraryModule[]> => {
     if (library?.port !== port) {
@@ -206,24 +222,39 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     }
   };
 
-  /** The instruction profiles of the emulator since the start; a daemon without a feature answers an error, said once in `note`. */
+  /** A controller method with `{enable}`: true starts and clears, false stops and clears, no argument reads the counts since the start. */
+  const emuSource = <A, T>(method: string, part: (a: A) => T): Source<T> => ({
+    start: async () => void (await call(method, { enable: true })),
+    stop: async () => void (await call(method, { enable: false })),
+    reset: async () => void (await call(method, { enable: true })),
+    read: async () => part(await call<A>(method)),
+  });
+  const cfSource = (): Source<Part> => emuSource<CfAnswer, Part>('cf.profile', (a) => cfPart(undefined, a));
+  const sharcSource = (): Source<Part> => emuSource<SharcAnswer, Part>('sharc.profile', sharcPart);
+
+  const spansSource = (s: ProfileSession): Source<void> => ({
+    start: async () => {
+      await state(s, 'reset');
+      await state(s, 'start');
+    },
+    stop: async () => void (await state(s, 'stop')),
+    reset: async () => void (await s.profileState('reset')),
+    read: async () => {},
+  });
+
+  /** The instruction profiles of the emulator since the start; a source that fails to read is said once in `instructionNote`. */
   async function instructionParts(): Promise<{ cf?: Part; sharc?: Part }> {
-    if (!deps.rpc) return {};
     const out: { cf?: Part; sharc?: Part } = {};
-    const faults: ProfileFaults = { without: [], other: [] };
-    try {
-      out.cf = cfPart(cfBase, await call<CfAnswer>('cf.profile'));
-    } catch (e) {
-      addFault(faults, 'cf.profile', e);
-    }
-    if (!hasDsp()) faults.noDsp = true;
-    if (hasDsp()) {
+    const faults: ProfileFaults = { without: [...startFaults.without], other: [...startFaults.other] };
+    for (const key of ['cf', 'sharc'] as const) {
       try {
-        out.sharc = sharcPart(await call<SharcAnswer>('sharc.profile'));
+        const src = active[key];
+        if (src) out[key] = await src.read();
       } catch (e) {
-        addFault(faults, 'sharc.profile', e);
+        addFault(faults, `${key}.profile`, e);
       }
     }
+    if (!hasDsp()) faults.noDsp = true;
     instructionNote = noteOf(faults);
     return out;
   }
@@ -290,7 +321,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       };
       const r: ProfileReading = { noDebug: false, port, emulator: !!deps.rpc, snap, modules };
       if (deps.rpc) {
-        if (counting && all.running) {
+        if (counting() && all.running) {
           const parts = await instructionParts();
           try {
             r.dsp = await dspOf(s, modules, parts.sharc);
@@ -298,6 +329,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
             // the DSP section stays empty
           }
         }
+        if (!hasDsp()) r.noDsp = true;
         if (instructionNote) r.note = instructionNote;
       } else {
         const d = await health(s);
@@ -310,62 +342,54 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       const s = await deps.session();
       kept = {};
       device = ((await s.info()).port ?? '').split('-')[0] || device;
-      await state(s, 'reset');
-      if (deps.rpc) {
-        counting = false;
-        try {
-          await deps.names?.refresh(s); // the maps of the image that runs now (a reload changes them)
-        } catch {
-          // no names: the DSP view has the total only
-        }
-        const faults: ProfileFaults = { without: [], other: [] };
-        try {
-          cfBase = await call<CfAnswer>('cf.profile');
-        } catch (e) {
-          cfBase = undefined;
-          addFault(faults, 'cf.profile', e);
-        }
-        if (hasDsp()) {
-          try {
-            await call('sharc.profile', { enable: true });
-            counting = true;
-          } catch (e) {
-            addFault(faults, 'sharc.profile', e);
-          }
-        } else faults.noDsp = true;
-        counting ||= cfBase !== undefined;
-        instructionNote = noteOf(faults);
+      await spansSource(s).start();
+      if (!deps.rpc) return;
+      active = {};
+      try {
+        await deps.names?.refresh(s); // the maps of the image that runs now (a reload changes them)
+      } catch {
+        // no names: the DSP view has the total only
       }
-      await state(s, 'start');
+      const faults: ProfileFaults = { without: [], other: [] };
+      const wanted: [keyof typeof active, string, Source<Part>][] = [['cf', 'cf.profile', cfSource()]];
+      if (hasDsp()) wanted.push(['sharc', 'sharc.profile', sharcSource()]);
+      else faults.noDsp = true;
+      for (const [key, method, src] of wanted) {
+        try {
+          await src.start();
+          active[key] = src;
+        } catch (e) {
+          addFault(faults, method, e);
+        }
+      }
+      startFaults = faults;
+      instructionNote = noteOf(faults);
     },
 
     async stop() {
       const s = await deps.session();
-      await state(s, 'stop');
-      if (deps.rpc && counting) {
-        kept = await instructionParts();
-        counting = false;
-        if (hasDsp()) {
-          try {
-            await call('sharc.profile', { enable: false });
-          } catch {
-            // the daemon had nothing counting
-          }
+      await spansSource(s).stop();
+      if (!deps.rpc || !counting()) return;
+      kept = await instructionParts();
+      const stopping = Object.values(active);
+      active = {};
+      for (const src of stopping) {
+        try {
+          await src.stop();
+        } catch {
+          // the daemon had nothing counting
         }
       }
     },
 
     async reset() {
       const s = await deps.session();
-      await s.profileState('reset');
+      await spansSource(s).reset();
       kept = {};
-      if (deps.rpc && counting) {
-        try {
-          cfBase = await call<CfAnswer>('cf.profile');
-          if (hasDsp()) await call('sharc.profile', { enable: true });
-        } catch (e) {
-          instructionNote = asFault(e);
-        }
+      try {
+        for (const src of Object.values(active)) await src.reset();
+      } catch (e) {
+        instructionNote = asFault(e);
       }
     },
 
@@ -374,7 +398,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       const all = await s.profileAll();
       const info = await s.info();
       const modules = await moduleRefs(s, info.port ?? '');
-      const parts = deps.rpc && counting ? await instructionParts() : kept;
+      const parts = deps.rpc && counting() ? await instructionParts() : kept;
       const polls = await pollInfos(all.polls);
       const spans = spansPart(all, (x) => ownerName(x, modules, polls));
       const id = runId(deps.rpc ? 'emu' : 'dev', now());

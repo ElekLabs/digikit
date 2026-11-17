@@ -7,7 +7,7 @@
 //     wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot] [--cpu cf|sharc]
 //     wb [--port SUB] [--bin PATH] profile spans [--start|--stop|--reset] [--out FILE]   (a device command, run from wb.mjs: profSpans; --start resets the counters, then starts)
 //
-// `record` reads `cf.profile` before and after N seconds and keeps the difference; `--since-boot` keeps the cumulative counters (the state of a paused emulator).
+// `record` starts `cf.profile`, waits N seconds and reads the counters; `--since-boot` skips the start and the wait and reads the counters since an earlier `cf.profile {enable: true}` (the state of a paused emulator).
 // `--cpu sharc` records `sharc.profile` (the daemon needs the `sharc-profile` cargo feature): it starts the DSP counting, waits N seconds and reads it;
 // `--since-boot` skips the start and the wait and reads what the counting has gathered since a `sharc.profile {enable: true}` (a paused emulator).
 // `--analyse ID=MODULE.dkm:DSP.dko.json` adds the static analysis of a module's DSP code to `report`: SHARC counters are also added per loop.
@@ -236,11 +236,13 @@ async function record(ctx) {
     fail('profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot] [--cpu cf|sharc]');
   const client = await connectDaemon(ctx);
   try {
-    const before = opts['since-boot'] ? { paths: [] } : await client.call('cf.profile');
-    await sleep(seconds * 1000);
+    if (!opts['since-boot']) {
+      await client.call('cf.profile', { enable: true });
+      await sleep(seconds * 1000);
+    }
     const after = await client.call('cf.profile');
     const run = await runInfo(ctx, client);
-    const part = cfPart(opts['since-boot'] ? undefined : before, after);
+    const part = cfPart(undefined, after);
     part.metrics.push({
       name: 'sharc.pc',
       unit: 'insn',
