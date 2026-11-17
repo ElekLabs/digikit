@@ -96,7 +96,7 @@ fn bound(
 /// The command line: see the usage text of `patchkit`.
 pub fn run(root: &Path, rest: &[String]) -> Result<()> {
     let (mut device, mut firmware, mut dir) = (None, None, None);
-    let (mut named, mut files) = (vec![], vec![]);
+    let (mut named, mut by_name, mut files) = (vec![], vec![], vec![]);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         let mut value = |what: &str| {
@@ -109,6 +109,7 @@ pub fn run(root: &Path, rest: &[String]) -> Result<()> {
             "--firmware" => firmware = Some(PathBuf::from(value("--firmware")?)),
             "--bind-dir" => dir = Some(PathBuf::from(value("--bind-dir")?)),
             "--module" => named.push(value("--module")?),
+            "--service" => by_name.push(value("--service")?),
             f if f.starts_with('-') => return Err(err!("services: unknown flag {f}")),
             f => files.push(f.to_string()),
         }
@@ -126,6 +127,12 @@ pub fn run(root: &Path, rest: &[String]) -> Result<()> {
             .iter()
             .find(|(_, m)| *m == id)
             .ok_or_else(|| err!("{id} is not a service module (role = \"service\")"))?;
+        wanted.insert(name.clone(), id.clone());
+    }
+    for name in &by_name {
+        let id = modules
+            .get(name)
+            .ok_or_else(|| err!("no module provides the service {name}"))?;
         wanted.insert(name.clone(), id.clone());
     }
     let bytes = files

@@ -20,6 +20,9 @@ fn toolchain() -> bool {
 }
 
 fn patchkit(args: &[&str]) -> String {
+    let out = patchkit(&["services", "--device", "dt2", "--service", "machines"]);
+    let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(v["module_id"], "core/services/machines");
     let r = Command::new(env!("CARGO_BIN_EXE_patchkit"))
         .arg("--root")
         .arg(root())
@@ -93,7 +96,7 @@ fn a_machine_needs_machines_an_effect_needs_fx_and_a_module_without_needs_gets_n
 }
 
 #[test]
-fn a_named_service_module_is_wanted_without_a_file_and_another_module_is_refused() {
+fn a_named_service_is_wanted_without_a_file_and_another_module_is_refused() {
     let out = patchkit(&[
         "services",
         "--device",
@@ -106,6 +109,9 @@ fn a_named_service_module_is_wanted_without_a_file_and_another_module_is_refused
         (v["service"].as_str(), v["module_id"].as_str()),
         (Some("fx"), Some("core/services/fx"))
     );
+    let out = patchkit(&["services", "--device", "dt2", "--service", "machines"]);
+    let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(v["module_id"], "core/services/machines");
     let r = Command::new(env!("CARGO_BIN_EXE_patchkit"))
         .arg("--root")
         .arg(root())

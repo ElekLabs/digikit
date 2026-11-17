@@ -37,8 +37,8 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          with --fx-max the effect budget of the tightest device): JSON from devices/*.toml and devices/cycle-factors.json
   uses    set --id MODULE --device SHORT [--dsp-cost-voice N] [--dsp-cost-fx N]   write the measured DSP cost (instructions per block) into
                                          [uses.<device>] of the module's module.toml (only those lines change; comments stay); prints wrote/unchanged PATH
-  services --device SHORT [--firmware FW.syx --bind-dir DIR] [--module ID]... [FILE.dkm]...   the card services that the .dkm files need (the NEEDS of their header
-                                         tables, matched to the modules with `role = \"service\"` and `service = NAME`) and those of --module: one JSON line each
+  services --device SHORT [--firmware FW.syx --bind-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...   the card services that the .dkm files need (the NEEDS of their header
+                                         tables, matched to the modules with `role = \"service\"` and `service = NAME`) and those named by --module (id) or --service (name): one JSON line each
                                          {service, module_id, store_path}; with --firmware and --bind-dir each is packed and bound to the stock image in DIR
                                          (kept while its .src.json sidecar matches), and the line has bound_path
   pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm
