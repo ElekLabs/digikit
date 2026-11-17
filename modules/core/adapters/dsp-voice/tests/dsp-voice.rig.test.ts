@@ -28,7 +28,7 @@ import {
   SV_M13,
   TABLE,
   UNPACK_BP,
-  VOICE_CORE,
+  VOICE_DISPATCH,
   VOICE_STATE,
   VOICE_TYPE,
   VoiceRig,
@@ -110,7 +110,7 @@ describe('core/dsp-voice on the rig', () => {
     expect(any(out.reads.out), 'no module routine ran').toBe(false);
     expect(out.reads.diag![0], 'the heartbeat is the stub\'s').toBe(1);
     expect(out.reads.diag![4], 'M13 as the firmware left it').toBe(u32(out.in.M13!));
-    expect(out.reads.sv![0], 'M13 is saved only on the slot path').toBe(0);
+    expect(out.reads.sv![0], 'M13 is saved only on the slot path: nothing wrote the word').toBeNull();
     expect(out.instructions).toBeLessThan(40);
     // every voice but 0: the check and the stock path
     const odd = await rig.call(5);
@@ -553,7 +553,7 @@ describe('core/dsp-voice build variants on the rig', () => {
   });
 
   it('the c3 nosys variant writes no system register on the registered path', () => {
-    const text = applyConditionals(readFileSync(VOICE_CORE, 'utf8'), C3_VARIANTS['c-nosys']);
+    const text = applyConditionals(readFileSync(VOICE_DISPATCH, 'utf8'), C3_VARIANTS['c-nosys']);
     const path = text.split('_dv_stock:')[0]!;
     expect(path).not.toContain('MODE1 =');
     expect(path).not.toContain('BIT SET MODE1');
@@ -565,7 +565,7 @@ describe('core/dsp-voice build variants on the rig', () => {
     // A load of a B register also loads its I register (PRM p.6-24, "Circular Buffer Programming Model"); the stock epilogue restores B3
     // first, in every build (the emulator does not model the I load).
     const order = (defines: string[]): [number, number] => {
-      const lines = applyConditionals(readFileSync(VOICE_CORE, 'utf8'), defines)
+      const lines = applyConditionals(readFileSync(VOICE_DISPATCH, 'utf8'), defines)
         .split('\n')
         .map((x) => x.trim());
       const at = (prefix: string) => lines.findIndex((x) => x.startsWith(prefix));
@@ -680,6 +680,6 @@ describe('core/dsp-voice raw sine routine on the rig', () => {
     expect(out.reads.lev).toEqual([0x0100]);
     out = await rig.unpack(3, 0);
     expect(stopsAt(out, UNPACK_BP)).toBe(true);
-    expect(out.instructions).toBeLessThan(6);
+    expect(out.instructions).toBeLessThan(16); // the stub's slot load and the dispatch entry on top of the check (13 measured)
   });
 });
