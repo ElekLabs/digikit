@@ -27,11 +27,11 @@ impl Drop for Bound<'_> {
 
 const MAGIC: u32 = 0x4658_5047;
 
-/// The words of a usable `fxpages_info` table: version 3, the device of the core, a list of 4, the pages of the chain and the kit's 64 values.
+/// The words of a usable `fxpages_info` table: version 4, the device of the core, a list of 4, the pages of the chain and the kit's 64 values.
 fn table(core: &FakeCore) -> Vec<u32> {
     let mut w = vec![0u32; 80];
     w[0] = MAGIC;
-    w[1] = 3;
+    w[1] = 4;
     w[2] = core.device_id();
     w[6] = MAX_FX as u32;
     w[8] = 4;
@@ -225,13 +225,13 @@ fn an_image_table_is_bound_only_when_its_magic_version_device_and_sizes_fit() {
         r
     };
     assert!(bound(ok.clone()));
-    // the newest table is fine, an older one is not
+    // a newer table is fine, an older one is not
     let mut w = ok.clone();
-    w[1] = 4;
+    w[1] = 5;
     assert!(bound(w));
     for (what, word, value) in [
         ("another magic", 0usize, 0x4658_5048u32),
-        ("version 2", 1, 2),
+        ("version 3", 1, 3),
         ("another device", 2, 99),
         ("a list longer than the buffer", 8, 9),
         ("more pages than the chain has rows", 6, MAX_FX as u32 + 1),
