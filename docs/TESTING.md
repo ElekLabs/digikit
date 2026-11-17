@@ -1092,7 +1092,7 @@ firmware, generated core or `out/` data.
 ### Owner hashes (`patchkit owners`)
 
 T1e keys a device test on the bytes of the service or area that it proves, not on the whole runtime. The runtime is one object, so
-`modules/core/runtime/owners.toml` maps the module path prefixes of its items to tags (`S:machines`, `C:storage`, ...) and lists the `shared`
+`modules/core/runtime/owners.toml` maps the module path prefixes of its items to tags (`C:storage`, `S:lfo`, ...) and lists the `shared`
 set (the standard library, `dkrt_abi`, `dkrt_sdk`, the entry points, the platform and others). The longest prefix at a `::` boundary wins.
 A C symbol is shared. An anonymous constant (a string, a table) belongs to the owner of the items that use it when they have one owner,
 and is shared otherwise. The tags of a test are the `tags` of its `metadata.runtimeAcceptance` record (vocabulary and check:
@@ -1102,18 +1102,16 @@ and is shared otherwise. The tags of a test are the `tags` of its `metadata.runt
 
 ```text
 $ patchkit owners modules/core/runtime/build/runtime.dko.json --out out/owners
-C:boot            22 items  cdc8cfe737173616
-C:diagnostics     40 items  f014789d84b40177
-C:dsp             28 items  0d59faae70bd3eaf
-C:loading         91 items  a9f5f478b8913ee2
-C:state           23 items  c23cfcc4d10c01aa
-C:storage        108 items  1d186a24994f2818
-C:tick             1 items  182559b316337832
-C:transport       37 items  16a32570dac04169
-S:lfo             23 items  7239c5a2fb8f71e4
-S:machines        40 items  a809be9c324d5eca
-S:samples         56 items  b8727e23ad0bcdc8
-shared           483 items  3bfc451eb35f79d7
+C:boot            22 items  dde8387366edca03
+C:diagnostics     41 items  99fa3153dedc8bf2
+C:dsp             25 items  643005221cbfde5b
+C:loading         82 items  7f3408b9070fbf87
+C:state           23 items  600322bec191c865
+C:storage        119 items  825506877527224f
+C:tick             1 items  d296515fc179902e
+C:transport       37 items  8d22528f8e08036f
+S:lfo              0 items  e3b0c44298fc1c14
+shared           472 items  a7528f325952d65c
 ```
 
 The command writes `<tag>.sha256` for every tag and `shared.sha256` into `--out`. `--owners FILE` names another map (default
