@@ -239,6 +239,7 @@ const NO_TESTS = new Set([
   'sharc-fast-cl',
   'bootstrap-emu',
   'digiemu-desktop',
+  'digi-wasm-core',
 ]);
 
 // Crates whose tests read no firmware, generated core or out/ data; their rust-tests are cached.

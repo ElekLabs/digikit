@@ -1261,7 +1261,9 @@ impl ThreadedPeer {
                 let mut period_ns: Vec<u32> = Vec::new();
                 let mut periods = 0u64;
                 let mut frames_done = 0u64;
-                let mut spike = crate::spikelog::DspWindow::open(crate::cputime::thread_cpu_ns());
+                let mut spike = elektron_native_boot::spikelog::DspWindow::open(
+                    elektron_native_boot::cputime::thread_cpu_ns(),
+                );
                 let tier_time = std::env::var_os("SHARC_TIER_TIME").is_some_and(|v| v != "0");
                 let born = sharc_native::ticks();
                 let mut wait_ticks = 0u64;
@@ -1317,7 +1319,7 @@ impl ThreadedPeer {
                             frames_done += 1;
                             if frames_done % LIVE_REPORT_FRAMES == 0 {
                                 let report = WorkerReport {
-                                    cpu_ns: crate::cputime::thread_cpu_ns(),
+                                    cpu_ns: elektron_native_boot::cputime::thread_cpu_ns(),
                                     tiers: core.engine.tier_counters(),
                                     model_stats: core.engine.model_stats(),
                                     periods: frames_done,
@@ -1342,9 +1344,9 @@ impl ThreadedPeer {
                             }
                         }
                         Msg::Report => {
-                            let (cycles, insns) = crate::cputime::thread_counters();
+                            let (cycles, insns) = elektron_native_boot::cputime::thread_counters();
                             let _ = report_tx.send(WorkerReport {
-                                cpu_ns: crate::cputime::thread_cpu_ns(),
+                                cpu_ns: elektron_native_boot::cputime::thread_cpu_ns(),
                                 cycles,
                                 insns,
                                 tiers: core.engine.tier_counters(),

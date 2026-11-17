@@ -884,6 +884,13 @@ def cmd_test_quick(args) -> int:
              "--lib", "--target-dir", str(nogen)],
         ),
         (
+            "packages/emulator/sharc-peer",
+            {**base_env, "SHARC_GEN_DIR": str(gen)},
+            ["--manifest-path", "packages/emulator/sharc-peer/Cargo.toml",
+             "--features", "second-core" if "second-core" in FEATURES.split(",") else "host",
+             "--lib", "--target-dir", str(prod)],
+        ),
+        (
             "packages/emulator/coupled",
             {**base_env, "SHARC_GEN_DIR": str(gen)},
             ["--manifest-path", "packages/emulator/coupled/Cargo.toml",

@@ -5,7 +5,7 @@
         --scenario sf-del-ref --scenario sf-rev-ref --poke 0x6f8=0x7f00 --poke 0x6f8=0
 
 Each scenario runs unpatched and once per --poke (OFF=VAL[/TRACKS], see DSP_FRAME_POKE in
-packages/emulator/boot/src/sharc_peer.rs: the big-endian 16-bit word at byte OFF of every frame sent to
+packages/emulator/sharc-peer/src/peer.rs: the big-endian 16-bit word at byte OFF of every frame sent to
 the DSP). A poke whose PCM hash equals the unpatched one for every scenario is evidence, for
 those scenarios only, that the word is not read (or has no effect). A scenario must exercise
 the stage that would read the word (finding 04, frame map).

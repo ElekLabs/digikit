@@ -686,7 +686,7 @@ asked for. With `watch` ranges (pcs) it also returns the stores of instructions 
 later line is `{"ops": [...]}` and gets one answer line, so a rig runs a case block by block and stops at its first failure.
 
 The stock DSP image can be the base core. The setup line takes `image`, the loader stream of firmware section 7 as hex. The rig reads it with the boot crate's own `LoadedMemory::from_stream`
-(`packages/emulator/boot/src/dsp_stream.rs`, compiled into the rig by path: a dependency would change `Cargo.lock`, an input of the device tests) and loads it before `code`, so
+(`packages/emulator/sharc-peer/src/dsp_stream.rs`, compiled into the rig by path: a dependency would change `Cargo.lock`, an input of the device tests) and loads it before `code`, so
 linked code and hooks go over the stock bytes. A call takes `stock_reads: [[loader_byte_address, count]]` and answers `stock`, the bytes of the image as loaded (hex, `null` when the stream does not write all of them).
 `breaks` on a call replaces the setup's breaks for that call, and `resume: true` continues from the pc the last call stopped at (the stacks and registers stay; `regs` are still set), as `Runner.run` does after a breakpoint. A zero-step
 resume reads DM without ending a stopped call. `specials: {"MSF": [mask, bits]}` sets an 80-bit multiplier register (hex strings) before a call and `read_specials` answers it after. An address like 0x2010f000 or 0x80100000 is a byte address: a read count steps by one byte, so a rig that reads words asks for each word.

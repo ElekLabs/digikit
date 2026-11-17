@@ -36,16 +36,15 @@
 //! The DSP state is a mid-run continuation, so it does not match the
 //! ColdFire's boot-time view of the link; see the findings notes.
 
+#[path = "../../boot/examples/common/mod.rs"]
 mod common;
 
-use elektron_native_boot::{
-    Emulator,
-    sharc_peer::{
-        DEFAULT_PERIOD, DN2_IDLE, DT2_IDLE, NativeDsp, SharcPeer, Shared, SharedDsp,
-        ThreadedHandle, ThreadedPeer, open_engine_patched,
-    },
-};
+use elektron_native_boot::Emulator;
 use sha2::{Digest, Sha256};
+use sharc_peer::{
+    DEFAULT_PERIOD, DN2_IDLE, DT2_IDLE, NativeDsp, SharcPeer, Shared, SharedDsp, ThreadedHandle,
+    ThreadedPeer, open_engine_patched,
+};
 use std::{cell::RefCell, rc::Rc};
 use std::{env, fs, io::Write, time::Instant};
 

@@ -13,10 +13,8 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use elektron_native_boot::{
-    dsp_patch::DspPatch,
-    sharc_peer::{DspEngine, IdleLoop, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched},
-};
+use crate::dsp_patch::DspPatch;
+use crate::{DspEngine, IdleLoop, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched};
 use sharc_native::GenCore;
 
 /// The core for a device id (`dn2`, `dt2`): the one made for that device's image.
@@ -59,7 +57,7 @@ pub fn spawn_dsp(
     ThreadedPeer::spawn_with_timing(
         move || {
             open_engine_patched(core, &image, &state, clock_base, patch.as_ref(), idle)
-                .map(elektron_native_boot::sharc_peer::NativeDsp)
+                .map(crate::NativeDsp)
         },
         period,
         idle.range,
@@ -81,9 +79,14 @@ pub fn initialize_cold_dsp(
     progress: impl FnMut(u64),
 ) -> Result<EngineInputs, String> {
     validate_cold_state(core, &inputs.image, &inputs.state, inputs.idle)?;
-    let mut engine: Box<dyn DspEngine> = Box::new(elektron_native_boot::sharc_peer::NativeDsp(
-        open_engine_patched(core, &inputs.image, &inputs.state, 0, None, inputs.idle)?,
-    ));
+    let mut engine: Box<dyn DspEngine> = Box::new(crate::NativeDsp(open_engine_patched(
+        core,
+        &inputs.image,
+        &inputs.state,
+        0,
+        None,
+        inputs.idle,
+    )?));
     finish_cold_initialization(inputs, engine.as_mut(), cancel, progress)
 }
 

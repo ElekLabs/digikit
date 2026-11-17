@@ -20,6 +20,7 @@
       "{workspaceRoot}/tools/sharc_dev/sharc_rsgen.py",
       "{workspaceRoot}/packages/emulator/coupled/**/*",
       "{workspaceRoot}/packages/emulator/boot/**/*",
+      "{workspaceRoot}/packages/emulator/sharc-peer/**/*",
       "{workspaceRoot}/packages/emulator/device-profile/**/*",
       "{workspaceRoot}/packages/emulator/loader/**/*",
       "{workspaceRoot}/packages/emulator/plusdrive/**/*",

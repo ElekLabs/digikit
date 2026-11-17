@@ -22,9 +22,7 @@ pub const STEP_CHUNK: u32 = 250_000;
 #[cfg(feature = "coupled-audio")]
 pub mod audio_out;
 #[cfg(feature = "coupled-audio")]
-pub mod cold;
-#[cfg(feature = "coupled-audio")]
-pub mod dsp_core;
+pub use sharc_peer::{cold, dsp_core};
 pub mod scenario;
 pub mod span_gate;
 /// Most inputs kept for replay.
@@ -38,9 +36,9 @@ pub use audio_out::{AudioOut, PcmSink, PcmTap};
 #[cfg(feature = "coupled-audio")]
 pub use coupled::gates;
 #[cfg(feature = "coupled-audio")]
-pub use elektron_native_boot::sharc_peer::{ExecutionProfile, WorkerReport};
-#[cfg(feature = "coupled-audio")]
 pub use sharc_native::{RegionCost, RegionProfile, TierCounters};
+#[cfg(feature = "coupled-audio")]
+pub use sharc_peer::{ExecutionProfile, WorkerReport};
 
 #[cfg(feature = "coupled-audio")]
 #[allow(dead_code, clippy::print_stdout)]
@@ -96,7 +94,7 @@ pub struct AudioOptions {
     pub link_timing: bool,
     /// What live playback does when the emulator falls behind real time.
     pub audio_mode: AudioMode,
-    /// A DSP patch file (`elektron_native_boot::dsp_patch`) overlaid on the
+    /// A DSP patch file (`sharc_peer::dsp_patch`) overlaid on the
     /// imported DSP state. Its BASE line, if any, must match the firmware's SHA-256.
     pub dsp_patch: Option<PathBuf>,
     /// The DSP side answers zeros: no SHARC engine, SSI paced, restored from the
@@ -142,7 +140,7 @@ impl CoupledRuntime {
         let options = options.filter(|options| matches_automatic_profile(options, syx));
         if let Some(path) = options.and_then(|o| o.dsp_patch.as_deref()) {
             use sha2::{Digest, Sha256};
-            elektron_native_boot::dsp_patch::DspPatch::load(path)?
+            sharc_peer::dsp_patch::DspPatch::load(path)?
                 .check_base(&format!("{:x}", Sha256::digest(syx)))?;
         }
         let mut runtime = Self {
@@ -259,7 +257,7 @@ impl CoupledRuntime {
     /// count at which it took effect.
     pub fn inject_dsp_patch(
         &mut self,
-        patch: elektron_native_boot::dsp_patch::DspPatch,
+        patch: sharc_peer::dsp_patch::DspPatch,
     ) -> Result<Value, String> {
         #[cfg(feature = "coupled-audio")]
         {
@@ -293,8 +291,8 @@ impl CoupledRuntime {
     /// Diagnose the session's active DSP, fenced after outstanding audio work.
     pub fn dsp_ddr_monitor(
         &mut self,
-        command: elektron_native_boot::ddr_monitor::DdrMonitorCommand,
-    ) -> Result<elektron_native_boot::ddr_monitor::DdrMonitorStatus, String> {
+        command: sharc_peer::ddr_monitor::DdrMonitorCommand,
+    ) -> Result<sharc_peer::ddr_monitor::DdrMonitorStatus, String> {
         #[cfg(feature = "coupled-audio")]
         {
             let audio = self.audio.as_mut().ok_or("no DSP audio session")?;
@@ -593,11 +591,9 @@ impl CoupledRuntime {
 mod coupled {
     use super::*;
     use crate::audio_out::{AudioOut, PcmCapture, PcmSink, pace_seconds, player_settings};
-    use elektron_native_boot::{
-        pcm_play::{Mode, PcmPlayer, Recovery, SOURCE_RATE},
-        sharc_peer::{DEFAULT_PERIOD, Shared, ThreadedHandle, ThreadedTimingProfile},
-    };
+    use elektron_native_boot::pcm_play::{Mode, PcmPlayer, Recovery, SOURCE_RATE};
     use serde_json::json;
+    use sharc_peer::{DEFAULT_PERIOD, Shared, ThreadedHandle, ThreadedTimingProfile};
     use std::{cell::RefCell, rc::Rc, time::Instant};
 
     fn continuation(data: &[u8]) -> Result<(u64, u64, &[u8]), String> {
@@ -646,7 +642,7 @@ mod coupled {
                         profile.device, profile.version
                     )
                 })?;
-            let idle = elektron_native_boot::sharc_peer::IdleLoop {
+            let idle = sharc_peer::IdleLoop {
                 range: (dsp.idle_start, dsp.idle_end),
                 head: dsp.idle_head,
             };
@@ -659,7 +655,7 @@ mod coupled {
             let patch = options
                 .dsp_patch
                 .as_deref()
-                .map(elektron_native_boot::dsp_patch::DspPatch::load)
+                .map(sharc_peer::dsp_patch::DspPatch::load)
                 .transpose()?;
             let sidecar = std::fs::read(&options.state).map_err(|e| format!("DSP state: {e}"))?;
             let (clock, initial_instructions, state) = continuation(&sidecar)?;
@@ -685,7 +681,7 @@ mod coupled {
                     patch,
                     idle,
                 },
-                elektron_native_boot::sharc_peer::period_from_env(),
+                sharc_peer::period_from_env(),
                 link_timing,
                 true,
             )?;

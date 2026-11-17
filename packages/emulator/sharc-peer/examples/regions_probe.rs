@@ -37,14 +37,12 @@ const AFTER_CLEAR_PC: u32 = 0x4000_0546;
 
 /// The DSP of a ready directory on the DSPI2 link (the cold boot of
 /// `coupled::cold::boot_to_ready`, without the snapshot).
-#[cfg(feature = "sharc")]
+#[cfg(feature = "host")]
 mod dsp {
-    use elektron_native_boot::{
-        Emulator,
-        sharc_peer::{
-            IdleLoop, NativeDsp, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched,
-            period_from_env,
-        },
+    use elektron_native_boot::Emulator;
+    use sharc_peer::{
+        IdleLoop, NativeDsp, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched,
+        period_from_env,
     };
     use std::{cell::RefCell, rc::Rc};
 
@@ -347,13 +345,13 @@ fn main() {
         Some(sha) => Emulator::new_patched(&syx, card, sha).unwrap(),
         None => Emulator::new(&syx, card).unwrap(),
     };
-    #[cfg(feature = "sharc")]
+    #[cfg(feature = "host")]
     let dsp = match (&dsp_image, &dsp_idle) {
         (Some(image), Some(idle)) => Some(dsp::attach(&mut emu, image, idle)),
         (None, None) => None,
         _ => panic!("--dsp and --dsp-idle go together"),
     };
-    #[cfg(not(feature = "sharc"))]
+    #[cfg(not(feature = "host"))]
     assert!(
         dsp_image.is_none() && dsp_idle.is_none(),
         "--dsp needs a build with --features sharc"
@@ -381,7 +379,7 @@ fn main() {
     loop {
         let snap = emu.step_chunk(250_000);
         let s = &snap.status;
-        #[cfg(feature = "sharc")]
+        #[cfg(feature = "host")]
         if let Some(halt) = dsp.as_ref().and_then(dsp::Dsp::sync) {
             println!(
                 "{{\"error\":\"DSP halted: {halt}\",\"icount\":{}}}",
@@ -456,7 +454,7 @@ fn main() {
         }
     }
     report(&mut emu, &regions, "final");
-    #[cfg(feature = "sharc")]
+    #[cfg(feature = "host")]
     if let Some(dsp) = &dsp {
         let halted = dsp.sync();
         println!(

@@ -13,10 +13,10 @@ name = "digi_coupled"
 
 [features]
 # Local-only DN2 coupling: generated DSP code must never be distributed.
-coupled-audio = ["elektron-native-boot/sharc", "elektron-native-boot/play", "dep:sharc-fast-cl", "dep:sharc-native", "dep:sharc-gen"]
+coupled-audio = ["sharc-peer/host", "elektron-native-boot/play", "dep:sharc-native"]
 # A second generated core (SHARC_GEN_DIR_2, crate sharc-gen-2) next to the first: the firmware's device
-# picks the core (src/dsp_core.rs). Implies coupled-audio.
-second-core = ["coupled-audio", "dep:sharc-gen-2"]
+# picks the core (sharc-peer src/dsp_core.rs). Implies coupled-audio.
+second-core = ["coupled-audio", "sharc-peer/second-core"]
 # Enable this with coupled-audio; it forwards to the optional native cores.
 region-profile = ["sharc-native?/region-profile"]
 # Exact ColdFire instruction mix per PC (boot/src/cfmix.rs); DIGI_CF_MIX_OUT=DIR makes coupled-run write it.
@@ -30,10 +30,8 @@ elektron-native-boot = { path = "../boot" }
 emmc-card = { path = "../card" }
 serde_json = "1"
 sha2 = "0.10"
-sharc-fast-cl = { path = "../sharc-fast-cl", optional = true }
+sharc-peer = { path = "../sharc-peer" }
 sharc-native = { path = "../sharc", optional = true }
-sharc-gen = { path = "../sharc-gen", optional = true }
-sharc-gen-2 = { path = "../sharc-gen-2", optional = true }
 
 [[bin]]
 name = "coupled-run"

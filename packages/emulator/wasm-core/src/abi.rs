@@ -3,7 +3,7 @@
 
 use std::{cell::RefCell, slice};
 
-use crate::{Emulator, ExecutionPolicy};
+use elektron_native_boot::{Emulator, ExecutionPolicy};
 
 // Large enough for a coupled ColdFire snapshot (about 62 MB for DN2).
 const ALLOCATION_LIMIT: usize = 192 * 1024 * 1024;
@@ -186,9 +186,7 @@ pub extern "C" fn digi_result_len() -> usize {
 #[cfg(feature = "sharc")]
 mod coupled {
     use super::*;
-    use crate::sharc_peer::{
-        DEFAULT_PERIOD, RemoteDsp, SharcPeer, Shared, SharedDsp, open_dn2_engine,
-    };
+    use sharc_peer::{DEFAULT_PERIOD, RemoteDsp, SharcPeer, Shared, SharedDsp, open_dn2_engine};
     use std::rc::Rc;
 
     /// Header of the `.dsp` file `sharc_live` writes beside a coupled
