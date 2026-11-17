@@ -71,7 +71,7 @@ use json::Json;
 use sharc_native::mem::Mem;
 use sharc_native::rt::bnd;
 use sharc_native::rt::{Int, MR, Spec, V, VI};
-use sharc_native::{Engine, exec_insn, trap_name, vectors};
+use sharc_native::{Engine, exec_insn, vectors};
 
 /// Registers a fresh core holds (tools/sharc_dev/sharc_run.py `make_state`: every register 0, then these).
 const START_REGS: [(&str, i64); 6] = [
@@ -344,7 +344,7 @@ pub fn new_engine(
         mem.load(*address, bytes);
     }
     mem.reset();
-    let mut e = Engine::new(mem);
+    let mut e = Engine::new(mem, &sharc_gen::CORE);
     e.use_blocks = false;
     // options of tools/sharc_dev/sharc_transpile_run.py `to_native` for a fresh `Runner`
     for (key, value) in [
@@ -494,7 +494,7 @@ pub fn run_call(
         let insn = match bnd::decode_at_with(&mut e.s, pc as Int, sym_of) {
             Ok(i) => i,
             Err(t) => {
-                halt = format!("trap: {}", trap_name(t));
+                halt = format!("trap: {}", e.s.core.trap_name(t));
                 break;
             }
         };
@@ -508,7 +508,7 @@ pub fn run_call(
         let done = exec_insn(&mut e.s, insn);
         let log = e.s.probe.take();
         if let Err(t) = done {
-            halt = format!("trap: {}", trap_name(t));
+            halt = format!("trap: {}", e.s.core.trap_name(t));
             break;
         }
         if let Some(log) = log {
@@ -728,7 +728,10 @@ fn results_json(results: Vec<CallResult>) -> Json {
 fn response_line(results: Json) -> String {
     let mut out = String::new();
     Json::Obj(vec![
-        ("build".into(), Json::Str(sharc_native::build_info())),
+        (
+            "build".into(),
+            Json::Str(sharc_native::build_info(&sharc_gen::CORE)),
+        ),
         ("results".into(), results),
     ])
     .write(&mut out);

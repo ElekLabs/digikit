@@ -884,7 +884,7 @@ mod coupled {
             emulator.load_state(&snapshot)?;
             // The fast tier's Cranelift backend is registered by the spawn; the engine uses it only when
             // SHARC_FAST_REGIONS names regions (the launcher sets that). The core is the device's own.
-            let core = crate::dsp_core::Core::for_device(&profile.device);
+            let core = crate::dsp_core::core_for_device(&profile.device);
             let (peer, handle, shared) = crate::dsp_core::spawn_dsp(
                 core,
                 crate::dsp_core::EngineInputs {
@@ -931,7 +931,7 @@ mod coupled {
                 player,
                 device_error,
                 playback_requested: options.playback,
-                dsp_core: core.image_name(),
+                dsp_core: core.image,
                 frames: 0,
                 samples: 0,
                 initial_instructions,

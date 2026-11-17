@@ -234,11 +234,9 @@ const NO_TESTS = new Set([
   'sharc-stats',
   'sharc-gen',
   'sharc-gen-2',
-  'sharc-native-2',
   'dkfw',
   'dkrt-test-support',
   'sharc-fast-cl',
-  'sharc-fast-cl-2',
   'bootstrap-emu',
   'digiemu-desktop',
 ]);
@@ -263,10 +261,6 @@ export const HERMETIC = {
   dkmidi: [],
   dkbulk: [],
 };
-
-// Crates that compile another crate's sources by path (sharc-2 builds packages/emulator/sharc/src);
-// those files are outside the project root.
-const SHARED_SOURCE = { 'sharc-native-2': ['{workspaceRoot}/packages/emulator/sharc/**/*'] };
 
 // Files outside the crate embedded by patchkit's source, unit tests and build.rs.
 const COMPILE_SOURCE = {
@@ -335,7 +329,6 @@ export const createNodesV2 = [
               inputs: [
                 ...inputs,
                 '{workspaceRoot}/tools/nx/rust-env.mjs',
-                ...(SHARED_SOURCE[name] ?? []),
                 ...(COMPILE_SOURCE[name] ?? []),
               ],
               options: {

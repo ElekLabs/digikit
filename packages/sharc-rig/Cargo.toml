@@ -12,6 +12,7 @@ description = "Call harness for module routines on the generated native SHARC+ c
 # the daemon build key (tools/devtools/emud_key.py) or of the device tests that follow it.
 [dependencies]
 sharc-native = { path = "../emulator/sharc" }
+sharc-gen = { path = "../emulator/sharc-gen" }
 
 [lib]
 name = "sharc_rig"

@@ -215,7 +215,10 @@ fn main() {
     let (peer, dsp, shared): (Box<dyn periph::dspi::Peer>, DspCtl, _) = if threaded {
         let (image, state) = (image.clone(), state.clone());
         let (p, h, sh) = ThreadedPeer::spawn(
-            move || open_engine_patched(&image, &state, base, None, idle).map(NativeDsp),
+            move || {
+                open_engine_patched(&sharc_gen::CORE, &image, &state, base, None, idle)
+                    .map(NativeDsp)
+            },
             period,
             idle.range,
         )
@@ -226,7 +229,8 @@ fn main() {
         (p.boxed(), DspCtl::Worker(h), sh)
     } else {
         let d = SharedDsp::new(
-            open_engine_patched(&image, &state, base, None, idle).expect("DSP engine"),
+            open_engine_patched(&sharc_gen::CORE, &image, &state, base, None, idle)
+                .expect("DSP engine"),
         );
         if env::var_os("DSP_PROFILE").is_some() {
             // The interpreter profile for tools/sharc_dev/sharc_rsgen.py (option 26).

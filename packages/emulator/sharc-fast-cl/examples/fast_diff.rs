@@ -59,7 +59,7 @@ impl Rng {
 }
 
 fn open(image: &[u8], state: &[u8], clock_base: u64) -> Engine {
-    let mut e = Engine::from_image(image).expect("image blob");
+    let mut e = Engine::from_image(image, &sharc_gen::CORE).expect("image blob");
     e.import(state).expect("state blob");
     let mut options = vec![
         (1, 1),

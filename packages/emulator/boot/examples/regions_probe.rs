@@ -76,7 +76,10 @@ mod dsp {
         };
         emu.enable_ssi_diagnostic(96_000).unwrap();
         let (peer, handle, shared) = ThreadedPeer::spawn(
-            move || open_engine_patched(&image, &state, base, None, idle).map(NativeDsp),
+            move || {
+                open_engine_patched(&sharc_gen::CORE, &image, &state, base, None, idle)
+                    .map(NativeDsp)
+            },
             period_from_env(),
             idle.range,
         )

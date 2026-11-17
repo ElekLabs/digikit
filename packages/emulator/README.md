@@ -36,12 +36,12 @@ root). The directory name is not always the package name; use the package name w
 | `packages/emulator/device-profile` | `device-profile` | Hash-bound device and firmware identities, embedded from `devices/*.toml`. |
 | `packages/emulator/plusdrive` | `plusdrive-format` | +Drive image format encoders; the `plusdrive` CLI. |
 | `packages/emulator/boot` | `elektron-native-boot` | Bounded cold boot, the ColdFire runtime, the DSP peer (`sharc_peer`), DSP patches, and the examples (`card_boot`, `dsp_cold`, `sharc_live`, `turn_probe`; the headless tools `boot_gate`, `panel_drive` and `sysex_bridge`, see their headers). Also the wasm ABI. |
-| `packages/emulator/sharc-rt` | `sharc-rt` | Runtime under the generated core: state, memory, decoder, instruction table. |
-| `packages/emulator/sharc-gen` | `sharc-gen` | The generated SHARC+ core (from `SHARC_GEN_DIR`), compiled apart from the engine. |
-| `packages/emulator/sharc-stats` | `sharc-stats` | The counters and profiles the engine reports (shared by both engine instances). |
-| `packages/emulator/sharc` | `sharc-native` | The DSP engine: interpreter, AOT block dispatch and the fast tier (`src/fast/`). |
+| `packages/emulator/sharc-rt` | `sharc-rt` | Runtime under the generated core: state, memory, decoder, instruction table, and `GenCore`, the table of one generated core. |
+| `packages/emulator/sharc-gen` | `sharc-gen` | The generated SHARC+ core (from `SHARC_GEN_DIR`), compiled apart from the engine; `sharc_gen::CORE` is its `GenCore`. |
+| `packages/emulator/sharc-stats` | `sharc-stats` | The counters and profiles the engine reports (shared by every engine). |
+| `packages/emulator/sharc` | `sharc-native` | The DSP engine: interpreter, AOT block dispatch and the fast tier (`src/fast/`). It runs the `GenCore` it is opened with (`Engine::new(mem, core)`). |
 | `packages/emulator/sharc-fast-cl` | `sharc-fast-cl` | Cranelift backend for the fast-tier kernel IR. |
-| `packages/emulator/sharc-gen-2`, `sharc-2`, `sharc-fast-cl-2` | `sharc-gen-2`, `sharc-native-2`, `sharc-fast-cl-2` | The second core: the same sources as `sharc-gen`, `sharc-native` and `sharc-fast-cl`, built on `SHARC_GEN_DIR_2` (see "Two cores in one binary"). Empty without that variable. |
+| `packages/emulator/sharc-gen-2` | `sharc-gen-2` | The second core: the sources of `sharc-gen`, built on `SHARC_GEN_DIR_2` (see "Two cores in one binary"). Empty without that variable. |
 | `packages/emulator/sharc-fast-wasm` | `sharc-fast-wasm` | WebAssembly backend for the same IR, plus the V8 gate tools. |
 | `packages/emulator/live` | `live-audio` | Live audio output: SPSC ring, frame repeater, cpal callback. |
 | `packages/emulator/coupled` | `digi-coupled` | The coupled ColdFire + SHARC+ run loop shared by the app and `coupled-run`; the fixture gates. |
@@ -103,16 +103,16 @@ Wrap heavy builds in `uv run python -m tools.devtools.benchlock run --shared -- 
 
 The generated core is device-specific (symbol numbers and the AOT blocks differ), so a build that opens either
 device's firmware coupled holds two: `SHARC_GEN_DIR` and `SHARC_GEN_DIR_2` name them, in either order, and the cargo
-feature `second-core` (digi-coupled, digi-control, digiemu-desktop) links both. The `-2` packages compile the
-sources of the first ones again (`[lib] path`, `build = ...`) against the second directory, so there are two engine
-types and one glue per core: `elektron_native_boot::sharc_peer::{NativeDsp, open_engine_patched}` for the first core,
-`sharc_peer::second::...` for the second (one file, `boot/src/sharc_engine.rs`, included twice). The engine instance
-the DSP worker runs is chosen when the session starts: `coupled/src/dsp_core.rs` takes the core whose DSP image
-name (`dn2-1.11`, `dt2-1.16`) starts with the loaded firmware's device id, so there is no per-instruction cost.
-The second instance has no C ABI symbols (cfg `sharc_second`) and reads its own fast-tier lists
-(`SHARC_FAST_REGIONS_2`, `SHARC_BLOCKTRANS_2`). The other device's ready inputs go to `digi-emud` and the app as
+feature `second-core` (digi-coupled, digi-control, digiemu-desktop) links both. `sharc-gen-2` compiles the
+sources of `sharc-gen` again (`[lib] path`, `build = ...`) against the second directory, so a build has two data
+crates, `sharc_gen::CORE` and `sharc_gen_2::CORE`, and one engine: `Engine::new(mem, core)` and
+`elektron_native_boot::sharc_peer::open_engine_patched(core, ...)` take the core as a value. The core the DSP worker
+runs is chosen when the session starts: `coupled/src/dsp_core.rs` takes the core whose DSP image
+name (`dn2-1.12`, `dt2-1.17`) starts with the loaded firmware's device id. Calls into a core's interpreter
+(`exec_insn`, interrupts, loop stacks) are indirect calls through its `GenCore`. The second core reads its own
+fast-tier lists (`SHARC_FAST_REGIONS_2`, `SHARC_BLOCKTRANS_2`; `GenCore::env_suffix`). The other device's ready inputs go to `digi-emud` and the app as
 `--also-coupled DSP_IMAGE DSP_STATE CF_SNAPSHOT SYX` (repeatable): a firmware load for that device then boots coupled
-(audio, DSP, restart) instead of ColdFire only. Without `SHARC_GEN_DIR_2` the `-2` packages are empty and every build
+(audio, DSP, restart) instead of ColdFire only. Without `SHARC_GEN_DIR_2` `sharc-gen-2` is empty and every build
 is as before. Proof: `uv run python -m tools.devtools.dual_core_check` (the header names the build command). The
 desktop launcher builds this by default with `mise run wb` when both devices' inputs are available
 (no PGO profile for it yet).
@@ -127,7 +127,7 @@ Use:
   `DIGI_EMU_SECOND_CORE=0` for a single-core desktop build. Daemon launches (`mise run emu:serve`) remain single-core
   by default; set `DIGI_EMU_SECOND_CORE=1` to include the other core there.
 - The patched images (runtime, core/dynfx, core/fxpages, core/fx) differ from the image the generated blocks came from. Each
-  engine instance checks its own loaded code against its own generated core (`Engine::verify_code`, `code_diff.rs`) and bars only
+  engine checks its own loaded code against its own generated core (`Engine::verify_code`, `code_diff.rs`) and bars only
   the blocks with a changed instruction, so the AOT path works on the second core as on the first (`SHARC_CODE_LOG=1` prints the
   check; the audio report's `dsp_tiers` has `code_mismatch`).
 - Process-wide state is shared by both cores through `sharc-rt`: the instruction table (`insn_table`) is parsed once per generated

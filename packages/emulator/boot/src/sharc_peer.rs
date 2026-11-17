@@ -1702,22 +1702,10 @@ fn frame_poke(tx: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// The engine glue over the first generated core (the build's SHARC_GEN_DIR).
-mod engine_dn2 {
-    use super::*;
-    use ::sharc_native;
-    include!("sharc_engine.rs");
-}
-pub use engine_dn2::*;
-
-/// The same glue over the second generated core (SHARC_GEN_DIR_2): `second::NativeDsp` runs that
-/// device's DSP where `NativeDsp` runs the first one's.
-#[cfg(feature = "second-core")]
-pub mod second {
-    use super::*;
-    use ::sharc_native_2 as sharc_native;
-    include!("sharc_engine.rs");
-}
+/// The engine glue: `NativeDsp` runs the generated core the engine is opened with.
+#[path = "sharc_engine.rs"]
+mod engine;
+pub use engine::*;
 
 #[cfg(test)]
 mod tests {
@@ -1819,22 +1807,9 @@ mod tests {
             let mut mem = sharc_native::mem::Mem::new();
             mem.load(0x8001_0000, &[1, 2, 3, 4]);
             mem.reset();
-            let mut engine = sharc_native::Engine::new(mem);
+            let mut engine = sharc_native::Engine::new(mem, &sharc_gen::CORE);
             engine.s.icount = 73;
             Ok(NativeDsp(engine))
-        });
-    }
-
-    #[cfg(feature = "second-core")]
-    #[test]
-    fn ddr_monitor_second_core_worker_lifecycle() {
-        ddr_monitor_worker_contract(|| {
-            let mut mem = sharc_native_2::mem::Mem::new();
-            mem.load(0x8001_0000, &[1, 2, 3, 4]);
-            mem.reset();
-            let mut engine = sharc_native_2::Engine::new(mem);
-            engine.s.icount = 73;
-            Ok(second::NativeDsp(engine))
         });
     }
 
@@ -2478,7 +2453,7 @@ mod aligned_stop_tests {
         let (start, end) = (num("DN2_EQUIV_START", 4600), num("DN2_EQUIV_END", 5600));
         let clock = num("DN2_EQUIV_CLOCK", 573_627_620) as u64;
         let period = 667_000;
-        let open = || NativeDsp(open_dn2_engine(&image, &state, clock).unwrap());
+        let open = || NativeDsp(open_dn2_engine(&sharc_gen::CORE, &image, &state, clock).unwrap());
         let mut new = Core::new(open(), period);
         let mut old = Core::new(ChunkedOnly(open()), period);
         let (mut busy_before_end, mut nonidle) = (0, 0);

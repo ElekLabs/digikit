@@ -235,7 +235,7 @@ mod coupled {
         } else {
             (DEFAULT_CLOCK_BASE, 0, dsp)
         };
-        let engine = open_dn2_engine(image, state, base)?;
+        let engine = open_dn2_engine(&sharc_gen::CORE, image, state, base)?;
         let dsp_handle = SharedDsp::new(engine);
         ENGINE.with(|slot| *slot.borrow_mut() = Some(SharedDsp(dsp_handle.0.clone())));
         let (peer, shared) = SharcPeer::new(dsp_handle, DEFAULT_PERIOD);
@@ -323,7 +323,7 @@ mod coupled {
             } else {
                 (DEFAULT_CLOCK_BASE, 0, dsp)
             };
-            let engine = open_dn2_engine(image, state, base)?;
+            let engine = open_dn2_engine(&sharc_gen::CORE, image, state, base)?;
             let handle = SharedDsp::new(engine);
             ENGINE.with(|slot| *slot.borrow_mut() = Some(SharedDsp(handle.0.clone())));
             let (peer, shared) = RemoteDsp::new(handle, DEFAULT_PERIOD);
@@ -595,6 +595,6 @@ mod coupled {
     /// The number of AOT blocks in the linked generated core (0: the generic core).
     #[unsafe(no_mangle)]
     pub extern "C" fn digi_sharc_aot_blocks() -> u32 {
-        sharc_native::aot_block_count() as u32
+        sharc_gen::CORE.blocks.len() as u32
     }
 }

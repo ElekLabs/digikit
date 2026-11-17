@@ -29,7 +29,8 @@ fn main() {
     } else {
         DN2_IDLE
     };
-    let mut e = open_engine_patched(&image, &state, 0, patch.as_ref(), idle).expect("engine");
+    let mut e = open_engine_patched(&sharc_gen::CORE, &image, &state, 0, patch.as_ref(), idle)
+        .expect("engine");
     let t0 = Instant::now();
     let mut done = 0u64;
     let mut rested = 0u32;

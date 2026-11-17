@@ -186,7 +186,7 @@ pub extern "C" fn helper_exec(st: *mut u8, rec: u64) -> u32 {
                         eprintln!(
                             "fast: helper decode at {:#x}: {}",
                             r.pc,
-                            crate::trap_name(t)
+                            s.core.trap_name(t)
                         );
                         None
                     }
