@@ -11,10 +11,11 @@
 //!
 //! Device facts (knob positions of a machine's words, stock rows by glyph, clone_of, level) come from `Profile`, read from the `dynreg_info` table.
 use crate::{assign, dsp};
-use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
+use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_abi::keys::KeysCopy;
-use dkrt_abi::mem::{cstr_len, iw};
+use dkrt_abi::mem::iw;
+use dkrt_svc_params::builder::{fail, find, len_of, put_text, room, Gate};
 use dkrt_svc_params::dynreg::w;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::records::{
@@ -153,19 +154,12 @@ impl Build {
     }
 
     fn fail(&mut self, e: i32) {
-        if self.err == 0 {
-            self.err = e;
-        }
+        fail(&mut self.err, e);
     }
 
     /// One more record of the bounded collection; false (error kept) when full.
     fn room(&mut self) -> bool {
-        if self.records >= MAX_PA {
-            self.fail(E_DECL_FULL);
-            return false;
-        }
-        self.records += 1;
-        true
+        room(&mut self.err, &mut self.records, MAX_PA)
     }
 
     pub fn add_machine(&mut self, index: u32, name: *const u8, short: *const u8) -> *mut u8 {
@@ -215,7 +209,7 @@ impl Build {
         let pg = match find(&self.pages, p) {
             Some(i) => i,
             None => {
-                if foreign(p) {
+                if gate().foreign(p) {
                     self.fail(E_FORMAT);
                 }
                 return placeholder();
@@ -275,7 +269,7 @@ impl Build {
                 self.params[i].click_arg = arg;
             }
             None => {
-                if foreign(h) {
+                if gate().foreign(h) {
                     self.fail(E_FORMAT);
                 }
             }
@@ -322,50 +316,20 @@ impl Build {
     }
 }
 
-/// The index of the element `h` points to in `a`, None for the placeholder or any other pointer.
-fn find<T>(a: &[T], h: *mut u8) -> Option<usize> {
-    let base = a.as_ptr() as usize;
-    let at = h as usize;
-    let size = core::mem::size_of::<T>();
-    if at < base || at >= base + a.len() * size || (at - base) % size != 0 {
-        return None;
-    }
-    Some((at - base) / size)
-}
-
-/// A handle that is not null, not our placeholder and not an element of our state: it came from another service (or from nowhere).
-fn foreign(h: *mut u8) -> bool {
-    !h.is_null() && h != placeholder()
-}
-
-unsafe fn put_text(dst: &mut [u8], src: *const u8, err: &mut i32) {
-    if src.is_null() {
-        *err = E_FORMAT;
-        return;
-    }
-    let n = cstr_len(src, dst.len());
-    if n == 0 || n == dst.len() {
-        *err = E_FORMAT; // empty, or no room for the NUL
-        return;
-    }
-    let mut i = 0;
-    while i < n {
-        dst[i] = *src.add(i);
-        i += 1;
-    }
-}
-
 // ---- the open collection and the placeholder ------------------------------------------------------------------------------------
 
-static PLACEHOLDER: u32 = 0;
 static mut BUILD: Build = Build::new();
-/// The module record whose `init` the calls belong to (`u32::MAX`: none).
-static mut OPEN: u32 = u32::MAX;
+static mut GATE: Gate = Gate::new();
 /// The callback arguments of the ACTION and native page records `WRITE` wrote, for `apply` (`take_args`).
 static mut ARGS: Option<ApplyArgs> = None;
 
+fn gate() -> &'static mut Gate {
+    unsafe { &mut *addr_of_mut!(GATE) }
+}
+
+/// The placeholder handle of a refused call.
 pub fn placeholder() -> *mut u8 {
-    addr_of!(PLACEHOLDER) as usize as *mut u8
+    gate().placeholder()
 }
 
 /// The collection (host tests read it).
@@ -377,97 +341,74 @@ pub fn build() -> &'static mut Build {
 pub unsafe fn begin(rec: usize) {
     core::ptr::write(addr_of_mut!(BUILD), Build::new());
     *addr_of_mut!(ARGS) = None;
-    write_volatile(addr_of_mut!(OPEN), rec as u32);
+    gate().begin(rec);
 }
 
 /// Close the collection: later builder calls return the placeholder.
 pub unsafe fn end() {
-    write_volatile(addr_of_mut!(OPEN), u32::MAX);
+    gate().end();
 }
 
-/// The record whose `init` is open and whose context is `ctx`: the module context a builder call opens a machine for (`CoreApi::module_of`).
-unsafe fn open_for<C: CoreApi>(core: &C, ctx: *mut u8) -> Option<&'static mut Build> {
-    let rec = read_volatile(addr_of!(OPEN));
-    if rec == u32::MAX || core.module_of(ctx) as u32 != rec + 1 {
-        return None;
-    }
-    Some(build())
-}
-
-// the builder calls (exported by the service file: `dks/src/builder.rs`)
+// the builder calls (exported by the service file: `dks/src/builder.rs`); a call that names a handle comes from the module whose `init` is open
 
 pub unsafe fn add_machine<C: CoreApi>(core: &C, ctx: *mut u8, index: u32, name: *const u8, short: *const u8) -> *mut u8 {
-    match open_for(core, ctx) {
-        Some(b) => b.add_machine(index, name, short),
-        None => placeholder(),
-    }
-}
-pub unsafe fn machine_add_page(m: *mut u8, name: *const u8, short: *const u8) -> *mut u8 {
-    match open_any() {
-        Some(b) => b.machine_add_page(m, name, short),
-        None => placeholder(),
-    }
-}
-pub unsafe fn page_add_param(p: *mut u8, name: *const u8, short: *const u8, def: u32) -> *mut u8 {
-    match open_any() {
-        Some(b) => b.page_add_param(p, name, short, def),
-        None => placeholder(),
-    }
-}
-pub unsafe fn param_range(prm: *mut u8, min: u32, max: u32) {
-    if let Some(b) = open_any() {
-        b.param_range(prm, min, max);
-    }
-}
-pub unsafe fn param_glyph(prm: *mut u8, glyph: u32) {
-    if let Some(b) = open_any() {
-        b.param_glyph(prm, glyph);
-    }
-}
-pub unsafe fn param_latched(prm: *mut u8) {
-    if let Some(b) = open_any() {
-        b.param_latched(prm);
-    }
-}
-pub unsafe fn param_on_click(prm: *mut u8, f: u32, arg: u32) {
-    if let Some(b) = open_any() {
-        b.param_on_click(prm, f, arg);
-    }
-}
-pub unsafe fn page_canvas(p: *mut u8, flags: u32, draw: u32, event: u32, arg: u32) {
-    if let Some(b) = open_any() {
-        b.page_canvas(p, flags, draw, event, arg);
-    }
-}
-pub unsafe fn page_bind(p: *mut u8, prm: *mut u8, slot: u32) {
-    if let Some(b) = open_any() {
-        b.page_bind(p, prm, slot);
-    }
-}
-pub unsafe fn page_bind_local(p: *mut u8, local: u32, slot: u32) {
-    if let Some(b) = open_any() {
-        b.page_bind_local(p, local, slot);
-    }
-}
-
-/// The collection while any module's `init` is open (a handle names its element, so the caller is the module that got it).
-fn open_any() -> Option<&'static mut Build> {
-    if unsafe { read_volatile(addr_of!(OPEN)) } == u32::MAX {
-        None
+    if gate().open_for(core, ctx) {
+        build().add_machine(index, name, short)
     } else {
-        Some(build())
+        placeholder()
+    }
+}
+pub unsafe fn machine_add_page<C: CoreApi>(core: &C, m: *mut u8, name: *const u8, short: *const u8) -> *mut u8 {
+    if gate().open_any(core) {
+        build().machine_add_page(m, name, short)
+    } else {
+        placeholder()
+    }
+}
+pub unsafe fn page_add_param<C: CoreApi>(core: &C, p: *mut u8, name: *const u8, short: *const u8, def: u32) -> *mut u8 {
+    if gate().open_any(core) {
+        build().page_add_param(p, name, short, def)
+    } else {
+        placeholder()
+    }
+}
+pub unsafe fn param_range<C: CoreApi>(core: &C, prm: *mut u8, min: u32, max: u32) {
+    if gate().open_any(core) {
+        build().param_range(prm, min, max);
+    }
+}
+pub unsafe fn param_glyph<C: CoreApi>(core: &C, prm: *mut u8, glyph: u32) {
+    if gate().open_any(core) {
+        build().param_glyph(prm, glyph);
+    }
+}
+pub unsafe fn param_latched<C: CoreApi>(core: &C, prm: *mut u8) {
+    if gate().open_any(core) {
+        build().param_latched(prm);
+    }
+}
+pub unsafe fn param_on_click<C: CoreApi>(core: &C, prm: *mut u8, f: u32, arg: u32) {
+    if gate().open_any(core) {
+        build().param_on_click(prm, f, arg);
+    }
+}
+pub unsafe fn page_canvas<C: CoreApi>(core: &C, p: *mut u8, flags: u32, draw: u32, event: u32, arg: u32) {
+    if gate().open_any(core) {
+        build().page_canvas(p, flags, draw, event, arg);
+    }
+}
+pub unsafe fn page_bind<C: CoreApi>(core: &C, p: *mut u8, prm: *mut u8, slot: u32) {
+    if gate().open_any(core) {
+        build().page_bind(p, prm, slot);
+    }
+}
+pub unsafe fn page_bind_local<C: CoreApi>(core: &C, p: *mut u8, local: u32, slot: u32) {
+    if gate().open_any(core) {
+        build().page_bind_local(p, local, slot);
     }
 }
 
 // ---- lowering to records -----------------------------------------------------------------------------------------------------
-
-fn len_of(s: &[u8]) -> usize {
-    let mut n = 0;
-    while n < s.len() && s[n] != 0 {
-        n += 1;
-    }
-    n
-}
 
 /// The (min, max) knob units a glyph allows (`typed.rs glyph_info`); None for an unknown glyph.
 fn glyph_range(g: u32) -> Option<(i32, i32)> {
@@ -892,11 +833,11 @@ unsafe fn voices<C: CoreApi>(core: &C, rec: usize, b: &Build, keys: &KeysCopy) -
     voice
 }
 
-/// The commit of module record `rec` (`Service::module_commit`): `PREPARE` checks the collection and measures its records, `WRITE` writes them, declares the voice rows' ranges
-/// and keeps the callback arguments for `apply`. The collection is closed after the `WRITE` pass.
+/// The commit of module record `rec` (`Service::module_commit`): `PREPARE` checks the collection and measures its records, `WRITE` writes them, counts the rows and keeps the callback
+/// arguments for `apply`; `DECLARE` (after the registry walker's check) declares the voice rows' ranges. The collection is closed after the `DECLARE` pass.
 pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i32 {
     let b = build();
-    if read_volatile(addr_of!(OPEN)) != rec as u32 {
+    if !gate().is_open_for(rec) {
         return OK; // no `module_begin` for this record: nothing was collected
     }
     if b.err != 0 {
@@ -928,7 +869,19 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
             Err(e) => e,
         };
     }
-    if let Err(e) = lower(b, &p, c.keys, &voice, c.base, sink, &mut plan) {
+    if c.phase == commit_phase::WRITE {
+        if let Err(e) = lower(b, &p, c.keys, &voice, c.base, sink, &mut plan) {
+            return e;
+        }
+        *addr_of_mut!(ARGS) = Some(apply_args(b, &plan));
+        let (mr, pr, pg) = counts_of(b, &p);
+        sink.rows[0] += mr;
+        sink.rows[1] += pr;
+        sink.rows[2] += pg;
+        return OK;
+    }
+    // DECLARE: the walker's check found nothing wrong. The plan of the lowering gives each machine's knob positions again (a measuring pass writes nothing).
+    if let Err(e) = lower(b, &p, c.keys, &voice, c.base, &mut RecordSink::measure(), &mut plan) {
         return e;
     }
     // the ranges and latch mask of each machine's voice row
@@ -947,11 +900,6 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
         }
         m += 1;
     }
-    *addr_of_mut!(ARGS) = Some(apply_args(b, &plan));
-    let (mr, pr, pg) = counts_of(b, &p);
-    sink.rows[0] += mr;
-    sink.rows[1] += pr;
-    sink.rows[2] += pg;
     end();
     OK
 }

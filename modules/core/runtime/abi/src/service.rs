@@ -11,7 +11,7 @@
 //!   (the DSP loader in `dsp/mod.rs` keeps the area, the row table and the state machine);
 //! - capacity counts (`caps`), the module behind a fault site (`attribute`), the guard's state of a machine type (`guard_state`);
 //! - `on_loaded` (every row of a module is in the DSP);
-//! - the module lifecycle: `module_begin` before a module's `init`, `module_commit` after it (two passes over a `RecordSink`), and `remove`;
+//! - the module lifecycle: `module_begin` before a module's `init`, `module_commit` after it (a `PREPARE`, a `WRITE` and a `DECLARE` pass over a `RecordSink`), and `remove`;
 //! - the boot: `settle`, once, after the services are loaded and before the first module, with the keys of the boot's selection.
 use crate::core_api::CoreApi;
 use crate::dsp::{DspSec, Job};
@@ -148,12 +148,15 @@ pub struct GuardState {
     pub disabled: bool,
 }
 
-/// The two passes of a module commit (`ModuleCommitCtx::phase`), run over every service in table order.
+/// The passes of a module commit (`ModuleCommitCtx::phase`), run over every service in table order.
 pub mod commit_phase {
     /// Check what the service collected for the module and measure the records it will write (`sink.at` grows). Changes nothing.
     pub const PREPARE: u32 = 0;
-    /// Declare the DSP details of the module's rows and write the records into `sink.buf` (null when no service has records).
+    /// Write the records into `sink.buf` (null when no service has records) and count the rows the module uses (`sink.rows`). Changes nothing else.
     pub const WRITE: u32 = 1;
+    /// The loader's registry walker has checked the block and found nothing wrong: declare the DSP details of the module's rows (the sink is the written one, not touched).
+    /// A refusal of the walker's check leaves everything as it was.
+    pub const DECLARE: u32 = 2;
 }
 
 /// The bytes of the module's `register` section that the services write at a commit (`ModuleCommitCtx::sink`). The loader hands the block to the registry walker

@@ -108,23 +108,29 @@ fn a_call_outside_init_returns_the_placeholder_and_changes_nothing() {
     unsafe {
         build::end();
         assert_eq!(build::add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")), placeholder());
-        assert_eq!(build::machine_add_page(placeholder(), c(b"A\0"), c(b"S\0")), placeholder());
-        assert_eq!(build::page_add_param(placeholder(), c(b"A\0"), c(b"A\0"), 1), placeholder());
-        build::param_range(placeholder(), 1, 2);
-        build::param_latched(placeholder());
-        build::page_bind_local(placeholder(), 0, 1);
+        assert_eq!(build::machine_add_page(&core, placeholder(), c(b"A\0"), c(b"S\0")), placeholder());
+        assert_eq!(build::page_add_param(&core, placeholder(), c(b"A\0"), c(b"A\0"), 1), placeholder());
+        build::param_range(&core, placeholder(), 1, 2);
+        build::param_latched(&core, placeholder());
+        build::page_bind_local(&core, placeholder(), 0, 1);
         // inside init a context that is not the running module's is no builder either (`module_of` answers 0)
         build::begin(0);
         assert_eq!(build::add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")), placeholder());
         assert_eq!((build::build().nm, build::build().err), (0, 0), "a call with a context that is not live records nothing");
         // the running module's context opens a machine
         core.running.set(1);
+        core.source.set(1);
         let m = build::add_machine(&core, 4 as *mut u8, 0, c(b"A\0"), c(b"A\0"));
         assert_ne!(m, placeholder());
         assert_eq!(build::build().nm, 1);
+        // the code of another module (or of no module) that holds the handle changes nothing while this module's `init` is open
+        core.source.set(2);
+        assert_eq!(build::machine_add_page(&core, m, c(b"A\0"), c(b"S\0")), placeholder());
+        assert_eq!(build::build().np, 0);
+        core.source.set(1);
         // the collection is closed: the handle is no more taken
         build::end();
-        assert_eq!(build::machine_add_page(m, c(b"A\0"), c(b"S\0")), placeholder());
+        assert_eq!(build::machine_add_page(&core, m, c(b"A\0"), c(b"S\0")), placeholder());
         assert_eq!(build::build().np, 0);
     }
 }
@@ -394,11 +400,12 @@ fn collect_analog(core: &FakeCore) {
     unsafe {
         build::begin(0);
         core.running.set(1);
+        core.source.set(1);
         let m = build::add_machine(core, 8 as *mut u8, 0, c(b"Analog\0"), c(b"ANLG\0"));
-        let p = build::machine_add_page(m, c(b"Analog\0"), c(b"S\0"));
-        build::page_add_param(p, c(b"Tone\0"), c(b"TONE\0"), 64);
-        let go = build::page_add_param(p, c(b"Go\0"), c(b"GO\0"), 0);
-        build::param_on_click(go, 0x2000, 5);
+        let p = build::machine_add_page(core, m, c(b"Analog\0"), c(b"S\0"));
+        build::page_add_param(core, p, c(b"Tone\0"), c(b"TONE\0"), 64);
+        let go = build::page_add_param(core, p, c(b"Go\0"), c(b"GO\0"), 0);
+        build::param_on_click(core, go, 0x2000, 5);
     }
 }
 
@@ -422,6 +429,8 @@ fn the_commit_measures_then_writes_the_same_records_declares_the_rows_and_closes
     assert_eq!((rd(&buf, act), rd(&buf, act + 8), rd(&buf, act + 12)), (5, 1, 0x2000 - 0x1000), "the action of the second param, as an image offset");
     // the callback argument waits for `apply`
     assert_eq!(build::args().map(|a| a.click[0]), Some(5));
+    // the declare pass (after the walker's check) closes the collection
+    assert_eq!(commit(&core, commit_phase::DECLARE, &k, &mut out), OK);
     // the collection is closed: another builder call is refused until the next `module_begin`
     unsafe {
         let m = build::add_machine(&core, 8 as *mut u8, 1, c(b"X\0"), c(b"X\0"));
@@ -443,7 +452,7 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
     core.set_dynreg(dynreg(&DT2));
     collect_analog(&core);
     unsafe {
-        build::page_add_param(core::ptr::null_mut(), c(b"P\0"), c(b"P\0"), 0);
+        build::page_add_param(&core, core::ptr::null_mut(), c(b"P\0"), c(b"P\0"), 0);
         let m = build::add_machine(&core, 8 as *mut u8, 1, core::ptr::null(), c(b"A\0"));
         assert_ne!(m, placeholder());
     }
@@ -462,6 +471,7 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
     unsafe {
         build::begin(dkrt_abi::MAX_MODULES);
         core.running.set(dkrt_abi::MAX_MODULES as u8 + 1);
+        core.source.set(dkrt_abi::MAX_MODULES as u8 + 1);
         build::add_machine(&core, 8 as *mut u8, 0, c(b"A\0"), c(b"A\0"));
     }
     let ctx = ModuleCommitCtx { phase: commit_phase::PREPARE, base: 0, image_size: 0x4000, keys: &k, sink: &mut RecordSink::measure() };
@@ -558,4 +568,56 @@ fn the_lowered_records_of_the_golden_cases_are_the_recorded_bytes() {
     if let Some(at) = (0..want.len().max(have.len())).find(|i| want.get(*i) != have.get(*i)) {
         panic!("the lowered records differ from {} at the machines' line {}:\n  now:      {}\n  recorded: {}", path.display(), at + 1, have.get(at).unwrap_or(&"(end)"), want.get(at).unwrap_or(&"(end)"));
     }
+}
+
+#[test]
+fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_leaves_them_as_they_were() {
+    use dkrt_abi::core_api::CoreApi;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut core = FakeCore::new();
+    core.set_dynreg(dynreg(&DN2));
+    // the module's DSP part claimed a voice row for the pinned machine type 0x12, which has a note_on routine
+    const PINNED: u32 = 0x12;
+    {
+        let d = core.dsp();
+        d.row_owner[0] = 1;
+        d.row_type[0] = PINNED;
+        d.row_note_on[0] = 1;
+        d.row_rng[0] = [0; 8];
+        d.row_latched[0] = 0;
+    }
+    unsafe {
+        build::begin(0);
+        core.running.set(1);
+        core.source.set(1);
+        let m = build::add_machine(&core, 8 as *mut u8, 0, c(b"Analog\0"), c(b"ANLG\0"));
+        let p = build::machine_add_page(&core, m, c(b"Analog\0"), c(b"S\0"));
+        let q = build::page_add_param(&core, p, c(b"Decay\0"), c(b"DECAY\0"), 80);
+        build::param_range(&core, q, 0, 100);
+        build::param_latched(&core, q);
+    }
+    let k = keys(&[PINNED], (1, 1, 1));
+    let mut measured = RecordSink::measure();
+    assert_eq!(commit(&core, commit_phase::PREPARE, &k, &mut measured), OK);
+    let mut buf = std::vec![0u8; measured.at];
+    let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
+    assert_eq!(commit(&core, commit_phase::WRITE, &k, &mut out), OK);
+    // the loader's walker refuses the block here: it never gives the declare pass, and the rows are as they were
+    assert_eq!((core.dsp().row_rng[0], core.dsp().row_latched[0]), ([0; 8], 0));
+    unsafe { <Machines as Service<FakeCore>>::remove(&core, 1) };
+    assert_eq!((core.dsp().row_rng[0], core.dsp().row_latched[0]), ([0; 8], 0));
+    // a block that passes: the declare pass puts the ranges and the latch in the row
+    unsafe {
+        build::begin(0);
+        let m = build::add_machine(&core, 8 as *mut u8, 0, c(b"Analog\0"), c(b"ANLG\0"));
+        let p = build::machine_add_page(&core, m, c(b"Analog\0"), c(b"S\0"));
+        let q = build::page_add_param(&core, p, c(b"Decay\0"), c(b"DECAY\0"), 80);
+        build::param_range(&core, q, 0, 100);
+        build::param_latched(&core, q);
+    }
+    let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
+    assert_eq!(commit(&core, commit_phase::WRITE, &k, &mut out), OK);
+    assert_eq!(commit(&core, commit_phase::DECLARE, &k, &mut out), OK);
+    assert_eq!(core.dsp().row_latched[0], 1);
+    assert_eq!(core.dsp().row_rng[0][1], 100 * 256 << 16);
 }

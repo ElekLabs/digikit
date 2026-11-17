@@ -7,6 +7,7 @@
 #![no_std]
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::{cstr_len, iw, wr32, FwMem};
+pub mod builder;
 pub mod dynreg;
 use dynreg::{w, MACH_TEXT};
 

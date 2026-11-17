@@ -67,21 +67,22 @@ fn a_call_outside_init_returns_the_placeholder_and_changes_nothing() {
     unsafe {
         build::end();
         assert_eq!(build::add_fx(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")), placeholder());
-        assert_eq!(build::fx_add_page(placeholder(), c(b"A\0"), c(b"S\0")), placeholder());
-        build::fx_routes(placeholder(), 1, 1);
-        build::fx_mix(placeholder(), 5);
+        assert_eq!(build::fx_add_page(&core, placeholder(), c(b"A\0"), c(b"S\0")), placeholder());
+        build::fx_routes(&core, placeholder(), 1, 1);
+        build::fx_mix(&core, placeholder(), 5);
         // inside init a context that is not the running module's is no builder either
         build::begin(0);
         assert_eq!(build::add_fx(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")), placeholder());
         assert_eq!((build::build().nf, build::build().err), (0, 0));
         // the running module's context opens an effect, which takes a page and its knob
         core.running.set(1);
+        core.source.set(1);
         let f = build::add_fx(&core, 4 as *mut u8, 0, c(b"A\0"), c(b"A\0"));
         assert_ne!(f, placeholder());
-        let p = build::fx_add_page(f, c(b"A\0"), c(b"S\0"));
-        assert_ne!(build::page_add_fx_param(p, c(b"K\0"), c(b"K\0"), 1, 0.0, 1.0, 0.5), placeholder());
+        let p = build::fx_add_page(&core, f, c(b"A\0"), c(b"S\0"));
+        assert_ne!(build::page_add_fx_param(&core, p, c(b"K\0"), c(b"K\0"), 1, 0.0, 1.0, 0.5), placeholder());
         build::end();
-        assert_eq!(build::fx_add_page(f, c(b"A\0"), c(b"S\0")), placeholder());
+        assert_eq!(build::fx_add_page(&core, f, c(b"A\0"), c(b"S\0")), placeholder());
     }
 }
 
@@ -171,10 +172,11 @@ fn collect_effect(core: &FakeCore, rec: usize) {
     unsafe {
         build::begin(rec);
         core.running.set(rec as u8 + 1);
+        core.source.set(rec as u8 + 1);
         let f = build::add_fx(core, 4 as *mut u8, 0, c(b"Freq shift\0"), c(b"FSH\0"));
-        build::fx_routes(f, ROUTE_SEND | ROUTE_MASTER, ROUTE_SEND);
-        let p = build::fx_add_page(f, c(b"Freq shift\0"), c(b"FSH\0"));
-        build::page_add_fx_param(p, c(b"Freq Shift\0"), c(b"SHIFT\0"), DK_BIPOLAR, -64.0, 63.0, 0.5);
+        build::fx_routes(core, f, ROUTE_SEND | ROUTE_MASTER, ROUTE_SEND);
+        let p = build::fx_add_page(core, f, c(b"Freq shift\0"), c(b"FSH\0"));
+        build::page_add_fx_param(core, p, c(b"Freq Shift\0"), c(b"SHIFT\0"), DK_BIPOLAR, -64.0, 63.0, 0.5);
     }
 }
 
@@ -192,6 +194,9 @@ fn the_commit_measures_then_writes_declares_the_effects_row_and_remembers_the_id
     assert_eq!(commit(&core, REC, commit_phase::WRITE, &k, &mut out), OK);
     assert_eq!((out.count, out.at, out.rows), (1, measured.at, [0; 3]));
     assert_eq!(rd(&buf, 16), KIND_EFFECT);
+    // nothing of the DSP row is declared before the declare pass (the walker's check comes in between)
+    assert_eq!(core.dsp().fx_flags[1], 0);
+    assert_eq!(commit(&core, REC, commit_phase::DECLARE, &k, &mut out), OK);
     // the effect's DSP row has the route flags and the knob default of the builder calls
     let d = core.dsp();
     assert_eq!((d.fx_flags[1], f32::from_bits(d.fx_par[1][0])), (0b101, 0.5));

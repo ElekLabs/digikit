@@ -650,23 +650,32 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         c.write_generic(&mut out);
         let rows = (out.rows[0], out.rows[1], out.rows[2]);
-        let b = match blk {
-            Some(b) => b,
-            None => return Ok((0, 0, rows)),
-        };
-        if out.at != size || out.count != count {
-            free(self);
-            return Err(E_FORMAT); // a service wrote another size than it measured
+        if let Some(b) = blk {
+            if out.at != size || out.count != count {
+                free(self);
+                return Err(E_FORMAT); // a service wrote another size than it measured
+            }
+            wr32(b.ptr, 0x444b_5247);
+            wr32(b.ptr.add(4), 1);
+            wr32(b.ptr.add(8), self.p.device_id());
+            wr32(b.ptr.add(12), count);
+            // check before anything of the module's rows is declared: a refusal leaves everything as it was
+            let r = crate::registry::check(b.ptr, size as u32, image_size, self.p.device_id());
+            if r != OK {
+                free(self);
+                return Err(r);
+            }
         }
-        wr32(b.ptr, 0x444b_5247);
-        wr32(b.ptr.add(4), 1);
-        wr32(b.ptr.add(8), self.p.device_id());
-        wr32(b.ptr.add(12), count);
-        let r = crate::registry::check(b.ptr, size as u32, image_size, self.p.device_id());
+        let ctx = ModuleCommitCtx { phase: commit_phase::DECLARE, base, image_size, keys, sink: &mut out };
+        let r = self.r.module_commit(rec, &ctx);
         if r != OK {
             free(self);
             return Err(r);
         }
+        let b = match blk {
+            Some(b) => b,
+            None => return Ok((0, 0, rows)),
+        };
         let r = crate::registry::apply(rec as u8 + 1, b.ptr, size as u32, base);
         if r != OK {
             free(self);
