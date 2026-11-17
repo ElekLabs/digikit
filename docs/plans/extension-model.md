@@ -666,7 +666,7 @@ runtime-and-services.md.
 | 1 | E0a filter DSP experiment | profile under the native core; UI chooser | one, about 10 min | parked: first attempt did not settle it (finding 148); retry before E7 |
 | 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
 | 2 | E2 boilerplate codegen | - | none; objdiff | built and reviewed (branch e2/exports-codegen); PR after the gate merge |
-| 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | todo |
+| 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | active (branch e3/keys) |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | todo |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |

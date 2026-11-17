@@ -552,6 +552,60 @@ impl<'a> Keys<'a> {
         false
     }
 
+    /// The first (kind, key) that this table and `other` both provide, in the order of this table; `None` when they share none. Plain index loops (the
+    /// runtime's planner calls it).
+    pub fn first_shared_key(&self, other: &Keys) -> Option<(u32, u32)> {
+        let mut g = 0;
+        while let Some((kind, list)) = self.group(g) {
+            let mut j = 0;
+            while j < list.len() {
+                if other.has_key(kind, list.get(j)) {
+                    return Some((kind, list.get(j)));
+                }
+                j += 1;
+            }
+            g += 1;
+        }
+        None
+    }
+
+    /// The first (kind, key) that this table provides twice, in a group or across two groups of one kind; `None` when every key is unique per kind.
+    pub fn first_repeat(&self) -> Option<(u32, u32)> {
+        let mut g = 0;
+        while let Some((kind, list)) = self.group(g) {
+            let mut j = 0;
+            while j < list.len() {
+                let key = list.get(j);
+                // an earlier position of the same kind: the same group before `j`, or any earlier group
+                let mut k = 0;
+                while k < j {
+                    if list.get(k) == key {
+                        return Some((kind, key));
+                    }
+                    k += 1;
+                }
+                let mut h = 0;
+                while h < g {
+                    if let Some((hk, hl)) = self.group(h) {
+                        if hk == kind {
+                            let mut m = 0;
+                            while m < hl.len() {
+                                if hl.get(m) == key {
+                                    return Some((kind, key));
+                                }
+                                m += 1;
+                            }
+                        }
+                    }
+                    h += 1;
+                }
+                j += 1;
+            }
+            g += 1;
+        }
+        None
+    }
+
     pub fn needs(&self) -> impl Iterator<Item = Need> + 'a {
         let me = *self;
         (0..self.count(tag::NEEDS)).filter_map(move |i| {
@@ -836,8 +890,56 @@ pub fn keys_size(
 mod tests {
     extern crate std;
     use super::*;
-    use crate::{KIND_MACHINE, RES_DSP_COST_FX, RES_DSP_COST_VOICE, RES_MACHINE_ROWS};
+    use crate::{KIND_EFFECT, KIND_MACHINE, RES_DSP_COST_FX, RES_DSP_COST_VOICE, RES_MACHINE_ROWS};
     use std::{vec, vec::Vec};
+
+    fn table_with(groups: &[(u32, &[u32])]) -> Vec<u8> {
+        let kg: Vec<KeyGroup> = groups
+            .iter()
+            .map(|g| KeyGroup {
+                kind: g.0,
+                keys: g.1,
+            })
+            .collect();
+        let t = Table {
+            keys: &kg,
+            ..Table::default()
+        };
+        let mut out = vec![0u8; table_size(&t)];
+        write_table(&t, &mut out).unwrap();
+        out
+    }
+
+    #[test]
+    fn two_tables_share_a_key_only_within_one_kind() {
+        let a = table_with(&[(KIND_MACHINE, &[1, 2]), (KIND_EFFECT, &[3])]);
+        let b = table_with(&[(KIND_MACHINE, &[3, 2]), (KIND_EFFECT, &[1])]);
+        let c = table_with(&[(KIND_MACHINE, &[9]), (KIND_EFFECT, &[3])]);
+        let (ka, kb, kc) = (
+            Keys::parse(&a).unwrap(),
+            Keys::parse(&b).unwrap(),
+            Keys::parse(&c).unwrap(),
+        );
+        assert_eq!(ka.first_shared_key(&kb), Some((KIND_MACHINE, 2)));
+        assert_eq!(ka.first_shared_key(&kc), Some((KIND_EFFECT, 3)));
+        assert_eq!(kb.first_shared_key(&kc), None);
+        assert_eq!(ka.first_shared_key(&ka), Some((KIND_MACHINE, 1)));
+    }
+
+    #[test]
+    fn a_key_repeated_in_a_group_or_across_groups_of_one_kind_is_found() {
+        let one = table_with(&[(KIND_MACHINE, &[1, 2, 1])]);
+        let two = table_with(&[
+            (KIND_MACHINE, &[1]),
+            (KIND_EFFECT, &[1]),
+            (KIND_MACHINE, &[2, 1]),
+        ]);
+        let none = table_with(&[(KIND_MACHINE, &[1, 2]), (KIND_EFFECT, &[1, 2])]);
+        let first = |b: &[u8]| Keys::parse(b).unwrap().first_repeat();
+        assert_eq!(first(&one), Some((KIND_MACHINE, 1)));
+        assert_eq!(first(&two), Some((KIND_MACHINE, 1)));
+        assert_eq!(first(&none), None);
+    }
 
     #[test]
     fn a_table_of_every_entry_round_trips() {
