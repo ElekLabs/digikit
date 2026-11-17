@@ -4906,7 +4906,7 @@
    "addend": 0,
    "offset": 26,
    "section": ".text._RNvNtNtCs7eEPMLW8Jyr_4dkrt6loader7records6module",
-   "symbol": ".sec..bss._RNvNtNtCs7eEPMLW8Jyr_4dkrt6loader7records13PROVIDER_RECS",
+   "symbol": ".sec..bss.DKRT_PROVIDERS",
    "type": "cf.32"
   },
   {
@@ -44294,13 +44294,6 @@
    "size": 384
   },
   {
-   "align": 2,
-   "hex": "",
-   "kind": "bss",
-   "name": ".bss._RNvNtNtCs7eEPMLW8Jyr_4dkrt6loader7records13PROVIDER_RECS",
-   "size": 312
-  },
-  {
    "align": 1,
    "hex": "",
    "kind": "bss",
@@ -45209,6 +45202,13 @@
    "kind": "bss",
    "name": ".bss.DKRT_SAVE_MODE",
    "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.DKRT_PROVIDERS",
+   "size": 312
   },
   {
    "align": 1,
@@ -47507,7 +47507,7 @@
    "size": 24
   }
  ],
- "source_sha256": "33efb1f30443a2b2979ea653865a9f780153a1ec0acfd23a8e99be836b370cbc",
+ "source_sha256": "c9823738176d931a76518335e305aa055ec82f861dd56568525c5c37a22004c4",
  "symbols": [
   {
    "global": false,
@@ -47597,6 +47597,12 @@
    "global": false,
    "name": ".sec..bss.DKRT_POLLS",
    "section": ".bss.DKRT_POLLS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.DKRT_PROVIDERS",
+   "section": ".bss.DKRT_PROVIDERS",
    "value": 0
   },
   {
@@ -48311,12 +48317,6 @@
    "global": false,
    "name": ".sec..bss._RNvNtCs7eEPMLW8Jyr_4dkrt9transport5RWIRE",
    "section": ".bss._RNvNtCs7eEPMLW8Jyr_4dkrt9transport5RWIRE",
-   "value": 0
-  },
-  {
-   "global": false,
-   "name": ".sec..bss._RNvNtNtCs7eEPMLW8Jyr_4dkrt6loader7records13PROVIDER_RECS",
-   "section": ".bss._RNvNtNtCs7eEPMLW8Jyr_4dkrt6loader7records13PROVIDER_RECS",
    "value": 0
   },
   {
@@ -53049,6 +53049,12 @@
   },
   {
    "global": true,
+   "name": "DKRT_PROVIDERS",
+   "section": ".bss.DKRT_PROVIDERS",
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "DKRT_SAVE_MODE",
    "section": ".bss.DKRT_SAVE_MODE",
    "value": 0
@@ -55077,9 +55083,9 @@
   }
  ],
  "toolchain": {
-  "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_load dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_pool_done dkrt_pool_lost dkrt_project_changed dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
+  "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_load dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_pool_done dkrt_pool_lost dkrt_project_changed dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
   "instructions_redecoded": "59531",
-  "isa_check": "d34e002e3e19be611a2af6a47c405fc1e658be821a37589a3f8bae1a4f4843f6",
+  "isa_check": "d01eeccad99bfc34efc10a74289b50c618d16b5375b62c0d1fc24e07c71f7e12",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

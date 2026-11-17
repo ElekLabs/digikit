@@ -163,6 +163,7 @@ for (const device of DEVICES) {
           what: 'the MIX knob is at its end',
         });
         expect(await kit.raw(7)).toBe(target);
+        await rowIs('the MIX word at target', (r) => r[13] === (target ? bits(1) : 0));
         expect((await words())[1]).toBe(target ? bits(1) : 0);
         await shot(runtime.session, artifacts, tag);
       };
@@ -184,6 +185,7 @@ for (const device of DEVICES) {
       await mainPage(runtime);
       await sound('b');
       await endpoint(0x7000, 1, 0x7f00, 'gbp-page-mix-top');
+      await mainPage(runtime);
       await ui.fxPage(3);
       const halfRaw = await kit.setRaw('LEVEL', 7, 0x4000);
       await rowIs('the MIX word follows the knob', (r) => Math.abs(floatWord(r[13]!) - halfRaw / 0x7f00) < 1e-4);
@@ -192,6 +194,7 @@ for (const device of DEVICES) {
       await mainPage(runtime);
       await sound('h');
       await endpoint(0x7000, 1, 0x7f00, 'gbp-page-mix-top-again');
+      await mainPage(runtime);
       await turn(0x1800, 'down');
       await mainPage(runtime);
       await sound('d');
