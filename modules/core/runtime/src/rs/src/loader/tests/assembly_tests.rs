@@ -665,6 +665,12 @@ fn an_effect_loads_with_the_fx_service_file() {
 fn an_lfo_loads_with_the_lfo_service_file() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        // the image half (core/lfo) has the six slots of the device, kind 1 in the info table; `fits` loads the file, whose declared fills must name them, and installs each
+        let image = Image::read(*dev, "emulator");
+        for site in ["tick_call", "tick_slew", "tick_start", "read_call", "read_slew", "read_start"] {
+            let name = std::format!("lfo_{}_{site}", dev.name);
+            assert!(image.entries.iter().any(|e| e.0 == name && e.2 == 1), "{}: no slot {name} in the image", dev.name);
+        }
         unsafe {
             fits(*dev, "emulator", &[&LFO_SHAPE], &["lfo"]);
         }
