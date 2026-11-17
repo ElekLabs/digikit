@@ -317,6 +317,36 @@ The command writes `modules/<category>/<name>/` (manifest, source stubs, `tests/
 builds it, so the template is known to compile. [modules/README.md](../modules/README.md) is the authoring guide and
 the manifest reference.
 
+### Register liveness at a hook site
+
+A stub or a hook routine may overwrite only registers the stock code does not read afterwards. `tools/coldfire/liveness.py` finds them from the stock bytes of a port (SLEIGH decode of the ColdFire image, so no encoding table is kept): from each start address it follows fall-through and branch targets and calls a register dead when every path writes all of it before a read, call, return or indirect jump.
+
+```sh
+uv run python -m tools.coldfire.liveness dt2-1.17 cf.lfo.site.tick_slew --abi strict   # the site; starts: site+len and the branch target
+uv run python -m tools.coldfire.liveness dt2-1.17 cf.lfo.site.tick_call --from-site cf.lfo.site.tick_done --trace   # more starts; the code up to the first call
+uv run python -m tools.coldfire.liveness dt2-1.17 cf.lfo.site.tick_call --match 203c636ba875a4000800a1c2e58a      # where a byte sequence sits in that code
+uv run python -m tools.coldfire.liveness dt2-1.17 --writes 0x40139156 --writes 0x4013916c                         # registers a function and its callees write
+uv run python -m tools.coldfire.liveness dt2-1.17 --stable 0x40139698 0x40139804 A3 --skip 0x40188098             # writers of A3 on the paths between two addresses, the calls on them and what each callee writes
+uv run python -m tools.coldfire.liveness dt2-1.17 --preds 0x4013961e 0x4013986c                                    # every way into an address inside a function (is a site reached without the code before it?)
+uv run python -m tools.coldfire.liveness --decode a4000800a1c2                                                    # decode bytes
+```
+
+Output of the first command (cut):
+
+```text
+dt2-1.17 cf.lfo.site.tick_slew site 0x4013986c len 6
+  0x4013986c: moveq 0x6,D2
+  0x4013986e: cmp.l D3,D2
+  0x40139870: bne.b 0x4013989e
+from 0x40139872 (strict)
+  dead: D0 D2 D3 D5 D7 A0 A1 NF ZF VF CF
+  live: D1 D4 D6 A2 A3 A4 A5 A6 ACC0 ACC1 ACC2 ACC3 MACSR MASK XF
+    D0 dead, written at 0x40139882
+    D1 live: read at 0x401398a6: tst.l D1
+```
+
+`strict` counts a register that reaches a call, a return or an indirect jump untouched as live; `gcc` (default: both are printed) assumes the call convention of compiled code and shows more dead registers. It is a guess about the code, not a fact of the image: decide a scratch register, a register to save or a register that stays stable from `strict`, `--stable` and `--writes` only. `--stable` and `--writes` assume no convention: a call writes a register only when its callee (direct callees included, `jsr (An)` after one `lea (ABS).l,An` resolved) does; `--skip ADDR` leaves a named callee out (for example a fault reporter on an error branch), and the finding that uses it says so.
+
 ### Resolve a port for a firmware
 
 ```sh

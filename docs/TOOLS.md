@@ -44,6 +44,7 @@ Never patch the bootstrap or updater sections. See
 | --- | --- |
 | `tools/coldfire/ghidradump.py` | Export an analysed Ghidra program into grep-friendly disassembly/decompilation plus SQLite indexes. |
 | `tools/coldfire/ghidraq.py` | Run read-only PyGhidra queries for functions, callers, references, strings, ranges, decompilation, and bounded HighFunction dataflow. Queries can be chained with `--then` so one JVM answers several questions. |
+| `tools/coldfire/liveness.py` | Register liveness of stock ColdFire code after a patch site, found from the image bytes (SLEIGH decode): which registers a stub may overwrite, the code to the first call, registers a function writes. |
 | `tools/coldfire/refscan.py` | Exhaustively scan a raw ColdFire image for direct references into an address range. Use this to check Ghidra's incomplete reference tables. |
 | `tools/coldfire/codeseeds.py` | Recover likely function entries from vectors, calls, and code pointers. |
 | `tools/coldfire/ghidraapply.py` | Apply code seeds or RTTI discoveries to a Ghidra project. |
