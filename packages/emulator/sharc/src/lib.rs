@@ -28,6 +28,7 @@
 
 pub mod canon;
 mod code_diff;
+pub mod core_lib;
 mod cycmix;
 mod diag;
 pub mod fast;
@@ -36,7 +37,7 @@ mod irq_probe;
 mod live_capture;
 mod pc_dump;
 mod reply_watch;
-pub mod sha256;
+pub use sharc_rt::sha256;
 pub mod vectors;
 mod write_watch;
 pub use sharc_stats::{ModelStats, RegionCost, RegionEntryProfile, RegionProfile, TierCounters};

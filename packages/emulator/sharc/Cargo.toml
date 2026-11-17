@@ -14,6 +14,7 @@ description = "Native SHARC+ core generated from tools/sharc_dev/sharc_core (too
 # for the examples that drive it; nothing links it into the library.
 [dependencies]
 sharc-rt = { path = "../sharc-rt" }
+dynlib = { path = "../dynlib" }
 sharc-stats = { path = "../sharc-stats" }
 sharc-gen = { path = "../sharc-gen", optional = true }
 

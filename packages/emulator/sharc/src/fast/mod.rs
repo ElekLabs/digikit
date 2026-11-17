@@ -661,7 +661,7 @@ pub fn default_backend() -> Box<dyn KernelBackend> {
     if let Some(f) = *BACKEND.lock().unwrap() {
         return f();
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if let Ok(path) = std::env::var("SHARC_FAST_BACKEND") {
         match plugin::PluginBackend::open(&path) {
             Ok(b) => return Box::new(b),

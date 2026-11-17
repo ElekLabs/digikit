@@ -12,9 +12,11 @@
 pub mod addressing;
 pub mod decode;
 pub mod gencore;
+pub mod header;
 pub mod insn_table;
 pub mod mem;
 pub mod rt;
+pub mod sha256;
 
 pub use gencore::GenCore;
 use rt::St;

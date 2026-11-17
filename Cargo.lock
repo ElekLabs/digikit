@@ -1390,6 +1390,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
+name = "dynlib"
+version = "0.0.1"
+
+[[package]]
 name = "elektron-native-boot"
 version = "0.1.0"
 dependencies = [
@@ -2636,6 +2640,7 @@ name = "live-audio"
 version = "0.0.1"
 dependencies = [
  "cpal",
+ "dynlib",
 ]
 
 [[package]]
@@ -4065,6 +4070,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sharc-core-lib"
+version = "0.0.1"
+dependencies = [
+ "sharc-gen",
+ "sharc-rt",
+]
+
+[[package]]
 name = "sharc-fast-cl"
 version = "0.0.1"
 dependencies = [
@@ -4104,6 +4117,7 @@ dependencies = [
 name = "sharc-native"
 version = "0.0.1"
 dependencies = [
+ "dynlib",
  "sharc-fast-cl",
  "sharc-gen",
  "sharc-rt",

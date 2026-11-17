@@ -12,6 +12,7 @@ description = "Live audio output path for the Digitakt II emulator: a lock-free 
 # else.
 [dependencies]
 cpal = "0.18"
+dynlib = { path = "../dynlib" }
 
 [lib]
 name = "live_audio"

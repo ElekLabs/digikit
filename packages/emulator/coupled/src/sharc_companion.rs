@@ -90,7 +90,7 @@ impl SharcCompanion {
         emulator.load_state(&snapshot)?;
         // The fast tier's Cranelift backend is registered by the spawn; the engine uses it only when
         // SHARC_FAST_REGIONS names regions (the launcher sets that). The core is the device's own.
-        let core = sharc_peer::dsp_core::core_for_device(&profile.device);
+        let core = sharc_peer::dsp_core::core_for_device(&profile.device)?;
         let (peer, handle, shared) = sharc_peer::dsp_core::spawn_dsp(
             core,
             sharc_peer::dsp_core::EngineInputs {
