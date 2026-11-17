@@ -19,7 +19,7 @@ blocks = 375
 
 [[case.check]]
 kind = "same-as"
-sha256 = "cb132603f4a8e9ab9c89b05b48a451f9f1a5ee664724c2a9246e8f2d4a3675e8"
+sha256 = "33b995d8bb64e05ba0f014ae969a4b959c1c101712ca25bf3b006f8c256632fb"
 
 [[case.check]]
 kind = "peak"
