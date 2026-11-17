@@ -49,7 +49,7 @@ and `core/sample-pool` reach `main` with that branch. Paths without a directory 
   never reads a type.
 - The `.dkm` header has no type or category field.
 - The Transfer tab groups by the contract bytes: Machines if the machine contract is set, Effects if fx, else Tools
-  (`apps/web/src/modules/dktransfer.ts:77` `groupOf`, `tools/device/dktransfer.py:88` `group_of`). **A `raw` machine would show under
+  (`apps/web/src/modules/dktransfer.ts:77` `groupOf`, `tools/device/dkmodule.py` `group_of`). **A `raw` machine would show under
   Tools.** This is the defect that the category field fixes.
 - The module gallery shows the manifest category (`apps/web/src/data/modules.ts:26` and `:87`, `apps/web/src/components/ModuleCard.tsx`).
 - `module:new` picks the folder from the type (`tools/patchkit/pk_new.py:28`, `KIND_DIRS`).
@@ -351,8 +351,8 @@ A `raw` machine adds one line: `contract = "raw"`.
 ### 6.4 Files that change in step 1
 
 - patchkit: `packages/patchkit/src/module.rs` (the enum and the field), `packages/patchkit/src/dkm.rs` (the header, the contract check).
-- Python tools: `tools/patchkit/pk_new.py` (folder from the category), `tools/patchkit/pk_package.py`, `tools/device/dktransfer.py`
-  (`candidates`, `group_of`), `tools/devtools/verify_route.py`, `tools/devtools/layercheck.py`.
+- Python tools: `tools/patchkit/pk_new.py` (folder from the category), `tools/patchkit/pk_package.py`, `tools/device/dkmodule.py`
+  (`group_of`), `tools/devtools/verify_route.py`, `tools/devtools/layercheck.py`.
 - Web and desktop: `apps/web/src/modules/dktransfer.ts` (`groupOf`), `apps/web/src/transfer/transfer-core.ts`,
   `apps/web/src/data/modules.ts`, `apps/web/src/data/shipped.mjs`, `apps/web/src/components/ModuleCard.tsx`,
   `apps/desktop/ui/src/memory-backend.ts` and its preview fixtures.

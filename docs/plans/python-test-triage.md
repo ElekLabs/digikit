@@ -16,7 +16,7 @@ it; the remaining Python tests stay as they are.
 | --- | --- | --- | --- |
 | Keep in Python | about 203 | about 53 000 | Python SHARC core, transpiler and generators (source of truth of the Rust core), hardware-measured facts, dev tools on the gate path, firmware and RE analysis, Python patchkit logic and in-process core integration tests |
 | Move to TypeScript device tests | about 25 | about 3 000 | `tests/digikit` scenario wrappers (kinds: upload, settings, menu, safe/cut, equiv, roundtrip, debug/card/crash), smoke, `tests/emulator/test_coupled_patched.py`, `test_bootstrap.py`, `tests/control/test_runtime_load.py`, the device tests of `tests/control/test_digi_client.py`, patchkit boot tests (`test_patchkit_dkrt_boot.py`, `test_patchkit_dkrt_machine.py`, `test_patchkit_expansion.py`, `test_patchkit_rust.py`, `test_modcheck_device.py`), `tests/sharc/integration/test_sharc_golden.py` |
-| Duplicates | 0 whole files | | Rust covers individual functions only; the Python transfer and protocol code (`tools/device/dkupload.py`, `dksettings.py`, `dktransfer.py`) duplicates Rust and TypeScript implementations, not just tests |
+| Duplicates | 0 whole files | | Rust covers individual functions only; the Python transfer and protocol code (`tools/device/dkupload.py`, `dksettings.py`) duplicates Rust and TypeScript implementations, not just tests |
 | Delete | 2 files and 2 functions | | `test_pk_proofs.py` (argv pins), freqshift `test_runtime_routing.py` (router), and the two functions whose assertions Rust repeats (`codec.rs` rebuild, `dkmdsp.rs` effect record) |
 
 Kept after review: `test_pk_types.py` (type-number registry contract), `test_sharc_dsp_facts.py`
@@ -27,8 +27,7 @@ Kept after review: `test_pk_types.py` (type-number registry contract), `test_sha
 1. Migrate the device scenarios family by family, as the FX work did: assertion ledger, TypeScript
    test on the shared helpers, proof on both devices, then delete the Python test, its scenario
    TOMLs and the runner code only it uses. Start with upload.
-2. When the last Python consumer of `dkupload.py`, `dksettings.py` and `dktransfer.py` is gone
-   (`transfer-cli.ts` runs the Python CLI today), switch to the TypeScript or Rust implementation and
+2. When the last Python consumer of `dkupload.py` and `dksettings.py` is gone, switch to the TypeScript or Rust implementation and
    delete the Python one with its tests.
 3. Tests of pure analysis tools used by hand (for example `tests/sharc/analysis`, coldfire analysis,
    DSP analysis, probe tooling): proposed for deletion. A scout first separates them from tools that

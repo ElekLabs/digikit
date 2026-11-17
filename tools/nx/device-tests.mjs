@@ -54,7 +54,7 @@ export const deviceTarget = (
     if (rec.dksampleWasm) dependsOn.push('dksample:wasm');
     if (rec.dkprofWasm) dependsOn.push('dkprof:wasm');
   }
-  const { inputs, patchkitLive } = deviceInputs(
+  const { inputs, patchkitLive, patchkitWasm } = deviceInputs(
     root,
     tests,
     recs,
@@ -64,6 +64,7 @@ export const deviceTarget = (
     uploadable,
     opts,
   );
+  if (patchkitWasm) dependsOn.push('patchkit:wasm'); // the test runs `wb transfer` (patchkit.wasm)
   return {
     executor: 'nx:run-commands',
     cache: true,

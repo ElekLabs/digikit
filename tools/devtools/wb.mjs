@@ -12,7 +12,8 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store ls [PREFIX]
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store put LOCAL REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store rm REMOTE
-//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer install ID... [--stock STOCK.syx]   (modules with the services they need; tools/devtools/wb_transfer.mjs)
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer install ID... [--stock STOCK.syx] [--restart] [--library DIR]   (modules with the services they need; tools/devtools/wb_transfer.mjs)
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer restart
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer delete PATH...
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
 //     node tools/devtools/wb.mjs [--format json|text] addrmap lookup ADDR... | module analyse DKM DKO | profile report FILE | profile record --seconds N --out FILE [--cpu cf|sharc]
@@ -25,6 +26,7 @@
 // `log card` prints the card log state of the debug module (the log written to data/digikit/debug on the card, kept across restarts); `on` / `off` switch it;
 // `get` reads the card log files and writes each raw (.bin) and decoded (.txt) to DIR (default out/runs/cardlog/<YYYYmmdd-HHMMSS>/), the older boot first.
 // `store` works on the card's store by path (for example data/tools/bootscreen/x.dkbs); `store put` verifies the file after the upload.
+// --emu [--run-dir DIR]: any device command on the running emulator of DIR (default out/native/run) instead of a MIDI port (`mise run emu:serve`).
 // --port: a part of the MIDI port name (default "Digitakt"). --bin: the dkmidi binary (default $DKMIDI_BIN, else the nogen target dir;
 // `mise run dkmidi:build` builds it). `samples put` needs apps/web/public/dksample.wasm (`mise run wasm:dksample`).
 // `samples put` sends the file bytes over the USB bulk link when the device offers its interface (usb-fast; the `dkbulk` bridge, `mise run dkbulk:build`,
@@ -45,6 +47,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DkSession,
+  EmuUsbTransport,
   ProcessBulkLink,
   chooseBulk,
   eventLine,
@@ -63,7 +66,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--stock STOCK.syx] | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE]';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--stock STOCK.syx] [--restart] [--library DIR] | transfer restart | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE]';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -94,6 +97,7 @@ for (let i = 0; i < args.length; i++) {
     a === '--speed' ||
     a === '--out' ||
     a === '--stock' ||
+    a === '--library' ||
     [
       '--format',
       '--map',
@@ -114,6 +118,7 @@ for (let i = 0; i < args.length; i++) {
     if (REPEATED.has(key)) (opts[key] ??= []).push(args[++i]);
     else opts[key] = args[++i];
   } else if (a === '--ret') opts.ret = true;
+  else if (a === '--emu' || a === '--restart') opts[a.slice(2)] = true;
   else if (a === '--since-boot') opts['since-boot'] = true;
   else if (a === '--start' || a === '--stop' || a === '--reset') opts.op = a.slice(2);
   else if (a.startsWith('--')) fail(`unknown option ${a}\n${usage}`);
@@ -149,7 +154,12 @@ function fail(msg, code = 2) {
   process.exit(code);
 }
 
-const host = createNodeHost({ root, dkmidiBin: opts.bin, dkbulkBin: opts['bulk-bin'] });
+const host = createNodeHost({
+  root,
+  dkmidiBin: opts.bin,
+  dkbulkBin: opts['bulk-bin'],
+  libraryDir: opts.library ? path.resolve(opts.library) : undefined,
+});
 
 /** The samples backend the device profile names (`[storage] samples`), as the desktop app reads it; the stock +Drive when the device or its profile is unknown. */
 async function samplesKind(info) {
@@ -161,7 +171,7 @@ async function samplesKind(info) {
 }
 
 const SPANS = words[0] === 'profile' && words[1] === 'spans';
-if ((!OFFLINE.includes(words[0]) || SPANS) && !existsSync(opts.bin))
+if ((!OFFLINE.includes(words[0]) || SPANS) && !opts.emu && !existsSync(opts.bin))
   fail(`no dkmidi binary at ${opts.bin} (run: mise run dkmidi:build)`);
 
 /** Start the bridge on the port and open a session on it. */
@@ -188,6 +198,17 @@ function connect(timeoutMs = 60000) {
   };
 }
 
+/** The running emulator of `--run-dir` (default out/native/run) as the link: the same SysEx session over its control socket (the emulator runs in real time). */
+async function connectEmu() {
+  const { connect: connectControl, readSocket } = await import('../../packages/control-client/src/index.ts');
+  const runDir = path.resolve(root, opts['run-dir'] ?? 'out/native/run');
+  const sock = readSocket(runDir);
+  if (!sock) fail(`no emulator socket in ${runDir} (start one: mise run emu:serve)`, 1);
+  const client = await connectControl(sock);
+  const transport = new EmuUsbTransport(client.call.bind(client));
+  return { session: new DkSession(transport, { timeoutMs: 60000 }), transport, close: async () => client.close() };
+}
+
 /**
  * `connect`, then one quick INFO; a device that does not reply is tried again for up to `waitMs` with a new bridge. The device may still re-enumerate after
  * the previous run: its MIDI port may be gone or not answer yet (the device re-enumerates after a USB mode change). After the time the last link is returned anyway (a stock device has no INFO) and
@@ -196,7 +217,7 @@ function connect(timeoutMs = 60000) {
 async function connectReady(waitMs = 8000) {
   const deadline = Date.now() + waitMs;
   for (;;) {
-    const link = connect();
+    const link = opts.emu ? await connectEmu() : connect();
     try {
       await link.session.info(true);
       return link;
@@ -560,7 +581,7 @@ if (SPANS) {
   });
 } else if (cmd === 'transfer') {
   await withSession(async (session) => {
-    status = await transferCommand({ host, session, sub, rest, opts, fail });
+    status = await transferCommand({ host, root, session, sub, rest, opts, fail });
   });
 } else if (cmd === 'store' && sub === 'ls') {
   await withSession(async (session) => {

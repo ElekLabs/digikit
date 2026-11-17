@@ -115,6 +115,12 @@ export const MERGE_OUTPUTS = outputFiles([...SHARED_BUILT, ...MERGE_BYTES]);
 // hashed in dist/bytes/images.sha256. (An explicit module list goes through runtime-plan-modules.ts, which imports patchkit.ts.)
 export const PATCHKIT_LIVE = ['tests/regression/runtime/patchkit.ts'].map((file) => `{workspaceRoot}/${file}`);
 export const DEVICE_INPUTS = [...READ_BY_TESTS, ...BUILT_OUTPUTS, ...DEVICE_COMMON];
+// A test whose import closure holds one of these runs `wb transfer`, which loads apps/web/public/patchkit.wasm (the target depends on
+// `patchkit:wasm` and the key holds the wasm).
+export const PATCHKIT_WASM_USERS = ['tests/regression/runtime/transfer-cli.ts'].map(
+  (file) => `{workspaceRoot}/${file}`,
+);
+
 export const mergeDeviceInputs = (imports, patchkitLive) => [
   ...sharedReads(imports, patchkitLive),
   ...TEST_READS,
@@ -178,7 +184,9 @@ export const deviceInputs = (
   // the image bytes: its key keeps the binary.
   const patchkitCompiles = recs.some((rec) => rec.patchModules?.length);
   const patchkitLive = imports.some((file) => PATCHKIT_LIVE.includes(file)) || patchkitCompiles;
+  const patchkitWasm = imports.some((file) => PATCHKIT_WASM_USERS.includes(file));
   const inputs = [
+    ...(patchkitWasm ? [{ dependentTasksOutputFiles: 'apps/web/public/patchkit.wasm', transitive: true }] : []),
     // a test that reads the precomputed `needs` of committed packs keys on that file's content
     ...(imports.includes(PACK_NEEDS) ? outputFiles(['dist/bytes/pack-verdicts.json']) : []),
     ...(opts.narrow && patchkitLive ? outputFiles(['dist/patchkit/patchkit']) : []),
@@ -230,7 +238,7 @@ export const deviceInputs = (
     ...new Set(recs.flatMap((rec) => (rec.sources ?? []).map((s) => `{workspaceRoot}/${s}`))),
     ...(seeds.length ? pythonInputs(seeds) : []),
   ];
-  return { inputs, patchkitLive };
+  return { inputs, patchkitLive, patchkitWasm };
 };
 
 // Files that every device test's key holds (the shared reads, the test reads, the SDK and the toolchain), as repository globs.

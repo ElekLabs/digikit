@@ -10,9 +10,10 @@ const exec = promisify(execFile);
 export interface TransferEvent {
   event: string;
   loaded?: string[];
+  missing?: string[];
 }
 
-/** Exercise the transfer CLI against this daemon, preserving stdout/stderr even on failure. */
+/** `wb transfer` against this daemon (the workbench's own install engine), preserving stdout/stderr even on failure. */
 export async function transferCommand(
   session: Session,
   args: string[],
@@ -24,28 +25,26 @@ export async function transferCommand(
     async () => {
       fs.mkdirSync(path.dirname(artifactFile), { recursive: true });
       const command = [
-        'run',
-        'python',
-        '-m',
-        'tools.device.dktransfer',
+        'tools/devtools/wb.mjs',
         '--emu',
         '--run-dir',
         session.runDir,
-        '--json',
+        '--library',
+        // the prepared modules and services of this checkout (`nx run <id>:pack`), the library the other device tests install from
+        process.env.DIGI_RUNTIME_MODULES ?? 'dist/modules',
+        'transfer',
         ...args,
       ];
       let stdout: string;
       let stderr: string;
       try {
-        // out/patch/transfer is shared by all worktrees and runs. A run packs into its own folder.
-        const env = { ...process.env, DIGI_TRANSFER_DIR: path.join(session.runDir, 'transfer') };
-        const result = await exec('uv', command, { cwd: repoRoot(), env, timeout, maxBuffer: 4 * 1024 * 1024 });
+        const result = await exec('node', command, { cwd: repoRoot(), timeout, maxBuffer: 4 * 1024 * 1024 });
         stdout = result.stdout;
         stderr = result.stderr;
       } catch (error) {
         const output = error as Error & { stdout?: string; stderr?: string };
         fs.writeFileSync(artifactFile, `${output.stdout ?? ''}\n${output.stderr ?? ''}\n${output.message}`);
-        throw new Error(`dktransfer ${args.join(' ')} failed: ${output.message}; see ${artifactFile}`, {
+        throw new Error(`wb transfer ${args.join(' ')} failed: ${output.message}; see ${artifactFile}`, {
           cause: error,
         });
       }
@@ -59,7 +58,7 @@ export async function transferCommand(
   );
 }
 
-/** Python owns module preparation and install; use the already-running daemon. `alongside` modules are installed and selected with it (the debug module, for a test that reads the log). */
+/** `wb transfer install --restart` against the already-running daemon: the modules (and the services they need), the selection, the restart and the wait for their registration. `alongside` modules are installed and selected with it (the debug module, for a test that reads the log). */
 export async function cliInstall(
   session: Session,
   moduleId: string,
@@ -76,7 +75,7 @@ export async function cliInstall(
         path.join(artifactDirectory, 'install.log'),
         timeout,
       );
-      const result = events.find((event) => event.event === 'result');
+      const result = events.find((event) => event.event === 'loaded');
       if (![moduleId, ...alongside].every((id) => result?.loaded?.includes(id))) {
         throw new Error(`install --restart did not load ${moduleId}: ${JSON.stringify(events)}`);
       }

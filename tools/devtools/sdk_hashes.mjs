@@ -41,7 +41,7 @@ const runAsync = (args) =>
     ),
   );
 
-// modules that pack to a .dkm: not core, not a framework, dynamic, raw or service (as tools/device/dktransfer.py candidates)
+// modules that pack to a .dkm: not core, not a framework, dynamic, raw or service (as the Transfer pane's library)
 const modules = globSync('{modules,tests/fixtures/modules}/**/module.toml', { cwd: root })
   .sort()
   .map((f) => ({ f, m: parse(readFileSync(join(root, f), 'utf8')).module }))

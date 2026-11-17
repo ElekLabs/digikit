@@ -351,7 +351,7 @@ coverage nor blocks separately demonstrated equivalent consolidation.
 Further readiness work should replace only waits with proven observable completion conditions;
 deliberate input pacing and stability-boundary tests stay. PR #241 completes a bounded subset, not
 the roadmap's whole readiness goal. Existing Cargo incremental builds and
-[packed-module reuse](../../tools/device/dktransfer.py) already avoid work. Build-cache input closure
+packed-module reuse already avoid work. Build-cache input closure
 is broad, and incremental ROI has not been established: rebuild byte identity alone proves neither
 saved work nor worthwhile caching. No new benchmark, plugin or implementation is authorized by this
 checkpoint; broader build/pack caching remains conditional on a justified candidate and input audit.
