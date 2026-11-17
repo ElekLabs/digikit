@@ -218,7 +218,7 @@ fn table_with_needs(
     slots_add: &[dkneeds::keys::Slot],
     kinds_add: &[dkneeds::keys::KindDecl],
 ) -> Result<Vec<u8>> {
-    use dkneeds::keys::{Bind, KeyGroup, Keys, Pair, Table, write_table};
+    use dkneeds::keys::{write_table, Bind, KeyGroup, Keys, Pair, Table};
     let keys = if reg.is_empty() {
         None
     } else {
@@ -1223,7 +1223,7 @@ mod tests {
 
     /// The table of a module whose KEYS name the record kinds `kinds` (one key each), packed as a `.dkm`.
     fn needs_of_keys(kinds: &[u32]) -> Vec<dkneeds::keys::Need> {
-        use dkneeds::keys::{KeyGroup, Keys, Table, table_size, write_table};
+        use dkneeds::keys::{table_size, write_table, KeyGroup, Keys, Table};
         let ks = [7u32];
         let groups: Vec<KeyGroup> = kinds
             .iter()
@@ -1255,11 +1255,9 @@ mod tests {
         assert!(own[0].hard);
         // effects are owned by a service in the image (no need for them); machines and pages by the machines service file (a hard need on it)
         let mach = dkneeds::keys::name_hash("machines");
-        assert!(
-            needs_of_keys(&[dkneeds::KIND_EFFECT])
-                .iter()
-                .all(|n| n.service != lfo && n.service != mach),
-        );
+        assert!(needs_of_keys(&[dkneeds::KIND_EFFECT])
+            .iter()
+            .all(|n| n.service != lfo && n.service != mach),);
         let m = needs_of_keys(&[dkneeds::KIND_MACHINE, dkneeds::KIND_PAGE]);
         assert!(m.iter().all(|n| n.service != lfo));
         assert_eq!(m.iter().filter(|n| n.service == mach && n.hard).count(), 1);
@@ -1487,12 +1485,10 @@ mod tests {
         let mut o = entry_object(&[0, 8]);
         o.relocs[0].symbol = "fw_thing".into();
         o.stamp_isa();
-        assert!(
-            pack(&o, &opts())
-                .unwrap_err()
-                .0
-                .contains("dk_module.init is an import")
-        );
+        assert!(pack(&o, &opts())
+            .unwrap_err()
+            .0
+            .contains("dk_module.init is an import"));
         // a field that holds a number and no relocation
         let mut o = entry_object(&[0, 8]);
         o.sections[1] = sec(
@@ -1502,12 +1498,10 @@ mod tests {
             &[0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0],
         );
         o.stamp_isa();
-        assert!(
-            pack(&o, &opts())
-                .unwrap_err()
-                .0
-                .contains("dk_module.fini = 0x7 is no function")
-        );
+        assert!(pack(&o, &opts())
+            .unwrap_err()
+            .0
+            .contains("dk_module.fini = 0x7 is no function"));
     }
 
     #[test]
@@ -1622,34 +1616,71 @@ mod tests {
     }
 
     fn service_of(p: Provided) -> Options {
-        Options { service: Some(p), ..opts() }
+        Options {
+            service: Some(p),
+            ..opts()
+        }
     }
 
     fn provided() -> Provided {
-        Provided { service: "svc-test".into(), exports: vec![], hooks: vec![], fills: vec![] }
+        Provided {
+            service: "svc-test".into(),
+            exports: vec![],
+            hooks: vec![],
+            fills: vec![],
+        }
     }
 
     #[test]
     fn a_service_that_names_an_entry_twice_or_one_the_object_lacks_is_refused() {
         let o = object();
-        let hook = |name: &str, entry: &str| (name.to_string(), entry.to_string(), Vec::<String>::new());
+        let hook =
+            |name: &str, entry: &str| (name.to_string(), entry.to_string(), Vec::<String>::new());
         let e = |p: Provided| pack(&o, &service_of(p)).unwrap_err().0;
         // the same name twice
-        let twice = Provided { exports: vec!["tick_fn".into(), "tick_fn".into()], ..provided() };
+        let twice = Provided {
+            exports: vec!["tick_fn".into(), "tick_fn".into()],
+            ..provided()
+        };
         assert!(e(twice).contains("exports tick_fn twice"));
-        let twice = Provided { hooks: vec![hook("hook.a", "tick_fn"), hook("hook.a", "init_fn")], ..provided() };
+        let twice = Provided {
+            hooks: vec![hook("hook.a", "tick_fn"), hook("hook.a", "init_fn")],
+            ..provided()
+        };
         assert!(e(twice).contains("hooks hook.a twice"));
-        let twice = Provided { fills: vec![hook("slot", "tick_fn"), hook("slot", "init_fn")], ..provided() };
+        let twice = Provided {
+            fills: vec![hook("slot", "tick_fn"), hook("slot", "init_fn")],
+            ..provided()
+        };
         assert!(e(twice).contains("fills slot twice"));
         // an entry the object does not define, for each list
-        assert!(e(Provided { exports: vec!["nope".into()], ..provided() }).contains("exports nope, which the object does not define"));
-        assert!(e(Provided { hooks: vec![hook("hook.a", "nope")], ..provided() }).contains("no global symbol"));
-        assert!(e(Provided { fills: vec![hook("slot", "nope")], ..provided() }).contains("fills slot with nope"));
+        assert!(e(Provided {
+            exports: vec!["nope".into()],
+            ..provided()
+        })
+        .contains("exports nope, which the object does not define"));
+        assert!(e(Provided {
+            hooks: vec![hook("hook.a", "nope")],
+            ..provided()
+        })
+        .contains("no global symbol"));
+        assert!(e(Provided {
+            fills: vec![hook("slot", "nope")],
+            ..provided()
+        })
+        .contains("fills slot with nope"));
         // a hook for a device that does not exist
-        let bad_device = Provided { hooks: vec![("hook.a".into(), "tick_fn".into(), vec!["zz9".into()])], ..provided() };
+        let bad_device = Provided {
+            hooks: vec![("hook.a".into(), "tick_fn".into(), vec!["zz9".into()])],
+            ..provided()
+        };
         assert!(e(bad_device).contains("is not one of"));
         // the same functions once each pack
-        let ok = Provided { exports: vec!["tick_fn".into()], hooks: vec![hook("hook.a", "init_fn")], ..provided() };
+        let ok = Provided {
+            exports: vec!["tick_fn".into()],
+            hooks: vec![hook("hook.a", "init_fn")],
+            ..provided()
+        };
         assert!(pack(&o, &service_of(ok)).is_ok());
     }
 

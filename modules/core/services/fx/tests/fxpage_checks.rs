@@ -62,7 +62,17 @@ fn text(r: &mut [u8], at: usize, field: usize, s: &[u8]) {
 const KNOB_AT: usize = 48;
 const KNOB_REC: usize = 52;
 
-fn knob(r: &mut [u8], j: usize, pos: u32, disp: u32, lo: f32, hi: f32, def: f32, name: &[u8], short: &[u8]) {
+fn knob(
+    r: &mut [u8],
+    j: usize,
+    pos: u32,
+    disp: u32,
+    lo: f32,
+    hi: f32,
+    def: f32,
+    name: &[u8],
+    short: &[u8],
+) {
     let k = KNOB_AT + j * KNOB_REC;
     put32(r, k, pos);
     put32(r, k + 4, disp);
@@ -145,13 +155,25 @@ fn the_texts_of_an_effect_record_are_printable_and_fit_their_fields() {
     for (what, r) in [
         ("empty tab", edited(|r| text(r, 16, 8, b""))),
         ("tab of 4 characters", edited(|r| text(r, 16, 8, b"ABCD"))),
-        ("a control character in the tab", edited(|r| text(r, 16, 8, b"A\x1fB"))),
+        (
+            "a control character in the tab",
+            edited(|r| text(r, 16, 8, b"A\x1fB")),
+        ),
         ("bytes after the NUL of the tab", edited(|r| r[19] = b'Z')),
         ("empty title", edited(|r| text(r, 24, 24, b""))),
         ("a title with no NUL", edited(|r| r[24..48].fill(b'x'))),
-        ("empty knob name", edited(|r| text(r, KNOB_AT + 20, 24, b""))),
-        ("knob short name of 7 characters", edited(|r| text(r, KNOB_AT + 44, 8, b"SEVENCH"))),
-        ("a high byte in the knob name", edited(|r| r[KNOB_AT + 20] = 0x80)),
+        (
+            "empty knob name",
+            edited(|r| text(r, KNOB_AT + 20, 24, b"")),
+        ),
+        (
+            "knob short name of 7 characters",
+            edited(|r| text(r, KNOB_AT + 44, 8, b"SEVENCH")),
+        ),
+        (
+            "a high byte in the knob name",
+            edited(|r| r[KNOB_AT + 20] = 0x80),
+        ),
     ] {
         assert_eq!(check(&r), E_FORMAT, "{what}");
     }
@@ -165,10 +187,14 @@ fn the_texts_of_an_effect_record_are_printable_and_fit_their_fields() {
 #[test]
 fn a_knob_of_an_effect_record_has_its_own_position_a_range_and_a_default_inside_it() {
     let _g = lock();
-    let first = |pos, disp, lo, hi, def| edited(|r| knob(r, 0, pos, disp, lo, hi, def, b"Size", b"SIZE"));
+    let first =
+        |pos, disp, lo, hi, def| edited(|r| knob(r, 0, pos, disp, lo, hi, def, b"Size", b"SIZE"));
     for (what, r) in [
         ("position 8", first(8, 0, 0.0, 1.0, 0.5)),
-        ("the same position twice", edited(|r| knob(r, 1, 0, 0, 0.0, 1.0, 0.5, b"Tone", b"TONE"))),
+        (
+            "the same position twice",
+            edited(|r| knob(r, 1, 0, 0, 0.0, 1.0, 0.5, b"Tone", b"TONE")),
+        ),
         ("display kind 2", first(0, 2, 0.0, 1.0, 0.5)),
         ("min equal to max", first(0, 0, 1.0, 1.0, 1.0)),
         ("min over max", first(0, 0, 1.0, 0.0, 0.5)),

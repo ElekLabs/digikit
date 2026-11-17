@@ -198,15 +198,26 @@ mod tests {
     fn library(keys: &str, objects: &[(&str, &str)]) -> Library {
         let mut text = format!("{HEAD}{keys}");
         for (_, path) in objects {
-            text.push_str(&format!("[[object]]\npath = \"{path}\"\nplace = \"cf.expansion\"\n"));
+            text.push_str(&format!(
+                "[[object]]\npath = \"{path}\"\nplace = \"cf.expansion\"\n"
+            ));
         }
-        let arch_of = |path: &str| objects.iter().find(|(_, p)| *p == path).map(|(a, _)| *a).unwrap();
+        let arch_of = |path: &str| {
+            objects
+                .iter()
+                .find(|(_, p)| *p == path)
+                .map(|(a, _)| *a)
+                .unwrap()
+        };
         let m = Module::from_parts(&text, &|p| Ok(dko(arch_of(p)))).unwrap();
         Library { modules: vec![m] }
     }
 
     fn refused(lib: &Library, device: Option<&str>) -> String {
-        let o = PackOptions { device: device.map(String::from), ..Default::default() };
+        let o = PackOptions {
+            device: device.map(String::from),
+            ..Default::default()
+        };
         match pack_module(lib, "test/pk", &o) {
             Ok(_) => panic!("the module must be refused"),
             Err(e) => e.0,
@@ -228,13 +239,23 @@ mod tests {
         let lib = library(keys, &[("cf", "a.dko.json")]);
         assert!(refused(&lib, None).contains("needs --device"));
         let e = refused(&lib, Some("dn2"));
-        assert!(e.contains("is not built for dn2") && e.contains("dt2-1.17"), "{e}");
+        assert!(
+            e.contains("is not built for dn2") && e.contains("dt2-1.17"),
+            "{e}"
+        );
     }
 
     #[test]
     fn a_run_time_module_with_two_dsp_objects_for_the_device_is_refused() {
         let keys = "dynamic = true\n";
-        let lib = library(keys, &[("cf", "a.dko.json"), ("sharc", "d1.dko.json"), ("sharc", "d2.dko.json")]);
+        let lib = library(
+            keys,
+            &[
+                ("cf", "a.dko.json"),
+                ("sharc", "d1.dko.json"),
+                ("sharc", "d2.dko.json"),
+            ],
+        );
         assert!(refused(&lib, Some("dt2")).contains("2 DSP objects for dt2"));
     }
 
