@@ -22,12 +22,17 @@ pub mod shims {
         REAL_CORE.dynreg()
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_type_resolve(key: u32) -> u32 {
-        REAL_CORE.type_resolve(key)
+    pub unsafe extern "C" fn dkc_boot_index() -> u32 {
+        REAL_CORE.boot_index()
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_type_map_used() -> u32 {
-        REAL_CORE.type_map_used()
+    pub unsafe extern "C" fn dkc_legacy_type_map(out: *mut u32) {
+        let map = REAL_CORE.legacy_type_map();
+        let mut i = 0;
+        while i < map.len() {
+            *out.add(i) = map[i];
+            i += 1;
+        }
     }
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_guard_faults(ty: u32) -> u32 {

@@ -6,7 +6,7 @@
 //!
 //! The DSP side is a table (`dyndsp_info`) that the test builds: the device, the area and the symbols the section imports.
 use crate::cleanup_tests as ct;
-use crate::{assign, collect};
+use crate::collect;
 use crate::dsp::{self, Job, INFO_MAGIC, I_AREA, I_AREA_BYTES, I_DEVICE, I_IMPORTS, I_MAGIC, I_NIMPORT, I_VFREE, I_VROWS, L2_BYTE_BASE};
 use crate::test_lock::LOCK;
 use dkneeds::{fx, keys::Keys, machine};
@@ -102,9 +102,9 @@ fn check(f: &[u8], device: u32) -> (i32, Job) {
     let n = collect::machine_keys(f, &mut keys);
     unsafe {
         let _info = ct::VoiceInfoGuard::set(info.as_ptr());
-        assign::seed_for_test(&keys[..n]);
+        dkrt_svc_machines::assign::seed_for_test(&keys[..n], dkrt_abi::core_api::CoreApi::boot_index(&crate::core_api::REAL_CORE));
         let r = dsp::check(f.as_ptr(), off, size, f.len() as u32, &mut job);
-        assign::seed_for_test(&[]);
+        dkrt_svc_machines::assign::seed_for_test(&[], 0);
         (r, job)
     }
 }

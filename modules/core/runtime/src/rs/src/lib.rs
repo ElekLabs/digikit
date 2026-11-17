@@ -19,7 +19,6 @@ mod api;
 mod arena;
 pub mod core_api;
 mod native;
-pub mod assign;
 pub mod collect;
 mod handlers;
 #[rustfmt::skip]

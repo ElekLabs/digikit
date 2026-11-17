@@ -80,11 +80,13 @@ impl CoreApi for ImportCore {
     unsafe fn dynreg(&self) -> *const u32 {
         dkc_dynreg()
     }
-    unsafe fn type_resolve(&self, key: u32) -> u32 {
-        dkc_type_resolve(key)
+    fn boot_index(&self) -> u32 {
+        unsafe { dkc_boot_index() }
     }
-    fn type_map_used(&self) -> u32 {
-        unsafe { dkc_type_map_used() }
+    fn legacy_type_map(&self) -> [u32; dkrt_sdk::sel::MAP_N] {
+        let mut map = [0u32; dkrt_sdk::sel::MAP_N];
+        unsafe { dkc_legacy_type_map(map.as_mut_ptr()) };
+        map
     }
     unsafe fn guard_faults(&self, ty: u32) -> u32 {
         dkc_guard_faults(ty)

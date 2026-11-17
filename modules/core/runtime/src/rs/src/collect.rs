@@ -660,7 +660,7 @@ pub(crate) mod dkm {
     pub const H_REG_SIZE: usize = dkneeds::H_REG_SIZE as usize;
 }
 
-/// The machine keys of the keys table of a whole `.dkm` file, for the boot's type assignment (`assign::plan`): at most 8, the count returned.
+/// The machine keys of the keys table of a whole `.dkm` file, for the boot's type assignment (`Service::settle` of the machines service): at most 8, the count returned.
 /// A file that is torn or not a `.dkm` has none (its load reports the error).
 pub fn machine_keys(file: &[u8], out: &mut [u32; 8]) -> usize {
     let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]);

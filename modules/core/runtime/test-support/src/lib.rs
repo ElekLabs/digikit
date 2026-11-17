@@ -121,6 +121,10 @@ pub struct FakeCore {
     pub mem: RefCell<std::collections::BTreeMap<u32, u32>>,
     pub calls: RefCell<Vec<Call>>,
     pub source: Cell<u8>,
+    /// The selection index of the module being loaded (`CoreApi::boot_index`).
+    pub boot_index: Cell<u32>,
+    /// The map `CoreApi::legacy_type_map` hands out.
+    pub legacy_map: Cell<[u32; dkrt_sdk::sel::MAP_N]>,
     pub settings: RefCell<Vec<(Vec<u8>, Vec<u8>)>>,
     pub link: RefCell<&'static mut Link<FakeLink>>,
     pub name: String,
@@ -149,6 +153,8 @@ impl FakeCore {
             mem: RefCell::new(std::collections::BTreeMap::new()),
             calls: RefCell::new(Vec::new()),
             source: Cell::new(0),
+            boot_index: Cell::new(u32::MAX),
+            legacy_map: Cell::new([0; dkrt_sdk::sel::MAP_N]),
             settings: RefCell::new(Vec::new()),
             link: RefCell::new(Box::leak(Box::new(link()))),
             name: String::from("fake\0"),
@@ -231,11 +237,11 @@ impl CoreApi for FakeCore {
             self.dynreg_table.as_ptr()
         }
     }
-    unsafe fn type_resolve(&self, key: u32) -> u32 {
-        key & 0xff
+    fn boot_index(&self) -> u32 {
+        self.boot_index.get()
     }
-    fn type_map_used(&self) -> u32 {
-        0
+    fn legacy_type_map(&self) -> [u32; dkrt_sdk::sel::MAP_N] {
+        self.legacy_map.get()
     }
     unsafe fn guard_faults(&self, _ty: u32) -> u32 {
         0

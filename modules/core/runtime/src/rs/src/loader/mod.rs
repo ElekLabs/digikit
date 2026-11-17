@@ -87,7 +87,7 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     /// The first item that `init`'s declarations and the header table do not both hold, of the last load that failed with E_DECL_KIND: (tag of the item, its first
     /// word), and 0x100 added to the tag when only the header has it. `(0, 0)`: none (`report_provider` logs it).
     decl_diff: (u32, u32),
-    /// The header table of the module at each selection index, kept while `assign::plan` reads each file once (`capture`); `table_len` 0: none (the file
+    /// The header table of the module at each selection index, kept while the boot reads each file once (`capture`); `table_len` 0: none (the file
     /// is missing, torn, of the old format or has a larger table).
     tables: [[u8; TABLE_MAX]; SEL_MAX],
     table_len: [usize; SEL_MAX],
@@ -626,7 +626,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             let mut voice = [false; limits::MACHINE_ROWS];
             let mut m = 0;
             while m < c.nm {
-                voice[m] = services().has_voice(rec, crate::assign::resolve(col::machine_key(keys, &c.machines[m])));
+                voice[m] = services().has_voice(rec, 0 /* RS-C C2(e) removes this path */);
                 m += 1;
             }
             size = match col::lower(c, &p, keys, &voice, base, core::ptr::null_mut(), 0, &mut plan) {
@@ -652,7 +652,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             // the ranges and latch mask of each machine's voice row, the routes and defaults of each effect's row
             let mut m = 0;
             while m < c.nm {
-                let t = crate::assign::resolve(col::machine_key(keys, &c.machines[m]));
+                let t = 0 /* RS-C C2(e) removes this path */;
                 if services().has_voice(rec, t) {
                     let (rng, latched) = col::voice_declared(c, &plan, m);
                     if latched != 0 {
@@ -958,7 +958,28 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         let provs = parse_provs(&self.found, planned.np);
         plan::settle(&services(), planned, &mods[..n], &provs[..planned.np], &self.loaded[..planned.np]);
+        // every service of the boot is loaded and no module yet: the services plan what they keep per selected module
+        let mut sel = dkrt_abi::service::SettleCtx::new();
+        sel.count = n;
+        let mut i = 0;
+        while i < n {
+            sel.nkeys[i] = machine_keys(&self.tables[i][..self.table_len[i]], &mut sel.keys[i]) as u8;
+            i += 1;
+        }
+        services().settle(&sel);
     }
+}
+
+/// The machine keys of a module's header table (`table` empty: none), at most 8; their count.
+#[inline(never)]
+fn machine_keys(table: &[u8], out: &mut [u32; 8]) -> usize {
+    let k = match dkrt_abi::keys::KeysCopy::from_bytes(table) {
+        Ok(k) => k,
+        Err(_) => return 0,
+    };
+    let n = k.nm.min(8);
+    out[..n].copy_from_slice(&k.mk[..n]);
+    n
 }
 
 /// The header tables of the first `n` providers the search found.

@@ -46,11 +46,11 @@ impl CoreApi for RealCore {
     unsafe fn dynreg(&self) -> *const u32 {
         registry::info()
     }
-    unsafe fn type_resolve(&self, key: u32) -> u32 {
-        crate::assign::resolve(key)
+    fn boot_index(&self) -> u32 {
+        unsafe { core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)) }
     }
-    fn type_map_used(&self) -> u32 {
-        crate::assign::map_used()
+    fn legacy_type_map(&self) -> [u32; dkrt_sdk::sel::MAP_N] {
+        unsafe { (*core::ptr::addr_of!(crate::selection::REC)).map }
     }
     unsafe fn guard_faults(&self, ty: u32) -> u32 {
         crate::watch::guard_faults(ty)

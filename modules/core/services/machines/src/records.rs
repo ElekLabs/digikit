@@ -9,6 +9,7 @@ use dkrt_abi::mem::{cstr_len, iw, rd, rd32, wr};
 use dkrt_abi::registry::{each, w, RegState, MACH_TEXT};
 use dkrt_abi::service::{
     check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, RowWrite, Service,
+    SettleCtx,
 };
 use dkrt_sdk::records::{
     KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
@@ -90,6 +91,10 @@ impl<C: CoreApi> Service<C> for Machines {
         d.kind(KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2);
     }
 
+    unsafe fn settle(core: &C, s: &SettleCtx) {
+        crate::assign::plan(core, s)
+    }
+
     unsafe fn fits(inf: *const u32) -> bool {
         // the table must fit this registry's state (a table that says more rows than the state has would index past it)
         !(iw(inf, w::M_DYN_N) as usize > MAX_MACH
@@ -148,7 +153,7 @@ impl<C: CoreApi> Service<C> for Machines {
         } else if kind == CAPK_PAGE_ROWS {
             Some(counts(core)[2])
         } else if kind == CAPK_MAP_ENTRIES {
-            Some((dkrt_sdk::sel::MAP_N as u32, core.type_map_used()))
+            Some((dkrt_sdk::sel::MAP_N as u32, crate::assign::map_used()))
         } else {
             None
         }
@@ -452,7 +457,7 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
             }
         } else {
             // the first word is a machine key; `assign` has the number for it (0: none, which is out of range below)
-            let t = core.type_resolve(rd32(b));
+            let t = crate::assign::resolve(core, rd32(b));
             let clone = rd32(b.add(4));
             let own = rd32(b.add(12));
             if rd32(b.add(8)) != 255
@@ -521,10 +526,10 @@ unsafe fn ck_owners<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
         if kind != KIND_PAGE || bad != OK {
             return;
         }
-        let t = core.type_resolve(rd32(b));
+        let t = crate::assign::resolve(core, rd32(b));
         let mut found = false;
         each(reg, |k, m| {
-            found |= k == KIND_MACHINE && core.type_resolve(rd32(m)) == t;
+            found |= k == KIND_MACHINE && crate::assign::resolve(core, rd32(m)) == t;
         });
         if !found {
             bad = E_FORMAT;
@@ -656,7 +661,7 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
         wr(s0 + 4 * KNOBS as u32, 0);
         wr(row + iw(inf, w::PGO_NAME), name);
         wr(row + iw(inf, w::PGO_TITLE), title);
-        wr(row + iw(inf, w::PGO_MACH), core.type_resolve(rd32(b))); // the page belongs to its machine from this store on
+        wr(row + iw(inf, w::PGO_MACH), crate::assign::resolve(core, rd32(b))); // the page belongs to its machine from this store on
     });
     // machines
     let knobs = iw(inf, w::KNOBS) as usize;
@@ -664,7 +669,7 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
         if kind != KIND_MACHINE {
             return;
         }
-        let t = core.type_resolve(rd32(b));
+        let t = crate::assign::resolve(core, rd32(b));
         let clone = rd32(b.add(4));
         let k = (t - iw(inf, w::M_DYN0)) as usize;
         let row = iw(inf, w::M_ROWS) + (t - iw(inf, w::M_FIRST)) * iw(inf, w::M_ROW_SIZE);

@@ -9,6 +9,7 @@
 #![no_std]
 #[cfg(test)]
 extern crate std;
+pub mod assign;
 pub mod dsp;
 pub mod nativepage;
 pub mod paramapi;

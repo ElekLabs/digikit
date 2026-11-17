@@ -11,7 +11,8 @@
 //!   (the DSP loader in `dsp/mod.rs` keeps the area, the row table and the state machine);
 //! - capacity counts (`caps`), the module behind a fault site (`attribute`), the guard's state of a machine type (`guard_state`);
 //! - the declarations of a module's DSP rows (`has_voice`, `declare_voice`, `declare_fx`) and `on_loaded`;
-//! - the module lifecycle: `module_begin` before a module's `init`, `module_commit` after it (two passes over a `RecordSink`), and `remove`.
+//! - the module lifecycle: `module_begin` before a module's `init`, `module_commit` after it (two passes over a `RecordSink`), and `remove`;
+//! - the boot: `settle`, once, after the services are loaded and before the first module, with the machine keys of the boot's selection.
 use crate::core_api::CoreApi;
 use crate::dsp::{DspSec, Job};
 use crate::registry::ApplyArgs;
@@ -53,6 +54,7 @@ const fn svc_abi() -> u32 {
         size_of::<DkrtFx>(),
         size_of::<RecordSink>(),
         size_of::<ModuleCommitCtx>(),
+        size_of::<SettleCtx>(),
         size_of::<crate::keys::KeysCopy>(),
     ];
     let mut h = crate::gen_svc_abi::FILES_HASH;
@@ -234,6 +236,22 @@ pub struct ModuleCommitCtx<'a> {
     /// The module's header table: `[uses]` rows, machine keys and effect ids.
     pub keys: &'a crate::keys::KeysCopy,
     pub sink: *mut RecordSink,
+}
+
+/// What the loader gives `settle`: the machine keys of each module of the boot's selection (the keys table of its header; `nkeys[k]` of the 8 words of `keys[k]`), in
+/// selection order. A module whose file could not be read has none.
+#[repr(C)]
+pub struct SettleCtx {
+    /// The modules of the selection.
+    pub count: usize,
+    pub nkeys: [u8; dkrt_sdk::SEL_MAX],
+    pub keys: [[u32; 8]; dkrt_sdk::SEL_MAX],
+}
+
+impl SettleCtx {
+    pub const fn new() -> SettleCtx {
+        SettleCtx { count: 0, nkeys: [0; dkrt_sdk::SEL_MAX], keys: [[0; 8]; dkrt_sdk::SEL_MAX] }
+    }
 }
 
 /// One declaration of `Declare`: (table tag, first word, second word, third word); an unused word is 0.
@@ -485,6 +503,9 @@ pub trait Service<C: CoreApi> {
     unsafe fn module_commit(core: &C, rec: usize, c: &ModuleCommitCtx) -> i32 {
         OK
     }
+    /// The boot has loaded every service its selection needs and loads no module yet; `s` names the machine keys of each selected module. Called once per boot
+    /// on every service that is loaded. A service that keeps state across boots (the machines service: its type numbers) plans and saves it here.
+    unsafe fn settle(core: &C, s: &SettleCtx) {}
 
     /// DSP section: the entries of the tables this service owns (called in list order, after the header is validated).
     unsafe fn dsp_check_sections(core: &C, sec: &DspSec) -> i32 {
@@ -542,6 +563,7 @@ pub struct ServiceRow {
     attribute: unsafe extern "C" fn(*const c_void, u32, u32, *mut usize) -> bool,
     guard_state: unsafe extern "C" fn(*const c_void, u32, *mut GuardState) -> bool,
     on_loaded: unsafe extern "C" fn(*const c_void, usize),
+    settle: unsafe extern "C" fn(*const c_void, *const SettleCtx),
     module_begin: unsafe extern "C" fn(*const c_void, usize),
     module_commit: unsafe extern "C" fn(*const c_void, usize, *const ModuleCommitCtx) -> i32,
     tick: unsafe extern "C" fn(*const c_void, u32),
@@ -647,6 +669,9 @@ mod thunk {
     }
     pub unsafe extern "C" fn on_loaded<C: CoreApi, S: Service<C>>(core: *const c_void, rec: usize) {
         S::on_loaded(&*(core as *const C), rec)
+    }
+    pub unsafe extern "C" fn settle<C: CoreApi, S: Service<C>>(core: *const c_void, s: *const SettleCtx) {
+        S::settle(&*(core as *const C), &*s)
     }
     pub unsafe extern "C" fn module_begin<C: CoreApi, S: Service<C>>(core: *const c_void, rec: usize) {
         S::module_begin(&*(core as *const C), rec)
@@ -814,6 +839,7 @@ impl ServiceRow {
             attribute: thunk::attribute::<C, S>,
             guard_state: thunk::guard_state::<C, S>,
             on_loaded: thunk::on_loaded::<C, S>,
+            settle: thunk::settle::<C, S>,
             module_begin: thunk::module_begin::<C, S>,
             module_commit: thunk::module_commit::<C, S>,
             tick: thunk::tick::<C, S>,
@@ -1075,6 +1101,15 @@ impl ServiceTable {
         let mut i = 0;
         while i < self.rows.len() {
             (self.row(i).on_loaded)(self.core, rec);
+            i += 1;
+        }
+    }
+    /// `Service::settle` on every row, in table order.
+    #[inline]
+    pub unsafe fn settle(&self, s: &SettleCtx) {
+        let mut i = 0;
+        while i < self.rows.len() {
+            (self.row(i).settle)(self.core, s);
             i += 1;
         }
     }

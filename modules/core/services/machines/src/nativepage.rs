@@ -189,7 +189,7 @@ pub unsafe fn apply<C: CoreApi>(
         };
         binding[2] = rd32(b.add(8));
     }
-    let owner = core.type_resolve(rd32(body.add(4)));
+    let owner = crate::assign::resolve(core, rd32(body.add(4)));
     let flags = if kind == KIND_V2 {
         rd32(body.add(44))
     } else {

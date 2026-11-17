@@ -34,10 +34,12 @@ pub trait CoreApi: crate::mem::FwMem {
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
     /// The words of `dynreg_info` (`registry::w`); null without a registry.
     unsafe fn dynreg(&self) -> *const u32;
-    /// The machine type number for machine key `key` of the module being loaded (sticky assignment); 0 when there is none.
-    unsafe fn type_resolve(&self, key: u32) -> u32;
-    /// Entries of the sticky type map in use (for CAPACITY).
-    fn type_map_used(&self) -> u32;
+    /// The selection index of the module being loaded (`u32::MAX` outside a module load): a service that planned something per selected module (`Service::settle`) finds
+    /// the module's part by it.
+    fn boot_index(&self) -> u32;
+    /// The sticky machine type map that the selection record kept before the machines service owned it (`MAP_N` words, 0 empty), read once to migrate it to the
+    /// service's settings key. Removed one release after.
+    fn legacy_type_map(&self) -> [u32; dkrt_sdk::sel::MAP_N];
     /// What the DSP guard counted for machine type `ty`: faults and whether it disabled the type.
     unsafe fn guard_faults(&self, ty: u32) -> u32;
     unsafe fn guard_disabled(&self, ty: u32) -> bool;
