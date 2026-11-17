@@ -19,6 +19,14 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(sharc_gen)");
     println!("cargo:rustc-check-cfg=cfg(sharc_image)");
     println!("cargo:rustc-check-cfg=cfg(sharc_gen_version)");
+    println!("cargo:rustc-check-cfg=cfg(sharc_region_entries)");
+    // The suffix of the environment variables with this core's fast-tier address lists.
+    let suffix = if env::var("CARGO_PKG_NAME").as_deref() == Ok("sharc-gen-2") {
+        "_2"
+    } else {
+        ""
+    };
+    println!("cargo:rustc-env=SHARC_GEN_ENV_SUFFIX={suffix}");
     // The second instance (package sharc-gen-2, same sources) reads SHARC_GEN_DIR_2; both emit the
     // directory as SHARC_GEN_DIR to their own crate, which is the name the generated files include.
     let var = gen_dir_var();
@@ -36,6 +44,11 @@ fn main() {
     println!("cargo:rustc-cfg=sharc_gen");
     if dir.join("image.rs").is_file() {
         println!("cargo:rustc-cfg=sharc_image");
+        // Generated since REGION_ENTRIES: blocks can be barred per region.
+        let image = std::fs::read_to_string(dir.join("image.rs")).unwrap_or_default();
+        if image.contains("REGION_ENTRIES") {
+            println!("cargo:rustc-cfg=sharc_region_entries");
+        }
     }
     // Generated before the staleness guard: no GENERATOR_VERSION, reported
     // as version 0 (build_info), which the loaders refuse.

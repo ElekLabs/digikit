@@ -424,7 +424,7 @@ def main() -> int:
         "--regions",
         action="store_true",
         help="per-function wall time of the fast and AOT tiers (needs a build with "
-        "DIGI_COUPLED_FEATURES=coupled-audio,region-profile)",
+        "DIGI_COUPLED_FEATURES=sharc,play,region-profile)",
     )
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--timeout", type=float, default=2400)

@@ -30,8 +30,8 @@ Zero-DSP mode retains the existing SSI/DMA clock with zero samples, including pa
 snapshot restores and reset reconstruction; it executes no SHARC engine. Its patched snapshots use a separate
 `-zero.snap` identity, so earlier CF-only snapshots cannot silently remove that timing.
 Startup flags are shared by both servers (`packages/emulator/control/src/cli.rs`): `--control`, `--no-control`, `--paused`,
-`--run-dir DIR`, `--card-image FILE` (with `--card-folder DIR`: the +Drive folder the image was built from; the firmware's changes are exported to it on exit; `--no-card-sync` turns the export off), `--device-folders` (one card folder per device, below), `--mirror-dir DIR` (the folder of the first loaded device), `--scenario NAME_OR_FILE`, `--report PATH`, `--no-audio` and the coupled-audio
-flags. `--scenario` needs a coupled-audio build.
+`--run-dir DIR`, `--card-image FILE` (with `--card-folder DIR`: the +Drive folder the image was built from; the firmware's changes are exported to it on exit; `--no-card-sync` turns the export off), `--device-folders` (one card folder per device, below), `--mirror-dir DIR` (the folder of the first loaded device), `--scenario NAME_OR_FILE`, `--report PATH`, `--no-audio` and the sharc,play
+flags. `--scenario` needs a sharc build.
 
 ## Command line
 
@@ -100,9 +100,7 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `events.subscribe` | `events`, `subscribe`, `drain_events` | `events` |
 | `quit` | `quit` | `quit` |
 
-`firmware.load {replace: true, dsp?}` chooses the DSP of the session it starts (the workbench's "DSP" tick): `dsp: false` boots ColdFire
-only (no DSP audio session; a device with a second CPU that runs a program gets the mailbox responder instead, so there is no peer audio and
-`sharc.profile`: DSP execution counts as raw counters of the profile artifact `dk.profile/1` ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)). `{enable: true}` starts counting and clears the counts; `{enable: false}` stops and clears; without `enable` the call reads the counts since the start (an error says so when the counting is off). The answer: `clock` (`emu.sharc.insn`, unit `insn`, the sampling text), `blocks` (DSP blocks since the start), `icount` and `idle_skipped` (instructions executed and replayed by the idle skip since the start), `counted` (`fast`, `block`, `interpreted`: instructions each source counted) and `raw`, a list of `{cpu: "sharc", addr, count, series: "pc"}` sorted by software PC. Two sources are added by PC: the dispatch profile of the fast and block tiers (a dispatch is credited whole to its entry PC, so a count at an entry PC covers the region that starts there) and the interpreter's per-PC counts (each instruction at its own PC). [O] `icount` and `idle_skipped` are engine totals; in the first DN2 run they did not reconcile with the sum of `counted` (a dispatch may be counted in two sources, and a chained dispatch is not counted), so read the per-PC counts as a ranking and per-block estimate, not as an exact total. It reads no EMUCLK or TCOUNT. A daemon built without the feature answers "built without sharc-profile"; it needs `coupled-audio` (a DSP): `cargo build --release -p digi-control --bin digi-emud --features sharc-profile`.
+`sharc.profile`: DSP execution counts as raw counters of the profile artifact `dk.profile/1` ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)). `{enable: true}` starts counting and clears the counts; `{enable: false}` stops and clears; without `enable` the call reads the counts since the start (an error says so when the counting is off). The answer: `clock` (`emu.sharc.insn`, unit `insn`, the sampling text), `blocks` (DSP blocks since the start), `icount` and `idle_skipped` (instructions executed and replayed by the idle skip since the start), `counted` (`fast`, `block`, `interpreted`: instructions each source counted) and `raw`, a list of `{cpu: "sharc", addr, count, series: "pc"}` sorted by software PC. Two sources are added by PC: the dispatch profile of the fast and block tiers (a dispatch is credited whole to its entry PC, so a count at an entry PC covers the region that starts there) and the interpreter's per-PC counts (each instruction at its own PC). [O] `icount` and `idle_skipped` are engine totals; in the first DN2 run they did not reconcile with the sum of `counted` (a dispatch may be counted in two sources, and a chained dispatch is not counted), so read the per-PC counts as a ranking and per-block estimate, not as an exact total. It reads no EMUCLK or TCOUNT. A daemon built without the feature answers "built without sharc-profile"; it implies the features `sharc` and `play` (a DSP and its audio output): `cargo build --release -p digi-control --bin digi-emud --features sharc-profile`.
 
 `job.cancel`: cancel the long job that runs: a cold boot (`firmware.load`, `restart`, a soft-reset boot), a card load, or `step`/`run_until`.
 Answers `{cancelled: kind|null}`; the cancelled call answers error 10 `cancelled`. After a cancelled `firmware.load {replace: true}` no firmware is loaded.
@@ -263,7 +261,7 @@ for the container area `0x80000..0x380000` (any other flash write runs the firmw
 soft reset after such a write the controller boots the container the guest wrote (`flash.booted` event, or `flash.invalid` when it does not read back as a
 firmware) instead of the image it had loaded. `patchkit flash STOCK.syx --emulator SOCKET` drives it (finding 75).
 
-`pcm.tap` needs the coupled-audio build and a DSP session. `capture` and `capture_stop` have no wrapper.
+`pcm.tap` needs the sharc build and a DSP session. `capture` and `capture_stop` have no wrapper.
 
 ## CPU load (`status.load`)
 
@@ -357,7 +355,7 @@ emu.close()
 ```
 
 `Emu.spawn(*args)` starts a private daemon (binary from `DIGI_EMUD`) and quits it on exit;
-`Emu.spawn_coupled(syx, ready_dir)` adds the coupled-audio flags.
+`Emu.spawn_coupled(syx, ready_dir)` adds the sharc flags.
 
 ## Not implemented
 

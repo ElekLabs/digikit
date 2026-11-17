@@ -11,7 +11,7 @@
 //! firmware sent on MIDI DIN. --frame writes the raw 1024-byte OLED frame at T. --overlay-out writes the
 //! card writes (`card.overlay` format: u64 le sector, 64-byte mask, 512 data bytes per touched sector).
 //!
-//! Boots SYX with the ColdFire emulator (no DSP, unless built with the `sharc`
+//! Boots SYX with the ColdFire emulator (no DSP, unless built with the `host`
 //! feature and given --dsp IMAGE --dsp-idle COLD_IDLE: then the DSP of
 //! `tools/emulator/ready.py` runs on the DSPI2 link as in `coupled::cold`, and the
 //! final report gains a `dsp` line). Every --fill region is
@@ -37,14 +37,12 @@ const AFTER_CLEAR_PC: u32 = 0x4000_0546;
 
 /// The DSP of a ready directory on the DSPI2 link (the cold boot of
 /// `coupled::cold::boot_to_ready`, without the snapshot).
-#[cfg(feature = "sharc")]
+#[cfg(feature = "host")]
 mod dsp {
-    use elektron_native_boot::{
-        Emulator,
-        sharc_peer::{
-            IdleLoop, NativeDsp, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched,
-            period_from_env,
-        },
+    use elektron_native_boot::Emulator;
+    use sharc_peer::{
+        IdleLoop, NativeDsp, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched,
+        period_from_env,
     };
     use std::{cell::RefCell, rc::Rc};
 
@@ -76,7 +74,10 @@ mod dsp {
         };
         emu.enable_ssi_diagnostic(96_000).unwrap();
         let (peer, handle, shared) = ThreadedPeer::spawn(
-            move || open_engine_patched(&image, &state, base, None, idle).map(NativeDsp),
+            move || {
+                open_engine_patched(&sharc_gen::CORE, &image, &state, base, None, idle)
+                    .map(NativeDsp)
+            },
             period_from_env(),
             idle.range,
         )
@@ -344,16 +345,16 @@ fn main() {
         Some(sha) => Emulator::new_patched(&syx, card, sha).unwrap(),
         None => Emulator::new(&syx, card).unwrap(),
     };
-    #[cfg(feature = "sharc")]
+    #[cfg(feature = "host")]
     let dsp = match (&dsp_image, &dsp_idle) {
         (Some(image), Some(idle)) => Some(dsp::attach(&mut emu, image, idle)),
         (None, None) => None,
         _ => panic!("--dsp and --dsp-idle go together"),
     };
-    #[cfg(not(feature = "sharc"))]
+    #[cfg(not(feature = "host"))]
     assert!(
         dsp_image.is_none() && dsp_idle.is_none(),
-        "--dsp needs a build with --features sharc"
+        "--dsp needs a build with --features host"
     );
     if !emu.run_until_pc(AFTER_CLEAR_PC, 100_000_000) {
         eprintln!("reset clear did not return to {AFTER_CLEAR_PC:#x}");
@@ -378,7 +379,7 @@ fn main() {
     loop {
         let snap = emu.step_chunk(250_000);
         let s = &snap.status;
-        #[cfg(feature = "sharc")]
+        #[cfg(feature = "host")]
         if let Some(halt) = dsp.as_ref().and_then(dsp::Dsp::sync) {
             println!(
                 "{{\"error\":\"DSP halted: {halt}\",\"icount\":{}}}",
@@ -453,7 +454,7 @@ fn main() {
         }
     }
     report(&mut emu, &regions, "final");
-    #[cfg(feature = "sharc")]
+    #[cfg(feature = "host")]
     if let Some(dsp) = &dsp {
         let halted = dsp.sync();
         println!(

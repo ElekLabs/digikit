@@ -24,7 +24,7 @@ says about its RAM:
   * the expansion candidate: the top-of-RAM gap between the DMA arena (plus a
     margin) and the stack reserve. Nothing in the linker map owns it.
 
-`confirm` runs the ColdFire emulator (packages/emulator/boot example regions_probe, built
+`confirm` runs the ColdFire emulator (packages/emulator/sharc-peer example regions_probe, built
 on first use) on the image's .syx with the region filled by an
 address-dependent pattern right after the reset clear returns, in both the
 cached view and the +0x08000000 alias (the emulator keeps them as separate
@@ -537,7 +537,7 @@ def probe_binary(dsp_dir: pathlib.Path | None = None) -> pathlib.Path:
         env["SHARC_GEN_DIR"] = str(gen)
         env = digi_env.rust_env(env)
         target = pathlib.Path(native_target.target_dir(gen))
-        features = ["--features", "sharc"]
+        features = ["--features", "host"]
     binary = target / "release" / "examples" / "regions_probe"
     subprocess.run(
         [
@@ -554,7 +554,7 @@ def probe_binary(dsp_dir: pathlib.Path | None = None) -> pathlib.Path:
             "--target-dir",
             str(target),
             "-p",
-            "elektron-native-boot",
+            "sharc-peer",
             "--example",
             "regions_probe",
             *features,

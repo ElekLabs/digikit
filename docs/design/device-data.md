@@ -89,7 +89,7 @@ Board facts that only the emulator uses. Every key is optional; an unknown key i
 | `board_revision` | The PCB revision byte that MAIN reads from FlexBus CS1 at address 0. An emulator choice (the smallest value that passes the firmware's checks), not read from a unit. |
 | `calibration_record` | What the emulated NOR holds at the calibration record offset. `"synthetic"`: a valid record built from the format alone, tables zero; never data from a unit. |
 | `peer` | The second CPU. `"coldfire"`: its program runs on a second ColdFire core. `"mailbox-responder"`: no peer code; the emulator only answers MAIN's handshake. |
-| `peer_audio` | Sub-table `[emulator.peer_audio]` (`dma_channel` 32..=63, `slots` two words below 16, `bits` 8..=32): MAIN mixes the peer's voices itself and streams them to the converter by eDMA. Needs `peer = "coldfire"`. The launcher builds the audio output (`cf-audio`, its own cargo target dir) and sets `DIGI_EMU_PEER_AUDIO` only for a device that has it. |
+| `peer_audio` | Sub-table `[emulator.peer_audio]` (`dma_channel` 32..=63, `slots` two words below 16, `bits` 8..=32): MAIN mixes the peer's voices itself and streams them to the converter by eDMA. Needs `peer = "coldfire"`. The launcher builds the audio output (feature `play`, its own cargo target dir) and sets `DIGI_EMU_PEER_AUDIO` only for a device that has it. |
 | `led_protocol` | How the panel UART carries LED state: `"indexed"` (default, `b9 idx val` records) or `"packed-states"` (palette records and packed 2-bit states). |
 
 CPU-architecture registers of the MCF5441x itself (the UART status register offset, `RCM.RCR`, the eSDHC `PRSSTAT` offset) are

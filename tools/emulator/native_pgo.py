@@ -106,7 +106,7 @@ DEFAULT_GENERATED = digi_env.DEFAULT_GENERATED
 READY = digi_env.READY
 TOOLCHAIN = digi_env.TOOLCHAIN
 TRIPLE = digi_env.TRIPLE
-FEATURES = "coupled-audio"
+FEATURES = "sharc,play"
 BOTH = "both"
 BOTH_FEATURES = "second-core"
 BOTH_WORKLOAD_NAME = "both-v1"
@@ -880,7 +880,7 @@ GUARDED_CRATES = (
     "sharc_gen",
     "sharc_rt",
     "elektron_native_boot",
-    "sharc_native_2",
+    "sharc_peer",
     "sharc_gen_2",
 )
 CRATE_NAME_RE = re.compile(

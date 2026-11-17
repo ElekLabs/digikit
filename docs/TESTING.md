@@ -685,8 +685,8 @@ asked for. With `watch` ranges (pcs) it also returns the stores of instructions 
 (a frame halfword, the trig bit, a release byte). `sharc-rig --serve` keeps the core between lines: the first line is a request, every
 later line is `{"ops": [...]}` and gets one answer line, so a rig runs a case block by block and stops at its first failure.
 
-The stock DSP image can be the base core. The setup line takes `image`, the loader stream of firmware section 7 as hex. The rig reads it with the boot crate's own `LoadedMemory::from_stream`
-(`packages/emulator/boot/src/dsp_stream.rs`, compiled into the rig by path: a dependency would change `Cargo.lock`, an input of the device tests) and loads it before `code`, so
+The stock DSP image can be the base core. The setup line takes `image`, the loader stream of firmware section 7 as hex. The rig reads it with the sharc-peer crate's own `LoadedMemory::from_stream`
+(`packages/emulator/sharc-peer/src/dsp_stream.rs`, compiled into the rig by path: a dependency would change `Cargo.lock`, an input of the device tests) and loads it before `code`, so
 linked code and hooks go over the stock bytes. A call takes `stock_reads: [[loader_byte_address, count]]` and answers `stock`, the bytes of the image as loaded (hex, `null` when the stream does not write all of them).
 `breaks` on a call replaces the setup's breaks for that call, and `resume: true` continues from the pc the last call stopped at (the stacks and registers stay; `regs` are still set), as `Runner.run` does after a breakpoint. A zero-step
 resume reads DM without ending a stopped call. `specials: {"MSF": [mask, bits]}` sets an 80-bit multiplier register (hex strings) before a call and `read_specials` answers it after. An address like 0x2010f000 or 0x80100000 is a byte address: a read count steps by one byte, so a rig that reads words asks for each word.
@@ -957,7 +957,16 @@ A missing or stale profile prints one warning: a stale profile is still applied 
 `uv run python -m tools.emulator.native_pgo clean [--dry-run] [--days N]` removes bench, ab, raw and train output and unreferenced profiles older than N days (default 14) under `out/native/pgo`. It keeps profiles named by `manifest.json` or the newest four `by-key` entries. `train` calls it at its end when `AUTO_CLEAN` is set.
 `DIGI_EMU_PGO=0` turns PGO off. Measuring tools (`coupled_ab`, `sharc_matrix`, `perf`, `fastcov`, `fast_roots`) keep their own builds.
 
-`tools/devtools/sharc_cells.py` compares host instruction counts of two built `coupled-run` binaries on runtime fixtures (`uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --jobs 2 --cov`). It runs each binary at two lengths, prints steady-state counters per audio second, the B/A instruction ratio and PCM and DSP state parity (non-zero exit on a difference), and with `--cov` the fast-tier root and exit tables. It does not take the bench lock, because counters are not timing; use `coupled_ab` for the final timing A/B.
+`tools/devtools/sharc_cells.py` compares host instruction counts of two built `coupled-run` binaries on runtime fixtures (`uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --jobs 2 --cov`). It runs each binary at two lengths, prints steady-state counters per audio second, the B/A instruction ratio and PCM, DSP state and ColdFire state parity (`pcm/dsp/cf` per length; the ColdFire state is `state_sha256` of the `coupled-run` report, taken at the end of the run, see below; non-zero exit on a difference), and with `--cov` the fast-tier root and exit tables. `--env LABEL:NAME=VALUE` (repeatable) sets one variable for the runs of one label only (the cell environment is otherwise clean), for example `--env B:DIGI_SHARC_CORE_LIB_DN2=PATH` to run B with a loaded core library. It does not take the bench lock, because counters are not timing; use `coupled_ab` for the final timing A/B.
+
+```text
+== dt2 (dt2, dt2-sample-trig), lengths [3.0, 6.0] s, steady state per audio s ==
+label    insn G    cyc G   aot M  fast M  interp  idle M   blk M  fcall M   B/A insns   rtf per length   parity (pcm/dsp/cf per length)
+A        25.510    4.811   294.1    18.6    1.80   685.4    2.17     0.31   1.0000     0.43/0.45        3s:=/=/= 6s:=/=/=
+B        25.518    4.908   294.1    18.6    1.80   685.4    2.17     0.31   1.0003     0.45/0.50        3s:=/=/= 6s:=/=/=
+```
+
+A `DIFF` in `pcm`, `dsp` or `cf` makes the exit code non-zero. `A` and `B` ran the same binary here. The ColdFire state digest (`Emulator::cf_state_digest`) covers the `save_state` bytes (CPU, RAM pages, DMA, DSPI and SSI link, eSDHC and card, timers, SD gate, UART bytes, the firmware-event counters, frame and input state) without the three instruction-path counters (interpreted, idle skipped, RAM clear skipped), then the state the snapshot lacks: the flash image and the flash write counts, the MIDI DIN port, the USB port (callbacks, queues with their contents, the active call, counters, the EP2 buffers, the controller error) and the pending and active guest calls. It leaves out instrumentation (spans, probe hits, `pc_probe`, traces, telemetry) and the SHARC side, which the DSP state sha covers. The board snapshot does not carry the USB PHY registers and their log, VBUS, the eDMA channel-37 transmit state, the soft-reset flag and the last write error. When the digest cannot be taken (a faulted emulator, `DIGI_CF_IPS` set, a pending IRQ1, a MIDI DIN transfer on the wire, FPU state) the report has `state_sha256: null` and `state_digest_error`, and `sharc_cells` fails that cell with the reason; so it does for a binary older than the digest (plan item "CF state digest in the A/B tool", PR 0 of docs/plans/emulator-core-split.md).
 
 ## Render cache
 
@@ -1128,6 +1137,35 @@ the key. A dependency that the key does not cover (and that is not under the car
 build, so nothing is stored with an incomplete key. Add the missing path to `SOURCE_GLOBS` in
 `tools/devtools/emud_key.py`. `uv run python -m tools.devtools.emud_key audit --device DEV --depfile FILE`
 repeats the check on a kept file.
+
+### Core library store
+
+`verify_build cores` keeps the generated SHARC core of each device as a library in
+`<git common dir>/sharc-core-cache/<image>/<key>/` (the library, `key.txt`, `header.json`; the image is the device id). An
+entry is a hit only with all three files. It uses the mechanics of the daemon store (`tools/devtools/store.py`): insert by one
+rename, so two processes that insert one key are safe; the use time is the mtime of `key.txt` (a hit refreshes it, never
+creates it). Eviction keeps the last 4 keys per image, every key that `dist/daemons.json` of any worktree names, and every entry
+used within the last hour; it renames an entry to `.tmp-evict-*` before it removes it and removes `.tmp-*` directories older
+than an hour. `DIGI_SHARC_CORE_STORE` moves the store (tests only).
+
+Key and build come from one description, `core_store.build_plan` (the argv and environment of the cargo call). The key follows the
+daemon key's scheme (`emud_key.key_of`): the content of the repository files in `CORE_SOURCE_GLOBS` (the `sharc-core-lib`,
+`sharc-gen` and `sharc-rt` crates, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo`) and `CORE_RECIPE_FILES`, every file of
+the gen dir, the PGO profile content (or `plain`), `rustc -vV`, the target triple, the argv without the target dir (profile,
+features) and the rustc flag and `CARGO_PROFILE_*` variables of the build environment. The key is known before the first build, so
+a lookup needs no build. After a build the dependency file of cargo is audited against the key: a file the build read that the key
+does not cover fails the build and stores nothing (add it to `CORE_SOURCE_GLOBS`).
+
+```sh
+uv run python -m tools.devtools.verify_build cores --device dn2,dt2
+# dn2 core: built 040713e7aaac        (a miss: builds and inserts)
+# dn2 core: restored 040713e7aaac     (a hit)
+# dn2 core: evicted 91350c44d39f      (a key beyond the last 4 that no worktree names and that was not used within the hour)
+```
+
+The build is `core_store.build_core`. The crate `sharc-core-lib` is not in the tree yet, so a miss stops with `the crate
+packages/emulator/sharc-core-lib does not exist yet; the build would be: ...` (exit 1). The Nx target and the `dist/daemons.json`
+entries come with the wiring PR. `tests/devtools/test_core_store.py` covers the key and the store with a stand-in library.
 
 To clear the Nx cache: `pnpm nx:pilot reset`.
 

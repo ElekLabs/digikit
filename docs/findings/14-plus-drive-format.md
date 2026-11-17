@@ -1266,7 +1266,7 @@ the DSP.
 
 ### In-process card and ready boot **[D]**
 
-`packages/emulator/control/src/cards.rs` builds the card (no Python); `packages/emulator/coupled/src/cold.rs` is the
+`packages/emulator/control/src/cards.rs` builds the card (no Python); `packages/emulator/sharc-peer/src/cold.rs` is the
 `sharc_live` cold boot (ColdFire plus the DSP from `cold-idle.dsp` on the DSPI2 link, snapshot at
 ready once link port 0 has been quiet for 400 frames, `digi-audio-m5.snap` and `.snap.dsp`). The
 controller's `card.load` runs both on a worker thread while the running guest waits, then

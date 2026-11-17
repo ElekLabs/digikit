@@ -1,5 +1,5 @@
 //! A coupled cold boot to the ready state, in process: the Rust logic of
-//! `packages/emulator/boot/examples/sharc_live.rs` that `tools/emulator/ready.py` runs for a card.
+//! `packages/emulator/sharc-peer/examples/sharc_live.rs` that `tools/emulator/ready.py` runs for a card.
 //!
 //! The ColdFire boots from the .syx with the card attached and the DSP
 //! (restored from cold-idle, or initialized from reset for changed DSP) on the DSPI2 link. When the panel is
@@ -17,10 +17,8 @@ use std::{
     time::Instant,
 };
 
-use elektron_native_boot::{
-    Emulator,
-    sharc_peer::{IdleLoop, period_from_env},
-};
+use crate::{IdleLoop, period_from_env};
+use elektron_native_boot::Emulator;
 use emmc_card::Card;
 
 const DSP_MAGIC: &[u8; 8] = b"DT2DSP01";
@@ -48,7 +46,7 @@ pub struct ColdInputs {
     pub cold_state: Option<PathBuf>,
     /// The firmware DSP diff, applied once to raw reset state before DSP initialization.
     /// The DSP must reach idle before the ColdFire starts. `None` restores cold-idle unchanged.
-    pub dsp_patch: Option<elektron_native_boot::dsp_patch::DspPatch>,
+    pub dsp_patch: Option<crate::dsp_patch::DspPatch>,
     /// Ready at the main panel, without waiting for the filesystem check (a soft reset on a card an earlier boot used).
     pub relax_fs_check: bool,
     /// Where the boot leaves the card writes when the guest asks for a soft reset (RCM.RCR) before it is ready: the boot then ends
@@ -188,7 +186,7 @@ pub fn boot_emulator_to_ready(
     };
     let sample_link = dsp.sample_link == Some(device_profile::SampleLink::Lp0);
     emulator.enable_ssi_diagnostic(96_000)?;
-    let core = crate::dsp_core::Core::for_device(&profile.device);
+    let core = crate::dsp_core::core_for_device(&profile.device)?;
     let engine_inputs = if inputs.dsp_patch.is_some() {
         let path = inputs.cold_state.as_ref().ok_or(
             "raw DSP cold.state is required; regenerate ready inputs with `mise run emu:ready -- <device> --force`",

@@ -1,23 +1,29 @@
 """Paired counter runs of coupled-run binaries on runtime fixtures: steady-state host
-instruction counts, tier counters, PCM and DSP state parity, and fast-tier exit tables.
+instruction counts, tier counters, PCM, DSP state and ColdFire state parity, and fast-tier exit tables.
 
     uv run python -m tools.devtools.sharc_cells A=BIN_A B=BIN_B --state dn2-reset --state dt2 \\
         [--seconds 3,6] [--jobs 4] [--scenario NAME] [--cov] \\
-        [--roots-add B:0x1c4b72] [--roots-remove A:0x1c4b72] [--out DIR] [--json]
+        [--roots-add B:0x1c4b72] [--roots-remove A:0x1c4b72] [--env B:NAME=VALUE] [--out DIR] [--json]
 
 A cell is one binary on one state (a directory of out/fixtures/runtime/). Each cell runs
 once per length in --seconds; the first label is the reference for parity and ratios.
 Steady state per audio second is (long - short) / (audio seconds difference), which
 removes the start-up work. --cov adds one short run per cell with SHARC_FAST_COV and
-prints the fast-tier root and exit tables from its `cov run` lines.
+prints the fast-tier root and exit tables from its `cov run` lines. `--env LABEL:NAME=VALUE` (repeatable)
+adds one environment variable to the runs of one label, for example `--env B:DIGI_SHARC_CORE_LIB_DN2=PATH`.
 
 This tool does not take the bench lock. Host instruction counts
 (`cpu.dsp_thread_insns_per_audio_s`) repeat within 0.02% on a busy host, so counter runs
 may run in parallel (--jobs, under `nice -n 10`). They say nothing about time: do the final
 timing A/B with tools/devtools/coupled_ab.py, which holds the lock.
 
-The exit code is non-zero when a run fails or PCM or DSP state differs from the first
-label's at the same length.
+The ColdFire state is `state_sha256` of the report (`Emulator::cf_state_digest`: the `save_state` bytes
+without the three instruction-path counters, plus flash, MIDI/USB port and guest-call state; not
+instrumentation), taken at the end of the run. A report without it, or with `state_digest_error`, fails
+that cell with the reason.
+
+The exit code is non-zero when a run fails or PCM, DSP state or ColdFire state differs from the
+first label's at the same length.
 """
 
 from __future__ import annotations
@@ -161,7 +167,9 @@ def load_state(name: str) -> dict:
     }
 
 
-def cell_env(state: dict, label: str, add: dict, remove: dict) -> dict[str, str]:
+def cell_env(
+    state: dict, label: str, add: dict, remove: dict, extra: dict | None = None
+) -> dict[str, str]:
     """A clean environment: HOME and PATH plus the fast-tier lists of the firmware,
     in the engine slot of the device. The table is keyed by the stock firmware."""
     entry = digi_env.fast_table().get(state["stock"], {})
@@ -179,6 +187,7 @@ def cell_env(state: dict, label: str, add: dict, remove: dict) -> dict[str, str]
     env.update(
         digi_env.slot_env(state["device"], {k: v for k, v in lists.items() if v})
     )
+    env.update((extra or {}).get(label, {}))
     return env
 
 
@@ -205,6 +214,13 @@ def run_cell(
     sc = json.loads((folder / "report.json").read_text())["scenarios"][0]
     cpu, tiers, audio = sc["cpu"], sc["dsp_instructions"], sc["audio_seconds"]
     dump = pathlib.Path(sc["dsp_dump"]["path"])
+    cf_state = sc.get("state_sha256")
+    if not cf_state:
+        if sc.get("state_digest_error"):
+            raise RuntimeError(f"CF digest unavailable: {sc['state_digest_error']}")
+        raise RuntimeError(
+            "binary has no state_sha256 (older than the CF state digest, plan item PR 0 of docs/plans/emulator-core-split.md)"
+        )
     return {
         "audio_s": audio,
         "insns": cpu["dsp_thread_insns_per_audio_s"] * audio,
@@ -213,6 +229,7 @@ def run_cell(
         "rtf": sc.get("real_time_factor"),
         "pcm": sc["pcm"]["sha256"],
         "state": hashlib.sha256(dump.read_bytes()).hexdigest(),
+        "cf_state": cf_state,
     }
 
 
@@ -238,7 +255,7 @@ def state_table(
     lines = [
         f"== {state['name']} ({state['device']}, {scenario}), lengths {lengths} s, "
         "steady state per audio s ==",
-        head + "   B/A insns   rtf per length   parity (pcm/state per length)",
+        head + "   B/A insns   rtf per length   parity (pcm/dsp/cf per length)",
     ]
     data = {}
     base = None
@@ -249,7 +266,7 @@ def state_table(
         par = []
         for n, r in zip(lengths, rs, strict=True):
             a = runs[(ref, n)]
-            same = (r["pcm"] == a["pcm"], r["state"] == a["state"])
+            same = tuple(r[k] == a[k] for k in ("pcm", "state", "cf_state"))
             ok &= all(same)
             par.append(f"{n:g}s:" + "/".join("=" if x else "DIFF" for x in same))
         lines.append(
@@ -283,6 +300,7 @@ def main() -> int:
     )
     ap.add_argument("--roots-add", action="append", default=[], metavar="LABEL:ADDR")
     ap.add_argument("--roots-remove", action="append", default=[], metavar="LABEL:ADDR")
+    ap.add_argument("--env", action="append", default=[], metavar="LABEL:NAME=VALUE")
     ap.add_argument("--out", help="default: out/runs/sharc-cells/<timestamp>")
     ap.add_argument("--json", action="store_true", help="also print the JSON data")
     args = ap.parse_args()
@@ -305,6 +323,13 @@ def main() -> int:
             if label not in labels or not addr:
                 sys.exit(f"expected LABEL:ADDR with a known label, got {item!r}")
             dest[label].append(addr)
+    extra_env: dict[str, dict[str, str]] = defaultdict(dict)
+    for item in args.env:
+        label, _, setting = item.partition(":")
+        name, eq, value = setting.partition("=")
+        if label not in labels or not eq or not name:
+            sys.exit(f"expected LABEL:NAME=VALUE with a known label, got {item!r}")
+        extra_env[label][name] = value
     states = [load_state(n) for n in args.state]
     out = (
         pathlib.Path(args.out)
@@ -349,7 +374,7 @@ def main() -> int:
 
     def work(job):
         key, path, st, scen, n, folder = job
-        env = cell_env(st, key[1], add, remove)
+        env = cell_env(st, key[1], add, remove, extra_env)
         if key[2] == "cov":
             env |= {"SHARC_FAST_COV": "1", "SHARC_FAST_LOG": "summary"}
         t0 = time.time()
@@ -403,7 +428,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, indent=1))
     if not ok:
-        print("\nFAILED: a run failed or PCM/state differs from the first label")
+        print("\nFAILED: a run failed or PCM/DSP/CF state differs from the first label")
     return 0 if ok else 1
 
 

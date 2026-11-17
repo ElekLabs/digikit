@@ -31,21 +31,20 @@
 //!   AUDIO_BUFFER=SECONDS: hold the audio back until that much has been
 //!   produced, then play it in real time (implies AUDIO=1); at the end of the
 //!   run whatever is left is played out. No device: a message, the run goes on.
-//! Build: SHARC_GEN_DIR=<generated dir> cargo build --release --features sharc
-//!   [,play] --example sharc_live
+//! Build: SHARC_GEN_DIR=<generated dir> cargo build --release -p sharc-peer
+//!   --features host[,play] --example sharc_live
 //! The DSP state is a mid-run continuation, so it does not match the
 //! ColdFire's boot-time view of the link; see the findings notes.
 
+#[path = "../../boot/examples/common/mod.rs"]
 mod common;
 
-use elektron_native_boot::{
-    Emulator,
-    sharc_peer::{
-        DEFAULT_PERIOD, DN2_IDLE, DT2_IDLE, NativeDsp, SharcPeer, Shared, SharedDsp,
-        ThreadedHandle, ThreadedPeer, open_engine_patched,
-    },
-};
+use elektron_native_boot::Emulator;
 use sha2::{Digest, Sha256};
+use sharc_peer::{
+    DEFAULT_PERIOD, IdleLoop, NativeDsp, SharcPeer, Shared, SharedDsp, ThreadedHandle,
+    ThreadedPeer, open_engine_patched,
+};
 use std::{cell::RefCell, rc::Rc};
 use std::{env, fs, io::Write, time::Instant};
 
@@ -206,16 +205,16 @@ fn main() {
         _ => state,
     };
 
-    let idle = if env::var("DSP_DEVICE").as_deref() == Ok("dt2") {
-        DT2_IDLE
-    } else {
-        DN2_IDLE
-    };
+    let idle = IdleLoop::for_device(&env::var("DSP_DEVICE").unwrap_or_else(|_| "dn2".into()))
+        .expect("DSP profile");
     let threaded = env::var("DSP_THREAD").as_deref() == Ok("1");
     let (peer, dsp, shared): (Box<dyn periph::dspi::Peer>, DspCtl, _) = if threaded {
         let (image, state) = (image.clone(), state.clone());
         let (p, h, sh) = ThreadedPeer::spawn(
-            move || open_engine_patched(&image, &state, base, None, idle).map(NativeDsp),
+            move || {
+                open_engine_patched(&sharc_gen::CORE, &image, &state, base, None, idle)
+                    .map(NativeDsp)
+            },
             period,
             idle.range,
         )
@@ -226,7 +225,8 @@ fn main() {
         (p.boxed(), DspCtl::Worker(h), sh)
     } else {
         let d = SharedDsp::new(
-            open_engine_patched(&image, &state, base, None, idle).expect("DSP engine"),
+            open_engine_patched(&sharc_gen::CORE, &image, &state, base, None, idle)
+                .expect("DSP engine"),
         );
         if env::var_os("DSP_PROFILE").is_some() {
             // The interpreter profile for tools/sharc_dev/sharc_rsgen.py (option 26).

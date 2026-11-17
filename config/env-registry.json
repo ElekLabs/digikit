@@ -79,7 +79,7 @@
   },
   "DIGI_COUPLED_FEATURES": {
    "owner": "python:tools/devtools",
-   "purpose": "Cargo features of the coupled-run build (default coupled-audio)"
+   "purpose": "Cargo features of the coupled-run build (default sharc,play)"
   },
   "DIGI_COUPLED_FIXTURES": {
    "owner": "rust:apps/desktop",
@@ -840,6 +840,34 @@
   "DIGI_TRANSFER_DIR": {
    "owner": "python:tools/device",
    "purpose": "Folder for the packed .dkm files and the failed-pack record of dktransfer (default out/patch/transfer); a test run sets one inside its run directory."
+  },
+  "DIGI_SHARC_CORE_LIB_DN2": {
+   "owner": "rust:packages/emulator/sharc-peer",
+   "purpose": "Path of the DN2 core library (sharc-core-lib) that the host loads instead of its static core; verify_build writes it to dist/daemons.json"
+  },
+  "DIGI_SHARC_CORE_STORE": {
+   "owner": "python:tools/devtools",
+   "purpose": "Directory of the core library store instead of <git common dir>/sharc-core-cache (tests only)"
+  },
+  "SHARC_GEN_ENV_SUFFIX": {
+   "owner": "rust:packages/emulator/sharc-gen",
+   "purpose": "Build-time: the suffix of the region-list variables of the core (set by its build script)"
+  },
+  "SHARC_RT_FLAGS": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (build flags) that the core library header carries"
+  },
+  "SHARC_RT_RUSTC": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (rustc version) that the core library header carries"
+  },
+  "SHARC_RT_SRC_SHA256": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (source hash) that the core library header carries"
+  },
+  "SHARC_RT_TARGET": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (target triple) that the core library header carries"
   }
  },
  "prefixes": {
@@ -850,6 +878,7 @@
  "not_env": {
   "DIGI_X": "Placeholder name in tests/devtools/test_render_cache.py.",
   "SHARC_DIR": "Not an environment variable: Python constant for out/sharcdb in tools/coldfire/fw.py:42, patched in tests.",
-  "SHARC_VISA": "unclear: see tests/coldfire/test_ghidraq.py:226 (a Ghidra address space name, not an environment variable)"
+  "SHARC_VISA": "unclear: see tests/coldfire/test_ghidraq.py:226 (a Ghidra address space name, not an environment variable)",
+  "DIGI_SHARC_CORE_DN2": "Placeholder key of a pinned daemons.json in tests/devtools/test_core_store.py."
  }
 }

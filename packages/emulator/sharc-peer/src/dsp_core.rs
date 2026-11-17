@@ -1,11 +1,11 @@
 //! Which generated DSP core runs a firmware's DSP.
 //!
-//! A build holds one generated core (`SHARC_GEN_DIR`), or two with the `second-core` feature
-//! (`SHARC_GEN_DIR_2` is the second one's slot; the names do not say which device a core is for).
-//! Each core knows the DSP image it was made for (`dn2-1.11`, `dt2-1.16`), and the core whose image
-//! name starts with the firmware's device id runs that firmware's DSP. A device without a core of
-//! its own gets the first core, as a single-core build always did (the image's blocks then do not
-//! match and the engine interprets).
+//! A build holds one generated core (`SHARC_GEN_DIR`, `sharc_gen::CORE`), or two with the `second-core`
+//! feature (`SHARC_GEN_DIR_2` is the second one's slot, `sharc_gen_2::CORE`; the names do not say which
+//! device a core is for). Each core knows the DSP image it was made for (`dn2-1.12`, `dt2-1.17`), and the
+//! core whose image name starts with the firmware's device id runs that firmware's DSP. A device without
+//! a core of its own gets the first core, as a single-core build always did (the image's blocks then do
+//! not match and the engine interprets). One engine runs either core: the core is the value passed to it.
 
 use std::{
     cell::RefCell,
@@ -13,40 +13,40 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use elektron_native_boot::{
-    dsp_patch::DspPatch,
-    sharc_peer::{DspEngine, IdleLoop, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched},
-};
+use crate::dsp_patch::DspPatch;
+use crate::{DspEngine, IdleLoop, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched};
+use sharc_native::GenCore;
 
-/// The generated core a DSP session runs on.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Core {
-    First,
+/// The static core for a device id (`dn2`, `dt2`): the one made for that device's image.
+fn static_core_for_device(device: &str) -> &'static GenCore {
     #[cfg(feature = "second-core")]
-    Second,
+    if !sharc_gen::CORE.image.starts_with(device) && sharc_gen_2::CORE.image.starts_with(device) {
+        return &sharc_gen_2::CORE;
+    }
+    let _ = device;
+    &sharc_gen::CORE
 }
 
-impl Core {
-    /// The core for a device id (`dn2`, `dt2`): the one made for that device's image.
-    pub fn for_device(device: &str) -> Self {
-        #[cfg(feature = "second-core")]
-        if !sharc_native::gen_image_name().starts_with(device)
-            && sharc_native_2::gen_image_name().starts_with(device)
-        {
-            return Self::Second;
-        }
-        let _ = device;
-        Self::First
+/// The core for a device id (`dn2`, `dt2`): the static core made for that device's image, or, when
+/// `DIGI_SHARC_CORE_LIB_<DEV>` (`DIGI_SHARC_CORE_LIB_DN2`) names a core library
+/// (`packages/emulator/sharc-core-lib`), the core loaded from it. The library is refused unless its
+/// header equals the host's (`sharc_native::core_lib::load`) and its image is the one the static core
+/// would have served.
+pub fn core_for_device(device: &str) -> Result<&'static GenCore, String> {
+    let served = static_core_for_device(device);
+    let var = format!("DIGI_SHARC_CORE_LIB_{}", device.to_ascii_uppercase());
+    let Some(path) = std::env::var_os(&var).filter(|p| !p.is_empty()) else {
+        return Ok(served);
+    };
+    let core = sharc_native::core_lib::load(std::path::Path::new(&path), served.env_suffix)
+        .map_err(|e| format!("{var}: {e}"))?;
+    if core.image != served.image {
+        return Err(format!(
+            "{var}: the library is for DSP image {}, {device} runs {}",
+            core.image, served.image
+        ));
     }
-
-    /// The name of the DSP image the core was made for.
-    pub fn image_name(self) -> &'static str {
-        match self {
-            Self::First => sharc_native::gen_image_name(),
-            #[cfg(feature = "second-core")]
-            Self::Second => sharc_native_2::gen_image_name(),
-        }
-    }
+    Ok(core)
 }
 
 /// Everything `open_engine_patched` needs; it runs on the worker thread.
@@ -60,7 +60,7 @@ pub struct EngineInputs {
 
 /// The DSP worker of `core`, with its DSPI2 peer.
 pub fn spawn_dsp(
-    core: Core,
+    core: &'static GenCore,
     inputs: EngineInputs,
     period: u32,
     link_timing: bool,
@@ -73,43 +73,18 @@ pub fn spawn_dsp(
         patch,
         idle,
     } = inputs;
-    match core {
-        Core::First => {
-            if fast_tier {
-                sharc_fast_cl::register();
-            }
-            ThreadedPeer::spawn_with_timing(
-                move || {
-                    open_engine_patched(&image, &state, clock_base, patch.as_ref(), idle)
-                        .map(elektron_native_boot::sharc_peer::NativeDsp)
-                },
-                period,
-                idle.range,
-                link_timing,
-            )
-        }
-        #[cfg(feature = "second-core")]
-        Core::Second => {
-            if fast_tier {
-                sharc_fast_cl_2::register();
-            }
-            ThreadedPeer::spawn_with_timing(
-                move || {
-                    elektron_native_boot::sharc_peer::second::open_engine_patched(
-                        &image,
-                        &state,
-                        clock_base,
-                        patch.as_ref(),
-                        idle,
-                    )
-                    .map(elektron_native_boot::sharc_peer::second::NativeDsp)
-                },
-                period,
-                idle.range,
-                link_timing,
-            )
-        }
+    if fast_tier {
+        sharc_fast_cl::register();
     }
+    ThreadedPeer::spawn_with_timing(
+        move || {
+            open_engine_patched(core, &image, &state, clock_base, patch.as_ref(), idle)
+                .map(crate::NativeDsp)
+        },
+        period,
+        idle.range,
+        link_timing,
+    )
 }
 
 /// Instruction budget of the cold DSP initialization, in place of a wall limit
@@ -120,35 +95,33 @@ const COLD_INIT_LIMIT: u64 = 800_000_000;
 /// Initialize a changed DSP before attaching the ColdFire. Exporting here keeps
 /// the worker's restore path ordinary: its input has no patch left to apply.
 pub fn initialize_cold_dsp(
-    core: Core,
+    core: &'static GenCore,
     inputs: EngineInputs,
     cancel: &AtomicBool,
     progress: impl FnMut(u64),
 ) -> Result<EngineInputs, String> {
-    validate_cold_state(&inputs.image, &inputs.state, inputs.idle)?;
-    let mut engine: Box<dyn DspEngine> = match core {
-        Core::First => Box::new(elektron_native_boot::sharc_peer::NativeDsp(
-            open_engine_patched(&inputs.image, &inputs.state, 0, None, inputs.idle)?,
-        )),
-        #[cfg(feature = "second-core")]
-        Core::Second => Box::new(elektron_native_boot::sharc_peer::second::NativeDsp(
-            elektron_native_boot::sharc_peer::second::open_engine_patched(
-                &inputs.image,
-                &inputs.state,
-                0,
-                None,
-                inputs.idle,
-            )?,
-        )),
-    };
+    validate_cold_state(core, &inputs.image, &inputs.state, inputs.idle)?;
+    let mut engine: Box<dyn DspEngine> = Box::new(crate::NativeDsp(open_engine_patched(
+        core,
+        &inputs.image,
+        &inputs.state,
+        0,
+        None,
+        inputs.idle,
+    )?));
     finish_cold_initialization(inputs, engine.as_mut(), cancel, progress)
 }
 
-fn validate_cold_state(image: &[u8], state: &[u8], idle: IdleLoop) -> Result<(), String> {
+fn validate_cold_state(
+    core: &'static GenCore,
+    image: &[u8],
+    state: &[u8],
+    idle: IdleLoop,
+) -> Result<(), String> {
     // Validate before open_engine_patched concretises unknown memory or applies
     // the patch. A cold.state is canonical reset state, with no executed stores.
-    let mut raw =
-        sharc_native::Engine::from_image(image).map_err(|e| format!("DSP image error {e}"))?;
+    let mut raw = sharc_native::Engine::from_image(image, core)
+        .map_err(|e| format!("DSP image error {e}"))?;
     raw.import(state)
         .map_err(|e| format!("invalid raw DSP cold.state ({e}); regenerate ready inputs with `mise run emu:ready -- <device> --force`"))?;
     let s = &raw.s;
@@ -292,24 +265,24 @@ mod tests {
 
     #[test]
     fn raw_state_validation_rejects_initialized_or_malformed_inputs() {
-        let mut raw = sharc_native::Engine::from_image(&[]).unwrap();
+        let mut raw = sharc_native::Engine::from_image(&[], &sharc_gen::CORE).unwrap();
         raw.s.pc_sw = 42;
-        validate_cold_state(&[], &raw.export(), IDLE).unwrap();
+        validate_cold_state(&sharc_gen::CORE, &[], &raw.export(), IDLE).unwrap();
         raw.s.pc_sw = 10;
         assert!(
-            validate_cold_state(&[], &raw.export(), IDLE)
+            validate_cold_state(&sharc_gen::CORE, &[], &raw.export(), IDLE)
                 .unwrap_err()
                 .contains("already initialized")
         );
         raw.s.pc_sw = 42;
         raw.poke_raw(0x2000_0000, &[1]);
         assert!(
-            validate_cold_state(&[], &raw.export(), IDLE)
+            validate_cold_state(&sharc_gen::CORE, &[], &raw.export(), IDLE)
                 .unwrap_err()
                 .contains("already initialized")
         );
         assert!(
-            validate_cold_state(&[], b"DT2DSP01", IDLE)
+            validate_cold_state(&sharc_gen::CORE, &[], b"DT2DSP01", IDLE)
                 .unwrap_err()
                 .contains("regenerate ready inputs")
         );

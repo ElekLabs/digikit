@@ -45,7 +45,7 @@ from tools.emulator import digi_env, native_pgo, native_target  # noqa: E402
 from tools.firmware import device as device_files  # noqa: E402
 
 TOOLCHAIN = digi_env.TOOLCHAIN
-DEFAULT_FEATURES = "coupled-audio"
+DEFAULT_FEATURES = "sharc,play"
 FEATURES = os.environ.get("DIGI_COUPLED_FEATURES", DEFAULT_FEATURES)
 BINARY_NAME = "coupled-run"
 BISECT_DIR = ROOT / "out" / "native" / "bisect"
@@ -885,6 +885,13 @@ def cmd_test_quick(args) -> int:
              "--lib", "--target-dir", str(nogen)],
         ),
         (
+            "packages/emulator/sharc-peer",
+            {**base_env, "SHARC_GEN_DIR": str(gen)},
+            ["--manifest-path", "packages/emulator/sharc-peer/Cargo.toml",
+             "--features", "second-core" if "second-core" in FEATURES.split(",") else "host",
+             "--lib", "--target-dir", str(prod)],
+        ),
+        (
             "packages/emulator/coupled",
             {**base_env, "SHARC_GEN_DIR": str(gen)},
             ["--manifest-path", "packages/emulator/coupled/Cargo.toml",
@@ -915,7 +922,7 @@ def cmd_gates(args) -> int:
     command = cargo(
         [
             "test", "--release", "-p", "digi-coupled",
-            "--features", "coupled-audio", "--lib",
+            "--features", "sharc,play", "--lib",
             "--target-dir", str(native_target.target_dir(gen)), "--locked",
             "gate_tests", "--", "--ignored", *args.extra,
         ]

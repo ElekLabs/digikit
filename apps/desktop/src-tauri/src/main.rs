@@ -48,7 +48,7 @@ struct Launch {
 }
 
 fn parse_args() -> Result<StartupArgs, String> {
-    cli::parse_values(std::env::args_os().skip(1), cfg!(feature = "coupled-audio"))
+    cli::parse_values(std::env::args_os().skip(1), cfg!(feature = "sharc"))
 }
 
 async fn send(
@@ -515,7 +515,7 @@ fn load_startup(
 }
 
 fn main() {
-    #[cfg(feature = "coupled-audio")]
+    #[cfg(feature = "sharc")]
     if std::env::args_os()
         .nth(1)
         .is_some_and(|a| a == "--pgo-train")
@@ -756,7 +756,7 @@ mod cli_tests {
     fn parse(args: &[&str]) -> Result<StartupArgs, String> {
         cli::parse_values(
             args.iter().map(std::ffi::OsString::from),
-            cfg!(feature = "coupled-audio"),
+            cfg!(feature = "sharc"),
         )
     }
 
@@ -883,7 +883,7 @@ mod cli_tests {
     }
 
     #[test]
-    fn audio_status_validates_session_and_reports_no_coupled_audio_as_null() {
+    fn audio_status_validates_session_and_reports_no_sharc_audio_as_null() {
         let (handle, controller) = spawn(Config::new(None));
         let sender = handle.sender().clone();
         let (missing_reply, missing_response) = mpsc::channel();

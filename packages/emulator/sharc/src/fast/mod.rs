@@ -54,6 +54,7 @@ pub mod lower;
 pub mod plugin;
 pub mod region;
 
+use crate::GenCore;
 use crate::rt::St;
 use ir::*;
 use std::sync::Mutex;
@@ -660,7 +661,7 @@ pub fn default_backend() -> Box<dyn KernelBackend> {
     if let Some(f) = *BACKEND.lock().unwrap() {
         return f();
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if let Ok(path) = std::env::var("SHARC_FAST_BACKEND") {
         match plugin::PluginBackend::open(&path) {
             Ok(b) => return Box::new(b),
@@ -1981,16 +1982,16 @@ impl FastTier for FastEngine {
     }
 }
 
-/// The environment variable of the fast-tier region lists for this engine instance: regions and cluster roots
-/// are addresses in one device's DSP image, so the second instance (`sharc_second`, the second generated core)
+/// The environment variable of the fast-tier region lists for a generated core: regions and cluster roots
+/// are addresses in one device's DSP image, so a core with an `env_suffix` (the second core of a build)
 /// reads its own, `SHARC_FAST_REGIONS_2` and `SHARC_BLOCKTRANS_2`.
-const fn region_env(first: &'static str, second: &'static str) -> &'static str {
-    if cfg!(sharc_second) { second } else { first }
+fn region_env(base: &str, core: &GenCore) -> String {
+    format!("{base}{}", core.env_suffix)
 }
 
 /// `SHARC_BLOCKTRANS=0xb8276c,...` (hex cluster roots).
-pub fn blocktrans_roots() -> Vec<u32> {
-    parse_regions(region_env("SHARC_BLOCKTRANS", "SHARC_BLOCKTRANS_2"))
+pub fn blocktrans_roots(core: &GenCore) -> Vec<u32> {
+    parse_regions(&region_env("SHARC_BLOCKTRANS", core))
 }
 
 fn parse_regions(name: &str) -> Vec<u32> {
@@ -2008,8 +2009,9 @@ fn parse_regions(name: &str) -> Vec<u32> {
 
 /// `SHARC_FAST_REGIONS=0x1c399a,...` (hex entry PCs) as a fast tier.
 /// `SHARC_FAST_AUTO=threshold,min_insns[,blocks]` adds run-time selection.
-pub fn from_env() -> Option<FastEngine> {
-    let name = region_env("SHARC_FAST_REGIONS", "SHARC_FAST_REGIONS_2");
+pub fn from_env(core: &GenCore) -> Option<FastEngine> {
+    let name = region_env("SHARC_FAST_REGIONS", core);
+    let name = name.as_str();
     let mut text = std::env::var(name).unwrap_or_default();
     // `@FILE`: the PC list (hex, separated by commas or white space) is in FILE
     // (a program database's blocks or instructions do not fit in the environment).
@@ -2024,11 +2026,8 @@ pub fn from_env() -> Option<FastEngine> {
         .filter_map(|x| u32::from_str_radix(x.trim().trim_start_matches("0x"), 16).ok())
         .collect();
     let auto = auto_config();
-    let roots = blocktrans_roots();
-    let fallback = parse_regions(region_env(
-        "SHARC_FAST_FALLBACK_REGIONS",
-        "SHARC_FAST_FALLBACK_REGIONS_2",
-    ));
+    let roots = blocktrans_roots(core);
+    let fallback = parse_regions(&region_env("SHARC_FAST_FALLBACK_REGIONS", core));
     if pcs.is_empty() && auto.is_none() && roots.is_empty() && fallback.is_empty() {
         return None;
     }

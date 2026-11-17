@@ -162,7 +162,7 @@ function build(features, targetDirPath, env, dest) {
   const command = [
     'build',
     '--manifest-path',
-    'packages/emulator/boot/Cargo.toml',
+    'packages/emulator/wasm-core/Cargo.toml',
     '--locked',
     '--offline',
     '--release',
@@ -176,7 +176,7 @@ function build(features, targetDirPath, env, dest) {
   if (!run('cargo', command, { cwd: ROOT, env })) {
     die('WASM build failed; install wasm32-unknown-unknown for the pinned Rust toolchain');
   }
-  fs.copyFileSync(path.join(targetDirPath, 'wasm32-unknown-unknown/release/elektron_native_boot.wasm'), dest);
+  fs.copyFileSync(path.join(targetDirPath, 'wasm32-unknown-unknown/release/digi_wasm_core.wasm'), dest);
 }
 
 const WASM_FEATURE_FLAGS = [

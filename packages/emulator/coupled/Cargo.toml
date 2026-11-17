@@ -12,15 +12,15 @@ description = "Coupled ColdFire + SHARC+ run loop shared by the desktop app and 
 name = "digi_coupled"
 
 [features]
-# Local-only DN2 coupling: generated DSP code must never be distributed.
-coupled-audio = ["cf-audio", "elektron-native-boot/sharc", "dep:sharc-fast-cl", "dep:sharc-native"]
-# Audio output of a ColdFire-only emulation (a device with `[emulator.peer_audio]`): the PCM goes to the same player as the DSP session.
-cf-audio = ["elektron-native-boot/play"]
-# A second generated core (SHARC_GEN_DIR_2) next to the first: the firmware's device picks the core
-# (src/dsp_core.rs). Implies coupled-audio.
-second-core = ["coupled-audio", "elektron-native-boot/second-core", "dep:sharc-native-2", "dep:sharc-fast-cl-2"]
-# Enable this with coupled-audio; it forwards to the optional native cores.
-region-profile = ["sharc-native?/region-profile", "sharc-native-2?/region-profile"]
+# Local-only SHARC+ coupling: generated DSP code must never be distributed.
+sharc = ["sharc-peer/host", "dep:sharc-native"]
+# Playback through the default output device (cpal).
+play = ["elektron-native-boot/play"]
+# A second generated core (SHARC_GEN_DIR_2, crate sharc-gen-2) next to the first: the firmware's device
+# picks the core (sharc-peer src/dsp_core.rs). Implies `sharc` and `play`.
+second-core = ["sharc", "play", "sharc-peer/second-core"]
+# Enable this with `sharc`; it forwards to the optional native cores.
+region-profile = ["sharc-native?/region-profile"]
 # Exact ColdFire instruction mix per PC (boot/src/cfmix.rs); DIGI_CF_MIX_OUT=DIR makes coupled-run write it.
 cf-mix = ["elektron-native-boot/cf-mix"]
 # SHARC_FAST_DUMP kernel and call capture (--diag dump); the hooks are absent otherwise.
@@ -32,12 +32,10 @@ elektron-native-boot = { path = "../boot" }
 emmc-card = { path = "../card" }
 serde_json = "1"
 sha2 = "0.10"
-sharc-fast-cl = { path = "../sharc-fast-cl", optional = true }
+sharc-peer = { path = "../sharc-peer" }
 sharc-native = { path = "../sharc", optional = true }
-sharc-native-2 = { path = "../sharc-2", optional = true }
-sharc-fast-cl-2 = { path = "../sharc-fast-cl-2", optional = true }
 
 [[bin]]
 name = "coupled-run"
 path = "src/bin/coupled_run.rs"
-required-features = ["coupled-audio"]
+required-features = ["sharc"]

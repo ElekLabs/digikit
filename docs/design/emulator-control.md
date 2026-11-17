@@ -214,7 +214,7 @@ and stop on `PcmPlayer` **[O]**; `dspi_log` and `dsp_watch` via a new worker
 (decoded SHA-256) and picks the cheapest way (**built**):
 
 1. Same MAIN, DSP stream changed (the dev loop): no restart. The two boot
-   streams are loaded as memory (`elektron_native_boot::dsp_stream`, the Rust
+   streams are loaded as memory (`sharc_peer::dsp_stream`, the Rust
    twin of `tools/sharc_dev/sharcldr.py`), the changed bytes become `BYTES` patch
    operations, and the DSP worker applies them between two frames
    (`Msg::Patch`; the report carries `at_frame`). The engine's code-identity

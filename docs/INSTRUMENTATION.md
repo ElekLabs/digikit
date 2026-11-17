@@ -592,7 +592,7 @@ a channel by calling `dk_sink_set(channel, sink)` (an import, runtime 0.7.1). Th
 
 ## MIDI input and output, panel scripts, safety runs (ColdFire, native)
 
-Finding 25. `regions_probe` (`packages/emulator/boot/examples/regions_probe.rs`, built by
+Finding 25. `regions_probe` (`packages/emulator/sharc-peer/examples/regions_probe.rs`, built by
 `tools/coldfire/regions.py probe_binary`) takes, besides the options of `regions.py confirm`:
 
 | option | effect |
@@ -675,7 +675,7 @@ node tools/devtools/wb.mjs profile spans --out out/try/spans.profile.json
 
 **Profile pane (desktop workbench).** The Profile tab of the right-hand column (Emulator page and Remote page; `apps/desktop/ui/src/ProfilePanel.tsx`) shows the same span counters live. Start resets the counters and starts the spans (`PROFILE_STATE`); on the emulator it also starts `sharc.profile` and takes a `cf.profile` baseline, so one button records spans and instruction profiles, and on a device it records spans only. While the tab is shown and the target records, the pane reads once per second (`profileAll`, one read at a time). Shares are `sum_ticks / elapsed`: `PROFILE_STATE` reports the elapsed ticks of the span clock (a u64 after the row count; the module adds the 32-bit counter difference at every UI pass and every `PROFILE_STATE`, so one read per wrap period, about 32.5 s at 132 MHz, keeps it exact). The graph keeps the last 60 readings, coloured by the owner type (machine, effect, tool, runtime). A maximum of at least 100 µs and more than 4 times the mean shows red. The DSP section on the emulator lists the modules' instructions per DSP block against the device headroom (`DSP_COST` of CAPACITY), from `sharc.profile` named with the maps of the running image; on a device it shows the whole-block load of the newest HEALTH event. Export writes one `dk.profile/1` (spans, `cf.profile`, `sharc.profile`) with the same builder as `wb profile` (`packages/workbench-core/src/profile/profile-artifact.ts`); Open profile… shows the shares of an exported file as one more column. Phase names come from `[spans]` of `sdk/sdk.toml`. The poll set changes at run time (`dkrt_poll_add`), so the runtime records the owner of each slot (the module record whose code holds the function, or the firmware image) and `PROFILE_STATE` reports it with the function address (`dk_debug_poll`); a row reads `<module> poll` or `runtime poll`, with `: <function>` when the address maps name the function (the Log pane's maps), and `poll N` only when the debug module is too old to say. Without the debug module the pane offers to add it (Transfer upload, one restart). `node tools/devtools/ui_shots.mjs profile-emulator profile-device profile-nodebug` draws the three states over the preview (`preview/profile-backend.mock.ts`; the first two take a minute for the 60 s graph).
 
-**DSP profile (`--cpu sharc`).** A daemon built with `--features sharc-profile` (a DSP core, as for `coupled-audio`) answers `sharc.profile` ([CONTROL.md](CONTROL.md)).
+**DSP profile (`--cpu sharc`).** A daemon built with `--features sharc-profile` (it implies `sharc` and `play`: a DSP core and its audio output) answers `sharc.profile` ([CONTROL.md](CONTROL.md)).
 `wb profile record --cpu sharc --seconds N --out FILE [--image X.syx] [--run-dir DIR]` starts the counting, waits N seconds (a live emulator) and writes the counts as a profile
 (`clock.unit` `insn`, metrics `sharc.blocks`, `sharc.insn.*`, `sharc.coverage`); `--since-boot` skips the start and the wait and reads the counts since an earlier
 `sharc.profile {enable: true}` (a paused emulator). `wb profile report FILE --map SHIP.addrmap.json --map MODULE.addrmap.json --loads LOADS.json` names the DSP functions of a module and, with
@@ -693,7 +693,7 @@ The SHARC-only rig is a second producer of `dk.profile/1` (`tools/devtools/rig_p
 | crate | feature | effect |
 |---|---|---|
 | `packages/emulator/sharc` (`coupled`: same names) | `fast-dump` | `SHARC_FAST_DUMP` capture hooks |
-| | `region-profile` | per-entry wall time (`perf.py --regions`; needs `DIGI_COUPLED_FEATURES=coupled-audio,region-profile`) |
+| | `region-profile` | per-entry wall time (`perf.py --regions`; needs `DIGI_COUPLED_FEATURES=sharc,play,region-profile`) |
 | `packages/emulator/boot` | `cf-profile` | host-time and PC profile of ColdFire |
 | `packages/emulator/control` | `sharc-profile` | `sharc.profile`: DSP instruction counts per PC (turns on the engine's `region-profile`) |
 | | `diagnostic-profile`, `-events` | boot event records and profile |
