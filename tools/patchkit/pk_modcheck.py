@@ -281,24 +281,19 @@ def _measure(mid: str, devices: list[str]) -> dict[str, dict]:
                 str(patchkit.binary()),
                 _daemon(dev),
                 debug_dkm=dbg,
-                services=_bound_services(dev, Path(tmp)),
+                services=_bound_services(dev, Path(tmp), [out, dbg]),
             )
     return per
 
 
-def _bound_services(dev: str, tmp: Path) -> list[Path]:
-    """Pack the card services for DEV and bind them to the stock firmware, as the Nx targets `<id>:pack` and `<id>:bind` do (module:check needs no Nx output)."""
+def _bound_services(dev: str, tmp: Path, files: list[Path]) -> list[Path]:
+    """The card services that the packed FILES need, bound to the stock firmware (`patchkit services`; module:check needs no Nx output)."""
     from tools.patchkit import pk_services
 
-    services = pk_services.service_modules()
     return [
-        pk_services.bound_service(dev, services[name], tmp / "svc-bound" / dev)
-        for name in CARD_SERVICES
+        Path(s["bound_path"])
+        for s in pk_services.bound_services(dev, tmp / "svc-bound" / dev, files)
     ]
-
-
-# The services that are files of the card (`[[service]]` without `rust` in sdk.toml, loaded from services/<name>.dks): a machine or an effect needs them.
-CARD_SERVICES = ("machines", "fx")
 
 
 def _write_measured(

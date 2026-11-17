@@ -281,7 +281,7 @@ def prepare_store(
     shutil.rmtree(folder, ignore_errors=True)
     (folder / "digikit" / "modules").mkdir(parents=True)
     selected = []
-    explicit: set[str] = set()  # services named in the store
+    explicit: list[str] = []  # service modules named in the store
     for mid in ids:
         pick = mid.endswith(
             "*"
@@ -306,8 +306,10 @@ def prepare_store(
             spec = run_dir / f"{name}.toml"
             spec.write_text(f'name = "dev/{name}"\nbss = {int(bss) // 4 * 4}\n')
             pack_store("synth-dkm", spec, "--device", device, "-o", out)
-        elif pk_services.service_name(mid):  # a service is a bound file of the card
-            explicit.add(pk_services.service_name(mid))
+        elif pk_services.is_service(
+            device, mid
+        ):  # a service is a bound file of the card
+            explicit.append(mid)
             continue
         else:
             out = folder / "digikit" / "modules" / f"{mid.rpartition('/')[2]}.dkm"
@@ -323,20 +325,15 @@ def prepare_store(
         if pick:
             selected.append(f"modules/{out.name}")
     # the services of the card: those named, then those the packed modules need (as the device tests put them on the card)
-    wanted = sorted(
-        explicit
-        | set(
-            pk_services.needed_services((folder / "digikit" / "modules").glob("*.dkm"))
-        )
-    )
-    services = pk_services.service_modules()
-    for name in wanted:
-        bound = pk_services.bound_service(
-            device, services[name], ROOT / "out" / "cache" / "devreload-svc" / device
-        )
-        to = folder / "digikit" / pk_services.store_path(name)
+    for svc in pk_services.bound_services(
+        device,
+        ROOT / "out" / "cache" / "devreload-svc" / device,
+        files=sorted((folder / "digikit" / "modules").glob("*.dkm")),
+        modules=explicit,
+    ):
+        to = folder / "digikit" / svc["store_path"]
         to.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(bound, to)
+        shutil.copyfile(svc["bound_path"], to)
     files = {}
     for path in sorted(folder.rglob("*")):
         if path.is_file():

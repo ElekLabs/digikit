@@ -1001,3 +1001,19 @@ there should be **no** `MACHINE_FAULT` (the clamp in the routine prevents the ca
 
 Patched images were flashed to one Digitakt II (finding 47). Whether and when to flash again is the maintainer's decision, every time.
 The device on the desk is a Digitakt II on 1.17: the DT2 1.17 port is the one that has been run on hardware.
+
+### Which services a module needs
+
+`patchkit services --device SHORT [--firmware FW.syx --bind-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...` is the one rule for the card
+services of a module. A module that needs a service has a hard `NEEDS` item for its name hash in the header table of its `.dkm`. The service of a name is
+the module whose `module.toml` has `role = "service"` and `service = "NAME"`. The command prints one JSON line for each service that the files need or
+that `--module` (id) or `--service` (name) names, in name order. This is the format, not a captured run:
+
+```text
+{"service":"fx","module_id":"core/services/fx","store_path":"services/fx.dks"}
+```
+
+With `--firmware` and `--bind-dir` it also packs each service for the device, binds it to the stock image as `DIR/<name>.dks` and adds `bound_path`. A file
+whose `DIR/<name>.src.json` sidecar names the same packed bytes and image is kept; any other is bound again. The device tests, `dk:dev` and `module:check`
+all call it; the tests only ask which services (no `--bind-dir`) and take the bound file from the Nx target `<service id>:bind`. Its Rust tests are
+`packages/patchkit/tests/services.rs` (they skip without the m68k-elf toolchain).
