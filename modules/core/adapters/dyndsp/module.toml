@@ -47,6 +47,14 @@ _dd_vcount = "voices.count"
 _dd_exp2 = "_dv_exp2"
 _dd_frame_hw = "_dv_frame_hw"
 _dd_frame_sw = "_dv_frame_sw"
+# the table of a run-time DSP object's imports also holds the firmware addresses that core/dsp-voice's dispatch code uses (the anchors of its own object)
+_dv_table = "voices.rows"
+_fw_type_cache = "dsp.voice.value.type_cache"
+_fw_render_next = "dsp.voice.site.render_entry.next"
+_fw_frame = "dsp.voice.value.frame_base"
+_fw_param_rec = "dsp.voice.value.param_record_base"
+_fw_release_latch = "dsp.voice.value.release_latch"
+_fw_unpack = "dsp.voice.fn.track_unpack"
 
 [[object]]
 path = "build/dyndsp-dn2.dko.json"

@@ -114,6 +114,7 @@ export const pinned = (types: number[]): SynthVoice[] => types.map((type) => ({ 
 /** The loader's format limits (sdk/sdk.toml `[limits.format]`, tools/device/dkproto.py). */
 export const ARENA_HDR = 16; // the arena block's header
 export const DSP_GRANULE = 64; // the DSP area is handed out in granules
+export const DSP_SLOT_BYTES = 64; // window 0 of core/dsp-link starts with the slot block (DK_SLOT_BYTES): the area the runtime reports is that much shorter than `dsp_area_bytes`
 export const DKM_HEADER = 160;
 /** The header and the 8-byte header table of a module with no machine, effect or key, up to the next multiple of 16 (where the image starts). */
 export const DKM_FIXTURE_HEADER = DKM_HEADER + 16;
@@ -164,7 +165,7 @@ export function geometryOf(device: Device, plan: RuntimePlan): Geometry {
     device,
     arenaLo,
     arenaHi,
-    dspArea: profile.digikit.dsp_area_bytes,
+    dspArea: profile.digikit.dsp_area_bytes - DSP_SLOT_BYTES,
     dspBase,
     stageBytes: lim.stage_bytes!,
     arenaBytes: lim.arena_bytes!,

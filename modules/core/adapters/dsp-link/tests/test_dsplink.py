@@ -271,7 +271,7 @@ def test_dl_send_checks_its_arguments(machine, built):
     lk = link_of(built, r[0])
     assert (
         lk["state"] == 4
-        and lk["dst"] == 0x10
+        and lk["dst"] == 0x10 + 16  # window 0 starts with the 16 slot words
         and lk["nwords"] == 16
         and lk["buf"] == src
     )
@@ -280,8 +280,8 @@ def test_dl_send_checks_its_arguments(machine, built):
         [AREA, src, 63],  # length not a multiple of 4
         [AREA, src, 0],
         [AREA - 4, src, 64],  # before the area
-        [AREA + 0x80000, src, 4],  # after it
-        [AREA + 0x7FFFC, src, 8],  # runs over its end
+        [AREA + 0x7FFC0, src, 4],  # after it: the last 64 bytes of the 512 KiB are the slot block's place in window 0
+        [AREA + 0x7FFBC, src, 8],  # runs over its end
         [AREA, 0, 64],
     ]
     res = run(machine, built, {}, [call(built, "dl_send", a) for a in bad])
@@ -290,7 +290,7 @@ def test_dl_send_checks_its_arguments(machine, built):
         machine,
         built,
         {src: bytes(4)},
-        [call(built, "dl_send", [AREA + 0x7FFFC, src, 4])],
+        [call(built, "dl_send", [AREA + 0x7FFBC, src, 4])],
     )
     assert last[0].d0 == 0
 
@@ -471,8 +471,21 @@ def test_window_transfers_carry_the_window_and_refuse_bad_arguments(machine, bui
     w = tail_words(r[1].reads[1], 0x402, 174)
     assert w[0] == MAGIC | (0 << 16) | (2 << 30)
     assert (w[1] & 0x1FFFF, (w[1] >> 17) & 0xFF, (w[1] >> 25) & 1) == (5, 2, 1)
+    # window 0 words 0 to 15 are the slot block
+    r = run(
+        machine,
+        built,
+        {src: data},
+        [call(built, "dl_send_win", [0, 14, src, 8]), tick],
+    )
+    assert r[0].d0 == 0
+    w = tail_words(r[1].reads[1], 0x402, 174)
+    assert w[0] == MAGIC | (0 << 16) | (0 << 30)
+    assert (w[1] & 0x1FFFF, (w[1] >> 17) & 0xFF, (w[1] >> 25) & 1) == (14, 2, 1)
     bad = [
-        [0, 0, src, 8],  # window 0 is dl_send's
+        [0, 16, src, 4],  # window 0 through this call is the slot block: words 0 to 15
+        [0, 15, src, 8],  # crosses word 16
+        [0, 0, src, 68],
         [3, 0, src, 8],  # no window 3
         [1, 0, src, 0],
         [1, 0, src, 6],
