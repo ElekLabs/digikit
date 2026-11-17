@@ -186,7 +186,9 @@ pub extern "C" fn digi_result_len() -> usize {
 #[cfg(feature = "sharc")]
 mod coupled {
     use super::*;
-    use sharc_peer::{DEFAULT_PERIOD, RemoteDsp, SharcPeer, Shared, SharedDsp, open_dn2_engine};
+    use sharc_peer::{
+        DEFAULT_PERIOD, IdleLoop, RemoteDsp, SharcPeer, Shared, SharedDsp, open_engine,
+    };
     use std::rc::Rc;
 
     /// Header of the `.dsp` file `sharc_live` writes beside a coupled
@@ -233,10 +235,12 @@ mod coupled {
         } else {
             (DEFAULT_CLOCK_BASE, 0, dsp)
         };
-        let engine = open_dn2_engine(&sharc_gen::CORE, image, state, base)?;
+        let idle = IdleLoop::for_device("dn2")?;
+        let engine = open_engine(&sharc_gen::CORE, image, state, base, idle)?;
         let dsp_handle = SharedDsp::new(engine);
         ENGINE.with(|slot| *slot.borrow_mut() = Some(SharedDsp(dsp_handle.0.clone())));
-        let (peer, shared) = SharcPeer::new(dsp_handle, DEFAULT_PERIOD);
+        let (mut peer, shared) = SharcPeer::new(dsp_handle, DEFAULT_PERIOD);
+        peer.set_idle_range(idle.range);
         shared.borrow_mut().dsp_instructions = dsp_instructions;
         let mut emulator = Emulator::new(syx, None)?;
         // The coupled snapshots are taken with this lane on.
@@ -321,10 +325,12 @@ mod coupled {
             } else {
                 (DEFAULT_CLOCK_BASE, 0, dsp)
             };
-            let engine = open_dn2_engine(&sharc_gen::CORE, image, state, base)?;
+            let idle = IdleLoop::for_device("dn2")?;
+            let engine = open_engine(&sharc_gen::CORE, image, state, base, idle)?;
             let handle = SharedDsp::new(engine);
             ENGINE.with(|slot| *slot.borrow_mut() = Some(SharedDsp(handle.0.clone())));
-            let (peer, shared) = RemoteDsp::new(handle, DEFAULT_PERIOD);
+            let (mut peer, shared) = RemoteDsp::new(handle, DEFAULT_PERIOD);
+            peer.set_idle_range(idle.range);
             shared.borrow_mut().dsp_instructions = dsp_instructions;
             DSP_PEER.with(|slot| *slot.borrow_mut() = Some(peer));
             SHARED.with(|slot| *slot.borrow_mut() = Some(shared));

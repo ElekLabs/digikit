@@ -75,7 +75,7 @@
   },
   "DIGI_COUPLED_FEATURES": {
    "owner": "python:tools/devtools",
-   "purpose": "Cargo features of the coupled-run build (default coupled-audio)"
+   "purpose": "Cargo features of the coupled-run build (default sharc,play)"
   },
   "DIGI_COUPLED_FIXTURES": {
    "owner": "rust:apps/desktop",

@@ -28,7 +28,7 @@ def make(tmp_path: Path, **over: object) -> emud_key.EmudInputs:
         gen_dirs={"gen": gen},
         profdata=prof,
         rustc="rustc 1",
-        flags={"features": "coupled-audio"},
+        flags={"features": "sharc,play"},
     )
     for name, value in over.items():
         setattr(base, name, value)

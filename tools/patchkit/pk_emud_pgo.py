@@ -73,7 +73,7 @@ def build(device: str) -> Path:
         "cargo", "build", "--release", "--locked",
         "--manifest-path", "packages/emulator/control/Cargo.toml",
         "--bin", "digi-emud",
-        "--features", "coupled-audio",
+        "--features", "sharc,play",
         "--target", digi_env.TRIPLE,
         "--target-dir", str(target_dir(device)),
     ]  # fmt: skip

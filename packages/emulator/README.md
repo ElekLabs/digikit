@@ -46,7 +46,7 @@ root). The directory name is not always the package name; use the package name w
 | `packages/emulator/sharc-gen-2` | `sharc-gen-2` | The second core: the sources of `sharc-gen`, built on `SHARC_GEN_DIR_2` (see "Two cores in one binary"). Empty without that variable. |
 | `packages/emulator/sharc-fast-wasm` | `sharc-fast-wasm` | WebAssembly backend for the same IR, plus the V8 gate tools. |
 | `packages/emulator/live` | `live-audio` | Live audio output: SPSC ring, frame repeater, cpal callback. |
-| `packages/emulator/coupled` | `digi-coupled` | The coupled ColdFire + SHARC+ run loop shared by the app and `coupled-run`; the fixture gates. |
+| `packages/emulator/coupled` | `digi-coupled` | The coupled run loop shared by the app and `coupled-run`: `CoupledRuntime` over a `Companion` (the SHARC+ session `SharcCompanion`, the zero answerer or none) and one `AudioOut` (player, tap, capture, pacing); the fixture gates. Features `sharc` (the generated DSP core) and `play` (output device). |
 | `packages/emulator/control` | `digi-control` | Controller and control protocol (JSON-RPC over NDJSON); the `digi-emud` daemon. Design: `docs/design/emulator-control.md`. |
 | `apps/desktop/src-tauri` | `digiemu-desktop` | The desktop app (Tauri), a thin shell over `digi-control` and `digi-coupled`. |
 
@@ -162,7 +162,7 @@ old names (`desktop_runtime::coupled::tests::...`), with the same asserted hashe
 ```
 export SHARC_GEN_DIR=$PWD/out/native/dn2-audio/gen
 T=$(uv run python -m tools.emulator.native_target dir)
-cargo build --release --locked --target-dir "$T" -p digi-coupled --features coupled-audio --bin coupled-run
+cargo build --release --locked --target-dir "$T" -p digi-coupled --features sharc,play --bin coupled-run
 SHARC_FAST_REGIONS=0x1c399a,0x1c3862,0x1c364f,0x1c5765,0xb823db,0x1c1884,0x1cdcef,0x1c3030,0xb85347,0x1c1da8,0xb80509 "$T"/release/coupled-run \
   --syx firmware/Digitone_II_OS1.11.syx \
   --dsp-image out/snapshots/dn2-audio-ready-cold-2026-10-07/digi-audio-dn2-image.bin \

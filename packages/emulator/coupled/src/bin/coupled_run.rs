@@ -1591,7 +1591,7 @@ fn real_main() -> Result<bool, String> {
     let mut args = parse_args()?;
     if args.profile_regions && !cfg!(feature = "region-profile") {
         return Err(
-            "--profile-regions needs a diagnostic rebuild with --features coupled-audio,region-profile"
+            "--profile-regions needs a diagnostic rebuild with --features sharc,play,region-profile"
                 .into(),
         );
     }

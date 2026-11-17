@@ -1,5 +1,4 @@
 use super::*;
-use elektron_native_boot::pcm_play::PlaybackStats;
 use std::{cell::RefCell, rc::Rc};
 
 const PCM_CAPTURE_LIMIT: u64 = SOURCE_RATE as u64 * 2 * 10;
@@ -79,9 +78,9 @@ impl PcmSink for FakeSink {
     fn push(&self, pcm: &[f32]) {
         self.0.borrow_mut().pushed.push(pcm.to_vec());
     }
-    fn queue_state(&self) -> QueueState {
+    fn queue_state(&self) -> SinkQueue {
         let s = self.0.borrow();
-        QueueState {
+        SinkQueue {
             queued_device_frames: s.queued_device_frames,
             feeder_pending_source_frames: s.pending_source_frames,
             device_rate: 44_100,
@@ -89,8 +88,11 @@ impl PcmSink for FakeSink {
             rebuffering: s.underruns > 0,
         }
     }
-    fn stats(&self) -> PlaybackStats {
-        PlaybackStats::default()
+    fn stats(&self) -> SinkStats {
+        SinkStats {
+            json: serde_json::json!({"error": null}),
+            connected: true,
+        }
     }
     fn device(&self) -> String {
         "fake".into()
@@ -171,9 +173,11 @@ fn sink_underruns_follow_the_sink() {
     assert_eq!(out.sink_underruns(), Some(2));
 }
 
+#[cfg(feature = "play")]
 #[test]
 fn rebuffer_recovery_refills_to_the_buffer_length_inside_the_ring() {
     use crate::AudioMode;
+    use elektron_native_boot::pcm_play::{Mode, Recovery};
     let (mode, recovery) = player_settings(0.5, AudioMode::Rebuffer);
     assert!(matches!(mode, Mode::Buffer(s) if s == 0.5));
     assert!(matches!(recovery, Recovery::Rebuffer(s) if s == 0.5));
@@ -190,8 +194,10 @@ fn rebuffer_recovery_refills_to_the_buffer_length_inside_the_ring() {
     ));
 }
 
+#[cfg(feature = "play")]
 #[test]
 fn pace_target_and_refill_level_for_several_buffer_lengths() {
+    use elektron_native_boot::pcm_play::{Mode, Recovery};
     // After an underrun the player stays silent until `refill` seconds are queued. The controller
     // waits while `queue_ahead` is true, so the pace target should not lie below that level. This
     // holds for buffers of 0.2 s and more. For buffer 0 the pace (0.05) is below the refill (0.2);

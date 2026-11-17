@@ -42,7 +42,7 @@ mod common;
 use elektron_native_boot::Emulator;
 use sha2::{Digest, Sha256};
 use sharc_peer::{
-    DEFAULT_PERIOD, DN2_IDLE, DT2_IDLE, NativeDsp, SharcPeer, Shared, SharedDsp, ThreadedHandle,
+    DEFAULT_PERIOD, IdleLoop, NativeDsp, SharcPeer, Shared, SharedDsp, ThreadedHandle,
     ThreadedPeer, open_engine_patched,
 };
 use std::{cell::RefCell, rc::Rc};
@@ -205,11 +205,8 @@ fn main() {
         _ => state,
     };
 
-    let idle = if env::var("DSP_DEVICE").as_deref() == Ok("dt2") {
-        DT2_IDLE
-    } else {
-        DN2_IDLE
-    };
+    let idle = IdleLoop::for_device(&env::var("DSP_DEVICE").unwrap_or_else(|_| "dn2".into()))
+        .expect("DSP profile");
     let threaded = env::var("DSP_THREAD").as_deref() == Ok("1");
     let (peer, dsp, shared): (Box<dyn periph::dspi::Peer>, DspCtl, _) = if threaded {
         let (image, state) = (image.clone(), state.clone());

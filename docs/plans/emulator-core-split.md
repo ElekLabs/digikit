@@ -62,7 +62,11 @@ Rejected before: lower opt-level (opt 1: 2.5x the build CPU; opt 0: 100x slower 
 - PR 7: `AudioOut` (player, tap, capture, pacing; now in `coupled/src/lib.rs` 581-805) is the one audio output path.
 - PR 8: `coupled::Companion`; `CoupledRuntime` holds `Box<dyn Companion>` and one `AudioOut`. Methods: `kind() -> Kind`
   (`Kind::as_str` keeps "peer", "zero", "sharc", "responder", "none"), `sync()`, `poll(&mut Emulator, &mut AudioOut)`,
-  `halted()`, `export_state(&mut Emulator)`, `report(&Emulator)`, `as_any_mut()` for SHARC-only data.
+  `halted()`, `export_state(&mut Emulator)`, `report(&Emulator)`, `as_any()` and `as_any_mut()` for SHARC-only data, and
+  `step_begin()` (a timing mark before the ColdFire step, empty by default). `sync()` is the barrier only: the runtime
+  calls `poll` after it to push the PCM it completed. `SharcCompanion` lives in `coupled` (the trait takes `AudioOut`,
+  which is there; `sharc-peer` cannot depend on `coupled`). `Kind` has "sharc", "zero" and "none"; "peer" and "responder"
+  join it with their companions.
 - Scheduling stays outside the trait: the SHARC runs on a worker thread behind `periph::dspi::Peer` and `sync()` is its
   barrier; the Syntakt peer runs in lock step inside the board and `sync()` does nothing. No lock-step methods on main
   until the Syntakt rebase shows a second user.

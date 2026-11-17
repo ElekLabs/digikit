@@ -241,7 +241,7 @@ fn apply_overlay_sectors(
 }
 
 /// A digest of an overlay, for the key of a cached cold boot that started from it.
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn overlay_digest(sectors: &[emmc_card::CardOverlaySector]) -> Vec<u8> {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
@@ -798,28 +798,28 @@ fn no_firmware<T>() -> Result<T, RpcError> {
     Err(RpcError::no_firmware())
 }
 
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn frames(runtime: &Runtime) -> u64 {
     runtime.frames_sent()
 }
-#[cfg(not(feature = "coupled-audio"))]
+#[cfg(not(feature = "sharc"))]
 fn frames(_runtime: &Runtime) -> u64 {
     0
 }
 
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn dsp_halted(runtime: &Runtime) -> Option<String> {
     runtime.dsp_halted()
 }
-#[cfg(not(feature = "coupled-audio"))]
+#[cfg(not(feature = "sharc"))]
 fn dsp_halted(_runtime: &Runtime) -> Option<String> {
     None
 }
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn sink_underruns(runtime: &Runtime) -> Option<u64> {
     runtime.sink_underruns()
 }
-#[cfg(not(feature = "coupled-audio"))]
+#[cfg(not(feature = "sharc"))]
 fn sink_underruns(_runtime: &Runtime) -> Option<u64> {
     None
 }
@@ -3367,7 +3367,7 @@ impl Actor {
     }
 
     fn rpc_pcm_tap(&mut self, p: &Params) -> RpcResult {
-        #[cfg(feature = "coupled-audio")]
+        #[cfg(feature = "sharc")]
         {
             let action = p.opt_str("action")?.unwrap_or("report");
             self.with_runtime(|r| {
@@ -3412,7 +3412,7 @@ impl Actor {
                 }
             })
         }
-        #[cfg(not(feature = "coupled-audio"))]
+        #[cfg(not(feature = "sharc"))]
         {
             let _ = p;
             Err(RpcError::new(
@@ -3726,7 +3726,7 @@ impl Actor {
                     .as_ref()
                     .and_then(|l| l.base_analysis.as_ref())
                     .is_some_and(|a| a.main_sha256() == new.main_sha256());
-            if base == new.sha256 || stock_main || !cfg!(feature = "coupled-audio") {
+            if base == new.sha256 || stock_main || !cfg!(feature = "sharc") {
                 return Err(RpcError::bad_params(
                     "initial_buttons requires a patched coupled cold boot",
                 ));
@@ -4316,7 +4316,7 @@ fn card_snapshot_key(card: Option<&Path>, relax_fs: bool) -> String {
 /// The file name stem of the ready pair of a (MAIN, DSP inputs, card): the
 /// SHA-256 of the MAIN digest, of the DSP image and selected startup state, and
 /// of the card file's identity and its saved overlay.
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn patched_pair_key(
     main_sha: &str,
     image: &Path,
@@ -4363,7 +4363,7 @@ impl Actor {
     /// A patched MAIN with DSP audio. The ColdFire boots from the patched
     /// bytes with its DSP initialized before ColdFire startup. The ready pair
     /// is cached under `<snapshot root>/<MAIN>-<key>/`.
-    #[cfg(feature = "coupled-audio")]
+    #[cfg(feature = "sharc")]
     #[allow(clippy::too_many_arguments)]
     fn load_patched_coupled(
         &mut self,
@@ -4627,7 +4627,7 @@ impl Actor {
         Ok(CoupledLoad::Started)
     }
 
-    #[cfg(not(feature = "coupled-audio"))]
+    #[cfg(not(feature = "sharc"))]
     #[allow(clippy::too_many_arguments)]
     fn load_patched_coupled(
         &mut self,
@@ -4886,7 +4886,7 @@ fn run_card_job(
         return Err("cancelled".into());
     }
     let ready_cached = paths.ready_cached();
-    #[allow(unused_mut)] // assigned only with the coupled-audio feature
+    #[allow(unused_mut)] // assigned only with the sharc feature
     let mut boot_seconds = 0.0;
     let mut ready = None;
     // Zero DSP has no DSP image and no card ready pair: the runtime restores
@@ -4898,7 +4898,7 @@ fn run_card_job(
                 json!({"state": "working", "phase": "restoring", "message": "Restoring the cached ready state", "fraction": 0.95}),
             );
         } else {
-            #[cfg(feature = "coupled-audio")]
+            #[cfg(feature = "sharc")]
             {
                 let image = std::fs::canonicalize(&audio.image)
                     .map_err(|e| format!("DSP image {}: {e}", audio.image.display()))?;
@@ -4942,7 +4942,7 @@ fn run_card_job(
                 )?;
                 boot_seconds = boot_started.elapsed().as_secs_f64();
             }
-            #[cfg(not(feature = "coupled-audio"))]
+            #[cfg(not(feature = "sharc"))]
             {
                 let _ = audio;
                 return Err("this build has no coupled audio to boot the card with".into());
@@ -5355,7 +5355,7 @@ mod card_key_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[cfg(feature = "coupled-audio")]
+    #[cfg(feature = "sharc")]
     #[test]
     fn the_ready_pair_key_follows_the_saved_overlay() {
         let dir = std::env::temp_dir().join(format!("digi-card-pair-key-{}", std::process::id()));
@@ -5395,7 +5395,7 @@ mod pace_tests {
     }
 }
 
-#[cfg(all(test, feature = "coupled-audio"))]
+#[cfg(all(test, feature = "sharc"))]
 mod tests {
     use super::patched_pair_key;
 
