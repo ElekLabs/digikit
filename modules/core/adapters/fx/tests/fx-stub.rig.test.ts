@@ -39,7 +39,7 @@ describe('core/fx hook stubs', () => {
       const b = await rig.sendBlock(RAMP, 'friendly');
       clean(b);
       same(b.master, RAMP);
-      same(b.ret, new Array<number>(64).fill(0));
+      same(b.ret, Array<number>(64).fill(0));
       expect(b.instructions, 'the send stub with nothing installed (6 measured)').toBeLessThanOrEqual(6);
       expect(SIGNALS.length).toBe(16);
     }),
