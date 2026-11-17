@@ -2,7 +2,7 @@ import { pollUntil } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
-import { pickSine, REDRAW, word, type Rt } from '@digi/regression/runtime/fx-live.ts';
+import { pickSine, REDRAW, stableFrameHash, word, type Rt } from '@digi/regression/runtime/fx-live.ts';
 import { decodeTables, dynType } from '@digi/regression/runtime/project-kit.ts';
 import {
   DN2_AUDIO_MIRROR_112,
@@ -46,7 +46,7 @@ async function stockFrames(rt: Rt): Promise<string[]> {
   const frames: string[] = [];
   for (const key of ['SYN', 'SYN', 'SYN', 'SYN', 'FLTR', 'AMP']) {
     await rt.ui.tap(key, { until: { ms: 300, why: REDRAW } });
-    frames.push(await rt.session.frameHash());
+    frames.push(await stableFrameHash(rt));
   }
   return frames;
 }
@@ -67,6 +67,7 @@ describeOn('dn2', `DN2 ${FIRMWARE.dn2} machines.dks: the own page of a run-time 
     const rt = await run.load('with-machines', { modules: [ID], selection: ['modules/dyn-dn2.dkm'] });
     const { session } = rt;
     await expectLoaded(rt, run);
+    await session.expectNoFault('machines.dks loaded');
     expect(await stockFrames(rt), 'FM TONE SYN, FLTR and AMP show the same frames with machines.dks loaded').toEqual(stock);
 
     const tables = await decodeTables(session, run.plan);

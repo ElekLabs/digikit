@@ -1,9 +1,10 @@
 import { pollUntil } from '@digi/test-support';
 import { expect, test } from 'vitest';
+import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
 import { portAnchorAddress } from '@digi/regression/runtime/device-data.ts';
-import { dspBytes, REDRAW, type Rt } from '@digi/regression/runtime/fx-live.ts';
+import { dspBytes, REDRAW, stableFrameHash, type Rt } from '@digi/regression/runtime/fx-live.ts';
 import { decodeTables, dynType, selectDt2, trackType } from '@digi/regression/runtime/project-kit.ts';
 import { ENCODERS, expectLoaded, namedKnobs, tableSymbols, turnChangesOneWord } from './machines-kit.ts';
 
@@ -18,11 +19,16 @@ const ID = 'test/sine';
 const DSP_TYPE_CACHE = portAnchorAddress('dt2', FIRMWARE.dt2, 'dsp.voice.value.type_cache');
 
 /** The frames of the stock SRC pages (two presses: the second page), FLTR and AMP of track 1 (the menu frames of the old cell are not compared). */
-async function stockFrames(rt: Rt): Promise<string[]> {
+async function stockFrames(rt: Rt, expected?: string[]): Promise<string[]> {
   const frames: string[] = [];
   for (const key of ['SRC', 'SRC', 'FLTR', 'AMP']) {
     await rt.ui.tap(key, { until: { ms: 300, why: REDRAW } });
-    frames.push(await rt.session.frameHash());
+    frames.push(await stableFrameHash(rt));
+    // with `expected` (the loaded boot): keep the screen of each page that differs from the stock one
+    if (expected && frames.at(-1) !== expected[frames.length - 1]) {
+      const name = `stock-frame-${frames.length}-${key}`;
+      console.info(`${name} screen: ${await captureRemoteOled(rt.session, name)}`);
+    }
   }
   return frames;
 }
@@ -38,12 +44,19 @@ describeOn('dt2', `DT2 ${FIRMWARE.dt2} machines.dks: the SRC page of a run-time 
   test('rows, list entry, committed type and the SRC knob of Sine', async () => {
     const plain = await run.first();
     const stock = await stockFrames(plain);
+    if (new Set(stock).size === 1) {
+      // the keys changed nothing on the plain boot: keep the screen and the status for the diagnosis
+      const status = await plain.session.status();
+      console.info(`plain boot ignored the page keys: mode ${status.mode}, cf ${JSON.stringify(status.cf)}`);
+      console.info(`plain-stock screen: ${await captureRemoteOled(plain.session, 'plain-stock')}`);
+    }
     expect(new Set(stock).size, 'the stock pages show different frames').toBeGreaterThan(1);
 
     const rt = await run.load('with-machines', { modules: [ID], selection: ['modules/sine.dkm'] });
     const { session } = rt;
     await expectLoaded(rt, run);
-    expect(await stockFrames(rt), 'the stock SRC, FLTR and AMP pages show the same frames with machines.dks loaded').toEqual(stock);
+    await session.expectNoFault('machines.dks loaded');
+    expect(await stockFrames(rt, stock), 'the stock SRC, FLTR and AMP pages show the same frames with machines.dks loaded').toEqual(stock);
 
     const tables = await decodeTables(session, run.plan);
     const row = tables.machines['Sine'] as { short: string; clone_of: number; knobs: (string | number)[] };

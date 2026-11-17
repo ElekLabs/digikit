@@ -412,3 +412,131 @@ fn the_service_crates_of_the_repository_pass() {
         assert_eq!(problems(&dir, &sdk), Vec::<String>::new(), "{name}");
     }
 }
+
+#[test]
+fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
+    use patchkit::svccheck::check_with_adapters;
+    let adapters_with = |test: &str, devices: &str| {
+        let (dir, sdk) = service(test, &[]);
+        let adapters = dir.parent().unwrap().join("adapters/machines");
+        fs::create_dir_all(&adapters).unwrap();
+        fs::write(
+            adapters.join("module.toml"),
+            format!("[[slot]]\nname = \"frametype\"\n{devices}\n"),
+        )
+        .unwrap();
+        (dir, sdk, adapters.parent().unwrap().to_path_buf())
+    };
+    let fill =
+        |devices: &str| format!("\n[[fill]]\nslot = \"frametype\"\nentry = \"e\"\n{devices}");
+    // a slot on dn2 only: a fill for dn2 agrees
+    let (dir, sdk, adapters) = adapters_with("fill-ok", "devices = [\"dn2\"]");
+    append(&dir.join("dks/module.toml"), &fill("devices = [\"dn2\"]\n"));
+    assert_eq!(
+        check_with_adapters(&dir, &sdk, &adapters).unwrap(),
+        Vec::<String>::new()
+    );
+    // a fill with no devices would fill a slot that dt2 does not have
+    let (dir, sdk, adapters) = adapters_with("fill-all", "devices = [\"dn2\"]");
+    append(&dir.join("dks/module.toml"), &fill(""));
+    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    assert!(
+        mentions(&found, "[[fill]] `frametype` has no `devices`"),
+        "{found:?}"
+    );
+    // a device the slot lacks
+    let (dir, sdk, adapters) = adapters_with("fill-extra", "devices = [\"dn2\"]");
+    append(
+        &dir.join("dks/module.toml"),
+        &fill("devices = [\"dn2\", \"dt2\"]\n"),
+    );
+    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    assert!(
+        mentions(
+            &found,
+            "is for dt2, but the image adapter has the slot only on dn2"
+        ),
+        "{found:?}"
+    );
+    // a slot on every device takes a fill without devices
+    let (dir, sdk, adapters) = adapters_with("fill-slot-all", "");
+    append(&dir.join("dks/module.toml"), &fill(""));
+    assert_eq!(
+        check_with_adapters(&dir, &sdk, &adapters).unwrap(),
+        Vec::<String>::new()
+    );
+    // a fill that names no slot of any adapter is a typo
+    let (dir, sdk, adapters) = adapters_with("fill-typo", "devices = [\"dn2\"]");
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[fill]]\nslot = \"frametpye\"\nentry = \"e\"\ndevices = [\"dn2\"]\n",
+    );
+    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    assert!(
+        mentions(
+            &found,
+            "`frametpye` names a slot that no image adapter declares"
+        ),
+        "{found:?}"
+    );
+}
+
+/// The service with two adapter folders, each declaring `[[slot]] frametype` with the given `devices` lines.
+fn two_adapters(test: &str, first: &str, second: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let (dir, sdk) = service(test, &[]);
+    let adapters = dir.parent().unwrap().join("adapters");
+    for (folder, devices) in [("machines", first), ("other", second)] {
+        fs::create_dir_all(adapters.join(folder)).unwrap();
+        fs::write(
+            adapters.join(folder).join("module.toml"),
+            format!("[[slot]]\nname = \"frametype\"\n{devices}\n"),
+        )
+        .unwrap();
+    }
+    (dir, sdk, adapters)
+}
+
+#[test]
+fn a_slot_declared_twice_for_a_common_device_fails_and_on_disjoint_devices_passes() {
+    use patchkit::svccheck::check_with_adapters;
+    let twice = "the slot `frametype` is declared twice";
+    let (dir, sdk, adapters) = two_adapters(
+        "slot-twice",
+        "devices = [\"dn2\"]",
+        "devices = [\"dn2\", \"dt2\"]",
+    );
+    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    assert!(mentions(&found, twice), "{found:?}");
+    // a slot with no `devices` is on every device, so any second declaration overlaps
+    let (dir, sdk, adapters) = two_adapters("slot-twice-all", "", "devices = [\"dt2\"]");
+    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    assert!(mentions(&found, twice), "{found:?}");
+    // one slot per device is not a duplicate, and a fill for either device agrees
+    let (dir, sdk, adapters) = two_adapters(
+        "slot-disjoint",
+        "devices = [\"dn2\"]",
+        "devices = [\"dt2\"]",
+    );
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[fill]]\nslot = \"frametype\"\nentry = \"e\"\ndevices = [\"dn2\", \"dt2\"]\n",
+    );
+    assert_eq!(
+        check_with_adapters(&dir, &sdk, &adapters).unwrap(),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn a_fill_without_the_adapters_folder_is_an_error() {
+    use patchkit::svccheck::check_with_adapters;
+    let (dir, sdk) = service("no-adapters", &[]);
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[fill]]\nslot = \"frametype\"\nentry = \"e\"\n",
+    );
+    let missing = dir.parent().unwrap().join("no-such-adapters");
+    let found = check_with_adapters(&dir, &sdk, &missing).unwrap();
+    assert!(mentions(&found, "the adapters folder"), "{found:?}");
+    assert!(mentions(&found, "is missing"), "{found:?}");
+}
