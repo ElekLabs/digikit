@@ -26,17 +26,8 @@ import {
   wordsHash,
 } from './analysis.ts';
 import { signalBlock } from './checks.ts';
-import {
-  classify,
-  fingerprint,
-  fingerprintFile,
-  readFingerprint,
-  readRef,
-  rigKey,
-  writeFingerprint,
-  writeRef,
-  cacheDir,
-} from './fingerprint.ts';
+import { classify, fingerprintFile, readRef, rigKey, writeRef, cacheDir } from './fingerprint.ts';
+import { asV1, compare, measure, readPin, writePin } from './pcmpin.ts';
 import { plotPng, writePng, writeWav } from './plot.ts';
 import { REC, RECORDS, f2w, nw } from './context.ts';
 import { PLANE_L, PLANE_R, TOKEN, publish, writePlanes } from './samplepool.ts';
@@ -389,6 +380,14 @@ function signal(t: Trace, c: Check): number[] {
   return slice(t.out.map(part), c.blocks);
 }
 
+/** Writes `out.wav` and `plot.png` of a rig output that differs from its pin into `out/rig/<key>/`; returns the line that names them. */
+function rigArtifacts(key: string, x: readonly number[], pinBands: readonly number[], verdict: string): string {
+  const out = cacheDir(key);
+  writeWav(path.join(out, 'out.wav'), x);
+  writePng(path.join(out, 'plot.png'), plotPng(key, `PIN DIFFERS  ${verdict}`, x, readRef(key), pinBands));
+  return `plot and WAV: ${out}/plot.png, out.wav`;
+}
+
 /** The first message of a check that fails, or null. */
 export function evaluate(t: Trace, c: Check, dir: string, key?: string): string | null {
   const x = (): number[] => signal(t, c);
@@ -442,11 +441,25 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
         : `the output is not the input times ${num(c, 'gain')}: error ${err} is above ${bound} (${num(c, 'rel_peak', 2 ** -20)} of the reference peak ${peak(ref)})`;
     }
     case 'same-as': {
+      // Tolerant pin (fingerprint v2, `exact` not set): the fingerprint with its tolerances decides. Exact pin, a v1 fingerprint or none: the hash decides.
       const h = wordsHash(x());
+      const pin = key ? readPin(fingerprintFile(dir, key)) : null;
+      const exact = c.exact === true || (pin?.version === 2 && pin.exact !== undefined);
+      if (pin?.version === 2 && !exact) {
+        const diffs = compare(pin, measure(x(), { blockRms: true }).fp);
+        if (diffs.length === 0) return null;
+        return `${diffs.join('; ')}\n  ${rigArtifacts(key!, x(), pin.bandDb, diffs[0]!)}`;
+      }
       if (h === String(c.sha256)) return null;
       const mismatch = `the words hash is ${h}, the pin is ${String(c.sha256)}`;
       if (!key) return mismatch;
-      return `${mismatch}\n  ${classify(x(), readRef(key), readFingerprint(fingerprintFile(dir, key))).line}`;
+      const diffs = pin?.version === 2 ? compare(pin, measure(x(), { blockRms: true }).fp) : [];
+      const more = diffs.length
+        ? `\n  fingerprint: ${diffs.join('; ')}`
+        : pin?.version === 2
+          ? '\n  fingerprint: equal within tolerance (only bits differ)'
+          : '';
+      return `${mismatch}${more}\n  ${classify(x(), readRef(key), asV1(pin)).line}`;
     }
     case 'instructions': {
       const b =
@@ -635,7 +648,7 @@ export async function runRigFile(module: string, file: string, o: RunOptions = {
 
 /**
  * Write the pins of a file: run every case that has a `same-as` check and put the words hash of the check's signal into its `sha256` line.
- * A case with such a check names one device, so the n-th `sha256 = "..."` line of the file belongs to the n-th `same-as` check in file order.
+ * A machine case with such a check names one device; an effect case runs once for the effect (key device `fx`, as in `runRigFile`). So the n-th `sha256 = "..."` line of the file belongs to the n-th `same-as` check in file order.
  * Returns the hashes written, as `case [device] hash`. This is the only writer of a rig reference pin: a changed pin is a re-pin and needs review.
  */
 export async function pinRigFile(module: string, file: string, o: RunOptions = {}): Promise<string[]> {
@@ -647,20 +660,25 @@ export async function pinRigFile(module: string, file: string, o: RunOptions = {
   for (const c of loadRigFile(file).case) {
     const pins = (c.check ?? []).filter((k) => k.kind === 'same-as');
     if (pins.length === 0) continue;
-    const devices = (c.device ?? [...DEVICES]).filter((d): d is Device => (DEVICES as readonly string[]).includes(d));
-    if (devices.length !== 1) throw new Error(`${c.name}: a case with a same-as check names exactly one device`);
+    const devices: string[] = isFx
+      ? ['fx']
+      : (c.device ?? [...DEVICES]).filter((d): d is Device => (DEVICES as readonly string[]).includes(d));
+    if (devices.length !== 1)
+      throw new Error(`${c.name}: a machine case with a same-as check names exactly one device`);
     try {
-      const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, devices[0]!, c, dir, o);
+      const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, devices[0] as Device, c, dir, o);
       if (t.failure !== null) throw new Error(t.failure);
       if (!isFx && c.poison !== false) {
-        const why = stateDependence(t, await runMachine(module, devices[0]!, c, dir, o, FILL_SEED));
+        const why = stateDependence(t, await runMachine(module, devices[0] as Device, c, dir, o, FILL_SEED));
         if (why !== null) throw new Error(why);
       }
       for (const k of pins) {
         const x = signal(t, k);
         const h = wordsHash(x);
         const key = rigKey(module, devices[0]!, c.name);
-        writeFingerprint(fingerprintFile(dir, key), fingerprint(x));
+        const file = fingerprintFile(dir, key);
+        // the tolerance of the pin that is replaced stays; `exact = true` on the check keeps the hash in the pin
+        writePin(file, measure(x, { blockRms: true }).fp, { exactSha256: k.exact === true ? h : undefined });
         writeRef(key, x);
         hashes.push(h);
         lines.push(`${c.name} [${devices[0]}] ${h}`);
@@ -693,22 +711,34 @@ export async function reportRigFile(module: string, file: string, o: RunOptions 
   for (const c of loadRigFile(file).case) {
     const pins = (c.check ?? []).filter((k) => k.kind === 'same-as');
     if (pins.length === 0) continue;
-    const device = (c.device ?? [...DEVICES])[0] as Device;
+    const device = isFx ? 'fx' : ((c.device ?? [...DEVICES])[0] as Device);
     const key = rigKey(module, device, c.name);
     try {
-      const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, device, c, dir, o);
+      const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, device as Device, c, dir, o);
       const x = signal(t, pins[0]!);
       const ref = readRef(key);
       const same = wordsHash(x) === String(pins[0]!.sha256);
-      const v = classify(x, ref, readFingerprint(fingerprintFile(dir, key)));
+      const pin = readPin(fingerprintFile(dir, key));
+      const v = classify(x, ref, asV1(pin));
+      const diffs = pin?.version === 2 ? compare(pin, measure(x, { blockRms: true }).fp) : [];
+      const tolerant = pin?.version === 2 && pin.exact === undefined && pins[0]!.exact !== true;
+      const verdict = tolerant ? (diffs.length ? `PIN DIFFERS: ${diffs.join('; ')}` : 'within the tolerances') : '';
       const out = cacheDir(key);
       writeWav(path.join(out, 'out.wav'), x);
       if (ref) writeWav(path.join(out, 'ref.wav'), ref);
       writePng(
         path.join(out, 'plot.png'),
-        plotPng(`${module} ${device} ${c.name}`, `${same ? 'PIN MATCHES' : 'PIN DIFFERS'}  ${v.line}`, x, ref),
+        plotPng(
+          `${module} ${device} ${c.name}`,
+          `${same ? 'PIN MATCHES' : 'PIN DIFFERS'}  ${v.line}`,
+          x,
+          ref,
+          pin?.bandDb ?? null,
+        ),
       );
-      lines.push(`${key}: ${same ? 'pin matches' : 'PIN DIFFERS'}; ${v.line}\n  ${path.join(out, 'plot.png')}`);
+      lines.push(
+        `${key}: ${same ? 'pin matches' : 'PIN DIFFERS'}; ${v.line}${verdict ? `\n  fingerprint: ${verdict}` : ''}\n  ${path.join(out, 'plot.png')}`,
+      );
     } catch (e) {
       lines.push(`${key}: not run: ${(e as Error).message}`);
     }

@@ -5,8 +5,8 @@ import { crc32, deflateSync } from 'node:zlib';
 import { FS } from './analysis.ts';
 import { BANDS, bandLevels, bandEdges } from './fingerprint.ts';
 
-/** Mono float32 WAV (format 3). */
-export function wavBytes(x: readonly number[], rate = FS): Buffer {
+/** Float32 WAV (format 3); `x` holds the channels interleaved (mono by default). */
+export function wavBytes(x: readonly number[], rate = FS, channels = 1): Buffer {
   const data = Buffer.from(Float32Array.from(x).buffer);
   const h = Buffer.alloc(44);
   h.write('RIFF', 0);
@@ -14,19 +14,19 @@ export function wavBytes(x: readonly number[], rate = FS): Buffer {
   h.write('WAVEfmt ', 8);
   h.writeUInt32LE(16, 16);
   h.writeUInt16LE(3, 20);
-  h.writeUInt16LE(1, 22);
+  h.writeUInt16LE(channels, 22);
   h.writeUInt32LE(rate, 24);
-  h.writeUInt32LE(rate * 4, 28);
-  h.writeUInt16LE(4, 32);
+  h.writeUInt32LE(rate * 4 * channels, 28);
+  h.writeUInt16LE(4 * channels, 32);
   h.writeUInt16LE(32, 34);
   h.write('data', 36);
   h.writeUInt32LE(data.length, 40);
   return Buffer.concat([h, data]);
 }
 
-export function writeWav(file: string, x: readonly number[]): void {
+export function writeWav(file: string, x: readonly number[], rate = FS, channels = 1): void {
   mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, wavBytes(x));
+  writeFileSync(file, wavBytes(x, rate, channels));
 }
 
 // ---- a small raster -------------------------------------------------------------------------------------------------------------
@@ -167,7 +167,14 @@ function columns(x: readonly number[], width: number): [number, number][] {
  * The plot of one case: the waveform of the output (orange) over the reference (blue), the difference (red, own scale), and the band spectra of both.
  * `ref` is null when there is no cached output: only the output is drawn.
  */
-export function plotPng(title: string, verdict: string, now: readonly number[], ref: readonly number[] | null): Buffer {
+export function plotPng(
+  title: string,
+  verdict: string,
+  now: readonly number[],
+  ref: readonly number[] | null,
+  /** band levels of a pin that keeps no audio: drawn as the reference curve when `ref` is null */
+  refBands: readonly number[] | null = null,
+): Buffer {
   const W = 1400;
   const H = 1020;
   const L = 70;
@@ -208,7 +215,7 @@ export function plotPng(title: string, verdict: string, now: readonly number[], 
   // 3 band spectra
   panel(640, 1000, 'BAND LEVELS, 64 LOG BANDS 40 HZ TO 22 KHZ (DB)');
   const a = bandLevels(now);
-  const b = ref ? bandLevels(ref) : null;
+  const b = ref ? bandLevels(ref) : refBands ? [...refBands] : null;
   const hi = Math.max(...a, ...(b ?? []));
   const lo = hi - 120;
   const yOf = (v: number) => 1000 - 8 - ((Math.max(v, lo) - lo) / (hi - lo)) * (360 - 30);

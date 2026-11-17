@@ -5,6 +5,7 @@
     "control-client",
     "@digi/test-support",
     "@digi/dk-session",
+    "@digi/sharc-rig-kit",
     "digi-control",
     "digi-coupled",
     "dkui-host"
@@ -26,7 +27,7 @@
         "default",
         {
           "input": "production",
-          "projects": ["control-client", "@digi/test-support", "@digi/dk-session", "@digi/dkbs"]
+          "projects": ["control-client", "@digi/test-support", "@digi/dk-session", "@digi/dkbs", "@digi/sharc-rig-kit"]
         },
         "jsToolchain"
       ]
