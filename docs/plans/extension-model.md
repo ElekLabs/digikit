@@ -71,7 +71,7 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
 - No run-time unload. `unload_rec` runs only to roll back a failed load (`undo_early`). Hot reload was archived at tag
   `digikit-hot-reload-v1` (`loader::unload`, `registry::in_use`, `registry::view_now`, `refresh_view`, `CMD_UNLOAD`). Its anchors predate
   1.17 and 1.12, and the `dynreg_info` words it used are zeros today (`modules/core/services/params/src/dynreg.rs:12-13`).
-- No transport check exists. The firmware address of "transport playing" is unknown.
+- No transport check exists in the runtime. E0b found the firmware's transport function (section "Firmware facts" below).
 - ARCHITECTURE.md:198: menus are never freed and no module unloads.
 - The `dk:dev` swap (about 4 s) replaces module bytes inside the emulator and restores the screen (`tools/patchkit/pk_devreload.py`). It never
   runs the device unload path. Machine and fx modules still boot.
@@ -88,42 +88,60 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
   `owned_ids` (machine type numbers for the MODULES reply). The handover of 2026-11-17 already deferred `fx_entry` to `dkrt_export(name_hash)`.
 - "Adapter" covers two things: the firmware half of a service (reserved rows, stubs, slots, info tables) and the runtime's own platform code.
   `modules/core/adapters/` holds 25 folders of both.
-- Proof adapters: `file-catalog-proof`, `storage-fault-proof` (opt-in, in no patch set, used only by their own tests), `dsp-ddr-proof`,
-  `dsp-lp0-proof` (only `tests/__pycache__` left), and `dsp-stereo-proof` (opt-in, but it holds the shadow-replay rig test that roadmap row
-  T1i extends, branch `test/t1i-rig-read-hook`).
+- Proof adapters: three firmware experiments that back findings, in no patch set and required by no module. An image holds one only when a test
+  names it (`apply --modules ...`). runtime-and-services.md 5.x keeps them because no shipped test covers their paths.
+  - `dsp-stereo-proof` (DN2 1.12): observer stubs on the stock SHARC stages after a machine; shadow-replay of the right channel. Three rig tests,
+    run in the normal rig target; `dsp-voice` hooks the same call sites; T1i extends the shadow-replay test (branch `test/t1i-rig-read-hook`).
+  - `storage-fault-proof` (DT2 1.17): latches the eMMC error bits in the storage interrupt; proves the emulator's storage model (finding 107,
+    patchkit `storage_fault_isr.rs`).
+  - `file-catalog-proof` (DT2 1.17): directory open, next and size through a mailbox in the UI task (finding 93); opt-in device test that needs a
+    prebuilt card. The runtime and `plusdrive-write` now use the same anchors.
+  - `dsp-ddr-proof` and `dsp-lp0-proof` are not tracked any more.
 - "Gate" has four meanings: the planned hot reload hook gate, the builder `Gate` (`params/src/builder.rs`), test gates, size limits.
 - Module ids are written in each `module.toml` (`id = "core/dynreg"` in `modules/core/adapters/dynreg/`); patchkit finds manifests anywhere
   under `modules/` (`packages/patchkit/src/module.rs:1`). A folder move inside `modules/` keeps ids.
 
-**Firmware facts for the two features (DT2 1.17, [D] unless marked)**
+**Firmware facts (E0b, DT2 1.17 and DN2 1.12)**
+
+The details, addresses and marks are in the findings [filter machines](../findings/142-filter-machines.md), [LFO waveforms](../findings/143-lfo-waveforms.md),
+[transport state](../findings/141-transport-state.md) and the corrected [finding 135](../findings/135-hot-reload-firmware-facts.md) Q6. A second agent
+checked the claims the plan depends on against the image bytes. What the items below rely on:
 
 Filter machines:
 
-- One chooser view, `MachineSelectionView` (ctor `0x400611fe`). It builds a source list (`FUN_40060f50`, table `0x401f5458`, 7 longs,
-  anchored as `cf.machine.data.list.table`) and a filter list (`FUN_400610e8`, builder `FUN_40052c98`, table `0x401f5440`, 6 longs
-  `{0,1,4,3,5,2}`, not anchored). `vfunc_2` (`0x40061678`) switches lists on `this[0x6a]` (0 source, 1 filter).
-- Filter types and machines share one descriptor table at `0x4293b858` (0x2c bytes per row, 9 fields). Rows 0-5 are filter types (SVAR, LP4,
-  EQ, COMB-, LEGACY, COMB+); machines start at row 6. Accessor `FUN_400c89c6`: `type < 6` gives `type * 0x2c + 0x4293b858`, else
-  `0x4293ba68`.
-- Fields 0-3 (envelope, codes 45-48), 7 (ENV DEPTH, 49) and 8 (track level, 10) are the same for every filter type. Only fields 4-6
-  differ: three knobs per filter type.
-- The filter type is a byte at sound+0xa3, next to the machine type at sound+0xa2 (`FUN_400506ac`, `FUN_4005063e`).
-- `FilterPageView` picks the descriptor per type for page 8 (FLTR1) through the accessor. Page 9 (FLTR2) is fixed. The response graph is a
-  closed 6-way switch on the type in `FUN_4007439e`. DN2 has a per-type slot table `0x42c65cd0` (6 types x 3) **[O]**.
-- DSP side unknown. The old reading of "five filter types on the SHARC" (findings 06, 53) is probably wrong: the 7-entry jump table at
-  `0x8055c874` looks indexed by machine type **[O]**.
+- One chooser view (`MachineSelectionView`) holds a source list and a filter list. Filter rows are text only (no glyph). FLTR1 and FLTR2 are a
+  fixed global page set: a filter type has three own knobs on FLTR1 (descriptor fields 4-6) and cannot have another page.
+- The filter type is a byte in the sound: DT2 +0xa3, DN2 +0xdf. On DT2 filter types and machines share one descriptor table; on DN2 they are
+  separate arrays that share one fallback row.
+- Six sites interpret the value and need a hook: the accessor, the graph switch (its default branch draws something; the hook must replace it),
+  the list builder, the name function ("ERROR" for 6 and up), the loader bound, and the per-type knob slot function that `core/machines` already
+  hooks (`cf.machine.hook.param_code.args`). About ten other functions only copy or compare the byte.
+- The stock loader keeps 0..5 (and 0xff) and resets any other value to 0. A stored type of 6 or more on stock code shows the last machine's
+  knobs, the name "ERROR" and no knob slots, with no fault.
+- New filter types can use 16..31: positive as a signed byte, never 0xff, above the stock range, inside the MIDI value and the 32-word SHARC table.
+- DSP: the filter type goes to the SHARC as one frame word per track; one converter function indexes a 32-word table with it and keeps only
+  the result. What the result selects is open (E0a). The "five filter routines" of findings 06 and 53 are stages of one function.
+- Hook budget: `bind_max` is 24 per service file, `install_sites` 48 overall. `machines.dks` declares 13 hooks (DT2 binds 7, DN2 10); six
+  filter hooks give 19.
 
 LFO waveforms:
 
-- Parameter codes 79, 89, 99 (LFO1-3 WAVE): range 0..0x600 in steps of 0x100, so 7 values (`value >> 8`). T1 row of code 79 at `0x40210820`.
-- Names: formatter `0x400e1b68` (outside a Ghidra function), bound `moveq #6`, name table `0x40213ffc`: TRI SINE SQR SAW EXPO RAMP RAND.
-  The next table starts at `0x40214018`, so it cannot grow in place.
-- Compute on the ColdFire: LFO tick `FUN_4013961e` (DN2 1.12: `FUN_40137a06`), called per frame from the vector_191 interrupt handler. At
-  `0x40139804`: `moveq #6; beq random`, else a call through the function table at `0x402227d4` (6 entries). Wave 6 (RAND) is a special case
-  with a slew table at `0x402227ec`. No upper range check in the tick: wave 7 on stock code indexes `0x402227d4 + 28`, inside the slew
-  table, and jumps into data. A second `moveq #6` compare is at `0x4013986c`.
-- Graph: `LfoPageView::vfunc_4` (`0x4010ca20`) calls `FUN_4010c5ee`, which clamps the wave to 6 and indexes a 7-byte table at `0x4021bf94`.
-- Possibly involved: the bipolar tables (`FUN_4006aa32`), and NRPN or CC mappings that depend on the parameter maximum **[O]**.
+- WAVE is parameter codes 79, 89, 99, range 0..0x600 (`value >> 8`, 7 values). DT2 has one name formatter, DN2 two (4- and 3-character names).
+- The tick runs in the vector_191 interrupt at 1,500 Hz and evaluates 48 LFOs (16 tracks x 3). It clamps the wave to 0..6 before it calls the
+  6-entry function table; wave 6 (RAND) is a special case. A second function reads the same table and clamps the same way. The graph clamps
+  to 0..6. Waveforms return signed Q31 from a 32-bit phase.
+- No loader clamps the wave value, but every reader does. On stock code a wave of 7 or more shows "ERR" and behaves like RAND, with no
+  fault, and survives save and load. Which field the tick clamp reads is not traced (so the exact behaviour per value is [O]).
+
+Machine rows and transport (for E5):
+
+- Stock dispatch sends an out-of-range machine type to the last stock machine (DT2 type 6, DN2 type 4), not to type 0. In a patched image
+  a gap row is dispatched without a fault but plays type 0's sound (DT2 sample renderer, DN2 FM TONE).
+- The firmware's transport function returns 0 stopped, 1 playing, 2 paused; panel keys and MIDI clock set the same words. It resolves by
+  hash on both images. A record function combines playing with a UI flag.
+- The machine selection list is built once per view by one builder function from a list that holds every reserved type; only the final copy
+  is filtered by name. A reload needs one rebuild call on the stored view. The archive's project, kit and track facts all re-resolve on
+  1.17 and 1.12.
 
 ## 3. The model
 
@@ -178,9 +196,12 @@ new table family is the number of direct readers of its stored number; E0b count
 6. **Global firmware numbers are assigned at load and kept across boots.** Machine type, filter type, LFO wave value: each comes from the
    sticky allocator with the service's range and settings key. Extended numbers are stored only where stock firmware cannot misread them
    (rule 7).
-7. **Elektron data never holds a value stock code cannot handle.** An extended filter type or LFO wave value goes into Elektron sound data only
-   if the firmware's loaders clamp it, or the image clamps it. Otherwise the value lives in digikit's store, as the fx send amounts do
-   (`fxsend.rs:11-12`), and the service writes a stock value into the sound. Decided per feature in E0b.
+7. **Elektron data never holds a value stock code cannot handle.** An extended value goes into Elektron sound data only if every stock reader
+   handles it without a fault and the value survives a stock save and load. Otherwise the value lives in digikit's store, as the fx send
+   amounts do (`fxsend.rs:11-12`), and the service writes a stock value into the sound. Outcome of E0b:
+   - LFO wave 7 and up: every stock reader clamps it (shows "ERR", behaves like RAND, survives save and load). It goes into the sound.
+   - Filter type 16 and up: the stock loader resets it to 0. It goes into digikit's store, and the sound holds the stock filter the module names
+     as its fallback (O6).
 8. **One planner rule checks keys for every kind, against the boot set and the live set.** patchkit and dkneeds read the same `KEYS` table,
    so the workbench refuses a clash at upload.
 9. **Services keep only domain checks**: ranges, row capacity, valid glyphs, page limits.
@@ -289,10 +310,15 @@ modules/core/
     lfo/{src,dks,image/}             image/ gains the LFO tick stub in E6
     params/                          shared library crate (row writers, init window), not a service: renamed rows/ (crate dkrt-svc-rows)
   apps/digikit-menu/               unchanged (L4)
+  proofs/storage-fault/            firmware experiment behind finding 107 (from adapters/storage-fault-proof)
   adapters/                        gone
 ```
 
-`overdrive` stays as an adapter folder until E9 decides its owner; it moves to `services/<owner>/image/` or becomes a content module.
+- `dsp-stereo-proof` moves into the tests of `dsp-voice` (`services/machines/image/dsp-voice/tests/stereo-proof/`): its sources become test
+  assets of the call sites it proves. Its id stays.
+- `file-catalog-proof` moves to `proofs/file-catalog/`, or goes if E1 finds a shipped test that covers its path.
+- Proofs are in no patch set; moving them changes no shipped image.
+- `overdrive` stays as an adapter folder until E9 decides its owner; it moves to `services/<owner>/image/` or becomes a content module.
 
 ### 4.2 Names
 
@@ -333,14 +359,14 @@ one PR unless it says otherwise. Every PR gets an independent review before merg
 Payoff: decides E5 details, E6 and E7. Confidence of an answer: high.
 
 E0a Filter DSP experiment (emulator, one run, about 10 minutes; needs Em's go before it runs).
-- Static first, if cheap: scan readers of the DSP staging block `0x80003cd0 + t * 0x9a` (`track_row_copy`, `FUN_4002d438`) in the frame
-  builder for the byte at +1 (filter type).
-- Then, on DT2 1.17, one track, steady noise input, the existing DSP PC histogram. Write sound+0xa3 to 0, 1, 2, 3, 4, 5, and 6, one segment
-  each. Record which SHARC routines change with the filter type, and what type 6 does.
-- Answer: the SHARC site that reads the filter type, and whether the filter stage is a per-voice dispatch (a stub plus a slot as in R12-8) or
-  inline stock code.
+- The static half is done (E0b): the ColdFire frame builder sends the filter type as TX word `0xb4 + 2 * track`; on the SHARC one converter
+  function indexes the 32-word table at DM `0x2567a0` with it and stores only the result in the track record.
+- On DT2 1.17: dump DM `0x2567a0..0x2567df` after boot. Then one track, steady noise input, the existing DSP PC histogram; write sound+0xa3 to
+  0..7, one segment each. Record which SHARC routines change with the filter type and what the table result selects.
+- Answer: whether the filter stage is a per-voice dispatch (a stub plus a slot as in R12-8) or inline stock code, and the site to hook.
 
-E0b Static, read-only (firmware-query), in parallel:
+E0b Static, read-only (firmware-query), in parallel. Done: results in the findings named in section 2; checked by a second agent (18 of 22
+claims confirmed, one refuted and corrected, the rest open and marked).
 1. Transport state: the variable that says the sequencer plays or records, on DT2 1.17 and DN2 1.12, and a find-rule for `devices/fw/`.
 2. Empty machine rows: what the firmware does with a row of type 0 (finding 135 Q6, `mf_dispatch` `0x400c89a4`). Decides the MISSING
    placeholder row.
@@ -362,21 +388,21 @@ stored-number readers). Anchors go into `devices/fw/*.toml` with `tools.firmware
 
 Estimate: E0a 1-2 h including the report; E0b 1 day. Depends on: nothing.
 
-### E1 Cleanup: proof adapters
+### E1 Proof adapters: coverage check
+
+The proofs stay (runtime-and-services.md keeps them: no shipped test covers their paths). E1 only checks one of them; the moves are in E8.
 
 What:
-- Delete `modules/core/adapters/{file-catalog-proof,storage-fault-proof}` and their tests, and the leftover `dsp-ddr-proof`, `dsp-lp0-proof`
-  folders. Remove the patchkit `storage_fault_*` tests and any `project.json`, Nx or docs references.
-- `dsp-stereo-proof`: move its shadow-replay rig test to where T1i needs it (agree with branch `test/t1i-rig-read-hook` first), then delete the
-  adapter.
-- Grep for users of everything deleted; update `docs/TESTING.md`, `docs/FINDINGS.md` links and `AGENTS.md` if they name them.
+- `file-catalog-proof`: find whether a shipped device test lists a DT2 +Drive folder through the runtime's file calls (candidates:
+  `transfer-live`, `samples-store-live`, the Files page tests). If one does, propose deleting the proof and its opt-in test, with finding 93
+  pointing at the shipped test; an independent reviewer checks it is not the only proof. If none does, it moves to `proofs/` in E8.
+- `storage-fault-proof` and `dsp-stereo-proof` stay; nothing to check.
 
-Tests: the deleted tests go; an independent reviewer checks that none of them was the only proof of something still in use.
-Gate: `mise run test:changed`, static checks.
+Gate: static checks; no device run.
 
-Done when: no reference to the five names remains (`git grep`), static checks green.
+Done when: the decision on `file-catalog-proof` is written into this plan (4.1) and, if it goes, the deletion PR is merged.
 
-Estimate: 2-3 h. Payoff: less code, faster selection. Confidence: high. Depends on: T1i agreement for `dsp-stereo-proof`.
+Estimate: 1-2 h. Payoff: small. Confidence: high. Depends on: nothing.
 
 ### E2 Builder boilerplate from sdk.toml
 
@@ -452,8 +478,9 @@ This is hot reload S1 (code-only modules) and S4 (machine and fx modules) of [di
 2.7) and moves DSP row state into the services (step 7). The two-block DSP wait for modules is S4's own work, done here.
 
 What:
-1. Runtime: `dkrt_reload(rec, path)` and `CMD_RELOAD` in `module_cmds.rs`, in the order of 3.6. One refusal function (transport from E0b,
-   card operations, safe mode, open module view).
+1. Runtime: `dkrt_reload(rec, path)` and `CMD_RELOAD` in `module_cmds.rs`, in the order of 3.6. One refusal function: the firmware's
+   transport function returns non-zero (playing or paused; declared in `devices/fw` as `cf.project.fn.transport_state`, found by hash on
+   both images), card operations, safe mode, an open module view or the machine selection view.
 2. Validation before unload: the planner over the live set (E3 rule as a function), keys check of 3.6 step 2.
 3. Run-time numbering: `sticky` assigns for a load outside `settle` (kept keys keep numbers; new keys take free ones); `resolve` answers from
    the live table, not only the boot table.
@@ -461,9 +488,14 @@ What:
    `worker::retire` when it returns `E_BUSY`.
 5. DSP: stop the owner's voices, two-block wait before `dsp::release_range`; DSP instruction-cache invalidate on range reuse (hardware-only:
    close statically first, as R12-8 lists it open).
-6. MISSING placeholder row (design from E0b item 2), written by machines (and filters after E7) for a key whose module is absent.
-7. Selection views and listings: port `registry::view_now` and `refresh_view` into the machines service with the 1.17/1.12 facts from E0b
-   item 7; listing generation counters.
+6. MISSING placeholder row, written by machines (and filters after E7) for a key whose module is absent. A gap row plays type 0's sound
+   today, so the placeholder must be made silent: DN2 sets `own_dsp = 1` (finding 33 saw silence without fault); DT2 needs a silent routine
+   registered in `dsp-voice` for the placeholder type, or a selector word of 6 or more if the rig shows it gives a zero block (try on the
+   rig first). The row keeps an empty list name, so the selection list leaves it out, and shows "MISSING" / "MISS" as its name.
+7. Selection views: port `refresh_view` (archive `registry.rs:479`) into the machines service. Declare the list builder hook and the view
+   word in `devices/fw` and fill the `dynreg_info` words (view word, builder, project singleton, active kit, track type, track count 16);
+   E0b re-resolved all of them on 1.17 and 1.12. One builder call on the stored view rebuilds the list. Listing generation counters for the
+   runtime menu's own lists.
 8. Event tables published by pointer swap (`svc_rows.rs:73` shifts the table today), so a reader never sees a half-moved table.
 9. `core/ui`: refuse reload while one of the module's views or menus is open (ARCHITECTURE.md:198); menu teardown is later work.
 10. Delete the per-service duplicate checks (`E_FX_ID_DUP`, lfo `E_TYPE_USED` path) and their refusal-table rows; the planner covers them.
@@ -483,25 +515,30 @@ Done when: `dk:dev` reloads a machine or effect module with no boot, on both dev
 
 Estimate: 6-7 days (the hot reload plan's S1 plus S4). Payoff: removes the 5-10 s boot from every machine and effect iteration, and makes
 module updates live for users. Confidence: medium-high; the archive proved the machine path on the emulator (findings 32, 33).
-Depends on: E3, E4, E0b items 1, 2, 7; R12-8 merged.
+Depends on: E3, E4, R12-8 merged. (E0b is done.)
 
 ### E6 LFO shapes
 
 What:
-1. Hook contexts: the tick sites (the function-table call at `0x40139804` and the second compare at `0x4013986c`) run in the vector_191
-   interrupt, so they are an image half: a stub with a slot in `services/lfo/image/` (new image hashes, patch sets updated). The formatter
-   bound and name table and the graph clamp and table are UI-task sites: `lfo.dks` hooks (B1 bind resolves the addresses). The T1 maximum of
-   codes 79, 89, 99 is raised by the image half or kept, per rule 7.
-2. The slot code: for an extended wave value, compute the output from the module's 32-sample table with integer linear interpolation over the
-   phase, at the stock functions' output scale. Cost ceiling: stated per LFO per frame before the code is written (3 LFOs x 16 tracks per
-   frame), measured with the instruction counts.
+1. Hook contexts (sites in the LFO waveforms finding, both devices):
+   - Interrupt sites, as an image half (a stub with a slot in `services/lfo/image/`; new image hashes, patch sets updated): the tick's wave
+     clamp (DT2 `0x40139698`, DN2 `0x40137b56`) and its function-table call and RAND compares (DT2 `0x40139804`, `0x4013986c`), and the second
+     function-table reader with its own clamp (DT2 `FUN_401392d4`, DN2 `FUN_401376bc`). Without the clamp hook a wave of 7 or more becomes RAND
+     before the table call.
+   - UI-task sites, as `lfo.dks` hooks (B1 bind resolves the addresses): the name formatter (DT2 one; DN2 two, 4- and 3-character names), the
+     graph clamp and the unipolar table, and the T1 maximum of codes 79, 89, 99 so the panel can reach the new values.
+2. The slot code: for an extended wave value, compute signed Q31 from the 32-bit phase with the module's 32-sample table and integer linear
+   interpolation; mark unipolar shapes in the service's own table. Cost ceiling: the tick runs at 1,500 Hz and evaluates 48 LFOs; the estimate
+   is 20-30 instructions per extended LFO, at most 1.5-2 M instructions per second with all 48 extended. Measure with the instruction counts
+   before the PR; stop if above the ceiling.
 3. `SHAPES` writes happen under the interrupt mask (lfo `records.rs:153-161`), so the tick never reads a half-written shape.
-4. Stored value (rule 7, E0b item 6): if the loaders clamp, the extended value goes into the sound; if not, the sound holds a stock wave and
-   digikit's store holds the extended choice per sound, and the slot applies it.
+4. Stored value (rule 7): the extended wave value goes into the sound. Every stock reader clamps it, so without the module it shows "ERR" and
+   behaves like RAND, with no fault, and it survives save and load.
 5. The LFO_SHAPE record gains a name (4 characters, as the stock names). The kind has no consumer on the device, so its layout changes in place;
    this is a contract MINOR (`since` bumped).
 6. Wave value numbers from the sticky allocator (E3), range above 6, settings key `lfo.shapes`.
-7. With `lfo.dks` absent or in safe mode, no extended value reaches stock code (item 4); with the module unloaded, the slot falls back to TRI.
+7. With `lfo.dks` absent or in safe mode, stock code handles the value as in item 4. With the service loaded but the shape's module absent,
+   the slot falls back to TRI.
 8. Builder: `dk_record_add` with the generic LFO_SHAPE record; a typed `dk_lfo_add_shape` only if writing the fixture shows `dk_record_add`
    is awkward in C.
 9. Template `sdk/templates/lfo/` and a fixture `tests/fixtures/modules/test/lfo-shape`.
@@ -513,28 +550,30 @@ screen; and one stock-firmware or safe-mode check that the saved project loads w
 Done when: a module adds a waveform that shows its name on the MOD page, draws, and modulates, on DT2 and DN2, and a project saved with it
 loads safely without the module.
 
-Estimate: 2-3 days. Payoff: proves the "value of an existing knob" shape. Confidence: medium (image half, interrupt cost, rule 7).
-Depends on: E0b items 5, 6; E3; E4.
+Estimate: 2-3 days. Payoff: proves the "value of an existing knob" shape. Confidence: medium-high (all sites found on both devices; the
+interrupt cost is the open risk). Depends on: E3; E4. Open first: which field the tick clamp reads (finding [O]).
 
 ### E7 Filter machines
 
-Only if E0a finds a usable DSP site and E0b item 3 gives a bounded number of readers.
+Only if E0a finds a usable DSP site. E0b bounded the ColdFire side: six hook sites on DT2, the same shape on DN2.
 
 What:
 1. `dk_module_ctx_add_filter(ctx, index, name, short)` returns a typed `dk_filter *`. Page and param calls take a `dk_filter *` through
    their own typed entry points (`dk_filter_add_page`), implemented by the machines service with the same code as machines. The typed handle
    costs nothing and stops a track's machine and filter from being mixed up in C.
-2. The machines service gains the filter table family (3.2): the list builder `FUN_40052c98` (append the new ids), the accessor
-   `FUN_400c89c6` (return the service's row for a number in the filter range), the graph switch (default to the service, which draws through
-   an overlay canvas), the DN2 slot table, and every other reader E0b item 3 found. New filter type numbers sit in their own range, assigned by
-   the sticky allocator (E3), and never index the stock table directly.
-3. A filter page has at most three own knobs (descriptor fields 4-6); a fourth is refused with `DK_E_PAGE_FULL`. A second filter page is
-   refused the same way until E0b item 4 shows a hook for it (rule 2).
-4. Stored value per rule 7 (E0b item 6).
+2. The machines service gains the filter table family (3.2), six sites per device (addresses in the filter machines finding): the list
+   builder (append the new ids), the accessor (return the service's row for 16..31), the graph switch (replace the default branch for 16..31;
+   the service draws through an overlay canvas), the name function, the loader bound, and an extension of the existing
+   `cf.machine.hook.param_code.args` hook for the per-type knob slots. New filter type numbers are 16..31, assigned by the sticky allocator
+   (E3); they never index a stock table. Chooser rows are text only, so a filter has a name and no glyph.
+3. A filter page has at most three own knobs (descriptor fields 4-6); a fourth is refused with `DK_E_PAGE_FULL`. FLTR1 and FLTR2 are a fixed
+   global page set, so a second filter page is refused the same way (rule 2).
+4. Stored value (rule 7): the stock loader resets 16..31 to 0, so the choice lives in digikit's store per sound and the sound holds the stock
+   filter the module names as its fallback. The loader-bound hook restores the choice from the store when a kit loads (O6).
 5. DSP: a stub at the filter-type site with a slot, dispatch in the `machines.dks` DSP section (R12-8 pattern). Filter DSP is a new contract
    in `sdk/dsp/contract/` (input and output buffers per voice, state per voice).
-6. `machines.dks` import, bind and export count stays under 64 (E0b item 8); if not, the filter hooks go into a second service file of the
-   same service.
+6. Hook budget: `machines.dks` declares 13 hooks; the six filter sites give 19, under `bind_max` 24 per service file and `install_sites` 48
+   overall. Five hooks remain after E7; the next table family may need a second service file.
 7. Template `sdk/templates/filter/` and a fixture `tests/fixtures/modules/test/filter-gain`.
 
 Tests: unit (machines service filter lowering, contract suite with a filter fixture); rig (filter DSP conformance in `@digi/sharc-rig-kit`);
@@ -543,8 +582,8 @@ assembly (filter fixture loads); device (one test per device: select the filter,
 Done when: a module adds a filter that appears in FUNC+SYN on the FLTR page, shows its knobs, draws its graph and filters audio, on DT2
 (and DN2 if E0b item 5 shows the same shape).
 
-Estimate: 3-5 days. Payoff: proves the "table row" shape for a second table family. Confidence: medium until E0a and E0b item 3.
-Depends on: E0a; E0b items 3-6, 8; E3; E4; E5 (MISSING placeholder for filters); R12-8.
+Estimate: 3-5 days. Payoff: proves the "table row" shape for a second table family. Confidence: medium until E0a (ColdFire side known).
+Depends on: E0a; E3; E4; E5 (MISSING placeholder for filters); R12-8.
 
 ### E8 Folder regroup and names
 
@@ -555,13 +594,15 @@ What: section 4.1 and 4.2, as one mechanical PR after the open branches merge.
 - Merge `usb-bulk-audio` into `usb-bulk`: one module; the patch sets name `core/usb-bulk`; the `core/usb-bulk-audio` id goes (it is a
   platform module with no stored identity).
 - `InitWindow` rename (4.2).
+- Proofs (4.1): `dsp-stereo-proof` into the tests of `dsp-voice`, `storage-fault-proof` (and `file-catalog-proof` if E1 keeps it) to `proofs/`.
 - Docs: ARCHITECTURE.md (layers, folder map), LAYOUT.md, AGENTS.md directory map, runtime-and-services.md wording.
 
 Tests: `git diff -M --stat` shows renames plus path edits only; image and `.dks` hashes unchanged except the usb-bulk merge (its image
 diff is checked with `patchkit objdiff`). This selects the whole gate, so it runs with the full test run of its batch (`mise run test:full`).
 
 Estimate: 4-6 h mechanical plus the full run. Payoff: the folders show the layers; new code lands in the right place. Confidence: high.
-Depends on: E1; open branches merged. Order: last, or before E6 if the branches have merged by then.
+Depends on: E1; open branches merged (including `test/t1i-rig-read-hook`, which edits `dsp-stereo-proof`). Order: last, or before E6 if the
+branches have merged by then.
 
 ### E9 Later: on-demand platform pieces and overdrive
 
@@ -576,9 +617,9 @@ runtime-and-services.md.
 
 | # | Item | Depends on | Device runs | Status |
 | --- | --- | --- | --- | --- |
-| 1 | E0b static spikes (extended) | - | none | todo |
+| 1 | E0b static spikes (extended) | - | none | done: findings 141, 142, 143; 135, 02, 06, 53 corrected (branch e0b/findings) |
 | 1 | E0a filter DSP experiment | Em's go | one, about 10 min | todo |
-| 2 | E1 cleanup | T1i agreement | none (static checks) | todo |
+| 2 | E1 proof coverage check | - | none | todo |
 | 2 | E2 boilerplate codegen | - | none; objdiff | todo |
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | todo |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | todo |
@@ -608,11 +649,10 @@ not the screen; PCM pins set from a numeric report. Before a device run, list th
 
 | Risk | Effect | Stop rule or fallback |
 | --- | --- | --- |
-| Stock loaders do not clamp LFO wave or filter type | an extended value in a saved project jumps into data on stock code or in safe mode | rule 7: the value lives in digikit's store; E0b item 6 decides before E6 and E7 start |
+| A stock reader of the LFO wave that E0b missed does not clamp | a fault on stock code with a saved extended wave | E6 device test loads a saved project without the module and in safe mode |
 | E0a finds the filter stage inline in stock code with no per-type dispatch | E7 needs a new DSP hook design | stop E7 after E0a and report payoff and cost; E1-E6 are unaffected |
-| E0b item 3 finds many direct readers of the filter type | E7 needs many hooks | stop E7 if the count passes what `machines.dks` can bind (E0b item 8) and report |
-| An empty machine row crashes the firmware (finding 135 Q6) | the reload window is unsafe | the MISSING placeholder is a real row that renders silence |
-| No readable transport state | E5 cannot refuse during play | refuse when any voice of the module is active (weaker); report |
+| A filter-type reader E0b missed indexes a table by the raw value | wrong data for 16..31 | E7 device test walks every filter page and the chooser with a custom filter selected |
+| A gap row plays type 0's sound (DT2 sample renderer, DN2 FM TONE) | sound in the reload window | the MISSING placeholder is made silent (E5 item 6); on DT2 the silent routine is checked on the rig first |
 | The contract suite finds residue in many tables | E4 grows | fix in the owning service; each fix is a unit test |
 | Routing machines row writers through `FwMem` changes timing or code size | device behaviour changes | E3/E5 device subset covers the machines path; size limit of runtime-and-services.md applies |
 | LFO slot cost in the interrupt | audio or UI timing | state the ceiling first; integer interpolation; stop if above the ceiling |
@@ -622,7 +662,8 @@ not the screen; PCM pins set from a numeric report. Before a device run, list th
 ## 9. Decisions
 
 Taken:
-- Extended LFO wave and filter values: in digikit's store unless the stock loaders clamp (rule 7).
+- Extended values (rule 7): LFO waves in the sound (stock readers clamp them); filter types in digikit's store (the stock loader resets them).
+- Proof adapters stay; they move next to what they prove (4.1); E1 checks whether `file-catalog-proof` is still needed.
 - O1: filters get a typed `dk_filter *` handle; the machines service implements them.
 - O5: reload first; user-facing unload without a replacement later.
 - O2: regroup inside `modules/core` (section 4.1), after the open branches merge.
@@ -631,6 +672,8 @@ Taken:
 Open:
 - O3: owner of the overdrive curve list if overdrive becomes a feature: a small `drive` service, or the fx service.
 - O4: E6 builder: `dk_record_add` with the generic LFO_SHAPE record, or a typed `dk_lfo_add_shape` (decided while writing the fixture).
+- O6: E7 stored filter choice: digikit's store with a stock fallback in the sound (recommended, rule 7), or patch the stock loader bound
+  (7 to 32) so the extended type survives in kit files; with the patch, a kit opened on stock firmware falls back to filter 0.
 
 ## 10. Changes to other documents when items land
 
