@@ -42,6 +42,22 @@ export function repoRoot(): string {
   }
 }
 
+/** `DIGI_SHARC_CORE_LIB_<DEV>`: the core library a daemon of this device loads (`verify_build daemons|cores` writes it to
+ * dist/daemons.json beside `DIGI_EMUD_<DEV>`). The environment wins over the file, so a
+ * variable set by hand (another library) overrides `dist/daemons.json`. A daemon has no static core: with neither, it
+ * stops with a message that names the variable and `verify_build cores`. */
+export function coreLibEnv(device: Device, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const key = `DIGI_SHARC_CORE_LIB_${device.toUpperCase()}`;
+  if (env[key]) return {};
+  const file = path.join(repoRoot(), 'dist/daemons.json');
+  try {
+    const value = (JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>)[key];
+    return value ? { [key]: value } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** The stock images: $DIGI_FIRMWARE_DIR (relative to the repository root), else firmware/. The same rule as
  * tools/firmware/config.py FIRMWARE_DIR, the control daemon and tools/nx/device-inputs.mjs. */
 export function firmwareDir(env: NodeJS.ProcessEnv = process.env): string {
@@ -112,12 +128,18 @@ export function validateRuntimeInputs(inputs: ReadyInputs): void {
 }
 
 /** Match the coupled launcher's verified fast-tier defaults for the actual stock bytes (rules: emulator-config.ts).
+ * DEVICE is the device of the firmware: its core reads the lists with its suffix (DT2 `_2`, DN2 none).
  * Explicit values (including empty strings) win; DIGI_EMU_FAST=0 suppresses defaults.
  * The daemon inherits process.env, so disabled defaults do not erase explicit settings. */
-export function coupledEnv(syx: string, environ: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function coupledEnv(
+  syx: string,
+  device: Device,
+  environ: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
   if (environ.DIGI_EMU_FAST === '0') return {};
   const digest = createHash('sha256').update(fs.readFileSync(syx)).digest('hex');
   const config = JSON.parse(fs.readFileSync(path.join(repoRoot(), 'config/emulator.json'), 'utf8'));
-  const res = resolveTiers({ context: 'tests', digest, environ, config });
+  // A core library reads the region lists of its device: the DT2 core `_2` names (`GenCore::env_suffix`).
+  const res = resolveTiers({ context: 'tests', digest, environ, config, slot: device === 'dt2' ? '_2' : '' });
   return { ...res.explicit, ...res.add };
 }

@@ -1,6 +1,7 @@
-// The engine glue of one generated core: `sharc_native` names that core's engine crate. Included by
-// sharc_peer.rs once per core (module `engine_dn2`, and `second` with the `second-core` feature), so a
-// binary can run either device's DSP; the types they return come from sharc-stats and are shared.
+// The engine glue: `NativeDsp` and `SharedDsp` run any generated core (`sharc_native::GenCore`), which
+// the engine is opened with; the types they return come from sharc-stats.
+
+use super::*;
 
 fn ddr_monitor_command(
     engine: &mut sharc_native::Engine,
@@ -36,7 +37,7 @@ fn ddr_monitor_command(
         },
     });
     Ok(DdrMonitorStatus {
-        active_core_profile: sharc_native::gen_image_name().to_string(),
+        active_core_profile: engine.s.core.image.to_string(),
         dsp_icount: engine.s.icount,
         armed: range.is_some(),
         range,
@@ -51,7 +52,7 @@ impl DspEngine for NativeDsp {
     fn spi2_exchange(&mut self, frame: &[u8]) -> Result<Vec<u8>, String> {
         self.0
             .spi2_exchange(frame)
-            .map_err(|t| format!("spi2_exchange trap {}", sharc_native::trap_name(t)))
+            .map_err(|t| format!("spi2_exchange trap {}", self.0.s.core.trap_name(t)))
     }
     fn lp0_ready(&self) -> bool {
         self.0.lp0_ready()
@@ -59,7 +60,7 @@ impl DspEngine for NativeDsp {
     fn lp0_transfer(&mut self, bytes: &[u8]) -> Result<(), String> {
         self.0
             .lp0_transfer(bytes)
-            .map_err(|t| format!("lp0_transfer trap {}", sharc_native::trap_name(t)))
+            .map_err(|t| format!("lp0_transfer trap {}", self.0.s.core.trap_name(t)))
     }
     fn step(&mut self, n: u32) -> u32 {
         self.0.step(n)
@@ -82,7 +83,7 @@ impl DspEngine for NativeDsp {
     fn sport_block(&mut self) -> Result<Option<Vec<u8>>, String> {
         self.0
             .sport_block(None)
-            .map_err(|t| format!("sport_block trap {}", sharc_native::trap_name(t)))
+            .map_err(|t| format!("sport_block trap {}", self.0.s.core.trap_name(t)))
     }
     fn pc(&self) -> u32 {
         self.0.s.pc_sw as u32
@@ -156,19 +157,17 @@ impl SharedDsp {
 
 impl DspEngine for SharedDsp {
     fn spi2_exchange(&mut self, frame: &[u8]) -> Result<Vec<u8>, String> {
-        self.0
-            .borrow_mut()
-            .spi2_exchange(frame)
-            .map_err(|t| format!("spi2_exchange trap {}", sharc_native::trap_name(t)))
+        let mut e = self.0.borrow_mut();
+        e.spi2_exchange(frame)
+            .map_err(|t| format!("spi2_exchange trap {}", e.s.core.trap_name(t)))
     }
     fn lp0_ready(&self) -> bool {
         self.0.borrow().lp0_ready()
     }
     fn lp0_transfer(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.0
-            .borrow_mut()
-            .lp0_transfer(bytes)
-            .map_err(|t| format!("lp0_transfer trap {}", sharc_native::trap_name(t)))
+        let mut e = self.0.borrow_mut();
+        e.lp0_transfer(bytes)
+            .map_err(|t| format!("lp0_transfer trap {}", e.s.core.trap_name(t)))
     }
     fn step(&mut self, n: u32) -> u32 {
         self.0.borrow_mut().step(n)
@@ -190,10 +189,9 @@ impl DspEngine for SharedDsp {
         )
     }
     fn sport_block(&mut self) -> Result<Option<Vec<u8>>, String> {
-        self.0
-            .borrow_mut()
-            .sport_block(None)
-            .map_err(|t| format!("sport_block trap {}", sharc_native::trap_name(t)))
+        let mut e = self.0.borrow_mut();
+        e.sport_block(None)
+            .map_err(|t| format!("sport_block trap {}", e.s.core.trap_name(t)))
     }
     fn pc(&self) -> u32 {
         self.0.borrow().s.pc_sw as u32
@@ -279,16 +277,18 @@ fn concretise_import(e: &mut sharc_native::Engine) {
     }
 }
 
-/// Build the DN2 continuation engine from a packed image blob
+/// Build a continuation engine from a packed image blob
 /// (`tools/sharc_dev/sharc_pack_image.py`) and a canonical state blob, with the option
 /// set the audio runs use. `clock_base` seeds the diagnostic instruction
-/// clock (EMUCLK).
-pub fn open_dn2_engine(
+/// clock (EMUCLK); `idle` is the firmware's RTOS idle loop.
+pub fn open_engine(
+    core: &'static sharc_native::GenCore,
     image: &[u8],
     state: &[u8],
     clock_base: u64,
+    idle: IdleLoop,
 ) -> Result<sharc_native::Engine, String> {
-    open_dn2_engine_patched(image, state, clock_base, None)
+    open_engine_patched(core, image, state, clock_base, None, idle)
 }
 
 /// Overlay a DSP patch onto an engine's memory (`crate::dsp_patch`). Every
@@ -368,30 +368,22 @@ pub fn apply_dsp_patch(
     Ok(())
 }
 
-/// `open_dn2_engine` with an optional DSP patch overlaid on the imported
+/// `open_engine` with an optional DSP patch overlaid on the imported
 /// state, so a snapshot's DSP runs the patched code and data. Generated AOT
 /// blocks re-check their code range (per range, with a region-entry table in
 /// the generated core) and the fast tier re-verifies its code words, so both
-/// stay on for the code a patch does not touch.
-pub fn open_dn2_engine_patched(
-    image: &[u8],
-    state: &[u8],
-    clock_base: u64,
-    patch: Option<&crate::dsp_patch::DspPatch>,
-) -> Result<sharc_native::Engine, String> {
-    open_engine_patched(image, state, clock_base, patch, DN2_IDLE)
-}
-
-/// `open_dn2_engine_patched` for any firmware: `idle` is the RTOS idle loop
+/// stay on for the code a patch does not touch. `idle` is the RTOS idle loop
 /// the exact idle skip (options 23-25) is armed on.
 pub fn open_engine_patched(
+    core: &'static sharc_native::GenCore,
     image: &[u8],
     state: &[u8],
     clock_base: u64,
     patch: Option<&crate::dsp_patch::DspPatch>,
     idle: IdleLoop,
 ) -> Result<sharc_native::Engine, String> {
-    let mut e = sharc_native::Engine::from_image(image).map_err(|c| format!("image error {c}"))?;
+    let mut e =
+        sharc_native::Engine::from_image(image, core).map_err(|c| format!("image error {c}"))?;
     e.import(state)
         .map_err(|c| format!("state import error {c}"))?;
     // 4 runtime decode, 5 instruction clock, 6 clock base, 9 software IRQs,

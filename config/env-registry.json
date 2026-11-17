@@ -75,7 +75,7 @@
   },
   "DIGI_COUPLED_FEATURES": {
    "owner": "python:tools/devtools",
-   "purpose": "Cargo features of the coupled-run build (default coupled-audio)"
+   "purpose": "Cargo features of the coupled-run build (default sharc,play)"
   },
   "DIGI_COUPLED_FIXTURES": {
    "owner": "rust:apps/desktop",
@@ -661,10 +661,6 @@
    "owner": "rust:packages/emulator",
    "purpose": "Directory of the generated SHARC core (first core); read by sharc-gen build.rs."
   },
-  "SHARC_GEN_DIR_2": {
-   "owner": "rust:packages/emulator",
-   "purpose": "internal: slot-2 core of a two-core build, set by native_emu from SHARC_GEN_DIR_DT2; not a user setting."
-  },
   "SHARC_GEN_DIR_DN2": {
    "owner": "python:tools/emulator",
    "purpose": "Directory of the generated SHARC core of the Digitone II; wins over SHARC_GEN_DIR for DN2."
@@ -820,6 +816,38 @@
   "DIGI_TRANSFER_DIR": {
    "owner": "python:tools/device",
    "purpose": "Folder for the packed .dkm files and the failed-pack record of dktransfer (default out/patch/transfer); a test run sets one inside its run directory."
+  },
+  "DIGI_SHARC_CORE_STORE": {
+   "owner": "python:tools/devtools",
+   "purpose": "Directory of the core library store instead of <git common dir>/sharc-core-cache (tests only)"
+  },
+  "DIGI_SHARC_CORE_LIB_DN2": {
+   "owner": "rust:packages/emulator/sharc-peer",
+   "purpose": "Path of the DN2 core library (sharc-core-lib) that the host loads instead of its static core; verify_build writes it to dist/daemons.json"
+  },
+  "DIGI_SHARC_CORE_LIB_DT2": {
+   "owner": "rust:packages/emulator/sharc-peer",
+   "purpose": "Path of the DT2 core library (sharc-core-lib) that the host loads instead of its static core; verify_build writes it to dist/daemons.json"
+  },
+  "SHARC_GEN_ENV_SUFFIX": {
+   "owner": "rust:packages/emulator/sharc-gen",
+   "purpose": "Build-time: the suffix of the region-list variables of the core (set by its build script)"
+  },
+  "SHARC_RT_FLAGS": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (build flags) that the core library header carries"
+  },
+  "SHARC_RT_RUSTC": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (rustc version) that the core library header carries"
+  },
+  "SHARC_RT_SRC_SHA256": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (source hash) that the core library header carries"
+  },
+  "SHARC_RT_TARGET": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (target triple) that the core library header carries"
   }
  },
  "prefixes": {

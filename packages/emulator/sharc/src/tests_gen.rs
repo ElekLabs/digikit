@@ -46,7 +46,7 @@ fn engine_cfg(parcels: &[u16], mode1: u32, seed: u64, fast: bool, cfg: u8) -> cr
     let mut mem = Mem::new();
     mem.load(SPIN_ALIAS, &bytes);
     mem.reset();
-    let mut e = crate::Engine::new(mem);
+    let mut e = crate::Engine::new(mem, crate::default_core());
     assert_eq!(e.set_option(4, 1), 0);
     if cfg == 1 {
         // Setting a model refreshes `block_base_ok`, which also compares
@@ -54,7 +54,7 @@ fn engine_cfg(parcels: &[u16], mode1: u32, seed: u64, fast: bool, cfg: u8) -> cr
         // for (false for the DN2/DT2 images); a mismatch gates the fast tier
         // off as well. The runtime sets the image's value, so do the same.
         assert_eq!(
-            e.set_option(10, crate::gen_explicit_memory_model() as i64),
+            e.set_option(10, crate::default_core().explicit_memory_model as i64),
             0
         );
         for key in [19, 20] {

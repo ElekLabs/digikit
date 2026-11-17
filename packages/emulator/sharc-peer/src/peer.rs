@@ -27,16 +27,6 @@ use std::{
 use crate::ddr_monitor::{DdrMonitorCommand, DdrMonitorStatus};
 use periph::dspi::Peer;
 
-/// DN2 RTOS idle loop, short-word PCs (inclusive start, exclusive end).
-pub const DN2_IDLE_RANGE: (u32, u32) = (0xb8_8a49, 0xb8_8abb);
-/// Head of the idle task's spin loop (a linked call to `0xb88a49`).
-pub const DN2_IDLE_HEAD: u32 = 0xb8_8aab;
-/// DT2 1.16 RTOS idle loop: the same code as DN2's (function hashes match
-/// `0xb88a49` -> `0xb8636d`, `0xb88aa6` -> `0xb863ca`), moved by -0x26dc.
-pub const DT2_IDLE_RANGE: (u32, u32) = (0xb8_636d, 0xb8_63df);
-/// Head of the DT2 idle task's spin loop (a linked call to `0xb8636d`).
-pub const DT2_IDLE_HEAD: u32 = 0xb8_63cf;
-
 /// Where a firmware's RTOS idle task spins (from the device profile).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IdleLoop {
@@ -46,14 +36,42 @@ pub struct IdleLoop {
     pub head: u32,
 }
 
-pub const DN2_IDLE: IdleLoop = IdleLoop {
-    range: DN2_IDLE_RANGE,
-    head: DN2_IDLE_HEAD,
-};
-pub const DT2_IDLE: IdleLoop = IdleLoop {
-    range: DT2_IDLE_RANGE,
-    head: DT2_IDLE_HEAD,
-};
+impl IdleLoop {
+    /// The idle loop a device profile names.
+    pub fn from_profile(dsp: &device_profile::DspProfile) -> Self {
+        Self {
+            range: (dsp.idle_start, dsp.idle_end),
+            head: dsp.idle_head,
+        }
+    }
+
+    /// The idle loop of a device's DSP (`dn2`, `dt2`) from the embedded profiles. It is the same in
+    /// every firmware version of one device (checked here: an error names the versions that differ);
+    /// `from_profile` takes the exact one.
+    pub fn for_device(device: &str) -> Result<Self, String> {
+        let registry = device_profile::Registry::embedded().map_err(|e| e.to_string())?;
+        let mut found: Vec<(&str, Self)> = Vec::new();
+        for firmware in registry
+            .devices()
+            .iter()
+            .filter(|d| d.short == device)
+            .flat_map(|d| d.firmwares.iter())
+        {
+            if let Some(dsp) = &firmware.dsp {
+                found.push((&firmware.version, Self::from_profile(dsp)));
+            }
+        }
+        let Some(&(first_version, first)) = found.first() else {
+            return Err(format!("no DSP profile for device {device}"));
+        };
+        if let Some((version, other)) = found.iter().find(|(_, idle)| *idle != first) {
+            return Err(format!(
+                "the idle loop of device {device} differs between firmware versions: {first_version} has {first:?}, {version} has {other:?}"
+            ));
+        }
+        Ok(first)
+    }
+}
 
 /// 1 GHz DSP clock / 1.5 kHz frame rate.
 pub const DEFAULT_PERIOD: u32 = 666_667;
@@ -586,7 +604,8 @@ impl<E: DspEngine> Core<E> {
         Self {
             engine,
             period,
-            idle: DN2_IDLE_RANGE,
+            // Empty until the host sets the idle loop (`set_idle_range`, or `spawn`).
+            idle: (0, 0),
             halted: None,
             rx_phase: std::env::var("DIGI_DSP_RX_PHASE")
                 .ok()
@@ -998,6 +1017,11 @@ impl<E: DspEngine> RemoteDsp<E> {
         self.sample_link = true;
     }
 
+    /// The RTOS idle loop the engine may skip (see [`IdleLoop`]).
+    pub fn set_idle_range(&mut self, range: (u32, u32)) {
+        self.core.idle = range;
+    }
+
     /// First half of a frame: the reply. Renders the previous frame first if
     /// the caller has not.
     pub fn reply(&mut self, tx: &[u8]) -> Vec<u8> {
@@ -1261,7 +1285,9 @@ impl ThreadedPeer {
                 let mut period_ns: Vec<u32> = Vec::new();
                 let mut periods = 0u64;
                 let mut frames_done = 0u64;
-                let mut spike = crate::spikelog::DspWindow::open(crate::cputime::thread_cpu_ns());
+                let mut spike = elektron_native_boot::spikelog::DspWindow::open(
+                    elektron_native_boot::cputime::thread_cpu_ns(),
+                );
                 let tier_time = std::env::var_os("SHARC_TIER_TIME").is_some_and(|v| v != "0");
                 let born = sharc_native::ticks();
                 let mut wait_ticks = 0u64;
@@ -1317,7 +1343,7 @@ impl ThreadedPeer {
                             frames_done += 1;
                             if frames_done % LIVE_REPORT_FRAMES == 0 {
                                 let report = WorkerReport {
-                                    cpu_ns: crate::cputime::thread_cpu_ns(),
+                                    cpu_ns: elektron_native_boot::cputime::thread_cpu_ns(),
                                     tiers: core.engine.tier_counters(),
                                     model_stats: core.engine.model_stats(),
                                     periods: frames_done,
@@ -1342,9 +1368,9 @@ impl ThreadedPeer {
                             }
                         }
                         Msg::Report => {
-                            let (cycles, insns) = crate::cputime::thread_counters();
+                            let (cycles, insns) = elektron_native_boot::cputime::thread_counters();
                             let _ = report_tx.send(WorkerReport {
-                                cpu_ns: crate::cputime::thread_cpu_ns(),
+                                cpu_ns: elektron_native_boot::cputime::thread_cpu_ns(),
                                 cycles,
                                 insns,
                                 tiers: core.engine.tier_counters(),
@@ -1702,21 +1728,28 @@ fn frame_poke(tx: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// The engine glue over the first generated core (the build's SHARC_GEN_DIR).
-mod engine_dn2 {
-    use super::*;
-    use ::sharc_native;
-    include!("sharc_engine.rs");
-}
-pub use engine_dn2::*;
+/// The engine glue: `NativeDsp` runs the generated core the engine is opened with.
+#[path = "sharc_engine.rs"]
+mod engine;
+pub use engine::*;
 
-/// The same glue over the second generated core (SHARC_GEN_DIR_2): `second::NativeDsp` runs that
-/// device's DSP where `NativeDsp` runs the first one's.
-#[cfg(feature = "second-core")]
-pub mod second {
-    use super::*;
-    use ::sharc_native_2 as sharc_native;
-    include!("sharc_engine.rs");
+#[cfg(test)]
+mod idle_loop_tests {
+    use super::IdleLoop;
+
+    #[test]
+    fn every_firmware_of_a_device_has_the_same_idle_loop_today() {
+        let dn2 = IdleLoop::for_device("dn2").unwrap();
+        let dt2 = IdleLoop::for_device("dt2").unwrap();
+        assert_ne!(dn2, dt2);
+        assert!(IdleLoop::for_device("none").is_err());
+    }
+}
+
+/// The DN2 idle loop of the profiles, for the tests.
+#[cfg(test)]
+fn dn2_idle_range() -> (u32, u32) {
+    IdleLoop::for_device("dn2").expect("DN2 profile").range
 }
 
 #[cfg(test)]
@@ -1729,7 +1762,7 @@ mod tests {
         F: FnOnce() -> Result<E, String> + Send + 'static,
     {
         use crate::ddr_monitor::{DdrMonitorHit, DdrMonitorKind, DdrMonitorRange};
-        let (_peer, handle, _) = ThreadedPeer::spawn(make, 5000, DN2_IDLE_RANGE).unwrap();
+        let (_peer, handle, _) = ThreadedPeer::spawn(make, 5000, dn2_idle_range()).unwrap();
         let range = DdrMonitorRange {
             start: 0x8001_0000,
             end: 0x8001_0004,
@@ -1819,29 +1852,16 @@ mod tests {
             let mut mem = sharc_native::mem::Mem::new();
             mem.load(0x8001_0000, &[1, 2, 3, 4]);
             mem.reset();
-            let mut engine = sharc_native::Engine::new(mem);
+            let mut engine = sharc_native::Engine::new(mem, &sharc_gen::CORE);
             engine.s.icount = 73;
             Ok(NativeDsp(engine))
-        });
-    }
-
-    #[cfg(feature = "second-core")]
-    #[test]
-    fn ddr_monitor_second_core_worker_lifecycle() {
-        ddr_monitor_worker_contract(|| {
-            let mut mem = sharc_native_2::mem::Mem::new();
-            mem.load(0x8001_0000, &[1, 2, 3, 4]);
-            mem.reset();
-            let mut engine = sharc_native_2::Engine::new(mem);
-            engine.s.icount = 73;
-            Ok(second::NativeDsp(engine))
         });
     }
 
     #[test]
     fn ddr_monitor_unsupported_engine_acknowledges_error() {
         let (_peer, handle, _) =
-            ThreadedPeer::spawn(|| Ok(WordProbe), 5000, DN2_IDLE_RANGE).unwrap();
+            ThreadedPeer::spawn(|| Ok(WordProbe), 5000, dn2_idle_range()).unwrap();
         assert!(
             handle
                 .ddr_monitor(DdrMonitorCommand::Status)
@@ -1864,7 +1884,7 @@ mod tests {
             Ok(None)
         }
         fn pc(&self) -> u32 {
-            DN2_IDLE_RANGE.0
+            dn2_idle_range().0
         }
         fn halt_reason(&self) -> Option<String> {
             None
@@ -1881,7 +1901,7 @@ mod tests {
     #[test]
     fn exact_word_probe_keeps_unaligned_addresses_and_unknowns() {
         let (_peer, handle, _shared) =
-            ThreadedPeer::spawn(|| Ok(WordProbe), 5000, DN2_IDLE_RANGE).unwrap();
+            ThreadedPeer::spawn(|| Ok(WordProbe), 5000, dn2_idle_range()).unwrap();
         assert_eq!(handle.peek_word(0x3e002).unwrap(), Some(0x55667788));
         assert_eq!(handle.peek_word(0x3e003).unwrap(), None);
         // The existing byte view still aligns each word and slices its bytes;
@@ -1910,7 +1930,7 @@ mod tests {
         fn step(&mut self, n: u32) -> u32 {
             self.ran += n;
             self.pc = if self.ran >= self.idle_after {
-                DN2_IDLE_RANGE.0 + 3
+                dn2_idle_range().0 + 3
             } else {
                 0x1c0000
             };
@@ -2144,7 +2164,7 @@ mod tests {
         }
         fn pc(&self) -> u32 {
             if self.idle_at(self.t) {
-                DN2_IDLE_RANGE.0
+                dn2_idle_range().0
             } else {
                 0x1c0000
             }
@@ -2184,6 +2204,7 @@ mod tests {
                     },
                     period,
                 );
+                core.idle = dn2_idle_range();
                 got.push(core.run_period());
             }
             assert_eq!(got[0], got[1], "idle {idle:?} halt {halt:?}");
@@ -2193,6 +2214,7 @@ mod tests {
     #[test]
     fn frame_flow_pcm_and_busy() {
         let (mut peer, sh) = SharcPeer::new(mock(None), 20_000);
+        peer.set_idle_range(dn2_idle_range());
         let mut tx = vec![0u8; 2748];
         tx[1] = 3;
         let reply = peer.exchange(&tx);
@@ -2217,6 +2239,7 @@ mod tests {
     #[test]
     fn engine_error_returns_zeros_and_stays_halted() {
         let (mut peer, sh) = SharcPeer::new(mock(Some(1)), 4096);
+        peer.set_idle_range(dn2_idle_range());
         let r = peer.exchange(&[0u8; 8]);
         assert_eq!(r, vec![0xab; 8]); // reply was taken before the block failed
         assert_eq!(sh.borrow().halted.as_deref(), Some("boom"));
@@ -2231,6 +2254,7 @@ mod tests {
     #[test]
     fn detached_gives_zero_reply_without_running() {
         let (mut peer, sh) = SharcPeer::new(mock(None), 4096);
+        peer.set_idle_range(dn2_idle_range());
         sh.borrow_mut().attached = false;
         assert_eq!(peer.exchange(&[1u8; 4]), vec![0; 4]);
         assert_eq!(sh.borrow().dsp_instructions, 0);
@@ -2275,7 +2299,7 @@ mod threaded_tests {
         fn step(&mut self, n: u32) -> u32 {
             self.mix(n as u64);
             self.pc = if self.h & 3 == 0 {
-                DN2_IDLE_RANGE.0 + 1
+                dn2_idle_range().0 + 1
             } else {
                 0x1c0000
             };
@@ -2357,6 +2381,7 @@ mod threaded_tests {
 
     fn run_sync(n: u32, halt: Option<u32>) -> Out {
         let (mut peer, sh) = SharcPeer::new(Chain::new(halt), 5000);
+        peer.set_idle_range(dn2_idle_range());
         let mut replies = Vec::new();
         for i in 0..n {
             sh.borrow_mut().attached = script(i);
@@ -2368,7 +2393,7 @@ mod threaded_tests {
 
     fn run_threaded(n: u32, halt: Option<u32>, poll: bool) -> (Out, (Vec<u8>, u64)) {
         let (mut peer, handle, sh) =
-            ThreadedPeer::spawn(move || Ok(Chain::new(halt)), 5000, DN2_IDLE_RANGE).unwrap();
+            ThreadedPeer::spawn(move || Ok(Chain::new(halt)), 5000, dn2_idle_range()).unwrap();
         let mut replies = Vec::new();
         for i in 0..n {
             sh.borrow_mut().attached = script(i);
@@ -2405,7 +2430,7 @@ mod threaded_tests {
         let r = ThreadedPeer::spawn(
             || Err::<Chain, _>("no engine".to_string()),
             1,
-            DN2_IDLE_RANGE,
+            dn2_idle_range(),
         );
         assert_eq!(r.err().as_deref(), Some("no engine"));
     }
@@ -2478,9 +2503,22 @@ mod aligned_stop_tests {
         let (start, end) = (num("DN2_EQUIV_START", 4600), num("DN2_EQUIV_END", 5600));
         let clock = num("DN2_EQUIV_CLOCK", 573_627_620) as u64;
         let period = 667_000;
-        let open = || NativeDsp(open_dn2_engine(&image, &state, clock).unwrap());
+        let open = || {
+            NativeDsp(
+                open_engine(
+                    &sharc_gen::CORE,
+                    &image,
+                    &state,
+                    clock,
+                    IdleLoop::for_device("dn2").unwrap(),
+                )
+                .unwrap(),
+            )
+        };
         let mut new = Core::new(open(), period);
         let mut old = Core::new(ChunkedOnly(open()), period);
+        new.idle = dn2_idle_range();
+        old.idle = dn2_idle_range();
         let (mut busy_before_end, mut nonidle) = (0, 0);
         for (i, frame) in frames.iter().enumerate().take(end).skip(start) {
             let (r_new, _) = new.exchange(frame, true, None);

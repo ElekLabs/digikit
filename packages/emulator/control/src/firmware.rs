@@ -4,9 +4,9 @@
 
 use std::collections::BTreeMap;
 
-use elektron_native_boot::dsp_patch::DspPatch;
-use elektron_native_boot::dsp_stream::{self, LoadedMemory};
 use sha2::{Digest, Sha256};
+use sharc_peer::dsp_patch::DspPatch;
+use sharc_peer::dsp_stream::{self, LoadedMemory};
 
 /// The MAIN OS section (ColdFire).
 pub const SECTION_MAIN: u32 = 3;

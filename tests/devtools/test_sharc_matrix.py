@@ -12,6 +12,12 @@ def put(path, data):
     return str(path)
 
 
+@pytest.fixture(autouse=True)
+def no_core_store(monkeypatch):
+    """The core libraries come from the store (git, cargo): not in these tests."""
+    monkeypatch.setattr(matrix, "core_libraries", lambda devices: {})
+
+
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(matrix, "tool_hashes", lambda: {"runner": "stable"})

@@ -337,11 +337,15 @@ def tier_config() -> dict[str, object]:
 def resolve_tiers(
     context: str | None,
     syx: pathlib.Path,
-    slot: str = "",
+    slot: str | None = None,
     environ: Environ | None = None,
     **options: bool,
 ) -> emulator_config.Resolution:
-    """`emulator_config.resolve` for a firmware file and the current config file."""
+    """`emulator_config.resolve` for a firmware file and the current config file. SLOT is the suffix of the region list
+    names (`SLOT_SUFFIX`); None takes the one of the firmware's device, because a core library reads the lists of its
+    device (`GenCore::env_suffix`: DN2 none, DT2 `_2`)."""
+    if slot is None:
+        slot = SLOT_SUFFIX.get(device_for_syx(pathlib.Path(syx)) or "dn2", "")
     return emulator_config.resolve(
         context,
         _syx_digest(str(syx)),
@@ -365,20 +369,20 @@ def fast_env(
     """
     environ = os.environ if environ is None else environ
     syx = firmware(environ) if syx is None else syx
-    res = resolve_tiers(context, syx, "", environ)
+    res = resolve_tiers(context, syx, None, environ)
     return {} if res.off else {**res.explicit, **res.add}
 
 
-# Engine slots of a two-core build. Slot 1 (SHARC_GEN_DIR, unsuffixed region lists) is always the DN2 core and
-# slot 2 (SHARC_GEN_DIR_2, `_2` lists) always the DT2 core, whichever firmware boots. The region lists are
-# addresses in one device's DSP image and each engine instance reads the list of its own slot.
+# Engine slots. The region lists are addresses in one device's DSP image, and the core of a device reads the lists
+# named with its suffix (`GenCore::env_suffix`): DN2 `SHARC_FAST_REGIONS`, DT2 `SHARC_FAST_REGIONS_2`, in a host that
+# runs one device and in a host that runs both.
 SLOT_DEVICES = ("dn2", "dt2")
 SLOT_SUFFIX = {"dn2": "", "dt2": "_2"}
 SLOT_LISTS = ("SHARC_FAST_REGIONS", "SHARC_FAST_FALLBACK_REGIONS", "SHARC_BLOCKTRANS")
 
 
 def slot_env(device: str, env: dict[str, str]) -> dict[str, str]:
-    """ENV (a device's `fast_env`) with its region lists renamed for the device's engine slot of a two-core build."""
+    """ENV with its region lists renamed for the engine slot of DEVICE (names that are already suffixed stay)."""
     suffix = SLOT_SUFFIX[device]
     return {
         (key + suffix if key in SLOT_LISTS else key): value

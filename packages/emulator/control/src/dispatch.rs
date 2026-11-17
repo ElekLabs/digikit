@@ -74,7 +74,7 @@ impl Dispatcher {
             "schema_version": SCHEMA_VERSION,
             "host": self.host,
             "features": {
-                "coupled_audio": cfg!(feature = "coupled-audio"),
+                "coupled_audio": cfg!(feature = "sharc"),
                 "server": cfg!(feature = "server"),
             },
             "methods": METHODS,
