@@ -356,6 +356,31 @@ fn service_hooks_equal_the_hook_entries_per_device() {
     ));
 }
 
+/// The service with an adapters folder beside it that declares `[[slot]] frametype` with the given `devices` line.
+fn adapters_with(test: &str, devices: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let (dir, sdk) = service(test, &[]);
+    let adapters = dir.parent().unwrap().join("adapters/machines");
+    fs::create_dir_all(&adapters).unwrap();
+    fs::write(
+        adapters.join("module.toml"),
+        format!("[[slot]]\nname = \"frametype\"\n{devices}\n"),
+    )
+    .unwrap();
+    (dir, sdk, adapters.parent().unwrap().to_path_buf())
+}
+
+/// The `service!` call of the service in `dir` with `extra` after `hooks = []` (the fills and exports of the call must equal the manifest entries).
+fn call_with(dir: &Path, extra: &str) {
+    fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        format!(
+            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, setup = hooks::setup, hooks = [], {extra});\n"
+        ),
+    )
+    .unwrap();
+}
+
 #[test]
 fn service_exports_and_fills_equal_the_manifest_entries() {
     let call = |extra: &str| {
@@ -363,7 +388,10 @@ fn service_exports_and_fills_equal_the_manifest_entries() {
             "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, setup = hooks::setup, hooks = [], {extra});\n"
         )
     };
-    let (dir, sdk) = service("exports-fills", &[]);
+    let (dir, sdk, adapters) = adapters_with("exports-fills", "devices = [\"dn2\"]");
+    let problems = |dir: &Path, sdk: &Path| {
+        patchkit::svccheck::check_with_adapters(dir, sdk, &adapters).unwrap()
+    };
     fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
     fs::write(
         dir.join("dks/src/lib.rs"),
@@ -462,22 +490,12 @@ fn the_service_crates_of_the_repository_pass() {
 #[test]
 fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
     use patchkit::svccheck::check_with_adapters;
-    let adapters_with = |test: &str, devices: &str| {
-        let (dir, sdk) = service(test, &[]);
-        let adapters = dir.parent().unwrap().join("adapters/machines");
-        fs::create_dir_all(&adapters).unwrap();
-        fs::write(
-            adapters.join("module.toml"),
-            format!("[[slot]]\nname = \"frametype\"\n{devices}\n"),
-        )
-        .unwrap();
-        (dir, sdk, adapters.parent().unwrap().to_path_buf())
-    };
     let fill =
         |devices: &str| format!("\n[[fill]]\nslot = \"frametype\"\nentry = \"e\"\n{devices}");
     // a slot on dn2 only: a fill for dn2 agrees
     let (dir, sdk, adapters) = adapters_with("fill-ok", "devices = [\"dn2\"]");
     append(&dir.join("dks/module.toml"), &fill("devices = [\"dn2\"]\n"));
+    call_with(&dir, "fills = [(\"frametype\", hooks::e, dn2)]");
     assert_eq!(
         check_with_adapters(&dir, &sdk, &adapters).unwrap(),
         Vec::<String>::new()
@@ -507,6 +525,7 @@ fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
     // a slot on every device takes a fill without devices
     let (dir, sdk, adapters) = adapters_with("fill-slot-all", "");
     append(&dir.join("dks/module.toml"), &fill(""));
+    call_with(&dir, "fills = [(\"frametype\", hooks::e)]");
     assert_eq!(
         check_with_adapters(&dir, &sdk, &adapters).unwrap(),
         Vec::<String>::new()
@@ -567,6 +586,7 @@ fn a_slot_declared_twice_for_a_common_device_fails_and_on_disjoint_devices_passe
         &dir.join("dks/module.toml"),
         "\n[[fill]]\nslot = \"frametype\"\nentry = \"e\"\ndevices = [\"dn2\", \"dt2\"]\n",
     );
+    call_with(&dir, "fills = [(\"frametype\", hooks::e)]");
     assert_eq!(
         check_with_adapters(&dir, &sdk, &adapters).unwrap(),
         Vec::<String>::new()
