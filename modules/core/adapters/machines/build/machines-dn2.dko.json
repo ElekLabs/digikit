@@ -225,6 +225,34 @@
    "section": ".rodata",
    "symbol": "_mf_pgn",
    "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 64,
+   "section": ".rodata",
+   "symbol": "mf_native_register",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".rodata",
+   "symbol": "mf_native_register_v2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 72,
+   "section": ".rodata",
+   "symbol": "mf_native_remove",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 76,
+   "section": ".rodata",
+   "symbol": "mf_native_turn",
+   "type": "cf.32"
   }
  ],
  "sections": [
@@ -244,13 +272,13 @@
   },
   {
    "align": 4,
-   "hex": "4d414348000000020000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "4d41434800000003000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 64
+   "size": 80
   }
  ],
- "source_sha256": "90b7ca1364206f3f1063015da902a9053d46eca2f4791d7928e0379a4901a286",
+ "source_sha256": "525a192e81dd68de71453239cd460d0f60f29e72aa0395850c34cee2039d6320",
  "symbols": [
   {
    "global": false,
@@ -379,6 +407,30 @@
    "value": 0
   },
   {
+   "global": true,
+   "name": "mf_native_register",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_register_v2",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_remove",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_turn",
+   "section": null,
+   "value": 0
+  },
+  {
    "global": false,
    "name": "mf_pgstr",
    "section": ".bss",
@@ -408,7 +460,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "111",
-  "isa_check": "17f199822796f7941dea216329c721069fa052c431bd109f85f75d805901258f",
+  "isa_check": "4fda86de446369c07ca037add753f23b71a2fe2d62bb6afef9cf237411dd7789",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

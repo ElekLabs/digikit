@@ -253,6 +253,34 @@
    "section": ".rodata",
    "symbol": ".sec..rodata",
    "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 104,
+   "section": ".rodata",
+   "symbol": "mf_native_register",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
+   "section": ".rodata",
+   "symbol": "mf_native_register_v2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 112,
+   "section": ".rodata",
+   "symbol": "mf_native_remove",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 116,
+   "section": ".rodata",
+   "symbol": "mf_native_turn",
+   "type": "cf.32"
   }
  ],
  "sections": [
@@ -272,13 +300,13 @@
   },
   {
    "align": 4,
-   "hex": "000000080000000c0000001000000014ffffffffffffffff000000180000001c00000020000000244d414348000000020000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "000000080000000c0000001000000014ffffffffffffffff000000180000001c00000020000000244d41434800000003000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 104
+   "size": 120
   }
  ],
- "source_sha256": "c04ac59a1f695350e2bd97d95aeaa39cfa8cc0be741b9d42e4a5f2a3358503bd",
+ "source_sha256": "b9b8505abc61e6ffcf19b2c6cb62ed20ca6a45440bdbf6d23181b6b39bac2c9f",
  "symbols": [
   {
    "global": false,
@@ -414,6 +442,30 @@
   },
   {
    "global": true,
+   "name": "mf_native_register",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_register_v2",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_remove",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_turn",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "mf_native_type",
    "section": ".text",
    "value": 380
@@ -460,7 +512,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "111",
-  "isa_check": "a3ea145c07d2fe7ab4fe6aec781a3ec674dbaa372086b3b21c407d7dd5c4709d",
+  "isa_check": "a9ca68aa55c674ec4d20a13af99d8a6fea67dc56276e50a67cb7a05dc737a5b2",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }
