@@ -35,3 +35,19 @@ it('starts coupled tasks first within the core budget', () => {
   expect(startAtOnce({ sharc: 2, zero: 20 }, 12, 12)).toEqual({ sharc: 2, zero: 6 });
   expect(startAtOnce({ sharc: 0, zero: 20 }, 12, 12)).toEqual({ sharc: 0, zero: 12 });
 });
+
+it('counts a dsp value it cannot resolve as coupled', () => {
+  expect(dspModeOf(`start({ dsp: mode });`)).toBe('sharc');
+  expect(dspModeOf(`start({ dsp: await pick() });`)).toBe('sharc');
+  expect(dspModeOf(`start({ dsp: fast ? 'zero' : slow });`)).toBe('sharc');
+  expect(dspModeOf(`start({ dsp: 'zero' });`)).toBe('zero');
+  // the caller's own value passes through; the caller decides
+  expect(dspModeOf(`start({ dsp: opts.dsp });`)).toBe('zero');
+  expect(dspModeOf(`start({ ...opts, dsp: resolveDsp(given) });`)).toBe('zero');
+});
+
+it('turns an option-conditional helper coupled only for a caller that sets the option', () => {
+  const kit = [`export function rig(o) { return start({ dsp: o.initial === 'small' ? 'cold' : o.dsp }); }`];
+  expect(dspModeOf(`rig({ initial: 'small' });`, kit)).toBe('sharc');
+  expect(dspModeOf(`rig({ initial: 'big' });`, kit)).toBe('zero');
+});

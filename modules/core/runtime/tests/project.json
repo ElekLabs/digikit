@@ -148,6 +148,7 @@
       },
       {
         "files": ["memaudit.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["C:layout"],
         "modules": ["test/c-demo", "test/dyn-demo", "test/dyn-demo-stray", "test/dyn-dn2", "test/sine", "core/services/machines"],
         "plusdrive": true
