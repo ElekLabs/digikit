@@ -36,8 +36,8 @@ import { setFitReader } from '@digi/workbench-core/modules/fit.ts';
 import { nameHash, readProvides, serviceFileOf, type ServiceFile } from '@digi/workbench-core/modules/services.ts';
 import { fileHashHex } from '@digi/dk-session';
 import { parseSoftwareVersion } from '@digi/workbench-core/transfer/connection-core.ts';
+import { FakeDevice, concat, hex, sha } from '@digi/test-support/fakedevice';
 import { dkm, everythingFits, needsOf } from './support/dkm.ts';
-import { FakeDevice, concat, hex, sha } from './support/fakedevice.ts';
 
 setFitReader(everythingFits);
 
@@ -688,7 +688,7 @@ test('buildView with services: a library module lists its services with their st
   const shot = (await libraryModule(needing('someone/shot', ['fx']), needsOf))!;
   dev.files.set('modules/shot.dkm', shot.bytes);
   const view = await buildView(session(dev), [pluck, shot], depsOf([fx, machines]));
-  const rows = Object.fromEntries(view.modules.map((r) => [r.id, r]));
+  const rows = Object.fromEntries(view.modules.map((r): [string, typeof r] => [String(r.id), r]));
   assert.deepEqual(
     rows['someone/pluck'].services?.map((r) => [r.stem, r.state]),
     [

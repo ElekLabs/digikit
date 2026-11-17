@@ -6,7 +6,7 @@ import { emulatorClock, repoRoot, type Device, type Session } from '@digi/test-s
 import { expect } from 'vitest';
 import { type PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
-import { boundService, neededServices, requireCoupledForServices, servicePath, SERVICE_MODULES } from './service-files.ts';
+import { boundService, neededServices, requireCoupledForServices, servicePath } from './service-files.ts';
 import { bootClockOf, pollEmulated, waitForBootEmulated } from './waits.ts';
 
 /** Emulated milliseconds the boot-time loads of the installed modules may take after the boot is seen. */
@@ -27,7 +27,7 @@ export const DEBUG_MODULE = 'digikit/debug';
 
 /**
  * Native USB upload of prepared modules, one selection with all of them (in this order), one restart, then wait for their registration.
- * With `device`, the services that the modules need (`SERVICE_MODULES`: `fx.dks` for an effect) go on the card too, bound to the stock firmware (the Nx target
+ * With `device`, the services that the modules need (`patchkit services`: `fx.dks` for an effect) go on the card too, bound to the stock firmware (the Nx target
  * `<service id>:bind`; the runtime finds them by name at boot). With `session` and the debug module in the list, the wait ends on the log's FW_READY: the boot intro
  * is over and the stock MidiRpc service answers (without the log, the session's own probe before the first stock request covers it).
  */
@@ -48,8 +48,9 @@ export async function installModules(
         paths.push(storePath);
       }
       if (device) {
-        for (const name of neededServices(modules.map((m) => m.artifact))) {
-          const boundFile = await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!));
+        for (const needed of neededServices(modules.map((m) => m.artifact))) {
+          const name = needed.service;
+          const boundFile = await boundService(device, needed, moduleArtifact(device, needed.moduleId));
           // the rule holds whenever a service goes on the card: a call without a session cannot show the mode, so it is refused for a service with a DSP part
           requireCoupledForServices([{ name: servicePath(name), file: boundFile }], session ? (await session.status()).dsp : undefined);
           const bound = fs.readFileSync(boundFile);
@@ -88,9 +89,14 @@ export async function installModules(
   );
 }
 
-/** One prepared module alone (a test that does not read the log). */
-export function installModule(dk: DkSession, id: string, artifact: string): Promise<void> {
-  return installModules(dk, [{ id, artifact }]);
+/** One prepared module alone (a test that does not read the log). Pass `device` to put the services it needs on the card. */
+export function installModule(
+  dk: DkSession,
+  id: string,
+  artifact: string,
+  options?: { device?: Device; session?: Pick<Session, 'status' | 'client'> },
+): Promise<void> {
+  return installModules(dk, [{ id, artifact }], options);
 }
 
 /** The debug module and the modules `ids`, in one selection and one restart. */

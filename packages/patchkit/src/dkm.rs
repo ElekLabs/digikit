@@ -1593,4 +1593,177 @@ mod tests {
         assert_eq!(s.len(), 2, "a compiler helper names no service");
         assert!(services_of(["memcpy"]).is_empty());
     }
+    #[test]
+    fn a_version_is_three_numbers_up_to_255() {
+        assert_eq!(parse_version("1.2.3").unwrap(), 0x010203);
+        assert_eq!(parse_version("0.8.0").unwrap(), 0x000800);
+        assert_eq!(parse_version("255.255.255").unwrap(), 0xffffff);
+        for (bad, why) in [
+            ("1.2", "expected major.minor.patch"),
+            ("1.2.3.4", "expected major.minor.patch"),
+            ("", "expected major.minor.patch"),
+            ("1.2.x", "bad number"),
+            ("1..3", "bad number"),
+            ("-1.0.0", "bad number"),
+            ("1.2.256", "over 255"),
+        ] {
+            let e = parse_version(bad).unwrap_err().0;
+            assert!(e.contains(why), "{bad:?}: {e}");
+        }
+    }
+
+    fn pack_error(o: &Dko) -> String {
+        pack(o, &opts()).unwrap_err().0
+    }
+
+    /// `object()` with the import `fw_thing` renamed to `name`.
+    fn object_importing(name: &str) -> Dko {
+        let mut o = unstamped();
+        for s in o.symbols.iter_mut().filter(|s| s.name == "fw_thing") {
+            s.name = name.into();
+        }
+        for r in o.relocs.iter_mut().filter(|r| r.symbol == "fw_thing") {
+            r.symbol = name.into();
+        }
+        o.stamp_isa();
+        o
+    }
+
+    #[test]
+    fn an_object_that_cannot_be_packed_is_refused_with_the_reason() {
+        // not ColdFire code
+        let mut o = unstamped();
+        o.arch = "sharc".into();
+        o.stamp_isa();
+        assert!(pack_error(&o).contains("ColdFire"));
+        // an import name over the 31 characters of an import slot, and one of exactly 31
+        assert!(pack_error(&object_importing(&"x".repeat(IMPORT_LEN))).contains("is longer than"));
+        assert!(pack(&object_importing(&"x".repeat(IMPORT_LEN - 1)), &opts()).is_ok());
+        // a relocation in a bss section
+        let mut o = object();
+        o.relocs.push(rel(".bss", 0, "cf.32", "counter", 0));
+        o.stamp_isa();
+        let e = pack_error(&o);
+        assert!(e.contains("bss"), "{e}");
+        // a relocation whose word is not in the image
+        let mut o = object();
+        o.relocs.push(rel(".data", 22, "cf.32", "counter", 0));
+        o.stamp_isa();
+        assert!(!pack_error(&o).is_empty());
+        // a symbol the packer reads that lies outside the image (in bss), and one that is not a whole word of it
+        let mut o = object();
+        o.symbols.push(sym("dk_svc_abi", Some(".bss"), 0));
+        o.stamp_isa();
+        assert!(pack_error(&o).contains("outside the loaded image"));
+        let mut o = object();
+        o.symbols.push(sym("dk_svc_abi", Some(".data"), 22));
+        o.stamp_isa();
+        assert!(pack_error(&o).contains("not a whole word"));
+    }
+
+    fn service_of(p: Provided) -> Options {
+        Options {
+            service: Some(p),
+            ..opts()
+        }
+    }
+
+    fn provided() -> Provided {
+        Provided {
+            service: "svc-test".into(),
+            exports: vec![],
+            hooks: vec![],
+            fills: vec![],
+        }
+    }
+
+    #[test]
+    fn a_service_that_names_an_entry_twice_or_one_the_object_lacks_is_refused() {
+        let o = object();
+        let hook =
+            |name: &str, entry: &str| (name.to_string(), entry.to_string(), Vec::<String>::new());
+        let e = |p: Provided| pack(&o, &service_of(p)).unwrap_err().0;
+        // the same name twice
+        let twice = Provided {
+            exports: vec!["tick_fn".into(), "tick_fn".into()],
+            ..provided()
+        };
+        assert!(e(twice).contains("exports tick_fn twice"));
+        let twice = Provided {
+            hooks: vec![hook("hook.a", "tick_fn"), hook("hook.a", "init_fn")],
+            ..provided()
+        };
+        assert!(e(twice).contains("hooks hook.a twice"));
+        let twice = Provided {
+            fills: vec![hook("slot", "tick_fn"), hook("slot", "init_fn")],
+            ..provided()
+        };
+        assert!(e(twice).contains("fills slot twice"));
+        // an entry the object does not define, for each list
+        assert!(
+            e(Provided {
+                exports: vec!["nope".into()],
+                ..provided()
+            })
+            .contains("exports nope, which the object does not define")
+        );
+        assert!(
+            e(Provided {
+                hooks: vec![hook("hook.a", "nope")],
+                ..provided()
+            })
+            .contains("no global symbol")
+        );
+        assert!(
+            e(Provided {
+                fills: vec![hook("slot", "nope")],
+                ..provided()
+            })
+            .contains("fills slot with nope")
+        );
+        // a hook for a device that does not exist
+        let bad_device = Provided {
+            hooks: vec![("hook.a".into(), "tick_fn".into(), vec!["zz9".into()])],
+            ..provided()
+        };
+        assert!(e(bad_device).contains("is not one of"));
+        // the same functions once each pack
+        let ok = Provided {
+            exports: vec!["tick_fn".into()],
+            hooks: vec![hook("hook.a", "init_fn")],
+            ..provided()
+        };
+        assert!(pack(&o, &service_of(ok)).is_ok());
+    }
+
+    /// `f` with the sha256 written for its bytes: a damaged field that `parse` must find by itself.
+    fn resealed(mut f: Vec<u8>) -> Vec<u8> {
+        let sha = file_sha(&f);
+        f[H_SHA..H_SHA + 32].copy_from_slice(&sha);
+        f
+    }
+
+    #[test]
+    fn a_file_with_a_damaged_field_is_refused_by_parse_with_the_field_named() {
+        let f = pack(&object(), &opts()).unwrap();
+        let with = |edit: &dyn Fn(&mut Vec<u8>)| {
+            let mut g = f.clone();
+            edit(&mut g);
+            Dkm::parse(&resealed(g)).unwrap_err().0
+        };
+        assert!(with(&|g| put(g, 4, 2)).contains("format 2 is not supported"));
+        assert!(with(&|g| g[H_NAME] = b' ').contains("bad module name"));
+        assert!(with(&|g| put(g, H_ROLE, 2)).contains("role 2 is not supported"));
+        // the first relocation: past the image, an unknown kind, an import that is not in the import table
+        let at = get(&f, H_RELOC_OFF) as usize;
+        assert!(with(&|g| put(g, at + CF_RELOC_OFFSET, 0x1000)).contains("outside the image"));
+        assert!(with(&|g| put(g, at + CF_RELOC_KIND, 2 << 24)).contains("bad relocation kind"));
+        assert!(with(&|g| put(g, at + CF_RELOC_KIND, 1 << 24 | 9)).contains("bad relocation kind"));
+        // a table that starts after the end of the file, and a size field that is not the file's
+        let end = f.len() as u32;
+        assert!(with(&|g| put(g, H_REG_OFF, end + 8)).contains("outside the file"));
+        let mut short = f.clone();
+        short.truncate(f.len() - 4);
+        assert!(Dkm::parse(&short).unwrap_err().0.contains("size fields"));
+    }
 }

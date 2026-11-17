@@ -79,15 +79,34 @@ pub unsafe fn call(a: u32, args: &[usize]) -> usize {
         return 0;
     }
     let mut v = [0usize; CALL_ARGS];
-    let n = if args.len() < CALL_ARGS { args.len() } else { CALL_ARGS };
+    let n = if args.len() < CALL_ARGS {
+        args.len()
+    } else {
+        CALL_ARGS
+    };
     let mut i = 0;
     while i < n {
         v[i] = args[i];
         i += 1;
     }
-    type F = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize, usize, usize, usize, usize, usize) -> usize;
+    type F = unsafe extern "C" fn(
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+    ) -> usize;
     let f: F = core::mem::transmute(a as usize);
-    f(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11])
+    f(
+        v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11],
+    )
 }
 
 /// The most arguments `call` passes.

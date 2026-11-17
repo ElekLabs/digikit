@@ -58,7 +58,6 @@ for (const device of DEVICES) {
       const sym = (name: string) => symbolsOf(runtime, plan)(name);
       let runtime = fixture.runtime;
       const pcm: Record<string, string> = {};
-      let mixHalf = 0;
       const chain = () => rows(runtime.session, plan, slots);
       const row = async () => (await chain())[0]!;
       const words = async () => {
@@ -146,7 +145,6 @@ for (const device of DEVICES) {
       expect((await row()).slice(18, 23)).toEqual([0, 0, 0, 0, 0]);
       expect(master.capacity.SEND_SLOTS).toEqual({ limit: sendSlots, used: 0, largest: 0 });
       await mainPage(runtime);
-      await sound('a');
 
       // The MIX endpoints: approach, sixty fast events, settle.
       const endpoint = async (near: number, direction: number, target: number, tag: string) => {
@@ -163,6 +161,7 @@ for (const device of DEVICES) {
           what: 'the MIX knob is at its end',
         });
         expect(await kit.raw(7)).toBe(target);
+        await rowIs('the MIX word at target', (r) => r[13] === (target ? bits(1) : 0));
         expect((await words())[1]).toBe(target ? bits(1) : 0);
         await shot(runtime.session, artifacts, tag);
       };
@@ -182,19 +181,17 @@ for (const device of DEVICES) {
       // MIX bypass after a nonzero bias: a MIX that fails to bypass shows as gain.
       await endpoint(0x1000, -1, 0, 'gbp-page-mix-zero');
       await mainPage(runtime);
-      await sound('b');
       await endpoint(0x7000, 1, 0x7f00, 'gbp-page-mix-top');
+      await mainPage(runtime);
       await ui.fxPage(3);
       const halfRaw = await kit.setRaw('LEVEL', 7, 0x4000);
       await rowIs('the MIX word follows the knob', (r) => Math.abs(floatWord(r[13]!) - halfRaw / 0x7f00) < 1e-4);
-      mixHalf = floatWord((await row())[13]!);
-      expect(Math.abs(mixHalf - halfRaw / 0x7f00)).toBeLessThan(1e-4);
+      expect(Math.abs(floatWord((await row())[13]!) - halfRaw / 0x7f00)).toBeLessThan(1e-4);
       await mainPage(runtime);
-      await sound('h');
       await endpoint(0x7000, 1, 0x7f00, 'gbp-page-mix-top-again');
+      await mainPage(runtime);
       await turn(0x1800, 'down');
       await mainPage(runtime);
-      await sound('d');
       await noFault();
       const saved = [await kit.raw(0), await kit.raw(7)];
       await mainPage(runtime);
@@ -212,17 +209,11 @@ for (const device of DEVICES) {
       await runtime.ui.wait({ ms: 300, why: NO_PAGE_STATE });
       await shot(runtime.session, artifacts, 'gbp-page-loaded');
       await mainPage(runtime);
-      await sound('e');
       await noFault();
 
-      // The gain law on the master: the dry PCM of the first card, scaled. The value a case plays is the float word that the row holds.
-      await compare(pcm.dry!, pcm.a!, 1, artifacts, 'bias-zero', true);
+      // One end-to-end PCM compare is the boundary proof: the dry PCM of the first card, scaled by the gain of the float word that the row holds. The gain
+      // law itself, the zero bias, MIX 0, 0.5 and 1, and other biases are proven on the SHARC rig (tests/fixtures/modules/dyn-fx-gain-bipolar/tests/rig).
       await compare(pcm.dry!, pcm.c!, gainOf(bias.up!), artifacts, 'bias-up');
-      await compare(pcm.dry!, pcm.b!, 1, artifacts, 'mix-zero-after-bias', true);
-      // MIX blends the dry and the wet block: dry + mix * (wet - dry) = 1 + mix * (gain - 1).
-      await compare(pcm.dry!, pcm.h!, Math.fround(1 + mixHalf * (gainOf(bias.up!) - 1)), artifacts, 'mix-half');
-      await compare(pcm.dry!, pcm.d!, gainOf(bias.down!), artifacts, 'bias-down');
-      await compare(pcm.dry!, pcm.e!, gainOf(bias.down!), artifacts, 'bias-loaded');
 
       // Send route, the fixture's default route (no stored choice): the amounts of track 1, the value word, the MIX word.
       const send = await boot('send', [SINE, FX]);

@@ -1001,4 +1001,93 @@ mod tests {
         );
         assert_eq!(p.verdicts[1].result(), E_PLAN_FIT);
     }
+    #[test]
+    fn a_need_of_a_loaded_service_row_is_not_met_without_a_provider() {
+        // no service is in-crate (`gen_services::STATIC` is 0): every row is a service file's row
+        assert_eq!(crate::gen_services::STATIC, 0, "the runtime has no in-crate service row");
+        static ROWS2: [ServiceRow; 2] = [ServiceRow::of::<S, crate::core_api::RealCore>("machines", &[]), ServiceRow::of::<S, crate::core_api::RealCore>("loaded", &[])];
+        static ROWS2_P: dkrt_abi::service::RowPtrs<2> = dkrt_abi::service::RowPtrs::of(&ROWS2);
+        let c = caps();
+        let env = Env { services: ServiceTable::new(&ROWS2_P.0, &REAL_CORE), runtime: 0x000800, caps: &c };
+        let plan_of = |mods: &[Vec<u8>], provs: &[Vec<u8>]| {
+            let m: Vec<Option<Keys>> = mods.iter().map(|b| Some(Keys::parse(b).unwrap())).collect();
+            let p: Vec<Option<Keys>> = provs.iter().map(|b| Some(Keys::parse(b).unwrap())).collect();
+            plan_with(&env, &m, &p)
+        };
+        let loaded = name_hash("loaded");
+        let after_prefix = Table { needs: &[need(loaded, 0)], ..KEEP };
+        let p = plan_of(&[bytes(&after_prefix)], &[]);
+        assert_eq!(p.verdicts[0], Verdict::Refused(Reason::NeedMissing(loaded)));
+        // a provider of the loaded row's name takes it (a loaded row is no service of the runtime)
+        let provider = Table { provides: &[Pair { a: loaded, b: 0 }], ..KEEP };
+        let p = plan_of(&[bytes(&after_prefix)], &[bytes(&provider)]);
+        assert_eq!((p.provider_verdicts[0], p.verdicts[0]), (Verdict::Accepted, Verdict::Accepted));
+    }
+
+    #[test]
+    fn a_provider_table_that_did_not_parse_is_accepted_and_never_meets_a_need() {
+        let svc = name_hash("lfo_bus");
+        let consumer = Table { needs: &[need(svc, 0)], ..KEEP };
+        let p = run_p(&[Some(bytes(&consumer))], &[None]);
+        assert_eq!(p.provider_verdicts[0], Verdict::Accepted);
+        assert_eq!(p.verdicts[0], Verdict::Refused(Reason::NeedMissing(svc)));
+    }
+
+    #[test]
+    fn a_provider_that_needs_a_service_nobody_provides_is_refused_and_one_that_needs_a_newer_version_too() {
+        let (a, b) = (name_hash("a"), name_hash("b"));
+        let lone = Table { needs: &[need(b, 0)], provides: &[Pair { a, b: 0 }], ..KEEP };
+        let p = run_p(&[], &[Some(bytes(&lone))]);
+        assert_eq!(p.provider_verdicts[0], Verdict::Refused(Reason::NeedMissing(b)));
+        assert_eq!(p.provider_verdicts[0].result(), E_MISSING);
+        // `base` provides b at 0.1.0 and `top` needs 0.2.0: the order puts `base` first and `top` is refused with the contract error
+        let base = Table { provides: &[Pair { a: b, b: 0x000100 }], ..KEEP };
+        let top = Table { needs: &[need(b, 0x000200)], provides: &[Pair { a, b: 0 }], ..KEEP };
+        let p = run_p(&[], &[Some(bytes(&top)), Some(bytes(&base))]);
+        assert_eq!(p.provider_verdicts[..2], [Verdict::Refused(Reason::NeedVersion), Verdict::Accepted]);
+        assert_eq!(p.provider_verdicts[0].result(), E_CONTRACT);
+    }
+
+    #[test]
+    fn a_generic_key_in_two_modules_refuses_the_later_one() {
+        let g = dkrt_sdk::records::GENERIC_KINDS[0];
+        let (k5, k6) = ([5u32], [6u32]);
+        let first = Table { kinds: &[KindDecl { kind: g, len: 16, entry: 8 }], keys: &[KeyGroup { kind: g, keys: &k5 }], ..KEEP };
+        let same = Table { keys: &[KeyGroup { kind: g, keys: &k5 }], ..KEEP };
+        let other = Table { keys: &[KeyGroup { kind: g, keys: &k6 }], ..KEEP };
+        let p = run(&[Some(bytes(&first)), Some(bytes(&same)), Some(bytes(&other))]);
+        assert_eq!(p.verdicts[..3], [Verdict::Accepted, Verdict::Refused(Reason::DuplicateKey(g, 5)), Verdict::Accepted]);
+        match p.verdicts[1] {
+            Verdict::Refused(why) => assert_eq!(why.detail(), [g, 5]),
+            Verdict::Accepted => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn a_module_without_a_table_does_not_block_the_order_of_the_others() {
+        let svc = name_hash("lfo_bus");
+        let consumer = Table { needs: &[need(svc, 0)], ..KEEP };
+        let provider = Table { provides: &[Pair { a: svc, b: 0 }], ..KEEP };
+        // the module with no table is placed first (nothing to wait for); the consumer waits for the module that provides what it needs
+        let p = run(&[None, Some(bytes(&consumer)), Some(bytes(&provider))]);
+        assert_eq!(p.order[..3], [0, 2, 1]);
+        assert_eq!(p.verdicts[0], Verdict::Accepted);
+    }
+
+    #[test]
+    fn settle_leaves_a_module_with_no_table_and_a_module_the_plan_refused_as_they_are() {
+        let b = name_hash("b");
+        let user_b = bytes(&Table { needs: &[need(b, 0)], ..KEEP });
+        let prov_b = bytes(&Table { provides: &[Pair { a: b, b: 0 }], ..KEEP });
+        let (mods, provs) = ([None, Some(Keys::parse(&user_b).unwrap())], [Some(Keys::parse(&prov_b).unwrap())]);
+        let c = caps();
+        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
+        let env = Env { services, runtime: 0x000800, caps: &c };
+        let mut p = plan_with(&env, &mods, &provs);
+        assert_eq!(p.verdicts[..2], [Verdict::Accepted; 2]);
+        // the module the plan refused keeps its own reason, not the failed provider's
+        p.verdicts[1] = Verdict::Refused(Reason::Fit(CAPK_MACHINE_ROWS));
+        settle(&services, &mut p, &mods, &provs, &[false]);
+        assert_eq!(p.verdicts[..2], [Verdict::Accepted, Verdict::Refused(Reason::Fit(CAPK_MACHINE_ROWS))]);
+    }
 }

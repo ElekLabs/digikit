@@ -206,6 +206,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     *st() = core::mem::zeroed();
     *dsp::ds() = core::mem::zeroed();
     *boot::info() = core::mem::zeroed();
+    dsp_loading();
     dsp::init_once();
     LINK = Link {
         completion,
@@ -544,36 +545,38 @@ pub extern "C" fn sdhc_large_ctl(_: u32, _: u32) -> u32 {
     0
 }
 
-// The +Drive write adapter, absent in this host fixture (version 0 is refused).
+// The +Drive write adapter: absent in this host fixture (version 0 is refused) until a test installs the fake of `host_io::Pdw`.
 #[no_mangle]
 pub extern "C" fn dkpw_version() -> u32 {
-    0
+    crate::host_io::pdw_version()
 }
 #[no_mangle]
-pub extern "C" fn dkpw_begin(_: *const u8, _: u32, _: *const u8, _: u32) -> i32 {
-    -48
+pub extern "C" fn dkpw_begin(path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32 {
+    crate::host_io::pdw_begin(path, size, hash4, flags)
 }
 #[no_mangle]
-pub extern "C" fn dkpw_write(_: *const u8, _: u32) -> i32 {
-    -48
+pub extern "C" fn dkpw_write(buf: *const u8, len: u32) -> i32 {
+    crate::host_io::pdw_write(buf, len)
 }
 #[no_mangle]
-pub extern "C" fn dkpw_close(_: *mut u8) -> i32 {
-    -48
+pub extern "C" fn dkpw_close(out: *mut u8) -> i32 {
+    crate::host_io::pdw_close(out)
 }
 #[no_mangle]
-pub extern "C" fn dkpw_abort() {}
-#[no_mangle]
-pub extern "C" fn dkpw_delete(_: *const u8) -> i32 {
-    -48
+pub extern "C" fn dkpw_abort() {
+    crate::host_io::pdw_abort()
 }
 #[no_mangle]
-pub extern "C" fn dkpw_recover(_: *mut u32) -> i32 {
-    -48
+pub extern "C" fn dkpw_delete(path: *const u8) -> i32 {
+    crate::host_io::pdw_delete(path)
+}
+#[no_mangle]
+pub extern "C" fn dkpw_recover(out: *mut u32) -> i32 {
+    crate::host_io::pdw_recover(out)
 }
 #[no_mangle]
 pub extern "C" fn dkpw_commit() -> i32 {
-    0
+    crate::host_io::pdw_commit()
 }
 #[no_mangle]
 pub extern "C" fn dkpw_staging() -> *const u8 {
@@ -609,8 +612,11 @@ pub(crate) fn lenient_tick_drop() {
 /// The other firmware anchors that the platform tests keep reachable: nothing in the host tests may write the card or send MIDI through them
 /// (the tests of platform behaviour use `FakePlatform`).
 #[export_name = "cf.storage.fn.block.write"]
-pub extern "C" fn block_write(_: u32, _: u32, _: *const u8) -> i32 {
-    panic!("host tests must not write firmware storage")
+pub extern "C" fn block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
+    match crate::host_io::card_write(sector, bytes, buf) {
+        Some(r) => r,
+        None => panic!("host tests must not write firmware storage"),
+    }
 }
 #[export_name = "cf.midi.fn.send"]
 pub extern "C" fn midi_send(_: u32, _: *const u8, _: u32) {
@@ -621,9 +627,13 @@ pub extern "C" fn midi_send(_: u32, _: *const u8, _: u32) {
 pub extern "C" fn dkrt_info_table() {}
 
 #[export_name = "cf.storage.fn.block.read"]
-pub extern "C" fn block_read(_: u32, _: u32, _: *mut u8) -> i32 {
-    panic!("host cleanup tests must not read firmware storage")
+pub extern "C" fn block_read(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
+    match crate::host_io::card_read(sector, bytes, buf) {
+        Some(r) => r,
+        None => panic!("host cleanup tests must not read firmware storage"),
+    }
 }
+
 
 unsafe extern "C" fn test_sink(_: *const crate::dlog::Ev) {}
 

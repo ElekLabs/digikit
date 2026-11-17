@@ -306,7 +306,7 @@ def run_once(binary, scenario, seconds, env, label, timed, out, timeout):
         proc = subprocess.Popen(
             argv,
             cwd=ROOT,
-            env=coupled.run_env(env),
+            env=coupled.run_env(env, syx=coupled.inputs()["firmware"]),
             stdout=subprocess.DEVNULL,
             stderr=err,
         )

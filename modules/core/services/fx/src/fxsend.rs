@@ -347,7 +347,11 @@ unsafe fn release<C: CoreApi>(core: &C, inf: *const u32, k: usize) {
     }
     let c = s.cell[k] as usize - 1;
     wr(iw(inf, w::ROW) + 8 + 4 * c as u32, 0);
-    dkrt_svc_params::reset_param_row(core, dkrt_svc_params::dynreg(core), iw(inf, w::P_SEND) + c as u32);
+    dkrt_svc_params::reset_param_row(
+        core,
+        dkrt_svc_params::dynreg(core),
+        iw(inf, w::P_SEND) + c as u32,
+    );
     s.row[c] = 0;
     s.cell[k] = 0;
     s.route[k] = 0;
@@ -509,7 +513,7 @@ unsafe fn tracks<C: CoreApi>(core: &C, inf: *const u32) {
 mod tests {
     use super::*;
 
-    /// The offsets that the device tests read from `DKRT_FXS` (`fx-routes-ui.ts`, `fx-track-route-kit.device.test.ts`).
+    /// The offsets that the device tests read from `DKRT_FXS` (`fx-routes-ui.ts`, `fx-track-route.device.test.ts`).
     #[test]
     fn the_layout_the_device_tests_read_is_unchanged() {
         assert_eq!(core::mem::offset_of!(SendState, restores), 16);

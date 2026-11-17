@@ -8,8 +8,25 @@
       {
         "files": ["frametype-slot.device.test.ts"],
         "devices": ["dn2"],
+        "dsp": "sharc",
         "tags": ["S:machines", "C:loading"],
         "modules": ["digikit/debug", "test/dyn-dn2", "core/services/machines"]
+      },
+      {
+        "files": ["machine-rows-dn2.device.test.ts"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "tags": ["S:machines", "C:state"],
+        "modules": ["test/dyn-dn2", "core/services/machines"],
+        "plusdrive": true
+      },
+      {
+        "files": ["machine-rows-dt2.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["S:machines", "C:state"],
+        "modules": ["test/sine", "core/services/machines"],
+        "plusdrive": true
       }
     ]
   }

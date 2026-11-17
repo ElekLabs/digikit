@@ -32,7 +32,17 @@ static int done_n, in_tick, done_outside_tick;
 static uint32_t done_req[64];
 static int32_t done_res[64];
 static uint32_t done_clock;
-void dkrt_pool_done(uint32_t req, int32_t result)
+/* the pointer slots of the image (module.toml [[slot]]), filled as the samples service fills them */
+volatile uintptr_t sp_slot_pool_done;
+volatile uintptr_t sp_slot_pool_lost;
+static void harness_pool_done(uint32_t req, int32_t result);
+static void harness_pool_lost(void);
+__attribute__((constructor)) static void harness_fill_slots(void)
+{
+    sp_slot_pool_done = (uintptr_t)harness_pool_done;
+    sp_slot_pool_lost = (uintptr_t)harness_pool_lost;
+}
+static void harness_pool_done(uint32_t req, int32_t result)
 {
     if (!in_tick)
         done_outside_tick++;
@@ -40,7 +50,7 @@ void dkrt_pool_done(uint32_t req, int32_t result)
     done_req[done_n] = req;
     done_res[done_n++] = result;
 }
-void dkrt_pool_lost(void)
+static void harness_pool_lost(void)
 {
     puts("LOST");
     exit(4);

@@ -1,0 +1,20 @@
+[package]
+name = "sharc-core-lib"
+license.workspace = true
+repository.workspace = true
+version = "0.0.1"
+edition = "2024"
+publish = false
+description = "One generated SHARC+ core (SHARC_GEN_DIR) as a shared library: sharc_core_header and sharc_core"
+
+# The core compiled apart from every host. Build it once per generated core with SHARC_GEN_DIR set
+# (the device is the generated directory, not a crate): see packages/emulator/README.md.
+[dependencies]
+sharc-rt = { path = "../sharc-rt" }
+sharc-gen = { path = "../sharc-gen" }
+
+[lib]
+name = "sharc_core_lib"
+crate-type = ["cdylib"]
+test = false
+doctest = false

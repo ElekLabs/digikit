@@ -57,11 +57,7 @@ name is `out/patch/<firmware>+<modules>.syx`. The command verifies the result be
 - The input must be a stock image. A patched image is refused.
 - Everything under `out/` is derived from firmware and is never committed.
 
-A machine needs its framework modules, which are added for you (`test/machine-clone` is a patched-in test machine of registry rows; content machines such as the project's PLUCK, `digikit/pluck`, are run-time modules, see below):
-
-```sh
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules test/machine-clone -o out/patch/clone.syx
-```
+A machine is a run-time module (the project's PLUCK, `digikit/pluck`, see below): `machines.dks` on the card acts on its rows. patchkit refuses a patch-time `[[entry]]` row of the `machines` registry.
 
 ### Inspect, check, explain, verify
 
@@ -71,7 +67,7 @@ uv run python -m tools.patchkit.patchkit inspect out/patch/fx.syx               
 uv run python -m tools.patchkit.patchkit check --firmware firmware/Digitakt_II_OS1.17.syx           # which modules fit this firmware
 uv run python -m tools.patchkit.patchkit verify out/patch/fx.syx --base firmware/Digitakt_II_OS1.17.syx   # re-decode and check
 mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx
-mise run patch:mem -- core/machines test/machine-clone --device dt2 --firmware 1.17    # bytes used and free per region
+mise run patch:mem -- core/machines core/params --device dt2 --firmware 1.17    # bytes used and free per region
 ```
 
 - `check` prints `ok` or `refused` plus the reason for every module (for example "built for dn2-1.12").
@@ -355,7 +351,7 @@ first `pnpm dev` in a fresh tree compiles the browser cores and takes several mi
 |---|---|---|
 | Port | Per-firmware facts: named anchors with SHA-256 of the expected bytes, free regions, container limits. Generated, keyed by the `.syx` SHA-256. | `devices/ports/dt2-1.17.toml` |
 | Framework module | Hooks firmware sites once and exports a registry that other modules add entries to. Ordinary assembly plus a manifest. | `core/machines`, `core/params`, `core/dsp-voice`, `core/expansion` |
-| Content module | Own code and declarative registry entries. No addresses. | `test/machine-clone` |
+| Content module | Own code and declarative registry entries. No addresses. | `test/registry-demo` |
 
 Device, board and firmware facts are data (`devices/*.toml`, `devices/ports/*.toml`, `modules/core/adapters/machines/types.toml`); code that needs a constant gets it from `patchkit gen` (`[[gen]]` in a `module.toml`). Where each fact lives and what a new device needs: `docs/design/device-data.md`.
 
@@ -1026,3 +1022,19 @@ there should be **no** `MACHINE_FAULT` (the clamp in the routine prevents the ca
 
 Patched images were flashed to one Digitakt II (finding 47). Whether and when to flash again is the maintainer's decision, every time.
 The device on the desk is a Digitakt II on 1.17: the DT2 1.17 port is the one that has been run on hardware.
+
+### Which services a module needs
+
+`patchkit services --device SHORT [--firmware FW.syx --bind-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...` is the one rule for the card
+services of a module. A module that needs a service has a hard `NEEDS` item for its name hash in the header table of its `.dkm`. The service of a name is
+the module whose `module.toml` has `role = "service"` and `service = "NAME"`. The command prints one JSON line for each service that the files need or
+that `--module` (id) or `--service` (name) names, in name order. This is the format, not a captured run:
+
+```text
+{"service":"fx","module_id":"core/services/fx","store_path":"services/fx.dks"}
+```
+
+With `--firmware` and `--bind-dir` it also packs each service for the device, binds it to the stock image as `DIR/<name>.dks` and adds `bound_path`. A file
+whose `DIR/<name>.src.json` sidecar names the same packed bytes and image is kept; any other is bound again. The device tests, `dk:dev` and `module:check`
+all call it. The Nx target `<module id>:pack` runs it on each packed file and writes `dist/modules/<device>/<leaf>.services.json` beside it; the device tests read that file (they run no patchkit) and take the bound file from the target `<service id>:bind`. Its Rust tests are
+`packages/patchkit/tests/services.rs` (they skip without the m68k-elf toolchain).

@@ -93,4 +93,3 @@ pub struct RegState {
     pub empty_rep: [u32; 4],
     pub s: Strings,
 }
-

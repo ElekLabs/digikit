@@ -1,7 +1,5 @@
 //! Portable bounded Oracle boot diagnostic runtime.
 
-#[cfg(target_arch = "wasm32")]
-mod abi;
 mod capture;
 pub mod card_file;
 #[cfg(feature = "cf-mix")]
@@ -9,10 +7,7 @@ pub mod cfmix;
 #[cfg(feature = "cf-profile")]
 pub mod cfprof;
 mod common;
-mod cputime;
-pub mod ddr_monitor;
-pub mod dsp_patch;
-pub mod dsp_stream;
+pub mod cputime;
 mod guard;
 mod late_send;
 pub mod midi;
@@ -22,8 +17,6 @@ pub mod pcm_play;
 mod pcprobe;
 mod ram_clear;
 mod runtime;
-#[cfg(feature = "sharc")]
-pub mod sharc_peer;
 mod softfloat;
 mod spans;
 pub mod spikelog;

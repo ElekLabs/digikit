@@ -26,6 +26,8 @@ export interface CallSpec {
   read_regs: string[];
   /** count the instructions executed at each pc (the result's `profile`) */
   profile?: boolean;
+  /** record the DM loads of instructions at `watch` pcs (the result's `loads`); the rig's read hook, off by default */
+  loads?: boolean;
   /** `[loader byte address, count]` of the stock image as loaded (the result's `stock`); needs `RigSetup.image` */
   stock_reads?: [address: number, count: number][];
   /** pcs that end this call instead of the setup's `breaks` */
@@ -50,6 +52,8 @@ export interface CallResult {
   reads: (number | null)[][];
   /** runs `[pc, address, width]` stored by instructions at `watch` pcs */
   stores: [pc: number, address: number, width: number][];
+  /** `[pc, address, width]` of the DM loads (1, 2 or 4 bytes) of instructions at `watch` pcs, in execution order; only for a call with `loads` */
+  loads?: [pc: number, address: number, width: number][];
   /** `[pc, count]` per executed pc, in pc order; only for a call with `profile` */
   profile?: [pc: number, count: number][];
   /** one hex string per `stock_reads` entry (`null` when the image does not write every byte); only for a call with `stock_reads` */
@@ -61,7 +65,7 @@ export interface CallResult {
 export interface RigSetup {
   return_sw: number;
   breaks: number[];
-  /** `[first pc, end pc]` ranges whose stores the calls report */
+  /** `[first pc, end pc]` ranges whose stores (and, for a call with `loads`, loads) the calls report */
   watch?: [number, number][];
   /** the stock DSP loader stream (firmware section 7), hex: loaded before `code`, which goes over it */
   image?: string;

@@ -161,7 +161,16 @@ def main(argv: list[str] | None = None) -> int:
         not a.rebuild, "dt2", ready_dir / "digi-audio-dn2-image.bin", pgo=True
     )
     wav = a.wav or work / "trig.wav"
-    env = coupled.run_env({}) if a.fast else {**os.environ, "SHARC_FAST_REGIONS": ""}
+    if a.fast:
+        env = coupled.run_env({}, syx=syx)
+    else:
+        from tools.devtools import core_store
+
+        env = {
+            **os.environ,
+            "SHARC_FAST_REGIONS_2": "",  # the DT2 core reads the `_2` lists
+            **core_store.library_env(["dt2"]),
+        }
     env.update(kv.partition("=")[::2] for kv in a.env)
     subprocess.run(
         [

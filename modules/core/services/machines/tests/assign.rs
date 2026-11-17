@@ -94,11 +94,15 @@ fn a_stored_map_keeps_a_machine_on_its_number_and_a_boot_that_changes_nothing_sa
     unsafe {
         assert_eq!(resolve(&core, B), FIRST + 5, "sticky");
     }
-    assert!(saved(&core).is_empty(), "nothing changed, nothing is written");
+    assert!(
+        saved(&core).is_empty(),
+        "nothing changed, nothing is written"
+    );
     // a new machine takes the lowest number no entry references
     let core = FakeCore::new();
     stored(&core, map);
     settle(&core, &selection(&[&[B, A]]));
+    core.boot_index.set(0);
     unsafe {
         assert_eq!((resolve(&core, B), resolve(&core, A)), (FIRST + 5, FIRST));
     }
@@ -117,7 +121,11 @@ fn the_map_of_the_selection_record_is_read_once_and_moved_to_the_settings_key() 
     unsafe {
         assert_eq!(resolve(&core, A), FIRST + 2, "the number of the old map");
     }
-    assert_eq!(saved(&core), [old], "saved to the new key although the boot changed nothing");
+    assert_eq!(
+        saved(&core),
+        [old],
+        "saved to the new key although the boot changed nothing"
+    );
     // nothing to migrate: nothing is saved for a boot without machines
     let core = FakeCore::new();
     settle(&core, &selection(&[&[]]));
@@ -155,16 +163,28 @@ fn a_refused_write_is_tried_again_at_the_next_boot_with_the_same_numbers_and_the
     core.boot_index.set(0);
     settle(&core, &selection(&[&[A, B]]));
     let first = unsafe { (resolve(&core, A), resolve(&core, B)) };
-    assert_eq!(first, (FIRST + 2, FIRST), "the number of the old map, then the lowest free");
+    assert_eq!(
+        first,
+        (FIRST + 2, FIRST),
+        "the number of the old map, then the lowest free"
+    );
     assert_eq!(saved(&core).len(), 1, "one write, refused");
-    assert_ne!(core.legacy.get(), [0u8; 32], "the old bytes are not zeroed while the key is not stored");
+    assert_ne!(
+        core.legacy.get(),
+        [0u8; 32],
+        "the old bytes are not zeroed while the key is not stored"
+    );
     assert!(core.settings.borrow().is_empty());
     // the next boot: the same numbers, and the write is tried again
     core.put_result.set(OK);
     settle(&core, &selection(&[&[A, B]]));
     assert_eq!(unsafe { (resolve(&core, A), resolve(&core, B)) }, first);
     assert_eq!(saved(&core).len(), 2);
-    assert_eq!(core.legacy.get(), [0u8; 32], "zeroed after the key holds the map");
+    assert_eq!(
+        core.legacy.get(),
+        [0u8; 32],
+        "zeroed after the key holds the map"
+    );
 }
 
 #[test]

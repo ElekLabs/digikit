@@ -17,7 +17,7 @@ time (the stock project may run files in parallel, `REGRESSION_JOBS`, set by the
 Device tests for a module live in that module: `modules/**/tests/*.device.test.ts` (patched runtime on DT2 1.17
 and DN2 1.12). The owner's `project.json` lists them in `metadata.runtimeAcceptance`, with paths relative
 to that project. A record with `dksampleWasm: true` makes the target depend on `dksample:wasm`, which builds
-`apps/web/public/dksample.wasm`. Python tools a record lists in `sources` are hashed with the `tools.*` files they import (`tools/nx/py-imports.mjs`); a test that runs a new Python tool must list it there. Runtime acceptance belongs to `modules/core/runtime/tests/project.json`
+`apps/web/public/dksample.wasm`; `dkprofWasm: true` does the same with `dkprof:wasm` and `apps/web/public/dkprof.wasm`. A test whose imports reach `runtime/transfer-cli.ts` (it runs `wb transfer`) depends on `patchkit:wasm` and keys on `apps/web/public/patchkit.wasm` without a flag (`PATCHKIT_WASM_USERS` in `tools/nx/device-test-keys.mjs`). Python tools a record lists in `sources` are hashed with the `tools.*` files they import (`tools/nx/py-imports.mjs`); a test that runs a new Python tool must list it there. Runtime acceptance belongs to `modules/core/runtime/tests/project.json`
 (`core/runtime-tests`) except CF-only service commands and settings, owned by nested `service-commands/project.json`
 and `settings/project.json` (`core/runtime-service-tests` and `core/runtime-settings-tests`). Run an owner's
 `test-device` directly; `module:check core/runtime` discovers all owners. Checks that run over
@@ -125,8 +125,8 @@ the session ID even when they run outside the test body. Failed operations also 
 Stock restart and instruction-step waits are rejected for runtime sessions. Cleanup cancels protocol requests
 and closes the owned daemon.
 
-`transfer-live` runs the `tools.device.dktransfer` CLI (`runtime/transfer-cli.ts`) for install, delete and
-protocol restart, then checks the store, the mirror hash, `card.folder` metadata and the next boot.
+`transfer-live` runs `wb transfer` (`runtime/transfer-cli.ts`) for install with the services the module needs, delete and
+protocol restart, then checks the store (modules and `services/*.dks`), the mirror hash, `card.folder` metadata and the next boot.
 
 `input-adapter` and `remote-input` check semantic KEY navigation, TURN delivery and decoder acceptance, not
 vendor parameter changes. Exact remote pacing is checked by the host C unit

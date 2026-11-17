@@ -335,6 +335,7 @@ C 1c4ed0\nM 1000 0a0b\nE\nR 0 6\nX 1\nA 0 1 0 0\nC\nW 1004 ff\nP 1c4ed9 a 0\nEND
     fn loads_an_entry_state() {
         let v = &parse(SAMPLE).unwrap()[0];
         let mut s = St::new(crate::mem::Mem::new());
+        s.core = crate::default_core();
         load_entry(&mut s, v);
         assert_eq!(s.r[0], V::c(5));
         assert!(s.r[1].is_unknown());

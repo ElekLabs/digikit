@@ -284,11 +284,13 @@ pub unsafe fn report_provider(path: &[u8], res: i32, hash: u32, base: u32) {
 pub unsafe fn report_dsp(idx: u32, r: i32) {
     dlog::ev(logk::MOD_DSP, if r == OK { dlog::INFO } else { logk::F_ERROR }, [idx, r as u32, 0, 0, 0]);
     if (idx as usize) < SEL_MAX {
-        let b = info();
-        b.results[idx as usize] = r;
-        states().dsp_done(idx as usize, r);
-        if r == OK {
-            b.loaded += 1;
+        // only a module that waits for its DSP part takes the result; an active or failed module keeps its record
+        if states().dsp_done(idx as usize, r) {
+            let b = info();
+            b.results[idx as usize] = r;
+            if r == OK {
+                b.loaded += 1;
+            }
         }
     }
 }
@@ -361,6 +363,109 @@ mod tests {
             let mut copy: DkrtBootInfo = core::mem::zeroed();
             boot_info(&mut copy);
             assert_eq!((copy.states[..2].to_vec(), copy.detail[1]), (vec![STATE_ACTIVE, STATE_REFUSED], [7, 99]));
+        }
+    }
+    /// `path` as the NUL-terminated selection path the loader hands to `report_module`.
+    fn sel_path(p: &[u8]) -> [u8; SEL_PATH] {
+        let mut out = [0u8; SEL_PATH];
+        out[..p.len()].copy_from_slice(p);
+        out
+    }
+
+    unsafe fn name_of(k: usize) -> [u8; NAME_LEN] {
+        *addr_of!(BOOT_NAME[k])
+    }
+
+    unsafe fn fresh_boot_record() {
+        *info() = core::mem::zeroed();
+        BOOT_NAME = [[0; NAME_LEN]; SEL_MAX];
+        states().begin();
+    }
+
+    #[test]
+    fn a_module_report_keeps_the_file_leaf_and_names_the_missing_service_on_an_import_error() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            let mut missing = [0u8; NEEDS_LEN];
+            missing[..8].copy_from_slice(b"usb-bulk");
+            report_module(1, sel_path(b"mods/deep/a.dkm").as_ptr(), E_IMPORT, &missing);
+            assert_eq!(info().results[1], E_IMPORT);
+            assert_eq!(st().last_result, E_IMPORT);
+            assert_eq!(info().loaded, 0, "only OK counts as loaded");
+            assert_eq!(info().needs[1], missing);
+            assert_eq!(name_of(1)[..6], *b"a.dkm\0");
+            assert_eq!(info().needs[0], [0; NEEDS_LEN]);
+
+            // another error with a name set keeps no needs; an import error with no name keeps none either
+            fresh_boot_record();
+            report_module(0, sel_path(b"a.dkm").as_ptr(), E_INIT, &missing);
+            report_module(1, sel_path(b"b.dkm").as_ptr(), E_IMPORT, &[0; NEEDS_LEN]);
+            assert_eq!(info().needs, [[0; NEEDS_LEN]; SEL_MAX]);
+            assert_eq!(info().results[..2], [E_INIT, E_IMPORT]);
+
+            // OK counts, LOADING does not (the DSP part reports later), and a leaf over the name field is cut with its NUL kept
+            fresh_boot_record();
+            report_module(0, sel_path(b"x/ok.dkm").as_ptr(), OK, &[0; NEEDS_LEN]);
+            report_module(1, sel_path(b"x/dsp.dkm").as_ptr(), LOADING, &[0; NEEDS_LEN]);
+            assert_eq!(info().loaded, 1);
+            let mut long = b"mods/".to_vec();
+            long.extend_from_slice(&[b'n'; 40]);
+            long.extend_from_slice(b".dkm");
+            report_module(2, sel_path(&long).as_ptr(), OK, &[0; NEEDS_LEN]);
+            assert_eq!(name_of(2)[..NAME_LEN - 1], [b'n'; NAME_LEN - 1]);
+            assert_eq!(name_of(2)[NAME_LEN - 1], 0);
+        }
+    }
+
+    #[test]
+    fn a_provider_report_is_a_log_event_only_and_a_dsp_report_updates_one_row() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            info().count = 2;
+            for k in 0..2 {
+                states().planned(k, Verdict::Accepted);
+                states().init(k);
+                states().finished(k, LOADING);
+            }
+            let (results, states_before, loaded) = (info().results, info().states, info().loaded);
+            report_provider(b"services/lfo.dks", OK, 0x1234, 0x0010_0000);
+            report_provider(b"services/x", E_FORMAT, 0, 0);
+            assert_eq!((info().results, info().states, info().loaded), (results, states_before, loaded));
+            assert_eq!(*addr_of!(BOOT_NAME), [[0; NAME_LEN]; SEL_MAX]);
+
+            report_dsp(0, OK);
+            assert_eq!((info().results[0], info().states[0], info().loaded), (OK, STATE_ACTIVE, 1));
+            assert_eq!((info().results[1], info().states[1]), (0, STATE_DSP_LOADING), "the other row is untouched");
+            report_dsp(1, E_INIT);
+            assert_eq!((info().results[1], info().states[1], info().loaded), (E_INIT, STATE_FAILED, 1));
+            // an index past the selection changes nothing
+            let before = (info().results, info().states, info().loaded);
+            report_dsp(SEL_MAX as u32, E_INIT);
+            assert_eq!((info().results, info().states, info().loaded), before);
+        }
+    }
+
+    #[test]
+    fn a_dsp_report_for_a_module_that_is_not_waiting_for_its_dsp_changes_nothing() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            info().count = 2;
+            for k in 0..2 {
+                states().planned(k, Verdict::Accepted);
+                states().init(k);
+            }
+            // module 0 is active (no DSP part); module 1 failed in its init
+            states().finished(0, OK);
+            report_module(0, sel_path(b"a.dkm").as_ptr(), OK, &[0; NEEDS_LEN]);
+            states().finished(1, E_INIT);
+            report_module(1, sel_path(b"b.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN]);
+            let before = (info().results, info().states, info().loaded);
+            report_dsp(0, E_INIT);
+            report_dsp(1, OK);
+            assert_eq!((info().results, info().states, info().loaded), before);
         }
     }
 }

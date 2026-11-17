@@ -14,7 +14,7 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# C, built by `patchkit build`. Loaded by the digikit runtime from the card store (`patchkit pack test/svc-echo`, tools/device/dktransfer.py).
+# C, built by `patchkit build`. Loaded by the digikit runtime from the card store (`patchkit pack test/svc-echo`, `mise run transfer`).
 [[object]]
 path = "build/svc-echo.dko.json"
 sources = ["src/c/svc_echo.c"]

@@ -1,7 +1,7 @@
 """Panel key scripts and probe runs for the arena-safety proofs (finding 25).
 
 A `Script` is a timeline of panel taps, encoder turns, MIDI/USB input and frame dumps, in instructions after the
-firmware is ready. `args()` turns it into `regions_probe` arguments (packages/emulator/boot/examples/regions_probe.rs).
+firmware is ready. `args()` turns it into `regions_probe` arguments (packages/emulator/sharc-peer/examples/regions_probe.rs).
 `SCRIPTS` names the reusable ones; `tools/coldfire/regions.py scenario_args` falls back to them.
 """
 

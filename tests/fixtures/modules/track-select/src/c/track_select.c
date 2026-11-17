@@ -1,5 +1,5 @@
 /* test/track-select: the test-only route to the sample pool calls (`dk_sample_pool_add`, `_clear`, `_status`, `_info`) for a module that owns a
- * pool table (tests drive it without the SHOT picker). It owns no table, so it has no `dk_sample_pool_open` handle of its own. The runtime does not
+ * pool table (tests drive it without the SHOT picker). It owns no table, so `dk_sample_pool_open` finds none for it (init calls it once, which makes the module a user of the samples service file). The runtime does not
  * check which module a handle belongs to, and its handle is the client number as a pointer (the first module with a table gets client slot 0, handle 1),
  * so the test passes that number in the request and the module wraps it (POOL below). This relies on the runtime's handle form; it is a test of the
  * runtime, not an example for a module. Not a product picker. Commands
@@ -162,6 +162,10 @@ static int32_t status_cmd(u32 cmd, u32 seq, const void *request, u32 len, void *
 static int32_t init(dk_module_ctx *ctx)
 {
     dk_ui *ui;
+    dk_sample_pool *own;
+    /* The module owns no table: its own open finds none (DK_E_NOT_FOUND). The call is here for what it is: an import of `samples.dks`, so the module needs the
+     * samples service file and a boot without that file refuses it (the assembly cases of samples.dks). */
+    (void)dk_sample_pool_open(ctx, &own);
     /* The window command is optional: without core/ui (the UI timer) 'w' returns an error status. */
     if (dk_ui_open(ctx, &ui) == DK_OK && dk_ui_tick(ui, window_tick, 0, TICK_MS) == 0)
         win_ok = 1;

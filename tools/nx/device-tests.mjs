@@ -3,6 +3,7 @@
 import { globSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
+import { checkDspModes, taskMode } from './dsp-mode.mjs';
 import { mergeTests, manifestClosure, read, records } from './module-manifests.mjs';
 import {
   DEVICE_INPUTS,
@@ -22,6 +23,10 @@ export const DEVICE_IMAGES = 'patchkit:device-images';
 export const PACK_VERDICTS = 'patchkit:pack-verdicts';
 // The host assembly tests of the runtime (modules/core/runtime): the seams between the real packed outputs. No device task starts while they fail.
 export const TEST_ASSEMBLY = 'core/runtime:test-assembly';
+// Tasks every device task depends on: the patchkit binary, the daemons and the runtime assembly tests. Their projects are the
+// shared inputs of every device test (`test:subset --base` cannot select by path for them).
+export const SHARED_TASKS = ['patchkit:cli', 'digi-control:daemons', TEST_ASSEMBLY];
+export const SHARED_PROJECTS = SHARED_TASKS.map((task) => task.split(':')[0]);
 // Device and conformance tasks run behind this wrapper: it takes one machine-wide emulator slot. It only schedules and is
 // no input: it cannot change a result, and Nx does not cache failures.
 export const EMU_SLOT = 'node tools/devtools/emu-slot.mjs --';
@@ -37,15 +42,7 @@ export const deviceTarget = (
   uploadable = false,
   opts = {},
 ) => {
-  const dependsOn = [
-    'patchkit:cli',
-    'digi-control:daemons',
-    IMAGE_BUILD,
-    DEVICE_BYTES,
-    DEVICE_IMAGES,
-    PACK_VERDICTS,
-    TEST_ASSEMBLY,
-  ];
+  const dependsOn = [...SHARED_TASKS, IMAGE_BUILD, DEVICE_BYTES, DEVICE_IMAGES, PACK_VERDICTS];
   if (uploadable) dependsOn.push('pack');
   for (const rec of recs) {
     for (const id of rec.modules ?? []) {
@@ -55,8 +52,9 @@ export const deviceTarget = (
     if (Object.keys(rec.aliases ?? {}).length) dependsOn.push('pack-aliases');
     if (rec.plusdrive) dependsOn.push('plusdrive-format:cli');
     if (rec.dksampleWasm) dependsOn.push('dksample:wasm');
+    if (rec.dkprofWasm) dependsOn.push('dkprof:wasm');
   }
-  const { inputs, patchkitLive } = deviceInputs(
+  const { inputs, patchkitLive, patchkitWasm } = deviceInputs(
     root,
     tests,
     recs,
@@ -66,6 +64,7 @@ export const deviceTarget = (
     uploadable,
     opts,
   );
+  if (patchkitWasm) dependsOn.push('patchkit:wasm'); // the test runs `wb transfer` (patchkit.wasm)
   return {
     executor: 'nx:run-commands',
     cache: true,
@@ -78,6 +77,8 @@ export const deviceTarget = (
       // the key holds the patchkit binary (a full key, or a live closure): runtime/patchkit-exec.ts runs patchkit only then
       env: {
         DIGI_PATCHKIT_LIVE: (!opts.narrow && !opts.merge) || patchkitLive ? '1' : '',
+        // the DSP mode of the files (records' `dsp`, checked against the sources): emu-slot.mjs takes the cores of the task from it
+        DIGI_EMU_DSP: taskMode(tests, recs),
         // the `-all` twins run the full tier: `full: true` tests (tests/regression/runtime/devices.ts FULL_TIER) run too
         ...(opts.fullTier ? { DIGIKIT_TIER: 'full' } : {}),
       },
@@ -230,7 +231,13 @@ export const conformanceTarget = (workspaceRoot, root, m, f, importInputs) => ({
   outputs: [],
   options: {
     command: `${EMU_SLOT} pnpm --filter @digi/regression test:conformance`,
-    env: { DIGI_CONFORMANCE_MODULES: m.id, DIGI_CONFORMANCE_MANIFEST: f, DIGI_PATCHKIT_LIVE: '1' },
+    env: {
+      DIGI_CONFORMANCE_MODULES: m.id,
+      DIGI_CONFORMANCE_MANIFEST: f,
+      DIGI_PATCHKIT_LIVE: '1',
+      // as tests/conformance/manifests.ts: a dynamic module that is no service runs with the SHARC
+      DIGI_EMU_DSP: m.dynamic === true && m.type !== 'service' ? 'sharc' : 'zero',
+    },
     cwd: '.',
   },
 });
@@ -259,6 +266,7 @@ export const testOnlyNodes = (
     if (!tests.length) continue;
     const recs = records(join(workspaceRoot, root));
     checkAcceptanceTags(root, recs, tests, moduleInfo);
+    checkDspModes(workspaceRoot, root, recs, importInputs);
     if (recs.some((rec) => Object.keys(rec.aliases ?? {}).length))
       throw new Error(`Test-only project ${config.name} needs explicit pack-aliases support`);
     // Explicit fixture images build only their manifest requirements; ordinary owners keep the default image.

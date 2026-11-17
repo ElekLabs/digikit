@@ -7,6 +7,7 @@ import { readSettingsRecordIfPresent, settingsValue, type DkModule } from '@digi
 import {
   button,
   emulatorClock,
+  pollUntil,
   repoRoot,
   type Session,
   runUntilFramesWithProgress,
@@ -23,13 +24,14 @@ import { plusdriveBinary } from './card-kit.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { daemonBinary, FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices, SERVICE_MODULES } from './service-files.ts';
+import { boundService, neededServices } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { deviceProfile } from './device-data.ts';
 import type { FxExpectations } from './dkm-parse.ts';
 import { committedFxExpectations } from './pack-needs.ts';
+import { serviceSymbol } from './service-symbols.ts';
 import { planSymbol, prepareRuntimePlanOffline, validateRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
-import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
+import { runtimeSafety, runtimeWatchEnv, type SafetyPolicy } from './write-safety.ts';
 import { GAIN, SINE } from './fixtures.ts';
 import { drainInputs } from './fx-session.ts';
 import { moduleResultsNote } from './runtime-menu.ts';
@@ -64,6 +66,7 @@ async function baseline(
   plan: RuntimePlan,
   wet: boolean,
   artifacts: string,
+  cardServices: Set<string>,
 ): Promise<RuntimeBaseline> {
   const tag = wet ? 'wet' : 'dry';
   const binary = plusdriveBinary();
@@ -82,9 +85,9 @@ async function baseline(
   const selection = ['modules/sine.dkm', ...(wet ? ['modules/dyn-fx-gain.dkm'] : [])];
   // the services the gain effect needs (fx.dks), bound to the stock firmware, go to digikit/services
   const services = await Promise.all(
-    neededServices(files.map((f) => f.file)).map(async (name) => ({
-      name: `${name}.dks`,
-      file: await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
+    neededServices(files.map((f) => f.file)).map(async (needed) => ({
+      name: (cardServices.add(needed.service), `${needed.service}.dks`),
+      file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
     })),
   );
   const key = cardKey(device, {
@@ -117,11 +120,44 @@ async function baseline(
   };
 }
 
+/** After the owned emulators exit: every watch log and exported overlay meets the safety policy of the card's services. One call site for every session kind. */
+export function expectLifetimeSafety(run: {
+  device: Device;
+  watchOutput: string;
+  overlays: string[];
+  epochs: Set<number>;
+  artifacts: string;
+  policy: SafetyPolicy;
+  cardServices: Iterable<string>;
+}) {
+  const { device, watchOutput, overlays, epochs, artifacts, policy, cardServices } = run;
+  const report = runtimeSafety(device, watchOutput, overlays, epochs.size, policy, [], [...cardServices]);
+  record(artifacts, 'lifetime-safety', report);
+  expect(report.pass, 'every emulator and exported overlay meets the write-safety policy').toBe(true);
+}
+
+/** The frame hash once the screen holds still: two reads 100 ms of emulated time apart are equal (a redraw may follow the first tap after a boot). */
+export async function stableFrameHash(rt: Rt): Promise<string> {
+  let last: string | undefined;
+  const { hash } = await pollUntil(
+    rt.clock,
+    async () => {
+      const hash = await rt.session.frameHash();
+      const stable = hash === last;
+      last = hash;
+      return { hash, stable };
+    },
+    (r) => r.stable,
+    { withinMs: 5000, intervalMs: 100, message: 'the frame holds still for 100 ms of emulated time' },
+  );
+  return hash;
+}
+
 export async function analysisJson<T>(module: string, args: string[], artifacts: string, tag: string): Promise<T> {
   try {
     const result = await exec('uv', ['run', '--no-sync', 'python', '-m', module, ...args], {
       cwd: root,
-      timeout: 30_000,
+      timeout: 180_000, // a heavy analysis (four 28 MB overlays) takes 8 s on an idle host and over 30 s under load: the wall time only guards against a hang
       maxBuffer: 4 * 1024 * 1024,
       env: { ...process.env, UV_NO_SYNC: '1' },
     });
@@ -266,13 +302,46 @@ export async function capture(runtime: Rt, file: string, selection?: number, tri
   return trig;
 }
 
-interface Metrics {
+export interface PcmMetrics {
+  ok: boolean;
   identical: boolean;
-  max_err_ulps: number;
   rms_db: number | null;
   rms_base: number;
   shift: number | null;
 }
+/** The `hook_ab compare` metrics of a render against the reference scaled by `gain`, from the onset on. The CLI exits 1 on a failed verdict; its JSON on stdout is still read. */
+export async function pcmMetrics(
+  base: string,
+  sample: string,
+  gain: number,
+  artifacts: string,
+  tag: string,
+  relBound?: number,
+): Promise<PcmMetrics> {
+  const args = ['run', '--no-sync', 'python', '-m', 'tools.patchkit.hook_ab', 'compare', base, sample];
+  args.push('--gain', String(gain), '--align-onset', '--json');
+  if (relBound !== undefined) args.push('--rel-bound', String(relBound));
+  let stdout: string;
+  try {
+    stdout = (await exec('uv', args, { cwd: root, timeout: 30_000 })).stdout;
+  } catch (error) {
+    const output = error as { stdout?: string; stderr?: string };
+    if (!output.stdout) {
+      record(artifacts, `pcm-${tag}`, { error: String(error), stderr: output.stderr });
+      throw error;
+    }
+    stdout = output.stdout;
+  }
+  const metrics = JSON.parse(stdout) as PcmMetrics;
+  record(artifacts, `pcm-${tag}`, metrics);
+  return metrics;
+}
+
+/**
+ * Asserts that a render equals the reference scaled by `gain`. The CLI verdict (`ok`: the largest error within
+ * `relBound` of the scaled reference peak, 2**-20 when unset) is the only error rule; this adds audibility, the gain
+ * in dB and the onset shift (hook_ab counts interleaved samples; the tolerance is 128 audio frames).
+ */
 export async function compare(
   base: string,
   sample: string,
@@ -280,42 +349,17 @@ export async function compare(
   artifacts: string,
   tag: string,
   identical = false,
-): Promise<void> {
-  let result: { stdout: string; stderr: string };
-  try {
-    result = await exec(
-      'uv',
-      [
-        'run',
-        '--no-sync',
-        'python',
-        '-m',
-        'tools.patchkit.hook_ab',
-        'compare',
-        base,
-        sample,
-        '--gain',
-        String(gain),
-        '--align-onset',
-        '--json',
-      ],
-      { cwd: root, timeout: 30_000 },
-    );
-  } catch (error) {
-    const output = error as { stdout?: string; stderr?: string };
-    record(artifacts, `pcm-${tag}`, { error: String(error), stdout: output.stdout, stderr: output.stderr });
-    throw error;
-  }
-  const metrics = JSON.parse(result.stdout) as Metrics;
-  record(artifacts, `pcm-${tag}`, metrics);
+  relBound?: number,
+): Promise<PcmMetrics> {
+  const metrics = await pcmMetrics(base, sample, gain, artifacts, tag, relBound);
   expect(metrics.rms_base, 'reference has sound').toBeGreaterThan(0);
-  expect(metrics.max_err_ulps).toBeLessThanOrEqual(2);
+  expect(metrics.ok, 'PCM equals the scaled reference within the error bound').toBe(true);
   expect(metrics.rms_db).not.toBeNull();
   expect(Math.abs(metrics.rms_db! - 20 * Math.log10(gain))).toBeLessThan(0.001);
   expect(metrics.shift).not.toBeNull();
-  // hook_ab counts interleaved stereo samples; the onset tolerance is 128 audio frames.
   expect(Math.abs(metrics.shift!) / 2).toBeLessThanOrEqual(128);
   if (identical) expect(metrics.identical, 'dry PCM is bit-identical from onset').toBe(true);
+  return metrics;
 }
 
 /** Interleaved samples of an IEEE-float WAV (format 3). */
@@ -437,7 +481,7 @@ export async function inspect(
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([names.length, names.length, 1]);
   expect(fields.slice(10)).toEqual(names.map(() => 0));
-  const assigned = await serviceSymbol({ session }, plan, 'machines');
+  const assigned = await serviceSymbol({ session }, plan, 'machines', 'DKRT_ASSIGN');
   expect(await word(session, assigned)).toBe(0x444b4153);
   expect(await word(session, assigned + 4)).toBe(1);
   expect(modules[0]!.types).toHaveLength(1);
@@ -489,27 +533,61 @@ export async function evidence(
   artifacts: string,
   tag: string,
   overlays: string[],
-  requireAudible = true,
+  requireAudible?: boolean,
 ): Promise<void> {
   const { session } = runtime;
+  // Capture the guard report and the overlay first, so that a fault still leaves its artifacts.
   const guard = await bounded(() => session.client.guardReport());
   const file = path.join(artifacts, `${tag}.overlay.bin`);
   const overlay = await rpc(session, 'card.overlay', { path: file });
   overlays.push(file);
-  const pcm = await rpc<{ non_finite: number; peak: number }>(session, 'pcm.tap', { action: 'report' });
+  // A case in which no tap ran (for example one a test replaced by a reload before it played anything) has no PCM
+  // evidence: guard, overlay and fault checks still run, unless the case requires audio. After a recorded tap start,
+  // a failing report fails the case.
+  const pcm = session.pcmTapStarted
+    ? await rpc<{ non_finite: number; peak: number }>(session, 'pcm.tap', { action: 'report' })
+    : undefined;
   record(artifacts, `${tag}-closing`, { guard, overlay, pcm, status: await bounded(() => session.status()) });
-  await bounded(() => expectNoGuardHits(session));
-  expect(pcm.non_finite).toBe(0);
-  if (requireAudible) expect(pcm.peak, 'input is audible').toBeGreaterThan(0.01);
   await bounded(() => session.expectNoFault(tag));
+  await bounded(() => expectNoGuardHits(session));
+  if (!pcm && requireAudible) throw new Error(`${tag}: the case requires audio but no PCM tap ran`);
+  if (pcm) {
+    expect(pcm.non_finite).toBe(0);
+    if (requireAudible) expect(pcm.peak, 'input is audible').toBeGreaterThan(0.01);
+  }
+}
+
+/** The per-case evidence closer of a fixture: remembers the epoch, then checks evidence, fault, guard and PCM. */
+export function evidenceCollector(
+  config: { requireAudible?: RequireAudible },
+  artifacts: () => string,
+  overlays: string[],
+  rememberEpoch: (epoch: unknown) => void,
+  close: typeof evidence = evidence,
+) {
+  return async (runtime: PatchedSession, tag: string, requireAudible?: boolean): Promise<void> => {
+    rememberEpoch((await bounded(() => runtime.session.status())).epoch);
+    await close(runtime, artifacts(), tag, overlays, audibleRequired(config, runtime, requireAudible));
+  };
+}
+
+/** Audio is required only when the call (`override`) or the suite sets `requireAudible`. */
+export type RequireAudible = boolean | ((runtime: PatchedSession) => boolean);
+export function audibleRequired(
+  config: { requireAudible?: RequireAudible },
+  runtime: PatchedSession,
+  override?: boolean,
+): boolean {
+  const { requireAudible } = config;
+  return override ?? (typeof requireAudible === 'function' ? requireAudible(runtime) : (requireAudible ?? false));
 }
 
 export interface GainFxSessionOptions {
   initial?: 'dry' | 'wet';
   /** A patch set of the device file other than `emulator` (the sine and gain DKMs load as in any case). */
   patchSet?: string;
-  /** Idle cases may be silent; guard, nonfinite, fault and overlay checks always remain mandatory. */
-  requireAudible?: boolean | ((runtime: PatchedSession) => boolean);
+  /** Idle cases may be silent; guard, nonfinite, fault and overlay checks always remain mandatory. A suite that needs sound sets `true`. */
+  requireAudible?: RequireAudible;
 }
 
 /** Fixed default-emulator sine/gain fixtures, sharing the existing owned Session lifecycle. */
@@ -521,18 +599,14 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
   let closed = 0;
   let watchOutput: string;
   const overlays: string[] = [];
+  const cardServices = new Set<string>();
   const epochs = new Set<number>();
   const rememberEpoch = (epoch: unknown) => {
     if (typeof epoch !== 'number') throw new Error('runtime status lacks epoch');
     epochs.add(epoch);
   };
   const slots = slotsFor(device);
-  const collectEvidence = (runtime: PatchedSession, tag: string, requireAudible?: boolean) => {
-    const required =
-      requireAudible ??
-      (typeof config.requireAudible === 'function' ? config.requireAudible(runtime) : (config.requireAudible ?? true));
-    return evidence(runtime, artifacts, tag, overlays, required);
-  };
+  const collectEvidence = evidenceCollector(config, () => artifacts, overlays, rememberEpoch);
   const fixture = withReusablePatchedSession(
     {
       ...options(device),
@@ -558,16 +632,14 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
     {
       prepareBaseline: async (session) => {
         rememberEpoch((await bounded(() => session.status())).epoch);
-        dry = await baseline(session, plan, false, artifacts);
-        wet = await baseline(session, plan, true, artifacts);
+        dry = await baseline(session, plan, false, artifacts, cardServices);
+        wet = await baseline(session, plan, true, artifacts, cardServices);
         return config.initial === 'wet' ? wet : dry;
       },
       finishCase: (runtime) => collectEvidence(runtime, `case-${++closed}`),
       tempDirs: () => [artifacts],
       afterClose: async () => {
-        const report = runtimeSafety(device, watchOutput, overlays, epochs.size);
-        record(artifacts, 'lifetime-safety', report);
-        expect(report.pass, 'every emulator and exported overlay meets legacy safety policy').toBe(true);
+        expectLifetimeSafety({ device, watchOutput, overlays, epochs, artifacts, policy: 'default', cardServices });
       },
     },
     scope,

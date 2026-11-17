@@ -8,7 +8,7 @@ import wasmUrl from '../../../web/public/patchkit.wasm?url';
 import { fitWarnings } from '@digi/workbench-core/modules/dktransfer.ts';
 import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
-import type { LocalEntry } from '../src/samples-core';
+import type { LocalEntry } from '@digi/workbench-core/transfer/samples-core.ts';
 import type { TransferRow, TransferView } from '@digi/workbench-core/transfer/transfer-core.ts';
 
 // the rows' fit verdicts come from the Rust rule in patchkit.wasm, as in the app
@@ -36,8 +36,8 @@ export interface SimState {
   putfail: boolean;
   /** Names (comma separated) of files that the fake device holds already with the same bytes: an upload skips them (skip=kick,snare). */
   skip: string;
-  /** The link of the samples: none (no pill), bulk, sysex, wrongmode (SysEx, device in USB AUDIO/MIDI), fallback (bulk until the second file, then SysEx). */
-  link: 'none' | 'bulk' | 'sysex' | 'wrongmode' | 'fallback';
+  /** The link of the samples: none (no pill), bulk, sysex, wrongmode (SysEx, device in USB AUDIO/MIDI), fallback (bulk until the second file, then SysEx), reason (SysEx with the reason of the bulk choice). */
+  link: 'none' | 'bulk' | 'sysex' | 'wrongmode' | 'fallback' | 'reason';
 }
 
 export const PARAMS = [

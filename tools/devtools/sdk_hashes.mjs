@@ -41,7 +41,7 @@ const runAsync = (args) =>
     ),
   );
 
-// modules that pack to a .dkm: not core, not a framework, dynamic, raw or service (as tools/device/dktransfer.py candidates)
+// modules that pack to a .dkm: not core, not a framework, dynamic, raw or service (as the Transfer pane's library)
 const modules = globSync('{modules,tests/fixtures/modules}/**/module.toml', { cwd: root })
   .sort()
   .map((f) => ({ f, m: parse(readFileSync(join(root, f), 'utf8')).module }))
@@ -78,13 +78,15 @@ const result = {
   image: {},
 };
 mkdirSync(work, { recursive: true });
-const jobs = modules.flatMap(({ m }) => devicesOf(m).map((d) => ({ id: m.id, d })));
+const jobs = modules.flatMap(({ m }) =>
+  devicesOf(m).map((d) => ({ id: m.id, d, ext: m.role === 'service' ? 'dks' : 'dkm' })),
+);
 let next = 0;
 await Promise.all(
   Array.from({ length: JOBS }, async () => {
     while (next < jobs.length) {
-      const { id, d } = jobs[next++];
-      const out = join(work, `${d}-${id.replaceAll('/', '__')}.dkm`);
+      const { id, d, ext } = jobs[next++];
+      const out = join(work, `${d}-${id.replaceAll('/', '__')}.${ext}`);
       const err = await runAsync(['pack', id, '--device', d, '-o', out]);
       if (err && !NOPACK_OK.has(id)) failures.push(`pack ${id} --device ${d} failed: ${err}`);
       result.dkm[`${d} ${id}`] = err ? 'nopack' : sha(readFileSync(out));

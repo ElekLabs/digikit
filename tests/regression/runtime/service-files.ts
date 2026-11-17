@@ -3,22 +3,50 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot, resolveInputs, type Device } from '@digi/test-support';
 import { FIRMWARE } from './devices.ts';
-import { neededServiceHashes, nameHash } from './dkm-parse.ts';
+
+/** A service the card needs: its name (`services/<name>.dks`) and the module that provides it. */
+export type CardService = { service: string; moduleId: string };
 
 /**
- * Services that are files of the card (`services/<name>.dks`, docs/plans/runtime-and-services.md section 13.2): the module that provides each. A module that needs one
- * of them has a hard NEEDS item for its hash (the packer adds it for a record kind of that service), and the runtime finds the file by its name at boot. The harness
- * puts the file on the card of every test that installs such a module, so a test never lists the service by hand.
+ * Services that are files of the card (`services/<name>.dks`, docs/plans/runtime-and-services.md section 13.2). A module that needs one has a hard NEEDS item for its hash
+ * (the packer adds it for a record kind of that service), and the runtime finds the file by its name at boot. The harness puts the file on the card of every test that
+ * installs such a module, so a test never lists the service by hand. Which services a packed `.dkm` needs is `patchkit services` (the NEEDS and the manifests: no list
+ * here); the Nx target `<module id>:pack` runs it and writes `<leaf>.services.json` beside the file, so a test only reads it and runs no patchkit.
  */
-export const SERVICE_MODULES: Record<string, string> = {
-  machines: 'core/services/machines',
-  fx: 'core/services/fx',
-};
+export function neededServices(files: string[]): CardService[] {
+  const found = new Map<string, CardService>();
+  for (const file of files) {
+    const list = servicesSidecar(file);
+    if (!fs.existsSync(list)) throw new Error(`missing ${list}: run nx run <module id>:pack`);
+    for (const line of fs.readFileSync(list, 'utf8').split('\n').filter(Boolean)) {
+      const v = JSON.parse(line) as { service: string; module_id: string };
+      found.set(v.service, { service: v.service, moduleId: v.module_id });
+    }
+  }
+  return [...found.values()].sort((x, y) => x.service.localeCompare(y.service));
+}
 
-/** The names of the services (of `SERVICE_MODULES`) that the packed `.dkm` files need, in the order of `SERVICE_MODULES`. */
-export function neededServices(files: string[]): string[] {
-  const needed = new Set(files.flatMap((f) => neededServiceHashes(fs.readFileSync(f))));
-  return Object.keys(SERVICE_MODULES).filter((name) => needed.has(nameHash(name)));
+/** The sidecar `<leaf>.services.json` that `neededServices` reads, for a packed `.dkm`/`.dks` (the Nx pack target writes it for shipped modules). */
+export const servicesSidecar = (file: string) => file.replace(/\.dk[ms]$/, '.services.json');
+
+/**
+ * A card file under `modules/` that a test wrote as raw bytes with no packer behind it (a blob): it needs no service, and this writes that answer in the sidecar.
+ * A copy or byte edit of a packed module is `derivedModule` instead; a module packed at test time gets its answer from `patchkit services` (synth.ts).
+ */
+export function rawModule(file: string): string {
+  fs.writeFileSync(servicesSidecar(file), '');
+  return file;
+}
+
+/**
+ * A card file that a test made by copying or byte-editing the packed module `original` (a patch that leaves its NEEDS table alone): it needs what the original
+ * needs, so it inherits the sidecar of the original. Throws when the original has none (it was not packed by the Nx pack target).
+ */
+export function derivedModule(original: string, copy: string): string {
+  const from = servicesSidecar(original);
+  if (!fs.existsSync(from)) throw new Error(`missing ${from}: run nx run <module id>:pack`);
+  fs.copyFileSync(from, servicesSidecar(copy));
+  return copy;
 }
 
 /** Header word H_DSP_SIZE of a .dkm or .dks: bytes of its DSP section (0: none). */
@@ -48,9 +76,13 @@ export const servicePath = (name: string) => `services/${name}.dks`;
  * file is not enough. The Nx target `<module id>:bind` writes it under dist/ (keyed on the packed bytes and the firmware image; the file holds firmware bytes and is never
  * committed); a test only copies it, so no test that puts a service on a card is a live-patchkit task. `moduleFile` is the packed `.dks` (the `bind` input).
  */
-export async function boundService(device: Device, name: string, moduleFile: string): Promise<string> {
+export async function boundService(
+  device: Device,
+  { service: name, moduleId }: CardService,
+  moduleFile: string,
+): Promise<string> {
   const out = boundPath(device, name);
-  const rerun = `run nx run ${SERVICE_MODULES[name]}:bind`;
+  const rerun = `run nx run ${moduleId}:bind`;
   if (!fs.existsSync(out)) throw new Error(`missing ${out}: ${rerun} (it binds ${moduleFile} to the stock firmware)`);
   // the sidecar of `patchkit bind` names what the file was bound from: a copy left in dist/ from other bytes is stale (mtimes say nothing under an Nx cache restore)
   const stale = staleBinding(out, moduleFile, resolveInputs(device, FIRMWARE[device]).syx);

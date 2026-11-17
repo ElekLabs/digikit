@@ -1,2 +1,2 @@
-//! `samples` service, slots and hooks: none. The service fills no firmware slot and installs no hook. The adapters of the image call it through the
-//! C entry points `dkrt_pool_done`, `dkrt_pool_lost` and `dkrt_project_changed` (the runtime's `handlers.rs`).
+//! `samples` service, slots and hooks: it fills the two pool event slots of the sample-pool adapter (`pool_done`, `pool_lost`: the routines `pool_done_fill` and
+//! `pool_lost_fill` of the service file, `dks/src/glue.rs`) and installs no hook. `dkrt_project_changed` had no caller and is gone.

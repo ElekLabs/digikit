@@ -1,6 +1,6 @@
 // Build and pack: the patchkit command, the build input lists and the build-objects, pack and pack-aliases targets.
 // It does not hold device-test cache keys (device-test-keys.mjs) or the shape of test targets (device-tests.mjs).
-import { packOut, packMap, manifestClosure, manifestArgs, packDevices } from './module-manifests.mjs';
+import { packOut, packMap, servicesOut, manifestClosure, manifestArgs, packDevices } from './module-manifests.mjs';
 import { packSourceInputs } from './pack-inputs.mjs';
 
 // Commands run with cwd '.' (the workspace root); Nx accepts {workspaceRoot} only at the start of an option.
@@ -90,20 +90,31 @@ export const buildObjectsTarget = (workspaceRoot, byId, m, root, objects, coreBu
   },
 });
 
+// `patchkit services` maps the NEEDS of a packed file to the service modules of all manifests: their manifests are inputs of the pack target besides its closure.
+const serviceManifests = (byId) =>
+  [...byId.values()].filter(({ manifest }) => manifest.role === 'service').map(({ file }) => file);
+
 export const packTarget = (workspaceRoot, byId, m, devices) => {
   const manifests = manifestClosure(byId, [m.id]);
   return {
     executor: 'nx:run-commands',
     cache: false,
-    inputs: packInputs(workspaceRoot, byId, manifests),
+    inputs: [
+      ...packInputs(workspaceRoot, byId, manifests),
+      ...serviceManifests(byId).map((file) => `{workspaceRoot}/${file}`),
+    ],
     dependsOn: ['patchkit:cli'],
-    outputs: devices.flatMap((d) => [`{workspaceRoot}/${packOut(d, m)}`, `{workspaceRoot}/${packMap(d, m)}`]),
+    outputs: devices.flatMap((d) => [
+      `{workspaceRoot}/${packOut(d, m)}`,
+      `{workspaceRoot}/${packMap(d, m)}`,
+      `{workspaceRoot}/${servicesOut(d, m)}`,
+    ]),
     options: {
       commands: [
         'mkdir -p dist/modules/dt2 dist/modules/dn2',
         ...devices.map(
           (d) =>
-            `${PK} pack ${m.id} ${manifestArgs(manifests)} --device ${d} --addrmap ${packMap(d, m)} -o ${packOut(d, m)}`,
+            `${PK} pack ${m.id} ${manifestArgs(manifests)} --device ${d} --addrmap ${packMap(d, m)} -o ${packOut(d, m)} && ${PK} services --device ${d} ${packOut(d, m)} > ${servicesOut(d, m)}`,
         ),
       ],
       parallel: false,
@@ -132,8 +143,9 @@ export const bindTarget = (workspaceRoot, m, devices) => {
     cache: true,
     inputs: ds
       .flatMap((d) => [
-        `{workspaceRoot}/${packOut(d, m)}`,
-        `{workspaceRoot}/${packMap(d, m)}`,
+        // The packed files are gitignored dist/ outputs of the pack target: a file input would not hash them, so the key reads them as outputs of the dependency.
+        { dependentTasksOutputFiles: packOut(d, m) },
+        { dependentTasksOutputFiles: packMap(d, m) },
         `{workspaceRoot}/${STOCK_FIRMWARE[d]}`,
       ])
       .concat([{ input: 'production', projects: ['patchkit'] }]), // the tool too: what bind writes (the .dks, its map and its .src.json sidecar) depends on it
@@ -168,9 +180,12 @@ export const packAliasesTarget = (workspaceRoot, byId, recs) => {
       aliasSources.add(source);
       for (const d of packDevices(src.manifest)) {
         aliasCmds.push(
-          `${PK} pack ${source} ${manifestArgs(manifestClosure(byId, [source]))} --device ${d} --name ${alias} -o ${packOut(d, src.manifest, alias)}`,
+          `${PK} pack ${source} ${manifestArgs(manifestClosure(byId, [source]))} --device ${d} --name ${alias} -o ${packOut(d, src.manifest, alias)} && ${PK} services --device ${d} ${packOut(d, src.manifest, alias)} > ${servicesOut(d, src.manifest, alias)}`,
         );
-        aliasOutputs.push(`{workspaceRoot}/${packOut(d, src.manifest, alias)}`);
+        aliasOutputs.push(
+          `{workspaceRoot}/${packOut(d, src.manifest, alias)}`,
+          `{workspaceRoot}/${servicesOut(d, src.manifest, alias)}`,
+        );
       }
     }
   if (!aliasCmds.length) return undefined;

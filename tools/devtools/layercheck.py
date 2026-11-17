@@ -11,7 +11,7 @@ Rules:
   roles     Every module under modules/core has `role` in [module], and the role fits the folder: adapters/ -> adapter,
             apps/ -> app, runtime/ -> runtime, expansion/ -> installer.
   sources   Content modules (modules/machines, modules/fx, modules/tools, tests/fixtures/modules) and apps include only
-            their own files and the SDK (sdk/include, sdk/dsp/contract). Apps may also include dkrt.h (runtime) and dk_ui_core.h
+            their own files and the SDK (sdk/include, sdk/dsp/contract); a fixture may also include the source of another fixture (a variant of its base). Apps may also include dkrt.h (runtime) and dk_ui_core.h
             (core/ui). Only the runtime's platform file, the installer and adapters include the firmware bindings (dk_fw_* headers, the dkfw crate).
             C, ColdFire and SHARC assembly (`#include`, `.include`) and Rust (`dkfw`, path dependencies) are read.
   objects   The undefined symbols of the built objects of apps and content modules are SDK imports, dkrt_*, dk_ui_*,
@@ -264,6 +264,7 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
     runtime_inc = (root / CORE / "runtime/include").resolve()
     adapters = (root / CORE / "adapters").resolve()
     all_mod_dirs = [(m.dir.resolve(), m) for m in mods]
+    fixtures = (root / "tests/fixtures/modules").resolve()
     for m in mods:
         kind = classify(root, m)
         role = m.mod.get("role")
@@ -337,6 +338,12 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
                     foreign = next(
                         (o for d, o in all_mod_dirs if d in target.parents), None
                     )
+                    if (
+                        foreign is not None
+                        and fixtures in m.dir.resolve().parents
+                        and fixtures in foreign.dir.resolve().parents
+                    ):
+                        continue  # a fixture variant (file-write-b) includes the source of its base fixture
                     out.append(
                         Violation(
                             where,
@@ -983,7 +990,11 @@ def without_test_modules(lines: list[str]) -> list[str]:
     out = list(lines)
     i = 0
     while i < len(lines):
-        if lines[i].strip() == "#[cfg(test)]" and i + 1 < len(lines) and re.match(r"\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{", lines[i + 1]):
+        if (
+            lines[i].strip() == "#[cfg(test)]"
+            and i + 1 < len(lines)
+            and re.match(r"\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{", lines[i + 1])
+        ):
             depth = 0
             j = i + 1
             while j < len(lines):
@@ -999,7 +1010,12 @@ def without_test_modules(lines: list[str]) -> list[str]:
 
 
 # The host-test files of `handlers/` (its other files, if any, are scanned).
-KIND_FREE_TEST_FILES = ("handlers/tests.rs", "handlers/lfo_tests.rs", "handlers/fx_fixture.rs", "handlers/dks_decls.rs")
+KIND_FREE_TEST_FILES = (
+    "handlers/tests.rs",
+    "handlers/lfo_tests.rs",
+    "handlers/fx_fixture.rs",
+    "handlers/dks_decls.rs",
+)
 # The abi crate is the core's boundary: it too names no machine or effect.
 RT_ABI_SRC = "modules/core/runtime/abi/src"
 
@@ -1013,17 +1029,32 @@ def check_core_kind_free(root: Path) -> list[Violation]:
             continue
         for f in sorted(src.rglob("*.rs")):
             r = f.relative_to(src)
-            if base == RT_SRC and (r.as_posix() in KIND_FREE_EXEMPT or r.as_posix() in KIND_FREE_TEST_FILES or is_runtime_test_file(r)):
+            if base == RT_SRC and (
+                r.as_posix() in KIND_FREE_EXEMPT
+                or r.as_posix() in KIND_FREE_TEST_FILES
+                or is_runtime_test_file(r)
+            ):
                 continue
             if base == RT_ABI_SRC and r.as_posix() == "keys.rs":
                 continue  # the header table's key groups (`dkneeds::KIND_MACHINE`, `KIND_EFFECT`): the .dkm format the core parses for the planner and the commit
-            if base == RT_ABI_SRC and (r.name.startswith("gen_") or r.name == "tests.rs" or "tests" in r.parts):
+            if base == RT_ABI_SRC and (
+                r.name.startswith("gen_") or r.name == "tests.rs" or "tests" in r.parts
+            ):
                 continue
-            lines = without_test_modules(rust_without_comments(f.read_text(encoding="utf-8")).splitlines())
+            lines = without_test_modules(
+                rust_without_comments(f.read_text(encoding="utf-8")).splitlines()
+            )
             for n, line in enumerate(lines, 1):
                 m = RT_KIND_FREE.search(line)
                 if m:
-                    out.append(Violation(f"{base}/{r.as_posix()}:{n}", "kind-free", f"the core names {m.group(0)}", KIND_FREE_HINT))
+                    out.append(
+                        Violation(
+                            f"{base}/{r.as_posix()}:{n}",
+                            "kind-free",
+                            f"the core names {m.group(0)}",
+                            KIND_FREE_HINT,
+                        )
+                    )
     return out
 
 

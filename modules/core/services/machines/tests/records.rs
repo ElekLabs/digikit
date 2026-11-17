@@ -1,15 +1,15 @@
 //! The service over a `FakeCore` and a `FakeFw`: the record checks, `apply` and `remove` of parameter rows and click actions, the native page
 //! record and the capacity counts. A machine or a page row is written at absolute addresses of the firmware's tables (`wr`), which a host cannot
 //! reach: those parts run in the device tests (`core/dynreg`, `core/input`).
+use dkneeds::keys::name_hash;
 use dkrt_abi::mem::FwMem;
-use dkrt_svc_params::dynreg::w;
 use dkrt_abi::service::*;
 use dkrt_sdk::records::*;
 use dkrt_sdk::*;
-use dkneeds::keys::name_hash;
 use dkrt_svc_machines::info;
 use dkrt_svc_machines::records::*;
 use dkrt_svc_machines::slots;
+use dkrt_svc_params::dynreg::w;
 use dkrt_test_support::{Call, FakeCore, FakeFw};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -76,7 +76,8 @@ fn machines_info(native_pages: bool) -> Vec<u32> {
 fn core() -> FakeCore {
     let mut c = FakeCore::new();
     c.set_dynreg(table());
-    c.info_tables.push((name_hash("machines_info"), machines_info(true)));
+    c.info_tables
+        .push((name_hash("machines_info"), machines_info(true)));
     c
 }
 
@@ -233,7 +234,10 @@ fn a_table_with_more_rows_than_the_state_has_or_no_table_refuses_the_records_tha
     // an image without `dynreg_info`: the section needs a registry, one without machine records does not
     assert_eq!(run_check(&core, check_step::COUNTS, &reg), E_NO_REGISTRY);
     assert_eq!(run_check(&core, check_step::COUNTS, &section(&[])), OK);
-    assert_eq!(unsafe { <Machines as Service<FakeCore>>::apply(&core, &apply_ctx(&reg)) }, E_NO_REGISTRY);
+    assert_eq!(
+        unsafe { <Machines as Service<FakeCore>>::apply(&core, &apply_ctx(&reg)) },
+        E_NO_REGISTRY
+    );
     // a table that fits
     core.set_dynreg(table());
     assert_eq!(run_check(&core, check_step::COUNTS, &reg), OK);
@@ -304,12 +308,14 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
     let reg = section(&[(kind, body.clone())]);
     let ctx = apply_ctx(&reg);
     // what the adapter's `mf_native_register` reads, taken while its arguments are valid: (owner, draw, event, snapshot words, arg, with_arg)
-    let seen: Rc<RefCell<Vec<(usize, usize, usize, Vec<u32>, usize, usize)>>> = Rc::new(RefCell::new(Vec::new()));
+    let seen: Rc<RefCell<Vec<(usize, usize, usize, Vec<u32>, usize, usize)>>> =
+        Rc::new(RefCell::new(Vec::new()));
     let sink = seen.clone();
     *core.on_call.borrow_mut() = Some(Box::new(move |addr, a| {
         assert_eq!(addr, N_REGISTER, "version 1 records use the v1 function");
         let words = unsafe { std::slice::from_raw_parts(a[5] as *const u32, a[6]) }.to_vec();
-        sink.borrow_mut().push((a[0], a[2], a[3], words, a[7], a[8]));
+        sink.borrow_mut()
+            .push((a[0], a[2], a[3], words, a[7], a[8]));
         0
     }));
     unsafe {
@@ -322,7 +328,12 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
             "a kind of another service or a parameter record writes nothing"
         );
         assert_eq!(
-            <Machines as Service<FakeCore>>::apply_record(&core, KIND_NATIVE_PAGE, body.as_ptr(), &ctx),
+            <Machines as Service<FakeCore>>::apply_record(
+                &core,
+                KIND_NATIVE_PAGE,
+                body.as_ptr(),
+                &ctx
+            ),
             OK
         );
     }
@@ -333,28 +344,50 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
     // a refusal of the firmware adapter is the record's status
     *core.on_call.borrow_mut() = Some(Box::new(|_, _| E_NO_REGISTRY as usize));
     assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::apply_record(&core, KIND_NATIVE_PAGE, body.as_ptr(), &ctx) },
+        unsafe {
+            <Machines as Service<FakeCore>>::apply_record(
+                &core,
+                KIND_NATIVE_PAGE,
+                body.as_ptr(),
+                &ctx,
+            )
+        },
         E_NO_REGISTRY
     );
     // a turn calls the adapter's turn function, and its answer says whether the turn was consumed
     *core.on_call.borrow_mut() = None;
     core.fw_result.set(1);
-    assert_eq!(unsafe { dkrt_svc_machines::nativepage::turn(&core, std::ptr::null(), std::ptr::null()) }, 1);
+    assert_eq!(
+        unsafe { dkrt_svc_machines::nativepage::turn(&core, std::ptr::null(), std::ptr::null()) },
+        1
+    );
     // a firmware without the native page calls (the words are 0) refuses the record when it is checked, registers nothing and consumes no turn
     let mut bare = core;
-    bare.info_tables.clear();
-    bare.info_tables.push((name_hash("machines_info"), machines_info(false)));
+    bare.info_tables
+        .retain(|(h, _)| *h != name_hash("machines_info"));
+    bare.info_tables
+        .push((name_hash("machines_info"), machines_info(false)));
     assert_eq!(
         run_check(&bare, check_step::NATIVE, &section(&[(kind, body.clone())])),
         E_NO_REGISTRY
     );
     bare.calls.borrow_mut().clear();
     assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::apply_record(&bare, KIND_NATIVE_PAGE, body.as_ptr(), &ctx) },
-        E_NO_REGISTRY,
-        "an unbound word is not called"
+        unsafe {
+            <Machines as Service<FakeCore>>::apply_record(
+                &bare,
+                KIND_NATIVE_PAGE,
+                body.as_ptr(),
+                &ctx,
+            )
+        },
+        OK,
+        "an unbound word is not called (the check refused the record before; apply has nothing to register)"
     );
-    assert_eq!(unsafe { dkrt_svc_machines::nativepage::turn(&bare, std::ptr::null(), std::ptr::null()) }, 0);
+    assert_eq!(
+        unsafe { dkrt_svc_machines::nativepage::turn(&bare, std::ptr::null(), std::ptr::null()) },
+        0
+    );
     assert!(bare.calls().iter().all(|c| !matches!(c, Call::Fw { .. })));
 }
 

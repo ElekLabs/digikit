@@ -5,7 +5,9 @@ use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{DspSec, MAX_FX};
 use dkrt_abi::mem::rd32;
 use dkrt_abi::registry::each;
-use dkrt_abi::service::{tick_phase, ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, RowWrite, Service};
+use dkrt_abi::service::{
+    tick_phase, ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, RowWrite, Service,
+};
 use dkrt_sdk::*;
 
 /// The fx service; every method works over the core it is given.

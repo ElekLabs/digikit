@@ -173,7 +173,7 @@ fn main() {
         "DN2_REPLAY_REPEATS must be 1..=100"
     );
     for repeat in 0..repeats {
-        let mut e = Engine::from_image(&image).expect("image blob");
+        let mut e = Engine::from_image(&image, &sharc_gen::CORE).expect("image blob");
         e.import(&state).expect("state blob");
         let blocks = std::env::var("NO_BLOCKS").as_deref() != Ok("1");
         let mut options = vec![

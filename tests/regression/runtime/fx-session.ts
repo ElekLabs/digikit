@@ -12,12 +12,23 @@ import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { plusdriveBinary } from './card-kit.ts';
 import { FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices, SERVICE_MODULES } from './service-files.ts';
-import { bindServiceSymbols, rememberShipMap } from './service-symbols.ts';
+import { boundService, neededServices } from './service-files.ts';
+import { bindServiceSymbols } from './service-symbols.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { moduleResultsNote } from './runtime-menu.ts';
 import { pollEmulated } from './waits.ts';
-import { analysisJson, bounded, evidence, options, pickSine, word, type Rt } from './fx-live.ts';
+import {
+  analysisJson,
+  bounded,
+  evidence,
+  evidenceCollector,
+  options,
+  pickSine,
+  word,
+  type RequireAudible,
+  type Rt,
+  expectLifetimeSafety,
+} from './fx-live.ts';
 import {
   planSymbol,
   prepareRuntimePlanListedOffline,
@@ -25,7 +36,7 @@ import {
   type PreparedRuntimePlan,
   type RuntimePlan,
 } from './runtime-plan.ts';
-import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
+import { runtimeWatchEnv } from './write-safety.ts';
 
 const exec = promisify(execFile);
 const root = repoRoot();
@@ -61,9 +72,16 @@ export interface FxCardPreset {
   selection: string[];
   /** UTF-8 settings keys and hex-encoded byte values. */
   settings?: [string, string][];
-  /** No service files on the card: an effect module in the selection is refused (the fx service is missing) and the FX pages stay stock. */
-  noServices?: boolean;
+  /**
+   * `true`: no service files on the card, so every module that needs one is refused (machines need machines.dks too). A list of service names (`['fx']`): only
+   * those files are left off the card: an effect module in the selection is refused (the fx service is missing), the FX pages stay stock, and the machines load.
+   */
+  noServices?: boolean | string[];
 }
+
+/** True when a preset or readiness `noServices` leaves the service file `name` off the card. */
+export const dropsService = (noServices: boolean | string[] | undefined, name: string): boolean =>
+  noServices === true || (Array.isArray(noServices) && noServices.includes(name));
 export interface PreparedFxSessionOptions {
   image: {
     name: string;
@@ -74,7 +92,7 @@ export interface PreparedFxSessionOptions {
   };
   initial: string;
   presets: Record<string, FxCardPreset>;
-  requireAudible?: boolean | ((runtime: PatchedSession) => boolean);
+  requireAudible?: RequireAudible;
 }
 
 /** Wait until the boot input has finished, so the run can pause. */
@@ -152,7 +170,7 @@ export async function inspectFxBoot(
   artifacts: string,
   tag: string,
   expectedResults = expectedNames.map(() => 0),
-  readiness: { afterEpoch?: number; noServices?: boolean } = {},
+  readiness: { afterEpoch?: number; noServices?: boolean | string[] } = {},
 ) {
   const { session, dk } = runtime;
   validateRuntimePlan(plan, session);
@@ -180,8 +198,12 @@ export async function inspectFxBoot(
   await drainInputs(session);
   await bounded(() => session.client.call('run.mode', { mode: 'paused' }));
   const fields = await Promise.all(Array.from({ length: 10 }, (_, i) => word(session, boot + i * 4)));
-  // the symbols of the fx service file for this boot (`symbolsOf`); only a preset with `noServices` has none, any other boot without them fails here
-  await bindServiceSymbols(runtime, plan, 'fx', { expected: !readiness.noServices });
+  // the symbols of the fx service file for this boot (`symbolsOf`): the runtime loads the file only when a selected module needs it, so a boot of machines
+  // alone (or a preset with `noServices`) has none; any other boot without them fails here
+  const needsFx = neededServices(expectedNames.map((id) => moduleArtifact(session.options.device, id))).some(
+    (s) => s.service === 'fx',
+  );
+  await bindServiceSymbols(runtime, plan, 'fx', { expected: !dropsService(readiness.noServices, 'fx') && needsFx });
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([expectedResults.length, expectedNames.length, 1]);
   const status = await bounded(() => session.status());
@@ -224,18 +246,13 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
   let closed = 0;
   const baselines = new Map<string, RuntimeBaseline>();
   const overlays: string[] = [];
+  const cardServices = new Set<string>();
   const epochs = new Set<number>();
   const rememberEpoch = (epoch: unknown) => {
     if (typeof epoch !== 'number') throw new Error('route status lacks epoch');
     epochs.add(epoch);
   };
-  const collectEvidence = async (runtime: PatchedSession, tag: string, requireAudible?: boolean) => {
-    rememberEpoch((await bounded(() => runtime.session.status())).epoch);
-    const required =
-      requireAudible ??
-      (typeof config.requireAudible === 'function' ? config.requireAudible(runtime) : (config.requireAudible ?? true));
-    await evidence(runtime, artifacts, tag, overlays, required);
-  };
+  const collectEvidence = evidenceCollector(config, () => artifacts, overlays, rememberEpoch, evidence);
   const fixture = withReusablePatchedSession(
     {
       ...options(device),
@@ -252,7 +269,6 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
           { modules },
         );
         planSymbol(prepared.plan, 'DKRT_BOOT');
-        rememberShipMap(prepared.plan, prepared.planFile);
         profile = await analysisJson<FxProfile>(
           'tools.patchkit.pk_digikit_fxroutes',
           ['profile', '--device', device],
@@ -278,12 +294,15 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
           )
             throw new Error(`invalid route preset selection ${tag}`);
           const files = inventory.map((id, index) => ({ name: `m${index}.dkm`, file: moduleArtifact(device, id) }));
-          // the services the inventory needs (fx.dks), bound to the stock firmware, go to digikit/services; a preset with `noServices` has none (the effect is refused)
+          // the services the inventory needs (fx.dks), bound to the stock firmware, go to digikit/services; a preset with `noServices` leaves out all (`true`) or the named ones (the effect is refused)
           const services = await Promise.all(
-            (preset.noServices ? [] : neededServices(files.map((f) => f.file))).map(async (name) => ({
-              name: `${name}.dks`,
-              file: await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
-            })),
+            neededServices(files.map((f) => f.file))
+              .filter((needed) => !dropsService(preset.noServices, needed.service))
+              .map((needed) => (cardServices.add(needed.service), needed))
+              .map(async (needed) => ({
+                name: `${needed.service}.dks`,
+                file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
+              })),
           );
           // The card is built in WORK (`<work>/card/card.img`).
           const produce = async (work: string) => {
@@ -330,7 +349,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
             const key = cardKey(device, {
               kind: 'fx-route-preset',
               modules: files.map((f) => ({ name: f.name, sha: fileSha(f.file) })),
-              services: (preset.noServices ? [] : services).map((f) => ({ name: f.name, sha: fileSha(f.file) })),
+              services: services.map((f) => ({ name: f.name, sha: fileSha(f.file) })),
               selection: preset.selection,
             });
             cardImage = await cachedCard(key, produce);
@@ -350,9 +369,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
       afterClose: async () => {
         const results = await Promise.allSettled([
           (async () => {
-            const report = runtimeSafety(device, watchOutput, overlays, epochs.size, policy);
-            record(artifacts, 'lifetime-safety', report);
-            expect(report.pass, 'every route emulator and exported overlay meets legacy safety policy').toBe(true);
+            expectLifetimeSafety({ device, watchOutput, overlays, epochs, artifacts, policy, cardServices });
           })(),
           analysisJson('tools.patchkit.pk_digikit_fxroutes', ['render-shots', artifacts], artifacts, 'rendered-shots'),
         ]);

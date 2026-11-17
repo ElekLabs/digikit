@@ -1,12 +1,12 @@
 //! The builder calls of the machines and their commit over a `FakeCore`: the collection, its refusals, the lowering to the records of the `register` section (the records the packer
 //! wrote before builders, and `tests/fixtures/records/lowered.golden`, recorded before the collect moved into the services), and the two passes of `module_commit`.
 use dkrt_abi::keys::KeysCopy;
-use dkrt_svc_params::dynreg::w;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink, Service};
 use dkrt_sdk::records::*;
 use dkrt_sdk::*;
 use dkrt_svc_machines::build::{self, *};
 use dkrt_svc_machines::records::Machines;
+use dkrt_svc_params::dynreg::w;
 use dkrt_test_support::FakeCore;
 use std::boxed::Box;
 use std::sync::Mutex;
@@ -52,7 +52,11 @@ const DN2: Profile = Profile {
     tpl: [0xd5, 0xd7, 0x47, 0xdd, 0xee, 0xd5],
 };
 const KEY: u32 = 0x00ab_cd00;
-const FREE: Free = Free { machine_rows: 8, param_rows: 16, page_rows: 8 };
+const FREE: Free = Free {
+    machine_rows: 8,
+    param_rows: 16,
+    page_rows: 8,
+};
 
 fn keys(mk: &[u32], rows: (u32, u32, u32)) -> KeysCopy {
     let mut k = KeysCopy::empty();
@@ -92,7 +96,11 @@ fn lowered(b: &Build, p: &Profile, k: &KeysCopy, base: u32) -> (Vec<u8>, u32, Pl
     let mut buf = std::vec![0u8; measured.at];
     let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
     lower(b, p, k, &[true; MAX_M], base, &mut out, &mut plan).unwrap();
-    assert_eq!((out.at, out.count), (measured.at, measured.count), "the writing pass has the size and count the measuring pass found");
+    assert_eq!(
+        (out.at, out.count),
+        (measured.at, measured.count),
+        "the writing pass has the size and count the measuring pass found"
+    );
     (buf, out.count, plan)
 }
 
@@ -107,16 +115,32 @@ fn a_call_outside_init_returns_the_placeholder_and_changes_nothing() {
     let core = FakeCore::new();
     unsafe {
         build::end();
-        assert_eq!(build::add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")), placeholder());
-        assert_eq!(build::machine_add_page(&core, placeholder(), c(b"A\0"), c(b"S\0")), placeholder());
-        assert_eq!(build::page_add_param(&core, placeholder(), c(b"A\0"), c(b"A\0"), 1), placeholder());
+        assert_eq!(
+            build::add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")),
+            placeholder()
+        );
+        assert_eq!(
+            build::machine_add_page(&core, placeholder(), c(b"A\0"), c(b"S\0")),
+            placeholder()
+        );
+        assert_eq!(
+            build::page_add_param(&core, placeholder(), c(b"A\0"), c(b"A\0"), 1),
+            placeholder()
+        );
         build::param_range(&core, placeholder(), 1, 2);
         build::param_latched(&core, placeholder());
         build::page_bind_local(&core, placeholder(), 0, 1);
         // inside init a context that is not the running module's is no builder either (`module_of` answers 0)
         build::begin(0);
-        assert_eq!(build::add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")), placeholder());
-        assert_eq!((build::build().nm, build::build().err), (0, 0), "a call with a context that is not live records nothing");
+        assert_eq!(
+            build::add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")),
+            placeholder()
+        );
+        assert_eq!(
+            (build::build().nm, build::build().err),
+            (0, 0),
+            "a call with a context that is not live records nothing"
+        );
         // the running module's context opens a machine
         core.running.set(1);
         core.source.set(1);
@@ -125,12 +149,18 @@ fn a_call_outside_init_returns_the_placeholder_and_changes_nothing() {
         assert_eq!(build::build().nm, 1);
         // the code of another module (or of no module) that holds the handle changes nothing while this module's `init` is open
         core.source.set(2);
-        assert_eq!(build::machine_add_page(&core, m, c(b"A\0"), c(b"S\0")), placeholder());
+        assert_eq!(
+            build::machine_add_page(&core, m, c(b"A\0"), c(b"S\0")),
+            placeholder()
+        );
         assert_eq!(build::build().np, 0);
         core.source.set(1);
         // the collection is closed: the handle is no more taken
         build::end();
-        assert_eq!(build::machine_add_page(&core, m, c(b"A\0"), c(b"S\0")), placeholder());
+        assert_eq!(
+            build::machine_add_page(&core, m, c(b"A\0"), c(b"S\0")),
+            placeholder()
+        );
         assert_eq!(build::build().np, 0);
     }
 }
@@ -163,7 +193,10 @@ fn the_collection_is_bounded_by_max_records_and_the_call_past_it_returns_the_pla
         }
     }
     for _ in 0..(MAX_PA - MAX_M - MAX_PG) {
-        assert_ne!(b.page_add_param(first, c(b"P\0"), c(b"P\0"), 0), placeholder());
+        assert_ne!(
+            b.page_add_param(first, c(b"P\0"), c(b"P\0"), 0),
+            placeholder()
+        );
     }
     assert_eq!(b.err, 0, "exactly MAX_PA records fit");
     assert_eq!(b.records(), MAX_PA);
@@ -178,19 +211,32 @@ fn the_collection_is_bounded_by_max_records_and_the_call_past_it_returns_the_pla
     b.page_canvas(over, 1, 4, 6, 8);
     b.page_bind_local(over, 0, 0);
     b.page_bind(over, over, 0);
-    assert_eq!(b.page_add_param(over, c(b"X\0"), c(b"X\0"), 1), placeholder());
+    assert_eq!(
+        b.page_add_param(over, c(b"X\0"), c(b"X\0"), 1),
+        placeholder()
+    );
     assert_eq!((b.np, b.nparam, b.records()), before);
     // a 17th page is the same
-    assert_eq!(b.machine_add_page(machines[0], c(b"G\0"), c(b"S\0")), placeholder());
+    assert_eq!(
+        b.machine_add_page(machines[0], c(b"G\0"), c(b"S\0")),
+        placeholder()
+    );
 }
 
 #[test]
 fn a_bad_text_is_an_error_at_commit_not_a_failed_call() {
     let mut b = Box::new(Build::new());
-    let h = b.add_machine(0, c(b"A very long machine name that does not fit\0"), c(b"A\0"));
+    let h = b.add_machine(
+        0,
+        c(b"A very long machine name that does not fit\0"),
+        c(b"A\0"),
+    );
     assert_ne!(h, placeholder());
     assert_eq!(b.err, E_FORMAT);
-    assert_eq!(check_commit(&b, &DT2, &keys(&[KEY], (1, 0, 0)), &FREE), E_FORMAT);
+    assert_eq!(
+        check_commit(&b, &DT2, &keys(&[KEY], (1, 0, 0)), &FREE),
+        E_FORMAT
+    );
 }
 
 #[test]
@@ -199,14 +245,20 @@ fn a_handle_of_another_service_is_refused_where_a_machine_call_needs_its_own() {
     let other = std::boxed::Box::new([0u8; 8]);
     let foreign = other.as_ptr() as *mut u8;
     let mut b = analog();
-    assert_eq!(b.page_add_param(foreign, c(b"P\0"), c(b"P\0"), 0), placeholder());
+    assert_eq!(
+        b.page_add_param(foreign, c(b"P\0"), c(b"P\0"), 0),
+        placeholder()
+    );
     assert_eq!(b.err, E_FORMAT);
     let mut b = analog();
     b.param_on_click(foreign, 4, 8);
     assert_eq!(b.err, E_FORMAT);
     // the placeholder itself and a null handle are what an earlier refusal gave: the error is kept already, nothing new is added
     let mut b = analog();
-    assert_eq!(b.page_add_param(placeholder(), c(b"P\0"), c(b"P\0"), 0), placeholder());
+    assert_eq!(
+        b.page_add_param(placeholder(), c(b"P\0"), c(b"P\0"), 0),
+        placeholder()
+    );
     b.param_on_click(core::ptr::null_mut(), 4, 8);
     assert_eq!(b.err, 0);
 }
@@ -217,17 +269,62 @@ fn commit_refuses_more_rows_than_uses_an_unknown_id_and_no_free_row() {
     let ok = keys(&[KEY], (1, 3, 1));
     assert_eq!(check_commit(&b, &DN2, &ok, &FREE), OK);
     // more rows than [uses]
-    assert_eq!(check_commit(&b, &DN2, &keys(&[KEY], (1, 2, 1)), &FREE), E_DECL_USES);
-    assert_eq!(check_commit(&b, &DN2, &keys(&[KEY], (0, 3, 1)), &FREE), E_DECL_USES);
+    assert_eq!(
+        check_commit(&b, &DN2, &keys(&[KEY], (1, 2, 1)), &FREE),
+        E_DECL_USES
+    );
+    assert_eq!(
+        check_commit(&b, &DN2, &keys(&[KEY], (0, 3, 1)), &FREE),
+        E_DECL_USES
+    );
     // a page device needs a page row for the machine; a machine-row device none
-    assert_eq!(check_commit(&b, &DN2, &keys(&[KEY], (1, 3, 0)), &FREE), E_DECL_USES);
+    assert_eq!(
+        check_commit(&b, &DN2, &keys(&[KEY], (1, 3, 0)), &FREE),
+        E_DECL_USES
+    );
     assert_eq!(check_commit(&b, &DT2, &keys(&[KEY], (1, 3, 0)), &FREE), OK);
     // a machine index that is no row of the header's keys table
-    assert_eq!(check_commit(&b, &DN2, &keys(&[], (1, 3, 1)), &FREE), E_DECL_ID);
+    assert_eq!(
+        check_commit(&b, &DN2, &keys(&[], (1, 3, 1)), &FREE),
+        E_DECL_ID
+    );
     // no free row
-    assert_eq!(check_commit(&b, &DN2, &ok, &Free { machine_rows: 0, ..FREE }), E_TYPE_USED);
-    assert_eq!(check_commit(&b, &DN2, &ok, &Free { param_rows: 2, ..FREE }), E_PARAM_FULL);
-    assert_eq!(check_commit(&b, &DN2, &ok, &Free { page_rows: 0, ..FREE }), E_PAGE_FULL);
+    assert_eq!(
+        check_commit(
+            &b,
+            &DN2,
+            &ok,
+            &Free {
+                machine_rows: 0,
+                ..FREE
+            }
+        ),
+        E_TYPE_USED
+    );
+    assert_eq!(
+        check_commit(
+            &b,
+            &DN2,
+            &ok,
+            &Free {
+                param_rows: 2,
+                ..FREE
+            }
+        ),
+        E_PARAM_FULL
+    );
+    assert_eq!(
+        check_commit(
+            &b,
+            &DN2,
+            &ok,
+            &Free {
+                page_rows: 0,
+                ..FREE
+            }
+        ),
+        E_PAGE_FULL
+    );
 }
 
 #[test]
@@ -235,24 +332,58 @@ fn a_digitakt_machine_lowers_to_the_records_the_packer_wrote() {
     let b = analog();
     let k = keys(&[KEY], (1, 3, 0));
     let (buf, count, plan) = lowered(&b, &DT2, &k, 0x1000);
-    assert_eq!(count, 4, "3 params and 1 machine, no page row on a machine-row device");
+    assert_eq!(
+        count, 4,
+        "3 params and 1 machine, no page row on a machine-row device"
+    );
     assert_eq!(buf.len(), 16 + 3 * 0x50 + 0x6c);
     // PARAM 1 (Decay): the encoder row 0xcc, slot = knob position of word 1 = 2, range 0..100, default 80, raw (x 256)
     let p1 = 16 + 0x50;
     assert_eq!((rd(&buf, p1), rd(&buf, p1 + 8)), (1, 1));
     assert_eq!((rd(&buf, p1 + 12), rd(&buf, p1 + 16)), (0xcc, 2));
-    assert_eq!((rd(&buf, p1 + 20), rd(&buf, p1 + 24), rd(&buf, p1 + 28)), (0, 100 * 256, 80 * 256));
+    assert_eq!(
+        (rd(&buf, p1 + 20), rd(&buf, p1 + 24), rd(&buf, p1 + 28)),
+        (0, 100 * 256, 80 * 256)
+    );
     // PARAM 2 (Play): the play glyph's stock row
     assert_eq!(rd(&buf, 16 + 2 * 0x50 + 12), 0xcb);
     // MACHINE: key, clone, position 255; knobs: tune on 0, the params on 1, 2 and 4 (B C E), LEV on 7
     let m = 16 + 3 * 0x50;
-    assert_eq!((rd(&buf, m), rd(&buf, m + 8), rd(&buf, m + 16)), (2, KEY, 255), "kind, key, position");
+    assert_eq!(
+        (rd(&buf, m), rd(&buf, m + 8), rd(&buf, m + 16)),
+        (2, KEY, 255),
+        "kind, key, position"
+    );
     assert_eq!(rd(&buf, m + 12), 0, "clone_of");
     let knobs: std::vec::Vec<u32> = (0..8).map(|j| rd(&buf, m + 8 + 20 + 4 * j)).collect();
-    assert_eq!(knobs, [0xca, KNOB_PARAM, KNOB_PARAM | 1, 0, KNOB_PARAM | 2, 0, 0, 0xd1]);
+    assert_eq!(
+        knobs,
+        [
+            0xca,
+            KNOB_PARAM,
+            KNOB_PARAM | 1,
+            0,
+            KNOB_PARAM | 2,
+            0,
+            0,
+            0xd1
+        ]
+    );
     // the voice row: the range of each knob position and the latch of word 1
     let (rng, latched) = voice_declared(&b, &plan, 0);
-    assert_eq!(rng, [0, 127 * 256 << 16, 100 * 256 << 16, 0, 3 * 256 << 16, 0, 0, 0]);
+    assert_eq!(
+        rng,
+        [
+            0,
+            127 * 256 << 16,
+            100 * 256 << 16,
+            0,
+            3 * 256 << 16,
+            0,
+            0,
+            0
+        ]
+    );
     assert_eq!(latched, 0b10);
 }
 
@@ -283,23 +414,58 @@ fn a_digitone_machine_with_canvas_pages_lowers_pages_and_native_records() {
     assert_eq!(buf.len(), 16 + 2 * 0x50 + 0x6c + 0x60 + 0x10 + 2 * 0x98);
     // slot = 25 + knob position: word 0 at position 1, word 1 at position 2
     assert_eq!(rd(&buf, 16 + 8 + 8), 25 + 1);
-    assert_eq!(rd(&buf, 16 + 12), 0xd5, "the Digitone II template of the default glyph");
+    assert_eq!(
+        rd(&buf, 16 + 12),
+        0xd5,
+        "the Digitone II template of the default glyph"
+    );
     assert_eq!(rd(&buf, 16 + 0x50 + 8 + 8), 25 + 2);
     let page = 16 + 2 * 0x50 + 0x6c;
     assert_eq!(rd(&buf, page), 3);
     let act = page + 0x60;
-    assert_eq!((rd(&buf, act), rd(&buf, act + 8), rd(&buf, act + 12)), (5, 0, 0x100), "action: param 0, image offset");
+    assert_eq!(
+        (rd(&buf, act), rd(&buf, act + 8), rd(&buf, act + 12)),
+        (5, 0, 0x100),
+        "action: param 0, image offset"
+    );
     let n0 = act + 0x10;
-    assert_eq!((rd(&buf, n0), rd(&buf, n0 + 8), rd(&buf, n0 + 16), rd(&buf, n0 + 20)), (7, 2, 0x200, 0x300));
-    assert_eq!((rd(&buf, n0 + 8 + 40), rd(&buf, n0 + 8 + 44)), (0, 1), "page 0, overlay flag");
+    assert_eq!(
+        (
+            rd(&buf, n0),
+            rd(&buf, n0 + 8),
+            rd(&buf, n0 + 16),
+            rd(&buf, n0 + 20)
+        ),
+        (7, 2, 0x200, 0x300)
+    );
+    assert_eq!(
+        (rd(&buf, n0 + 8 + 40), rd(&buf, n0 + 8 + 44)),
+        (0, 1),
+        "page 0, overlay flag"
+    );
     let b0 = n0 + 8 + 48;
-    assert_eq!((rd(&buf, b0), rd(&buf, b0 + 4), rd(&buf, b0 + 8)), (1, 1, 0), "param file index 1 on encoder 0");
+    assert_eq!(
+        (rd(&buf, b0), rd(&buf, b0 + 4), rd(&buf, b0 + 8)),
+        (1, 1, 0),
+        "param file index 1 on encoder 0"
+    );
     let n1 = n0 + 0x98;
-    assert_eq!((rd(&buf, n1 + 8 + 40), rd(&buf, n1 + 8 + 44)), (1, 2), "page 1, wide flag");
+    assert_eq!(
+        (rd(&buf, n1 + 8 + 40), rd(&buf, n1 + 8 + 44)),
+        (1, 2),
+        "page 1, wide flag"
+    );
     let b1 = n1 + 8 + 48;
-    assert_eq!((rd(&buf, b1 + 12), rd(&buf, b1 + 16), rd(&buf, b1 + 20)), (2, 0, 6), "local 0 on encoder 6");
+    assert_eq!(
+        (rd(&buf, b1 + 12), rd(&buf, b1 + 16), rd(&buf, b1 + 20)),
+        (2, 0, 6),
+        "local 0 on encoder 6"
+    );
     let args = apply_args(&b, &plan);
-    assert_eq!((args.click[0], args.native[0], args.native[1]), (0x77, 0x88, 0x99));
+    assert_eq!(
+        (args.click[0], args.native[0], args.native[1]),
+        (0x77, 0x88, 0x99)
+    );
 }
 
 #[test]
@@ -312,7 +478,14 @@ fn one_canvas_page_without_flags_is_a_v1_page() {
     let (buf, _, _) = lowered(&b, &DN2, &keys(&[KEY], (1, 3, 1)), 0);
     let n = buf.len() - 0x90;
     assert_eq!((rd(&buf, n), rd(&buf, n + 8)), (6, 1), "kind 6, version 1");
-    assert_eq!((rd(&buf, n + 8 + 40), rd(&buf, n + 8 + 44), rd(&buf, n + 8 + 48)), (2, 3, 5));
+    assert_eq!(
+        (
+            rd(&buf, n + 8 + 40),
+            rd(&buf, n + 8 + 44),
+            rd(&buf, n + 8 + 48)
+        ),
+        (2, 3, 5)
+    );
 }
 
 #[test]
@@ -345,6 +518,20 @@ fn a_param_beyond_the_devices_knob_positions_or_outside_its_glyph_range_is_refus
     let mut b = analog();
     b.params[0].glyph = 3; // on/off wants 0 to 1, the param has 0 to 127
     assert_eq!(lower_err(&b, &DN2, &keys(&[KEY], (1, 3, 1))), Err(E_FORMAT));
+}
+
+#[test]
+fn a_second_knob_page_of_a_machine_is_refused_at_the_commit() {
+    // a machine has one knob page for now: a second page without a canvas is E_FORMAT on both device kinds
+    let mut b = Box::new(Build::new());
+    let m = b.add_machine(0, c(b"Two\0"), c(b"TWO\0"));
+    let p1 = b.machine_add_page(m, c(b"One\0"), c(b"S\0"));
+    b.page_add_param(p1, c(b"Tone\0"), c(b"TONE\0"), 64);
+    let p2 = b.machine_add_page(m, c(b"Two\0"), c(b"S\0"));
+    b.page_add_param(p2, c(b"Decay\0"), c(b"DECAY\0"), 80);
+    assert_eq!(b.err, 0, "the calls themselves succeed; the commit refuses");
+    assert_eq!(lower_err(&b, &DT2, &keys(&[KEY], (1, 2, 0))), Err(E_FORMAT));
+    assert_eq!(lower_err(&b, &DN2, &keys(&[KEY], (1, 2, 2))), Err(E_FORMAT));
 }
 
 #[test]
@@ -391,7 +578,13 @@ fn dynreg(p: &Profile) -> Vec<u32> {
 }
 
 fn commit(core: &FakeCore, phase: u32, k: &KeysCopy, sink: &mut RecordSink) -> i32 {
-    let ctx = ModuleCommitCtx { phase, base: 0x1000, image_size: 0x4000, keys: k, sink };
+    let ctx = ModuleCommitCtx {
+        phase,
+        base: 0x1000,
+        image_size: 0x4000,
+        keys: k,
+        sink,
+    };
     unsafe { <Machines as Service<FakeCore>>::module_commit(core, 0, &ctx) }
 }
 
@@ -419,14 +612,24 @@ fn the_commit_measures_then_writes_the_same_records_declares_the_rows_and_closes
     let mut measured = RecordSink::measure();
     assert_eq!(commit(&core, commit_phase::PREPARE, &k, &mut measured), OK);
     // 2 params, 1 machine, 1 action
-    assert_eq!((measured.count, measured.at), (4, 16 + 2 * 0x50 + 0x6c + 0x10));
-    assert_eq!(measured.rows, [0; 3], "the rows are counted when they are written");
+    assert_eq!(
+        (measured.count, measured.at),
+        (4, 16 + 2 * 0x50 + 0x6c + 0x10)
+    );
+    assert_eq!(
+        measured.rows, [0; 3],
+        "the rows are counted when they are written"
+    );
     let mut buf = std::vec![0u8; measured.at];
     let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
     assert_eq!(commit(&core, commit_phase::WRITE, &k, &mut out), OK);
     assert_eq!((out.count, out.at, out.rows), (4, measured.at, [1, 2, 0]));
     let act = 16 + 2 * 0x50 + 0x6c;
-    assert_eq!((rd(&buf, act), rd(&buf, act + 8), rd(&buf, act + 12)), (5, 1, 0x2000 - 0x1000), "the action of the second param, as an image offset");
+    assert_eq!(
+        (rd(&buf, act), rd(&buf, act + 8), rd(&buf, act + 12)),
+        (5, 1, 0x2000 - 0x1000),
+        "the action of the second param, as an image offset"
+    );
     // the callback argument waits for `apply`
     assert_eq!(build::args().map(|a| a.click[0]), Some(5));
     // the declare pass (after the walker's check) closes the collection
@@ -445,7 +648,10 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
     // no dynreg_info in the image
     let core = FakeCore::new();
     collect_analog(&core);
-    assert_eq!(commit(&core, commit_phase::PREPARE, &k, &mut RecordSink::measure()), E_NO_REGISTRY);
+    assert_eq!(
+        commit(&core, commit_phase::PREPARE, &k, &mut RecordSink::measure()),
+        E_NO_REGISTRY
+    );
     unsafe { build::end() };
     // an error of the calls is the commit's result, before anything is checked
     let mut core = FakeCore::new();
@@ -456,7 +662,10 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
         let m = build::add_machine(&core, 8 as *mut u8, 1, core::ptr::null(), c(b"A\0"));
         assert_ne!(m, placeholder());
     }
-    assert_eq!(commit(&core, commit_phase::PREPARE, &k, &mut RecordSink::measure()), E_FORMAT);
+    assert_eq!(
+        commit(&core, commit_phase::PREPARE, &k, &mut RecordSink::measure()),
+        E_FORMAT
+    );
     unsafe { build::end() };
     // a module that declared no machine commits nothing and needs no registry
     let core = FakeCore::new();
@@ -474,8 +683,19 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
         core.source.set(dkrt_abi::MAX_MODULES as u8 + 1);
         build::add_machine(&core, 8 as *mut u8, 0, c(b"A\0"), c(b"A\0"));
     }
-    let ctx = ModuleCommitCtx { phase: commit_phase::PREPARE, base: 0, image_size: 0x4000, keys: &k, sink: &mut RecordSink::measure() };
-    assert_eq!(unsafe { <Machines as Service<FakeCore>>::module_commit(&core, dkrt_abi::MAX_MODULES, &ctx) }, E_FORMAT);
+    let ctx = ModuleCommitCtx {
+        phase: commit_phase::PREPARE,
+        base: 0,
+        image_size: 0x4000,
+        keys: &k,
+        sink: &mut RecordSink::measure(),
+    };
+    assert_eq!(
+        unsafe {
+            <Machines as Service<FakeCore>>::module_commit(&core, dkrt_abi::MAX_MODULES, &ctx)
+        },
+        E_FORMAT
+    );
     unsafe { build::end() };
 }
 
@@ -495,7 +715,11 @@ fn golden_case(name: &str, b: &Build, p: &Profile, k: &KeysCopy, base: u32) -> s
     use std::fmt::Write;
     let mut s = std::string::String::new();
     writeln!(s, "case {name}").unwrap();
-    let (buf, count, plan) = if b.is_empty() { (std::vec![0u8; 16], 0, Plan::new()) } else { lowered(b, p, k, base) };
+    let (buf, count, plan) = if b.is_empty() {
+        (std::vec![0u8; 16], 0, Plan::new())
+    } else {
+        lowered(b, p, k, base)
+    };
     let mut at = 16;
     let mut recs = 0;
     while at < buf.len() {
@@ -507,13 +731,34 @@ fn golden_case(name: &str, b: &Build, p: &Profile, k: &KeysCopy, base: u32) -> s
     assert_eq!(recs, count);
     for m in 0..b.nm {
         let (rng, latched) = voice_declared(b, &plan, m);
-        writeln!(s, "voice {m} {} {latched:08x}", rng.iter().map(|w| std::format!("{w:08x}")).collect::<Vec<_>>().join(" ")).unwrap();
+        writeln!(
+            s,
+            "voice {m} {} {latched:08x}",
+            rng.iter()
+                .map(|w| std::format!("{w:08x}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+        .unwrap();
     }
     let args = apply_args(b, &plan);
-    let clicks = (0..b.nparam).filter(|&i| b.params[i].click != 0 && plan.file[i] != u8::MAX).count();
+    let clicks = (0..b.nparam)
+        .filter(|&i| b.params[i].click != 0 && plan.file[i] != u8::MAX)
+        .count();
     let natives = (0..b.np).filter(|&i| b.pages[i].canvas).count();
-    let join = |v: &[u32]| v.iter().map(|w| std::format!("{w:08x}")).collect::<Vec<_>>().join(" ");
-    writeln!(s, "args click {} native {}", join(&args.click[..clicks]), join(&args.native[..natives])).unwrap();
+    let join = |v: &[u32]| {
+        v.iter()
+            .map(|w| std::format!("{w:08x}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    writeln!(
+        s,
+        "args click {} native {}",
+        join(&args.click[..clicks]),
+        join(&args.native[..natives])
+    )
+    .unwrap();
     s
 }
 
@@ -521,20 +766,50 @@ fn golden_text() -> std::string::String {
     let mut s = std::string::String::new();
     let empty = Build::new();
     let one = keys(&[KEY], (1, 3, 1));
-    s += &golden_case("dt2-analog", &analog(), &DT2, &keys(&[KEY], (1, 3, 0)), 0x1000);
+    s += &golden_case(
+        "dt2-analog",
+        &analog(),
+        &DT2,
+        &keys(&[KEY], (1, 3, 0)),
+        0x1000,
+    );
     s += &golden_case("dn2-analog", &analog(), &DN2, &one, 0x1000);
-    s += &golden_case("dn2-shot-canvas-pages", &shot(), &DN2, &keys(&[KEY], (1, 2, 1)), 0x1000);
+    s += &golden_case(
+        "dn2-shot-canvas-pages",
+        &shot(),
+        &DN2,
+        &keys(&[KEY], (1, 2, 1)),
+        0x1000,
+    );
     let mut v1 = analog();
     let m = &mut v1.machines[0] as *mut CMachine as *mut u8;
     let g = v1.machine_add_page(m, c(b"W\0"), c(b"S\0"));
     v1.page_canvas(g, 0, 0x1400, 0x1500, 0);
     v1.page_bind_local(g, 3, 5);
     s += &golden_case("dn2-v1-canvas-page", &v1, &DN2, &one, 0);
-    s += &golden_case("dn2-sine-knob-page", &sine(), &DN2, &keys(&[KEY], (1, 1, 1)), 0);
+    s += &golden_case(
+        "dn2-sine-knob-page",
+        &sine(),
+        &DN2,
+        &keys(&[KEY], (1, 1, 1)),
+        0,
+    );
     s += &golden_case("dt2-effect", &empty, &DT2, &keys(&[], (0, 0, 0)), 0);
     s += &golden_case("dt2-effect-mix-64", &empty, &DT2, &keys(&[], (0, 0, 0)), 0);
-    s += &golden_case("dt2-commit-demo", &commit_demo(), &DT2, &keys(&[KEY], (1, 3, 0)), 0x1000);
-    s += &golden_case("dn2-commit-demo", &commit_demo(), &DN2, &keys(&[KEY], (1, 3, 1)), 0x1000);
+    s += &golden_case(
+        "dt2-commit-demo",
+        &commit_demo(),
+        &DT2,
+        &keys(&[KEY], (1, 3, 0)),
+        0x1000,
+    );
+    s += &golden_case(
+        "dn2-commit-demo",
+        &commit_demo(),
+        &DN2,
+        &keys(&[KEY], (1, 3, 1)),
+        0x1000,
+    );
     s
 }
 
@@ -555,12 +830,16 @@ fn commit_demo() -> Box<Build> {
 
 /// The lines of the golden file that belong to this service: the case headers, the machines' records, the voice and the args lines.
 fn mine(line: &str) -> bool {
-    line.starts_with("case ") || line.starts_with("voice ") || line.starts_with("args ") || (line.starts_with("record ") && !line.starts_with("record 4 "))
+    line.starts_with("case ")
+        || line.starts_with("voice ")
+        || line.starts_with("args ")
+        || (line.starts_with("record ") && !line.starts_with("record 4 "))
 }
 
 #[test]
 fn the_lowered_records_of_the_golden_cases_are_the_recorded_bytes() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../tests/fixtures/records/lowered.golden");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../../tests/fixtures/records/lowered.golden");
     let text = golden_text();
     let want = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     let want: Vec<&str> = want.lines().filter(|l| mine(l)).collect();
@@ -571,7 +850,8 @@ fn the_lowered_records_of_the_golden_cases_are_the_recorded_bytes() {
 }
 
 #[test]
-fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_leaves_them_as_they_were() {
+fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_leaves_them_as_they_were(
+) {
     use dkrt_abi::core_api::CoreApi;
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut core = FakeCore::new();
@@ -603,9 +883,15 @@ fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_l
     let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
     assert_eq!(commit(&core, commit_phase::WRITE, &k, &mut out), OK);
     // the loader's walker refuses the block here: it never gives the declare pass, and the rows are as they were
-    assert_eq!((core.dsp().row_rng[0], core.dsp().row_latched[0]), ([0; 8], 0));
+    assert_eq!(
+        (core.dsp().row_rng[0], core.dsp().row_latched[0]),
+        ([0; 8], 0)
+    );
     unsafe { <Machines as Service<FakeCore>>::remove(&core, 1) };
-    assert_eq!((core.dsp().row_rng[0], core.dsp().row_latched[0]), ([0; 8], 0));
+    assert_eq!(
+        (core.dsp().row_rng[0], core.dsp().row_latched[0]),
+        ([0; 8], 0)
+    );
     // a block that passes: the declare pass puts the ranges and the latch in the row
     unsafe {
         build::begin(0);

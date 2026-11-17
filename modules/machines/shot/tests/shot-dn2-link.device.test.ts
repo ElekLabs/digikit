@@ -2,7 +2,8 @@ import { encoder } from '@digi/test-support';
 import { expect } from 'vitest';
 import { bounded, rows, slotsFor, word, SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { effectPage, mainPage } from '@digi/regression/runtime/fx-pages-ui.ts';
-import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';
 import { dn2Tests, type Dn2 } from './shot-dn2-support.ts';
 
 // R6a, the DSP link queue (docs/plans/runtime-and-services.md section 6): the effect page's knob writes (live values on the link) and the sample track
@@ -11,7 +12,7 @@ import { dn2Tests, type Dn2 } from './shot-dn2-support.ts';
 //
 // DN2 OS 1.12, patch set `sample-tracks` (it has core/fxpages, core/dynfx, core/sample-pool and core/dsp-link). Written for the batched gate; not run yet.
 //
-// Read back: the effect row's p0 word and the track record through `dsp.peek` (the plan symbols `fx.rows` and `RECORDS`), and the page writer's counters in
+// Read back: the effect row's p0 word and the track record through `dsp.peek` (the plan symbols `fx.rows` and the samples service `DKRT_SMP_RECORDS`), and the page writer's counters in
 // `DKRT_FXP` (word 4 `sent`: values the link confirmed; word 5 `errors`: live writes that failed).
 
 const FXP_SENT = 16;
@@ -29,9 +30,9 @@ dn2Tests(
   ['a'],
   async (c: Dn2) => {
     const { runtime, session, api, settle, phase, rec, fixtures, file, artifacts, expectNoNewFault } = c;
-    const plan = await prepareRuntimePlan(session, artifacts, ['fx.rows', 'DKRT_FXP']);
+    const plan = await prepareRuntimePlan(session, artifacts, ['fx.rows']);
     const slots = slotsFor('dn2');
-    const fxp = planSymbol(plan, 'DKRT_FXP');
+    const fxp = await serviceSymbol(runtime, plan, 'fx', 'DKRT_FXP');
     const gain = async () => (await rows(session, plan, slots))[0]![4]!;
     const burst = async (detents: number, events: number) => {
       for (let i = 0; i < events; i++) {
