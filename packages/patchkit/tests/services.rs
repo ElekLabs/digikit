@@ -20,9 +20,6 @@ fn toolchain() -> bool {
 }
 
 fn patchkit(args: &[&str]) -> String {
-    let out = patchkit(&["services", "--device", "dt2", "--service", "machines"]);
-    let v: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
-    assert_eq!(v["module_id"], "core/services/machines");
     let r = Command::new(env!("CARGO_BIN_EXE_patchkit"))
         .arg("--root")
         .arg(root())
