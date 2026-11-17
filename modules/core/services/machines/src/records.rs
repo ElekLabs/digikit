@@ -1001,10 +1001,10 @@ mod tests {
         b[at..at + s.len()].copy_from_slice(s);
     }
 
-    fn check(f: unsafe fn(&CheckCtx) -> i32, recs: &[Rec], pages: bool) -> i32 {
+    fn check(f: unsafe fn(&Ctx) -> i32, recs: &[Rec], pages: bool) -> i32 {
         let (s, inf) = (section(recs), info(pages));
         unsafe {
-            f(&CheckCtx {
+            f(&Ctx {
                 reg: s.as_ptr(),
                 image_size: 100,
                 inf: inf.as_ptr(),
@@ -1012,12 +1012,12 @@ mod tests {
         }
     }
 
-    fn check_core(f: unsafe fn(&FakeCore, &CheckCtx) -> i32, recs: &[Rec], pages: bool) -> i32 {
+    fn check_core(f: unsafe fn(&FakeCore, &Ctx) -> i32, recs: &[Rec], pages: bool) -> i32 {
         check_core_with(f, recs, info(pages))
     }
 
     fn check_core_with(
-        f: unsafe fn(&FakeCore, &CheckCtx) -> i32,
+        f: unsafe fn(&FakeCore, &Ctx) -> i32,
         recs: &[Rec],
         inf: Vec<u32>,
     ) -> i32 {
@@ -1025,7 +1025,7 @@ mod tests {
         unsafe {
             f(
                 &core,
-                &CheckCtx {
+                &Ctx {
                     reg: s.as_ptr(),
                     image_size: 100,
                     inf: inf.as_ptr(),

@@ -363,7 +363,8 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
     );
     // a firmware without the native page calls (the words are 0) refuses the record when it is checked, registers nothing and consumes no turn
     let mut bare = core;
-    bare.info_tables.clear();
+    bare.info_tables
+        .retain(|(h, _)| *h != name_hash("machines_info"));
     bare.info_tables
         .push((name_hash("machines_info"), machines_info(false)));
     assert_eq!(
@@ -380,8 +381,8 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
                 &ctx,
             )
         },
-        E_NO_REGISTRY,
-        "an unbound word is not called"
+        OK,
+        "an unbound word is not called (the check refused the record before; apply has nothing to register)"
     );
     assert_eq!(
         unsafe { dkrt_svc_machines::nativepage::turn(&bare, std::ptr::null(), std::ptr::null()) },

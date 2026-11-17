@@ -1002,9 +1002,9 @@ mod tests {
         assert_eq!(p.verdicts[1].result(), E_PLAN_FIT);
     }
     #[test]
-    fn a_need_of_a_service_in_the_static_prefix_is_met_without_a_provider_and_a_loaded_row_is_not() {
-        // two rows: "machines" is the in-crate prefix of this table, "loaded" follows it as a service file's row does
-        assert_eq!(crate::gen_services::STATIC, 1, "the table below has one in-crate row");
+    fn a_need_of_a_loaded_service_row_is_not_met_without_a_provider() {
+        // no service is in-crate (`gen_services::STATIC` is 0): every row is a service file's row
+        assert_eq!(crate::gen_services::STATIC, 0, "the runtime has no in-crate service row");
         static ROWS2: [ServiceRow; 2] = [ServiceRow::of::<S, crate::core_api::RealCore>("machines", &[]), ServiceRow::of::<S, crate::core_api::RealCore>("loaded", &[])];
         static ROWS2_P: dkrt_abi::service::RowPtrs<2> = dkrt_abi::service::RowPtrs::of(&ROWS2);
         let c = caps();
@@ -1015,10 +1015,9 @@ mod tests {
             plan_with(&env, &m, &p)
         };
         let loaded = name_hash("loaded");
-        let in_crate = Table { needs: &[need(name_hash("machines"), 0)], ..KEEP };
         let after_prefix = Table { needs: &[need(loaded, 0)], ..KEEP };
-        let p = plan_of(&[bytes(&in_crate), bytes(&after_prefix)], &[]);
-        assert_eq!(p.verdicts[..2], [Verdict::Accepted, Verdict::Refused(Reason::NeedMissing(loaded))]);
+        let p = plan_of(&[bytes(&after_prefix)], &[]);
+        assert_eq!(p.verdicts[0], Verdict::Refused(Reason::NeedMissing(loaded)));
         // a provider of the loaded row's name takes it (a loaded row is no service of the runtime)
         let provider = Table { provides: &[Pair { a: loaded, b: 0 }], ..KEEP };
         let p = plan_of(&[bytes(&after_prefix)], &[bytes(&provider)]);
