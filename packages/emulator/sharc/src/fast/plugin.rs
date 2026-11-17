@@ -9,16 +9,11 @@
 //! void     sharc_fast_free(void* kernel);
 //! ```
 
-#![cfg(unix)]
+#![cfg(any(unix, windows))]
 
 use super::ir::*;
 use std::ffi::{CString, c_char, c_void};
-
-unsafe extern "C" {
-    fn dlopen(path: *const c_char, flags: i32) -> *mut c_void;
-    fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
-    fn dlerror() -> *const c_char;
-}
+use std::path::Path;
 
 type CompileFn = unsafe extern "C" fn(*const u32, usize, *mut c_char, usize) -> *mut c_void;
 type RunFn = unsafe extern "C" fn(*mut c_void, *mut u8, *mut u8) -> u32;
@@ -52,27 +47,18 @@ impl CompiledKernel for PluginKernel {
 
 impl PluginBackend {
     pub fn open(path: &str) -> Result<PluginBackend, String> {
-        let c = CString::new(path).map_err(|e| e.to_string())?;
-        // SAFETY: plain dlopen/dlsym of a library the user named.
-        unsafe {
-            let h = dlopen(c.as_ptr(), 2);
-            if h.is_null() {
-                let e = dlerror();
-                return Err(if e.is_null() {
-                    format!("dlopen {path} failed")
-                } else {
-                    std::ffi::CStr::from_ptr(e).to_string_lossy().into_owned()
-                });
+        let lib = dynlib::open(Path::new(path))?;
+        let sym = |name: &str| -> Result<*mut c_void, String> {
+            let n = CString::new(name).unwrap();
+            let p = dynlib::symbol(lib, &n);
+            if p.is_null() {
+                Err(format!("{path}: no symbol {name}"))
+            } else {
+                Ok(p)
             }
-            let sym = |name: &str| -> Result<*mut c_void, String> {
-                let n = CString::new(name).unwrap();
-                let p = dlsym(h, n.as_ptr());
-                if p.is_null() {
-                    Err(format!("{path}: no symbol {name}"))
-                } else {
-                    Ok(p)
-                }
-            };
+        };
+        // SAFETY: the symbols have the C ABI declared above (the library is the user's choice).
+        unsafe {
             Ok(PluginBackend {
                 compile: std::mem::transmute::<*mut c_void, CompileFn>(sym("sharc_fast_compile")?),
                 run: std::mem::transmute::<*mut c_void, RunFn>(sym("sharc_fast_run2")?),

@@ -178,14 +178,15 @@ pub extern "C" fn helper_exec(st: *mut u8, rec: u64) -> u32 {
         None => {
             // As `Engine::step` decodes: from the memory the region's code
             // words were checked against, else from the image's table.
+            let sym_of = s.core.sym_of;
             let i = if s.runtime_decode {
-                match crate::rt::bnd::decode_at(s, (), None, r.pc as Int) {
+                match crate::rt::bnd::decode_at_with(s, r.pc as Int, sym_of) {
                     Ok(i) => Some(i),
                     Err(t) => {
                         eprintln!(
                             "fast: helper decode at {:#x}: {}",
                             r.pc,
-                            crate::trap_name(t)
+                            s.core.trap_name(t)
                         );
                         None
                     }

@@ -185,6 +185,8 @@ const GATE = {
         '{workspaceRoot}/tools/devtools/emud_key.py',
         '{workspaceRoot}/tools/devtools/verify_build.py',
         '{workspaceRoot}/tools/devtools/stablebin.py',
+        '{workspaceRoot}/tools/devtools/store.py',
+        '{workspaceRoot}/tools/devtools/core_store.py',
         '{workspaceRoot}/tools/emulator/digi_env.py',
         '{workspaceRoot}/tools/emulator/native_pgo.py',
         '{workspaceRoot}/tools/emulator/native_target.py',
@@ -232,14 +234,14 @@ const GATE = {
 const NO_TESTS = new Set([
   'sharc-stats',
   'sharc-gen',
-  'sharc-gen-2',
-  'sharc-native-2',
   'dkfw',
   'dkrt-test-support',
   'sharc-fast-cl',
-  'sharc-fast-cl-2',
   'bootstrap-emu',
   'digiemu-desktop',
+  'digi-wasm-core',
+  'dynlib',
+  'sharc-core-lib',
 ]);
 
 // Crates whose tests read no firmware, generated core or out/ data; their rust-tests are cached.
@@ -262,10 +264,6 @@ export const HERMETIC = {
   dkmidi: [],
   dkbulk: [],
 };
-
-// Crates that compile another crate's sources by path (sharc-2 builds packages/emulator/sharc/src);
-// those files are outside the project root.
-const SHARED_SOURCE = { 'sharc-native-2': ['{workspaceRoot}/packages/emulator/sharc/**/*'] };
 
 // Files outside the crate embedded by patchkit's source, unit tests and build.rs.
 const COMPILE_SOURCE = {
@@ -369,12 +367,7 @@ export const createNodesV2 = [
           : {
               executor: 'nx:run-commands',
               cache: false,
-              inputs: [
-                ...inputs,
-                '{workspaceRoot}/tools/nx/rust-env.mjs',
-                ...(SHARED_SOURCE[name] ?? []),
-                ...(COMPILE_SOURCE[name] ?? []),
-              ],
+              inputs: [...inputs, '{workspaceRoot}/tools/nx/rust-env.mjs', ...(COMPILE_SOURCE[name] ?? [])],
               options: {
                 command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
                 cwd: '.',

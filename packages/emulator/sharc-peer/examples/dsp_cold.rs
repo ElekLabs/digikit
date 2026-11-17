@@ -9,9 +9,9 @@
 //! sharc --example dsp_cold. Output is firmware-derived: keep it out of the
 //! repository.
 
-use elektron_native_boot::dsp_patch::DspPatch;
-use elektron_native_boot::sharc_peer::{DN2_IDLE, DT2_IDLE, open_engine_patched};
 use sha2::{Digest, Sha256};
+use sharc_peer::dsp_patch::DspPatch;
+use sharc_peer::{IdleLoop, open_engine_patched};
 use std::{env, fs, time::Instant};
 
 fn main() {
@@ -24,12 +24,10 @@ fn main() {
     let state = fs::read(&a[2]).unwrap();
     let max: u64 = a.get(4).map_or(800_000_000, |v| v.parse().unwrap());
     let patch = env::var_os("DSP_PATCH").map(|p| DspPatch::load(p.as_ref()).unwrap());
-    let idle = if env::var("DSP_DEVICE").as_deref() == Ok("dt2") {
-        DT2_IDLE
-    } else {
-        DN2_IDLE
-    };
-    let mut e = open_engine_patched(&image, &state, 0, patch.as_ref(), idle).expect("engine");
+    let idle = IdleLoop::for_device(&env::var("DSP_DEVICE").unwrap_or_else(|_| "dn2".into()))
+        .expect("DSP profile");
+    let mut e = open_engine_patched(&sharc_gen::CORE, &image, &state, 0, patch.as_ref(), idle)
+        .expect("engine");
     let t0 = Instant::now();
     let mut done = 0u64;
     let mut rested = 0u32;

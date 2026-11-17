@@ -26,6 +26,7 @@
         "{workspaceRoot}/tools/sharc_dev/sharc_rsgen.py",
         "{workspaceRoot}/packages/emulator/coupled/**/*",
         "{workspaceRoot}/packages/emulator/boot/**/*",
+        "{workspaceRoot}/packages/emulator/sharc-peer/**/*",
         "{workspaceRoot}/packages/emulator/device-profile/**/*",
         "{workspaceRoot}/packages/emulator/loader/**/*",
         "{workspaceRoot}/packages/emulator/plusdrive/**/*",
@@ -79,11 +80,13 @@
         { "env": "DIGI_COUPLED_FEATURES" },
         { "env": "SHARC_AOT" },
         { "env": "SHARC_FAST_REGIONS" },
+        { "env": "SHARC_FAST_REGIONS_2" },
         { "env": "SHARC_BLOCKTRANS" },
+        { "env": "SHARC_BLOCKTRANS_2" },
         { "env": "SHARC_FAST_FALLBACK_REGIONS" },
+        { "env": "SHARC_FAST_FALLBACK_REGIONS_2" },
         { "env": "SHARC_FAST_AUTO" },
         { "env": "SHARC_GEN_DIR" },
-        { "env": "SHARC_GEN_DIR_2" },
         { "env": "UPDATE_GOLDENS" }
       ],
       "options": {

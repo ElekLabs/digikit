@@ -1,7 +1,7 @@
 # 17. Emulator control protocol and firmware injection
 
 Design: `docs/design/emulator-control.md`. Code: `packages/emulator/control`,
-`packages/emulator/boot/src/dsp_stream.rs`, `tools/control/digi_client.py`, `tools/patchkit/dsp_patch.py syx`.
+`packages/emulator/sharc-peer/src/dsp_stream.rs`, `tools/control/digi_client.py`, `tools/patchkit/dsp_patch.py syx`.
 Marks as in CLAUDE.md. Nothing here was re-checked by a second agent yet, so
 the numbers are **[D]** (measured here, one machine, other lanes running).
 
@@ -62,7 +62,7 @@ controller (`pcm.tap`). Patch: `07e58305:tools/patchkit/dsp_patches/dn2-1.11-mas
 
 `coupled-run --dsp-patch FILE` (also the desktop launcher and `firmware.load`) overlays
 word-level edits on the imported DSP state after the snapshot import, because a `.snap.dsp`
-carries its own copy of code and data. Format (`packages/emulator/boot/src/dsp_patch.rs`,
+carries its own copy of code and data. Format (`packages/emulator/sharc-peer/src/dsp_patch.rs`,
 `tools/patchkit/dsp_patch.py check|show|apply|syx`): `BASE <sha256 of the unpatched .syx>`, then
 `PM <pc> <hex> [was <hex>]` (a 16, 32 or 48-bit instruction at a short-word PC), `SW`,
 `DM <addr> <hex32> [was ..]` and `BYTES <addr> <hex>`. `was` is checked against live memory.
@@ -78,7 +78,7 @@ The ColdFire `step N` is exact for 1, 7, 250000 and 600000 instructions.
 
 `firmware.load` of an image whose MAIN differs from the base now cold-boots the ColdFire **with the base's DSP
 attached** and installs a runtime with DSP audio (`packages/emulator/control/src/controller.rs` `load_patched_coupled`;
-`packages/emulator/coupled/src/cold.rs` `boot_patched_to_ready`). Semantics and the cache layout are in
+`packages/emulator/sharc-peer/src/cold.rs` `boot_patched_to_ready`). Semantics and the cache layout are in
 `docs/design/emulator-control.md` ("Firmware injection", item 3). Summary: the DSP is the ready inputs' image and
 cold-idle state (the DSP section of the base .syx; a MAIN patch never changes it); the boot runs on a worker thread
 until the panel is ready (DT2: until link port 0 is quiet, as `tools/emulator/ready.py` does) and writes the ready pair

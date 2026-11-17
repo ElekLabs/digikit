@@ -16,10 +16,10 @@ build against non-PGO single-core binaries only.
    - New profile state `out/native/pgo/both/<triple>/` (device name `both`).
    - `compute_components` adds `generated2` (tree digest of `SHARC_GEN_DIR_2`) and the
      feature `second-core`; the workload name is `both-v1`.
-   - `GUARDED_CRATES` gets `sharc_native_2` and `sharc_gen_2`, so `crate_mismatches` checks the
-     second engine instance. `CRATE_NAME_RE` already builds its pattern from the list.
+   - `GUARDED_CRATES` gets `sharc_gen_2`, so `crate_mismatches` checks the second generated core
+     (there is one engine for both cores). `CRATE_NAME_RE` already builds its pattern from the list.
    - The slot order is fixed and part of the key: slot 1 (`SHARC_GEN_DIR`, `sharc_native`) is
-     always the DN2 core, slot 2 (`SHARC_GEN_DIR_2`, `sharc_native_2`) always the DT2 core,
+     always the DN2 core, slot 2 (`SHARC_GEN_DIR_2`, `sharc_gen_2`) always the DT2 core,
      whichever firmware launches. A profile matches symbols by crate hash, and the crate hash
      depends on which generated core is in the crate, so each launch order would otherwise be a
      separate binary and profile. The fast-region lists follow the firmware's device (DN2
@@ -55,9 +55,9 @@ build against non-PGO single-core binaries only.
    notice. The new task `perf:pgo:both` trains the two-core profile. `perf:pgo` runs dn2, dt2,
    both, then the launcher build.
 5. Verify: `native_pgo check --device both`; after the profile-use build run
-   `verify_binary` (crate hashes) on `digiemu-desktop`. A mismatch on `sharc_native_2` means the
+   `verify_binary` (crate hashes) on `digiemu-desktop`. A mismatch on `sharc_gen_2` means the
    profile did nothing for core 2. `verify --device both` ignores `elektron_native_boot`, like
-   the DT2 check. `GUARDED_CRATES` includes `sharc_native_2` and `sharc_gen_2`.
+   the DT2 check. `GUARDED_CRATES` includes `sharc_gen_2`.
 
 ## Cost
 

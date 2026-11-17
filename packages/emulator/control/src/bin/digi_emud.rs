@@ -28,8 +28,8 @@ fn main() {
             !is_free
         })
         .collect();
-    let startup: StartupArgs = cli::parse_values(args, cfg!(feature = "coupled-audio"))
-        .unwrap_or_else(|error| {
+    let startup: StartupArgs =
+        cli::parse_values(args, cfg!(feature = "sharc")).unwrap_or_else(|error| {
             eprintln!("{error}");
             std::process::exit(2)
         });

@@ -3,7 +3,7 @@
 
 use std::{cell::RefCell, slice};
 
-use crate::{Emulator, ExecutionPolicy};
+use elektron_native_boot::{Emulator, ExecutionPolicy};
 
 // Large enough for a coupled ColdFire snapshot (about 62 MB for DN2).
 const ALLOCATION_LIMIT: usize = 192 * 1024 * 1024;
@@ -186,8 +186,8 @@ pub extern "C" fn digi_result_len() -> usize {
 #[cfg(feature = "sharc")]
 mod coupled {
     use super::*;
-    use crate::sharc_peer::{
-        DEFAULT_PERIOD, RemoteDsp, SharcPeer, Shared, SharedDsp, open_dn2_engine,
+    use sharc_peer::{
+        DEFAULT_PERIOD, IdleLoop, RemoteDsp, SharcPeer, Shared, SharedDsp, open_engine,
     };
     use std::rc::Rc;
 
@@ -235,10 +235,12 @@ mod coupled {
         } else {
             (DEFAULT_CLOCK_BASE, 0, dsp)
         };
-        let engine = open_dn2_engine(image, state, base)?;
+        let idle = IdleLoop::for_device("dn2")?;
+        let engine = open_engine(&sharc_gen::CORE, image, state, base, idle)?;
         let dsp_handle = SharedDsp::new(engine);
         ENGINE.with(|slot| *slot.borrow_mut() = Some(SharedDsp(dsp_handle.0.clone())));
-        let (peer, shared) = SharcPeer::new(dsp_handle, DEFAULT_PERIOD);
+        let (mut peer, shared) = SharcPeer::new(dsp_handle, DEFAULT_PERIOD);
+        peer.set_idle_range(idle.range);
         shared.borrow_mut().dsp_instructions = dsp_instructions;
         let mut emulator = Emulator::new(syx, None)?;
         // The coupled snapshots are taken with this lane on.
@@ -323,10 +325,12 @@ mod coupled {
             } else {
                 (DEFAULT_CLOCK_BASE, 0, dsp)
             };
-            let engine = open_dn2_engine(image, state, base)?;
+            let idle = IdleLoop::for_device("dn2")?;
+            let engine = open_engine(&sharc_gen::CORE, image, state, base, idle)?;
             let handle = SharedDsp::new(engine);
             ENGINE.with(|slot| *slot.borrow_mut() = Some(SharedDsp(handle.0.clone())));
-            let (peer, shared) = RemoteDsp::new(handle, DEFAULT_PERIOD);
+            let (mut peer, shared) = RemoteDsp::new(handle, DEFAULT_PERIOD);
+            peer.set_idle_range(idle.range);
             shared.borrow_mut().dsp_instructions = dsp_instructions;
             DSP_PEER.with(|slot| *slot.borrow_mut() = Some(peer));
             SHARED.with(|slot| *slot.borrow_mut() = Some(shared));
@@ -595,6 +599,6 @@ mod coupled {
     /// The number of AOT blocks in the linked generated core (0: the generic core).
     #[unsafe(no_mangle)]
     pub extern "C" fn digi_sharc_aot_blocks() -> u32 {
-        sharc_native::aot_block_count() as u32
+        sharc_gen::CORE.blocks.len() as u32
     }
 }

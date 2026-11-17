@@ -2,13 +2,16 @@
 
 Each pair runs A then B (order swapped on odd pairs) under one exclusive
 benchlock hold, so nothing else heavy runs in between. The binaries are
-`coupled-run` builds of any generated core (copy them away first: a target dir
-is rebuilt in place). Default config: the fast tier and the AOT core, as
+`coupled-run` builds (copy them away first: a target dir is rebuilt in place). A binary holds no
+generated core: it loads `DIGI_SHARC_CORE_LIB_<DEV>`, which both labels take from the core store unless
+`--env LABEL:DIGI_SHARC_CORE_LIB_<DEV>=PATH` gives a label its own library (the run starts with one line
+naming the core of each label: "both labels use core <key>" means a core change is NOT compared). Default config: the fast tier and the AOT core, as
 `tools/emulator/coupled.py scenario` sets it (digi_env.fast_env). Every run checks the
 scenario's PCM hash against the file's pin (or against the first run).
 
     uv run python -m tools.devtools.coupled_ab A=BIN_A B=BIN_B -s trig1-taps -s tf-br-127 \\
-        [--pairs 6] [--scenarios tests/regression/scenarios/dn2-trackfx.ts] [--out OUT.json]
+        [--pairs 6] [--scenarios tests/regression/scenarios/dn2-trackfx.ts] [--out OUT.json] \
+        [--env B:DIGI_SHARC_CORE_LIB_DN2=PATH]
     uv run python -m tools.devtools.coupled_ab A=BIN --pairs 5 -s trig1-taps     # one binary: N runs
     uv run python -m tools.devtools.coupled_ab A=BIN B=BIN --patch B=X.patch ...  # one binary, image B patched
     uv run python -m tools.devtools.coupled_ab A=BIN B=BIN --image A=MAIN.syx --image B=BRANCH.syx -s trig1-taps
@@ -52,7 +55,7 @@ from pathlib import Path
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 import tools  # noqa: E402
-from tools.devtools import benchlock  # noqa: E402
+from tools.devtools import benchlock, core_choice, core_store  # noqa: E402
 from tools.emulator import coupled  # noqa: E402
 
 # Set by --dt2-card: the sample card's ready inputs and its `--card-image` argument.
@@ -65,6 +68,8 @@ PATCHES: dict[str, str] = {}
 IMAGES: dict[str, str] = {}
 # Set by --env: extra environment for the runs (interpreter-only: SHARC_AOT=0 ...).
 ENV: dict[str, str] = {}
+# Set by --env LABEL:NAME=VALUE: extra environment for the runs of one label (`DIGI_SHARC_CORE_LIB_<DEV>`: its core library).
+LABEL_ENV: dict[str, dict[str, str]] = {}
 
 
 class Invalid(ValueError):
@@ -337,7 +342,7 @@ def prepare_image(
         # other exit code or a timeout is an error.
         process(
             prep,
-            coupled.run_env(ENV, syx=stock),
+            coupled.run_env({**ENV, **LABEL_ENV.get(label, {})}, syx=stock),
             work / "cold-log",
             3600,
             ok_codes=(0, 2),
@@ -371,6 +376,7 @@ def one_run(
     device: str,
     patch: str | None = None,
     image: dict | None = None,
+    label: str = "",
 ) -> dict:
     """One validated native sample; the matrix uses the same persistent helper.
 
@@ -391,7 +397,7 @@ def one_run(
             scenario,
             scenarios,
             inputs=ins,
-            env=coupled.run_env(ENV, syx=tier_syx),
+            env=coupled.run_env({**ENV, **LABEL_ENV.get(label, {})}, syx=tier_syx),
             seconds=float(SECONDS) if SECONDS else None,
             folder=Path(tmp),
             timeout=600,
@@ -437,7 +443,12 @@ def main() -> None:
         "give one for every label",
     )
     ap.add_argument(
-        "--env", action="append", default=[], metavar="K=V", help="run environment"
+        "--env",
+        action="append",
+        default=[],
+        metavar="K=V|LABEL:K=V",
+        help="run environment, for every label or (LABEL:NAME=VALUE) for one: "
+        "`--env B:DIGI_SHARC_CORE_LIB_DN2=PATH` gives B another core library",
     )
     ap.add_argument("--out")
     args = ap.parse_args()
@@ -447,7 +458,15 @@ def main() -> None:
         sys.exit(
             "--patch cannot be combined with --image: coupled-run refuses --dsp-patch with --cold-base"
         )
-    ENV.update(e.partition("=")[::2] for e in args.env)
+    labels = [item.partition("=")[0] for item in args.binaries]
+    try:
+        shared, per_label = core_choice.parse_label_env(
+            args.env, labels, allow_global=True
+        )
+    except ValueError as exc:
+        sys.exit(str(exc))
+    ENV.update(shared)
+    LABEL_ENV.update(per_label)
     for item in args.patch:
         label, _, path = item.partition("=")
         if not pathlib.Path(path).is_file():
@@ -475,6 +494,16 @@ def main() -> None:
             "against stock firmware compares different firmware"
             % ", ".join(b[0] for b in bins)
         )
+    try:
+        print(
+            core_choice.announce(
+                args.device,
+                {label: {**ENV, **LABEL_ENV.get(label, {})} for label, _ in bins},
+            ),
+            flush=True,
+        )
+    except core_store.CoreStoreError as exc:
+        sys.exit(f"coupled_ab: {exc}")
     prepared: dict[str, dict] = {}
     if IMAGES:
         # The scenario's PCM pin belongs to the stock ready state; the images are
@@ -531,6 +560,7 @@ def main() -> None:
                         args.device,
                         PATCHES.get(label),
                         prepared.get(label),
+                        label,
                     )
                     r["pair"] = i
                     runs.setdefault((scenario, label), []).append(r)
