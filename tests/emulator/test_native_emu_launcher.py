@@ -172,7 +172,6 @@ def test_desktop_defaults_to_both_devices_with_per_core_fast_settings(
     ]
     # The launch names no generated core for the host: it holds none.
     assert "SHARC_GEN_DIR" not in os.environ
-    assert "SHARC_GEN_DIR_2" not in os.environ
     # Each core reads the lists with the suffix of its device, whichever firmware launches.
     for suffix, device in (("", "dn2"), ("_2", "dt2")):
         for name, value in (

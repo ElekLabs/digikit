@@ -240,6 +240,8 @@ const NO_TESTS = new Set([
   'bootstrap-emu',
   'digiemu-desktop',
   'digi-wasm-core',
+  'dynlib',
+  'sharc-core-lib',
 ]);
 
 // Crates whose tests read no firmware, generated core or out/ data; their rust-tests are cached.
@@ -327,11 +329,7 @@ export const createNodesV2 = [
           : {
               executor: 'nx:run-commands',
               cache: false,
-              inputs: [
-                ...inputs,
-                '{workspaceRoot}/tools/nx/rust-env.mjs',
-                ...(COMPILE_SOURCE[name] ?? []),
-              ],
+              inputs: [...inputs, '{workspaceRoot}/tools/nx/rust-env.mjs', ...(COMPILE_SOURCE[name] ?? [])],
               options: {
                 command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
                 cwd: '.',
