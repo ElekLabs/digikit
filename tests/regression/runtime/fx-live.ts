@@ -464,7 +464,7 @@ export async function inspect(
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([names.length, names.length, 1]);
   expect(fields.slice(10)).toEqual(names.map(() => 0));
-  const assigned = await serviceSymbol({ session }, plan, 'machines');
+  const assigned = await serviceSymbol({ session }, plan, 'machines', 'DKRT_ASSIGN');
   expect(await word(session, assigned)).toBe(0x444b4153);
   expect(await word(session, assigned + 4)).toBe(1);
   expect(modules[0]!.types).toHaveLength(1);

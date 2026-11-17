@@ -990,7 +990,11 @@ def without_test_modules(lines: list[str]) -> list[str]:
     out = list(lines)
     i = 0
     while i < len(lines):
-        if lines[i].strip() == "#[cfg(test)]" and i + 1 < len(lines) and re.match(r"\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{", lines[i + 1]):
+        if (
+            lines[i].strip() == "#[cfg(test)]"
+            and i + 1 < len(lines)
+            and re.match(r"\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{", lines[i + 1])
+        ):
             depth = 0
             j = i + 1
             while j < len(lines):
@@ -1006,7 +1010,12 @@ def without_test_modules(lines: list[str]) -> list[str]:
 
 
 # The host-test files of `handlers/` (its other files, if any, are scanned).
-KIND_FREE_TEST_FILES = ("handlers/tests.rs", "handlers/lfo_tests.rs", "handlers/fx_fixture.rs", "handlers/dks_decls.rs")
+KIND_FREE_TEST_FILES = (
+    "handlers/tests.rs",
+    "handlers/lfo_tests.rs",
+    "handlers/fx_fixture.rs",
+    "handlers/dks_decls.rs",
+)
 # The abi crate is the core's boundary: it too names no machine or effect.
 RT_ABI_SRC = "modules/core/runtime/abi/src"
 
@@ -1020,17 +1029,32 @@ def check_core_kind_free(root: Path) -> list[Violation]:
             continue
         for f in sorted(src.rglob("*.rs")):
             r = f.relative_to(src)
-            if base == RT_SRC and (r.as_posix() in KIND_FREE_EXEMPT or r.as_posix() in KIND_FREE_TEST_FILES or is_runtime_test_file(r)):
+            if base == RT_SRC and (
+                r.as_posix() in KIND_FREE_EXEMPT
+                or r.as_posix() in KIND_FREE_TEST_FILES
+                or is_runtime_test_file(r)
+            ):
                 continue
             if base == RT_ABI_SRC and r.as_posix() == "keys.rs":
                 continue  # the header table's key groups (`dkneeds::KIND_MACHINE`, `KIND_EFFECT`): the .dkm format the core parses for the planner and the commit
-            if base == RT_ABI_SRC and (r.name.startswith("gen_") or r.name == "tests.rs" or "tests" in r.parts):
+            if base == RT_ABI_SRC and (
+                r.name.startswith("gen_") or r.name == "tests.rs" or "tests" in r.parts
+            ):
                 continue
-            lines = without_test_modules(rust_without_comments(f.read_text(encoding="utf-8")).splitlines())
+            lines = without_test_modules(
+                rust_without_comments(f.read_text(encoding="utf-8")).splitlines()
+            )
             for n, line in enumerate(lines, 1):
                 m = RT_KIND_FREE.search(line)
                 if m:
-                    out.append(Violation(f"{base}/{r.as_posix()}:{n}", "kind-free", f"the core names {m.group(0)}", KIND_FREE_HINT))
+                    out.append(
+                        Violation(
+                            f"{base}/{r.as_posix()}:{n}",
+                            "kind-free",
+                            f"the core names {m.group(0)}",
+                            KIND_FREE_HINT,
+                        )
+                    )
     return out
 
 
