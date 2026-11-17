@@ -5,10 +5,8 @@
 //! `RealCore` is a zero-sized type that delegates to the core functions, so a call through it costs what the direct call cost. A function that a host test must
 //! drive takes a generic `C: CoreApi` (no `dyn`: the runtime has no allocator and no vtables); everything else calls the `REAL_CORE` constant.
 use crate::{dlog, registry, settings, worker};
-use core::ptr::addr_of;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use dkrt_abi::dsp::DspState;
-use dkrt_abi::registry::RegState;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
 pub use dkrt_abi::core_api::{CoreApi, SampleCore, JOB_E_CANCELLED, LOG_INFO};
@@ -47,15 +45,6 @@ impl dkrt_abi::mem::FwMem for RealCore {}
 impl CoreApi for RealCore {
     unsafe fn dynreg(&self) -> *const u32 {
         registry::info()
-    }
-    fn reg_state(&self) -> &'static mut RegState {
-        registry::rs()
-    }
-    fn param_first(&self) -> u32 {
-        registry::param_first()
-    }
-    fn param_owners(&self) -> &[u8] {
-        unsafe { &(*addr_of!(registry::DKRT_REG)).param_owner }
     }
     unsafe fn type_resolve(&self, key: u32) -> u32 {
         crate::assign::resolve(key)

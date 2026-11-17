@@ -14,7 +14,6 @@
 use crate::dsp::DspState;
 use crate::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use crate::platform::SampleHost;
-use crate::registry::RegState;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
 /// The `done` status of a job that was cancelled (`sdk/include/dk/platform/job.h`).
@@ -35,12 +34,6 @@ pub trait CoreApi: crate::mem::FwMem {
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
     /// The words of `dynreg_info` (`registry::w`); null without a registry.
     unsafe fn dynreg(&self) -> *const u32;
-    /// The ownership and string state of the reserved machine, parameter and page rows.
-    fn reg_state(&self) -> &'static mut RegState;
-    /// The code of the first run-time parameter row; `u32::MAX` without a registry.
-    fn param_first(&self) -> u32;
-    /// The owner (module record + 1, 0 free) of each run-time parameter row.
-    fn param_owners(&self) -> &[u8];
     /// The machine type number for machine key `key` of the module being loaded (sticky assignment); 0 when there is none.
     unsafe fn type_resolve(&self, key: u32) -> u32;
     /// Entries of the sticky type map in use (for CAPACITY).

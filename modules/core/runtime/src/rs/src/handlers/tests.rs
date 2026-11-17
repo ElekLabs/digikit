@@ -2,7 +2,7 @@
 //! declarations, attributions and `on_loaded`), and host tests of the core's walkers over it (docs/ARCHITECTURE.md "Boundaries and tests").
 use super::*;
 use dkrt_sdk::*;
-use crate::registry::{apply_with, check_with, each, remove_with, DKRT_REG};
+use crate::registry::{apply_with, check_with, each, remove_with};
 use dkrt_sdk::proto::CAPK_FX_SLOTS;
 use crate::core_api::{CoreApi, RealCore, REAL_CORE};
 use dkrt_abi::service::ServiceRow;
@@ -166,8 +166,6 @@ unsafe fn reset() {
     log().clear();
     REFUSE = (0, 0);
     FAIL_APPLY = (0, 0);
-    (*core::ptr::addr_of_mut!(DKRT_REG)).registers = 0;
-    (*core::ptr::addr_of_mut!(DKRT_REG)).removes = 0;
 }
 
 fn rec(svc: u8, i: u8) -> (u32, Vec<u8>) {
@@ -207,8 +205,6 @@ fn a_mixed_file_checks_in_step_order_applies_in_file_order_and_removes_in_revers
                 Call::Remove { svc: 1, owner: 5 },
             ]
         );
-        let r = &*core::ptr::addr_of!(DKRT_REG);
-        assert_eq!((r.registers, r.removes), (1, 1));
     }
 }
 
@@ -234,7 +230,6 @@ fn the_first_fault_is_the_first_step_that_finds_one_and_a_failed_apply_stops_the
         assert_eq!(apply_with(TWO, 5, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
         let applied: Vec<_> = log().iter().filter(|c| matches!(c, Call::Apply { .. })).collect();
         assert_eq!(applied.len(), 2, "the effect record before the failing one was applied, the one after was not");
-        assert_eq!((*core::ptr::addr_of!(DKRT_REG)).registers, 0, "a failed apply is not a registration");
     }
 }
 

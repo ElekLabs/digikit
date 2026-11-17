@@ -14,27 +14,12 @@ pub mod shims {
     use super::*;
     use dkrt_abi::dsp::DspState;
     use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
-    use dkrt_abi::registry::RegState;
     use dkrt_abi::service::ServiceRow;
     use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_dynreg() -> *const u32 {
         REAL_CORE.dynreg()
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_reg_state() -> *mut RegState {
-        REAL_CORE.reg_state()
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_param_first() -> u32 {
-        REAL_CORE.param_first()
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_param_owners(len: *mut u32) -> *const u8 {
-        let o = REAL_CORE.param_owners();
-        *len = o.len() as u32;
-        o.as_ptr()
     }
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_type_resolve(key: u32) -> u32 {

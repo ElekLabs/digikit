@@ -26,19 +26,12 @@ const MAX_PARAM: usize = limits::PARAM_ROWS;
 const MAX_PAGE: usize = limits::PAGE_ROWS;
 const KNOBS: usize = limits::PAGE_KNOBS;
 
-pub(crate) use dkrt_abi::mem::{iw, rd, wr};
-pub(crate) use dkrt_abi::registry::{each, w, ApplyArgs, RegState, MACH_TEXT};
+pub(crate) use dkrt_abi::mem::iw;
+pub(crate) use dkrt_abi::registry::{each, w, ApplyArgs};
 
 extern "C" {
     /// Data symbol of core/dynreg; resolves to 0 when the module is not in the image (`[object] optional`).
     fn dynreg_info();
-}
-
-#[no_mangle]
-pub static mut DKRT_REG: RegState = unsafe { core::mem::zeroed() };
-
-pub(crate) fn rs() -> &'static mut RegState {
-    unsafe { &mut *addr_of_mut!(DKRT_REG) }
 }
 
 pub(crate) unsafe fn info() -> *const u32 {
@@ -98,17 +91,16 @@ pub unsafe fn profile() -> Option<crate::collect::Profile> {
     Some(p)
 }
 
-/// Free reserved machine, parameter and page rows, for the commit of a builder module.
+/// Free reserved machine, parameter and page rows, for the commit of a builder module: each service that counts a kind gives (limit, used).
 pub unsafe fn free_rows() -> Option<crate::collect::Free> {
-    let inf = info();
-    if inf.is_null() {
+    if info().is_null() {
         return None;
     }
-    let s = rs();
+    let free = |kind: u8| services().cap(kind).map_or(0, |(limit, used)| limit.saturating_sub(used));
     Some(crate::collect::Free {
-        machine_rows: capacity::free_rows(&s.mach_owner, iw(inf, w::M_DYN_N)),
-        param_rows: capacity::free_rows(&s.param_owner, iw(inf, w::P_DYN_N)),
-        page_rows: capacity::free_rows(&s.page_owner, iw(inf, w::PG_DYN_N)),
+        machine_rows: free(proto::CAPK_MACHINE_ROWS),
+        param_rows: free(proto::CAPK_PARAM_ROWS),
+        page_rows: free(proto::CAPK_PAGE_ROWS),
     })
 }
 
@@ -117,19 +109,6 @@ static mut ARGS: Option<ApplyArgs> = None;
 pub unsafe fn set_args(a: Option<ApplyArgs>) {
     *addr_of_mut!(ARGS) = a;
 }
-
-/// The code of the first run-time parameter row (a row `k` of the registry has code `param_first() + k`); `u32::MAX` without a registry.
-pub fn param_first() -> u32 {
-    unsafe {
-        let inf = info();
-        if inf.is_null() {
-            u32::MAX
-        } else {
-            iw(inf, w::P_DYN0)
-        }
-    }
-}
-
 
 /// Validate the `register` records of a module file. `reg` points into the file (the staging buffer). Nothing is written.
 pub unsafe fn check(reg: *const u8, size: u32, image_size: u32) -> i32 {
@@ -215,12 +194,7 @@ pub(crate) unsafe fn apply_with(l: ServiceTable, owner: u8, reg: *const u8, size
         });
     }
     *addr_of_mut!(ARGS) = None;
-    if rc != OK {
-        return rc;
-    }
-    let s = rs();
-    s.registers = s.registers.wrapping_add(1);
-    OK
+    rc
 }
 
 /// Give back every row `owner` filled: each service gives back its own, the last service of the list first.
@@ -230,8 +204,4 @@ pub unsafe fn remove(owner: u8) {
 
 pub(crate) unsafe fn remove_with(l: ServiceTable, owner: u8) {
     l.remove(owner);
-    if !info().is_null() {
-        let s = rs();
-        s.removes = s.removes.wrapping_add(1);
-    }
 }

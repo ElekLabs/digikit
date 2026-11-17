@@ -55,7 +55,6 @@ fn row_words(core: &FakeCore, code: u32) -> [u32; 3] {
 fn core() -> FakeCore {
     let mut c = FakeCore::new();
     c.dynreg_table = table();
-    c.first = P_DYN0;
     c
 }
 
@@ -234,13 +233,13 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
     // the parameters sit in the first free rows, with their ranges and the owner
     assert_eq!(row_words(&core, P_DYN0), [0, 255, 17]);
     assert_eq!(row_words(&core, P_DYN0 + 1), [-64i32 as u32, 63, 0]);
-    assert_eq!(&core.reg_state().param_owner[..3], [OWNER, OWNER, 0]);
+    assert_eq!(&rstate().param_owner[..3], [OWNER, OWNER, 0]);
     assert_eq!(
         unsafe { <Machines as Service<FakeCore>>::cap(&core, dkrt_sdk::proto::CAPK_PARAM_ROWS) },
         Some((16, 2))
     );
     // the first parameter has no action: the stock click, nothing is queued
-    core.owners = std::vec![OWNER, OWNER, 0];
+    assert_eq!(&rstate().param_owner[..3], [OWNER, OWNER, 0]);
     assert_eq!(click(&core, P_DYN0 as i32, 6, 1).callback, 0);
     // a click on the second parameter queues the callback at the module's load address plus its image offset
     let p = click(&core, (P_DYN0 + 1) as i32, 6, 0);
@@ -252,7 +251,7 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
     // remove: the rows are free, the action is disarmed and the queued click of the unloaded module is dropped
     core.calls.borrow_mut().clear();
     unsafe { <Machines as Service<FakeCore>>::remove(&core, OWNER) };
-    assert_eq!(&core.reg_state().param_owner[..3], [0, 0, 0]);
+    assert_eq!(&rstate().param_owner[..3], [0, 0, 0]);
     assert_eq!(
         (row_words(&core, P_DYN0), row_words(&core, P_DYN0 + 1)),
         ([0, 0, 0], [0, 0, 0]),
@@ -366,21 +365,21 @@ fn the_capacity_counts_need_a_registry_and_the_ui_pass_runs_the_click_last() {
 #[test]
 fn the_machine_types_of_a_module_are_its_machine_rows_in_type_order() {
     let core = core();
-    let s = core.reg_state();
+    let s = rstate();
     s.mach_owner[1] = 4;
     s.mach_owner[5] = 4;
     s.mach_owner[2] = 9;
     let mut out = [0u8; limits::MACHINE_ROWS];
     let first = dkrt_sdk::device::DYN_TYPE_FIRST as u8;
-    assert_eq!(types_of(&core, 4, &mut out), 2);
+    assert_eq!(types_of(4, &mut out), 2);
     assert_eq!(&out[..2], [first + 1, first + 5]);
-    assert_eq!(types_of(&core, 7, &mut out), 0);
+    assert_eq!(types_of(7, &mut out), 0);
 }
 
 #[test]
 fn the_machine_types_are_a_row_method_of_the_service() {
     let core = core();
-    core.reg_state().mach_owner[3] = 2;
+    rstate().mach_owner[3] = 2;
     let mut out = [0u8; 8];
     let n = unsafe { <Machines as Service<FakeCore>>::machine_types_of(&core, 2, &mut out) };
     assert_eq!(n, 1);

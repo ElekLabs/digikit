@@ -1,12 +1,12 @@
 //! `machines` service, record handlers (interface B): the machine, parameter, page, click-action and native-page records of the
 //! `register` section, and the voice parts of the DSP section. The registry walker (`registry.rs`) calls them through
-//! `handlers::Service`; the rows and strings they fill are the registry's state (`CoreApi::reg_state`).
+//! `handlers::Service`; the rows and strings they fill are the registry's state (`DKRT_REG`, a static of this service).
 use crate::{dsp, nativepage, slots};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspSec;
 use dkrt_abi::mem::{cstr_len, iw, rd, rd32, wr};
-use dkrt_abi::registry::{each, w, MACH_TEXT};
+use dkrt_abi::registry::{each, w, RegState, MACH_TEXT};
 use dkrt_abi::service::{
     check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, RowWrite, Service,
 };
@@ -16,13 +16,39 @@ use dkrt_sdk::records::{
 };
 use dkrt_sdk::*;
 
+/// The registry's state: who owns each reserved machine, parameter and page row (module record index + 1, 0 free) and the strings the rows use. One machines
+/// service, one state: a static of this crate, so it lives in `machines.dks` (the symbol stays for the test tools).
+#[no_mangle]
+pub static mut DKRT_REG: RegState = unsafe { core::mem::zeroed() };
+
+pub fn rstate() -> &'static mut RegState {
+    unsafe { &mut *addr_of_mut!(DKRT_REG) }
+}
+
+/// The code of the first run-time parameter row (a row `k` has code `param_first + k`); `u32::MAX` without a registry.
+pub fn param_first<C: CoreApi>(core: &C) -> u32 {
+    unsafe {
+        let inf = core.dynreg();
+        if inf.is_null() {
+            u32::MAX
+        } else {
+            iw(inf, w::P_DYN0)
+        }
+    }
+}
+
+/// The owner of each run-time parameter row.
+pub fn param_owners() -> &'static [u8] {
+    unsafe { &(*addr_of!(DKRT_REG)).param_owner }
+}
+
 /// The reserved machine, parameter and page rows as (rows the registry has, rows in use); (0, 0) without a registry (for CAPACITY).
 unsafe fn counts<C: CoreApi>(core: &C) -> [(u32, u32); 3] {
     let inf = core.dynreg();
     if inf.is_null() {
         return [(0, 0); 3];
     }
-    let s = core.reg_state();
+    let s = rstate();
     let used = |o: &[u8]| {
         let mut n = 0;
         let mut k = 0;
@@ -51,8 +77,8 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 pub struct Machines;
 
 impl<C: CoreApi> Service<C> for Machines {
-    unsafe fn machine_types_of(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
-        types_of(core, owner, out) as u32
+    unsafe fn machine_types_of(_core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
+        types_of(owner, out) as u32
     }
 
     unsafe fn declare(d: &mut Declare) {
@@ -374,7 +400,7 @@ unsafe fn ck_device(c: &CheckCtx) -> i32 {
 unsafe fn ck_records<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
-    let s = core.reg_state();
+    let s = rstate();
     // pass 2: the records
     let has_pages = iw(inf, w::PG_ROWS) != 0;
     let (p_first, knobs, slot_base) = (
@@ -515,7 +541,7 @@ unsafe fn ck_owners<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
 unsafe fn ck_rows<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
-    let s = core.reg_state();
+    let s = rstate();
     // free reserved page and parameter rows
     return capacity::registry_rows(
         ng,
@@ -528,7 +554,7 @@ unsafe fn ck_rows<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
 /// Fill the reserved parameter, action, page and machine rows from the (checked) records.
 unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
     let (owner, reg, base, inf, args) = (ctx.owner, ctx.reg, ctx.base, ctx.inf, ctx.args);
-    let s = core.reg_state();
+    let s = rstate();
     // parameters first: their codes are what the machines' knobs name
     let mut codes = [0u32; MAX_PARAM];
     let mut rows = [0usize; MAX_PARAM]; // the file's parameter i sits in row rows[i]
@@ -774,7 +800,7 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     if inf.is_null() {
         return;
     }
-    let s = core.reg_state();
+    let s = rstate();
     let empty = iw(inf, w::EMPTY);
     let knobs = iw(inf, w::KNOBS) as usize;
     let first = iw(inf, w::M_FIRST);
@@ -786,7 +812,7 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
             let row = iw(inf, w::M_ROWS) + (t - first) * iw(inf, w::M_ROW_SIZE);
             wr(row + iw(inf, w::O_NAME), empty); // hide first
             s.empty_rep = [0, 0, 0xffff_ffff, 0];
-            let rep = addr_of!(core.reg_state().empty_rep) as u32 + 12;
+            let rep = addr_of!(rstate().empty_rep) as u32 + 12;
             wr(row + iw(inf, w::O_LONG), rep);
             wr(row + iw(inf, w::O_SHORT), rep);
             wr(row + iw(inf, w::O_SNAME), empty);
@@ -820,7 +846,7 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
                 + (iw(inf, w::PG_DYN0) + k as u32 - iw(inf, w::PG_FIRST)) * iw(inf, w::PG_ROW_SIZE);
             wr(row + iw(inf, w::PGO_MACH), iw(inf, w::PG_FREE));
             s.empty_rep = [0, 0, 0xffff_ffff, 0];
-            let rep = addr_of!(core.reg_state().empty_rep) as u32 + 12;
+            let rep = addr_of!(rstate().empty_rep) as u32 + 12;
             wr(row + iw(inf, w::PGO_NAME), rep);
             wr(row + iw(inf, w::PGO_TITLE), rep);
             let (c0, s0) = (row + iw(inf, w::PGO_C), row + iw(inf, w::PGO_S));
@@ -859,8 +885,8 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
 }
 
 /// The machine type numbers of the machine rows `owner` filled (at most 8), in type order; returns how many.
-pub fn types_of<C: CoreApi>(core: &C, owner: u8, out: &mut [u8; MAX_MACH]) -> usize {
-    let s = core.reg_state();
+pub fn types_of(owner: u8, out: &mut [u8; MAX_MACH]) -> usize {
+    let s = rstate();
     let first = dkrt_sdk::device::DYN_TYPE_FIRST;
     let mut n = 0;
     let mut k = 0;

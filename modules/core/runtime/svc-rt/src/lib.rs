@@ -14,7 +14,6 @@ pub use dkrt_abi;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspState;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
-use dkrt_abi::registry::RegState;
 use dkrt_abi::service::ServiceRow;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
@@ -80,23 +79,6 @@ impl dkrt_abi::mem::FwMem for ImportCore {}
 impl CoreApi for ImportCore {
     unsafe fn dynreg(&self) -> *const u32 {
         dkc_dynreg()
-    }
-    fn reg_state(&self) -> &'static mut RegState {
-        unsafe { &mut *dkc_reg_state() }
-    }
-    fn param_first(&self) -> u32 {
-        unsafe { dkc_param_first() }
-    }
-    fn param_owners(&self) -> &[u8] {
-        unsafe {
-            let mut n = 0u32;
-            let p = dkc_param_owners(&mut n);
-            if p.is_null() {
-                &[]
-            } else {
-                core::slice::from_raw_parts(p, n as usize)
-            }
-        }
     }
     unsafe fn type_resolve(&self, key: u32) -> u32 {
         dkc_type_resolve(key)

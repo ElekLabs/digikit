@@ -11,7 +11,6 @@ use dkrt_abi::dsp::DspState;
 use dkrt_abi::fw::Fw;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use dkrt_abi::platform::SampleHost;
-use dkrt_abi::registry::RegState;
 use dkrt_link::fake::{link, FakeLink};
 use dkrt_link::Link;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
@@ -121,8 +120,6 @@ pub struct FakeCore {
     /// The firmware words written so far, by address.
     pub mem: RefCell<std::collections::BTreeMap<u32, u32>>,
     pub calls: RefCell<Vec<Call>>,
-    pub first: u32,
-    pub owners: Vec<u8>,
     pub source: Cell<u8>,
     pub settings: RefCell<Vec<(Vec<u8>, Vec<u8>)>>,
     pub link: RefCell<&'static mut Link<FakeLink>>,
@@ -141,20 +138,16 @@ pub struct FakeCore {
     pub host: FakeHost,
     jobs: RefCell<Vec<FakeJob>>,
     next_job: Cell<u32>,
-    reg: *mut RegState,
     dsp: *mut DspState,
 }
 
 impl FakeCore {
     pub fn new() -> Self {
         // zero is every state's valid initial value (the real objects are zeroed statics)
-        let reg: &'static mut RegState = Box::leak(Box::new(unsafe { core::mem::zeroed() }));
         let dsp: &'static mut DspState = Box::leak(Box::new(unsafe { core::mem::zeroed() }));
         FakeCore {
             mem: RefCell::new(std::collections::BTreeMap::new()),
             calls: RefCell::new(Vec::new()),
-            first: 100,
-            owners: Vec::new(),
             source: Cell::new(0),
             settings: RefCell::new(Vec::new()),
             link: RefCell::new(Box::leak(Box::new(link()))),
@@ -169,7 +162,6 @@ impl FakeCore {
             host: FakeHost::new(),
             jobs: RefCell::new(Vec::new()),
             next_job: Cell::new(0),
-            reg,
             dsp,
         }
     }
@@ -238,15 +230,6 @@ impl CoreApi for FakeCore {
         } else {
             self.dynreg_table.as_ptr()
         }
-    }
-    fn reg_state(&self) -> &'static mut RegState {
-        unsafe { &mut *self.reg }
-    }
-    fn param_first(&self) -> u32 {
-        self.first
-    }
-    fn param_owners(&self) -> &[u8] {
-        &self.owners
     }
     unsafe fn type_resolve(&self, key: u32) -> u32 {
         key & 0xff

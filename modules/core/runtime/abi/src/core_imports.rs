@@ -18,10 +18,6 @@ macro_rules! core_imports {
         $m! {
             // ---- the registry's rows
             fn dkc_dynreg() -> *const u32;
-            fn dkc_reg_state() -> *mut $crate::registry::RegState;
-            fn dkc_param_first() -> u32;
-            // The owner of each run-time parameter row: `*len` is set to the count.
-            fn dkc_param_owners(len: *mut u32) -> *const u8;
             fn dkc_type_resolve(key: u32) -> u32;
             fn dkc_type_map_used() -> u32;
             fn dkc_guard_faults(ty: u32) -> u32;

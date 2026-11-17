@@ -1,5 +1,5 @@
 //! The registry's shared types: the words of `dynreg_info`, the ownership and string state of the reserved rows (`RegState`), the callback arguments of a commit
-//! and the walk over a validated `register` section. The core owns the object `DKRT_REG`; a service reaches it through `CoreApi::reg_state`.
+//! and the walk over a validated `register` section. The machines service owns the object `DKRT_REG`.
 use crate::mem::rd32;
 use dkrt_sdk::*;
 
@@ -87,8 +87,6 @@ pub struct Strings {
 #[repr(C, align(4))]
 pub struct RegState {
     pub magic: u32,
-    pub registers: u32,
-    pub removes: u32,
     pub mach_owner: [u8; MAX_MACH],
     pub param_owner: [u8; MAX_PARAM],
     pub page_owner: [u8; MAX_PAGE],
