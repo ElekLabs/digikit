@@ -42,6 +42,8 @@ PROFILE = "release"
 FEATURES: tuple[str, ...] = ()
 STORE_NAME = "sharc-core-cache"
 RUSTFLAG_VARS = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS")
+# Compiler wrappers change the built code too; CARGO_TARGET_<TRIPLE>_* (rustflags, linker, runner) is matched by prefix.
+WRAPPER_VARS = ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER")
 
 # git pathspecs (glob magic) of the repository files cargo reads for the library.
 CORE_SOURCE_GLOBS = (
@@ -128,7 +130,11 @@ def key_inputs(
         del argv[at : at + 2]  # a path of this tree, not an input
     flags = {"argv": " ".join(argv), "triple": triple, "profile": PROFILE}
     for name, value in sorted(plan.env.items()):
-        if name in RUSTFLAG_VARS or name.startswith("CARGO_PROFILE_"):
+        if (
+            name in RUSTFLAG_VARS
+            or name in WRAPPER_VARS
+            or name.startswith(("CARGO_PROFILE_", "CARGO_TARGET_"))
+        ):
             if plan.profdata:
                 value = value.replace(str(plan.profdata), "<profdata>")
             flags[f"env:{name}"] = value
