@@ -60,7 +60,7 @@ iteration checks do not replace this gate. `mise run test:plan` explains task se
 | Framework module, runtime | `core/runtime:rust-tests` for runtime units, `core/runtime:test-assembly` for the seams to the service files and the image; an acceptance owner's `test-device` for iteration (runtime owners are listed below). Use `test:plan` for affected consumers. The default gate runs every owner's `test-device` and `test-conformance` and replays unchanged ones from the cache. |
 | SHARC core or transpiler | regenerate the cores, then `test:changed` |
 | Emulator crates | `test:changed`; the crates' Rust tests |
-| PCM pins (`tests/scenarios/*.json`, device-test `pcmSha256`, rig pins) | from the signal report (section "PCM pins"); a change in how a module sounds goes to Em |
+| PCM pins (`tests/scenarios/*.json`, device-test `<case>.pcm.json` pins, rig pins and fingerprints) | from the signal report (section "PCM pins"); a change in how a module sounds goes to Em |
 
 ## Commands
 
@@ -608,7 +608,7 @@ and a table named like the kind. Kinds:
 
 | Kind | Checks |
 | --- | --- |
-| `equiv` | Machine, parameter, page and voice rows of a boot with set S equal those of a boot of no module (apart from S's own machines); the note is audible, and the TypeScript cells pin its PCM by `pcmSha256` (Em approves a new value). |
+| `equiv` | Machine, parameter, page and voice rows of a boot with set S equal those of a boot of no module (apart from S's own machines); the note is audible, and the TypeScript cells pin its PCM with a `<case>.pcm.json` fingerprint pin ("PCM pins"; a change in how the note sounds goes to Em). |
 | `upload` | Module upload over USB SysEx: only `rust` is Python. The other parts are in `modules/core/runtime/tests/upload.device.test.ts` and `upload-faults.device.test.ts`. |
 | `menu` | Ticking a set in SETTINGS > DIGIKIT > MODULES and restarting loads the set: the machine is in the list, claims its voice row and plays an audible note. |
 | `pages` | Parameter pages of a machine on track 1: an added machine has one SRC page (no page dots, no sample view) and the stock sample machines keep two. |
@@ -807,15 +807,16 @@ fine, the module writes only its own memory, the output is finite). Check kinds:
 synthetic signals. A reference table is the output of the old float32 model of the module (or of the rig, for a new pin) as float32
 words; changing one is a re-pin and needs review like a PCM pin of `tests/scenarios`.
 
-A `same-as` pin comes from the rig itself: a case with a `same-as` check names one device, and `DIGI_RIG_PIN=1 pnpm exec vitest run --config vitest.host.config.ts --project module-rig <module dir>/tests/`
+A `same-as` pin comes from the rig itself: a machine case with a `same-as` check names one device (an effect case runs once for the effect and uses the key `fx`), and `DIGI_RIG_PIN=1 pnpm exec vitest run --config vitest.host.config.ts --project module-rig <module dir>/tests/`
 runs no checks and writes the words hash of every `same-as` signal into its `sha256` line (`pinRigFile` in `soundcheck.ts`; the n-th `sha256` line belongs to the n-th `same-as` check of the file) and prints `pin CASE [device] HASH`.
 Every machine case runs twice with all module state filled differently: the module's `.PKBSS` and the voice state blocks (the state array is a bss run in the rig's data layout) hold NaN words in the first run and a seeded integer pattern (`FILL_SEED`) in the second (`MachineRigOptions.poison` default true, `fillSeed`). The case fails with kind `initial state` when the two outputs differ in any sample: the output does not depend on the initial state, so a read of state the machine never wrote shows, float or integer, and a NaN output fails the finite rule. That is a machine bug to report, not a value to pin. The adapter's `note_on` clears the first `clear` bytes of the voice state, as on the device. `poison = false` on a case zeroes the memory, skips the second run and needs a `poison_reason`. A `MachineRig` refuses to open a machine whose device is missing from `build/gen/gallery.json` or has no parameter there (`galleryGaps`; `module:check` writes the gallery).
 The machine note pins of analog, bd, pd and pluck are `tests/rig/equiv-note.toml`: note 60, velocity 100, default parameters, 375 blocks (0.25 s) in a friendly context, one case per device (pluck adds a second note, 67, for 375 blocks).
 
 #### Classifying a changed pin (fingerprint, report, plots)
 
-The `sha256` of a `same-as` check stays the strict gate: bit-exact. Next to it each pinned case has a fingerprint in `tests/rig/fingerprint/<key>.json`
-(plain numbers: peak, onset sample, RMS per 32-sample block, 64 log-spaced band levels from 40 Hz to 22 kHz; no audio). `<key>` is
+A `same-as` check is gated by the pin's fingerprint with its tolerances, or by the `sha256` (bit-exact) when the check has `exact = true` or the pin is a v1
+fingerprint (format and tolerances: "PCM pins"). Each pinned case has a fingerprint in `tests/rig/fingerprint/<key>.json`
+(plain numbers; v1: peak, onset sample, RMS per 32-sample block, 64 log-spaced band levels from 40 Hz to 22 kHz; no audio; v2 adds more). `<key>` is
 `<module>.<device>.<case name>` in lower case (`rigKey` in `packages/sharc-rig-kit/src/fingerprint.ts`). Writing a pin (`DIGI_RIG_PIN=1`, above) writes the
 fingerprint and the local cache `out/rig/<key>/ref.f32` (the pinned output; not committed; `out/` is shared by the worktrees, so keys name module, device and case).
 
@@ -1209,11 +1210,62 @@ To clear the Nx cache: `pnpm nx:pilot reset`.
 
 ## PCM pins
 
-A PCM pin (`tests/scenarios/*.json`, the device-test `pcmSha256` pins, the rig pins) is set or changed from a numeric report of the captured signal (pitch against the expected note, crest factor, harmonics, level envelope, onset, stereo match), with the WAV kept for listening; never from a hash alone. Claude approves when the report matches what the fixture should produce; a change in how a module sounds goes to Em. The harness keeps the capture: a pending or changed device pin prints its artifacts directory, which holds `run.wav` (stereo float32, 48 kHz). The report for a pin names the expected values (for `test/sine` at note 60: 261.63 Hz, crest 1.414, no harmonics, a steady level) beside the measured ones. Fingerprint pins (a numeric fingerprint with tolerances compared by a tool, replacing the hashes) are planned in docs/plans/test-architecture.md T2.
+A PCM pin (`tests/scenarios/*.json`, the device pins `<case>.pcm.json`, the rig pins) is set or changed from a numeric report of the captured signal (pitch against the expected note, crest factor, harmonics, level envelope, onset, stereo match), with the WAV kept for listening; never from a hash alone. Claude approves when the report matches what the fixture should produce; a change in how a module sounds goes to Em. The harness keeps the capture: a pending or changed device pin prints its artifacts directory, which holds `run.wav` (stereo float32, 48 kHz). The report for a pin names the expected values (for `test/sine` at note 60: 261.63 Hz, crest 1.414, no harmonics, a steady level) beside the measured ones. Fingerprint pins (a numeric fingerprint with tolerances compared by a tool, replacing the hashes) are written by the pin CLI of `@digi/sharc-rig-kit` (docs/plans/test-architecture.md T2).
 
 `tests/sharc/integration/test_sharc_golden.py`
 hashes six SHARC core outputs: a refactor keeps them; an intended change updates them with
 `--update` and says why.
+
+Rig pins and device pins are numeric fingerprints compared with tolerances by one comparer (`packages/sharc-rig-kit/src/pcmpin.ts`,
+import `@digi/sharc-rig-kit/pins`). A hash alone never sets a pin.
+
+**Fingerprint v2** (plain numbers, no audio; the reader still accepts v1, comparing its onset, peak, bands and block levels):
+
+| Field | Meaning |
+| --- | --- |
+| `rate`, `channels`, `frames`, `window_frames` | the format; `window_frames` is the number of frames analysed from the onset (device pins: 12000 = 0.25 s; rig pins: null, the whole output) |
+| `onset` | first frame with a sample above 1e-6 |
+| `peak_db` | peak, dBFS |
+| `stereo` | `identical` (L = R) and `max_diff` (largest abs(L-R)); two channels only |
+| `rms_db` | level of each 10 ms window, dBFS |
+| `bandHz`, `bandDb` | 64 log-spaced band levels, 40 Hz to 22 kHz, of the channel mix |
+| `periodic` | only when the fundamental and harmonics 1..6 hold 90 % of the energy: `pitch` {`hz`, `midi`} from the parabolic peak of the zero-padded Hann spectrum, `crest` (peak over RMS) and `harmonics_db` (2..6, dB re the fundamental) |
+| `block`, `block_rms` | rig pins: RMS per 32-sample block (the sample classifier below reads it) |
+| `tolerance` | the fields below that differ from the defaults |
+| `exact` | `{ sha256 }`: the pin is exact |
+
+**Tolerances** (defaults tight enough that a change you can hear fails): `onset` 0 frames, `level_db` 0.1 (peak and each 10 ms window),
+`band_db` 0.5 (bands more than `band_floor_db` = 60 dB under the loudest band are skipped), `pitch_cents` 1, `harmonic_db` 1
+(harmonics under `harmonic_floor_db` = -80 dB in both signals are skipped), `crest_pct` 0.5, `rms_floor_db` -90 (a 10 ms window under it in both is skipped).
+`compare(pin, capture)` returns the differences in plain words and an empty list when the capture is within tolerance:
+`pitch +14.0 cents`, `level -3.1 dB from 200 ms to 250 ms`, `harmonic 3 rose to -38 dB`, `onset moved 32 frames`,
+`bands moved: 102-20942 Hz -2.0 dB`, `L and R differ now`. A test fails with that list.
+
+`exact`: the pin also needs the SHA-256 of the analysed float32 words (the fingerprint differences are listed all the same, or
+"only bits differ"). Use it only where the test proves identical output: the two `freqshift` state-independence cases
+(`exact = true` on the `same-as` check) and the device pin `equiv-dn2-set` (exact RECIPS output, finding 102; written with `--exact`). The machine note pins (`equiv-note.toml`) and `equiv-dt2-sine` are tolerant: a refactor that keeps
+the sound within tolerance passes without a re-pin.
+
+**Rig pins**: `tests/rig/fingerprint/<key>.json` (key: `rigKey`). A `same-as` check with a v2 file is compared with its tolerances;
+`exact = true` on the check, a v1 file or no file keeps the hash as the gate. The `sha256` line of the toml stays as the record of the last pin.
+`DIGI_RIG_PIN=1` (above) writes the v2 file; a tolerance in the old file stays, and an exact check stores the hash in it.
+
+**Device pins**: `modules/core/adapters/dynreg/tests/pins/<case>.pcm.json` (`pcmPinFile`), checked by `defineEquiv` over 12000 stereo frames
+from the onset (`checkCapture`). Cases of a plain sine (`sine: { note }`) also assert properties that hold whatever the pin says:
+pitch within 5 cents of the note, crest factor of the second half of the window within 1 % of sqrt(2) (`crest_settled`: the amplitude of the DT2 sine starts 1.7 % high and settles within about 0.15 s, which the whole-window crest includes), harmonics under -60 dB, level steady within 0.5 dB.
+
+**Failure and report**: a failed or missing pin prints the differences and the full report, expected beside measured (format, onset, peak,
+stereo, level range, loudest bands, pitch, crest factor, harmonics), and writes `<case>.plot.png` (the window and the pin's band curve) and
+`<case>.window.wav` beside the capture (`out/runs/...` of the case for a device pin, `out/rig/<key>/plot.png` and `out.wav` for a rig pin) for listening.
+
+**Approving a pin**: read the report; Claude approves a pin that states the fixture's own facts (for the DT2 sine: 261.63 Hz = MIDI 60, crest
+1.438 over the window and 1.412 in its second half, harmonics -115 dB, peak -23.9 dBFS, level within 0.4 dB, L = R) and a change that keeps the sound; a change of the sound goes to Em. Then write it from the capture
+(the WAV the device test keeps beside the run, `run.wav`, or the window WAV) with the CLI:
+
+```sh
+node packages/sharc-rig-kit/src/pin-cli.ts show  --wav CAPTURE.wav --pin PIN.json   # report and differences, exit 1 on a difference
+node packages/sharc-rig-kit/src/pin-cli.ts write --wav CAPTURE.wav --pin PIN.json [--window 12000] [--exact] [--tol pitch_cents=3,level_db=0.2]
+```
 
 ## Desktop UI preview
 
