@@ -14,7 +14,7 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# C, built by `patchkit build`. Loaded by the digikit runtime from the card store (`patchkit pack test/input-probe`, tools/device/dktransfer.py).
+# C, built by `patchkit build`. Loaded by the digikit runtime from the card store (`patchkit pack test/input-probe`, `mise run transfer`).
 [[object]]
 path = "build/input-probe.dko.json"
 sources = ["src/c/input_probe.c"]

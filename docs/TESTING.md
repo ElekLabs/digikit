@@ -1018,8 +1018,6 @@ A package or a harness file that no test imports is not an input: an edit to `pa
 leaves a target that does not import it cached. Files read by path are described in "What a device test's cache key contains". `digi-control:daemons` declares the daemon
 sources (`SOURCE_GLOBS` of `tools/devtools/emud_key.py`) as inputs. The binary is keyed by content, and these
 inputs make a source edit select every task that consumes `dist/daemons.json`.
-`tools/device/dktransfer.py` keeps the state of failed packs in a folder. A test run sets `DIGI_TRANSFER_DIR` to a folder
-of its run directory, because `out/` is shared by all worktrees.
 
 ### What a device test's cache key contains
 

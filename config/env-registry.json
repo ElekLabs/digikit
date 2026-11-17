@@ -813,10 +813,6 @@
    "owner": "ts:tools/nx",
    "purpose": "Fixed number of machine-wide emulator slots, with no idle-core check (default: the ceiling from cores and RAM)."
   },
-  "DIGI_TRANSFER_DIR": {
-   "owner": "python:tools/device",
-   "purpose": "Folder for the packed .dkm files and the failed-pack record of dktransfer (default out/patch/transfer); a test run sets one inside its run directory."
-  },
   "DIGI_SHARC_CORE_STORE": {
    "owner": "python:tools/devtools",
    "purpose": "Directory of the core library store instead of <git common dir>/sharc-core-cache (tests only)"
