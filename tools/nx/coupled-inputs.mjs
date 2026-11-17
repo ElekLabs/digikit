@@ -51,15 +51,18 @@ export const coupledInputs = async (env = process.env) => {
   }
   if (env.DIGI_DT2_CARD) await add('dt2/card', under(env.DIGI_DT2_CARD));
   // The DSP core of each device is a library from the store: its key hashes the generated core (an untracked directory
-  // that no Nx input sees), sharc-rt, the toolchain and the build recipe (tools/devtools/core_store.py `key`).
-  // An explicit DIGI_SHARC_CORE_LIB_<DEV> is hashed by content instead.
+  // that no Nx input sees), sharc-rt, the toolchain and the build plan (tools/devtools/core_store.py `key`).
+  // An explicit DIGI_SHARC_CORE_LIB_<DEV> is hashed by content instead. The key is computed from `env`, the same
+  // environment the gen dir and the explicit library are read from; it takes about 0.15 s and never builds.
   for (const device of ['dn2', 'dt2']) {
     const explicit = env[`DIGI_SHARC_CORE_LIB_${device.toUpperCase()}`];
     if (explicit) await add(`${device}/core-lib`, under(explicit));
     else {
       const done = spawnSync('uv', ['run', 'python', '-m', 'tools.devtools.core_store', 'key', '--device', device], {
         cwd: root,
+        env,
         encoding: 'utf8',
+        timeout: 60_000,
       });
       lines.push(`${device}/core-key ${done.status === 0 ? done.stdout.trim() : 'unavailable'}`);
     }
