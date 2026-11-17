@@ -637,7 +637,7 @@ export async function runRigFile(module: string, file: string, o: RunOptions = {
 
 /**
  * Write the pins of a file: run every case that has a `same-as` check and put the words hash of the check's signal into its `sha256` line.
- * A case with such a check names one device, so the n-th `sha256 = "..."` line of the file belongs to the n-th `same-as` check in file order.
+ * A machine case with such a check names one device; an effect case runs once for the effect (key device `fx`, as in `runRigFile`). So the n-th `sha256 = "..."` line of the file belongs to the n-th `same-as` check in file order.
  * Returns the hashes written, as `case [device] hash`. This is the only writer of a rig reference pin: a changed pin is a re-pin and needs review.
  */
 export async function pinRigFile(module: string, file: string, o: RunOptions = {}): Promise<string[]> {
@@ -649,13 +649,15 @@ export async function pinRigFile(module: string, file: string, o: RunOptions = {
   for (const c of loadRigFile(file).case) {
     const pins = (c.check ?? []).filter((k) => k.kind === 'same-as');
     if (pins.length === 0) continue;
-    const devices = (c.device ?? [...DEVICES]).filter((d): d is Device => (DEVICES as readonly string[]).includes(d));
-    if (devices.length !== 1) throw new Error(`${c.name}: a case with a same-as check names exactly one device`);
+    const devices: string[] = isFx
+      ? ['fx']
+      : (c.device ?? [...DEVICES]).filter((d): d is Device => (DEVICES as readonly string[]).includes(d));
+    if (devices.length !== 1) throw new Error(`${c.name}: a machine case with a same-as check names exactly one device`);
     try {
-      const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, devices[0]!, c, dir, o);
+      const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, devices[0] as Device, c, dir, o);
       if (t.failure !== null) throw new Error(t.failure);
       if (!isFx && c.poison !== false) {
-        const why = stateDependence(t, await runMachine(module, devices[0]!, c, dir, o, FILL_SEED));
+        const why = stateDependence(t, await runMachine(module, devices[0] as Device, c, dir, o, FILL_SEED));
         if (why !== null) throw new Error(why);
       }
       for (const k of pins) {
@@ -697,10 +699,10 @@ export async function reportRigFile(module: string, file: string, o: RunOptions 
   for (const c of loadRigFile(file).case) {
     const pins = (c.check ?? []).filter((k) => k.kind === 'same-as');
     if (pins.length === 0) continue;
-    const device = (c.device ?? [...DEVICES])[0] as Device;
+    const device = isFx ? 'fx' : ((c.device ?? [...DEVICES])[0] as Device);
     const key = rigKey(module, device, c.name);
     try {
-      const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, device, c, dir, o);
+      const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, device as Device, c, dir, o);
       const x = signal(t, pins[0]!);
       const ref = readRef(key);
       const same = wordsHash(x) === String(pins[0]!.sha256);
