@@ -66,6 +66,7 @@ RECIPE_FILES = (
     "tools/devtools/emud_key.py",
     "tools/devtools/verify_build.py",
     "tools/devtools/stablebin.py",
+    "tools/devtools/store.py",
     "tools/emulator/digi_env.py",
     "tools/emulator/native_pgo.py",
     "tools/emulator/native_target.py",

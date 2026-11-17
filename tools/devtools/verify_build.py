@@ -1,6 +1,7 @@
 """Build the windowless daemons (`digi-emud`) once, as the Nx target `digi-control:daemons` does.
 
     uv run python -m tools.devtools.verify_build daemons [--device dt2,dn2] [--env-out FILE]
+    uv run python -m tools.devtools.verify_build cores [--device dt2,dn2]
 
 Before this, every python-tests process that drove a daemon asked cargo for the binary itself
 (tools/patchkit/pk_harness.py `daemon_binary`): the first build of a new generated core ran inside a
@@ -16,24 +17,23 @@ the result with one rename. The last 4 used keys per device stay, and every key 
 `dist/daemons.json` of any worktree of the clone points at (a restore refreshes the use time). `DIGI_EMUD_<DEV>=<stored digi-emud>` is written
 to --env-out (JSON); a stored file is never rewritten, so the test processes run it and ask cargo for nothing.
 `pk_harness.daemon_binary` takes that variable before anything else.
+
+`cores` provides the generated SHARC core of each device as a library from the same kind of store
+(`sharc-core-cache`, tools/devtools/core_store.py); both use the mechanics of tools/devtools/store.py.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
-from tools.devtools import emud_key, stablebin  # noqa: E402
+from tools.devtools import core_store, emud_key, stablebin, store  # noqa: E402
 from tools.patchkit import pk_emud_pgo, pk_harness  # noqa: E402
-
-KEEP = 4  # most recently used keys kept per device in the store
 
 
 def cargo_target_dir(binary: Path) -> Path:
@@ -61,68 +61,13 @@ def build_one(device: str, syx: Path) -> tuple[Path, Path]:
 
 def store_root() -> Path:
     """`<git common dir>/emud-cache` (or DIGI_EMUD_STORE, for tests): shared by every worktree of the clone, never committed."""
-    override = os.environ.get("DIGI_EMUD_STORE")
-    if override:
-        return Path(override)
-    done = subprocess.run(
-        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        cwd=ROOT, check=True, capture_output=True, text=True,
-    )  # fmt: skip
-    return Path(done.stdout.strip()) / "emud-cache"
+    return store.store_root("emud-cache", "DIGI_EMUD_STORE")
 
 
-def worktree_roots() -> list[Path]:
-    """The root directory of every worktree of the clone (`git worktree list --porcelain`)."""
-    done = subprocess.run(
-        ["git", "worktree", "list", "--porcelain"],
-        cwd=ROOT, check=True, capture_output=True, text=True,
-    )  # fmt: skip
-    return [
-        Path(line.removeprefix("worktree "))
-        for line in done.stdout.splitlines()
-        if line.startswith("worktree ")
-    ]
-
-
-def referenced_keys(device_dir: Path, worktrees: list[Path]) -> set[str]:
-    """The keys of DEVICE_DIR that `dist/daemons.json` of any of WORKTREES points at.
-
-    A worktree without that file, or with one that cannot be read, references nothing.
-    """
-    keys: set[str] = set()
-    for tree in worktrees:
-        try:
-            pinned = json.loads((tree / "dist" / "daemons.json").read_text())
-        except (OSError, ValueError):
-            continue
-        if not isinstance(pinned, dict):
-            continue
-        for value in pinned.values():
-            binary = Path(str(value))
-            if binary.parent.parent == device_dir:
-                keys.add(binary.parent.name)
-    return keys
-
-
-def evict(
-    device_dir: Path, keep_key: str, referenced: set[str] | frozenset[str] = frozenset()
-) -> None:
-    """Keep the KEEP most recently used keys of a device, KEEP_KEY, and every key in REFERENCED.
-
-    The use time is the mtime of key.txt: it is set on insert and refreshed on every restore.
-    """
-    entries = []
-    for entry in device_dir.iterdir():
-        if entry.name.startswith(".") or not entry.is_dir():
-            continue
-        try:
-            entries.append((entry.joinpath("key.txt").stat().st_mtime, entry))
-        except OSError:
-            entries.append((0.0, entry))
-    entries.sort(key=lambda item: item[0], reverse=True)
-    for _mtime, entry in entries[KEEP:]:
-        if entry.name != keep_key and entry.name not in referenced:
-            shutil.rmtree(entry, ignore_errors=True)
+# The store mechanics (insert by rename, eviction, keys named by worktrees) are in tools/devtools/store.py.
+worktree_roots = store.worktree_roots
+referenced_keys = store.referenced_keys
+evict = store.evict
 
 
 def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
@@ -158,31 +103,25 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
         raise pk_harness.HarnessError(
             f"{len(missing)} build inputs of {device} are not in the cache key:{lines}"
         )
-    device_dir.mkdir(parents=True, exist_ok=True)
-    tmp = device_dir / f".tmp-{os.getpid()}"
-    shutil.rmtree(tmp, ignore_errors=True)
-    tmp.mkdir()
-    with stablebin.build_lock(target):  # cargo may be rewriting BUILT
-        shutil.copyfile(built, tmp / "digi-emud")
-    (tmp / "digi-emud").chmod(0o755)
-    (tmp / "key.txt").write_text(key + "\n")
-    # the repository files the build read: the daemon part of the key of a device test that does not run patchkit
-    (tmp / "files.txt").write_text(
-        "".join(
-            f"{n}\n"
-            for n in emud_key.repo_files_of_depfile(depfile.read_text(), ROOT, target)
+
+    def fill(tmp: Path) -> None:
+        with stablebin.build_lock(target):  # cargo may be rewriting BUILT
+            shutil.copyfile(built, tmp / "digi-emud")
+        (tmp / "digi-emud").chmod(0o755)
+        # the repository files the build read: the daemon part of the key of a device test that does not run patchkit
+        (tmp / "files.txt").write_text(
+            "".join(
+                f"{n}\n"
+                for n in emud_key.repo_files_of_depfile(
+                    depfile.read_text(), ROOT, target
+                )
+            )
         )
-    )
-    shutil.copyfile(depfile, tmp / "depfile.d")
-    try:
-        os.rename(tmp, final)
+        shutil.copyfile(depfile, tmp / "depfile.d")
+
+    if store.insert(device_dir, key, "digi-emud", fill):
         print(f"{device} daemon: built {key[:12]}", flush=True)
-    except OSError:
-        if not binary.is_file():
-            raise
-        shutil.rmtree(
-            tmp, ignore_errors=True
-        )  # another process inserted this key first
+    else:  # another process inserted this key first
         print(
             f"{device} daemon: restored {key[:12]} (inserted by another process)",
             flush=True,
@@ -210,9 +149,22 @@ def build_daemons(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
     return env, test_keys
 
 
+def build_cores(devices: list[str]) -> int:
+    """Provide the core libraries of DEVICES from the store (tools/devtools/core_store.py)."""
+    root = core_store.store_root()
+    try:
+        for device in devices:
+            library = core_store.ensure_core(device, root)
+            print(f"{device} core: {library}", flush=True)
+    except (core_store.CoreStoreError, FileNotFoundError) as exc:
+        print(f"verify_build: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    ap.add_argument("what", choices=["daemons"])
+    ap.add_argument("what", choices=["daemons", "cores"])
     ap.add_argument(
         "--device", default="dt2,dn2", help="comma-separated (default: dt2,dn2)"
     )
@@ -223,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
     devices = [d for d in args.device.split(",") if d]
+    if args.what == "cores":
+        return build_cores(devices)
     unknown = sorted(set(devices) - set(pk_emud_pgo.FIRMWARE))
     if unknown:
         ap.error(f"unknown devices: {', '.join(unknown)}")

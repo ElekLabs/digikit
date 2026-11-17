@@ -1138,6 +1138,29 @@ build, so nothing is stored with an incomplete key. Add the missing path to `SOU
 `tools/devtools/emud_key.py`. `uv run python -m tools.devtools.emud_key audit --device DEV --depfile FILE`
 repeats the check on a kept file.
 
+### Core library store
+
+`verify_build cores` keeps the generated SHARC core of each device as a library in
+`<git common dir>/sharc-core-cache/<image>/<key>/` (the library, `key.txt`, `header.json`; the image is the device id).
+It uses the same mechanics as the daemon store (`tools/devtools/store.py`: insert by one rename, the use time is the mtime of
+`key.txt`, the last 4 keys per image stay plus every key that `dist/daemons.json` of any worktree names), so two processes that
+insert one key are safe: one rename wins and the other restores the winner's entry. `DIGI_SHARC_CORE_STORE` moves the store
+(tests only). The key (`tools/devtools/core_store.py`) is a sha256 over the files of the gen dir (`out/native/<dev>-audio/gen`),
+the sources of `packages/emulator/sharc-rt`, `rustc -vV`, the target triple, `RUSTFLAGS`, the cargo profile and the PGO profile
+hash (`plain` without one).
+
+```sh
+uv run python -m tools.devtools.verify_build cores --device dn2,dt2
+# dn2 core: built 040713e7aaac        (a miss: builds and inserts)
+# dn2 core: restored 040713e7aaac     (a hit)
+# dn2 core: evicted 91350c44d39f      (a key beyond the last 4 that no worktree names)
+```
+
+The build is `core_store.build_core`; `build_command` names the cargo call for the crate `sharc-core-lib`. The crate is not in
+the tree yet, so a miss stops with `the crate packages/emulator/sharc-core-lib does not exist yet; the build would be: ...`
+(exit 1). The Nx target and the `dist/daemons.json` entries come with the wiring PR. `tests/devtools/test_core_store.py` covers the
+key and the store with a stand-in library (miss, hit, concurrent insert, eviction).
+
 To clear the Nx cache: `pnpm nx:pilot reset`.
 
 ## PCM pins

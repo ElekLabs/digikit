@@ -185,6 +185,7 @@ const GATE = {
         '{workspaceRoot}/tools/devtools/emud_key.py',
         '{workspaceRoot}/tools/devtools/verify_build.py',
         '{workspaceRoot}/tools/devtools/stablebin.py',
+        '{workspaceRoot}/tools/devtools/store.py',
         '{workspaceRoot}/tools/emulator/digi_env.py',
         '{workspaceRoot}/tools/emulator/native_pgo.py',
         '{workspaceRoot}/tools/emulator/native_target.py',
