@@ -234,21 +234,30 @@ pub struct Fixture {
     pub state: fn(&FakeCore) -> Vec<u32>, // the service's own view (owners, ids)
     pub a: Module,                 // module A: keys, a call list that stands for the fixture's module.c, its DSP rows
     pub b: Module,                 // module B: different keys
+    pub a2: Module,                // the keys of A, other content in every table the service fills (names, defaults, DSP fields)
+    pub enable: &'static [(u32, u32, u32)], // link words that turn a DSP row off: (window, word, off value)
+    pub kept: fn(u32) -> bool,     // memory words a release leaves on purpose (documented free values)
     pub bad: Module,               // a module the service must refuse at the commit
+    pub bad_late: Option<Late>,    // a module refused during apply, after rows were written, and its reference that loads
 }
 
 pub fn contract<S: Service<FakeCore>>(f: &Fixture) { /* cases below */ }
 ```
 
 A shared lifecycle driver in test-support (`Lifecycle`) runs a module the way the loader does: `settle`, DSP admit and claim, `module_begin`, the
-init calls, `module_commit` (PREPARE, WRITE), the registry check, DECLARE, apply, row publication, and on unload `dsp_clear`, `remove` and DSP
-release. Its state snapshot is `FakeCore.mem`, the DSP state, the last word on each link slot, the settings store, `cap` counts and the service's
-own view (`Fixture::state`: `fxpage::page_owner`, `owned_ids`, `tracks::has`).
+init calls, `module_commit` (PREPARE, WRITE), the registry check (the layout by `dkrt_abi::regcheck::check_layout`, the function the runtime's walker
+calls, then the service's check steps), DECLARE, apply, row publication, and on unload `dsp_clear`, `remove` and DSP release. Its state snapshot is
+`FakeCore.mem` (non-zero words), the whole DSP state (`DspState` bytes), the last non-zero word on each link slot, the link queue (live values, queued
+requests), the last word at each `Fixture::enable` word, the settings store, `cap` counts and the service's own view (`Fixture::state`:
+`fxpage::page_owner`, `owned_ids`, `tracks::has`). A module gets DSP rows whose fields follow `Dsp::salt`, so two modules with the same keys and other
+salts claim the same rows with other contents.
 
 Cases:
 
 1. `declare` gives exactly the kinds that `[records.kinds]` assigns to this service (`Declare::matches_kinds`).
-2. `check` writes nothing: the snapshot is unchanged.
+2. `check` writes nothing: during the load of A and of B (the state in which the loader checks, after the commit and before the apply) the snapshot
+   before and after the registry check is the same, the check makes no core call and accepts the section; a second run over the section of a loaded
+   module is compared the same way.
 3. Re-commit equivalence: the snapshot after `A` equals the snapshot after `A, unload A, A`. What `B` alone writes is the same after
    `A, unload A, B`: a row that `A` held and released keeps the service's free values, which a never used row does not have, so the words of `B`
    are compared, not the whole memory. `cap` counts and the service's view return to their starting values after `unload A`. This is the
@@ -257,12 +266,24 @@ Cases:
    both: `cap` counts and the view are at their start.
 5. A refused commit (`bad`), then the loader's `remove`: the snapshot equals the one before.
 6. Case 3 ten times: no growth in any table, no drift in sticky maps after the first assignment.
+7. An unload leaves nothing. From the same fresh start, the state after "load `A`, unload `A`" equals the state after "load `a2`, unload `a2`" in memory
+   words, DSP state bytes, link queue and requests, enable words, settings, `cap` counts and the view (the last words sent for a row's content differ with
+   the module and stay in the DSP memory until the next row overwrites them: they are not compared). Besides: no queued link value or request is left;
+   every enable word is 0 or its off value after the unload; and no memory word that the load of `A` (or `a2`) wrote is still at that value unless the
+   unload wrote it (its free value) or `Fixture::kept` names it. A comparison that sees no difference between the loaded `A` and the loaded `a2` fails
+   (the case would be blind).
+8. A commit refused during apply (`bad_late`: rows are written, then a record is refused), then the loader's undo, leaves what the unload of
+   `same_but_ok` leaves (a module that claims the same DSP rows and writes the same rows and loads), as in case 7 but without the enable words (a row
+   that was never published sends none); also with B loaded when the module fits beside it. The failure must come after at least one record applied.
+   Lfo and samples have no such path: their `check` covers every limit of their `apply`.
 
 Fixtures are the shared ones in `tests/fixtures/modules` (`lfo-shape`, `dyn-fx-gain`, `dyn-fx-gain-b`, `sine`). Each module of the suite is a Rust
-call list that makes the builder calls of the fixture's `module.c` through the service's `build::*` (or `Init::record` for `dk_record_add`); it
-sits in the service's `tests/contract.rs`, because it names `build::*` and test-support is below the services. The fixtures' sources are inputs of
-the crate's `rust-tests`. Host compilation of the `module.c` files is not done. The samples service has no kind and no builder call: its module
-is a track-table record in the DSP section (`Dsp::bank`), and its `bad` module is a stray `dk_record_add` that the commit refuses after the claim.
+call list that makes the builder calls of the fixture's `module.c` through the service's `build::*` (or `Init::record` for `dk_record_add`) and mirrors
+the fixture's calls exactly; it sits in the service's `tests/contract.rs`, because it names `build::*` and test-support is below the services. `a2`,
+`bad_late` and its reference have no shared fixture. The fixtures' `module.toml`, `module_ids.h` and sources are inputs of the crate's `rust-tests`
+(`FIXTURE_SOURCE` in `tools/nx/cargo.mjs`). Host compilation of the `module.c` files is not done. The samples service has no kind and no builder
+call: its module is a track-table record in the DSP section (`Dsp::bank`; `a2` has another local id), and its `bad` module is a stray `dk_record_add`
+that the commit refuses after the claim.
 No hand-built record bytes where a builder call exists.
 
 Service statics are reset by `module_begin` and `remove`; the suite takes the shared test lock.
@@ -519,13 +540,19 @@ What:
 3. A Rust call list per fixture, in the service's `tests/contract.rs`. Done; host compilation of the `module.c` files is not planned.
 4. `tests/contract.rs` in machines, fx, lfo and samples with DT2 and DN2 fixtures. Done.
 5. Fix what the suite finds. Found: the fx and machines rows were unreachable on the host (item 1); the machines `rust-tests` did not compile
-   on e3/keys and two of its tests shared a static without the lock (fixed). The six cases found no residue in the four services as they
-   stand: a mutation of each service's `remove` or `dsp_release` (a table entry left behind) fails the suite.
+   on e3/keys and two of its tests shared a static without the lock (fixed). The first version of the suite compared only what a module wrote
+   itself, so it could not see a release that left words behind; case 7 and 8 and the `a2` and `bad_late` modules were added for that. Found with
+   them: the fx `remove` published the kit table (`DKRT_FXP_DEFS`) before it cleared the row's defaults, so the defaults of an unloaded effect stayed in
+   the table (fixed in `fxpage::remove`, unit test `an_unloaded_effect_leaves_no_defaults_in_the_table_of_the_kit_hooks`). Left on purpose, named in
+   the fixtures' `kept`: the machines `remove` keeps `O_POS` of a hidden row (255, the end marker, the same for every module), and the fx `remove` keeps
+   the name and title pointers of an unlisted page row and the list buffer entries after the count. Mutations of each service's `remove`, `dsp_clear` or
+   `dsp_release` (one item of each kind left behind: row words, a page row, a send cell, an IDS halfword, a DEFS halfword, a DSP row field, an owner, a
+   DSP row's off word, a link value) fail the suite.
 
 Tests: the suite itself (unit). Check with `pnpm nx:pilot show target inputs <service>:rust-tests` that each service's target hashes the
 test-support crate and the fixtures it reads.
 
-Done when: all four services pass all six cases on both profiles.
+Done when: all four services pass all eight cases on both profiles.
 
 Estimate: 2-3 days. Payoff: the reload proof for every service, and the T1 `Service` contract. Confidence: medium-high (step 1 touches the
 machines writers on the device path; the device subset of E3 or E5 covers it). Depends on: E3; branch `nx/dks-tests` (the service
