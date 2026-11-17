@@ -143,7 +143,7 @@ pub fn len(kind: u32) -> Option<u32> {
 #[cfg(test)]
 pub(crate) mod tests;
 #[cfg(test)]
-mod lfo_tests;
+pub(crate) mod lfo_tests;
 #[cfg(test)]
 pub(crate) mod fx_fixture;
 #[cfg(test)]

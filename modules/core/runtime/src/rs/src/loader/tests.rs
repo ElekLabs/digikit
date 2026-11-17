@@ -1021,15 +1021,15 @@ fn the_role_word_picks_the_steps() {
 // ---- interface B: the module lifecycle with a fake service ------------------------------------------------------------------------
 
 #[test]
-fn the_services_are_told_before_init_and_commit_in_two_passes_after_it() {
+fn the_services_are_told_before_init_and_commit_in_three_passes_after_it() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        use dkrt_abi::service::commit_phase::{PREPARE, WRITE};
+        use dkrt_abi::service::commit_phase::{DECLARE, PREPARE, WRITE};
         let mut l = loader(Init::Ok);
         assert_eq!(l.load(PATH.as_ptr()), OK);
         // the module is the first block of the arena: its base is FIRST_ADDR, its image 32 bytes
-        assert_eq!(l.r.svc, vec![Svc::Begin(0), Svc::Commit(0, PREPARE, FIRST_ADDR, 32), Svc::Commit(0, WRITE, FIRST_ADDR, 32)]);
-        assert_eq!(*ORDER.lock().unwrap(), ["begin", "init", "commit", "commit"]);
+        assert_eq!(l.r.svc, vec![Svc::Begin(0), Svc::Commit(0, PREPARE, FIRST_ADDR, 32), Svc::Commit(0, WRITE, FIRST_ADDR, 32), Svc::Commit(0, DECLARE, FIRST_ADDR, 32)]);
+        assert_eq!(*ORDER.lock().unwrap(), ["begin", "init", "commit", "commit", "commit"]);
         // a service that wrote no record has no block of its own: the module block stays alone
         assert_eq!(l.m.live.iter().map(|b| b.0).collect::<Vec<_>>(), vec![FIRST_ADDR]);
     }

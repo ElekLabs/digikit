@@ -46,13 +46,13 @@ fn section(shapes: &[(u32, i16)]) -> Vec<u8> {
 
 /// The lfo service as the runtime has it: a service file (`lfo.dks`), not a row of the image. Its row joins the table as `Registry::add` does at the commit of the
 /// loaded file, and leaves it as `Registry::remove` does at the unload.
-struct Loaded;
+pub(crate) struct Loaded;
 
 /// The module record of the service file.
 const FILE_REC: usize = 0;
 
 impl Loaded {
-    fn new() -> Loaded {
+    pub(crate) fn new() -> Loaded {
         static ROW: ServiceRow = ServiceRow::of::<Lfo, RealCore>("lfo", &KINDS_LFO);
         assert_eq!(unsafe { svc_rows::add(FILE_REC, &ROW) }, OK);
         Loaded
@@ -73,7 +73,7 @@ fn clear() {
 
 #[test]
 fn a_shape_record_goes_from_the_builder_call_to_the_table_and_back() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     clear();
     let sec = section(&[(7, -1000)]);
@@ -92,7 +92,7 @@ fn a_shape_record_goes_from_the_builder_call_to_the_table_and_back() {
 
 #[test]
 fn a_second_owner_of_a_shape_id_and_an_id_twice_or_zero_are_refused() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     clear();
     let a = section(&[(7, 0)]);
@@ -145,7 +145,7 @@ fn plan_of(tables: &[Vec<u8>]) -> plan::Plan {
 
 #[test]
 fn the_planner_knows_the_kind_from_the_service_table_refuses_an_unowned_kind_and_a_second_owner() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     let one = table(&[(KIND_LFO_SHAPE, &[7])]);
     let same = table(&[(KIND_LFO_SHAPE, &[7, 8])]);

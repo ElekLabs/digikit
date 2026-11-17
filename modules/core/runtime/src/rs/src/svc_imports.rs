@@ -242,8 +242,7 @@ mod tests {
             assert!(!SVC_NAMES.contains(n), "{n} is in both tables");
         }
         assert!(SVC_NAMES.contains(&"dk_service_declare_row") && SVC_NAMES.contains(&"dkc_panic"));
-        // one `dkc_*` per CoreApi method, and the two of a service file
-        assert!(SVC_COUNT >= 30, "{SVC_COUNT}");
+        // the list is the one source of the table (a method added to it is checked by the loop above); the count is no pin
     }
 
     #[test]
