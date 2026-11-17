@@ -11,6 +11,7 @@ import { buildObjectsTarget, packTarget, packAliasesTarget, bindTarget } from '.
 import { deviceTargets, checkMergeTests, conformanceTarget, testOnlyNodes, regressionNode } from './device-tests.mjs';
 import { serviceLeaves, isBindable, bindableIds } from './device-test-keys.mjs';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
+import { standaloneRustTests } from './cargo.mjs';
 import { rigTarget } from './rig-tests.mjs';
 import { testImportInputs } from './ts-imports.mjs';
 import { pythonImportInputs } from './py-imports.mjs';
@@ -148,6 +149,8 @@ export const createNodesV2 = [
           }),
         );
       // sound checks on the SHARC-only rig (packages/sharc-rig-kit, docs/TESTING.md "Sound checks"): tests/rig/*.toml run by tests/*.rig.test.ts
+      const rustTests = standaloneRustTests(ctx.workspaceRoot, root);
+      if (rustTests) targets['rust-tests'] = rustTests;
       if (rigTests.length) targets['test-rig'] = rigTarget(root);
       if (uploadable) targets['test-conformance'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);
       if (Object.keys(targets).length) project.targets = targets;
