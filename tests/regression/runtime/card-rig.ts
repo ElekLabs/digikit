@@ -263,15 +263,17 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     const { modules = [], name: _name, ...rest } = spec;
     const files = modules.map((m) => (typeof m === 'string' ? mod(m) : m));
     // the services that these modules need go on the card too, bound to the stock firmware (`service-files.ts`)
+    // only the files of `modules/` are modules: samples, other data and the service files of a test have no NEEDS
+    const needed = neededServices(files.filter((m) => m.name.startsWith('modules/')).map((m) => m.file));
     const services = await Promise.all(
-      neededServices(files.map((m) => m.file))
-        .filter((needed) => !files.some((m) => m.name === servicePath(needed.service)))
-        .map(async (needed) => ({
-          name: servicePath(needed.service),
-          file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
+      needed
+        .filter((n) => !files.some((m) => m.name === servicePath(n.service)))
+        .map(async (n) => ({
+          name: servicePath(n.service),
+          file: await boundService(device, n, moduleArtifact(device, n.moduleId)),
         })),
     );
-    for (const needed of neededServices(files.map((m) => m.file))) cardServices.add(needed.service);
+    for (const n of needed) cardServices.add(n.service);
     const options = {
       ...(o.project ? { syx: resolveInputs(device, FIRMWARE[device]).syx } : {}),
       ...rest,
