@@ -142,7 +142,9 @@ def _externs_fixed(device: str, spec: pk_conform.MachineSpec) -> dict[str, int]:
         "_dv_table": dv.TABLE,
     }
     if device == "dt2":
-        fixed["_dl_slots"] = dv.SLOTS  # the slot block of core/dsp-link, read by the stubs of core/dsp-voice
+        fixed["_dl_slots"] = (
+            dv.SLOTS
+        )  # the slot block of core/dsp-link, read by the stubs of core/dsp-voice
     if device == "dn2":
         fixed.update(
             {n: dv.STOCK_BP + 0x10 + 4 * i for i, n in enumerate(STEREO_STANDINS)}
@@ -301,7 +303,9 @@ class MachineRig:
                 poke(nw(dv.TABLE) + k, 0)
             poke(nw(dv.TABLE), self.spec.machine_type)
             poke(nw(dv.TABLE) + 1, b.symbols[self.spec.entry])
-            if self.device == "dt2":  # what the machines service installs: the stubs jump to the dispatch entries through the slots
+            if (
+                self.device == "dt2"
+            ):  # what the machines service installs: the stubs jump to the dispatch entries through the slots
                 for k in range(dv.SLOT_WORDS):
                     poke(nw(dv.SLOTS) + k, 0)
                 poke(nw(dv.SLOTS), b.symbols["_dv_run"])

@@ -11,7 +11,14 @@ CORE = (
     ROOT / "modules" / "core" / "adapters" / "dsp-voice" / "src" / "dsp" / "dsp-voice.s"
 )
 DISPATCH = (
-    ROOT / "modules" / "core" / "services" / "machines" / "dks" / "dsp" / "dispatch-dt2.s"
+    ROOT
+    / "modules"
+    / "core"
+    / "services"
+    / "machines"
+    / "dks"
+    / "dsp"
+    / "dispatch-dt2.s"
 )  # the code behind the stubs of CORE: the machines service carries it
 # a sine routine of the raw (no contract) form
 SINE = ROOT / "tests" / "support" / "raw_sine.s"
@@ -39,7 +46,11 @@ STEP_WORD = (
 MASK = (
     DIAG + 0x11C
 )  # `_dv_mask`: the registered types, rebuilt by voice 0 from the table
-SV_M13, SV_M13U, SV_I12U = DIAG + 0x130, DIAG + 0x134, DIAG + 0x138  # the registers the stubs pin (dk_stub.inc)
+SV_M13, SV_M13U, SV_I12U = (
+    DIAG + 0x130,
+    DIAG + 0x134,
+    DIAG + 0x138,
+)  # the registers the stubs pin (dk_stub.inc)
 SLOTS = DIAG + 0x780  # `_dl_slots`: the 16 slot words of core/dsp-link
 SLOT_WORDS = 16
 GUARD = DIAG + 0x200  # the guard's scalars and arrays (_dv_g, 128 bytes)
@@ -176,12 +187,16 @@ class Rig:
             )
 
         self.core = obj(CORE)  # the stubs
-        self.dispatch = obj(DISPATCH)  # follows the stubs, rounded up to 0x100 short words
+        self.dispatch = obj(
+            DISPATCH
+        )  # follows the stubs, rounded up to 0x100 short words
         dispatch_base = CORE_BASE + ((len(self.core.section) // 2 + 0xFF) & ~0xFF)
         self.sine = pk_sharc.assemble(SINE.read_text())
         self.sine_linked = None
         own = {n: CORE_BASE + off for n, (off, _g) in self.core.symbols.items()}
-        own.update({n: dispatch_base + off for n, (off, _g) in self.dispatch.symbols.items()})
+        own.update(
+            {n: dispatch_base + off for n, (off, _g) in self.dispatch.symbols.items()}
+        )
         ext_core = {**core_externs(), **own}
         self.core_linked = pk_sharc.link(self.core, CORE_BASE, ext_core)
         self.dispatch_linked = pk_sharc.link(self.dispatch, dispatch_base, ext_core)
@@ -216,7 +231,9 @@ class Rig:
             self.dm[nw(RECORDS) + k] = 0
         for k in range(SLOT_WORDS):
             self.dm[nw(SLOTS) + k] = 0
-        self.set_slot(0, self.core_syms["_dv_run"])  # what the machines service installs
+        self.set_slot(
+            0, self.core_syms["_dv_run"]
+        )  # what the machines service installs
         self.set_slot(1, self.core_syms["_dv_unpack_run"])
         self.dm[nw(TABLE)] = TYPE
         self.dm[nw(TABLE) + 1] = self.render_pc
