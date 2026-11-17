@@ -109,7 +109,7 @@ test('a mirrored runtime owns its mirror inside the temporary run directory', as
   const runDir = runtime.session.runDir;
   try {
     expect(fs.existsSync(runDir)).toBe(true);
-    expect(fake.coupledEnv).toHaveBeenCalledWith('/stock.syx');
+    expect(fake.coupledEnv).toHaveBeenCalledWith('/stock.syx', 'dn2');
     expect(fake.spawn.mock.calls[0]?.[0].env).toEqual({ SHARC_FAST_REGIONS: 'fixture-regions' });
     expect(fake.client.firmwareLoad).toHaveBeenCalledWith(expect.objectContaining({ auto_no: false }));
     expect(fake.spawn.mock.calls[0]?.[0].args.slice(-2)).toEqual(['--mirror-dir', `${runDir}/mirror`]);

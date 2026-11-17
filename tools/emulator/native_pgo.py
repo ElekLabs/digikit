@@ -11,11 +11,17 @@ State lives under ``out/native/pgo/dn2/<host-triple>/`` (ignored by git):
     profiles/<sha>.profdata  merged profile, content addressed
     bench-<time>/          copied binaries, logs, bench.tsv, summary.json
 
-Cargo target dirs come from tools/emulator/native_target.py, keyed by the generated
-core (``out/native/target/<gen-key>``): the benchmark control is the plain
-release build in the key dir itself (shared with the desktop app and the
-fast-tier examples, so the generated core is not recompiled), the profile
-builds differ by RUSTFLAGS and use ``pgo-instrument/`` and ``pgo-use/`` below it.
+The hosts (app, ``coupled-run``, ``digi-emud``) hold no generated core: the DSP hot loop (the generated blocks and
+interpreter of a device) runs in the core library that the host loads from the store, and the libraries are plain builds.
+So a host profile covers the ColdFire emulation, the SHARC engine glue and the fast tier, not the generated core, and
+every A/B number is plain-vs-plain for the DSP loop until the profile-guided libraries (PR 5b of
+docs/plans/emulator-core-split.md) exist. The generated core stays an input of the profile key (a stale core marks the
+profile stale), but not of any build.
+
+Cargo target dirs come from tools/emulator/native_target.py. Host builds use the no-core dir
+(``out/native/target/nogen``): the benchmark control is the plain release build in the dir itself (shared with the
+other hosts), the profile builds differ by RUSTFLAGS and use ``pgo-instrument/`` and ``pgo-use/`` (``pgo-use-<device>/``
+for the DT2 and ``both`` profiles) below it. No host build sets ``SHARC_GEN_DIR``.
 
 Commands: ``train``, ``clean [--dry-run] [--days N]``, ``check``, ``plan``, ``bench --pairs N``,
 ``bench-bins A B --pairs N`` (two prebuilt workload test binaries).
@@ -721,11 +727,7 @@ def plan_for(
             "--target",
             TRIPLE,
             "--target-dir",
-            str(
-                native_target().target_dir(
-                    generated_dir(environ), pgo_variant(environ, device)
-                )
-            ),
+            str(native_target().target_dir("", pgo_variant(environ, device))),
         ],
         env={"RUSTFLAGS": profile_use_flags(profdata), "RUSTC": toolchain_rustc()},
     )
@@ -964,9 +966,7 @@ def pgo_binary(
     environ: dict[str, str] | os._Environ[str] | None = None, device: str = "dn2"
 ) -> pathlib.Path:
     """The app binary the launcher's PGO build produces for DEVICE's profile."""
-    target = native_target().target_dir(
-        generated_dir(environ), pgo_variant(environ, device)
-    )
+    target = native_target().target_dir("", pgo_variant(environ, device))
     return pathlib.Path(target) / TRIPLE / "release" / "digiemu-desktop"
 
 
@@ -1005,13 +1005,14 @@ def toolchain_rustc() -> str:
     return rustc
 
 
-def base_env(gen: pathlib.Path) -> dict[str, str]:
+def base_env() -> dict[str, str]:
+    """The environment of a host build: the process's without RUSTFLAGS, no `SHARC_GEN_DIR` (a host links no generated core)."""
     env = {
         k: v
         for k, v in os.environ.items()
         if k not in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS")
     }
-    env["SHARC_GEN_DIR"] = str(gen)
+    env.pop("SHARC_GEN_DIR", None)
     env["RUSTC"] = toolchain_rustc()
     return env
 
@@ -1040,7 +1041,7 @@ def build_tests(
         raise SystemExit(
             "apps/desktop/ui/dist is missing: run `mise run workbench:inputs`"
         )
-    env = base_env(gen)
+    env = base_env()
     if rustflags:
         env["RUSTFLAGS"] = rustflags
     command = [
@@ -1221,7 +1222,7 @@ def cmd_train(args: argparse.Namespace) -> None:
     key = key_of(components)
     t = phase("key", t)
 
-    target = native_target().target_dir(gen, "pgo-instrument")
+    target = native_target().target_dir("", "pgo-instrument")
     raw = fresh_raw_dir(target)
     binary = build_tests(
         target,
@@ -1412,7 +1413,7 @@ def build_coupled(
 ) -> pathlib.Path:
     """Build packages/emulator/coupled's ``coupled-run`` (RUSTFLAGS builds use --target). GEN only names the target dir
     and the key: the binary holds no generated core."""
-    env = base_env(gen)
+    env = base_env()
     if rustflags:
         env["RUSTFLAGS"] = rustflags
     command = [
@@ -1562,7 +1563,7 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
     hasher.save()
     key = key_of(components)
     variant = args.variant or "pgo-dt2-instrument"
-    target = native_target().target_dir(gen, variant)
+    target = native_target().target_dir("", variant)
     raw = fresh_raw_dir(target)
     binary = build_coupled(
         target,
@@ -1838,7 +1839,7 @@ def cmd_train_both(args: argparse.Namespace) -> None:
     hasher.save()
     key = key_of(components)
     variant = args.variant or "pgo-both-instrument"
-    target = native_target().target_dir(gen, variant)
+    target = native_target().target_dir("", variant)
     raw = fresh_raw_dir(target)
     binary = build_coupled(
         target,
@@ -1952,7 +1953,7 @@ def cmd_coupled_build(args: argparse.Namespace) -> None:
         profile = str(pathlib.Path(profile).resolve())
         flags = profile_use_flags(profile)
     target = native_target().target_dir(
-        gen, args.variant or ("pgo-cr-" + args.device if flags else "")
+        "", args.variant or ("pgo-cr-" + args.device if flags else "")
     )
     binary = build_coupled(target, flags, gen, target / "build.log")
     print(binary)
@@ -1978,12 +1979,12 @@ def cmd_bench(args: argparse.Namespace) -> None:
     out.mkdir(parents=True)
     t = time.monotonic()
     control_src = build_tests(
-        native_target().target_dir(gen), None, gen, out / "control-build.log"
+        native_target().target_dir(""), None, gen, out / "control-build.log"
     )
     print(f"control build {time.monotonic() - t:.1f} s", flush=True)
     t = time.monotonic()
     use_src = build_tests(
-        native_target().target_dir(gen, "pgo-use"),
+        native_target().target_dir("", "pgo-use"),
         profile_use_flags(detail),
         gen,
         out / "use-build.log",
@@ -2186,7 +2187,7 @@ def cmd_build(args: argparse.Namespace) -> None:
     target = (
         pathlib.Path(args.target_dir).resolve()
         if args.target_dir
-        else native_target().target_dir(gen)
+        else native_target().target_dir("")
     )
     binary = build_tests(target, None, gen, target / "build.log")
     print(binary)

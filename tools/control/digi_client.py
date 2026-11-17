@@ -214,10 +214,13 @@ class Emu:
         ready = pathlib.Path(ready_dir).resolve()
         # The table only: no fallback roots, and neither the environment nor DIGI_EMU_FAST is read.
         env = digi_env.resolve_tiers("tests", syx, None, {}, fallback=False).add
-        # The daemon holds no DSP core: the library of the firmware's device comes from the core store (a variable
-        # already in the environment wins).
         device = digi_env.device_for_syx(syx) or "dn2"
-        env = {**env, **core_store.library_env([device])}
+        # The core of a device reads the lists with its suffix: names the caller gives without it are renamed for DEVICE.
+        given = digi_env.slot_env(device, kwargs.pop("env", None) or {})
+        # The daemon holds no DSP core: the library of the firmware's device comes from the core store, unless the
+        # caller's env or the process environment names one (the explicit variable wins; nothing is built then).
+        libraries = core_store.library_env([device], environ={**os.environ, **given})
+        env = {**env, **libraries, **given}
         return cls.spawn(
             str(syx),
             "--auto-coupled",
@@ -231,7 +234,7 @@ class Emu:
             str(ready / "digi-audio-m5.snap"),
             "--no-audio",
             *args,
-            env={**env, **kwargs.pop("env", {})},
+            env=env,
             **kwargs,
         )
 

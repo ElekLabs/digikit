@@ -352,3 +352,34 @@ def library_env(
             ) from exc
         env[var] = str(library)
     return env
+
+
+def restored_library(device: str, root: Path | None = None) -> Path | None:
+    """The stored library of DEVICE for the current inputs, or None: restore only, nothing is built."""
+    try:
+        key = emud_key.key_of(current(device)[1])
+    except (CoreStoreError, OSError, SystemExit):
+        return None
+    entry = (store_root() if root is None else root) / device / key
+    return entry / lib_name() if whole(entry) else None
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`core_store key --device dn2`: the store key of the library of a device (what `verify_build cores` would store it
+    under), for the Nx inputs of the coupled-run targets (tools/nx/coupled-inputs.mjs). Prints `none` when the key cannot be
+    computed (no generated core)."""
+    import argparse
+
+    ap = argparse.ArgumentParser(description=(main.__doc__ or "").splitlines()[0])
+    ap.add_argument("what", choices=["key"])
+    ap.add_argument("--device", required=True)
+    args = ap.parse_args(argv)
+    try:
+        print(core_key(args.device))
+    except (CoreStoreError, OSError, SystemExit):
+        print("none")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

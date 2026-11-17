@@ -128,13 +128,13 @@ export function validateRuntimeInputs(inputs: ReadyInputs): void {
 }
 
 /** Match the coupled launcher's verified fast-tier defaults for the actual stock bytes (rules: emulator-config.ts).
- * DEVICE names the list suffix of the core (DT2 `_2`; none by default).
+ * DEVICE is the device of the firmware: its core reads the lists with its suffix (DT2 `_2`, DN2 none).
  * Explicit values (including empty strings) win; DIGI_EMU_FAST=0 suppresses defaults.
  * The daemon inherits process.env, so disabled defaults do not erase explicit settings. */
 export function coupledEnv(
   syx: string,
+  device: Device,
   environ: NodeJS.ProcessEnv = process.env,
-  device?: Device,
 ): Record<string, string> {
   if (environ.DIGI_EMU_FAST === '0') return {};
   const digest = createHash('sha256').update(fs.readFileSync(syx)).digest('hex');

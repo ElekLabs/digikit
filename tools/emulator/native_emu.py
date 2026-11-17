@@ -643,28 +643,48 @@ def syx_from_args(args: list[str]) -> pathlib.Path:
 
 
 def core_library_env(args: list[str]) -> dict[str, str]:
-    """`DIGI_SHARC_CORE_LIB_<DEV>` for the engines of a coupled launch, from the core library store (tools/devtools/core_store.py:
-    a miss builds the library): the device of the firmware and, with `--also-coupled`, the other one. A profile-guided build
-    uses the same plain libraries (the header leaves the PGO flags out). Nothing for a launch without coupled audio. The
-    launch stops when a library cannot be built, with the build command in the message."""
+    """`DIGI_SHARC_CORE_LIB_<DEV>` of both devices for a coupled launch, from the core library store
+    (tools/devtools/core_store.py: a hit takes about 0.2 s, a miss builds the library once), whichever device the firmware
+    is and with or without `--also-coupled`, so choosing a firmware of the other device in the app boots it coupled. A
+    profile-guided build uses the same plain libraries (the header leaves the PGO flags out). Nothing for a launch without
+    coupled audio. When one device's library cannot be built the launch goes on with the other and one line names the
+    missing one and the build command; the launch stops when no library can be provided. An explicit
+    `DIGI_SHARC_CORE_LIB_<DEV>` wins."""
     if not ("--coupled" in args or "--auto-coupled" in args):
         return {}
     from tools.devtools import core_store
 
-    cores: dict[str, pathlib.Path | None] = {}
-    device = digi_env.device_for_syx(syx_from_args(args))
-    if device is not None:
-        cores[device] = generated_core(args, device)
+    own = digi_env.device_for_syx(syx_from_args(args))
+    second: dict[str, str] = {}
     if "--also-coupled" in args:
         at = args.index("--also-coupled")
         if at + 4 < len(args) and (
             other := digi_env.device_for_syx(pathlib.Path(args[at + 4]))
         ):
-            cores[other] = other_core(other, args[at + 1])
-    try:
-        return core_store.library_env(cores)
-    except core_store.CoreStoreError as exc:
-        raise SystemExit(f"core library: {exc}") from exc
+            second[other] = args[at + 1]
+    env: dict[str, str] = {}
+    missing: dict[str, str] = {}
+    for device in ("dn2", "dt2"):
+        if device == own:
+            gen = generated_core(args, device)
+        else:
+            image = (
+                second.get(device) or digi_env.ready_inputs(device=device)["DSP image"]
+            )
+            gen = other_core(device, image)
+        try:
+            env.update(core_store.library_env({device: gen}))
+        except core_store.CoreStoreError as exc:
+            missing[device] = str(exc)
+    if len(missing) == 2:
+        raise SystemExit(f"core library: {'; '.join(missing.values())}")
+    for device, reason in missing.items():
+        print(
+            f"{device.upper()} core library unavailable ({reason}): a {device.upper()} firmware will not run its DSP; "
+            f"build with: uv run python -m tools.devtools.verify_build cores --device {device}",
+            file=sys.stderr,
+        )
+    return env
 
 
 def main(args: list[str] | None = None) -> None:

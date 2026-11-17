@@ -377,8 +377,9 @@ def bench(
     slices: int,
     keep: str,
 ) -> int:
-    """Alternating runs of each binary (LABEL=PATH; the order rotates on each pair). A DT2 core that is the second core of one binary
-    and the first of another makes the comparison of the role. START is the device the daemon starts on (default: the other one);
+    """Alternating runs of each binary (LABEL=PATH; the order rotates on each pair). Every binary loads the same core libraries from
+    the store (`core_store.library_env`), so the runs compare the binaries; to compare cores, run it twice with
+    `DIGI_SHARC_CORE_LIB_<DEV>` set to each library. START is the device the daemon starts on (default: the other one);
     pass the same for both. Prints each run and the medians per binary."""
     ready = {d: digi_env.ready_inputs(device=d) for d in ("dn2", "dt2")}
     start = start or ("dt2" if device == "dn2" else "dn2")
@@ -442,7 +443,7 @@ def main() -> int:
         "--menu",
         action="append",
         metavar="MODULE",
-        help="on the other device (the second core when starting on DN2): upload MODULE (repeatable), then the on-device path SETTINGS > DIGIKIT > MODULES > tick > APPLY & RESTART, with screenshots (implies --runtime; a machine also plays a note, an effect: its FX page)",
+        help="on the other device (the second engine of the process): upload MODULE (repeatable), then the on-device path SETTINGS > DIGIKIT > MODULES > tick > APPLY & RESTART, with screenshots (implies --runtime; a machine also plays a note, an effect: its FX page)",
     )
     ap.add_argument(
         "--shots",
@@ -459,7 +460,7 @@ def main() -> int:
         "--binary",
         action="append",
         metavar="LABEL=PATH",
-        help="--bench: a digi-emud to measure (repeatable; default: $DIGI_EMUD). A build whose first core is the device against one whose second core is it shows what the role costs",
+        help="--bench: a digi-emud to measure (repeatable; default: $DIGI_EMUD). Both builds load the core libraries of the store (or the DIGI_SHARC_CORE_LIB_<DEV> of the environment)",
     )
     ap.add_argument(
         "--bench-start",

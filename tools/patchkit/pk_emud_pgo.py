@@ -6,7 +6,9 @@
     uv run python -m tools.patchkit.pk_emud_pgo bench [--device dt2] [--pairs 3] [--seconds 12]
 
 The device's PGO profile (`tools/emulator/native_pgo.py train [--device dt2]`, out/native/pgo/<device>) is applied to the
-windowless daemon the proofs drive. It builds into its own target dir (`<gen key>/pgo-emud-<device>` under
+windowless daemon the proofs drive. The daemon holds no generated core (it loads the plain core libraries from the store), so
+the profile does not cover the DSP hot loop: PGO and plain daemons run the same plain core, and `bench` shows the gain of the
+host code only until the profile-guided libraries (PR 5b). It builds into its own target dir (`nogen/pgo-emud-<device>` under
 tools/emulator/native_target.py, never the launcher's `pgo-use`) and holds benchlock shared like every build. A profile that is
 a little stale is fine (LLVM drops the data of functions whose code changed; see native_pgo.is_emulation_package).
 The harness (tools/patchkit/pk_harness.py `daemon_binary`) uses this binary when it exists; DIGI_PK_PGO=0 turns that off.
@@ -50,7 +52,8 @@ def generated_core(device: str) -> Path:
 
 
 def target_dir(device: str) -> Path:
-    return Path(native_target.target_dir(generated_core(device), f"pgo-emud-{device}"))
+    # a host links no generated core: the no-core target dir, one variant per device
+    return Path(native_target.target_dir("", f"pgo-emud-{device}"))
 
 
 def binary_path(device: str) -> Path:
@@ -65,7 +68,7 @@ def build(device: str) -> Path:
             f"no PGO profile for {device}: `uv run python -m tools.emulator.native_pgo train --device {device}`"
         )
     digi_env.check_generated(gen)
-    env = native_pgo.base_env(gen)
+    env = native_pgo.base_env()
     env["RUSTFLAGS"] = native_pgo.profile_use_flags(profile)
     env["RUSTDOC"] = str(Path(env["RUSTC"]).with_name("rustdoc"))
     command = [

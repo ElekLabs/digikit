@@ -184,7 +184,10 @@ def test_desktop_defaults_to_both_devices_with_per_core_fast_settings(
 
 
 @pytest.mark.parametrize("first", ["dn2", "dt2"])
-def test_a_coupled_launch_gets_the_library_of_each_engine(monkeypatch, tmp_path, first):
+@pytest.mark.parametrize("also", [True, False])
+def test_a_coupled_launch_gets_the_libraries_of_both_devices(
+    monkeypatch, tmp_path, first, also
+):
     from tools.devtools import core_store
 
     scope, _calls, inputs, cores = _dual_launch(monkeypatch, tmp_path, first)
@@ -194,7 +197,8 @@ def test_a_coupled_launch_gets_the_library_of_each_engine(monkeypatch, tmp_path,
         core_store,
         "library_env",
         lambda devices, *a, **k: (
-            asked.update(devices) or {"DIGI_SHARC_CORE_LIB_X": "y"}
+            asked.update(devices)
+            or {f"DIGI_SHARC_CORE_LIB_{next(iter(devices)).upper()}": "y"}
         ),
     )
     args = [
@@ -202,16 +206,50 @@ def test_a_coupled_launch_gets_the_library_of_each_engine(monkeypatch, tmp_path,
         "--auto-coupled",
         "--dsp-image",
         str(inputs[first]["DSP image"]),
-        "--also-coupled",
-        *(
-            str(inputs[other][label])
-            for label in ("DSP image", "DSP state", "CF snapshot", "firmware")
-        ),
     ]
-    assert scope["core_library_env"](args) == {"DIGI_SHARC_CORE_LIB_X": "y"}
+    if also:
+        args += [
+            "--also-coupled",
+            *(
+                str(inputs[other][label])
+                for label in ("DSP image", "DSP state", "CF snapshot", "firmware")
+            ),
+        ]
+    env = scope["core_library_env"](args)
+    assert sorted(env) == ["DIGI_SHARC_CORE_LIB_DN2", "DIGI_SHARC_CORE_LIB_DT2"]
     # the core of each device, from its own registered image
     assert asked == {first: cores[first], other: cores[other]}
     assert scope["core_library_env"](["--cf-only"]) == {}
+
+
+def test_a_missing_library_of_one_device_does_not_stop_the_launch(
+    monkeypatch, tmp_path, capsys
+):
+    from tools.devtools import core_store
+
+    scope, _calls, inputs, _cores = _dual_launch(monkeypatch, tmp_path, "dn2")
+
+    def library_env(devices, *a, **k):
+        (device,) = devices
+        if device == "dt2":
+            raise core_store.CoreStoreError("no gen")
+        return {"DIGI_SHARC_CORE_LIB_DN2": "y"}
+
+    monkeypatch.setattr(core_store, "library_env", library_env)
+    args = [str(inputs["dn2"]["firmware"]), "--auto-coupled"]
+    assert scope["core_library_env"](args) == {"DIGI_SHARC_CORE_LIB_DN2": "y"}
+    err = capsys.readouterr().err
+    assert (
+        "DT2 core library unavailable" in err
+        and "verify_build cores --device dt2" in err
+    )
+    monkeypatch.setattr(
+        core_store,
+        "library_env",
+        lambda *a, **k: (_ for _ in ()).throw(core_store.CoreStoreError("no gen")),
+    )
+    with pytest.raises(SystemExit):
+        scope["core_library_env"](args)
 
 
 # plus_drive/<device>/ is the +Drive input.

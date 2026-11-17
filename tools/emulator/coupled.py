@@ -202,8 +202,9 @@ def feature_variant(features: str | None = None) -> str:
 
 
 def pgo_dir(gen, device):
-    """The target dir of the PGO coupled-run: the same one `native_pgo coupled-build` uses."""
-    return native_target.target_dir(gen, "pgo-cr-" + device)
+    """The target dir of the PGO coupled-run: the same one `native_pgo coupled-build` uses (a host holds no generated core:
+    the no-core dir, GEN is unused)."""
+    return native_target.target_dir("", "pgo-cr-" + device)
 
 
 def pgo_profile(device, gen):
@@ -724,15 +725,16 @@ def run_parallel(binary: pathlib.Path, args) -> int:
 
 
 def binary_identity(binary: pathlib.Path, device: str) -> dict[str, str]:
-    """Names a built binary by its bytes and the core library it loads (its store key). The path is not part of it: each
-    lane has its own."""
-    try:
-        libraries = core_store.library_env([device], environ={})
-    except core_store.CoreStoreError as exc:
-        raise SystemExit(f"coupled: {exc}") from exc
-    core = pathlib.Path(
-        libraries[core_store.CORE_LIB_VAR.format(device.upper())]
-    ).parent.name
+    """Names a built binary by its bytes and the core library it loads. The path is not part of it: each lane has its own.
+    The core is an explicit `DIGI_SHARC_CORE_LIB_<DEV>` (its content hash), else the stored library of the current inputs
+    (its key), else `none`: this never builds a library (the run step does). The Nx hash of the gate targets sees a core
+    change through tools/nx/coupled-inputs.mjs, not through this file."""
+    var = core_store.CORE_LIB_VAR.format(device.upper())
+    if os.environ.get(var):
+        core = "file:" + render_cache.file_digest(os.environ[var])[:16]
+    else:
+        library = core_store.restored_library(device)
+        core = library.parent.name if library else "none"
     return {"device": device, "sha256": render_cache.file_digest(binary), "core": core}
 
 

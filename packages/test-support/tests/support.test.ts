@@ -88,14 +88,14 @@ test('coupled launch defaults follow actual firmware bytes and preserve explicit
   const firmware = (bytes: Buffer) => read.mockReturnValueOnce(bytes).mockReturnValueOnce(table);
   try {
     firmware(dt2);
-    assert.deepEqual(coupledEnv('same-path.syx', {}), {
+    assert.deepEqual(coupledEnv('same-path.syx', 'dn2', {}), {
       SHARC_FAST_REGIONS: 'dt2-regions',
       SHARC_BLOCKTRANS: 'dt2-roots',
       SHARC_FAST_FALLBACK_REGIONS: 'dt2-fallback',
     });
     for (const explicit of ['', 'ordinary-roots']) {
       firmware(dt2);
-      assert.deepEqual(coupledEnv('dt2.syx', { SHARC_FAST_REGIONS: explicit }), {
+      assert.deepEqual(coupledEnv('dt2.syx', 'dn2', { SHARC_FAST_REGIONS: explicit }), {
         SHARC_FAST_REGIONS: explicit,
         SHARC_BLOCKTRANS: 'dt2-roots',
       });
@@ -103,7 +103,7 @@ test('coupled launch defaults follow actual firmware bytes and preserve explicit
     for (const fallback of ['', 'explicit-fallback']) {
       firmware(dt2);
       assert.deepEqual(
-        coupledEnv('dt2.syx', {
+        coupledEnv('dt2.syx', 'dn2', {
           SHARC_FAST_REGIONS: '',
           SHARC_FAST_FALLBACK_REGIONS: fallback,
         }),
@@ -115,29 +115,29 @@ test('coupled launch defaults follow actual firmware bytes and preserve explicit
       );
     }
     firmware(dt2);
-    assert.deepEqual(coupledEnv('dt2.syx', { SHARC_FAST_AUTO: '10,100' }), {
+    assert.deepEqual(coupledEnv('dt2.syx', 'dn2', { SHARC_FAST_AUTO: '10,100' }), {
       SHARC_FAST_REGIONS: 'dt2-regions',
       SHARC_BLOCKTRANS: 'dt2-roots',
     });
     firmware(dn2); // Replacing bytes at the same path must not reuse DT2's defaults.
-    assert.deepEqual(coupledEnv('same-path.syx', {}), {
+    assert.deepEqual(coupledEnv('same-path.syx', 'dn2', {}), {
       SHARC_FAST_REGIONS: 'dn2-regions',
       SHARC_BLOCKTRANS: 'dn2-roots',
     });
     firmware(dn2);
-    assert.deepEqual(coupledEnv('dn2.syx', { SHARC_FAST_REGIONS: '', SHARC_BLOCKTRANS: 'explicit' }), {
+    assert.deepEqual(coupledEnv('dn2.syx', 'dn2', { SHARC_FAST_REGIONS: '', SHARC_BLOCKTRANS: 'explicit' }), {
       SHARC_FAST_REGIONS: '',
       SHARC_BLOCKTRANS: 'explicit',
     });
     firmware(dt2); // The DT2 core reads the lists with the `_2` suffix.
-    assert.deepEqual(coupledEnv('dt2.syx', {}, 'dt2'), {
+    assert.deepEqual(coupledEnv('dt2.syx', 'dt2', {}), {
       SHARC_FAST_REGIONS_2: 'dt2-regions',
       SHARC_BLOCKTRANS_2: 'dt2-roots',
       SHARC_FAST_FALLBACK_REGIONS_2: 'dt2-fallback',
     });
     firmware(Buffer.from('unknown firmware'));
-    assert.deepEqual(coupledEnv('unknown.syx', {}), {});
-    assert.deepEqual(coupledEnv('not-read.syx', { DIGI_EMU_FAST: '0' }), {});
+    assert.deepEqual(coupledEnv('unknown.syx', 'dn2', {}), {});
+    assert.deepEqual(coupledEnv('not-read.syx', 'dn2', { DIGI_EMU_FAST: '0' }), {});
   } finally {
     read.mockRestore();
   }
