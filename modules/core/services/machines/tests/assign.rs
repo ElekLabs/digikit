@@ -99,6 +99,7 @@ fn a_stored_map_keeps_a_machine_on_its_number_and_a_boot_that_changes_nothing_sa
     let core = FakeCore::new();
     stored(&core, map);
     settle(&core, &selection(&[&[B, A]]));
+    core.boot_index.set(0);
     unsafe {
         assert_eq!((resolve(&core, B), resolve(&core, A)), (FIRST + 5, FIRST));
     }
