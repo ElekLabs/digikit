@@ -30,7 +30,15 @@
         "files": ["transfer-live.device.test.ts"],
         "tags": ["C:storage", "C:transport"],
         "modules": ["digikit/debug", "test/sine", "core/services/machines"],
-        "sources": ["tools/device/dktransfer.py"]
+        "sources": [
+          "tools/devtools/wb.mjs",
+          "tools/devtools/wb_transfer.mjs",
+          "packages/workbench-core/src/modules/dktransfer.ts",
+          "packages/workbench-core/src/modules/dkbind.ts",
+          "packages/workbench-core/src/node/node-host.ts",
+          "packages/workbench-core/src/node/bind-bundle.ts",
+          "packages/workbench-core/src/node/stock-image.ts"
+        ]
       },
       {
         "files": ["samples-live.device.test.ts"],

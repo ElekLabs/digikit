@@ -16,7 +16,7 @@ interface FolderResult {
   files: { path: string; size: number; hash: string }[];
 }
 
-/** CLI upload, persistence, folder mirroring and the selected-but-missing module boot. */
+/** `wb transfer` upload (with services), persistence, folder mirroring and the selected-but-missing module boot. */
 async function expectTransferLive({ session, dk }: PatchedSession): Promise<void> {
   const artifacts = liveArtifacts(session, 'transfer-live');
   const mirror = path.join(session.runDir, 'mirror');
@@ -33,9 +33,11 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect((await session.status()).epoch, 'CLI RESTART boots another epoch').toBeGreaterThan(epoch);
   const entries = await dk.list();
   record(artifacts, 'installed-store', entries);
-  expect(entries.map((entry) => entry.path).sort(), 'upload survives the soft reset').toEqual(
-    [debugPath, modulePath].sort(),
-  );
+  const modulePaths = (files: { path: string }[]) => files.map((f) => f.path).filter((p) => !p.endsWith('.dks')).sort();
+  expect(modulePaths(entries), 'upload survives the soft reset').toEqual([debugPath, modulePath].sort());
+  // the services the modules need went on the card with them, bound to the stock firmware
+  const services = entries.map((e) => e.path).filter((p) => p.startsWith('services/') && p.endsWith('.dks'));
+  expect(services, 'the needed services are in the store listing').not.toEqual([]);
   const entry = entries.find((e) => e.path === modulePath)!;
 
   // The store follows the guest's card writes after its quiet period (about two seconds).
@@ -45,7 +47,10 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect(folder.folder, 'card.folder reports the session-owned mirror').toBe(mirror);
   expect(folder.continuous, 'card.folder continuously mirrors the store').toBe(true);
   expect(
-    folder.files.map(({ path, hash }) => ({ path, hash })).sort((x, y) => x.path.localeCompare(y.path)),
+    folder.files
+      .filter((f) => !f.path.endsWith('.dks'))
+      .map(({ path, hash }) => ({ path, hash }))
+      .sort((x, y) => x.path.localeCompare(y.path)),
     'mirror metadata matches the card',
   ).toEqual([
     { path: debugPath, hash: entries.find((e) => e.path === debugPath)!.hash },
@@ -59,17 +64,11 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   ).toBe(true);
   const emptyStore = await dk.list();
   record(artifacts, 'deleted-store', emptyStore);
-  expect(
-    emptyStore.map((e) => e.path),
-    'CLI delete removes the module and leaves the debug module',
-  ).toEqual([debugPath]);
+  expect(modulePaths(emptyStore), 'CLI delete removes the module and leaves the debug module').toEqual([debugPath]);
   const synced = await session.client.call<FolderResult>('card.sync');
   record(artifacts, 'deleted-folder', synced);
   expect(fs.existsSync(mirrored), 'card.sync removes the deleted module from the folder').toBe(false);
-  expect(
-    synced.files.map((f) => f.path),
-    'card.sync reports the debug module only',
-  ).toEqual([debugPath]);
+  expect(modulePaths(synced.files), 'card.sync reports the debug module only').toEqual([debugPath]);
 
   // DELETE keeps the selection. Exactly one more protocol restart preserves the original
   // boot-loop history: another early restart could enter safe mode instead of trying the path.
@@ -87,7 +86,7 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   const modules = await dk.modules();
   record(artifacts, 'missing-module-loaded', modules);
   expect(
-    modules.map((module) => module.name),
+    modules.map((module) => module.name).filter((name) => name === 'test/sine' || name === DEBUG_MODULE),
     'boot skips the missing selected module',
   ).toEqual([DEBUG_MODULE]);
 }
