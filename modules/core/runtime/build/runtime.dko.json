@@ -5988,6 +5988,41 @@
    "type": "cf.32"
   },
   {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12module_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12module_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "symbol": ".sec..text._RNvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role8table_of",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 134,
+   "section": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12module_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 158,
+   "section": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12module_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 178,
+   "section": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12module_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5count",
+   "type": "cf.32"
+  },
+  {
    "addend": 12,
    "offset": 4,
    "section": ".text._RNvNtCs7eEPMLW8Jyr_4dkrt8settings5touch",
@@ -10902,36 +10937,36 @@
    "type": "cf.32"
   },
   {
-   "addend": 40,
+   "addend": 176,
    "offset": 80,
    "section": ".text._RNvNtCs7eEPMLW8Jyr_4dkrt4boot10report_dsp",
    "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
   },
   {
-   "addend": 176,
-   "offset": 98,
-   "section": ".text._RNvNtCs7eEPMLW8Jyr_4dkrt4boot10report_dsp",
-   "symbol": ".sec..data.DKRT_BOOT",
-   "type": "cf.32"
-  },
-  {
    "addend": 184,
-   "offset": 108,
+   "offset": 90,
    "section": ".text._RNvNtCs7eEPMLW8Jyr_4dkrt4boot10report_dsp",
    "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 130,
+   "offset": 112,
    "section": ".text._RNvNtCs7eEPMLW8Jyr_4dkrt4boot10report_dsp",
    "symbol": "_RNvMNtCsaGmOzcP47sg_8dkrt_abi5stateNtB2_10BootStates8dsp_done",
    "type": "cf.32"
   },
   {
+   "addend": 40,
+   "offset": 126,
+   "section": ".text._RNvNtCs7eEPMLW8Jyr_4dkrt4boot10report_dsp",
+   "symbol": ".sec..data.DKRT_BOOT",
+   "type": "cf.32"
+  },
+  {
    "addend": 32,
-   "offset": 146,
+   "offset": 148,
    "section": ".text._RNvNtCs7eEPMLW8Jyr_4dkrt4boot10report_dsp",
    "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
@@ -35524,7 +35559,7 @@
    "addend": 0,
    "offset": 0,
    "section": ".rodata.global.1X",
-   "symbol": ".sec..text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role8no_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1g_12RealRegistryEB6_",
+   "symbol": ".sec..text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12module_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
    "type": "cf.32"
   },
   {
@@ -42939,13 +42974,6 @@
    "align": 2,
    "hex": "42804e75",
    "kind": "text",
-   "name": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role8no_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1g_12RealRegistryEB6_",
-   "size": 4
-  },
-  {
-   "align": 2,
-   "hex": "42804e75",
-   "kind": "text",
    "name": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role8no_placeNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1g_12RealRegistryEB6_",
    "size": 4
   },
@@ -44505,6 +44533,13 @@
   },
   {
    "align": 2,
+   "hex": "4e56ffe82f0b2f0a246e000c486a009047f9000000004e932d40ffe8486a00944e932d40ffec486a00084e9322004fef000cb0aeffe8640e4280246effe0266effe44e5e4e7592aeffe8b2aeffec65e82f2effec2f2effe82f0a41eefff04eb900000000202efff0222efff44fef000c4a8067c42d40fff82d41fffc48780009486efff84eb900000000508f4a80670470fb60a648780006486efff84eb900000000508f4a8066e84878000a486efff84eb900000000508f4a806700ff7e70fb6000ff78",
+   "kind": "text",
+   "name": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12module_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "size": 196
+  },
+  {
+   "align": 2,
    "hex": "700123c00000000042b9000000004eb90000000023c00000000041f90000000023d0000000004e75",
    "kind": "text",
    "name": ".text._RNvNtCs7eEPMLW8Jyr_4dkrt8settings5touch",
@@ -45289,10 +45324,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffe44aae000c66407004222e00082d41ffe4222e000c2d41ffe842aeffec42aefff042aefff4486effe43f004267487800064eb9000000004fef000c7007b0ae000864084e5e4e75700160be41f900000000202e000c222e000821801c00223c000000002d41fff8203c000000002d40fffc2f2e000c2f2e0008486efff84eb9000000004fef000c4aae000c66b652b90000000060ae",
+   "hex": "4e56ffe44aae000c66407004222e00082d41ffe4222e000c2d41ffe842aeffec42aefff042aefff4486effe43f004267487800064eb9000000004fef000c7007b0ae000864084e5e4e75700160be223c000000002d41fff8203c000000002d40fffc2f2e000c2f2e0008486efff84eb9000000004fef000c4a0067ca41f900000000202e000c222e000821801c004a8066b452b90000000060ac",
    "kind": "text",
    "name": ".text._RNvNtCs7eEPMLW8Jyr_4dkrt4boot10report_dsp",
-   "size": 152
+   "size": 154
   },
   {
    "align": 2,
@@ -50608,7 +50643,7 @@
    "size": 24
   }
  ],
- "source_sha256": "29221b9ad4e536fa11b09117638a05f06b7a4ff13f6c94ab5c78654e26f1e47e",
+ "source_sha256": "5f10c89a9827eec268c44fce6e21f5d68651d30e171f39f7615062ffdfa18337",
  "symbols": [
   {
    "global": false,
@@ -52712,6 +52747,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12module_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "section": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12module_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12service_undoNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
    "section": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role12service_undoNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
    "value": 0
@@ -52738,12 +52779,6 @@
    "global": false,
    "name": ".sec..text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role7no_undoNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1f_12RealRegistryEB6_",
    "section": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role7no_undoNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1f_12RealRegistryEB6_",
-   "value": 0
-  },
-  {
-   "global": false,
-   "name": ".sec..text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role8no_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1g_12RealRegistryEB6_",
-   "section": ".text._RINvNtNtCs7eEPMLW8Jyr_4dkrt6loader4role8no_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1g_12RealRegistryEB6_",
    "value": 0
   },
   {
@@ -58503,8 +58538,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_ASSIGN DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_REG DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_load dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_pool_done dkrt_pool_lost dkrt_project_changed dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
-  "instructions_redecoded": "63757",
-  "isa_check": "6f0b07b0f10de58e2f6c64f5709e3d5078ded4e1c11e9a236a8d68278ed37e9d",
+  "instructions_redecoded": "63816",
+  "isa_check": "3a24162b1e5ad3a1588fcc9231974c3547e63558d898a6b8f81e7fd57a794ee2",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
