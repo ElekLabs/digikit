@@ -736,7 +736,7 @@ Goal: one Loader owns the module lifecycle, so R12-3 to R12-6 add service steps 
 
 - `Images` trait: stage, alloc and free, `enter_init` and `enter_fini`. It has a fake.
 - `Registry` trait (R12-4). `Registry::add` gets the service row from the init declaration (`dk_service_declare_row`) at commit. `abi_ok` reads the 64-byte head.
-- `Installer`: a concrete struct. Its fake is the `FakePlatform` call log. It becomes a trait only when R12-8 adds a second backend.
+- `Installer`: a trait with two backends (R12-8): the ColdFire backend, and the DSP backend that sends the slot writes of a provider's DSP part. Its fake is the `FakePlatform` call log.
 - Exports table: publish, withdraw, resolve.
 
 **Role steps.** One table `RoleSteps { check, activate, undo }`, chosen from the role word. Modules have empty steps.
@@ -774,7 +774,7 @@ Estimate: about 2 agent days.
 
 **Patchkit and limits.** The patchkit `bind` command is ported onto the R12-2 `dkm.rs` (CLI; the wasm `pk_bind` comes in R12-7). Bound files are never committed. Limits come from `sdk.toml`: 24 BIND items per provider and 48 installed sites. `Declare::MAX` is raised for machines (15 hooks).
 
-**Scope limits.** A provider with a DSP section is refused until R12-8. Import resolution for role 1: `IMPORTS`, then `SVC_IMPORTS`, then a loaded provider's EXPORTS.
+**Scope limits.** A provider with a DSP section needs a coupled session (the zero-DSP test peer never acknowledges a DSP transfer; R12-8). Import resolution for role 1: `IMPORTS`, then `SVC_IMPORTS`, then a loaded provider's EXPORTS.
 
 **Device proof.** One file in `core/runtime-tests`, on both devices: order provider, install, consumer; the site jumps to the trampoline; `dk_svctest_ping()` returns 42; safe boot gives stock bytes; E_HOOK_STOCK; E_PLAN_OWNER (moves from the host row to the device proof); `DIGI_FLUSH_CHECK=1`. Per-leaf `.dks` device inputs: `tools/nx/device-test-keys.mjs` needs a role set from `modules.mjs`.
 

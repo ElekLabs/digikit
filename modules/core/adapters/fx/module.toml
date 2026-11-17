@@ -57,7 +57,6 @@ space = "dsp"
 [[slot]]
 name = "fx_send"
 space = "dsp"
-devices = ["dt2", "dn2"]
 
 [[op]]
 op = "hook"

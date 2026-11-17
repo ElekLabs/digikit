@@ -1894,7 +1894,7 @@ fn a_patch_time_effect_row_of_any_module_but_core_dynfx_is_refused() {
         None,
     )]);
     expect_err(
-        run(&lib, &["core/fx", "t/fxrow"]),
+        run(&lib, &["core/dsp-link", "core/fx", "t/fxrow"]),
         "core/fx: registry fx takes no patch-time entry (an effect is a run-time module (builder calls in init, packed as a .dkm); a row is filled through core/dsp-link by core/dynfx); t/fxrow adds `gain`",
     );
 }
