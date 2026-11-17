@@ -278,13 +278,15 @@ export const HERMETIC = {
 
 // The shared fixtures (`tests/fixtures/modules`) whose `init` the contract suite of a service crate mirrors with a call list (`tests/contract.rs`): a change of a
 // fixture selects the crate's tests, so the call list is read against it.
+const fixture = (name) => [
+  `{workspaceRoot}/tests/fixtures/modules/${name}/module.toml`,
+  `{workspaceRoot}/tests/fixtures/modules/${name}/src/**/*`,
+  `{workspaceRoot}/tests/fixtures/modules/${name}/build/gen/module_ids.h`,
+];
 const FIXTURE_SOURCE = {
-  'dkrt-svc-lfo': ['{workspaceRoot}/tests/fixtures/modules/lfo-shape/src/**/*'],
-  'dkrt-svc-fx': [
-    '{workspaceRoot}/tests/fixtures/modules/dyn-fx-gain/src/**/*',
-    '{workspaceRoot}/tests/fixtures/modules/dyn-fx-gain-b/src/**/*',
-  ],
-  'dkrt-svc-machines': ['{workspaceRoot}/tests/fixtures/modules/sine/src/**/*'],
+  'dkrt-svc-lfo': fixture('lfo-shape'),
+  'dkrt-svc-fx': [...fixture('dyn-fx-gain'), ...fixture('dyn-fx-gain-b')],
+  'dkrt-svc-machines': fixture('sine'),
 };
 
 // Files outside the crate embedded by patchkit's source, unit tests and build.rs.

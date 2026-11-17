@@ -1,6 +1,6 @@
 //! The service over a `FakeCore` and a `FakeFw`: the record checks, `apply` and `remove` of parameter rows and click actions, the native page
-//! record and the capacity counts. A machine or a page row is written at absolute addresses of the firmware's tables (`wr`), which a host cannot
-//! reach: those parts run in the device tests (`core/dynreg`, `core/input`).
+//! record and the capacity counts. The machine and page rows are written through `FwMem` (`wr`), so a host test reaches them: `tests/contract.rs` loads and
+//! unloads whole modules and compares the rows (the contract suite); the tests here cover the single handlers.
 use dkneeds::keys::name_hash;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::FwMem;

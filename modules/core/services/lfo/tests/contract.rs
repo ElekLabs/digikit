@@ -27,6 +27,10 @@ fn a(init: &mut Init) {
 fn b(init: &mut Init) {
     lfo_shape(init, SHAPE_B, 500);
 }
+/// The shape id of `a` with other samples.
+fn a2(init: &mut Init) {
+    lfo_shape(init, SHAPE_A, 3000);
+}
 /// An id of 0 is no shape: the service refuses it at the check.
 fn bad(init: &mut Init) {
     lfo_shape(init, 0, 0);
@@ -66,7 +70,12 @@ fn fixture(device: u32) -> Fixture {
         state,
         a: module(0, a),
         b: module(1, b),
+        a2: module(0, a2),
+        enable: &[],
+        kept: |_| false,
         bad: module(2, bad),
+        // none: `check` refuses a table that is too full or an id kept already, and `apply_record` has no other limit
+        bad_late: None,
     }
 }
 

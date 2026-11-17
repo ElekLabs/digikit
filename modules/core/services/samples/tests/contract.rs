@@ -32,11 +32,18 @@ fn module(sel: u32, local: u32, init: fn(&mut Init)) -> Module {
     }
 }
 
-/// The service's own view: which module records hold a track table.
-fn state(_core: &FakeCore) -> Vec<u32> {
-    (0..4)
-        .map(|rec| unsafe { tracks::has(rec) } as u32)
-        .collect()
+/// The service's own view: which module records hold a track table, and the handle each local id of a record has.
+fn state(core: &FakeCore) -> Vec<u32> {
+    let mut v = Vec::new();
+    for rec in 0..4 {
+        v.push(unsafe { tracks::has(rec) } as u32);
+        core.source.set(rec as u8 + 1);
+        for local in 1..=3 {
+            v.push(unsafe { tracks::tracks(core, local) } as u32);
+        }
+    }
+    core.source.set(0);
+    v
 }
 
 fn fixture(device: u32) -> Fixture {
@@ -48,7 +55,13 @@ fn fixture(device: u32) -> Fixture {
         state,
         a: module(0, 1, nothing),
         b: module(1, 2, nothing),
+        // the keys of `a` and another local id
+        a2: module(0, 3, nothing),
+        enable: &[],
+        kept: |_| false,
         bad: module(2, 1, stray_record),
+        // none: the service has no `apply`; its only refusals are `dsp_admit` and the checks of the section, before any row is written
+        bad_late: None,
     }
 }
 

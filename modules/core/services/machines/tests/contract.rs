@@ -1,7 +1,8 @@
 //! The service contract suite (`dkrt_test_support::contract`) for the machines service on both profiles. The call lists below stand for the shared fixture
 //! `tests/fixtures/modules/sine` (`src/module.c`: one machine with a page of one parameter) and a second machine with another key: each makes the builder calls through
 //! the service's `build::*`. The image tables are those of the device profiles (`Profile` of `tests/build.rs`) as `core/dynreg` writes them, over the fake core's memory.
-use dkrt_abi::dsp::{I_AREA_BYTES, I_VFIRST, I_VFREE};
+use dkneeds::keys::name_hash;
+use dkrt_abi::dsp::{FREE_TYPE, I_AREA_BYTES, I_VFIRST, I_VFREE, ROW_WORDS, WIN_VOICES};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::profiles::{DN2, DT2};
 use dkrt_sdk::limits;
@@ -9,7 +10,7 @@ use dkrt_sdk::records::KINDS_MACHINES;
 use dkrt_svc_machines::build;
 use dkrt_svc_machines::records::{owned_ids, rstate, Machines};
 use dkrt_svc_params::dynreg::w;
-use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module};
+use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Late, Module};
 use dkrt_test_support::FakeCore;
 
 /// The first run-time machine type (the same on both devices of the suite).
@@ -18,6 +19,8 @@ const DYN_TYPE_FIRST: u32 = DT2.dyn_type_first;
 /// The machine keys of the keys tables of the two modules (`hash24 << 8`).
 const KEY_A: u32 = 0x00a1_0100;
 const KEY_B: u32 = 0x00b2_0200;
+/// The key of the module that is refused while its records apply.
+const KEY_L1: u32 = 0x00c3_0300;
 
 fn c(s: &'static [u8]) -> *const u8 {
     assert_eq!(s.last(), Some(&0));
@@ -44,6 +47,70 @@ fn sine_two(i: &mut Init) {
     }
 }
 
+/// The machine of `sine` for another module key set: the key of `sine`, the same rows (one page, one parameter), other names, default and range.
+fn sine_alt(i: &mut Init) {
+    unsafe {
+        let m = build::add_machine(i.core, i.ctx(), 0, c(b"Sine Alt\0"), c(b"ALT\0"));
+        let p = build::machine_add_page(i.core, m, c(b"Sine Alt\0"), c(b"ALTP\0"));
+        let l = build::page_add_param(i.core, p, c(b"Depth\0"), c(b"DEPTH\0"), 33);
+        build::param_range(i.core, l, 5, 90);
+    }
+}
+
+/// A machine with a canvas page: its machine row, page and parameter rows are written, then the registration of the native page in the firmware fails (the call
+/// of the image answers an error), which `apply_record` reports after `apply` wrote the rows.
+fn native_page_fails(i: &mut Init) {
+    native_page(i);
+    i.core.fw_result.set((-5i32) as usize);
+}
+
+/// The same machine, whose native page registers.
+fn native_page_ok(i: &mut Init) {
+    native_page(i);
+}
+
+fn native_page(i: &mut Init) {
+    unsafe {
+        let m = build::add_machine(i.core, i.ctx(), 0, c(b"Late\0"), c(b"LAT\0"));
+        let knobs = build::machine_add_page(i.core, m, c(b"LATE\0"), c(b"L\0"));
+        let start = build::page_add_param(i.core, knobs, c(b"Start\0"), c(b"START\0"), 0);
+        let ctl = build::machine_add_page(i.core, m, c(b"LATE\0"), c(b"L\0"));
+        build::page_canvas(
+            i.core,
+            ctl,
+            (i.core.device == DN2.id) as u32,
+            0x4100,
+            0x4200,
+            0x88,
+        );
+        build::page_bind(i.core, ctl, start, 0);
+        // the Digitone II's native pages come in pairs (the second is the wave page); the Digitakt II has one page, without flags (record version 1)
+        if i.core.device == DN2.id {
+            let wave = build::machine_add_page(i.core, m, c(b"LATE WAVE\0"), c(b"L\0"));
+            build::page_canvas(i.core, wave, 2, 0x4300, 0x4400, 0x99);
+            build::page_bind(i.core, wave, start, 4);
+        }
+    }
+}
+
+/// The type word of each of the four voice rows of the image (`image` gives `dyndsp_info` first row 2): the word that frees a row.
+const ENABLE: [(u32, u32, u32); 4] = [
+    (WIN_VOICES, ROW_WORDS * 2, FREE_TYPE),
+    (WIN_VOICES, ROW_WORDS * 3, FREE_TYPE),
+    (WIN_VOICES, ROW_WORDS * 4, FREE_TYPE),
+    (WIN_VOICES, ROW_WORDS * 5, FREE_TYPE),
+];
+
+/// What `remove` leaves of a machine row on purpose: the position in the list (`O_POS`; the row is hidden by its empty name, so its position is no order).
+fn kept(addr: u32) -> bool {
+    const ROWS: u32 = 0x30_0000;
+    const SIZE: u32 = 0x100;
+    const O_POS: u32 = 0x44;
+    addr >= ROWS
+        && (addr - ROWS) / SIZE < limits::MACHINE_ROWS as u32
+        && (addr - ROWS) % SIZE == O_POS
+}
+
 fn keys_of(mk: &[u32]) -> KeysCopy {
     let mut k = KeysCopy::empty();
     k.machine_rows = 1;
@@ -58,6 +125,9 @@ fn keys_a() -> KeysCopy {
 }
 fn keys_b() -> KeysCopy {
     keys_of(&[KEY_B])
+}
+fn keys_late() -> KeysCopy {
+    keys_of(&[KEY_L1])
 }
 /// A keys table without the machine's row: the commit refuses the builder calls (`E_DECL_ID`).
 fn keys_none() -> KeysCopy {
@@ -118,7 +188,7 @@ fn image(core: &mut FakeCore) {
         t[w::PG_FREE] = 0xff;
     }
     // the builder profile (`Profile` of `tests/build.rs`)
-    t[w::P_CLONE] = 0;
+    t[w::P_CLONE] = 3;
     t[w::P_LEVEL] = 10;
     t[w::P_OWN] = dn2 as u32;
     t[w::P_TUNE] = if dn2 { 0 } else { 0xca };
@@ -138,12 +208,37 @@ fn image(core: &mut FakeCore) {
     };
     t[w::P_TPL..w::P_TPL + 6].copy_from_slice(&tpl);
     core.set_dynreg(t);
+    // the per-type tables of the firmware hold the free row's words for every type, and the clone's (type 3) are other: a machine's rows take the clone's words,
+    // and a release gives the free row's back
+    {
+        let mut m = core.mem.borrow_mut();
+        for t in 0..256u32 {
+            let clone = t == 3;
+            m.insert(0x40_0000 + 12 * t + 8, if clone { 0x99 } else { 0x77 }); // the names table: word 2 of each entry
+            m.insert(0x41_0000 + 4 * t, if clone { 0x55 } else { 0x11 }); // the permit table
+        }
+        for word in 0..64u32 {
+            // the per-type bytes: 1 for every type, 5 for type 3
+            let byte = |t: u32| if t == 3 { 5u32 } else { 1 };
+            m.insert(
+                0x42_0000 + 4 * word,
+                (0..4).fold(0, |v, i| v << 8 | byte(4 * word + i)),
+            );
+        }
+    }
     // `dyndsp_info`: the voice rows start at row 2 of the DSP's table and four are free
     let mut d = vec![0u32; 16];
     d[I_AREA_BYTES] = 0x10_0000;
     d[I_VFIRST] = 2;
     d[I_VFREE] = 4;
     core.dsp_table = d;
+    // `machines_info`: the adapter's native page register is bound (a call of it is a firmware call the fake answers)
+    let mut mi = vec![0u32; dkrt_svc_machines::info::WORDS];
+    mi[dkrt_svc_machines::info::w::MAGIC] = dkrt_svc_machines::info::MAGIC;
+    mi[dkrt_svc_machines::info::w::VERSION] = dkrt_svc_machines::info::VERSION;
+    mi[dkrt_svc_machines::info::w::N_REGISTER] = 0x6000_0010;
+    mi[dkrt_svc_machines::info::w::N_REGISTER_V2] = 0x6000_0020;
+    core.info_tables.push((name_hash("machines_info"), mi));
 }
 
 /// The service's own view: who owns the machine, parameter and page rows, and the type numbers each owner has.
@@ -161,13 +256,14 @@ fn state(core: &FakeCore) -> Vec<u32> {
     v
 }
 
-fn module(sel: u32, keys: fn() -> KeysCopy, init: fn(&mut Init)) -> Module {
+fn module(sel: u32, keys: fn() -> KeysCopy, init: fn(&mut Init), salt: u32) -> Module {
     Module {
         sel,
         keys,
         init,
         dsp: Dsp {
             voices: 1,
+            salt,
             ..Dsp::default()
         },
     }
@@ -180,9 +276,17 @@ fn fixture(device: u32) -> Fixture {
         kinds: &KINDS_MACHINES,
         image,
         state,
-        a: module(0, keys_a, sine),
-        b: module(1, keys_b, sine_two),
-        bad: module(2, keys_none, sine),
+        a: module(0, keys_a, sine, 1),
+        b: module(1, keys_b, sine_two, 3),
+        a2: module(0, keys_a, sine_alt, 2),
+        enable: &ENABLE,
+        kept,
+        bad: module(2, keys_none, sine, 1),
+        bad_late: Some(Late {
+            bad: module(3, keys_late, native_page_fails, 1),
+            same_but_ok: module(3, keys_late, native_page_ok, 1),
+            beside_b: true,
+        }),
     }
 }
 

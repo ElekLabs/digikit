@@ -71,7 +71,6 @@ mod w {
     pub const STOCK: usize = 10;
     pub const STOCK_N: usize = 11;
     pub const P_FIRST: usize = 12;
-    pub const PER: usize = 13;
     pub const ARRAY_OFF: usize = 14;
     pub const VALUES_N: usize = 15;
     pub const TPL_PERCENT: usize = 16;
@@ -612,8 +611,14 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
                 core.wr(row + 8 + 4 * c as u32, 0);
                 c += 1;
             }
+            // the defaults go to 0 before the row's table is published: the kit hooks must not keep the defaults of the effect that left
             let mut j = 0;
+            while j < WORDS {
+                s.def[k][j] = 0;
+                j += 1;
+            }
             publish_row(core, inf, k, 0);
+            j = 0;
             while j < WORDS {
                 dkrt_svc_params::reset_param_row(
                     core,
