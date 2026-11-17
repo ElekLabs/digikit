@@ -104,11 +104,7 @@ host tests: their checks stay device tests until the logic is split out.
 | `core/adapters/fx/tests/patched-dsp-startup.device.test.ts` | A:core/fx, C:boot, C:dsp |
 | `core/adapters/fxpages/tests/fx-kit-persist.device.test.ts` | A:core/fxpages, C:state |
 | `core/adapters/fxpages/tests/fx-pages.device.test.ts` | A:core/fxpages |
-| `core/adapters/fxpages/tests/fx-track-route-kit.device.test.ts` | A:core/fxpages, C:state |
-| `core/adapters/fxpages/tests/fx-track-route-limit.device.test.ts` | A:core/fxpages |
-| `core/adapters/fxpages/tests/fx-track-route-lock.device.test.ts` | A:core/fxpages |
-| `core/adapters/fxpages/tests/fx-track-route-send.device.test.ts` | A:core/fxpages |
-| `core/adapters/fxpages/tests/fx-track-route-stock.device.test.ts` | A:core/fxpages |
+| `core/adapters/fxpages/tests/fx-track-route.device.test.ts` | A:core/fxpages, C:state |
 | `core/adapters/input/tests/input-adapter.device.test.ts` | A:core/input |
 | `core/adapters/introblank/tests/introblank-rec.device.test.ts` | A:core/introblank, C:boot |
 | `core/adapters/introblank/tests/introblank.device.test.ts` | A:core/introblank, C:boot |
