@@ -1,7 +1,5 @@
-// The Transfer logic in TypeScript (the port of tools/device/dktransfer.py, which stays as the command line for scripts and the
-// scenarios): the merged list of the built modules in a folder and what the device holds, install (upload, skip the same file hash,
-// VERIFY), delete (DELETE, confirmed by LIST) and restart (RESTART, wait for the boot, report what loaded). The events have the shapes
-// the Python tool prints with --json. Written without TS-only runtime syntax so node can import it for the tests.
+// The Transfer logic in TypeScript (the one install engine: the pane, the site and `wb transfer`, tools/devtools/wb_transfer.mjs): the merged list of the built modules in a folder and what the device holds, install (upload, skip the same file hash,
+// VERIFY), delete (DELETE, confirmed by LIST) and restart (RESTART, wait for the boot, report what loaded). The events are printed as JSON by `wb transfer`. Written without TS-only runtime syntax so node can import it for the tests.
 //
 // The app does not build: its modules are built `.dkm` files of a folder (the workbench app builds and packs them into out/modules/<device>/ when it reads the library: `lib_build`, apps/desktop/src-tauri/src/library.rs).
 import {
@@ -893,14 +891,14 @@ export async function restartDevice(
   emit: Emit = () => {},
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   loadedTimeoutMs = 20000,
-  opts: { signal?: AbortSignal; stillBooting?: () => boolean } = {},
+  opts: { signal?: AbortSignal; stillBooting?: () => boolean; bootTimeoutMs?: number } = {},
 ): Promise<{ loaded: string[]; missing: string[] }> {
   const info = await s.info();
   requireRuntime(info);
   emit({ event: 'restart' });
   await s.restart();
   emit({ event: 'wait', modules: [] });
-  await s.waitForBoot(sleep, undefined, opts);
+  await s.waitForBoot(sleep, opts.bootTimeoutMs, opts);
   // MODULES answers once the runtime is up; the modules of the selection load at the start of the boot
   const end = Date.now() + loadedTimeoutMs;
   let loaded: string[] = [];

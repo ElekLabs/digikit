@@ -3,6 +3,7 @@
 // checkout and sends the emulator RPC over the control socket (packages/control-client). A command with no headless meaning (a dialog, the build of
 // the library, the emulator session of the app) fails with `NodeHostUnsupported`. `wb` (tools/devtools/wb.mjs) uses it, so a command line and the
 // workbench run the same code over the same interfaces.
+import { buildBindBundle } from './bind-bundle.ts';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -45,6 +46,8 @@ export interface NodeHostOptions {
   dkbulkBin?: string;
   /** The control socket of a running emulator, for `rpc`. */
   socket?: string;
+  /** Where the library's `.dkm` files are (`<device>/**.dkm`); default `out/modules` of `root`. */
+  libraryDir?: string;
   /** Where `saveLog` and `firmware.save` write; without it they are unsupported (a command line has no save dialog). */
   outDir?: string;
 }
@@ -119,10 +122,10 @@ async function saveTo(outDir: string | undefined, command: string, bytes: Uint8A
 }
 
 /** The module library `out/modules/<device>/` (`lib_scan`, `lib_read`) and the device profiles (`device_storage`). `build` needs the Rust packer: unsupported. */
-function nodeLibrary(root: string): LibraryHost {
+function nodeLibrary(root: string, libraryDir?: string): LibraryHost {
   const deviceDir = (device: string) => {
     if (!/^[a-z0-9]+$/.test(device)) throw new Error(`not a device id: ${JSON.stringify(device)}`);
-    return path.join(root, 'out/modules', device);
+    return path.join(libraryDir ?? path.join(root, 'out/modules'), device);
   };
   const walk = (dir: string, base: string, out: { path: string; size: number }[], ext = '.dkm') => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -313,7 +316,8 @@ function nodeFirmware(root: string, outDir: string | undefined): FirmwareHost {
     prepare: unsupported('firmware.prepare'),
     save: (bytes, name) => saveTo(outDir, 'firmware.save', bytes, name),
     patchkitWasm: () => wasm('patchkit.wasm'),
-    bindBundle: () => wasm('modules/bind.json'),
+    // from the checkout's devices/ files, as `apps/web/scripts/gen-modules.mjs` writes bind.json for the site
+    bindBundle: async () => toBuffer(new TextEncoder().encode(JSON.stringify(buildBindBundle(root)))),
     sampleWasm: () => wasm('dksample.wasm'),
     dkprofWasm: () => wasm('dkprof.wasm'),
   };
@@ -363,7 +367,7 @@ export function createNodeHost(options: NodeHostOptions): Host & { close(): void
   const rpc = nodeRpc(options.socket);
   return {
     fs: nodeFs(options.outDir),
-    library: nodeLibrary(options.root),
+    library: nodeLibrary(options.root, options.libraryDir),
     ports: { midi: nodeMidi(options.dkmidiBin), bulk: nodeBulk(options.dkbulkBin) },
     firmware: nodeFirmware(options.root, options.outDir),
     emu: nodeEmu,

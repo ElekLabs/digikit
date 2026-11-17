@@ -315,16 +315,30 @@ Who owns what: the SDK has no device code. Adapters and device profiles carry th
 
 ## Install with services from the command line
 
-`wb transfer` runs the Transfer pane's install and delete through the same TypeScript (`packages/workbench-core/src/modules/dktransfer.ts`), over the NodeHost. It needs the `dkmidi` bridge (`mise run dkmidi:build`), `apps/web/public/patchkit.wasm` and `apps/web/public/modules/bind.json` (`mise run wasm:patchkit`, `node apps/web/scripts/gen-modules.mjs`), and the packed modules and services in `out/modules/<device>/` and `dist/modules/<device>/`.
+`wb transfer` (`mise run transfer`) runs the Transfer pane's install and delete through the same TypeScript (`packages/workbench-core/src/modules/dktransfer.ts`), over the NodeHost. It needs `apps/web/public/patchkit.wasm` (`mise run wasm:patchkit`), the packed modules in `out/modules/<device>/` (or `--library DIR`, for example `dist/modules` after `nx run <id>:pack`) and the unbound services in `dist/modules/<device>/`. For a device it needs the `dkmidi` bridge (`mise run dkmidi:build`); `--emu` drives the running emulator of `--run-dir DIR` (default `out/native/run`, `mise run emu:serve`) instead.
 
 ```text
-node tools/devtools/wb.mjs [--port SUB] transfer install ID... [--stock STOCK.syx] [--format text]
-node tools/devtools/wb.mjs [--port SUB] transfer delete PATH...
+mise run transfer -- [--port SUB | --emu [--run-dir DIR]] install ID... [--stock STOCK.syx] [--restart] [--library DIR] [--format text]
+mise run transfer -- [--port SUB | --emu [--run-dir DIR]] restart
+mise run transfer -- [--port SUB | --emu [--run-dir DIR]] delete PATH...
 ```
 
-`install` resolves the services each module needs (transitively), binds each service that hooks the firmware to `--stock`, uploads the services in dependency order and then the modules, and skips files whose hash is on the card. A module whose service cannot be resolved or bound is named and skipped; the others install. `delete` takes the services that no remaining module needs along with the deleted modules, and keeps the others. Output: one JSON event per line, or the pane's text with `--format text`.
+`install` resolves the services each module needs (transitively), binds each service that hooks the firmware to the stock firmware, uploads the services in dependency order and then the modules, and skips files whose hash is on the card. The stock firmware is `--stock`, by default the one the tests use for the device (`stockImage` in `packages/test-support/src/inputs.ts`: DT2 1.17, DN2 1.12 in `$DIGI_FIRMWARE_DIR` or `firmware/`). A module whose service cannot be resolved or bound is named and skipped; the others install. `--restart` then selects exactly the installed modules, restarts the device, waits for the boot and exits 1 when MODULES does not list one of them (the last event is `{"event":"loaded","loaded":[...],"missing":[...]}`). `delete` takes the services that no remaining module needs along with the deleted modules, and keeps the others. Output: one JSON event per line, or the pane's text with `--format text`.
 
-Output of a run (filled in when run on a device): _to be added_.
+Output of `mise run transfer -- --emu --run-dir RUN --library dist/modules install test/sine digikit/debug` on DN2 1.12 (progress events left out):
+
+```text
+{"event":"start","device":"dn2","modules":["test/sine","digikit/debug"]}
+{"event":"upload","id":"machines","kind":"service","path":"services/machines.dks","bytes":29718}
+{"event":"verify","id":"machines","kind":"service","path":"services/machines.dks","ok":true}
+{"event":"upload","id":"test/sine","path":"modules/sine.dkm","bytes":1062}
+{"event":"verify","id":"test/sine","path":"modules/sine.dkm","ok":true}
+{"event":"upload","id":"digikit/debug","path":"modules/debug.dkm","bytes":8256}
+{"event":"verify","id":"digikit/debug","path":"modules/debug.dkm","ok":true}
+{"event":"done","restarted":false,"selected":[]}
+```
+
+With `--restart` the events `restart` and `wait` follow, then `loaded`. The device test `transfer-live` runs this on both devices.
 
 ## 11. Where to go next
 

@@ -346,6 +346,9 @@ importers:
       '@digi/dk-session':
         specifier: workspace:*
         version: link:../dk-session
+      '@digi/workbench-core':
+        specifier: workspace:*
+        version: link:../workbench-core
     devDependencies:
       '@types/node':
         specifier: 22.15.0

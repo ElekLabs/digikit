@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  firmwareDir as stockFirmwareDir,
+  STOCK_SYX,
+  stockImage as stockImageOf,
+} from '@digi/workbench-core/node/stock-image.ts';
 import { resolveTiers } from './emulator-config.ts';
 
 export type Device = 'dt2' | 'dn2';
@@ -19,8 +24,8 @@ function firmwareTable(): Record<string, { syx: string; ready: string }> {
     fs.readFileSync(path.join(repoRoot(), 'tools/emulator/ready_inputs.json'), 'utf8'),
   ) as ReadyJson;
   return {
-    'dt2 1.17': { syx: 'Digitakt_II_OS1.17.syx', ready: json.ready_dirs.dt2 },
-    'dn2 1.12': { syx: 'Digitone_II_OS1.12.syx', ready: json.ready_dir },
+    'dt2 1.17': { syx: STOCK_SYX.dt2, ready: json.ready_dirs.dt2 },
+    'dn2 1.12': { syx: STOCK_SYX.dn2, ready: json.ready_dir },
   };
 }
 
@@ -58,11 +63,14 @@ export function coreLibEnv(device: Device, env: NodeJS.ProcessEnv = process.env)
   }
 }
 
-/** The stock images: $DIGI_FIRMWARE_DIR (relative to the repository root), else firmware/. The same rule as
- * tools/firmware/config.py FIRMWARE_DIR, the control daemon and tools/nx/device-inputs.mjs. */
+/** The stock images: $DIGI_FIRMWARE_DIR (relative to the repository root), else firmware/ (the rule of `@digi/workbench-core/node/stock-image.ts`, which `wb transfer` shares). */
 export function firmwareDir(env: NodeJS.ProcessEnv = process.env): string {
-  const dir = env.DIGI_FIRMWARE_DIR;
-  return dir ? path.resolve(repoRoot(), dir) : path.join(repoRoot(), 'firmware');
+  return stockFirmwareDir(repoRoot(), env);
+}
+
+/** The stock .syx of a device on its analysis version (the file `wb transfer install` binds services to). */
+export function stockImage(device: Device, env: NodeJS.ProcessEnv = process.env): string {
+  return stockImageOf(device, repoRoot(), env);
 }
 
 /** The .syx and ready-input files of a device and firmware version; throws when one is missing. */

@@ -91,7 +91,7 @@ description = "Build the dkbulk USB bulk bridge and uploader (packages/dkbulk) i
 ["wb:cli"]
 depends = ["dkmidi:build", "dkbulk:build"]
 run = "node tools/devtools/wb.mjs"
-description = "Workbench actions from the command line through the workbench's own code: mise run wb:cli -- samples put FILE... --folder F [--bulk auto|off|force] | samples ls | store put LOCAL REMOTE | store ls [PREFIX] | store rm REMOTE | transfer install ID... [--stock STOCK.syx] | transfer delete PATH... | info | ports"
+description = "Workbench actions from the command line through the workbench's own code: mise run wb:cli -- samples put FILE... --folder F [--bulk auto|off|force] | samples ls | store put LOCAL REMOTE | store ls [PREFIX] | store rm REMOTE | transfer install ID... [--stock STOCK.syx] [--restart] | transfer restart | transfer delete PATH... | info | ports"
 
 ["bootscreen"]
 run = "node packages/dkbs/cli/bootscreen.mjs"
@@ -416,8 +416,9 @@ run = "uv run --with python-rtmidi --with sounddevice python -m tools.device.dev
 description = "Press keys through the digikit remote, record the device's USB audio and analyse each hit: mise run device:probe -- --list-audio | --steps 'trig1*10@500' [--device dt2|dn2] [--no-remote] [--analyse WAV]"
 
 [transfer]
-run = "uv run --with python-rtmidi python -m tools.device.dktransfer"
-description = "The repo's run-time modules on a target and their install: mise run transfer -- list --emu [--json] | install <author/name> [MOD ...] [--keep PATH ...] (or --port NAME; a paused emulator is refused, --step lets the tool step it)"
+depends = ["dkmidi:build"]
+run = "node tools/devtools/wb.mjs transfer"
+description = "Install, restart and delete run-time modules on a target, through the workbench's own code (wb transfer): mise run transfer -- install ID... [--restart] [--stock STOCK.syx] [--library DIR] | restart | delete PATH... (the target is --port NAME, default Digitakt, or --emu [--run-dir DIR]; the services a module needs go on the card bound to the stock firmware of the device)"
 
 ["dk:store"]
 run = "uv run --with python-rtmidi python -m tools.device.dkupload"
