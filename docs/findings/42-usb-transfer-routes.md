@@ -39,8 +39,10 @@ functions of 1.17 are 0x2e0 above their 1.16 addresses. Manual: out/refs/MCF5441
   The setting byte is read at boot by an inline mapping (DT2 `FUN_400cc9c8` 0x400cce0c-0x400cce2e; DN2 `FUN_400cedfc` 0x400cf216-0x400cf238): 0 -> port 2,
   1 -> port 6, 2 -> port 5. The menu actions (DT2 `FUN_4010331a`, `FUN_40103330`, `FUN_40103348`; DN2 `FUN_40104dc2`, `FUN_40104dd8`, `FUN_40104df0`) each store
   the value and call `FUN_40006c16` (the third, storing 2 / port 5, is inferred). The setter is `FUN_400bb7ba`. **[D]**
-- EP0 handler `FUN_40005ff6` (0x40005ff6): standard requests plus vendor requests 0xC0/0x40 (0..5), 0xC1 (0x0A, 0x0B, 0x11, 0x12). No BOS
-  and no string index 0xEE: Windows will not bind WinUSB by itself **[D]**. DEVICE_QUALIFIER is stalled (HS-only device).
+- EP0 handler `FUN_40005ff6` (0x40005ff6): standard requests plus vendor requests 0xC0/0x40 (0..5), 0xC1 (0x0A, 0x0B, 0x11, 0x12). BOS
+  (GET_DESCRIPTOR type 0x0F) gets no answer at all (no data stage, no stall; the host times out). Unknown vendor requests stall (ENDPTCTRL0 bit 0x10).
+  There is no string index 0xEE: Windows will not bind WinUSB by itself **[D]**. DEVICE_QUALIFIER stalls (HS-only device).
+  `core/usb-bulk-audio` answers BOS and the MS OS 2.0 request in USB AUDIO/MIDI (see [usb-winusb.md](../plans/usb-winusb.md)).
 
 ## 2. SysEx receive path (what a MidiRpc byte goes through)
 
@@ -144,7 +146,7 @@ Plan: `docs/plans/usb-fast.md`. Facts below are static, DT2 1.17 and DN2 1.12 **
 - **Disconnect callback** of port 2 (`FUN_4000436e`) is not a loop: it clears ENDPTCTRL1, flushes EP1 RX and TX through ENDPTFLUSH 0xfc0b01b4 and polls
   the bits (unbounded), cancels both EP1 queues with `FUN_400059aa`, cancels the timer and clears the state words (the decompile loops because it treats
   the register reads as constant). A callback for EP2 must do the same.
-- **EP0** (`FUN_40005ff6`): the BOS request is not answered (silent) and unknown requests stall. Vendor bRequest codes in use: 0xC0: 0, 1, 2, 4, 5;
+- **EP0** (`FUN_40005ff6`): the BOS request (GET_DESCRIPTOR type 0x0F) gets no answer at all (no data stage, no stall; the host times out). Unknown vendor requests stall (ENDPTCTRL0 bit 0x10). DEVICE_QUALIFIER stalls. Vendor bRequest codes in use: 0xC0: 0, 1, 2, 4, 5;
   0x40: 1, 3, 7; 0xC1: 0x0A, 0x0B, 0x11, 0x12.
 - **Re-enumeration**: the firmware's USB mode switch `FUN_40006c16(port)` (same address and bytes on DT2 and DN2) compares `port` with the active port index
   CUR_PORT (DT2 0x40965a60, DN2 0x4058f2a8, u32) and returns if equal. Otherwise it calls `FUN_40006bac` (`FUN_40005dcc`: clear USBCMD.RS, USBINTR 0, disconnect

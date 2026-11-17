@@ -32,7 +32,7 @@ A take-over (mode switch in RAM) failed on about 1 in 15 to 1 in 200 switches an
 ## Open [O]
 
 - Hardware recheck on both devices after the merge with main's SDK S2b-2.
-- Windows stays on SysEx (see Next, item 5).
+- Windows stays on SysEx; WinUSB is planned in [usb-winusb.md](usb-winusb.md).
 - Long-run stability and bus reset during a transfer.
 - macOS asks once to allow the accessory: the workbench should say so.
 
@@ -48,7 +48,7 @@ Agreed with Em on 2026-11-13.
    Why: the speed word is debug-service territory.
 4. Stay a `.dkm` tool; split a bulk-link service only when a second consumer of the framed stream exists (for example live sample streaming).
    Why: a service without a second consumer adds a layer and no value.
-5. Windows: a WinUSB (MS OS 2.0) descriptor for interface 5 needs a control-request hook; until then Windows stays on SysEx.
+5. Windows: a WinUSB (MS OS 2.0) descriptor for interface 5 needs a control-request hook; planned in [usb-winusb.md](usb-winusb.md). Until then Windows stays on SysEx.
    Why: without the descriptor Windows does not bind a driver to the bulk interface.
 6. Faster sample packs: the per-file store cost (DN2 table rewrite per commit, DT2 about 195 ms per file).
    Why: it is the main limit now, not the USB link.
