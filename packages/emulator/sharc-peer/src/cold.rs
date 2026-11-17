@@ -1,5 +1,5 @@
 //! A coupled cold boot to the ready state, in process: the Rust logic of
-//! `packages/emulator/boot/examples/sharc_live.rs` that `tools/emulator/ready.py` runs for a card.
+//! `packages/emulator/sharc-peer/examples/sharc_live.rs` that `tools/emulator/ready.py` runs for a card.
 //!
 //! The ColdFire boots from the .syx with the card attached and the DSP
 //! (restored from cold-idle, or initialized from reset for changed DSP) on the DSPI2 link. When the panel is

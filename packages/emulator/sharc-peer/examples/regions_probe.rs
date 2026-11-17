@@ -11,7 +11,7 @@
 //! firmware sent on MIDI DIN. --frame writes the raw 1024-byte OLED frame at T. --overlay-out writes the
 //! card writes (`card.overlay` format: u64 le sector, 64-byte mask, 512 data bytes per touched sector).
 //!
-//! Boots SYX with the ColdFire emulator (no DSP, unless built with the `sharc`
+//! Boots SYX with the ColdFire emulator (no DSP, unless built with the `host`
 //! feature and given --dsp IMAGE --dsp-idle COLD_IDLE: then the DSP of
 //! `tools/emulator/ready.py` runs on the DSPI2 link as in `coupled::cold`, and the
 //! final report gains a `dsp` line). Every --fill region is
@@ -354,7 +354,7 @@ fn main() {
     #[cfg(not(feature = "host"))]
     assert!(
         dsp_image.is_none() && dsp_idle.is_none(),
-        "--dsp needs a build with --features sharc"
+        "--dsp needs a build with --features host"
     );
     if !emu.run_until_pc(AFTER_CLEAR_PC, 100_000_000) {
         eprintln!("reset clear did not return to {AFTER_CLEAR_PC:#x}");
