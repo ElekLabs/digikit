@@ -51,6 +51,9 @@ pub trait Companion {
     fn export_state(&mut self, emulator: &mut Emulator) -> Result<(Vec<u8>, u64), String>;
     /// The companion's part of the health report (`Value::Null` when it has none).
     fn report(&self, emulator: &Emulator) -> Value;
+    /// Called with the merged health report (companion part and output part) each time the runtime builds
+    /// one, for diagnostics the companion prints itself.
+    fn log_report(&self, _merged: &Value) {}
     /// For data only one kind has (the SHARC+ patch, peek, DDR monitor, profiles and counters).
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;

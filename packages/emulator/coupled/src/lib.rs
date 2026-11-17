@@ -239,6 +239,12 @@ impl CoupledRuntime {
     /// Pace the existing SSI/DMA zero peer without a SHARC engine. Call before guest execution
     /// or snapshot restore; unlike `attach`, this does not load a stock firmware snapshot.
     pub fn enable_zero_dsp_timing(&mut self) -> Result<(), String> {
+        if self.companion.kind() != Kind::None {
+            return Err(format!(
+                "zero-DSP timing needs a runtime without a DSP companion (this one has {})",
+                self.companion.kind().as_str()
+            ));
+        }
         self.emulator.enable_ssi_diagnostic(96_000)?;
         self.companion = Box::new(ZeroCompanion);
         Ok(())
@@ -335,6 +341,7 @@ impl CoupledRuntime {
         if let Some(fields) = report.as_object_mut() {
             fields.extend(self.out.report_fields());
         }
+        self.companion.log_report(&report);
         Some(report)
     }
     /// Lightweight native-output observation for the periodic desktop UI poll.

@@ -45,18 +45,31 @@ impl IdleLoop {
         }
     }
 
-    /// The idle loop of a device's DSP (`dn2`, `dt2`) from the embedded profiles. The loop is the same
-    /// in every firmware version of one device; `from_profile` takes the exact one.
+    /// The idle loop of a device's DSP (`dn2`, `dt2`) from the embedded profiles. It is the same in
+    /// every firmware version of one device (checked here: an error names the versions that differ);
+    /// `from_profile` takes the exact one.
     pub fn for_device(device: &str) -> Result<Self, String> {
         let registry = device_profile::Registry::embedded().map_err(|e| e.to_string())?;
-        registry
+        let mut found: Vec<(&str, Self)> = Vec::new();
+        for firmware in registry
             .devices()
             .iter()
             .filter(|d| d.short == device)
             .flat_map(|d| d.firmwares.iter())
-            .find_map(|f| f.dsp.as_ref())
-            .map(Self::from_profile)
-            .ok_or_else(|| format!("no DSP profile for device {device}"))
+        {
+            if let Some(dsp) = &firmware.dsp {
+                found.push((&firmware.version, Self::from_profile(dsp)));
+            }
+        }
+        let Some(&(first_version, first)) = found.first() else {
+            return Err(format!("no DSP profile for device {device}"));
+        };
+        if let Some((version, other)) = found.iter().find(|(_, idle)| *idle != first) {
+            return Err(format!(
+                "the idle loop of device {device} differs between firmware versions: {first_version} has {first:?}, {version} has {other:?}"
+            ));
+        }
+        Ok(first)
     }
 }
 
@@ -1719,6 +1732,19 @@ fn frame_poke(tx: &[u8]) -> Option<Vec<u8>> {
 #[path = "sharc_engine.rs"]
 mod engine;
 pub use engine::*;
+
+#[cfg(test)]
+mod idle_loop_tests {
+    use super::IdleLoop;
+
+    #[test]
+    fn every_firmware_of_a_device_has_the_same_idle_loop_today() {
+        let dn2 = IdleLoop::for_device("dn2").unwrap();
+        let dt2 = IdleLoop::for_device("dt2").unwrap();
+        assert_ne!(dn2, dt2);
+        assert!(IdleLoop::for_device("none").is_err());
+    }
+}
 
 /// The DN2 idle loop of the profiles, for the tests.
 #[cfg(test)]

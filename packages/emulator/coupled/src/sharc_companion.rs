@@ -28,9 +28,6 @@ pub struct SharcCompanion {
     /// The DSP image name of the generated core this session runs (`dn2-1.11`, `dt2-1.16`).
     dsp_core: &'static str,
     pub(crate) frames: u64,
-    /// Interleaved PCM samples collected so far (for the periodic tier print).
-    pcm_samples: u64,
-    started: Instant,
     initial_instructions: u64,
     link_timing: bool,
     pub(crate) cf_step_calls: u64,
@@ -45,6 +42,11 @@ pub struct SharcCompanion {
     /// Marks of `step_begin`, consumed by the `poll` that follows the ColdFire step.
     cf_step_start: Option<Instant>,
     spike_start: Option<Instant>,
+    /// Set by `sync`: the barrier's wall time so far. The `poll` that follows commits what the barrier
+    /// completed, and both count as sync time (as when the drain ran inside the sync).
+    sync_wall_ns: Option<u64>,
+    /// `sync` ran and its `poll` is still to come.
+    after_sync: bool,
 }
 
 impl SharcCompanion {
@@ -112,8 +114,6 @@ impl SharcCompanion {
             shared,
             dsp_core: core.image,
             frames: 0,
-            pcm_samples: 0,
-            started: Instant::now(),
             initial_instructions,
             link_timing,
             cf_step_calls: 0,
@@ -126,6 +126,8 @@ impl SharcCompanion {
             spike: elektron_native_boot::spikelog::CfWindow::open(),
             cf_step_start: None,
             spike_start: None,
+            sync_wall_ns: None,
+            after_sync: false,
         })
     }
 
@@ -142,7 +144,6 @@ impl SharcCompanion {
         let handoff_start = self.link_timing.then(Instant::now);
         let mut shared = self.shared.borrow_mut();
         self.frames += shared.frames.len() as u64;
-        self.pcm_samples += shared.pcm.len() as u64;
         out.push(&shared.pcm);
         // Host observation histories are not DSP state. Keep production storage bounded
         // by one host step; retain the peer's cumulative counters and halt information.
@@ -188,11 +189,9 @@ impl Companion for SharcCompanion {
     fn sync(&mut self) {
         let wall_start = self.link_timing.then(Instant::now);
         self.handle.sync();
-        if let Some(start) = wall_start {
-            self.audio_sync_wall_ns = self
-                .audio_sync_wall_ns
-                .saturating_add(start.elapsed().as_nanos().min(u64::MAX as u128) as u64);
-        }
+        self.sync_wall_ns =
+            wall_start.map(|start| start.elapsed().as_nanos().min(u64::MAX as u128) as u64);
+        self.after_sync = true;
     }
 
     fn poll(&mut self, _emulator: &mut Emulator, out: &mut AudioOut) {
@@ -202,10 +201,20 @@ impl Companion for SharcCompanion {
         let wall_start = self.link_timing.then(Instant::now);
         self.handle.poll();
         self.drain(out);
-        if let Some(start) = wall_start {
-            self.audio_poll_wall_ns = self
-                .audio_poll_wall_ns
-                .saturating_add(start.elapsed().as_nanos().min(u64::MAX as u128) as u64);
+        let elapsed =
+            wall_start.map(|start| start.elapsed().as_nanos().min(u64::MAX as u128) as u64);
+        if std::mem::take(&mut self.after_sync) {
+            // The commit of a barrier: sync time, as before the drain moved out of `sync`.
+            let total = self
+                .sync_wall_ns
+                .take()
+                .unwrap_or(0)
+                .saturating_add(elapsed.unwrap_or(0));
+            if self.link_timing {
+                self.audio_sync_wall_ns = self.audio_sync_wall_ns.saturating_add(total);
+            }
+        } else if let Some(ns) = elapsed {
+            self.audio_poll_wall_ns = self.audio_poll_wall_ns.saturating_add(ns);
         }
         if let Some(start) = self.spike_start.take() {
             self.spike_step_end(start, out);
@@ -255,20 +264,6 @@ impl Companion for SharcCompanion {
                 })
             })
             .unwrap_or(Value::Null);
-        // Diagnostic: print the DSP tier counters to stderr every 10 s.
-        if self.link_timing
-            && self
-                .tiers_printed
-                .get()
-                .is_none_or(|at| at.elapsed().as_secs_f64() >= 10.0)
-        {
-            let mut line = json!({"dsp_tiers": dsp_tiers.clone()});
-            line["source_audio_seconds"] =
-                (self.pcm_samples as f64 / 2.0 / SOURCE_RATE as f64).into();
-            line["session_wall_seconds"] = self.started.elapsed().as_secs_f64().into();
-            eprintln!("native_audio_report={line}");
-            self.tiers_printed.set(Some(Instant::now()));
-        }
         let shared = self.shared.borrow();
         let mut report = json!({
             "schema_version": 1, "peer": "threaded", "sample_rate": SOURCE_RATE,
@@ -294,6 +289,23 @@ impl Companion for SharcCompanion {
             );
         }
         report
+    }
+
+    /// Diagnostic: print the DSP tier counters to stderr every 10 s (link timing only). The audio and wall
+    /// seconds are the output's.
+    fn log_report(&self, merged: &Value) {
+        if self.link_timing
+            && self
+                .tiers_printed
+                .get()
+                .is_none_or(|at| at.elapsed().as_secs_f64() >= 10.0)
+        {
+            let mut line = json!({"dsp_tiers": merged["dsp_tiers"].clone()});
+            line["source_audio_seconds"] = merged["source_audio_seconds"].clone();
+            line["session_wall_seconds"] = merged["session_wall_seconds"].clone();
+            eprintln!("native_audio_report={line}");
+            self.tiers_printed.set(Some(Instant::now()));
+        }
     }
 
     fn as_any(&self) -> &dyn Any {
