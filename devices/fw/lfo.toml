@@ -1,0 +1,177 @@
+# The LFO tick and its second reader (docs/findings/143-lfo-waveforms.md): the sites that make a wave value above RAND a table shape, DT2 1.17 and DN2 1.12.
+# Each site is the six bytes `moveq 6,Dn; cmp.l D3,Dn; beq|bne` that compare the clamped wave with 6. An image stub (core/lfo, `op = "stub"`) runs them while the slot is
+# empty, so the image is stock without the lfo service; the lfo service fills the slots and its routine tests the unclamped wave byte for a value above 6.
+
+[[site]]
+name = "cf.lfo.site.tick_call"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x1e6, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x2c0, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x40139804, DN2 0x40137cc6: the LFO tick: `moveq 6,Dn; cmp.l D3,Dn; beq` before the wave function table call (D3 is the wave clamped to 0..6; the beq goes to the RAND code)."
+
+[[site]]
+name = "cf.lfo.site.tick_slew"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x24e, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x318, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013986c, DN2 0x40137d1e: the LFO tick: `moveq 6,Dn; cmp.l D3,Dn; bne` before the slew code of RAND (the bne skips it)."
+
+[[site]]
+name = "cf.lfo.site.tick_start"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x160, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x23a, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013977e, DN2 0x40137c40: the LFO tick: `moveq 6,Dn; cmp.l D3,Dn; beq` that gives RAND a start phase of 0 at a trigger (the beq goes to the clear)."
+
+[[site]]
+name = "cf.lfo.site.read_call"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x208, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x208, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x401394dc, DN2 0x401378c4: the second reader of the LFO tables (the look-ahead of FUN_401392d4 on DT2, FUN_401376bc on DN2): the compare of D3 with 6 before the function table call."
+
+[[site]]
+name = "cf.lfo.site.read_slew"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x276, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x276, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013954a, DN2 0x40137932: the second reader: the compare of D3 with 6 before the slew code."
+
+[[site]]
+name = "cf.lfo.site.read_start"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x17a, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x17a, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013944e, DN2 0x40137836: the second reader: the compare of D3 with 6 that gives RAND a start phase of 0."
+
+[[site]]
+name = "cf.lfo.site.tick_rand"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x214, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x2e6, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x40139832, DN2 0x40137cec: the RAND code of the LFO tick (the target of the beq at `tick_call`)."
+
+[[site]]
+name = "cf.lfo.site.tick_done"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x280, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x34c, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013989e, DN2 0x40137d52: the LFO tick after the wave function call: the result is in d0 (DN2: the store of d0)."
+
+[[site]]
+name = "cf.lfo.site.tick_start_rand"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x17c, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x256, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013979a, DN2 0x40137c5c: the LFO tick: the clear of the start phase for RAND (the target of the beq at `tick_start`)."
+
+[[site]]
+name = "cf.lfo.site.read_rand"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x23e, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x23e, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x40139512, DN2 0x401378fa: the RAND code of the second reader (the target of the beq at `read_call`)."
+
+[[site]]
+name = "cf.lfo.site.read_done"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x2a6, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x2a6, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013957a, DN2 0x40137962: the second reader after the function call (the target of the bne at `read_slew`)."
+
+[[site]]
+name = "cf.lfo.site.read_start_rand"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x196, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x196, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013946a, DN2 0x40137852: the second reader: the clear of the start phase for RAND (the target of the beq at `read_start`)."
+
+[[hook]]
+name = "cf.lfo.hook.tick_call"
+site = "cf.lfo.site.tick_call"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.tick_rand", "cf.lfo.site.tick_done"]
+regs = { in = ["d1", "d2", "d3"], clobbers = ["d0", "a1", "ccr"] }   # continues at site+6
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The LFO tick, DT2 and DN2: the compare of the clamped wave D3 with 6 before the call of the wave function table. d2 is the phase accumulator, d3 the wave clamped to 0..6; DT2 has the block in a3 (wave byte at 2(a3)), DN2 in a4 (wave byte at 0x4c(a4)). Interrupt context. exit.1 is the RAND code, exit.2 the code after the call (the result in d0)."
+
+[[hook]]
+name = "cf.lfo.hook.tick_slew"
+site = "cf.lfo.site.tick_slew"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.tick_done"]
+regs = { in = ["d1", "d2", "d3"], clobbers = ["d1", "d2", "a1", "ccr"] }   # continues at site+6
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The LFO tick: the compare of D3 with 6 before the slew code of RAND. Interrupt context. exit.1 skips the slew code. d0 and d1 (DT2) are live: the routine uses d2 (DT2) or d1 (DN2) as the stock code does."
+
+[[hook]]
+name = "cf.lfo.hook.tick_start"
+site = "cf.lfo.site.tick_start"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.tick_start_rand"]
+regs = { in = ["d1", "d2", "d3"], clobbers = ["d0", "a1", "ccr"] }   # continues at site+6
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The LFO tick: the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger. Interrupt context. exit.1 is the clear."
+
+[[hook]]
+name = "cf.lfo.hook.read_call"
+site = "cf.lfo.site.read_call"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.read_rand", "cf.lfo.site.read_done"]
+regs = { in = ["d1", "d2", "d3"], clobbers = ["d0", "a1", "ccr"] }   # continues at site+6
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The second reader of the LFO tables: the compare of D3 with 6 before the call of the wave function table. a4 is the block (wave byte at 0x2a(a4)); d7 is live. Interrupt context. exit.1 is the RAND code, exit.2 the code after the call."
+
+[[hook]]
+name = "cf.lfo.hook.read_slew"
+site = "cf.lfo.site.read_slew"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.read_done"]
+regs = { in = ["d1", "d2", "d3"], clobbers = ["d2", "a1", "ccr"] }   # continues at site+6
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The second reader: the compare of D3 with 6 before the slew code. Interrupt context. exit.1 skips the slew code."
+
+[[hook]]
+name = "cf.lfo.hook.read_start"
+site = "cf.lfo.site.read_start"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.read_start_rand"]
+regs = { in = ["d1", "d2", "d3"], clobbers = ["d2", "a1", "ccr"] }   # continues at site+6
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The second reader: the compare of D3 with 6 that gives RAND a start phase of 0. Interrupt context. exit.1 is the clear."

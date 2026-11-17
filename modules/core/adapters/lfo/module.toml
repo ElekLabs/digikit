@@ -1,0 +1,173 @@
+[module]
+id = "core/lfo"
+version = "0.1.0"
+name = "LFO shapes"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "The image half of the lfo service: twelve pointer-slot stubs (six for each device) at the sites where the LFO tick and its second reader treat a wave value above RAND; stock behaviour while no slot is filled"
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = ["core/runtime"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The LFO tick (vector 191, 1,500 Hz, 48 LFOs per call) clamps the wave byte to 0..6 and calls a function table for 0..5; 6 is RAND (finding 143). Each site below is the
+# six-byte compare of the clamped wave with 6. An `op = "stub"` puts a jump there to a generated stub that loads the pointer slot: a zero slot runs the displaced compare and
+# continues in the stock code, so without the lfo service (or in safe mode) the image behaves as stock; the lfo service fills the slots with routines (modules/core/services/lfo/dks)
+# that read the unclamped wave byte and call the shape table for a value above 6. The routines run in the interrupt: they wait for nothing and call only the table lookup.
+# The same six sites exist on both devices (the rules are in devices/fw/lfo.toml); each device has its own six slots, because a service file may fill a slot name once. The image stub of the slot comes with the module `core/lfo`, E8 of
+# docs/plans/extension-model.md moves it into services/lfo/image/.
+[[slot]]
+name = "lfo_dt2_tick_call"
+devices = ["dt2"]
+
+[[slot]]
+name = "lfo_dt2_tick_slew"
+devices = ["dt2"]
+
+[[slot]]
+name = "lfo_dt2_tick_start"
+devices = ["dt2"]
+
+[[slot]]
+name = "lfo_dt2_read_call"
+devices = ["dt2"]
+
+[[slot]]
+name = "lfo_dt2_read_slew"
+devices = ["dt2"]
+
+[[slot]]
+name = "lfo_dt2_read_start"
+devices = ["dt2"]
+
+[[slot]]
+name = "lfo_dn2_tick_call"
+devices = ["dn2"]
+
+[[slot]]
+name = "lfo_dn2_tick_slew"
+devices = ["dn2"]
+
+[[slot]]
+name = "lfo_dn2_tick_start"
+devices = ["dn2"]
+
+[[slot]]
+name = "lfo_dn2_read_call"
+devices = ["dn2"]
+
+[[slot]]
+name = "lfo_dn2_read_slew"
+devices = ["dn2"]
+
+[[slot]]
+name = "lfo_dn2_read_start"
+devices = ["dn2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.tick_call"
+slot = "lfo_dt2_tick_call"
+scratch = "a1"
+devices = ["dt2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.tick_slew"
+slot = "lfo_dt2_tick_slew"
+scratch = "a1"
+devices = ["dt2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.tick_start"
+slot = "lfo_dt2_tick_start"
+scratch = "a1"
+devices = ["dt2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.read_call"
+slot = "lfo_dt2_read_call"
+scratch = "a1"
+devices = ["dt2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.read_slew"
+slot = "lfo_dt2_read_slew"
+scratch = "a1"
+devices = ["dt2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.read_start"
+slot = "lfo_dt2_read_start"
+scratch = "a1"
+devices = ["dt2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.tick_call"
+slot = "lfo_dn2_tick_call"
+scratch = "a1"
+devices = ["dn2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.tick_slew"
+slot = "lfo_dn2_tick_slew"
+scratch = "a1"
+devices = ["dn2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.tick_start"
+slot = "lfo_dn2_tick_start"
+scratch = "a1"
+devices = ["dn2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.read_call"
+slot = "lfo_dn2_read_call"
+scratch = "a1"
+devices = ["dn2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.read_slew"
+slot = "lfo_dn2_read_slew"
+scratch = "a1"
+devices = ["dn2"]
+
+[[op]]
+op = "stub"
+hook = "cf.lfo.hook.read_start"
+slot = "lfo_dn2_read_start"
+scratch = "a1"
+devices = ["dn2"]
+
+[[claim]]
+resource = "cf.lfo.site.tick_call"
+
+[[claim]]
+resource = "cf.lfo.site.tick_slew"
+
+[[claim]]
+resource = "cf.lfo.site.tick_start"
+
+[[claim]]
+resource = "cf.lfo.site.read_call"
+
+[[claim]]
+resource = "cf.lfo.site.read_slew"
+
+[[claim]]
+resource = "cf.lfo.site.read_start"

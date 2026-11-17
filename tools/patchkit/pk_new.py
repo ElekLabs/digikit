@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Create a run-time content module from a template (`mise run module:new -- machine|fx|tool AUTHOR/NAME [--dir DIR]`, or a service crate of the runtime with `module:new -- service NAME`).
+"""Create a run-time content module from a template (`mise run module:new -- machine|fx|tool|lfo AUTHOR/NAME [--dir DIR]`, or a service crate of the runtime with `module:new -- service NAME`).
 
     uv run python -m tools.patchkit.pk_new machine alice/drone         # a SHARC+ voice machine
     uv run python -m tools.patchkit.pk_new fx alice/crunch --title Crunch --short CRU
     uv run python -m tools.patchkit.pk_new tool alice/hello --dir ~/my-modules
+    uv run python -m tools.patchkit.pk_new lfo alice/wobble             # an LFO waveform: modules/tools/wobble
     uv run python -m tools.patchkit.pk_new service sweep                # a service crate: modules/core/services/sweep
 
 The templates are the source trees in sdk/templates/<kind>/. The tokens `__ID__`, `__AUTHOR__`, `__NAME__` (lower snake),
@@ -26,7 +27,13 @@ ROOT = HERE.parent.parent
 
 MODULES = ROOT / "modules"
 TEMPLATES = ROOT / "sdk" / "templates"
-KIND_DIRS = {"machine": "machines", "fx": "fx", "tool": "tools", "service": "services"}
+KIND_DIRS = {
+    "machine": "machines",
+    "fx": "fx",
+    "tool": "tools",
+    "service": "services",
+    "lfo": "tools",
+}
 
 AUTHOR_RE = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 NAME_RE = re.compile(r"[a-z][a-z0-9]*(_[a-z0-9]+)*")

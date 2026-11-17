@@ -555,6 +555,829 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x401375e4"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401378c4"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401394dc"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The second reader of the LFO tables: the compare of D3 with 6 before the call of the wave function table. a4 is the block (wave byte at 0x2a(a4)); d7 is live. Interrupt context. exit.1 is the RAND code, exit.2 the code after the call.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.read_call",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "a1",
+          "ccr"
+        ],
+        "in": [
+          "d1",
+          "d2",
+          "d3"
+        ]
+      },
+      "site": "cf.lfo.site.read_call",
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137652"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137932"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013954a"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The second reader: the compare of D3 with 6 before the slew code. Interrupt context. exit.1 skips the slew code.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.read_slew",
+      "regs": {
+        "clobbers": [
+          "d2",
+          "a1",
+          "ccr"
+        ],
+        "in": [
+          "d1",
+          "d2",
+          "d3"
+        ]
+      },
+      "site": "cf.lfo.site.read_slew",
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137556"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137836"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013944e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The second reader: the compare of D3 with 6 that gives RAND a start phase of 0. Interrupt context. exit.1 is the clear.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.read_start",
+      "regs": {
+        "clobbers": [
+          "d2",
+          "a1",
+          "ccr"
+        ],
+        "in": [
+          "d1",
+          "d2",
+          "d3"
+        ]
+      },
+      "site": "cf.lfo.site.read_start",
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401379e6"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137cc6"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40139804"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The LFO tick, DT2 and DN2: the compare of the clamped wave D3 with 6 before the call of the wave function table. d2 is the phase accumulator, d3 the wave clamped to 0..6; DT2 has the block in a3 (wave byte at 2(a3)), DN2 in a4 (wave byte at 0x4c(a4)). Interrupt context. exit.1 is the RAND code, exit.2 the code after the call (the result in d0).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.tick_call",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "a1",
+          "ccr"
+        ],
+        "in": [
+          "d1",
+          "d2",
+          "d3"
+        ]
+      },
+      "site": "cf.lfo.site.tick_call",
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137a3e"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137d1e"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013986c"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The LFO tick: the compare of D3 with 6 before the slew code of RAND. Interrupt context. exit.1 skips the slew code. d0 and d1 (DT2) are live: the routine uses d2 (DT2) or d1 (DN2) as the stock code does.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.tick_slew",
+      "regs": {
+        "clobbers": [
+          "d1",
+          "d2",
+          "a1",
+          "ccr"
+        ],
+        "in": [
+          "d1",
+          "d2",
+          "d3"
+        ]
+      },
+      "site": "cf.lfo.site.tick_slew",
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137960"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137c40"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013977e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The LFO tick: the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger. Interrupt context. exit.1 is the clear.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.tick_start",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "a1",
+          "ccr"
+        ],
+        "in": [
+          "d1",
+          "d2",
+          "d3"
+        ]
+      },
+      "site": "cf.lfo.site.tick_start",
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401375e4",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401378c4",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401394dc",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x401394dc, DN2 0x401378c4: the second reader of the LFO tables (the look-ahead of FUN_401392d4 on DT2, FUN_401376bc on DN2): the compare of D3 with 6 before the function table call.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.read_call",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 520
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 520
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137682",
+            "len": 2
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137962",
+            "len": 2
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013957a",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x4013957a, DN2 0x40137962: the second reader after the function call (the target of the bne at `read_slew`).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.read_done",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 678
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 678
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4013761a",
+            "len": 2
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401378fa",
+            "len": 2
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40139512",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x40139512, DN2 0x401378fa: the RAND code of the second reader (the target of the beq at `read_call`).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.read_rand",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 574
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 574
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137652",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137932",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013954a",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x4013954a, DN2 0x40137932: the second reader: the compare of D3 with 6 before the slew code.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.read_slew",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 630
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 630
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137556",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137836",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013944e",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x4013944e, DN2 0x40137836: the second reader: the compare of D3 with 6 that gives RAND a start phase of 0.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.read_start",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 378
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 378
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137572",
+            "len": 2
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137852",
+            "len": 2
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013946a",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x4013946a, DN2 0x40137852: the second reader: the clear of the start phase for RAND (the target of the beq at `read_start`).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.read_start_rand",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 406
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 406
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401379e6",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137cc6",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40139804",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x40139804, DN2 0x40137cc6: the LFO tick: `moveq 6,Dn; cmp.l D3,Dn; beq` before the wave function table call (D3 is the wave clamped to 0..6; the beq goes to the RAND code).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.tick_call",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 704
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 486
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137a72",
+            "len": 2
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137d52",
+            "len": 2
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013989e",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x4013989e, DN2 0x40137d52: the LFO tick after the wave function call: the result is in d0 (DN2: the store of d0).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.tick_done",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 844
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 640
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137a0c",
+            "len": 2
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137cec",
+            "len": 2
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40139832",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x40139832, DN2 0x40137cec: the RAND code of the LFO tick (the target of the beq at `tick_call`).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.tick_rand",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 742
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 532
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137a3e",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137d1e",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013986c",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x4013986c, DN2 0x40137d1e: the LFO tick: `moveq 6,Dn; cmp.l D3,Dn; bne` before the slew code of RAND (the bne skips it).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.tick_slew",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 792
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 590
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137960",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137c40",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013977e",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x4013977e, DN2 0x40137c40: the LFO tick: `moveq 6,Dn; cmp.l D3,Dn; beq` that gives RAND a start phase of 0 at a trigger (the beq goes to the clear).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.tick_start",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 570
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 352
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4013797c",
+            "len": 2
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137c5c",
+            "len": 2
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013979a",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x4013979a, DN2 0x40137c5c: the LFO tick: the clear of the start phase for RAND (the target of the beq at `tick_start`).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.lfo.site.tick_start_rand",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 598
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 380
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo",
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x40025e36",
             "len": 8
           }
@@ -21137,6 +21960,13 @@
       "file": "devices/fw/input.toml",
       "meaning": "key and encoder decoding",
       "name": "input"
+    },
+    {
+      "count": 18,
+      "cpu": "cf",
+      "file": "devices/fw/lfo.toml",
+      "meaning": "the LFO tick, its wave function table and the wave parameter readers",
+      "name": "lfo"
     },
     {
       "count": 13,

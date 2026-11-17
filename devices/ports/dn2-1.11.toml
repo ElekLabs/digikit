@@ -129,6 +129,126 @@ mark = "D"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.lfo.site.read_call"
+cpu = "cf"
+kind = "code"
+addr = 0x401375e4
+len = 6
+sha256 = "c0a706b60f9c27e1f571890d9d77c8f42996f8322e72546a961d07b7cbf026c1"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_done"
+cpu = "cf"
+kind = "code"
+addr = 0x40137682
+len = 2
+sha256 = "ee17b0047b7589b9069938d8417376f794a6d345a5f001b3b6fd12eea53343b6"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_rand"
+cpu = "cf"
+kind = "code"
+addr = 0x4013761a
+len = 2
+sha256 = "24cc057006592d73549d88226a92fd10eda8dd626a46eb45597f31698e2a134e"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_slew"
+cpu = "cf"
+kind = "code"
+addr = 0x40137652
+len = 6
+sha256 = "c70bafcd9b83f19c3409f27d62a31aeb06ecbb344f945a3ac0c65426415afa6c"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_start"
+cpu = "cf"
+kind = "code"
+addr = 0x40137556
+len = 6
+sha256 = "eca5788a5083a2d542dff91101cc2e2db9c148be4a0f54cad50b3a85327c7fce"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_start_rand"
+cpu = "cf"
+kind = "code"
+addr = 0x40137572
+len = 2
+sha256 = "43a286effac35df5d4864a650a8e64ba60367543d984a7b95f9ae0a8b702d4d8"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_call"
+cpu = "cf"
+kind = "code"
+addr = 0x401379e6
+len = 6
+sha256 = "653daeac4978c36383c5317679688c03595f9e70f5903919e134d26f5e0f78fd"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_done"
+cpu = "cf"
+kind = "code"
+addr = 0x40137a72
+len = 2
+sha256 = "ee17b0047b7589b9069938d8417376f794a6d345a5f001b3b6fd12eea53343b6"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_rand"
+cpu = "cf"
+kind = "code"
+addr = 0x40137a0c
+len = 2
+sha256 = "f10722a69c629e0108621db21b31d91e24c5c202778f92d81bf84fc1821a6844"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_slew"
+cpu = "cf"
+kind = "code"
+addr = 0x40137a3e
+len = 6
+sha256 = "29a0aa82f7f8ea15a76d1c9106f0afd9bac10d4bcc598c0a60745be19d749bab"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_start"
+cpu = "cf"
+kind = "code"
+addr = 0x40137960
+len = 6
+sha256 = "6ec1bf39f9f594432cfb13123de7a8956716f655210eee41d3b0b06a758cfa47"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_start_rand"
+cpu = "cf"
+kind = "code"
+addr = 0x4013797c
+len = 2
+sha256 = "43a286effac35df5d4864a650a8e64ba60367543d984a7b95f9ae0a8b702d4d8"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
 name = "cf.link.fn.block_isr"
 cpu = "cf"
 kind = "code"
@@ -3708,6 +3828,36 @@ len = 6
 sha256 = "f6353ecd25610b1605fe58097dae09f6182ee62fef7a0e305380a0f3e36ab25e"
 mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
+
+[[hook]]
+name = "cf.lfo.hook.read_call"
+site = "cf.lfo.site.read_call"
+mode = "replace"
+
+[[hook]]
+name = "cf.lfo.hook.read_slew"
+site = "cf.lfo.site.read_slew"
+mode = "replace"
+
+[[hook]]
+name = "cf.lfo.hook.read_start"
+site = "cf.lfo.site.read_start"
+mode = "replace"
+
+[[hook]]
+name = "cf.lfo.hook.tick_call"
+site = "cf.lfo.site.tick_call"
+mode = "replace"
+
+[[hook]]
+name = "cf.lfo.hook.tick_slew"
+site = "cf.lfo.site.tick_slew"
+mode = "replace"
+
+[[hook]]
+name = "cf.lfo.hook.tick_start"
+site = "cf.lfo.site.tick_start"
+mode = "replace"
 
 [[hook]]
 name = "cf.link.hook.block_isr"

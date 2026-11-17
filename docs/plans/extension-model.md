@@ -723,7 +723,7 @@ runtime-and-services.md.
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |
-| 7 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | todo |
+| 7 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | active |
 | 8 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8 | filter test plus subset | todo |
 | 9 | E8 regroup and names | E1, open branches merged | full run of its batch | todo |
 
@@ -769,7 +769,7 @@ Taken:
 
 Open:
 - O3: owner of the overdrive curve list if overdrive becomes a feature: a small `drive` service, or the fx service.
-- O4: E6 builder: `dk_record_add` with the generic LFO_SHAPE record, or a typed `dk_lfo_add_shape` (decided while writing the fixture).
+- O4 (decided in E6): the LFO_SHAPE record stays a generic `dk_record_add`. Writing the fixture and the template showed only byte packing as the awkward part (key, name and 32 samples as big-endian bytes, 80 bytes); the service check now refuses a body key that the module's KEYS entry does not list, so a literal key is caught. A typed `dk_lfo_add_shape` would add an import, a `since` and collector plumbing for no new capability; if packing proves error-prone for authors, add a header helper that fills the body in `sdk/include/dk`, with no runtime change.
 - O6: E7 stored filter choice: digikit's store with a stock fallback in the sound (recommended, rule 7), or patch the stock loader bound
   (7 to 32) so the extended type survives in kit files; with the patch, a kit opened on stock firmware falls back to filter 0.
 

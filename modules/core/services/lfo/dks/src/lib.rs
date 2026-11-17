@@ -1,8 +1,37 @@
-//! The `lfo` service as a service file (`services/lfo.dks`): the crate `dkrt-svc-lfo` over the `dkc_*` imports (docs/plans/runtime-and-services.md section 13.2).
+//! The `lfo` service as a service file (`services/lfo.dks`): the crate `dkrt-svc-lfo` over the `dkc_*` imports (docs/plans/runtime-and-services.md section 13.2), and the routines of
+//! the six interrupt slots of `core/lfo` (`hooks.rs`), through which the LFO tick reads the shape table (docs/plans/extension-model.md E6).
 // a host build (the assembly test of the runtime) has std; the file is `no_std` on the ColdFire
 #![cfg_attr(target_arch = "m68k", no_std)]
+#![cfg_attr(target_arch = "m68k", feature(asm_experimental_arch))]
 
 use dkrt_sdk::records::KINDS_LFO;
 use dkrt_svc_lfo::records::Lfo;
 
-dkrt_svc_rt::service!(Lfo, "lfo", &KINDS_LFO);
+mod hooks;
+
+/// The first step of `init`: nothing to bind (the slots are named by `fills`; a file without `core/lfo` in the image is refused for its missing slots).
+unsafe fn setup<C: dkrt_svc_rt::dkrt_abi::core_api::CoreApi>(_core: &C) -> i32 {
+    0
+}
+
+dkrt_svc_rt::service!(
+    Lfo,
+    "lfo",
+    &KINDS_LFO,
+    setup = setup::<dkrt_svc_rt::ImportCore>,
+    hooks = [],
+    fills = [
+        ("lfo_dt2_tick_call", hooks::lfo_dt2_tick_call, dt2),
+        ("lfo_dt2_tick_slew", hooks::lfo_dt2_tick_slew, dt2),
+        ("lfo_dt2_tick_start", hooks::lfo_dt2_tick_start, dt2),
+        ("lfo_dt2_read_call", hooks::lfo_dt2_read_call, dt2),
+        ("lfo_dt2_read_slew", hooks::lfo_dt2_read_slew, dt2),
+        ("lfo_dt2_read_start", hooks::lfo_dt2_read_start, dt2),
+        ("lfo_dn2_tick_call", hooks::lfo_dn2_tick_call, dn2),
+        ("lfo_dn2_tick_slew", hooks::lfo_dn2_tick_slew, dn2),
+        ("lfo_dn2_tick_start", hooks::lfo_dn2_tick_start, dn2),
+        ("lfo_dn2_read_call", hooks::lfo_dn2_read_call, dn2),
+        ("lfo_dn2_read_slew", hooks::lfo_dn2_read_slew, dn2),
+        ("lfo_dn2_read_start", hooks::lfo_dn2_read_start, dn2),
+    ]
+);
