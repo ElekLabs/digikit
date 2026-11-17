@@ -133,7 +133,7 @@ The SHOT machine (`modules/machines/shot`) uses most of the surface: a knob page
 
 ### The calls collect; the commit decides
 
-During `init` the calls only record into one `Collect` block in the arena. They are bounded by `max_records` (32) and by the size `collect_bytes` (6320, checked at compile time against the ColdFire layout).
+During `init` the calls only record. The machine calls (`dk_module_ctx_add_machine`, `dk_machine_add_page`, `dk_page_add_param`, ...) are exports of `machines.dks` and the effect calls (`dk_module_ctx_add_fx`, ...) exports of `fx.dks`: each service keeps its own collection in its state, bounded by `max_records` (32). `dk_record_add` and the service declarations record into one `Collect` block in the arena, bounded by the size `collect_bytes` (1618, checked at compile time against the ColdFire layout).
 
 A call never fails on its own. On overflow, a bad argument, a call outside `init` or a handle that is not ours, it returns a placeholder handle. The first error is kept. The setters ignore a placeholder. The error is reported when `init` returns.
 
