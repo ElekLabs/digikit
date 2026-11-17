@@ -16,8 +16,10 @@ This tool does not take the bench lock. Host instruction counts
 may run in parallel (--jobs, under `nice -n 10`). They say nothing about time: do the final
 timing A/B with tools/devtools/coupled_ab.py, which holds the lock.
 
-The ColdFire state is `state_sha256` of the report (`Emulator::state_digest_arch`: the machine
-state without the three instruction-path counters), taken at the end of the run.
+The ColdFire state is `state_sha256` of the report (`Emulator::cf_state_digest`: the `save_state` bytes
+without the three instruction-path counters, plus flash, MIDI/USB port and guest-call state; not
+instrumentation), taken at the end of the run. A report without it, or with `state_digest_error`, fails
+that cell with the reason.
 
 The exit code is non-zero when a run fails or PCM, DSP state or ColdFire state differs from the
 first label's at the same length.
@@ -208,6 +210,13 @@ def run_cell(
     sc = json.loads((folder / "report.json").read_text())["scenarios"][0]
     cpu, tiers, audio = sc["cpu"], sc["dsp_instructions"], sc["audio_seconds"]
     dump = pathlib.Path(sc["dsp_dump"]["path"])
+    cf_state = sc.get("state_sha256")
+    if not cf_state:
+        if sc.get("state_digest_error"):
+            raise RuntimeError(f"CF digest unavailable: {sc['state_digest_error']}")
+        raise RuntimeError(
+            "binary has no state_sha256 (older than the CF state digest, plan item PR 0 of docs/plans/emulator-core-split.md)"
+        )
     return {
         "audio_s": audio,
         "insns": cpu["dsp_thread_insns_per_audio_s"] * audio,
@@ -216,7 +225,7 @@ def run_cell(
         "rtf": sc.get("real_time_factor"),
         "pcm": sc["pcm"]["sha256"],
         "state": hashlib.sha256(dump.read_bytes()).hexdigest(),
-        "cf_state": sc["state_sha256"],
+        "cf_state": cf_state,
     }
 
 

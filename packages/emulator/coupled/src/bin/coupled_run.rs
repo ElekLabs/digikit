@@ -1418,7 +1418,11 @@ fn run_scenario(
         }
         std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     }
-    let cf_state_sha256 = rt.cf_state_digest()?;
+    // A digest that cannot be taken (the emulator faulted, DIGI_CF_IPS is set, ...) never fails the run.
+    let (cf_state_sha256, cf_state_error) = match rt.cf_state_digest() {
+        Ok(digest) => (Value::from(digest), Value::Null),
+        Err(e) => (Value::Null, Value::from(e)),
+    };
     let dsp_dump = match &args.dump_dsp {
         Some(base) => {
             let path = wav_path_for(base, &sc.name);
@@ -1558,6 +1562,7 @@ fn run_scenario(
         "calls": calls,
         "dsp_dump": dsp_dump,
         "state_sha256": cf_state_sha256,
+        "state_digest_error": cf_state_error,
         "gates": gates,
         "guard": guard,
         "pc_probe": if args.pc_probe.is_some() { rt.pc_probe_report() } else { Value::Null },

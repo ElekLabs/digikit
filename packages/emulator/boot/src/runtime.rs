@@ -4554,6 +4554,11 @@ impl Emulator {
     /// two runs that reach the same guest state by different paths (stepping one instruction at a time, the batched loop, the idle skip)
     /// have the same digest. The oracle for a change to those paths (`state.digest {"arch": true}`).
     pub fn state_digest_arch(&mut self) -> Result<String, String> {
+        Ok(digest(&self.save_state_arch()?))
+    }
+
+    /// `save_state` with the three counters of `state_digest_arch` zeroed for the call.
+    fn save_state_arch(&mut self) -> Result<Vec<u8>, String> {
         let saved = (
             self.interpreted_instructions,
             self.idle_fast_forwarded_instructions,
@@ -4564,13 +4569,123 @@ impl Emulator {
             self.idle_fast_forwarded_instructions,
             self.ram_clear_fast_forwarded_instructions,
         ) = (0, 0, 0);
-        let digest = self.state_digest();
+        let bytes = self.save_state();
         (
             self.interpreted_instructions,
             self.idle_fast_forwarded_instructions,
             self.ram_clear_fast_forwarded_instructions,
         ) = saved;
-        digest
+        bytes
+    }
+
+    /// The digest of the ColdFire side for an A/B of two builds (`coupled-run` `state_sha256`): the `save_state` bytes without the
+    /// three instruction-path counters (see `state_digest_arch`), then, in this order, state that the snapshot does not carry and
+    /// the guest changes: the flash image and `flash_writes`, the MIDI DIN port and the USB port (flags, callbacks, queues with
+    /// their contents, the active call, counters, the EP2 buffers, the controller error), and the pending and active host-called
+    /// guest functions (`calls`, `call_active`). Left out on purpose: instrumentation (spans, probe hits, `pc_probe`, traces,
+    /// telemetry). Fails like `save_state`. The snapshot format is not changed.
+    pub fn cf_state_digest(&mut self) -> Result<String, String> {
+        use periph::snap::Writer;
+        let mut bytes = self.save_state_arch()?;
+        let mut w = Writer::new();
+        w.tag("CFX_");
+        w.bytes(digest(&self.flash).as_bytes());
+        w.u64(self.flash_writes.erases);
+        w.u64(self.flash_writes.programs);
+        w.u64(self.flash_writes.bytes);
+        let m = &self.midi;
+        w.tag("MIDI");
+        w.bytes(&m.queue.iter().copied().collect::<Vec<_>>());
+        w.bool(m.pending);
+        for v in [
+            m.next_ic, m.period, m.rx_bytes, m.rx_irqs, m.tx_bytes, m.tx_dma, m.tx_irqs,
+        ] {
+            w.u64(v);
+        }
+        w.opt_u64(m.tx_due);
+        let u = &m.usb;
+        w.tag("USB_");
+        w.bool(u.enabled);
+        for v in [u.rx_cb, u.tx_fn, u.ret_pc] {
+            w.u32(v);
+        }
+        w.bool(u.slots.is_some());
+        let (s0, s1) = u.slots.unwrap_or((0, 0));
+        w.u32(s0);
+        w.u32(s1);
+        w.bool(u.unregistered);
+        w.u64(u.queue.len() as u64);
+        for item in &u.queue {
+            match item {
+                crate::midi::UsbItem::Midi(b) => {
+                    w.u8(0);
+                    w.bytes(b);
+                }
+                crate::midi::UsbItem::Bulk(b, zlp) => {
+                    w.u8(1);
+                    w.bytes(b);
+                    w.bool(*zlp);
+                }
+                crate::midi::UsbItem::BulkTxDone(td) => {
+                    w.u8(2);
+                    w.u32(*td);
+                }
+                crate::midi::UsbItem::Call(f, args) => {
+                    w.u8(3);
+                    w.u32(*f);
+                    w.u64(args.len() as u64);
+                    for a in args {
+                        w.u32(*a);
+                    }
+                }
+            }
+        }
+        w.u64(u.next_ic);
+        w.u64(u.period);
+        w.bool(u.active.is_some());
+        if let Some(c) = &u.active {
+            w.u32(c.sp_after_rts);
+            w.u32(c.frame_sp);
+            for v in c.saved {
+                w.u32(v);
+            }
+        }
+        w.bytes(&u.out);
+        w.u64(u.in_bytes);
+        w.u64(u.calls);
+        w.u32(u.bulk_queue_fn);
+        w.bytes(&u.bulk_out);
+        w.u64(u.bulk_in_bytes);
+        w.u64(u.bulk_out_bytes);
+        w.u64(u.bulk_naks);
+        w.u64(u.bulk_out_zlps);
+        w.bool(u.sys_error.is_some());
+        w.bytes(u.sys_error.as_deref().unwrap_or("").as_bytes());
+        w.tag("CALL");
+        w.u64(self.calls.len() as u64);
+        for c in &self.calls {
+            w.u32(c.at);
+            w.u32(c.func);
+            w.u64(c.args.len() as u64);
+            for a in &c.args {
+                w.u32(*a);
+            }
+            w.u64(c.data.len() as u64);
+            for (addr, data) in &c.data {
+                w.u32(*addr);
+                w.bytes(data);
+            }
+        }
+        w.bool(self.call_active.is_some());
+        if let Some(c) = &self.call_active {
+            w.u32(c.at);
+            w.u32(c.sp_after);
+            for v in c.d.iter().chain(&c.a) {
+                w.u32(*v);
+            }
+        }
+        bytes.extend_from_slice(&w.buf);
+        Ok(digest(&bytes))
     }
 }
 

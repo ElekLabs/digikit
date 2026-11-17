@@ -557,10 +557,13 @@ impl CoupledRuntime {
         let (blob, icount) = self.audio.as_ref()?.handle.export();
         (!blob.is_empty()).then_some((blob, icount))
     }
-    /// SHA-256 of the ColdFire machine state without the three instruction-path counters
-    /// (`Emulator::state_digest_arch`): equal for two builds that run the same guest.
+    /// The ColdFire-side state digest of the `coupled-run` report (`state_sha256`): `Emulator::cf_state_digest`. It covers the
+    /// `save_state` bytes (CPU, RAM, peripherals, timers, eSDHC and card, frame and input state) without the three
+    /// instruction-path counters, and the state the snapshot lacks: flash image and flash write counts, MIDI DIN port, USB
+    /// port and its queues, and the pending and active guest calls. It leaves out instrumentation (spans, probe hits,
+    /// `pc_probe`, traces) and the SHARC side (see the DSP state sha). Fails when `save_state` refuses.
     pub fn cf_state_digest(&mut self) -> Result<String, String> {
-        self.emulator.state_digest_arch()
+        self.emulator.cf_state_digest()
     }
     /// The native audio health report (includes link timing when enabled).
     pub fn audio_report(&self) -> Option<Value> {
