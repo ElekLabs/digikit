@@ -18,7 +18,7 @@ cost ranking, runs a short coupled idle scenario with `SHARC_FAST_COV=1`
 Build the binary once, non-PGO (one ~4 min sharc-gen compile):
 
     SHARC_GEN_DIR=$PWD/out/native/dn2-audio/gen cargo build --release --locked \
-      -p digi-coupled --features coupled-audio --bin coupled-run \
+      -p digi-coupled --features sharc,play --bin coupled-run \
       --target-dir out/native/target/cov
 
 Method notes. Roots are armed as clusters only (no `SHARC_FAST_REGIONS`), so

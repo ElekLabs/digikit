@@ -294,7 +294,7 @@ def target_dir_for(gen: pathlib.Path | None, second: str | None = None) -> str:
 
 def coupled_features() -> str:
     """The cargo feature of a coupled build: `second-core` when SHARC_GEN_DIR_2 names a second generated core."""
-    return "second-core" if os.environ.get("SHARC_GEN_DIR_2") else "coupled-audio"
+    return "second-core" if os.environ.get("SHARC_GEN_DIR_2") else "sharc,play"
 
 
 def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:

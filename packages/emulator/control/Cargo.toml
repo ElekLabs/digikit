@@ -18,14 +18,16 @@ doctest = false
 default = ["server"]
 # Unix-socket transport and the discovery file (unix only; not for wasm).
 server = []
-# Local-only DN2 coupling: generated DSP code must never be distributed.
 # ColdFire path/PC profile (`cf.profile` method).
 cf-profile = ["elektron-native-boot/cf-profile"]
 # DSP execution counts (`sharc.profile` method): per-entry dispatch costs of the fast and block tiers plus interpreted PC counts.
-sharc-profile = ["coupled-audio", "digi-coupled/region-profile"]
-coupled-audio = ["digi-coupled/coupled-audio"]
+sharc-profile = ["sharc", "digi-coupled/region-profile"]
+# Local-only SHARC+ coupling: generated DSP code must never be distributed.
+sharc = ["digi-coupled/sharc"]
+# Playback through the default output device.
+play = ["digi-coupled/play"]
 # Both devices' generated cores in one binary (SHARC_GEN_DIR and SHARC_GEN_DIR_2).
-second-core = ["coupled-audio", "digi-coupled/second-core"]
+second-core = ["sharc", "play", "digi-coupled/second-core"]
 
 [dependencies]
 digi-coupled = { path = "../coupled" }

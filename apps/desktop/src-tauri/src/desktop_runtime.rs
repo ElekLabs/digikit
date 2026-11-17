@@ -9,7 +9,7 @@ pub use digi_coupled::{AudioMode, AudioOptions};
 /// The PGO training workload: the `coupled_ready_workload` gate without its pins, runnable from
 /// the app binary (`--pgo-train`) so the profile is trained on the same crate
 /// hashes the shipped binary has. Needs the private DN2 ready fixtures.
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 pub fn pgo_training_workload() -> Result<(), String> {
     std::panic::catch_unwind(|| {
         digi_coupled::gates::coupled_ready_workload();
@@ -23,7 +23,7 @@ pub fn pgo_training_workload() -> Result<(), String> {
     })
 }
 
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 mod coupled {
     #[cfg(test)]
     mod tests {

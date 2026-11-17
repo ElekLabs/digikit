@@ -142,7 +142,7 @@ def build_command(
         "-p",
         "digi-coupled",
         "--features",
-        "coupled-audio,region-profile" if profile_regions else "coupled-audio",
+        "sharc,play,region-profile" if profile_regions else "sharc,play",
         "--bin",
         "coupled-run",
         *(["--target", TRIPLE] if pgo else []),

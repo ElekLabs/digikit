@@ -2,10 +2,7 @@
 //! whichever core produces it (the SHARC session today, a peer ColdFire's
 //! `Emulator::take_pcm()` later) and does the player push, the tap, the capture
 //! and the pacing query the controller uses. It knows no DSP types.
-use elektron_native_boot::{
-    pcm_play::{Mode, PcmPlayer, QueueState, Recovery, SOURCE_RATE},
-    wav::WavWriter,
-};
+use elektron_native_boot::wav::WavWriter;
 use serde_json::{Map, Value, json};
 use std::{
     fs::File,
@@ -17,53 +14,109 @@ use std::{
 /// The free-running pace target without prefill (`--audio-buffer 0`).
 pub const PACE_MIN_SECONDS: f64 = 0.05;
 
-/// The output device behind [`AudioOut`]: `PcmPlayer` in production, a fake in tests.
+/// The sample rate of the PCM an [`AudioOut`] takes (the DSP's audio rate).
+pub const SOURCE_RATE: u32 = 48_000;
+
+/// The sink's queue as its feeder last published it.
+#[derive(Clone, Copy, Debug)]
+pub struct SinkQueue {
+    pub queued_device_frames: u64,
+    pub feeder_pending_source_frames: u64,
+    pub device_rate: u32,
+    pub underrun_events: u64,
+    pub rebuffering: bool,
+}
+
+impl SinkQueue {
+    fn to_json(self) -> Value {
+        json!({
+            "queued_device_frames": self.queued_device_frames,
+            "feeder_pending_source_frames": self.feeder_pending_source_frames,
+            "device_rate": self.device_rate,
+            "underrun_events": self.underrun_events,
+            "rebuffering": self.rebuffering,
+        })
+    }
+}
+
+/// A snapshot of the sink's statistics for the report.
+pub struct SinkStats {
+    /// The statistics as the report shows them (`sink`).
+    pub json: Value,
+    /// The sink has no error.
+    pub connected: bool,
+}
+
+/// The output device behind [`AudioOut`]: `PcmPlayer` with feature `play`, a fake in tests.
 pub trait PcmSink {
     fn push(&self, pcm: &[f32]);
-    fn queue_state(&self) -> QueueState;
-    fn stats(&self) -> elektron_native_boot::pcm_play::PlaybackStats;
+    fn queue_state(&self) -> SinkQueue;
+    fn stats(&self) -> SinkStats;
     fn device(&self) -> String;
     fn device_rate(&self) -> u32;
 }
 
-impl PcmSink for PcmPlayer {
-    fn push(&self, pcm: &[f32]) {
-        PcmPlayer::push(self, pcm);
+/// The cpal player of `elektron-native-boot` as a sink.
+#[cfg(feature = "play")]
+mod player {
+    use super::{PcmSink, SOURCE_RATE, SinkQueue, SinkStats};
+    use elektron_native_boot::pcm_play::{Mode, PcmPlayer, Recovery};
+    use serde_json::json;
+
+    const _: () = assert!(elektron_native_boot::pcm_play::SOURCE_RATE == SOURCE_RATE);
+
+    impl PcmSink for PcmPlayer {
+        fn push(&self, pcm: &[f32]) {
+            PcmPlayer::push(self, pcm);
+        }
+        fn queue_state(&self) -> SinkQueue {
+            let q = PcmPlayer::queue_state(self);
+            SinkQueue {
+                queued_device_frames: q.queued_device_frames,
+                feeder_pending_source_frames: q.feeder_pending_source_frames,
+                device_rate: q.device_rate,
+                underrun_events: q.underrun_events,
+                rebuffering: q.rebuffering,
+            }
+        }
+        fn stats(&self) -> SinkStats {
+            let stats = PcmPlayer::stats(self);
+            SinkStats {
+                connected: stats.error.is_none(),
+                json: json!(stats),
+            }
+        }
+        fn device(&self) -> String {
+            self.device.clone()
+        }
+        fn device_rate(&self) -> u32 {
+            self.device_rate
+        }
     }
-    fn queue_state(&self) -> QueueState {
-        PcmPlayer::queue_state(self)
-    }
-    fn stats(&self) -> elektron_native_boot::pcm_play::PlaybackStats {
-        PcmPlayer::stats(self)
-    }
-    fn device(&self) -> String {
-        self.device.clone()
-    }
-    fn device_rate(&self) -> u32 {
-        self.device_rate
+
+    /// The output player mode and underrun policy for a buffer length and audio mode.
+    pub fn player_settings(buffer_seconds: f64, audio_mode: crate::AudioMode) -> (Mode, Recovery) {
+        let mode = if buffer_seconds == 0.0 {
+            Mode::Live
+        } else {
+            Mode::Buffer(buffer_seconds)
+        };
+        // The refill threshold must fit the ~1 s output ring.
+        let refill = buffer_seconds.clamp(0.2, 0.9);
+        let recovery = match audio_mode {
+            crate::AudioMode::Rebuffer => Recovery::Rebuffer(refill),
+            crate::AudioMode::Stretch => Recovery::Stretch(refill),
+            crate::AudioMode::Gap => Recovery::Gap,
+        };
+        (mode, recovery)
     }
 }
+#[cfg(feature = "play")]
+pub use player::player_settings;
 
 /// The queued audio at which free running waits: the prefill, at least `PACE_MIN_SECONDS`.
 pub fn pace_seconds(buffer_seconds: f64) -> f64 {
     buffer_seconds.max(PACE_MIN_SECONDS)
-}
-
-/// The output player mode and underrun policy for a buffer length and audio mode.
-pub fn player_settings(buffer_seconds: f64, audio_mode: crate::AudioMode) -> (Mode, Recovery) {
-    let mode = if buffer_seconds == 0.0 {
-        Mode::Live
-    } else {
-        Mode::Buffer(buffer_seconds)
-    };
-    // The refill threshold must fit the ~1 s output ring.
-    let refill = buffer_seconds.clamp(0.2, 0.9);
-    let recovery = match audio_mode {
-        crate::AudioMode::Rebuffer => Recovery::Rebuffer(refill),
-        crate::AudioMode::Stretch => Recovery::Stretch(refill),
-        crate::AudioMode::Gap => Recovery::Gap,
-    };
-    (mode, recovery)
 }
 
 /// Output of one session: player, tap, capture, counters and the pace target.
@@ -153,7 +206,7 @@ impl AudioOut {
     /// The queue as the feeder last published it, with the pace target (for the spike log).
     pub fn queue_json(&self) -> Value {
         self.sink.as_ref().map_or(Value::Null, |sink| {
-            let mut queue = json!(sink.queue_state());
+            let mut queue = sink.queue_state().to_json();
             queue["pace_seconds"] = self.pace_seconds.into();
             queue
         })
@@ -189,7 +242,7 @@ impl AudioOut {
     /// The report fields about the output: sink, device, counters and capture.
     pub fn report_fields(&self) -> Map<String, Value> {
         let sink = self.sink.as_ref().map(|sink| sink.stats());
-        let connected = sink.as_ref().is_some_and(|s| s.error.is_none());
+        let connected = sink.as_ref().is_some_and(|s| s.connected);
         let wall = self.wall_seconds();
         let audio = self.audio_seconds();
         let Value::Object(mut fields) = json!({
@@ -201,7 +254,7 @@ impl AudioOut {
             "playback_requested": self.playback_requested, "sink_connected": connected,
             "device_error": self.device_error,
             "output_device": self.sink.as_ref().map(|sink| sink.device()),
-            "sink": sink,
+            "sink": sink.map(|s| s.json),
         }) else {
             unreachable!()
         };

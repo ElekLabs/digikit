@@ -1,8 +1,8 @@
 //! `job.cancel` on a coupled cold boot: the boot worker is stopped, the `firmware.load` that waits for it answers CANCELLED
-//! and no job is left. Needs the coupled-audio feature (local only), the stock DN2 1.12 image (`DN2_SYX`, else `firmware/`)
+//! and no job is left. Needs the sharc feature (local only), the stock DN2 1.12 image (`DN2_SYX`, else `firmware/`)
 //! and its ready inputs (`DIGI_COUPLED_FIXTURES`, the directory `mise run emu:ready -- dn2` fills); without them the test returns.
 
-#![cfg(feature = "coupled-audio")]
+#![cfg(feature = "sharc")]
 
 use std::{
     path::PathBuf,

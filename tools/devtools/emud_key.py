@@ -33,7 +33,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
-# git pathspecs (glob magic) of the repository files cargo reads for digi-emud with coupled-audio.
+# git pathspecs (glob magic) of the repository files cargo reads for digi-emud with sharc,play.
 SOURCE_GLOBS = (
     "Cargo.toml",
     "Cargo.lock",
@@ -75,7 +75,7 @@ RECIPE_FILES = (
 )
 
 MANIFEST = "packages/emulator/control/Cargo.toml"
-FEATURES = "coupled-audio"
+FEATURES = "sharc,play"
 BIN = "digi-emud"
 
 

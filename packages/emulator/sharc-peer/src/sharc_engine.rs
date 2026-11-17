@@ -277,17 +277,18 @@ fn concretise_import(e: &mut sharc_native::Engine) {
     }
 }
 
-/// Build the DN2 continuation engine from a packed image blob
+/// Build a continuation engine from a packed image blob
 /// (`tools/sharc_dev/sharc_pack_image.py`) and a canonical state blob, with the option
 /// set the audio runs use. `clock_base` seeds the diagnostic instruction
-/// clock (EMUCLK).
-pub fn open_dn2_engine(
+/// clock (EMUCLK); `idle` is the firmware's RTOS idle loop.
+pub fn open_engine(
     core: &'static sharc_native::GenCore,
     image: &[u8],
     state: &[u8],
     clock_base: u64,
+    idle: IdleLoop,
 ) -> Result<sharc_native::Engine, String> {
-    open_dn2_engine_patched(core, image, state, clock_base, None)
+    open_engine_patched(core, image, state, clock_base, None, idle)
 }
 
 /// Overlay a DSP patch onto an engine's memory (`crate::dsp_patch`). Every
@@ -367,22 +368,11 @@ pub fn apply_dsp_patch(
     Ok(())
 }
 
-/// `open_dn2_engine` with an optional DSP patch overlaid on the imported
+/// `open_engine` with an optional DSP patch overlaid on the imported
 /// state, so a snapshot's DSP runs the patched code and data. Generated AOT
 /// blocks re-check their code range (per range, with a region-entry table in
 /// the generated core) and the fast tier re-verifies its code words, so both
-/// stay on for the code a patch does not touch.
-pub fn open_dn2_engine_patched(
-    core: &'static sharc_native::GenCore,
-    image: &[u8],
-    state: &[u8],
-    clock_base: u64,
-    patch: Option<&crate::dsp_patch::DspPatch>,
-) -> Result<sharc_native::Engine, String> {
-    open_engine_patched(core, image, state, clock_base, patch, DN2_IDLE)
-}
-
-/// `open_dn2_engine_patched` for any firmware: `idle` is the RTOS idle loop
+/// stay on for the code a patch does not touch. `idle` is the RTOS idle loop
 /// the exact idle skip (options 23-25) is armed on.
 pub fn open_engine_patched(
     core: &'static sharc_native::GenCore,
