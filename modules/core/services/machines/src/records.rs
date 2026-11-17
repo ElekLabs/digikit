@@ -1016,11 +1016,7 @@ mod tests {
         check_core_with(f, recs, info(pages))
     }
 
-    fn check_core_with(
-        f: unsafe fn(&FakeCore, &Ctx) -> i32,
-        recs: &[Rec],
-        inf: Vec<u32>,
-    ) -> i32 {
+    fn check_core_with(f: unsafe fn(&FakeCore, &Ctx) -> i32, recs: &[Rec], inf: Vec<u32>) -> i32 {
         let (s, core) = (section(recs), FakeCore::new());
         unsafe {
             f(
