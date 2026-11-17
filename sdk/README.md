@@ -49,6 +49,13 @@ including the builder calls that declare machines and effects, are generated int
 `sdk.toml`. Each import has a `service`, a `since` (the runtime version that added it) and a `context`; the generated header repeats the last two
 in the comment of each prototype.
 
+A service that a service file (`.dks`) provides marks its imports `provided = true`; the file exports exactly those imports, in `sdk.toml` order, and its
+`module.toml` has no `[[export]]`. A provided import takes one more optional field, `wrapper = "<module>"`: the module of the service's `dks/src`
+(`fw`, `builder`, `glue`) that holds the function written by hand, for a function that converts a callback or a handle. An import without `wrapper` is a pure
+wrapper over the service crate's `build::*` function (the name without `dk_` and a leading `module_ctx_`): `patchkit gen` writes it, with the type check against
+the import's signature and the export list `gen_exports::exports()`, to `modules/core/services/<service>/dks/src/gen_exports.rs`. A pure wrapper cannot take a
+callback argument. A new builder call is an `[[import]]` and the `build::*` function; the generated file follows.
+
 - [docs/MODULES.md](../docs/MODULES.md) says what a module is and why: the entry point, services and optional providers, the builder calls,
   what `module.toml` fixes, the load path and the versions.
 - [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md) has the steps and a code sample for a machine, an effect and a tool.

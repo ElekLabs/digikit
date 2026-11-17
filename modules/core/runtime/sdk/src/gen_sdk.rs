@@ -693,6 +693,36 @@ pub mod api {
         "dk_debug_speed_flags",
     ];
 
+    /// The imports a service file provides (`provided = true`): (service, import name), in order.
+    pub const PROVIDED: [(&str, &str); 26] = [
+        ("machines", "dk_param_get"),
+        ("machines", "dk_param_set"),
+        ("machines", "dk_module_ctx_add_machine"),
+        ("fx", "dk_module_ctx_add_fx"),
+        ("machines", "dk_machine_add_page"),
+        ("fx", "dk_fx_add_page"),
+        ("machines", "dk_page_add_param"),
+        ("fx", "dk_page_add_fx_param"),
+        ("machines", "dk_param_range"),
+        ("machines", "dk_param_glyph"),
+        ("machines", "dk_param_latched"),
+        ("machines", "dk_param_on_click"),
+        ("machines", "dk_page_canvas"),
+        ("machines", "dk_page_bind"),
+        ("machines", "dk_page_bind_local"),
+        ("fx", "dk_fx_routes"),
+        ("fx", "dk_fx_mix"),
+        ("samples", "dk_sample_pool_open"),
+        ("samples", "dk_sample_pool_add"),
+        ("samples", "dk_sample_pool_clear"),
+        ("samples", "dk_sample_pool_status"),
+        ("samples", "dk_sample_pool_info"),
+        ("samples", "dk_sample_pool_path"),
+        ("samples", "dk_sample_pool_set"),
+        ("samples", "dk_sample_pool_peaks"),
+        ("samples", "dk_sample_pool_peaks_window"),
+    ];
+
     /// `dk_ui_confirm`: A YES/NO dialog: `done(arg, yes)` runs after it closed. 0 when shown, a negative code when not (another dialog is open, out of memory).
     pub type DkUiConfirmFn = unsafe extern "C" fn(ui: *mut u8, title: *const u8, text: *const u8, done: Option<UiConfirmFn>, arg: *mut u8) -> i32;
 
