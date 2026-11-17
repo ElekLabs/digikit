@@ -42,7 +42,7 @@ What is still open **[O]**: the compared halfword at `0x1c31bf` was not named (a
 
 ## The page hooks and the Sound index **[D]**
 
-`core/fxpages` has an object per device from the same source (`fxpages-dn2.s` is `fxpages-dt2.s` with the Digitone II's page numbers and addresses); `fxpages_info` is version 2 on both (the send words from byte 156).
+`core/fxpages` has an object per device from the same source (`fxpages-dn2.s` is `fxpages-dt2.s` with the Digitone II's page numbers and addresses); `fxpages_info` is version 4 on both (the send words from byte 156; no firmware address in it).
 
 | What | DN2 1.12 | Anchor |
 | --- | --- | --- |

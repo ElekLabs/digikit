@@ -14,7 +14,7 @@ const fake = vi.hoisted(() => {
     guardSet: vi.fn(),
     call: vi.fn(),
   };
-  return { client, close: vi.fn(), spawn: vi.fn(), coupledEnv: vi.fn() };
+  return { client, close: vi.fn(), spawn: vi.fn(), coupledEnv: vi.fn(), coreLibEnv: vi.fn() };
 });
 vi.mock('@digi/control-client', async (original) => ({
   ...(await original<object>()),
@@ -24,6 +24,7 @@ vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
   ...(await original<object>()),
   validateRuntimeInputs: vi.fn(),
   coupledEnv: fake.coupledEnv,
+  coreLibEnv: fake.coreLibEnv,
   resolveInputs: () => ({ syx: '/stock.syx', cfSnapshot: '/ready.snap', dspImage: '/dsp.bin', dspState: '/dsp.snap' }),
 }));
 import { PRE_SOCKET_HANG_MS, Session } from '@digi/test-support';
@@ -42,6 +43,7 @@ const identity = {
 beforeEach(() => {
   vi.resetAllMocks();
   fake.coupledEnv.mockReturnValue({ SHARC_FAST_REGIONS: 'fixture-regions' });
+  fake.coreLibEnv.mockReturnValue({ DIGI_SHARC_CORE_LIB_DN2: '/fixture/core.lib' });
   fake.spawn.mockResolvedValue({ client: fake.client, close: fake.close });
   fake.client.cardLoad.mockResolvedValue({ card: '/card.img' });
   fake.client.firmwareLoad.mockResolvedValue({ runtime: identity, start_used: 'snapshot' });
@@ -109,8 +111,11 @@ test('a mirrored runtime owns its mirror inside the temporary run directory', as
   const runDir = runtime.session.runDir;
   try {
     expect(fs.existsSync(runDir)).toBe(true);
-    expect(fake.coupledEnv).toHaveBeenCalledWith('/stock.syx');
-    expect(fake.spawn.mock.calls[0]?.[0].env).toEqual({ SHARC_FAST_REGIONS: 'fixture-regions' });
+    expect(fake.coupledEnv).toHaveBeenCalledWith('/stock.syx', 'dn2');
+    expect(fake.spawn.mock.calls[0]?.[0].env).toEqual({
+      ...fake.coupledEnv('/stock.syx', 'dn2'),
+      ...fake.coreLibEnv('dn2'),
+    });
     expect(fake.client.firmwareLoad).toHaveBeenCalledWith(expect.objectContaining({ auto_no: false }));
     expect(fake.spawn.mock.calls[0]?.[0].args.slice(-2)).toEqual(['--mirror-dir', `${runDir}/mirror`]);
     fs.mkdirSync(`${runDir}/mirror/digikit/modules`, { recursive: true });

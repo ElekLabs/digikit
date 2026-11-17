@@ -3,9 +3,11 @@
 //! file serves both devices. Design: docs/design/digikit-registry.md ("Effect pages"), docs/findings/61-fx-pages.md.
 //!
 //! Each hook runs in place of the first whole instructions of its stock site (6 bytes, or 8 for two of them) and ends in the stock code behind them: the displaced
-//! instructions are redone by the hook, and the return address is a word of the table (the site plus its length, or another place of the stock routine). Registers:
-//! the hook may clobber what `devices/fw/page.toml` lists for it. A hook that returns into code that tests the flags (`fxp_label`) jumps through `a0`
-//! (`movea` and `jmp` leave the flags); the others push the address and `rts` (the stack is as it was at the site).
+//! instructions are redone by the hook, and it leaves by `jmp` to an exit that `patchkit bind` resolves (`dk_exit_<hook>_<n>`, an absolute address: `fx_x_*`; n = 0 is the
+//! site plus its length, n >= 1 another place of the stock routine, the `exits` of the hook in `devices/fw/page.toml`). A routine that ends the hooked function leaves by
+//! `jmp fx_ret_acc` (`dk_ret_`), and `fxp_acc` calls the stock accessor with `jsr fx_stock_acc` (`dk_stock_`). `jmp abs.l` leaves every register and flag (the code behind
+//! `fxp_label` tests the flags of the compare). The aliases are the `[object.externs]` of module.toml; the stock page lists are `fx_stock` and `fx_keystock` (`dk_fw_`).
+//! Registers: the hook may clobber what `devices/fw/page.toml` lists for it.
 //!
 //! - `fxp_acc`: the page descriptor accessor `row = f(int page)`. A page number `first + k` (k below the effect slots) answers with row k of `DKRT_FXP_ROWS`; the number
 //!   `first + slots` answers with the send row; every other number runs the stock code.
@@ -19,9 +21,24 @@
 //!   effect ID differs, or a value is out of range), the saver writes the values and the IDs into the spare halfwords of the storage record, the initialiser gives
 //!   the defaults. The loader and the initialiser put the mark (`MARKVAL` at `MARK_OFF` in the array) when a row has an effect.
 //!
-//! Table offsets (bytes): the image table `fxpages_info` version 3 (`core/fxpages`) and the words `fxpage::bind_table` adds (from `ROWS_N`).
+//! Table offsets (bytes): the image table `fxpages_info` version 4 (`core/fxpages`) and the words `fxpage::bind_table` adds (from `ROWS_N`). The firmware words of version 3
+//! (the stock lists and the return of each hook) are not in the table any more: `bind` resolves them.
 #[cfg(target_arch = "m68k")]
 use core::arch::global_asm;
+use dkrt_svc_rt::ImportCore;
+
+#[cfg(target_arch = "m68k")]
+extern "C" {
+    /// Two words of the asm below: the stock page list of the FX view and the instruction of its builder that holds the stock count (`dk_fw_` words, resolved by `patchkit bind`).
+    static DKRT_FXP_FW: [u32; 2];
+}
+
+/// The service's `setup`: give the table the two firmware words, then bind it (`fxpage::setup`). A host build has no firmware: both words are 0.
+pub unsafe fn setup(core: &ImportCore) -> i32 {
+    #[cfg(target_arch = "m68k")]
+    dkrt_svc_fx::fxpage::set_firmware(DKRT_FXP_FW[0], DKRT_FXP_FW[1]);
+    dkrt_svc_fx::fxpage::setup(core)
+}
 
 macro_rules! entries {
     ($($name:ident,)*) => {
@@ -57,21 +74,8 @@ global_asm!(
 
     .equ T_FIRST, 20            | the page number of effect row 0
     .equ T_SLOTS, 24            | effect rows
-    .equ T_STOCK, 40            | the stock list of page numbers
     .equ T_VIDX, 80             | the array index of each value (bytes)
     .equ T_MARKVAL, 152         | the mark's value
-    .equ T_R_ACC, 196           | the stock code behind each hook's site
-    .equ T_R_LIST, 200
-    .equ T_R_KEYLIST, 204
-    .equ T_R_SOUND, 208
-    .equ T_R_LABEL_TAIL, 212    | the tail of the label code (pushes the position and draws)
-    .equ T_R_LABEL, 216
-    .equ T_R_GRAPH_SKIP, 220    | the target of the stock `beq.w` that skips the graph
-    .equ T_R_GRAPH, 224
-    .equ T_R_LOAD, 228
-    .equ T_R_SAVE, 232
-    .equ T_R_INIT, 236
-    .equ T_KEYSTOCK, 240        | the stock list of the track FX key
     .equ T_TRACKPAGE, 244       | the track FX page number
     .equ T_TAIL, 248            | byte offset of the last word of the array that stock moves with the storage record
     .equ T_STORE_OFF, 252       | byte offset of the spare halfwords in the storage record
@@ -80,7 +84,7 @@ global_asm!(
     .equ T_MARK_OFF, 264        | byte offset of the mark in the array
 
     .text
-    .balign 4
+    .balignw 4, 0x4e71
 
     .globl fxp_acc
 fxp_acc:
@@ -96,14 +100,13 @@ fxp_acc:
     moveq   #ROW_SIZE,%d1
     muls.l  %d1,%d0
     addi.l  #DKRT_FXP_ROWS,%d0
-    rts
+    jmp     fx_ret_acc
 1:  move.l  4(%sp),%d0                  | the displaced instructions (the stock bound: the pages below the first)
     move.l  DKRT_FXP_TAB+T_FIRST,%d1
     subq.l  #1,%d1
-    movea.l DKRT_FXP_TAB+T_R_ACC,%a0
-    jmp     (%a0)
+    jmp     fx_x_acc
 2:  move.l  DKRT_FXP_TAB+T_TRACKPAGE,-(%sp)  | the send page: the track FX page's name, title and level slot, from the stock accessor
-    jsr     fxp_stock_acc
+    jsr     fx_stock_acc                | the stock accessor from its first instruction: called, so the stock `rts` returns here
     addq.l  #4,%sp
     movea.l %d0,%a0
     lea     DKRT_FXP_SEND_ROW,%a1
@@ -111,14 +114,7 @@ fxp_acc:
     move.l  4(%a0),4(%a1)               | title
     move.l  8+4*8(%a0),8+4*8(%a1)       | the level slot (the ninth code)
     move.l  %a1,%d0
-    rts
-
-fxp_stock_acc:                          | the stock accessor, called as a function: the page number at 4(SP)
-    move.l  4(%sp),%d0
-    move.l  DKRT_FXP_TAB+T_FIRST,%d1
-    subq.l  #1,%d1
-    movea.l DKRT_FXP_TAB+T_R_ACC,%a0
-    jmp     (%a0)
+    jmp     fx_ret_acc
 
     .globl fxp_list
 fxp_list:
@@ -126,11 +122,9 @@ fxp_list:
     beq.s   1f
     move.l  %d0,(%sp)                   | the count the builder pushed (the stock 3)
     move.l  #DKRT_FXP_LIST_BUF,%d0
-    move.l  DKRT_FXP_TAB+T_R_LIST,-(%sp)
-    rts
-1:  move.l  DKRT_FXP_TAB+T_STOCK,%d0         | the displaced instruction
-    move.l  DKRT_FXP_TAB+T_R_LIST,-(%sp)
-    rts
+    jmp     fx_x_list
+1:  move.l  #fx_stock,%d0               | the displaced instruction
+    jmp     fx_x_list
 
     .globl fxp_keylist
 fxp_keylist:
@@ -138,19 +132,16 @@ fxp_keylist:
     beq.s   1f
     move.l  %d0,(%sp)                   | the count the builder pushed (the stock 1)
     move.l  #DKRT_FXP_KEY_LIST,%d0
-    move.l  DKRT_FXP_TAB+T_R_KEYLIST,-(%sp)
-    rts
-1:  move.l  DKRT_FXP_TAB+T_KEYSTOCK,%d0      | the displaced instruction
-    move.l  DKRT_FXP_TAB+T_R_KEYLIST,-(%sp)
-    rts
+    jmp     fx_x_keylist
+1:  move.l  #fx_keystock,%d0            | the displaced instruction
+    jmp     fx_x_keylist
 
     .globl fxp_sound
 fxp_sound:
     addq.l  #1,DKRT_FXP_NSOUND               | D0 (the loader's result) is not touched
     movem.l (%sp),%d2-%d4/%a2-%a6       | the displaced instructions
     lea     0x20(%sp),%sp
-    move.l  DKRT_FXP_TAB+T_R_SOUND,-(%sp)
-    rts
+    jmp     fx_x_sound
 
     .globl fxp_label
 fxp_label:
@@ -163,13 +154,11 @@ fxp_label:
     addi.l  #DKRT_FXP_ROWS,%d1
     movea.l %d1,%a0
     move.l  (%a0),-(%sp)                | the tab label, as the stock code pushes its string
-    movea.l DKRT_FXP_TAB+T_R_LABEL_TAIL,%a0
-    jmp     (%a0)
-1:  movea.l DKRT_FXP_TAB+T_STOCK,%a0         | the displaced instructions: the first page of the stock list (DEL; D0 is untouched)
+    jmp     fx_x_label_tail
+1:  movea.l #fx_stock,%a0               | the displaced instructions: the first page of the stock list (DEL; D0 is untouched)
     move.l  (%a0),%d1
     cmp.l   %d0,%d1
-    movea.l DKRT_FXP_TAB+T_R_LABEL,%a0       | movea and jmp keep the flags of the compare for the stock `bne.b`
-    jmp     (%a0)
+    jmp     fx_x_label                  | jmp abs.l keeps the flags of the compare for the stock `bne.b`
 
     .globl fxp_graph
 fxp_graph:
@@ -177,10 +166,8 @@ fxp_graph:
     beq.s   1f
     cmp.l   DKRT_FXP_TAB+T_FIRST,%d0
     bcs.s   2f
-1:  move.l  DKRT_FXP_TAB+T_R_GRAPH_SKIP,-(%sp)   | no graph
-    rts
-2:  move.l  DKRT_FXP_TAB+T_R_GRAPH,-(%sp)
-    rts
+1:  jmp     fx_x_graph_skip             | no graph
+2:  jmp     fx_x_graph
 
     .globl fxp_load
 fxp_load:
@@ -232,8 +219,7 @@ fxp_load:
     bne.s   1b
     movem.l (%sp),%d2-%d4/%a4-%a5
     lea     20(%sp),%sp
-    movea.l DKRT_FXP_TAB+T_R_LOAD,%a0
-    jmp     (%a0)
+    jmp     fx_x_load
 
     .globl fxp_save
 fxp_save:
@@ -267,8 +253,7 @@ fxp_save:
     bne.s   1b
     movem.l (%sp),%d2-%d4/%a4-%a5
     lea     20(%sp),%sp
-    movea.l DKRT_FXP_TAB+T_R_SAVE,%a0
-    jmp     (%a0)
+    jmp     fx_x_save
 
     .globl fxp_init
 fxp_init:
@@ -301,7 +286,12 @@ fxp_init:
     lea     20(%sp),%sp
 9:  movem.l (%sp),%d2/%a2-%a5          | the displaced instructions
     lea     0x20(%sp),%sp
-    move.l  DKRT_FXP_TAB+T_R_INIT,-(%sp)
-    rts
+    jmp     fx_x_init
+
+    .data
+    .balign 4
+    .globl DKRT_FXP_FW
+DKRT_FXP_FW:
+    .long   fx_stock, fx_stock_n         | the stock list of the FX view, and the `moveq N,D1` of its builder (the byte at +1 is the stock count): `bind` resolves both
 "#
 );

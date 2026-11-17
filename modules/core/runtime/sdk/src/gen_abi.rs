@@ -706,9 +706,6 @@ pub mod sig {
     /// Which modules fit. The ticked set loads at the next boot into an empty runtime: start from the limits (nothing used) and take in the ticked entries (ticked[i] != 0) in list order; a ticked one that does not fit is flagged and not taken. Then each unticked entry is checked against what the ticked ones leave. An entry without SCAN_COMPAT or without SCAN_NEEDS has no verdict (wont 0). n is at most SCAN_MAX. OK.
     pub type dkrt_fit = unsafe extern "C" fn(entries: *const DkrtScan, n: u32, ticked: *const u8, out: *mut DkrtFitOut) -> i32;
 
-    /// Adapter to runtime: the load `req` of dkpool_load finished. result is OK (the handle `out` is filled), E_POOL, E_READ or E_FORMAT. Only from dkpool_tick.
-    pub type dkrt_pool_done = unsafe extern "C" fn(req: u32, result: i32);
-
     /// Adapter to runtime: queue a job on the background worker (owner 0). step is the address of i32 step(u8 *ctx), run in the worker task: it returns 1 to be called again, 0 when finished, or a negative error. done is the address of void done(u8 *ctx, i32 status) (or 0), called once in the UI task with the final status, or -80 after a cancel. Returns a job id > 0, E_BUSY when the queue is full or E_CONTRACT for a null step.
     pub type dkrt_job_post = unsafe extern "C" fn(step: usize, done: usize, ctx: *mut u8) -> i32;
 
@@ -723,10 +720,4 @@ pub mod sig {
 
     /// Adapter to runtime: wait until the run started by dkrt_aux_run has finished. Returns 0, or E_STATE when none was started.
     pub type dkrt_aux_wait = unsafe extern "C" fn() -> i32;
-
-    /// Adapter to runtime: the backing was lost (a stock reset), every handle is invalid. Only from dkpool_tick.
-    pub type dkrt_pool_lost = unsafe extern "C" fn();
-
-    /// Adapter to runtime: the current project slot changed. The runtime never reads the byte.
-    pub type dkrt_project_changed = unsafe extern "C" fn(slot: u32);
 }

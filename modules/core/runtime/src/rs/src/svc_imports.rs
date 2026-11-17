@@ -14,55 +14,25 @@ pub mod shims {
     use super::*;
     use dkrt_abi::dsp::DspState;
     use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
-    use dkrt_abi::registry::RegState;
     use dkrt_abi::service::ServiceRow;
     use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_dynreg() -> *const u32 {
-        REAL_CORE.dynreg()
+    pub unsafe extern "C" fn dkc_boot_index() -> u32 {
+        REAL_CORE.boot_index()
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_reg_state() -> *mut RegState {
-        REAL_CORE.reg_state()
+    pub unsafe extern "C" fn dkc_legacy_state(out: *mut u8) {
+        let b = REAL_CORE.legacy_state();
+        let mut i = 0;
+        while i < b.len() {
+            *out.add(i) = b[i];
+            i += 1;
+        }
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_param_first() -> u32 {
-        REAL_CORE.param_first()
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_param_owners(len: *mut u32) -> *const u8 {
-        let o = REAL_CORE.param_owners();
-        *len = o.len() as u32;
-        o.as_ptr()
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_write_param_row(inf: *const u32, code: u32, template: u32, slot: u32, min: u32, max: u32, def: u32, name: u32, short: u32) {
-        REAL_CORE.write_param_row(inf, code, template, slot, min, max, def, name, short)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_write_fx_param_row(code: u32, template: u32, mirror: u32, min: u32, max: u32, def: u32, name: u32, short: u32) {
-        REAL_CORE.write_fx_param_row(code, template, mirror, min, max, def, name, short)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_write_send_param_row(code: u32, class: u32, owner_of: u32, mirror: u32, name: u32, short: u32) {
-        REAL_CORE.write_send_param_row(code, class, owner_of, mirror, name, short)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_reset_param_row(code: u32) {
-        REAL_CORE.reset_param_row(code)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_make_rep(rep: *mut u8, src: *const u8, upper: bool) -> u32 {
-        REAL_CORE.make_rep(rep, src, upper)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_type_resolve(key: u32) -> u32 {
-        REAL_CORE.type_resolve(key)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_type_map_used() -> u32 {
-        REAL_CORE.type_map_used()
+    pub unsafe extern "C" fn dkc_legacy_state_clear() -> i32 {
+        REAL_CORE.legacy_state_clear()
     }
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_guard_faults(ty: u32) -> u32 {
@@ -79,6 +49,38 @@ pub mod shims {
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_module_name(owner: u8) -> *const u8 {
         REAL_CORE.module_name(owner)
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_module_of(ctx: *const u8) -> u8 {
+        REAL_CORE.module_of(ctx)
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_storage_stat(root: u32, path: *const u8, len: u32, out: *mut dkrt_abi::storage::StatWire) -> i32 {
+        match REAL_CORE.storage_stat(root, core::slice::from_raw_parts(path, len as usize)) {
+            Ok(s) => {
+                *out = dkrt_abi::storage::StatWire::of(&s);
+                dkrt_sdk::OK
+            }
+            Err(e) => e,
+        }
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_storage_stat_head(root: u32, path: *const u8, len: u32, out: *mut dkrt_abi::storage::StatWire, head: *mut u8) -> i32 {
+        match REAL_CORE.storage_stat_head(root, core::slice::from_raw_parts(path, len as usize), &mut *(head as *mut [u8; 64])) {
+            Ok((s, n)) => {
+                *out = dkrt_abi::storage::StatWire::of(&s);
+                n as i32
+            }
+            Err(e) => e,
+        }
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_irq_mask() -> u32 {
+        REAL_CORE.irq_mask()
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_irq_restore(sr: u32) {
+        REAL_CORE.irq_restore(sr)
     }
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_settings_get(key: *const u8, key_len: u32, out: *mut u8, out_len: u32) -> i32 {
@@ -104,35 +106,6 @@ pub mod shims {
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_job_cancel(owner: u8, id: u32) -> i32 {
         REAL_CORE.job_cancel(owner, id)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_native_available(kind: u32) -> bool {
-        REAL_CORE.native_available(kind)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_native_register(
-        kind: u32,
-        owner: u32,
-        page: u32,
-        flags: u32,
-        title: *const u8,
-        draw: u32,
-        event: u32,
-        bindings: *const u32,
-        words: *const u32,
-        word_count: u32,
-        arg: u32,
-        with_arg: u32,
-    ) -> i32 {
-        REAL_CORE.native_register(kind, owner, page, flags, title, draw, event, bindings, words, word_count, arg, with_arg)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_native_remove(kind: u32) {
-        REAL_CORE.native_remove(kind)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_native_turn(view: *const u8, event: *const u8) -> u32 {
-        REAL_CORE.native_turn(view, event)
     }
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_dsp() -> *mut DspState {
@@ -297,8 +270,7 @@ mod tests {
             assert!(!SVC_NAMES.contains(n), "{n} is in both tables");
         }
         assert!(SVC_NAMES.contains(&"dk_service_declare_row") && SVC_NAMES.contains(&"dkc_panic"));
-        // one `dkc_*` per CoreApi method, and the two of a service file
-        assert!(SVC_COUNT >= 38, "{SVC_COUNT}");
+        // the list is the one source of the table (a method added to it is checked by the loop above); the count is no pin
     }
 
     #[test]

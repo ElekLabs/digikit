@@ -186,4 +186,4 @@ accepts any alignment in DDR. The scenario's helpers (`u16`, `put16`) do the sam
 ## The send page (FX routing step 3) **[D]**
 
 `core/fxpages` also has the send page of the track FX key (finding 64): page number `page_first + fx_slots` (36 on the Digitakt II) in `fxp_acc`, a hook on the FX key's list (`cf.fxpages.keylist`: the same builder `FUN_40066584`, `+0x6c0`), a hook on the sound loader's exit (`cf.fxpages.sound`)
-and two more parameter rows (`params.fs0`, `fs1`). `fxpages_info` is version 2 (words 39 to 48). The F4 pages above are unchanged: with no send effect the FX key and the F4 view are the stock ones and the PCM is the same bit for bit.
+and two more parameter rows (`params.fs0`, `fs1`). `fxpages_info` is version 4 (the send words are 39 to 48; no firmware address in it). The F4 pages above are unchanged: with no send effect the FX key and the F4 view are the stock ones and the PCM is the same bit for bit.

@@ -2,10 +2,12 @@
 // the firmware and the private ready inputs that `tools/emulator/coupled.py` boots from.
 // They are not the patchkit ones that tools/nx/device-inputs.mjs hashes. Mirrors tools/emulator/digi_env.py
 // (`firmware`, `firmware_for`, `READY_DIRS`, `ready_inputs`, `ready_inputs.json`); a change there must change this file.
+// It also hashes the store key of each device's core library (the generated core is untracked and no Nx input sees it).
 // The DT2 FX card is built from a generated sine, so it has no input file; DIGI_DT2_CARD (a kept card image) is hashed.
 import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { firmwareDir } from './device-inputs.mjs';
 
@@ -48,8 +50,25 @@ export const coupledInputs = async (env = process.env) => {
     await add(`dt2/ready/${f}`, join(dt2Ready, f));
   }
   if (env.DIGI_DT2_CARD) await add('dt2/card', under(env.DIGI_DT2_CARD));
+  // The DSP core of each device is a library from the store: its key hashes the generated core (an untracked directory
+  // that no Nx input sees), sharc-rt, the toolchain and the build plan (tools/devtools/core_store.py `key`).
+  // An explicit DIGI_SHARC_CORE_LIB_<DEV> is hashed by content instead. The key is computed from `env`, the same
+  // environment the gen dir and the explicit library are read from; it takes about 0.15 s and never builds.
+  for (const device of ['dn2', 'dt2']) {
+    const explicit = env[`DIGI_SHARC_CORE_LIB_${device.toUpperCase()}`];
+    if (explicit) await add(`${device}/core-lib`, under(explicit));
+    else {
+      const done = spawnSync('uv', ['run', 'python', '-m', 'tools.devtools.core_store', 'key', '--device', device], {
+        cwd: root,
+        env,
+        encoding: 'utf8',
+        timeout: 60_000,
+      });
+      lines.push(`${device}/core-key ${done.status === 0 ? done.stdout.trim() : 'unavailable'}`);
+    }
+  }
   return createHash('sha256')
-    .update(`coupled-inputs v1\n${lines.join('\n')}`)
+    .update(`coupled-inputs v2\n${lines.join('\n')}`)
     .digest('hex');
 };
 

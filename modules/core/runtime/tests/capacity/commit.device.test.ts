@@ -7,6 +7,7 @@ import { committedRecords, decodeCommitEvent } from '@digi/test-support/commit-r
 import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { dspBytes, word } from '@digi/regression/runtime/fx-live.ts';
+import { derivedModule } from '@digi/regression/runtime/service-files.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { dynType } from '@digi/regression/runtime/project-kit.ts';
@@ -48,6 +49,35 @@ function usesCountAt(f: Buffer, id: number): number {
     at += 8 + f.readUInt32BE(at + 4);
   }
   throw new Error(`no uses entry for resource ${id}`);
+}
+
+/** The key group of machine keys (kind 2) taken out of the KEYS entry (tag 3) of the header table: the entries after it move up and the table shrinks by the group. */
+function dropMachineKeys(f: Buffer): void {
+  const KIND_MACHINE = 2;
+  const table = f.readUInt32BE(H_KEYS_OFF);
+  const size = f.readUInt32BE(H_KEYS_SIZE);
+  let at = table + 8;
+  for (let i = f.readUInt16BE(table + 6); i > 0; i--) {
+    const len = f.readUInt32BE(at + 4);
+    if (f.readUInt16BE(at) === 3) {
+      let g = at + 8;
+      for (let k = f.readUInt16BE(at + 2); k > 0; k--) {
+        const bytes = 8 + 4 * f.readUInt32BE(g + 4);
+        if (f.readUInt32BE(g) === KIND_MACHINE) {
+          const end = table + size;
+          f.copy(f, g, g + bytes, end);
+          f.fill(0, end - bytes, end);
+          f.writeUInt16BE(f.readUInt16BE(at + 2) - 1, at + 2);
+          f.writeUInt32BE(len - bytes, at + 4);
+          f.writeUInt32BE(size - bytes, H_KEYS_SIZE);
+          return;
+        }
+        g += bytes;
+      }
+    }
+    at += 8 + len;
+  }
+  throw new Error('no machine key group');
 }
 
 /** The machine key the packer writes for the fixture's `test/commit-demo:cmach` (the keys table and the DSP voice record; init passes the index 0). */
@@ -140,7 +170,7 @@ cardRigs(
     dsp: 'sharc',
     roots: COUPLED_ROOTS,
     hold: true,
-    symbols: [...SYMBOLS, 'voices.rows', 'dyndsp_info', 'DKRT_ASSIGN'],
+    symbols: [...SYMBOLS, 'voices.rows', 'dyndsp_info'],
   },
   (rig) => {
     const fixture = () => fs.readFileSync(moduleArtifact(rig.device, ID));
@@ -150,7 +180,7 @@ cardRigs(
       const file = path.join(rig.artifacts, name);
       fs.mkdirSync(rig.artifacts, { recursive: true });
       fs.writeFileSync(file, rehash(f));
-      return file;
+      return derivedModule(moduleArtifact(rig.device, ID), file);
     };
 
     test('the commit logs its rows, writes the voice row ranges and latch mask and commits the effect page', async () => {
@@ -223,10 +253,10 @@ cardRigs(
 
     test('a machine index that the keys table lacks is E_DECL_ID and writes nothing', async () => {
       await rig.first();
-      // init declares machine 0 and effect 0; with a header table that has no entries (and no DSP section, which would name its voice key) there is no row for them
+      // init declares machine 0 and effect 0. The header table keeps its NEEDS and USES, so the builder imports link, and loses its machine keys, so row 0 is not in it
+      // (the machines service refuses in its commit check); without the DSP section, whose voice record would name the machine key (E_DSP_TYPE)
       const file = patched('id.dkm', (f) => {
-        f.writeUInt32BE(8, H_KEYS_SIZE);
-        f.writeUInt16BE(0, f.readUInt32BE(H_KEYS_OFF) + 6);
+        dropMachineKeys(f);
         f.writeUInt32BE(0, H_DSP_SIZE);
       });
       const good = await goodArenaOf(rig);

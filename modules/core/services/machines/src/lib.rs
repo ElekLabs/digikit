@@ -17,7 +17,10 @@ pub(crate) fn profile<C: dkrt_abi::core_api::CoreApi>(
     dkrt_abi::platform::DeviceProfile::by_id(core.device_id())
 }
 
+pub mod assign;
+pub mod build;
 pub mod dsp;
+pub mod info;
 pub mod nativepage;
 pub mod paramapi;
 pub mod records;

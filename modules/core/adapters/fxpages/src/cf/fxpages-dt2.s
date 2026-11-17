@@ -8,8 +8,8 @@
 | service need from the firmware and nothing that changes at run time: the state words (rows, page list, counters) are 0 here; the service keeps them in its own bss and
 | fills them into its copy of the table (`fxpage::bind_table`).
 |
-| The return words (196 and up) are where each hook continues in the stock code: the site plus the length of the instructions the hook replaced, or another place of
-| the same routine (`_fp_label + 0x1e`, `_fp_graph + 0x1c4`).
+| The firmware addresses of version 3 (the stock page lists and the return words from 196: where each hook continues in the stock code) are not here: the service file
+| names them and `patchkit bind` resolves them for the user's firmware (devices/fw `exits`); their words are 0.
 |
 | fxpages_info is the table the service reads (all words big endian).
 
@@ -24,7 +24,7 @@
     .globl fxpages_info
 fxpages_info:
     .long   0x46585047                  |  0 'FXPG'
-    .long   3                           |  4 version (3: the return words from byte 196; 2: the send page words from byte 156)
+    .long   4                           |  4 version (4: no firmware address, the words 40, 44, 196 to 236 and 240 are 0; 3: the return words from byte 196; 2: the send page words from byte 156)
     .long   DEVICE_ID                   |  8 device ([digikit] id: 1 = dt2)
     .long   0                           | 12 the page rows (the service's state)
     .long   ROW_SIZE                    | 16 row size
@@ -33,8 +33,8 @@ fxpages_info:
     .long   0                           | 28 the list of page numbers the FX view gets (the service's state)
     .long   LIST_WORDS                  | 32 its capacity
     .long   0                           | 36 the count cell (the service's state)
-    .long   _fp_stock                   | 40 the stock list (page numbers, words)
-    .long   _fp_stock_n                 | 44 the address of `moveq N,D1` in the builder: N is the byte at +1, the stock count
+    .long   0                           | 40 (version 3: the stock list of the FX view; now `dk_fw_` in the service file)
+    .long   0                           | 44 (version 3: the builder's `moveq N,D1`; now `dk_fw_`)
     .long   _fp_p_first                 | 48 the parameter code of knob 0 of effect row 0 (`params.fp0`)
     .long   8                           | 52 parameter rows for each effect row: 7 knobs and MIX
     .long   FX_ARRAY_OFF                | 56 byte offset of the kit's effect value array in the kit object
@@ -68,18 +68,18 @@ fxpages_info:
     .long   FX_SOUND_OFF                | 184 the first Sound object in the kit object (bytes from the kit object)
     .long   FX_SOUND_STRIDE             | 188 bytes between the 16 Sound objects
     .long   0                           | 192 sound loads that went through the loader hook (the service's state)
-    .long   _fp_acc + 6                 | 196 page_desc: the stock code behind the hook
-    .long   _fp_list + 6                | 200 fx_view_list.load
-    .long   _fp_keylist + 6             | 204 fx_key_list.load
-    .long   _fp_sound + 8               | 208 sound_load_exit
-    .long   _fp_label + 0x1e            | 212 tab_label_test: the tail of the label code (pushes the position and draws)
-    .long   _fp_label + 6               | 216 tab_label_test: the stock compare and its `bne.b`
-    .long   _fp_graph + 0x1c4           | 220 filter_graph_test: the target of the stock `beq.w` (no graph)
-    .long   _fp_graph + 6               | 224 filter_graph_test: the graph is drawn
-    .long   _fp_load + 6                | 228 fx_array.load
-    .long   _fp_save + 6                | 232 fx_array.save
-    .long   _fp_init + 8                | 236 fx_array.init_exit
-    .long   _fp_keystock                | 240 the stock list of the track FX key
+    .long   0                           | 196 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 200 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 204 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 208 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 212 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 216 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 220 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 224 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 228 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 232 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 236 (version 3: a return address; now `dk_exit_` in the service file)
+    .long   0                           | 240 (version 3: the stock list of the track FX key; now `dk_fw_`)
     .long   FX_TRACK_PAGE               | 244 the track FX page number
     .long   FX_TAIL_OFF                 | 248 byte offset of the last word of the array that stock moves with the storage record
     .long   FX_STORE_OFF                | 252 byte offset of the spare halfwords in the storage record

@@ -382,7 +382,7 @@ service = "runtime"
 since = "0.7.0"
 context = "init"
 sig = "i32 (dk_files *files, const char *path, void *buf, u32 cap)"
-doc = "Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`."
+doc = "Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code: `E_NOT_FOUND` for a missing file or a folder, `E_SEL_PATH` for an empty path, `E_TOO_BIG` for a path over 159 bytes or a file larger than `cap`. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`."
 
 [[import]]
 name = "dk_host_register"
@@ -637,6 +637,7 @@ doc = "Set parameter word `word` of the calling module on `track` to `raw` (unit
 [[import]]
 name = "dk_module_ctx_add_machine"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "dk_machine *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
@@ -645,6 +646,7 @@ doc = "Declare a machine of this module: `index` is its DK_MACHINE_ID_<ID> (buil
 [[import]]
 name = "dk_module_ctx_add_fx"
 service = "fx"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "dk_fx *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
@@ -701,6 +703,7 @@ doc = "A service module declares a resource it adds, with its limit. See dk_serv
 [[import]]
 name = "dk_machine_add_page"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "dk_page *(dk_machine *m, const char *name, const char *short_name)"
@@ -709,6 +712,7 @@ doc = "Add a page to the machine, after the pages already added: `name` is its t
 [[import]]
 name = "dk_fx_add_page"
 service = "fx"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "dk_page *(dk_fx *fx, const char *name, const char *short_name)"
@@ -717,6 +721,7 @@ doc = "Add the effect's page: `name` is its title, `short_name` its tab label (3
 [[import]]
 name = "dk_page_add_param"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "dk_param *(dk_page *p, const char *name, const char *short_name, u32 def)"
@@ -725,6 +730,7 @@ doc = "Add a machine parameter on the next knob of the page (word = order of dec
 [[import]]
 name = "dk_page_add_fx_param"
 service = "fx"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "dk_param *(dk_page *p, const char *name, const char *short_name, u32 kind, float min, float max, float def)"
@@ -733,6 +739,7 @@ doc = "Add an effect parameter on the next knob of the page. `kind` is DK_PERCEN
 [[import]]
 name = "dk_param_range"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "void (dk_param *prm, u32 min, u32 max)"
@@ -741,6 +748,7 @@ doc = "Set the range of a machine parameter (default 0 to 127)."
 [[import]]
 name = "dk_param_glyph"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "void (dk_param *prm, u32 glyph)"
@@ -749,6 +757,7 @@ doc = "Set the glyph of a machine parameter (DK_GLYPH_*); its range must fit the
 [[import]]
 name = "dk_param_latched"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "void (dk_param *prm)"
@@ -757,6 +766,7 @@ doc = "Latch the parameter at note_on (machine contract 1.3)."
 [[import]]
 name = "dk_param_on_click"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "void (dk_param *prm, param_click_fn fn, void *arg)"
@@ -765,6 +775,7 @@ doc = "Run `fn(arg, track)` when the parameter's knob is clicked on the machine'
 [[import]]
 name = "dk_page_canvas"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "void (dk_page *p, u32 flags, page_draw_fn draw, page_event_fn event, void *arg)"
@@ -773,6 +784,7 @@ doc = "Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or 
 [[import]]
 name = "dk_page_bind"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "void (dk_page *p, dk_param *prm, u32 slot)"
@@ -781,6 +793,7 @@ doc = "On a canvas page, bind a shared parameter of the machine to the encoder `
 [[import]]
 name = "dk_page_bind_local"
 service = "machines"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "void (dk_page *p, u32 local, u32 slot)"
@@ -789,6 +802,7 @@ doc = "On a canvas page, bind the page's local control number `local` to the enc
 [[import]]
 name = "dk_fx_routes"
 service = "fx"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "void (dk_fx *fx, u32 allowed, u32 def)"
@@ -797,6 +811,7 @@ doc = "Set the routes the effect may run on (DK_ROUTE_MASTER, DK_ROUTE_SEND, or 
 [[import]]
 name = "dk_fx_mix"
 service = "fx"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "void (dk_fx *fx, u32 def)"
@@ -805,6 +820,7 @@ doc = "Set the default of the effect's MIX knob, 0 to 127 (127 when this is not 
 [[import]]
 name = "dk_sample_pool_open"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, dk_sample_pool **out)"
@@ -813,6 +829,7 @@ doc = "Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS
 [[import]]
 name = "dk_sample_pool_add"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, const char *path)"
@@ -821,6 +838,7 @@ doc = "Add a stereo-capable sample file to the pool (copies the path, no file IO
 [[import]]
 name = "dk_sample_pool_clear"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index)"
@@ -829,6 +847,7 @@ doc = "Close the entry's generation, drop its reference and set it UNUSED, a hol
 [[import]]
 name = "dk_sample_pool_status"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index)"
@@ -837,6 +856,7 @@ doc = "DK_SAMPLE_UNUSED, QUEUED, LOADING, READY, or a negative error; an error i
 [[import]]
 name = "dk_sample_pool_info"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, void *out)"
@@ -845,6 +865,7 @@ doc = "Copy a 16-byte dk_sample_info (frames, rate, channels, token) of a READY 
 [[import]]
 name = "dk_sample_pool_path"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, char *buf, u32 cap)"
@@ -853,6 +874,7 @@ doc = "Copy the root-relative path of the entry into `buf` and return its length
 [[import]]
 name = "dk_sample_pool_set"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, const char *path)"
@@ -861,6 +883,7 @@ doc = "Load a sample file into pool entry `index` (0..15), replacing what was th
 [[import]]
 name = "dk_sample_pool_peaks"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, u32 token, void *out, u32 capacity)"
@@ -869,6 +892,7 @@ doc = "Copy bounded PCM16 min/max overview pairs of a READY pool entry matching 
 [[import]]
 name = "dk_sample_pool_peaks_window"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, u32 token, u32 first, u32 frames, u32 columns, void *out, u32 capacity)"
@@ -1695,7 +1719,6 @@ DSP_VOICES = { id = 16, fit = true, label = "DSP voices" }   # voices the machin
 # and its `[records.kinds]`.
 [[service]]
 name = "samples"
-rust = "dkrt_svc_samples::records::Samples"
 
 [[service]]
 name = "machines"
@@ -1766,7 +1789,7 @@ dsp_header = 64     # 0x40: the header of the DSP section
 max_records = 32    # records of the `register` table
 max_relocs = 4096   # ColdFire relocations
 max_imports = 32    # imports of the DSP section
-max_cf_imports = 64  # imports of the ColdFire import table (a different table from the DSP section's)
+max_cf_imports = 128  # imports of the ColdFire import table (a different table from the DSP section's); machines.dks used 63 of 64 before its builder calls moved in
 max_state_voices = 64  # voice states of one voice record
 max_state_bytes = 16777216  # bytes of one voice state (1 << 24, the loader's most: the DSP area)
 granule = 64        # the DSP area's placement granule
@@ -1779,7 +1802,7 @@ bind_max = 24       # BIND items (hook sites) of one provider file (`patchkit bi
 install_sites = 48  # hook sites installed at once over all providers (the installer's table: machines 21 + fx 9 and room)
 slots_max = 16      # `[[slot]]` entries of one module (patchkit refuses more)
 info_max = 64       # entries of the image's one table `dkrt_info_table`: every `[[info]]` and `[[slot]]` of all adapters (patchkit refuses more; the core reads at most this many)
-collect_bytes = 7486  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the builder calls of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)
+collect_bytes = 1618  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the generic records and the declarations of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)
 
 # The layout of the `.dkm` file and of its DSP section: byte offsets (big endian words), entry sizes and magics that the packer (packages/patchkit
 # dkm.rs, dkmdsp.rs), the reader of the DSP container (packages/dksharc dkds.rs), dkneeds and the runtime (loader.rs, dsp, services) share. `patchkit gen`

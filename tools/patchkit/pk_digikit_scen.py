@@ -739,99 +739,6 @@ def run_dkrun(
     c.check("dkrun: a second run uploads nothing (same sha256)", not out2["uploaded"])
 
 
-def run_transfer(
-    c: Ctx, rig: B.BootRig, D: Any, blobs: dict[str, bytes], files: dict[str, str]
-) -> None:
-    """`tools.device.dktransfer.install` against the emulator on a boot with no module: build only what changed (nothing: the committed
-    objects are current), pack, upload, SELECT, RESTART, wait for MODULES. A second install builds and uploads nothing."""
-    from tools.device import dkrun as R
-    from tools.device import dktransfer as TR
-    from tools.device import dkupload as DK
-    from tools.patchkit import pk_digikit_upload as U
-
-    # out/ is shared by all worktrees and the pack reuse rule compares file times: a file another run packed from other sources would be reused
-    os.environ["DIGI_TRANSFER_DIR"] = str(c.work / "transfer")
-    (module,) = c.table()["modules"]
-    (path,) = blobs
-    steps = {"n": 0}
-
-    def sleep(s: float) -> None:
-        rig.emu.step(int(s * R.EMU_IPS))
-        steps["n"] += int(s * R.EMU_IPS)
-
-    def now() -> float:
-        return steps["n"] / R.EMU_IPS
-
-    up = DK.Uploader(U.transport(rig))
-    rows = TR.repo_rows(up.info()["port"])
-    before = TR.list_view(up, rows)
-    row = next(r for r in before["modules"] if r["id"] == module)
-    c.check(
-        "transfer list: the module is listed, in a group, not on the card, needs no build",
-        row["group"] == "Machines"
-        and row["on_card"] == "no"
-        and not row["loaded"]
-        and row["build"] == "unchanged"
-        and before["card_only"] == [],
-        str(row),
-    )
-    events: list[dict[str, Any]] = []
-    out = TR.install(up, [module], emit=events.append, rows=rows, select=True)
-    c.check(
-        "transfer install (no restart): nothing built (unchanged), uploaded, verified by the device, selected",
-        out["built"] == []
-        and out["uploaded"] == [module]
-        and out["selected"] == [path]
-        and not out["restarted"]
-        and [e["ok"] for e in events if e["event"] == "verify"] == [True],
-        str(events),
-    )
-    c.check(
-        "transfer install (no restart): the module is not loaded yet",
-        module not in [m["name"] for m in up.modules()["modules"]],
-    )
-    res = TR.restart_device(
-        up,
-        [module],
-        emit=events.append,
-        wait_boot=lambda: D._wait_restart(rig),
-        sleep=sleep,
-        now=now,
-        paths=[path],
-    )
-    c.check(
-        "transfer restart: MODULES lists the module after the boot",
-        res["loaded"] == [module] and res["missing"] == [],
-        str(res),
-    )
-    rec = B.current(rig.sel_records())
-    c.check(
-        "transfer install: SELECT wrote the module and nothing else",
-        rec is not None and rec["paths"] == [path],
-        str(rec),
-    )
-    up = DK.Uploader(U.transport(rig))
-    after = TR.list_view(up, rows)
-    row = next(r for r in after["modules"] if r["id"] == module)
-    c.check(
-        "transfer list after the install: on the card, loaded, fits",
-        row["on_card"] == "yes" and row["loaded"] and row["fits"] is True,
-        str(row),
-    )
-
-    plan = TR.plan_install(TR.repo_rows(up.info()["port"], [module]), [module], up.ls())
-    c.check(
-        "transfer install, second time: nothing to build or upload",
-        plan["build"] == [] and plan["upload"] == [] and plan["select"] == [path],
-        str(plan),
-    )
-    hdr = up.header(path)
-    c.check(
-        "READ: the file on the card has the .dkm header the repo packed",
-        hdr == Path(row["dkm"]).read_bytes()[: DK.HEADER_BYTES],
-    )
-
-
 def memory_rows(cap: dict[str, dict[str, int]]) -> list[str]:
     """The rows the MEMORY page shows for a CAPACITY reply (modules/core/apps/digikit-menu `fill_mem`): label, ten-character bar, percent or used/limit."""
     out = []
@@ -905,7 +812,7 @@ def check_memory_page(c: Ctx, rig: B.BootRig, plan: Any) -> None:
 
 
 def run_menu(c: Ctx) -> None:
-    """Boot with an empty selection, install the set over USB (`dk run` or `dktransfer install`, by the table), and after the boot
+    """Boot with an empty selection, install the set over USB (`dk run`), and after the boot
     check the machine in the list, its voice row and an audible note. The set may hold a code-only module next to the machine."""
     from tools.coldfire import digikit_menu_proof as D
 
@@ -916,8 +823,7 @@ def run_menu(c: Ctx) -> None:
     dkrun = bool(
         t.get("dkrun")
     )  # the selection and the restart come from `tools.device.dkrun` (SELECT, RESTART)
-    transfer = bool(t.get("transfer"))  # dktransfer.install does what dkrun does
-    assert dkrun or transfer, "the menu kind needs dkrun or transfer in its table"
+    assert dkrun, "the menu kind needs dkrun in its table"
     blobs = {}
     for path in files.values():  # the store is filled over USB SysEx, not by the card build: take the packed files out of the folder
         f = c.env.folder / "digikit" / path
@@ -930,9 +836,7 @@ def run_menu(c: Ctx) -> None:
     with c.rig(menu_img, empty, "menu") as rig:
         b0 = rig.boot_info()
         c.check("the first boot has no module", b0["count"] == 0 and b0["loaded"] == 0)
-        if transfer:
-            run_transfer(c, rig, D, blobs, files)
-        elif dkrun:
+        if dkrun:
             run_dkrun(c, rig, D, blobs, files)
         info = rig.boot_info()
         k = len(rows)

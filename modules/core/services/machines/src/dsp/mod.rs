@@ -138,7 +138,7 @@ pub(crate) unsafe fn check_types<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
     while i < nvoice {
         let e = s.add(voice_off as usize + vstride as usize * i as usize);
         // the voice names its machine by key (or by a pinned number): `assign` has the type
-        let t = core.type_resolve(rd32(e.add(VOICE_TYPE as usize)));
+        let t = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
         let entry = rd32(e.add(VOICE_ENTRY as usize));
         if !crate::profile(core).is_some_and(|p| p.is_dyn_type(t))
             || entry >= image_size
@@ -155,9 +155,12 @@ pub(crate) unsafe fn check_types<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         }
         let mut j = 0;
         while j < i {
-            if core.type_resolve(rd32(s.add(
-                voice_off as usize + vstride as usize * j as usize + VOICE_TYPE as usize,
-            ))) == t
+            if crate::assign::resolve(
+                core,
+                rd32(
+                    s.add(voice_off as usize + vstride as usize * j as usize + VOICE_TYPE as usize),
+                ),
+            ) == t
             {
                 return E_DSP_TYPE; // twice in this file
             }
@@ -184,7 +187,7 @@ pub(crate) unsafe fn claim<C: CoreApi>(core: &C, c: &mut Claim) {
             row += 1;
         }
         let e = job.voices.add(job.vstride as usize * v);
-        d.row_type[row] = core.type_resolve(rd32(e.add(VOICE_TYPE as usize)));
+        d.row_type[row] = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
         d.row_pc[row] = L2_SW_BASE + (base + rd32(e.add(VOICE_ENTRY as usize)) - L2_BYTE_BASE) / 2;
         let mut k = 0;
         while k < 8 {

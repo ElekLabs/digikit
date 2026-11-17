@@ -9,7 +9,7 @@
 //! - the DSP section parts it owns: `dsp_check_*`, `dsp_admit`, `dsp_claim`, `dsp_release`, `dsp_clear`, `dsp_row_step`
 //!   (the DSP loader in `dsp/mod.rs` keeps the area, the row table and the state machine);
 //! - capacity counts (`cap`, per capacity kind), the module behind a fault site (`attribute`), the guard's state of a machine type (`guard_state`);
-//! - the declarations of a module's DSP rows (`has_voice`, `declare_voice`, `declare_fx`) and `on_loaded`.
+//! - `on_loaded` (every row of a module is in the DSP).
 pub use dkrt_abi::service::*;
 
 /// The table over the runtime's own core.
@@ -46,9 +46,9 @@ pub mod exports {
     pub unsafe fn fx_entry(index: u32, out: &mut dkrt_sdk::DkrtFx) -> i32 {
         super::services().fx_entry(index, out)
     }
-    /// Host tests only: the page set of the machines service, and its row as a loaded service file has it (`svc_rows::test_machines`).
+    /// Host tests only: the type numbers of the machines service for the module being loaded, and its row as a loaded service file has it (`svc_rows::test_machines`).
     #[cfg(test)]
-    pub(crate) use dkrt_svc_machines::nativepage::PageSet;
+    pub(crate) use dkrt_svc_machines::assign::seed_for_test;
     #[cfg(test)]
     pub(crate) fn machines_row() -> &'static dkrt_abi::service::ServiceRow {
         static ROW: dkrt_abi::service::ServiceRow =
@@ -56,83 +56,12 @@ pub mod exports {
         &ROW
     }
     /// The machine type numbers of the machine rows module `owner` filled (`module_cmds`: the module list); returns how many.
-    pub fn machine_types_of(owner: u8, out: &mut [u8; 8]) -> usize {
-        unsafe { super::services().machine_types_of(owner, out) }
+    pub fn owned_ids(owner: u8, out: &mut [u8; 8]) -> usize {
+        unsafe { super::services().owned_ids(owner, out) }
     }
     /// The shapes of the lfo service, for the runtime's own tests of the record path.
     #[cfg(test)]
     pub(crate) use dkrt_svc_lfo::records::{owner_of, shape, used, Lfo, MAX_SHAPES, SAMPLES};
-
-    // ---- the sample pool (interface A: the imports of sdk.toml over the samples service) ----------------------------------------
-    // The handle a module holds is its client number (`entry`); each call resolves it inside the service. The service is generic over the core: these wrappers
-    // pass the real one.
-    use crate::core_api::{client, give, own_rec, REAL_CORE};
-    use dkrt_sdk::E_CONTRACT;
-
-    pub unsafe extern "C" fn dk_sample_pool_open(ctx: *mut u8, out: *mut *mut u8) -> i32 {
-        if out.is_null() || own_rec(ctx).is_none() {
-            return E_CONTRACT;
-        }
-        give(out, dkrt_svc_samples::tracks::open_first(&REAL_CORE))
-    }
-
-    pub unsafe extern "C" fn dk_sample_pool_add(p: *mut u8, path: *const u8) -> i32 {
-        dkrt_svc_samples::tracks::pool_add(&REAL_CORE, client(p), path)
-    }
-
-    pub unsafe extern "C" fn dk_sample_pool_clear(p: *mut u8, index: u32) -> i32 {
-        dkrt_svc_samples::tracks::pool_clear(&REAL_CORE, client(p), index)
-    }
-
-    pub unsafe extern "C" fn dk_sample_pool_status(p: *mut u8, index: u32) -> i32 {
-        dkrt_svc_samples::tracks::status(client(p), index)
-    }
-
-    pub unsafe extern "C" fn dk_sample_pool_info(p: *mut u8, index: u32, out: *mut u8) -> i32 {
-        dkrt_svc_samples::tracks::info(client(p), index, out)
-    }
-
-    pub unsafe extern "C" fn dk_sample_pool_path(p: *mut u8, index: u32, buf: *mut u8, cap: u32) -> i32 {
-        dkrt_svc_samples::tracks::path(&REAL_CORE, client(p), index, buf, cap)
-    }
-
-    pub unsafe extern "C" fn dk_sample_pool_set(p: *mut u8, index: u32, path: *const u8) -> i32 {
-        dkrt_svc_samples::tracks::pool_set(&REAL_CORE, client(p), index, path)
-    }
-
-    pub unsafe extern "C" fn dk_sample_pool_peaks(p: *mut u8, index: u32, token: u32, out: *mut u8, capacity: u32) -> i32 {
-        dkrt_svc_samples::tracks::peaks(client(p), index, token, out, capacity)
-    }
-
-    pub unsafe extern "C" fn dk_sample_pool_peaks_window(
-        p: *mut u8,
-        index: u32,
-        token: u32,
-        first: u32,
-        frames: u32,
-        columns: u32,
-        out: *mut u8,
-        capacity: u32,
-    ) -> i32 {
-        dkrt_svc_samples::peakwin::window(&REAL_CORE, client(p), index, token, first, frames, columns, out, capacity)
-    }
-
-    // ---- the events the adapters call ------------------------------------------------------------------------------------------
-    /// Adapter to runtime: load `req` finished (`result` 0, E_POOL, E_READ or E_FORMAT).
-    #[no_mangle]
-    pub unsafe extern "C" fn dkrt_pool_done(req: u32, result: i32) {
-        dkrt_svc_samples::tracks::pool_done(req, result)
-    }
-    /// Adapter to runtime: the backing was lost, all handles are invalid.
-    #[no_mangle]
-    pub unsafe extern "C" fn dkrt_pool_lost() {
-        dkrt_svc_samples::tracks::pool_lost(&REAL_CORE)
-    }
-    /// Project adapter to runtime: the current project slot changed.
-    #[no_mangle]
-    pub unsafe extern "C" fn dkrt_project_changed(slot: u32) {
-        dkrt_svc_samples::tracks::project_changed(slot)
-    }
 }
 
 /// The length of a record of `kind`; `E_FORMAT`-worthy kinds are `None`. For the builder lowering (`collect`).
@@ -143,7 +72,7 @@ pub fn len(kind: u32) -> Option<u32> {
 #[cfg(test)]
 pub(crate) mod tests;
 #[cfg(test)]
-mod lfo_tests;
+pub(crate) mod lfo_tests;
 #[cfg(test)]
 pub(crate) mod fx_fixture;
 #[cfg(test)]

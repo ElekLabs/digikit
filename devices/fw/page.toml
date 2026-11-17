@@ -192,6 +192,7 @@ name = "cf.page.hook.tab_label_test"
 site = "cf.page.site.tab_label_test"
 cpu = "cf"
 mode = "replace"
+exits = ["cf.page.site.tab_label_test + 0x1e"]
 regs = { in = ["d0"], clobbers = ["d0", "d1", "a0", "ccr"] }   # effect path pushes the row name and jumps to site+0x1e [O]
 devices = ["dt2", "dn2"]
 mark = "D"
@@ -203,6 +204,7 @@ name = "cf.page.hook.filter_graph_test"
 site = "cf.page.site.filter_graph_test"
 cpu = "cf"
 mode = "replace"
+exits = ["cf.page.site.filter_graph_test + 0x1c4"]
 regs = { in = ["d0", "d5"], clobbers = ["ccr"] }   # exits: site+6 (draw the graph) or site+0x1c4 (the beq.w target)
 devices = ["dt2", "dn2"]
 mark = "D"

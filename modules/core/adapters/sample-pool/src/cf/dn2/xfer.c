@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include "cf/dn2/xfer.h"
+#include "cf/pool_events.h"
 
 typedef uint32_t u32;
 typedef int32_t i32;
@@ -228,7 +229,7 @@ static void finish(i32 result)
     r->state = RQ_FREE;
     job.r = 0;
     job.state = J_IDLE;
-    dkrt_pool_done(req, result);
+    sp_pool_done(req, result);
 }
 
 /* Post the load of `r` to the worker. */
@@ -262,7 +263,7 @@ static SpReq *next_queued(void)
             spa_abort(&sp_pool, r->blk);
             sp_unlease(r);
             r->state = RQ_FREE;
-            dkrt_pool_done(r->req, DKPOOL_E_LOST);
+            sp_pool_done(r->req, DKPOOL_E_LOST);
             continue;
         }
         if (!best || (int32_t)(r->age - best->age) < 0)

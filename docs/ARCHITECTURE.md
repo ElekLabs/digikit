@@ -26,7 +26,7 @@ Five layers, L0 to L4. Calls go down. The diagram is the target; "today and targ
         │    + service-only set      │    lifecycle, record-kind handlers,
         ▼                            │    slots/hooks, resources, sinks
  ───────────────────────────────────────────────────────────────┴──────────
- L2  Runtime core (kind-free: never names a machine, effect or service)
+ L2  Runtime core (kind-free: never names a machine, effect or service; `layercheck` rule `kind-free`)
      state      State, statics, imports, C API (api.rs), mailbox
      boot       selection, safe mode, boot plan (dependencies, fit, refusals)
      loading    loader, collect (relocate, commit records),
@@ -74,10 +74,10 @@ The crossings of the R2b code, and what R2c made of them:
 | R2b crossing | Now |
 | --- | --- |
 | `tracks` checks `fxpage` and `fxsend` busy; `fx_live` checks `tracks::busy` | The DSP link queue of the core (R6a, `link.rs`): live values with `link_set`, owner requests with `link_submit`. No writer asks whether the link is busy |
-| `fx` needs `machines` rows | Both use `CoreApi` rows (`reg_state`, `dynreg`, `write_param_row`, `make_rep`) and no function of the other |
-| `pageclick` reads registry rows | `CoreApi::param_first`, `param_owners` |
+| `fx` needs `machines` rows | Both write parameter rows with the shared crate `dkrt-svc-params` and find `dynreg_info` through `CoreApi::info`; neither calls a function of the other (RS-C: no registry state or table in `CoreApi`) |
+| `pageclick` reads registry rows | `dkrt_svc_machines::records::param_first`, `param_owners`: the registry state `DKRT_REG` is a static of `machines.dks` |
 | `fxsend` uses `settings` | `CoreApi::settings_get` and `settings_put` (a broker resource) |
-| `assign` (sticky type numbers) in `machines` | Back in the core (`assign.rs`): it is kind-free. Services call `CoreApi::type_resolve` |
+| `assign` (sticky type numbers) in `machines` | In `machines` again (RS-C, `assign.rs` of the crate): `Service::settle` plans the numbers once per boot from the machine keys of the selection, and the map is the settings key `machines.types` (the selection record's old map is read once: `CoreApi::legacy_type_map`) |
 | core calls of `assign`, `fxpage::tick`, `pageclick::tick`, `tracks::tick`, `fxsend::fx_entry`, the nativepage kinds | `Service::tick(phase)`, `handlers::exports`, `dkrt_abi::registry::KIND_NATIVE*` |
 
 ### Today and target
@@ -95,6 +95,8 @@ Today the runtime object holds the L2 core and the L3 services, joined by the in
 - **R12** makes the L3 services real modules (`.dks`). The movable ColdFire hooks go from L1 into their services, and the runtime shrinks to L2.
 
 `core/expansion` is the reset-time installer: it runs at reset and copies all patched-in code to its place. `modules/core/fw` holds the generated firmware bindings (a library, not a module).
+
+A service file (`.dks`) holds no firmware address. It names firmware through `dk_fw_` (an anchor), `dk_exit_` (the end of a hook's site or an `exits` entry of the hook in `devices/fw`), `dk_ret_` (an `rts`), `dk_stock_` (the stock path, called from the hook) and `dk_tail_` imports, and `patchkit bind` resolves them for the user's firmware (docs/PATCHING.md "Firmware references"). A bound file carries the table item `FW` (the first 8 bytes of the stock image's SHA-256); the loader compares it with the `fw_id` entry that `patchkit apply` puts in the image's info table and refuses a file bound to another firmware with `E_HOOK_STOCK`. The image info tables hold only what the patched image owns: `machines_info` (version 2, 16 words: registry rows and counts, `mf_ensure`, the native page functions, the slot map, the page rows) and `fxpages_info` (version 4: device numbers, value indices and send cells; its former firmware words are 0).
 
 ## Boundaries and tests
 
@@ -142,7 +144,9 @@ Rules:
 
 7. **Platform.** The runtime module installs no firmware hook except the machine page hooks (`cf.page.hook.source_key`, `source_turn`); the rest are in the platform adapter. Only `platform.rs` and `fw.rs` (at the source root of the runtime crate; it must implement `dkrt_abi::fw::Fw`) name the firmware crate `dkfw`; the rest of the core and the services use the `Platform` and `Fw` traits. No runtime file but `platform.rs` compares the device id with a number: it asks the device profile (`Platform::samples_in_store`, `sample_path_max`), whose values come from the device files.
 
-Today `check:layers` enforces these seven rules: roles, which sources and objects each role may use (so L4 never reaches firmware names and L1 is the only layer with `dk_fw_*`), no patching by apps, the capability cost, the arrows between L2 and L3 (including the dependencies and sources of the service crates), and the platform boundary of the runtime.
+8. **Kind-free core.** The runtime's own code (the runtime crate's sources without its host tests, `handlers.rs` and the generated `gen_services.rs`) names no machine or effect: no builder call, no record kind of a machine or an effect, no table of an image adapter that only a service reads (`dynreg_info`, `machines_info`, `fxpages_info`, `mf_native_*`) and no machines registry state. The machines and fx service files export the builder calls (`provided = true` in `sdk/sdk.toml`), keep the state of a module's `init` and write their records in `Service::module_commit`: two passes (`PREPARE` checks and measures, `WRITE` writes and declares the DSP rows) over the one record block of the module; the loader appends the generic records and runs the registry walker (`check`, `apply`, `apply_record`, `remove` of the services that own the kinds). What is left in the core of this kind is the DSP loader's row tables (`guard_*`, `dsp_info`, `fx_info`, until the SHARC stubs move them), the effect list of the FX ROUTES menu (`Service::fx_entry`) and the sample worker (`job_post`, until `samples.dks`).
+
+Today `check:layers` enforces these eight rules: roles, which sources and objects each role may use (so L4 never reaches firmware names and L1 is the only layer with `dk_fw_*`), no patching by apps, the capability cost, the arrows between L2 and L3 (including the dependencies and sources of the service crates), the platform boundary of the runtime, and a core that names no machine or effect (`kind-free`).
 
 Exceptions are listed in `layercheck.py` with a reason: `test/registry-demo` patches the firmware itself (it is patchkit's example of a hook), and `test/ui-demo` stands in for an app.
 

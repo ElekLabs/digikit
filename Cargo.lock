@@ -1069,6 +1069,7 @@ name = "digi-wasm-core"
 version = "0.1.0"
 dependencies = [
  "elektron-native-boot",
+ "periph",
  "serde_json",
  "sharc-fast-wasm",
  "sharc-gen",
@@ -1220,6 +1221,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
+ "dkrt-svc-params",
  "dkrt-test-support",
 ]
 
@@ -1240,7 +1242,17 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
+ "dkrt-svc-params",
  "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-svc-params"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
 ]
 
 [[package]]
@@ -4106,13 +4118,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sharc-gen-2"
-version = "0.0.1"
-dependencies = [
- "sharc-rt",
-]
-
-[[package]]
 name = "sharc-native"
 version = "0.0.1"
 dependencies = [
@@ -4136,7 +4141,6 @@ dependencies = [
  "sha2",
  "sharc-fast-cl",
  "sharc-gen",
- "sharc-gen-2",
  "sharc-native",
 ]
 

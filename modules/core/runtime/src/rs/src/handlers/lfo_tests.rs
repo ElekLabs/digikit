@@ -1,7 +1,7 @@
 //! Host tests of the `lfo` service through the runtime (the crate `dkrt-svc-lfo` has its own over `FakeCore`): the proof that a kind the registry, the collector, the loader, dkneeds and patchkit do not name works end to end
 //! (R7): a fixture's record goes through `dk_record_add`'s collector, the `register` section, the registry walkers and the planner.
 use super::exports::{owner_of, shape, used, Lfo, MAX_SHAPES, SAMPLES};
-use crate::collect::{self, Collect, KeysCopy, Plan, Profile};
+use crate::collect::Collect;
 use super::tests::LOCK;
 use crate::plan::{self, Env};
 use crate::registry;
@@ -9,28 +9,12 @@ use dkneeds::keys::{write_table, KeyGroup, Keys, Table};
 use crate::core_api::RealCore;
 use crate::svc_rows;
 use dkrt_abi::plan::{Reason, Verdict};
-use dkrt_abi::service::ServiceRow;
+use dkrt_abi::service::{RecordSink, ServiceRow};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::records::{KIND_LFO_SHAPE, KINDS_LFO, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
 use std::vec;
 use std::vec::Vec;
-
-const DT2: Profile = Profile {
-    device: 1,
-    pages: false,
-    slot_base: 0,
-    clone_of: 0,
-    level: 10,
-    own_dsp: false,
-    tune_code: 0xca,
-    tune_slot: 0,
-    level_code: 0xd1,
-    level_knob: 7,
-    nslots: 6,
-    slots: [1, 2, 4, 5, 6, 7, 0, 0],
-    tpl: [0xcc, 0xd1, 0x47, 0x32, 0xca, 0xcb],
-};
 
 /// The body of a shape record: the id, then the 32 samples (a ramp from `from`), big-endian.
 fn body(id: u32, from: i16) -> Vec<u8> {
@@ -41,30 +25,34 @@ fn body(id: u32, from: i16) -> Vec<u8> {
     b
 }
 
-/// What a fixture module's `init` does: `dk_record_add` for each shape; then the commit lowers the collection to a `register` section.
+/// What a fixture module's `init` does: `dk_record_add` for each shape; then the commit appends them to the `register` section.
 fn section(shapes: &[(u32, i16)]) -> Vec<u8> {
     let mut c = Collect::new();
     for (id, from) in shapes {
         let b = body(*id, *from);
         assert_eq!(c.add_record(KIND_LFO_SHAPE, b.as_ptr(), b.len() as u32), OK);
     }
-    let keys = KeysCopy::empty();
-    let mut plan = Plan::new();
-    let size = collect::lower(&c, &DT2, &keys, &[false; limits::MACHINE_ROWS], 0x1000, core::ptr::null_mut(), 0, &mut plan).unwrap();
-    let mut buf = vec![0u8; size];
-    collect::lower(&c, &DT2, &keys, &[false; limits::MACHINE_ROWS], 0x1000, buf.as_mut_ptr(), size, &mut plan).unwrap();
+    // the commit appends the generic records to the block the services write, behind the header (magic, version, device, count)
+    let mut sink = RecordSink::measure();
+    c.write_generic(&mut sink);
+    let mut buf = vec![0u8; sink.at];
+    let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
+    c.write_generic(&mut out);
+    for (at, word) in [(0, 0x444b_5247u32), (4, 1), (8, 1), (12, out.count)] {
+        buf[at..at + 4].copy_from_slice(&word.to_be_bytes());
+    }
     buf
 }
 
 /// The lfo service as the runtime has it: a service file (`lfo.dks`), not a row of the image. Its row joins the table as `Registry::add` does at the commit of the
 /// loaded file, and leaves it as `Registry::remove` does at the unload.
-struct Loaded;
+pub(crate) struct Loaded;
 
 /// The module record of the service file.
 const FILE_REC: usize = 0;
 
 impl Loaded {
-    fn new() -> Loaded {
+    pub(crate) fn new() -> Loaded {
         static ROW: ServiceRow = ServiceRow::of::<Lfo, RealCore>("lfo", &KINDS_LFO);
         assert_eq!(unsafe { svc_rows::add(FILE_REC, &ROW) }, OK);
         Loaded
@@ -85,14 +73,14 @@ fn clear() {
 
 #[test]
 fn a_shape_record_goes_from_the_builder_call_to_the_table_and_back() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     clear();
     let sec = section(&[(7, -1000)]);
     // the section is the header and one record of the kind's length
     assert_eq!(sec.len(), 16 + LEN_LFO_SHAPE as usize);
     unsafe {
-        assert_eq!(registry::check(sec.as_ptr(), sec.len() as u32, 0), OK);
+        assert_eq!(registry::check(sec.as_ptr(), sec.len() as u32, 0, 1), OK);
         assert_eq!(registry::apply(1, sec.as_ptr(), sec.len() as u32, 0x1000), OK);
     }
     let s = shape(7).expect("the walker applied the record");
@@ -104,26 +92,26 @@ fn a_shape_record_goes_from_the_builder_call_to_the_table_and_back() {
 
 #[test]
 fn a_second_owner_of_a_shape_id_and_an_id_twice_or_zero_are_refused() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     clear();
     let a = section(&[(7, 0)]);
     unsafe {
-        assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0), OK);
+        assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0, 1), OK);
         assert_eq!(registry::apply(1, a.as_ptr(), a.len() as u32, 0x1000), OK);
         // another module with the same id is refused at the check, and what the first kept is unchanged
-        assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0), E_TYPE_USED);
+        assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0, 1), E_TYPE_USED);
         let other = section(&[(8, 5)]);
-        assert_eq!(registry::check(other.as_ptr(), other.len() as u32, 0), OK);
+        assert_eq!(registry::check(other.as_ptr(), other.len() as u32, 0, 1), OK);
         // an id twice in one file, and the id 0
         let twice = section(&[(9, 0), (9, 1)]);
-        assert_eq!(registry::check(twice.as_ptr(), twice.len() as u32, 0), E_TYPE_USED);
+        assert_eq!(registry::check(twice.as_ptr(), twice.len() as u32, 0, 1), E_TYPE_USED);
         let zero = section(&[(0, 0)]);
-        assert_eq!(registry::check(zero.as_ptr(), zero.len() as u32, 0), E_FORMAT);
+        assert_eq!(registry::check(zero.as_ptr(), zero.len() as u32, 0, 1), E_FORMAT);
         // a table that cannot take the file's shapes
         let many: Vec<(u32, i16)> = (100..100 + MAX_SHAPES as u32).map(|i| (i, 0)).collect();
         let big = section(&many[..MAX_SHAPES]);
-        assert_eq!(registry::check(big.as_ptr(), big.len() as u32, 0), E_TABLE_FULL);
+        assert_eq!(registry::check(big.as_ptr(), big.len() as u32, 0, 1), E_TABLE_FULL);
         registry::remove(1);
     }
     assert_eq!(used(), 0);
@@ -157,7 +145,7 @@ fn plan_of(tables: &[Vec<u8>]) -> plan::Plan {
 
 #[test]
 fn the_planner_knows_the_kind_from_the_service_table_refuses_an_unowned_kind_and_a_second_owner() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     let one = table(&[(KIND_LFO_SHAPE, &[7])]);
     let same = table(&[(KIND_LFO_SHAPE, &[7, 8])]);

@@ -25,6 +25,7 @@ fast-wasm = ["sharc", "dep:sharc-fast-wasm"]
 
 [dependencies]
 elektron-native-boot = { path = "../boot" }
+periph = { path = "../periph", default-features = false }
 serde_json = "1"
 sharc-peer = { path = "../sharc-peer", optional = true }
 sharc-native = { path = "../sharc", optional = true }

@@ -181,140 +181,105 @@
    "addend": 0,
    "offset": 52,
    "section": ".rodata",
-   "symbol": "_mf_k_keydown",
+   "symbol": "_mf_first",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 56,
    "section": ".rodata",
-   "symbol": "_mf_k_setvalue",
+   "symbol": "_mf_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 60,
    "section": ".rodata",
-   "symbol": "_mf_k_viewtrack",
+   "symbol": "_mf_entries",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 64,
    "section": ".rodata",
-   "symbol": "_mf_first",
+   "symbol": "_mf_rows",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 68,
    "section": ".rodata",
-   "symbol": "_mf_count",
+   "symbol": ".sec..text",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 72,
    "section": ".rodata",
-   "symbol": "_mf_entries",
+   "symbol": "mf_native_page_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 76,
    "section": ".rodata",
-   "symbol": "_mf_rows",
+   "symbol": "mf_native_descriptor",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 80,
    "section": ".rodata",
-   "symbol": ".sec..text",
+   "symbol": "mf_native_code",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 84,
    "section": ".rodata",
-   "symbol": "mf_native_page_count",
+   "symbol": "mf_native_draw",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 88,
    "section": ".rodata",
-   "symbol": "mf_native_descriptor",
+   "symbol": "mf_native_overlay",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 92,
    "section": ".rodata",
-   "symbol": "mf_native_code",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 96,
-   "section": ".rodata",
-   "symbol": "mf_native_draw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 100,
-   "section": ".rodata",
-   "symbol": "mf_native_overlay",
+   "symbol": ".sec..rodata",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 104,
    "section": ".rodata",
-   "symbol": "_mf_spt",
+   "symbol": "mf_native_register",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 108,
    "section": ".rodata",
-   "symbol": ".sec..rodata",
-   "type": "cf.32"
-  },
-  {
-   "addend": 12,
-   "offset": 120,
-   "section": ".rodata",
-   "symbol": "_mf_c5",
+   "symbol": "mf_native_register_v2",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 124,
+   "offset": 112,
    "section": ".rodata",
-   "symbol": "_mf_c5a",
+   "symbol": "mf_native_remove",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 128,
+   "offset": 116,
    "section": ".rodata",
-   "symbol": "_mf_x_typearg",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 132,
-   "section": ".rodata",
-   "symbol": "_mf_sp",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 136,
-   "section": ".rodata",
-   "symbol": "_mf_spa",
+   "symbol": "mf_native_turn",
    "type": "cf.32"
   }
  ],
@@ -335,13 +300,13 @@
   },
   {
    "align": 4,
-   "hex": "000000080000000c0000001000000014ffffffffffffffff000000180000001c00000020000000244d4143480000000100000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "000000080000000c0000001000000014ffffffffffffffff000000180000001c00000020000000244d41434800000003000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 196
+   "size": 120
   }
  ],
- "source_sha256": "29fda66fba4d7ed191ae9d6bbd9c63007cee8caa1e35a430c1b1861912958a60",
+ "source_sha256": "b9b8505abc61e6ffcf19b2c6cb62ed20ca6a45440bdbf6d23181b6b39bac2c9f",
  "symbols": [
   {
    "global": false,
@@ -359,18 +324,6 @@
    "global": false,
    "name": ".sec..text",
    "section": ".text",
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_c5",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_c5a",
-   "section": null,
    "value": 0
   },
   {
@@ -393,24 +346,6 @@
   },
   {
    "global": true,
-   "name": "_mf_k_keydown",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_k_setvalue",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_k_viewtrack",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
    "name": "_mf_list_stock",
    "section": null,
    "value": 0
@@ -418,18 +353,6 @@
   {
    "global": true,
    "name": "_mf_rows",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_sp",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_spa",
    "section": null,
    "value": 0
   },
@@ -454,12 +377,6 @@
   {
    "global": true,
    "name": "_mf_t_rank",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_x_typearg",
    "section": null,
    "value": 0
   },
@@ -525,6 +442,30 @@
   },
   {
    "global": true,
+   "name": "mf_native_register",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_register_v2",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_remove",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_turn",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "mf_native_type",
    "section": ".text",
    "value": 380
@@ -571,7 +512,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "111",
-  "isa_check": "8fbe2a46eab870d3f4b41cfb25dd7dc6ae1fd98fc6a46f0a4f76904ffae1562a",
+  "isa_check": "a9ca68aa55c674ec4d20a13af99d8a6fea67dc56276e50a67cb7a05dc737a5b2",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

@@ -239,7 +239,7 @@ anchor on both ports (`dkrt.fw.*`). The runtime's upload buffer is a static 16-b
 
 ## Tests
 
-- CLI transfer acceptance: `modules/core/runtime/tests/transfer-live.device.test.ts` on DT2 1.17 and DN2 1.12, through the real `tools.device.dktransfer` CLI. Install/restart persists the upload and selection, the mirror matches the card's file hash and metadata, delete plus `card.sync` removes it, and the next protocol restart skips the selected missing module with `MOD_LOAD E_NOT_FOUND` and reaches `UI_FIRST`. Run with `mise run test:runtime -- transfer-live` (prerequisites: `tests/regression/README.md`); the gate selects this acceptance on relevant changes. Remaining scenario tests are in `tests/digikit/scenarios`.
+- CLI transfer acceptance: `modules/core/runtime/tests/transfer-live.device.test.ts` on DT2 1.17 and DN2 1.12, through the real `wb transfer` CLI (`mise run transfer`), which installs the services the module needs with it. Install/restart persists the upload and selection, the mirror matches the card's file hash and metadata, delete plus `card.sync` removes it, and the next protocol restart skips the selected missing module with `MOD_LOAD E_NOT_FOUND` and reaches `UI_FIRST`. Run with `mise run test:runtime -- transfer-live` (prerequisites: `tests/regression/README.md`); the gate selects this acceptance on relevant changes. Remaining scenario tests are in `tests/digikit/scenarios`.
 - upload, list, restart, load: equal to a card built with the file in `digikit/` (rows, tables, PCM).
 - replace, delete, CLEAR, E_FULL, E_HASH (a wrong file hash commits nothing), DATA retry and bad offset.
 - power cut during staging, between header B and A, and after A: the next boot reads a valid store (old or new, never mixed).

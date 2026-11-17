@@ -3,15 +3,16 @@
 | Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (`patchkit bind` made the hook raw: no trampoline); the frame type is entered
 | through the image stub of the pointer slot `frametype` (an interrupt site). The routine takes the whole control flow of the site: it runs in place of the stock
 | instructions there and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, made by `patchkit bind`) or, when a
-| branch is among them, by pushing an exit address of the table `MF_TAB` and doing `rts` (the stack is as it was at the site). `MF_TAB` is the image table `machines_info` of core/machines, copied by `setup`
-| (lib.rs). Offsets T_* below; the same layout is in hooks-dt2.s and in `image.rs`.
+| branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `devices/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address `patchkit bind` resolves: the jump changes no
+| register or flag). A routine that ends the hooked function leaves by `jmp mf_ret_*` (`dk_ret_<hash>`, an `rts`). The aliases are the `[object.externs]` of module.toml. `MF_TAB` is the image table
+| `machines_info` of core/machines, copied by `setup` (lib.rs). Offsets T_* below; the same layout is in hooks-dt2.s and in `image.rs`.
 |
 | Hook convention: registers the stock site frees are scratch (`devices/fw/machine.toml` lists them per hook); everything else a routine saves.
 | The image keeps `mf_ensure` (the tables of the registry are built once, on first use: `mfn_call_ensure` calls it through the table), the machine list hook and the
 | dispatch hook.
 
     .text
-    .balign 4
+    .balignw 4, 0x4e71
 
 | row layout (bytes), the field order of core/machines' [[registry.field]]
     .equ O_CLONE,  44
@@ -25,23 +26,17 @@
 
 
 | the table (byte offsets of the words of MF_TAB; `image.rs` has the same layout)
-    .equ T_FIRST, 24
-    .equ T_COUNT, 28
-    .equ T_ROWS, 36
-    .equ T_ENSURE, 40
-    .equ T_N_PAGE_COUNT, 44
-    .equ T_N_DESCRIPTOR, 48
-    .equ T_N_CODE, 52
-    .equ T_N_DRAW, 56
-    .equ T_N_OVERLAY, 60
-    .equ T_PGROWS, 72
-    .equ T_PGN, 76
-    .equ T_R_GROUP_NEXT, 100
-    .equ T_R_GROUP_TAKEN, 104
-    .equ T_R_FT, 108
-    .equ T_R_RD, 112
-    .equ T_R_OW, 116
-    .equ T_RC0, 120
+    .equ T_FIRST, 12
+    .equ T_COUNT, 16
+    .equ T_ROWS, 24
+    .equ T_ENSURE, 28
+    .equ T_N_PAGE_COUNT, 32
+    .equ T_N_DESCRIPTOR, 36
+    .equ T_N_CODE, 40
+    .equ T_N_DRAW, 44
+    .equ T_N_OVERLAY, 48
+    .equ T_PGROWS, 56
+    .equ T_PGN, 60
 
 | mf_ensure: the image's table builder; it preserves every register (not the flags). Called as a subroutine.
 mfn_call_ensure:
@@ -70,10 +65,8 @@ mf_group:
 1:  moveq   #3,%d1                      | the stock test
     cmp.l   %d0,%d1
     blt.s   2f
-    move.l  MF_TAB+T_R_GROUP_TAKEN,-(%sp)
-    rts
-2:  move.l  MF_TAB+T_R_GROUP_NEXT,-(%sp)
-    rts
+    jmp     mf_x_g_taken
+2:  jmp     mf_x_g_next
 
 | ---- type maps: three functions index per-type tables built at start-up with the machine type they get as a stack argument, and fall back to MIDI's row above type 4. A
 | machine with page rows (registry `pages`) answers them itself (page count, page descriptor, slot -> code from its rows); any other added type is replaced by its clone_of in
@@ -107,7 +100,7 @@ mf_typemap0:
     movea.l MF_TAB+T_N_PAGE_COUNT,%a0
     jsr     (%a0)
     addq.l  #8,%sp
-    rts                                 | ordinary pages plus an opt-in native callback page
+    jmp     mf_ret_tm0                  | ordinary pages plus an opt-in native callback page
 1:  move.l  %a1,%d0
     CLONEMAP 4
 9:  jmp     dk_tail_02e8a3f1            | the stock instructions of the site, made by `patchkit bind`, and on
@@ -123,7 +116,7 @@ mf_typemap1:
     tst.l   %d0
     beq.s   8f
     move.l  (%sp)+,%d2
-    rts
+    jmp     mf_ret_tm1
 8:  move.l  8(%sp),%d0
     cmp.l   MF_TAB+T_FIRST,%d0
     bcs.s   9f
@@ -141,7 +134,7 @@ mf_typemap1:
     bsr.w   mfn_pg_page                  | a0 = the row (the descriptor)
     move.l  %a0,%d0
     move.l  (%sp)+,%d2
-    rts
+    jmp     mf_ret_tm1
 1:  move.l  %a1,%d0
     CLONEMAP 8
 9:  jmp     dk_tail_763365db
@@ -166,7 +159,7 @@ mf_typemap2:
     moveq   #0x64,%d1                   | not a machine slot: the stock code does not look at the type
     bra.s   9f
 2:  move.l  (%sp)+,%d2
-    rts
+    jmp     mf_ret_tm2
 1:  move.l  %a1,%d0
     CLONEMAP 0xc
     moveq   #0x64,%d1                   | the stock code set d1 before the site and reads it again
@@ -264,8 +257,7 @@ mf_frametype:
     move.l  O_CLONE(%a1),%d0
 1:  movem.l (%sp),%d1-%d2/%a1
     lea     12(%sp),%sp
-9:  movea.l MF_TAB+T_R_FT,%a1
-    jmp     (%a1)
+9:  jmp     mf_x_ft
 
 | ---- type reader: `FUN_4004b7f2` returns the machine type of a sound (`mvs.b (0xde,A0),D0`, then a bra.b to the epilogue). Its callers are pages and parameter code that test
 | the type against FM TONE's and so on, so a clone must look like its original to them. The identity code (list stepping, the name of the machine, sound snapshots, preset and
@@ -281,10 +273,24 @@ mf_reader:
     cmp.l   MF_TAB+T_COUNT,%d1
     bcc.w   9f
     move.l  4(%sp),%d1
-    .irp i,0,1,2,3,4,5,6,7,8
-    cmp.l   MF_TAB+T_RC0 + 4 * \i,%d1
+    cmpi.l  #mf_rc0+4,%d1
     beq.w   9f
-    .endr
+    cmpi.l  #mf_rc1+4,%d1
+    beq.w   9f
+    cmpi.l  #mf_rc2+6,%d1
+    beq.w   9f
+    cmpi.l  #mf_rc3+6,%d1
+    beq.w   9f
+    cmpi.l  #mf_rc4+6,%d1
+    beq.w   9f
+    cmpi.l  #mf_rc5+6,%d1
+    beq.w   9f
+    cmpi.l  #mf_rc6+6,%d1
+    beq.w   9f
+    cmpi.l  #mf_rc7+6,%d1
+    beq.w   9f
+    cmpi.l  #mf_rc8+6,%d1
+    beq.w   9f
     | a machine with own pages is its own type for every caller (the page, draw, defaults and clipboard code all index per-type structures that have its rows): the other added
     | types look like their clone
     move.l  %d0,-(%sp)
@@ -301,8 +307,7 @@ mf_reader:
     movea.l %d0,%a1
     move.l  O_CLONE(%a1),%d0
     movea.l (%sp)+,%a1
-9:  move.l  MF_TAB+T_R_RD,-(%sp)
-    rts
+9:  jmp     mf_x_rd
 
 | ---- owner test of `SoundParameterSet::vfunc_21` (type == the parameter's owner machine): a clone looks like its original. Site (6 bytes): `mvs.b (0xde,A0),D3; move.l D2,-(SP)`.
 | d0 and a1 are saved.
@@ -328,5 +333,4 @@ mf_owner:
 2:  movem.l (%sp),%d0/%a1
     lea     8(%sp),%sp
 9:  move.l  %d2,-(%sp)                  | the second displaced instruction
-    move.l  MF_TAB+T_R_OW,-(%sp)
-    rts
+    jmp     mf_x_ow

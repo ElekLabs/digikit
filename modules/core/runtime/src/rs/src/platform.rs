@@ -7,7 +7,6 @@
 //! (profile of the first device file, no block clock, no MIDI counter). The tests that drive platform behaviour use `FakePlatform` (`fake_platform.rs`)
 //! through the generic functions.
 
-use crate::card;
 use crate::dev;
 use crate::state::{State, DKRT_STATE};
 use core::ffi::c_void;
@@ -92,6 +91,31 @@ pub fn with_profile<R>(profile: DeviceProfile, f: impl FnOnce() -> R) -> R {
 /// 0 not checked, 1 usable, 2 absent or another version.
 static mut POOL_STATE: u8 = 0;
 static mut PD_STATE: u8 = 0;
+
+/// `PLATFORM` answers as `profile` while this lives.
+#[cfg(test)]
+pub(crate) struct ProfileGuard;
+
+#[cfg(test)]
+impl ProfileGuard {
+    pub(crate) fn set(profile: DeviceProfile) -> ProfileGuard {
+        TEST_PROFILE.with(|p| p.set(Some(profile)));
+        ProfileGuard
+    }
+}
+
+#[cfg(test)]
+impl Drop for ProfileGuard {
+    fn drop(&mut self) {
+        TEST_PROFILE.with(|p| p.set(None));
+    }
+}
+
+/// Host tests: ask `StagedWriter::present` again (it remembers its first answer).
+#[cfg(test)]
+pub(crate) fn test_forget_staged_writer() {
+    unsafe { write_volatile(addr_of_mut!(PD_STATE), 0) }
+}
 
 /// The word a firmware code literal points to, when the literal is a DDR address (a misplaced anchor reads nothing).
 #[cfg(not(test))]
@@ -401,8 +425,8 @@ impl SamplePool for RealPlatform {
 
 impl RealPlatform {
     /// The profile facts the storage routes need.
-    fn storage_facts(&self) -> crate::storage_adapter::Facts {
-        crate::storage_adapter::Facts { in_store: Platform::samples_in_store(self), sample_path_max: Platform::sample_path_max(self) }
+    fn storage_facts(&self) -> crate::storage::route::Facts {
+        crate::storage::route::Facts { in_store: Platform::samples_in_store(self), sample_path_max: Platform::sample_path_max(self) }
     }
 }
 
@@ -418,14 +442,8 @@ impl dkrt_abi::storage::Storage for RealPlatform {
     unsafe fn stat(&self, root: u32, path: &[u8]) -> Result<dkrt_abi::storage::Stat, i32> {
         crate::storage_adapter::stat(root, &self.storage_facts(), path)
     }
-    unsafe fn read_head(&self, root: u32, path: &[u8], out: &mut [u8; 64]) -> Result<(), i32> {
-        crate::storage_adapter::read_head(root, &self.storage_facts(), path, out)
-    }
     unsafe fn stat_head(&self, root: u32, path: &[u8], out: &mut [u8; 64]) -> Result<(dkrt_abi::storage::Stat, usize), i32> {
         crate::storage_adapter::stat_head(root, &self.storage_facts(), path, out)
-    }
-    unsafe fn read_range(&self, root: u32, path: &[u8], offset: u32, out: &mut [u8]) -> Result<usize, i32> {
-        crate::storage_adapter::read_range(root, &self.storage_facts(), path, offset, out)
     }
     unsafe fn read_all(&self, root: u32, path: &[u8], dst: *mut u8, cap: u32) -> Result<u32, i32> {
         crate::storage_adapter::read_all(root, &self.storage_facts(), path, dst, cap)
@@ -562,27 +580,9 @@ pub unsafe fn block_read(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
     PLATFORM.block_read(sector, bytes, buf)
 }
 
-/// The firmware's block write, ungated. Only `block_write` and `card::claim` call it.
+/// The firmware's block write, ungated. Only `card::block_write` and `card::claim` call it.
 pub unsafe fn raw_block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
     PLATFORM.block_write_raw(sector, bytes, buf)
-}
-
-/// The one function that writes the card. Write `bytes` (a multiple of 512) from `buf` (16-byte aligned) to `sector`: refused with `E_RANGE`
-/// outside the store range of the device file, and with `E_CARD_RO` when the card's area is not ours (`card::admit`; finding 46). Every
-/// runtime card write goes through here: the selection record and the boot counter (boot.rs), uploads (store_cmds.rs), and the claim of a blank
-/// range (card.rs, which calls `raw_block_write` for its own headers after the same checks).
-pub unsafe fn block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
-    block_write_with(&PLATFORM, sector, bytes, buf)
-}
-
-/// `block_write` over a platform (the host tests drive it with `FakePlatform`).
-pub unsafe fn block_write_with<P: Platform>(p: &P, sector: u32, bytes: u32, buf: *const u8) -> i32 {
-    let g = card::admit_with(p, sector, bytes);
-    if g != OK {
-        return g;
-    }
-    card::info().writes = card::info().writes.wrapping_add(1);
-    p.block_write_raw(sector, bytes, buf)
 }
 
 /// Send one complete MIDI message (F0 .. F7 for SysEx) to `port` (2 = USB). The firmware takes the MIDI TX mutex itself and spins

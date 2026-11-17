@@ -7,7 +7,7 @@ import pytest
 from tools.device import dkupload
 from tools.firmware import config
 from tools.patchkit import pk_devreload as dev
-from tools.patchkit import pk_dkrt
+from tools.patchkit import pk_dkrt, pk_services
 
 
 def test_cf_target_and_synthetic_store_use_zero():
@@ -140,6 +140,9 @@ def store_build(monkeypatch, tmp_path):
     monkeypatch.setattr(dev, "pack_store", pack)
     monkeypatch.setattr(pk_dkrt, "Tools", Mock(return_value=tools))
     monkeypatch.setattr(config, "stock", Mock(return_value=tmp_path / "stock.syx"))
+    # the services of the card come from `patchkit services` (needs the stock firmware): none here
+    monkeypatch.setattr(pk_services, "is_service", Mock(return_value=False))
+    monkeypatch.setattr(pk_services, "bound_services", Mock(return_value=[]))
     card_build = Mock(side_effect=build_card)
     selection = Mock()
     stop = Mock()
@@ -627,7 +630,7 @@ def test_uploaded_preview_keeps_saved_overlay_when_daemon_is_absent(
 def test_upload_store_waits_for_boot_and_module_without_debug_log(
     monkeypatch, tmp_path, capsys, failure
 ):
-    from tools.device import dkrun, dktransfer
+    from tools.device import dkmodule, dkrun
 
     source = tmp_path / "plus_drive/digikit/modules/voice.dkm"
     source.parent.mkdir(parents=True)
@@ -664,11 +667,7 @@ def test_upload_store_waits_for_boot_and_module_without_debug_log(
     monkeypatch.setattr(dkrun, "require_runtime", Mock())
     upload = Mock()
     monkeypatch.setattr(dkrun, "upload_if_changed", upload)
-    monkeypatch.setattr(dktransfer, "header_info", Mock(return_value={"name": "VOICE"}))
-    legacy_restart = Mock(
-        side_effect=AssertionError("preview must not wait for BOOT_START")
-    )
-    monkeypatch.setattr(dktransfer, "restart_device", legacy_restart)
+    monkeypatch.setattr(dkmodule, "header_info", Mock(return_value={"name": "VOICE"}))
     events = Mock()
     for name, obj in (
         ("upload", upload),
@@ -703,7 +702,6 @@ def test_upload_store_waits_for_boot_and_module_without_debug_log(
     emu.quit.assert_not_called()
     emu.restart.assert_not_called()
     up.log.assert_not_called()
-    legacy_restart.assert_not_called()
     assert emu.call.call_args_list[-1].kwargs == {"mode": "free"}
 
 

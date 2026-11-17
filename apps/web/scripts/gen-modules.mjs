@@ -19,6 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
 import { loadDevices } from '@digi/devices/node';
+import { buildBindBundle } from '../../../packages/workbench-core/src/node/bind-bundle.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const deviceIds = loadDevices().runtimeIds;
@@ -138,29 +139,8 @@ export function buildModuleData(root = repoRoot) {
   return { bundle: { ports, modules, devices } };
 }
 
-/** The texts of the `devices/fw/` declaration files (`subsystems.toml` at the top left out), in the order `patchkit::fwgen::fw_texts` reads them. */
-function fwTexts(root, dir = join(root, 'devices', 'fw'), top = true) {
-  const out = [];
-  const byName = (x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0);
-  for (const e of readdirSync(dir, { withFileTypes: true }).sort(byName)) {
-    const full = join(dir, e.name);
-    if (e.isDirectory()) out.push(...fwTexts(root, full, false));
-    else if (e.name.endsWith('.toml') && !(top && e.name === 'subsystems.toml')) out.push(readFileSync(full, 'utf8'));
-  }
-  return out;
-}
-
-/**
- * `{ports, fw}`: what `pk_bind` reads besides the stock image to bind a service file (the Transfer page does it on the user's machine). It holds no module
- * and no firmware: the ports are the hashes and hook sites, `fw` the argument plan of each hook.
- */
-export function buildBindBundle(root = repoRoot) {
-  const ports = readdirSync(join(root, 'devices', 'ports'))
-    .filter((f) => f.endsWith('.toml'))
-    .sort()
-    .map((f) => readFileSync(join(root, 'devices', 'ports', f), 'utf8'));
-  return { ports, fw: fwTexts(root) };
-}
+// `buildBindBundle(root)`: the Transfer page's bind data; it lives with the Node host, which reads the same files for `wb transfer`.
+export { buildBindBundle };
 
 const SOURCE_MAX = 256 * 1024;
 
@@ -337,7 +317,7 @@ if (
   const { bundle } = buildModuleData();
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
-  writeFileSync(join(out, 'bind.json'), JSON.stringify(buildBindBundle()));
+  writeFileSync(join(out, 'bind.json'), JSON.stringify(buildBindBundle(repoRoot)));
   const index = shipModules(out);
   console.log(`shipped: ${index.modules.map((m) => `${m.id} (${Object.keys(m.devices).join(',')})`).join(', ')}`);
   console.log(

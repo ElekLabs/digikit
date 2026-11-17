@@ -5,10 +5,10 @@
     uv run python -m tools.devtools.emud_key audit --device dt2 --depfile FILE [--target-dir DIR]
 
 `key` prints a sha256 over everything the daemon build reads: the source files (SOURCE_GLOBS, content
-hashes), the build recipe scripts (RECIPE_FILES), every file of the generated core directory (and of
-SHARC_GEN_DIR_2), the PGO profile (content), the Rust toolchain pin, `rustc -vV` and the build flags.
+hashes), the build recipe scripts (RECIPE_FILES), the PGO profile (content), the Rust toolchain pin, `rustc -vV` and the build flags.
 `test-key` is the key of a device test that does not run patchkit (see TEST_KEY_EXCLUDED); `verify_build daemons` writes it to dist/bytes/daemon-test.key.
-It resolves the generated core and the profile with the same calls as tools/patchkit/pk_emud_pgo.py.
+The daemon holds no generated core (it loads the core library of each device, whose key is in the test key), so the
+generated core is not a key input. The profile is resolved with the same calls as tools/patchkit/pk_emud_pgo.py.
 
 `audit` reads the dependency file cargo wrote (`digi-emud.d`) and fails when it lists a file that the key does
 not cover. Files under the cargo target directory (build-script OUT_DIR files, the binary) are build outputs and
@@ -401,7 +401,7 @@ def inputs(device: str, environ: Mapping[str, str] | None = None) -> EmudInputs:
 
     environ = os.environ if environ is None else environ
     files = repo_files()
-    gen_dirs = {"gen": pk_emud_pgo.generated_core(device)}
+    gen = pk_emud_pgo.generated_core(device)  # selects the profile only
     flags = {
         "device": device,
         "manifest": MANIFEST,
@@ -413,14 +413,10 @@ def inputs(device: str, environ: Mapping[str, str] | None = None) -> EmudInputs:
         # digi_env reads only tools.rust from mise.toml; task edits do not affect the build.
         "toolchain": pk_emud_pgo.digi_env.TOOLCHAIN,
     }
-    if gen2 := environ.get("SHARC_GEN_DIR_2"):
-        path = Path(gen2)
-        gen_dirs["gen2"] = path if path.is_absolute() else ROOT / path
-    flags["SHARC_GEN_DIR_2"] = environ.get("SHARC_GEN_DIR_2", "")
     flags["SHARC_REGIONBENCH_SOL"] = environ.get("SHARC_REGIONBENCH_SOL", "")
     if sol := environ.get("SHARC_REGIONBENCH_SOL"):
         files["env:SHARC_REGIONBENCH_SOL"] = Path(sol)
-    profile = native_pgo.current_profile(device, gen_dirs["gen"])
+    profile = native_pgo.current_profile(device, gen)
     profdata = Path(profile) if profile else None
     if profdata:
         flags["rustflags"] = native_pgo.profile_use_flags(
@@ -428,7 +424,7 @@ def inputs(device: str, environ: Mapping[str, str] | None = None) -> EmudInputs:
         )
     else:
         flags["rustflags"] = "plain"
-    return EmudInputs(files, gen_dirs, profdata, rustc_version(), flags)
+    return EmudInputs(files, {}, profdata, rustc_version(), flags)
 
 
 def key(device: str) -> str:

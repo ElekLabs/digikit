@@ -14,6 +14,7 @@
       {
         "files": ["fault-trace.device.test.ts"],
         "devices": ["dt2"],
+        "dsp": "sharc",
         "tags": ["C:diagnostics", "C:dsp", "C:layout"],
         "modules": [
           "digikit/debug",
@@ -28,9 +29,18 @@
       },
       {
         "files": ["transfer-live.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["C:storage", "C:transport"],
         "modules": ["digikit/debug", "test/sine", "core/services/machines"],
-        "sources": ["tools/device/dktransfer.py"]
+        "sources": [
+          "tools/devtools/wb.mjs",
+          "tools/devtools/wb_transfer.mjs",
+          "packages/workbench-core/src/modules/dktransfer.ts",
+          "packages/workbench-core/src/modules/dkbind.ts",
+          "packages/workbench-core/src/node/node-host.ts",
+          "packages/workbench-core/src/node/bind-bundle.ts",
+          "packages/workbench-core/src/node/stock-image.ts"
+        ]
       },
       {
         "files": ["samples-live.device.test.ts"],
@@ -86,6 +96,7 @@
       {
         "files": ["upload-faults.device.test.ts"],
         "devices": ["dt2"],
+        "dsp": "sharc",
         "tags": ["C:layout", "C:storage", "C:transport"],
         "modules": ["test/sine", "core/services/machines"],
         "sources": ["tools/patchkit/pk_digikit_fxroutes.py"],
@@ -100,12 +111,14 @@
       },
       {
         "files": ["safe-mode.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["C:boot", "C:layout", "C:storage"],
         "modules": ["test/c-demo", "test/dyn-dn2", "test/dyn-crash", "test/sine", "core/services/machines"],
         "plusdrive": true
       },
       {
         "files": ["boot-restart.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["C:boot", "C:dsp", "C:loading"],
         "modules": ["test/dyn-dn2", "test/sine", "core/services/machines"],
         "plusdrive": true
@@ -113,12 +126,14 @@
       {
         "files": ["crash-capture.device.test.ts"],
         "devices": ["dt2"],
+        "dsp": "sharc",
         "tags": ["C:diagnostics", "C:layout"],
         "modules": ["digikit/debug", "test/dyn-crash"],
         "plusdrive": true
       },
       {
         "files": ["debug-guard.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["C:diagnostics", "C:dsp", "C:layout"],
         "modules": ["digikit/debug", "test/dyn-guard-nan", "test/sine", "core/services/machines"],
         "plusdrive": true
@@ -143,6 +158,7 @@
       },
       {
         "files": ["memaudit.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["C:layout"],
         "modules": ["test/c-demo", "test/dyn-demo", "test/dyn-demo-stray", "test/dyn-dn2", "test/sine", "core/services/machines"],
         "plusdrive": true

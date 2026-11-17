@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { expect } from 'vitest';
 import { blob, listing, pokeKnob, statusOf, type Files } from '@digi/regression/runtime/card-kit.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { rawModule } from '@digi/regression/runtime/service-files.ts';
 import { analysisJson, frames, pcmMatches, peak, playNote, readFloatWav, SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { selectSine, type FxProfile } from '@digi/regression/runtime/fx-session.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
@@ -53,6 +54,7 @@ async function faultSession(
 async function cardWithOld(rig: CardRig, name: string, old: Buffer): Promise<string> {
   const file = path.join(rig.artifacts, 'old.dkm');
   fs.writeFileSync(file, old);
+  rawModule(file);
   return rig.card({ name, modules: [{ name: 'modules/old.dkm', file }] });
 }
 

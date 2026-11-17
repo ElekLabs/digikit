@@ -127,14 +127,21 @@ Risks: the slice fails its pass marks (known after PR 3); PGO parity for the lib
 
 ## Status
 
-- [ ] P0 cold-build measurement (`cargo build --timings`, two-core workbench build) when load is under 12
-- [ ] PR 0 CF state digest in the A/B tool
-- [ ] PR 1 GenCore table
-- [ ] PR 2 one engine
-- [ ] PR 3 core library slice
-- [ ] PR 4a store tooling
-- [ ] PR 4b store wiring
-- [ ] PR 5 loading by default
-- [ ] PR 6 move to sharc-peer
-- [ ] PR 7 AudioOut
-- [ ] PR 8 Companion
+All items are done; P4 stays deferred.
+
+- [x] P0 cold build, measured instead of profiled: a cold two-core `coupled-run` build took 22 min 29 s (load 30-45); after PR 5a a cold `coupled-run` build takes 1-1.5 min and compiles no `sharc-gen`. A store hit for both core libraries takes 0.2 s.
+- [x] PR 0 CF state digest in the A/B tool (`state_sha256`; `sharc_cells` fails on a CF difference)
+- [x] PR 1 GenCore table
+- [x] PR 2 one engine
+- [x] PR 3 core library slice
+- [x] PR 4a store tooling
+- [x] PR 4b store wiring
+- [x] PR 5a loading by default: hosts hold no generated core; `sharc-gen-2`, `second-core` and `SHARC_GEN_DIR_2` deleted; the header flags hash leaves out the PGO flags
+- [x] PR 5b PGO libraries: training builds and loads instrumented libraries, one profile per target covers host and libraries; profile-guided libraries are store entries keyed by the profile content
+- [x] PR 6 move to sharc-peer
+- [x] PR 7 AudioOut
+- [x] PR 8 Companion
+
+Proof of the stack: every PR's `sharc_cells` A/B against the static baseline is identical in PCM, DSP state and CF state on dn2-reset and dt2; the final host instruction ratio is 1.0010-1.0015 (plain host and libraries). PGO host and PGO libraries run at the speed of the old static PGO build (`coupled_ab`: dn2 1.002, dt2 0.994 DSP CPU per audio second; PCM equal) with a 8.6 MB host binary instead of 70.9 MB. Device subset `C:dsp` (11 targets on DT2 and DN2, with gate-smoke and gate-pins) passes.
+
+After the merge: run `mise run perf:pgo` once (the profiles are stale after the sharc-rt change).

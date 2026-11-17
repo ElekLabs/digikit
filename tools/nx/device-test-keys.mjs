@@ -82,8 +82,11 @@ export const DEVICE_COMMON = [
   { env: 'DIGI_PK_READY_DT2_117' },
   { env: 'DIGI_PK_READY_DN2_112' },
   { env: 'SHARC_FAST_REGIONS' },
+  { env: 'SHARC_FAST_REGIONS_2' },
   { env: 'SHARC_BLOCKTRANS' },
+  { env: 'SHARC_BLOCKTRANS_2' },
   { env: 'SHARC_FAST_FALLBACK_REGIONS' },
+  { env: 'SHARC_FAST_FALLBACK_REGIONS_2' },
   { env: 'SHARC_FAST_AUTO' },
   { env: 'UPDATE_GOLDENS' },
   '{workspaceRoot}/config/emulator.json',
@@ -112,6 +115,12 @@ export const MERGE_OUTPUTS = outputFiles([...SHARED_BUILT, ...MERGE_BYTES]);
 // hashed in dist/bytes/images.sha256. (An explicit module list goes through runtime-plan-modules.ts, which imports patchkit.ts.)
 export const PATCHKIT_LIVE = ['tests/regression/runtime/patchkit.ts'].map((file) => `{workspaceRoot}/${file}`);
 export const DEVICE_INPUTS = [...READ_BY_TESTS, ...BUILT_OUTPUTS, ...DEVICE_COMMON];
+// A test whose import closure holds one of these runs `wb transfer`, which loads apps/web/public/patchkit.wasm (the target depends on
+// `patchkit:wasm` and the key holds the wasm).
+export const PATCHKIT_WASM_USERS = ['tests/regression/runtime/transfer-cli.ts'].map(
+  (file) => `{workspaceRoot}/${file}`,
+);
+
 export const mergeDeviceInputs = (imports, patchkitLive) => [
   ...sharedReads(imports, patchkitLive),
   ...TEST_READS,
@@ -132,10 +141,11 @@ export const builtSourceExclusions = (root, base = '.') =>
 export const serviceLeaves = (byId) =>
   new Set([...byId].filter(([, { manifest }]) => manifest.role === 'service').map(([id]) => id.split('/').at(-1)));
 
-// A service that takes hooks is bound to the firmware before it goes on a card (target `bind`, module-build.mjs); `bindableIds`: the ids of those.
-export const isBindable = (manifest, hooks) => manifest.role === 'service' && (hooks?.length ?? 0) > 0;
+// Every service is bound to the firmware before it goes on a card (target `bind`, module-build.mjs): the harness binds each service a module needs, and a
+// service with no hook and no firmware name (lfo) is bound unchanged. Hooks do not decide: samples refers to firmware names and has none. `bindableIds`: the ids.
+export const isBindable = (manifest) => manifest.role === 'service';
 export const bindableIds = (byId) =>
-  new Set([...byId].filter(([, { manifest, hooks }]) => isBindable(manifest, hooks)).map(([id]) => id));
+  new Set([...byId].filter(([, { manifest }]) => isBindable(manifest)).map(([id]) => id));
 
 // The cache inputs of one device test target, and whether its key holds the patchkit binary (`patchkitLive`).
 // `opts`: `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
@@ -174,7 +184,9 @@ export const deviceInputs = (
   // the image bytes: its key keeps the binary.
   const patchkitCompiles = recs.some((rec) => rec.patchModules?.length);
   const patchkitLive = imports.some((file) => PATCHKIT_LIVE.includes(file)) || patchkitCompiles;
+  const patchkitWasm = imports.some((file) => PATCHKIT_WASM_USERS.includes(file));
   const inputs = [
+    ...(patchkitWasm ? [{ dependentTasksOutputFiles: 'apps/web/public/patchkit.wasm', transitive: true }] : []),
     // a test that reads the precomputed `needs` of committed packs keys on that file's content
     ...(imports.includes(PACK_NEEDS) ? outputFiles(['dist/bytes/pack-verdicts.json']) : []),
     ...(opts.narrow && patchkitLive ? outputFiles(['dist/patchkit/patchkit']) : []),
@@ -226,5 +238,11 @@ export const deviceInputs = (
     ...new Set(recs.flatMap((rec) => (rec.sources ?? []).map((s) => `{workspaceRoot}/${s}`))),
     ...(seeds.length ? pythonInputs(seeds) : []),
   ];
-  return { inputs, patchkitLive };
+  return { inputs, patchkitLive, patchkitWasm };
 };
+
+// Files that every device test's key holds (the shared reads, the test reads, the SDK and the toolchain), as repository globs.
+// `test:subset --base` cannot select by path for a change in them (tools/nx/test-subset.mjs).
+export const SHARED_INPUT_GLOBS = [...SHARED_READS.map(({ file }) => file), ...TEST_READS, ...COMPILE_INPUTS].map(
+  (glob) => glob.replace('{workspaceRoot}/', ''),
+);

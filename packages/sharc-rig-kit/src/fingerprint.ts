@@ -2,7 +2,7 @@
  * Fingerprint and classifier of a rig pin (docs/TESTING.md "Classifying a changed pin").
  *
  * The `sha256` of a `same-as` check is the strict gate. Next to it a case stores a small fingerprint of the pinned signal as plain numbers
- * (`tests/rig/fingerprint/<key>.json`: peak, onset sample, RMS per block, 64 log-spaced band levels). When the hash differs, `classify` says what kind
+ * (`tests/rig/fingerprint/<key>.json`; v1 as written here, v2 in `pcmpin.ts` which `compare` reads with tolerances: peak, onset sample, RMS per block, 64 log-spaced band levels). When the hash differs, `classify` says what kind
  * of change it is: with the previous output (the local cache `out/rig/<key>/ref.f32`, written at pin time, never committed) it compares sample by
  * sample (time shift, rounding, real change); without it, it compares the fingerprints.
  */
@@ -46,6 +46,12 @@ export function bandEdges(): number[] {
   return Array.from({ length: BANDS + 1 }, (_, i) => BAND_LO * r ** i);
 }
 
+/** The centre frequencies of the bands, Hz (1 decimal). */
+export function bandHz(): number[] {
+  const edges = bandEdges();
+  return edges.slice(0, BANDS).map((lo, i) => dec(Math.sqrt(lo * edges[i + 1]!), 1));
+}
+
 /** Band powers of the Hann-windowed signal (zero padded to 65536 points), in dB. */
 export function bandLevels(x: readonly number[], rate = FS): number[] {
   const n = Math.min(x.length, FFT_SIZE);
@@ -61,13 +67,12 @@ export function bandLevels(x: readonly number[], rate = FS): number[] {
     if (f < edges[0]! || f >= edges[BANDS]!) continue;
     let b = Math.floor(Math.log(f / BAND_LO) / Math.log(edges[1]! / edges[0]!));
     b = Math.min(BANDS - 1, Math.max(0, b));
-    power[b] += (2 * (r[k]! ** 2 + im[k]! ** 2)) / (norm * FFT_SIZE);
+    power[b]! += (2 * (r[k]! ** 2 + im[k]! ** 2)) / (norm * FFT_SIZE);
   }
   return power.map(db10);
 }
 
 export function fingerprint(x: readonly number[], rate = FS): Fingerprint {
-  const edges = bandEdges();
   return {
     version: 1,
     rate,
@@ -76,7 +81,7 @@ export function fingerprint(x: readonly number[], rate = FS): Fingerprint {
     peak: sig(peak(x)),
     onset: x.findIndex((v) => Math.abs(v) > 1e-6),
     rms: blockRms(x, BLOCK).map((v) => sig(v)),
-    bandHz: edges.slice(0, BANDS).map((lo, i) => dec(Math.sqrt(lo * edges[i + 1]!), 1)),
+    bandHz: bandHz(),
     bandDb: bandLevels(x, rate).map((v) => dec(v)),
   };
 }

@@ -5,6 +5,7 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/fx-two-notes.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/dynfx"],
         "modules": ["test/dyn-fx-gain", "test/sine", "core/services/machines", "core/services/fx"],
         "sources": ["tools/patchkit/hook_ab.py"],
@@ -14,6 +15,7 @@
         "files": [
           "tests/fx-contract.device.test.ts"
         ],
+        "dsp": "sharc",
         "tags": ["A:core/dynfx"],
         "modules": [
           "test/dyn-fx-gain",
@@ -38,6 +40,7 @@
         "files": [
           "tests/fx-chain.device.test.ts"
         ],
+        "dsp": "sharc",
         "tags": ["A:core/dynfx"],
         "modules": [
           "test/dyn-fx-gain",
@@ -62,6 +65,7 @@
         "files": [
           "tests/fx-reuse.device.test.ts"
         ],
+        "dsp": "sharc",
         "tags": ["A:core/dynfx"],
         "modules": [
           "test/dyn-fx-gain",

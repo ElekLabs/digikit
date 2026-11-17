@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import functools
 import hashlib
 import json
 import os
@@ -40,7 +41,7 @@ import time
 from collections import defaultdict
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-from tools.devtools import coupled_ab  # noqa: E402
+from tools.devtools import core_choice, core_store, coupled_ab  # noqa: E402
 from tools.emulator import coupled, digi_env  # noqa: E402
 
 FIXTURES = ROOT / "out" / "fixtures" / "runtime"
@@ -167,6 +168,16 @@ def load_state(name: str) -> dict:
     }
 
 
+@functools.cache
+def core_library(device: str, explicit: tuple = ()) -> str:
+    """The library a cell of DEVICE loads: an explicit `DIGI_SHARC_CORE_LIB_<DEV>` (the label's `--env`, EXPLICIT, then the
+    environment), else the core store's (a miss builds it), once per device."""
+    try:
+        return core_choice.core_path(device, {**os.environ, **dict(explicit)})
+    except core_store.CoreStoreError as exc:
+        raise SystemExit(f"sharc_cells: {exc}") from exc
+
+
 def cell_env(
     state: dict, label: str, add: dict, remove: dict, extra: dict | None = None
 ) -> dict[str, str]:
@@ -187,7 +198,11 @@ def cell_env(
     env.update(
         digi_env.slot_env(state["device"], {k: v for k, v in lists.items() if v})
     )
-    env.update((extra or {}).get(label, {}))
+    # A host without a static core loads the library of the device from the core store (a static binary ignores it).
+    var = core_store.CORE_LIB_VAR.format(state["device"].upper())
+    own = (extra or {}).get(label, {})
+    env[var] = core_library(state["device"], tuple(own.items()))
+    env.update(own)
     return env
 
 
@@ -323,14 +338,22 @@ def main() -> int:
             if label not in labels or not addr:
                 sys.exit(f"expected LABEL:ADDR with a known label, got {item!r}")
             dest[label].append(addr)
-    extra_env: dict[str, dict[str, str]] = defaultdict(dict)
-    for item in args.env:
-        label, _, setting = item.partition(":")
-        name, eq, value = setting.partition("=")
-        if label not in labels or not eq or not name:
-            sys.exit(f"expected LABEL:NAME=VALUE with a known label, got {item!r}")
-        extra_env[label][name] = value
+    try:
+        _, parsed = core_choice.parse_label_env(args.env, labels)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    extra_env: dict[str, dict[str, str]] = defaultdict(dict, parsed)
     states = [load_state(n) for n in args.state]
+    for st in states:
+        try:
+            print(
+                core_choice.announce(
+                    st["device"], {label: extra_env[label] for label in labels}
+                ),
+                flush=True,
+            )
+        except core_store.CoreStoreError as exc:
+            sys.exit(f"sharc_cells: {exc}")
     out = (
         pathlib.Path(args.out)
         if args.out

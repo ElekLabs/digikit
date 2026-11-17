@@ -34,6 +34,11 @@ Rules:
             dkrt-test-support as a dev-dependency; it names no firmware crate and no device id (only its `dks/` service file may name `dkfw`, in `dks/src/fw.rs`), and has no path into the runtime crate. The runtime
             names a service crate (`dkrt_svc_*`) only in `gen_services.rs`, `handlers.rs` and the host-test files under `handlers/`. Final state (R12-1): no service is a folder of the
             runtime crate's `services/`; every service (fx, machines, samples, lfo) is a crate.
+  kind-free The runtime's own code (the runtime crate's and the abi crate's sources without their host tests, inline `#[cfg(test)] mod x { }` blocks included, `handlers.rs`, the host-test files in `handlers/` and the generated `gen_services.rs`) names no machine or effect: no builder
+            call (`dk_module_ctx_add_machine`, `dk_page_add_param`, `dk_fx_*` ...), no record kind of a machine or an effect (`KIND_MACHINE`, `KIND_PARAM`, `KIND_PAGE`,
+            `KIND_ACTION`, `KIND_NATIVE_PAGE*`, `KIND_EFFECT`, `KINDS_MACHINES`, `KINDS_FX`), no table of an image adapter that only a service reads (`dynreg_info`, `machines_info`,
+            `fxpages_info`, `mf_native_*`) and no state of the machines registry (`RegState`, `DKRT_REG`, `DKRT_ASSIGN`). The services own them: the machines and fx service files
+            export the builder calls and write their records in `Service::module_commit`; the loader only runs the generic part (docs/plans/runtime-slimming.md, RS-C).
   platform  Inside the runtime crate, only `platform.rs` (the real platform, L1) and `fw.rs` at the crate's source root (the declared adapter of
             `dkrt_abi::fw::Fw`: it must contain `impl Fw for`) name the firmware crate dkfw; the rest of the core and the services use the `Platform`
             trait and the `Fw` trait (`dkrt-abi`). No runtime file but `platform.rs` compares the device id with a number
@@ -787,7 +792,8 @@ def check_runtime_platform(root: Path) -> list[Violation]:
 
 
 SERVICE_CRATES = "modules/core/services"
-SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds"}
+# dkrt-svc-params is the parameter row writers that machines and fx share (no service names the other)
+SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds", "dkrt-svc-params"}
 SERVICE_DEV_DEPS = SERVICE_DEPS | {"dkrt-test-support"}
 # `dkrt_svc_rt` is the support crate of a service file (modules/core/runtime/svc-rt), not a service
 SERVICE_CRATE_REF = re.compile(r"\bdkrt_svc_(?!rt\b)\w+")
@@ -958,6 +964,102 @@ def check_service_crates(root: Path) -> list[Violation]:
     return out
 
 
+# What the core does not name any more after RS-C (the machines and fx content): builder calls, their record kinds, the adapters' tables and the registry state.
+RT_KIND_FREE = re.compile(
+    r"\b(?:dk_module_ctx_add_machine|dk_module_ctx_add_fx|dk_machine_add_page|dk_fx_add_page|dk_page_add_param|dk_page_add_fx_param|dk_param_range|dk_param_glyph|dk_param_latched"
+    r"|dk_param_on_click|dk_page_canvas|dk_page_bind|dk_page_bind_local|dk_fx_routes|dk_fx_mix"
+    r"|KIND_MACHINE|KIND_PARAM|KIND_PAGE|KIND_ACTION|KIND_NATIVE_PAGE|KIND_NATIVE_PAGE_V2|KIND_EFFECT|KINDS_MACHINES|KINDS_FX"
+    r"|dynreg_info|machines_info|fxpages_info|mf_native_\w+|RegState|DKRT_REG|DKRT_ASSIGN)\b"
+)
+KIND_FREE_EXEMPT = ("handlers.rs", "gen_services.rs")
+KIND_FREE_HINT = "the machines or the fx service owns it (modules/core/services/machines, fx): the core runs the generic part and calls the service through `Service` or `CoreApi`"
+
+
+def is_runtime_test_file(r: Path) -> bool:
+    """A host-test file of the runtime crate: `tests.rs`, `*_tests.rs`, a `tests/` folder, the fakes and the test lock."""
+    return (
+        "tests" in r.parts
+        or r.name == "tests.rs"
+        or r.name.endswith("_tests.rs")
+        or r.name.startswith("fake_")
+        or r.name == "test_lock.rs"
+    )
+
+
+def without_test_modules(lines: list[str]) -> list[str]:
+    """The lines with the body of each inline `#[cfg(test)] mod name { ... }` block blanked (braces matched; line numbers kept). `#[cfg(test)] mod name;` (a file) blanks nothing:
+    the file is a test file or is scanned on its own."""
+    out = list(lines)
+    i = 0
+    while i < len(lines):
+        if (
+            lines[i].strip() == "#[cfg(test)]"
+            and i + 1 < len(lines)
+            and re.match(r"\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{", lines[i + 1])
+        ):
+            depth = 0
+            j = i + 1
+            while j < len(lines):
+                depth += lines[j].count("{") - lines[j].count("}")
+                out[j] = ""
+                if depth <= 0:
+                    break
+                j += 1
+            out[i] = ""
+            i = j
+        i += 1
+    return out
+
+
+# The host-test files of `handlers/` (its other files, if any, are scanned).
+KIND_FREE_TEST_FILES = (
+    "handlers/tests.rs",
+    "handlers/lfo_tests.rs",
+    "handlers/fx_fixture.rs",
+    "handlers/dks_decls.rs",
+)
+# The abi crate is the core's boundary: it too names no machine or effect.
+RT_ABI_SRC = "modules/core/runtime/abi/src"
+
+
+def check_core_kind_free(root: Path) -> list[Violation]:
+    """The core names no machine or effect (rule `kind-free`): the runtime crate and the abi crate."""
+    out: list[Violation] = []
+    for base in (RT_SRC, RT_ABI_SRC):
+        src = root / base
+        if not src.is_dir():
+            continue
+        for f in sorted(src.rglob("*.rs")):
+            r = f.relative_to(src)
+            if base == RT_SRC and (
+                r.as_posix() in KIND_FREE_EXEMPT
+                or r.as_posix() in KIND_FREE_TEST_FILES
+                or is_runtime_test_file(r)
+            ):
+                continue
+            if base == RT_ABI_SRC and r.as_posix() == "keys.rs":
+                continue  # the header table's key groups (`dkneeds::KIND_MACHINE`, `KIND_EFFECT`): the .dkm format the core parses for the planner and the commit
+            if base == RT_ABI_SRC and (
+                r.name.startswith("gen_") or r.name == "tests.rs" or "tests" in r.parts
+            ):
+                continue
+            lines = without_test_modules(
+                rust_without_comments(f.read_text(encoding="utf-8")).splitlines()
+            )
+            for n, line in enumerate(lines, 1):
+                m = RT_KIND_FREE.search(line)
+                if m:
+                    out.append(
+                        Violation(
+                            f"{base}/{r.as_posix()}:{n}",
+                            "kind-free",
+                            f"the core names {m.group(0)}",
+                            KIND_FREE_HINT,
+                        )
+                    )
+    return out
+
+
 def tracked_files(root: Path) -> list[str]:
     """Tracked files (`git ls-files`); outside a git repository, every file except build output."""
     try:
@@ -1056,6 +1158,7 @@ def check(root: Path = ROOT) -> list[Violation]:
         *check_runtime_arrows(root),
         *check_runtime_platform(root),
         *check_service_crates(root),
+        *check_core_kind_free(root),
         *check_self_contained(root, mods),
     ]
 

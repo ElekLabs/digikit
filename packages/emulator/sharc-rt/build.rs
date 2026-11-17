@@ -1,6 +1,8 @@
 // The header of a core library names the sharc-rt source it was built from (`src/header.rs`): the
 // SHA-256 of every `.rs` file under src/ plus Cargo.toml and build.rs (relative path, NUL, bytes, NUL,
-// sorted), the rustc version, the target and the build flags that change code generation or layout. The hash code is the crate's own `src/sha256.rs`.
+// sorted), the rustc version, the target and the build flags that change code generation or layout (not the PGO-only flags, `src/pgo_flags.rs`). The hash code is the crate's own `src/sha256.rs`.
+#[path = "src/pgo_flags.rs"]
+mod pgo_flags;
 #[path = "src/sha256.rs"]
 mod sha256;
 
@@ -52,8 +54,11 @@ fn main() {
         std::env::var("TARGET").expect("target")
     );
     let var = |name: &str| std::env::var(name).unwrap_or_default();
+    // PGO changes optimisation, not layout or ABI: a host built with a profile accepts a plain library and the other way
+    // round, so every flag that only steers PGO stays out of the hash (src/pgo_flags.rs).
+    let kept = pgo_flags::strip(&var("CARGO_ENCODED_RUSTFLAGS"));
     let mut f = sha256::Sha256::new();
-    f.update(var("CARGO_ENCODED_RUSTFLAGS").as_bytes());
+    f.update(kept.as_bytes());
     let rustflags: String = f
         .finish()
         .iter()

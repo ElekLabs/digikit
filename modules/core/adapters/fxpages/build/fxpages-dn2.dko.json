@@ -4,20 +4,6 @@
  "relocs": [
   {
    "addend": 0,
-   "offset": 40,
-   "section": ".rodata",
-   "symbol": "_fp_stock",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 44,
-   "section": ".rodata",
-   "symbol": "_fp_stock_n",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 48,
    "section": ".rodata",
    "symbol": "_fp_p_first",
@@ -29,151 +15,19 @@
    "section": ".rodata",
    "symbol": "_fp_p_send",
    "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 196,
-   "section": ".rodata",
-   "symbol": "_fp_acc",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 200,
-   "section": ".rodata",
-   "symbol": "_fp_list",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 204,
-   "section": ".rodata",
-   "symbol": "_fp_keylist",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 208,
-   "section": ".rodata",
-   "symbol": "_fp_sound",
-   "type": "cf.32"
-  },
-  {
-   "addend": 30,
-   "offset": 212,
-   "section": ".rodata",
-   "symbol": "_fp_label",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 216,
-   "section": ".rodata",
-   "symbol": "_fp_label",
-   "type": "cf.32"
-  },
-  {
-   "addend": 452,
-   "offset": 220,
-   "section": ".rodata",
-   "symbol": "_fp_graph",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 224,
-   "section": ".rodata",
-   "symbol": "_fp_graph",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 228,
-   "section": ".rodata",
-   "symbol": "_fp_load",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 232,
-   "section": ".rodata",
-   "symbol": "_fp_save",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 236,
-   "section": ".rodata",
-   "symbol": "_fp_init",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 240,
-   "section": ".rodata",
-   "symbol": "_fp_keystock",
-   "type": "cf.32"
   }
  ],
  "sections": [
   {
    "align": 4,
-   "hex": "465850470000000300000002000000000000002c000000250000000300000000000000080000000000000000000000000000000000000008000048e400000018000000750000007300000079800052a0464748494a4b4c4d4e4f505152535455565758595a5b5c5d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000064000046a700000001000000000000000000000000000000640000000000000044000000340000048b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000ca00000060",
+   "hex": "465850470000000400000002000000000000002c000000250000000300000000000000080000000000000000000000000000000000000008000048e400000018000000750000007300000079800052a0464748494a4b4c4d4e4f505152535455565758595a5b5c5d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000064000046a700000001000000000000000000000000000000640000000000000044000000340000048b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000ca00000060",
    "kind": "data",
    "name": ".rodata",
    "size": 256
   }
  ],
- "source_sha256": "8f1e20de173b413079dfe34f7b1f3c1cc74a8f7d455b770f7b0f8786cd71635c",
+ "source_sha256": "6f0924043a7ec40364abdb6184833e449de1cc2034082f4049f74d864fdb3727",
  "symbols": [
-  {
-   "global": true,
-   "name": "_fp_acc",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_graph",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_init",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_keylist",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_keystock",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_label",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_list",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_load",
-   "section": null,
-   "value": 0
-  },
   {
    "global": true,
    "name": "_fp_p_first",
@@ -183,30 +37,6 @@
   {
    "global": true,
    "name": "_fp_p_send",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_save",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_sound",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_stock",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_fp_stock_n",
    "section": null,
    "value": 0
   },
@@ -222,7 +52,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "41ca61e96b56ed22e4d6300018f3d6ef6f4d96d21305c24867cb2deb8b5dbc89",
+  "isa_check": "5549cd0c64250d512b46d707e409091af18bff5b0afb592eee12efd58e468e0a",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

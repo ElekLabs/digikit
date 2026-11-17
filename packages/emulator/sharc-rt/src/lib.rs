@@ -15,6 +15,8 @@ pub mod gencore;
 pub mod header;
 pub mod insn_table;
 pub mod mem;
+#[cfg(test)]
+mod pgo_flags;
 pub mod rt;
 pub mod sha256;
 

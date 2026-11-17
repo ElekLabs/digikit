@@ -440,6 +440,20 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   turns each reference into a base-relative relocation to it and drops the import. The `BIND` item carries the stock bytes of
   the site as for any hook, so the runtime refuses a firmware that differs with E_HOOK_STOCK before it installs anything. An
   unbound `.dks` has no firmware bytes.
+- **Firmware references.** A service names firmware in five ways, all resolved by `patchkit bind` (`bind::FwRef`); `patchkit pack` makes the import names
+  from the `[object.externs]` of the service module (`alias = "target"`) and renames the `cf.*` symbols a Rust service takes from the `dkfw` crate to `dk_fw_`.
+  H is the 8 hex digits of `name_hash`.
+
+  | import | extern target | resolves to |
+  | --- | --- | --- |
+  | `dk_fw_<H(name)>` | `cf.draw.fn.blit` | the address of the anchor; an offset is the addend; absolute word, no relocation |
+  | `dk_exit_<H(hook)>_<n>` | `hook.<hook>.exit` (n = 0), `hook.<hook>.exit.<n>` | n = 0: the end of the site; n >= 1: `exits[n-1]` of the hook; absolute word |
+  | `dk_tail_<H(hook)>` | `hook.<hook>.tail` | the generated tail (`tail = true`); base-relative |
+  | `dk_stock_<H(hook)>` | `hook.<hook>.stock` | the same code, called with `jsr`; control comes back; base-relative |
+  | `dk_ret_<H(hook)>` | `hook.<hook>.ret` | one `rts` that bind appends; base-relative |
+
+  A name that only another device has, and a hook listed only for another device, resolve to 0; any other unknown name is a bind error naming it. A file with a
+  hook or a resolved reference gets the table item `FW`; `patchkit apply` adds the info entry `fw_id`, and the loader refuses a file bound to another firmware with E_HOOK_STOCK.
 - **Hooks per device.** One `.dks` serves both devices. `[[hook]]` in the module's `module.toml` has `devices`; the `service!`
   call lists `(name, entry)` for every device, `(name, entry, dt2)` or `(name, entry, dn2)` for one, and declares at `init` those of
   the running device. The packer writes the device set of each hook into the unbound file: an item of `HOOKS` is `{name hash, word}`,
@@ -1001,3 +1015,19 @@ there should be **no** `MACHINE_FAULT` (the clamp in the routine prevents the ca
 
 Patched images were flashed to one Digitakt II (finding 47). Whether and when to flash again is the maintainer's decision, every time.
 The device on the desk is a Digitakt II on 1.17: the DT2 1.17 port is the one that has been run on hardware.
+
+### Which services a module needs
+
+`patchkit services --device SHORT [--firmware FW.syx --bind-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...` is the one rule for the card
+services of a module. A module that needs a service has a hard `NEEDS` item for its name hash in the header table of its `.dkm`. The service of a name is
+the module whose `module.toml` has `role = "service"` and `service = "NAME"`. The command prints one JSON line for each service that the files need or
+that `--module` (id) or `--service` (name) names, in name order. This is the format, not a captured run:
+
+```text
+{"service":"fx","module_id":"core/services/fx","store_path":"services/fx.dks"}
+```
+
+With `--firmware` and `--bind-dir` it also packs each service for the device, binds it to the stock image as `DIR/<name>.dks` and adds `bound_path`. A file
+whose `DIR/<name>.src.json` sidecar names the same packed bytes and image is kept; any other is bound again. The device tests, `dk:dev` and `module:check`
+all call it. The Nx target `<module id>:pack` runs it on each packed file and writes `dist/modules/<device>/<leaf>.services.json` beside it; the device tests read that file (they run no patchkit) and take the bound file from the target `<service id>:bind`. Its Rust tests are
+`packages/patchkit/tests/services.rs` (they skip without the m68k-elf toolchain).

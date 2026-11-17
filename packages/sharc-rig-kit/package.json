@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./suite": "./src/suite.ts"
+    "./suite": "./src/suite.ts",
+    "./pins": "./src/pcmpin.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

@@ -430,6 +430,7 @@ def measure(
     device: str, state: str, budget: Budget, seconds: float
 ) -> tuple[float, float, str]:
     """Replay the budget scenario on the current runtime: (interpreted instructions, block entries per audio second, fixture key)."""
+    from tools.devtools import core_store
     from tools.emulator import coupled, digi_env
 
     fixture, key = ensure_fixture(device, state)
@@ -449,6 +450,7 @@ def measure(
         env = {**os.environ}
         # The tier tables are keyed by the stock firmware (as the PGO replay runs do).
         env.update(digi_env.fast_env(env, syx=digi_env.base_firmware(firmware)))
+        env.update(core_store.library_env([device], environ=env))
         try:
             done = subprocess.run(
                 argv, cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,

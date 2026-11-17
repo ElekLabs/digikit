@@ -23,7 +23,7 @@ ports = ["dt2-1.17", "dn2-1.12"]
 #   firmware's list, rank and name tables span them; a row whose name is empty is skipped when the list is returned.
 # - `dynreg_copy` retargets the copy at the end of the machine list getter (`std::copy` of the sorted static list into the
 #   returned vector) and leaves out the types whose row is still empty.
-# - `dynreg_info` is the table of addresses and row layout that the runtime's registry reads (core/runtime, optional link).
+# - `dynreg_info` is the table of addresses and row layout that the machines and fx service files read through the image's info table (`[[info]]` below).
 #
 # Digitone II: the same, and a page row per machine: a machine with a page row is its own type for the page and draw code
 # (core/machines), the knobs are the page's columns. Eight page rows are reserved (their `machine` is a value no type has).
@@ -629,6 +629,12 @@ name = ""
 title = ""
 machine = 0x7fffffff
 devices = ["dn2"]
+
+# The table of this adapter, exported to the image's info table (`dkrt_info_table`): the machines and fx service files find it by the hash of its name (`CoreApi::info`);
+# the runtime itself does not read it.
+[[info]]
+name = "dynreg_info"
+devices = ["dt2", "dn2"]
 
 # The capacity limits this adapter reserves, as `cap_<kind>` entries of the image's info table (docs/PATCHING.md): each points at the u32 word of the table that holds the limit, so the planner knows the limit before any service file is loaded.
 [[info]]

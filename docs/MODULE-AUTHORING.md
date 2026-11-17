@@ -431,7 +431,7 @@ A run-time module keeps its own values with the settings imports of `<dk/platfor
 
 A module's own files live under `data/<module id>/` in the store, not next to the `.dkm`: the `modules/` list holds at most 32 entries. `dk_data_path` (`<dk/platform/data.h>`)
 builds the path and refuses a name that is empty or holds `/` or `..`. Read a file with `dk_files_read` in `init`, or list the folder with the `dk_files_*` calls (root
-`DK_FILES_STORE`). Only the host writes these files for now. `dk_files_read` runs one at a time and in `init` only.
+`DK_FILES_STORE`). Only the host writes these files for now. `dk_files_read` runs one at a time and in `init` only. It returns the file size or a negative code: `E_NOT_FOUND` (missing file, or a folder), `E_SEL_PATH` (empty path, or a NUL inside it) and `E_TOO_BIG` (a path over 159 bytes, or a file larger than `cap`); the path checks are those of `Storage::read_all`, which it calls.
 
 `dk_intro_take` (`<dk/platform/intro.h>`) replaces the boot animation. It runs after the REC, safe-mode and boot-counter checks and does no storage I/O: read the frames
 in `init`, then call it.
