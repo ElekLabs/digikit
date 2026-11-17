@@ -10,7 +10,7 @@
 // target from the runtimeAcceptance record: zero 1 core, sharc 3, tools/nx/dsp-mode.mjs). A slot is taken only when
 // the cores of the running tasks plus this one fit the core budget (the performance cores, DIGI_BUDGET) and the machine has
 // that many idle cores beside the reserve. Waiters are served by priority: the longest expected run first (its last
-// duration in the newest gate traces, else coupled before zero-DSP), so long coupled tasks start first and do not end the gate alone.
+// duration, kept clone-wide beside the slots, else coupled before zero-DSP), so long coupled tasks start first and do not end the gate alone.
 // One waiter at a time holds the `admit` lock, and decides. The first emulator is always admitted. After an admission the
 // lock is kept for RAMP_MS, so the next decision sees the load of the new emulator.
 // DIGI_EMU_SLOTS=N is a fixed count with no core, idle or order check (for an A/B).
@@ -152,34 +152,26 @@ export const taskCores = (env = process.env) => {
 // Core budget of the machine for emulators: the budget B of tools/nx/resources.mjs (performance cores, or DIGI_BUDGET).
 export const coreCapacity = (env = process.env) => budget(workCores(), env.DIGI_BUDGET).budget;
 
-// Expected run seconds of a task when no gate trace knows it: a coupled run is the long one.
+// Expected run seconds of a task when no earlier run is recorded: a coupled run is the long one.
 const GUESS_SECONDS = { zero: 120, sharc: 600 };
+// A waiter that does not fit may be overtaken by smaller ones at most this many times, so a coupled head is not starved.
+export const MAX_OVERTAKE = 8;
 
-// Seconds of the last run of `target` in the newest gate traces (out/runs/gate/<stamp>/slots-trace.json), or undefined.
-export const lastRunSeconds = (target, root = path.join(process.cwd(), 'out/runs/gate')) => {
-  let stamps;
+// Seconds of the last passed run of each target, one file per target in `<slot dir>/durations/`: clone-wide, like the slots.
+const durationFile = (dir, target) => path.join(dir, 'durations', target.replace(/[^\w.-]/g, '_'));
+export const lastRunSeconds = (dir, target) => {
+  const seconds = Number(lockText(durationFile(dir, target)));
+  return seconds > 0 ? seconds : undefined;
+};
+export const recordRunSeconds = (dir, target, seconds) => {
   try {
-    stamps = fs.readdirSync(root).sort().reverse().slice(0, 5);
+    const file = durationFile(dir, target);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(`${file}.${process.pid}.tmp`, String(seconds));
+    fs.renameSync(`${file}.${process.pid}.tmp`, file);
   } catch {
-    return undefined;
+    /* an order hint is advice and never fails a task */
   }
-  for (const stamp of stamps) {
-    let text;
-    try {
-      text = fs.readFileSync(path.join(root, stamp, 'slots-trace.json'), 'utf8');
-    } catch {
-      continue;
-    }
-    for (const line of text.split('\n').reverse()) {
-      try {
-        const event = JSON.parse(line);
-        if (event.name === 'run' && event.tid === target) return event.dur / 1e6;
-      } catch {
-        /* a partial line */
-      }
-    }
-  }
-  return undefined;
 };
 
 const sumCores = (dir, slots) => {
@@ -228,7 +220,11 @@ export const acquire = async (
   fs.mkdirSync(dir, { recursive: true });
   const ticketName = `wait-${process.pid}.${++tickets}`;
   const ticket = path.join(dir, ticketName);
-  if (live) fs.writeFileSync(ticket, JSON.stringify({ priority: task.priority, at: Date.now() }));
+  if (live)
+    fs.writeFileSync(
+      ticket,
+      JSON.stringify({ priority: task.priority, at: Date.now(), cores: task.cores, overtaken: 0 }),
+    );
   const startedAt = Date.now();
   const admit = path.join(dir, 'admit');
   let told = false;
@@ -251,10 +247,18 @@ export const acquire = async (
       await wait(used);
       continue;
     }
-    if (live && firstWaiter(dir)?.name !== ticketName) {
-      release(admit); // a waiter with a longer expected run goes first
-      await wait(used);
-      continue;
+    // The head waiter (the longest expected run) goes first. One that does not fit by cores yet may be overtaken by a
+    // waiter that does, MAX_OVERTAKE times in all; then nothing overtakes and the running tasks drain until the head fits.
+    let overtaking;
+    const head = live ? firstWaiter(dir) : undefined;
+    if (head && head.name !== ticketName) {
+      const blocked = sumCores(dir, slots) + head.cores > task.capacity && head.overtaken < MAX_OVERTAKE;
+      if (!blocked) {
+        release(admit);
+        await wait(used);
+        continue;
+      }
+      overtaking = head;
     }
     // With no emulator running, work never starves: admit at once.
     if (live && used > 0) {
@@ -263,8 +267,8 @@ export const acquire = async (
         await wait(used);
         continue;
       }
-      idle = await idleCores();
-      if (idle < reserve() + task.cores) {
+      idle = await (task.idleCores ?? idleCores)();
+      if (idle < (task.reserve ?? reserve()) + task.cores) {
         release(admit);
         await wait(used);
         continue;
@@ -274,6 +278,15 @@ export const acquire = async (
       const lock = path.join(dir, `slot-${i}`);
       if (!tryLock(lock)) continue;
       const idleText = idle === undefined ? '' : `, idle ${idle.toFixed(1)} cores`;
+      if (overtaking) {
+        const file = path.join(dir, overtaking.name);
+        try {
+          const { priority, at, cores, overtaken } = overtaking;
+          fs.writeFileSync(file, JSON.stringify({ priority, at, cores, overtaken: overtaken + 1 }));
+        } catch {
+          /* the head is gone */
+        }
+      }
       if (live) {
         fs.writeFileSync(path.join(dir, `cores-${process.pid}`), String(task.cores));
         fs.rmSync(ticket, { force: true });
@@ -359,7 +372,7 @@ const main = async () => {
   const task = {
     cores,
     capacity: coreCapacity(),
-    priority: lastRunSeconds(target) ?? GUESS_SECONDS[cores > MODE_CORES.zero ? 'sharc' : 'zero'],
+    priority: lastRunSeconds(dir, target) ?? GUESS_SECONDS[cores > MODE_CORES.zero ? 'sharc' : 'zero'],
   };
   process.on('exit', () => releaseOwn(dir));
   const { lock, admit } = await acquire(dir, slotCount(), liveCheck(), undefined, task);
@@ -401,6 +414,7 @@ const main = async () => {
         recordRetry({ target, attempt: n, passed });
       }
       traceEvent('run', takenAt, Date.now());
+      if (status === 0 && liveCheck()) recordRunSeconds(dir, target, (Date.now() - takenAt) / 1000);
       process.exit(status);
     });
   };
