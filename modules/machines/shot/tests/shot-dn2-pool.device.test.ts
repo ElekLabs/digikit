@@ -1,6 +1,17 @@
+import { encoder } from '@digi/test-support';
 import { expect } from 'vitest';
+import { fileHashHex } from '@digi/dk-session';
+import { bounded, rows, slotsFor, word, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { effectPage, mainPage } from '@digi/regression/runtime/fx-pages-ui.ts';
+import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';
+import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 import { RATE, expectedWindow } from './shot-support.ts';
-import { LAYOUTS, PAGE, dn2Tests, physOf, plane, planePages, type Dn2, type Fixture } from './shot-dn2-support.ts';
+import { LAYOUTS, PAGE, FOLDER, dn2Tests, physOf, plane, planePages, type Dn2, type Fixture } from './shot-dn2-support.ts';
+
+// One boot, one install and one upload for the three DN2 sample-pool files that shared a setup: the pool (load, planes, dedup, windows, reselect,
+// throughput), the store read leases and the DSP link queue. The phases run in this order; the pool phases need the empty pool, and the lease and link
+// phases select their own files on track 0 and assert no pool counter of the earlier phases.
 
 // DN2 OS 1.12, the sample pool (core/sample-pool: allocator, LP0 page transport into DDR) through the runtime sample pool (API 1.5/1.6):
 // boot state, load, handle, DDR planes, dedup, peak windows, cached reselect, throughput with dsp-link coexistence, a missing path.
@@ -15,7 +26,27 @@ const THROUGHPUT_FLOOR = 150;
 const BLOCKS_PER_SECOND = 1500;
 const layoutSeen = 'wordrev';
 
-dn2Tests('DN2 sample pool: load, planes, dedup, windows, reselect, throughput', 'shot-dn2-pool', ['a', 'm', 'x', 't'], async (c: Dn2) => {
+
+// R6a, the DSP link queue (docs/plans/runtime-and-services.md section 6): the effect page's knob writes (live values on the link) and the sample track
+// writes (the track table's owner requests) go through one queue. This test turns the GAIN knob of an effect page while a pool sample loads into a track,
+// so the table publish and the knob words share the link. Both must land in DSP memory, and the link must report no failed write.
+//
+// DN2 OS 1.12, patch set `sample-tracks` (it has core/fxpages, core/dynfx, core/sample-pool and core/dsp-link). Written for the batched gate; not run yet.
+//
+// Read back: the effect row's p0 word and the track record through `dsp.peek` (the plan symbols `fx.rows` and `RECORDS`), and the page writer's counters in
+// `DKRT_FXP` (word 4 `sent`: values the link confirmed; word 5 `errors`: live writes that failed).
+
+const FXP_SENT = 16;
+const FXP_ERRORS = 20;
+const GAIN_DEFAULT = 0x3f000000; // 0.5f, the default of the gain effect's GAIN knob (test/dyn-fx-gain)
+const floatOf = (bits: number) => {
+  const b = Buffer.alloc(4);
+  b.writeUInt32LE(bits >>> 0);
+  return b.readFloatLE();
+};
+
+
+async function poolPhases(c: Dn2) {
   const { api, settle, log, phase, pool, link, clocks, rec, ddr, fixtures, file, dspWords } = c;
 
   // ---- 0. boot state of the pool -------------------------------------------------------------------------------------------
@@ -219,4 +250,132 @@ dn2Tests('DN2 sample pool: load, planes, dedup, windows, reselect, throughput', 
     expect(s.state, 'NOT_FOUND').toBe(-1);
     expect(await api.clear(index), 'the failed entry can be cleared').toBe(0);
   });
-});
+}
+
+// DN2 OS 1.12, store read leases (docs/plans/usb-fast.md step 1b): while the sample pool loads a store file, the runtime refuses to replace it, delete it or
+// clear the store (E_FILE_IN_USE on SysEx), a new file can still be stored, and the pool's copy in DDR is the file as it was. When the load is done the
+// lease is gone: replace and delete work.
+
+async function leasePhases(c: Dn2) {
+  const { dk, api, settle, log, phase, pool, rec, ddr, fixtures, file } = c;
+  const q = fixtures.q!;
+  const t = fixtures.t!;
+  const path = `samples/${FOLDER}/q`;
+  const other = `samples/${FOLDER}/n`;
+  const hashOf = async (p: string) => (await dk.list()).find((e) => e.path === p)?.hash;
+  const qHash = fileHashHex(q.prep.stored);
+
+  await phase('lease', async () => {
+    expect(await hashOf(path), 'the fixture is stored where the test expects it').toBe(qHash);
+    const p0 = await pool();
+    expect(await api.select(file('q'), 0), 'select queues the load').toBe(0);
+    // wait until pages flow: the load is running and holds its lease
+    await pollEmulated(c.session, pool, (v) => v.pages - p0.pages >= 8, {
+      emulatedMs: 60_000,
+      message: 'the load did not start',
+      intervalMs: 30,
+    });
+    const refusals: Record<string, string | undefined> = {};
+    const refused = async (name: string, op: () => Promise<unknown>) => {
+      refusals[name] = await op().then(
+        () => 'accepted',
+        (e: unknown) => (e as { status?: string }).status ?? String(e),
+      );
+    };
+    await refused('replace', () => dk.put(path, t.prep.stored));
+    await refused('delete', () => dk.delete(path));
+    await refused('clear', () => dk.clear());
+    const mid = await api.status(0);
+    const pMid = await pool();
+    log.lease = { refusals, stateAfterRefusals: mid.state, pagesAfterRefusals: pMid.pages - p0.pages, expectedPages: 2 * planePages(q.frames) };
+    expect(refusals, 'replace, delete and clear are refused while the pool loads the file').toEqual({
+      replace: 'E_FILE_IN_USE',
+      delete: 'E_FILE_IN_USE',
+      clear: 'E_FILE_IN_USE',
+    });
+    expect(
+      mid.state !== 3 && pMid.pages - p0.pages < 2 * planePages(q.frames),
+      `the load had finished before the three refusals were answered (state ${mid.state}, ${pMid.pages - p0.pages} pages): the test proves nothing, use a longer fixture`,
+    ).toBe(true);
+    expect(await hashOf(path), 'the refused commands changed nothing').toBe(qHash);
+    // an unrelated upload still works during the load (the store lock is shared with the load's card reads; the session retries E_BUSY)
+    await dk.put(other, t.prep.stored);
+    expect(await hashOf(other)).toBe(fileHashHex(t.prep.stored));
+    expect(await hashOf(path), 'the leased file is unchanged after the other upload').toBe(qHash);
+
+    const ready = await settle(0);
+    expect(ready.state, `Q reaches ready ${JSON.stringify(ready.seen)}`).toBe(3);
+    const r = await rec(0);
+    expect(r.frames).toBe(q.frames);
+    // the pool's copy is the old file, plane by plane
+    for (const [channel, base] of [[0, r.baseL!], [1, r.baseR!]] as [number, number][]) {
+      const got = await ddr(physOf(base), planePages(q.frames) * PAGE);
+      expect(got.equals(plane(q, channel, LAYOUTS.wordrev!)), `plane ${channel} of the pool is the file that was loaded`).toBe(true);
+    }
+  });
+
+  await phase('after the load', async () => {
+    // the lease ended with the load: the same three commands work now
+    await dk.put(path, t.prep.stored);
+    expect(await hashOf(path), 'replace works after the load').toBe(fileHashHex(t.prep.stored));
+    await dk.delete(path);
+    expect(await hashOf(path), 'delete works after the load').toBeUndefined();
+    await dk.delete(other);
+    expect(await hashOf(other)).toBeUndefined();
+  });
+}
+
+async function linkPhases(c: Dn2) {
+const { runtime, session, api, settle, phase, rec, fixtures, file, artifacts, expectNoNewFault } = c;
+  const plan = await prepareRuntimePlan(session, artifacts, ['fx.rows']);
+  const slots = slotsFor('dn2');
+  const fxp = await serviceSymbol(runtime, plan, 'fx', 'DKRT_FXP');
+  const gain = async () => (await rows(session, plan, slots))[0]![4]!;
+  const burst = async (detents: number, events: number) => {
+    for (let i = 0; i < events; i++) {
+      await bounded(() => session.client.inputTurn(encoder('ENC A'), detents));
+      await runtime.ui.wait({ ms: 2, why: SETTLE });
+    }
+  };
+
+  await phase('knob-turns-during-a-track-load', async () => {
+    const before = await gain();
+    expect(before, 'the gain effect row holds the default GAIN').toBe(GAIN_DEFAULT);
+    const sentBefore = await word(session, fxp + FXP_SENT);
+    await effectPage(runtime);
+    // the load starts the track table writes; the turns go to the effect page meanwhile
+    expect(await api.select(file('a'), 0), 'select queues').toBe(0);
+    await burst(8, 20);
+    expect((await settle(0)).state, 'the track reaches ready').toBe(3);
+    await runtime.ui.wait({ ms: 300, why: SETTLE });
+    await mainPage(runtime);
+    // the knob: the DSP row has the last value, a float above the default (clockwise turns)
+    const after = await gain();
+    expect(floatOf(after), 'p0 follows the turns').toBeGreaterThan(floatOf(GAIN_DEFAULT));
+    expect(Number.isFinite(floatOf(after))).toBe(true);
+    // the track: the published record reads back
+    const r = await rec(0);
+    expect(r.unknown).toBe(0);
+    expect(r.ready, 'the record is published (ready written last)').toBe(1);
+    expect(r.frames).toBe(fixtures.a!.frames);
+    // the link: values were confirmed and no live write failed
+    expect(await word(session, fxp + FXP_SENT), 'the link confirmed knob values').toBeGreaterThan(sentBefore);
+    expect(await word(session, fxp + FXP_ERRORS), 'no live write failed').toBe(0);
+  });
+
+  await phase('no-fault', async () => {
+    await expectNoNewFault('the end of the concurrent writes');
+  });
+}
+
+dn2Tests(
+  'DN2 sample pool: load, planes, dedup, windows, reselect, throughput, store leases, DSP link',
+  'shot-dn2-pool',
+  ['a', 'm', 'x', 't', 'q'],
+  async (c: Dn2) => {
+    await poolPhases(c);
+    await leasePhases(c);
+    await linkPhases(c);
+  },
+  ['test/dyn-fx-gain'],
+);

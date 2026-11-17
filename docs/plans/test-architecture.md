@@ -295,7 +295,7 @@ Deleted at the end: `waits.ts tap`, `fx-session.ts tap/advance` (stepped clock),
 
 | Phase | Stream | Owns | Gate |
 |---|---|---|---|
-| 0 | C: wall-clock fixes with today's `pollEmulated` | shot-dn2-supersede, shot-dn2-lease, shot-dt2, samples-store-live, patched-dsp-startup, dsp-cache-registers, dsp-ddr-monitor, remote.ts `expectRemoteEnabled`, runtime-menu.ts deadlines, install.ts:51; dk-session host tests rpc-emulated-wait, emu-usb-transport | host tests + device subset of those files |
+| 0 | C: wall-clock fixes with today's `pollEmulated` | shot-dn2-supersede, shot-dn2-pool (lease phase), shot-dt2, samples-store-live, patched-dsp-startup, dsp-cache-registers, dsp-ddr-monitor, remote.ts `expectRemoteEnabled`, runtime-menu.ts deadlines, install.ts:51; dk-session host tests rpc-emulated-wait, emu-usb-transport | host tests + device subset of those files |
 | 1 | A: dk-session | runtime-events.ts (new), dkupload-core.ts waitForBoot, wait-for-boot.test.ts, runtime-events.test.ts | dk-session host tests, workbench-core host tests |
 | 1 | B: test-support | emulated-clock.ts, input.ts (new) + host tests | test-support host tests |
 | 2 | core (serial) | support.ts, ui.ts (new), install.ts, waits.ts, flows/menu.ts | device subset: gate-smoke, gate-pins, one test per fixture kind |

@@ -154,8 +154,6 @@ host tests: their checks stay device tests until the logic is split out.
 | `machines/pd/tests/equiv.device.test.ts` | C:dsp, S:machines |
 | `machines/pluck/tests/equiv.device.test.ts` | C:dsp, S:machines |
 | `machines/shot/tests/shot-dn2-audio.device.test.ts` | C:dsp, S:machines, S:samples |
-| `machines/shot/tests/shot-dn2-lease.device.test.ts` | S:machines, S:samples |
-| `machines/shot/tests/shot-dn2-link.device.test.ts` | S:machines, S:samples |
 | `machines/shot/tests/shot-dn2-pool.device.test.ts` | S:machines, S:samples |
 | `machines/shot/tests/shot-dn2-supersede.device.test.ts` | M:digikit/remote, S:machines, S:samples |
 | `machines/shot/tests/shot-dt2.device.test.ts` | S:machines, S:samples |
