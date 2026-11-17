@@ -8,11 +8,12 @@
  * use byte-space pointers for their stock 32-bit DM access context. No instruction semantics are modified. Original firmware is supplied at
  * run time, never copied into a fixture. Reference channels execute independently on separate cores with private state.
  *
- * Read bounds: the Python test also logs every DM read and checks the table loads at their PCs (address range and count). The rig records
- * stores only, so these checks are not ported (docs/plans/ledgers/t1g-retirement.md, "Shadow replay").
+ * Read bounds: the Python test logged every DM read and checked the loads at their PCs (address range, count) and the held period. They are
+ * `LoadRule` data per group below, checked on the loads the rig records (`loads: true`, docs/TESTING.md "SHARC-only rig"); `checkLoads` fails
+ * a load of the right instruction at a wrong address, which a count of executions passes.
  */
 import { describe, expect, it } from 'vitest';
-import { DN2_112, stockAvailable, stockSkipReason } from '@digi/sharc-rig-kit';
+import { DN2_112, loadFailures, stockAvailable, stockSkipReason, wordToFloat, type LoadRule } from '@digi/sharc-rig-kit';
 import {
   BACK,
   CONTROL,
@@ -26,8 +27,9 @@ import {
   bits,
   buildShadow,
   canonical,
-  executed,
+  imageRange,
   toByte,
+  wordRange,
   type ShadowBuild,
 } from './shadow-rig.ts';
 
@@ -54,6 +56,12 @@ function checkStores(s: Shadow, allowed: Iterable<number>, label = 'stores', wid
   return counts;
 }
 const count = (counts: Map<number, number>, a: number): number => counts.get(a) ?? 0;
+
+/** the loads of the last call against the rules of its group */
+function checkLoads(s: Shadow, label: string, rules: LoadRule[]): void {
+  const failures = loadFailures(s.loads, rules);
+  if (failures.length) throw new Error(`${label}: ${failures.join('; ')}`);
+}
 
 async function open(build: ShadowBuild, n: number): Promise<Shadow[]> {
   return Promise.all(Array.from({ length: n }, () => Shadow.open(build)));
@@ -303,15 +311,15 @@ const PREPARED_SHARED = [0, 1, 2, 3, 4, 14, ...PREPARED_WRITES];
 const BYTE_REGS = { ...REGS, I6: STACK * 4, I7: STACK * 4 };
 const WIDE_REGS = { ...BYTE_REGS, M13: 0, M15: 0xffffffff };
 
-/** the audio each leaf reads at the table loads (Python watches the loads; the rig counts how often the load instructions run) */
-const TABLE_LOADS: Record<string, { pcs: number[]; executions: number }> = {
-  held: { pcs: [0xb826e0], executions: 1 },
-  prepared: { pcs: [0xb81053, 0xb81059], executions: 64 },
+/** the table loads of the leaves: the word of the held period, and 64 words of the 1024-word table of the prepared stage (Python: 4 and 256 byte loads) */
+const TABLE_LOADS: Record<string, LoadRule> = {
+  held: { label: 'held table loads', pcs: [0xb826e0], within: [imageRange(0x26e9c8, 128)], bytes: 4 },
+  prepared: { label: 'prepared table loads', pcs: [0xb81053, 0xb81059], within: [imageRange(0x26b3a8, 1024)], bytes: 256 },
 };
 
 async function filterCall(s: Shadow, family: string, side: string, histories: number[], coefficients: number[], sharedWrites: number[] = []): Promise<void> {
   const loads = TABLE_LOADS[family];
-  const r = await s.call(`_${side}_${family}`, BYTE_REGS, { maxSteps: CALL_LIMIT, profile: side !== 'prepare' && loads !== undefined });
+  const r = await s.call(`_${side}_${family}`, BYTE_REGS, { maxSteps: CALL_LIMIT, loads: side !== 'prepare' && loads !== undefined });
   expect(r.halt, `${side} ${family}: ${JSON.stringify({ ...r, stores: r.stores.length })}`).toBe('breakpoint');
   expect(r.final_pc).toBe(BACK);
   if (side === 'prepare') {
@@ -327,7 +335,14 @@ async function filterCall(s: Shadow, family: string, side: string, histories: nu
   expect(range(32).map((i) => count(counts, LEFT + offset + i))).toEqual(Array(32).fill(1));
   expect(histories.every((i) => count(counts, CONTROL + offset + i) > 0)).toBe(true);
   expect(sharedWrites.every((i) => count(counts, CONTROL + offset + i) === 1)).toBe(true);
-  if (loads) expect(executed(r, loads.pcs), `table loads of ${family}`).toBe(loads.executions);
+  if (loads) {
+    checkLoads(s, `${side} ${family}`, [loads]);
+    if (family === 'held') {
+      // the period the leaf loads is a finite entry between 1 and 32 samples
+      const period = wordToFloat(await s.wordAt(s.loads[0]![1]));
+      expect(period > 1 && period < 32, `held period ${period}`).toBe(true);
+    }
+  }
 }
 
 suite(enabled ? `${title}: filter leaves` : `${title}: filter leaves: ${stockSkipReason(DN2_112)}`, () => {
@@ -510,11 +525,18 @@ suite(enabled ? `${title}: filter leaves` : `${title}: filter leaves: ${stockSki
 // ---- the gain stage (b80345) ----
 
 const gainBuild = (): ShadowBuild => buildShadow('gain', ['stereo-gain-shadow-replay.s'], 0xb94000, { _gain: 0xb80345 });
-/** the five table loads of the gain stage (Python watches the loads and checks their range; the rig tells which of the load instructions ran) */
-const GAIN_TABLE_PCS = [0xb8039c, 0xb803d7, 0xb80452, 0xb8049d, 0xb804fc];
+/** the five table loads of the gain stage: each reads whole words of its 128-word table of the image */
+const GAIN_TABLES: Record<number, number> = { 0xb8039c: 0x26a570, 0xb803d7: 0x26a570, 0xb80452: 0x26a970, 0xb8049d: 0x26a770, 0xb804fc: 0x26a770 };
+const GAIN_TABLE_PCS = Object.keys(GAIN_TABLES).map(Number);
+const GAIN_LOAD_RULES: LoadRule[] = GAIN_TABLE_PCS.map((pc) => ({
+  label: `gain table load ${pc.toString(16)}`,
+  pcs: [pc],
+  within: [imageRange(GAIN_TABLES[pc]!, 128)],
+  bytesMultipleOf: 4,
+}));
 
 async function gainCall(s: Shadow, side: string, control = 0): Promise<number[]> {
-  const r = await s.call(`_${side}_gain`, { ...WIDE_REGS, R0: control, R1: 0 }, { maxSteps: CALL_LIMIT, profile: true });
+  const r = await s.call(`_${side}_gain`, { ...WIDE_REGS, R0: control, R1: 0 }, { maxSteps: CALL_LIMIT, loads: true });
   expect(r.halt, `${side} gain: ${JSON.stringify({ ...r, stores: r.stores.length })}`).toBe('breakpoint');
   expect(r.final_pc).toBe(BACK);
   if (side === 'prepare') {
@@ -529,7 +551,9 @@ async function gainCall(s: Shadow, side: string, control = 0): Promise<number[]>
   const counts = checkStores(s, allowed);
   // Unity/hold paths may leave in-place audio untouched. Each stored sample must still occur once and remain inside the 32-word plane.
   expect(range(32).every((i) => count(counts, LEFT + offset + i) <= 1)).toBe(true);
-  return GAIN_TABLE_PCS.filter((pc) => executed(r, [pc]) > 0);
+  checkLoads(s, `${side} gain`, GAIN_LOAD_RULES);
+  const ran = new Set(s.loads.map(([pc]) => pc));
+  return GAIN_TABLE_PCS.filter((pc) => ran.has(pc));
 }
 
 suite(enabled ? `${title}: gain` : `${title}: gain: ${stockSkipReason(DN2_112)}`, () => {
@@ -621,10 +645,12 @@ const RING_PRIVATE = [0, 13, 14, 16, 17];
 const RING_SHARED = range(18).filter((i) => !RING_PRIVATE.includes(i));
 /** the four indexed loads of the ring read 32 samples each (Python: 32 * 4 loads of 4 bytes) */
 const RING_LOAD_PCS = [0xb8079b, 0xb8079e, 0xb807a4, 0xb807a7];
+/** they read the backing of this channel's ring only */
+const ringLoads = (ring: number): LoadRule => ({ label: 'ring loads', pcs: RING_LOAD_PCS, within: [wordRange(ring, RING_WORDS)], bytes: 32 * 4 * 4 });
 
 async function ringCall(s: Shadow, side: string, initialization = false): Promise<void> {
   const entry = initialization ? `_init_${side}_ring` : `_${side}_ring`;
-  const r = await s.call(entry, WIDE_REGS, { maxSteps: CALL_LIMIT, profile: true });
+  const r = await s.call(entry, WIDE_REGS, { maxSteps: CALL_LIMIT, loads: !initialization && side !== 'prepare' });
   expect(r.halt, `${entry}: ${JSON.stringify({ ...r, stores: r.stores.length })}`).toBe('breakpoint');
   expect(r.final_pc).toBe(BACK);
   const offset = side === 'right' ? 0x100 : 0;
@@ -656,8 +682,8 @@ async function ringCall(s: Shadow, side: string, initialization = false): Promis
   } else {
     expect(range(32).map((i) => count(counts, LEFT + offset + i))).toEqual(Array(32).fill(1));
     expect(range(RING_WORDS).reduce((n, i) => n + count(counts, ring + i), 0)).toBe(32);
-    // the actual indexed loads ran 32 times each (their addresses are checked against this channel's backing by the Python test only)
-    expect(executed(r, RING_LOAD_PCS)).toBe(32 * 4);
+    // the indexed loads read 32 samples each, all from this channel's backing
+    checkLoads(s, entry, [ringLoads(ring)]);
   }
 }
 
@@ -753,16 +779,18 @@ const SOURCE_SCRATCH = { S0: 0x12340000, S5: 0x12340005, S9: 0x12340009, S14: 0x
 async function sourceCall(s: Shadow, side: string, depth: number): Promise<void> {
   // Companion scratch is explicitly seeded, not treated as callee-preserved.
   const regs = { ...BYTE_REGS, ...SOURCE_SCRATCH };
-  const r = await s.call(`_${side}_source`, regs, { maxSteps: CALL_LIMIT, readRegs: ['MODE1', 'S0', 'S5', 'S9', 'S14'], profile: true });
+  const r = await s.call(`_${side}_source`, regs, { maxSteps: CALL_LIMIT, readRegs: ['MODE1', 'S0', 'S5', 'S9', 'S14'], loads: true });
   expect(r.halt, `${side} source: ${JSON.stringify({ ...r, stores: r.stores.length })}`).toBe('breakpoint');
   expect(r.final_pc).toBe(BACK);
   expect(r.regs.MODE1).toBe(0);
   const offset = side === 'right' ? 0x100 : 0;
   const counts = checkStores(s, [...range(32).map((i) => LEFT + offset + i), ...stackWords()]);
   expect(range(32).map((i) => count(counts, LEFT + offset + i))).toEqual(Array(32).fill(1));
-  // The loads: the 32 samples once (16 double-word loads), and two table words (two loads) when the depth is nonzero.
-  expect(executed(r, SOURCE_SAMPLE_PCS)).toBe(16);
-  expect(executed(r, SOURCE_TABLE_PCS)).toBe(depth ? 2 : 0);
+  // The loads: the 32 samples of this channel's plane once (16 double-word loads), and two table words when the depth is nonzero.
+  checkLoads(s, `${side} source`, [
+    { label: 'source sample loads', pcs: SOURCE_SAMPLE_PCS, within: [wordRange(LEFT + offset, 32)], bytes: 32 * 4 },
+    { label: 'source table loads', pcs: SOURCE_TABLE_PCS, within: [imageRange(0x26e7c8, 128)], bytes: depth ? 8 : 0 },
+  ]);
   if (depth) {
     expect(r.regs.S9).toBe((-depth) >>> 0);
     expect(r.regs.S14).toBe((-depth - 1) >>> 0);
@@ -852,34 +880,52 @@ async function orderedCall(s: Shadow, side: string, phase: Phase, control = 0): 
   let entry: string | number;
   let stop = BACK;
   let writes: number[];
+  // the words the phase may load (normal-word addresses) and the tables of the image it may load from
+  let reads: number[];
+  let tables: number[] = [];
   if (phase === 'prepare') {
     entry = '_prepare_ordered';
     writes = shared.map((a) => a + 0x100);
+    reads = shared;
   } else if (phase === 'prefix') {
     entry = `_${side}_ordered`;
     writes = [...range(32).map((i) => audio + i), ...range(32).map((i) => scratch + i), ...histories.map((a) => a + offset), ...stackWords()];
+    reads = [...writes, ...shared.filter((a) => a < ORDER_ENGINE).map((a) => a + offset)];
+    tables = [0x26e7c8];
   } else if (phase === 'blend') {
     entry = ORIGINAL_BLEND;
     stop = ORIGINAL_BLEND_END;
     // Original continuation reloads the scratch pointer from engine+4e02.
     Object.assign(regs, { I1: (CONTROL + offset) * 4, I0: engine * 4, I5: audio * 4, R9: 32 });
     writes = range(32).map((i) => audio + i);
+    reads = [...writes, ...range(32).map((i) => scratch + i), CONTROL + offset + 0x4e02, ...[0, 2, 7, 9].map((i) => engine + i)];
   } else if (phase === 'gain') {
     entry = `_${side}_ordered_gain`;
     Object.assign(regs, { R0: control, R1: 0 });
     writes = [...range(32).map((i) => audio + i), ...[7, 9, 10].map((i) => gain + i), ...stackWords()];
+    reads = [...writes, ...range(11).map((i) => gain + i)];
+    tables = [0x26a570, 0x26a770, 0x26a970];
   } else {
     entry = ORIGINAL_PAN;
     stop = ORIGINAL_PAN_END;
     Object.assign(regs, { I3: (ORDER_INPUTS + offset) * 4, I5: (ORDER_OUTPUTS + offset) * 4, I4: pan * 4, R9: 32 });
     const planes = offset ? ORDER_PLANES.slice(2) : ORDER_PLANES.slice(0, 2);
     writes = planes.flatMap((base) => range(32).map((i) => base + i));
+    reads = [
+      ...range(32).map((i) => audio + i),
+      ...[0, 2, 112, 114].map((i) => pan + i),
+      ORDER_INPUTS + offset,
+      ORDER_OUTPUTS + offset,
+      ORDER_OUTPUTS + offset + 1,
+    ];
   }
-  const r = await s.call(entry, regs, { maxSteps: CALL_LIMIT, breaks: [BACK, stop], readRegs: ['MODE1'] });
+  const r = await s.call(entry, regs, { maxSteps: CALL_LIMIT, breaks: [BACK, stop], readRegs: ['MODE1'], loads: true });
   expect(r.halt, `${side} ${phase}: ${JSON.stringify({ ...r, stores: r.stores.length })}`).toBe('breakpoint');
   expect(r.final_pc).toBe(stop);
   expect(r.regs.MODE1).toBe(0);
   const counts = checkStores(s, writes, `${side} ${phase}`);
+  // every load, whichever instruction makes it, reads one of the words the phase may read or a word of its tables
+  checkLoads(s, `${side} ${phase}`, [{ label: 'ordered-route read bounds', within: [...reads.map((a) => wordRange(a, 1)), ...tables.map((t) => imageRange(t, 128))] }]);
   if (phase === 'prepare' || phase === 'pan') {
     expect([...counts.keys()].sort()).toEqual([...new Set(writes)].sort());
     expect(new Set(counts.values())).toEqual(new Set([1]));
@@ -1037,7 +1083,7 @@ const RESET_HISTORIES: Record<string, number[]> = { snapshots: [3, 4, 48, 49, 50
 const RESET_STOCK = { _reset_snapshots: 0xb81d6d, _reset_nine: 0xb81c8d, _reset_prepared: 0xb811f1, _reset_held: 0xb82440 };
 
 async function resetCall(s: Shadow, family: string, side: string): Promise<void> {
-  const r = await s.call(`_reset_${side}_${family}`, WIDE_REGS, { maxSteps: CALL_LIMIT });
+  const r = await s.call(`_reset_${side}_${family}`, WIDE_REGS, { maxSteps: CALL_LIMIT, loads: true });
   expect(r.halt, `${side} reset ${family}: ${JSON.stringify({ ...r, stores: r.stores.length })}`).toBe('breakpoint');
   expect(r.final_pc).toBe(BACK);
   const base = CONTROL + (side === 'right' ? 0x100 : 0);
@@ -1045,6 +1091,13 @@ async function resetCall(s: Shadow, family: string, side: string): Promise<void>
   const counts = checkStores(s, [...mutable, ...stackWords()], `${side} reset ${family}`);
   // every mutable word is written
   expect(mutable.filter((a) => !counts.has(a))).toEqual([]);
+  // the loads stay in the record, the stack and (snapshots) the table of the image
+  checkLoads(s, `${side} reset ${family}`, [
+    {
+      label: 'helper-reset read bounds',
+      within: [wordRange(base, RESET_SIZES[family]!), wordRange(STACK - 64, 65), ...(family === 'snapshots' ? [imageRange(0x26e5c0, 128)] : [])],
+    },
+  ]);
 }
 
 suite(enabled ? `${title}: helper resets` : `${title}: helper resets: ${stockSkipReason(DN2_112)}`, () => {
