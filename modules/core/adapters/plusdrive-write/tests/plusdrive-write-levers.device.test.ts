@@ -5,7 +5,7 @@ import { pdwSuite, pattern, slot4, cat, drive, staged, noStagingFolder, WRITE, B
 
 // +Drive writes through core/plusdrive-write, the write levers (finding 134) (docs/plans/usb-fast.md 3.1, finding 120; setup: plusdrive-write-support.ts).
 
-pdwSuite('+Drive writes through core/plusdrive-write: the write levers (finding 134)', (t) => {
+pdwSuite('+Drive writes through core/plusdrive-write: the write levers (finding 134)', { devices: ['dt2'] }, (t) => {
   const { rig, settle, baseCard, run, snapshot, fsWrites, hashTable, inodes, fileOfSize, extentsOf } = t;
   // The only part of the fast close that differs from the stock read is the page to card mapping (file_page_find), and a file of one extent does
   // not test it. The reserve is the cheaper one (`reserve_fast`: the page allocator without the free page count): its allocation of a file of 20 pieces

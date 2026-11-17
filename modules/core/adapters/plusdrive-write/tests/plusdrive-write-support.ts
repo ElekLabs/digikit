@@ -160,10 +160,10 @@ export function makeCtx(rig: CardRig) {
 export type Pdw = ReturnType<typeof makeCtx>;
 
 /** One describe per device with a rig and its context; `define` registers the file's cases. */
-export function pdwSuite(label: string, define: (t: Pdw) => void): void {
+export function pdwSuite(label: string, o: { devices: ['dt2'] }, define: (t: Pdw) => void): void {
   cardRigs(
     label,
-    { devices: ['dt2'], dsp: 'zero', roots: [...RT, 'core/plusdrive-write'], symbols: ['DKRT_MAILBOX', 'DKRT_SESSION_IDLE', 'DKRT_PD_CUT'], project: true, uploads: true, relaxFs: true },
+    { devices: o.devices, dsp: 'zero', roots: [...RT, 'core/plusdrive-write'], symbols: ['DKRT_MAILBOX', 'DKRT_SESSION_IDLE', 'DKRT_PD_CUT'], project: true, uploads: true, relaxFs: true },
     (rig: CardRig) => define(makeCtx(rig)),
   );
 }

@@ -5,7 +5,7 @@ import { pdwSuite, pattern, slot4, cat, staged, noStagingFolder, WRITE, REPLACE,
 
 // +Drive writes through core/plusdrive-write, power cuts and recovery (docs/plans/usb-fast.md 3.1, finding 120; setup: plusdrive-write-support.ts).
 
-pdwSuite('+Drive writes through core/plusdrive-write: power cuts and recovery', (t) => {
+pdwSuite('+Drive writes through core/plusdrive-write: power cuts and recovery', { devices: ['dt2'] }, (t) => {
   const { rig, settle, baseCard, run, snapshot, same } = t;
   // A cut at each step of a replace (the adapter stops dead, as a power cut would; DKRT_PD_CUT). After the reboot the destination holds the old
   // file or the new one, whole, never nothing and never a partial file, the staging folder is cleaned, and no other file changed. A new file is

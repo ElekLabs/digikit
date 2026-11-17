@@ -5,7 +5,7 @@ import { pdwSuite, pattern, slot4, cat, staged, noStagingFolder, WRITE, ABORT, D
 
 // +Drive writes through core/plusdrive-write, files and journal-free cases: write, replace, abort, delete, wrong hash, open files, foreign staging entries, direct write failures, full card (docs/plans/usb-fast.md 3.1, finding 120; setup: plusdrive-write-support.ts).
 
-pdwSuite('+Drive writes through core/plusdrive-write: files and journal-free cases: write, replace, abort, delete, wrong hash, open files, foreign staging entries, direct write failures, full card', (t) => {
+pdwSuite('+Drive writes through core/plusdrive-write: files and journal-free cases: write, replace, abort, delete, wrong hash, open files, foreign staging entries, direct write failures, full card', { devices: ['dt2'] }, (t) => {
   const { rig, settle, baseCard, run, snapshot, same, hashTable, inodes, at, fileOfSize } = t;
   test('a write lands at its destination with the firmware trailer and hash, creates the folders, leaves no staging file; E_EXISTS without REPLACE; REPLACE swaps; an abort leaves nothing; a delete removes the file', async () => {
     const dk = await rig.pausedBoot(await baseCard());

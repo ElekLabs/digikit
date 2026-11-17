@@ -5,7 +5,7 @@ import { pdwSuite, pattern, slot4, cat, drive, staged, WRITE, ABORT, SAMPLES, HA
 
 // +Drive writes through core/plusdrive-write, the close hash (docs/plans/usb-fast.md 3.1, finding 120; setup: plusdrive-write-support.ts).
 
-pdwSuite('+Drive writes through core/plusdrive-write: the close hash', (t) => {
+pdwSuite('+Drive writes through core/plusdrive-write: the close hash', { devices: ['dt2'] }, (t) => {
   const { rig, baseCard, run, snapshot, same, fsWrites, hashTable } = t;
   const bothHashes = async (knob: number) => {
     const dk = await rig.pausedBoot(await baseCard());
