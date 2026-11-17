@@ -18,7 +18,7 @@ export default function ModuleCard(props: ModuleCardProps) {
   return (
     <article class="card">
       <div class="card-top">
-        {/* oxlint-disable-next-line solid/no-innerhtml -- repository SVGs, checked by apps/web/tests/icons.test.mjs */}
+        {/* oxlint-disable-next-line solid/no-innerhtml -- repository SVGs, checked by apps/web/tests/icons.test.ts */}
         <span class="tile" innerHTML={props.module.icon} />
         <span class="eyebrow">{CATEGORY_LABEL[props.module.category]}</span>
       </div>

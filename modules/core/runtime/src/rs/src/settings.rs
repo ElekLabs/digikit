@@ -6,7 +6,7 @@
 //! record needs. A power cut in the write leaves the current copy valid. Unloaded modules keep their entries (nothing is removed but by `remove`).
 //!
 //! Callers: the UI task (the menu, `core/fxpages`) and the mailbox test commands. Not for interrupts or the MIDI task: the record is one buffer.
-//! The C ABI for core modules is `dkrt_settings_get`, `dkrt_settings_put`, `dkrt_settings_remove` and `dkrt_settings_flush` below.
+//! The C ABI for core modules is `dkrt_settings_put` and `dkrt_settings_flush` (the menu's).
 //! A `.dkm` module uses `dk_settings_open`, `dk_settings_get`, `dk_settings_put` and `dk_settings_remove` (`module_*` below): the runtime
 //! stores its keys as `<module name>/<key>`, so a module reaches its own prefix only. There is no task check: `dk_settings_put` and `dk_settings_remove`
 //! must be called from the UI task (a menu, `tick`, `init`), not from a host command handler (MIDI task) or an interrupt.
@@ -152,14 +152,7 @@ pub unsafe fn load() {
             s.card_seq = l.seq;
             s.damaged = l.damaged;
             let n = count_entries();
-            // state: 0 none valid, 1 a copy loaded, 2 a copy is damaged and the other one was taken
-            let state = if l.copy == set::NONE {
-                0
-            } else if l.damaged != 0 {
-                2
-            } else {
-                1
-            };
+            let state = load_state(l.copy, l.damaged);
             let e = if l.damaged != 0 { logk::F_ERROR } else { dlog::INFO };
             dlog::ev(logk::SETTINGS_LOAD, e, [state, l.copy, l.seq, l.used, n]);
         }
@@ -274,8 +267,7 @@ pub unsafe fn flush() -> i32 {
     if s.off != 0 {
         return E_SET_OFF;
     }
-    let target = if s.copy == 0 { 1 } else { 0 };
-    let seq = s.card_seq.wrapping_add(1);
+    let (target, seq) = next_write(s.copy, s.card_seq);
     set::seal(&mut area()[..], seq);
     let r = set::write(&io(), &crate::store::layout(), target, area());
     s.last_result = r;
@@ -310,9 +302,31 @@ pub unsafe fn tick() {
         return;
     }
     let (now, delay) = clock();
-    if now.wrapping_sub(s.changed) >= delay || s.passes.wrapping_sub(s.changed_pass) >= DEAD_PASSES {
+    if write_due(now, s.changed, delay, s.passes, s.changed_pass) {
         flush();
     }
+}
+
+/// The `SETTINGS_LOAD` state of what the boot found: 0 no valid copy, 1 a copy loaded, 2 a copy is damaged and the other one was taken.
+fn load_state(copy: u32, damaged: u32) -> u32 {
+    if copy == set::NONE {
+        0
+    } else if damaged != 0 {
+        2
+    } else {
+        1
+    }
+}
+
+/// The copy and the `seq` of the next write: the copy that is not current (A when none is), with the card's `seq` + 1.
+fn next_write(copy: u32, card_seq: u32) -> (u32, u32) {
+    (if copy == 0 { 1 } else { 0 }, card_seq.wrapping_add(1))
+}
+
+/// Is the record due: quiet for `delay` (in the clock's unit), or the UI loop ran `DEAD_PASSES` passes since the last change (a block counter that
+/// does not move)?
+fn write_due(now: u32, changed: u32, delay: u32, passes: u32, changed_pass: u32) -> bool {
+    now.wrapping_sub(changed) >= delay || passes.wrapping_sub(changed_pass) >= DEAD_PASSES
 }
 
 unsafe fn key_of<'a>(key: *const u8) -> &'a [u8] {
@@ -321,14 +335,6 @@ unsafe fn key_of<'a>(key: *const u8) -> &'a [u8] {
         n += 1;
     }
     core::slice::from_raw_parts(key, n)
-}
-
-/// `dkrt_settings_get(key, buf, cap)`: the value of `key` (NUL-terminated) into `buf` (`cap` bytes): its length, or `E_SET_NOKEY`, `E_SET_KEY`,
-/// `E_SET_VALUE` (`cap` too small). UI task.
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_settings_get(key: *const u8, buf: *mut u8, cap: u32) -> i32 {
-    crate::init_once();
-    get(key_of(key), core::slice::from_raw_parts_mut(buf, cap as usize))
 }
 
 /// `dkrt_settings_put(key, value, len)`: set `key` (NUL-terminated) to the `len` bytes at `value`: 0, or `E_SET_KEY`, `E_SET_VALUE`, `E_SET_FULL`.
@@ -340,13 +346,6 @@ pub unsafe extern "C" fn dkrt_settings_put(key: *const u8, value: *const u8, len
         return E_SET_VALUE;
     }
     put(key_of(key), core::slice::from_raw_parts(value, len as usize))
-}
-
-/// `dkrt_settings_remove(key)`: remove `key` (NUL-terminated): 0 (also when it was not there), or `E_SET_KEY`. UI task.
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_settings_remove(key: *const u8) -> i32 {
-    crate::init_once();
-    remove(key_of(key))
 }
 
 // ---- the API of a .dkm module (api 1.9) --------------------------------------------------------------------------------------
@@ -479,4 +478,47 @@ pub unsafe fn mailbox(cmd: u32, arg: *mut u8) -> i32 {
     }
     let out = core::slice::from_raw_parts_mut(arg, 96);
     get(&k[..kl], out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_load_state_says_none_loaded_or_damaged() {
+        assert_eq!(load_state(set::NONE, 0), 0, "no valid copy, nothing damaged");
+        assert_eq!(load_state(set::NONE, 2), 0, "both copies damaged: still no record");
+        assert_eq!(load_state(0, 0), 1);
+        assert_eq!(load_state(1, 0), 1);
+        assert_eq!(load_state(0, 1), 2, "A taken, B damaged");
+        assert_eq!(load_state(1, 1), 2, "B taken, A damaged");
+    }
+
+    #[test]
+    fn the_next_write_goes_to_the_other_copy_with_the_next_seq() {
+        assert_eq!(next_write(0, 4), (1, 5));
+        assert_eq!(next_write(1, 9), (0, 10));
+        assert_eq!(next_write(set::NONE, 0), (0, 1), "no valid copy: A, seq 1");
+        assert_eq!(next_write(1, u32::MAX), (0, 0), "the seq wraps");
+    }
+
+    #[test]
+    fn a_change_is_written_once_it_has_been_quiet_for_the_delay() {
+        let (changed, delay) = (1000u32, 3000u32);
+        assert!(!write_due(changed, changed, delay, 5, 5), "right after the change");
+        assert!(!write_due(changed + delay - 1, changed, delay, 5, 5));
+        assert!(write_due(changed + delay, changed, delay, 5, 5));
+        // the clock wraps between the change and now
+        let near_end = u32::MAX - 100;
+        assert!(!write_due(near_end.wrapping_add(delay - 1), near_end, delay, 5, 5));
+        assert!(write_due(near_end.wrapping_add(delay), near_end, delay, 5, 5));
+    }
+
+    #[test]
+    fn a_block_counter_that_does_not_move_is_taken_for_dead_after_many_passes() {
+        let (changed, delay) = (7u32, 3000u32);
+        assert!(!write_due(changed, changed, delay, DEAD_PASSES - 1, 0));
+        assert!(write_due(changed, changed, delay, DEAD_PASSES, 0));
+        assert!(!write_due(changed, changed, delay, 10 + DEAD_PASSES - 1, 10));
+    }
 }

@@ -131,6 +131,35 @@ fn the_runtime_constants_are_the_device_files_numbers() {
         dt2.contains(".equ PEEK_LO_1, 0x47e8b000 ") && dt2.contains(".equ PEEK_HI_1, 0x47fe1000 "),
         "{dt2}"
     );
+    // the profiling clock: DTIM0 DTCN0 at 132 MHz on both devices
+    for inc in [dn2, dt2] {
+        assert!(inc.contains(".equ SPAN_CLOCK, 0xfc07000c "), "{inc}");
+        assert!(inc.contains(".equ SPAN_CLOCK_HZ, 0x7de2900 "), "{inc}");
+    }
+}
+
+#[test]
+fn a_device_without_a_span_clock_gets_zero() {
+    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
+        .unwrap();
+    let text = std::fs::read_to_string(root().join("devices/digitone-ii.toml")).unwrap();
+    let text: String = text
+        .lines()
+        .filter(|l| !l.starts_with("span_clock"))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let facts = Facts::from_texts([text.as_str()]).unwrap();
+    let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
+    let inc = &files
+        .iter()
+        .find(|f| f.0 == "build/gen/device-dn2.inc")
+        .unwrap()
+        .1;
+    assert!(inc.contains(".equ SPAN_CLOCK, 0x0 "), "{inc}");
+    assert!(inc.contains(".equ SPAN_CLOCK_HZ, 0x0 "), "{inc}");
 }
 
 /// What `devgen::generate` makes of `module` when its `[[gen]]` entries are replaced by one entry.
@@ -550,7 +579,7 @@ const RT021_MODULES: [&str; 10] = [
 ];
 
 #[test]
-fn a_device_without_a_dsp_patches_the_runtime_alone() {
+fn a_device_without_a_dsp_patches_the_runtime_and_what_it_stands_on_alone() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
@@ -563,7 +592,7 @@ fn a_device_without_a_dsp_patches_the_runtime_alone() {
             all.sort();
             assert_eq!(
                 all,
-                ["core/expansion", "core/runtime"],
+                ["core/expansion", "core/platform", "core/runtime"],
                 "{} set {set}",
                 dev.short
             );
@@ -595,6 +624,8 @@ fn the_patch_sets_are_the_rt021_flash_modules() {
             // run-time effects (core/dynfx and the chain it reserves rows in): both devices have them in both sets (the Digitone II's emulator set since the engine bars only the
             // changed blocks: the hook costs x1.01 DSP CPU there, finding 55)
             want.extend(["core/dynfx", "core/fx", "core/fxpages"]);
+            // core/runtime requires the platform adapter (its hooks and the exception hook install)
+            want.push("core/platform");
             // the DIGIKIT menu is written on <dk/platform/ui.h>: core/digikit-menu requires core/ui
             want.push("core/ui");
             // the sample pool: both Digitakt II sets have it; the Digitone II flashes without it until the SPI wire-size decision
@@ -605,6 +636,7 @@ fn the_patch_sets_are_the_rt021_flash_modules() {
             // core/sdhc-large (large card commands for registered buffers) is in every flashed set
             if set == "device" {
                 want.push("core/usb-bulk");
+                want.push("core/usb-bulk-audio");
                 if dev.short == "dt2" {
                     want.push("core/plusdrive-write");
                 }

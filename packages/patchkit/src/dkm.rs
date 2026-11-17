@@ -9,14 +9,18 @@ use crate::error::*;
 use crate::link;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: u32 = 0x444b_4d46; // "DKMF"
-pub const FORMAT: u32 = 1;
+// The layout numbers are `[format]` of sdk/sdk.toml, through `dkneeds` (the runtime reads the same constants).
+pub const MAGIC: u32 = dkneeds::MAGIC;
+pub const FORMAT: u32 = dkneeds::FORMAT;
 /// The header size. The entry points are the `dk_module` record of the module (docs/plans/sdk.md section 5): `init`, `fini`, `menu` and `tick` are image
 /// offsets in the header, [`NONE`] for a missing one. The runtime calls them with a `dk_module_ctx`.
-pub const HEADER: usize = 0xa0;
-pub const NONE: u32 = 0xffff_ffff;
-pub const NAME_LEN: usize = 32;
-pub const IMPORT_LEN: usize = 32;
+pub const HEADER: usize = dkneeds::HEADER as usize;
+pub const NONE: u32 = dkneeds::NONE;
+pub const NAME_LEN: usize = dkneeds::NAME_LEN as usize;
+pub const IMPORT_LEN: usize = dkneeds::CF_IMPORT_LEN as usize;
+const CF_RELOC_LEN: usize = dkneeds::CF_RELOC_LEN as usize;
+const CF_RELOC_OFFSET: usize = dkneeds::CF_RELOC_OFFSET as usize;
+const CF_RELOC_KIND: usize = dkneeds::CF_RELOC_KIND as usize;
 /// Largest module file the v0 runtime stages (its staging buffer): `[limits.max] stage_bytes` of sdk/sdk.toml.
 pub fn max_file() -> usize {
     crate::sdkgen::limits_max().stage_bytes as usize
@@ -51,30 +55,39 @@ pub fn needs_json(f: &[u8]) -> Result<serde_json::Value> {
 }
 
 // header field offsets
-pub const H_SIZE: usize = 0x08;
-pub const H_HDRSIZE: usize = 0x0c;
-pub const H_SHA: usize = 0x10;
-pub const H_RUNTIME: usize = 0x30;
-pub const H_VERSION: usize = 0x34;
-/// 0x38..0x40: reserved, zero (the contract pairs of earlier formats; the one version is the runtime word at 0x30).
-pub const H_RESERVED: usize = 0x38;
-pub const H_NAME: usize = 0x40;
-pub const H_IMAGE_OFF: usize = 0x60;
-pub const H_IMAGE_SIZE: usize = 0x64;
-pub const H_BSS: usize = 0x68;
-pub const H_ALIGN: usize = 0x6c;
-pub const H_RELOC_OFF: usize = 0x70;
-pub const H_RELOC_N: usize = 0x74;
-pub const H_IMPORT_OFF: usize = 0x78;
-pub const H_IMPORT_N: usize = 0x7c;
-pub const H_INIT: usize = 0x80;
-pub const H_FINI: usize = 0x84;
-pub const H_MENU: usize = 0x88;
-pub const H_TICK: usize = 0x8c;
-pub const H_REG_OFF: usize = 0x90;
-pub const H_REG_SIZE: usize = 0x94;
-pub const H_DSP_OFF: usize = 0x98;
-pub const H_DSP_SIZE: usize = 0x9c;
+pub const H_MAGIC: usize = dkneeds::H_MAGIC as usize;
+pub const H_FORMAT: usize = dkneeds::H_FORMAT as usize;
+pub const H_SIZE: usize = dkneeds::H_SIZE as usize;
+pub const H_HDRSIZE: usize = dkneeds::H_HDRSIZE as usize;
+pub const H_SHA: usize = dkneeds::H_SHA as usize;
+pub const H_RUNTIME: usize = dkneeds::H_RUNTIME as usize;
+pub const H_VERSION: usize = dkneeds::H_VERSION as usize;
+/// 0x38: the role of the file, [`ROLE_MODULE`] or [`ROLE_SERVICE`].
+pub const H_ROLE: usize = dkneeds::H_ROLE as usize;
+/// 0x3c..0x40: the ABI fingerprint of the object's `dk_svc_abi` data symbol (a service file built with `dkrt-svc-rt`); 0 when the object defines none, so a
+/// module is byte-identical to the format before the word was used.
+pub const H_SVC_ABI: usize = dkneeds::H_SVC_ABI as usize;
+/// A content module (a `.dkm`).
+pub const ROLE_MODULE: u32 = 0;
+/// A service provider (a `.dks`): its table has `PROVIDES` and `EXPORTS`.
+pub const ROLE_SERVICE: u32 = 1;
+pub const H_NAME: usize = dkneeds::H_NAME as usize;
+pub const H_IMAGE_OFF: usize = dkneeds::H_IMAGE_OFF as usize;
+pub const H_IMAGE_SIZE: usize = dkneeds::H_IMAGE_SIZE as usize;
+pub const H_BSS: usize = dkneeds::H_BSS as usize;
+pub const H_ALIGN: usize = dkneeds::H_ALIGN as usize;
+pub const H_RELOC_OFF: usize = dkneeds::H_RELOC_OFF as usize;
+pub const H_RELOC_N: usize = dkneeds::H_RELOC_N as usize;
+pub const H_IMPORT_OFF: usize = dkneeds::H_IMPORT_OFF as usize;
+pub const H_IMPORT_N: usize = dkneeds::H_IMPORT_N as usize;
+pub const H_INIT: usize = dkneeds::H_INIT as usize;
+pub const H_FINI: usize = dkneeds::H_FINI as usize;
+pub const H_MENU: usize = dkneeds::H_MENU as usize;
+pub const H_TICK: usize = dkneeds::H_TICK as usize;
+pub const H_REG_OFF: usize = dkneeds::H_REG_OFF as usize;
+pub const H_REG_SIZE: usize = dkneeds::H_REG_SIZE as usize;
+pub const H_DSP_OFF: usize = dkneeds::H_DSP_OFF as usize;
+pub const H_DSP_SIZE: usize = dkneeds::H_DSP_SIZE as usize;
 /// Bit 31 of the word at [`H_RUNTIME`]: the module was built with `DK_TRACE`. The word at [`H_RUNTIME`] is the runtime version the module needs
 /// (the loader's rule: same major and minor, a patch at most the runtime's); a version never reaches this bit.
 pub const FLAG_TRACE: u32 = 1 << 31;
@@ -131,6 +144,140 @@ pub fn needed_runtime<'a>(imports: impl IntoIterator<Item = &'a str>) -> u32 {
         .unwrap_or(0)
 }
 
+/// The `NEEDS` of a module that links `imports`: one per service its imports name, the newest `since` among them, hard unless each of them has a
+/// stub for an absent provider. Sorted by service name hash.
+pub fn needs_of_imports<'a>(
+    imports: impl IntoIterator<Item = &'a str>,
+) -> Vec<dkneeds::keys::Need> {
+    let table = crate::sdkgen::import_infos();
+    let mut by: BTreeMap<u32, dkneeds::keys::Need> = BTreeMap::new();
+    for n in imports {
+        if let Some(i) = table.get(n) {
+            let h = dkneeds::keys::name_hash(&i.service);
+            let e = by.entry(h).or_insert(dkneeds::keys::Need {
+                service: h,
+                min_version: 0,
+                hard: false,
+            });
+            e.min_version = e.min_version.max(i.since);
+            e.hard |= !i.optional;
+        }
+    }
+    by.into_values().collect()
+}
+
+/// A hard NEED on the owning service of each record kind in `kinds` (the kinds of a module's `KEYS`, `[records.kinds] service`), only when that service has no
+/// `rust` row, so a `.dks` provides it. A service in the runtime image is always there: modules whose kinds it owns stay byte-identical until it moves out.
+/// The needs stay sorted by service name hash; a kind that is no record kind adds none.
+fn record_kind_needs(needs: &mut Vec<dkneeds::keys::Need>, kinds: &[u32]) {
+    let providers = crate::sdkgen::provider_services();
+    for kind in kinds {
+        let Some((_, _, service)) = dkneeds::KINDS.iter().find(|k| k.0 == *kind) else {
+            continue;
+        };
+        if !providers.contains(*service) {
+            continue;
+        }
+        let h = dkneeds::keys::name_hash(service);
+        match needs.iter_mut().find(|n| n.service == h) {
+            Some(n) => n.hard = true,
+            None => needs.push(dkneeds::keys::Need {
+                service: h,
+                min_version: 0,
+                hard: true,
+            }),
+        }
+    }
+    needs.sort_by_key(|n| n.service);
+}
+
+/// The `KINDS` of a service file: each record kind `service` owns (`[records.kinds]`) with `init` as the handler entry. The `service!` macro of `dkrt-svc-rt`
+/// declares every kind with the address of `init`, and the loader compares the declarations with this table.
+fn service_kinds(service: &str, init: u32) -> Vec<dkneeds::keys::KindDecl> {
+    dkneeds::KINDS
+        .iter()
+        .filter(|k| k.2 == service)
+        .map(|k| dkneeds::keys::KindDecl {
+            kind: k.0,
+            len: k.1,
+            entry: init,
+        })
+        .collect()
+}
+
+/// The header table to write: `reg` is the table the caller built (empty: a module that takes and keeps nothing) with the `NEEDS` entry replaced by
+/// the needs of `imports`.
+///
+/// `provides` and `exports` are added to the ones of `reg`; a table with any `PROVIDES` is written as version 2.
+fn table_with_needs(
+    reg: &[u8],
+    imports: &[&str],
+    provides: &[dkneeds::keys::Pair],
+    exports_add: &[dkneeds::keys::Pair],
+    hooks_add: &[dkneeds::keys::Pair],
+    slots_add: &[dkneeds::keys::Slot],
+    kinds_add: &[dkneeds::keys::KindDecl],
+) -> Result<Vec<u8>> {
+    use dkneeds::keys::{Bind, KeyGroup, Keys, Pair, Table, write_table};
+    let keys = if reg.is_empty() {
+        None
+    } else {
+        Some(Keys::parse(reg).map_err(|e| err!("header table: {e:?}"))?)
+    };
+    let mut needs = needs_of_imports(imports.iter().copied());
+    if let Some(k) = &keys {
+        let kinds: Vec<u32> = k.key_groups().map(|g| g.0).collect();
+        record_kind_needs(&mut needs, &kinds);
+    }
+    let (mut uses, mut kinds, mut slots, mut hooks, mut exports, mut resources) =
+        (vec![], vec![], vec![], vec![], vec![], vec![]);
+    let mut groups: Vec<(u32, Vec<u32>)> = vec![];
+    let mut provided: Vec<Pair> = vec![];
+    let mut binds: Vec<Bind> = vec![];
+    if let Some(k) = &keys {
+        provided.extend(k.provides().map(|(a, b)| Pair { a, b }));
+        binds.extend((0..k.bind_count()).filter_map(|i| k.bind(i)).map(|b| Bind {
+            site: b.site,
+            addr: b.addr,
+            tramp: b.tramp,
+            stock: b.stock,
+        }));
+        uses.extend(k.uses());
+        kinds.extend(k.kinds());
+        slots.extend(k.slots());
+        hooks.extend(k.hooks());
+        exports.extend(k.exports());
+        resources.extend(k.resources());
+        for (kind, ks) in k.key_groups() {
+            groups.push((kind, ks.collect()));
+        }
+    }
+    exports.extend_from_slice(exports_add);
+    hooks.extend_from_slice(hooks_add);
+    slots.extend_from_slice(slots_add);
+    kinds.extend_from_slice(kinds_add);
+    provided.extend_from_slice(provides);
+    let key_groups: Vec<KeyGroup> = groups
+        .iter()
+        .map(|(kind, keys)| KeyGroup { kind: *kind, keys })
+        .collect();
+    let t = Table {
+        provides: &provided,
+        bind: &binds,
+        needs: &needs,
+        uses: &uses,
+        keys: &key_groups,
+        kinds: &kinds,
+        slots: &slots,
+        hooks: &hooks,
+        exports: &exports,
+        resources: &resources,
+    };
+    let mut out = vec![0u8; dkneeds::keys::table_size(&t)];
+    write_table(&t, &mut out).map_err(|e| err!("header table: {e:?}"))?;
+    Ok(out)
+}
+
 /// The services the imports name (`service` of `[[import]]`), each with the imports of it, sorted; a compiler helper names none.
 pub fn services_of<'a>(
     imports: impl IntoIterator<Item = &'a str>,
@@ -155,6 +302,56 @@ pub struct Options {
     pub stereo: bool,
     /// A machine that reads `gate` (`DK_MACHINE_GATE` in its desc); informational for tools.
     pub gate: bool,
+    /// A service provider (`role = "service"`): the file gets [`ROLE_SERVICE`] and a table with its `PROVIDES` and `EXPORTS`. `None`: a content module.
+    pub service: Option<Provided>,
+}
+
+/// The low 24 bits of a `HOOKS` entry of a service file: the handler's image offset. The top byte is the device mask of the hook.
+pub const HOOK_ENTRY_MASK: u32 = 0x00ff_ffff;
+
+/// The device mask of a hook: bit `i` is the device `i` of `devdata::all()` (file-name order); no device is mask 0, which means every device. The packer writes it
+/// in the top byte of the hook's `HOOKS` entry and `patchkit bind` reads it (and writes the bound file's entry without it), so a hook for the device of the firmware
+/// that the port lacks is refused wherever bind runs.
+pub fn hook_device_mask(devices: &[String]) -> Result<u32> {
+    let all = crate::devdata::all();
+    let mut mask = 0u32;
+    for d in devices {
+        let i = all.iter().position(|x| x.short == *d).ok_or_else(|| {
+            err!(
+                "hook device {d:?} is not one of {}",
+                crate::devdata::short_list()
+            )
+        })?;
+        if i >= 8 {
+            return Err(err!("hook device {d:?}: the device mask has 8 bits"));
+        }
+        mask |= 1 << i;
+    }
+    Ok(mask)
+}
+
+/// What a service file provides: the service name (`[module] service`) and the functions it exports (`[[export]]`), each a global function of the object.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Provided {
+    pub service: String,
+    pub exports: Vec<String>,
+    /// The hooks the service takes (`[[hook]]`): (hook name of the port, global function of the object that handles it, devices it is for; empty: every
+    /// device). A `patchkit bind` of the file gives each a trampoline; the devices are the device mask in the top byte of the `HOOKS` entry
+    /// ([`hook_device_mask`]).
+    pub hooks: Vec<(String, String, Vec<String>)>,
+    /// The pointer slots the service fills (`[[fill]]`): (slot name of the image adapter, global function of the object whose address goes in the slot).
+    /// A `SLOTS` item of the table is the name hash and the entry offset. The third item lists the devices the fill is for (empty: every device); [`Provided::for_device`]
+    /// drops the others, because a slot that the image of another device lacks is an unknown slot to the loader.
+    pub fills: Vec<(String, String, Vec<String>)>,
+}
+
+impl Provided {
+    /// The service as packed for `device`: the fills limited to other devices are left out.
+    pub fn for_device(mut self, device: &str) -> Provided {
+        self.fills
+            .retain(|(_, _, devs)| devs.is_empty() || devs.iter().any(|d| d == device));
+        self
+    }
 }
 
 /// "1.2.3" -> 0x010203
@@ -394,6 +591,17 @@ fn pack_inner(
     } else {
         [Some(0), None, None, None]
     };
+    // the ABI fingerprint of a service built with `dkrt-svc-rt`: the value of the data symbol `dk_svc_abi` (a big-endian word in the image)
+    let svc_abi = match sym("dk_svc_abi")? {
+        None => 0,
+        Some(at) => {
+            let at = at as usize;
+            match image.get(at..at + 4) {
+                Some(w) => u32::from_be_bytes([w[0], w[1], w[2], w[3]]),
+                None => return Err(err!("dk_svc_abi is not a whole word of the image")),
+            }
+        }
+    };
     let align = obj
         .sections
         .iter()
@@ -406,38 +614,165 @@ fn pack_inner(
         return Err(err!("a section needs alignment over 16 (the arena's)"));
     }
 
+    // the header table: the packer's uses and keys (none: a module that keeps nothing) and the needs of the imports the module links
+    let (provides, svc_exports, svc_hooks, svc_slots, svc_kinds) = match &o.service {
+        None => (vec![], vec![], vec![], vec![], vec![]),
+        Some(s) => {
+            let mut hk: Vec<dkneeds::keys::Pair> = vec![];
+            for (hook, entry, devices) in &s.hooks {
+                if !linked.globals.iter().any(|g| g == entry) {
+                    return Err(err!(
+                        "the service hooks {hook} with {entry}, which is no global symbol of the object"
+                    ));
+                }
+                let at = sym(entry)?.ok_or_else(|| {
+                    err!("the service hooks {hook} with {entry}, which the object does not define")
+                })?;
+                let a = dkneeds::keys::name_hash(hook);
+                if hk.iter().any(|p| p.a == a) {
+                    return Err(err!("the service hooks {hook} twice"));
+                }
+                if at > HOOK_ENTRY_MASK {
+                    return Err(err!(
+                        "the service hooks {hook} with {entry} at image offset {at:#x}, over the 24 bits of a HOOKS entry"
+                    ));
+                }
+                hk.push(dkneeds::keys::Pair {
+                    a,
+                    b: at | hook_device_mask(devices)? << 24,
+                });
+            }
+            hk.sort_by_key(|p| p.a);
+            let mut sl: Vec<dkneeds::keys::Slot> = vec![];
+            for (slot, entry, _) in &s.fills {
+                let at = sym(entry)?.ok_or_else(|| {
+                    err!("the service fills {slot} with {entry}, which the object does not define")
+                })?;
+                let id = dkneeds::keys::name_hash(slot);
+                if sl.iter().any(|p| p.id == id) {
+                    return Err(err!("the service fills {slot} twice"));
+                }
+                sl.push(dkneeds::keys::Slot {
+                    id,
+                    flags: 0,
+                    entry: at,
+                });
+            }
+            sl.sort_by_key(|p| p.id);
+            let mut ex: Vec<dkneeds::keys::Pair> = vec![];
+            for n in &s.exports {
+                let at = sym(n)?.ok_or_else(|| {
+                    err!("the service exports {n}, which the object does not define")
+                })?;
+                let a = dkneeds::keys::name_hash(n);
+                if ex.iter().any(|p| p.a == a) {
+                    return Err(err!("the service exports {n} twice"));
+                }
+                ex.push(dkneeds::keys::Pair { a, b: at });
+            }
+            ex.sort_by_key(|p| p.a);
+            (
+                vec![dkneeds::keys::Pair {
+                    a: dkneeds::keys::name_hash(&s.service),
+                    b: o.version,
+                }],
+                ex,
+                hk,
+                sl,
+                service_kinds(&s.service, init.unwrap_or(0)),
+            )
+        }
+    };
+    let table = table_with_needs(
+        reg,
+        &imports,
+        &provides,
+        &svc_exports,
+        &svc_hooks,
+        &svc_slots,
+        &svc_kinds,
+    )?;
+    emit(&EmitParts {
+        name: &o.name,
+        version: o.version,
+        role: if o.service.is_some() {
+            ROLE_SERVICE
+        } else {
+            ROLE_MODULE
+        },
+        // the runtime version the module needs: the newest `since` of its service imports, at least the version that introduced the header table,
+        // and the trace flag
+        runtime_word: needed_runtime(imports.iter().copied()).max(crate::sdkgen::table_runtime())
+            | if o.trace { FLAG_TRACE } else { 0 },
+        svc_abi,
+        image: &image,
+        bss: linked.bss_size as u32,
+        align,
+        imports: &imports,
+        relocs: &relocs,
+        entries: [init, fini, tick, menu],
+        table: &table,
+        dsp,
+        max_file,
+    })
+}
+
+/// What [`emit`] lays out as a file.
+pub(crate) struct EmitParts<'a> {
+    pub name: &'a str,
+    pub version: u32,
+    /// [`ROLE_MODULE`] or [`ROLE_SERVICE`], the word at [`H_ROLE`].
+    pub role: u32,
+    /// The word at [`H_RUNTIME`]: the runtime version the module needs and the trace flag.
+    pub runtime_word: u32,
+    /// The word at [`H_SVC_ABI`]: the service ABI fingerprint of a service (0 for a module).
+    pub svc_abi: u32,
+    pub image: &'a [u8],
+    pub bss: u32,
+    pub align: u32,
+    pub imports: &'a [&'a str],
+    /// (image offset, 0 = base-relative or 1 << 24 | import index), sorted.
+    pub relocs: &'a [(u32, u32)],
+    /// The image offsets of `init`, `fini`, `tick` and `menu`.
+    pub entries: [Option<u32>; 4],
+    /// The header table, already written.
+    pub table: &'a [u8],
+    /// The DSP section (empty: none).
+    pub dsp: &'a [u8],
+    pub max_file: usize,
+}
+
+/// The file layout: header, imports, relocations, header table, DSP section, image, with the file hash. 0x3c..0x40 stay zero.
+pub(crate) fn emit(p: &EmitParts) -> Result<Vec<u8>> {
+    let [init, fini, tick, menu] = p.entries;
+    let (imports, relocs, reg, dsp, image) = (p.imports, p.relocs, p.table, p.dsp, p.image);
     let import_off = HEADER;
     let reloc_off = import_off + imports.len() * IMPORT_LEN;
     let reg_off = reloc_off + relocs.len() * 8;
     let reg_size = reg.len();
-    if !reg.is_empty() {
-        dkneeds::keys::Keys::parse(reg).map_err(|e| err!("keys table: {e:?}"))?;
-    }
     let dsp_off = align_up(reg_off + reg_size, 16);
     let image_off = align_up(dsp_off + dsp.len(), 16);
     let total = image_off + image.len();
-    if total > max_file {
+    if total > p.max_file {
         return Err(err!(
-            "the module file is {total} bytes; the runtime stages {max_file}"
+            "the module file is {total} bytes; the runtime stages {}",
+            p.max_file
         ));
     }
     let mut f = vec![0u8; total];
-    put(&mut f, 0, MAGIC);
-    put(&mut f, 4, FORMAT);
+    put(&mut f, H_MAGIC, MAGIC);
+    put(&mut f, H_FORMAT, FORMAT);
     put(&mut f, H_SIZE, total as u32);
     put(&mut f, H_HDRSIZE, HEADER as u32);
-    // the runtime version the module needs: the newest `since` of its service imports (0: none), and the trace flag; 0x38..0x40 stay zero
-    put(
-        &mut f,
-        H_RUNTIME,
-        needed_runtime(imports.iter().copied()) | if o.trace { FLAG_TRACE } else { 0 },
-    );
-    put(&mut f, H_VERSION, o.version);
-    f[H_NAME..H_NAME + o.name.len()].copy_from_slice(o.name.as_bytes());
+    put(&mut f, H_RUNTIME, p.runtime_word);
+    put(&mut f, H_VERSION, p.version);
+    put(&mut f, H_SVC_ABI, p.svc_abi);
+    put(&mut f, H_ROLE, p.role);
+    f[H_NAME..H_NAME + p.name.len()].copy_from_slice(p.name.as_bytes());
     put(&mut f, H_IMAGE_OFF, image_off as u32);
     put(&mut f, H_IMAGE_SIZE, image.len() as u32);
-    put(&mut f, H_BSS, linked.bss_size as u32);
-    put(&mut f, H_ALIGN, align);
+    put(&mut f, H_BSS, p.bss);
+    put(&mut f, H_ALIGN, p.align);
     put(&mut f, H_RELOC_OFF, reloc_off as u32);
     put(&mut f, H_RELOC_N, relocs.len() as u32);
     put(&mut f, H_IMPORT_OFF, import_off as u32);
@@ -453,8 +788,8 @@ fn pack_inner(
         f[at..at + n.len()].copy_from_slice(n.as_bytes());
     }
     for (i, (off, k)) in relocs.iter().enumerate() {
-        put(&mut f, reloc_off + i * 8, *off);
-        put(&mut f, reloc_off + i * 8 + 4, *k);
+        put(&mut f, reloc_off + i * CF_RELOC_LEN + CF_RELOC_OFFSET, *off);
+        put(&mut f, reloc_off + i * CF_RELOC_LEN + CF_RELOC_KIND, *k);
     }
     f[reg_off..reg_off + reg_size].copy_from_slice(reg);
     if !dsp.is_empty() {
@@ -462,7 +797,7 @@ fn pack_inner(
         put(&mut f, H_DSP_SIZE, dsp.len() as u32);
         f[dsp_off..dsp_off + dsp.len()].copy_from_slice(dsp);
     }
-    f[image_off..].copy_from_slice(&image);
+    f[image_off..].copy_from_slice(image);
     let sha = file_sha(&f);
     f[H_SHA..H_SHA + 32].copy_from_slice(&sha);
     Ok(f)
@@ -472,6 +807,10 @@ fn pack_inner(
 pub struct Dkm {
     pub name: String,
     pub version: u32,
+    /// [`ROLE_MODULE`] or [`ROLE_SERVICE`].
+    pub role: u32,
+    /// The word at [`H_SVC_ABI`].
+    pub svc_abi: u32,
     pub runtime_min: u32,
     /// Built with `DK_TRACE` ([`FLAG_TRACE`]); not part of `runtime_min`.
     pub trace: bool,
@@ -566,10 +905,16 @@ impl Dkm {
                 },
             ));
         }
+        let role = get(f, H_ROLE);
+        if role != ROLE_MODULE && role != ROLE_SERVICE {
+            return Err(err!("role {role} is not supported (0 module, 1 service)"));
+        }
         let opt = |v: u32| (v != NONE).then_some(v);
         Ok(Dkm {
             name,
             version: get(f, H_VERSION),
+            role,
+            svc_abi: get(f, H_SVC_ABI),
             runtime_min: get(f, H_RUNTIME) & !FLAG_TRACE,
             trace: get(f, H_RUNTIME) & FLAG_TRACE != 0,
             sha256: hex(&f[H_SHA..H_SHA + 32]),
@@ -687,6 +1032,7 @@ mod tests {
             trace: false,
             stereo: false,
             gate: false,
+            service: None,
         }
     }
 
@@ -771,29 +1117,213 @@ mod tests {
     }
 
     #[test]
+    fn the_abi_fingerprint_of_a_service_object_is_header_word_0x3c() {
+        let mut o = unstamped();
+        // the dk_module record fills data bytes 8 to 24; the fingerprint follows it
+        let mut data = [0u8; 28];
+        data[24..28].copy_from_slice(&0xabcd_0123u32.to_be_bytes());
+        o.sections[1] = sec(".data", "data", 4, &data);
+        o.symbols.push(sym("dk_svc_abi", Some(".data"), 24));
+        o.stamp_isa();
+        assert_eq!(get(&pack(&o, &opts()).unwrap(), H_SVC_ABI), 0xabcd_0123);
+        // an object without the symbol leaves the word zero
+        assert_eq!(get(&pack(&object(), &opts()).unwrap(), H_SVC_ABI), 0);
+    }
+
+    /// The header table of `o` packed with `service` as the provided service of the file.
+    fn service_table(service: &str, o: &Dko) -> (Dkm, Vec<u8>) {
+        let opts = Options {
+            service: Some(Provided {
+                service: service.into(),
+                exports: vec![],
+                hooks: vec![],
+                fills: vec![],
+            }),
+            ..opts()
+        };
+        let f = pack(o, &opts).unwrap();
+        (Dkm::parse(&f).unwrap(), f)
+    }
+
+    #[test]
+    fn a_service_file_records_init_as_the_handler_of_each_kind_its_service_owns() {
+        use dkneeds::keys::{Keys, KindDecl};
+        // `lfo` has no `rust` row: a `.dks` owns lfo_shape, and the `service!` glue declares it with the address of `init`
+        let (d, _) = service_table("lfo", &object());
+        let k = Keys::parse(&d.register).unwrap();
+        assert!(k.kinds().eq([KindDecl {
+            kind: dkneeds::KIND_LFO_SHAPE,
+            len: dkneeds::LEN_LFO_SHAPE,
+            entry: d.init.unwrap(),
+        }]));
+        assert_ne!(d.init, Some(0), "the object's init is no stub at offset 0");
+        // a service that owns no kind (svc-test) has an empty KINDS: its file is as before
+        let (d, _) = service_table("svc-test", &object());
+        assert_eq!(Keys::parse(&d.register).unwrap().kinds().count(), 0);
+        // a module that provides nothing has none either
+        let d = Dkm::parse(&pack(&object(), &opts()).unwrap()).unwrap();
+        assert_eq!(Keys::parse(&d.register).unwrap().kinds().count(), 0);
+    }
+
+    #[test]
+    fn a_service_file_that_fills_a_slot_has_a_slots_item_with_the_name_hash_and_the_entry_offset() {
+        use dkneeds::keys::Keys;
+        let o = object();
+        let opts = Options {
+            service: Some(Provided {
+                service: "svc-test".into(),
+                exports: vec![],
+                hooks: vec![],
+                fills: vec![("frametype".into(), "tick_fn".into(), vec![])],
+            }),
+            ..opts()
+        };
+        let d = Dkm::parse(&pack(&o, &opts).unwrap()).unwrap();
+        let k = Keys::parse(&d.register).unwrap();
+        let slots: Vec<_> = k.slots().collect();
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].id, dkneeds::keys::name_hash("frametype"));
+        assert_ne!(slots[0].entry, 0);
+        // a fill with a function the object does not define is refused, and one slot twice
+        let bad = Options {
+            service: Some(Provided {
+                service: "svc-test".into(),
+                exports: vec![],
+                hooks: vec![],
+                fills: vec![("frametype".into(), "no_such_function".into(), vec![])],
+            }),
+            ..self::opts()
+        };
+        assert!(pack(&o, &bad).is_err());
+    }
+
+    #[test]
+    fn a_fill_limited_to_a_device_is_in_the_pack_for_that_device_only() {
+        use dkneeds::keys::Keys;
+        let o = object();
+        let slots_for = |device: &str| {
+            let opts = Options {
+                service: Some(
+                    Provided {
+                        service: "svc-test".into(),
+                        exports: vec![],
+                        hooks: vec![],
+                        fills: vec![("frametype".into(), "tick_fn".into(), vec!["dn2".into()])],
+                    }
+                    .for_device(device),
+                ),
+                ..opts()
+            };
+            let d = Dkm::parse(&pack(&o, &opts).unwrap()).unwrap();
+            Keys::parse(&d.register).unwrap().slots().count()
+        };
+        assert_eq!(slots_for("dt2"), 0);
+        assert_eq!(slots_for("dn2"), 1);
+    }
+
+    /// The table of a module whose KEYS name the record kinds `kinds` (one key each), packed as a `.dkm`.
+    fn needs_of_keys(kinds: &[u32]) -> Vec<dkneeds::keys::Need> {
+        use dkneeds::keys::{KeyGroup, Keys, Table, table_size, write_table};
+        let ks = [7u32];
+        let groups: Vec<KeyGroup> = kinds
+            .iter()
+            .map(|k| KeyGroup {
+                kind: *k,
+                keys: &ks,
+            })
+            .collect();
+        let t = Table {
+            keys: &groups,
+            ..Table::default()
+        };
+        let mut reg = vec![0u8; table_size(&t)];
+        write_table(&t, &mut reg).unwrap();
+        let f = pack_keys(Some(&object()), &reg, &[], &opts()).unwrap();
+        Keys::parse(&Dkm::parse(&f).unwrap().register)
+            .unwrap()
+            .needs()
+            .collect()
+    }
+
+    #[test]
+    fn a_record_kind_of_a_service_file_is_a_hard_need_and_a_kind_of_an_in_crate_service_is_none() {
+        // lfo_shape: its service (lfo) is provided by a .dks, so the module needs it
+        let needs = needs_of_keys(&[dkneeds::KIND_LFO_SHAPE]);
+        let lfo = dkneeds::keys::name_hash("lfo");
+        let own: Vec<_> = needs.iter().filter(|n| n.service == lfo).collect();
+        assert_eq!(own.len(), 1);
+        assert!(own[0].hard);
+        // effects are owned by a service in the image (no need for them); machines and pages by the machines service file (a hard need on it)
+        let mach = dkneeds::keys::name_hash("machines");
+        assert!(
+            needs_of_keys(&[dkneeds::KIND_EFFECT])
+                .iter()
+                .all(|n| n.service != lfo && n.service != mach),
+        );
+        let m = needs_of_keys(&[dkneeds::KIND_MACHINE, dkneeds::KIND_PAGE]);
+        assert!(m.iter().all(|n| n.service != lfo));
+        assert_eq!(m.iter().filter(|n| n.service == mach && n.hard).count(), 1);
+        // the same kind twice is one need
+        let twice = needs_of_keys(&[dkneeds::KIND_LFO_SHAPE, dkneeds::KIND_LFO_SHAPE]);
+        assert_eq!(twice.iter().filter(|n| n.service == lfo).count(), 1);
+        // no KEYS, no record kind
+        let f = pack(&object(), &opts()).unwrap();
+        assert!(
+            dkneeds::keys::Keys::parse(&Dkm::parse(&f).unwrap().register)
+                .unwrap()
+                .needs()
+                .all(|n| n.service != lfo)
+        );
+    }
+
+    #[test]
     fn the_header_has_the_needed_runtime_and_no_contract_pairs() {
         // 0x38..0x40 are reserved zero; 0x30 is the newest `since` of the imports (0: none) with the trace flag
         let f = pack(&object(), &opts()).unwrap();
-        assert_eq!(&f[H_RESERVED..H_RESERVED + 8], &[0u8; 8]);
-        assert_eq!(get(&f, H_RUNTIME), 0);
+        assert_eq!(&f[H_ROLE..H_ROLE + 4], &[0u8; 4]);
+        assert_eq!(&f[H_SVC_ABI..H_SVC_ABI + 4], &[0u8; 4]);
+        // no import is linked: the file needs the version that introduced the header table
+        assert_eq!(get(&f, H_RUNTIME), crate::sdkgen::table_runtime());
         let f = pack_keys(Some(&object()), &[], &[0u8; 16], &opts()).unwrap();
-        assert_eq!(&f[H_RESERVED..H_RESERVED + 8], &[0u8; 8]);
+        assert_eq!(&f[H_ROLE..H_ROLE + 8], &[0u8; 8]);
         let traced = Options {
             trace: true,
             ..opts()
         };
         let f = pack(&object(), &traced).unwrap();
-        assert_eq!(get(&f, H_RUNTIME), FLAG_TRACE);
-        assert_eq!(Dkm::parse(&f).unwrap().runtime_min, 0);
+        assert_eq!(
+            get(&f, H_RUNTIME),
+            FLAG_TRACE | crate::sdkgen::table_runtime()
+        );
+        assert_eq!(
+            Dkm::parse(&f).unwrap().runtime_min,
+            crate::sdkgen::table_runtime()
+        );
         assert!(Dkm::parse(&f).unwrap().trace);
-        // the keys table is validated; any other bytes are refused
+        // the header table is validated; any other bytes are refused
         assert!(pack_keys(None, &[1, 2, 3], &[], &opts()).is_err());
+        // the needs of the linked imports are written: the service and the newest version among its imports
+        let mut o = unstamped();
+        for s in o.symbols.iter_mut().filter(|s| s.name == "fw_thing") {
+            s.name = "dk_settings_open".into();
+        }
+        for r in o.relocs.iter_mut().filter(|r| r.symbol == "fw_thing") {
+            r.symbol = "dk_settings_open".into();
+        }
+        o.stamp_isa();
+        let f = pack(&o, &opts()).unwrap();
+        let d = Dkm::parse(&f).unwrap();
+        let k = dkneeds::keys::Keys::parse(&d.register).unwrap();
+        let n: Vec<_> = k.needs().collect();
+        assert_eq!(n.len(), 1);
+        assert_eq!(n[0].service, dkneeds::keys::name_hash("runtime"));
+        assert_eq!(n[0].min_version, 0x000700);
+        assert!(n[0].hard);
     }
 
     /// A DSP section of an 8-byte image with BSS bytes of bss and one version 3 voice with `voices` states of 20 bytes (0: version 2).
     fn dsp_section(bss: u32, voices: u32) -> Vec<u8> {
         crate::dkmdsp::DspSection {
-            sample_bank: None,
             sample_tracks: None,
             device: 1,
             image: vec![0; 8],
@@ -850,7 +1380,7 @@ mod tests {
         let f = pack_keys(Some(&object()), &[], &dsp_section(100, 0), &opts()).unwrap();
         assert_eq!(needs(&f).unwrap().dsp_area, 128);
         // a keys table: the row counts the packer wrote
-        let mut keys = vec![0u8; dkneeds::keys::keys_size(1, 0)];
+        let mut keys = vec![0u8; dkneeds::keys::keys_size((1, 2, 1), 0, 1, 0)];
         dkneeds::keys::write_keys((1, 2, 1), 0, &[0x123400], &[], &mut keys).unwrap();
         let f = pack_keys(None, &keys, &[], &opts()).unwrap();
         let n = needs(&f).unwrap();
@@ -865,37 +1395,6 @@ mod tests {
         let j = needs_json(&f).unwrap();
         assert_eq!(j["PARAM_ROWS"], 2);
         assert_eq!(j["file_size"], f.len());
-    }
-
-    #[test]
-    fn dkneeds_reads_the_formats_the_packer_writes() {
-        // dkneeds has its own copies of the constants of the files it reads (it has no dependency): they are the packer's
-        assert_eq!(dkneeds::MAGIC, MAGIC);
-        assert_eq!(dkneeds::FORMAT, super::FORMAT);
-        assert_eq!(dkneeds::HEADER as usize, HEADER);
-        for (a, b) in [
-            (dkneeds::H_SIZE, H_SIZE),
-            (dkneeds::H_HDRSIZE, H_HDRSIZE),
-            (dkneeds::H_IMAGE_OFF, H_IMAGE_OFF),
-            (dkneeds::H_IMAGE_SIZE, H_IMAGE_SIZE),
-            (dkneeds::H_BSS, H_BSS),
-            (dkneeds::H_ALIGN, H_ALIGN),
-            (dkneeds::H_RELOC_OFF, H_RELOC_OFF),
-            (dkneeds::H_RELOC_N, H_RELOC_N),
-            (dkneeds::H_IMPORT_OFF, H_IMPORT_OFF),
-            (dkneeds::H_IMPORT_N, H_IMPORT_N),
-            (dkneeds::H_MENU, H_MENU),
-            (dkneeds::H_TICK, H_TICK),
-            (dkneeds::H_REG_OFF, H_REG_OFF),
-            (dkneeds::H_REG_SIZE, H_REG_SIZE),
-            (dkneeds::H_DSP_OFF, H_DSP_OFF),
-            (dkneeds::H_DSP_SIZE, H_DSP_SIZE),
-        ] {
-            assert_eq!(a as usize, b);
-        }
-        use crate::dkmdsp as d;
-        assert_eq!(dkneeds::DSP_MAGIC, d::MAGIC);
-        assert_eq!(dkneeds::DSP_HEADER as usize, d::HEADER);
     }
 
     #[test]
@@ -1029,10 +1528,14 @@ mod tests {
             .push(rel(".text", 0, "cf.32", "dk_settings_open", 0));
         o.stamp_isa();
         let f = pack(&o, &opts()).unwrap();
-        assert_eq!(get(&f, H_RUNTIME), 0x000700);
+        // the newest `since` of its imports, and at least the version that introduced the header table
+        assert_eq!(get(&f, H_RUNTIME), crate::sdkgen::table_runtime());
         assert_eq!(Dkm::parse(&f).unwrap().imports, vec!["dk_settings_open"]);
-        // a module that links nothing of the SDK needs none
-        assert_eq!(get(&pack(&object(), &opts()).unwrap(), H_RUNTIME), 0);
+        // a module that links nothing of the SDK needs the header table's version
+        assert_eq!(
+            get(&pack(&object(), &opts()).unwrap(), H_RUNTIME),
+            crate::sdkgen::table_runtime()
+        );
     }
 
     #[test]

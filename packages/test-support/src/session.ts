@@ -58,16 +58,21 @@ function needsDsp(what: string, dsp: DspMode): Error {
   return new Error(`${what} needs the DSP, but this session runs with dsp:'${dsp}'; pass dsp:'sharc' to this test`);
 }
 
-/** A client whose DSP-only RPCs throw when the session runs without a DSP. */
-function guardDspClient(client: Client, dsp: DspMode): Client {
-  if (dsp === 'sharc') return client;
+/**
+ * A client whose DSP-only RPCs throw when the session runs without a DSP, and which tells `onTapStart` when a
+ * `pcm.tap start` succeeded (the one place that knows whether a case ran a PCM tap).
+ */
+function guardDspClient(client: Client, dsp: DspMode, onTapStart: () => void): Client {
   return new Proxy(client, {
     get(target, prop) {
       const value = Reflect.get(target, prop, target);
       if (prop !== 'call') return typeof value === 'function' ? value.bind(target) : value;
-      return (method: string, ...rest: unknown[]) => {
-        if (DSP_ONLY_RPC.test(method)) return Promise.reject(needsDsp(method, dsp));
-        return (target.call as (...a: unknown[]) => unknown)(method, ...rest);
+      return async (method: string, ...rest: unknown[]) => {
+        if (dsp !== 'sharc' && DSP_ONLY_RPC.test(method)) throw needsDsp(method, dsp);
+        const result = await (target.call as (...a: unknown[]) => Promise<unknown>)(method, ...rest);
+        const params = rest[0] as { action?: string } | undefined;
+        if (method === 'pcm.tap' && params?.action === 'start') onTapStart();
+        return result;
       };
     },
   }) as Client;
@@ -127,20 +132,78 @@ export interface RuntimeBaseline {
  */
 export const PRE_SOCKET_HANG_MS = 300_000;
 
+/** Thrown when `withinRuntimeDeadline` gives up on an operation. */
+export class RuntimeDeadlineError extends Error {
+  constructor() {
+    super('runtime lifecycle deadline exceeded');
+    this.name = 'RuntimeDeadlineError';
+  }
+}
+
+/**
+ * Whether a deadline has passed, given the error its operation ended with. A timer can fire up to 1 ms before `Date.now()`
+ * reaches the deadline it was set from (monotonic clock against wall clock), so a wall-clock comparison alone can call a
+ * deadline that did fire "not expired". A deadline error or a timed-out `expect.poll` is itself the proof.
+ */
+export function deadlineExpired(deadline: number, error?: unknown): boolean {
+  if (Date.now() >= deadline) return true;
+  if (error instanceof RuntimeDeadlineError) return true;
+  const cause = error instanceof Error ? error.cause : undefined;
+  return cause instanceof Error && cause.message === 'Matcher did not succeed in time.';
+}
+
 /** Bound awaited control RPCs to one absolute lifecycle deadline, including a peer that never answers. */
 export async function withinRuntimeDeadline<T>(deadline: number, operation: () => Promise<T>): Promise<T> {
   const remaining = deadline - Date.now();
-  if (remaining <= 0) throw new Error('runtime lifecycle deadline exceeded');
+  if (remaining <= 0) throw new RuntimeDeadlineError();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       operation(),
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error('runtime lifecycle deadline exceeded')), remaining);
+        timer = setTimeout(() => reject(new RuntimeDeadlineError()), remaining);
       }),
     ]);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Wall seconds one slice of emulated time may take before it counts as a hang. A loaded host (many emulators at once) runs several times
+ * slower than a quiet one, so a fixed bound on a whole step fails a healthy run; a slice that makes no progress for this long does not.
+ * DIGI_PROGRESS_HANG_S overrides it.
+ */
+export const PROGRESS_HANG_S = Number(process.env.DIGI_PROGRESS_HANG_S ?? 30);
+
+/** One slice: 0.5 emulated seconds (66 M ColdFire instructions, 750 DSP frames). The whole wait is capped at slices times PROGRESS_HANG_S. */
+const SLICE_INSNS = MS * 500;
+const SLICE_FRAMES = 750;
+
+type StepClient = Pick<Session['client'], 'step' | 'runUntil'>;
+
+/** Step `instructions` in slices; each slice is bounded by PROGRESS_HANG_S of wall time, so the total scales with the emulated time asked for. */
+export async function stepWithProgress(client: StepClient, instructions: number): Promise<void> {
+  for (let left = Math.floor(instructions); left > 0;) {
+    const n = Math.min(left, SLICE_INSNS);
+    await withinRuntimeDeadline(Date.now() + PROGRESS_HANG_S * 1000, () =>
+      client.step(n, { timeout_wall_s: PROGRESS_HANG_S }),
+    );
+    left -= n;
+  }
+}
+
+/** Run to the absolute DSP frame `target` in slices, each bounded like `stepWithProgress`. `now` reads the current DSP frame. */
+export async function runUntilFramesWithProgress(
+  client: StepClient,
+  now: () => Promise<number>,
+  target: number,
+): Promise<void> {
+  for (let at = await now(); at < target; at = await now()) {
+    const next = Math.min(target, at + SLICE_FRAMES);
+    await withinRuntimeDeadline(Date.now() + PROGRESS_HANG_S * 1000, () =>
+      client.runUntil({ frames: next, timeout_wall_s: PROGRESS_HANG_S }),
+    );
   }
 }
 
@@ -155,6 +218,7 @@ export class Session {
   #card: string | undefined;
   #preparedImage: PreparedRuntimeImage | undefined;
   #guarded: Client | undefined;
+  #pcmTapStarted = false;
   #closing: Promise<void> | undefined;
   #reloading = false;
   #preserveDiagnostics = false;
@@ -172,7 +236,14 @@ export class Session {
   }
 
   get client(): Client {
-    return (this.#guarded ??= guardDspClient(this.#daemon.client, this.dsp));
+    return (this.#guarded ??= guardDspClient(this.#daemon.client, this.dsp, () => {
+      this.#pcmTapStarted = true;
+    }));
+  }
+
+  /** True when a `pcm.tap start` succeeded since the last runtime baseline reload (a reload resets the tap). */
+  get pcmTapStarted(): boolean {
+    return this.#pcmTapStarted;
   }
 
   /** Throws unless the session has a DSP: for helpers that capture or read audio, PCM, spectra or DSP state. */
@@ -351,6 +422,7 @@ export class Session {
     if (!this.options.runtime?.reuse) throw new Error('runtime baseline reload requires runtime.reuse');
     if (this.#closing || this.#reloading) throw new Error('runtime session is closed or already reloading');
     this.#reloading = true;
+    this.#pcmTapStarted = false;
     const reloadStart = performance.now();
     let loadMs = 0;
     let phase = 'validate.card';
@@ -386,7 +458,7 @@ export class Session {
       // The card's own `overlay.bin` (its test writes) is part of the baseline: the daemon applies it on load.
       if (!fs.statSync(image).isFile()) throw new Error('runtime baseline must be a card image file');
       if (!baseline.guard) throw new Error('runtime baseline requires an explicit scenario guard policy');
-      // The visible job can finish; a hidden patch job may still reject load as BUSY, which discards this daemon.
+      // The visible job can finish; a job (a cold boot included) that still runs would reject load as BUSY, which discards this daemon.
       let before = (lastStatus = await checked('status.before-load', () => this.client.status()));
       statusPhase = 'before-load';
       while (before.job) {

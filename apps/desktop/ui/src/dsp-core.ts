@@ -1,6 +1,7 @@
 // The pure part of the "DSP" tick in Console.tsx: which devices have the choice, and what a tick that differs from the running image
 // means. Host tests: apps/desktop/ui/tests/dsp.test.ts.
 import type { DeviceRecord } from '@digi/devices';
+import type { KeyValue } from '@digi/workbench-core/storage.ts';
 
 /** What the controller reports of the DSP choice (`status.dsp_enabled`, `status.dsp_flag`). */
 export interface DspState {
@@ -27,17 +28,17 @@ export const dspLine = (running: DspState | undefined): string =>
 
 /** The saved "DSP" choice: on unless the user turned it off. A storage that cannot be read gives "on". */
 export const DSP_KEY = 'digikit.bootDsp';
-export const readDspChoice = (storage: Pick<Storage, 'getItem'>): boolean => {
+export const readDspChoice = (storage: Pick<KeyValue, 'get'>): boolean => {
   try {
-    return storage.getItem(DSP_KEY) !== 'off';
+    return storage.get(DSP_KEY) !== 'off';
   } catch {
     return true;
   }
 };
 /** Keep the choice. Only a click on the tick calls this: the launcher's one-time flag lasts for the session and is never saved. */
-export const writeDspChoice = (storage: Pick<Storage, 'setItem'>, on: boolean): void => {
+export const writeDspChoice = (storage: Pick<KeyValue, 'set'>, on: boolean): void => {
   try {
-    storage.setItem(DSP_KEY, on ? 'on' : 'off');
+    storage.set(DSP_KEY, on ? 'on' : 'off');
   } catch {
     /* the choice lasts until the window closes */
   }

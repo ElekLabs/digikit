@@ -16,7 +16,7 @@ the menu's `DK_LINES`, `DK_REDRAWS`, the module's counters), not from OLED pixel
     from the idle loop (two per iteration) and raises the load by their share;
   * page: SETTINGS > DIGIKIT > HEALTH opens; with no key press the page refreshes (DK_REDRAWS rises about twice a second and the
     firmware's own dirty flag of the view is consumed); its lines equal this file's formatting of DK_HEALTH; leaving the page stops
-    the polling (`DKRT_POLL` back to 0);
+    the polling (the menu's function out of `DKRT_POLLS`);
   * busy: a pattern with every step of eight tracks trigged plays; the CPU load and the DSP numbers are read again, and the page
     opened while it plays shows them;
   * safety: 0 stray writes over `cf.expansion` (the module's own counters are written by its own code), 0 flush hits;
@@ -460,15 +460,23 @@ class HealthProof:
         i1, n1, b1 = self.w(idle), self.icount(), self.w(burn + 32)
         return {"idle": (i1 - i0) & 0xFFFFFFFF, "instr": n1 - n0, "runs": b1 - b0}
 
+    POLL_SLOTS = (
+        4  # the size of `DKRT_POLLS` (`dkrt_poll_add` fills the first free slot)
+    )
+
+    def poll_functions(self) -> list[int]:
+        table = self.sym("DKRT_POLLS")
+        return [f for f in (self.w(table + 4 * i) for i in range(self.POLL_SLOTS)) if f]
+
     def burn_checks(self) -> None:
         """The idle counter counts what the tasks leave. A routine that burns instructions once per UI-loop pass (machine code the host
-        writes into the runtime's staging buffer, registered as the poll function) at three sizes: the idle loop's share of the
+        writes into the runtime's staging buffer, registered in the last slot of `DKRT_POLLS`) at three sizes: the idle loop's share of the
         instructions falls with each, by at least half of what the routine takes (other low-priority work gives way as well), is 0 once
         the routine wants more than the CPU has (the idle context is the lowest priority) and the load rises to 100 %; it recovers when
         the routine is removed."""
         emu = self.rig.emu
         stage = self.stage = self.sym("DKRT_STAGE")
-        poll = self.sym("DKRT_POLL")
+        poll = self.sym("DKRT_POLLS") + 4 * (self.POLL_SLOTS - 1)
         quiet = self.interval()
         base = self.health()
         levels = []
@@ -546,11 +554,11 @@ class HealthProof:
         self.to_health()
         digest0 = self.frame("page_a")
         r0 = self.w(self.sym("DK_REDRAWS"))
-        poll = self.w(self.sym("DKRT_POLL"))
+        polls = self.poll_functions()
         self.check(
             "the page registered its poll function",
-            poll != 0 and r0 >= 1,
-            f"poll {poll:#x} redraws {r0}",
+            self.sym("dk_poll") in polls and r0 >= 1,
+            f"polls {polls} redraws {r0}",
         )
         # DK_HEALTH_MENU is the core/ui menu object (dk_ui_menu, modules/core/adapters/ui/src/ui.c): the firmware's view is the pointer at +4
         view = self.w(self.w(self.sym("DK_HEALTH_MENU")) + 4)
@@ -600,11 +608,11 @@ class HealthProof:
         r2 = self.w(self.sym("DK_REDRAWS"))
         self.rig.s.run_ms(1500)
         r3 = self.w(self.sym("DK_REDRAWS"))
-        poll = self.w(self.sym("DKRT_POLL"))
+        polls = self.poll_functions()
         self.check(
             "leaving the page stops the polling",
-            poll == 0 and r3 - r2 <= 1,
-            f"poll {poll:#x}, redraws {r2} -> {r3}",
+            self.sym("dk_poll") not in polls and r3 - r2 <= 1,
+            f"polls {polls}, redraws {r2} -> {r3}",
         )
         self.tap("NO", 500)
         self.tap("NO", 500)

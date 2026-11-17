@@ -2,8 +2,9 @@
 """Transfer: the repo's run-time modules on a target (emulator or device), and install of a chosen set.
 
 This is the command line for scripts and the scenarios. The desktop workbench does not use it: its Transfer page speaks the same protocol in
-TypeScript (packages/dk-session/src/dkupload-core.ts `DkSession`, dktransfer.py's port in apps/web/src/modules/dktransfer.ts) and reads
-built modules from out/modules/<device>/ (`mise run module:pack-all`, tools/device/dkpackall.py). Python is for reverse engineering and
+TypeScript (packages/dk-session/src/dkupload-core.ts `DkSession`, dktransfer.py's port in packages/workbench-core/src/modules/dktransfer.ts) and reads
+built modules from out/modules/<device>/ (the workbench app builds and packs there when it reads the library: `lib_build`,
+apps/desktop/src-tauri/src/library.rs). Python is for reverse engineering and
 dev tooling; the app starts no process.
 
     uv run python -m tools.device.dktransfer list --emu [--json]
@@ -46,12 +47,14 @@ from pathlib import Path
 from typing import Any
 
 from tools.device import dkneeds as N
+from tools.device import dkproto
 from tools.device import dkrun as R
 from tools.device import dkupload as D
 from tools.patchkit import modroots
 
 MAGIC = b"DKMF"
-GROUPS = ("Machines", "Effects", "Tools")
+GROUPS = ("Machines", "Effects", "Tools", "Services")
+KEYS_TAG = 3  # the KEYS entry of the header table (packages/dkneeds/src/keys.rs)
 SELECTION_MAX = 8
 
 
@@ -81,16 +84,35 @@ def header_info(h: bytes) -> dict[str, Any] | None:
 
 
 def group_of(f: bytes) -> str:
-    """Machines for a file whose keys table lists a machine, Effects for one that lists an effect, else Tools. The table is at the header's 0x90
-    pair (offset, size); a header alone, without the table, gives Tools."""
+    """Services for a file whose role word (header 0x38) is 1, Machines for a file whose keys table lists a machine, Effects for one that lists an
+    effect, else Tools. The table is at the header's 0x90 pair (offset, size); a header alone, without the table, gives Tools. Table versions
+    1 to TABLE_VERSION are read."""
     off, size = struct.unpack_from(">II", f, 0x90)
     t = f[off : off + size]
-    if size >= 12 and len(t) == size:
-        machines, effects = struct.unpack_from(">HH", t, 6)
-        if machines:
-            return "Machines"
-        if effects:
-            return "Effects"
+    if size < 8 or len(t) != size:
+        return "Tools"
+    magic, version = struct.unpack_from(">IH", t, 0)
+    if magic != dkproto.TABLE_MAGIC or not 1 <= version <= dkproto.TABLE_VERSION:
+        return "Tools"
+    if struct.unpack_from(">I", f, dkproto.H_ROLE)[0] == 1:
+        return "Services"
+    kinds: set[int] = set()
+    at = 8
+    for _ in range(struct.unpack_from(">H", t, 6)[0]):
+        tag, count, length = struct.unpack_from(">HHI", t, at)
+        body = at + 8
+        if tag == KEYS_TAG:
+            g = body
+            for _ in range(count):
+                kind, n = struct.unpack_from(">II", t, g)
+                if n:
+                    kinds.add(kind)
+                g += 8 + 4 * n
+        at = body + length
+    if dkproto.RECORD_KIND["MACHINE"] in kinds:
+        return "Machines"
+    if dkproto.RECORD_KIND["EFFECT"] in kinds:
+        return "Effects"
     return "Tools"
 
 

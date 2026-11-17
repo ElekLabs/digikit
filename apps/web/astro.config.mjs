@@ -162,5 +162,6 @@ export default defineConfig({
   base: process.env.DIGI_SITE_BASE || undefined,
   devToolbar: { enabled: false },
   integrations: [solid(), emulatorPage, buildGuard],
-  vite: { plugins: [localInputs], ...(server ? { server } : {}) },
+  // the shared pages are TypeScript and Solid source in a workspace package: the server build bundles them
+  vite: { plugins: [localInputs], ssr: { noExternal: ['@digi/workbench-core'] }, ...(server ? { server } : {}) },
 });

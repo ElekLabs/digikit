@@ -3,11 +3,11 @@ import { Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import '@fontsource-variable/archivo/wdth.css';
 import '@fontsource/jetbrains-mono/400.css';
-import '@web/styles/site.css';
-import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
-import { panels } from '@web/data/faceplates';
-import { parseLeds } from '@web/runtime/leds';
-import type { RuntimeStatus } from '@web/runtime/runtime';
+import '@digi/workbench-core/ui/styles/site.css';
+import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import { parseLeds } from '@digi/workbench-core/runtime/leds.ts';
+import type { RuntimeStatus } from '@digi/workbench-core/runtime/runtime.ts';
 import './panel.css';
 
 async function call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {

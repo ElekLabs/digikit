@@ -13,6 +13,7 @@
         "files": [
           "file-write.device.test.ts"
         ],
+        "tags": ["C:storage"],
         "modules": [
           "test/file-write",
           "test/file-write-b"
@@ -23,15 +24,12 @@
         "files": [
           "file-write-cut.device.test.ts"
         ],
+        "tags": ["C:layout", "C:storage"],
         "modules": [
           "test/file-write"
         ],
         "plusdrive": true
       }
-    ],
-    "mergeTests": [
-      "file-write.device.test.ts",
-      "file-write-cut.device.test.ts"
     ]
   }
 }

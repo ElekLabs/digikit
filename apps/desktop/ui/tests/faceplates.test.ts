@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { registry } from '../../../web/src/data/device-profiles';
-import { defaultFaceplate, faceplateIds, panels, runtimeFaceplateIds } from '../../../web/src/data/faceplates';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
+import { defaultFaceplate, faceplateIds, panels, runtimeFaceplateIds } from '@digi/workbench-core/data/faceplates.ts';
 
 describe('faceplate choice', () => {
   it('offers only devices with a runtime, and each has a faceplate', () => {

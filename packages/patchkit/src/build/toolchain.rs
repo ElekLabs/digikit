@@ -46,8 +46,6 @@ pub struct Pins {
 struct IncludeDirs {
     cf: Vec<String>,
     sharc: Vec<String>,
-    /// The declaration headers that only a patched-in module sees.
-    patched: Vec<String>,
 }
 
 pub fn pins() -> &'static Pins {
@@ -62,11 +60,6 @@ pub fn global_include_dirs(cf: bool) -> &'static [String] {
     } else {
         &pins().include.sharc
     }
-}
-
-/// The directories added after `global_include_dirs(true)` for a patched-in module only (the declaration macros).
-pub fn patched_include_dirs() -> &'static [String] {
-    &pins().include.patched
 }
 
 /// The repository: where the tools and the caches are.

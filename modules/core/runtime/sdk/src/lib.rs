@@ -28,6 +28,7 @@ pub use gen_sdk::load::*;
 // The import names, their function types and the callback types are written by `patchkit gen` from `[[import]]` and `[handle.callbacks]` of `sdk/sdk.toml` (`gen_sdk.rs`, module `api`).
 pub use gen_sdk::api;
 pub use gen_sdk::api::HostCmdFn;
+pub use gen_sdk::records;
 pub use gen_sdk::sample_pool;
 
 // `DkrtStatus`, `DkrtCap`, `DkrtHealth`, `DkrtStoreEntry`, `DkrtModule`, `DkrtFx`, `DkrtSelection`, `DkrtBootInfo`, `DkrtDiag` and the scan and fit
@@ -321,7 +322,6 @@ pub mod sample_tracks;
 pub mod files;
 /// Internal fixed-memory listing work/notification lifecycle model.
 pub mod files_job;
-pub mod sample_stream;
 
 /// The sticky machine type assignment (docs/design/module-sdk.md 11.5 D7) as a pure function, tested on the host; the runtime's `assign` calls it.
 pub mod sticky;

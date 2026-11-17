@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { deviceOfSyx } from '../../../web/src/patch/identify';
-import { registry } from '../../../web/src/data/device-profiles';
+import { deviceOfSyx } from '@digi/workbench-core/patch/identify.ts';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import { booting, bootingScreen, bootingStatus, loadFailure } from '../src/boot-core';
 
 const [first, second] = registry.runtimeIds as [string, string];

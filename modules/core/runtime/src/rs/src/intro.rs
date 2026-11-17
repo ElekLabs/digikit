@@ -16,7 +16,7 @@
 //! no logger (`dlog::CURRENT_SRC` is one global and tasks preempt each other). The module's `done` runs once in the UI task at the first
 //! UI pass (`ui_pass`), with the module as the log source: the module frees its buffer there, never in `frame`.
 //!
-//! A fault in `frame` reaches the stock exception handler: `crash::install` runs only from the UI loop, so no runtime handler is set yet.
+//! A fault in `frame` reaches the stock exception handler: `fault::install` runs only from the UI loop, so no runtime handler is set yet.
 //! The boot counter stays armed until the stable period of the UI loop, so repeated failed boots end in safe mode (no module loads).
 use crate::dlog;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
@@ -127,7 +127,7 @@ unsafe extern "C" fn tramp(_index: u32, _count: u32, bitmap: *mut u8) {
     write_volatile(addr_of_mut!((*v).mask), MASK.as_ptr());
     write_volatile(addr_of_mut!((*v).owns), 0);
     write_volatile(addr_of_mut!((*v).pad), [0; 3]);
-    dkfw::draw::blit(bitmap, v as *mut u8, 0, 0, 0);
+    crate::platform::blit(bitmap, v as *mut u8);
     let next = tick + 1;
     write_volatile(addr_of_mut!(TICK), next);
     if next >= read_volatile(addr_of!(TICKS)) {
@@ -158,7 +158,7 @@ pub unsafe fn take(frame: Option<IntroFrameFn>, done: Option<IntroDoneFn>, ctx: 
 /// Is the firmware's intro still running (its current-entry pointer is not NULL)?
 #[cfg(not(test))]
 unsafe fn intro_running() -> bool {
-    read_volatile(addr_of!(dkfw::rtos::INTRO_ENTRY) as *const u32) != 0
+    read_volatile(crate::platform::intro_entry_addr() as *const u32) != 0
 }
 
 /// The one place that makes the stock intro run an entry of ours: fill the static entry (`callback`, open count), then publish it with one
@@ -166,7 +166,7 @@ unsafe fn intro_running() -> bool {
 /// Every source of frames (a module after its load, the safe-mode screen, later a blank intro) installs through this and ends through `tramp`.
 #[cfg(not(test))]
 unsafe fn install(callback: usize) -> bool {
-    let ptr = addr_of!(dkfw::rtos::INTRO_ENTRY) as *mut u32;
+    let ptr = crate::platform::intro_entry_addr();
     if read_volatile(ptr) == 0 {
         return false;
     }
@@ -227,7 +227,7 @@ pub unsafe fn end_blank() {
     if table.is_null() {
         return;
     }
-    let ptr = addr_of!(dkfw::rtos::INTRO_ENTRY) as *const u32;
+    let ptr = crate::platform::intro_entry_addr() as *const u32;
     if read_volatile(ptr) != table as u32 {
         return;
     }

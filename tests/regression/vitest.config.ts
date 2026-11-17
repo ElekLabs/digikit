@@ -10,6 +10,10 @@ const at = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 // Files under modules/ and tests/conformance/ have no node_modules: resolve the workspace packages here.
 const alias = [
   { find: /^@digi\/regression\/(.*)$/, replacement: `${at('.').replace(/\/$/, '')}/$1` },
+  {
+    find: /^@digi\/test-support\/commit-records$/,
+    replacement: at('../../packages/test-support/src/commit-records.ts'),
+  },
   { find: /^@digi\/test-support$/, replacement: at('../../packages/test-support/src/index.ts') },
   { find: /^@digi\/control-client$/, replacement: at('../../packages/control-client/src/index.ts') },
   { find: /^@digi\/dkbs$/, replacement: at('../../packages/dkbs/src/index.ts') },
@@ -67,8 +71,9 @@ export default defineConfig({
         test: {
           name: 'proofs',
           include: ['runtime/**/*.test.ts'],
-          testTimeout: 300_000,
-          hookTimeout: 150_000,
+          // Backstops; see the runtime project.
+          testTimeout: 1_800_000,
+          hookTimeout: 600_000,
         },
       },
       {

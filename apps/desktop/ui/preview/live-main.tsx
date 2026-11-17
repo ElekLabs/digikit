@@ -1,6 +1,6 @@
 // The live preview's entry: a small desktop shell (the sidebar of src/Console.tsx, its page switch and its panels) over a running emulator
 // (live.vite.config.ts). What the real Console does that the pages feel is kept: the faceplate stays mounted behind the other pages, the
-// Memory and Card panels are shown only on the Emulator page, and `status` is set once per display frame, as the runtime's pump sets it (a
+// Memory panels are shown only on the Emulator page, and `status` is set once per display frame, as the runtime's pump sets it (a
 // new object each time), so a panel that reads on every change of `status` is as busy here as in the app. The daemon is asked for the
 // status twice a second only: a real call per frame would load it more than the app's pump does.
 //   live.html?page=emulator|transfer|remote[&idle=1][&log=1]   window.__live: { page(name), frames() }
@@ -11,20 +11,24 @@ import { render } from 'solid-js/web';
 import '@fontsource-variable/archivo/wdth.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
-import '@web/styles/site.css';
+import '@digi/workbench-core/ui/styles/site.css';
 import '../src/console.css';
 import '../src/native.css';
-import '../src/desktop-env';
+import { createDesktopApps } from '../src/desktop-app';
+import { createTauriHost } from '../src/host/tauri-host';
 import { installNativeFeel } from '../src/native';
-import LivePanel from '@web/components/LivePanel';
-import { panels } from '@web/data/faceplates';
+import LivePanel from '@digi/workbench-core/ui/components/LivePanel.tsx';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import RemotePage from '../src/RemotePage';
 import SidePanels from '../src/SidePanels';
-import { emulatorSession } from '@web/transfer/target';
+import AppProvider from '@digi/workbench-core/ui/transfer/AppProvider.tsx';
 import { createLogFollow, followSession } from '../src/log-follow';
 import LogPanel from '../src/LogPanel';
-import TransferPage from '@web/transfer/TransferPage';
+import TransferPage from '@digi/workbench-core/ui/transfer/TransferPage.tsx';
 
+const host = createTauriHost();
+const apps = createDesktopApps(host);
+const { emulatorSession } = apps.app.target;
 type Page = 'emulator' | 'transfer' | 'remote';
 const query = new URLSearchParams(location.search);
 const start = (query.get('page') as Page | null) ?? 'emulator';
@@ -104,20 +108,26 @@ function Shell() {
               </div>
             </main>
             <Show when={!idle}>
-              <SidePanels visible={shown()} card session={emulatorSession} where={() => 'the emulator'} />
+              <SidePanels host={host} visible={shown()} session={emulatorSession} where={() => 'the emulator'} />
             </Show>
           </div>
           <Show when={page() === 'transfer'}>
             <TransferPage />
           </Show>
           <Show when={page() === 'remote'}>
-            <RemotePage fallbackDevice={device()} />
+            <RemotePage fallbackDevice={device()} emulatorLoaded={true} />
           </Show>
         </div>
       </div>
       <Show when={follow}>
         <section class="log-drawer" aria-label="Log" style={{ height: '420px' }}>
-          <LogPanel follow={follow!} emulatorRunning={() => !!status()} devicePort={() => undefined} toggleKey="⌘J" />
+          <LogPanel
+            host={host}
+            follow={follow!}
+            emulatorRunning={() => !!status()}
+            devicePort={() => undefined}
+            toggleKey="⌘J"
+          />
         </section>
       </Show>
     </div>
@@ -125,4 +135,11 @@ function Shell() {
 }
 
 installNativeFeel();
-render(() => <Shell />, document.getElementById('app')!);
+render(
+  () => (
+    <AppProvider app={apps.app} firmware={apps.firmware}>
+      <Shell />
+    </AppProvider>
+  ),
+  document.getElementById('app')!,
+);

@@ -11,18 +11,35 @@ Rules:
   roles     Every module under modules/core has `role` in [module], and the role fits the folder: adapters/ -> adapter,
             apps/ -> app, runtime/ -> runtime, expansion/ -> installer.
   sources   Content modules (modules/machines, modules/fx, modules/tools, tests/fixtures/modules) and apps include only
-            their own files and the SDK (sdk/include, sdk/dsp/contract). Apps may also include dkrt.h (runtime) and dk_ui_core.h
-            (core/ui). Only runtime, installer and adapters include the firmware bindings (dk_fw_* headers, the dkfw crate).
+            their own files and the SDK (sdk/include, sdk/dsp/contract); a fixture may also include the source of another fixture (a variant of its base). Apps may also include dkrt.h (runtime) and dk_ui_core.h
+            (core/ui). Only the runtime's platform file, the installer and adapters include the firmware bindings (dk_fw_* headers, the dkfw crate).
             C, ColdFire and SHARC assembly (`#include`, `.include`) and Rust (`dkfw`, path dependencies) are read.
   objects   The undefined symbols of the built objects of apps and content modules are SDK imports, dkrt_*, dk_ui_*,
             dk_app_* or the SHARC externs the SDK documents. A symbol never names a firmware anchor, and `[object.externs]`
             never maps one to an anchor.
+  spans     No content module and no app uses `DK_SPAN_BEGIN` or `DK_SPAN_END` (<dk/core/trace.h>, dk_trace.inc). A span is a measurement the owner of a kind's
+            dispatcher takes around its per-row call: the runtime's services and the image's stub (adapters) use them, and the runtime measures every module that way.
   apps      An app has no `[[op]]` and no `[[claim]]`: it never patches the firmware.
   self-contained
             No tracked file outside a user content module's own directory (modules/machines|fx|tools) names its id
             (`AUTHOR/NAME`) or its path (`machines/NAME`). Allowed: docs/**, any *.md, .agents/**, the fixtures
             (tests/fixtures/modules) and a module with `host = true` in [module] (the workbench speaks
             its protocol).
+  arrows    Inside the runtime crate (modules/core/runtime/src/rs/src), a service (services/NAME) names no other service folder and no core
+            module except `crate::core_api` (the interface to the core: CoreApi, RealCore, FakeCore and the few core functions it re-exports); pure types
+            come from the crate dkrt-abi. The core reaches a service only through `handlers.rs` (`exports`) and the generated table `gen_services.rs`. A service's own
+            host tests (`tests.rs` or a `tests/` folder in the service) may name core modules: they drive the walkers and the planner over the service.
+  service-crates
+            A service crate (modules/core/services/NAME, linked into the runtime object) depends only on dkrt-abi, dkrt-sdk and dkneeds, and on
+            dkrt-test-support as a dev-dependency; it names no firmware crate and no device id (only its `dks/` service file may name `dkfw`, in `dks/src/fw.rs`), and has no path into the runtime crate. The runtime
+            names a service crate (`dkrt_svc_*`) only in `gen_services.rs`, `handlers.rs` and the host-test files under `handlers/`. Final state (R12-1): no service is a folder of the
+            runtime crate's `services/`; every service (fx, machines, samples, lfo) is a crate.
+  platform  Inside the runtime crate, only `platform.rs` (the real platform, L1) and `fw.rs` at the crate's source root (the declared adapter of
+            `dkrt_abi::fw::Fw`: it must contain `impl Fw for`) name the firmware crate dkfw; the rest of the core and the services use the `Platform`
+            trait and the `Fw` trait (`dkrt-abi`). No runtime file but `platform.rs` compares the device id with a number
+            (`device() == 1`): the code asks the device profile (`samples_in_store()`), whose values come from the device files. The runtime
+            module patches the firmware only with the machine page hooks (finding 128: runtime-owned, with slots); the UI loop, main-OS task and MIDI
+            receive hooks and the exception hook install are in the adapter `core/platform`.
   imports   Every function of <dk/platform/ui.h> is an `[[import]]` of sdk/sdk.toml with `requires = "core/ui"`, and every import
             with `requires` is in the runtime's `optional` list, so the runtime can link it by name (or hand out its stub).
 
@@ -58,6 +75,8 @@ FOLDER_ROLES = {
     "apps": "app",
     "runtime": "runtime",
     "expansion": "installer",
+    # a service file: modules/core/services/NAME/dks (the neutral crate above it is no module)
+    "services": "service",
 }
 # Content modules that patch the firmware themselves (they have [[op]] and anchor externs by design: patchkit's own
 # example of a hook). They are exempt from the objects and apps rules.
@@ -72,6 +91,7 @@ INC_ASM = re.compile(r'^\s*\.include\s+"([^"]+)"')
 RS_FW = re.compile(r"\bdkfw\s*::|\bextern\s+crate\s+dkfw\b")
 EXTERN_DOC = re.compile(r"\.EXTERN\s+([A-Za-z_][A-Za-z0-9_]*)")
 SOURCE_SUFFIXES = {".c", ".h", ".s", ".S", ".inc", ".rs"}
+SPAN = re.compile(r"\bDK_SPAN_(?:BEGIN|END)\b")
 
 
 @dataclass(frozen=True)
@@ -144,6 +164,9 @@ def check_roles(root: Path, mods: list[Module]) -> list[Violation]:
         r = rel(root, m.dir)
         parts = r.split("/")[2:]  # below modules/core
         want = FOLDER_ROLES.get(parts[0]) if parts else None
+        # the `services` folder holds modules only as modules/core/services/NAME/dks (the service file of the crate NAME)
+        if parts[:1] == ["services"] and not (len(parts) == 3 and parts[2] == "dks"):
+            want = None
         where = f"{r}/module.toml:{line_of(m.text, 'category', 1)}"
         have = m.mod.get("role")
         if want is None:
@@ -186,16 +209,12 @@ class Resolver:
         self.global_dirs = [
             root / d for d in dict.fromkeys([*pins["cf"], *pins["sharc"]])
         ]
-        # the declaration headers (sdk/patched-in/include): only a patched-in module (`dynamic = false`) sees them
-        self.patched_dirs = [root / d for d in pins["patched"]]
 
     def find(self, name: str, file: Path, mod: Module, quoted: bool) -> Path | None:
         dirs = []
         if quoted:
             dirs += [file.parent]
         dirs += [mod.dir / "src", mod.dir / "build/gen", mod.dir, *self.global_dirs]
-        if not mod.mod.get("dynamic", False):
-            dirs += self.patched_dirs
         for d in dirs:
             p = d / name
             if p.is_file():
@@ -240,12 +259,13 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
     runtime_inc = (root / CORE / "runtime/include").resolve()
     adapters = (root / CORE / "adapters").resolve()
     all_mod_dirs = [(m.dir.resolve(), m) for m in mods]
+    fixtures = (root / "tests/fixtures/modules").resolve()
     for m in mods:
         kind = classify(root, m)
         role = m.mod.get("role")
         is_app = (kind == "core" and role == "app") or m.id in APP_LIKE
         if kind == "core" and not is_app:
-            continue  # runtime, installer and adapters may use the firmware bindings
+            continue  # installer and adapters may use the firmware bindings; the runtime's own rule is `check_runtime_platform`
         who = "an app" if is_app else "a content module"
         own = m.dir.resolve()
         sdk = (root / "sdk").resolve()
@@ -313,6 +333,12 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
                     foreign = next(
                         (o for d, o in all_mod_dirs if d in target.parents), None
                     )
+                    if (
+                        foreign is not None
+                        and fixtures in m.dir.resolve().parents
+                        and fixtures in foreign.dir.resolve().parents
+                    ):
+                        continue  # a fixture variant (file-write-b) includes the source of its base fixture
                     out.append(
                         Violation(
                             where,
@@ -355,6 +381,28 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
                                 "depend only on dkrt-sdk (the Rust view of the SDK); firmware bindings belong to adapters",
                             )
                         )
+    return out
+
+
+def check_spans(root: Path, mods: list[Module]) -> list[Violation]:
+    """Content modules and apps do not measure spans: the dispatcher of each kind does (docs/plans/sdk.md section 9)."""
+    out = []
+    for m in mods:
+        if classify(root, m) == "core" and m.mod.get("role") != "app":
+            continue
+        for f in module_sources(m):
+            for n, line in enumerate(
+                f.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            ):
+                if SPAN.search(line):
+                    out.append(
+                        Violation(
+                            f"{rel(root, f)}:{n}",
+                            "spans",
+                            f"{m.id} uses DK_SPAN_*",
+                            "leave the measurement to the service that owns the kind: its dispatcher already takes a span around each call of a module",
+                        )
+                    )
     return out
 
 
@@ -570,6 +618,346 @@ SC_HINT = (
 )
 
 
+RT_SRC = "modules/core/runtime/src/rs/src"
+RT_CRATE_REF = re.compile(
+    r"\bcrate::(?:\{([^}]*)\}|([A-Za-z_]\w*)(?:::([A-Za-z_]\w*))?)"
+)
+RT_BARE_SERVICES = re.compile(r"(?<![\w:])services::")
+ARROW_SERVICE_HINT = (
+    "call the core through CoreApi (crate::core_api) and take pure types from dkrt-abi; a service reaches another service through the core "
+    "(a handler or a link function), never directly"
+)
+ARROW_CORE_HINT = "call the service through the Service trait (handlers.rs `Services`) or list its C entry point in `handlers::exports`"
+
+
+def rust_without_comments(text: str) -> str:
+    """The source with `//` comments blanked (line numbers kept)."""
+    return re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), text)
+
+
+def check_runtime_arrows(root: Path) -> list[Violation]:
+    """The arrows inside the runtime crate: services see only `core_api` of the core and no other service; the core sees services only in handlers.rs."""
+    src = root / RT_SRC
+    if not src.is_dir():
+        return []
+    out: list[Violation] = []
+    for f in sorted(src.rglob("*.rs")):
+        r = f.relative_to(src)
+        text = rust_without_comments(f.read_text(encoding="utf-8"))
+        own = r.parts[1] if r.parts[0] == "services" and len(r.parts) > 2 else None
+        is_test = r.name == "tests.rs" or "tests" in r.parts
+        if own is None and r.parts[0] == "services":
+            continue  # services/mod.rs: the list of service folders
+        for m in RT_CRATE_REF.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            where = f"{RT_SRC}/{r.as_posix()}:{line}"
+            if m.group(1) is not None:
+                names = [
+                    (n.strip().split("::") + [""])[:2]
+                    for n in m.group(1).split(",")
+                    if n.strip()
+                ]
+            else:
+                names = [[m.group(2), m.group(3) or ""]]
+            for first, second in names:
+                if own is not None:
+                    if first == "services" and second != own:
+                        out.append(
+                            Violation(
+                                where,
+                                "arrows",
+                                f"service {own} names {first}::{second or '*'}",
+                                ARROW_SERVICE_HINT,
+                            )
+                        )
+                    elif first not in ("services", "core_api") and not is_test:
+                        out.append(
+                            Violation(
+                                where,
+                                "arrows",
+                                f"service {own} names core module crate::{first}",
+                                ARROW_SERVICE_HINT,
+                            )
+                        )
+                elif first == "services" and r.as_posix() not in (
+                    "handlers.rs",
+                    "gen_services.rs",
+                ):
+                    out.append(
+                        Violation(
+                            where,
+                            "arrows",
+                            f"the core names crate::services::{second or '*'}",
+                            ARROW_CORE_HINT,
+                        )
+                    )
+        if own is None and r.as_posix() not in ("handlers.rs", "gen_services.rs"):
+            for m in RT_BARE_SERVICES.finditer(text):
+                line = text.count("\n", 0, m.start()) + 1
+                out.append(
+                    Violation(
+                        f"{RT_SRC}/{r.as_posix()}:{line}",
+                        "arrows",
+                        "the core names services::",
+                        ARROW_CORE_HINT,
+                    )
+                )
+    return out
+
+
+# L1 files of the runtime crate: the real platform and the adapter of `dkrt_abi::fw::Fw` (`fw.rs` at the source root), the only places that name the
+# firmware crate. The adapter file must implement the interface it is declared for.
+RT_PLATFORM_FILE = "platform.rs"
+RT_ADAPTER_FILE = "fw.rs"
+RT_ADAPTER_IMPL = re.compile(r"\bimpl\s+(?:dkrt_abi::fw::)?Fw\s+for\b")
+RT_DEVICE_COMPARE = re.compile(
+    r"\b(?:device|device_id)\s*\(\s*\)\s*[!=]=\s*\d|\bprofile\s*\(\s*\)\s*\.\s*id\s*[!=]=\s*\d"
+)
+
+
+# The firmware hooks that the runtime module patches in itself: none. Every hook (UI loop, main-OS task entry, MIDI receive) belongs to the platform adapter; the machine
+# page hooks are the machines service file's (modules/core/services/machines/dks).
+RT_OWN_HOOKS: set[str] = set()
+RT_MANIFEST = "modules/core/runtime/module.toml"
+
+
+def check_runtime_platform(root: Path) -> list[Violation]:
+    """The runtime has no firmware calls outside its L1 files (`platform.rs`, an adapter's `fw.rs`), branches on no device id and patches only its own hooks."""
+    src = root / RT_SRC
+    if not src.is_dir():
+        return []
+    out: list[Violation] = []
+    manifest = root / RT_MANIFEST
+    if manifest.is_file():
+        text = manifest.read_text(encoding="utf-8")
+        for op in tomllib.loads(text).get("op", []):
+            hook = op.get("hook", "")
+            if hook and hook not in RT_OWN_HOOKS:
+                out.append(
+                    Violation(
+                        f"{RT_MANIFEST}:{line_of(text, hook)}",
+                        "platform",
+                        f"the runtime installs the firmware hook {hook} itself",
+                        "put the hook and its trampoline in the platform adapter (modules/core/adapters/platform); the runtime exports the function it calls",
+                    )
+                )
+    for f in sorted(src.rglob("*.rs")):
+        r = f.relative_to(src)
+        l1 = r.as_posix() in (RT_ADAPTER_FILE, RT_PLATFORM_FILE)
+        text = rust_without_comments(f.read_text(encoding="utf-8"))
+        if r.name == RT_ADAPTER_FILE and r.as_posix() != RT_ADAPTER_FILE:
+            out.append(
+                Violation(
+                    f"{RT_SRC}/{r.as_posix()}:1",
+                    "platform",
+                    "an adapter file fw.rs below the source root of the runtime",
+                    "the only firmware adapter is src/fw.rs (the implementation of dkrt_abi::fw::Fw)",
+                )
+            )
+        if r.as_posix() == RT_ADAPTER_FILE and not RT_ADAPTER_IMPL.search(text):
+            out.append(
+                Violation(
+                    f"{RT_SRC}/{r.as_posix()}:1",
+                    "platform",
+                    "fw.rs does not implement dkrt_abi::fw::Fw",
+                    "fw.rs is exempt from the dkfw rule only as the declared adapter of that interface",
+                )
+            )
+        for n, line in enumerate(text.splitlines(), 1):
+            where = f"{RT_SRC}/{r.as_posix()}:{n}"
+            if not l1 and RS_FW.search(line):
+                out.append(
+                    Violation(
+                        where,
+                        "platform",
+                        "the runtime names the firmware crate dkfw outside platform.rs",
+                        "call it through the Platform trait or the Fw trait (dkrt-abi); the implementation of Fw is src/fw.rs",
+                    )
+                )
+            if r.as_posix() != RT_PLATFORM_FILE and RT_DEVICE_COMPARE.search(line):
+                out.append(
+                    Violation(
+                        where,
+                        "platform",
+                        "the runtime compares the device id outside platform.rs",
+                        "ask the device profile (Platform::samples_in_store, sample_path_max ...); add the fact to the device files and `patchkit gen`",
+                    )
+                )
+    return out
+
+
+SERVICE_CRATES = "modules/core/services"
+SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds"}
+SERVICE_DEV_DEPS = SERVICE_DEPS | {"dkrt-test-support"}
+# `dkrt_svc_rt` is the support crate of a service file (modules/core/runtime/svc-rt), not a service
+SERVICE_CRATE_REF = re.compile(r"\bdkrt_svc_(?!rt\b)\w+")
+SERVICE_RUNTIME_FILES = ("handlers.rs", "gen_services.rs")
+# The services that are folders of the runtime crate (`services/NAME`): none since R12-1; every service is a crate (`modules/core/services/NAME`).
+RT_LOCAL_SERVICES: set[str] = set()
+SERVICE_RUNTIME_REF = re.compile(r"\bdkrt::|\bextern\s+crate\s+dkrt\b")
+RUNTIME_MANIFEST = "modules/core/runtime/src/rs/Cargo.toml"
+DEP_TABLES = ("dependencies", "build-dependencies", "dev-dependencies")
+
+
+def manifest_deps(data: dict) -> list[tuple[str, str, str, object]]:
+    """(table label, key, crate name, spec) of every dependency of a manifest: the three tables and the same tables under `[target.CFG.*]`.
+    A renamed dependency (`alias = { package = "dkrt-abi" }`) has its real crate name, not its key."""
+    out: list[tuple[str, str, str, object]] = []
+
+    def take(label: str, table: dict) -> None:
+        for key, spec in table.items():
+            real = spec.get("package", key) if isinstance(spec, dict) else key
+            out.append((label, key, real, spec))
+
+    for t in DEP_TABLES:
+        take(t, data.get(t, {}))
+    for cfg, tables in data.get("target", {}).items():
+        for t in DEP_TABLES:
+            take(f"target.{cfg}.{t}", tables.get(t, {}))
+    return out
+
+
+def check_test_only_deps(
+    root: Path, manifest: Path, data: dict, text: str
+) -> list[Violation]:
+    """dkrt-test-support and the `fake` feature of dkrt-link are for tests: dev-dependencies only."""
+    out = []
+    for label, key, real, spec in manifest_deps(data):
+        if label.endswith("dev-dependencies"):
+            continue
+        fake = (
+            real == "dkrt-link"
+            and isinstance(spec, dict)
+            and "fake" in spec.get("features", [])
+        )
+        if real == "dkrt-test-support" or fake:
+            what = (
+                "dkrt-test-support"
+                if real == "dkrt-test-support"
+                else "the fake feature of dkrt-link"
+            )
+            out.append(
+                Violation(
+                    f"{rel(root, manifest)}:{line_of(text, key)}",
+                    "service-crates",
+                    f"{what} is a [{label}] entry",
+                    "test fakes may be dev-dependencies of the runtime crate and of services only; they never reach the runtime object",
+                )
+            )
+    return out
+
+
+def check_service_crates(root: Path) -> list[Violation]:
+    """Service crates reach the runtime only through dkrt-abi, and the runtime reaches them only through its service table and `handlers::exports`."""
+    out: list[Violation] = []
+    base = root / SERVICE_CRATES
+    for manifest in sorted(base.glob("*/Cargo.toml")) if base.is_dir() else []:
+        text = manifest.read_text(encoding="utf-8")
+        data = tomllib.loads(text)
+        for label, key, real, _ in manifest_deps(data):
+            allowed = (
+                SERVICE_DEV_DEPS if label.endswith("dev-dependencies") else SERVICE_DEPS
+            )
+            if real not in allowed:
+                alias = f" (as {key})" if key != real else ""
+                out.append(
+                    Violation(
+                        f"{rel(root, manifest)}:{line_of(text, key)}",
+                        "service-crates",
+                        f"the service crate depends on {real}{alias} ([{label}])",
+                        f"a service crate depends only on {', '.join(sorted(allowed))}; reach the core through CoreApi (dkrt-abi), and put test fakes in dkrt-test-support",
+                    )
+                )
+        out.extend(check_test_only_deps(root, manifest, data, text))
+        for f in sorted(manifest.parent.rglob("*.rs")):
+            if "target" in f.relative_to(manifest.parent).parts:
+                continue
+            for n, line in enumerate(
+                rust_without_comments(f.read_text(encoding="utf-8")).splitlines(), 1
+            ):
+                where = f"{rel(root, f)}:{n}"
+                # the service file (`dks/`) is where a service names firmware (`dks/src/fw.rs`); the neutral crate does not
+                if (
+                    RS_FW.search(line)
+                    and "dks" not in f.relative_to(manifest.parent).parts
+                ):
+                    out.append(
+                        Violation(
+                            where,
+                            "service-crates",
+                            "the service crate names the firmware crate dkfw",
+                            "use the Platform trait or CoreApi (dkrt-abi)",
+                        )
+                    )
+                if RT_DEVICE_COMPARE.search(line):
+                    out.append(
+                        Violation(
+                            where,
+                            "service-crates",
+                            "the service crate compares the device id with a number",
+                            "ask the device profile through CoreApi or Platform",
+                        )
+                    )
+                if SERVICE_RUNTIME_REF.search(line):
+                    out.append(
+                        Violation(
+                            where,
+                            "service-crates",
+                            "the service crate names the runtime crate",
+                            "take the core as a `&C` argument with `C: CoreApi`",
+                        )
+                    )
+    rt_manifest = root / RUNTIME_MANIFEST
+    if rt_manifest.is_file():
+        rt_text = rt_manifest.read_text(encoding="utf-8")
+        out.extend(
+            check_test_only_deps(root, rt_manifest, tomllib.loads(rt_text), rt_text)
+        )
+    src = root / RT_SRC
+    local = src / "services"
+    for d in sorted(local.iterdir()) if local.is_dir() else []:
+        if d.is_dir() and d.name not in RT_LOCAL_SERVICES:
+            out.append(
+                Violation(
+                    rel(root, d),
+                    "service-crates",
+                    f"the service {d.name} is a folder of the runtime crate",
+                    f"no service is a folder of the runtime crate; put a service in a crate modules/core/services/{d.name}",
+                )
+            )
+    mod_rs = local / "mod.rs"
+    if mod_rs.is_file():
+        mod_text = rust_without_comments(mod_rs.read_text(encoding="utf-8"))
+        for n, line in enumerate(mod_text.splitlines(), 1):
+            m = re.match(r"\s*pub\s+mod\s+(\w+)", line)
+            if m and m.group(1) not in RT_LOCAL_SERVICES:
+                out.append(
+                    Violation(
+                        f"{RT_SRC}/services/mod.rs:{n}",
+                        "service-crates",
+                        f"services/mod.rs declares the service {m.group(1)}",
+                        "no service is a folder of the runtime crate; every service is a crate in modules/core/services",
+                    )
+                )
+    for f in sorted(src.rglob("*.rs")) if src.is_dir() else []:
+        r = f.relative_to(src).as_posix()
+        if r in SERVICE_RUNTIME_FILES or r.startswith("handlers/"):
+            continue
+        for n, line in enumerate(
+            rust_without_comments(f.read_text(encoding="utf-8")).splitlines(), 1
+        ):
+            if SERVICE_CRATE_REF.search(line):
+                out.append(
+                    Violation(
+                        f"{RT_SRC}/{r}:{n}",
+                        "service-crates",
+                        "the core names a service crate outside handlers.rs and gen_services.rs",
+                        ARROW_CORE_HINT,
+                    )
+                )
+    return out
+
+
 def tracked_files(root: Path) -> list[str]:
     """Tracked files (`git ls-files`); outside a git repository, every file except build output."""
     try:
@@ -663,7 +1051,11 @@ def check(root: Path = ROOT) -> list[Violation]:
         *check_committed_objects(root, mods),
         *check_objects(root, mods),
         *check_apps(root, mods),
+        *check_spans(root, mods),
         *check_imports(root),
+        *check_runtime_arrows(root),
+        *check_runtime_platform(root),
+        *check_service_crates(root),
         *check_self_contained(root, mods),
     ]
 

@@ -16,7 +16,7 @@
 //! 2. else the lowest number that no map entry references and this boot has not given out; record the entry (rule 0);
 //! 3. else drop the lowest-index entry whose hash is not among this boot's machines (logged), take its number, record the entry (rule 0);
 //! 4. two machines with the same key in one boot: the second takes a fresh number and is not recorded.
-use crate::{dlog, loader};
+use crate::{collect, dlog, selection, store};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::sel::{Record, MAP_N};
 use dkrt_sdk::sticky::{assign, clean, Event, Types, MAX_KEYS};
@@ -56,12 +56,29 @@ pub fn map_used() -> u32 {
     n
 }
 
-/// Assign the numbers of every machine of the selected modules. Call once, at the start of the boot load, with the record the boot started from.
-/// The device's run-time machine types (the device object's).
-fn types() -> Types {
-    Types { first: crate::dev::dyn_type_first(), count: crate::dev::dyn_types() }
+/// The machine keys of the `.dkm` at `path` (at most 8, the count returned): reads the file into the staging buffer, so it runs before the first
+/// load. A file that is missing, torn or not a `.dkm` has none (its load reports the error).
+unsafe fn keys_of(k: usize, path: *const u8, out: &mut [u32; 8]) -> usize {
+    let found = match store::find(path) {
+        Ok(f) => f,
+        Err(_) => return 0,
+    };
+    if store::load_to_stage(&found) != OK {
+        return 0;
+    }
+    let file = core::slice::from_raw_parts(store::stage() as *const u8, found.size as usize);
+    // the boot planner keeps the header table of the file it has just read (one read of each file serves both)
+    crate::loader::capture(k, file);
+    collect::machine_keys(file, out)
 }
 
+/// The device's run-time machine types (the device profile's).
+fn types() -> Types {
+    let p = crate::profile();
+    Types { first: p.dyn_type_first, count: p.dyn_types }
+}
+
+/// Assign the numbers of every machine of the selected modules. Call once, at the start of the boot load, with the record the boot started from.
 pub unsafe fn plan(rec: &Record) {
     let a = st();
     a.magic = 0x444b_4153; // "DKAS"
@@ -69,10 +86,11 @@ pub unsafe fn plan(rec: &Record) {
     let tys = types();
     a.map = clean(tys, &rec.map);
     // the machines of the selection, in load order
+    crate::loader::reset_plan();
     let mut k = 0;
     while k < rec.count as usize {
         let mut keys = [0u32; 8];
-        let n = loader::machine_keys(rec.paths[k].as_ptr(), &mut keys);
+        let n = keys_of(k, rec.paths[k].as_ptr(), &mut keys);
         let mut i = 0;
         while i < n && a.n < MAX_KEYS {
             a.idx[a.n] = k as u32;
@@ -90,14 +108,14 @@ pub unsafe fn plan(rec: &Record) {
     });
 }
 
-/// The type number for machine key `key` of the module being loaded (selection index `loader::BOOT_IDX`): the number `plan` assigned, a pinned
+/// The type number for machine key `key` of the module being loaded (selection index `selection::BOOT_IDX`): the number `plan` assigned, a pinned
 /// number as it is (when it is in the run-time range), 0 when there is none.
 pub unsafe fn resolve(key: u32) -> u32 {
     if key >> 8 == 0 {
         return if types().contains(key) { key } else { 0 }; // a pinned number (0: none)
     }
     let a = st();
-    let at = core::ptr::read_volatile(addr_of_mut!(loader::BOOT_IDX));
+    let at = core::ptr::read_volatile(addr_of_mut!(selection::BOOT_IDX));
     let mut i = 0;
     while i < a.n {
         if a.key[i] == key && a.idx[i] == at {
@@ -106,6 +124,18 @@ pub unsafe fn resolve(key: u32) -> u32 {
         i += 1;
     }
     0
+}
+
+/// Host tests: give each of `keys` the run-time type number after `dkrt_sdk::sticky`'s first, as `plan` does for the module being loaded (none with `&[]`).
+#[cfg(test)]
+pub(crate) unsafe fn seed_for_test(keys: &[u32]) {
+    let a = st();
+    a.n = keys.len();
+    for (i, k) in keys.iter().enumerate() {
+        a.idx[i] = core::ptr::read_volatile(addr_of_mut!(selection::BOOT_IDX));
+        a.key[i] = *k;
+        a.ty[i] = dkrt_abi::profiles::DT2.dyn_type_first + i as u32;
+    }
 }
 
 /// The map to write back when the boot changed it.

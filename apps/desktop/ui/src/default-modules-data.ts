@@ -3,8 +3,8 @@
 // module's own module.toml) and the wait for the runtime. The install itself is in default-modules.ts. Host tests: apps/desktop/ui/tests/default-modules.test.ts.
 import { parse } from 'smol-toml';
 import { DkError, type DkSession } from '@digi/dk-session';
-import { registry } from '../../../web/src/data/device-profiles';
-import type { DefaultModuleEntry } from '../../../web/src/firmware/default-modules-core';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
+import type { DefaultModuleEntry } from '@digi/workbench-core/firmware/default-modules-core.ts';
 
 // the one-line summary of a module is in its own module.toml
 const manifests = import.meta.glob('../../../../modules/*/*/module.toml', {

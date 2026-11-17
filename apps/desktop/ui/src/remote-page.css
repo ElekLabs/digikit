@@ -1,4 +1,4 @@
-/* The Remote page (RemotePage.tsx): the faceplate of the selected target with the device's screen. Tokens from the site (apps/web/src/styles/site.css). */
+/* The Remote page (RemotePage.tsx): the faceplate of the selected target with the device's screen. Tokens from the site (packages/workbench-core/ui/styles/site.css). */
 .remote-page {
   flex: 1;
   min-height: 0;
@@ -28,6 +28,10 @@
 .remote-page .head .dim {
   font-family: var(--font-mono);
   font-size: 11.5px;
+  color: var(--ink-3, #868b94);
+}
+.remote-page .remote-empty {
+  padding: 24px;
   color: var(--ink-3, #868b94);
 }
 /* How to play the faceplate, as key caps. */

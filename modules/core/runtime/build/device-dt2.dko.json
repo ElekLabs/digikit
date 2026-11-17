@@ -4,49 +4,49 @@
  "relocs": [
   {
    "addend": 0,
-   "offset": 132,
+   "offset": 156,
    "section": ".rodata",
    "symbol": "cf.storage.fn.path.open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 136,
+   "offset": 160,
    "section": ".rodata",
    "symbol": "cf.storage.fn.path.read",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 140,
+   "offset": 164,
    "section": ".rodata",
    "symbol": "cf.storage.fn.path.close",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 144,
+   "offset": 168,
    "section": ".rodata",
    "symbol": "cf.storage.fn.path.size",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 148,
+   "offset": 172,
    "section": ".rodata",
    "symbol": "cf.storage.fn.directory.open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 152,
+   "offset": 176,
    "section": ".rodata",
    "symbol": "cf.storage.fn.directory.next",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 156,
+   "offset": 180,
    "section": ".rodata",
    "symbol": "cf.storage.fn.directory.metadata",
    "type": "cf.32"
@@ -55,13 +55,13 @@
  "sections": [
   {
    "align": 4,
-   "hex": "444b4456000000010000003c0000000fec070000480000004000000008000000fc0cc0000000001347fe000000001000000a2c2b0000001000000008000000016474320000000002000000474000000047e3000047e8b00047fe10000000000000000000000000000000000002df100000029000444b494d47494431000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "444b4456000000010000003c0000000fec070000480000004000000008000000fc0cc0000000001347fe000000001000000a2c2b0000001000000008000000016474320000000000000000fe0002f6c40000001000000002fc07000c07de2900000000474000000047e3000047e8b00047fe10000000000000000000000000000000000002df100000029000444b494d47494431000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 160
+   "size": 184
   }
  ],
- "source_sha256": "dcd758014cfa3bd20d47ccca278b9782a6258de8e6c2594f361887667b1159a9",
+ "source_sha256": "057f9532c4a269ce14b3465d23e103da6305cde99afa481dd098fc55692aef5f",
  "symbols": [
   {
    "global": true,
@@ -125,51 +125,87 @@
   },
   {
    "global": true,
-   "name": "dkrt_files_fs",
-   "section": ".rodata",
-   "value": 148
-  },
-  {
-   "global": true,
-   "name": "dkrt_image_id",
-   "section": ".rodata",
-   "value": 124
-  },
-  {
-   "global": true,
-   "name": "dkrt_peek_n",
-   "section": ".rodata",
-   "value": 68
-  },
-  {
-   "global": true,
-   "name": "dkrt_peek_ranges",
+   "name": "dkrt_dsp_headroom",
    "section": ".rodata",
    "value": 76
   },
   {
    "global": true,
-   "name": "dkrt_sample_fs",
+   "name": "dkrt_dsp_voices",
    "section": ".rodata",
-   "value": 132
+   "value": 80
   },
   {
    "global": true,
-   "name": "dkrt_sound_words",
+   "name": "dkrt_files_fs",
+   "section": ".rodata",
+   "value": 172
+  },
+  {
+   "global": true,
+   "name": "dkrt_image_id",
+   "section": ".rodata",
+   "value": 148
+  },
+  {
+   "global": true,
+   "name": "dkrt_peek_n",
+   "section": ".rodata",
+   "value": 84
+  },
+  {
+   "global": true,
+   "name": "dkrt_peek_ranges",
+   "section": ".rodata",
+   "value": 100
+  },
+  {
+   "global": true,
+   "name": "dkrt_sample_fs",
+   "section": ".rodata",
+   "value": 156
+  },
+  {
+   "global": true,
+   "name": "dkrt_sample_path_max",
    "section": ".rodata",
    "value": 72
   },
   {
    "global": true,
+   "name": "dkrt_samples_in_store",
+   "section": ".rodata",
+   "value": 68
+  },
+  {
+   "global": true,
+   "name": "dkrt_sound_words",
+   "section": ".rodata",
+   "value": 96
+  },
+  {
+   "global": true,
+   "name": "dkrt_span_clock",
+   "section": ".rodata",
+   "value": 88
+  },
+  {
+   "global": true,
+   "name": "dkrt_span_clock_hz",
+   "section": ".rodata",
+   "value": 92
+  },
+  {
+   "global": true,
    "name": "dkrt_store_first",
    "section": ".rodata",
-   "value": 108
+   "value": 132
   },
   {
    "global": true,
    "name": "dkrt_store_sectors",
    "section": ".rodata",
-   "value": 112
+   "value": 136
   }
  ],
  "toolchain": {
@@ -177,7 +213,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "508ecce2aebde0f3342a2d7e63c2aa125a45755ccc1fc78a14f538392a4c3ffe",
+  "isa_check": "f97c849b0144a2a108082038cab821959617df695a3a0ff9714a2282c9c61c37",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

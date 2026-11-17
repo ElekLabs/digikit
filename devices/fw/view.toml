@@ -68,8 +68,8 @@ rule.dt2 = { kind = "cf_words", as = "code", words = ["*", "*", 0x40001928, 0x58
 rule.dn2 = { kind = "cf_words", as = "code", words = ["*", "*", 0x40001928, 0x588f7229, 0x24407192, 0xb28065e8], offset = 0x6, len = 6 }
 rule.st = { kind = "cf_func", hash = "79e8b624e678d28f4d2a312510ee44f1", offset = 0x702, len = 6, mark = "D" }
 mark = "D"
-users = ["core/runtime"]
-doc = "The `jsr` at the top of the UI task's event loop that pops the next event; core/runtime retargets it to run its per-pass tick."
+users = ["core/platform"]
+doc = "The `jsr` at the top of the UI task's event loop that pops the next event; core/platform retargets it to run the runtime's per-pass tick."
 
 [[site]]
 name = "cf.view.site.ui_loop.queue_lit"
@@ -102,7 +102,7 @@ mode = "retarget"
 regs = { in = [], clobbers = ["ccr"] }
 handler = { sig = "void ()", args = [] }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/platform"]
 doc = "The jsr at the top of the UI task's event loop that pops the next event; the hook point for the runtime's per-pass tick."
 
 [[fn]]

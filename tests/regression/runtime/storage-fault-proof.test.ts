@@ -7,9 +7,10 @@ import { repoRoot, resolveInputs, Session } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { validateStorageWatch, type StorageWatchEvent as Event } from './storage-fault-watch.ts';
+import { optInPatchkit } from './patchkit.ts';
 
 const binary = process.env.DIGI_STORAGE_FAULT_EMUD;
-const patchkit = process.env.DIGI_PATCHKIT_BIN;
+const patchkit = optInPatchkit();
 const root = repoRoot();
 const exec = promisify(execFile);
 const mask = 0x00310000;

@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { encode, decode, type Frame } from '@digi/dkbs';
-import { RT, type CardRig, type CardSpec } from '@digi/regression/runtime/card-rig.ts';
+import { type CardRig, type CardSpec } from '@digi/regression/runtime/card-rig.ts';
 import { introFramebuffer } from '@digi/regression/runtime/intro-frame.ts';
 import { encodeSettings } from '@digi/regression/runtime/project-kit.ts';
+import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 
 /** Shared by introblank.device.test.ts and introblank-rec.device.test.ts. */
 
@@ -11,7 +12,7 @@ export const SAFE_KEY = 2;
 const FILE = 'data/tools/bootscreen/test.dkbs';
 const ACTIVE = 'tools/bootscreen/active';
 
-export const IB = [...RT, 'core/introblank'];
+export const IB = rootsOf('ib');
 
 const noise = (seed: number) =>
   Uint8Array.from(Array.from({ length: 1024 }, (_, i) => (i * 73 + (i >> 3) * 17 + seed) % 256));

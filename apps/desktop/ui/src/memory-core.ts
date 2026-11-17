@@ -2,12 +2,12 @@
 // Host tests: apps/desktop/ui/tests/memory.test.ts.
 //
 // The data is CAPACITY (limit and used per resource), MODULES (which modules are loaded) and, per module, what its file takes (`needs_of` of
-// packages/dkneeds, through patchkit.wasm: apps/web/src/modules/dkneeds.ts) from the matching file of the local library. What `used` holds beyond
+// packages/dkneeds, through patchkit.wasm: packages/workbench-core/src/modules/dkneeds.ts) from the matching file of the local library. What `used` holds beyond
 // the known modules (the runtime's own, a module that is not in the library) is one "other" segment. Nothing that is only ticked or pending
 // is shown: the bars are what the device holds now.
 
 import { ARENA_HDR } from '@digi/dk-session/gen_proto';
-import type { Caps, Needs } from '../../../web/src/modules/fit.ts';
+import type { Caps, Needs } from '@digi/workbench-core/modules/fit.ts';
 
 // ARENA_HDR (the arena's block header): the `largest` of the ARENA is a payload, while `free` adds up block sizes. DSP_AREA's `largest` is a raw gap.
 
@@ -18,7 +18,7 @@ export type SegmentKind = 'machine' | 'effect' | 'tool' | 'other';
 export interface KnownModule {
   name: string;
   label: string;
-  group: 'Machines' | 'Effects' | 'Tools';
+  group: 'Machines' | 'Effects' | 'Tools' | 'Services';
   needs: Needs | null;
 }
 
@@ -73,7 +73,12 @@ export const SPECS: Spec[] = [
   { resource: 'MODULES', label: 'Modules', bytes: false, take: () => 1 },
 ];
 
-const KINDS: Record<KnownModule['group'], SegmentKind> = { Machines: 'machine', Effects: 'effect', Tools: 'tool' };
+const KINDS: Record<KnownModule['group'], SegmentKind> = {
+  Machines: 'machine',
+  Effects: 'effect',
+  Tools: 'tool',
+  Services: 'tool',
+};
 
 /** The bars for a device: `caps` is CAPACITY, `loaded` the names MODULES reports (in its order), `library` the local library's modules. */
 export function buildBars(caps: Caps, loaded: string[], library: KnownModule[]): Bar[] {
@@ -127,6 +132,31 @@ export const segmentTitle = (bar: Bar, s: Segment): string =>
   s.kind === 'other'
     ? `Other: ${amountText(bar, s.amount)} (not from a module of your library)`
     : `${s.label}: ${amountText(bar, s.amount)}`;
+
+/** One line of the per-module table under a bar: the module, its type and what it takes of the resource. */
+export interface ModuleRow {
+  id: string;
+  label: string;
+  kind: SegmentKind;
+  /** `259 KiB`, or `1` for a count. */
+  text: string;
+}
+
+/**
+ * The per-module rows of a bar, largest first, `Other` last: the same segments the bar draws, with their amounts in words. They come from the
+ * device's fixed capacity (CAPACITY) and the needs of each loaded module's file (`buildBars`); no other data source.
+ */
+export function moduleRows(bar: Bar): ModuleRow[] {
+  const rows = bar.segments.map((s) => ({
+    id: s.id,
+    label: s.label,
+    kind: s.kind,
+    text: amountText(bar, s.amount),
+    amount: s.amount,
+  }));
+  const named = rows.filter((r) => r.kind !== 'other').sort((a, b) => b.amount - a.amount || a.id.localeCompare(b.id));
+  return [...named, ...rows.filter((r) => r.kind === 'other')].map(({ amount: _amount, ...r }) => r);
+}
 
 /** The free text: the total, and the largest block when memory is split so that it is smaller than the total. */
 export const freeText = (bar: Bar): string =>

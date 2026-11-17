@@ -14,7 +14,7 @@ the duplicate refused), the module's counter rising while the UI task runs, and 
 old unload) is refused as unknown. The write-watch on `cf.expansion` (the runtime's code and the arena allowed as writers) and
 the flush check run through all of it. Prints one JSON report; exit status 0 when every check holds.
 
-The state layout peeked here is `State` and `Mailbox` in modules/core/runtime/src/rs/src/lib.rs and modules/core/runtime/sdk/src/lib.rs.
+The state layout peeked here is `State` and `Mailbox` in modules/core/runtime/src/rs/src/state.rs and modules/core/runtime/sdk/src/lib.rs.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ BOOT_FIELDS = 10  # DkrtBootInfo words before `results`
 ARENA_BYTES = pk_device.shared_limits().arena_bytes  # devices/*.toml [limits]
 MAX_MODULES = pk_device.shared_limits().modules
 LOG_ENTRIES = 16
-# offsets in State (repr(C); sizes in the comments of lib.rs)
+# offsets in State (repr(C); sizes in the comments of state.rs)
 ST_TICKS, ST_LAST, ST_LOADS, ST_TICK_CALLS, ST_FREE = 8, 12, 16, 20, 24
 ST_ARENA_LO, ST_ARENA_HI, ST_LOG_NEXT = 28, 32, 36
 ST_MODULES, ST_LOG = 40, 456
@@ -493,7 +493,7 @@ def proof(
           and by["late_direct"]["d0"] == (E_BOOT_ONLY & 0xFFFFFFFF), str(by["late_direct"]))  # fmt: skip
     check("the late requests changed nothing (one module, one load)",
           be32(s1, ST_LOADS) == 1 and be32(s1, m0) == 1, f"loads {be32(s1, ST_LOADS)}")  # fmt: skip
-    # the table check (table.rs) ran after every boot-time load attempt; it logs TABLE_BAD and sets this byte when an invariant failed
+    # the table check (invariants.rs) ran after every boot-time load attempt; it logs TABLE_BAD and sets this byte when an invariant failed
     check("table check: no TABLE_BAD (the runtime's tables stayed consistent through the boot loads)",
           raw("table_bad")[0] == 0, f"DKRT_TABLE_BAD {raw('table_bad')[0]}")  # fmt: skip
     summary = json.loads((work / "ww.summary.json").read_text())

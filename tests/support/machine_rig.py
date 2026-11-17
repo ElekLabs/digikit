@@ -5,7 +5,7 @@
     rig.set_note(60, vel=100); rig.trigger()
     b = rig.block()                                 # b.samples (32 floats), b.instructions, b.returned, b.context_bad
 
-The rig is plain Python (no numpy, no pytest): it also runs under PyPy (tests/modules/test_machine_conformance.py).
+The rig is plain Python (no numpy, no pytest): it also runs under PyPy (the adapter tests).
 The rig reads the module's manifest (tools/patchkit/pk_conform.py): DSP sources of the device, entry symbol, machine type and
 parameters with their frame slots. It assembles the wrapper and the module, places the data symbols of both (`.PKDATA`, `.PKBSS`,
 `.VAR`) in free L2, and keeps the core's memory from block to block (tools/patchkit/pk_sharc.py CallSession), so a delay line or a
@@ -198,8 +198,8 @@ def _build(sp: pk_conform.MachineSpec) -> _Built:
         at = data[sp.desc]
         for a0, raw, _bss in inits:
             if a0 <= at < a0 + len(raw):
-                desc = struct.unpack("<10I", raw[at - a0 : at - a0 + 40])
-        if len(desc) != 10 or desc[0] != 0x444B4D41:
+                desc = struct.unpack("<8I", raw[at - a0 : at - a0 + 32])
+        if len(desc) != 8 or desc[0] != 0x444B4D41:
             raise pk_conform.ConformError(f"{module}: {sp.desc} is no dk_machine_desc")
         stride = (desc[4] + 7) & ~7
         clear = desc[5]
@@ -561,7 +561,7 @@ class MachineRig:
             )
         out += [(a, n, "module data") for a, n in b.module_data]  # shared by all voices
         frame = ADAPTER_FRAME_WORDS[self.device]
-        stack = b.desc[9] if b.desc else DEFAULT_STACK_BYTES
+        stack = b.desc[7] if b.desc else DEFAULT_STACK_BYTES
         out.append((dv.STACK - 4 * frame - stack, stack, "module stack"))
         return out
 

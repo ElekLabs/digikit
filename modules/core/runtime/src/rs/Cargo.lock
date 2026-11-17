@@ -16,7 +16,26 @@ version = "0.1.0"
 dependencies = [
  "dkfw",
  "dkneeds",
+ "dkrt-abi",
  "dkrt-fit",
+ "dkrt-link",
+ "dkrt-sdk",
+ "dkrt-svc-fx",
+ "dkrt-svc-fx-dks",
+ "dkrt-svc-lfo",
+ "dkrt-svc-lfo-dks",
+ "dkrt-svc-machines",
+ "dkrt-svc-machines-dks",
+ "dkrt-svc-rt",
+ "dkrt-svc-samples",
+ "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-abi"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
  "dkrt-sdk",
 ]
 
@@ -29,5 +48,94 @@ dependencies = [
 ]
 
 [[package]]
+name = "dkrt-link"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
 name = "dkrt-sdk"
 version = "0.1.0"
+
+[[package]]
+name = "dkrt-svc-fx"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-svc-fx-dks"
+version = "0.1.0"
+dependencies = [
+ "dkrt-sdk",
+ "dkrt-svc-fx",
+ "dkrt-svc-rt",
+]
+
+[[package]]
+name = "dkrt-svc-lfo"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-svc-lfo-dks"
+version = "0.1.0"
+dependencies = [
+ "dkrt-sdk",
+ "dkrt-svc-lfo",
+ "dkrt-svc-rt",
+]
+
+[[package]]
+name = "dkrt-svc-machines"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-svc-machines-dks"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-sdk",
+ "dkrt-svc-machines",
+ "dkrt-svc-rt",
+]
+
+[[package]]
+name = "dkrt-svc-rt"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-svc-samples"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-test-support"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-link",
+ "dkrt-sdk",
+]

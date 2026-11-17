@@ -259,7 +259,7 @@ under load, because benchlock only excludes work that also takes it.
 ### Browser core tiers
 
 The coupled browser core (wasm32) has a fast tier too (feature `fast-wasm`): its
-kernels are wasm modules the page compiles (`packages/emulator/sharc-fast-wasm`, `apps/web/src/core-host.ts`).
+kernels are wasm modules the page compiles (`packages/emulator/sharc-fast-wasm`, `packages/workbench-core/src/core-host.ts`).
 `SHARC_FAST_REGIONS` and `SHARC_BLOCKTRANS` are environment variables, which
 wasm32-unknown-unknown does not have, so the page passes the regions in
 (`digi_sharc_fast_regions`). With no `?fast=` query it uses the `desktop` regions

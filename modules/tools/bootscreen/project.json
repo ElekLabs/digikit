@@ -9,7 +9,8 @@
           "tests/bootscreen-safe.device.test.ts",
           "tests/bootscreen-fault.device.test.ts"
         ],
-        "modules": ["test/intro-fault", "test/intro-reset", "test/intro-ticks"],
+        "tags": ["C:boot", "M:tools/bootscreen"],
+        "modules": ["test/dyn-crash", "test/intro-ticks"],
         "plusdrive": true
       }
     ]

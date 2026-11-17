@@ -6,7 +6,8 @@ import { parse } from 'smol-toml';
 /** The one reader of devices/<profile>.toml and devices/ports/<device>-<firmware>.toml. Only the keys read by the tests are typed. */
 export interface DeviceProfile {
   limits: { fx_slots: number } & Record<string, number>;
-  digikit: { peek: [number, number][]; dsp_area_bytes: number };
+  digikit: { id: number; name: string; peek: [number, number][]; dsp_area_bytes: number; sample_path_max: number };
+  capabilities: { card: 'path-fs' | 'slots' | 'none' | 'unknown' } & Record<string, string>;
   storage?: { samples?: string };
   card: {
     regions?: { role: string; sector: number }[];
@@ -75,9 +76,8 @@ export function expansionRegion(device: Device, firmware: string): [number, numb
   return [region.start, region.end];
 }
 
-/** The address of the DN2 FX send slot bus, from its port anchor. */
-export function slotBusAddress(device: Device, firmware: string): number {
-  const name = 'dsp.fx.value.send.slot_bus';
+/** The address of the port anchor `name` (exactly one must exist). */
+export function portAnchorAddress(device: Device, firmware: string, name: string): number {
   const anchors = (portFile(device, firmware).anchor ?? []).filter((a) => a.name === name);
   if (anchors.length !== 1) throw new Error(`expected exactly one ${name} anchor, found ${anchors.length}`);
   const address = anchors[0]!.addr;
@@ -85,3 +85,7 @@ export function slotBusAddress(device: Device, firmware: string): number {
     throw new Error(`${name}: invalid address`);
   return address;
 }
+
+/** The address of the DN2 FX send slot bus, from its port anchor. */
+export const slotBusAddress = (device: Device, firmware: string): number =>
+  portAnchorAddress(device, firmware, 'dsp.fx.value.send.slot_bus');

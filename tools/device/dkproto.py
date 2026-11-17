@@ -19,9 +19,39 @@ MAX_STATE_BYTES = 16777216
 GRANULE = 64
 DSP_SLACK = 8
 ARENA_HDR = 16
-COLLECT_BYTES = 6320
+COLLECT_BYTES = 7486
+TABLE_MAGIC = 1145787458
+TABLE_VERSION = 2
+PROVIDER_MAX = 6
+BIND_MAX = 24
+INSTALL_SITES = 48
+SLOTS_MAX = 16
+INFO_MAX = 64
 MAX_VOICES = 8
 MAX_FX = 4
+H_ROLE = 56
+
+# the record kinds of a .dkm ([records.kinds])
+RECORD_KIND: dict[str, int] = {
+    "PARAM": 1,
+    "MACHINE": 2,
+    "PAGE": 3,
+    "EFFECT": 4,
+    "ACTION": 5,
+    "NATIVE_PAGE": 6,
+    "NATIVE_PAGE_V2": 7,
+    "LFO_SHAPE": 8,
+}
+
+# the resources of a module's uses ([records.resources])
+RESOURCE: dict[str, int] = {
+    "MACHINE_ROWS": 1,
+    "PARAM_ROWS": 2,
+    "PAGE_ROWS": 3,
+    "RECORD_BYTES": 4,
+    "DSP_COST_VOICE": 5,
+    "DSP_COST_FX": 6,
+}
 
 CMD: dict[str, int] = {
     "INFO": 0x01,
@@ -65,6 +95,8 @@ CMD_SELECT = 0x30
 CMD_RESTART = 0x31
 
 SERVICE_CMD: dict[str, int] = {
+    "PROFILE_STATE": 0x1E,
+    "PROFILE_READ": 0x1F,
     "LOG": 0x20,
     "PEEK": 0x21,
     "LOGCFG": 0x22,
@@ -182,6 +214,34 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
         "the service is not in the image (the module that provides it is not loaded)",
     ),
     -74: ("E_DECL_FULL", "init made more builder calls than the record limit allows"),
+    -75: (
+        "E_PLAN_KIND",
+        "the boot plan refused the module: a record kind of its header table has no owning service",
+    ),
+    -76: (
+        "E_PLAN_OWNER",
+        "the boot plan refused the module: another module owns the kind, slot or hook site it takes",
+    ),
+    -77: (
+        "E_PLAN_KEY",
+        "the boot plan refused the module: another module of the selection has the same key for a kind",
+    ),
+    -78: (
+        "E_PLAN_FIT",
+        "the boot plan refused the module: its uses do not fit what the earlier modules of the selection left",
+    ),
+    -79: (
+        "E_DECL_KIND",
+        "a service declared a record kind that the header table does not carry, or with another length",
+    ),
+    -81: (
+        "E_SVC_ABI",
+        "a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint)",
+    ),
+    -82: (
+        "E_HOOK_STOCK",
+        "a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init",
+    ),
 }
 
 CAP: dict[str, int] = {
@@ -201,10 +261,12 @@ CAP: dict[str, int] = {
     "RENAME": 13,
     "READBACK": 14,
     "LOADS": 15,
+    "SVC_ABI": 16,
 }
 
 RANGES: dict[str, tuple[int, int]] = {
     "debug": (0x20, 0x22),
+    "debug_profile": (0x1E, 0x1F),
     "entry_demo_test": (0x1C, 0x1D),
     "file_write_test": (0x24, 0x27),
     "file_write_test_b": (0x28, 0x2B),
@@ -230,6 +292,8 @@ CAPACITY_KINDS: dict[str, int] = {
     "STORE": 12,
     "SETTINGS": 13,
     "SEND_SLOTS": 14,
+    "DSP_COST": 15,
+    "DSP_VOICES": 16,
 }
 
 SETTINGS_SECTORS = 16  # one copy of the settings record

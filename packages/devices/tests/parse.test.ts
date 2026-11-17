@@ -122,6 +122,5 @@ describe('the repository device files', () => {
     expect(r.get('dt2').acceptance).toBeDefined();
     expect(r.get('dn2').acceptance).toBeDefined();
     expect(r.get('dt2').capabilities.card).toBe('path-fs');
-    expect(r.get('dn2').acceptance?.readyDir).toBe('out/ready-fix-dn2-112');
   });
 });

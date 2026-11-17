@@ -4,6 +4,9 @@ import { cardCall, pickFolder } from './card-mock';
 import * as firmware from './firmware-mock';
 import { sim } from './sim';
 
+/** The preview is a plain browser, outside the app: the native runtime is not offered. */
+export const isTauri = (): boolean => false;
+
 export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: Record<string, string> }): Promise<T> {
   switch (cmd) {
     case 'local_pick_folder':
@@ -27,6 +30,8 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
       return (await firmware.midi.recv(Number(args?.timeoutMs))) as T;
     case 'patchkit_wasm':
       return (await firmware.patchkitWasm()) as T;
+    case 'bind_bundle':
+      return new TextEncoder().encode('{"ports":[],"fw":[]}').buffer as T;
     case 'firmware_prepare':
       return (await firmware.prepare(
         args as Uint8Array,

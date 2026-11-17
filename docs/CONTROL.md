@@ -57,7 +57,7 @@ Global options: `--socket PATH` (default: discover), `--run-dir DIR` (where to l
 ## Methods
 
 Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports an incomplete method list (it omits
-`mem.cf.peek`, `mem.cf.poke`, `mem.cf.write`, `dev.reload`, `card.*` and `watchdog.config`); use this table.
+`mem.cf.peek`, `mem.cf.poke`, `mem.cf.write`, `dev.reload`, `runtime.maps`, `card.*` and `watchdog.config`); use this table.
 
 | Method | Wrapper | CLI |
 |---|---|---|
@@ -77,7 +77,9 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `mem.cf.peek`, `mem.cf.poke` | `peek32`, `poke32` | `call` |
 | `mem.cf.write {addr, hex}` | | `call` |
 | `dev.reload {modules_dir?, swap_modules?, auto_no?, build?}` | | `call`; `mise run dk:dev` |
-| `card.overlay`, `card.export`, `card.load`, `card.status`, `card.cancel`, `card.folder`, `card.sync`, `card.reset_overlay` | | `call` |
+| `runtime.maps {modules_dir?}` | | `call`; the workbench Log |
+| `card.overlay`, `card.export`, `card.load`, `card.status`, `card.folder`, `card.sync`, `card.reset_overlay` | | `call` |
+| `job.cancel` | | `call` |
 | `midi.in`, `midi.out` | `midi_in`, `midi_out` | `call` |
 | `midi.usb.in`, `midi.usb.out` | `usb_in`, `usb_out` | `call` |
 | `usb.bulk.in {bytes \| file, period?, connect?, zlp?}`, `usb.bulk.out {file?}`, `usb.phy {vbus?, run?}` | | `call` |
@@ -90,16 +92,29 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `state.save {path}`, `state.load {path}` | `state_save`, `state_load` | `call` |
 | `pcm.tap` (`start`, `report`, `capture`, `capture_stop`) | `pcm_start`, `pcm_report` | `call` |
 | `cf.profile` | | `call`; only with the `cf-profile` feature |
+| `sharc.profile {enable?}` | | `call`; only with the `sharc-profile` feature |
 | `dsp.peek` | `dsp_peek` | `call` |
 | `dsp.patch` | `patch` | `call` |
 | `guard.set`, `guard.report`, `guard.clear` | | `call` |
+| `pc.probe.set`, `pc.probe.report`, `pc.probe.clear` | `pcProbeSet`, `pcProbeReport`, `pcProbeClear` (control-client) | `call` |
 | `events.subscribe` | `events`, `subscribe`, `drain_events` | `events` |
 | `quit` | `quit` | `quit` |
 
 `firmware.load {replace: true, dsp?}` chooses the DSP of the session it starts (the workbench's "DSP" tick): `dsp: false` boots ColdFire
 only (no DSP audio session; a device with a second CPU that runs a program gets the mailbox responder instead, so there is no peer audio and
+`sharc.profile`: DSP execution counts as raw counters of the profile artifact `dk.profile/1` ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)). `{enable: true}` starts counting and clears the counts; `{enable: false}` stops and clears; without `enable` the call reads the counts since the start (an error says so when the counting is off). The answer: `clock` (`emu.sharc.insn`, unit `insn`, the sampling text), `blocks` (DSP blocks since the start), `icount` and `idle_skipped` (instructions executed and replayed by the idle skip since the start), `counted` (`fast`, `block`, `interpreted`: instructions each source counted) and `raw`, a list of `{cpu: "sharc", addr, count, series: "pc"}` sorted by software PC. Two sources are added by PC: the dispatch profile of the fast and block tiers (a dispatch is credited whole to its entry PC, so a count at an entry PC covers the region that starts there) and the interpreter's per-PC counts (each instruction at its own PC). [O] `icount` and `idle_skipped` are engine totals; in the first DN2 run they did not reconcile with the sum of `counted` (a dispatch may be counted in two sources, and a chained dispatch is not counted), so read the per-PC counts as a ranking and per-block estimate, not as an exact total. It reads no EMUCLK or TCOUNT. A daemon built without the feature answers "built without sharc-profile"; it needs `coupled-audio` (a DSP): `cargo build --release -p digi-control --bin digi-emud --features sharc-profile`.
+
+`job.cancel`: cancel the long job that runs: a cold boot (`firmware.load`, `restart`, a soft-reset boot), a card load, or `step`/`run_until`.
+Answers `{cancelled: kind|null}`; the cancelled call answers error 10 `cancelled`. After a cancelled `firmware.load {replace: true}` no firmware is loaded.
+
+`status.job` is `null` or `{kind: "boot"|"card"|"step"|"run_until"|"firmware.load", wall_seconds, phase?, progress?, icount?}`.
+`progress` (0..1) is an estimate. A cold boot has `phase` "starting the DSP" with `progress: null` (a changed DSP section runs its cold start first), then "booting" with an estimated `progress`. `icount` restarts at 0 when a soft reset reboots the job. `status.boot` is gone.
+
+`firmware.load {replace: true, dsp?}` chooses the DSP of the session it starts (the workbench's "DSP" tick): `dsp: false` boots ColdFire
+only (no DSP audio session; a device with a second CPU that runs a program gets the mailbox responder instead, so there is no peer audio and
 the UI is fast), `dsp: true` the DSP session when its inputs are set and the peer program. The choice is kept for the loads after it
 (`status.dsp_enabled`); `--no-dsp` on `digi-emud` and the app is the choice before the first load (`status.dsp_flag` tells a webview).
+
 `firmware.load {syx, runtime?, patch_set?, ...}`: with `runtime: true` the controller patches the stock image in-process with the
 device's patch set (`patch_set`, default `emulator`; the roots are in `devices/*.toml` `[patch_sets]`, the modules they require are added)
 and loads the result with the stock image as its base. A `syx` that already has a patch record is loaded as it is. The patched image is
@@ -118,6 +133,12 @@ exact stock firmware (desktop only), else none; an image of another device never
 
 `mem.cf.write {addr, hex}` writes a byte range (any alignment, hex text) of SDRAM in one call, with one decode-cache invalidation for the range: code
 written this way runs as new code. Unmapped pages are mapped zeroed. Like `mem.cf.poke` it is a host write, not part of the replay record.
+
+`runtime.maps {modules_dir?}` answers what a host needs to name addresses of the image that runs now: `{image_sha256, matches, ship, symbols}`. `ship` is the
+ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` (the ones the image has) to byte addresses: the memory a host reads
+with `mem.cf.peek` and passes to `dkprof` (`loadTable`) to get the load table. The map is made from the running image's patch record and the stock image, as `dev.reload`
+makes its plan, so it follows a module swap: ask again after a `dev.reload`. The answer is kept for the image's SHA-256. `matches` is false when the modules on disk give other bytes
+than the running image (a hot DSP injection, or an object changed since): the names may then be wrong. An image with no patch record, or no stock image in `firmware/`, is an error.
 
 `dev.reload {modules_dir?, swap_modules?, auto_no?, build?}` brings the running session to the module objects as they are on disk now. Without
 `build` it never builds. With `build: true` (the workbench button sets it) it first builds the stale objects of the session's modules in
@@ -190,6 +211,8 @@ answers zeros, the ColdFire state restored from the snapshot (about 2.2x real ti
 processor as it runs: `"sharc"`, `"peer"` (a peer CPU runs its program), `"responder"` (the mailbox stand-in for a peer CPU),
 `"zero"` or `"none"`. `run_until {frames|audio_s}` is refused (no DSP session); `elapsed`, `icount` and `step`
 work. No PCM is produced.
+
+`pc.probe.set {task_ptr?, keep?, probes: [{pc, label?, words?, stack?, frame?}]}` (or `{file, name?}`: the spec is a JSON file on the daemon's host, or its member `name`) sets the ColdFire PC probe; `pc.probe.report` returns the counts per (task, IPL) and the first hits per PC; `pc.probe.clear` forgets the hits. The spec is kept and armed in every runtime installed later, so set it before `firmware.load` or `restart`. A runtime that a cold boot worker builds and snapshots never sees it. Spec, report and the R12 checks: [INSTRUMENTATION.md](INSTRUMENTATION.md#pc-probe-coldfire).
 
 `guard.set {protect: [{lo, hi, label}], allow_pc: [{lo, hi}]}` arms write-range guards (addresses are integers or
 `"0x..."` strings, `hi` exclusive; an empty `protect` disarms). A ColdFire store (8, 16 or 32 bit) that overlaps a
@@ -278,7 +301,7 @@ same numbers). Each closed window is blended 50/50 into the shown value; a resto
 | -32602 | bad params | 7 | DSP halted |
 | 1 | no firmware | 8 | I/O |
 | 2 | stale session | 9 | timeout |
-| 3 | busy | | |
+| 3 | busy | 10 | cancelled |
 
 `card.folder`, `card.folder_set` and `card.sync`: the module store as a folder. **The folder belongs to the device, not to the process.** With
 `--device-folders` (the launcher passes it; the desktop app keeps the user's choices in its app data folder, `card-folders.json`) every load

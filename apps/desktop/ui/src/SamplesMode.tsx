@@ -1,6 +1,6 @@
 // Transfer page, Samples mode, a file explorer on both sides. On your computer: a folder of samples (chosen once, remembered; one level shown
 // with a breadcrumb) and the files added by hand or dropped (kept in the list even when they are outside the folder). On device: the device's
-// sample folders. Rows are selected like in Finder (click, Shift, Cmd or Ctrl, a marquee, Cmd+A, Esc; the tick is the selection), a folder
+// sample folders. Rows are a checklist (a click toggles a row, Shift adds a range, Cmd or Ctrl, a marquee, Cmd+A, Esc; the tick is the selection), a folder
 // opens with a double click or Enter, "Up" and the breadcrumb go back. Upload sends the selected rows, a folder with everything in it and its
 // structure kept, into the open device folder; so does a drag of the rows onto the device pane or onto one of its folders. The backend is the
 // one the device profile names (`[storage] samples`: the stock MidiRpc file commands or the digikit store; samples-backend.ts), so the mode is
@@ -8,35 +8,37 @@
 // uploaded unchanged. Each upload is verified against the bytes sent. The page speaks the protocol in TypeScript over the selected target; the
 // local files come through the native `local_*` commands (local.rs); no process is started.
 import { For, Show, createMemo, createSignal, onMount, type JSX } from 'solid-js';
-import { errorLine, formatBytes, isCancelled } from '@web/modules/backend';
-import { openDeviceSamples, labelOf, listLocalAt, pickFolder, readLocal, readLocalFile } from './samples-backend';
-import WaitNotice from '@web/transfer/WaitNotice';
+import { errorLine, formatBytes, isCancelled } from '@digi/workbench-core/modules/backend.ts';
+import { labelOf, type SamplesBackendApi } from './samples-backend';
+import WaitNotice from '@digi/workbench-core/ui/transfer/WaitNotice.tsx';
 import {
   applyUpload,
+  dropUploads,
+  joinPath,
+  parentOf,
+  uploadCancelled,
+  uploadFailure,
+  uploadItems,
+  type UploadItem,
+} from '@digi/workbench-core/transfer/sample-upload.ts';
+import {
   confirmDeleteLabel,
   crumbs,
   deletePartLine,
   deleteRows,
   deletingLine,
-  dropUploads,
   folderNameError,
-  joinPath,
   foldersFromOutside,
   localCrumbs,
   localRowTags,
   localRows,
   noFoldersMessage,
-  parentOf,
   planUpload,
   sampleRows,
   samplesBar,
   selectedRows,
-  uploadCancelled,
-  uploadFailure,
-  uploadItems,
   type LocalRow,
-  type UploadItem,
-} from './samples-core';
+} from '@digi/workbench-core/transfer/samples-core.ts';
 import {
   Crumbs,
   DevicePane,
@@ -50,13 +52,13 @@ import {
   droppedFiles,
   type CancelledRun,
   type PageCtx,
-} from '@web/transfer/TransferParts';
-import { createPaneSelect } from '@web/transfer/pane-select';
-import { ROWS_TYPE, dropFolder } from '@web/transfer/select-core';
-import { noteActivity } from '@web/transfer/activity';
-import { countLabel } from '@web/transfer/transfer-core';
-import SplitPane from '@web/transfer/SplitPane';
-import { askStop, deviceInfo, stopWasAsked } from '@web/transfer/transfer-state';
+} from '@digi/workbench-core/ui/transfer/TransferParts.tsx';
+import { createPaneSelect } from '@digi/workbench-core/transfer/pane-select.ts';
+import { ROWS_TYPE, dropFolder } from '@digi/workbench-core/transfer/select-core.ts';
+import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
+import { countLabel } from '@digi/workbench-core/transfer/transfer-core.ts';
+import SplitPane from '@digi/workbench-core/ui/transfer/SplitPane.tsx';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import {
   addedFiles,
   localEntries,
@@ -81,8 +83,10 @@ import {
   uploads,
 } from './samples-state';
 
-export default function SamplesMode(props: { ctx: PageCtx }): JSX.Element {
+export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBackendApi }): JSX.Element {
+  const { askStop, deviceInfo, stopWasAsked } = useTransferApp().state;
   const { busy, run, setError } = props.ctx;
+  const { openDeviceSamples, listLocalAt, pickFolder, readLocal, readLocalFile } = props.backend;
   const [note, setNote] = createSignal('');
   const [naming, setNaming] = createSignal(false);
   const [newName, setNewName] = createSignal('');

@@ -10,17 +10,20 @@
 //!
 //! The record is the only thing the runtime writes to the card here, and only to its two sectors (`store::Layout::sel_a`/`sel_b`), through
 //! `block_write`, which refuses a write when the card's area is not ours (`card.rs`): then the boot counter is not raised either.
-use crate::{assign, block_read, block_write, card, crash, dlog, loader, st};
+
+use crate::platform::st;
+use crate::safe_mode::{key_held, DKRT_STABLE_BLOCKS, LATE_FLOOR};
+use crate::selection::{current, update, Choice, REC, REC_COPY, REC_VALID};
+use crate::{assign, card, fault, dlog, loader};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::sel::{self, Record};
 use dkrt_sdk::*;
 
-const INFO_MAGIC: u32 = 0x444b_4254; // "DKBT"
+pub use crate::safe_mode::*;
+pub use crate::selection::*;
 
-#[repr(C, align(16))]
-pub struct Sector([u8; 512]);
-#[no_mangle]
-pub static mut DKRT_SECBUF: Sector = Sector([0; 512]);
+
+pub(crate) const INFO_MAGIC: u32 = 0x444b_4254; // "DKBT"
 
 #[no_mangle]
 pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
@@ -38,34 +41,37 @@ pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
     dsp_wait: 0,
     stable: 0,
     needs: [[0; NEEDS_LEN]; SEL_MAX],
+    states: [STATE_SELECTED; SEL_MAX],
+    detail: [[0; 2]; SEL_MAX],
 };
-/// The stable period in DSP blocks (`STABLE_BLOCKS`). A static so that the scenarios can shorten it (they poke it; nothing else writes it).
-#[repr(C, align(4))]
-pub struct Knob(pub u32); // a ColdFire gcc aligns a u32 to 2: the emulator's poke wants a word
-#[no_mangle]
-pub static mut DKRT_STABLE_BLOCKS: Knob = Knob(STABLE_BLOCKS);
-/// The block count at the first UI-loop pass and the number of passes since (the fallback when the block counter does not move).
-#[no_mangle]
-pub static mut DKRT_UI_START: Knob = Knob(0);
-static mut UI_PASSES: u32 = 0;
-/// The boot counter a stable session leaves behind: 1 after a boot that found the crash record of a session that had been stable, else 0.
-static mut LATE_FLOOR: u32 = 0;
-/// UI-loop passes after which a block counter that has not moved at all is taken for dead and the counter is cleared as in the first
-/// pass of old (the UI loop runs 30 to 120 times a second: 1800 passes are 15 s to a minute).
-const DEAD_CLOCK_PASSES: u32 = 1800;
-/// The record this boot started from (or an empty one) and the bookkeeping the writes need.
-static mut REC: Record = Record::empty();
-static mut REC_VALID: bool = false;
-static mut REC_COPY: u32 = 0;
 
 /// The file name of each module of this boot's selection (the part of its path after the last `/`, up to `NAME_LEN - 1` bytes, NUL padded): the LOADS
 /// command reports it with the result, and the record may change after the boot (a SELECT).
-pub const NAME_LEN: usize = 28;
+pub use dkrt_abi::state::NAME_LEN;
 static mut BOOT_NAME: [[u8; NAME_LEN]; SEL_MAX] = [[0; NAME_LEN]; SEL_MAX];
 
 /// The file name of module `k` of this boot's selection (NUL padded, `NAME_LEN` bytes).
 pub unsafe fn boot_name(k: usize) -> *const u8 {
     addr_of!(BOOT_NAME[k]) as *const u8
+}
+
+/// The states of this boot's modules (`dkrt_abi::state`): a view of `DKRT_BOOT.states` and `.detail`.
+pub fn states() -> dkrt_abi::state::BootStates<'static> {
+    let b = info();
+    dkrt_abi::state::BootStates { states: &mut b.states, detail: &mut b.detail }
+}
+
+/// The module records `LOADS` reports, as `dkrt_abi::state::LoadsView`.
+pub fn loads_view() -> dkrt_abi::state::LoadsView<'static> {
+    let b = info();
+    dkrt_abi::state::LoadsView {
+        count: b.count as usize,
+        results: &b.results,
+        states: &b.states,
+        detail: &b.detail,
+        needs: &b.needs,
+        names: unsafe { &*addr_of!(BOOT_NAME) },
+    }
 }
 
 /// Paths of the selection this boot loaded (for CAPACITY).
@@ -75,201 +81,6 @@ pub fn selected() -> u32 {
 
 pub fn info() -> &'static mut DkrtBootInfo {
     unsafe { &mut *addr_of_mut!(DKRT_BOOT) }
-}
-
-fn secbuf() -> *mut u8 {
-    unsafe { addr_of_mut!(DKRT_SECBUF) as *mut u8 }
-}
-
-/// One selection copy as read from the card.
-#[derive(Clone, Copy)]
-enum CopyRead {
-    /// The read worked and the record is good.
-    Valid(Record),
-    /// The read worked and the record is bad.
-    Invalid,
-    /// The block read failed.
-    ReadError,
-}
-
-/// The selection as the two copies give it.
-#[derive(Clone, Copy)]
-enum Choice {
-    /// The valid copy with the higher sequence number (A when equal), the copy it is in, and whether the other copy is valid too.
-    Use { record: Record, copy: u32, other_valid: bool },
-    /// No valid copy and no read error: nothing was ever saved.
-    Empty,
-    /// No valid copy and at least one read error: the record cannot be known.
-    Unreadable,
-}
-
-/// The choice from the two copies. A valid copy wins even when the other copy could not be read.
-fn choose(a: CopyRead, b: CopyRead) -> Choice {
-    match (a, b) {
-        (CopyRead::Valid(x), CopyRead::Valid(y)) => {
-            if y.seq > x.seq {
-                Choice::Use { record: y, copy: 1, other_valid: true }
-            } else {
-                Choice::Use { record: x, copy: 0, other_valid: true }
-            }
-        }
-        (CopyRead::Valid(x), _) => Choice::Use { record: x, copy: 0, other_valid: false },
-        (_, CopyRead::Valid(y)) => Choice::Use { record: y, copy: 1, other_valid: false },
-        (CopyRead::ReadError, _) | (_, CopyRead::ReadError) => Choice::Unreadable,
-        _ => Choice::Empty,
-    }
-}
-
-/// The copy `selection_set` writes first: the one that is not the only valid copy, so that a cut write leaves a valid copy.
-fn first_write(c: &Choice) -> u32 {
-    match c {
-        Choice::Use { copy: 0, other_valid: false, .. } => 1,
-        _ => 0,
-    }
-}
-
-/// Read one copy (0 = A, 1 = B).
-unsafe fn read_copy(i: u32) -> CopyRead {
-    let sector = if i == 0 { crate::store::layout().sel_a() } else { crate::store::layout().sel_b() };
-    if block_read(sector, 512, secbuf()) != 0 {
-        return CopyRead::ReadError;
-    }
-    let b = &*(secbuf() as *const [u8; 512]);
-    match sel::decode(b) {
-        Some(r) => CopyRead::Valid(r),
-        None => CopyRead::Invalid,
-    }
-}
-
-/// The record in use, read from both copies.
-unsafe fn current() -> Choice {
-    // the card's state first (reads only): a card too small has no store, which is an empty record and not a read failure
-    card::check();
-    current_on(card::state() == CARD_TOO_SMALL, |i| read_copy(i))
-}
-
-/// `current` with the card state and the copy reader given: no store means `Empty` with no read.
-fn current_on(no_store: bool, mut read: impl FnMut(u32) -> CopyRead) -> Choice {
-    if no_store {
-        return Choice::Empty;
-    }
-    let a = read(0);
-    let b = read(1);
-    choose(a, b)
-}
-
-/// Write `r` to copy `i`. Only these two sectors are ever written.
-unsafe fn write_copy(i: u32, r: &Record) -> i32 {
-    let sector = if i == 0 { crate::store::layout().sel_a() } else { crate::store::layout().sel_b() };
-    let b = &mut *(secbuf() as *mut [u8; 512]);
-    sel::encode(r, b);
-    let e = block_write(sector, 512, secbuf());
-    if e == E_CARD_RO || e == E_RANGE {
-        return e;
-    }
-    if e != 0 {
-        return E_SEL_WRITE;
-    }
-    OK
-}
-
-unsafe fn path_ok(p: *const u8) -> bool {
-    let mut n = 0;
-    while n < SEL_PATH {
-        let c = *p.add(n);
-        if c == 0 {
-            return n > 0;
-        }
-        if !(0x21..0x7f).contains(&c) {
-            return false;
-        }
-        n += 1;
-    }
-    false
-}
-
-/// `dkrt_selection_get`: `E_READ` when no copy is valid and a copy could not be read.
-pub unsafe fn selection_get(out: *mut DkrtSelection) -> i32 {
-    let r = match current() {
-        Choice::Use { record, .. } => record,
-        Choice::Empty => Record::empty(),
-        Choice::Unreadable => return E_READ,
-    };
-    let o = &mut *out;
-    o.count = r.count;
-    o.flags = r.flags;
-    o.paths = r.paths;
-    OK
-}
-
-/// `dkrt_selection_set`: both copies, A then B, with the next sequence number (B first when A is the only valid copy). The boot counter
-/// carries over. `E_READ`, with no write, when no copy is valid and a copy could not be read.
-pub unsafe fn selection_set(s: *const DkrtSelection) -> i32 {
-    let s = &*s;
-    let r = sel::check_count(s.count);
-    if r != OK {
-        return r;
-    }
-    let mut k = 0;
-    while k < s.count as usize {
-        if !path_ok(s.paths[k].as_ptr()) {
-            return E_SEL_PATH;
-        }
-        k += 1;
-    }
-    let choice = current();
-    let cur = match choice {
-        Choice::Use { record, .. } => record,
-        Choice::Empty => Record::empty(),
-        Choice::Unreadable => return E_READ,
-    };
-    let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
-    dlog::ev(logk::MENU, dlog::INFO, [logk::MENU_SELECT, s.count, 0, 0, 0]);
-    let first = first_write(&choice);
-    let e = write_copy(first, &r);
-    if e != OK {
-        return e;
-    }
-    write_copy(1 - first, &r)
-}
-
-/// `CMD_SELECT_ONE`: write copy `i` only, with `seq + 1` (the state of a power cut between the two writes).
-pub unsafe fn selection_set_one(i: u32, s: *const DkrtSelection) -> i32 {
-    let s = &*s;
-    let e = sel::check_one(s.count, i);
-    if e != OK {
-        return e;
-    }
-    let cur = match current() {
-        Choice::Use { record, .. } => record,
-        Choice::Empty => Record::empty(),
-        Choice::Unreadable => return E_READ,
-    };
-    let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
-    write_copy(i, &r)
-}
-
-/// Write the record with a changed counter/flags into the copy that is not the current one (the current one stays valid if
-/// the write is cut).
-unsafe fn update(mut r: Record, current_copy: u32, valid: bool) -> i32 {
-    r.seq = if valid { r.seq.wrapping_add(1) } else { 1 };
-    let target = if valid { 1 - current_copy } else { 0 };
-    let e = write_copy(target, &r);
-    if e == OK {
-        REC = r;
-        REC_VALID = true;
-        REC_COPY = target;
-    }
-    e
-}
-
-/// Is the safe-mode key down? Reads the stock key state byte. REC is key 0x13, panel channel 2 bit 2. Returns 0 before the first
-/// channel-2 report. Hardware timing not yet proved **[O]**.
-unsafe fn key_held() -> bool {
-    match crate::dev::safe_key() {
-        Some(k) => dkfw::input::key_down(k) != 0,
-        None => false,
-    }
 }
 
 /// The boot hook (once per boot, main-OS task).
@@ -298,9 +109,9 @@ pub unsafe extern "C" fn dkrt_boot() {
     // the settings record (the fx routes and send amounts): into RAM before the UI starts
     crate::settings::load();
     // the crash record and the RAM probe of the boot before
-    crash::keep_probe();
-    if crash::at_boot() {
-        let seen = crash::seen();
+    fault::keep_probe();
+    if fault::at_boot() {
+        let seen = fault::seen();
         if seen.found != 0 && seen.stable != 0 {
             // the crashed boot had already cleared its counter: count it as bad now, and keep that one count until a boot with no crash
             // behind it has run 30 s (`ui_pass`)
@@ -312,6 +123,7 @@ pub unsafe extern "C" fn dkrt_boot() {
     b.copy = copy;
     b.counter = r.boot_counter;
     b.count = r.count;
+    states().begin();
     REC = r;
     REC_VALID = valid;
     REC_COPY = copy;
@@ -325,10 +137,10 @@ pub unsafe extern "C" fn dkrt_boot() {
         SAFE_FLAG
     } else if key_held() {
         SAFE_KEY
-    } else if crash::seen().hang != 0 {
+    } else if fault::seen().hang != 0 {
         // the boot before stopped because the DSP stopped (a hang record): one stop is enough, even after a stable boot; the selection stays as it is
         SAFE_DSP
-    } else if crash::seen().panic != 0 {
+    } else if fault::seen().panic != 0 {
         // the boot before panicked (a panic record): one panic is enough, like a stop
         SAFE_PANIC
     } else if r.boot_counter >= SAFE_AFTER {
@@ -353,11 +165,14 @@ pub unsafe extern "C" fn dkrt_boot() {
         }
         // a safe boot loads no module: show the safe-mode screen in place of the stock intro (no storage access, built here on the main-OS task)
         crate::intro::show_safe(reason);
+        // no provider loads and the installer writes nothing: every hook site stays stock
+        loader::set_safe();
         let mut k = 0;
         while k < SEL_MAX {
             b.results[k] = E_SAFE_MODE;
             k += 1;
         }
+        states().skip_all(r.count as usize);
         return;
     }
     // raise the counter before anything of a module runs; the first UI-loop pass clears it. On a card the runtime does not write there is no
@@ -368,52 +183,21 @@ pub unsafe extern "C" fn dkrt_boot() {
     }
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
-    loader::EARLY = true;
     // the type numbers of every machine of the selection, before the first load (reads the files; the staging buffer is free)
     assign::plan(&r);
+    // the boot plan over the header tables that read gave, with the providers the search found for the hard needs the runtime does not meet: the order to
+    // load in, and a module the plan refuses is not loaded
+    let mut planned = loader::plan_selection(r.count as usize);
+    // the providers load before any module; a module that needs one that did not load is refused before the module stage
+    loader::load_providers(&planned);
+    loader::settle(&mut planned, r.count as usize);
     let mut k = 0;
     while k < r.count as usize {
-        loader::BOOT_IDX = k as u32;
-        loader::MISSING = [0; NEEDS_LEN];
-        let res = loader::load(r.paths[k].as_ptr());
-        st().last_result = res;
-        b.results[k] = res;
-        if res == OK {
-            b.loaded += 1;
-        }
-        let p = r.paths[k].as_ptr();
-        let mut at = 0;
-        let mut i = 0;
-        while i < SEL_PATH && *p.add(i) != 0 {
-            if *p.add(i) == b'/' {
-                at = i + 1;
-            }
-            i += 1;
-        }
-        let bad = if res == OK || res == LOADING { dlog::INFO } else { logk::F_ERROR };
-        dlog::ev(
-            logk::MOD_LOAD,
-            bad,
-            [k as u32, res as u32, dlog::word_of(p, at, SEL_PATH), dlog::word_of(p, at + 4, SEL_PATH), dlog::word_of(p, at + 8, SEL_PATH)],
-        );
-        let mut j = 0;
-        while j < NAME_LEN - 1 && at + j < SEL_PATH && *p.add(at + j) != 0 {
-            BOOT_NAME[k][j] = *p.add(at + j);
-            j += 1;
-        }
-        if res == E_IMPORT && loader::MISSING[0] != 0 {
-            let m = loader::MISSING;
-            b.needs[k] = m;
-            dlog::ev(
-                logk::MOD_NEEDS,
-                logk::F_ERROR,
-                [k as u32, dlog::word_of(m.as_ptr(), 0, NEEDS_LEN), dlog::word_of(m.as_ptr(), 4, NEEDS_LEN), dlog::word_of(m.as_ptr(), 8, NEEDS_LEN), 0],
-            );
-        }
+        states().planned(k, planned.verdicts[k]);
         k += 1;
     }
-    loader::EARLY = false;
-    loader::BOOT_IDX = u32::MAX;
+    loader::boot(&r, &planned);
+    crate::selection::BOOT_IDX = u32::MAX;
     // core/introblank: no module took the intro, so the black intro has nothing to wait for
     crate::intro::end_blank();
     // the sticky map: written once, after the loads, and only when this boot changed it
@@ -424,59 +208,81 @@ pub unsafe extern "C" fn dkrt_boot() {
     }
 }
 
+/// The result `res` of the load of selection entry `k` (the file at `path`): the boot record, the log events and the name the LOADS report shows.
+pub unsafe fn report_module(k: usize, path: *const u8, res: i32, missing: &[u8; NEEDS_LEN]) {
+    let b = info();
+    st().last_result = res;
+    b.results[k] = res;
+    if res == OK {
+        b.loaded += 1;
+    }
+    let p = path;
+    let mut at = 0;
+    let mut i = 0;
+    while i < SEL_PATH && *p.add(i) != 0 {
+        if *p.add(i) == b'/' {
+            at = i + 1;
+        }
+        i += 1;
+    }
+    let bad = if res == OK || res == LOADING { dlog::INFO } else { logk::F_ERROR };
+    dlog::ev(
+        logk::MOD_LOAD,
+        bad,
+        [k as u32, res as u32, dlog::word_of(p, at, SEL_PATH), dlog::word_of(p, at + 4, SEL_PATH), dlog::word_of(p, at + 8, SEL_PATH)],
+    );
+    let mut j = 0;
+    while j < NAME_LEN - 1 && at + j < SEL_PATH && *p.add(at + j) != 0 {
+        BOOT_NAME[k][j] = *p.add(at + j);
+        j += 1;
+    }
+    if res == E_IMPORT && missing[0] != 0 {
+        let m = *missing;
+        b.needs[k] = m;
+        dlog::ev(
+            logk::MOD_NEEDS,
+            logk::F_ERROR,
+            [k as u32, dlog::word_of(m.as_ptr(), 0, NEEDS_LEN), dlog::word_of(m.as_ptr(), 4, NEEDS_LEN), dlog::word_of(m.as_ptr(), 8, NEEDS_LEN), 0],
+        );
+    }
+}
+
+/// The result `res` of the load of the provider file at the store path `path` (`services/<name>.dks`) that provides the service `hash`, loaded at `base` (0 when
+/// it did not load): log only. The event is `MOD_LOAD` with the provider index (`loader::PROVIDER_IDX`, not a selection index), the result, the first four
+/// characters of the file name, the service hash and the base; the boot record and `LOADS` do not change.
+pub unsafe fn report_provider(path: &[u8], res: i32, hash: u32, base: u32) {
+    let mut at = 0;
+    let mut i = 0;
+    while i < path.len() {
+        if path[i] == b'/' {
+            at = i + 1;
+        }
+        i += 1;
+    }
+    let mut name = [0u8; 4];
+    let mut j = 0;
+    while j < 4 && at + j < path.len() {
+        name[j] = path[at + j];
+        j += 1;
+    }
+    let bad = if res == OK { dlog::INFO } else { logk::F_ERROR };
+    dlog::ev(
+        logk::MOD_LOAD,
+        bad,
+        [loader::PROVIDER_IDX, res as u32, dlog::word_of(name.as_ptr(), 0, 4), hash, base],
+    );
+}
+
 /// The DSP part of the module loaded for selection index `idx` is over with result `r` (called by the DSP loader).
-pub unsafe fn note_result(idx: u32, r: i32) {
+pub unsafe fn report_dsp(idx: u32, r: i32) {
     dlog::ev(logk::MOD_DSP, if r == OK { dlog::INFO } else { logk::F_ERROR }, [idx, r as u32, 0, 0, 0]);
     if (idx as usize) < SEL_MAX {
         let b = info();
         b.results[idx as usize] = r;
+        states().dsp_done(idx as usize, r);
         if r == OK {
             b.loaded += 1;
         }
-    }
-}
-
-/// Every pass of the UI loop (`dkrt_tick`). The first pass notes the block count; the boot counter goes back to 0 when the session has run
-/// `DKRT_STABLE_BLOCKS` blocks past it, or at once in a safe boot (nothing of a module runs there). A hang or a fault in between leaves
-/// the counter raised, so the next boots count it: two such boots in a row start the third in safe mode.
-pub unsafe fn ui_pass() {
-    let b = info();
-    if b.stable != 0 {
-        return;
-    }
-    if b.magic != INFO_MAGIC {
-        b.ui_reached = 1;
-        b.stable = 1;
-        return; // the boot hook did not run (an image patched without the boot site)
-    }
-    let now = crate::fw_blocks().unwrap_or(0);
-    if b.ui_reached == 0 {
-        b.ui_reached = 1;
-        DKRT_UI_START.0 = now;
-        UI_PASSES = 0;
-        dlog::ev(logk::UI_FIRST, dlog::INFO, [now, b.safe, b.loaded, 0, 0]);
-    }
-    UI_PASSES = UI_PASSES.wrapping_add(1);
-    let elapsed = now.wrapping_sub(DKRT_UI_START.0);
-    let period = core::ptr::read_volatile(addr_of!(DKRT_STABLE_BLOCKS.0));
-    let dead = elapsed == 0 && UI_PASSES >= DEAD_CLOCK_PASSES;
-    if b.safe != 0 || elapsed >= period || dead {
-        b.stable = 1;
-        // The record as the card holds it now, not the one this boot started from: the menu may have saved a selection since.
-        // A boot that followed a crash in a stable session leaves one bad boot counted (`LATE_FLOOR`), so that a second such crash leads to safe mode.
-        let floor = LATE_FLOOR;
-        // With SAFE_READ the record is unknown: the counter stays as it is.
-        let cur = match current() {
-            Choice::Use { record, copy, .. } if b.reason != SAFE_READ => Some((record, copy)),
-            _ => None,
-        };
-        if let Some((mut r, copy)) = cur {
-            if r.boot_counter != floor {
-                r.boot_counter = floor;
-                update(r, copy, true);
-            }
-        }
-        dlog::ev(logk::STABLE, dlog::INFO, [now, floor, 0, 0, 0]);
     }
 }
 
@@ -498,81 +304,40 @@ pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
         dsp_wait: b.dsp_wait,
         stable: b.stable,
         needs: b.needs,
+        states: b.states,
+        detail: b.detail,
     };
 }
 
 #[cfg(test)]
-mod choice_tests {
+mod tests {
     use super::*;
-
-    #[derive(Clone, Copy)]
-    enum In {
-        Valid(u32),
-        Invalid,
-        ReadError,
-    }
-
-    fn read(i: In) -> CopyRead {
-        match i {
-            In::Valid(seq) => {
-                let mut r = Record::empty();
-                r.seq = seq;
-                CopyRead::Valid(r)
-            }
-            In::Invalid => CopyRead::Invalid,
-            In::ReadError => CopyRead::ReadError,
-        }
-    }
-
-    /// (kind, seq, copy, other_valid)
-    fn summary(c: &Choice) -> (&'static str, u32, u32, bool) {
-        match c {
-            Choice::Use { record, copy, other_valid } => ("use", record.seq, *copy, *other_valid),
-            Choice::Empty => ("empty", 0, 0, false),
-            Choice::Unreadable => ("unreadable", 0, 0, false),
-        }
-    }
+    use crate::test_lock::LOCK;
+    use dkrt_abi::plan::{Reason, Verdict};
 
     #[test]
-    fn the_choice_over_every_pair_of_copy_states() {
-        use In::*;
-        let table = [
-            (Valid(5), Valid(9), ("use", 9, 1, true)),
-            (Valid(9), Valid(5), ("use", 9, 0, true)),
-            (Valid(7), Valid(7), ("use", 7, 0, true)),
-            (Valid(5), Invalid, ("use", 5, 0, false)),
-            (Valid(5), ReadError, ("use", 5, 0, false)),
-            (Invalid, Valid(5), ("use", 5, 1, false)),
-            (Invalid, Invalid, ("empty", 0, 0, false)),
-            (Invalid, ReadError, ("unreadable", 0, 0, false)),
-            (ReadError, Valid(5), ("use", 5, 1, false)),
-            (ReadError, Invalid, ("unreadable", 0, 0, false)),
-            (ReadError, ReadError, ("unreadable", 0, 0, false)),
-        ];
-        for (a, b, want) in table {
-            assert_eq!(summary(&choose(read(a), read(b))), want);
+    fn the_boot_record_feeds_the_loads_reply_and_the_boot_info_copy() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            *info() = core::mem::zeroed();
+            info().count = 2;
+            states().begin();
+            states().planned(0, Verdict::Accepted);
+            states().init(0);
+            states().finished(0, OK);
+            states().planned(1, Verdict::Refused(Reason::DuplicateKey(7, 99)));
+            info().results[1] = E_PLAN_KEY;
+            BOOT_NAME[0][..5].copy_from_slice(b"a.dkm");
+            let mut out = [0u8; dkrt_abi::state::loads_len(SEL_MAX)];
+            let n = dkrt_abi::state::loads_v2(&loads_view(), &mut out);
+            assert_eq!(n, dkrt_abi::state::loads_len(2));
+            assert_eq!(out[..2], [2, 2]);
+            assert_eq!(out[2 + 4], STATE_ACTIVE);
+            let e1 = 2 + dkrt_abi::state::LOADS_ENTRY;
+            assert_eq!((out[e1 + 4], out[e1 + 11], out[e1 + 15]), (STATE_REFUSED, 7, 99));
+            let mut copy: DkrtBootInfo = core::mem::zeroed();
+            boot_info(&mut copy);
+            assert_eq!((copy.states[..2].to_vec(), copy.detail[1]), (vec![STATE_ACTIVE, STATE_REFUSED], [7, 99]));
         }
-    }
-
-    #[test]
-    fn a_card_without_a_store_is_empty_and_is_not_read() {
-        let c = current_on(true, |_| panic!("no read on a card without a store"));
-        assert_eq!(summary(&c), ("empty", 0, 0, false));
-        assert_eq!(first_write(&c), 0);
-        // with a store, read errors with no valid copy are still unreadable
-        let c = current_on(false, |_| CopyRead::ReadError);
-        assert_eq!(summary(&c), ("unreadable", 0, 0, false));
-    }
-
-    #[test]
-    fn selection_set_never_writes_first_to_the_only_valid_copy() {
-        use In::*;
-        let first = |a, b| first_write(&choose(read(a), read(b)));
-        assert_eq!(first(Valid(5), ReadError), 1);
-        assert_eq!(first(Valid(5), Invalid), 1);
-        assert_eq!(first(Invalid, Valid(5)), 0);
-        assert_eq!(first(ReadError, Valid(5)), 0);
-        assert_eq!(first(Valid(5), Valid(9)), 0);
-        assert_eq!(first(Invalid, Invalid), 0);
     }
 }

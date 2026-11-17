@@ -129,6 +129,9 @@ A module reaches the device through named imports, grouped by service in `sdk.to
   `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`, `dk_sdhc_large_open`.
 - When an optional provider is not loaded, its imports bind to stubs: `_open` returns `DK_E_MISSING`, the other functions return the same
   code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the last `_open` stub that answered DK_E_MISSING during `init` as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
+- Records of a generic kind: `dk_record_add(ctx, kind, bytes, len)` (runtime 0.8.0, `<dk/gen/imports.h>`, kinds in `<dk/gen/records.h>`) emits a record of a kind that a service owns and `[records.kinds]` marks `generic`; the module lists its key in `module.toml` (`[[record]] kind = "lfo_shape", key = 7`). The typed kinds (machine, page, parameter, effect) stay builder calls. A service module declares its kinds, slots, hooks, exports and resources with `dk_service_declare_kind`, `_slot`, `_hook`, `_export` and `_resource`; the commit compares them with the header table and refuses a difference with `DK_E_DECL_KIND`.
+- Sink channels: `dk_sink_set(channel, sink)` (runtime 0.7.1, `<dk/core/sink.h>`) sets the sink of the `log` or `span` channel for the calling module; one owner per channel
+  (`DK_E_BUSY` for a second), cleared after the owner's `fini` (runtime-and-services 5.11). A new import is a PATCH: the runtime went from 0.7.0 to 0.7.1 and the import has `since = "0.7.1"`.
 - Each import has `service`, `since`, `context` and `sig` in `sdk.toml`:
 
 ```toml
@@ -142,7 +145,7 @@ context  = "init"             # init, ui, io-step, any, isr
 since    = "0.7.0"          # the runtime version that added the import
 ```
 
-- The packer writes the runtime version a module needs, the newest `since` among the imports it links (0 when it links none), into the header word at 0x30 (bit 31 is the trace flag), and derives the services it
+- The packer writes the runtime version a module needs, the newest `since` among the imports it links, and at least the version that introduced the header table (`[runtime] table`, 0.8.0), into the header word at 0x30 (bit 31 is the trace flag), and derives the services it
   needs from their `service` tags. `uses_api`, `api->size` and `DK_API_HAS` are gone. The runtime loads the module only when that version has its own major and minor and at most its own patch (0.x semver: a minor may break, a patch only adds); otherwise the load fails with `E_CONTRACT`. The bytes 0x38 to 0x3f of the header are reserved zero.
 - `service` uses the names of runtime-and-services: `runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`, `sdhc_large`. Today
   every `runtime`, `samples` and `machines` import resolves to code in the runtime image. When runtime-and-services moves `samples`,
@@ -391,11 +394,9 @@ placeholder, so chained calls stay safe.
 The load order is: store and file checks (magic, size, sha256, runtime version, name, import resolution with `E_IMPORT`, relocations, keys table), the module record, the DSP check, a comparison of the header keys with the DSP voice and effect counts (`collect::check_dsp_keys`, `E_DECL_ID`), `dsp::reserve`, the arena copy, then `init`. The DSP check and reserve stay before `init`. They read only the static DSP section and the machine and effect keys from the
 header: reserve copies the DSP image into its own arena block and fills the voice and FX row tables. After reserve the staged file is not read again.
 
-The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 is `keys_off` and `keys_size`. They point to the keys table: `machine_rows`, `param_rows` and `page_rows` (the `[uses]` counts), the
-machine count, the FX count, `record_bytes` (the size of the record block the module keeps), then the machine keys (u32) and the FX ids. All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read `[uses]` from
-this table; `needs_of` adds the arena block of `record_bytes` (rounded to 16, plus the 16-byte block header, as `arena::alloc` takes it) to `ARENA`. Every `.dkm` has a keys table at the 0x90 pair (size 0 for a module with no machine and no effect: a tool or a service); the runtime has no other format. The version is the runtime 0.7.0.
+The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 is `table_off` and `table_size`. They point to the header table, a versioned, tagged table (R7; layout in `packages/dkneeds/src/keys.rs` and `sdk/sdk.toml` `[limits.format]`): magic `DKTB`, version, then entries in tag order, each `u16 tag, u16 count, u32 payload bytes, payload`. NEEDS lists the services the linked imports name with the newest `since` of each and whether the need is hard; USES lists `(resource id, count)` for the `[uses]` counts and `record_bytes`; KEYS lists `(kind, n, keys)` for the machine keys, the effect ids and the keys of `[[record]]` entries; KINDS, SLOTS, HOOKS, EXPORTS and RESOURCES are the entries of a service module (R12). All fields are big-endian, like the rest of the header. `dkneeds::needs_of` and the device menu read USES from the table; `needs_of` adds the arena block of `record_bytes` (rounded to 16, plus the 16-byte block header, as `arena::alloc` takes it) to `ARENA`. Every `.dkm` has a table (a module that needs and keeps nothing has the 8-byte head); a file with no table or another magic is the format of runtime 0.7 and the loader refuses it with `E_CONTRACT`. The packer writes at least 0.8.0 as the version the module needs. The version is the runtime 0.8.0.
 
-The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS` (32) and by the size of the `Collect` block, `collect_bytes` (6320 in `sdk.toml` `[limits.format]`, asserted at compile time in `collect.rs`). A shot-like
+The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS` (32) and by the size of the `Collect` block, `collect_bytes` (7206 in `sdk.toml` `[limits.format]`, asserted at compile time in `collect.rs`). A shot-like
 machine needs about 10 records, the other modules 3 to 7. The collection is refused with `E_DECL_ID` (-27: an index outside the keys table), `E_DECL_USES` (-28: more rows than `[uses]` says) or `E_DECL_FULL` (-74: more calls than the limits allow). When `init` returns `DK_OK`:
 
 1. Check the collection (device limits, `[uses]`, the keys in the header, FX ids of modules already loaded: a duplicate is `E_FX_ID_DUP`), lower it to records and check the records with the `registry::check` rules.
@@ -452,19 +453,48 @@ the SDK grows. Today `type = "raw"` exists only in test fixtures.
 
 These come from the profiling work and land after the steps in section 12 that they depend on.
 
-- **DSP rules.** One rules section in `sdk/` for machine and FX entry points: registers a module may clobber, registers and mode bits it
-  must restore, memory it may touch. Parts exist today in `sdk/dsp/README.md` "Block routines" and `sdk/dsp/delay/delay.inc` (MODE1.CBUFEN).
-  The stock side comes from sharcdb (`regdef`/`reguse` of the interrupt context save at `0x1c02a4`, image and port to confirm, and of the
-  adapter dispatchers; `mem_access` for memory stock code owns). No finding records the stock save set yet [O]; record it in
-  `docs/findings/` and have a second agent check it against image bytes before [V]. `pk_conform` checks each module against the rules,
+- **DSP rules.** The table `[dsp.registers]` in `sdk/sdk.toml` is the one source of the register contract: registers a module may clobber,
+  must keep and never writes, and the entry registers. `patchkit gen` writes the rule comments of the generated headers, `sdk/dsp/REGISTERS.md`
+  and `packages/dksharc/src/rules_table.rs` from it. The check lives in `dksharc::rules` and runs in patchkit at module build. It warns first
+  and refuses when every module in the repo builds with no warning. Mode bits and memory rules are still to do; parts exist today in
+  `sdk/dsp/README.md` "Block routines" and `sdk/dsp/delay/delay.inc` (MODE1.CBUFEN).
+  The stock side comes from sharcdb (`regdef`/`reguse` of the interrupt context save at `0x1c02a4`, the same code on DT2 1.17 and DN2 1.12, and of the
+  adapter dispatchers; `mem_access` for memory stock code owns). [Finding 130](../findings/130-sharc-interrupt-save-set.md) records the stock save set [D]; a second agent checks it against image
+  bytes before [V]. `pk_conform` checks each module against the rules,
   using sharcdb tables built for the module's own DSP section ([profiling.md](profiling.md) 3.3).
-- **Cycle cost.** `max_cycles_*` stops being written by hand. The packer writes a DSP cycles-per-block use into the header and the report,
-  from the `module:check` emulator measurement at the device's voice count or a static estimate over the module's sharcdb tables, scaled
-  by the emulator-to-device calibration ([profiling.md](profiling.md) 6 and 7.3). The broker checks it (runtime-and-services 5.3).
-- **`DK_SPAN`.** `DK_SPAN_BEGIN(owner)` and `DK_SPAN_END(owner)` in `core/trace.h` and `dsp/contract/dk_trace.inc`. They read the cycle
-  counter and emit `(owner, cycles)` to the `span` sink (runtime-and-services 5.11). With no sink set they cost one flag test. Only
-  service dispatchers use them (runtime-and-services 6.1). In the emulator a counter read can change the execution tier
-  (`UNSAFE_READ_NAMES` in `tools/sharc_dev/sharc_rsgen.py`), so the reads run only while a sink is set [O: measure the tier effect].
+- **Cycle cost (S5a, built).** Nobody declares a cost: the DSP descriptors have no `max_cycles_*` words (the machine descriptor is 8 words, the effect
+  descriptor 6) and the manifest has no `[conformance]` overrides. `module:check` runs the conformance suite and writes the module's own cost into
+  `[uses.<device>]` of `module.toml`, like the row counts: `dsp_cost_voice` for a machine (the worst steady block of one voice, over every conformance case)
+  and `dsp_cost_fx` for an effect (its worst process call, the `core/fx` adapter around it included). The packer copies them into the header table as the
+  two resources `DSP_COST_VOICE` (id 5) and `DSP_COST_FX` (id 6) of `[records.resources]`; `dkneeds` reads them into `Needs`. The unit is **instructions**
+  per block (SHARC+ instructions the concrete core counts) until the device calibration (P9); the name "cycles" waits for it. A module that was not
+  measured has cost 0 and passes any headroom. The note-on block has no resource: the conformance suite checks it for each module alone against the whole
+  headroom, never added to the other voices' steady blocks. Today's costs are a floor for a module whose worst case the conformance cases do not drive
+  (`digikit/shot` plays no sample in the suite, so its cost is far below its worst block); the cases are the place to fix that.
+- **Voice rule and broker (S5a, built).** The rule is one integer function, `check_selection(voices, headroom, machines, fx)` in `dkrt-fit` (`no_std`):
+  `max(machine costs) * voices + sum(effect costs) <= headroom`. Every voice may run any selected machine, so the largest per-voice cost counts for all voices;
+  the effects add up. The same code runs in the boot planner (`plan.rs`, `judge`), the DIGIKIT menu (`fit_set`), `patchkit fit` (and `patchkit.wasm`, so the
+  Transfer tab) and `module:check`; `dkprof::budget` re-exports it for the host. A capacity carries the load as two kinds of `[capacity.kinds]`:
+  `DSP_COST` (limit: the device's headroom; used: the load so far; largest: the largest per-voice machine cost so far, the state of that maximum) and
+  `DSP_VOICES` (limit: the device's voices). The planner keeps no state of its own: `fits_now` and `take` update those two entries. A module that takes the
+  load over the headroom is refused with `E_PLAN_FIT` and the kind `DSP_COST`; the menu shows `DSP LOAD need > free FREE` (instructions per block).
+- **Headroom, voices and the margin come from the generated device profile.** `patchkit gen` writes `DSP_HEADROOM` and `DSP_VOICES` for each device
+  (`modules/core/runtime/build/gen/device-<dev>.inc`, and `DeviceProfile.dsp_headroom` and `dsp_voices`); the runtime reads two words, no float, no table
+  on the device. The headroom is what `dkprof::budget` computes from `[board]`, `[adapter.machine] voices` and `devices/cycle-factors.json`: the block at 85
+  percent (the safety margin until P9), with instructions projected to cycles by the "high" factor, less the stock firmware's load (`stock_busy`). Today
+  194,244 instructions on the Digitakt II and 92,796 on the Digitone II (`patchkit budget`). Both devices have 16 voices.
+- **`DK_SPAN` (S5a, defined; producers are P8a).** `DK_SPAN_BEGIN(owner)` and `DK_SPAN_END(owner)` in `<dk/core/trace.h>` (ColdFire C) and
+  `DK_SPAN_BEGIN(SKIP, RA, RB)` and `DK_SPAN_END(SKIP, ROW, RA, RB, RC)` in `dsp/contract/dk_trace.inc` (SHARC+). They are always compiled in: they test
+  the sink's pointer (C) or the stats window's pointer slot `_dk_stats_ptr` (SHARC+), and only when it is set read the cycle counter and report
+  `(owner, cycles)` to the `span` sink (C: `dk_span_emit`, runtime-and-services 5.11) or to the image's `_dk_span_add` (SHARC+). With no sink the cost is one
+  load, one test and one branch for each macro, and the arguments are not evaluated; the SHARC+ counter read (`EMUCLK`, which takes the emulator out of the
+  fast tiers, `UNSAFE_READ_NAMES` in `tools/sharc_dev/sharc_rsgen.py`) runs only while a window is registered. Only service dispatchers use them; `mise run check:layers` (rule spans) refuses them in content modules and apps. Checked by reading the disassembly of a test use (ColdFire
+  `tstl`/`bnes` on the sink word before any call; SHARC+ load, `PASS`, `IF EQ JUMP` before the `EMUCLK` read). The no-sink cost of the real dispatchers (a paired
+  A/B of instruction counts within 0.02 percent) is measured with the first producer (P8a).
+  The **stats window** is words in DSP data memory: a header of 4 words (magic `DKSW` 0x444b5357, version 1, rows 16, blocks measured since the window was
+  cleared), then 16 rows of 4 words (owner row number, calls, cycles summed, largest span), all 32-bit and wrapping; the reader takes differences. The
+  pointer slot `_dk_stats_ptr` holds the window's word address (0: no window, nothing is measured). The numbers are defined twice, in `dk_trace.inc` and in
+  `trace.h` (the ColdFire reader); the third reader (P8b, dsp-link) takes them from `sdk.toml` if the copies drift.
 
 ## 10. Style and enforcement
 
@@ -592,9 +622,8 @@ Work packages, in this order:
 - **D. Gen and module:check.** `patchkit gen` writes `build/gen/module_ids.h` (`DK_MACHINE_ID_<ID>`, `DK_FX_ID_<ID>`); `gen --check`
   guards it. `module:check` writes `[uses]` and the gallery param names (`build/gen/gallery.json`). Conformance reads committed rows
   from the emulated device. B, C and D run in parallel, each in its own lane.
-- **E. Migration.** The machines and the FX, the fixtures (scripted for the fixtures), and the core proofs `dsp-ddr-proof` and
-  `dsp-lp0-proof`, by three coders.
-- **F. Cleanup.** Delete the `sample-proof` fixture with the temporary `dk_sample_bank_*` imports, `dsp-ddr-proof` and `dsp-lp0-proof`, the `[contract]`
+- **E. Migration.** The machines and the FX, and the fixtures (scripted for the fixtures), by three coders.
+- **F. Cleanup.** Delete the `[contract]`
   table (one version: the runtime's; `since` is a runtime version string) and the major-2 `.dkm` loading path. The declaration macros, their
   headers and `desc.rs` stay for the two patched-in twins (`test/patched-pluck`, `test/twin-dn2`): the headers moved out of the public SDK to
   `sdk/patched-in/include`, which patchkit adds to the include path of patched-in (not `dynamic`) modules only; a follow-up deletes the
@@ -615,6 +644,9 @@ Work packages, in this order:
 
 - DSP rules, cycle cost and `DK_SPAN` (section 9). Depends on profiling P3 sharcdb tables for module DSP sections, P4 per-module cost,
   and runtime-and-services R4 spike (static part).
+- **S5a (done):** the derived cost in the header (`DSP_COST_VOICE`, `DSP_COST_FX`), the shared `check_selection` in the planner, the menu and `patchkit fit`,
+  the headroom and voices in the device profile, the `max_cycles_*` words and the `[conformance]` overrides deleted, and the `DK_SPAN` definition.
+- **S5b (in progress):** the DSP rules section and its check (dksharc slice 2, the stock save-set finding), see section 9, "DSP rules".
 
 ## 13. Open items
 

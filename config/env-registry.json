@@ -17,6 +17,10 @@
    "owner": "ts:packages/test-support",
    "purpose": "Directory of shared content-named card images for device tests (default dist/session-cache/cards)"
   },
+  "DIGI_CARD_TRACE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "1 logs one record per card command (CMD8, CMD12, CMD18, CMD23, CMD25) into the write-watch JSONL (tools/devtools/card_phases.py reads it)"
+  },
   "DIGI_CARD_IDENTITY": {
    "owner": "rust:packages/emulator",
    "purpose": "Selects the emulated card identity (a test sets small for a 1 MiB blank card)"
@@ -49,6 +53,10 @@
    "owner": "python:tools/patchkit",
    "purpose": "0 disables the cached ColdFire boot-state snapshots in the patchkit boot harness (flag)"
   },
+  "DIGI_CLOCK_STUCK_MS": {
+   "owner": "ts:packages/test-support",
+   "purpose": "Wall milliseconds an emulated clock may stand still in a wait before the wait fails (default 60000)"
+  },
   "DIGI_COLD_RELAX_FS": {
    "owner": "rust:packages/emulator",
    "purpose": "Set (any value) relaxes the DT2 filesystem check that the readiness wait expects on a used card"
@@ -60,6 +68,10 @@
   "DIGI_CONFORM_MODULES": {
    "owner": "python:tests/modules",
    "purpose": "Comma-separated module ids (author/name) that the conformance tests select"
+  },
+  "DIGI_CONFORM_REPORTS": {
+   "owner": "ts:packages/sharc-rig-kit",
+   "purpose": "Directory of the conformance reports of the SHARC-only rig (default dist/conformance-rig of the worktree)"
   },
   "DIGI_COUPLED_DSP_EXPORT": {
    "owner": "rust:packages/emulator",
@@ -153,6 +165,10 @@
    "owner": "python:tests/patchkit",
    "purpose": "Path to the DN2 digi-emud daemon binary; overrides DIGI_EMUD for DN2"
   },
+  "DIGI_EMUD_STORE": {
+   "owner": "python:tools/devtools",
+   "purpose": "Directory of the daemon store instead of <git common dir>/emud-cache (tests only)"
+  },
   "DIGI_EMUD_DT2": {
    "owner": "python:tests/patchkit",
    "purpose": "Path to the DT2 digi-emud daemon binary; overrides DIGI_EMUD for DT2"
@@ -180,10 +196,6 @@
   "DIGI_EMU_FAST": {
    "owner": "python:tests/emulator",
    "purpose": "0 turns off the SHARC fast regions (no region list is added)"
-  },
-  "DIGI_EMU_PANEL": {
-   "owner": "python:tools/emulator",
-   "purpose": "1 forces a rebuild of the desktop panel (otherwise rebuilt only when its sources change)"
   },
   "DIGI_EMU_PCM_F32LE": {
    "owner": "rust:packages/emulator",
@@ -405,9 +417,17 @@
    "owner": "python:tests/emulator",
    "purpose": "Set to 1 to make a stale or missing PGO profile a fatal error in native_pgo.py."
   },
+  "DIGI_RIG_ROOT": {
+   "owner": "ts:packages/sharc-rig-kit",
+   "purpose": "Root of the checkout whose module sources the rig kit reads (read-only); default: this checkout."
+  },
   "DIGI_RUNTIME_MODULES": {
    "owner": "ts:tests/regression",
    "purpose": "Directory of the built runtime modules installed by device tests (default dist/modules)."
+  },
+  "DIGI_SHARC_RIG": {
+   "owner": "ts:packages/sharc-rig-kit",
+   "purpose": "Path to the sharc-rig binary (default dist/bin/sharc-rig)"
   },
   "DIGI_SNAPSHOT_DIR": {
    "owner": "rust:packages/emulator",
@@ -663,7 +683,15 @@
   },
   "SHARC_GEN_DIR_2": {
    "owner": "rust:packages/emulator",
-   "purpose": "Directory of the generated SHARC core for the second core (sharc-gen-2)."
+   "purpose": "internal: slot-2 core of a two-core build, set by native_emu from SHARC_GEN_DIR_DT2; not a user setting."
+  },
+  "SHARC_GEN_DIR_DN2": {
+   "owner": "python:tools/emulator",
+   "purpose": "Directory of the generated SHARC core of the Digitone II; wins over SHARC_GEN_DIR for DN2."
+  },
+  "SHARC_GEN_DIR_DT2": {
+   "owner": "python:tools/emulator",
+   "purpose": "Directory of the generated SHARC core of the Digitakt II; wins over SHARC_GEN_DIR for DT2."
   },
   "SHARC_IRQ_PROBE": {
    "owner": "rust:packages/emulator",

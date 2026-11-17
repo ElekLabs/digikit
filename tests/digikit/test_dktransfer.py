@@ -2,25 +2,38 @@
 
 import struct
 import tomllib
-from pathlib import Path
 
 import pytest
 
+from tools.device import dkproto
 from tools.device import dktransfer as T
 from tools.device import dkupload as D
 
 
-def header(name, machines=0, fx=0, size=500, dsp=0):
-    """A .dkm header with the keys table behind it (when it lists machines or effects)."""
+def header(name, machines=0, fx=0, size=500, dsp=0, table_version=1, role=0):
+    """A .dkm header with the keys table behind it (when it lists machines or effects, or the role or table version is not the default)."""
     keys = b""
-    if machines or fx:
-        keys = struct.pack(">HHHHHH", machines, 0, 0, machines, fx, 0) + bytes(
-            4 * (machines + fx)
+    if machines or fx or role or table_version != 1:
+        # the header table: the head and one KEYS entry with a group for each kind that has keys (packages/dkneeds/src/keys.rs)
+        groups = b""
+        n_groups = 0
+        for kind, n in (
+            (dkproto.RECORD_KIND["MACHINE"], machines),
+            (dkproto.RECORD_KIND["EFFECT"], fx),
+        ):
+            if n:
+                groups += struct.pack(">II", kind, n) + bytes(4 * n)
+                n_groups += 1
+        keys = (
+            struct.pack(">IHH", dkproto.TABLE_MAGIC, table_version, 1)
+            + struct.pack(">HHI", T.KEYS_TAG, n_groups, len(groups))
+            + groups
         )
     h = bytearray(D.HEADER_BYTES)
     h[:4] = b"DKMF"
     struct.pack_into(">II", h, 8, size, 0xA0)
     struct.pack_into(">I", h, 0x34, 0x000102)
+    struct.pack_into(">I", h, dkproto.H_ROLE, role)
     h[0x40 : 0x40 + len(name)] = name.encode()
     struct.pack_into(">II", h, 0x64, 100, 20)
     struct.pack_into(">II", h, 0x90, D.HEADER_BYTES, len(keys))
@@ -41,6 +54,15 @@ def test_header_groups():
     assert T.header_info(header("a"))["group"] == "Tools"
     assert T.header_info(b"nope" + bytes(200)) is None
     assert T.header_info(b"DKMF") is None
+
+
+def test_header_table_versions_and_service_role():
+    assert T.group_of(header("a", machines=1, table_version=2)) == "Machines"
+    assert T.group_of(header("a", role=1, table_version=2)) == "Services"
+    assert T.group_of(header("a", machines=1, role=1)) == "Services"
+    # a version outside 1..TABLE_VERSION is the older-runtime case: no table is read
+    for bad in (0, dkproto.TABLE_VERSION + 1):
+        assert T.group_of(header("a", machines=1, role=1, table_version=bad)) == "Tools"
 
 
 def test_repo_rows_carry_the_needs_inferred_from_the_packed_file(tmp_path):
@@ -573,51 +595,3 @@ def test_delete_fails_when_list_still_shows_the_file():
     up.stuck = True
     with pytest.raises(T.TransferError, match="still on the card after DELETE"):
         T.delete(up, ["modules/a.dkm"])
-
-
-def test_pack_all_writes_one_folder_per_device_and_only_what_changed(
-    tmp_path, monkeypatch
-):
-    from tools.device import dkpackall as P
-    from tools.device import dkrun as R
-
-    packed = tmp_path / "packed"
-    packed.mkdir()
-    state = {"a": b"A1", "b": b"B1"}
-    built = []
-
-    def fake_pack(mid, dev):
-        if mid == "test/b" and dev == "dn2":
-            raise R.RunError("nothing for device dn2")
-        f = packed / f"{mid.replace('/', '_')}-{dev}.dkm"
-        f.write_bytes(state[mid.split("/")[-1]])
-        return f
-
-    monkeypatch.setattr(P, "OUT", tmp_path / "out")
-    monkeypatch.setattr(P.T, "candidates", lambda: ["digikit/a", "test/b"])
-    monkeypatch.setattr(P.T, "pack_for_transfer", fake_pack)
-    monkeypatch.setattr(
-        P.patchkit,
-        "module_status",
-        lambda d: "needs build" if d.name == "a" else "unchanged",
-    )
-    monkeypatch.setattr(P.modroots, "module_dir", lambda mid: Path(mid.split("/")[-1]))
-    monkeypatch.setattr(R, "build_objects", built.append)
-    first = P.pack_all(devices=["dt2", "dn2"])
-    assert first == {
-        "dt2": {"digikit/a": "new", "test/b": "new"},
-        "dn2": {"digikit/a": "new"},
-    }
-    assert built == ["digikit/a"]  # only the module whose objects changed is built
-    assert (tmp_path / "out/dt2/test/b.dkm").read_bytes() == b"B1"
-    assert not (tmp_path / "out/dn2/test").exists()  # does not pack for dn2: not there
-    # nothing changed: every file the same, nothing rewritten
-    again = P.pack_all(devices=["dt2", "dn2"])
-    assert set(again["dt2"].values()) == {"same"}
-    # one module changes, one stops packing: its file is rewritten, the other removed (and its empty folder)
-    state["a"] = b"A2"
-    monkeypatch.setattr(P.T, "candidates", lambda: ["digikit/a"])
-    third = P.pack_all(devices=["dt2", "dn2"])
-    assert third == {"dt2": {"digikit/a": "changed"}, "dn2": {"digikit/a": "changed"}}
-    assert (tmp_path / "out/dt2/digikit/a.dkm").read_bytes() == b"A2"
-    assert not (tmp_path / "out/dt2/test").exists()

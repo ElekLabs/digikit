@@ -1,13 +1,14 @@
 import { encoder, type Session } from '@digi/test-support';
-import type { PatchedSession } from '../support.ts';
-import { advance, bounded, captureNote, word } from './fx-live.ts';
-import { tap, type FxProfile } from './fx-session.ts';
+import type { TestRuntime } from '../support.ts';
+import { REDRAW, SETTLE, bounded, captureNote, word, type Rt } from './fx-live.ts';
+import type { FxProfile } from './fx-session.ts';
+import { wordBase } from './memory.ts';
 
 export async function halfword(session: Session, address: number): Promise<number> {
-  const value = await word(session, address & ~3);
+  const value = await word(session, wordBase(address));
   const offset = address % 4;
   if (offset <= 2) return (value >>> (8 * (2 - offset))) & 0xffff;
-  return ((value & 0xff) << 8) | ((await word(session, (address & ~3) + 4)) >>> 24);
+  return ((value & 0xff) << 8) | ((await word(session, wordBase(address) + 4)) >>> 24);
 }
 
 export async function soundImage(session: Session, profile: FxProfile, track: number): Promise<number[]> {
@@ -24,48 +25,41 @@ export async function amountShown(session: Session, profile: FxProfile, track: n
 }
 
 /** Legacy fast-event bursts, then single slow detents; preserve acceleration and settling. */
-export async function setAmount(
-  session: Session,
-  profile: FxProfile,
-  enc: string,
-  track: number,
-  want: number,
-  cell = 0,
-) {
+export async function setAmount(rt: Rt, profile: FxProfile, enc: string, track: number, want: number, cell = 0) {
+  const { session } = rt;
   for (let attempt = 0; attempt < 200; attempt++) {
     const got = await amountShown(session, profile, track, cell);
     if (got === want) {
-      await advance(session, 40);
+      await rt.ui.wait({ ms: 40, why: SETTLE });
       return;
     }
     const error = want - got;
     const fast = Math.abs(error) > 12;
     for (let event = 0; event < (fast ? 2 : 1); event++) {
       await bounded(() => session.client.inputTurn(encoder(enc), (error > 0 ? 1 : -1) * (fast ? 8 : 1)));
-      await advance(session, fast ? 2 : 40);
+      await rt.ui.wait({ ms: fast ? 2 : 40, why: 'spacing of the encoder events' });
     }
-    await advance(session, 100);
-    await advance(session, 20);
+    await rt.ui.wait({ ms: 120, why: SETTLE });
   }
   throw new Error(`turning ${enc}: shows ${await amountShown(session, profile, track, cell)}, wanted ${want}`);
 }
 
 /** Already-selected input: legacy note boundary offset and 1500-frame hold, without reopening the machine list. */
-export async function trackNote(runtime: PatchedSession, file: string, triggerFrame: number): Promise<void> {
+export async function trackNote(runtime: TestRuntime, file: string, triggerFrame: number): Promise<void> {
   await captureNote(runtime.session, { file, trigger: triggerFrame, tag: 'track send note' });
 }
 
-export async function selectTrack(session: Session, n: number) {
-  await tap(session, `TRIG ${n}`, 400, 'TRK');
+export async function selectTrack(rt: Rt, n: number) {
+  await rt.ui.tap(`TRIG ${n}`, { until: { ms: 400, why: REDRAW }, held: 'TRK' });
 }
 
-export async function kitMenu(session: Session, entry: number) {
-  await tap(session, 'PRESET', 500);
-  await tap(session, 'RIGHT', 200);
-  for (let i = 0; i < 2; i++) await tap(session, 'UP', 100);
-  for (let i = 0; i < entry; i++) await tap(session, 'DOWN', 100);
+export async function kitMenu(rt: Rt, entry: number) {
+  await rt.ui.tap('PRESET', { until: { ms: 500, why: REDRAW } });
+  await rt.ui.tap('RIGHT', { until: { ms: 200, why: REDRAW } });
+  for (let i = 0; i < 2; i++) await rt.ui.tap('UP', { until: { ms: 100, why: REDRAW } });
+  for (let i = 0; i < entry; i++) await rt.ui.tap('DOWN', { until: { ms: 100, why: REDRAW } });
 }
 
-export async function kitSlotOne(session: Session) {
-  for (let i = 0; i < 4; i++) await tap(session, 'UP', 80);
+export async function kitSlotOne(rt: Rt) {
+  for (let i = 0; i < 4; i++) await rt.ui.tap('UP', { until: { ms: 80, why: REDRAW } });
 }

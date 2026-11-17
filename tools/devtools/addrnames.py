@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """addrnames: names for code addresses in dev tools (docs/ADDRMAP.md). A thin client of `patchkit addr`; there is no Python reader of the map.
 
-    from tools.devtools.addrnames import AddrNames, read_load_table
-    names = AddrNames.for_image(Path("out/patch/x.syx"), modules=[Path("out/patch/demo-dt2.dkm")], loads=read_load_table(peek32, state))
+    from tools.devtools.addrnames import AddrNames
+    names = AddrNames.for_image(Path("out/patch/x.syx"), modules=[Path("out/patch/demo-dt2.dkm")], peek=peek_guest)
     names.text(0x401be1be)                       # "FUN_401be1be", "dkrt::card::gate+0x14" or "0x401be1be"
     names.text(ret_addr, ret=True)               # a return address: looks at the address minus 2
 
@@ -27,11 +27,6 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DEV_DIR = ROOT / "out" / "addrmap"
-
-# modules/core/runtime/src/rs/src/lib.rs: `State` is ten words, then MAX_MODULES `Module` records of 13 words
-# (used, name[32], version, base, size, fini); the symbol is DKRT_STATE of the runtime's plan symbols.
-STATE_HEADER_BYTES = 40
-MODULE_RECORD_BYTES = 52
 
 
 class AddrNamesError(RuntimeError):
@@ -61,25 +56,25 @@ def plan_symbol(plan: dict[str, Any], name: str) -> int:
     return found.pop()
 
 
-def read_load_table(
-    peek32: Callable[[int], int | None], state: int, max_modules: int = 8
-) -> dict[str, Any]:
-    """The load table of a running emulator: `{"modules": [{"id", "base", "size"}]}` from the runtime's module table at `state` (DKRT_STATE).
-    `peek32` reads one guest longword (`digi_client` `peek32`)."""
-    out = []
-    first = state + STATE_HEADER_BYTES
-    for i in range(max_modules):
-        at = first + i * MODULE_RECORD_BYTES
+def read_snapshot(
+    ship: Path, plan: dict[str, Any], peek: Callable[[int, int], bytes]
+) -> dict[str, bytes]:
+    """The raw memory the load table is decoded from: `patchkit addr --format reads` names the symbols and byte counts, `peek(addr, length)`
+    reads guest memory. The records are decoded by patchkit, not here."""
+    from tools.patchkit import patchkit
 
-        def word(k: int, at: int = at) -> int:
-            return peek32(at + 4 * k) or 0
-
-        if word(0) == 0:
-            continue
-        raw = b"".join(word(1 + k).to_bytes(4, "big") for k in range(8))
-        name = raw.split(b"\0")[0].decode("ascii", "replace")
-        out.append({"id": name, "base": word(10), "size": word(11)})
-    return {"modules": out}
+    r = subprocess.run(
+        [str(patchkit.binary()), "addr", "--map", str(ship), "--format", "reads"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    if r.returncode:
+        raise AddrNamesError(r.stderr.strip() or "patchkit addr --format reads failed")
+    return {
+        x["symbol"]: peek(plan_symbol(plan, x["symbol"]), x["len"])
+        for x in json.loads(r.stdout)
+    }
 
 
 def _sha256(path: Path) -> str:
@@ -87,9 +82,15 @@ def _sha256(path: Path) -> str:
 
 
 class AddrNames:
-    def __init__(self, maps: Sequence[Path], loads: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        maps: Sequence[Path],
+        loads: dict[str, Any] | None = None,
+        snapshot: dict[str, bytes] | None = None,
+    ):
         self.maps = [Path(m) for m in maps]
         self.loads = loads or {"modules": []}
+        self.snapshot = snapshot or {}
         self._cache: dict[tuple[str, int, bool], dict[str, Any]] = {}
         self.unloaded: list[str] = []
 
@@ -100,8 +101,10 @@ class AddrNames:
         modules: Iterable[Path] = (),
         loads: dict[str, Any] | None = None,
         dev: bool = True,
+        peek: Callable[[int, int], bytes] | None = None,
     ) -> AddrNames:
-        """The names of a patched image, the modules loaded on it (`.dkm` files with their `.addrmap.json`) and, with `dev`, the firmware."""
+        """The names of a patched image, the modules loaded on it (`.dkm` files with their `.addrmap.json`) and, with `dev`, the firmware.
+        With `peek(addr, length)` (guest memory of the running emulator or device) the load table is read and decoded for the lookup."""
         syx = Path(syx)
         ship = syx.with_suffix(".addrmap.json")
         if not ship.is_file():
@@ -124,7 +127,11 @@ class AddrNames:
                 maps.append(dev_map(f"{key['device']}-{key['firmware']}"))
             except AddrNamesError as e:
                 print(f"addrnames: no firmware names ({e})", file=sys.stderr)
-        return cls(maps, loads)
+        snapshot = None
+        if peek:
+            plan = json.loads(syx.with_suffix(".plan.json").read_text())
+            snapshot = read_snapshot(ship, plan, peek)
+        return cls(maps, loads, snapshot)
 
     @classmethod
     def for_stock(cls, image: str) -> AddrNames:
@@ -139,6 +146,8 @@ class AddrNames:
             argv += ["--map", str(m)]
         for mod in self.loads["modules"]:
             argv += ["--load", f"{mod['id']}={mod['base']:x}"]
+        for sym, raw in self.snapshot.items():
+            argv += ["--snapshot", f"{sym}={raw.hex()}"]
         if ret:
             argv.append("--ret")
         argv.append("--stdin")

@@ -2,16 +2,23 @@
 // device answers. The state can be set from the address (`?dev=empty&folder=files&speed=1.5`, see PARAMS) and while the page runs
 // (`window.__sim.set({ dev: 'noreply' })`), so a screenshot script (tools/devtools/ui_shots.mjs) reaches each state without clicking.
 import type { SampleEntry } from '@digi/dk-session/samples';
-import { DkNeeds } from '@web/modules/dkneeds';
-import { setFitReader, type Caps, type Needs } from '@web/modules/fit';
+import { DkNeeds } from '@digi/workbench-core/modules/dkneeds.ts';
+import { setFitReader, type Caps, type Needs } from '@digi/workbench-core/modules/fit.ts';
 import wasmUrl from '../../../web/public/patchkit.wasm?url';
-import { fitWarnings } from '@web/modules/dktransfer';
-import { noteActivity } from '@web/transfer/activity';
-import type { LocalEntry } from '../src/samples-core';
-import type { TransferRow, TransferView } from '@web/transfer/transfer-core';
+import { fitWarnings } from '@digi/workbench-core/modules/dktransfer.ts';
+import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
+import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
+import type { LocalEntry } from '@digi/workbench-core/transfer/samples-core.ts';
+import type { TransferRow, TransferView } from '@digi/workbench-core/transfer/transfer-core.ts';
 
 // the rows' fit verdicts come from the Rust rule in patchkit.wasm, as in the app
 setFitReader(await DkNeeds.create(await (await fetch(wasmUrl)).arrayBuffer()));
+
+/** The app the preview mocks talk to (main.tsx sets it right after building it): their connection indicator, job and page state are the app's. */
+export const simApp: { app?: TransferApp } = {};
+export const bindSimApp = (app: TransferApp): void => {
+  simApp.app = app;
+};
 
 /** dev: ok (answers), empty (nothing stored), noreply (never answers: the wait notice), error (every read fails), slow (2.5 s per read).
  *  folder: files (the samples folder of ~20 WAVs), empty, none (no folder chosen yet). speed: MiB/s of an upload. */
@@ -29,8 +36,8 @@ export interface SimState {
   putfail: boolean;
   /** Names (comma separated) of files that the fake device holds already with the same bytes: an upload skips them (skip=kick,snare). */
   skip: string;
-  /** The link of the samples: none (no pill), bulk, sysex, wrongmode (SysEx, device in USB AUDIO/MIDI), fallback (bulk until the second file, then SysEx). */
-  link: 'none' | 'bulk' | 'sysex' | 'wrongmode' | 'fallback';
+  /** The link of the samples: none (no pill), bulk, sysex, wrongmode (SysEx, device in USB AUDIO/MIDI), fallback (bulk until the second file, then SysEx), reason (SysEx with the reason of the bulk choice). */
+  link: 'none' | 'bulk' | 'sysex' | 'wrongmode' | 'fallback' | 'reason';
 }
 
 export const PARAMS = [
@@ -67,8 +74,7 @@ export async function deviceRead(): Promise<void> {
   switch (sim.dev) {
     case 'noreply': {
       // a real session over the mocked emulator capture, which never answers: the request waits, Cancel works, a timeout follows
-      const { session } = await import('@web/transfer/target');
-      await (await session()).info();
+      await (await simApp.app!.target.session()).info();
       return;
     }
     case 'error':
@@ -262,6 +268,8 @@ function capacity(): Caps {
     PARAM_ROWS: c(16, used.PARAM_ROWS, 0),
     PAGE_ROWS: c(0, 0, 0),
     FX_SLOTS: c(0, 0, 0),
+    DSP_COST: c(92796, 0, 0),
+    DSP_VOICES: c(16, 0, 0),
   };
 }
 
@@ -290,6 +298,14 @@ export function view(): TransferView {
     } as TransferRow;
     row.warnings = fitWarnings(row as { loaded: boolean; needs?: Needs }, cap);
     row.fits = row.warnings.length === 0;
+    // the preview's one module with two services, and one module that the service check refuses
+    if (m.id === 'pluck')
+      row.services = [
+        { stem: 'fx', label: 'fx service', version: 0x010200, state: 'not on device', size: 38.4 * KiB },
+        { stem: 'machines', label: 'machines service', version: 0x010200, state: 'on device', size: 61 * KiB },
+      ];
+    if (m.id === 'fm4')
+      row.service_refusal = { module: 'fm4', service: 'machines', kind: 'version', need: '1.3', have: '1.2' };
     return row;
   });
   const known = new Set(LIBRARY.map((m) => pathOf(m.id)));
@@ -314,6 +330,7 @@ export function view(): TransferView {
     capacity: cap,
     modules,
     card_only,
+    refusals: modules.flatMap((r) => (r.service_refusal ? [r.service_refusal] : [])),
   };
 }
 

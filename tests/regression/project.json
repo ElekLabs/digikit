@@ -20,13 +20,25 @@
     ]
   },
   "targets": {
-    "typecheck": { "cache": false },
+    "typecheck": {
+      "cache": false,
+      "inputs": [
+        "default",
+        {
+          "input": "production",
+          "projects": ["control-client", "@digi/test-support", "@digi/dk-session", "@digi/dkbs"]
+        },
+        "jsToolchain"
+      ]
+    },
     "test-device": {
       "executor": "nx:run-commands",
       "cache": false,
       "dependsOn": [
         "patchkit:cli",
         "patchkit:device-bytes",
+        "patchkit:device-images",
+        "core/runtime:test-assembly",
         { "target": "build-objects", "projects": ["tag:acceptance-image"] },
         "digi-control:daemons",
         "digikit/probe:pack",
@@ -66,10 +78,12 @@
     "runtimeAcceptance": [
       {
         "files": ["emulator/reply-inflight.test.ts"],
+        "tags": ["C:transport"],
         "modules": []
       },
       {
         "files": ["emulator/sharc-semantics.test.ts"],
+        "tags": ["C:dsp", "M:digikit/probe"],
         "modules": ["digikit/probe", "digikit/remote", "test/dsp-facts", "test/sharc-probe", "test/step-beacon"]
       }
     ]

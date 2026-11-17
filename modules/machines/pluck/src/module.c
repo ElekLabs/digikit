@@ -1,6 +1,5 @@
 /* The machine of digikit/pluck, declared by builder calls in init: one machine `pluck` with four parameters. The DSP reads the words in
-   this order: DECAY, PICK, BRIGHT, COLOR (src/dsp/pluck.s); its symbols are _pk_render, _pk_note_on and _pk_desc (`dsp = "pk"` in module.toml).
-   The twin test/patched-pluck (tests/fixtures/modules) has its own copy of the DSP source; keep the two equal. */
+   this order: DECAY, PICK, BRIGHT, COLOR (src/dsp/pluck.s); its symbols are _pk_render, _pk_note_on and _pk_desc (`dsp = "pk"` in module.toml). */
 #include <dk/core/module.h>
 #include "module_ids.h"
 

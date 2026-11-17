@@ -130,7 +130,8 @@ def default_jobs(n: int) -> int:
 
 
 # firmware: (device, version) -> base .syx and the ready directory (override: DIGI_PK_READY_<DEV>_<VER>); the firmwares that
-# have a port in devices/*.toml
+# have a port in devices/*.toml. DT2 1.17 and DN2 1.12 use the dirs of tools/emulator/ready_inputs.json (written by
+# `mise run emu:ready`); DN2 1.11 is a patch port with its own dir.
 FIRMWARE: dict[tuple[str, str], dict[str, str]] = {
     (short, version): {"syx": syx, "ready": pk_device.ready_dir(short, version)}
     for (short, version), syx in pk_device.port_firmware().items()

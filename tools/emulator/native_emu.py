@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Build the shared panel and the desktop emulator once, then run the binary.
+"""Build the desktop emulator once, then run the binary.
 
-With local DN2 ready inputs and a generated core, the bare launcher restores
-the audible DN2 session. The private inputs stay out of the repository: every
+With local ready inputs and a generated core, the app gets coupled audio; it
+opens with no firmware loaded unless a FILE is given (the daemon loads the
+default firmware). The private inputs stay out of the repository: every
 path is overridable, and unavailable inputs leave the ordinary CF diagnostic
 emulator available.
 
-The panel is rebuilt only when its sources changed (DIGI_EMU_PANEL=1 forces
-it). The app is built once with cargo build and the binary is run directly;
+The UI dist and the wasm files come from Nx (`mise run workbench:inputs`).
+The app is built once with cargo build and the binary is run directly;
 --build-only stops after the build and prints the binary path. A stale PGO
 profile is not used: the build falls back to plain with a warning. `mise run
 perf:pgo` retrains it (or launch once with DIGI_EMU_PGO_TRAIN=1).
@@ -25,17 +26,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools import python_env  # noqa: E402
 from tools.emulator import digi_env, emulator_config  # noqa: E402
 from tools.firmware import device as device_data  # noqa: E402
-
-# The desktop app embeds apps/desktop/ui/dist when cargo builds it, so a rewritten dist rebuilds the app (about 18 s). The digest of the
-# sources a dist was built from is kept inside that dist, and every worktree has its own dist: a stamp in the shared out/ made worktrees
-# with different UI sources rebuild each other's dist at every launch.
-PANEL_STAMP_NAME = ".panel-digest"
-PANEL_INPUTS = (
-    "apps/desktop/ui",
-    "apps/desktop/package.json",
-    "apps/web/src",
-    "pnpm-lock.yaml",
-)
 
 
 def fast_regions_for(syx: pathlib.Path) -> str:
@@ -78,14 +68,17 @@ def set_fast_regions(
     return first
 
 
-def generated_core(args: list[str] | None = None) -> pathlib.Path:
-    """The generated core for a launch: SHARC_GEN_DIR, else the one registered
-    for the --dsp-image in ARGS (tools/sharc_dev/aot_gen.py), else the DN2 default."""
+def generated_core(
+    args: list[str] | None = None, device: str | None = None
+) -> pathlib.Path:
+    """The generated core for a launch: SHARC_GEN_DIR_<DEVICE> (when DEVICE is given),
+    else SHARC_GEN_DIR, else the one registered for the --dsp-image in ARGS
+    (tools/sharc_dev/aot_gen.py), else the DN2 default."""
     image = None
     if args and "--dsp-image" in args:
         position = args.index("--dsp-image") + 1
         image = args[position] if position < len(args) else None
-    return digi_env.generated_dir(image=image)
+    return digi_env.generated_dir(image=image, device=device)
 
 
 def pgo_trained_core(device: str) -> pathlib.Path | None:
@@ -118,8 +111,7 @@ def second_core(
     device: str, *, enabled_by_default: bool = False
 ) -> tuple[list[str], pathlib.Path | None]:
     """The other device's ready inputs for a binary with both generated cores (`--also-coupled`) and its generated core
-    (a preset SHARC_GEN_DIR_2 names the other device's core, as SHARC_GEN_DIR names the launching device's; the caller
-    then stores both in slot order). Desktop launches enable it by default; daemons opt in with
+    (SHARC_GEN_DIR_<OTHER> names the other device's core; the caller then stores both in slot order). Desktop launches enable it by default; daemons opt in with
     DIGI_EMU_SECOND_CORE=1. DIGI_EMU_SECOND_CORE=0 disables it. The two-core build has its own PGO profile (device
     `both`). Nothing (a one-core launch) when it is off or the other device lacks a ready set or a core."""
     if (
@@ -132,8 +124,8 @@ def second_core(
     missing = [label for label, path in paths.items() if not path.is_file()]
     # Not `digi_env.generated_dir`: SHARC_GEN_DIR names the first core and would win over the image's registered one.
     gen = (
-        pathlib.Path(os.environ["SHARC_GEN_DIR_2"])
-        if os.environ.get("SHARC_GEN_DIR_2")
+        pathlib.Path(os.environ[f"SHARC_GEN_DIR_{other.upper()}"])
+        if os.environ.get(f"SHARC_GEN_DIR_{other.upper()}")
         else digi_env.gen_for_image(paths["DSP image"])
         or (digi_env.DEFAULT_GENERATED if other == "dn2" else None)
     )
@@ -155,9 +147,16 @@ def second_core(
 
 
 def default_audio_args(
-    args: list[str] | None = None, *, second_core_by_default: bool = False
+    args: list[str] | None = None,
+    *,
+    second_core_by_default: bool = False,
+    load_default: bool = True,
 ) -> list[str]:
-    """Add local ready audio inputs to a normal launcher command line."""
+    """Add local ready audio inputs to a normal launcher command line.
+
+    load_default=False leaves out the default firmware as the first positional:
+    the app opens empty and uses --audio-profile-syx only for its audio profile.
+    """
     args = [] if args is None else list(args)
     positional = next(
         (
@@ -184,14 +183,16 @@ def default_audio_args(
     if device != "dn2" and (card is not None or not paths["CF snapshot"].is_file()):
         paths = ready_for(device, syx, card, paths)
     missing = [label for label, path in paths.items() if not path.is_file()]
-    generated = digi_env.generated_dir(image=paths["DSP image"])
-    reason = "SHARC_GEN_DIR" if os.environ.get("SHARC_GEN_DIR") else "registered core"
-    if device == "dt2" and not os.environ.get("SHARC_GEN_DIR"):
+    generated = digi_env.generated_dir(image=paths["DSP image"], device=device)
+    own_var = f"SHARC_GEN_DIR_{device.upper()}"
+    explicit = own_var if os.environ.get(own_var) else "SHARC_GEN_DIR"
+    reason = explicit if os.environ.get(explicit) else "registered core"
+    if device == "dt2" and not os.environ.get(explicit):
         trained = pgo_trained_core(device)
         if trained is not None:
             generated, reason = trained, "the core the DT2 PGO profile was trained on"
     if not generated.is_dir():
-        missing.append("generated DN2 core (set SHARC_GEN_DIR)")
+        missing.append(f"generated {device.upper()} core (set {own_var})")
     if missing:
         print(
             "Native audio is not set up (missing "
@@ -215,7 +216,7 @@ def default_audio_args(
         os.environ["SHARC_GEN_DIR"] = str(dn2_core)
         os.environ["SHARC_GEN_DIR_2"] = str(dt2_core)
         args.extend(also)
-    if positional is None:
+    if positional is None and load_default:
         args.insert(0, str(paths["firmware"]))
     args.extend(
         [
@@ -490,14 +491,30 @@ def build_command(command: list[str]) -> list[str]:
     return head
 
 
-def verify_pgo(command: list[str], env: dict[str, str], device: str = "dn2") -> None:
+def verify_pgo(
+    command: list[str],
+    env: dict[str, str],
+    device: str = "dn2",
+    *,
+    binary: pathlib.Path | None = None,
+    before: int | None = None,
+) -> None:
     """Build, then warn loudly if the profile's crate hashes miss the binary.
 
-    A failed build stops the launch; a failed check only warns.
+    A failed build stops the launch; a failed check only warns. The check runs
+    only when the build changed `binary`; `before` is its mtime_ns before the
+    build, None when it did not exist.
     """
     built = subprocess.run(build_command(command), cwd=ROOT, env=env)
     if built is not None and built.returncode:
         raise SystemExit(built.returncode)
+    if (
+        binary is not None
+        and before is not None
+        and binary.exists()
+        and binary.stat().st_mtime_ns == before
+    ):
+        return
     try:
         done = subprocess.run(
             [
@@ -570,50 +587,6 @@ def app_binary(command: list[str], plan: object | None) -> pathlib.Path:
     if plan is not None:
         return target / digi_env.TRIPLE / "release" / name
     return target / "release" / name
-
-
-def panel_digest() -> str:
-    """Digest of the panel's sources (the browser WASM core is left out)."""
-    outer = hashlib.sha256()
-    for rel in PANEL_INPUTS:
-        top = ROOT / rel
-        if top.is_file():
-            files = [top]
-        else:
-            files = sorted(p for p in top.rglob("*") if p.is_file())
-        for path in files:
-            if path.name.startswith("emulator-core") and path.suffix == ".wasm":
-                continue
-            if "dist" in path.relative_to(top).parts[:1]:
-                continue  # the build output of the panel itself (apps/desktop/ui/dist)
-            outer.update(f"{path.relative_to(ROOT)}\0".encode())
-            outer.update(hashlib.sha256(path.read_bytes()).digest())
-    return outer.hexdigest()
-
-
-def build_panel(environ: dict[str, str] | os._Environ[str]) -> None:
-    """Build the desktop console (apps/desktop/ui) unless its sources match the last build of this worktree's dist.
-
-    DIGI_EMU_PANEL=1 forces the build.
-    """
-    digest = panel_digest()
-    dist = ROOT / "apps" / "desktop" / "ui" / "dist"
-    if dist.is_symlink():
-        # a link to another worktree's dist (older worktree-setup.sh): that dist belongs to the other tree
-        dist.unlink()
-    stamp = dist / PANEL_STAMP_NAME
-    try:
-        same = stamp.read_text().strip() == digest
-    except OSError:
-        same = False
-    if same and environ.get("DIGI_EMU_PANEL") != "1":
-        return
-    subprocess.run(
-        ["pnpm", "--filter", "@digi/desktop", "run", "build:ui"],
-        cwd=ROOT,
-        check=True,
-    )
-    stamp.write_text(digest + "\n")
 
 
 def plus_drive_files(root: pathlib.Path) -> list[pathlib.Path]:
@@ -839,7 +812,9 @@ def main(args: list[str] | None = None) -> None:
         and "--coupled" not in args
         and "--auto-coupled" not in args
     ):
-        args = default_audio_args(args, second_core_by_default=not daemon)
+        args = default_audio_args(
+            args, second_core_by_default=not daemon, load_default=daemon
+        )
     fast = None
     if "--coupled" in args or "--auto-coupled" in args:
         generated = generated_core(args)
@@ -850,21 +825,18 @@ def main(args: list[str] | None = None) -> None:
         digi_env.check_generated(generated)
         os.environ.setdefault("SHARC_GEN_DIR", str(generated))
         fast = set_fast_regions(args, os.environ)
-    # The native shell serves the built panel; it does not load browser WASM.
-    # Avoid rebuilding the browser core (and its local DSP code) for a desktop run.
-    # The daemon has no window: no panel, no PGO.
-    if not daemon:
-        build_panel(os.environ)
+    # The daemon has no window: no PGO.
     plan = None if daemon else pgo_plan(args)
     env = digi_env.rust_env({**os.environ, **(plan.env if plan is not None else {})})  # type: ignore[attr-defined]
     command = daemon_command(args) if daemon else cargo_command(args, plan)
+    binary = app_binary(command, plan)
+    before = binary.stat().st_mtime_ns if binary.exists() else None
     if plan is not None:
-        verify_pgo(command, env, device_for_args(args))
+        verify_pgo(command, env, device_for_args(args), binary=binary, before=before)
     else:
         done = subprocess.run(build_command(command), cwd=ROOT, env=env)
         if done is not None and done.returncode:
             raise SystemExit(done.returncode)
-    binary = app_binary(command, plan)
     if build_only:
         print(binary)
         return

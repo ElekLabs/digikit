@@ -177,7 +177,7 @@ SELECT writes the selection record and loads nothing; RESTART applies it at the 
   optional exports of `core/input` and `core/ui`, and the `Api` table. There is no import by firmware anchor or address.
 - SHARC link surface: names in the `dyndsp_info` export table only (`dsp.rs:600-611`); an unknown name is `E_DSP_IMPORT`.
 - **Not prevented:** a literal address cast in C or a literal address in assembly. The fixture `stock-pool` calls firmware functions at
-  fixed addresses (`stock_pool.c:38-47`); `dyn-fault` writes 0xEC090000. layercheck sees only undefined symbols, and a cast creates none.
+  fixed addresses (`stock_pool.c:38-47`); `dyn-crash` (mode 4, SOFTRST in init) writes 0xEC090000. layercheck sees only undefined symbols, and a cast creates none.
   Stray stores are found only at test time: `module:audit` (ColdFire) and the write-set checks of the conformance suites (SHARC,
   `tests/support/machine_rig.py`, `tests/support/fx_rig.py`).
 - Checks per type today: machine and fx run their conformance suites; service and raw get only the objects-against-sources check
@@ -358,7 +358,7 @@ A `raw` machine adds one line: `contract = "raw"`.
   `apps/desktop/ui/src/memory-backend.ts` and its preview fixtures.
 - Templates: `sdk/templates/*/module.toml`.
 - Manifests: the 9 content modules, every fixture in `tests/fixtures/modules/`, the 21 `core/*` modules (`type` removed).
-- Tests that pin the strings: `tests/patchkit/test_pk_new.py`, `tests/patchkit/test_pk_package.py`, `tests/devtools/test_layercheck.py`,
+- Tests that pin the strings: `tests/patchkit/test_pk_new.py`, `tests/patchkit/test_pk_package.py`,
   `tests/devtools/test_verify.py`, `tests/conformance/load.ts`.
 - Docs: `docs/MODULE-AUTHORING.md`, `docs/design/digikit-dkm.md`, `docs/design/module-sdk.md` (D2, D10).
 
@@ -606,7 +606,7 @@ adapters/<name>/src/cf/dt2/…, dn2/…           per-device code only where the
 adapters/<name>/build/<name>-{dev}.dko.json   one object per device
 ```
 
-Gen kinds today are `gas`, `gas-shared`, `sharc`, `sharc-adapter`, `gas-sample-pool`, `rust` and `c-shared`
+Gen kinds today are `gas`, `gas-shared`, `sharc`, `sharc-adapter`, `gas-sample-pool`, `rust`, `rust-profiles` and `c-shared`
 (`packages/patchkit/src/devgen.rs`). `rust` and `gas-shared` are one file for all devices; a constant that differs between devices is an
 error there (`docs/design/device-data.md`).
 

@@ -1,23 +1,20 @@
 // The desktop developer console: the file the app runs, the live panel, and the audio and CPU meters.
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
-import { setBrowseDevice } from '@web/transfer/transfer-state';
-import { invoke } from '@tauri-apps/api/core';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
-import { defaultFaceplate, panels } from '@web/data/faceplates';
-import { deviceNameOf, registry, runtimeDeviceIds, type DeviceId } from '@web/data/device-profiles';
-import { deviceOfImage } from '@web/patch/identify';
+import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
+import { defaultFaceplate, panels } from '@digi/workbench-core/data/faceplates.ts';
+import { deviceNameOf, registry, runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import {
-  nativeRuntime,
   type EmulatorRuntime,
   type FirmwareInfo,
   type NativeAudioStatus,
   type RuntimeSnapshot,
   type RuntimeUpdate,
-} from '@web/runtime/runtime';
+} from '@digi/workbench-core/runtime/runtime.ts';
 import { booting as startBoot, bootingScreen, bootingStatus, loadFailure, type Booting } from './boot-core';
-import { bumpCardRefresh } from './card-state';
+import { bumpCardRefresh, cardRefresh } from './card-state';
+import CardPanel from './CardPanel';
 import { pageFor, type Page } from './page-core';
 import {
   CHART,
@@ -46,111 +43,52 @@ import {
   reloadFailureEntry,
   unseenErrors,
 } from './log-core';
-import { desktopDefaultModules, shouldInstallAtStart } from './default-modules';
+import { createNativeRuntime } from './native-runtime';
+import { createPrefs } from './prefs';
 import { pgoWarning, type BuildInfo } from './pgo-warning';
 import { createLogFollow, followSession } from './log-follow';
+import { createDkProfLoader } from './dkprof-env';
+import { createDeviceNames, createEmulatorNames } from './log-names-backend';
 import { windowShown } from './log-follow-core';
 import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import LogPanel from './LogPanel';
+import type { EmuSource as Source, Host } from '@digi/workbench-core/host/host.ts';
 import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
 import { setInspectorOpen, setInspectorTab } from './panel-open';
 import RemotePage from './RemotePage';
-import {
-  EMULATOR_NO_RUNTIME,
-  emulatorRuntime,
-  emulatorSession,
-  lastMidiPort,
-  lastMidiSession,
-  setEmulatorRuntime,
-  target,
-} from '@web/transfer/target';
-import { noteConnection } from '@web/transfer/connection-state';
+import { useFirmwareApp, useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
+import { EMULATOR_NO_RUNTIME } from '@digi/workbench-core/transfer/target.ts';
 import { setReloadWithRuntime } from './emulator-actions';
-import { dspLine, dspOption, dspPending, hasDspChoice, readDspChoice, startupDsp, writeDspChoice } from './dsp-core';
-import { transferEnv } from '@web/transfer/env';
-import { run as flashRun } from '@web/firmware/firmware-state';
-import { running as flashRunning } from '@web/firmware/firmware-core';
-import FirmwarePage from '@web/firmware/FirmwarePage';
-import DefaultModules from '@web/firmware/DefaultModules';
-import { DefaultModuleError } from '@web/firmware/default-modules-core';
-import { tickedFor } from '@web/firmware/default-modules-state';
-import TransferPage from '@web/transfer/TransferPage';
-import { cardLine, folderFiles, startCard, type CardStatus } from '@web/runtime/cards';
-import { reloadError, reloadLine } from '@web/runtime/reload';
+import { dspLine, dspPending, hasDspChoice, readDspChoice, startupDsp, writeDspChoice } from './dsp-core';
+import { running as flashRunning } from '@digi/workbench-core/firmware/firmware-core.ts';
+import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
+import DefaultModules from '@digi/workbench-core/ui/firmware/DefaultModules.tsx';
+import { DefaultModuleError } from '@digi/workbench-core/firmware/default-modules-core.ts';
+import TransferPage from '@digi/workbench-core/ui/transfer/TransferPage.tsx';
+import FilesPage from '@digi/workbench-core/ui/files/FilesPage.tsx';
+import { cardLine, folderFiles, startCard, type CardStatus } from '@digi/workbench-core/runtime/cards.ts';
+import { reloadError, reloadLine } from '@digi/workbench-core/runtime/reload.ts';
+import type { ControllerJob } from '@digi/workbench-core/jobs/jobs-core.ts';
+import { isCancelled } from '@digi/workbench-core/modules/backend.ts';
+import { JobBusyError, type JobHandle } from '@digi/workbench-core/jobs/jobs.ts';
 
-type Source = { path: string; name: string; bytes: number; modified_ms: number };
 type Status = RuntimeSnapshot['status'];
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// "DSP": on unless the user turned it off; kept like the runtime tick (dsp-core.ts).
-const readDspPref = () => {
-  try {
-    return readDspChoice(localStorage);
-  } catch {
-    return true;
-  }
-};
-const writeDspPref = (on: boolean) => {
-  try {
-    writeDspChoice(localStorage, on);
-  } catch {
-    /* no storage: the choice lasts until the window closes */
-  }
-};
-
 // "Boot with digikit runtime": on unless the user turned it off; kept per browser profile of the app.
 const RUNTIME_KEY = 'digikit.bootRuntime';
-const readRuntimePref = () => {
-  try {
-    return localStorage.getItem(RUNTIME_KEY) !== 'off';
-  } catch {
-    return true;
-  }
-};
-const writeRuntimePref = (on: boolean) => {
-  try {
-    localStorage.setItem(RUNTIME_KEY, on ? 'on' : 'off');
-  } catch {
-    /* the choice lasts until the window closes */
-  }
-};
+
+// "Load on start": boot the last opened firmware file when the app opens (off unless ticked), and that file's path.
+const LOAD_ON_START_KEY = 'digikit.loadOnStart';
+const LAST_FIRMWARE_KEY = 'digikit.lastFirmware';
 
 // The height of the Log dock in px; kept per browser profile of the app (none saved: a share of the window).
 const DOCK_KEY = 'digikit.logHeight';
-const readDockPref = () => {
-  try {
-    return parseDock(localStorage.getItem(DOCK_KEY));
-  } catch {
-    return undefined;
-  }
-};
-const writeDockPref = (px: number | undefined) => {
-  try {
-    if (px === undefined) localStorage.removeItem(DOCK_KEY);
-    else localStorage.setItem(DOCK_KEY, String(px));
-  } catch {
-    /* the height lasts until the window closes */
-  }
-};
 
 // The sidebar is open unless the user collapsed it; kept per browser profile of the app.
 const SIDEBAR_KEY = 'digikit.sidebar';
-const readSidebarPref = () => {
-  try {
-    return localStorage.getItem(SIDEBAR_KEY) !== 'closed';
-  } catch {
-    return true;
-  }
-};
-const writeSidebarPref = (open: boolean) => {
-  try {
-    localStorage.setItem(SIDEBAR_KEY, open ? 'open' : 'closed');
-  } catch {
-    /* the choice lasts until the window closes */
-  }
-};
 
 function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }) {
   const pct = (v: number) => `${Math.max(0, Math.min(100, v))}%`;
@@ -164,14 +102,32 @@ function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }
   );
 }
 
-export default function Console() {
+export default function Console(props: { host: Host }) {
+  const app = useTransferApp();
+  const fw = useFirmwareApp();
+  const { readPref, writePref } = createPrefs(app.storage);
+  const readRuntimePref = () => readPref(RUNTIME_KEY) !== 'off';
+  const writeRuntimePref = (on: boolean) => writePref(RUNTIME_KEY, on ? 'on' : 'off');
+  const readDockPref = () => parseDock(readPref(DOCK_KEY));
+  const writeDockPref = (px: number | undefined) => writePref(DOCK_KEY, px === undefined ? null : String(px));
+  const readSidebarPref = () => readPref(SIDEBAR_KEY) !== 'closed';
+  const writeSidebarPref = (open: boolean) => writePref(SIDEBAR_KEY, open ? 'open' : 'closed');
+  // "DSP": on unless the user turned it off; kept like the runtime tick (dsp-core.ts).
+  const readDspPref = () => readDspChoice(app.storage);
+  const writeDspPref = (on: boolean) => writeDspChoice(app.storage, on);
+  const { emulatorRuntime, emulatorSession, lastMidiPort, lastMidiSession, setEmulatorRuntime, target } = app.target;
+  const { noteConnection } = app.connection;
+  const { busy, currentJob, jobs, runJob, syncControllerJob } = app.jobs;
+  const { setBrowseDevice } = app.state;
+  const { tickedFor } = fw.defaults;
+  const flashRun = fw.state.run;
   const [runtime, setRuntime] = createSignal<EmulatorRuntime>();
+  const [controllerJob, setControllerJob] = createSignal<ControllerJob | null>(null);
   const [outsideApp, setOutsideApp] = createSignal(false);
   const [status, setStatus] = createSignal<Status>();
   const [error, setError] = createSignal('');
   const [paused, setPaused] = createSignal(false);
   const [source, setSource] = createSignal<Source>();
-  const [opened, setOpened] = createSignal('');
   /** A firmware is starting: the old device information is gone until its first status. */
   const [booting, setBooting] = createSignal<Booting>();
   /** The last load failed: its file, so the faceplate is the image's device, or none when the image does not tell. */
@@ -180,7 +136,7 @@ export default function Console() {
   const [failed, setFailed] = createSignal<Booting>();
   const [watching, setWatching] = createSignal(true);
   const [reloadNote, setReloadNote] = createSignal('');
-  const [modulesBusy, setModulesBusy] = createSignal(false);
+  const [now, setNow] = createSignal(Date.now());
   const [audio, setAudio] = createSignal<NativeAudioStatus>();
   const [buildInfo, setBuildInfo] = createSignal<BuildInfo>();
   const [rate, setRate] = createSignal<number>();
@@ -193,16 +149,14 @@ export default function Console() {
   const [page, setPage] = createSignal<Page>('emulator');
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
-  const [cardBusy, setCardBusy] = createSignal(false);
   const [bootRuntime, setBootRuntime] = createSignal(readRuntimePref());
   const [bootDsp, setBootDsp] = createSignal(readDspPref());
+  const [loadOnStart, setLoadOnStart] = createSignal(readPref(LOAD_ON_START_KEY) === 'on');
   const [info, setInfo] = createSignal<FirmwareInfo>();
   let live: LivePanelApi | undefined;
-  let fileInput: HTMLInputElement | undefined;
   let folderInput: HTMLInputElement | undefined;
   let lastAudio: { produced: number; wall: number } | undefined;
   let lastModified: number | undefined;
-  let reloading = false;
   let health = healthStart();
   let dockEl: HTMLElement | undefined;
   const timers: number[] = [];
@@ -224,9 +178,6 @@ export default function Console() {
     const id = knownDevice();
     return id === undefined || !registry.ids.includes(id) || hasDspChoice(registry.get(id));
   };
-  /** The `dsp` option for a load of an image of this device: only a device that offers the choice gets it. */
-  const dspFor = (id: string | undefined) =>
-    dspOption(id !== undefined && registry.ids.includes(id) ? registry.get(id) : undefined, bootDsp());
   /** The tick differs from the running image: it applies at the next Reload or Open. */
   const dspIsPending = () => dspHere() && dspPending(bootDsp(), info()?.dsp);
   const noRuntimeTitle = () => `${deviceNameOf(device())} has no digikit runtime: not available on this device`;
@@ -234,25 +185,6 @@ export default function Console() {
     setPage(pageFor(page(), target(), runtimeHere()));
   });
 
-  /** Set when a default-modules install has started since the app opened (boot() or the first status of a startup with the runtime). */
-  let defaultsStarted = false;
-  let defaultsWork: Promise<void> | undefined;
-  /** The app can start the firmware with the runtime itself (boot() does not run): install once the status and the runtime info are both known. */
-  const startDefaultsAtLaunch = () => {
-    const s = status();
-    if (
-      s &&
-      shouldInstallAtStart({
-        runtimeOn: bootRuntime(),
-        runtimeSet: !!info()?.runtime?.set,
-        started: defaultsStarted,
-        hasStatus: true,
-      })
-    ) {
-      defaultsStarted = true;
-      void installDefaultModules(s.device);
-    }
-  };
   const update = (event: RuntimeUpdate) => {
     if (event.type === 'error') {
       setError(event.error);
@@ -265,7 +197,6 @@ export default function Console() {
     if (target().kind === 'emulator' && lastDevice() !== running && registry.runtimeIds.includes(running))
       setBrowseDevice(running);
     setLastDevice(event.snapshot.status.device);
-    startDefaultsAtLaunch();
     setError(event.snapshot.status.error ?? '');
     watchHealth({ error: event.snapshot.status.error });
   };
@@ -301,16 +232,34 @@ export default function Console() {
    * The ticked default modules of the device (devices/*.toml `[digikit] default_modules`) go on the emulator's card and are enabled, so the
    * emulator has what a flashed device has. The card keeps them: a later load finds them there and only checks the files.
    */
-  const installDefaultModules = (deviceId: string): Promise<void> =>
-    (defaultsWork ??= performDefaultInstall(deviceId).finally(() => {
-      defaultsWork = undefined;
-    }));
-  const performDefaultInstall = async (deviceId: string) => {
+  const installDefaultModules = async (deviceId: string): Promise<void> => {
+    try {
+      const stop = new AbortController();
+      await runJob(
+        'Installing default modules',
+        {
+          group: 'emulator',
+          cancel: () => {
+            stop.abort();
+            void runtime()?.cancelJob?.();
+          },
+        },
+        (job) => performDefaultInstall(deviceId, job, stop.signal),
+      );
+    } catch (e) {
+      if (!(e instanceof JobBusyError)) setError(message(e));
+    }
+  };
+  const performDefaultInstall = async (deviceId: string, job: JobHandle, signal: AbortSignal) => {
     const ids = tickedFor(deviceId);
     if (ids.length === 0) return;
     try {
-      const lines = await desktopDefaultModules.install('emulator', deviceId, ids, (p) =>
-        setReloadNote(`Default modules: ${p.text}`),
+      const lines = await fw.env.defaultModules!.install(
+        'emulator',
+        deviceId,
+        ids,
+        (p) => job.progress(undefined, p.text),
+        { signal, stillBooting: () => controllerJob() !== null },
       );
       setReloadNote(`Default modules ready: ${ids.join(', ')}`);
       logInput({
@@ -320,6 +269,11 @@ export default function Console() {
         detail: lines.join('\n'),
       });
     } catch (e) {
+      if (isCancelled(e) || isCancelled((e as { cause?: unknown })?.cause)) {
+        logInput({ source: 'firmware', level: 'info', text: 'default modules cancelled' });
+        bumpCardRefresh();
+        return;
+      }
       const what = e instanceof DefaultModuleError ? `default module ${e.id}` : 'default modules';
       setReloadNote(`${what} failed`);
       logInput(failureEntry('firmware', what, e instanceof DefaultModuleError ? e.message : message(e)));
@@ -330,10 +284,9 @@ export default function Console() {
   const boot = async (
     start: (r: EmulatorRuntime) => Promise<RuntimeSnapshot>,
     name: string,
+    withRuntime = bootRuntime(),
     imageDevice?: DeviceId,
   ) => {
-    // Defaults may be restarting the runtime. Keep the current UI alive until that transaction is finished.
-    await defaultsWork;
     const r = runtime();
     if (!r) return;
     live?.releaseAll();
@@ -361,7 +314,7 @@ export default function Console() {
             name,
             device: s.device,
             version: s.version,
-            runtime: bootRuntime(),
+            runtime: withRuntime,
             patch: info()?.runtime,
             ms: performance.now() - began,
           }),
@@ -369,12 +322,14 @@ export default function Console() {
       // another firmware may be another device: its card folder and its memory (the runtime needs a moment to load its modules)
       bumpCardRefresh();
       window.setTimeout(bumpCardRefresh, 2500);
-      if (s && bootRuntime()) {
-        defaultsStarted = true;
-        void installDefaultModules(s.device);
-      }
       return true;
     } catch (e) {
+      if (isCancelled(e) || isCancelled((e as { cause?: unknown })?.cause)) {
+        setReloadNote(`Load cancelled: ${name}`);
+        logInput({ source: 'firmware', level: 'info', text: `loading ${name} cancelled` });
+        if (status()) await refreshInfo();
+        return false;
+      }
       failLoad(name, imageDevice, e);
       if (status()) await refreshInfo(); // A refused load can restore the previous live session.
       return false;
@@ -388,66 +343,84 @@ export default function Console() {
     setReloadNote(loadFailure(name, message(e)));
     logInput(failureEntry('firmware', `loading ${name}`, message(e)));
   };
-  const load = async (bytes: Uint8Array, name: string) => {
-    let imageDevice: DeviceId | undefined;
+  /** Make `path` the console's firmware file and boot it; the controller reads it from its path. */
+  const bootPath = async (path: string, why: string, options: { runtime?: boolean; card?: string } = {}) => {
+    const withRuntime = options.runtime ?? bootRuntime();
+    const base = path.split(/[\\/]/).pop() || path;
     try {
-      imageDevice = await deviceOfImage(bytes);
+      const loaded = await runJob(
+        `Loading ${base}`,
+        { group: 'emulator', cancel: () => void runtime()?.cancelJob?.() },
+        async () => {
+          const file = await props.host.emu.setSource(path);
+          setSource(file ?? undefined);
+          lastModified = file?.modified_ms;
+          const ok = await boot(
+            (r) =>
+              r.loadPath
+                ? // The file at `path` may belong to another device than the running one: send the choices as they are; the
+                  // controller applies them by the loaded firmware's device data (runtime only on a runtime target, dsp only
+                  // where the device offers the choice).
+                  r.loadPath(path, { runtime: withRuntime, card: options.card, dsp: bootDsp() })
+                : Promise.reject(new Error('no reload')),
+            file?.name ?? path,
+            withRuntime,
+          );
+          if (ok) {
+            writePref(LAST_FIRMWARE_KEY, path);
+            setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
+          }
+          return ok;
+        },
+      );
+      // the install is its own job in the same group: it starts after the load job ended
+      const s = status();
+      if (loaded && s && withRuntime) void installDefaultModules(s.device);
     } catch (e) {
-      failLoad(name, undefined, e);
-      return;
+      if (e instanceof JobBusyError) return;
+      setError(message(e));
     }
-    return boot(
-      (r) => r.load(bytes, name, { runtime: bootRuntime() && hasRuntime(imageDevice), dsp: dspFor(imageDevice) }),
-      name,
-      imageDevice,
-    );
   };
-  /** Boot the startup file again: the controller reads it from its path. */
+  /** Boot the console's firmware file again. */
   const reload = async (why: string) => {
     const path = source()?.path;
-    if (reloading || !path) return;
-    reloading = true;
-    try {
-      setOpened('');
-      const loaded = await boot(
-        (r) =>
-          r.loadPath
-            ? // The file at `path` may belong to another device than the running one: send the choices as they are; the
-              // controller applies them by the loaded firmware's device data (runtime only on a runtime target, dsp only
-              // where the device offers the choice).
-              r.loadPath(path, { runtime: bootRuntime(), dsp: bootDsp() })
-            : Promise.reject(new Error('no reload')),
-        source()?.name ?? path,
-      );
-      if (loaded) setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
-    } catch (e) {
-      setError(message(e));
-    } finally {
-      reloading = false;
-    }
+    if (path) await bootPath(path, why);
+  };
+  /** The native picker; the picked file becomes the console's file and boots. */
+  const openFirmware = async () => {
+    const path = await props.host.emu.pickSyx(source()?.path ?? readPref(LAST_FIRMWARE_KEY));
+    if (path) await bootPath(path, 'Opened at');
   };
   /** `dev.reload {build: true}`: the controller builds the stale ColdFire objects, applies the modules again from the objects on disk
    * and swaps module code into a restored main screen, or boots the new image; the result goes to the status area and the Log. A build
    * error is one short line in the status area; the Log has it with the compiler output as its detail. */
   const reloadModules = async () => {
     const r = runtime();
-    if (!r?.reloadModules || modulesBusy()) return;
-    setModulesBusy(true);
-    setError('');
-    setReloadNote('Reloading modules…');
+    if (!r?.reloadModules) return;
     try {
-      const report = await r.reloadModules();
-      setReloadNote(reloadLine(report));
-      logInput(reloadEntry(report));
-      health = healthStart();
-      setPaused(false);
-      await refreshInfo();
+      await runJob('Reloading modules', { group: 'emulator' }, async () => {
+        setError('');
+        setReloadNote('Reloading modules…');
+        try {
+          const report = await r.reloadModules!();
+          setReloadNote(reloadLine(report));
+          logInput(reloadEntry(report));
+          health = healthStart();
+          setPaused(false);
+          await refreshInfo();
+        } catch (e) {
+          if (isCancelled(e)) {
+            setReloadNote('Module reload cancelled');
+            logInput({ source: 'firmware', level: 'info', text: 'module reload cancelled' });
+            return;
+          }
+          const failure = reloadError(e);
+          setReloadNote(failure.status);
+          logInput(reloadFailureEntry(failure));
+        }
+      });
     } catch (e) {
-      const failure = reloadError(e);
-      setReloadNote(failure.status);
-      logInput(reloadFailureEntry(failure));
-    } finally {
-      setModulesBusy(false);
+      if (!(e instanceof JobBusyError)) setError(message(e));
     }
   };
   // the "Boot with runtime" tick of other pages' "Reload with runtime" button
@@ -458,12 +431,12 @@ export default function Console() {
   });
   const pollSource = async () => {
     try {
-      const file = await invoke<Source | null>('emu_source_info');
+      const file = await props.host.emu.sourceInfo();
       setSource(file ?? undefined);
       if (!file) return;
       const changed = lastModified !== undefined && file.modified_ms !== lastModified;
       lastModified = file.modified_ms;
-      if (changed && watching() && !opened()) await reload('Reloaded after a change at');
+      if (changed && watching()) await reload('Reloaded after a change at');
     } catch {
       /* the file may be mid-write; the next poll sees it */
     }
@@ -486,13 +459,24 @@ export default function Console() {
 
   /** The heartbeat, once a second: a stalled main loop shows nowhere else. */
   const pollHealth = async () => {
+    setNow(Date.now());
     try {
-      const beat = await runtime()?.health?.();
-      if (beat) watchHealth({ stalled: beat.stalled, stallMs: beat.stall_ms });
+      const s = await runtime()?.controllerStatus?.();
+      if (s?.heartbeat) watchHealth({ stalled: s.heartbeat.stalled, stallMs: s.heartbeat.stall_ms });
+      setControllerJob(s?.job ?? null);
+      syncControllerJob(s?.job, () => void runtime()?.cancelJob?.());
     } catch {
       /* a replaced session has no status */
     }
   };
+
+  // an error banner goes away by itself after 8 s, unless the message changed meanwhile
+  createEffect(() => {
+    const text = error();
+    if (!text) return;
+    const timer = window.setTimeout(() => setError((current) => (current === text ? '' : current)), 8000);
+    onCleanup(() => window.clearTimeout(timer));
+  });
 
   const toggleLog = () => setLogOpen(!logOpen());
   const showMetrics = () => {
@@ -521,31 +505,41 @@ export default function Console() {
     // ⌘R / Ctrl+R reloads the firmware file, not the page; with Shift it reloads the modules into the running session.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
       e.preventDefault();
+      if (busy('emulator')) return;
       if (e.shiftKey) void reloadModules();
       else void reload('Reloaded at');
     }
   };
   onMount(() => {
-    void nativeRuntime(update).then((r) => {
+    void createNativeRuntime(props.host, update).then((r) => {
       if (!r) {
         setOutsideApp(true);
         return;
       }
       setRuntime(r);
-      void invoke<BuildInfo>('emu_build_info')
+      void props.host.emu
+        .buildInfo<BuildInfo>()
         .then(setBuildInfo)
         .catch(() => setBuildInfo(undefined));
       void (async () => {
-        await pollSource();
+        const launch = await props.host.emu.launch();
+        if (launch.loaded) await pollSource();
+        // The launcher's `--no-dsp` / `--dsp-on` wins over the saved choice for this session, also for the first load below; only a
+        // click on the tick saves a choice. The controller reports the flag before any firmware is loaded.
         await refreshInfo();
-        // the pump may deliver no later snapshot (a hidden window): check once here, now that the runtime info is known
-        startDefaultsAtLaunch();
-        // The app starts with the runtime patched in; a user who turned that off gets the startup file as it is.
-        // The launcher's `--no-dsp` / `--dsp-on` wins over the saved choice for this session; only a click on the tick saves a choice.
         const dsp = startupDsp(bootDsp(), info()?.dsp);
         if (dsp !== bootDsp()) setBootDsp(dsp);
-        if (!bootRuntime() && info()?.runtime?.set) await reload('Started without the runtime at');
-        else if (dspIsPending()) await reload(`Started with DSP ${dsp ? 'on' : 'off'} at`);
+        if (launch.loaded) {
+          if (dspIsPending()) await reload(`Started with DSP ${dsp ? 'on' : 'off'} at`);
+          return;
+        }
+        // The app opens empty; a command-line file, else the last opened file when "Load on start" is ticked, boots now.
+        const path = launch.syx ?? (loadOnStart() ? readPref(LAST_FIRMWARE_KEY) : null);
+        if (path)
+          await bootPath(path, 'Loaded at', {
+            runtime: launch.runtime ?? undefined,
+            card: launch.card ?? undefined,
+          });
       })();
       timers.push(window.setInterval(() => void pollSource(), 1000));
       timers.push(window.setInterval(() => void pollAudio(), 1000));
@@ -616,23 +610,32 @@ export default function Console() {
       logEvent('card', 'error', 'sample folder: no files in that folder');
       return;
     }
-    setCardBusy(true);
     try {
-      await startCard(cards, files, (done, total) =>
-        setCard({ state: 'working', message: `Sending samples (${done}/${total})`, fraction: 0 }),
+      await runJob(
+        'Loading the sample card',
+        { group: 'emulator', cancel: () => void runtime()?.cancelJob?.() },
+        async () => {
+          await startCard(cards, files, (done, total) =>
+            setCard({ state: 'working', message: `Sending samples (${done}/${total})`, fraction: 0 }),
+          );
+          while (true) {
+            const s = await cards.status();
+            setCard(s);
+            if (s.state !== 'working') {
+              logEvent('card', s.state === 'error' ? 'error' : 'info', cardLine(s));
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        },
       );
-      const poll = async () => {
-        const s = await runtime()!.cards!.status();
-        setCard(s);
-        if (s.state === 'working') window.setTimeout(() => void poll(), 400);
-        else {
-          setCardBusy(false);
-          logEvent('card', s.state === 'error' ? 'error' : 'info', cardLine(s));
-        }
-      };
-      void poll();
     } catch (e) {
-      setCardBusy(false);
+      if (e instanceof JobBusyError) return;
+      if (isCancelled(e)) {
+        setReloadNote('Sample card load cancelled');
+        logEvent('card', 'info', 'sample folder: cancelled');
+        return;
+      }
       setCard({ state: 'error', message: message(e) });
       logInput(failureEntry('card', 'sample folder', message(e)));
     }
@@ -650,6 +653,7 @@ export default function Console() {
     if (logOpen()) setSeenId(entries.at(-1)?.id ?? 0);
   });
   // the runtime logs of the emulator and of the device on the MIDI port chosen last (nothing is read while the emulator is paused)
+  const dkprof = createDkProfLoader(props.host);
   const logFollow = createLogFollow({
     follow: followOn,
     flashing: () => flashRunning(flashRun()),
@@ -658,15 +662,17 @@ export default function Console() {
     emulator: {
       running: () => !!status() && !paused(),
       session: async () => followSession(await emulatorSession()),
+      names: createEmulatorNames(props.host, dkprof),
     },
     device: {
       port: lastMidiPort,
       session: async () => followSession(await lastMidiSession()),
-      present: async () => (await transferEnv().targets.ports()).includes(lastMidiPort() ?? ''),
+      present: async () => (await app.env.targets.ports()).includes(lastMidiPort() ?? ''),
+      names: createDeviceNames(props.host, dkprof),
     },
   });
 
-  const fileLabel = () => opened() || source()?.path || 'No firmware file';
+  const fileLabel = () => source()?.path || 'Open firmware…';
   /** The last three parts of the path; the full path is the tooltip. */
   const shortPath = () => {
     const parts = fileLabel().split('/');
@@ -747,7 +753,7 @@ export default function Console() {
           <button
             type="button"
             class="tb"
-            disabled={!status() || cardBusy()}
+            disabled={!status() || busy('emulator')}
             title="Pick a plus_drive-style folder: WAVs become samples (track N plays file N, sorted by name), .mmcfs/ and digikit/ are used as they are"
             onClick={() => folderInput?.click()}
           >
@@ -772,7 +778,14 @@ export default function Console() {
 
       <Show when={error() || outsideApp()}>
         <p class="alert" role="alert">
-          {outsideApp() ? 'This page is the desktop app’s console; start it with mise run workbench.' : error()}
+          <span>
+            {outsideApp() ? 'This page is the desktop app’s console; start it with mise run workbench.' : error()}
+          </span>
+          <Show when={error()}>
+            <button type="button" class="dismiss" aria-label="Dismiss" onClick={() => setError('')}>
+              ×
+            </button>
+          </Show>
         </p>
       </Show>
 
@@ -823,9 +836,20 @@ export default function Console() {
           <button
             type="button"
             class="side"
+            classList={{ on: page() === 'files' }}
+            aria-current={page() === 'files' ? 'page' : undefined}
+            title="See every file in the target's card store: space, sizes and module headers"
+            onClick={() => setPage('files')}
+          >
+            <Icon d={FOLDER} />
+            <span>Files</span>
+          </button>
+          <button
+            type="button"
+            class="side"
             classList={{ on: page() === 'remote' }}
             aria-current={page() === 'remote' ? 'page' : undefined}
-            disabled={(!status() && target().kind === 'emulator') || (target().kind === 'emulator' && !runtimeHere())}
+            disabled={target().kind === 'emulator' && !runtimeHere()}
             title={
               target().kind === 'emulator' && !runtimeHere()
                 ? noRuntimeTitle()
@@ -854,14 +878,23 @@ export default function Console() {
             <header class="page-head emu-head">
               <h2>Emulator</h2>
               <span class="file-chip" title={fileLabel()}>
-                <Icon d={FOLDER} />
-                <span class="path">{shortPath()}</span>
+                <button
+                  type="button"
+                  class="file-open"
+                  disabled={busy('emulator')}
+                  aria-label="Open firmware file"
+                  title={source() ? 'Open another firmware file' : 'Open a firmware file'}
+                  onClick={() => void openFirmware()}
+                >
+                  <Icon d={FOLDER} />
+                  <span class="path">{shortPath()}</span>
+                </button>
                 <Show when={status()}>
                   <span class="tag device">
                     {status()!.device} {status()!.version}
                   </span>
                 </Show>
-                <Show when={source() && !opened()}>
+                <Show when={source()}>
                   <button
                     type="button"
                     class="tag watch"
@@ -874,13 +907,23 @@ export default function Console() {
                     {watching() ? 'watching' : 'not watching'}
                   </button>
                 </Show>
-                <Show when={opened()}>
-                  <span class="tag" title="Opened from the file picker; only the startup file is watched">
-                    opened
-                  </span>
-                </Show>
               </span>
               <span class="sp" />
+              <label
+                class="tag opt"
+                title="Boot this firmware file when the app opens (a file named on the command line wins)"
+              >
+                <input
+                  type="checkbox"
+                  checked={loadOnStart()}
+                  onChange={(e) => {
+                    setLoadOnStart(e.currentTarget.checked);
+                    writePref(LOAD_ON_START_KEY, e.currentTarget.checked ? 'on' : 'off');
+                  }}
+                />
+                <span class="long">Load on start</span>
+                <span class="short">On start</span>
+              </label>
               <label
                 class="tag opt"
                 title={
@@ -963,30 +1006,7 @@ export default function Console() {
                   )}
                 </Show>
               </label>
-              <input
-                ref={fileInput}
-                type="file"
-                accept=".syx,application/octet-stream"
-                hidden
-                onChange={async (e) => {
-                  const f = e.currentTarget.files?.[0];
-                  e.currentTarget.value = '';
-                  if (!f) return;
-                  setOpened(f.name);
-                  await load(new Uint8Array(await f.arrayBuffer()), f.name);
-                }}
-              />
               <span class="tb-group">
-                <button
-                  type="button"
-                  class="tb"
-                  aria-label="Open firmware file"
-                  title="Open a firmware file"
-                  onClick={() => fileInput?.click()}
-                >
-                  <Icon d={FOLDER} />
-                  <span class="lbl">Open…</span>
-                </button>
                 <DefaultModules
                   device={device()}
                   off={bootRuntime() ? '' : 'Boot with digikit runtime is off: no module can be installed'}
@@ -998,7 +1018,7 @@ export default function Console() {
                   type="button"
                   class="tb"
                   classList={{ pending: runtimePending() }}
-                  disabled={!source()}
+                  disabled={!source() || busy('emulator')}
                   aria-label="Reload"
                   title={`Reload the startup file (${reloadKey})${runtimePending() ? ' · applies the Runtime choice' : ''}`}
                   onClick={() => void reload('Reloaded at')}
@@ -1010,7 +1030,7 @@ export default function Console() {
                 <button
                   type="button"
                   class="tb"
-                  disabled={!status() || modulesBusy()}
+                  disabled={!status() || busy('emulator')}
                   aria-label="Reload modules"
                   title={`Build the stale module objects, then apply the modules into the running session, without a boot when only UI modules changed (${modulesKey}). A changed SHARC+ source still needs mise run dk:dev.`}
                   onClick={() => void reloadModules()}
@@ -1065,10 +1085,9 @@ export default function Console() {
                 </div>
               </main>
               <SidePanels
+                host={props.host}
                 visible={sidePanelsShown()}
                 active={panelsActive()}
-                card
-                reload={restart}
                 metrics={metrics}
                 session={emulatorSession}
                 where={() => 'the emulator'}
@@ -1076,10 +1095,24 @@ export default function Console() {
             </div>
           </div>
           <Show when={page() === 'transfer'}>
-            <TransferPage />
+            <TransferPage onFlash={() => setPage('firmware')} />
+          </Show>
+          <Show when={page() === 'files'}>
+            <FilesPage
+              refresh={cardRefresh}
+              halted={() =>
+                target().kind === 'emulator' && paused() ? 'The emulator is paused. Resume it to read its card.' : null
+              }
+              save={(name, bytes) => props.host.fs.saveLog(bytes, name, 'file')}
+              extra={
+                <Show when={target().kind === 'emulator'}>
+                  <CardPanel host={props.host} reload={restart} />
+                </Show>
+              }
+            />
           </Show>
           <Show when={page() === 'remote'}>
-            <RemotePage fallbackDevice={device()} />
+            <RemotePage fallbackDevice={device()} emulatorLoaded={!!status()} host={props.host} />
           </Show>
           <Show when={page() === 'firmware'}>
             <FirmwarePage />
@@ -1120,6 +1153,7 @@ export default function Console() {
             }}
           />
           <LogPanel
+            host={props.host}
             follow={logFollow}
             emulatorRunning={() => !!status()}
             devicePort={lastMidiPort}
@@ -1175,10 +1209,38 @@ export default function Console() {
           </Show>
         </Show>
         <span class="sp" />
-        <Show when={reloadNote()}>
-          <span class="muted" title={reloadNote()}>
-            {reloadNote()}
-          </span>
+        <Show
+          when={currentJob()}
+          fallback={
+            <Show when={reloadNote()}>
+              <span class="muted" title={reloadNote()}>
+                {reloadNote()}
+              </span>
+            </Show>
+          }
+        >
+          {(job) => (
+            <span class="job" title={job().detail ? `${job().label}: ${job().detail}` : job().label}>
+              <Icon d={RELOAD} />
+              <span class="label">{job().label}</span>
+              <Show when={job().detail}>
+                <span class="detail">{job().detail}</span>
+              </Show>
+              <span>{Math.max(0, Math.round((now() - job().started) / 1000))} s</span>
+              <Show when={job().progress !== undefined}>
+                <Meter value={job().progress! * 100} tone="amber" />
+                <span>~{Math.round(job().progress! * 100)}%</span>
+              </Show>
+              <Show when={jobs().list.length > 1}>
+                <span class="more">+{jobs().list.length - 1}</span>
+              </Show>
+              <Show when={job().cancel}>
+                <button type="button" class="cancel" onClick={() => job().cancel?.()}>
+                  Cancel
+                </button>
+              </Show>
+            </span>
+          )}
         </Show>
         <button type="button" class="sb" aria-expanded={logOpen()} title={`Log (${logKey})`} onClick={toggleLog}>
           Log

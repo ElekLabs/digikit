@@ -1,4 +1,4 @@
-# Native kernels for the peer CPU program of one firmware image (docs/findings/129-syntakt-peer-cpu.md, docs/plans/syntakt.md P4).
+# Native kernels for the peer CPU program of one firmware image (docs/findings/136-syntakt-peer-cpu.md, docs/plans/syntakt.md P4).
 # Input of `cfaot` (packages/emulator/coldfire/src/bin/cfaot.rs): the section is named by its SHA-256 (the tool refuses another
 # image); the kernels check their own code hash at run time, so a build with kernels for this image runs nothing for another.
 #

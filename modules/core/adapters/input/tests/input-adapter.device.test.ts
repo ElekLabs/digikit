@@ -1,16 +1,17 @@
 import fs from 'node:fs';
-import { button, type Device } from '@digi/test-support';
+import { probeInput, type Device } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { startPatchedSession } from '@digi/regression/support.ts';
 import { timePhase, timingContext } from '@digi/regression/timing.ts';
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
-import { openDigikitMenu, openRuntimeAbout, meaningfulAboutRows } from '@digi/regression/runtime/runtime-menu.ts';
+import { openDigikitMenu, openRuntimeAbout } from '@digi/regression/runtime/flows/menu.ts';
+import { meaningfulAboutRows } from '@digi/regression/runtime/runtime-menu.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { DEVICES, FIRMWARE, liveOptions } from '@digi/regression/runtime/devices.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { liveProtocol } from '@digi/regression/runtime/protocol.ts';
 import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
-import { tap as holdTap } from '@digi/regression/runtime/waits.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /** Two fresh daemons with identical probe installation and exactly one protocol restart. */
 async function expectInputAdapter(device: Device): Promise<void> {
@@ -43,30 +44,11 @@ async function expectInputAdapter(device: Device): Promise<void> {
           protocol.cancelPending();
           protocol = liveProtocol(session);
           await timePhase('protocol.waitForBoot', () => protocol.waitForBoot());
-          await expect
-            .poll(async () => (await protocol.modules()).map((module) => module.name), {
-              timeout: 20_000,
-              interval: 500,
-              message: 'input probe imports core/input',
-            })
-            .toContain('test/input-probe');
+          await expectPollEmulated(session, async () => (await protocol.modules()).map((module) => module.name), (value) => expect(value).toContain('test/input-probe'), { emulatedMs: 20000, intervalMs: 500, message: 'input probe imports core/input' });
           await expectRuntimeUi(session, plan, artifacts, { afterEpoch: epoch });
-          const tap = async (name: string, settleMs = 1200) => {
-            const code = button(name);
-            await holdTap(
-              session,
-              async (down) => {
-                if (source === 'panel') await session.client.inputButton(code, down);
-                else {
-                  const status = (await protocol.request(0x38, Uint8Array.of(code, down ? 1 : 0))).status;
-                  answers.push(status);
-                  expect(status, `probe ${name} ${down ? 'down' : 'up'}`).toBe(0);
-                }
-              },
-              300,
-              settleMs,
-            );
-          };
+          const ui = source === 'panel' ? runtime.ui : runtime.ui.with(probeInput(protocol, runtime.clock));
+          const flowRt = { ...runtime, ui, dk: protocol };
+          const keyOpts = source === 'panel' ? { holdMs: 300 } : { holdMs: 300, gapMs: 1200 };
           // Delivery/decoder acceptance, not a claim that a vendor parameter changes in this UI state.
           for (const delta of [4, -4]) {
             if (source === 'panel') {
@@ -74,29 +56,24 @@ async function expectInputAdapter(device: Device): Promise<void> {
               statuses.push(before);
               expect(typeof before.cf.input_irqs).toBe('number');
               await session.client.inputTurn(1, delta);
-              await expect
-                .poll(
-                  async () => {
+              await expectPollEmulated(session, async () => {
                     const after = await session.status();
                     statuses.push(after);
                     return after.cf.input_pending === 0 && Number(after.cf.input_irqs) > Number(before.cf.input_irqs);
-                  },
-                  { timeout: 8000, interval: 400, message: `panel TURN ${delta} delivered through UART` },
-                )
-                .toBe(true);
+                  }, (value) => expect(value).toBe(true), { emulatedMs: 8000, intervalMs: 400, message: `panel TURN ${delta} delivered through UART` });
             } else {
               const status = (await protocol.request(0x39, Uint8Array.of(1, delta & 255))).status;
               answers.push(status);
               expect(status, `probe TURN ${delta} accepted by input_turn`).toBe(0);
             }
           }
-          await openDigikitMenu(tap, async (name) => {
+          await openDigikitMenu(flowRt, { ...keyOpts, checkpoint: async (name) => {
             const frame = await session.client.framebufferGet({ hash: true, data: true });
             expect(frame.sha256).toMatch(/^[a-f0-9]{64}$/);
             frames[name] = frame.sha256!;
             record(artifacts, `${source}-${name}`, frame);
-          });
-          rows = await openRuntimeAbout(tap, session, protocol, plan, artifacts);
+          } });
+          rows = await openRuntimeAbout(flowRt, plan, artifacts, keyOpts);
           if (source === 'probe') {
             refusals = [
               (await protocol.request(0x38, Uint8Array.of(200, 1))).status,

@@ -131,7 +131,7 @@ _va_booted:
     R1 = 0x3f800000;                      // 1.0
     NOP;
     F0 = F0 + F1;                         // fold drive 1 .. 4
-    R2 = F0;
+    R2 = PASS F0;
     NOP;
     DM(3, I3) = R2;                       // state word 3: the drive the reflection folder reads
 
@@ -204,7 +204,7 @@ _va_booted:
     F4 = F4 * F0;                         // t2
     NOP;
     F8 = F8 + F4;                         // shape 1
-    F3 = F8;                              // keep it
+    F3 = PASS F8;                         // keep it
     // ---- oscillator 2 (phase 2): saw -> triangle by t1, then -> pulse by t2 ----
     F8 = F14 + F14;                     // 2 ph
     NOP;
@@ -277,7 +277,7 @@ _va_booted:
     NOP;
     F2 = F2 - F8;                         // fold: x - 2(x - c) reflects instead of clipping
     NOP;
-    F3 = F2;                              // the folded signal
+    F3 = PASS F2;                         // the folded signal
     R2 = 0x3f800000;                      // the +1 default goes to F4 and the constants through R2, so a constant
     F4 = PASS R2;                         // never lands on the register that holds the value
     R2 = 0x3f000000;                      // 0.5
@@ -329,8 +329,7 @@ _va_note_on:
     JUMP (M13, I13);
 
 .SECTION/DM seg_dmda;
-// magic, contract, n_params, voices, state_bytes, state_clear_bytes, max_cycles_block, max_cycles_note_on,
-// max_call_depth, stack_bytes
+// magic, contract, n_params, voices, state_bytes, state_clear_bytes, max_call_depth, stack_bytes
 .GLOBAL _va_desc;
 .VAR _va_desc = DK_MAGIC;
 .VAR _va_desc1 = DK_MACHINE_V1;
@@ -338,7 +337,5 @@ _va_note_on:
 .VAR _va_desc3 = DK_MAX_VOICES;
 .VAR _va_desc4 = 24;
 .VAR _va_desc5 = 0;   // nothing is cleared at note-on: the phases free-run
-.VAR _va_desc6 = 1200;
-.VAR _va_desc7 = 200;
-.VAR _va_desc8 = 2;
-.VAR _va_desc9 = 0;
+.VAR _va_desc6 = 2;
+.VAR _va_desc7 = 0;

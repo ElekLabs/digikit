@@ -72,8 +72,9 @@ dsp = { image = "dt2-1.17", idle_start = 0xb8636d, idle_end = 0xb863df, idle_hea
 # What this device can do. Every device file has this table; a table that is present must agree with it
 # (`devdata.rs` `validate`, docs/design/device-data.md "Device levels"). dsp: "sharc" | "none"; seal: the container seal
 # ("hmac", key in `SEALS` of packages/patchkit/src/syx.rs); sample_pool: how run-time samples get memory ("stock" borrows the
-# stock sample slots, "ddr" reserves a DDR range, "none"); card: "path-fs" (a folder filesystem on the card), "slots" (card
-# slots only), "none", "unknown".
+# stock sample slots, "ddr" reserves a DDR range, "none"); card: "path-fs" (a folder filesystem on the card: the samples are the
+# firmware's +Drive files), "slots" (card slots only: the samples are files of the digikit store), "none", "unknown".
+# `patchkit gen` reads `card` (samples_in_store of the device profile).
 [capabilities]
 dsp = "sharc"
 seal = "hmac"
@@ -91,17 +92,17 @@ readonly = [2, 4, 8]
 # part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
 [acceptance]
 firmware = "1.17"
-ready_dir = "out/ready-pk-dt2-117"
+ready_dir = "out/snapshots/dt2-audio-ready-cold-2026-10-20"
 sample_card = true
 
 # Board facts that only the emulator uses (docs/design/device-data.md). free_running_dtcn: the DMA timer counter channels (DTCN0..3) that run at
-# the bus clock in the emulator. None here: DTCN0 is not checked on this device (finding 07).
+# the bus clock in the emulator. Channel 0 here: it runs by default on this device.
 [emulator]
-free_running_dtcn = []
+free_running_dtcn = [0]
 
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
-# constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: a fact it uses as a
-# constant must be the same in every device file, and `patchkit gen` refuses a difference. Register offsets inside a peripheral
+# constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: it reads these facts at
+# run time from the device object `dkrt_dev` (DkrtDevice in modules/core/runtime/abi.toml). Register offsets inside a peripheral
 # are CPU facts (MCF5441x) and stay in the code, named as such.
 [board]
 # The console UART (UART8): the firmware drains it before its own soft reset (finding 36 section 3). The status register is at +4.
@@ -129,6 +130,9 @@ name = "dt2"
 default_modules = ["digikit/debug", "digikit/remote"]
 # The panel key held at power-on for safe mode: RECORD (a code of [[panel.group]] "transport", tools/patchkit/pk_harness.py BUTTONS).
 safe_key = 19
+# The longest sample path the runtime accepts for a `select` or a SysEx sample transfer, in bytes, relative to the samples root: the device's own
+# path limit (DT2: the +Drive filesystem, DN2: the store path limit 159 less the 8 bytes of the `samples/` prefix).
+sample_path_max = 254
 # core/dsp-link: the reserved DSP area in L2 (window 0; a chunk's offset field is 17 bits, so at most 524288 bytes), and the geometry of
 # the frame tail the link sends through.
 dsp_area_bytes = 524288
@@ -142,8 +146,11 @@ keep_bytes = 0x1000
 # RAM ranges [lo, hi) the PEEK command of the upload protocol may read (docs/design/digikit-upload.md): the firmware's data, then the
 # runtime's own region with the keep range. No peripheral registers; at most 4 ranges.
 peek = [[0x40000000, 0x47e30000], [0x47e8b000, 0x47fe1000]]
+# The profiling clock: DTIM0 DTCN0, bus clock, started before the main OS, read only, never written.
+span_clock = 0xfc07000c
+span_clock_hz = 132000000
 
-# The runtime's per-type limits (docs/design/module-sdk.md 11.5 D8); generated into the runtime's device.rs.
+# The runtime's per-type limits (docs/design/module-sdk.md 11.5 D8); generated into the runtime constants by `patchkit gen`.
 [limits]
 modules = 8
 machine_rows = 8
@@ -222,12 +229,10 @@ dsp_l2_excludes = [[0x200FA000, 0x200FE000]]
 # today (core/input and core/sample-pool, the stock sample pool adapter, are in both); a module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
 [patch_sets]
 emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
-# Real-device image. core/usb-bulk (inert until the usb-fast module is selected) and core/plusdrive-write (the +Drive writes usb-fast uses) are in: usb-fast requires both.
-device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/plusdrive-write", "core/sdhc-large"]
-# `device` plus core/usb-bulk-audio: the bulk OUT interface in USB AUDIO/MIDI (usb-fast without a take-over).
-device-audio-bulk = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
+# Real-device image. core/usb-bulk (inert until the usb-fast module is selected) and core/plusdrive-write (the +Drive writes usb-fast uses) are in: usb-fast requires both. core/usb-bulk-audio is in too: the bulk OUT interface in USB AUDIO/MIDI, so usb-fast works without changing USB CONFIG.
+device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
 # `device` plus the optional black intro (core/introblank): the Workbench Firmware page picks it with its "Custom boot screen" toggle.
-device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
+device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
 # Same roots as `emulator`; the name stays for the per-track sample tests (API 1.5).
 sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
 # `emulator` plus core/overdrive (the OVR TYPE device test).

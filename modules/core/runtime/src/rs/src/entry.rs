@@ -5,9 +5,9 @@
 //!
 //! The service imports (`[[import]]` with `service` in sdk/sdk.toml) that name a handle live here: the runtime hands out the handle of a service in `init`
 //! (`dk_settings_open`, `dk_files_open`, `dk_sample_pool_open`) and each call takes the handle. The handle is the client number the existing code
-//! (`settings.rs`, `files.rs`, `tracks.rs`) keeps, as a pointer. The imports that need no handle point at the functions of `lib.rs`.
+//! (`settings.rs`, `files.rs`, `tracks.rs`) keeps, as a pointer. The imports that need no handle point at the functions of `imports.rs`.
 
-use crate::{dlog, files, peakwin, settings, store, store_writer, tracks, MAX_MODULES};
+use crate::{dlog, files, settings, state::REC_MAX, store, store_writer, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
@@ -26,10 +26,10 @@ const NO_CTX: Ctx = Ctx { magic: 0, rec: 0 };
 
 /// The context of each module record; `magic` is `CTX_MAGIC` for a module of the new entry while it is loaded.
 #[no_mangle]
-pub static mut DKRT_CTXS: [Ctx; MAX_MODULES] = [NO_CTX; MAX_MODULES];
+pub static mut DKRT_CTXS: [Ctx; REC_MAX] = [NO_CTX; REC_MAX];
 /// The address of each module record's `tick` (0: none); one aligned store publishes or clears it, as for the slots.
 #[no_mangle]
-pub static mut DKRT_TICKS: [u32; MAX_MODULES] = [0; MAX_MODULES];
+pub static mut DKRT_TICKS: [u32; REC_MAX] = [0; REC_MAX];
 
 /// Make record `rec` a module of the new entry: its context is live from now on.
 pub unsafe fn bind(rec: usize) -> *const Ctx {
@@ -57,12 +57,12 @@ pub unsafe fn stop_tick(rec: usize) {
 
 /// Does record `rec` have a tick?
 pub fn has_tick(rec: usize) -> bool {
-    rec < MAX_MODULES && unsafe { read_volatile(addr_of!(DKRT_TICKS[rec])) != 0 }
+    rec < REC_MAX && unsafe { read_volatile(addr_of!(DKRT_TICKS[rec])) != 0 }
 }
 
 /// Is record `rec` a loaded module (it has a live context)?
 pub unsafe fn is_entry(rec: usize) -> bool {
-    rec < MAX_MODULES && read_volatile(addr_of!(DKRT_CTXS[rec].magic)) == CTX_MAGIC
+    rec < REC_MAX && read_volatile(addr_of!(DKRT_CTXS[rec].magic)) == CTX_MAGIC
 }
 
 /// The context of record `rec` as a pointer (0 when the record is not loaded), for `dkrt_module`.
@@ -79,7 +79,7 @@ unsafe fn ctx_rec(ctx: *mut u8) -> Option<usize> {
     let base = addr_of!(DKRT_CTXS) as usize;
     let at = ctx as usize;
     let size = core::mem::size_of::<Ctx>();
-    if at < base || at >= base + MAX_MODULES * size || (at - base) % size != 0 {
+    if at < base || at >= base + REC_MAX * size || (at - base) % size != 0 {
         return None;
     }
     let rec = (at - base) / size;
@@ -96,7 +96,7 @@ pub unsafe fn is_ctx(ctx: *mut u8) -> bool {
 }
 
 /// The record of the module that is running when it passes its own context (an `open` call), else None.
-unsafe fn own_rec(ctx: *mut u8) -> Option<usize> {
+pub(crate) unsafe fn own_rec(ctx: *mut u8) -> Option<usize> {
     let rec = ctx_rec(ctx)?;
     if dlog::current_source() as usize == rec + 1 {
         Some(rec)
@@ -113,8 +113,13 @@ pub unsafe fn tick_all() {
         if t != 0 {
             let call: unsafe extern "C" fn(*const Ctx) = core::mem::transmute(t as usize);
             let prev = dlog::enter_module(rec, dlog::PHASE_TICK);
+            let t0 = dlog::span_t0();
             call(addr_of!(DKRT_CTXS[rec]));
             dlog::leave_module(prev);
+            // The emit runs after `leave_module`: the sink's own work and faults are not the module's.
+            if let Some(t) = t0 {
+                dlog::span_end(rec as u32, t);
+            }
             let s = crate::st();
             s.tick_calls = s.tick_calls.wrapping_add(1);
         }
@@ -123,16 +128,16 @@ pub unsafe fn tick_all() {
 }
 
 /// A handle is the client number the existing code keeps, as a pointer (never null: a client is 1 or more).
-fn handle(client: i32) -> *mut u8 {
+pub(crate) fn handle(client: i32) -> *mut u8 {
     client as usize as *mut u8
 }
 
-fn client(h: *mut u8) -> u32 {
+pub(crate) fn client(h: *mut u8) -> u32 {
     h as usize as u32
 }
 
 /// Hand out `client` (positive) in `*out`: 0; a negative result is the error, `*out` untouched.
-unsafe fn give(out: *mut *mut u8, client: i32) -> i32 {
+pub(crate) unsafe fn give(out: *mut *mut u8, client: i32) -> i32 {
     if client <= 0 {
         return if client == 0 { E_NOT_FOUND } else { client };
     }
@@ -227,54 +232,12 @@ pub unsafe extern "C" fn dk_files_delete(_f: *mut u8, root: u32, path: *const u8
     store_writer::sdk_delete(root, path)
 }
 
-// ---- the sample pool --------------------------------------------------------------------------------------------------------
-
-pub unsafe extern "C" fn dk_sample_pool_open(ctx: *mut u8, out: *mut *mut u8) -> i32 {
-    if out.is_null() || own_rec(ctx).is_none() {
-        return E_CONTRACT;
-    }
-    give(out, tracks::open_first())
+pub unsafe extern "C" fn dk_files_commit(_f: *mut u8) -> i32 {
+    store_writer::sdk_commit()
 }
 
-pub unsafe extern "C" fn dk_sample_pool_add(p: *mut u8, path: *const u8) -> i32 {
-    tracks::pool_add(client(p), path)
-}
-
-pub unsafe extern "C" fn dk_sample_pool_clear(p: *mut u8, index: u32) -> i32 {
-    tracks::pool_clear(client(p), index)
-}
-
-pub unsafe extern "C" fn dk_sample_pool_status(p: *mut u8, index: u32) -> i32 {
-    tracks::status(client(p), index)
-}
-
-pub unsafe extern "C" fn dk_sample_pool_info(p: *mut u8, index: u32, out: *mut u8) -> i32 {
-    tracks::info(client(p), index, out)
-}
-
-pub unsafe extern "C" fn dk_sample_pool_path(p: *mut u8, index: u32, buf: *mut u8, cap: u32) -> i32 {
-    tracks::path(client(p), index, buf, cap)
-}
-
-pub unsafe extern "C" fn dk_sample_pool_set(p: *mut u8, index: u32, path: *const u8) -> i32 {
-    tracks::pool_set(client(p), index, path)
-}
-
-pub unsafe extern "C" fn dk_sample_pool_peaks(p: *mut u8, index: u32, token: u32, out: *mut u8, capacity: u32) -> i32 {
-    tracks::peaks(client(p), index, token, out, capacity)
-}
-
-pub unsafe extern "C" fn dk_sample_pool_peaks_window(
-    p: *mut u8,
-    index: u32,
-    token: u32,
-    first: u32,
-    frames: u32,
-    columns: u32,
-    out: *mut u8,
-    capacity: u32,
-) -> i32 {
-    peakwin::window(client(p), index, token, first, frames, columns, out, capacity)
+pub unsafe extern "C" fn dk_files_pending(_f: *mut u8) -> i32 {
+    store_writer::sdk_pending()
 }
 
 #[cfg(test)]
@@ -321,7 +284,7 @@ mod tests {
             let mut out: *mut u8 = core::ptr::null_mut();
             assert_eq!(dk_settings_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert_eq!(dk_files_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
-            assert_eq!(dk_sample_pool_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
+            assert_eq!(crate::handlers::exports::dk_sample_pool_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert!(out.is_null());
         }
     }

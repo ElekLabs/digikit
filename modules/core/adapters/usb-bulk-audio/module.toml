@@ -19,8 +19,8 @@ ports = ["dt2-1.17", "dn2-1.12"]
 # The entry of the firmware's USB init jumps to ua_init_hook, which runs ua_prepare (it extends entry 5 of the RAM port table: a copy of the 0x148-byte configuration with
 # interface 5 appended, and our connect and disconnect callbacks) and then the displaced prologue. The init runs at boot and again from the firmware tick after a controller
 # reset. ua_prepare refuses and leaves USB stock if entry 5 is not the stock layout. The wrappers run the stock callbacks and call core/usb-bulk's usb_bulk_port5_connect and
-# usb_bulk_port5_disconnect; usb_bulk_port5_attach marks the port bulk-capable there. Those three and the board's DDR facts (usb_alias_delta, usb_ddr_base, usb_ddr_bytes) are
-# symbols of core/usb-bulk, which patchkit links across the two objects. The engine is identical code at the same addresses on both devices.
+# usb_bulk_port5_disconnect; usb_bulk_port5_attach marks the port bulk-capable there. Those three are symbols of core/usb-bulk, which patchkit links across the two objects; the board's DDR facts are read from
+# the runtime's device object `dkrt_dev`. The engine is identical code at the same addresses on both devices.
 [[object]]
 path = "build/usb-bulk-audio.dko.json"
 sources = ["src/cf/usb_bulk_audio.c", "src/cf/ua_tramp.s"]

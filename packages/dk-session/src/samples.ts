@@ -13,12 +13,14 @@ import type { RpcPort } from './rpcfiles.ts';
 
 export type SamplesKind = 'stock-rpc' | 'digikit';
 
-/** A file or a folder of the listing; `size` is what the device reports. `hash` is the device's content hash of a file as the backend lists it
- * (opaque: only `sameOnDevice` of the same backend reads it); absent for a folder. */
+/** A file or a folder of the listing; `size` is the payload size on both backends (without the firmware's 16-byte trailer). `stored` is the size the
+ * digikit store keeps (payload plus trailer, what the file takes of the free space); absent on the +Drive. `hash` is the device's content hash of a file
+ * as the backend lists it (opaque: only `sameOnDevice` of the same backend reads it); absent for a folder. */
 export interface SampleEntry {
   name: string;
   kind: 'file' | 'folder';
   size: number;
+  stored?: number;
   hash?: string;
 }
 export interface SampleSpace {
@@ -81,7 +83,13 @@ export interface SamplesBackend {
     file: Prepared,
     onProgress?: (sent: number, total: number) => void,
     opts?: PutOptions,
-  ): Promise<void>;
+  ): Promise<PutResult | void>;
+  /**
+   * Name the files that `put` with `opts.defer` left pending on the device (one table commit); returns the files still pending (the device keeps back a
+   * file whose replaced file is being read). Only the bulk backend has it; after the bulk link failed it does nothing and returns 0 (the caller checks
+   * `bulkState`).
+   */
+  commit?(signal?: AbortSignal): Promise<number>;
   /** 'bulk' while file bytes go over the USB bulk link, 'fallback' after it failed (SysEx or MidiRpc for the rest of the run); absent without a bulk link. */
   readonly bulkState?: 'bulk' | 'fallback';
   /** Compare the stored file with `file` (a device that does not have it, or has other bytes, reports `ok` false). */
@@ -93,8 +101,15 @@ export interface SamplesBackend {
   rename(folder: string, name: string, toFolder: string, toName: string): Promise<void>;
 }
 
+/** What a `put` with `defer` returns when the device keeps files pending: the files still pending after this one (0: everything sent so far is committed). */
+export interface PutResult {
+  pending: number;
+}
+
 export interface PutOptions {
   signal?: AbortSignal;
+  /** Ask the device to keep the file pending (the batch commit); the result says how many are pending. A backend or a device without it ignores this and `put` returns nothing: the file is committed. */
+  defer?: boolean;
   exists?: boolean;
   /** The caller made the folder already (the bulk `put` on the +Drive skips its `mkdir`). */
   folderReady?: boolean;
@@ -298,13 +313,21 @@ class StoreSamples implements SamplesBackend {
       const slash = rest.indexOf('/');
       if (slash >= 0) out.set(rest.slice(0, slash), { name: rest.slice(0, slash), kind: 'folder', size: 0 });
       else if (isFolderEntry(e)) out.set(rest, { name: rest, kind: 'folder', size: 0 });
-      else out.set(rest, { name: rest, kind: 'file', size: e.size, hash: e.hash });
+      else
+        out.set(rest, {
+          name: rest,
+          kind: 'file',
+          size: Math.max(0, e.size - TRAILER.length),
+          stored: e.size,
+          hash: e.hash,
+        });
     }
     return [...out.values()];
   }
   sameOnDevice(file: Prepared, listing: readonly SampleEntry[]) {
     const e = listing.find((x) => x.name === file.name && x.kind === 'file');
-    return !!e && e.size === file.stored.length && e.hash === fileHashHex(file.stored);
+    // `size` of the listing is the payload; the stored size is what the file we send holds
+    return !!e && e.stored === file.stored.length && e.hash === fileHashHex(file.stored);
   }
   async space() {
     return storeSpace(this.s);
@@ -378,12 +401,12 @@ class StoreSamples implements SamplesBackend {
         break;
       }
     }
-    const ok = mismatchAt === null && entry.size === want.length;
+    const ok = mismatchAt === null && entry.size === want.length; // the store's own size: payload plus trailer
     return {
       ...base,
       ok,
       device,
-      size: entry.size,
+      size: Math.max(0, entry.size - TRAILER.length),
       mismatchAt,
       message: ok
         ? 'device hash matches'
@@ -493,8 +516,17 @@ class BulkSamples implements SamplesBackend {
   remove(folder: string, name: string) {
     return this.base.remove(folder, name);
   }
-  async put(folder: string, file: Prepared, onProgress?: (sent: number, total: number) => void, opts: PutOptions = {}) {
-    if (this.failed) return this.base.put(folder, file, onProgress, opts);
+  async commit(signal?: AbortSignal) {
+    if (this.failed) return 0;
+    return this.bulk.commit(signal);
+  }
+  async put(
+    folder: string,
+    file: Prepared,
+    onProgress?: (sent: number, total: number) => void,
+    opts: PutOptions = {},
+  ): Promise<PutResult | void> {
+    if (this.failed) return this.base.put(folder, file, onProgress, { ...opts, defer: false });
     const path = join(folder, file.name);
     // the +Drive needs the folder; the store's folders follow from the paths
     if (!this.store && clean(folder) && !opts.folderReady) await this.base.mkdir(folder);
@@ -504,12 +536,14 @@ class BulkSamples implements SamplesBackend {
     const replace =
       opts.exists ?? (await this.base.list(folder)).some((e) => e.name === file.name && e.kind === 'file');
     try {
-      await this.bulk.put(BULK_ROOT_SAMPLES, path, bytes, {
-        expected: this.expectedOf(file),
-        onProgress,
-        replace,
-        signal: opts.signal,
-      });
+      const o = { expected: this.expectedOf(file), onProgress, replace, signal: opts.signal };
+      if (opts.defer) {
+        const r = await this.bulk.put(BULK_ROOT_SAMPLES, path, bytes, { ...o, defer: true });
+        // an old device (a 4-byte END) committed at END: no result, the caller treats the file as done
+        return r.pending === undefined ? undefined : { pending: r.pending };
+      }
+      await this.bulk.put(BULK_ROOT_SAMPLES, path, bytes, o);
+      return undefined;
     } catch (e) {
       // the device answered (E_FULL, E_EXISTS, E_HASH ...) or the user cancelled: those are the result. Anything else is the link: SysEx for the rest of the run
       if (e instanceof BulkDeviceError || (e as { kind?: string } | null)?.kind === 'cancelled' || opts.signal?.aborted)
@@ -520,7 +554,7 @@ class BulkSamples implements SamplesBackend {
       this.note(
         `USB bulk link failed (${reason}); the rest of this run goes over ${this.base.kind === 'digikit' ? 'SysEx' : 'MidiRpc'}`,
       );
-      return this.base.put(folder, file, onProgress, opts);
+      return this.base.put(folder, file, onProgress, { ...opts, defer: false });
     }
   }
 }

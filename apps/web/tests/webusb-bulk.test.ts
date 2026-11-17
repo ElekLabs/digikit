@@ -238,7 +238,3 @@ test('no WebUSB: a readable error, and the env offers no bulk link', async () =>
   (globalThis as { navigator?: unknown }).navigator = { usb: usbWith(usbDevice(new FakeBulkDevice()).device).usb };
   expect(webUsbAvailable()).toBe(true);
 });
-
-test('bulkReply and bulkRequest are exported for device-side tests', () => {
-  expect(bulkReply(1, 2, 0).length).toBe(12);
-});

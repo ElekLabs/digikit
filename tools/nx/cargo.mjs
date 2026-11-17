@@ -7,6 +7,11 @@ import { join, normalize } from 'node:path';
 import { DependencyType } from '@nx/devkit';
 import { parse } from 'smol-toml';
 
+// The packs whose `needs` verdict tests read from dist/bytes/pack-verdicts.json (one list: tests/regression/runtime/needs-packs.json).
+const NEEDS_PACKS = JSON.parse(
+  readFileSync(new URL('../../tests/regression/runtime/needs-packs.json', import.meta.url), 'utf8'),
+).modules;
+
 const read = (root, toml) => parse(readFileSync(join(root, toml), 'utf8'));
 const KINDS = ['dependencies', 'dev-dependencies', 'build-dependencies'];
 
@@ -40,6 +45,26 @@ const cliTarget = ({ build, bin, dir }) => ({
 
 // Extra targets of named crates.
 const CRATE_TARGETS = {
+  'sharc-rig': {
+    build: {
+      executor: 'nx:run-commands',
+      cache: false, // cargo decides; the hash file it writes is the cache key of the tasks that run the rig
+      parallelism: true,
+      description:
+        'Builds the SHARC-only rig against the shared generated core into dist/bin/sharc-rig and writes dist/bytes/sharc-rig.sha256 (tools/nx/sharc-rig-bin.mjs).',
+      inputs: [
+        'default',
+        '^production',
+        '{workspaceRoot}/Cargo.toml',
+        '{workspaceRoot}/Cargo.lock',
+        '{workspaceRoot}/tools/nx/sharc-rig-bin.mjs',
+        '{workspaceRoot}/tools/nx/rust-env.mjs',
+        '{workspaceRoot}/out/native/shared-core/gen/CORE_FINGERPRINT',
+      ],
+      outputs: ['{workspaceRoot}/dist/bin/sharc-rig', '{workspaceRoot}/dist/bytes/sharc-rig.sha256'],
+      options: { command: 'node tools/nx/sharc-rig-bin.mjs', cwd: '.' },
+    },
+  },
   patchkit: {
     'device-bytes': {
       executor: 'nx:run-commands',
@@ -47,10 +72,70 @@ const CRATE_TARGETS = {
       parallelism: true,
       description:
         'Writes dist/bytes/core-objects.sha256: the hash of each committed core object without its source hash.',
-      inputs: ['{workspaceRoot}/tools/nx/device-bytes.mjs', { dependentTasksOutputFiles: '**/*', transitive: true }],
+      inputs: [
+        '{workspaceRoot}/tools/nx/device-bytes.mjs',
+        '{workspaceRoot}/tools/nx/object-hash.mjs',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
       dependsOn: [{ target: 'build-objects', projects: ['tag:acceptance-image'] }],
       outputs: ['{workspaceRoot}/dist/bytes/core-objects.sha256'],
       options: { command: 'node tools/nx/device-bytes.mjs', cwd: '.' },
+    },
+    'runtime-owners': {
+      executor: 'nx:run-commands',
+      cache: true,
+      parallelism: true,
+      description:
+        'Writes dist/bytes/owners/: one hash per owner of the runtime object (`patchkit owners`, modules/core/runtime/owners.toml), the shared set, the other runtime objects and the whole object.',
+      inputs: [
+        '{workspaceRoot}/tools/nx/runtime-owners.mjs',
+        '{workspaceRoot}/tools/nx/object-hash.mjs',
+        '{workspaceRoot}/modules/core/runtime/owners.toml',
+        '{workspaceRoot}/modules/core/runtime/build/*.dko.json',
+        { dependentTasksOutputFiles: 'dist/patchkit/patchkit', transitive: true },
+      ],
+      dependsOn: ['cli'],
+      outputs: ['{workspaceRoot}/dist/bytes/owners'],
+      options: { command: 'node tools/nx/runtime-owners.mjs', cwd: '.' },
+    },
+    'pack-verdicts': {
+      executor: 'nx:run-commands',
+      cache: false, // under a second: the file it writes is part of the key of the device tasks that read it
+      parallelism: true,
+      description:
+        'Writes dist/bytes/pack-verdicts.json: the `patchkit needs` verdict of each pack in tests/regression/runtime/needs-packs.json.',
+      inputs: [
+        '{workspaceRoot}/tools/nx/pack-verdicts.mjs',
+        '{workspaceRoot}/tests/regression/runtime/needs-packs.json',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
+      dependsOn: ['cli', ...NEEDS_PACKS.map((id) => `${id}:pack`)],
+      outputs: ['{workspaceRoot}/dist/bytes/pack-verdicts.json'],
+      options: { command: 'node tools/nx/pack-verdicts.mjs', cwd: '.' },
+    },
+    'device-images': {
+      executor: 'nx:run-commands',
+      cache: false, // a few seconds: the file it writes is part of the merge key of the device tasks
+      parallelism: true,
+      description:
+        'Writes dist/bytes/images.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set.',
+      inputs: [
+        '{workspaceRoot}/tools/nx/device-images.mjs',
+        '{workspaceRoot}/tests/regression/runtime/image-roots.json',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
+      dependsOn: ['cli', { target: 'build-objects', projects: ['tag:acceptance-image'] }],
+      outputs: ['{workspaceRoot}/dist/bytes/images.sha256', '{workspaceRoot}/dist/bytes/images'],
+      options: { command: 'node tools/nx/device-images.mjs', cwd: '.' },
+    },
+  },
+  dkprof: {
+    wasm: {
+      executor: 'nx:run-commands',
+      cache: false,
+      description: 'Builds the dkprof wasm that wb (profile, addrmap and module commands) loads.',
+      outputs: ['{workspaceRoot}/apps/web/public/dkprof.wasm'],
+      options: { command: 'node tools/nx/wasm.mjs --dkprof-only', cwd: '.' },
     },
   },
   dksample: {
@@ -71,7 +156,7 @@ const GATE = {
       executor: 'nx:run-commands',
       cache: false,
       parallelism: true, // no gate task is exclusive; an exclusive task scheduled mid-run makes Nx wait for every running task
-      outputs: ['{workspaceRoot}/dist/daemons.json'],
+      outputs: ['{workspaceRoot}/dist/daemons.json', '{workspaceRoot}/dist/bytes/daemon-test.key'],
       inputs: [
         // The sources the daemon is built from: SOURCE_GLOBS of tools/devtools/emud_key.py. The store keys the binary by
         // content; these inputs make a source edit select this task, and so every task that consumes dist/daemons.json.
@@ -81,12 +166,17 @@ const GATE = {
         '{workspaceRoot}/.cargo/**/*',
         '{workspaceRoot}/packages/emulator/**/*',
         '{workspaceRoot}/packages/dkaddrmap/**/*',
+        '{workspaceRoot}/packages/dksharc/**/*',
         '{workspaceRoot}/packages/dkneeds/**/*',
         '{workspaceRoot}/packages/dksample/**/*',
         '{workspaceRoot}/packages/dkupload/**/*',
         '{workspaceRoot}/packages/patchkit/**/*',
         '{workspaceRoot}/modules/core/runtime/fit/{Cargo.toml,build.rs,src/**/*}',
         '{workspaceRoot}/modules/core/runtime/sdk/{Cargo.toml,build.rs,src/**/*}',
+        // Test-only Rust files: `#[cfg(test)]` modules that the release build does not compile (an edit cannot change the binary).
+        // tools/devtools/emud_key.py checks that each of them is declared behind cfg(test) when it leaves the daemon test key.
+        '!{workspaceRoot}/{packages,modules}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}',
+        '!{workspaceRoot}/{packages,modules}/**/tests/**/*.rs',
         '{workspaceRoot}/devices/**/*',
         '{workspaceRoot}/tests/scenarios/dn2.json',
         '{workspaceRoot}/sdk/sdk.toml',
@@ -146,6 +236,7 @@ const NO_TESTS = new Set([
   'sharc-gen-2',
   'sharc-native-2',
   'dkfw',
+  'dkrt-test-support',
   'sharc-fast-cl',
   'sharc-fast-cl-2',
   'bootstrap-emu',
@@ -159,7 +250,9 @@ export const HERMETIC = {
   periph: [],
   'emmc-card': [],
   dkaddrmap: [],
+  dkprof: [],
   dkneeds: [],
+  dksharc: [],
   'dkrt-sdk': ['{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json'],
   'dkrt-fit': ['{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json'],
   'device-profile': ['{workspaceRoot}/devices/digitakt-ii.toml', '{workspaceRoot}/devices/digitone-ii.toml'],
@@ -247,7 +340,7 @@ export const createNodesV2 = [
                 ...(COMPILE_SOURCE[name] ?? []),
               ],
               options: {
-                command: `node tools/nx/rust-env.mjs${name === 'sharc-native' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
+                command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
                 cwd: '.',
               },
             };

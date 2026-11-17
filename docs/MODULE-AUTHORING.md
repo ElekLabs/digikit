@@ -107,7 +107,7 @@ the objects in the cache `out/cache/dko/<module id>/<object path>`, keyed by the
 modules commit their objects (`mise run check:layers` fails when a content module has one). The browser has no compilers: the web build runs
 `patchkit build` and puts the objects from the cache into the gallery bundle.
 
-Do not edit anything in `build/gen/`. A `.dkmod` export leaves out `build/` (section 10).
+Do not edit anything in `build/gen/`. A `.dkmod` export leaves out `build/` (section 11).
 
 ## 5. The manifest and the declaration
 
@@ -147,8 +147,11 @@ An id names the machine or effect only. The position of the entry in its list is
 `build/gen/module_ids.h` as `DK_MACHINE_ID_<ID>` or `DK_FX_ID_<ID>`, and `init` passes it to the builder call. Do not change the order after a
 release. A tool has neither list.
 
-`[uses.dt2]` and `[uses.dn2]` hold the rows the module takes on each device: `machine_rows`, `param_rows`, `page_rows`, `record_bytes`.
-`module:check` runs `init` in the emulator and writes them. Never write them by hand. The device menu and the packer use them to tell whether the
+`[[record]]` lists a record of a generic kind that `init` emits with `dk_record_add` (a kind that a service owns and that has no builder, such as `lfo_shape`): `kind` is the kind's lower-case name from `sdk/sdk.toml` `[records.kinds]` and `key` the identity of the record (the shape id of an `lfo_shape`). The packer writes the keys into the header table, so the boot planner refuses a kind no service owns and a key that another module of the selection has before the module loads. Machines and effects are builder calls, not `[[record]]`.
+
+`[uses.dt2]` and `[uses.dn2]` hold the rows the module takes on each device: `machine_rows`, `param_rows`, `page_rows`, `record_bytes`, and the DSP cost
+(`dsp_cost_voice` for a machine, `dsp_cost_fx` for an effect: instructions per block). `module:check` runs `init` in the emulator and the conformance
+suite, and writes them. Never write them by hand. The device menu and the packer use them to tell whether the
 module fits.
 
 `[[object]]` names a built object:
@@ -261,8 +264,6 @@ it in the source header, as `modules/machines/pluck/src/dsp/pluck.s` does.
 
 Put the word numbers in a header in the module's `src/` when C and assembly both need them (`shot_params.h` of SHOT). Use only decimal
 `#define`s and `//` comments on their own line: the SHARC+ assembler keeps a trailing comment in the macro text and upper-cases macro text.
-
-`patchkit desc MODULE_ID` prints the machines, parameters and pages of a module as JSON.
 
 ### 5.3 What the device profile fills in
 
@@ -500,7 +501,7 @@ of a module: the routines that the runtime calls.
 | --- | --- | --- |
 | `note_on(state, in, params)` | Once per note, before the first `render`. It makes no sound. | `0`, or a negative number (a fault). |
 | `render(state, in, params)` | Once per block of `DK_BLOCK` (32) samples while the voice runs. | `DK_OK`, or `DK_DONE` when the voice has ended. |
-| `desc` | A `dk_machine_desc` in read-only data: magic, contract word, parameter count, voices, state bytes, bytes cleared at note-on, cycle budgets. | Read by the adapter. |
+| `desc` | A `dk_machine_desc` in read-only data: magic, contract word, parameter count, voices, state bytes, bytes cleared at note-on, call depth and stack bytes. The DSP cost is not in it: `module:check` measures it. | Read by the adapter. |
 
 `render` writes `DK_BLOCK` floats to `in->out`. `in` also holds `pitch` (semitones shifted left by 8, the tune included), `velocity`, `block` and the source `track`.
 `params` holds `DK_MAX_PARAMS` words. The words after your parameters are 0.
@@ -524,8 +525,9 @@ machine and the pan a second time on R ([DN2 stereo](design/dn2-stereo.md)). At 
 A stereo slot costs about 2,900 to 5,500 more DSP instructions per block than a mono slot (design section 3). `digikit/shot` is the example.
 Do not place `note_on` at offset 0 of the image: an offset of 0 reads as "no note_on".
 
-The `dk_machine_desc` has 10 words: magic, contract, parameter count, voices (1 to 16), state bytes per voice (a multiple of 4), bytes cleared at
-note-on, max cycles of a block, max cycles of the note-on block, max call depth, stack bytes.
+The `dk_machine_desc` has 8 words: magic, contract, parameter count, voices (1 to 16), state bytes per voice (a multiple of 4), bytes cleared at
+note-on, max call depth, stack bytes. It carries no cycle count: `module:check` measures the worst steady block of one voice and writes it as
+`dsp_cost_voice` into `[uses.<device>]`. The broker accepts a selection when `max(per-voice costs) x voices + sum(effect costs)` stays within the device's headroom.
 
 The adapter in `core/dsp-voice` zeroes `state_clear_bytes` at note-on (the first note-on of a track after the module loads zeroes its whole state: voice states start zeroed; unload and load again zeroes again) and clamps the parameter words to your ranges. After each call it checks the
 output. A block with a sample that is not finite or is louder than 8.0 is zeroed. The voice ends. After 8 faults in a second the machine is
@@ -533,8 +535,7 @@ switched off.
 
 Registers:
 
-- You may change R0-R15, I0-I5, M1-M4 and B3.
-- Keep I6-I15, M0, M5-M15, L0-L7 and MODE1.
+- Which registers you may change, keep or never write: `sdk/dsp/REGISTERS.md`.
 - The adapter pins M5 = 0, M6 = 1, M7 = -1, M13 = 0, M14 = 1 and M15 = -1, L0-L5 = 0, SIMD off and RND32 set. Return with `JUMP (M13, I13)`.
 - `_dv_exp2` (F0 = 2^F0) is a helper of `core/dsp-voice`. Declare it with `.EXTERN _dv_exp2;`. It clobbers R0 to R3.
 - A 16-bit form `Rn = Rn op Rx` can be read differently by the emulator and the silicon. The build refuses it. Use three distinct registers.
@@ -543,7 +544,7 @@ Registers:
 Memory: your code may write `in->out`, its own voice's state, its data stack (`stack_bytes`) and the data and bss of its own object. Data and bss
 are shared by all voices. State that differs per voice goes in `state`. The conformance suite records every store and fails on any other.
 
-The template `src/dsp/NAME.s` shows all of this in about 90 lines. Read it first. Pitch tests: `tests/patchkit/test_sine.py`.
+The template `src/dsp/NAME.s` shows all of this in about 90 lines. Read it first. Pitch checks: `tests/fixtures/modules/sine/tests/rig/sine.toml` (docs/TESTING.md "Sound checks").
 
 
 ### 7.2 Effect (`<dk/gen/fx.h>`)
@@ -551,7 +552,7 @@ The template `src/dsp/NAME.s` shows all of this in about 90 lines. Read it first
 | Entry | When it runs | Result |
 | --- | --- | --- |
 | `process(state, in, params)` | Once per block while the effect is on. | `DK_FX_OK` (0), or a negative number. A negative number is a fault: the block plays dry. |
-| `desc` | A `dk_fx_desc` in read-only data: magic, contract word, `n_params`, `state_bytes`, cycle budget, call depth, stack bytes. | Read by the loader. |
+| `desc` | A `dk_fx_desc` in read-only data: magic, contract word, `n_params`, `state_bytes`, call depth, stack bytes (6 words). | Read by the loader. |
 
 - `in->in` is the input block: `DK_FX_BLOCK` (64) floats, planar. 32 left, then 32 right. It is read only.
 - `in->out` is the output block of 64 floats. Write all of them.
@@ -591,10 +592,10 @@ The template `src/dsp/NAME.s` shows all of this in about 90 lines. Read it first
   README what it means there.
 - Clamp the output to +-7.9. An input at the level bound times a filter's overshoot would otherwise refuse the block. Use an integer phase
   accumulator for anything that must not drift.
-- Fixtures: `tests/fixtures/modules/dyn-fx-gain` (insert), `dyn-fx-gain-send`, `dyn-fx-gain-both`, `dyn-fx-gain-sendonly`. A real effect with a
+- Fixtures: `dyn-fx-gain` (insert), `dyn-fx-gain-send`, `-both`, `-sendonly`, `-bipolar` ([fixture table](TESTING.md#fixture-table)). A real effect with a
   float32 reference model: `modules/fx/freqshift`.
-- The instruction budget of the conformance suite is `pk_conform.fx_budget()` (about 31,000 for the effect today, 900 for the adapter). Read it
-  from the report (`-rA`).
+- The instruction budget of the conformance suite is `patchkit budget` (about 31,000 for the effect today, 900 for the adapter). Read it
+  from the report in `dist/conformance-rig`. The worst call it measures is written as `dsp_cost_fx`.
 
 
 ### 7.3 Entry point and services (`<dk/core/module.h>`)
@@ -696,6 +697,7 @@ Names a module may import (from `[[import]]` in `sdk/sdk.toml`; every one is doc
 | `dk_input_*` | Press a key or turn an encoder (`dk_input_open` first). They need `core/input`; without it `dk_input_open` returns `DK_E_MISSING`. |
 | `dk_ui_*` | The calls of `<dk/platform/ui.h>`: menus, lists, rows and dialogs. They need `core/ui`. Without it the module still loads, `dk_ui_open` returns `DK_E_MISSING` and each call returns its failure value (`dk_ui_menu_new` NULL, the int calls -1, `dk_ui_menu_is_open` and `dk_ui_menu_checked` 0, the void calls nothing). `dk_ui_tick(ui, fn, arg, period_ms)` is a timer in the UI task: redraw a screen while a load runs; 0 stops it. |
 | `dk_time_blocks` | The 1500 Hz block clock. |
+| `dk_sink_set` | Sets the sink of a runtime channel (`DK_SINK_LOG`, `DK_SINK_SPAN`) for this module; one owner per channel, cleared after `fini` (`<dk/core/sink.h>`). For debug and profiling modules. |
 | `dk_dsp_link_*` | Sets one per-block callback in the block interrupt (`core/dsp-link`; `dk_dsp_link_open` returns `DK_E_MISSING` without it): `void cb(const volatile u16 *rec)` gets the previous DSP reply record. Short C only; clear it in `fini`. |
 
 A load fails with `E_IMPORT` when a name is not in the runtime's table, or when `init` returns `DK_E_MISSING` because a provider the module needs is absent.
@@ -721,22 +723,22 @@ wait. The request body is at most 160 bytes. The reply body is at most 879 bytes
 | Check | `mise run module:check -- ID [--device dt2\|dn2]` | See below. |
 | Memory audit | `mise run module:audit -- NAME [--device dt2\|dn2]` | Packs the module and the run-time modules it requires, loads them on a ColdFire-only emulator, drives the UI and reports ColdFire stores outside the module's blocks (pc, address, the code it belongs to). It runs the Vitest device test `modules/core/runtime/tests/memaudit-module.device.test.ts` through `tools/devtools/module_audit.sh`, which first builds the patchkit CLI and the daemons when they are stale. About 1 to 2 minutes per device. |
 | Pack | `mise run module:pack -- ID --device dt2\|dn2 [-o FILE]` | Builds the objects that are stale and makes the `.dkm` from them in one command (no separate build step). Default: `out/patch/NAME-DEVICE.dkm`. It refuses a module that cannot be packed, for example one with no `dk_module`. |
-| Pack all | `mise run module:pack-all [-- --force]` | Packs every run-time module for every device into `out/modules/<device>/<id>.dkm`. |
+| Pack all | the workbench app | Builds and packs the run-time modules of a device in-process when its library is read (the Transfer page, the memory panel, the default modules), into `out/modules/<device>/<id>.dkm`. |
 | Emulator | `mise run workbench` | Starts the emulator. Run it in another shell. |
 | Run | `mise run dk:run -- ID --emu` | Builds, packs, uploads, selects, restarts and follows the log. |
 | Run on a device | `mise run dk:run -- ID --port Digitakt` | The same on a device that has the digikit runtime. The port is a part of the MIDI port name. |
 | Iterate | `mise run dk:dev -- ID --device dn2 --keys 'tap:...,shot:NAME'` | Builds, reloads a kept emulator daemon and writes `out/runs/devreload/<dev>/sheet.png`. A UI-only change swaps in about 4 s; any other change boots (DN2 5 s, DT2 10 s). Iterate on DN2 and check DT2 at the end. It is no proof: finish with `module:check`. See [TESTING.md](TESTING.md). |
-| Log | `mise run dk:log -- --emu follow` | The runtime log. See section 11. |
+| Log | `mise run dk:log -- --emu follow` | The runtime log. See section 12. |
 | Card | `mise run dk:store -- --emu info` | Lists the store. Prints one `capacity` line per resource. |
 
 Every task takes `-- --help`. Hardware is a deliberate step: do not flash a device from these commands.
 
-`module:check` runs one pytest process. What it runs depends on the kind:
+`module:check` runs the conformance suite on the SHARC-only rig, then one pytest process for the module's own tests. What it runs depends on the kind:
 
 | Kind | What `module:check` runs |
 | --- | --- |
-| `machine` | `tests/modules/test_machine_conformance.py` on both devices, or on one with `--device`. Every parameter at its limits, many notes, modulation, long notes and retriggers. The write-set check is part of it. |
-| `fx` | `tests/modules/test_fx_conformance.py`: signals, parameter limits, modulation, switching and a long run. It checks returns, registers, the write set and the instruction budget. |
+| `machine` | The machine conformance of `packages/sharc-rig-kit` on both devices, or on one with `--device`. Every parameter at its limits, many notes, modulation, long notes and retriggers. The write-set check is part of it. |
+| `fx` | The effect conformance of the kit: signals, parameter limits, modulation, switching and a long run. It checks returns, registers, the write set and the instruction budget. |
 | `service` (tool) | No conformance suite. It checks the objects against their sources. |
 | machine and effect | Also runs `init` in the emulator and writes `[uses.dt2]`, `[uses.dn2]` and `build/gen/gallery.json`. |
 | all | The module's own tests: `tests/**/test_*.py` of the module, and the digikit test files of the kinds of its `tests/scenarios/*.toml`, limited to those scenarios. These may build or launch an emulator. |
@@ -753,7 +755,7 @@ A change in a module selects the module's own tests and those of the modules tha
 build. A PCM pin of a module stays in that module's `tests/scenarios`. Nothing outside the module folder names a user module: `mise run
 check:layers` (rule `self-contained`) fails on a module id or path in code or tests. Docs and `*.md` files may name modules. A module with
 `host = true` in `[module]` is exempt: the workbench speaks its protocol (the remote control service). Tests of shared tools use the fixtures in
-`tests/fixtures/modules` (`test/sine` is the small dynamic machine, `test/dyn-fx-gain` the effect), or a made-up id such as `acme/demo`.
+`tests/fixtures/modules` (`test/sine` is the small dynamic machine, `test/dyn-fx-gain` the effect; all fixtures are in the [fixture table](TESTING.md#fixture-table)), or a made-up id such as `acme/demo`.
 
 After the tests pass, `module:check` packs the module for each device. It prints a `size` line and two more lines, `needs` and `fits`.
 
@@ -779,7 +781,19 @@ Device facts for authors are in `.agents/skills/digikit-module/references/device
 Trace marks (`DK_TRACE_LOG`, `DK_STEP`) are switched on with `--trace` on `module:pack`, `module:check` and `dk:dev`: see `sdk/README.md`, "Tracing".
 
 
-## 9. Versions and compatibility
+## 9. What happens when a module loads
+
+At boot the runtime gives each selected module a state: SELECTED, then PLANNED or REFUSED, then INIT, DSP LOADING and ACTIVE. FAILED and SKIPPED are the other ends. The boot plan reads only the header tables, so a REFUSED module never ran any code. A refusal and a failure each carry a load code and a reason that Transfer and the DIGIKIT menu show:
+
+- `E_MISSING`, `E_CONTRACT`: a service the module needs is not there, or needs a newer runtime.
+- `E_PLAN_FIT`: the module's `[uses]` do not fit what the modules before it in the selection left (the reason names the resource).
+- `E_PLAN_KIND`, `E_PLAN_OWNER`, `E_PLAN_KEY`: a record kind has no owner, two modules own one kind, slot or hook site, or two modules give one key.
+- `E_INIT`: `init` returned non-zero. `E_DECL_KIND`: the header table has record kinds, slots, hooks or exports that `init` did not declare. Both end FAILED.
+- other codes (`E_NOMEM`, `E_DSP_*`): the load failed after the plan accepted the module.
+
+In safe mode no module loads and every one is SKIPPED. The table of every code with the tests that prove it is `modules/core/runtime/tests/refusal/refusal-table.ts`.
+
+## 10. Versions and compatibility
 
 [MODULES.md](MODULES.md) explains the version rule. What you do:
 
@@ -793,7 +807,7 @@ Trace marks (`DK_TRACE_LOG`, `DK_STEP`) are switched on with `--trace` on `modul
 - The machine key and the effect ID of saved projects and kits come from the packed name and the `id` in `[[machine]]` or `[[fx]]`. Do not
   rename either after users have saved data. A pack with `--name` makes an alias with its own keys.
 
-## 10. Export and import
+## 11. Export and import
 
 ```sh
 mise run module:export -- AUTHOR/NAME                    # out/patch/AUTHOR-NAME-VERSION.dkmod
@@ -807,7 +821,7 @@ A `.dkmod` holds no SDK code: it builds against the SDK of the machine that impo
 `import` checks every hash. It refuses extra or missing files, the author `core`, the type `framework` and an id that is already known. `--replace`
 allows a known id. Without `--dir` it uses the first folder of `PATCHKIT_MODULES`. After an import, run `module:check` before you trust the code.
 
-## 11. Logging
+## 12. Logging
 
 - ColdFire code logs with `dk_log(level, msg, value)` (`<dk/core/log.h>`; 24 characters of the message are kept). `DK_TRACE_LOG(msg, value)` of `<dk/core/trace.h>` is `dk_log` at the trace level and exists only in a `--trace` build.
   Levels: 0 error, 1 warn, 2 info, 3 debug, 4 trace.
@@ -826,7 +840,7 @@ allows a known id. Without `--dir` it uses the first folder of `PATCHKIT_MODULES
 - Details: [DEVELOPMENT.md, "Module loop"](DEVELOPMENT.md#module-loop) and `docs/findings/46-digikit-debug.md`.
 
 
-## 12. Looking things up
+## 13. Looking things up
 
 | Question | Where |
 | --- | --- |

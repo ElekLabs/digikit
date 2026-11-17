@@ -15,8 +15,18 @@ extern "C" {
     static dkrt_store_sectors: u32;
 }
 
+/// Host tests: a store layout for this thread (the device words of the host fixture are zero).
+#[cfg(test)]
+thread_local! {
+    pub static TEST_LAYOUT: core::cell::Cell<Option<Layout>> = const { core::cell::Cell::new(None) };
+}
+
 /// Where the store is on this device.
 pub fn layout() -> Layout {
+    #[cfg(test)]
+    if let Some(l) = TEST_LAYOUT.with(|c| c.get()) {
+        return l;
+    }
     unsafe { Layout { first: read_volatile(addr_of!(dkrt_store_first)), sectors: read_volatile(addr_of!(dkrt_store_sectors)) } }
 }
 
@@ -109,10 +119,11 @@ unsafe fn find_unlocked(path: *const u8) -> Result<File, i32> {
     }
 }
 
-/// The first 64 bytes of the file `f` (a native sample header), through the peek sector. Task context, like every store read.
+/// The first 64 bytes of the file `f` (a native sample header), through the peek sector. A file under 64 bytes has no head: `E_READ` (the sector holds
+/// other bytes after the end of the file, which are not the file's). Task context, like every store read.
 pub unsafe fn read_head(f: &File, head: &mut [u8; 64]) -> Result<(), i32> {
-    if f.size == 0 {
-        return Err(E_FORMAT);
+    if f.size < 64 {
+        return Err(E_READ);
     }
     let r = read_sector(f.first, scratch());
     if r != OK {
@@ -174,7 +185,7 @@ pub unsafe fn read_file(path: *const u8, dst: *mut u8, cap: u32) -> i32 {
 
 /// The store figures as the headers last said them, and whether the headers may have changed since. Only an upload writes a header sector
 /// (the card is not swapped while the device runs), so the HEALTH page, which asks twice a second, reads the card once and again after an
-/// upload wrote a header (`upload.rs` sets `STORE_DIRTY` when it writes one): a page that read the card on every refresh would cost the UI task
+/// upload wrote a header (`store_writer.rs` calls `figures_stale` when it writes one): a page that read the card on every refresh would cost the UI task
 /// card reads that show up in the CPU load it displays.
 static mut STORE_DIRTY: bool = true;
 static mut STORE_SEEN: Option<(u32, u32)> = None; // (used KiB, free KiB) of a usable header; None: no store
@@ -224,7 +235,7 @@ pub unsafe fn seen() -> Option<(u32, u32)> {
     STORE_SEEN
 }
 
-/// `dkrt_store_list(prefix, out, max)`: the files whose path starts with `prefix` (NUL-terminated, e.g. `modules/`), in path order, at most `max`
+/// `list(prefix, out, max)`: the files whose path starts with `prefix` (NUL-terminated, e.g. `modules/`), in path order, at most `max`
 /// into `out`; returns how many, or a negative code (`E_NOT_FOUND`: no store). A path that does not fit 63 bytes, a folder and an empty file are
 /// left out. A commit of an upload running at the same time makes the list start again (it is one header's table).
 pub unsafe fn list(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32 {
@@ -402,4 +413,20 @@ pub unsafe extern "C" fn dkrt_store_lease(path: *const u8, out: *mut DkrtStoreFi
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_store_unlease(id: i32) {
     crate::store_writer::lease_end(id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A file under 64 bytes has no head, and no sector is read for it (the host has no card: a read would not be answered).
+    #[test]
+    fn a_file_under_64_bytes_has_no_head() {
+        for size in [0, 1, 10, 63] {
+            let f = File { first: 0, size, sha: [0; 32] };
+            let mut head = [0xaau8; 64];
+            assert_eq!(unsafe { read_head(&f, &mut head) }, Err(E_READ), "size {size}");
+            assert_eq!(head, [0xaa; 64], "size {size}: nothing is written");
+        }
+    }
 }

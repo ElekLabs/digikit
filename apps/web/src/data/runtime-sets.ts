@@ -1,6 +1,6 @@
 // The module set the Patch page adds: the digikit runtime, the `device` set of each device file (devices/*.toml, [patch_sets]). The `device`
 // set is the one for a real device (the file is flashed), and `patchkit apply` without --modules uses it; `emulator` is for the emulator and equals it today.
-import { registry, runtimeDeviceIds, type DeviceId } from './device-profiles';
+import { registry, runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 
 function deviceSet(id: DeviceId): string[] {
   const set = registry.get(id).patchSets.device;

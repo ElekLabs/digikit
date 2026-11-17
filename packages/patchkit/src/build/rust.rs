@@ -35,6 +35,8 @@ struct Cargo {
     lib: Option<Lib>,
     profile: Option<Profile>,
     dependencies: Option<BTreeMap<String, toml::Spanned<toml::Value>>>,
+    #[serde(rename = "dev-dependencies")]
+    dev_dependencies: Option<BTreeMap<String, toml::Spanned<toml::Value>>>,
 }
 
 #[derive(Deserialize)]
@@ -62,11 +64,22 @@ fn parse_cargo(text: &str, what: &Path) -> Result<Cargo> {
     toml::from_str(text).map_err(|e| err!("{}: {e}", what.display()))
 }
 
-/// The `path` of every path dependency of a manifest, in the order the file lists them.
-fn path_deps(text: &str, what: &Path) -> Result<Vec<String>> {
+/// The `path` of every path dependency of a manifest, in the order the file lists them. `dev`: the `[dev-dependencies]` too. A build needs
+/// their manifests (cargo reads them) but never their code, so the source hash leaves them out (`crate_files`).
+fn path_deps(text: &str, what: &Path, dev: bool) -> Result<Vec<String>> {
     let c = parse_cargo(text, what)?;
     let mut deps: Vec<(usize, String)> = vec![];
-    for (_, d) in c.dependencies.unwrap_or_default() {
+    let dev_deps = if dev {
+        c.dev_dependencies.unwrap_or_default()
+    } else {
+        BTreeMap::new()
+    };
+    for (_, d) in c
+        .dependencies
+        .unwrap_or_default()
+        .into_iter()
+        .chain(dev_deps)
+    {
         if let Some(p) = d.get_ref().get("path").and_then(|p| p.as_str()) {
             deps.push((d.span().start, p.to_string()));
         }
@@ -122,7 +135,7 @@ pub fn crate_files(manifest: &Path) -> Result<Vec<PathBuf>> {
             out.push(d.join(extra));
         }
     }
-    for dep in path_deps(&tc::read_text(manifest)?, manifest)? {
+    for dep in path_deps(&tc::read_text(manifest)?, manifest, false)? {
         let sub = tc::canon(&d.join(&dep).join("Cargo.toml"));
         for p in crate_files(&sub)? {
             if !out.contains(&p) {
@@ -235,7 +248,20 @@ fn replace_path(text: &str, p: &str, rel: &str) -> String {
     out
 }
 
-/// Copy a crate to `dest` and its path dependencies to `deps_dir/<n>-<name>`, rewriting the `path = ".."` of the copies.
+/// `text` without the bare `[workspace]` line of a manifest: a path dependency that is a workspace root of its own (a service file crate, which is also built alone)
+/// would be a second root in the staged tree.
+fn without_workspace_root(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.split_inclusive('\n') {
+        if line.trim() != "[workspace]" {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// Copy a crate to `dest` and its path dependencies to `deps_dir/<n>-<name>`, rewriting the `path = ".."` of the copies. A dependency stages without its own
+/// `[workspace]` line.
 fn stage(
     manifest: &Path,
     dest: &Path,
@@ -244,7 +270,7 @@ fn stage(
 ) -> Result<PathBuf> {
     copy_tree(manifest.parent().unwrap(), dest)?;
     let mut text = tc::read_text(&dest.join("Cargo.toml"))?;
-    for dep in path_deps(&text.clone(), manifest)? {
+    for dep in path_deps(&text.clone(), manifest, true)? {
         let sub = tc::canon(&manifest.parent().unwrap().join(&dep).join("Cargo.toml"));
         let sd = match seen.iter().find(|(k, _)| *k == sub) {
             Some((_, sd)) => sd.clone(),
@@ -258,6 +284,9 @@ fn stage(
                 let sd = deps_dir.join(format!("{}-{}", seen.len(), name));
                 seen.push((sub.clone(), sd.clone()));
                 stage(&sub, &sd, deps_dir, seen)?;
+                let dep_manifest = sd.join("Cargo.toml");
+                let t = without_workspace_root(&tc::read_text(&dep_manifest)?);
+                std::fs::write(&dep_manifest, t).map_err(|e| err!("{e}"))?;
                 sd
             }
         };
@@ -490,6 +519,9 @@ fn build_object(env: &Env, manifest: &Path, out: &Path) -> Result<Vec<String>> {
         if elf::is_empty(&blob)? {
             continue; // a crate with only types (dkrt-sdk) compiles to an object with no sections; its flags are 0
         }
+        if !elf::has_code(&blob)? {
+            continue; // data only (the statics of a service crate whose functions are generic): no code, so no ISA flags to check
+        }
         let mname = m.file_name().unwrap().to_string_lossy().into_owned();
         check_flags(&blob, &format!("archive member {mname}"))?;
         if mname.starts_with(&format!("{crate_name}-"))
@@ -606,6 +638,16 @@ pub fn object_proto(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_staged_dependency_loses_its_workspace_root() {
+        let text =
+            "[package]\nname = \"a\"\n\n[workspace]\n\n[profile.release]\npanic = \"abort\"\n";
+        assert_eq!(
+            without_workspace_root(text),
+            "[package]\nname = \"a\"\n\n\n[profile.release]\npanic = \"abort\"\n"
+        );
+    }
 
     #[test]
     fn copy_tree_stamps_the_copy_with_the_current_time() {

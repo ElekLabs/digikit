@@ -10,7 +10,8 @@ import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { E_SET_NOKEY } from '@digi/regression/runtime/project-kit.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { linkedRuntimeNeed, runtimeVersion } from '@digi/regression/runtime/upload-kit.ts';
-import { pollEmulated, waitEmulated, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
+import { emulatorClock, waitClock } from '@digi/test-support';
+import { pollEmulated, waitForBootEmulated, expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
  * The entry point `dk_module` and the service imports (docs/plans/sdk.md section 5; the fixture test/entry-demo uses only the new contract).
@@ -26,7 +27,9 @@ const DEVICE_ID = { dt2: 1, dn2: 2 } as const; // [digikit] id of devices/*.toml
 async function expectEntryPoint({ session, dk }: PatchedSession): Promise<void> {
   expect(['zero', 'none'], 'the entry point needs no DSP').toContain((await session.status()).dsp);
   await expectRuntimeReady(session);
-  await installModule(dk, 'test/entry-demo', moduleArtifact(session.options.device, 'test/entry-demo'));
+  await installModule(dk, 'test/entry-demo', moduleArtifact(session.options.device, 'test/entry-demo'), {
+    device: session.options.device,
+  });
   expect(RANGES.entry_demo_test, 'reserved command range of the fixture').toEqual([0x1c, 0x1d]);
   const report = async () => {
     const reply = await dk.request(REPORT);
@@ -63,13 +66,13 @@ async function expectEntryPoint({ session, dk }: PatchedSession): Promise<void> 
     emulatedMs: 30_000,
     message: 'the UI loop never called tick',
   });
-  await waitEmulated(session, 1000);
+  await waitClock(emulatorClock(session), 1000); // a second of ticks: no observable condition beyond the first tick
   const later = await report();
   expect(later.ticks, 'tick runs on every UI pass').toBeGreaterThan(running.ticks);
   expect(later.tickSpan, 'dk_time_blocks advances between the first and the last tick').toBeGreaterThan(0);
 
   expect((await dk.request(WRITE, Uint8Array.of(0x5a))).status, 'the write is queued').toBe(0);
-  await waitEmulated(session, 500);
+  await waitClock(emulatorClock(session), 500); // the tick that runs the queued write has no event
   const written = await report();
   expect(written.pending, 'tick ran the queued write').toBe(0);
   expect([written.put, written.back, written.value], 'dk_settings_put, then dk_settings_get in tick').toEqual([0, 1, 0x5a]);
@@ -108,9 +111,7 @@ async function expectVersionRefusal({ session, dk }: PatchedSession): Promise<vo
   await dk.select(['modules/entry-major.dkm', 'modules/entry-minor.dkm', 'modules/entry-patch.dkm', 'modules/entry-demo.dkm']);
   await dk.restart();
   await waitForBootEmulated(dk);
-  await expect
-    .poll(async () => (await dk.modules()).map((m) => m.name), { timeout: 30_000, interval: 500 })
-    .toEqual(['test/entry-demo']);
+  await expectPollEmulated(session, async () => (await dk.modules()).map((m) => m.name), (value) => expect(value).toEqual(['test/entry-demo']), { emulatedMs: 30000, intervalMs: 500 });
   const boot = await bootInfo(session, plan);
   expect(boot.results, 'another major, another minor or a higher patch is E_CONTRACT, the real one loads').toEqual([E_CONTRACT, E_CONTRACT, E_CONTRACT, 0]);
   await session.expectNoFault('version refusal');

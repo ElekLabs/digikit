@@ -19,9 +19,42 @@ export const MAX_STATE_BYTES = 16777216;
 export const GRANULE = 64;
 export const DSP_SLACK = 8;
 export const ARENA_HDR = 16;
-export const COLLECT_BYTES = 6320;
+export const COLLECT_BYTES = 7486;
+export const TABLE_MAGIC = 1145787458;
+export const TABLE_VERSION = 2;
+export const PROVIDER_MAX = 6;
+export const BIND_MAX = 24;
+export const INSTALL_SITES = 48;
+export const SLOTS_MAX = 16;
+export const INFO_MAX = 64;
 export const MAX_VOICES = 8;
 export const MAX_FX = 4;
+export const H_ROLE = 56;
+
+/** The services the runtime image provides itself: the names of `[handle] services` that no `.dks` provider supplies (a `[[service]]` without `rust` and with no static row). A module's NEEDS may name them; every other name needs a `.dks`. */
+export const RUNTIME_SERVICE_NAMES = ['runtime', 'samples', 'ui', 'input', 'usb_bulk', 'dsp_link', 'sdhc_large'];
+
+/** The record kinds of a `.dkm` (`[records.kinds]`). */
+export const RECORD_KIND = {
+  PARAM: 1,
+  MACHINE: 2,
+  PAGE: 3,
+  EFFECT: 4,
+  ACTION: 5,
+  NATIVE_PAGE: 6,
+  NATIVE_PAGE_V2: 7,
+  LFO_SHAPE: 8,
+} as const;
+
+/** The resources of a module's `uses` (`[records.resources]`). */
+export const RESOURCE = {
+  MACHINE_ROWS: 1,
+  PARAM_ROWS: 2,
+  PAGE_ROWS: 3,
+  RECORD_BYTES: 4,
+  DSP_COST_VOICE: 5,
+  DSP_COST_FX: 6,
+} as const;
 
 export const CMD = {
   INFO: 0x01,
@@ -47,6 +80,8 @@ export const CMD = {
 
 /** The commands of run-time service modules (`[protocol.service]`). */
 export const SERVICE_CMD = {
+  PROFILE_STATE: 0x1e,
+  PROFILE_READ: 0x1f,
   LOG: 0x20,
   PEEK: 0x21,
   LOGCFG: 0x22,
@@ -137,6 +172,37 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-49, 'E_TABLE', "the runtime's tables failed their check"],
   [-73, 'E_MISSING', 'the service is not in the image (the module that provides it is not loaded)'],
   [-74, 'E_DECL_FULL', 'init made more builder calls than the record limit allows'],
+  [-75, 'E_PLAN_KIND', 'the boot plan refused the module: a record kind of its header table has no owning service'],
+  [-76, 'E_PLAN_OWNER', 'the boot plan refused the module: another module owns the kind, slot or hook site it takes'],
+  [-77, 'E_PLAN_KEY', 'the boot plan refused the module: another module of the selection has the same key for a kind'],
+  [
+    -78,
+    'E_PLAN_FIT',
+    'the boot plan refused the module: its uses do not fit what the earlier modules of the selection left',
+  ],
+  [-79, 'E_DECL_KIND', 'a service declared a record kind that the header table does not carry, or with another length'],
+  [
+    -81,
+    'E_SVC_ABI',
+    "a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint)",
+  ],
+  [
+    -82,
+    'E_HOOK_STOCK',
+    'a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init',
+  ],
+];
+
+/** The state of a module of the boot selection (LOADS v2): [code, name, text] */
+export const LOAD_STATE: [number, string, string][] = [
+  [0, 'SELECTED', 'in the selection, not planned yet'],
+  [1, 'PLANNED', 'the boot plan accepted it; it has not started'],
+  [2, 'REFUSED', 'the boot plan refused it before any of its code ran; the result code says why'],
+  [3, 'INIT', 'its code is loading and `init` is running'],
+  [4, 'DSP_LOADING', 'its ColdFire part is live and its DSP part is still going'],
+  [5, 'ACTIVE', 'loaded; its DSP part, if any, is in place'],
+  [6, 'FAILED', 'loading failed after the plan accepted it; the result code says why'],
+  [7, 'SKIPPED', 'not loaded on purpose: this boot is in safe mode'],
 ];
 
 export const CAP = {
@@ -156,11 +222,13 @@ export const CAP = {
   RENAME: 13,
   READBACK: 14,
   LOADS: 15,
+  SVC_ABI: 16,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */
 export const RANGES = {
   debug: [0x20, 0x22],
+  debug_profile: [0x1e, 0x1f],
   entry_demo_test: [0x1c, 0x1d],
   file_write_test: [0x24, 0x27],
   file_write_test_b: [0x28, 0x2b],
@@ -186,7 +254,25 @@ export const CAPACITY_KINDS = {
   STORE: 12,
   SETTINGS: 13,
   SEND_SLOTS: 14,
+  DSP_COST: 15,
+  DSP_VOICES: 16,
 } as const;
+
+/** What a person calls a capacity kind a fit looks at, by kind number. */
+export const CAPACITY_LABELS: Record<number, string> = {
+  1: 'module records',
+  2: 'selection paths',
+  3: 'CPU memory',
+  4: 'file',
+  5: 'DSP memory',
+  6: 'machine rows',
+  7: 'voice rows',
+  8: 'parameter rows',
+  9: 'page rows',
+  10: 'effect slots',
+  15: 'DSP load',
+  16: 'DSP voices',
+};
 
 /** The `kind` of a LOG event. */
 export const LOG_KIND = {
@@ -235,6 +321,8 @@ export const LOG_KIND = {
   MOD_NEEDS: 43,
   MODULE_COMMIT: 44,
   MODULE_LATCH: 45,
+  DSP_LINK: 46,
+  FW_READY: 47,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -284,6 +372,8 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   43: ['MOD_NEEDS', ['index', 'name0', 'name1', 'name2', '-']],
   44: ['MODULE_COMMIT', ['index', 'rows', 'records_addr', 'records_size', '-']],
   45: ['MODULE_LATCH', ['index', 'machine', 'latched', '-', '-']],
+  46: ['DSP_LINK', ['what', 'a', 'b', 'c', 'd']],
+  47: ['FW_READY', ['blocks', '-', '-', '-', '-']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */
@@ -303,3 +393,9 @@ export const LOG_FLAGS = {
 
 /** The level names, by number. */
 export const LOG_LEVELS = ['error', 'warn', 'info', 'debug', 'trace'] as const;
+
+/** The service tick phases of the profiling spans (owner `0x100 | p`), by number. */
+export const SPAN_PHASES = ['early', 'late', 'last'] as const;
+
+/** The poll slots of the profiling spans (owner `0x200 | i`). */
+export const SPAN_POLLS = 4;

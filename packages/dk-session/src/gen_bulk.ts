@@ -18,11 +18,13 @@ export const BULK_CMD = {
   END: 0x04,
   ABORT: 0x05,
   VERIFY: 0x06,
+  COMMIT: 0x07,
 } as const;
 
 /** Bits of the `flags` word of a request header. */
 export const BULK_FLAG = {
   REPLACE: 0x0001,
+  DEFER: 0x0002,
 } as const;
 
 /** Reply statuses: the upload protocol's (`[protocol.status]`) and the load results (`[load.status]`, `L_` prefix). */
@@ -97,4 +99,11 @@ export const BULK_STATUS = {
   L_E_TABLE: -49,
   L_E_MISSING: -73,
   L_E_DECL_FULL: -74,
+  L_E_PLAN_KIND: -75,
+  L_E_PLAN_OWNER: -76,
+  L_E_PLAN_KEY: -77,
+  L_E_PLAN_FIT: -78,
+  L_E_DECL_KIND: -79,
+  L_E_SVC_ABI: -81,
+  L_E_HOOK_STOCK: -82,
 } as const;

@@ -1,5 +1,5 @@
 // Labels shared by the module cards. No manifest imports here, so a client island can use them.
-import { deviceIds, deviceShort, type DeviceId } from './device-profiles';
+import { deviceIds, deviceShort, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 
 export type Category = 'fx' | 'machines' | 'core' | 'test' | 'ui' | 'tools';
 

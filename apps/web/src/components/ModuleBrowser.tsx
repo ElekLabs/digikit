@@ -1,10 +1,10 @@
 // The Modules page: filter the shipped modules, pick some, and hand the picks to the Transfer page.
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { deviceNameOf, runtimeDeviceIds } from '../data/device-profiles';
+import { deviceNameOf, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
 import type { Category } from '../data/module-labels';
 import type { ModuleInfo } from '../data/modules';
 import ModuleCard from './ModuleCard';
-import Segmented from './Segmented';
+import Segmented from '@digi/workbench-core/ui/components/Segmented.tsx';
 import './module-card.css';
 
 export interface ModuleBrowserProps {

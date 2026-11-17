@@ -45,10 +45,16 @@ class FakeDevice {
   failAt = new Map<number, number>();
   /** Never deliver replies (a stalled link). */
   mute = false;
+  private dataWaits: { n: number; resolve: () => void }[] = [];
   private queue: Uint8Array[] = [];
   private waiter: (() => void) | null = null;
   constructor(depth?: number) {
     this.dataDepth = depth;
+  }
+  /** Resolves once at least `n` DATA requests have arrived. */
+  dataReached(n: number): Promise<void> {
+    if (this.dataSent >= n) return Promise.resolve();
+    return new Promise((resolve) => this.dataWaits.push({ n, resolve }));
   }
   private push(m: Uint8Array) {
     this.queue.push(m);
@@ -84,6 +90,11 @@ class FakeDevice {
     }
     assert.equal(cmd, CMD.DATA);
     const ordinal = this.dataSent++;
+    this.dataWaits = this.dataWaits.filter((w) => {
+      if (this.dataSent < w.n) return true;
+      w.resolve();
+      return false;
+    });
     const off = u32(body);
     const data = body.subarray(4);
     const err = this.failAt.get(off);
@@ -252,9 +263,9 @@ test('cancelPending mid-window ends the put at once, aborts, and the session sta
 
 test('another request waits for one window of the upload, not for the whole file', async () => {
   const d = new FakeDevice();
-  const s = session(d, 2);
+  const s = new DkSession(d, { timeoutMs: 30_000, retries: 1, chunk: CH, depth: 2 });
   const up = s.put('f', bytes(CH * 400));
-  await new Promise((r) => setTimeout(r, 5));
+  await d.dataReached(20);
   const before = d.dataSent;
   let after = -1;
   const poll = s.info().then(() => (after = d.dataSent));

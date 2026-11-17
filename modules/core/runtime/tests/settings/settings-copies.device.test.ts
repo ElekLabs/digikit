@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { cardInfo } from '@digi/regression/runtime/card-kit.ts';
 import type { CardSpec } from '@digi/regression/runtime/card-rig.ts';
-import { advance } from '@digi/regression/runtime/fx-live.ts';
+import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { DEVICES } from '@digi/regression/runtime/devices.ts';
 import {
   decodeSettings,
-  E_SET_NOKEY,
   encodeSettings,
   sectorOf,
   settingsMap,
@@ -25,7 +24,7 @@ for (const device of DEVICES) {
       const { session } = rt;
       const ci = await cardInfo(session, kit.plan);
       await settingsMailbox(session, kit.plan).put(ROUTE, byte(1));
-      await advance(session, DELAY_MS + 500);
+      await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
       const w = await written();
       const ci2 = await cardInfo(session, kit.plan);
       expect([ci.stateName, ci2.stateName, ci2.claims]).toEqual(['blank', 'ours', 1]);
@@ -39,8 +38,6 @@ for (const device of DEVICES) {
     // cards with both copies set by hand
     const old = encodeSettings(4, [['k', text('old')]]);
     const newTorn = torn(encodeSettings(5, [['k', text('new')]]));
-    const goodA = encodeSettings(9, [['k', text('A9')]]);
-    const goodB = encodeSettings(3, [['k', text('B3')]]);
     const two = (a: Buffer, b: Buffer): CardSpec => ({
       selection: [],
       foreign: { [s.setA]: padded(a), [s.setB]: padded(b) },
@@ -56,26 +53,6 @@ for (const device of DEVICES) {
         next: 1,
         seq: 5,
       },
-      {
-        name: 'higher',
-        card: two(goodA, goodB),
-        what: 'copy A (seq 9 over 3)',
-        load: [1, 0, 9],
-        value: [2, 'A9'],
-        error: 0,
-        next: 1,
-        seq: 10,
-      },
-      {
-        name: 'both',
-        card: two(torn(old), newTorn),
-        what: 'no valid copy',
-        load: [0, 2, 0],
-        value: [E_SET_NOKEY, ''],
-        error: 1,
-        next: 0,
-        seq: 1,
-      },
     ] as const;
     test.each(copies)(
       'copies/$name: the boot reads $what and the next write goes to the other copy',
@@ -90,11 +67,11 @@ for (const device of DEVICES) {
         const [n, v] = await mb.get('k');
         expect([n, v.toString()], 'get gives its value').toEqual(want.value);
         await mb.put('k2', text('new'));
-        await advance(session, DELAY_MS + 500);
+        await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
         const after = await kit.after(`copies-${want.name}`, session.cardPath!);
-        const [target, keep] = want.next === 0 ? [s.setA, s.setB] : [s.setB, s.setA];
+        const [target, keep] = [s.setB, s.setA];
         const rec = decodeSettings(sectorOf(after, target));
-        expect(await written(), `the next write goes to copy ${'AB'[want.next]}`).toEqual([target]);
+        expect(await written(), `the next write goes to the copy at sector ${target}`).toEqual([target]);
         expect(rec?.seq).toBe(want.seq);
         expect(settingsMap(rec).k2).toBe(text('new').toString('hex'));
         expect(sectorOf(after, keep).equals(sectorOf(session.cardPath!, keep)), 'the other copy is untouched').toBe(

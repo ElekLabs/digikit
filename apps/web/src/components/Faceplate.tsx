@@ -1,18 +1,19 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { runtimeFaceplateIds, panels, type Panel as PanelData } from '../data/faceplates';
-import { deviceProfiles, localReadyFirmwareSha256, type DeviceId } from '../data/device-profiles';
-import { browserRuntime, type EmulatorRuntime, type RuntimeUpdate } from '../runtime/runtime';
-import { parseLeds } from '../runtime/leds';
+import { runtimeFaceplateIds, panels, type Panel as PanelData } from '@digi/workbench-core/data/faceplates.ts';
+import { deviceProfiles, localReadyFirmwareSha256, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
+import { browserRuntimeDeps } from '../runtime/browser-deps';
+import { browserRuntime, type EmulatorRuntime, type RuntimeUpdate } from '@digi/workbench-core/runtime/runtime.ts';
+import { parseLeds } from '@digi/workbench-core/runtime/leds.ts';
 import { PcmSink, resumeOnNextGesture } from '../runtime/audio';
-import { fetchLocalInputs, localManifest, sha256Hex } from '../runtime/local-inputs';
+import { fetchLocalInputs, localManifest, sha256Hex } from '@digi/workbench-core/runtime/local-inputs.ts';
 import CoupledAudio, { startCoupled } from './CoupledAudio';
-import LivePanel, { type LivePanelApi } from './LivePanel';
-import PanelArt from './PanelArt';
+import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
+import PanelArt from '@digi/workbench-core/ui/components/PanelArt.tsx';
 import SyxFile from './SyxFile';
 import { benchRequested, runBench } from '../runtime/bench';
 import { devEnabled } from '../dev';
-import { identify } from '../patch/identify';
-import { takeHandoff } from '../patch/handoff';
+import { identify } from '@digi/workbench-core/patch/identify.ts';
+import { handoffStore, takeHandoff } from '../patch/handoff';
 import './faceplate.css';
 
 function BenchStatus() {
@@ -97,7 +98,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   };
   let disposed = false;
   onMount(() => {
-    runtimeReady = Promise.resolve(props.runtime ?? browserRuntime(update)).then((selected) => {
+    runtimeReady = Promise.resolve(props.runtime ?? browserRuntime(update, browserRuntimeDeps())).then((selected) => {
       if (disposed) {
         selected.dispose();
         return undefined;
@@ -191,7 +192,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   onMount(() => {
     if (new URLSearchParams(location.search).get('handoff') !== '1') return;
     setStage('run');
-    void takeHandoff()
+    void takeHandoff(handoffStore())
       .then((item) => {
         if (!item) {
           setStatus('Nothing to boot: open the patch page and press Boot in emulator.');

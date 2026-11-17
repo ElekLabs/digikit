@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -41,29 +42,6 @@ class Fake:
         return verify_build.ensure_daemon("dn2", Path("stock.syx"), root)
 
 
-def test_miss_builds_once_and_stores(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake = Fake(tmp_path, monkeypatch)
-    root = tmp_path / "store"
-    binary = fake.ensure(root)
-    assert fake.builds == 1
-    assert binary == root / "dn2" / fake.key / "digi-emud"
-    assert binary.read_bytes() == b"binary 1"
-    assert binary.stat().st_mode & 0o777 == 0o755
-    assert (binary.parent / "key.txt").read_text() == fake.key + "\n"
-    assert (binary.parent / "depfile.d").is_file()
-
-
-def test_hit_does_not_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = Fake(tmp_path, monkeypatch)
-    root = tmp_path / "store"
-    first = fake.ensure(root)
-    second = fake.ensure(root)
-    assert fake.builds == 1
-    assert second == first
-
-
 def test_key_changed_during_build_is_an_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -86,23 +64,6 @@ def test_audit_findings_are_an_error_and_store_nothing(
     assert not (root / "dn2" / fake.key).exists()
 
 
-def test_eviction_keeps_the_four_most_recently_used(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake = Fake(tmp_path, monkeypatch)
-    root = tmp_path / "store"
-    keys = [f"{i}" * 64 for i in range(6)]
-    for age, key in enumerate(keys):
-        fake.key = fake.key_after = key
-        fake.ensure(root)
-        stamp = 1_000_000 + age
-        os.utime(root / "dn2" / key / "key.txt", (stamp, stamp))
-    kept = sorted(
-        p.name for p in (root / "dn2").iterdir() if not p.name.startswith(".")
-    )
-    assert kept == sorted(keys[2:])
-
-
 def test_concurrent_insert_uses_the_existing_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -120,3 +81,57 @@ def test_concurrent_insert_uses_the_existing_one(
     assert binary == final / "digi-emud"
     assert binary.read_bytes() == b"theirs"
     assert not list((root / "dn2").glob(".tmp-*"))
+
+
+def make_entry(device_dir: Path, key: str, used: int) -> Path:
+    entry = device_dir / key
+    entry.mkdir(parents=True)
+    (entry / "digi-emud").write_bytes(b"x")
+    stamp = entry / "key.txt"
+    stamp.write_text(key + "\n")
+    os.utime(stamp, (used, used))
+    return entry
+
+
+def test_evict_keeps_the_most_recently_used(tmp_path: Path) -> None:
+    device_dir = tmp_path / "dn2"
+    for n in range(6):
+        make_entry(device_dir, f"k{n}", 1000 + n)
+    verify_build.evict(device_dir, "k5")
+    assert sorted(p.name for p in device_dir.iterdir()) == ["k2", "k3", "k4", "k5"]
+
+
+def test_evict_uses_refreshed_use_time(tmp_path: Path) -> None:
+    device_dir = tmp_path / "dn2"
+    for n in range(6):
+        make_entry(device_dir, f"k{n}", 1000 + n)
+    os.utime(device_dir / "k0" / "key.txt", (2000, 2000))  # restored lately
+    verify_build.evict(device_dir, "k5")
+    assert sorted(p.name for p in device_dir.iterdir()) == ["k0", "k3", "k4", "k5"]
+
+
+def test_evict_never_removes_referenced_or_keep_key(tmp_path: Path) -> None:
+    device_dir = tmp_path / "dn2"
+    for n in range(7):
+        make_entry(device_dir, f"k{n}", 1000 + n)
+    verify_build.evict(device_dir, "k0", {"k1"})
+    names = sorted(p.name for p in device_dir.iterdir())
+    assert names == ["k0", "k1", "k3", "k4", "k5", "k6"]
+
+
+def test_referenced_keys_reads_daemons_json_of_each_worktree(tmp_path: Path) -> None:
+    device_dir = tmp_path / "store" / "dn2"
+    with_file = tmp_path / "a"
+    (with_file / "dist").mkdir(parents=True)
+    pinned = {
+        "DIGI_EMUD_DN2": str(device_dir / "kA" / "digi-emud"),
+        "DIGI_EMUD_DT2": str(tmp_path / "store" / "dt2" / "kB" / "digi-emud"),
+    }
+    (with_file / "dist" / "daemons.json").write_text(json.dumps(pinned))
+    broken = tmp_path / "b"
+    (broken / "dist").mkdir(parents=True)
+    (broken / "dist" / "daemons.json").write_text("{not json")
+    without = tmp_path / "c"
+    without.mkdir()
+    keys = verify_build.referenced_keys(device_dir, [with_file, broken, without])
+    assert keys == {"kA"}

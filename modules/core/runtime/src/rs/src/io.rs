@@ -116,10 +116,7 @@ pub fn step_job() -> u32 {
 }
 
 unsafe fn locked<T>(f: impl FnOnce() -> T) -> T {
-    let sr = crate::irq_mask();
-    let result = f();
-    crate::irq_restore(sr);
-    result
+    dkrt_abi::platform::locked(&crate::PLATFORM, f)
 }
 
 fn next_seq() -> u32 {
@@ -147,37 +144,38 @@ static mut TASK_UP: u32 = 0;
 #[cfg(not(test))]
 mod kernel {
     use super::*;
+    use crate::PLATFORM;
+    use dkrt_abi::platform::Tasking;
 
     /// Create and start the task. False: the kernel refused.
     pub unsafe fn create() -> bool {
-        dkfw::rtos::sem_init(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32, 0);
+        PLATFORM.sem_init(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32, 0);
         let tcb = addr_of_mut!(DKRT_IO_TASK.tcb) as u32;
-        let ok = dkfw::rtos::task_create(tcb, entry as usize as u32, PRIORITY, addr_of_mut!(DKRT_IO_TASK.stack) as u32, STACK_BYTES as u32);
-        if ok != 1 {
+        if !PLATFORM.task_create(tcb, entry as usize as u32, PRIORITY, addr_of_mut!(DKRT_IO_TASK.stack) as u32, STACK_BYTES as u32) {
             return false;
         }
-        dkfw::rtos::task_start(tcb);
+        PLATFORM.task_start(tcb);
         true
     }
 
     /// The current task's TCB address (the kernel's pointer variable).
     pub unsafe fn current_task() -> u32 {
-        read_volatile(addr_of!(dkfw::rtos::CURRENT_TCB) as *const u32)
+        PLATFORM.current_task()
     }
 
     /// Sleep 1 ms (task context).
     pub unsafe fn pause() {
-        dkfw::rtos::sleep_us(1000);
+        PLATFORM.sleep_us(1000);
     }
 
     /// Sleep until a post (task context).
     pub unsafe fn pend() {
-        dkfw::rtos::sem_pend(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32);
+        PLATFORM.sem_pend(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32);
     }
 
     /// Wake the task: sets the flag and reschedules. ISR-safe.
     pub unsafe fn post() {
-        dkfw::rtos::sem_post(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32);
+        PLATFORM.sem_post(addr_of_mut!(DKRT_IO_TASK.sem) as *mut u32);
     }
 }
 
@@ -265,6 +263,7 @@ unsafe fn drain() {
             Some(f) => f(ctx),
             None => IO_E_CANCELLED,
         };
+        crate::aux::step_end();
         // a step that met a busy store and asks to run again waits a moment first (a step that never met one runs again at once)
         if result == IO_MORE && read_volatile(addr_of!(STEP_BUSY)) {
             kernel::pause();
@@ -490,14 +489,11 @@ unsafe fn deliver(job: Job) {
     }
 }
 
-/// Host tests of other files share the one queue: they hold this lock.
-#[cfg(test)]
-pub(crate) static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::TEST_LOCK as LOCK;
+    use crate::test_lock::LOCK;
+    use dkrt_sdk::proto::E_STATE;
 
     struct Script {
         tag: u32,
@@ -797,6 +793,85 @@ mod tests {
             TASK_UP = 0;
             assert!(post(0, Some(step), Some(done), ptr(&mut a)) > 0);
             assert_eq!(TASK_UP, 2);
+        }
+    }
+
+    struct HelperScript {
+        out: [i32; 6],
+        sum: u32,
+        leave: bool,
+        runtime_run: bool,
+    }
+
+    extern "C" fn add_job(ctx: *mut u8) {
+        unsafe { *(ctx as *mut u32) += 1 }
+    }
+
+    unsafe extern "C" fn helper_step(ctx: *mut u8) -> i32 {
+        let s = &mut *(ctx as *mut HelperScript);
+        let job = &mut s.sum as *mut u32 as *mut u8;
+        if s.runtime_run {
+            s.out[0] = crate::aux::run(add_job, job); // the runtime's own run (the close hash): not the module's to collect or to start over
+            s.out[1] = crate::aux::module_wait();
+            s.out[2] = crate::aux::module_run(add_job as usize, job);
+            crate::aux::wait();
+            return 0;
+        }
+        s.out[0] = crate::aux::module_wait(); // no run yet
+        s.out[1] = crate::aux::module_run(add_job as usize, job);
+        s.out[2] = crate::aux::module_run(add_job as usize, job); // one at a time
+        s.out[5] = crate::aux::module_run(0, job);
+        if !s.leave {
+            s.out[3] = crate::aux::module_wait();
+            s.out[4] = crate::aux::module_wait(); // collected
+        }
+        0
+    }
+
+    fn helper_script(leave: bool, runtime_run: bool) -> HelperScript {
+        HelperScript { out: [99; 6], sum: 0, leave, runtime_run }
+    }
+
+    #[test]
+    fn the_helper_import_pair_runs_one_function_and_collects_it() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            reset();
+            let mut h = helper_script(false, false);
+            post(3, Some(helper_step), Some(done), &mut h as *mut HelperScript as *mut u8);
+            drain();
+            assert_eq!(h.out, [E_STATE, OK, E_BUSY, OK, E_STATE, dkrt_sdk::E_CONTRACT]);
+            assert_eq!(h.sum, 1, "the second run was refused, not queued");
+        }
+    }
+
+    #[test]
+    fn a_run_the_step_leaves_uncollected_is_collected_when_it_returns() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            reset();
+            let mut h = helper_script(true, false);
+            post(3, Some(helper_step), Some(done), &mut h as *mut HelperScript as *mut u8);
+            drain();
+            assert_eq!(h.out[1], OK);
+            // the runtime's own use (the close read-back hash) finds the helper free, and the module has no run left to collect
+            assert_eq!(crate::aux::run(add_job, &mut h.sum as *mut u32 as *mut u8), OK);
+            assert_eq!(crate::aux::wait(), OK);
+            assert_eq!(crate::aux::module_wait(), dkrt_sdk::E_CONTEXT, "outside a step");
+        }
+    }
+
+    #[test]
+    fn a_module_cannot_collect_or_start_over_the_runtimes_run() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            reset();
+            let mut h = helper_script(false, true);
+            post(3, Some(helper_step), Some(done), &mut h as *mut HelperScript as *mut u8);
+            drain();
+            assert_eq!((h.out[0], h.out[1], h.out[2]), (OK, E_STATE, E_BUSY));
+            let mut n = 0u32;
+            assert_eq!(crate::aux::module_run(add_job as usize, &mut n as *mut u32 as *mut u8), dkrt_sdk::E_CONTEXT);
         }
     }
 }

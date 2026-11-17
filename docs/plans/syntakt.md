@@ -44,7 +44,7 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
 - [x] `port_resolve`: DSP stream only for a firmware with a DSP image (S6).
 - [ ] One-sided `atlas catalog` (pairing with dt2-1.17 must not rewrite its catalog).
 - [x] Repeatable import of a raw ColdFire section: `tools/coldfire/imagepipe.py` (dry run proven; full run not repeated).
-- [x] Finding 70 corrected; peer CPU in finding 129. Anchor dry run now 81/106 rules; the old 27/172 is [O].
+- [x] Finding 70 corrected; peer CPU in finding 136. Anchor dry run now 81/106 rules; the old 27/172 is [O].
 
 ### P1 Emulator boots MAIN to the UI (no audio)
 
@@ -63,7 +63,7 @@ Targets: Syntakt OS 1.42 (`firmware/Syntakt_OS1.42.syx`, sha256 `ded3c59f…37c1
       address 0 (`board_revision`). No dialog on a cold boot ([finding 70](../findings/70-syntakt-1-42.md) "Emulated NOR").
 - [x] Peer responder for MAIN (no peer CPU): hello 0x484F/0x4841 at +0/+2, 0xA5A5 at +4, IRQ4 after each doorbell,
       DSPI2 eDMA ch 29 completion; status word 0x41bbf448 reaches 6 ([finding 70](../findings/70-syntakt-1-42.md) "Mailbox responder").
-- [x] The peer gets section 7 from MAIN: DSPI2 slave + eDMA ch 29 stream NOR ids 6/7 (finding 129 corrected, 646a6cdb).
+- [x] The peer gets section 7 from MAIN: DSPI2 slave + eDMA ch 29 stream NOR ids 6/7 (finding 136 corrected, 646a6cdb).
 - [x] Ready snapshot for st: `out/ready/st-1.42/main.state` from `panel_drive --save-state` (finding 70 "Mailbox responder").
 - [x] EPORT IRQ4 and the mailbox window at 0x10000000 (responder, no audio).
 
@@ -97,7 +97,7 @@ The Syntakt needs no `emu:ready`: the app boots cold to the main screen in about
 First milestone: stock 1.42 patched with core/runtime + core/expansion, then digikit/debug loaded and its event log
 read over USB MIDI.
 
-- [x] Static patch dry run of core/expansion on 1.42, byte-level, nothing run ([finding 130](../findings/130-syntakt-patch-dry-run.md)):
+- [x] Static patch dry run of core/expansion on 1.42, byte-level, nothing run ([finding 137](../findings/137-syntakt-patch-dry-run.md)):
       only section 3 differs; `tools/patchkit/image_report.py` is the second reader. core/runtime is not in it yet (next item).
 - [x] Patchkit: no-seal path, optional DSP section, refuse sections 1, 2, 4, 6, 7, 8 explicitly (from `[container]`, not names).
 - [x] Runtime target on st: no device-specific values in the runtime. A per-device data object `dkrt_dev` (struct `DkrtDevice` of
@@ -106,28 +106,28 @@ read over USB MIDI.
       cf.expansion with the runtime; the runtime and `tramp.s` read it, and `usb-bulk` too. The static array sizes are constants of the runtime ABI file. A manifest may list
       `optional_anchors`: a missing one is linked to 0, its hook skipped, reported as `disabled`. DT2 and DN2: `image_report` shows only the runtime,
       trampoline and device objects and the relocations into them changed, and the struct values equal the old constants.
-  - [x] Syntakt runtime facts, static (finding 131): UART, eSDHC, DDR, keep area, safe key, PEEK ranges (store location: proposal only).
+  - [x] Syntakt runtime facts, static (finding 138): UART, eSDHC, DDR, keep area, safe key, PEEK ranges (store location: proposal only).
   - [x] Device struct, gen kind, capability bits, optional anchors (host tests for each missing capability and each optional-anchor path).
-  - [x] Syntakt `[digikit]`, `[board]`, `[limits]`; dry run with core/runtime + core/expansion passes `image_report` (finding 130); it boots in the emulator to the main
+  - [x] Syntakt `[digikit]`, `[board]`, `[limits]`; dry run with core/runtime + core/expansion passes `image_report` (finding 137); it boots in the emulator to the main
         screen and the runtime is ready (boot record, event ring, INFO over USB MIDI).
-  - [x] Module store on st: `[card]` and `[card.store]` (the DN2 range; [finding 131](../findings/131-syntakt-runtime-facts.md) "Store location": an emulator session wrote at most sector 0x81f7f), a card layout without kit pool, a card the emulator seeds from device data. digikit/debug uploaded over emulated USB MIDI loads (MOD_LOAD result 0) and its log is read with `dklog --emu`.
+  - [x] Module store on st: `[card]` and `[card.store]` (the DN2 range; [finding 138](../findings/138-syntakt-runtime-facts.md) "Store location": an emulator session wrote at most sector 0x81f7f), a card layout without kit pool, a card the emulator seeds from device data. digikit/debug uploaded over emulated USB MIDI loads (MOD_LOAD result 0) and its log is read with `dklog --emu`.
 - [x] Runtime anchor proposals on 1.42 [D] (scratchpad st-1.42-anchors.tsv): 111 anchors, 73 high, 22 med/med-high,
       3 low, 15 miss. Misses: DSP link ISR (no SHARC; health loses the DSP measurement), source page hooks,
       7 storage path/directory functions (file layer rewritten), compact_set_rect, shared_ptr_as_view, popup_make.
 - [x] Region proposals [D]: `cf.flash_cave` 0x40339730..0x4033a000 (after the 136-entry init table; the cave
-      tool's two rejections are false positives); `cf.expansion` 0x478c0000..0x47bf0000 (finding 131: below the 4 MiB ring MAIN clears at boot).
+      tool's two rejections are false positives); `cf.expansion` 0x478c0000..0x47bf0000 (finding 138: below the 4 MiB ring MAIN clears at boot).
 - [x] Anchor rules on 1.42: 25 `rule.st` entries (runtime 12, menu 5, ui 3, input 2, health 2); 90 of 93
       st-applicable anchors resolve; DT2/DN2 unchanged (`rule.<short>` is resolved generically).
 - [x] Port resolve for st (`devices/ports/st-1.42.toml`, 107 anchors): SHARC rules and hooks are skipped on a device without a DSP;
       the 9 shared ColdFire rules that miss list their devices; the two regions are kept by hand in the device file.
 - [x] Workbench runtime path on st: `[patch_sets] emulator` (core/runtime), snapshot rate recorded per device, no boot cache with a running peer;
-      runtime patched, main screen, INFO, debug module upload and log with the responder ([finding 132](../findings/132-syntakt-runtime-in-the-workbench.md)).
-- [x] Duplicate replies with the peer program running: a capture artifact, fixed (finding 132 "Duplicate replies").
+      runtime patched, main screen, INFO, debug module upload and log with the responder ([finding 139](../findings/139-syntakt-runtime-in-the-workbench.md)).
+- [x] Duplicate replies with the peer program running: a capture artifact, fixed (finding 139 "Duplicate replies").
 - [ ] Debug module on st: `ports`/`[targets]` add st-1.42; PEEK ranges and `sound_words` from the device file;
       `dk_time_blocks` has no SHARC block source (report unsupported); Sound layout and machine ids unchecked.
 - [ ] Runtime services without a Syntakt equivalent return "unsupported" (e.g. `dk_debug_track_type` -> -2, which
       digikit/debug already handles).
-- [x] core/ui, core/health, core/input, core/digikit-menu and core/introblank run on st [D] (finding 130 "Adapters on 1.42"): the SETTINGS hook,
+- [x] core/ui, core/health, core/input, core/digikit-menu and core/introblank run on st [D] (finding 137 "Adapters on 1.42"): the SETTINGS hook,
       the idle hook, `[input]` and the input device object; the block interrupt anchors are optional (no DSP: no health windows).
 - [ ] Modules declare their devices; tool and UI modules run on `st`.
 
@@ -139,7 +139,7 @@ read over USB MIDI.
       0x40041060. Per frame (DTIM0 capture, vector 96) the peer copies window[0..0x1b0) as the parameter block, runs
       8 voices x 32 samples, and eDMA ch 47 writes 1 KB to window+0x1b0. No SSI/SAI. Open: who writes the peer NOR,
       the MAIN-side per-frame writer, the frame rate source.
-- Design (finding 129 "Peer CPU model"): a second `coldfire::Cpu` with its own map (private SDRAM and SRAM, its INTC0, DTIM0, PIT1, eDMA,
+- Design (finding 136 "Peer CPU model"): a second `coldfire::Cpu` with its own map (private SDRAM and SRAM, its INTC0, DTIM0, PIT1, eDMA,
   GPIO, DSPI), FlexBus CS0 at 0 mapped to the same 128 KB window MAIN sees at 0x10000000 (no copy: the peer's bus calls the board). One thread,
   lock step: after every slice of 2048 MAIN ticks the peer runs the same count, so a run is deterministic. Start: section 7 as MAIN streamed it
   (SHA-256 equal to the syx section), at 0x40000400, at its entry, on MAIN's first doorbell edge after the stream; stage 1 is skipped because its
@@ -150,10 +150,10 @@ read over USB MIDI.
       0.65 of real time on the host).
 - [x] Audio out: MAIN mixes the voices itself; the emulator reads MAIN's converter ring (eDMA ch 54, 24-bit words, 32 frames per audio frame, 48 kHz)
       from device data (`[emulator.peer_audio]`) and feeds the DSP session's output path (`cf_audio`). Analog tracks stay silent. WAV proof:
-      finding 129 "Audio". The launcher builds `cf-audio` for such a device and sets `DIGI_EMU_PEER_AUDIO=1`; the real workbench is not checked yet.
+      finding 136 "Audio". The launcher builds `cf-audio` for such a device and sets `DIGI_EMU_PEER_AUDIO=1`; the real workbench is not checked yet.
 - [x] Instruction rate per device (`[emulator] instructions_per_second`, default of `DIGI_CF_IPS`) and the frame period derived from it and the
-      converter's sample rate and frame size (finding 129 "Peer CPU model"): no frame overrun.
-- [x] Native kernel slice (finding 133): `cfaot` translates the voice oscillator 0x4000290e of the peer program to Rust; a kernel runs when the PC is at its
+      converter's sample rate and frame size (finding 136 "Peer CPU model"): no frame overrun.
+- [x] Native kernel slice (finding 140): `cfaot` translates the voice oscillator 0x4000290e of the peer program to Rust; a kernel runs when the PC is at its
       entry, exactly as the interpreter would (compared on 47.3 M instructions of a real run and on random states), 3.4-3.6x faster on its own, 10 percent
       of the peer's wall time, 1.75 percent of the whole run's host instructions. Next kernels and MAIN's vector 191 mixer: see the projection in the finding.
       Design (P4 section of this plan, "Native kernels"):
@@ -201,7 +201,7 @@ read over USB MIDI.
 Order: runtime safety items first, then the Nx cache gap, speed, restructure, design follow-ups.
 
 - Open runtime items:
-  - [ ] Store write safety: the remote stream handler takes host offsets (finding 131). Bound them to the store range on the device side
+  - [ ] Store write safety: the remote stream handler takes host offsets (finding 138). Bound them to the store range on the device side
         before any hardware use.
   - [ ] The `core/ui` HEALTH and MEMORY pages are unverified on the Syntakt.
   - [ ] `dk_input_turn` is unverified on the Syntakt.
@@ -211,7 +211,7 @@ Order: runtime safety items first, then the Nx cache gap, speed, restructure, de
 - Speed (now 0.37 of real time with audio on the Syntakt; the peer thread and MAIN run in one thread in lock step):
   - [ ] One thread per CPU (about 1.7x).
   - [ ] Peer RAM fast path: the peer bus folds bytes on every read (about 1.25x).
-  - [ ] More native kernels (finding 133): the peer's other hot buckets, and MAIN's vector 191 mixer (handler 0x400a38ce).
+  - [ ] More native kernels (finding 140): the peer's other hot buckets, and MAIN's vector 191 mixer (handler 0x400a38ce).
 - Emulator restructure (one slice at a time, the Syntakt run and the DN2/DT2 pinned scenarios must stay identical):
   - [ ] A `Companion` enum on the board (none, mailbox responder, ColdFire peer, DSP) instead of the peer special cases.
   - [ ] `companion/` crates: the peer CPU model and the SHARC link as siblings of the board, not inside `machine`.

@@ -1,8 +1,6 @@
 use super::*;
 use std::boxed::Box;
-use std::sync::Mutex;
-
-static LOCK: Mutex<()> = Mutex::new(());
+use crate::test_lock::LOCK;
 
 fn c(s: &'static [u8]) -> *const u8 {
     assert_eq!(s.last(), Some(&0));
@@ -315,7 +313,7 @@ fn a_flagged_canvas_page_alone_is_an_incomplete_v2_pair_that_the_registry_refuse
     lower(&b, &DN2, &k, &[true; MAX_M], 0, buf.as_mut_ptr(), size, &mut plan).unwrap();
     let n = size - 0x98;
     assert_eq!(rd(&buf, n), 7);
-    let mut set = crate::nativepage::PageSet::<8>::new();
+    let mut set = crate::handlers::exports::PageSet::<8>::new();
     assert!(set.claim(7, KEY, rd(&buf, n + 8 + 40)));
     assert!(!set.complete());
 }
@@ -381,6 +379,23 @@ fn a_param_beyond_the_devices_knob_positions_or_outside_its_glyph_range_is_refus
 }
 
 #[test]
+fn a_machine_with_two_knob_pages_is_refused_on_either_device() {
+    // the shape of the parked fixture `test/dyn-dn2-pages` (back with run-time multi-page machines, RS-C): one machine, page A with three parameters, page B with two (the runtime has one knob page per machine)
+    let mut b = Box::new(Collect::new());
+    let m = b.add_machine(0, c(b"A\0"), c(b"A\0"));
+    for n in [3, 2] {
+        let p = b.machine_add_page(m, c(b"A\0"), c(b"S\0"));
+        for _ in 0..n {
+            b.page_add_param(p, c(b"P\0"), c(b"P\0"), 0);
+        }
+    }
+    let k = keys(&[KEY], &[], (1, 5, 2));
+    let mut plan = Plan::new();
+    assert_eq!(lower(&b, &DN2, &k, &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan), Err(E_FORMAT));
+    assert_eq!(lower(&b, &DT2, &k, &[true; MAX_M], 0, core::ptr::null_mut(), 0, &mut plan), Err(E_FORMAT));
+}
+
+#[test]
 fn a_dsp_section_must_match_the_keys_table() {
     let k = keys(&[KEY], &[FXID, 0x77], (1, 0, 0));
     assert_eq!(check_dsp_keys(&k, 1, |_| KEY, 2), OK);
@@ -419,4 +434,166 @@ fn an_effect_without_routes_runs_on_the_master_only_and_one_with_routes_follows_
     assert_eq!(fx_flags_of_decl(&f.fxs[0]), 0);
     assert_eq!(fx_flags_of_decl(&f.fxs[1]), 0b101);
     assert_eq!(fx_flags_of_decl(&f.fxs[2]), 0b111);
+}
+
+/// A `.dkm` file of `size` bytes whose header points at a keys table with these machine keys.
+fn dkm_file(mk: &[u32], size: usize) -> std::vec::Vec<u8> {
+    let mut f = std::vec![0u8; size];
+    f[0..4].copy_from_slice(&dkm::MAGIC.to_be_bytes());
+    f[dkm::H_SIZE..][..4].copy_from_slice(&(size as u32).to_be_bytes());
+    let off = dkm::HEADER as usize;
+    let n = dkneeds::keys::write_keys((1, 1, 1), 0, mk, &[], &mut f[off..]).unwrap();
+    f[dkm::H_REG_OFF..][..4].copy_from_slice(&(off as u32).to_be_bytes());
+    f[dkm::H_REG_SIZE..][..4].copy_from_slice(&(n as u32).to_be_bytes());
+    f
+}
+
+#[test]
+fn machine_keys_reads_the_keys_table_of_a_file() {
+    let mut out = [0u32; 8];
+    let f = dkm_file(&[0x1234_5600, 0x0000_0007], 0xa0 + 64);
+    assert_eq!(machine_keys(&f, &mut out), 2);
+    assert_eq!(out[..2], [0x1234_5600, 7]);
+}
+
+#[test]
+fn machine_keys_of_a_torn_file_is_none() {
+    let mut out = [0u32; 8];
+    let f = dkm_file(&[0x1234_5600], 0xa0 + 64);
+    assert_eq!(machine_keys(&f[..0x40], &mut out), 0); // shorter than the header
+    assert_eq!(machine_keys(&f[..f.len() - 1], &mut out), 0); // size field does not match
+    let mut bad = f.clone();
+    bad[0] ^= 1; // not a .dkm
+    assert_eq!(machine_keys(&bad, &mut out), 0);
+    let mut past = f.clone();
+    past[dkm::H_REG_SIZE..][..4].copy_from_slice(&1000u32.to_be_bytes()); // table runs past the end
+    assert_eq!(machine_keys(&past, &mut out), 0);
+}
+
+#[test]
+fn a_generic_record_of_an_unknown_or_a_typed_kind_is_refused_and_the_error_is_kept() {
+    let body = [0u8; 0x100];
+    // no service owns kind 999
+    let mut a = Collect::new();
+    assert_eq!(a.add_record(999, body.as_ptr(), 8), E_FORMAT);
+    assert_eq!(a.err, E_FORMAT);
+    assert_eq!(a.ng, 0);
+    // a typed kind has its builders: even with the right length it is not taken as a generic record
+    let mut b = Collect::new();
+    assert_eq!(b.add_record(KIND_PARAM, body.as_ptr(), 0x50 - 8), E_FORMAT);
+    assert_eq!(b.ng, 0);
+    // without an active collection the import refuses and changes nothing
+    let _g = LOCK.lock().unwrap();
+    unsafe {
+        end();
+        assert_eq!(dk_record_add(core::ptr::null_mut(), KIND_PARAM, body.as_ptr(), 8), E_CONTEXT);
+    }
+}
+
+#[test]
+fn a_header_table_of_runtime_0_7_or_none_is_a_contract_error_and_a_damaged_one_a_format_error() {
+    // no table (the old "no machine, no effect" file), and the old table that begins with the row counts
+    assert_eq!(KeysCopy::from_bytes(&[]).err(), Some(E_CONTRACT));
+    let old = [0u8, 2, 0, 3, 0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1];
+    assert_eq!(KeysCopy::from_bytes(&old).err(), Some(E_CONTRACT));
+    // the current table: rows from USES, keys from KEYS
+    let mut t = [0u8; 128];
+    let n = dkneeds::keys::write_keys((2, 5, 1), 0, &[0x100, 0x200], &[7], &mut t).unwrap();
+    let k = KeysCopy::from_bytes(&t[..n]).unwrap();
+    assert_eq!((k.machine_rows, k.param_rows, k.page_rows, k.nm, k.nf), (2, 5, 1, 2, 1));
+    assert_eq!((k.mk[1], k.fk[0]), (0x200, 7));
+    // a damaged table (cut) is a format error, not a contract error
+    assert_eq!(KeysCopy::from_bytes(&t[..n - 4]).err(), Some(E_FORMAT));
+}
+
+#[test]
+fn what_init_declared_must_be_what_the_header_table_carries() {
+    use dkneeds::keys::{write_table, KindDecl, Pair, Slot, Table};
+    // a header table with one kind (kind 90, 24 bytes, handler at image offset 0x40), one slot (entry 0x60) and one export
+    let t = Table {
+        kinds: &[KindDecl { kind: 90, len: 24, entry: 0x40 }],
+        slots: &[Slot { id: 3, flags: 1, entry: 0x60 }],
+        exports: &[Pair { a: 0xaabb, b: 0x50 }],
+        // a slot with an entry needs a version 2 table, which PROVIDES makes
+        provides: &[Pair { a: 0x5e, b: 0 }],
+        ..Table::default()
+    };
+    let mut b = [0u8; 128];
+    let n = write_table(&t, &mut b).unwrap();
+    let keys = KeysCopy::from_bytes(&b[..n]).unwrap();
+    let base = 0x1000;
+    let _g = LOCK.lock().unwrap();
+    // nothing declared: the table's entries are missing
+    assert!(!decl_matches(&Collect::new(), &keys, base));
+    // the same items, with the addresses of the loaded image
+    let declared = || {
+        let mut c = Collect::new();
+        c.decl.add(Declare::KIND, 90, 24, base + 0x40);
+        c.decl.add(Declare::SLOT, 3, 1, base + 0x60);
+        c.decl.add(Declare::EXPORT, 0xaabb, base + 0x50, 0);
+        c
+    };
+    assert!(decl_matches(&declared(), &keys, base));
+    assert_eq!(decl_diff(&declared(), &keys, base), None);
+    // the diff names the first item that is not in both: the export the table has and `init` did not declare (the 0x100 bit), or the hook `init` declared more
+    let mut d = declared();
+    d.decl.n -= 1;
+    assert_eq!(decl_diff(&d, &keys, base), Some((Declare::EXPORT as u32 | 0x100, 0xaabb)));
+    let mut d = declared();
+    d.decl.add(Declare::HOOK, 1, base, 0);
+    assert_eq!(decl_diff(&d, &keys, base), Some((Declare::HOOK as u32, 1)));
+    // another handler, another length, an item more
+    let mut d = declared();
+    d.decl.items[0].c = base + 0x44;
+    assert!(!decl_matches(&d, &keys, base));
+    let mut d = declared();
+    d.decl.items[0].b = 28;
+    assert!(!decl_matches(&d, &keys, base));
+    // the slot's entry is compared too
+    let mut d = declared();
+    d.decl.items[1].c = base + 0x64;
+    assert!(!decl_matches(&d, &keys, base));
+    let mut d = declared();
+    d.decl.add(Declare::HOOK, 1, base, 0);
+    assert!(!decl_matches(&d, &keys, base));
+    // a module with no table entries and no declarations passes
+    let none = KeysCopy::empty();
+    assert!(decl_matches(&Collect::new(), &none, base));
+    // the row of a service file is no entry of the table: it does not count against it
+    let mut d = declared();
+    d.decl.row(&ROW);
+    assert!(decl_matches(&d, &keys, base));
+    // outside init the imports refuse
+    unsafe {
+        end();
+        assert_eq!(dk_service_declare_slot(core::ptr::null_mut(), 1, 0, core::ptr::null()), E_CONTEXT);
+    }
+}
+
+static ROW: dkrt_abi::service::ServiceRow = dkrt_abi::service::ServiceRow::of::<Nothing, crate::core_api::RealCore>("nothing", &[]);
+struct Nothing;
+impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for Nothing {}
+
+#[test]
+fn a_service_file_declares_one_row_in_init_and_only_there() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // outside init
+        end();
+        assert_eq!(dk_service_declare_row(core::ptr::null_mut(), &ROW), E_CONTEXT);
+        // inside init the context must be live; a null row and a second row are refused and kept as the load's error
+        let mut b = Box::new(Collect::new());
+        begin(&mut *b);
+        let ctx = crate::entry::bind(0) as *mut u8;
+        assert_eq!(dk_service_declare_row(ctx, core::ptr::null()), E_DECL_KIND);
+        assert_eq!(b.err, E_DECL_KIND);
+        b.err = 0;
+        assert_eq!(dk_service_declare_row(core::ptr::null_mut(), &ROW), E_CONTEXT);
+        assert_eq!(dk_service_declare_row(ctx, &ROW), OK);
+        assert!(core::ptr::eq(b.decl.row_ptr().unwrap(), &ROW));
+        assert_eq!(dk_service_declare_row(ctx, &ROW), E_DECL_KIND);
+        end();
+        crate::entry::unbind(0);
+        assert_eq!(b.decl.n, 1);
+    }
 }

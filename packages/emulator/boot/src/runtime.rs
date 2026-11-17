@@ -87,7 +87,7 @@ fn usb_dma_reachable(addr: u32) -> bool {
     matches!(addr, 0x4000_0000..=0x4fff_ffff | 0x8000_0000..=0x8bff_ffff)
 }
 
-/// Reads one audio frame of MAIN's output (finding 129 "Audio"): the half of the converter ring that the engine tick filled for the frame
+/// Reads one audio frame of MAIN's output (finding 136 "Audio"): the half of the converter ring that the engine tick filled for the frame
 /// that just ended, named by the TCD of the audio channel (`[emulator.peer_audio]`). It runs at the peer's doorbell edge, which MAIN's
 /// frame handler makes once per frame before the next tick starts. Edges less than half a frame apart (a handler that preempted a tick)
 /// are not read twice.
@@ -481,6 +481,8 @@ pub struct Emulator {
     probe_hits: BTreeMap<u32, u64>,
     /// Host-requested instruction spans between two PCs (`add_span`).
     spans: crate::spans::Spans,
+    /// Host-requested PC probe (`set_pc_probe`). See `pcprobe.rs`.
+    pc_probe: crate::pcprobe::PcProbe,
     /// Late frame sends (`set_late_send`, off by default).
     late_send: Option<crate::late_send::LateSend>,
     /// The DSPI1 peer's IRQ1 (EPORT, INTC0 source 1) after a transfer; not saved.
@@ -933,6 +935,7 @@ impl Emulator {
             exec_ranges,
             probe_hits: BTreeMap::new(),
             spans: crate::spans::Spans::default(),
+            pc_probe: crate::pcprobe::PcProbe::default(),
             late_send: None,
             irq1_pending: false,
             deliver_exceptions: false,
@@ -966,7 +969,7 @@ impl Emulator {
         emulator.rebuild_watch();
         // DIGI_WRITE_WATCH / DIGI_FLUSH_CHECK: off unless set (see watch.rs).
         match crate::watch::WatchConfig::from_env() {
-            Ok(cfg) => emulator.bus.guards.set_watch(cfg),
+            Ok(cfg) => emulator.set_write_watch(cfg),
             Err(e) => eprintln!("write-watch: {e}; not armed"),
         }
         emulator.mark(Mark::Entry, "before_instruction");
@@ -1380,6 +1383,23 @@ impl Emulator {
         self.rebuild_watch();
     }
 
+    /// Set (or, with no probes, remove) the PC probe: for each hit of a named PC, the instruction count, SR, SP, the
+    /// task word and chosen memory words (diagnostics; reads guest memory, changes no state). See `pcprobe.rs`.
+    pub fn set_pc_probe(&mut self, spec: &crate::pcprobe::PcProbeSpec) {
+        self.pc_probe.set(spec);
+        self.rebuild_watch();
+    }
+
+    /// The PC probe's counts and first hits.
+    pub fn pc_probe_report(&self) -> serde_json::Value {
+        self.pc_probe.report()
+    }
+
+    /// Forget the PC probe's hits and keep the probe.
+    pub fn clear_pc_probe(&mut self) {
+        self.pc_probe.clear();
+    }
+
     /// Forget the passes recorded so far.
     pub fn clear_spans(&mut self) {
         self.spans.clear();
@@ -1678,6 +1698,9 @@ impl Emulator {
     /// as the `DIGI_WRITE_WATCH*` and `DIGI_FLUSH_CHECK` variables read at
     /// construction. The CACR the instruments assume is the CPU's current one.
     pub fn set_write_watch(&mut self, cfg: Option<crate::watch::WatchConfig>) {
+        self.bus
+            .board
+            .set_card_trace(cfg.as_ref().is_some_and(|c| c.card_trace));
         self.bus.guards.set_watch(cfg);
         let cacr = self.cpu.ctrl.cacr;
         if let Some(w) = self.bus.guards.watch_mut() {
@@ -2256,6 +2279,7 @@ impl Emulator {
         pcs.extend(self.softfloat.entries());
         pcs.extend(self.probe_hits.keys().copied());
         pcs.extend(self.spans.pcs());
+        pcs.extend(self.pc_probe.pcs());
         if self.midi.usb.enabled {
             pcs.extend(
                 [
@@ -2889,6 +2913,16 @@ impl Emulator {
         if !self.spans.is_empty() {
             self.spans.observe(pc, self.cpu.icount);
         }
+        if !self.pc_probe.is_empty() {
+            let board = &mut self.bus.board;
+            self.pc_probe.observe(
+                pc,
+                self.cpu.icount,
+                self.cpu.sr,
+                self.cpu.a[7],
+                &mut |addr| board.read32(addr).ok(),
+            );
+        }
         if let Some(hits) = self.probe_hits.get_mut(&pc) {
             *hits += 1;
             let ret = self.bus.board.read32(self.cpu.a[7]).unwrap_or(0);
@@ -2979,6 +3013,11 @@ impl Emulator {
                 CompletionEvent::Data { .. } => self.completion_kind_counts[1] += 1,
                 CompletionEvent::Command { .. } => self.completion_kind_counts[2] += 1,
             }
+        }
+        for op in self.bus.board.take_card_trace() {
+            self.bus
+                .guards
+                .note_card(op.cmd, op.arg, op.bytes, self.bus.current_icount);
         }
         let ranges = self.bus.board.take_dma_written_ranges();
         let sources = self.bus.board.take_dma_sources();
@@ -3222,13 +3261,27 @@ impl Emulator {
         std::mem::take(&mut self.midi.usb.out)
     }
 
+    /// True when the guest has registered the USB callbacks in this boot (the slots of its registration function hold them). An image
+    /// whose registration code is not the known shape is not gated.
+    fn usb_registered(&mut self) -> bool {
+        let Some((slot0, slot1)) = self.midi.usb.slots else {
+            return true;
+        };
+        let slot0 = self.bus.board.read32(slot0).unwrap_or(0);
+        let slot1 = self.bus.board.read32(slot1).unwrap_or(0);
+        crate::midi::usb_registered(slot0, slot1, self.midi.usb.rx_cb)
+    }
+
     /// Hand the next chunk to the USB receive callback: an interrupt frame is pushed as for a hardware interrupt,
     /// the chunk and the callback's arguments are built below it, and the PC goes to the callback. The callback returns
     /// to an `rte` of the firmware; `observe_usb` sees it, pops the arguments and restores d0, d1, a0, a1.
     fn service_usb(&mut self) -> Result<bool, String> {
         const LEVEL: u8 = USB_LEVEL;
-        if !self.midi.usb.enabled
-            || self.midi.usb.sys_error.is_some()
+        if !self.midi.usb.enabled || self.midi.usb.sys_error.is_some() {
+            return Ok(false);
+        }
+        self.midi.usb.unregistered = !self.usb_registered();
+        if self.midi.usb.unregistered
             || self.midi.usb.active.is_some()
             || self.midi.usb.queue.is_empty()
             || self.cpu.icount < self.midi.usb.next_ic
@@ -3325,6 +3378,12 @@ impl Emulator {
                 .ok_or("this image has no USB MIDI callback this emulator knows")?;
             self.midi.usb.rx_cb = rx;
             self.midi.usb.tx_fn = tx;
+            self.midi.usb.slots = crate::midi::resolve_usb_slots(&self.main, MAIN_LOAD);
+            if self.midi.usb.slots.is_none() {
+                eprintln!(
+                    "usb: unknown registration code: USB MIDI delivery is not gated on the registration"
+                );
+            }
             self.midi.usb.period = periph::clock::scale_instr(USB_PERIOD, self.ips);
             self.midi.usb.enabled = true;
             self.midi.usb.trace =
@@ -3828,7 +3887,7 @@ impl Emulator {
     /// The guest is about to execute the instruction at `pc`: at the transmit function record its (length, buffer) arguments (and log the
     /// trace's addresses). This runs after the step's interrupt deliveries, so an arrival that an interrupt takes over does not count:
     /// seen at the top of the step, a send whose first instruction the peer's frame interrupt preempted was recorded twice, once on arrival
-    /// and once when the task resumed (finding 132).
+    /// and once when the task resumed (finding 139).
     fn observe_usb_tx(&mut self, pc: u32) {
         if self.midi.usb.trace && self.midi.usb.trace_pcs.contains(&pc) {
             let sp = self.cpu.a[7];
@@ -4772,6 +4831,7 @@ impl Emulator {
         if saved_ips != ips {
             self.snapshot_time_base();
         }
+        self.midi.usb.reset_boot();
         let main_sha = r.bytes()?;
         let device = r.bytes()?;
         let version = r.bytes()?;
@@ -5206,7 +5266,7 @@ mod tests {
                 .free_running_dtcn_mask()
         };
         assert_eq!(dtcn_mask(mask("dn2"), None), Ok(0b0001));
-        assert_eq!(dtcn_mask(mask("dt2"), None), Ok(0));
+        assert_eq!(dtcn_mask(mask("dt2"), None), Ok(0b0001));
         assert_eq!(dtcn_mask(mask("st"), None), Ok(0b0100));
         assert_eq!(dtcn_mask(mask("dn2"), Some("off")), Ok(0));
         assert_eq!(dtcn_mask(mask("dt2"), Some("bus")), Ok(1));
@@ -5973,7 +6033,7 @@ mod tests {
     }
 
     /// A send is recorded when its first instruction executes, not when the PC arrives: an interrupt that takes the step over (the peer's
-    /// frame, the USB hand-over) makes the task resume at the same PC later, and the arrival used to be seen twice (finding 132).
+    /// frame, the USB hand-over) makes the task resume at the same PC later, and the arrival used to be seen twice (finding 139).
     #[test]
     fn a_transmit_call_that_an_interrupt_preempts_is_recorded_once() {
         // a device with a peer CPU: its constructor sets the clock rate the other tests of that device read

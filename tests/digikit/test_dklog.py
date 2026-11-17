@@ -126,7 +126,7 @@ def test_dsp_events_show_the_breadcrumb_as_names():
 
 
 def crash_events(first_seq=10):
-    """The events a boot writes for a crash record, as `crash.rs at_boot` writes them."""
+    """The events a boot writes for a crash record, as `fault.rs at_boot` writes them."""
     s = first_seq
     out = [
         ev(

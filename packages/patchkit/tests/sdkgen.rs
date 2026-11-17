@@ -47,33 +47,6 @@ fn a_bad_type_or_view_is_refused() {
 }
 
 #[test]
-fn a_bad_descriptor_layout_is_refused() {
-    let text = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
-    // text that needs padding
-    let broken = text.replace("char short_name[8]", "char short_name[6]");
-    assert_ne!(broken, text);
-    assert!(
-        sdkgen::render(&broken)
-            .unwrap_err()
-            .0
-            .contains("multiple of 4")
-    );
-    // a type that is not a base type or an earlier record
-    let broken = text.replace("float min //", "double min //");
-    assert_ne!(broken, text);
-    assert!(
-        sdkgen::render(&broken)
-            .unwrap_err()
-            .0
-            .contains("unknown type")
-    );
-    // a length that is not a const of [desc]
-    let broken = text.replace("knob[DK_PAGE_KNOBS]", "knob[DK_NOPE]");
-    assert_ne!(broken, text);
-    assert!(sdkgen::render(&broken).unwrap_err().0.contains("DK_NOPE"));
-}
-
-#[test]
 fn the_record_format_constants_come_from_the_contract_maxima() {
     // The effect chain cap `fx_slots` of `[limits.max]` is the contract's DK_FX_MAX (`[fx]`).
     let max = sdkgen::limits_max();
@@ -109,7 +82,7 @@ fn bad_protocol_ranges_commands_and_capacity_kinds_are_refused() {
     assert_ne!(broken, text);
     assert!(sdkgen::render(&broken).is_err());
     // two kinds with one number, or kind 0, are refused
-    let dup = text.replace("ARENA = 3 ", "ARENA = 2 ");
+    let dup = text.replace("ARENA = { id = 3,", "ARENA = { id = 2,");
     assert_ne!(dup, text);
     assert!(
         sdkgen::render(&dup)
@@ -207,7 +180,7 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
         ("context = \"io-step\"", "context = \"anywhere\""),
         (
             "since = \"0.7.0\"\ncontext = \"isr\"",
-            "since = \"0.8.0\"\ncontext = \"isr\"",
+            "since = \"0.9.0\"\ncontext = \"isr\"",
         ),
         (
             "since = \"0.7.0\"\ncontext = \"isr\"",
@@ -235,4 +208,60 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
             .0
             .contains("does not fit the return type")
     );
+}
+
+#[test]
+fn the_span_owners_are_the_runtimes_phases_and_poll_slots() {
+    // `[spans]` of the contract names what the debug module's span table and the host show: it must match the runtime's own constants
+    let toml = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
+    let line = |key: &str| {
+        toml.lines()
+            .find(|l| l.starts_with(key))
+            .unwrap_or_else(|| panic!("sdk.toml has no {key}"))
+            .split('#')
+            .next()
+            .unwrap()
+            .split('=')
+            .nth(1)
+            .unwrap()
+            .trim()
+            .to_string()
+    };
+    let phases = line("phases = [");
+    let n_phases = phases.matches('"').count() / 2;
+    let abi =
+        std::fs::read_to_string(root().join("modules/core/runtime/abi/src/service.rs")).unwrap();
+    let block = abi.split("pub mod tick_phase {").nth(1).unwrap();
+    let block = block.split('}').next().unwrap();
+    assert_eq!(block.matches("pub const ").count(), n_phases);
+    let state =
+        std::fs::read_to_string(root().join("modules/core/runtime/src/rs/src/state.rs")).unwrap();
+    assert!(state.contains(&format!("pub const POLLS: usize = {};", line("polls = "))));
+}
+
+#[test]
+fn the_service_abi_hash_follows_every_byte_and_the_file_name_and_is_never_zero() {
+    let a = sdkgen::svc_abi_hash(&[("x.rs", b"fn a() {}"), ("y.rs", b"")]);
+    assert_eq!(
+        a,
+        sdkgen::svc_abi_hash(&[("x.rs", b"fn a() {}"), ("y.rs", b"")])
+    );
+    // one byte, the name, the order and the split between two files each change it
+    assert_ne!(
+        a,
+        sdkgen::svc_abi_hash(&[("x.rs", b"fn b() {}"), ("y.rs", b"")])
+    );
+    assert_ne!(
+        a,
+        sdkgen::svc_abi_hash(&[("z.rs", b"fn a() {}"), ("y.rs", b"")])
+    );
+    assert_ne!(
+        a,
+        sdkgen::svc_abi_hash(&[("y.rs", b""), ("x.rs", b"fn a() {}")])
+    );
+    assert_ne!(
+        sdkgen::svc_abi_hash(&[("x", b"ab"), ("y", b"")]),
+        sdkgen::svc_abi_hash(&[("x", b"a"), ("y", b"b")])
+    );
+    assert_ne!(sdkgen::svc_abi_hash(&[]), 0);
 }

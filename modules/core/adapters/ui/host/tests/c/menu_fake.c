@@ -107,7 +107,13 @@ uint32_t dkrt_blocks(void)
     return fk.blocks;
 }
 
-void dkrt_poll_set(uintptr_t f)
+int32_t dkrt_poll_add(uintptr_t f)
+{
+    (void)f;
+    return 0;
+}
+
+void dkrt_poll_remove(uintptr_t f)
 {
     (void)f;
 }

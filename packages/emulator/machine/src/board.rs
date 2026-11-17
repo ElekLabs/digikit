@@ -32,6 +32,8 @@ const PAGE_COUNT: usize = 4096;
 const PAGE_MASK: u32 = PAGE_SIZE as u32 - 1;
 /// The console TX descriptor is a 4 KiB modulo ring. Keep host collection
 /// bounded even when a malformed descriptor requests a larger transfer.
+/// Bound of the card trace buffer between two drains.
+const CARD_TRACE_MAX: usize = 4096;
 const TX35_MAX_BYTES: usize = 4096;
 /// eDMA channel the DT2 firmware uses for DSPI1 RX (finding 04, transfer inventory).
 const DSPI1_RX_CHAN: usize = 14;
@@ -74,6 +76,14 @@ const _: () = {
     assert!(periph::spilink::DSP_SLOT >= end);
     assert!(esdhc::BASE >= end);
 };
+
+/// One card command seen by the card trace instrument. `bytes` is the DMA transfer length (0 for CMD12/CMD23).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CardOp {
+    pub cmd: u8,
+    pub arg: u32,
+    pub bytes: usize,
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SemaphoreAddresses {
@@ -217,6 +227,8 @@ pub struct Board {
     dma_written: Vec<(u32, usize)>,
     /// The engine of each `dma_written` entry (instruments only; drained with it).
     dma_sources: Vec<&'static str>,
+    /// Card trace instrument (`DIGI_CARD_TRACE`): one record per card command, until the runner drains them. `None` = off.
+    card_trace: Option<Vec<CardOp>>,
     last_error: Option<BoardWriteError>,
     /// Optional PIT/INTC facade in a stable allocation; ownership transfers by pointer.
     /// Its owned MMIO is never backed by sparse RAM.
@@ -359,7 +371,7 @@ impl Board {
                 && tcd.nbytes & 0xc000_0000 == 0
                 && n != 0
                 && n <= 4096
-                && n % 4 == 0
+                && n.is_multiple_of(4)
                 && (tcd.attr & 7) == 2
                 && ((tcd.attr >> 8) & 7) == 2
                 && if channel == ssi::RX_CHAN {
@@ -451,13 +463,14 @@ impl Board {
             } else {
                 ssi.tx_bytes += n as u64;
             }
-            if result.major_complete && plan.tcd.csr & edma::CSR_E_SG != 0 {
-                if let Some(descriptor) = plan.descriptor {
-                    for (offset, byte) in descriptor.into_iter().enumerate() {
-                        self.dma
-                            .edma_regs
-                            .set_u8_at(edma::tcd_offset(channel) + offset, byte);
-                    }
+            if result.major_complete
+                && plan.tcd.csr & edma::CSR_E_SG != 0
+                && let Some(descriptor) = plan.descriptor
+            {
+                for (offset, byte) in descriptor.into_iter().enumerate() {
+                    self.dma
+                        .edma_regs
+                        .set_u8_at(edma::tcd_offset(channel) + offset, byte);
                 }
             }
             if self.policy == CompletionPolicy::Device
@@ -497,6 +510,7 @@ impl Board {
             events: vec![],
             dma_written: vec![],
             dma_sources: vec![],
+            card_trace: None,
             last_error: None,
             time: None,
             cf_ips: periph::clock::BASE_IPS,
@@ -566,7 +580,7 @@ impl Board {
     /// A channel started by software (SSRT) runs its whole transfer at once (`periph::edma::software_start`): the major-loop writeback
     /// (addresses advanced, CITER reloaded from BITER, DONE set, START cleared), the channel's INTH/INTL bit for INT_MAJOR or INT_HALF, its
     /// ERQ bit cleared for D_REQ, and with E_SG the next descriptor loaded from DLAST_SGA. Peer CPU board only: MAIN copies the peer's
-    /// voices out of the window this way every frame (finding 129). An access that no slave answers is a bus error (ES SBE or DBE, the
+    /// voices out of the window this way every frame (finding 136). An access that no slave answers is a bus error (ES SBE or DBE, the
     /// TCD keeps the state at the fault, no DONE); a bad configuration is a recorded error and moves nothing (RM 19.4.2).
     fn edma_software_start(&mut self, chan: usize) {
         let base = edma::tcd_offset(chan);
@@ -975,6 +989,10 @@ impl Board {
     /// Validate and install Oracle forced read words. A forced word may
     /// overlay one owned register (the Python hook does this before the
     /// peripheral read), but may not cross into or out of owned MMIO.
+    #[allow(
+        clippy::result_unit_err,
+        reason = "one failure kind: callers expect success or map the error"
+    )]
     pub fn install_forced_mmio(&mut self, words: BTreeMap<u32, u32>) -> Result<(), ()> {
         if words.keys().any(|&base| {
             let Some(end) = base.checked_add(3) else {
@@ -1217,6 +1235,7 @@ impl Board {
     pub fn has_host_events(&self) -> bool {
         !self.events.is_empty()
             || !self.dma_written.is_empty()
+            || self.card_trace.as_ref().is_some_and(|t| !t.is_empty())
             || !self.uart_tx.is_empty()
             || self.dspi1_irq
             || self.midi_tx37_started != 0
@@ -1300,6 +1319,24 @@ impl Board {
     /// instruction fetch; successful DMA writes, including Device SSI RX, appear.
     pub fn take_dma_written_ranges(&mut self) -> Vec<(u32, usize)> {
         std::mem::take(&mut self.dma_written)
+    }
+    /// Start (or stop) the card trace: one `CardOp` per card command (CMD18/CMD25 data
+    /// transfers, CMD8, and CMD12/CMD23 from the eSDHC command decode). Off by default; no cost then.
+    pub fn set_card_trace(&mut self, on: bool) {
+        self.card_trace = on.then(Vec::new);
+        self.esdhc.set_cmd_trace(on);
+    }
+    /// The card commands since the last call, in order (empty when the trace is off).
+    pub fn take_card_trace(&mut self) -> Vec<CardOp> {
+        let Some(trace) = self.card_trace.as_mut() else {
+            return Vec::new();
+        };
+        for (cmd, arg) in self.esdhc.take_cmd_trace() {
+            if trace.len() < CARD_TRACE_MAX {
+                trace.push(CardOp { cmd, arg, bytes: 0 });
+            }
+        }
+        std::mem::take(trace)
     }
     /// The engine of each range the last `take_dma_written_ranges` returned,
     /// in order (take it second; for the write-watch). Machine consumes these
@@ -1622,6 +1659,22 @@ impl Board {
         let argument = self.esdhc.read(esdhc::BASE + esdhc::CMDARG, 4).unwrap_or(0);
         self.drain_esdhc_host_writes();
         let (base, len) = self.dma_window(command)?;
+        if let Some(trace) = self.card_trace.as_mut() {
+            // Commands decoded before this transfer (CMD23) go first.
+            let before = self.esdhc.take_cmd_trace();
+            for (cmd, arg) in before {
+                if trace.len() < CARD_TRACE_MAX {
+                    trace.push(CardOp { cmd, arg, bytes: 0 });
+                }
+            }
+            if trace.len() < CARD_TRACE_MAX {
+                trace.push(CardOp {
+                    cmd: command,
+                    arg: argument,
+                    bytes: len,
+                });
+            }
+        }
         if command == 25 {
             for i in 0..len {
                 let address = base.checked_add(i as u32).ok_or(StorageDmaError::Dma(
@@ -1784,7 +1837,7 @@ impl Board {
                 address: addr,
                 bytes: len,
             })? as u8);
-            let soff = i32::try_from(tcd.soff).expect("eDMA SOFF is signed 16-bit");
+            let soff = i32::from(tcd.soff);
             addr = addr
                 .checked_add_signed(soff)
                 .ok_or(BoardWriteError::DspiDma {

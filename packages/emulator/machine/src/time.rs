@@ -104,7 +104,7 @@ pub struct Time {
     /// is always on. `restore_timer_component` does not touch it.
     force_irq: bool,
     /// Deliver the guest-forced INTC1 source 63 (vector 191) here too. Off while the SSI model delivers it; on for a board without SSI
-    /// pacing, where the audio frame handler forces it to run the engine tick (finding 129).
+    /// pacing, where the audio frame handler forces it to run the engine tick (finding 136).
     forced_191: bool,
 }
 
@@ -500,7 +500,9 @@ impl Time {
         if next == f64::INFINITY {
             return Some((u64::MAX, level)); // no timer is armed
         }
-        (next >= 0.0 && next < 9.0e15).then(|| (next.ceil() as u64, level))
+        (0.0..9.0e15)
+            .contains(&next)
+            .then(|| (next.ceil() as u64, level))
     }
 
     /// `service_with(done, _)` is known to change nothing.

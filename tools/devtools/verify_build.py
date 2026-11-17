@@ -12,7 +12,8 @@ For each device that has its ready inputs it takes the daemon from a content-add
 clone. The key is `tools/devtools/emud_key.py key`. On a miss it builds the profile-guided daemon when a PGO
 profile exists (`pgo-emud-<device>` variant; the launcher's `pgo-use` is never touched), else the plain daemon;
 checks that the key did not change during the build; audits cargo's dependency file against the key; and inserts
-the result with one rename. The last 4 used keys per device stay. `DIGI_EMUD_<DEV>=<stored digi-emud>` is written
+the result with one rename. The last 4 used keys per device stay, and every key that
+`dist/daemons.json` of any worktree of the clone points at (a restore refreshes the use time). `DIGI_EMUD_<DEV>=<stored digi-emud>` is written
 to --env-out (JSON); a stored file is never rewritten, so the test processes run it and ask cargo for nothing.
 `pk_harness.daemon_binary` takes that variable before anything else.
 """
@@ -59,7 +60,10 @@ def build_one(device: str, syx: Path) -> tuple[Path, Path]:
 
 
 def store_root() -> Path:
-    """`<git common dir>/emud-cache`: shared by every worktree of the clone, never committed."""
+    """`<git common dir>/emud-cache` (or DIGI_EMUD_STORE, for tests): shared by every worktree of the clone, never committed."""
+    override = os.environ.get("DIGI_EMUD_STORE")
+    if override:
+        return Path(override)
     done = subprocess.run(
         ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
         cwd=ROOT, check=True, capture_output=True, text=True,
@@ -67,8 +71,46 @@ def store_root() -> Path:
     return Path(done.stdout.strip()) / "emud-cache"
 
 
-def evict(device_dir: Path, keep_key: str) -> None:
-    """Keep the KEEP most recently used keys of a device (never KEEP_KEY)."""
+def worktree_roots() -> list[Path]:
+    """The root directory of every worktree of the clone (`git worktree list --porcelain`)."""
+    done = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=ROOT, check=True, capture_output=True, text=True,
+    )  # fmt: skip
+    return [
+        Path(line.removeprefix("worktree "))
+        for line in done.stdout.splitlines()
+        if line.startswith("worktree ")
+    ]
+
+
+def referenced_keys(device_dir: Path, worktrees: list[Path]) -> set[str]:
+    """The keys of DEVICE_DIR that `dist/daemons.json` of any of WORKTREES points at.
+
+    A worktree without that file, or with one that cannot be read, references nothing.
+    """
+    keys: set[str] = set()
+    for tree in worktrees:
+        try:
+            pinned = json.loads((tree / "dist" / "daemons.json").read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(pinned, dict):
+            continue
+        for value in pinned.values():
+            binary = Path(str(value))
+            if binary.parent.parent == device_dir:
+                keys.add(binary.parent.name)
+    return keys
+
+
+def evict(
+    device_dir: Path, keep_key: str, referenced: set[str] | frozenset[str] = frozenset()
+) -> None:
+    """Keep the KEEP most recently used keys of a device, KEEP_KEY, and every key in REFERENCED.
+
+    The use time is the mtime of key.txt: it is set on insert and refreshed on every restore.
+    """
     entries = []
     for entry in device_dir.iterdir():
         if entry.name.startswith(".") or not entry.is_dir():
@@ -79,7 +121,7 @@ def evict(device_dir: Path, keep_key: str) -> None:
             entries.append((0.0, entry))
     entries.sort(key=lambda item: item[0], reverse=True)
     for _mtime, entry in entries[KEEP:]:
-        if entry.name != keep_key:
+        if entry.name != keep_key and entry.name not in referenced:
             shutil.rmtree(entry, ignore_errors=True)
 
 
@@ -90,9 +132,16 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
     final = device_dir / key
     binary = final / "digi-emud"
     if binary.is_file():
-        (final / "key.txt").touch()
-        print(f"{device} daemon: restored {key[:12]}", flush=True)
-        return binary
+        # an entry written without files.txt (older code sharing the store) gets one from its depfile, or counts as a miss
+        if emud_key.backfill_files(final):
+            (final / "key.txt").touch()
+            print(f"{device} daemon: restored {key[:12]}", flush=True)
+            return binary
+        print(
+            f"{device} daemon: entry {key[:12]} has no usable files list: rebuilding",
+            flush=True,
+        )
+        shutil.rmtree(final, ignore_errors=True)
     built, target = build_one(device, syx)
     inputs = emud_key.inputs(device)
     after = emud_key.key_of(inputs)
@@ -117,6 +166,13 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
         shutil.copyfile(built, tmp / "digi-emud")
     (tmp / "digi-emud").chmod(0o755)
     (tmp / "key.txt").write_text(key + "\n")
+    # the repository files the build read: the daemon part of the key of a device test that does not run patchkit
+    (tmp / "files.txt").write_text(
+        "".join(
+            f"{n}\n"
+            for n in emud_key.repo_files_of_depfile(depfile.read_text(), ROOT, target)
+        )
+    )
     shutil.copyfile(depfile, tmp / "depfile.d")
     try:
         os.rename(tmp, final)
@@ -131,23 +187,27 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
             f"{device} daemon: restored {key[:12]} (inserted by another process)",
             flush=True,
         )
-    evict(device_dir, key)
+    evict(device_dir, key, referenced_keys(device_dir, worktree_roots()))
     return binary
 
 
-def build_daemons(devices: list[str]) -> dict[str, str]:
-    """Provide the daemons of DEVICES from the store; publish each path for downstream consumers."""
+def build_daemons(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
+    """Provide the daemons of DEVICES from the store: the paths for downstream consumers, and the test key of each device
+    (from the files the build read, see emud_key.test_key_of)."""
     env: dict[str, str] = {}
+    test_keys: dict[str, str] = {}
     root = store_root()
     for device in devices:
         cell = pk_harness.Cell(device, pk_emud_pgo.FIRMWARE[device])
         try:
             syx, _ready = pk_harness.firmware_inputs(cell)
         except pk_harness.HarnessError as exc:
-            print(f"SKIP {device}: {exc}", flush=True)
+            print(f"SKIP {device}: {exc}", file=sys.stderr, flush=True)
             continue
-        env[f"DIGI_EMUD_{device.upper()}"] = str(ensure_daemon(device, syx, root))
-    return env
+        binary = ensure_daemon(device, syx, root)
+        env[f"DIGI_EMUD_{device.upper()}"] = str(binary)
+        test_keys[device] = emud_key.test_key(device, binary.parent)
+    return env, test_keys
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -167,12 +227,24 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         ap.error(f"unknown devices: {', '.join(unknown)}")
     try:
-        env = build_daemons(devices)
+        env, test_keys = build_daemons(devices)
     except pk_harness.HarnessError as exc:
         print(f"verify_build: {exc}", file=sys.stderr)
         return 1
+    if not env:
+        print(
+            "verify_build: no daemon built (missing stock firmware or ready inputs, see SKIP lines above); "
+            "build ready inputs with mise run emu:ready -- <device>",
+            file=sys.stderr,
+        )
+        return 1
     if args.env_out:
         args.env_out.write_text(json.dumps(env, indent=2) + "\n")
+        # dist/bytes/daemon-test.key, one `device key` line each: device tasks of a merge key hash it instead of the daemon path,
+        # which moves with every patchkit edit
+        key_file = args.env_out.parent / "bytes" / "daemon-test.key"
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text("".join(f"{d} {k}\n" for d, k in sorted(test_keys.items())))
     return 0
 
 

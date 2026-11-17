@@ -71,7 +71,7 @@ device. The arena and DSP-area figures are the runtime's own (`arena::stats`, `d
 - `core/health` (`modules/core/adapters/health`, requires `core/runtime`): `health_read(HealthRaw *)`, `health_heap(HealthRaw *)`; exported state `health_hs`,
   `health_idle_line`, `health_off` (the proof's A/B switch).
 - Runtime C ABI, additive (`dkrt-sdk`, docs/design/digikit-runtime.md): `void dkrt_health(DkrtHealth *)` (24 words; flags `HEALTH_MODULE/CPU/DSP/HEAP/
-  HEAP_CUT/HEAP_BAD`), `u32 dkrt_blocks(void)` (DSP blocks since boot: a 1500 Hz clock, 0 without core/health), `void dkrt_poll_set(fn)` (the UI-loop tick calls
+  HEAP_CUT/HEAP_BAD`), `u32 dkrt_blocks(void)` (DSP blocks since boot: a 1500 Hz clock, 0 without core/health), `i32 dkrt_poll_add(fn)` and `void dkrt_poll_remove(fn)` (a table of four, `DKRT_POLLS`; the UI-loop tick calls
   `fn()` once per pass; one caller), mailbox command `CMD_HEALTH` (6) into the exported `DKRT_HEALTH`. The runtime links `health_read`/`health_heap` as optional
   symbols (0 when the module is not in the image). `RUNTIME_VERSION` stays 2.
 
@@ -79,7 +79,7 @@ device. The arena and DSP-area figures are the runtime's own (`arena::stats`, `d
 
 **[D]** No key press needed: the menu has no timer (finding 34), and I did not trace a timer or per-view update in the firmware, so the page uses the runtime's
 UI-loop tick (`dkrt_tick`, once per pass of the UI task's event loop, about 32 passes per emulated second here: 0.24 per million instructions). Opening
-the page registers `dk_poll` with `dkrt_poll_set`. `dk_poll` waits 750 DSP blocks (0.5 s, `dkrt_blocks`), then calls `dkrt_health`, rebuilds the six rows with the
+the page registers `dk_poll` with `dkrt_poll_add` and removes it with `dkrt_poll_remove`. `dk_poll` waits 750 DSP blocks (0.5 s, `dkrt_blocks`), then calls `dkrt_health`, rebuilds the six rows with the
 firmware's own rebuild idiom (selection kept, `View::invalidate`) and counts `DK_REDRAWS`. When the page is closed it removes itself: the View's parent pointer at
 View + 0x2c (the field `View::invalidate` tests) is 0 once the view has left the stack (read: 0x44f5de80 open, 0 closed). Without the block clock (no core/health)
 it refreshes every 60 passes.
@@ -146,7 +146,7 @@ way: idle share 46.2 %, then 38.9 % (burn 10.9 %), 17.1 % (43.6 %), 0 (70.5 %, 3
 - **Poll:** `dk_poll` runs once per UI pass (about 32 per second) and returns after a few instructions until half a second has passed; a refresh is `dkrt_health` (with the walk:
   about 12 instructions per free block, so a few hundred at 13 to 34 blocks), 6 menu items rebuilt by the firmware's own idiom, once per 0.5 s while the page is open. Nothing
   runs when the page is closed (the poll pointer is 0).
-- **Size:** `core/health` is 710 bytes of code and 84 bytes of bss; the runtime grew by `dkrt_health`, `dkrt_blocks`, `dkrt_poll_set` and the optional links.
+- **Size:** `core/health` is 710 bytes of code and 84 bytes of bss; the runtime grew by `dkrt_health`, `dkrt_blocks`, the poll table and the optional links.
 - **Emulator speed (not a device cost):** the emulator's idle fast-forward recognised only the stock `bra.b self` of the boot thread (`60 fe`), so with `core/health` the counting loop was interpreted and the DT2 cold boot took 107 s of wall time instead of about 25 s. **[C]** Fixed in the model: the fast-forward also recognises the counting loop by its instruction pattern (`addq.l #1,(counter).l; bra.s` back, `52 b9 <counter> 60 f8`, learned from the PC at chunk starts, so code placed at run time is found), skips whole passes (2 instructions each, up to the next timer or SSI event) and adds the skipped passes to the counter in memory and to the flags of the last `addq`. The result equals the interpreted loop exactly (unit test `counting_idle_loop_matches_reference`: CPU state, counter, guest clock). **[D]** DT2 1.16 with `core/health`, same machine, one run each: boot 107 s before, 41 s after; the proof's idle share (0.462) and load readings (204 / 329 / 706 / 1000 tenths of a percent, CPU 21 %) are identical before and after. Images without `core/health` are unchanged.
 
 Runs (each image once, on the committed objects): `dt2-1.16`, `dt2-1.17`: 27 of 27 checks plus `--sites-only` (2 of 2); `dn2-1.11`, `dn2-1.12`: 29 of 29 (the site check is part of the run).
@@ -168,7 +168,7 @@ reads the voice rows (`no symbol core/dsp-voice:voices.rows`); the image is now 
   loop's real speed (an absolute CPU calibration), the cost of the mutex walk on the real ColdFire.
 - **[O]** The reference of the CPU figure is the best window of the boot; a device that is never quiet reads low. An absolute calibration would need the idle loop's speed alone.
 - **[O]** DT2: the DSP average falls while a pattern plays. Per-task stack marks (the task table is not enumerable at run time). Why the burn displaces more than the idle loop (other low-priority work).
-- **[O]** One poll function only (`dkrt_poll_set`); a second user needs a list. The page's own stack use was not measured separately (it is the chain of `fill_about` plus `dkrt_health` and
+- The poll table (`DKRT_POLLS`) holds four functions, so the page and `core/ui`'s `dk_ui_tick` share it. The page's own stack use was not measured separately (it is the chain of `fill_about` plus `dkrt_health` and
   `health_heap`, about 200 bytes more).
 - **[O]** The firmware's own timer or per-view update was not looked for beyond the UI event loop; the UI-loop tick is what the page uses.
 

@@ -12,12 +12,19 @@
 //! Device facts (knob positions of a machine's words, stock rows by glyph, clone_of, level) come from `Profile`, read from the `dynreg_info` table
 //! (`registry::profile`); before builders the packer took them from the device file.
 use crate::{cstr_len, MAX_MODULES};
+use dkrt_sdk::records::{KIND_ACTION, KIND_EFFECT, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
+use dkrt_abi::service::{DeclItem, Declare};
 use dkrt_sdk::*;
+
+/// The length of a record of `kind`, as the service that owns the kind declares it.
+fn record_len(kind: u32) -> usize {
+    crate::handlers::len(kind).unwrap_or(0) as usize
+}
 
 pub const MAX_RECORDS: usize = dkneeds::MAX_RECORDS as usize;
 const MAX_M: usize = limits::MACHINE_ROWS;
-const MAX_F: usize = crate::fxpage::MAX_FX;
+const MAX_F: usize = crate::dsp::MAX_FX;
 const MAX_PG: usize = 16;
 const MAX_PA: usize = MAX_RECORDS;
 const TEXT: usize = 24;
@@ -27,26 +34,14 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 const KNOB_PARAM: u32 = 0x8000_0000;
 const FX_KNOBS: usize = 7;
 
-// record kinds and lengths of the `register` section (registry.rs, nativepage.rs, fxpage.rs)
-const KIND_PARAM: u32 = 1;
-const KIND_MACHINE: u32 = 2;
-const KIND_PAGE: u32 = 3;
-const KIND_EFFECT: u32 = 4;
-const KIND_ACTION: u32 = 5;
-const LEN_PARAM: usize = 0x50;
-const LEN_MACHINE: usize = 0x6c;
-const LEN_PAGE: usize = 0x60;
-const LEN_EFFECT: usize = 0x1a4;
-const LEN_ACTION: usize = 0x10;
+// record kinds of the `register` section: `dkrt_sdk::records` (sdk/sdk.toml `[records.kinds]`); the lengths come from the services' declarations (`handlers::len`)
 const REG_MAGIC: u32 = 0x444b_5247;
 const HEADER: usize = 16;
 const POS_END: u32 = 255;
 
-pub const ROUTE_MASTER: u32 = 1;
-pub const ROUTE_SEND: u32 = 2;
-const FXF_SEND: u32 = 1;
-const FXF_NOMASTER: u32 = 2;
-const FXF_DEFAULT_SEND: u32 = 4;
+pub const ROUTE_MASTER: u32 = dkneeds::page::DK_ROUTE_MASTER;
+pub const ROUTE_SEND: u32 = dkneeds::page::DK_ROUTE_SEND;
+use dkneeds::{FXF_DEFAULT_SEND, FXF_NOMASTER, FXF_SEND};
 /// `DK_BIPOLAR` of the display kind of `dk_page_add_fx_param` (`DK_PERCENT` is 1).
 const DK_BIPOLAR: u32 = 2;
 
@@ -129,6 +124,18 @@ pub struct CParam {
     pub fdef: u32,
 }
 
+/// The most generic records (`dk_record_add`) and the bytes of their bodies one `init` may emit.
+pub const MAX_G: usize = 8;
+pub const G_BYTES: usize = 640;
+
+/// A generic record: its kind and where its body is in `Collect::gbytes`.
+#[derive(Clone, Copy)]
+pub struct GRec {
+    pub kind: u32,
+    pub at: u16,
+    pub len: u16,
+}
+
 const M0: CMachine = CMachine { index: 0, name: [0; TEXT], short: [0; TEXT] };
 const F0: CFx = CFx { index: 0, name: [0; TEXT], short: [0; TEXT], routes_set: false, allowed: 0, def: 0, mix: 127, page: -1 };
 const G0: CPage = CPage { fx: false, owner: 0, name: [0; TEXT], short: [0; TEXT], canvas: false, flags: 0, draw: 0, event: 0, arg: 0, nbind: 0, binds: [[0; 3]; 8], nparam: 0 };
@@ -147,6 +154,13 @@ pub struct Collect {
     pub np: usize,
     pub params: [CParam; MAX_PA],
     pub nparam: usize,
+    /// the generic records (`dk_record_add`): kind and body, appended to the `register` section as they came
+    pub grecs: [GRec; MAX_G],
+    pub ng: usize,
+    /// what a service module declared in `init` (`dk_service_declare_*`), compared with its header table at the commit
+    pub decl: Declare,
+    gbytes: [u8; G_BYTES],
+    gat: usize,
     records: usize,
 }
 
@@ -156,7 +170,37 @@ const _: () = assert!(core::mem::size_of::<Collect>() == dkneeds::COLLECT_BYTES 
 
 impl Collect {
     pub const fn new() -> Collect {
-        Collect { err: 0, machines: [M0; MAX_M], nm: 0, fxs: [F0; MAX_F], nf: 0, pages: [G0; MAX_PG], np: 0, params: [P0; MAX_PA], nparam: 0, records: 0 }
+        Collect { err: 0, machines: [M0; MAX_M], nm: 0, fxs: [F0; MAX_F], nf: 0, pages: [G0; MAX_PG], np: 0, params: [P0; MAX_PA], nparam: 0, grecs: [GRec { kind: 0, at: 0, len: 0 }; MAX_G], ng: 0, decl: Declare::new(), gbytes: [0; G_BYTES], gat: 0, records: 0 }
+    }
+
+    /// `dk_record_add`: keep one record of a generic kind (`[records.kinds]` `generic = true`; the typed kinds have their builders). The body is
+    /// copied; its length is the kind's record length less the 8-byte header. The owning service checks the record at the commit. Returns OK
+    /// or the error that the commit reports too.
+    pub fn add_record(&mut self, kind: u32, bytes: *const u8, len: u32) -> i32 {
+        let want = match crate::handlers::len(kind) {
+            Some(l) if is_generic(kind) => l,
+            _ => {
+                self.fail(E_FORMAT);
+                return E_FORMAT;
+            }
+        };
+        if bytes.is_null() || len + 8 != want {
+            self.fail(E_FORMAT);
+            return E_FORMAT;
+        }
+        if self.ng >= MAX_G || self.gat + len as usize > G_BYTES || !self.room() {
+            self.fail(E_DECL_FULL);
+            return E_DECL_FULL;
+        }
+        let mut i = 0;
+        while i < len as usize {
+            self.gbytes[self.gat + i] = unsafe { *bytes.add(i) };
+            i += 1;
+        }
+        self.grecs[self.ng] = GRec { kind, at: self.gat as u16, len: len as u16 };
+        self.ng += 1;
+        self.gat += len as usize;
+        OK
     }
 
     fn fail(&mut self, e: i32) {
@@ -457,7 +501,7 @@ unsafe fn active() -> Option<&'static mut Collect> {
     }
 }
 
-// the builder imports (registered in lib.rs)
+// the builder imports (registered in imports.rs)
 
 pub unsafe extern "C" fn dk_module_ctx_add_machine(ctx: *mut u8, index: u32, name: *const u8, short_name: *const u8) -> *mut u8 {
     match active() {
@@ -535,6 +579,68 @@ pub unsafe extern "C" fn dk_fx_routes(f: *mut u8, allowed: u32, def: u32) {
         c.fx_routes(f, allowed, def);
     }
 }
+pub unsafe extern "C" fn dk_record_add(ctx: *mut u8, kind: u32, bytes: *const u8, len: u32) -> i32 {
+    match active() {
+        Some(c) if crate::entry::is_ctx(ctx) => c.add_record(kind, bytes, len),
+        _ => E_CONTEXT,
+    }
+}
+/// One `dk_service_declare_*` call: the item goes to the declarations (they take one record of the bounded collection each).
+unsafe fn declare(ctx: *mut u8, tag: u16, a: u32, b: u32, c: u32) -> i32 {
+    match active() {
+        Some(col) if crate::entry::is_ctx(ctx) => {
+            if col.decl.n >= Declare::MAX || !col.room() {
+                col.fail(E_DECL_FULL);
+                return E_DECL_FULL;
+            }
+            col.decl.add(tag, a, b, c);
+            OK
+        }
+        _ => E_CONTEXT,
+    }
+}
+/// `dk_service_declare_row` (a service file's `init`, `SVC_IMPORTS` only): the `ServiceRow` the file provides. One row per file; the commit hands it to the
+/// registry (`Registry::add`).
+#[cfg_attr(test, no_mangle)]
+pub unsafe extern "C" fn dk_service_declare_row(ctx: *mut u8, row: *const dkrt_abi::service::ServiceRow) -> i32 {
+    match active() {
+        Some(col) if crate::entry::is_ctx(ctx) => {
+            if row.is_null() || col.decl.row_ptr().is_some() {
+                col.fail(E_DECL_KIND);
+                return E_DECL_KIND;
+            }
+            if col.decl.n >= Declare::MAX || !col.room() {
+                col.fail(E_DECL_FULL);
+                return E_DECL_FULL;
+            }
+            col.decl.row(row);
+            OK
+        }
+        _ => E_CONTEXT,
+    }
+}
+#[cfg_attr(test, no_mangle)]
+pub unsafe extern "C" fn dk_service_declare_kind(ctx: *mut u8, kind: u32, len: u32, handler: *const u8) -> i32 {
+    // a handler is an image address: the header table carries its offset in the image
+    declare(ctx, Declare::KIND, kind, len, handler as usize as u32)
+}
+#[cfg_attr(test, no_mangle)]
+pub unsafe extern "C" fn dk_service_declare_slot(ctx: *mut u8, slot: u32, flags: u32, entry: *const u8) -> i32 {
+    // the entry is an image address: the header table carries its offset in the image
+    declare(ctx, Declare::SLOT, slot, flags, entry as usize as u32)
+}
+#[cfg_attr(test, no_mangle)]
+pub unsafe extern "C" fn dk_service_declare_hook(ctx: *mut u8, site: u32, entry: *const u8) -> i32 {
+    declare(ctx, Declare::HOOK, site, entry as usize as u32, 0)
+}
+#[cfg_attr(test, no_mangle)]
+pub unsafe extern "C" fn dk_service_declare_export(ctx: *mut u8, name_hash: u32, entry: *const u8) -> i32 {
+    declare(ctx, Declare::EXPORT, name_hash, entry as usize as u32, 0)
+}
+#[cfg_attr(test, no_mangle)]
+pub unsafe extern "C" fn dk_service_declare_resource(ctx: *mut u8, resource: u32, limit: u32) -> i32 {
+    declare(ctx, Declare::RESOURCE, resource, limit, 0)
+}
 pub unsafe extern "C" fn dk_fx_mix(f: *mut u8, def: u32) {
     if let Some(c) = active() {
         c.fx_mix(f, def);
@@ -553,33 +659,91 @@ pub struct KeysCopy {
     pub nf: usize,
     pub mk: [u32; MAX_RECORDS],
     pub fk: [u32; MAX_RECORDS],
+    /// the KINDS, SLOTS, HOOKS, EXPORTS and RESOURCES entries of the table, as `init`'s declarations must repeat them (`decl_matches`)
+    pub decl: Declare,
 }
 
 impl KeysCopy {
     pub const fn empty() -> KeysCopy {
-        KeysCopy { machine_rows: 0, param_rows: 0, page_rows: 0, nm: 0, nf: 0, mk: [0; MAX_RECORDS], fk: [0; MAX_RECORDS] }
+        KeysCopy { machine_rows: 0, param_rows: 0, page_rows: 0, nm: 0, nf: 0, mk: [0; MAX_RECORDS], fk: [0; MAX_RECORDS], decl: Declare::new() }
     }
 
-    /// Parse the table bytes (size 0: no machine, no effect and no rows).
+    /// Parse the header table bytes. A file with no table, or another magic or version, is the format of runtime 0.7: `E_CONTRACT`; a damaged
+    /// table is `E_FORMAT`.
     pub fn from_bytes(b: &[u8]) -> Result<KeysCopy, i32> {
         let mut k = KeysCopy::empty();
-        if b.is_empty() {
-            return Ok(k);
+        let keys = dkneeds::keys::Keys::parse(b).map_err(|e| if e == dkneeds::keys::KeysError::Format { E_CONTRACT } else { E_FORMAT })?;
+        k.machine_rows = keys.machine_rows();
+        k.param_rows = keys.param_rows();
+        k.page_rows = keys.page_rows();
+        let mut g = 0;
+        while let Some((kind, list)) = keys.group(g) {
+            g += 1;
+            let mut j = 0;
+            while j < list.len() {
+                let v = list.get(j);
+                j += 1;
+                if kind == KIND_MACHINE {
+                    if k.nm >= MAX_RECORDS {
+                        return Err(E_FORMAT);
+                    }
+                    k.mk[k.nm] = v;
+                    k.nm += 1;
+                } else if kind == KIND_EFFECT {
+                    if k.nf >= MAX_RECORDS {
+                        return Err(E_FORMAT);
+                    }
+                    k.fk[k.nf] = v;
+                    k.nf += 1;
+                }
+            }
         }
-        let keys = dkneeds::keys::Keys::parse(b).map_err(|_| E_FORMAT)?;
-        k.machine_rows = keys.machine_rows() as u32;
-        k.param_rows = keys.param_rows() as u32;
-        k.page_rows = keys.page_rows() as u32;
-        for v in keys.machine_keys() {
-            k.mk[k.nm] = v;
-            k.nm += 1;
+        for tg in [dkneeds::keys::tag::KINDS, dkneeds::keys::tag::SLOTS, dkneeds::keys::tag::HOOKS, dkneeds::keys::tag::EXPORTS, dkneeds::keys::tag::RESOURCES] {
+            let mut i = 0;
+            while let Some(w) = keys.words(tg, i) {
+                k.decl.add(tg, w.0, w.1, w.2);
+                i += 1;
+            }
         }
-        for v in keys.fx_keys() {
-            k.fk[k.nf] = v;
-            k.nf += 1;
+        if k.decl.full {
+            return Err(E_FORMAT);
         }
         Ok(k)
     }
+}
+
+/// Header fields of a `.dkm` that the keys table lookup needs (the loader reads the rest; offsets are big endian).
+pub(crate) mod dkm {
+    pub use dkneeds::{HEADER, MAGIC};
+    pub const H_MAGIC: usize = dkneeds::H_MAGIC as usize;
+    pub const H_SIZE: usize = dkneeds::H_SIZE as usize;
+    pub const H_REG_OFF: usize = dkneeds::H_REG_OFF as usize;
+    pub const H_REG_SIZE: usize = dkneeds::H_REG_SIZE as usize;
+}
+
+/// The machine keys of the keys table of a whole `.dkm` file, for the boot's type assignment (`assign::plan`): at most 8, the count returned.
+/// A file that is torn or not a `.dkm` has none (its load reports the error).
+pub fn machine_keys(file: &[u8], out: &mut [u32; 8]) -> usize {
+    let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]);
+    let size = file.len() as u32;
+    if size < dkm::HEADER || be(dkm::H_MAGIC) != dkm::MAGIC || be(dkm::H_SIZE) != size {
+        return 0;
+    }
+    let (off, len) = (be(dkm::H_REG_OFF), be(dkm::H_REG_SIZE));
+    // the keys table of the header (the pair at 0x90 is keys_off, keys_size)
+    if !(off <= size && len <= size - off) {
+        return 0;
+    }
+    let k = match KeysCopy::from_bytes(&file[off as usize..(off + len) as usize]) {
+        Ok(k) => k,
+        Err(_) => return 0,
+    };
+    let mut n = 0;
+    while n < k.nm && n < 8 {
+        out[n] = k.mk[n];
+        n += 1;
+    }
+    n
 }
 
 // ---- lowering to records -----------------------------------------------------------------------------------------------------
@@ -608,11 +772,33 @@ impl Out {
         }
         self.at += field;
     }
+    fn bytes(&mut self, s: &[u8]) {
+        let mut i = 0;
+        while i < s.len() {
+            if !self.buf.is_null() && self.at + i < self.cap {
+                unsafe { *self.buf.add(self.at + i) = s[i] };
+            }
+            i += 1;
+        }
+        self.at += s.len();
+    }
     fn head(&mut self, kind: u32, len: usize) {
         self.p32(kind);
         self.p32(len as u32);
         self.count += 1;
     }
+}
+
+/// Whether `kind` is a generic kind: a record a module emits with `dk_record_add` (`[records.kinds]` `generic = true`).
+fn is_generic(kind: u32) -> bool {
+    let mut i = 0;
+    while i < dkrt_sdk::records::GENERIC_KINDS.len() {
+        if dkrt_sdk::records::GENERIC_KINDS[i] == kind {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }
 
 fn len_of(s: &[u8]) -> usize {
@@ -737,7 +923,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             return Err(E_FORMAT); // the range does not fit the glyph
         }
         let tpl = p.tpl[q.glyph as usize];
-        o.head(KIND_PARAM, LEN_PARAM);
+        o.head(KIND_PARAM, record_len(KIND_PARAM));
         o.p32(k as u32);
         o.p32(tpl);
         o.p32(p.slot_base + plan.pos[i] as u32);
@@ -768,7 +954,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                 i += 1;
             }
         }
-        o.head(KIND_MACHINE, LEN_MACHINE);
+        o.head(KIND_MACHINE, record_len(KIND_MACHINE));
         o.p32(machine_key(keys, mc));
         o.p32(p.clone_of);
         o.p32(POS_END);
@@ -810,7 +996,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                     (&mc.name, &upper)
                 }
             };
-            o.head(KIND_PAGE, LEN_PAGE);
+            o.head(KIND_PAGE, record_len(KIND_PAGE));
             o.p32(machine_key(keys, mc));
             let mut j = 0;
             while j < KNOBS {
@@ -849,7 +1035,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
                 }
                 i += 1;
             }
-            o.head(KIND_EFFECT, LEN_EFFECT);
+            o.head(KIND_EFFECT, record_len(KIND_EFFECT));
             o.p32(fx.index); // the effect record of the DSP section: the keys table order
             o.p32(fx.mix); // MIX default
             o.p32(n as u32);
@@ -890,7 +1076,7 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
     while i < c.nparam {
         let q = &c.params[i];
         if q.click != 0 && plan.file[i] != u8::MAX {
-            o.head(KIND_ACTION, LEN_ACTION);
+            o.head(KIND_ACTION, record_len(KIND_ACTION));
             o.p32(plan.file[i] as u32);
             o.p32(q.click.wrapping_sub(base));
             if q.fx {
@@ -931,10 +1117,10 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             };
             taken |= 1 << index;
             if v1 {
-                o.head(crate::nativepage::KIND, crate::nativepage::LEN as usize);
+                o.head(KIND_NATIVE_PAGE, record_len(KIND_NATIVE_PAGE));
                 o.p32(1);
             } else {
-                o.head(crate::nativepage::KIND_V2, crate::nativepage::LEN_V2 as usize);
+                o.head(KIND_NATIVE_PAGE_V2, record_len(KIND_NATIVE_PAGE_V2));
                 o.p32(2);
             }
             o.p32(machine_key(keys, &c.machines[m]));
@@ -973,6 +1159,14 @@ pub fn lower(c: &Collect, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], b
             j += 1;
         }
         m += 1;
+    }
+    // the generic records, as they were added: the owning service checks and applies them
+    let mut g = 0;
+    while g < c.ng {
+        let r = c.grecs[g];
+        o.head(r.kind, 8 + r.len as usize);
+        o.bytes(&c.gbytes[r.at as usize..r.at as usize + r.len as usize]);
+        g += 1;
     }
     let size = o.at;
     if !buf.is_null() {
@@ -1103,6 +1297,76 @@ pub fn counts_of(c: &Collect, p: &Profile) -> (u32, u32, u32) {
         i += 1;
     }
     (c.nm as u32, params, pages)
+}
+
+/// What `init` declared (`dk_service_declare_*`, addresses in the loaded image at `base`) with the entries that are addresses made image offsets, as the header table
+/// has them.
+fn declared_offsets(c: &Collect, base: u32) -> Declare {
+    let mut d = c.decl;
+    let mut i = 0;
+    while i < d.n {
+        let DeclItem { tag, a, b, c: e } = d.items[i];
+        // the entries that are addresses become image offsets, as the table has them
+        d.items[i] = if tag == Declare::KIND {
+            DeclItem { tag, a, b, c: e.wrapping_sub(base) }
+        } else if tag == Declare::SLOT {
+            DeclItem { tag, a, b, c: e.wrapping_sub(base) }
+        } else if tag == Declare::HOOK || tag == Declare::EXPORT {
+            DeclItem { tag, a, b: b.wrapping_sub(base), c: e }
+        } else {
+            DeclItem { tag, a, b, c: e }
+        };
+        i += 1;
+    }
+    d
+}
+
+/// Whether what `init` declared (`dk_service_declare_*`, addresses in the loaded image at `base`) is what the header table carries (declare-check-commit):
+/// the same kinds with the same lengths and handlers, slots, hooks, exports and resources. A module that declares nothing and has no such entries passes.
+pub fn decl_matches(c: &Collect, keys: &KeysCopy, base: u32) -> bool {
+    declared_offsets(c, base).same_as(&keys.decl)
+}
+
+/// The first item that `a` and `b` do not both hold (the `ROW` item of `a` is left out, as in `Declare::same_as`): the item, and whether it is `a`'s (else it is `b`'s).
+fn first_unmatched(a: &Declare, b: &Declare) -> Option<(DeclItem, bool)> {
+    let has = |d: &Declare, x: DeclItem| {
+        let mut k = 0;
+        while k < d.n {
+            if d.items[k] == x {
+                return true;
+            }
+            k += 1;
+        }
+        false
+    };
+    let mut i = 0;
+    while i < a.n {
+        if a.items[i].tag != Declare::ROW && !has(b, a.items[i]) {
+            return Some((a.items[i], true));
+        }
+        i += 1;
+    }
+    i = 0;
+    while i < b.n {
+        if !has(a, b.items[i]) {
+            return Some((b.items[i], false));
+        }
+        i += 1;
+    }
+    None
+}
+
+/// `None` when `decl_matches`; else the first item that `init` and the header table do not both hold: (its tag, its first word), with 0x100 added to the tag when only
+/// the header table has it. A difference without such an item (a full collection) is `(0, 0)` with a tag of 1.
+pub fn decl_diff(c: &Collect, keys: &KeysCopy, base: u32) -> Option<(u32, u32)> {
+    let d = declared_offsets(c, base);
+    if d.same_as(&keys.decl) {
+        return None;
+    }
+    Some(match first_unmatched(&d, &keys.decl) {
+        Some((item, declared)) => (item.tag as u32 | if declared { 0 } else { 0x100 }, item.a),
+        None => (1, 0),
+    })
 }
 
 /// The checks of 6.3 that need only the collection, the header's keys table, the effect ids of the other loaded modules and the free rows. Returns OK or the refusal.

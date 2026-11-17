@@ -11,9 +11,30 @@ dkrt_device_id:
     .globl dkrt_device_name
 dkrt_device_name:
     .long DEVICE_NAME_WORD
+    /* the capabilities the runtime branches on instead of the device id: [capabilities] card = "slots" (the samples are store files) and
+     * [digikit] sample_path_max */
+    .globl dkrt_samples_in_store
+dkrt_samples_in_store:
+    .long SAMPLES_IN_STORE
+    .globl dkrt_sample_path_max
+dkrt_sample_path_max:
+    .long SAMPLE_PATH_MAX
+    /* the DSP load the broker checks a selection against: [adapter.machine] voices and the headroom (instructions per block) of dkprof::budget */
+    .globl dkrt_dsp_headroom
+dkrt_dsp_headroom:
+    .long DSP_HEADROOM
+    .globl dkrt_dsp_voices
+dkrt_dsp_voices:
+    .long DSP_VOICES
     .globl dkrt_peek_n
 dkrt_peek_n:
     .long PEEK_N
+    .globl dkrt_span_clock
+dkrt_span_clock:
+    .long SPAN_CLOCK
+    .globl dkrt_span_clock_hz
+dkrt_span_clock_hz:
+    .long SPAN_CLOCK_HZ
     .globl dkrt_sound_words
 dkrt_sound_words:
     .long FX_SOUND_WORDS
@@ -34,15 +55,3 @@ dkrt_store_sectors:
     .ascii "DKIMGID1"
 dkrt_image_id:
     .long 0, 0
-
-    /* DN2 has no stock path filesystem. Shared Rust checks the table before
-     * converting any entry into a callable function pointer. */
-    .balign 4
-    .globl dkrt_sample_fs
-dkrt_sample_fs:
-    .long 0, 0, 0, 0
-
-    .balign 4
-    .globl dkrt_files_fs
-dkrt_files_fs:
-    .long 0, 0, 0

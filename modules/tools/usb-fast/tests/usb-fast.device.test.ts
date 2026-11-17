@@ -23,7 +23,7 @@ import { cardRig, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts'
 import { portFile } from '@digi/regression/runtime/device-data.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { advance, rpc, word } from '@digi/regression/runtime/fx-live.ts';
+import { rpc, word, SETTLE } from '@digi/regression/runtime/fx-live.ts';
 
 /**
  * digikit/usb-fast (docs/plans/usb-fast-hardware.md, step 4), through the TypeScript BulkSession over the emulator link (`EmuBulkLink`: the daemon's
@@ -159,9 +159,9 @@ for (const device of DEVICES) {
       const mode = options.mode ?? PAIR;
       if (dt2 && !recovered.has(dk)) {
         recovered.add(dk);
-        await advance(rig.session, 2000); // the boot recovery of the staging folder
+        await rig.runtime.ui.wait({ ms: 2000, why: SETTLE }); // the boot recovery of the staging folder
       }
-      for (let i = 0; i < 100 && (await mode.callback(call)) === undefined; i++) await advance(rig.session, 100);
+      for (let i = 0; i < 100 && (await mode.callback(call)) === undefined; i++) await rig.runtime.ui.wait({ ms: 100, why: SETTLE });
       const notes: string[] = [];
       const opener = mode.opener(call, { stepInstructions: options.stepInstructions ?? STEP, zlp: options.zlp });
       const choice = await chooseBulk(dk, opener, (l) => notes.push(l), { timeoutMs: options.timeoutMs ?? 20_000, resyncMs: 200, chunk: options.chunk, log: (l) => notes.push(l) });
@@ -193,7 +193,7 @@ for (const device of DEVICES) {
       const dk = await rig.pausedBoot(await baseCard(name));
       let restarts = 0;
       if (mode.port !== 2) {
-        await advance(rig.session, 2500); // the boot's enable first
+        await rig.runtime.ui.wait({ ms: 2500, why: SETTLE }); // the boot's enable first
         restarts = await word(rig.session, planSymbol(rig.plan, 'usb_bulk_restarts'));
         await setPort(mode.port);
       }
@@ -243,6 +243,74 @@ for (const device of DEVICES) {
       unchanged(before, s.files, ['Kits/big.bin', 'one.bin', 'old.bin']);
       await rig.session.expectNoFault('usb-fast uploads');
     }, 1_800_000);
+
+    test.each(MODES)('$label: a batch of files sent with DEFER is verified at each END, named by one COMMIT (DN2; the DT2 +Drive names them at END), and a deferred path can be replaced', async (mode) => {
+      const { dk, bulk } = await boot(mode);
+      const before = (await state(dk, 'ub0')).files;
+      const batch: [string, Buffer][] = [
+        ['batch/a.bin', pattern(3000, 1)],
+        ['batch/b.bin', pattern(700, 2)],
+        ['batch/c.bin', pattern(70_001, 3)],
+        ['batch/d.bin', pattern(512, 4)],
+        ['batch/e.bin', pattern(12_345, 5)],
+        ['batch/f.bin', Buffer.from([0x33])],
+      ];
+      const pending: (number | undefined)[] = [];
+      for (const [name, data] of batch) {
+        const r = await bulk.session.put(SAMPLES, rp(name), data, { expected: hashU32(data, dt2), defer: true });
+        expect(r.hash, `${name}: END returns the device hash`).toBe(hashU32(data, dt2));
+        pending.push(r.pending);
+      }
+      // a path that is already pending is replaced by the next file of that path (DN2: the pending entry; DT2: the +Drive replace)
+      const first = pattern(2048, 6);
+      const second = pattern(4096, 7);
+      await bulk.session.put(SAMPLES, rp('batch/dup.bin'), first, { expected: hashU32(first, dt2), defer: true });
+      const last = await bulk.session.put(SAMPLES, rp('batch/dup.bin'), second, { expected: hashU32(second, dt2), defer: true, replace: true });
+      pending.push(last.pending);
+      if (dt2) {
+        expect(pending, 'the +Drive names its files at END: nothing is ever pending').toEqual(pending.map(() => 0));
+      } else {
+        expect(pending.slice(0, batch.length), 'the DN2 holds each verified file pending').toEqual(batch.map((_, i) => i + 1));
+        expect(last.pending, 'the replaced path took the place of the pending file').toBe(batch.length + 1);
+        const hidden = (await state(dk, 'ub1')).files;
+        expect([...hidden.keys()].filter((n) => n.startsWith('batch/')), 'a pending file is not listed').toEqual([]);
+      }
+      expect(await bulk.session.commit(), 'COMMIT names them all').toBe(0);
+      expect(await bulk.session.commit(), 'a second COMMIT has nothing to do').toBe(0);
+      const s = await state(dk, 'ub2');
+      for (const [name, data] of batch) await expectFile(dk, s, name, data, name);
+      await expectFile(dk, s, 'batch/dup.bin', second, 'the replaced pending path');
+      unchanged(before, s.files, [...batch.map(([n]) => n), 'batch/dup.bin']);
+
+      await rig.session.expectNoFault('usb-fast batch');
+    }, 1_800_000);
+
+    test.each(MODES)('$label: copy/write overlap: the same device hash and the same card contents for files below, at and above the 512 KiB half, with and without DEFER', async (mode) => {
+      const { dk, bulk } = await boot(mode);
+      // sizes: one half and less (one buffer), a tail in the second half, exact halves, a tail that is not a multiple of 512, several flushes
+      const files: [string, Buffer][] = [
+        ['small', pattern(300_001, 21)],
+        ['half', pattern(524_288, 22)],
+        ['half-plus', pattern(524_288 + 70_001, 23)],
+        ['one-mib', pattern(1_048_576, 24)],
+        ['odd', pattern(1_000_003, 25)],
+        ['several', pattern(3 * 1_048_576 + 700, 26)],
+      ];
+      for (const [name, data] of files) {
+        const want = hashU32(data, dt2);
+        expect(await bulk.session.put(SAMPLES, rp(`Ov/${name}`), data, { expected: want }), `${name}: END returns the device hash`).toBe(want);
+      }
+      // a batch: deferred files across the half size are verified at their END and named by one COMMIT
+      for (const [name, data] of files.slice(2, 4)) {
+        const r = await bulk.session.put(SAMPLES, rp(`Ov/d-${name}`), data, { expected: hashU32(data, dt2), defer: true });
+        expect(r.hash, `deferred ${name}`).toBe(hashU32(data, dt2));
+      }
+      expect(await bulk.session.commit(), 'COMMIT').toBe(0);
+      const s = await state(dk, 'ov0');
+      for (const [name, data] of files) await expectFile(dk, s, `Ov/${name}`, data, name);
+      for (const [name, data] of files.slice(2, 4)) await expectFile(dk, s, `Ov/d-${name}`, data, `deferred ${name}`);
+      await rig.session.expectNoFault('usb-fast overlap');
+    }, 3_600_000);
 
     /** STATUS 'S' [bit [0|1]]: the four speed switches (bit 0 hash once, bit 1 the USB receive ring, bit 2 the overlapped read-back hash, bit 3 large card commands); the reply is the mask now. */
     const speedMask = async (dk: DkSession, bit?: number, on?: number) =>
@@ -392,7 +460,7 @@ for (const device of DEVICES) {
       await rq(BULK_CMD.BEGIN, 1, Buffer.concat([be32(SAMPLES), Buffer.from(`${rp('nozlp.bin')}\0`), be32(data.length), Buffer.alloc(4)]));
       expect(parseBulkReply((await raw.recv(20_000))!).status, 'BEGIN').toBe(0);
       await rq(BULK_CMD.DATA, 2, Buffer.concat([be32(0), data])); // the frame is 512 bytes: no packet follows
-      for (let i = 0; i < 40; i++) await advance(rig.session, 50);
+      for (let i = 0; i < 40; i++) await rig.runtime.ui.wait({ ms: 50, why: SETTLE });
       expect(await raw.recv(300), 'no reply while the transfer is open').toBeNull();
       await rpc(rig.session, 'usb.bulk.in', { zlp: true });
       const r = parseBulkReply((await raw.recv(20_000))!);
@@ -435,7 +503,7 @@ for (const device of DEVICES) {
       return out;
     };
     const quiet = async (link: BulkChoice['link'], what: string) => {
-      for (let i = 0; i < 20; i++) await advance(rig.session, 50);
+      for (let i = 0; i < 20; i++) await rig.runtime.ui.wait({ ms: 50, why: SETTLE });
       expect(await link.recv(300), what).toBeNull();
     };
     const moduleStatus = async (dk: DkSession) => {
@@ -547,7 +615,7 @@ for (const device of DEVICES) {
       for (let i = 0; i < 100 && over.status === BULK_STATUS.L_E_BUSY; i++) {
         await link.send(req(BULK_CMD.BEGIN, 72, beginBody('p-new.bin', b.length, stable(b))));
         over = (await replies(link, 1))[0]!;
-        if (over.status === BULK_STATUS.L_E_BUSY) await advance(rig.session, 20);
+        if (over.status === BULK_STATUS.L_E_BUSY) await rig.runtime.ui.wait({ ms: 20, why: SETTLE });
       }
       expect(over, 'BEGIN over an open file').toMatchObject({ seq: 72, status: 0 });
       await link.send(dataFrame(73, 0, b));
@@ -586,9 +654,9 @@ for (const device of DEVICES) {
       // a bus reset while replies are owed and a buffer is held: 40 requests in one transfer, no reply read, the reset before the module is through
       const resets = (await moduleStatus(dk)).resets;
       await link.send(Buffer.concat(Array.from({ length: 40 }, (_, i) => req(BULK_CMD.INFO, i))));
-      await advance(rig.session, 1);
+      await rig.runtime.ui.wait({ ms: 1, why: SETTLE });
       await rpc(rig.session, 'usb.bulk.in', { connect: (await EmuBulkLink.connectCallback(call))! });
-      await advance(rig.session, 200);
+      await rig.runtime.ui.wait({ ms: 200, why: SETTLE });
       while (await link.recv(300)) {
         /* drain what was answered before the reset */
       }
@@ -639,14 +707,22 @@ for (const device of DEVICES) {
         const s = await state(next, `pc${k}c`);
         if (fresh) await expectFile(next, s, target, data, `${label}: the new file`);
         else if (replace) expect(s.files.get(target), `${label}: the old file`).toEqual(before.get(target));
-        else expect(s.files.has(target), `${label}: nothing at the destination`).toBe(false);
+        else if (dt2) {
+          // a new file is written at its final name (core/plusdrive-write, no boot cleanup): at most that one file stays, without its hash
+          const left = s.files.get(target);
+          if (left) expect(left.hash, `${label}: the partial file is unhashed`).not.toBe(hex(data, true).slice(0, 8));
+        } else expect(s.files.has(target), `${label}: nothing at the destination`).toBe(false);
         unchanged(before, s.files, [target, 'Cut/cut.bin']);
         // the next upload works, and the destination is as before it
         const more = pattern(9000, 41);
         await bulk2.session.put(SAMPLES, rp('after.bin'), more, { expected: hashU32(more, dt2) });
         const t = await state(next, `pc${k}d`);
         await expectFile(next, t, 'after.bin', more, `${label}: the next upload`);
-        expect(t.files.get(target), `${label}: the destination is unchanged by it`).toEqual(s.files.get(target));
+        if (dt2 && !replace && !fresh) {
+          // the next upload of the same name replaces the partial file and verifies
+          await bulk2.session.put(SAMPLES, rp(target), data, { replace: true, expected: hashU32(data, dt2) });
+          await expectFile(next, await state(next, `pc${k}e`), target, data, `${label}: the re-upload`);
+        } else expect(t.files.get(target), `${label}: the destination is unchanged by it`).toEqual(s.files.get(target));
       }
     }, 3_600_000);
 
@@ -751,7 +827,7 @@ for (const device of DEVICES) {
       expect(Buffer.from(b.body).readUInt32BE(0), 'started').toBe(1);
       let r = Buffer.alloc(0);
       for (let i = 0; i < 400; i++) {
-        await advance(rig.session, 500);
+        await rig.runtime.ui.wait({ ms: 500, why: SETTLE });
         r = Buffer.from((await dk.request(0x37, Uint8Array.from([0x52]))).body); // 'R'
         if (r.readUInt32BE(4) === 10 && r.readUInt32BE(0) === 0) break;
       }
@@ -779,7 +855,7 @@ for (const device of DEVICES) {
       await link.send(dataFrame(2, 0, f.subarray(0, 65_536)));
       expect((await replies(link, 1))[0]!.status).toBe(0);
       expect((await status()).cap, 'a staging buffer is held').toBeGreaterThan(0);
-      for (let t = 0; t < 23_000; t += 1000) await advance(rig.session, 1000);
+      for (let t = 0; t < 23_000; t += 1000) await rig.runtime.ui.wait({ ms: 1000, why: SETTLE });
       if (mode.outOnly) expect(await status(), 'freed, one session dropped').toEqual({ cap: 0, expired: 1 });
       if (mode.outOnly) {
         // OUT-only: the module also frees the receive ring at expiry, so a DATA frame is NAKed and nothing is queued for the 'R' poll; the next nonce starts a session again
@@ -797,6 +873,44 @@ for (const device of DEVICES) {
         expect((await status()).cap, 'the staging buffer is freed').toBe(0);
       }
       await rig.session.expectNoFault('usb-fast session expiry');
+    }, 1_800_000);
+
+    test('pair: the session expires while a half is pending and a DATA frame is half received (copy/write overlap): no stray write, the frame gets E_STATE, the file is not verified, the next upload works', async () => {
+      const { dk, bulk } = await boot(PAIR);
+      const link = bulk.link;
+      const half = 512 * 1024;
+      const f = pattern(3 << 20, 12);
+      const before = (await state(dk, 'ue0')).files;
+      await link.send(req(BULK_CMD.BEGIN, 1, beginBody('expire-half.bin', f.length, be32(hashU32(f, dt2)))));
+      expect((await replies(link, 1))[0]!.status).toBe(0);
+      // seven frames of 64 KiB: the first half is nearly full and nothing was written yet
+      for (let i = 0; i < 7; i++) {
+        await link.send(dataFrame(2 + i, i * 65_536, f.subarray(i * 65_536, (i + 1) * 65_536)));
+        expect((await replies(link, 1))[0]!.status, `DATA ${i + 1} is accepted`).toBe(0);
+      }
+      for (let t = 0; t < 23_000; t += 1000) await rig.runtime.ui.wait({ ms: 1000, why: SETTLE }); // the runtime ends the session: the next write answers E_STATE
+      // the frame that fills the half (its write fails with E_STATE) and the head of the next frame, which stays half received at that moment
+      const next = dataFrame(10, half, f.subarray(half, half + 65_536));
+      const head = 40_000;
+      await link.send(Buffer.concat([dataFrame(9, half - 65_536, f.subarray(half - 65_536, half)), next.subarray(0, head)]));
+      const got = await replies(link, 2);
+      expect(got[0]!.status, 'the frame that filled the half is accepted').toBe(0);
+      expect(got[1], 'the half received frame is answered with E_STATE').toMatchObject({ seq: 10, status: BULK_STATUS.E_STATE });
+      // the rest of that frame is skipped, not copied anywhere
+      await link.send(next.subarray(head));
+      for (let i = 0; i < 20; i++) await rig.runtime.ui.wait({ ms: 50, why: SETTLE });
+      await link.send(req(BULK_CMD.END, 11));
+      const end = await replies(link, 1);
+      expect(end[0]!.status, 'END does not verify a file that is gone').not.toBe(0);
+      expect((await state(dk, 'ue1')).files.has('expire-half.bin'), 'the file is not on the card').toBe(false);
+      // a new link and a new file: the module is healthy
+      const again = await connect(dk, { mode: PAIR });
+      const ok = pattern(900_001, 13);
+      await again.session.put(SAMPLES, rp('after-expire.bin'), ok, { expected: hashU32(ok, dt2) });
+      const s = await state(dk, 'ue2');
+      await expectFile(dk, s, 'after-expire.bin', ok, 'after the expiry');
+      unchanged(before, s.files, ['after-expire.bin']);
+      await rig.session.expectNoFault('usb-fast expiry under a half received frame');
     }, 1_800_000);
 
     test.each(MODES)('$label: the receive ring: INFO reports the window and the host keeps that many DATA frames in flight, a bus reset with a full ring commits nothing, the switch off or a host that never asked INFO keeps 2', async (mode) => {
@@ -885,16 +999,16 @@ for (const device of DEVICES) {
     test('a device in USB AUDIO/MIDI holds no bulk session until a nonce; the switch to USB MIDI brings the bulk pair up on a timer of the module', async () => {
       // The harness boots in USB MIDI, so the boot's enable happens first (the job's first step runs at init); the switch to port 5 then ends that session.
       const dk = await rig.pausedBoot(await baseCard());
-      await advance(rig.session, 2500);
+      await rig.runtime.ui.wait({ ms: 2500, why: SETTLE });
       await setPort(5);
-      await advance(rig.session, 3000);
+      await rig.runtime.ui.wait({ ms: 3000, why: SETTLE });
       const status = async () => {
         const b = Buffer.from((await dk.request(0x37)).body);
         return { enabled: (b.readUInt32BE(28) & 4) !== 0, ring: b.readUInt32BE(76) };
       };
       expect(await status(), 'USB AUDIO/MIDI without a nonce: no session, no ring').toEqual({ enabled: false, ring: 0 });
       await setPort(2);
-      await advance(rig.session, 1500);
+      await rig.runtime.ui.wait({ ms: 1500, why: SETTLE });
       expect((await status()).enabled, 'USB MIDI again: the job enabled the bulk session').toBe(true);
       const bulk = await connect(dk, { mode: PAIR });
       expect((await bulk.session.info()).flags & 1, 'the pair answers INFO on its own endpoint').toBe(0);

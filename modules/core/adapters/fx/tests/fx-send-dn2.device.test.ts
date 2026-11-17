@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { button } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
+import { withWaitApi, type PatchedSession } from '@digi/regression/support.ts';
 import {
   analysisJson,
   bounded,
@@ -9,6 +9,8 @@ import {
   dspBytes,
   dspWords,
   frames,
+  runFrames,
+  runToFrame,
   FREE_PC,
   inspect,
   pickSine,
@@ -37,11 +39,11 @@ async function captureSend(
   fixedTrigger?: number,
 ): Promise<number> {
   const { session } = runtime;
-  const until = (target: number) => bounded(() => session.client.runUntil({ frames: target, timeout_wall_s: 30 }));
+  const until = (target: number) => runToFrame(session, target);
   const trigger = (down: boolean) => bounded(() => session.client.inputButton(button('TRIG 1'), down));
   await rpc(session, 'run.mode', { mode: 'paused' });
   await rpc(session, 'pcm.tap', { action: 'start' });
-  await pickSine(session, sineHint);
+  await pickSine(withWaitApi(runtime), sineHint);
   const current = await frames(session);
   const trig = fixedTrigger ?? current + 300;
   record(artifacts, `${tag}-trigger-frame`, { current, triggerFrame: trig });
@@ -126,9 +128,7 @@ describeOn('dn2', `DN2 ${FIRMWARE.dn2} FX send voice slots`, () => {
       expect(after[14], 'effect remains enabled').toBe(0);
       expect(after[17], 'no effect fault').toBe(0);
       const n0 = (await dspWords(runtime.session, after[2]!, 1))[0]!;
-      await bounded(async () =>
-        runtime.session.client.runUntil({ frames: (await frames(runtime.session)) + 100, timeout_wall_s: 30 }),
-      );
+      await runFrames(runtime.session, 100);
       const n1 = (await dspWords(runtime.session, after[2]!, 1))[0]!;
       record(artifacts, `${tag}-after-note`, { row: after, n0, n1 });
       expect(n0, 'effect call counter has advanced').toBeGreaterThan(1000);

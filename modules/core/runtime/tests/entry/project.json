@@ -7,9 +7,9 @@
     "runtimeAcceptance": [
       {
         "files": ["entry.device.test.ts"],
+        "tags": ["C:loading"],
         "modules": ["test/entry-demo"]
       }
-    ],
-    "mergeTests": ["entry.device.test.ts"]
+    ]
   }
 }

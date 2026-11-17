@@ -32,10 +32,17 @@ pub struct DeviceInfo {
     /// `[patch] build_floor`: the four ASCII characters the OS validator compares the container's build word with (DT2 "0060");
     /// `None` when the OS has no floor (DN2).
     pub build_floor: Option<[u8; 4]>,
+    /// `[limits] modules`: module slots of the runtime's tables.
+    pub modules: Option<u64>,
     /// `[limits] fx_slots`: effects the device's chain takes (at most the contract's `DK_FX_MAX`).
     pub fx_slots: Option<u64>,
     /// `[patch_sets]`: named module sets as roots (the modules they require are added), e.g. `emulator` and `device`.
     pub patch_sets: BTreeMap<String, Vec<String>>,
+    /// `[board] dsp_clock_hz` and `dsp_blocks_per_second`: the DSP block length the budget starts from.
+    pub dsp_clock_hz: Option<u64>,
+    pub dsp_blocks_per_second: Option<u64>,
+    /// `[adapter.machine] voices`: voices of the machine adapter.
+    pub machine_voices: Option<u64>,
 }
 
 /// What every device file states, whatever else it holds: who the device is and what it can do. A device file has levels that follow
@@ -139,7 +146,12 @@ struct CardDoc {
 }
 #[derive(Deserialize)]
 struct AdapterDoc {
+    machine: Option<MachineDoc>,
     sample_pool: Option<SamplePoolDoc>,
+}
+#[derive(Deserialize)]
+struct MachineDoc {
+    voices: Option<u64>,
 }
 #[derive(Deserialize)]
 struct SamplePoolDoc {
@@ -156,6 +168,7 @@ struct FirmwareDoc {
 }
 #[derive(Deserialize)]
 struct LimitsDoc {
+    modules: Option<u64>,
     fx_slots: Option<u64>,
 }
 #[derive(Deserialize)]
@@ -347,8 +360,12 @@ fn parse_all(files: &[(&str, &str)]) -> Result<(Vec<Identity>, Vec<DeviceInfo>)>
                     })?)
                 }
             },
+            modules: f.limits.as_ref().and_then(|l| l.modules),
             fx_slots: f.limits.and_then(|l| l.fx_slots),
             patch_sets: f.patch_sets,
+            dsp_clock_hz: f.board.as_ref().and_then(|b| b.dsp_clock_hz),
+            dsp_blocks_per_second: f.board.as_ref().and_then(|b| b.dsp_blocks_per_second),
+            machine_voices: f.adapter.and_then(|a| a.machine).and_then(|m| m.voices),
         });
     }
     Ok((ids, out))

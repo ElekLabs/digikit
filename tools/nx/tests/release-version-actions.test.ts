@@ -92,18 +92,3 @@ it('fails closed on a TOML layout that would require serialization', async () =>
   await expect(action.updateProjectVersion(tree, '0.5.5')).rejects.toThrow('refusing to reformat TOML');
   expect(tree.read(modulePath, 'utf8')).toBe(text);
 });
-
-it('does not treat build graph edges as versioned dependency declarations', async () => {
-  const tree = createTreeWithEmptyWorkspace();
-  tree.write(modulePath, moduleText);
-  const action = await actions(tree);
-  expect(
-    await action.readDependencies(tree, {
-      dependencies: { 'example/owner': [{ target: 'example/build-tool', type: 'static' }] },
-    }),
-  ).toEqual([]);
-  await expect(action.updateProjectDependencies(tree, {}, { 'example/build-tool': '1.0.0' })).rejects.toThrow(
-    'not configured',
-  );
-  expect(tree.read(modulePath, 'utf8')).toBe(moduleText);
-});

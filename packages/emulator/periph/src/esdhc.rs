@@ -245,12 +245,17 @@ pub enum DeviceEventError {
 
 /// Pure register model.  Command completion is synchronous, as in the
 /// oracle's early eMMC model; interrupt delivery and DMA are machine duties.
+/// Bound of the recorded-command buffer between two drains.
+const CMD_TRACE_MAX: usize = 4096;
+
 pub struct Esdhc<P> {
     regs: RegFile,
     card: P,
     policy: RegisterPolicy,
     pattern: u32,
     host_writes: VecDeque<(u32, [u8; 4])>,
+    /// Instrument (`DIGI_CARD_TRACE`): CMD12 and CMD23 with their argument, until the board takes them. `None` = off.
+    cmd_trace: Option<Vec<(u8, u32)>>,
 }
 
 impl<P: CardPort> Esdhc<P> {
@@ -283,7 +288,21 @@ impl<P: CardPort> Esdhc<P> {
             policy,
             pattern: 0,
             host_writes: VecDeque::new(),
+            cmd_trace: None,
         }
+    }
+
+    /// Start (or stop) recording CMD12 and CMD23 for the card trace instrument.
+    pub fn set_cmd_trace(&mut self, on: bool) {
+        self.cmd_trace = on.then(Vec::new);
+    }
+
+    /// Commands recorded since the last call (empty when the trace is off).
+    pub fn take_cmd_trace(&mut self) -> Vec<(u8, u32)> {
+        self.cmd_trace
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
     }
 
     /// Give a machine owner the same attached card for its fallible eDMA
@@ -368,32 +387,32 @@ impl<P: CardPort> Esdhc<P> {
             }
         }
         self.regs.write(off, size, value);
-        if self.policy == RegisterPolicy::Device {
-            if let Some(bits) = Self::register_lane(SYSCTL, off, size, value) {
-                // RM Table 25-13: only the bounded interrupt-state effects
-                // of command/data reset are modeled here. Other reset fields
-                // and data-path reset behavior remain outside this model.
-                // RSTA sets IRQSTATEN to its reset value 0x117F_013F (RM
-                // p0621). The manual's "RW bits are cleared" wording (p0637)
-                // would zero it, but the firmware polls IRQSTAT CC/TC right
-                // after RSTA without writing IRQSTATEN, so those enables must
-                // be set. The exact full value is not proven. Other registers
-                // keep the legacy self-clear-only behavior; no further RSTA
-                // fidelity is claimed.
-                if bits & (1 << 24) != 0 {
-                    self.regs.set_u32_at(IRQSTATEN as usize, 0x117F_013F);
-                }
-                let mut clear = 0;
-                if bits & (1 << 24) == 0 && bits & (1 << 25) != 0 {
-                    clear |= CC;
-                }
-                if bits & (1 << 24) == 0 && bits & (1 << 26) != 0 {
-                    clear |= TC | BWR | BRR | (1 << 2) | (1 << 3);
-                }
-                if clear != 0 {
-                    let current = self.regs.u32_at(IRQSTAT as usize);
-                    self.put(IRQSTAT, current & !clear);
-                }
+        if self.policy == RegisterPolicy::Device
+            && let Some(bits) = Self::register_lane(SYSCTL, off, size, value)
+        {
+            // RM Table 25-13: only the bounded interrupt-state effects
+            // of command/data reset are modeled here. Other reset fields
+            // and data-path reset behavior remain outside this model.
+            // RSTA sets IRQSTATEN to its reset value 0x117F_013F (RM
+            // p0621). The manual's "RW bits are cleared" wording (p0637)
+            // would zero it, but the firmware polls IRQSTAT CC/TC right
+            // after RSTA without writing IRQSTATEN, so those enables must
+            // be set. The exact full value is not proven. Other registers
+            // keep the legacy self-clear-only behavior; no further RSTA
+            // fidelity is claimed.
+            if bits & (1 << 24) != 0 {
+                self.regs.set_u32_at(IRQSTATEN as usize, 0x117F_013F);
+            }
+            let mut clear = 0;
+            if bits & (1 << 24) == 0 && bits & (1 << 25) != 0 {
+                clear |= CC;
+            }
+            if bits & (1 << 24) == 0 && bits & (1 << 26) != 0 {
+                clear |= TC | BWR | BRR | (1 << 2) | (1 << 3);
+            }
+            if clear != 0 {
+                let current = self.regs.u32_at(IRQSTAT as usize);
+                self.put(IRQSTAT, current & !clear);
             }
         }
         if off == DATPORT && size == 4 {
@@ -458,6 +477,12 @@ impl<P: CardPort> Esdhc<P> {
     fn issue_command(&mut self, xfer: u32) {
         let idx = ((xfer >> 24) & 0x3F) as u8;
         let arg = self.regs.u32_at(CMDARG as usize);
+        if let Some(trace) = self.cmd_trace.as_mut()
+            && matches!(idx, 12 | 23)
+            && trace.len() < CMD_TRACE_MAX
+        {
+            trace.push((idx, arg));
+        }
         let response = self.card.command(idx, arg);
         for (off, value) in [CMDRSP0, CMDRSP1, CMDRSP2, CMDRSP3]
             .into_iter()

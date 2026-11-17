@@ -116,7 +116,7 @@ def tree_hashes(folder: Path) -> dict[str, str]:
 
 
 def tool_hashes() -> dict[str, str]:
-    # Includes transitive Python helpers and module inputs used by PLUCK's proof.
+    # Includes transitive Python helpers and module inputs used by the pluck render.
     paths = [p for p in (ROOT / "tools").rglob("*.py")]
     paths.extend((ROOT / "devices" / "ports").rglob("*.toml"))
     for base in (
@@ -410,8 +410,8 @@ def instrument(
     )
     work = folder / "keep" / f"equiv-dyn-pluck-{image}"
     if read(work / "report.json")["pass"] is not True:
-        raise Invalid(f"PLUCK proof failed: {folder}")
-    return {key: wav_pcm(work / f"{key}.wav")[0] for key in ("run", "ref")}
+        raise Invalid(f"pluck render failed: {folder}")
+    return {"run": wav_pcm(work / "run.wav")[0]}
 
 
 def summary(state: dict) -> dict:
@@ -618,7 +618,7 @@ def run(
                             for label in ("A", "B")
                         }
                         if results["A"] != results["B"]:
-                            raise Invalid(f"PLUCK A/B mismatch: {device}")
+                            raise Invalid(f"pluck A/B mismatch: {device}")
                         return results
 
                     step(f"instrument/{device}", proof)

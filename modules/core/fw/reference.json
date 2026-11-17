@@ -655,6 +655,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40134490",
+            "len": 2
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40134770",
@@ -800,6 +806,11 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400cef28"
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x400cf08c"
@@ -841,6 +852,11 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400cf7f2"
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x400cf956"
@@ -987,6 +1003,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400cef28",
+            "len": 6
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x400cf08c",
@@ -1018,6 +1040,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400cf7f2",
+            "len": 6
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x400cf956",
@@ -1675,176 +1703,6 @@
       "at": {
         "dt2-1.17": [
           {
-            "addr": "0x4005fbec"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Clone test `moveq #6,D1; cmp.l D0,D1; beq.w T` on the type in d0; the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.machine.hook.clone.0",
-      "regs": {
-        "clobbers": [
-          "d1",
-          "ccr"
-        ],
-        "in": [
-          "d0"
-        ]
-      },
-      "site": "cf.machine.site.clone.0",
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4005f8f8"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Clone test `moveq #6,D1; cmp.l D0,D1; bne.b U` on the type in d0; the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.machine.hook.clone.1",
-      "regs": {
-        "clobbers": [
-          "d1",
-          "ccr"
-        ],
-        "in": [
-          "d0"
-        ]
-      },
-      "site": "cf.machine.site.clone.1",
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x40030e1e"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Clone test `moveq #6,D1; cmp.l D0,D1; bne.w U` on the type in d0; the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.machine.hook.clone.2",
-      "regs": {
-        "clobbers": [
-          "d1",
-          "ccr"
-        ],
-        "in": [
-          "d0"
-        ]
-      },
-      "site": "cf.machine.site.clone.2",
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4004923e"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Clone test `addq.l #4,SP; cmp.l D0,D6; bne.b U` (d6 holds 6, d0 the type); the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.machine.hook.clone.3",
-      "regs": {
-        "clobbers": [
-          "ccr"
-        ],
-        "in": [
-          "d0",
-          "d6"
-        ]
-      },
-      "site": "cf.machine.site.clone.3",
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4005c936"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Clone test `moveq #6,D0; cmp.l D2,D0; bne.b U` on the type in d2; the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.machine.hook.clone.4",
-      "regs": {
-        "clobbers": [
-          "d0",
-          "ccr"
-        ],
-        "in": [
-          "d2"
-        ]
-      },
-      "site": "cf.machine.site.clone.4",
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
             "addr": "0x4005da60"
           }
         ]
@@ -1857,7 +1715,7 @@
       "file": "devices/fw/machine.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.machine.hook.clone.5",
       "regs": {
         "clobbers": [
@@ -1871,42 +1729,7 @@
       "site": "cf.machine.site.clone.5",
       "subsystem": "machine",
       "users": [
-        "core/machines"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4002ec18"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Clone test `moveq #6,D1; mvs.b (0x990,A0),D0; cmp.l D0,D1; bne.w U`; the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.machine.hook.clone.6",
-      "regs": {
-        "clobbers": [
-          "d0",
-          "d1",
-          "ccr"
-        ],
-        "in": [
-          "a0"
-        ]
-      },
-      "site": "cf.machine.site.clone.6",
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -1979,6 +1802,7 @@
       "regs": {
         "clobbers": [
           "d0",
+          "a1",
           "ccr"
         ],
         "in": [
@@ -1988,7 +1812,7 @@
       "site": "cf.machine.site.frametype",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -2013,7 +1837,7 @@
       "file": "devices/fw/machine.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.machine.hook.group",
       "regs": {
         "clobbers": [
@@ -2028,7 +1852,7 @@
       "site": "cf.machine.site.group",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -2219,7 +2043,7 @@
       "site": "cf.machine.site.owner_type_load",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -2239,7 +2063,7 @@
       "file": "devices/fw/machine.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.machine.hook.param_code.args",
       "regs": {
         "clobbers": [
@@ -2253,7 +2077,7 @@
       "site": "cf.machine.site.param_code.args",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -2278,7 +2102,7 @@
       "file": "devices/fw/machine.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.machine.hook.param_code.map",
       "regs": {
         "clobbers": [
@@ -2293,7 +2117,7 @@
       "site": "cf.machine.site.param_code.map",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -2330,7 +2154,7 @@
       "site": "cf.machine.site.srcpage",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -2355,7 +2179,7 @@
       "file": "devices/fw/machine.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.machine.hook.type_page.count",
       "regs": {
         "clobbers": [
@@ -2370,7 +2194,7 @@
       "site": "cf.machine.fn.type_page.count",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -2395,7 +2219,7 @@
       "file": "devices/fw/machine.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.machine.hook.type_page.desc",
       "regs": {
         "clobbers": [
@@ -2410,7 +2234,7 @@
       "site": "cf.machine.site.type_page.desc",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -2451,339 +2275,9 @@
       "site": "cf.machine.site.type_reader.load",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4005fbec",
-            "len": 8
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "DT2 clone test `moveq #6,D1; cmp.l D0,D1; beq.w` on the type in d0 (type 6 = MANUAL SLICE); the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.0",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 8,
-          "offset": 224
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.0"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4005fcd4",
-            "len": 2
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Branch target of the clone.0 test; the clone hook jumps there when its answer is the other way.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.0.alt",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 2,
-          "offset": 456
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.0.alt"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4005f8f8",
-            "len": 6
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "DT2 clone test `moveq #6,D1; cmp.l D0,D1; bne.b` on the type in d0; the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.1",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 6,
-          "offset": 214
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.1"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4005f920",
-            "len": 2
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Branch target of the clone.1 test; the clone hook jumps there when its answer is the other way.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.1.alt",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 2,
-          "offset": 254
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.1.alt"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x40030e1e",
-            "len": 8
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "DT2 clone test `moveq #6,D1; cmp.l D0,D1; bne.w` on the type in d0; the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.2",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 8,
-          "offset": 268
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.2"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x40030f90",
-            "len": 2
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Branch target of the clone.2 test; the clone hook jumps there when its answer is the other way.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.2.alt",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 2,
-          "offset": 638
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.2.alt"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4004923e",
-            "len": 6
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "DT2 clone test `addq.l #4,SP; cmp.l D0,D6; bne.b` (d6 holds 6, d0 the type); the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.3",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 6,
-          "offset": 652
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.3"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x40049266",
-            "len": 2
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Branch target of the clone.3 test; the clone hook jumps there when its answer is the other way.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.3.alt",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 2,
-          "offset": 692
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.3.alt"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4005c936",
-            "len": 6
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "DT2 clone test `moveq #6,D0; cmp.l D2,D0; bne.b` on the type in d2; the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.4",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 6,
-          "offset": 86
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.4"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4005c950",
-            "len": 2
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "Branch target of the clone.4 test; the clone hook jumps there when its answer is the other way.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.4.alt",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 2,
-          "offset": 112
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.4.alt"
-      ]
     },
     {
       "at": {
@@ -2822,40 +2316,7 @@
       "at": {
         "dt2-1.17": [
           {
-            "addr": "0x4002ec18",
-            "len": 12
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "DT2 clone test in the frame builder `moveq #6,D1; mvs.b (0x990,A0),D0; cmp.l D0,D1; bne.w`; the hook also answers equal for an added clone of type 6.",
-      "file": "devices/fw/machine.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.machine.site.clone.6",
-      "rule": {
-        "dt2": {
-          "kind": "cf_func",
-          "len": 12,
-          "offset": 3852
-        }
-      },
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": [
-        "cf.machines.clone.6"
-      ]
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x4002ecd8",
+            "addr": "0x4005db02",
             "len": 2
           }
         ]
@@ -2864,25 +2325,23 @@
       "devices": [
         "dt2"
       ],
-      "doc": "Branch target of the clone.6 test; the clone hook jumps there when its answer is the other way.",
+      "doc": "Branch target of the clone.5 test (`beq.w` at the end of the site); the machines service continues there when the masked type is 4.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
-      "name": "cf.machine.site.clone.6.alt",
+      "name": "cf.machine.site.clone.5.alt",
       "rule": {
         "dt2": {
           "kind": "cf_func",
           "len": 2,
-          "offset": 4044
+          "offset": 1338
         }
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
-      "was": [
-        "cf.machines.clone.6.alt"
-      ]
+      "was": []
     },
     {
       "at": {
@@ -2969,6 +2428,43 @@
       "was": [
         "cf.machines.group"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4005928a",
+            "len": 2
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4005928a",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "DN2: the target of the `bge.b` at the end of the group helper's site (types 0 to 3: group 1); the machines service continues there for an added type.",
+      "file": "devices/fw/machine.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.machine.site.group.alt",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 22
+        }
+      },
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -4242,6 +3738,7 @@
       "sig": "void (u8 *p)",
       "subsystem": "mem",
       "users": [
+        "core/plusdrive-write",
         "core/runtime"
       ],
       "was": [
@@ -4306,6 +3803,7 @@
       "subsystem": "mem",
       "users": [
         "core/digikit-menu",
+        "core/plusdrive-write",
         "core/runtime"
       ],
       "was": [
@@ -6549,7 +6047,7 @@
       "site": "cf.midi.site.rx",
       "subsystem": "midi",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": []
     },
@@ -6642,7 +6140,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The 6-byte router call `jsr (A0)` in the MIDI task for a gathered USB SysEx message (arguments on the stack); core/runtime hooks it to take the message or continue after the call.",
+      "doc": "The 6-byte router call `jsr (A0)` in the MIDI task for a gathered USB SysEx message (arguments on the stack); core/platform hooks it to give the message to the runtime or continue after the call.",
       "file": "devices/fw/midi.toml",
       "kind": "site",
       "mark": "D",
@@ -6666,7 +6164,7 @@
       },
       "subsystem": "midi",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "dkrt.hook.midi_rx"
@@ -6780,7 +6278,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.keystock",
@@ -6832,7 +6330,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.stock",
@@ -6841,6 +6339,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40065ae8",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40065ae8",
@@ -6884,6 +6388,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4003e426",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4003e426",
@@ -6920,6 +6430,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400167a4",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x400167a4",
@@ -7062,7 +6578,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.acc",
@@ -7071,6 +6587,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4001683a",
+            "len": 8
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4001683a",
@@ -7114,6 +6636,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40018118",
+            "len": 8
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40018118",
@@ -7355,7 +6883,7 @@
       "site": "cf.page.site.filter_graph_test",
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": []
     },
@@ -7403,7 +6931,7 @@
       "site": "cf.page.site.fx_array.init_exit",
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": []
     },
@@ -7453,7 +6981,7 @@
       "site": "cf.page.site.fx_array.load",
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": []
     },
@@ -7502,7 +7030,7 @@
       "site": "cf.page.site.fx_array.save",
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": []
     },
@@ -7545,7 +7073,7 @@
       "site": "cf.page.site.fx_key_list.load",
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": []
     },
@@ -7588,7 +7116,7 @@
       "site": "cf.page.site.fx_view_list.load",
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": []
     },
@@ -7634,7 +7162,7 @@
       "site": "cf.page.fn.page_desc",
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": []
     },
@@ -7678,12 +7206,17 @@
       "site": "cf.page.site.sound_load_exit",
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": []
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4001683a"
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4001683a"
@@ -7704,7 +7237,7 @@
       "file": "devices/fw/page.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.page.hook.source_code",
       "regs": {
         "clobbers": [
@@ -7719,12 +7252,17 @@
       "site": "cf.page.fn.source_code",
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40018118"
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40018118"
@@ -7745,7 +7283,7 @@
       "file": "devices/fw/page.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.page.hook.source_draw",
       "regs": {
         "clobbers": [
@@ -7760,7 +7298,7 @@
       "site": "cf.page.fn.source_draw",
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -7791,7 +7329,7 @@
       "file": "devices/fw/page.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.page.hook.source_key",
       "regs": {
         "clobbers": [
@@ -7806,7 +7344,7 @@
       "site": "cf.page.fn.source_key",
       "subsystem": "page",
       "users": [
-        "core/runtime"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -7837,7 +7375,7 @@
       "file": "devices/fw/page.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.page.hook.source_turn",
       "regs": {
         "clobbers": [
@@ -7852,7 +7390,7 @@
       "site": "cf.page.fn.source_turn",
       "subsystem": "page",
       "users": [
-        "core/runtime"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -7899,7 +7437,7 @@
       "site": "cf.page.site.tab_label_test",
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": []
     },
@@ -7944,7 +7482,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.graph",
@@ -7992,7 +7530,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.init",
@@ -8040,7 +7578,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.load",
@@ -8088,7 +7626,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.save",
@@ -8136,7 +7674,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.keylist",
@@ -8184,7 +7722,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.stock_n",
@@ -8232,7 +7770,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.list",
@@ -8280,7 +7818,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.sound",
@@ -8328,7 +7866,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/fxpages"
+        "core/services/fx"
       ],
       "was": [
         "cf.fxpages.label",
@@ -10498,7 +10036,7 @@
       },
       "subsystem": "rtos",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "dkrt.fw.queue_pop"
@@ -10746,6 +10284,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4013464c",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4013492c",
@@ -11067,7 +10611,7 @@
       "site": "cf.rtos.site.main_os_task",
       "subsystem": "rtos",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": []
     },
@@ -11128,7 +10672,7 @@
       },
       "subsystem": "rtos",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "dkrt.fw.exc_hook_lit"
@@ -11302,7 +10846,7 @@
       },
       "subsystem": "rtos",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "cf.rtos.site.boot",
@@ -11617,6 +11161,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4019e83a",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4019eb1a",
@@ -11665,6 +11215,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400f2494",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x400f25f8",
@@ -12194,6 +11750,42 @@
         }
       },
       "sig": "void (u32 kind, u32 a, u32 b)",
+      "subsystem": "storage",
+      "users": [
+        "core/plusdrive-write"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x401581dc",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_storage_file_alloc_pages",
+        "rust": "dkfw::storage::file_alloc_pages"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "Page allocation FUN_401581dc (DT2 1.17): allocates `pages` card pages for file pages [first_page, first_page + pages) of the inode, first fit from the bitmap start 0xa7a (hint 0), and adds one extent per allocation (FUN_40157c68, FUN_40155974); stops silently when no page is free. It does not write the inode back (inode.write does) and does not count free pages first, which file.reserve does (FUN_40155f84, bit by bit). Call under the filesystem mutex with an inode of inode.get. Pass hint 0 (finding 120, finding 134).",
+      "file": "devices/fw/storage.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.storage.fn.file.alloc_pages",
+      "rule": {
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "void (u8 *inode, u32 first_page, u32 pages, u8 hint)",
       "subsystem": "storage",
       "users": [
         "core/plusdrive-write"
@@ -12926,6 +12518,11 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c5bc"
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4012c89c"
@@ -12971,6 +12568,11 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c5ae"
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4012c88e"
@@ -13014,6 +12616,11 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c7a2"
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4012ca82"
@@ -13059,6 +12666,11 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c794"
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4012ca74"
@@ -13198,6 +12810,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c5bc",
+            "len": 12
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4012c89c",
@@ -13248,6 +12866,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c5ae",
+            "len": 6
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4012c88e",
@@ -13298,6 +12922,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c7a2",
+            "len": 12
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4012ca82",
@@ -13348,6 +12978,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c794",
+            "len": 6
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4012ca74",
@@ -14458,6 +14094,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x402875b0",
+            "len": 280
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40287af0",
@@ -14512,6 +14154,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400059aa",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x400059aa",
@@ -14560,6 +14208,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400043e2",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x400043e2",
@@ -14608,6 +14262,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4000436e",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4000436e",
@@ -14663,6 +14323,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40005a86",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40005a86",
@@ -14711,6 +14377,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40006bc6",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40006bc6",
@@ -14766,6 +14438,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40006bac",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40006bac",
@@ -14821,6 +14499,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40005764",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40005764",
@@ -14876,6 +14560,11 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40006c52"
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40006c52"
@@ -14923,6 +14612,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40006c52",
+            "len": 6
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x40006c52",
@@ -14967,6 +14662,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4058e2a8",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4058f2a8",
@@ -15021,6 +14722,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4058e280",
+            "len": 4
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4058f280",
@@ -15560,7 +15267,7 @@
       "site": "cf.view.site.ui_loop",
       "subsystem": "view",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": []
     },
@@ -15592,7 +15299,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The `jsr` at the top of the UI task's event loop that pops the next event; core/runtime retargets it to run its per-pass tick.",
+      "doc": "The `jsr` at the top of the UI task's event loop that pops the next event; core/platform retargets it to run the runtime's per-pass tick.",
       "file": "devices/fw/view.toml",
       "kind": "site",
       "mark": "D",
@@ -15617,7 +15324,7 @@
       },
       "subsystem": "view",
       "users": [
-        "core/runtime"
+        "core/platform"
       ],
       "was": [
         "dkrt.hook.ui_loop"
@@ -16303,6 +16010,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283801b4",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283801b4",
@@ -16335,6 +16049,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20017358",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20017358",
@@ -16374,6 +16094,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20017358",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20017358",
@@ -17107,6 +16834,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28395ff6",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28395ff6",
@@ -17139,6 +16873,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283956c0",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283956c0",
@@ -17171,6 +16912,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839554c",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839554c",
@@ -17310,6 +17058,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28395024",
+            "len": 4,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28395024",
@@ -17342,6 +17097,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x268ca8",
+            "len": 6
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x268ca8",
@@ -17646,6 +17407,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20003ada",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20003ada",
@@ -17678,6 +17446,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2000391a",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2000391a",
@@ -17710,6 +17485,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x200023e2",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x200023e2",
@@ -17742,6 +17524,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20002a4c",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20002a4c",
@@ -17774,6 +17563,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2000318e",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2000318e",
@@ -17806,6 +17602,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20004684",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20004684",
@@ -17838,6 +17641,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2000342c",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2000342c",
@@ -17870,6 +17680,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20001e5c",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20001e5c",
@@ -17902,6 +17719,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20001872",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20001872",
@@ -17935,6 +17759,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20001726",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20001726",
@@ -17968,6 +17799,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2000068a",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2000068a",
@@ -18000,6 +17838,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20004880",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20004880",
@@ -18032,6 +17877,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20004cb6",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20004cb6",
@@ -18146,6 +17998,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20000bb0",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20000bb0",
@@ -18178,6 +18037,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x20000dea",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x20000dea",
@@ -18210,6 +18076,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839b6ac",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839b6ac",
@@ -18274,6 +18147,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x200026d0",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x200026d0",
@@ -18307,6 +18187,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x200026b4",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x200026b4",
@@ -18340,6 +18227,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28393810",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28393810",
@@ -18382,6 +18275,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28393084",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28393084",
@@ -18528,6 +18427,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839315e",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839315e",
@@ -18574,6 +18479,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392e2c",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392e2c",
@@ -18616,6 +18527,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839376c",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839376c",
@@ -18662,6 +18579,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392e8e",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392e8e",
@@ -18704,6 +18627,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283937a2",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283937a2",
@@ -18750,6 +18679,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392ede",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392ede",
@@ -18792,6 +18727,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283929fa",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283929fa",
@@ -18839,6 +18780,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392d96",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392d96",
@@ -18886,6 +18833,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28393398",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28393398",
@@ -18928,6 +18881,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392b68",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392b68",
@@ -18974,6 +18933,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839371e",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839371e",
@@ -19020,6 +18985,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839238a",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839238a",
@@ -19062,6 +19033,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839355e",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839355e",
@@ -19106,6 +19083,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283935ec",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283935ec",
@@ -19209,6 +19192,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283937d2",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283937d2",
@@ -19255,6 +19244,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839389e",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839389e",
@@ -19301,6 +19296,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392f9a",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392f9a",
@@ -19343,6 +19344,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839313e",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839313e",
@@ -19385,6 +19392,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392b92",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392b92",
@@ -19431,6 +19444,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839326a",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839326a",
@@ -19477,6 +19496,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392b3e",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392b3e",
@@ -19524,6 +19549,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283936f4",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283936f4",
@@ -19571,6 +19602,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392d54",
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392d54",
@@ -19618,6 +19655,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28393810",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28393810",
@@ -19650,6 +19694,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28393084",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28393084",
@@ -19746,6 +19797,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839315e",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839315e",
@@ -19778,6 +19836,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392e2c",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392e2c",
@@ -19810,6 +19875,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839376c",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839376c",
@@ -19842,6 +19914,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392e8e",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392e8e",
@@ -19874,6 +19953,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283937a2",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283937a2",
@@ -19906,6 +19992,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392ede",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392ede",
@@ -19938,6 +20031,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283929fa",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283929fa",
@@ -19971,6 +20071,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392d96",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392d96",
@@ -20004,6 +20111,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28393398",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28393398",
@@ -20036,6 +20150,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392b68",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392b68",
@@ -20068,6 +20189,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839371e",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839371e",
@@ -20100,6 +20228,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839238a",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839238a",
@@ -20132,6 +20267,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839355e",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839355e",
@@ -20164,6 +20306,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28393564",
+            "len": 4,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28393564",
@@ -20196,6 +20345,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283935ec",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283935ec",
@@ -20228,6 +20384,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28393660",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28393660",
@@ -20260,6 +20423,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283935f2",
+            "len": 2,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283935f2",
@@ -20343,6 +20513,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283937d2",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283937d2",
@@ -20375,6 +20552,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839389e",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839389e",
@@ -20407,6 +20591,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392f9a",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392f9a",
@@ -20439,6 +20630,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839313e",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839313e",
@@ -20471,6 +20669,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392b92",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392b92",
@@ -20503,6 +20708,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x2839326a",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x2839326a",
@@ -20535,6 +20747,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392b3e",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392b3e",
@@ -20568,6 +20787,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283936f4",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x283936f4",
@@ -20601,6 +20827,13 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392d54",
+            "len": 6,
+            "pm": true
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x28392d54",
@@ -20634,6 +20867,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x241298",
+            "len": 6
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x241298",
@@ -20908,7 +21147,7 @@
       "name": "link"
     },
     {
-      "count": 78,
+      "count": 62,
       "cpu": "cf",
       "file": "devices/fw/machine.toml",
       "meaning": "the machine framework: dispatch, names, per-type tables, the run-time registry",
@@ -20971,7 +21210,7 @@
       "name": "samples"
     },
     {
-      "count": 47,
+      "count": 48,
       "cpu": "cf",
       "file": "devices/fw/storage.toml",
       "meaning": "block device reads and writes, the boot record",

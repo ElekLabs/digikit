@@ -14,27 +14,6 @@ use crate::module::Module;
 use crate::typed::SampleTracksDef;
 use std::collections::BTreeMap;
 
-/// A run-time module declares in `init` (builder calls) and lists its machines and effects in `[[machine]]`/`[[fx]]` of module.toml; the
-/// `.dk.desc` declaration macros (DK_MACHINE, DK_FX, ...) are for patched-in modules only.
-pub fn refuse_declarations(m: &Module) -> Result<()> {
-    let mf = &m.manifest;
-    let decls = !mf.machine.is_empty()
-        || !mf.param.is_empty()
-        || !mf.page.is_empty()
-        || !mf.native_page.is_empty()
-        || !mf.voice.is_empty()
-        || mf.sample_bank.is_some()
-        || mf.sample_tracks.is_some()
-        || !crate::desc::module_fx(m)?.is_empty();
-    if decls {
-        return Err(err!(
-            "{}: a run-time module has `.dk.desc` declarations (DK_MACHINE, DK_FX, ...); declare with builder calls in init and list [[machine]]/[[fx]] in module.toml",
-            mf.module.id
-        ));
-    }
-    Ok(())
-}
-
 #[derive(Debug)]
 pub struct Sections {
     /// The keys table of the header (`dkneeds::keys`).
@@ -95,6 +74,82 @@ fn desc_flags(obj: &Dko, desc: &str) -> Result<bool> {
     Ok(w & dkmdsp::DESC_STEREO != 0)
 }
 
+/// The header table (`dkneeds::keys`) of a module for `device`: the `[uses]` counts, the machine and effect keys and the keys of the `[[record]]` entries (generic
+/// kinds), grouped by kind in the order of the kind numbers. The packer adds the needs of the linked imports.
+fn header_table(
+    mf: &crate::module::Manifest,
+    device: &str,
+    mk: Vec<u32>,
+    fk: Vec<u32>,
+) -> Result<Vec<u8>> {
+    let id = &mf.module.id;
+    let u = mf.uses.for_device(device);
+    let rows = (
+        u32::from(u.machine_rows),
+        u32::from(u.param_rows),
+        u32::from(u.page_rows),
+    );
+    // the keys by kind: machines, effects, and the records of generic kinds (`[[record]]`), in the order of the kind numbers
+    let mut groups: std::collections::BTreeMap<u32, Vec<u32>> = std::collections::BTreeMap::new();
+    if !mk.is_empty() {
+        groups.insert(dkneeds::KIND_MACHINE, mk);
+    }
+    if !fk.is_empty() {
+        groups.insert(dkneeds::KIND_EFFECT, fk);
+    }
+    for r in &mf.records {
+        let kind = dkneeds::KIND_NAMES
+            .iter()
+            .find(|(n, _)| *n == r.kind)
+            .map(|k| k.1)
+            .ok_or_else(|| {
+                err!(
+                    "{id}: [[record]] kind {:?} is not in [records.kinds] of sdk/sdk.toml",
+                    r.kind
+                )
+            })?;
+        if !dkneeds::GENERIC_KINDS.contains(&kind) {
+            return Err(err!(
+                "{id}: [[record]] kind {:?} is not generic: its records come from builder calls",
+                r.kind
+            ));
+        }
+        let keys = groups.entry(kind).or_default();
+        if keys.contains(&r.key) {
+            return Err(err!(
+                "{id}: [[record]] kind {:?} key {} twice",
+                r.kind,
+                r.key
+            ));
+        }
+        keys.push(r.key);
+    }
+    let key_groups: Vec<dkneeds::keys::KeyGroup> = groups
+        .iter()
+        .map(|(kind, keys)| dkneeds::keys::KeyGroup { kind: *kind, keys })
+        .collect();
+    let uses: Vec<dkneeds::keys::Use> = [
+        (dkneeds::RES_MACHINE_ROWS, rows.0),
+        (dkneeds::RES_PARAM_ROWS, rows.1),
+        (dkneeds::RES_PAGE_ROWS, rows.2),
+        (dkneeds::RES_RECORD_BYTES, u32::from(u.record_bytes)),
+        (dkneeds::RES_DSP_COST_VOICE, u.dsp_cost_voice),
+        (dkneeds::RES_DSP_COST_FX, u.dsp_cost_fx),
+    ]
+    .into_iter()
+    .filter(|(_, count)| *count != 0)
+    .map(|(resource, count)| dkneeds::keys::Use { resource, count })
+    .collect();
+    let table = dkneeds::keys::Table {
+        uses: &uses,
+        keys: &key_groups,
+        ..Default::default()
+    };
+    let mut keys = vec![0u8; dkneeds::keys::table_size(&table)];
+    dkneeds::keys::write_table(&table, &mut keys).map_err(|e| err!("{id}: header table: {e:?}"))?;
+    Ok(keys)
+}
+
 /// The keys table and the DSP section of a new-style module for `device`. `name` is the packed module name (`pack --name`, else the module id): the keys hash it with
 /// the `[[machine]]` and `[[fx]]` ids, so an alias made with another name has keys of its own. `dsp_obj` is its DSP object (none: refused, a machine or an effect
 /// needs one).
@@ -103,9 +158,9 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
     let id = &mf.module.id;
     let Some(obj) = dsp_obj else {
         if mf.machines.is_empty() && mf.fxs.is_empty() {
-            // a tool or a service: no keys, no DSP section
+            // a tool or a service: no machine or effect keys, no DSP section (a header table with the records and the uses it has)
             return Ok(Sections {
-                keys: vec![],
+                keys: header_table(mf, device, vec![], vec![])?,
                 dsp: vec![],
                 stereo: false,
                 gate: false,
@@ -201,10 +256,8 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
         crate::register::device_id(device)?,
         &voices,
         &fxs,
-        None,
         tracks.as_ref(),
     )?;
-    let u = mf.uses.for_device(device);
     let mk: Vec<u32> = mf
         .machines
         .iter()
@@ -215,15 +268,7 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
         .iter()
         .map(|y| crate::register::effect_id(name, &y.id))
         .collect();
-    let mut keys = vec![0u8; dkneeds::keys::keys_size(mk.len(), fk.len())];
-    dkneeds::keys::write_keys(
-        (u.machine_rows, u.param_rows, u.page_rows),
-        u.record_bytes,
-        &mk,
-        &fk,
-        &mut keys,
-    )
-    .map_err(|e| err!("{id}: keys table: {e:?}"))?;
+    let keys = header_table(mf, device, mk, fk)?;
     Ok(Sections {
         keys,
         dsp,
@@ -262,7 +307,7 @@ mod tests {
     /// A DSP object with the given global text symbols (one parcel apart), a data section holding a machine desc with `contract` and
     /// the given global data symbols, and bss.
     fn dsp_object(text: &[&str], data: &[&str], bss: &[&str], contract: u32) -> Dko {
-        let words = [dkmdsp::DESC_MAGIC, contract, 1, 1, 8, 8, 100, 100, 0, 0];
+        let words = [dkmdsp::DESC_MAGIC, contract, 1, 1, 8, 8, 0, 0];
         let desc: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
         let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
         let mut symbols = vec![];
@@ -308,26 +353,23 @@ mod tests {
         }
     }
 
-    const MACHINE: &str = "[[machine]]\nid = \"foo\"\n[uses.dn2]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\nrecord_bytes = 560\n";
+    const MACHINE: &str = "[[machine]]\nid = \"foo\"\n[uses.dn2]\nmachine_rows = 1\nparam_rows = 4\npage_rows = 1\nrecord_bytes = 560\ndsp_cost_voice = 6239\n";
 
     #[test]
-    fn a_run_time_module_has_no_declaration_macros() {
-        refuse_declarations(&module(MACHINE)).unwrap();
-        refuse_declarations(&module("")).unwrap();
-        let mut m = module(MACHINE);
-        m.manifest.sample_tracks = Some(SampleTracksDef {
-            local_id: 0,
-            records: "r".into(),
-            control: "c".into(),
-        });
-        let e = refuse_declarations(&m).unwrap_err().to_string();
-        assert!(e.contains("builder calls"), "{e}");
+    fn a_tool_without_tables_has_a_head_only_header_table_and_no_dsp() {
+        let s = sections(&module(""), "test/m", "dn2", None).unwrap();
+        assert_eq!(s.keys.len(), dkneeds::keys::HEAD);
+        assert!(s.dsp.is_empty());
     }
 
     #[test]
-    fn a_tool_without_tables_has_an_empty_keys_table_and_no_dsp() {
-        let s = sections(&module(""), "test/m", "dn2", None).unwrap();
-        assert!(s.keys.is_empty() && s.dsp.is_empty());
+    fn a_record_entry_puts_its_key_in_the_keys_entry_and_a_typed_or_unknown_kind_is_refused() {
+        let m = module("[[record]]\nkind = \"effect\"\nkey = 1\n");
+        let e = sections(&m, "test/m", "dn2", None).unwrap_err().to_string();
+        assert!(e.contains("not generic"), "{e}");
+        let m = module("[[record]]\nkind = \"nothing\"\nkey = 1\n");
+        let e = sections(&m, "test/m", "dn2", None).unwrap_err().to_string();
+        assert!(e.contains("not in [records.kinds]"), "{e}");
     }
 
     #[test]
@@ -350,6 +392,7 @@ mod tests {
         let k = dkneeds::keys::Keys::parse(&s.keys).unwrap();
         assert_eq!((k.machine_rows(), k.param_rows(), k.page_rows()), (1, 4, 1));
         assert_eq!(k.record_bytes(), 560);
+        assert_eq!((k.dsp_cost_voice(), k.dsp_cost_fx()), (6239, 0));
         assert!(
             k.machine_keys()
                 .eq([crate::register::machine_key("test/m", "foo")])
@@ -390,14 +433,32 @@ mod tests {
             trace: false,
             stereo: s.stereo,
             gate: false,
+            service: None,
         };
         let f = crate::dkm::pack_keys(None, &s.keys, &s.dsp, &o).unwrap();
-        // the bytes of the old contract pairs are reserved zero; the packer links no import here, so the file needs no runtime version
+        // the bytes of the old contract pairs are reserved zero; the packer links no import here, so the file needs the version of the header table
         assert_eq!(&f[0x38..0x40], &[0u8; 8]);
-        assert_eq!(&f[0x30..0x34], &[0u8; 4]);
+        assert_eq!(
+            &f[0x30..0x34],
+            &crate::sdkgen::table_runtime().to_be_bytes()
+        );
         let off = u32::from_be_bytes(f[0x90..0x94].try_into().unwrap()) as usize;
         let size = u32::from_be_bytes(f[0x94..0x98].try_into().unwrap()) as usize;
-        assert_eq!(&f[off..off + size], &s.keys[..]);
+        // the packer adds the needs of the file: a hard need on the machines service (a file, R12-6) for the machine and page records of KEYS; the rest is the table of `sections`
+        let packed = dkneeds::keys::Keys::parse(&f[off..off + size]).unwrap();
+        let built = dkneeds::keys::Keys::parse(&s.keys).unwrap();
+        assert!(
+            packed
+                .key_groups()
+                .map(|(k, v)| (k, v.collect::<Vec<_>>()))
+                .eq(built.key_groups().map(|(k, v)| (k, v.collect::<Vec<_>>())))
+        );
+        assert!(packed.uses().eq(built.uses()));
+        let mach = dkneeds::keys::name_hash("machines");
+        assert!(
+            packed.needs().any(|n| n.service == mach && n.hard),
+            "a hard need on the machines service"
+        );
         let n = crate::dkm::needs(&f).unwrap();
         assert_eq!((n.machine_rows, n.param_rows, n.page_rows), (1, 4, 1));
         assert_eq!(n.voice_rows, 1);

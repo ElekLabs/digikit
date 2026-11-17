@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { registry } from '../../../web/src/data/device-profiles';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
+import { memoryKeyValue } from '@digi/workbench-core/storage.ts';
 import {
   DSP_KEY,
   dspLine,
@@ -35,14 +36,10 @@ describe('DSP tick', () => {
     expect(dspLine(undefined)).toBe('—');
   });
   it('keeps the saved choice: on unless saved off, and only an explicit write changes it', () => {
-    const store = new Map<string, string>();
-    const storage = {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => void store.set(k, v),
-    };
+    const storage = memoryKeyValue();
     expect(readDspChoice(storage)).toBe(true);
     writeDspChoice(storage, false);
-    expect(store.get(DSP_KEY)).toBe('off');
+    expect(storage.data.get(DSP_KEY)).toBe('off');
     // the launcher's flag is adopted for the session (startupDsp) and never written: the saved choice stays
     expect(startupDsp(readDspChoice(storage), { enabled: true, flag: true })).toBe(true);
     expect(readDspChoice(storage)).toBe(false);
@@ -51,10 +48,10 @@ describe('DSP tick', () => {
   });
   it('reads "on" and ignores a write when the storage throws', () => {
     const broken = {
-      getItem: () => {
+      get: () => {
         throw new Error('blocked');
       },
-      setItem: () => {
+      set: () => {
         throw new Error('blocked');
       },
     };

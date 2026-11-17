@@ -8,8 +8,6 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, Deserialize)]
 pub struct Manifest {
     #[serde(skip)]
-    pub sample_bank: Option<crate::typed::SampleBankDef>,
-    #[serde(skip)]
     pub sample_tracks: Option<crate::typed::SampleTracksDef>,
     pub module: ModuleInfo,
     #[serde(default)]
@@ -21,6 +19,13 @@ pub struct Manifest {
     pub anchor_rule: Vec<toml::Value>,
     #[serde(default)]
     pub op: Vec<Op>,
+    /// `[[slot]]`: pointer slots (a zero data word each) that `op = "stub"` sites load. Each is an entry of the image's one table `dkrt_info_table` (name hash and
+    /// the address of its word; `prim::build_info_table`).
+    #[serde(default)]
+    pub slot: Vec<SlotDef>,
+    /// `[[info]]`: data tables of this module that a service reads through `dkc_info`. Each is an entry of `dkrt_info_table`, with the address of `symbol`.
+    #[serde(default)]
+    pub info: Vec<InfoDef>,
     #[serde(default)]
     pub claim: Vec<Claim>,
     /// P1: sections copied from the user's image (and extended) at apply time.
@@ -44,13 +49,29 @@ pub struct Manifest {
     pub native_page: Vec<crate::typed::NativePageDef>,
     #[serde(skip)]
     pub voice: Vec<crate::typed::VoiceDef>,
-    /// `[[machine]] id = "..."`: the machines the module declares in C (DK_MACHINE); the id is all the manifest says of one. Their keys go in the
+    /// `[[machine]] id = "..."`: the machines the module declares in init (`dk_module_ctx_add_machine`); the id is all the manifest says of one. Their keys go in the
     /// `.dkm` keys table (`dkneeds::keys`).
     #[serde(default, rename = "machine")]
     pub machines: Vec<IdRef>,
-    /// `[[fx]] id = "..."`: the same for effects (DK_FX).
+    /// `[[fx]] id = "..."`: the same for effects (`dk_module_ctx_add_fx`).
     #[serde(default, rename = "fx")]
     pub fxs: Vec<IdRef>,
+    /// `[[record]] kind = "lfo_shape", key = 7`: a record of a generic kind (`[records.kinds]` `generic = true`) that `init` emits with `dk_record_add`, with its key (the first
+    /// word of the record's body). The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
+    #[serde(default, rename = "record")]
+    pub records: Vec<RecordKey>,
+    /// `[[export]] name = "dk_svctest_ping"`: the functions a service module (`role = "service"`) exports; each is an `[[import]]` of its service in sdk/sdk.toml.
+    /// Their name hashes and entry offsets go in the `EXPORTS` entry of the header table.
+    #[serde(default, rename = "export")]
+    pub exports: Vec<ExportDef>,
+    /// `[[hook]] name = "cf.menu.hook.settings_list.tail"`, `entry = "my_handler"`: the hook sites a service module takes and the global function of the object
+    /// that handles each. Their name hashes and entry offsets go in the `HOOKS` entry of the header table; `patchkit bind` gives each a trampoline.
+    #[serde(default, rename = "hook")]
+    pub hooks: Vec<ServiceHook>,
+    /// `[[fill]] slot = "frametype"`, `entry = "mf_frametype"`: a pointer slot of an image adapter (`[[slot]]` of its module.toml) that a service module fills with the address
+    /// of a global function of the object when it is loaded (the loader finds the slot word by the hash of the name in the image's info table).
+    #[serde(default, rename = "fill")]
+    pub fills: Vec<ServiceFill>,
     /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
     /// builds different rows per device (DT2 has no page rows).
     #[serde(default)]
@@ -68,9 +89,6 @@ pub struct Manifest {
     /// Set by `typed::lower`.
     #[serde(skip)]
     pub lowered: bool,
-    /// Set by `Library::lower`: the state block of each patched-in contract voice, by machine id.
-    #[serde(skip)]
-    pub voice_state: BTreeMap<String, crate::typed::VoiceState>,
 }
 
 impl Manifest {
@@ -82,6 +100,7 @@ impl Manifest {
                 self.module.id
             ));
         }
+        self.provided_service()?;
         for (table, ids) in [("machine", &self.machines), ("fx", &self.fxs)] {
             let mut seen = std::collections::BTreeSet::new();
             for r in ids {
@@ -118,12 +137,167 @@ impl Manifest {
         ] {
             if old.is_some() {
                 return Err(err!(
-                    "[[{name}]] is no longer read: declare machines with DK_MACHINE in C (sdk/include/dk/machine/machine.h)"
+                    "[[{name}]] is no longer read: declare machines and effects with `dk_module_ctx_add_machine` / `dk_module_ctx_add_fx` in init and list their ids as [[machine]] / [[fx]] in module.toml"
                 ));
             }
         }
         Ok(())
     }
+
+    /// What a `role = "service"` module provides (`None` for any other role). The service is a `[[service]]` of sdk/sdk.toml without `rust` (provided by a
+    /// `.dks`), and each `[[export]]` is an `[[import]]` of that service.
+    pub fn provided_service(&self) -> Result<Option<crate::dkm::Provided>> {
+        let id = &self.module.id;
+        if self.module.role != Some(ModuleRole::Service) {
+            if self.module.service.is_some()
+                || !self.exports.is_empty()
+                || !self.hooks.is_empty()
+                || !self.fills.is_empty()
+            {
+                return Err(err!(
+                    "{id}: `service` in [module], [[export]], [[hook]] and [[fill]] belong to a module with `role = \"service\"`"
+                ));
+            }
+            return Ok(None);
+        }
+        let Some(service) = &self.module.service else {
+            return Err(err!(
+                "{id}: a module with `role = \"service\"` needs `service = \"NAME\"` in [module]"
+            ));
+        };
+        if !crate::sdkgen::provider_services().contains(service) {
+            return Err(err!(
+                "{id}: service {service:?} is not a [[service]] of sdk/sdk.toml without `rust` (a service provided by a .dks)"
+            ));
+        }
+        // The runtime's find and Transfer name a provider by its file stem: `services/<service>.dks`, and the stem is the id's leaf.
+        let leaf = id.rsplit('/').next().unwrap_or(id);
+        if leaf.len() > 50 {
+            return Err(err!(
+                "{id}: the id's last part is {} bytes: a service file name is at most 50 (`services/<name>.dks` and its NUL must fit the 64 bytes of a selection path)",
+                leaf.len()
+            ));
+        }
+        if leaf != service {
+            return Err(err!(
+                "{id}: the id's last part {leaf:?} must equal the provided service {service:?} (the file is `{service}.dks`: the runtime finds a provider by its file name)"
+            ));
+        }
+        let imports = crate::sdkgen::import_infos();
+        let mut exports = vec![];
+        for e in &self.exports {
+            match imports.get(&e.name) {
+                Some(i) if i.service == *service => exports.push(e.name.clone()),
+                _ => {
+                    return Err(err!(
+                        "{id}: [[export]] {:?} is not an [[import]] of the service {service:?} in sdk/sdk.toml",
+                        e.name
+                    ));
+                }
+            }
+        }
+        let mut hooks: Vec<(String, String, Vec<String>)> = vec![];
+        for h in &self.hooks {
+            if h.name.is_empty() || h.entry.is_empty() {
+                return Err(err!(
+                    "{id}: [[hook]] needs a `name` and an `entry`, both not empty"
+                ));
+            }
+            if hooks.iter().any(|(n, _, _)| *n == h.name) {
+                return Err(err!(
+                    "{id}: [[hook]] {:?} is declared twice (one name has one entry, so a hook for two devices is one entry without `devices`)",
+                    h.name
+                ));
+            }
+            for d in &h.devices {
+                if crate::devdata::by_short(d).is_none() {
+                    return Err(err!(
+                        "{id}: [[hook]] {:?}: device {d:?} is not one of {}",
+                        h.name,
+                        crate::devdata::short_list()
+                    ));
+                }
+            }
+            hooks.push((h.name.clone(), h.entry.clone(), h.devices.clone()));
+        }
+        let mut fills: Vec<(String, String, Vec<String>)> = vec![];
+        for f in &self.fills {
+            if f.slot.is_empty() || f.entry.is_empty() {
+                return Err(err!(
+                    "{id}: [[fill]] needs a `slot` and an `entry`, both not empty"
+                ));
+            }
+            if fills.iter().any(|(n, _, _)| *n == f.slot) {
+                return Err(err!("{id}: [[fill]] {:?} is declared twice", f.slot));
+            }
+            for d in &f.devices {
+                if crate::devdata::by_short(d).is_none() {
+                    return Err(err!(
+                        "{id}: [[fill]] {:?}: device {d:?} is not one of {}",
+                        f.slot,
+                        crate::devdata::short_list()
+                    ));
+                }
+            }
+            fills.push((f.slot.clone(), f.entry.clone(), f.devices.clone()));
+        }
+        if fills.len() > dkneeds::SLOTS_MAX as usize {
+            return Err(err!(
+                "{id}: {} [[fill]] entries, over the {} a service file fills",
+                fills.len(),
+                dkneeds::SLOTS_MAX
+            ));
+        }
+        Ok(Some(crate::dkm::Provided {
+            service: service.clone(),
+            exports,
+            hooks,
+            fills,
+        }))
+    }
+}
+
+/// The module's provided service for `pack` (see [`Manifest::provided_service`]).
+pub fn service_of(m: &Module) -> Result<Option<crate::dkm::Provided>> {
+    m.manifest.provided_service()
+}
+
+/// An entry of `[[export]]`: the name of an exported function.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExportDef {
+    pub name: String,
+}
+
+/// An entry of `[[fill]]` of a service: the pointer slot of an image adapter and the global function of the object whose address the installer writes in it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceFill {
+    pub slot: String,
+    pub entry: String,
+    /// The devices the fill is for (`dt2`, `dn2`); empty: every device. Needed when the slot is limited to some devices (`devices` of its `[[slot]]`).
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
+/// An entry of `[[hook]]` of a service: the hook of the port files (`devices/ports/`) and the global function of the object that handles it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceHook {
+    pub name: String,
+    pub entry: String,
+    /// The devices the hook is for (`dt2`, `dn2`); empty: every device that declares it. `service!` lists the hooks of each device the same way
+    /// (`hooks_dt2`, `hooks_dn2`, `hooks`), and `patchkit service-check` compares the two per device.
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
+/// An entry of `[[record]]`: the kind by its lower-case name (`dkneeds::KIND_NAMES`) and the key of one record of it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecordKey {
+    pub kind: String,
+    pub key: u32,
 }
 
 /// An entry of `[[machine]]` or `[[fx]]`: the id and an optional DSP symbol prefix (any other key is refused).
@@ -182,6 +356,12 @@ pub struct Uses {
     /// Payload bytes of the record block `init` commits (the `module_commit` event's `records_size`): the keys table's `record_bytes`.
     #[serde(default)]
     pub record_bytes: u16,
+    /// DSP instructions per block of one voice of the module's machines, the worst steady block `module:check` measured (the keys table's `DSP_COST_VOICE`).
+    #[serde(default)]
+    pub dsp_cost_voice: u32,
+    /// DSP instructions per block of the module's effects, summed (the keys table's `DSP_COST_FX`).
+    #[serde(default)]
+    pub dsp_cost_fx: u32,
 }
 
 /// One generated file of device data: `kind` is `gas-dkdv` (the runtime's device object `dkrt_dev`, one file per device) or `gas-dkdv-offsets` (its field offsets, one file), `gas` (a ColdFire assembler
@@ -301,6 +481,12 @@ pub struct RegistryDef {
     /// Field values of a gap row (the registry's field defaults fill the rest).
     #[serde(default)]
     pub gap: Option<BTreeMap<String, toml::Value>>,
+    /// The registry takes no entry from a patched-in module: its rows are made at run time. The text says why and is part of the error that a module with an entry gets.
+    #[serde(default)]
+    pub refuse_entries: Option<String>,
+    /// Modules that may still add entries to a registry with `refuse_entries` (`core/dynreg` reserves the rows that run-time machines fill).
+    #[serde(default)]
+    pub refuse_entries_except: Vec<String>,
 }
 
 /// The parsed `index_table` of a registry: device -> numbers.
@@ -412,6 +598,8 @@ pub enum ModuleRole {
     Installer,
     Adapter,
     App,
+    /// A service provider (a `.dks`; any category): needs `service` in [module].
+    Service,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -424,6 +612,9 @@ pub struct ModuleInfo {
     /// The layer of a `core` module (required for `category = "core"`, see `ModuleRole`)
     #[serde(default)]
     pub role: Option<ModuleRole>,
+    /// With `role = "service"`: the service the module provides (a `[[service]]` of sdk/sdk.toml without `rust`)
+    #[serde(default)]
+    pub service: Option<String>,
     /// What the module is; `framework` is internal (core modules)
     #[serde(rename = "type")]
     pub kind: ModuleKind,
@@ -448,6 +639,25 @@ pub struct ModuleInfo {
     pub dynamic: bool,
 }
 
+impl ModuleInfo {
+    /// A module the run-time loader takes as a `.dkm`: not `core`, not a framework, and dynamic, raw or a service
+    /// (the rule of the workbench library and of `apps/web/src/data/shipped.mjs`).
+    pub fn is_runtime(&self) -> bool {
+        self.category != "core"
+            && !matches!(self.kind, ModuleKind::Framework)
+            && (self.dynamic || matches!(self.kind, ModuleKind::Raw | ModuleKind::Service))
+    }
+
+    /// Whether the module builds for the device `short` (`dt2`): no `ports`, or a port of that device.
+    pub fn builds_for(&self, short: &str) -> bool {
+        self.ports.is_empty()
+            || self
+                .ports
+                .iter()
+                .any(|p| p.split('-').next() == Some(short))
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct ObjectRef {
     pub path: String,
@@ -466,7 +676,7 @@ pub struct ObjectRef {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Op {
-    /// `write` or `hook`
+    /// `write`, `hook` or `stub`
     pub op: String,
     #[serde(default)]
     pub anchor: String,
@@ -504,6 +714,40 @@ pub struct Op {
     pub expect_sha256: Option<String>,
     #[serde(default)]
     pub reloc: Vec<OpReloc>,
+    /// stub: the declared slot the stub loads (a `[[slot]]` of the module)
+    #[serde(default)]
+    pub slot: Option<String>,
+    /// stub: the register the stub overwrites (`d0`..`d7`, `a0`..`a6`); it must be one the hook's contract lets the hook clobber
+    #[serde(default)]
+    pub scratch: Option<String>,
+    /// stub: expression of a hand-written stock path; the stub jumps there instead of running the re-encoded displaced instructions
+    #[serde(default)]
+    pub tail: Option<String>,
+}
+
+/// `[[info]] name = "fxpages_info", symbol = "fxpages_info", devices = ["dt2"]`: an entry of the image's info table: the hash of `name` and the address that the
+/// expression `symbol` evaluates to (a global symbol of the module's objects). `name` is what a service passes to `dkc_info` (as its name hash); it shares one
+/// namespace with the `[[slot]]` names of all image adapters, and `patchkit apply` refuses two entries with one hash.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InfoDef {
+    pub name: String,
+    /// Expression of the address; default: the symbol named `name`.
+    #[serde(default)]
+    pub symbol: Option<String>,
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
+/// `[[slot]] name = "frame_type", devices = ["dn2"]`: one 4-byte pointer slot in the module's data region, zero at build.
+#[derive(Clone, Debug, Deserialize)]
+pub struct SlotDef {
+    pub name: String,
+    #[serde(default)]
+    pub devices: Vec<String>,
+    /// region of the slot words (default `cf.expansion`)
+    #[serde(default)]
+    pub place: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -535,95 +779,6 @@ pub struct Module {
     pub dir: std::path::PathBuf,
 }
 
-/// A patched-in contract voice (`[[voice]]` with `desc`) needs memory for the state of its voices, which a `.dkm` gets from the runtime at load
-/// (`dkmdsp.rs`). Here the module's DSP object gets a bss section `dk.state.<machine>` of `voices` x `stride` bytes and the global symbol
-/// `_dkstate_<machine>`, which the voice row names as its state base; the patch linker places it with the rest of the object. `desc` is read
-/// from the object's data (`dk_machine_desc`, little endian: voices at word 3, state_bytes at 4, state_clear_bytes at 5).
-fn reserve_voice_state(m: &mut Module) -> Result<()> {
-    let voices: Vec<(String, String)> = m
-        .manifest
-        .voice
-        .iter()
-        .map(|v| (v.machine.clone(), v.desc.clone()))
-        .collect();
-    for (machine, desc) in voices {
-        if m.manifest.voice_state.contains_key(&machine) {
-            continue;
-        }
-        let found = m.objects.iter().position(|o| {
-            o.arch == "sharc"
-                && o.symbols
-                    .iter()
-                    .any(|s| s.name == desc && s.section.is_some())
-        });
-        let Some(oi) = found else {
-            return Err(err!(
-                "voice {machine}: desc {desc} is not defined by a DSP object of the module"
-            ));
-        };
-        let o = &mut m.objects[oi];
-        let sym = o.symbols.iter().find(|s| s.name == desc).unwrap().clone();
-        let sec = o
-            .sections
-            .iter()
-            .find(|x| Some(&x.name) == sym.section.as_ref())
-            .unwrap();
-        if sec.kind != "data" {
-            return Err(err!("voice {machine}: desc {desc} is not initialised data"));
-        }
-        let bytes = unhex(&sec.hex)?;
-        let at = sym.value as usize;
-        let words = bytes
-            .get(at..at + crate::dkmdsp::DESC_WORDS * 4)
-            .ok_or_else(|| {
-                err!(
-                    "voice {machine}: desc {desc} is shorter than {} bytes",
-                    crate::dkmdsp::DESC_WORDS * 4
-                )
-            })?;
-        let w = |i: usize| u32::from_le_bytes(words[i * 4..i * 4 + 4].try_into().unwrap());
-        if w(0) != crate::dkmdsp::DESC_MAGIC
-            || w(1) & !crate::dkmdsp::DESC_STEREO != crate::dkmdsp::DESC_CONTRACT
-        {
-            return Err(err!(
-                "voice {machine}: desc {desc} is no dk_machine_desc of contract {}",
-                crate::dkmdsp::DESC_CONTRACT
-            ));
-        }
-        let (voices_n, state, clear) = (w(3), w(4), w(5));
-        if clear > state || voices_n == 0 {
-            return Err(err!(
-                "voice {machine}: desc {desc}: {voices_n} voices, state {state} bytes, clear {clear}"
-            ));
-        }
-        let stride = state.div_ceil(8) * 8;
-        let name = format!("dk.state.{machine}");
-        let symbol = format!("_dkstate_{machine}");
-        o.sections.push(crate::dko::DkoSection {
-            name: name.clone(),
-            kind: "bss".into(),
-            align: 8,
-            size: voices_n * stride,
-            hex: String::new(),
-        });
-        o.symbols.push(crate::dko::DkoSymbol {
-            name: symbol.clone(),
-            section: Some(name),
-            value: 0,
-            global: true,
-        });
-        m.manifest.voice_state.insert(
-            machine,
-            crate::typed::VoiceState {
-                symbol,
-                stride,
-                clear,
-            },
-        );
-    }
-    Ok(())
-}
-
 impl Module {
     /// Build a module from its manifest text and a reader for the object paths it names.
     pub fn from_parts(
@@ -647,7 +802,7 @@ impl Module {
         read: &dyn Fn(&str) -> Result<String>,
         lenient: bool,
     ) -> Result<Module> {
-        let mut manifest: Manifest = toml::from_str(manifest_text)?;
+        let manifest: Manifest = toml::from_str(manifest_text)?;
         manifest.validate_header()?;
         let mut objects = vec![];
         let mut all = manifest_text.to_string();
@@ -659,41 +814,6 @@ impl Module {
             };
             all.push_str(&t);
             objects.push(Dko::parse(&t).map_err(|e| err!("{}: {e}", o.path))?);
-        }
-        // the descriptor records of the objects fill the typed sections; a module loaded without all its objects has none
-        if objects.len() == manifest.object.len() {
-            let d = crate::desc::read_objects(&objects)
-                .map_err(|e| err!("{}: {e}", manifest.module.id))?;
-            manifest.machine = d.machines;
-            manifest.param = d.params;
-            manifest.page = d.pages;
-            manifest.native_page = d.native_pages;
-            manifest.voice = d.voices;
-            manifest.sample_bank = d.sample_bank;
-            manifest.sample_tracks = d.sample_tracks;
-            // a patched-in module keeps the records out of the image: the objects lose their descriptor sections
-            if !manifest.module.dynamic {
-                // an object that held only records is removed with its manifest entry (the two lists stay aligned)
-                let section = crate::sdkgen::desc_spec().section;
-                let mut kept = vec![];
-                let mut kept_refs = vec![];
-                for (o, r) in objects.drain(..).zip(manifest.object.drain(..)) {
-                    if o.sections.iter().any(|s| s.name == section) {
-                        match crate::desc::strip(&o) {
-                            Some(s) => {
-                                kept.push(s);
-                                kept_refs.push(r);
-                            }
-                            None => {}
-                        }
-                    } else {
-                        kept.push(o);
-                        kept_refs.push(r);
-                    }
-                }
-                objects = kept;
-                manifest.object = kept_refs;
-            }
         }
         let mut alloc = BTreeMap::new();
         for r in &manifest.registry {
@@ -736,17 +856,9 @@ impl Library {
         self.modules.iter().find(|m| m.id() == id)
     }
 
-    /// Lower the typed sections of every module with the device models (`crate::typed`). A patched-in module with contract voices first gets
-    /// the state blocks of its voices (`reserve_voice_state`).
+    /// Lower the typed sections of every module with the device models (`crate::typed`).
     pub fn lower(&mut self, models: &crate::typed::Models) -> Result<()> {
         for m in &mut self.modules {
-            // a module loaded without its objects (`from_parts_lenient`) has no descriptors to read
-            if !m.manifest.module.dynamic
-                && !m.manifest.lowered
-                && m.objects.len() == m.manifest.object.len()
-            {
-                reserve_voice_state(m).map_err(|e| err!("{}: {e}", m.manifest.module.id))?;
-            }
             crate::typed::lower(&mut m.manifest, models)
                 .map_err(|e| err!("{}: {e}", m.manifest.module.id))?;
         }
@@ -810,6 +922,97 @@ pub struct Build<'a> {
     pub only: Option<&'a [String]>,
     /// Build defines (`DK_TRACE`) for the objects built on demand; they are part of the cache key (`crate::build::toolchain::Env::defines`).
     pub defines: &'a [String],
+}
+
+/// Where a module library comes from, besides the repository's module roots and PATCHKIT_MODULES.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Default, Clone)]
+pub struct LibrarySource {
+    /// `--manifest PATH` values: extra module manifests.
+    pub manifests: Vec<std::path::PathBuf>,
+    /// `--modules-dir DIR`: extra module roots.
+    pub modules_dirs: Vec<std::path::PathBuf>,
+    /// `--trace`: builds with DK_TRACE defined.
+    pub trace: bool,
+}
+
+/// `modules/` and `tests/fixtures/modules/` of the repository, then the extra roots of `src.modules_dirs` and the PATCHKIT_MODULES
+/// environment variable (a path list), in that order. Generated modules (derived from a firmware) live there. Content modules get their
+/// objects from the cache `out/cache/dko`; a stale object is built.
+/// With `lenient`, a module whose object files are missing still loads (for `gen`); with `only`, the objects of these
+/// content modules only are loaded or built (`pack` and `apply`: the others load without objects).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn library_with(
+    root: &std::path::Path,
+    src: &LibrarySource,
+    lenient: bool,
+    only: Option<&[String]>,
+) -> Result<Library> {
+    // `--trace` builds the modules with DK_TRACE defined (C: -DDK_TRACE; SHARC+: `#ifdef DK_TRACE`)
+    let defines: Vec<String> = if src.trace {
+        vec!["DK_TRACE".into()]
+    } else {
+        vec![]
+    };
+    let mut lib = Library::scan_repo_defined(root, lenient, only, &defines)?;
+    let mut extra: Vec<std::path::PathBuf> = src.modules_dirs.clone();
+    if let Some(v) = std::env::var_os("PATCHKIT_MODULES") {
+        extra.extend(std::env::split_paths(&v));
+    }
+    let build = Build {
+        root,
+        only,
+        defines: &defines,
+    };
+    for d in extra {
+        if d.is_dir() {
+            lib.extend_unique(Library::scan_in(Some(build), &d, lenient)?.modules)?;
+        }
+    }
+    lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
+    Ok(lib)
+}
+
+/// Explicit manifests replace all discovery roots, including PATCHKIT_MODULES. They must include
+/// the selected IDs, their requires closure and any allocation providers used by generation.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn selected_library(
+    root: &std::path::Path,
+    src: &LibrarySource,
+    lenient: bool,
+    only: &[String],
+    selected: &[String],
+) -> Result<Library> {
+    if src.manifests.is_empty() {
+        return library_with(root, src, lenient, Some(only));
+    }
+    let defines = if src.trace {
+        vec!["DK_TRACE".to_string()]
+    } else {
+        vec![]
+    };
+    let mut lib = Library::from_manifests(
+        Build {
+            root,
+            only: Some(only),
+            defines: &defines,
+        },
+        &src.manifests,
+        lenient,
+        selected,
+    )?;
+    lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
+    if lenient && lib.get("core/machines").is_none() {
+        for id in selected {
+            let m = lib.get(id).unwrap();
+            if !m.manifest.gens.is_empty() || !m.manifest.machine.is_empty() {
+                return Err(Error(format!(
+                    "{id}: generation requires --manifest for core/machines (machine allocations)"
+                )));
+            }
+        }
+    }
+    Ok(lib)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1143,112 +1346,6 @@ mod cache_generation_tests {
             started.elapsed()
         );
     }
-
-    #[test]
-    fn generation_reads_cached_declarations_without_building_and_tolerates_missing_cache() {
-        let root = std::env::temp_dir().join(format!("digikit-cached-gen-{}", std::process::id()));
-        let dir = root.join("modules").join("new-machine");
-        let cache = root.join("out/cache/dko/test/new-machine/k/build/module.dko.json");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-        // No sources or toolchains exist here: either a freshness check or a
-        // build would fail. Generation must use the existing cache only.
-        std::fs::write(
-            dir.join("module.toml"),
-            r#"
-[module]
-id = "test/new-machine"
-version = "0.1.0"
-name = "New machine"
-category = "test"
-type = "machine"
-author = "digikit"
-status = "experimental"
-summary = "Cached generation fixture."
-dynamic = true
-[[object]]
-path = "build/module.dko.json"
-sources = ["missing.c"]
-place = "cf.expansion"
-"#,
-        )
-        .unwrap();
-        let spec = crate::sdkgen::desc_spec();
-        let rec = spec
-            .records
-            .iter()
-            .find(|r| r.name == "dk_desc_machine")
-            .unwrap();
-        let mut bytes = vec![0u8; rec.size];
-        for (field, word) in [("kind", rec.kind.unwrap()), ("size", rec.size as u32)] {
-            let at = rec.field(field).unwrap().off;
-            bytes[at..at + 4].copy_from_slice(&word.to_be_bytes());
-        }
-        for (field, value) in [
-            ("id", "new"),
-            ("name", "New machine"),
-            ("short_name", "NEW"),
-            ("render", "_render"),
-            ("note_on", "_note_on"),
-            ("desc", "_desc"),
-        ] {
-            let at = rec.field(field).unwrap().off;
-            bytes[at..at + value.len()].copy_from_slice(value.as_bytes());
-        }
-        let object = serde_json::json!({
-            "format": crate::dko::FORMAT, "arch": "cf", "source_sha256": "stale",
-            "sections": [{ "name": spec.section, "kind": "data", "align": 4,
-                "size": bytes.len(), "hex": hex(&bytes) }], "symbols": [], "relocs": []
-        })
-        .to_string();
-        std::fs::write(&cache, &object).unwrap();
-        let env = crate::build::toolchain::Env::new(&root);
-        let build = Build {
-            root: &root,
-            only: Some(&[]),
-            defines: &[],
-        };
-        let models = crate::typed::Models::from_texts([
-            include_str!("../../../devices/digitakt-ii.toml"),
-            include_str!("../../../devices/digitone-ii.toml"),
-        ])
-        .unwrap();
-        let load = || Library {
-            modules: Library::read_root(&root.join("modules"), true, Some((&env, build))).unwrap(),
-        };
-        let lib = load();
-        let files = crate::modgen::generate(&lib, &models, "test/new-machine").unwrap();
-        assert_eq!(files[0].0, "build/gen/gallery.json");
-        let gallery: serde_json::Value = serde_json::from_str(&files[0].1).unwrap();
-        assert_eq!(gallery["machines"][0]["id"], "new");
-        assert_eq!(gallery["machines"][0]["name"], "New machine");
-        let mut explicit = Library::from_manifests(
-            build,
-            &[dir.join("module.toml")],
-            true,
-            &["test/new-machine".into()],
-        )
-        .unwrap();
-        explicit.lower(&models).unwrap();
-        assert_eq!(
-            crate::modgen::generate(&lib, &models, "test/new-machine").unwrap(),
-            crate::modgen::generate(&explicit, &models, "test/new-machine").unwrap(),
-        );
-        assert_eq!(std::fs::read_to_string(&cache).unwrap(), object);
-        // Excluded modules in a pack still omit objects even if cache exists.
-        let excluded =
-            Library::read_root(&root.join("modules"), false, Some((&env, build))).unwrap();
-        assert!(excluded[0].objects.is_empty());
-        std::fs::remove_file(&cache).unwrap();
-        let lib = load();
-        assert!(
-            crate::modgen::generate(&lib, &models, "test/new-machine")
-                .unwrap()
-                .is_empty()
-        );
-        assert!(!cache.exists());
-        std::fs::remove_dir_all(root).unwrap();
-    }
 }
 
 #[cfg(test)]
@@ -1265,7 +1362,7 @@ mod manifest_tests {
 
     #[test]
     fn machine_fx_and_uses_are_read() {
-        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses.dt2]\nmachine_rows = 2\npage_rows = 3\nrecord_bytes = 700\n[uses.dn2]\nmachine_rows = 2\npage_rows = 4\n").unwrap();
+        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses.dt2]\nmachine_rows = 2\npage_rows = 3\nrecord_bytes = 700\ndsp_cost_voice = 6239\ndsp_cost_fx = 4200\n[uses.dn2]\nmachine_rows = 2\npage_rows = 4\n").unwrap();
         let ids = |v: &[IdRef]| v.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
         assert_eq!(ids(&m.machines), ["analog", "b-2_x"]);
         assert_eq!(ids(&m.fxs), ["fshift"]);
@@ -1275,7 +1372,9 @@ mod manifest_tests {
                 machine_rows: 2,
                 param_rows: 0,
                 page_rows: 3,
-                record_bytes: 700
+                record_bytes: 700,
+                dsp_cost_voice: 6239,
+                dsp_cost_fx: 4200
             }
         );
         assert_eq!(m.uses.for_device("dn2").page_rows, 4);

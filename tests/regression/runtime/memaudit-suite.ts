@@ -9,7 +9,7 @@ import { bootInfo } from './card-kit.ts';
 import { CARD_SYMBOLS, cardRig, RT, type CardRig, type CardSpec } from './card-rig.ts';
 import { pausedProtocol } from './debug-kit.ts';
 import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
-import { advance } from './fx-live.ts';
+import { SETTLE } from './fx-live.ts';
 import {
   arenaBounds,
   bytesChanged,
@@ -28,11 +28,12 @@ import {
   ARENA_HDR,
   COLLECT_BLOCK,
   DSP_GRANULE,
-  fullSet,
+  fullSetOnBoot,
   geometryOf,
   LOADED,
   packSynth,
   usageOf,
+  type SynthSpec,
   type Want,
 } from './synth.ts';
 
@@ -126,7 +127,7 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
           });
 
           test('the set loads; while the UI is driven no store lands outside the module blocks and the patch code', async (ctx) => {
-            const mods = [];
+            const mods: { name: string; file: string }[] = [];
             for (const id of spec.modules) {
               const m = o.artifact ? await o.artifact(h, id) : h.mod(id);
               if ('skip' in m) return ctx.skip(m.skip);
@@ -137,14 +138,29 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
             if (spec.full) {
               // the second daemon builds the same card: the files must outlive the first daemon's artifact directory
               const g = geometryOf(device, h.plan);
-              const fill = await fullSet(g, (await needsOf(mods.map((m) => m.file))).map(usageOf));
-              for (const [i, f] of fill.entries()) {
-                mods.push({
-                  name: `modules/full${i}.dkm`,
-                  file: await packSynth(device, f.spec, synthDir, `${i}.dkm`),
-                });
-                wants.push(f.want);
-                if (f.want === LOADED) loaded.push(f.spec.name);
+              const packFill = async (set: { spec: SynthSpec; want: Want }[], tag: string) => {
+                const out = [];
+                for (const [i, f] of set.entries())
+                  out.push({
+                    name: `modules/full${i}.dkm`,
+                    file: await packSynth(device, f.spec, synthDir, `${tag}${i}.dkm`),
+                  });
+                return out;
+              };
+              // F is sized by a boot of the set before it, so that the providers its modules need are loaded
+              const fill = await fullSetOnBoot(
+                g,
+                (await needsOf(mods.map((m) => m.file))).map(usageOf),
+                async (before) => {
+                  const probe = { modules: [...mods, ...(await packFill(before, 'probe'))] };
+                  const rt = await h.load('audit-probe', { ...probe, selection: probe.modules.map((m) => m.name) });
+                  return (await pausedProtocol(rt, async (dk) => (await dk.capacity()).ARENA!)).largest;
+                },
+              );
+              for (const [i, m] of (await packFill(fill, 'full')).entries()) {
+                mods.push(m);
+                wants.push(fill[i]!.want);
+                if (fill[i]!.want === LOADED) loaded.push(fill[i]!.spec.name);
               }
             }
             cardSpec = { modules: mods, selection: mods.map((m) => m.name) };
@@ -202,7 +218,7 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
               allow_pc: plan.code.map(({ lo, hi }) => ({ lo, hi })),
             });
             try {
-              await driveAuditUi(session, machines, spec.sweep, !spec.stray);
+              await driveAuditUi(runtime, machines, spec.sweep, !spec.stray);
               const { total, hits } = await guardHits(session, modules, plan.code);
               const after = await moduleBlocks(session, modules);
               const changed = Object.fromEntries(
@@ -245,7 +261,7 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
           test('a cold boot of the same card with the write watch on: the load and init of the modules store nothing outside their blocks', async (ctx) => {
             if (!cardSpec || !guard) return ctx.skip('the drive test did not get as far as arming the guard');
             const runtime = await h.load('load-pass', cardSpec);
-            await advance(runtime.session, 300);
+            await runtime.ui.wait({ ms: 300, why: SETTLE });
             const stores = loggedStores(h.artifacts);
             expect(
               stores.map((s) => `pc 0x${s.pc.toString(16)} addr 0x${s.addr.toString(16)} size ${s.size}`),

@@ -1,6 +1,7 @@
 //! The version 3 store on a card in RAM: the format, the table stream, free-space reuse, and what a power cut can leave.
 extern crate std;
 use super::*;
+use crate::proto::E_MSG;
 use crate::{E_BAD_STORE, E_NOT_FOUND};
 use std::sync::Mutex;
 use std::vec::Vec;
@@ -59,6 +60,12 @@ struct Buf<const N: usize>([u8; N]);
 fn fresh() {
     *CARD.lock().unwrap() = std::vec![0u8; SECTORS as usize * 512];
     *CUT.lock().unwrap() = (u32::MAX, 0);
+}
+
+/// `crc32_of` over a slice.
+fn crc_of(b: &[u8]) -> u32 {
+    // SAFETY: the pointer and the length come from one slice.
+    unsafe { crc32_of(b.as_ptr(), b.len()) }
 }
 
 fn cstr(p: &str) -> Vec<u8> {
@@ -136,6 +143,36 @@ fn insert(
             1024,
             w.s.0.as_mut_ptr(),
             Edit::Insert(e.as_ptr()),
+            extra,
+        )
+    }
+}
+
+/// Commit an insert of all `files` (path, first sector, size) in one `Edit::InsertMany`.
+fn insert_many(
+    w: &mut Work,
+    files: &[(&str, u32, u32)],
+    extra: &[(u32, u32)],
+) -> Result<Committed, i32> {
+    let cur = current(w);
+    let mut ents = Vec::new();
+    for &(path, first, size) in files {
+        let mut e = [0u8; ENTRY];
+        let p = cstr(path);
+        unsafe { encode_entry(p.as_ptr(), &entry(first, size, KIND_FILE), e.as_mut_ptr()) };
+        ents.push(e);
+    }
+    let ptrs: Vec<*const u8> = ents.iter().map(|e| e.as_ptr()).collect();
+    unsafe {
+        commit(
+            &IO,
+            &LAY,
+            &cur,
+            w.a.0.as_mut_ptr(),
+            w.b.0.as_mut_ptr(),
+            1024,
+            w.s.0.as_mut_ptr(),
+            Edit::InsertMany(ptrs.as_ptr(), ptrs.len()),
             extra,
         )
     }
@@ -226,7 +263,7 @@ fn paths(w: &mut Work) -> Vec<(std::string::String, u32)> {
 
 #[test]
 fn crc32_matches_the_zlib_check_value() {
-    assert_eq!(crc32_of(b"123456789".as_ptr(), 9), 0xcbf4_3926);
+    assert_eq!(crc_of(b"123456789"), 0xcbf4_3926);
 }
 
 #[test]
@@ -593,6 +630,140 @@ fn a_power_cut_at_any_write_leaves_the_old_store_or_the_new_one() {
             }
             .unwrap();
             assert_eq!(ok, t.h.table_crc, "case {case} cut {cut}");
+        }
+    }
+}
+
+#[test]
+fn a_batch_insert_names_all_files_in_one_commit() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    insert(&mut w, "m", 10, 512, &[]).unwrap();
+    let seq = current(&mut w).seq;
+    // given out of order: the table comes out in table order
+    insert_many(
+        &mut w,
+        &[("z", 40, 512), ("a", 20, 512), ("d/x", 30, 512)],
+        &[],
+    )
+    .unwrap();
+    let h = current(&mut w);
+    assert_eq!((h.count, h.seq), (4, seq + 1));
+    assert_eq!(
+        paths(&mut w),
+        [
+            ("m".into(), 10),
+            ("a".into(), 20),
+            ("d/x".into(), 30),
+            ("z".into(), 40)
+        ]
+    );
+}
+
+#[test]
+fn a_batch_insert_replaces_a_path_that_is_stored_and_refuses_too_many() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    insert(&mut w, "a", 10, 512, &[]).unwrap();
+    insert(&mut w, "b", 11, 512, &[]).unwrap();
+    let c = insert_many(&mut w, &[("b", 50, 512), ("c", 51, 512)], &[]).unwrap();
+    assert_eq!(c.h.count, 3);
+    assert_eq!(
+        paths(&mut w),
+        [("a".into(), 10), ("b".into(), 50), ("c".into(), 51)]
+    );
+    let many: Vec<(std::string::String, u32, u32)> = (0..=MANY_MAX as u32)
+        .map(|i| (std::format!("f{i}"), 60 + i, 512))
+        .collect();
+    let refs: Vec<(&str, u32, u32)> = many.iter().map(|(p, f, s)| (p.as_str(), *f, *s)).collect();
+    assert_eq!(insert_many(&mut w, &refs, &[]).err(), Some(E_MSG));
+}
+
+/// A power cut after any number of writes of a batch commit leaves the old store or the new one with all the files.
+#[test]
+fn a_power_cut_in_a_batch_commit_leaves_the_old_store_or_the_new_one_with_all_files() {
+    let _g = lock();
+    for cut in 0..60u32 {
+        fresh();
+        let mut w = work();
+        insert(&mut w, "a", 10, 512, &[]).unwrap();
+        insert(&mut w, "b", 11, 512, &[]).unwrap();
+        let old = paths(&mut w);
+        *CUT.lock().unwrap() = (cut, 0);
+        let r = insert_many(
+            &mut w,
+            &[
+                ("c", 12, 512),
+                ("d/e", 13, 512),
+                ("b", 14, 512),
+                ("f", 15, 512),
+            ],
+            &[],
+        );
+        *CUT.lock().unwrap() = (u32::MAX, 0);
+        let now = paths(&mut w);
+        let t =
+            state(&mut w).unwrap_or_else(|e| panic!("cut {cut}: the store is unreadable ({e})"));
+        if r.is_ok() {
+            assert_eq!(now.len(), 5, "cut {cut}: {now:?}");
+        } else {
+            assert!(now == old || now.len() == 5, "cut {cut}: {now:?}");
+        }
+        if now != old {
+            for p in ["c", "d/e", "f"] {
+                assert!(now.iter().any(|(n, _)| n == p), "cut {cut}: {p} missing");
+            }
+            assert!(now.contains(&("b".into(), 14)), "cut {cut}: {now:?}");
+        }
+        let ok = unsafe {
+            table_crc(
+                &IO,
+                &LAY,
+                t.h.table_first,
+                t.h.table_sectors,
+                w.a.0.as_mut_ptr(),
+                4096,
+            )
+        }
+        .unwrap();
+        assert_eq!(ok, t.h.table_crc, "cut {cut}");
+    }
+}
+
+/// The extents of pending files (`extra`) are never taken for the table, at any cut: the new table lies outside them, and so does the old one.
+#[test]
+fn a_batch_commit_never_puts_the_table_over_a_pending_extent() {
+    let _g = lock();
+    for cut in 0..60u32 {
+        fresh();
+        let mut w = work();
+        insert(&mut w, "a", 400, 512, &[]).unwrap();
+        insert(&mut w, "b", 401, 512, &[]).unwrap();
+        // pending data from sector 1 to 60 (what the first-fit gap would be): the table must go beyond it
+        let pending = [(1u32, 60u32)];
+        let old = paths(&mut w);
+        *CUT.lock().unwrap() = (cut, 0);
+        let r = insert_many(
+            &mut w,
+            &[("c", 2, 512), ("d", 3, 512), ("e", 4, 512)],
+            &pending,
+        );
+        *CUT.lock().unwrap() = (u32::MAX, 0);
+        let t =
+            state(&mut w).unwrap_or_else(|e| panic!("cut {cut}: the store is unreadable ({e})"));
+        let tbl = (t.h.table_first, t.h.table_first + t.h.table_sectors);
+        let now = paths(&mut w);
+        if now != old {
+            assert!(
+                tbl.0 >= 61,
+                "cut {cut}: the new table {tbl:?} overlaps the pending extent"
+            );
+        }
+        assert!(now == old || now.len() == 5, "cut {cut}: {now:?}");
+        if r.is_ok() {
+            assert_eq!(now.len(), 5);
         }
     }
 }
@@ -1109,7 +1280,7 @@ fn catalog_table(count: u32) -> Vec<CatalogEntry> {
         used: 1 + table_sectors(count) + count,
         area: SECTORS,
     };
-    h.table_crc = crc32_of(card[10 * 512..].as_ptr(), h.table_sectors as usize * 512);
+    h.table_crc = crc_of(&card[10 * 512..][..h.table_sectors as usize * 512]);
     unsafe {
         encode_header(&h, card.as_mut_ptr());
         encode_header(&h, card.as_mut_ptr().add(LAY.header_b() as usize * 512));
@@ -1367,7 +1538,7 @@ fn catalog_crc_verified_but_malformed_entries_are_rejected() {
                 card[10 * 512..10 * 512 + PATH_BYTES].fill(b'x');
             }
             let mut h = unsafe { parse_header(card.as_ptr()) }.unwrap();
-            h.table_crc = crc32_of(card[10 * 512..].as_ptr(), h.table_sectors as usize * 512);
+            h.table_crc = crc_of(&card[10 * 512..][..h.table_sectors as usize * 512]);
             unsafe {
                 encode_header(&h, card.as_mut_ptr());
                 encode_header(&h, card.as_mut_ptr().add(LAY.header_b() as usize * 512));
@@ -1534,7 +1705,7 @@ fn incremental_catalog_falls_back_for_crc_tail_read_failure_and_identical_copies
                 unsafe {
                     put32(card.as_mut_ptr().add(200 * 512 + O_FIRST), LAY.limit());
                 }
-                h.table_crc = crc32_of(card[200 * 512..].as_ptr(), 1024);
+                h.table_crc = crc_of(&card[200 * 512..][..1024]);
             }
             unsafe {
                 encode_header(&h, card.as_mut_ptr());
@@ -1784,7 +1955,7 @@ fn catalog_rewind_header_failure_is_sticky_and_incremental_padding_is_not_an_ent
             put32(card.as_mut_ptr().add(padding + O_SIZE), 512);
         }
         let mut h = unsafe { parse_header(card.as_ptr()) }.unwrap();
-        h.table_crc = crc32_of(card[10 * 512..].as_ptr(), 1024);
+        h.table_crc = crc_of(&card[10 * 512..][..1024]);
         unsafe {
             encode_header(&h, card.as_mut_ptr());
             encode_header(&h, card.as_mut_ptr().add(LAY.header_b() as usize * 512));

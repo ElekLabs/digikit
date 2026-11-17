@@ -64,8 +64,6 @@ int main(void) {
             "-I",
             str(REPO_ROOT / "sdk/include"),
             "-I",
-            str(REPO_ROOT / "sdk/patched-in/include"),
-            "-I",
             str(REPO_ROOT / "tests/fixtures/modules/native-page/build/gen"),
             str(source),
             "-o",

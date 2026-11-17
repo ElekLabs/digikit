@@ -1,6 +1,6 @@
 // The pure part of the page choice in Console.tsx. Host tests: apps/desktop/ui/tests/page.test.ts.
 
-export type Page = 'emulator' | 'transfer' | 'remote' | 'firmware';
+export type Page = 'emulator' | 'transfer' | 'files' | 'remote' | 'firmware';
 
 /**
  * The page to show. Transfer and Remote talk to the selected target: a device on a MIDI port answers for itself, so the pages stay.

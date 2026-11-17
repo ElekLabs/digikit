@@ -8,7 +8,7 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 
-from tools.patchkit import modroots, pk_conform  # noqa: E402
+from tools.patchkit import modroots  # noqa: E402
 
 TYPES = ROOT / "modules" / "core" / "adapters" / "machines" / "types.toml"
 STOCK_TYPES = {"dt2": 7, "dn2": 5}  # the first number that is not a stock type
@@ -18,14 +18,8 @@ def machine_entries() -> list[tuple[str, str, list[str]]]:
     out = []
     for m in sorted(modroots.manifests().values()):
         d = tomllib.loads((m / "module.toml").read_text())
-        # hand-written rows and the `DK_MACHINE` records (`patchkit desc`)
         rows = [e for e in d.get("entry", []) if e["registry"] == "machines"]
-        declared = (
-            pk_conform.desc_records(d["module"]["id"])["machines"]
-            if d["module"].get("type") == "machine"
-            else []
-        )
-        for e in [*rows, *declared]:
+        for e in rows:
             # a module without a device filter is meant for the devices its [targets] name
             on = {k.split("-")[0] for k in d.get("targets", {})}
             out.append((d["module"]["id"], e["id"], e.get("devices") or sorted(on)))

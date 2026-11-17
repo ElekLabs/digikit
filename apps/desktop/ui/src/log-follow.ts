@@ -1,16 +1,18 @@
 // Follows the runtime log of the emulator and of the device on the MIDI port chosen last, and puts what it finds in the workbench log.
 // One poll loop per origin, once a second while the drawer is open, every 5 s for the device while it is closed, none while the window is hidden (log-follow-core.ts has the rules). Both read through the shared sessions of
-// apps/web/src/transfer/target.ts, so their requests take their turn with the Transfer pane's.
+// packages/workbench-core/src/transfer/target.ts, so their requests take their turn with the Transfer pane's.
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { readFault, type CardLogState, type DkSession, type LogConfig } from '@digi/dk-session';
 import type { LogInput, Origin } from './log-core.ts';
 import { changeLevel, configOf, readLevels, type LevelChange, type LevelView } from './log-level-core.ts';
 import { LogFollower, POLL_MS, pace, type FollowSession, type OriginStatus } from './log-follow-core.ts';
 import { logInputs } from './log-state.ts';
+import type { LogNames } from '@digi/dk-session/log-names';
 
 /** The protocol session as the follower uses it. */
 export const followSession = (dk: DkSession): FollowSession => ({
   info: (quick) => dk.info(quick),
+  peek: (addr, len) => dk.peek(addr, len),
   logPage: (from, quick) => dk.logPage(from, quick),
   logConfig: (quick) => dk.logConfig(quick),
   setLogConfig: (level, modules, quick) => dk.setLogConfig(level, modules, quick),
@@ -25,8 +27,13 @@ export interface FollowEnv {
   follow(): boolean;
   /** A firmware flash is running: the Firmware page has the MIDI port. */
   flashing(): boolean;
-  emulator: { running(): boolean; session(): Promise<FollowSession> };
-  device: { port(): string | undefined; session(): Promise<FollowSession>; present(): Promise<boolean> };
+  emulator: { running(): boolean; session(): Promise<FollowSession>; names?: LogNames };
+  device: {
+    port(): string | undefined;
+    session(): Promise<FollowSession>;
+    present(): Promise<boolean>;
+    names?: LogNames;
+  };
   push?(inputs: LogInput[]): void;
   /** The window is on screen (default: yes). A hidden window asks nothing of the device. */
   shown?(): boolean;
@@ -100,6 +107,7 @@ export function createLogFollow(env: FollowEnv): LogFollow {
           origin,
           session: source.session,
           present: 'present' in source ? source.present : undefined,
+          names: 'names' in source ? source.names : undefined,
           now,
           out: {
             push,

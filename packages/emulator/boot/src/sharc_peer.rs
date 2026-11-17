@@ -141,6 +141,12 @@ pub trait DspEngine {
     fn region_profile(&self) -> Option<sharc_native::RegionProfile> {
         None
     }
+    /// Enable or clear the interpreter's instruction counts per PC.
+    fn set_pc_hist(&mut self, _enabled: bool) {}
+    /// Interpreted instructions per PC (short word), by PC.
+    fn pc_hist(&self) -> Option<Vec<(u32, u64)>> {
+        None
+    }
     /// Enable the existing exact execution maps. The profile is frequency
     /// data only; it adds no per-instruction timer reads.
     fn set_execution_profile(&mut self, _enabled: bool) -> bool {
@@ -1032,6 +1038,7 @@ enum Msg {
     Export,
     Report,
     RegionProfile(bool),
+    PcHist(bool),
     ExecutionProfile {
         enabled: bool,
         ack: mpsc::Sender<bool>,
@@ -1077,6 +1084,8 @@ pub struct WorkerReport {
     pub model_stats: Option<sharc_native::ModelStats>,
     /// Per-entry dispatch costs, only after `set_region_profile(true)`.
     pub region_profile: Option<sharc_native::RegionProfile>,
+    /// Interpreted instructions per PC, only after `set_pc_hist(true)` (a full report only).
+    pub pc_hist: Option<Vec<(u32, u64)>>,
     /// Wall time of each frame the worker handled (SPI exchange + DSP period +
     /// SPORT block), in nanoseconds, in order; only with link timing, at most
     /// [`PERIOD_RECORD_LIMIT`] entries.
@@ -1341,6 +1350,7 @@ impl ThreadedPeer {
                                 tiers: core.engine.tier_counters(),
                                 model_stats: core.engine.model_stats(),
                                 region_profile: core.engine.region_profile(),
+                                pc_hist: core.engine.pc_hist(),
                                 period_ns: period_ns.clone(),
                                 periods,
                                 wait_ticks,
@@ -1355,6 +1365,7 @@ impl ThreadedPeer {
                             let _ = export_tx.send((core.engine.export(), core.engine.icount()));
                         }
                         Msg::RegionProfile(enabled) => core.engine.set_region_profile(enabled),
+                        Msg::PcHist(enabled) => core.engine.set_pc_hist(enabled),
                         Msg::ExecutionProfile { enabled, ack } => {
                             let _ = ack.send(core.engine.set_execution_profile(enabled));
                         }
@@ -1482,6 +1493,14 @@ impl ThreadedHandle {
             .tx
             .as_ref()
             .is_some_and(|c| c.send(Msg::RegionProfile(enabled)).is_ok())
+    }
+    /// Enable or clear the worker's interpreter instruction counts per PC.
+    pub fn set_pc_hist(&self, enabled: bool) -> bool {
+        self.link
+            .borrow()
+            .tx
+            .as_ref()
+            .is_some_and(|c| c.send(Msg::PcHist(enabled)).is_ok())
     }
     /// Enable the exact, non-timing execution maps and wait for worker order.
     pub fn set_execution_profile(&self, enabled: bool) -> bool {

@@ -76,6 +76,10 @@ struct Hook {
     mode: String,
     regs: Regs,
     handler: Option<Handler>,
+    /// A hook without a `handler` (a raw hook, entered at its own entry) may continue in the displaced stock instructions of the site: `tail = true`.
+    /// `patchkit bind` then generates that code from the user's firmware and resolves the `dk_tail_<hash>` references of the service to it.
+    #[serde(default)]
+    tail: bool,
     #[serde(default)]
     was: Vec<String>,
     cpu: Option<String>,
@@ -171,10 +175,106 @@ struct StaticDef {
 }
 
 /// Where a handler argument comes from at the hook.
-enum ArgSrc {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HandlerArg {
     Reg(String),
     /// `sp+N` at the hook, N a multiple of 4 and at least 4.
     Stack(u32),
+}
+
+type ArgSrc = HandlerArg;
+
+/// What a hook's call sequence does around the handler: the registers it saves (d0, d1, a0, a1 that the hook does not
+/// clobber) and the handler's arguments, as `gas_hook` writes them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HandlerPlan {
+    pub save: Vec<&'static str>,
+    pub args: Vec<HandlerArg>,
+}
+
+/// The handler plan of the declared hook `hook` on the device `device_short` (`dt2`, `dn2`). `decls` are the texts of the `devices/fw/` files
+/// ([`fw_texts`]).
+pub fn handler_plan(decls: &[&str], device_short: &str, hook: &str) -> Result<HandlerPlan> {
+    for text in decls.iter().copied() {
+        let f: Files = toml::from_str(text).map_err(|e| err!("devices/fw: {e}"))?;
+        for h in f.hook.iter().filter(|h| h.name == hook) {
+            if !h.devices.is_empty() && !h.devices.iter().any(|d| d == device_short) {
+                return Err(err!("{hook}: not declared for the device {device_short}"));
+            }
+            let Some(handler) = &h.handler else {
+                return Err(err!("{hook}: the hook has no handler"));
+            };
+            let inputs = expand_regs(hook, true, &h.regs.inputs)?;
+            let clobbers = expand_regs(hook, true, &h.regs.clobbers)?;
+            let (save, args) = plan_of(hook, &inputs, &clobbers, &handler.args)?;
+            return Ok(HandlerPlan { save, args });
+        }
+    }
+    Err(err!("{hook}: no declared hook with a handler"))
+}
+
+/// Does the declared hook `hook` have a `handler` (a C-callable function the trampoline calls)? A hook without one is a raw hook: entered at its `entry` itself (`bind`).
+pub fn hook_has_handler(decls: &[&str], device_short: &str, hook: &str) -> Result<bool> {
+    Ok(declared_hook(decls, device_short, hook, |h| {
+        h.handler.is_some()
+    })?)
+}
+
+/// Does the raw hook `hook` declare the exit `tail = true` (run the displaced instructions of the site, then continue at site + len)?
+pub fn hook_has_tail(decls: &[&str], device_short: &str, hook: &str) -> Result<bool> {
+    declared_hook(decls, device_short, hook, |h| h.tail)
+}
+
+fn declared_hook(
+    decls: &[&str],
+    device_short: &str,
+    hook: &str,
+    f: impl Fn(&Hook) -> bool,
+) -> Result<bool> {
+    for text in decls.iter().copied() {
+        let files: Files = toml::from_str(text).map_err(|e| err!("devices/fw: {e}"))?;
+        for h in files.hook.iter().filter(|h| h.name == hook) {
+            if !h.devices.is_empty() && !h.devices.iter().any(|d| d == device_short) {
+                return Err(err!("{hook}: not declared for the device {device_short}"));
+            }
+            return Ok(f(h));
+        }
+    }
+    Err(err!("{hook}: no declared hook"))
+}
+
+/// The registers to save and the argument sources of a hook handler. `inputs` and `clobbers` are the expanded `regs.in` and `regs.clobbers`.
+fn plan_of(
+    name: &str,
+    inputs: &[String],
+    clobbers: &[String],
+    handler_args: &[String],
+) -> Result<(Vec<&'static str>, Vec<ArgSrc>)> {
+    let mut args = Vec::new();
+    for a in handler_args {
+        if let Some(n) = a.strip_prefix("sp+") {
+            let off = n
+                .bytes()
+                .all(|b| b.is_ascii_digit())
+                .then(|| n.parse::<u32>().ok())
+                .flatten()
+                .filter(|o| *o >= 4 && o % 4 == 0)
+                .ok_or_else(|| err!("{name}: handler arg {a:?}: expected sp+N with N a multiple of 4, at least 4"))?;
+            args.push(ArgSrc::Stack(off));
+        } else if known_reg(true, a) && a != "ccr" {
+            if !inputs.contains(a) {
+                return Err(err!("{name}: handler arg {a} is not in regs.in"));
+            }
+            args.push(ArgSrc::Reg(a.clone()));
+        } else {
+            return Err(err!("{name}: handler arg {a:?} is not a register or sp+N"));
+        }
+    }
+    let save = ["d0", "d1", "a0", "a1"]
+        .into_iter()
+        .filter(|r| !clobbers.iter().any(|c| c == r))
+        .collect();
+    Ok((save, args))
 }
 
 /// A ColdFire hook with a `handler`.
@@ -944,6 +1044,11 @@ fn check_hook(
             }
         }
     }
+    if h.tail && (h.handler.is_some() || !cf || h.mode != "replace") {
+        return Err(err!(
+            "{name}: `tail = true` is only for a cf hook with mode \"replace\" and no handler (a raw hook)"
+        ));
+    }
     let Some(handler) = &h.handler else {
         return Ok(None);
     };
@@ -963,30 +1068,7 @@ fn check_hook(
             sig.args.len()
         ));
     }
-    let mut args = Vec::new();
-    for a in &handler.args {
-        if let Some(n) = a.strip_prefix("sp+") {
-            let off = n
-                .bytes()
-                .all(|b| b.is_ascii_digit())
-                .then(|| n.parse::<u32>().ok())
-                .flatten()
-                .filter(|o| *o >= 4 && o % 4 == 0)
-                .ok_or_else(|| err!("{name}: handler arg {a:?}: expected sp+N with N a multiple of 4, at least 4"))?;
-            args.push(ArgSrc::Stack(off));
-        } else if known_reg(true, a) && a != "ccr" {
-            if !inputs.contains(a) {
-                return Err(err!("{name}: handler arg {a} is not in regs.in"));
-            }
-            args.push(ArgSrc::Reg(a.clone()));
-        } else {
-            return Err(err!("{name}: handler arg {a:?} is not a register or sp+N"));
-        }
-    }
-    let save = ["d0", "d1", "a0", "a1"]
-        .into_iter()
-        .filter(|r| !clobbers.iter().any(|c| c == r))
-        .collect();
+    let (save, args) = plan_of(name, &inputs, &clobbers, &handler.args)?;
     Ok(Some((
         sub,
         HookDef {
@@ -1193,6 +1275,13 @@ fn collect(root: &Path, dir: &Path, rel: &str, out: &mut Vec<(String, String)>) 
         }
     }
     Ok(())
+}
+
+/// The texts of every declaration file under `devices/fw/` of the repository root, in the order `generate` reads them.
+pub fn fw_texts(root: &Path) -> Result<Vec<String>> {
+    let mut files = Vec::new();
+    collect(root, &root.join(SOURCE), SOURCE, &mut files)?;
+    Ok(files.into_iter().map(|(_, t)| t).collect())
 }
 
 /// The outputs, reading `devices/fw/` under the repository root.

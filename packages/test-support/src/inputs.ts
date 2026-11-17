@@ -6,12 +6,23 @@ import { resolveTiers } from './emulator-config.ts';
 
 export type Device = 'dt2' | 'dn2';
 
-// (device, version) -> base .syx and ready dir; same table as FIRMWARE in tools/patchkit/pk_harness.py.
+interface ReadyJson {
+  ready_dir: string;
+  ready_dirs: { dt2: string };
+}
+
+// (device, version) -> base .syx and ready dir. The ready dirs come from tools/emulator/ready_inputs.json,
+// like FIRMWARE in tools/patchkit/pk_harness.py.
 // Override the ready dir with DIGI_PK_READY_<DEV>_<VER> (version without the dot).
-const FIRMWARE: Record<string, { syx: string; ready: string }> = {
-  'dt2 1.17': { syx: 'Digitakt_II_OS1.17.syx', ready: 'out/ready-pk-dt2-117' },
-  'dn2 1.12': { syx: 'Digitone_II_OS1.12.syx', ready: 'out/ready-fix-dn2-112' },
-};
+function firmwareTable(): Record<string, { syx: string; ready: string }> {
+  const json = JSON.parse(
+    fs.readFileSync(path.join(repoRoot(), 'tools/emulator/ready_inputs.json'), 'utf8'),
+  ) as ReadyJson;
+  return {
+    'dt2 1.17': { syx: 'Digitakt_II_OS1.17.syx', ready: json.ready_dirs.dt2 },
+    'dn2 1.12': { syx: 'Digitone_II_OS1.12.syx', ready: json.ready_dir },
+  };
+}
 
 export interface ReadyInputs {
   syx: string;
@@ -31,14 +42,21 @@ export function repoRoot(): string {
   }
 }
 
+/** The stock images: $DIGI_FIRMWARE_DIR (relative to the repository root), else firmware/. The same rule as
+ * tools/firmware/config.py FIRMWARE_DIR, the control daemon and tools/nx/device-inputs.mjs. */
+export function firmwareDir(env: NodeJS.ProcessEnv = process.env): string {
+  const dir = env.DIGI_FIRMWARE_DIR;
+  return dir ? path.resolve(repoRoot(), dir) : path.join(repoRoot(), 'firmware');
+}
+
 /** The .syx and ready-input files of a device and firmware version; throws when one is missing. */
 export function resolveInputs(device: Device, firmware: string): ReadyInputs {
   const root = repoRoot();
-  const spec = FIRMWARE[`${device} ${firmware}`];
+  const spec = firmwareTable()[`${device} ${firmware}`];
   let syx: string;
   let readyDir: string;
   if (spec) {
-    syx = path.join(root, 'firmware', spec.syx);
+    syx = path.join(firmwareDir(), spec.syx);
     const env = process.env[`DIGI_PK_READY_${device.toUpperCase()}_${firmware.replace('.', '')}`];
     readyDir = env ?? path.join(root, spec.ready);
   } else {
@@ -55,7 +73,7 @@ export function resolveInputs(device: Device, firmware: string): ReadyInputs {
     if (!fs.existsSync(f)) {
       throw new Error(
         `${f} is missing; build the ready dir with ` +
-          `\`uv run python -m tools.emulator.ready ${device} --syx ${path.basename(syx)} --out ${readyDir} --force\``,
+          `\`uv run python -m tools.emulator.ready ${device} --syx ${syx} --out ${readyDir} --force\``,
       );
     }
   }

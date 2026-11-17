@@ -13,8 +13,16 @@
 #define DK_GRANULE 64
 #define DK_DSP_SLACK 8
 #define DK_ARENA_HDR 16
-#define DK_COLLECT_BYTES 6320
+#define DK_COLLECT_BYTES 7486
+#define DK_TABLE_MAGIC 1145787458
+#define DK_TABLE_VERSION 2
+#define DK_PROVIDER_MAX 6
+#define DK_BIND_MAX 24
+#define DK_INSTALL_SITES 48
+#define DK_SLOTS_MAX 16
+#define DK_INFO_MAX 64
 #define DK_MAX_VOICES 8
 #define DK_MAX_FX 4
+#define DK_MAX_MODULES 8
 
 #endif /* DK_GEN_LIMITS_H */

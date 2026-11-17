@@ -113,7 +113,7 @@ const hostEnv = {
     kernels[id] = null;
   },
 };
-// --split 1: the two-worker session of the browser (apps/web/src/split-session.ts):
+// --split 1: the two-worker session of the browser (packages/workbench-core/src/split-session.ts):
 // the ColdFire instance runs in this thread, the DSP instance in a worker_threads
 // worker (tools/devtools/wasm_split.mjs), DSPI2 frames cross a SharedArrayBuffer. Same
 // scenario loop and events, so the PCM must be the single-instance PCM.
@@ -127,7 +127,7 @@ const dspiStub = {
   },
 };
 if (args.split === '1') {
-  const web = path.join(root, 'apps/web/src');
+  const web = path.join(root, 'packages/workbench-core/src');
   const { createCfSide } = await import(path.join(web, 'split-session.ts'));
   const { createLinkBuffer } = await import(path.join(web, 'sab-link.ts'));
   const { Worker } = await import('node:worker_threads');
@@ -319,7 +319,7 @@ const wallS = (performance.now() - wallStart) / 1000;
 let pcm = Buffer.concat(chunks);
 let stats;
 if (cfSide) {
-  const { LinkServer } = await import(path.join(root, 'apps/web/src/sab-link.ts'));
+  const { LinkServer } = await import(path.join(root, 'packages/workbench-core/src/sab-link.ts'));
   new LinkServer(linkBuffer).close();
   const done = await dspDone;
   pcm = Buffer.from(done.pcm);

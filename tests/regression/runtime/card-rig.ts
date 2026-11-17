@@ -7,7 +7,14 @@ import { DkSession, EmuUsbTransport, frame, parseReply } from '@digi/dk-session'
 import { RpcError, type InitialButton } from '@digi/control-client';
 import { resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
 import { describe, expect } from 'vitest';
-import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession, type RuntimeCase } from '../support.ts';
+import {
+  expectNoGuardHits,
+  withReusablePatchedSession,
+  type PatchedSession,
+  type RuntimeCase,
+  type TestRuntime,
+  withWaitApi,
+} from '../support.ts';
 import {
   bootInfo,
   bootInfoLoaded,
@@ -21,16 +28,18 @@ import {
 } from './card-kit.ts';
 import { cachedCard, cachedCardId, cardKey, fileSha } from './card-cache.ts';
 import { uploadStore } from './device-data.ts';
-import { advance, bounded, options, rpc } from './fx-live.ts';
+import { bounded, options, rpc, SETTLE } from './fx-live.ts';
 import { drainInputs, withPausedFxProtocol } from './fx-session.ts';
-import { pollEmulated } from './waits.ts';
+import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
 import { moduleArtifact } from './install.ts';
+import { boundService, neededServices, servicePath, SERVICE_MODULES } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { RING_SYMBOLS } from './runtime-menu.ts';
 import {
   planSymbol,
+  prepareRuntimePlanListedOffline,
   prepareRuntimePlanOffline,
   validateRuntimePlan,
   type PreparedRuntimePlan,
@@ -47,6 +56,7 @@ import {
   runtimeWatchEnv,
   withoutOwn,
 } from './write-safety.ts';
+import { rootsOf } from './image-roots.ts';
 
 /**
  * The one card fixture of the runtime device tests (settings, round trip, equiv, debug, card, crash, safe mode and upload): an owned daemon
@@ -56,7 +66,7 @@ import {
  */
 
 /** The runtime image of the Python scenarios (`B.RT`). */
-export const RT = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
+export const RT = rootsOf('rt');
 /** Runtime variables the card scenarios read or poke (`DKRT_BOOT` is always planned). */
 export const CARD_SYMBOLS = ['DKRT_CARD', 'DKRT_CRASH', 'DKRT_MAILBOX', 'DKRT_STATE', ...RING_SYMBOLS];
 /** The test knob `DKRT_STORE_CAP` keeps every sector from here to header B out of the allocations (a DN2 store of 20 GiB then fits INFO's 32 bits). */
@@ -79,7 +89,7 @@ export interface CardRigOptions {
   symbols?: string[];
   /** Daemon environment besides the write watch; it overrides the watch's variables. A function gets the prepared runtime plan when the daemon starts. */
   env?: Record<string, string> | ((prepared: PreparedRuntimePlan) => Record<string, string>);
-  /** ColdFire-only daemon ('zero'; 'cold': also without a snapshot) or with the SHARC (default). */
+  /** ColdFire-only daemon ('zero', the default via `resolveDsp`; 'cold': also without a snapshot) or with the SHARC ('sharc'). */
   dsp?: 'zero' | 'sharc' | 'cold';
   /** Configure coupled audio without loading stock firmware before the first explicit baseline. */
   startEmpty?: boolean;
@@ -137,14 +147,14 @@ export interface CardRig {
   first(): Promise<RuntimeCase>;
   /** Wait for the runtime's UI and pause (the test steps time itself). */
   settle(
-    runtime: PatchedSession & { epoch?: number },
+    runtime: TestRuntime & { epoch?: number },
     afterEpoch?: number,
     options?: { emulatedMs?: number },
-  ): Promise<PatchedSession>;
+  ): Promise<TestRuntime>;
   /** Poll until the UI loop was reached (and the boot is safe mode when `safe`); returns the boot's fields. */
   ready(safe?: boolean): Promise<Awaited<ReturnType<typeof bootInfo>>>;
   /** A protocol restart (the card and its guest writes stay); returns the runtime of the new boot, settled. */
-  restart(runtime: PatchedSession): Promise<PatchedSession>;
+  restart(runtime: PatchedSession): Promise<TestRuntime>;
   /** Run protocol calls on the paused daemon (the transport steps the emulator). */
   usb<T>(runtime: PatchedSession, run: (dk: DkSession) => Promise<T>): Promise<T>;
   /** The card the guest left: `base` (default the card booted last) with the overlay of its writes laid over a copy (Python `card_after`). */
@@ -157,8 +167,8 @@ export interface CardRig {
   writes(tag: string): Promise<Set<number>>;
   /** Allow store sectors in the lifetime check (a test that writes them on purpose). */
   allowStoreWrites(sectors: Iterable<number>): void;
-  /** Step until the guest soft-resets and the cold boot is ready (Python `Rig.wait_reset`). */
-  waitReset(): Promise<void>;
+  /** Step until the guest soft-resets and the cold boot is ready (Python `Rig.wait_reset`). `steps`: the bound, in steps of 400k instructions (about 4.5 DSP blocks each). */
+  waitReset(steps?: number): Promise<void>;
 
   // ---- paused protocol sessions (the upload tests) ----
   /** Cold boot on a card of its own that shares the image of `card`, wait for the main UI, pause and settle 300 ms; returns a protocol session that steps the emulator while it waits for a reply. */
@@ -250,10 +260,20 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
    */
   const build = async (session: Session, tag: string, spec: CardSpec = {}) => {
     const { modules = [], name: _name, ...rest } = spec;
+    const files = modules.map((m) => (typeof m === 'string' ? mod(m) : m));
+    // the services that these modules need go on the card too, bound to the stock firmware (`service-files.ts`)
+    const services = await Promise.all(
+      neededServices(files.map((m) => m.file))
+        .filter((name) => !files.some((m) => m.name === servicePath(name)))
+        .map(async (name) => ({
+          name: servicePath(name),
+          file: await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
+        })),
+    );
     const options = {
       ...(o.project ? { syx: resolveInputs(device, FIRMWARE[device]).syx } : {}),
       ...rest,
-      modules: modules.map((m) => (typeof m === 'string' ? mod(m) : m)),
+      modules: [...files, ...services],
     };
     const base = options.base ? cachedCardId(options.base) : undefined;
     if (options.base && !base) return buildCard(device, { ...options, dir: freshDir(session, tag) });
@@ -278,13 +298,10 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
           path.join(os.tmpdir(), `digi-${scope.split(':')[0]!.replace(/\W+/g, '-')}-${device}-`),
         );
         console.info('card scenario artifacts:', artifacts);
-        prepared = await prepareRuntimePlanOffline(
-          { device, firmware: FIRMWARE[device] },
-          artifacts,
-          artifacts,
-          symbols,
-          o.roots ? { modules: o.roots } : undefined,
-        );
+        const target = { device, firmware: FIRMWARE[device] };
+        prepared = o.roots
+          ? await prepareRuntimePlanListedOffline(target, artifacts, artifacts, symbols, { modules: o.roots })
+          : await prepareRuntimePlanOffline(target, artifacts, artifacts, symbols);
         watchOutput = path.join(artifacts, 'writewatch.jsonl');
         // a plain image has no runtime areas to watch
         const env = o.plain ? {} : runtimeWatchEnv(prepared.planFile, watchOutput);
@@ -361,13 +378,13 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     options = {},
   ) => {
     if (o.plain) {
-      await advance(runtime.session, 300);
+      await runtime.ui.wait({ ms: 300, why: SETTLE });
       await rpc(runtime.session, 'run.mode', { mode: 'paused' });
       return runtime;
     }
     if (o.hold) {
       // Python `settle_ms` (SETTLE_MS, 300 emulated ms), then `wait_dsp`: up to 5 s until no module is still LOADING (its DSP part follows the ColdFire part)
-      await advance(runtime.session, 300);
+      await runtime.ui.wait({ ms: 300, why: SETTLE });
       await bootInfoLoaded(runtime.session, prepared.plan);
     }
     await expectRuntimeUi(runtime.session, prepared.plan, artifacts, {
@@ -452,10 +469,10 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       await rpc(session, 'run.mode', { mode: 'free' });
       await bounded(() => runtime.dk.restart());
       runtime.dk.cancelPending();
-      const dk = new DkSession(new EmuUsbTransport((method, params) => session.client.call(method, params)));
+      const dk = emulatorDk(session);
       // This controller can answer throughout the guest reset: settle proves the fresh ready epoch/UI hook.
       cap = undefined;
-      return settle({ session, dk, close: runtime.close }, before);
+      return settle(withWaitApi({ session, dk, close: runtime.close }), before);
     },
     usb: (runtime, run) => withPausedFxProtocol(runtime, run),
     after: (tag = `after-${++seq}`, base = image) => afterCard(tag, base),
@@ -473,7 +490,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     allowStoreWrites(sectors) {
       for (const s of sectors) extra.add(s);
     },
-    async waitReset() {
+    async waitReset(maxSteps = WAIT_RESET_STEPS) {
       const { session } = fixture.runtime;
       const { client } = session;
       client.drainEvents();
@@ -489,8 +506,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
             if (!(error instanceof RpcError)) throw error;
           });
         } else {
-          if (steps >= WAIT_RESET_STEPS)
-            throw new Error(`no reset within ${WAIT_RESET_STEPS * WAIT_RESET_STEP_INSNS} instructions`);
+          if (steps >= maxSteps) throw new Error(`no reset within ${maxSteps * WAIT_RESET_STEP_INSNS} instructions`);
           await client.step(WAIT_RESET_STEP_INSNS, { timeout_wall_s: 30 }).then(
             () => void steps++,
             (error) => {
@@ -531,9 +547,10 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       await expectRuntimeUi(runtime.session, prepared.plan, artifacts, { afterEpoch: runtime.epoch - 1 });
       await drainInputs(runtime.session);
       await rpc(runtime.session, 'run.mode', { mode: 'paused' });
-      await advance(runtime.session, 300);
+      await runtime.ui.wait({ ms: 300, why: SETTLE });
       if (previous && previous !== path.dirname(next)) fs.rmSync(previous, { recursive: true, force: true });
       clone = next;
+      // Wall-time wait: a stepping transport advances the emulator itself, with a 60 s timeout.
       const transport = new EmuUsbTransport((method, params) => runtime.session.client.call(method, params), {
         stepInstructions: 400_000,
       });

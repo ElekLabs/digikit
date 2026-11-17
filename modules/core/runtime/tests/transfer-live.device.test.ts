@@ -8,6 +8,7 @@ import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-cli.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 interface FolderResult {
   folder: string;
@@ -38,9 +39,7 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   const entry = entries.find((e) => e.path === modulePath)!;
 
   // The store follows the guest's card writes after its quiet period (about two seconds).
-  await expect
-    .poll(mirroredHash, { timeout: 30_000, interval: 500, message: `mirror hash: ${mirrored}` })
-    .toBe(entry.hash);
+  await expectPollEmulated(session, mirroredHash, (value) => expect(value).toBe(entry.hash), { emulatedMs: 30000, intervalMs: 500, message: `mirror hash: ${mirrored}` });
   const folder = await session.client.call<FolderResult>('card.folder');
   record(artifacts, 'installed-folder', folder);
   expect(folder.folder, 'card.folder reports the session-owned mirror').toBe(mirror);

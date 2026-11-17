@@ -1,26 +1,26 @@
 // The Memory panel: what the resources a device limits are used for. A tab of the right-hand column (SidePanels.tsx) of the Emulator page, beside
 // Card and Metrics, and of the Remote page, alone; in the Card panel's look (card-panel.css). One bar per resource the device limits
-// (memory-core.ts); each bar is split into one segment per loaded module, coloured by the module's type, then free space (a count with few slots,
+// (memory-core.ts); under each bar a table lists what each module takes of it; each bar is split into one segment per loaded module, coloured by the module's type, then free space (a count with few slots,
 // such as Machines, is one cell per slot instead); hover a
 // segment for the module and its amount.
 // The panel reads CAPACITY, MODULES and the local library (memory-backend.ts) over the session it is given, which is the target's one session
-// (target.ts): when its tab is shown, when a Transfer job ended or the emulator restarted (the same signal the Card panel reads), when
+// (target.ts): when its tab is shown, when a Transfer job ended or the emulator restarted (the same signal the Files page reads), when
 // the window gets the focus, and with its Refresh button. One read at a time (read-gate-core.ts); a read that fails is tried again a few
 // times with a growing gap (a device that is still booting after a restart). A panel whose tab is not shown reads nothing. Nothing pending or
 // ticked is shown.
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type JSX } from 'solid-js';
-import { panels } from '@web/data/faceplates';
-import { isCancelled, isNoRuntime } from '@web/modules/backend';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import { isCancelled, isNoRuntime } from '@digi/workbench-core/modules/backend.ts';
 import type { DkSession } from '@digi/dk-session';
 import { cardRefresh } from './card-state';
 import { deviceOfPort } from './remote-core';
-import { freeTitle, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
+import { freeTitle, moduleRows, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
 import { readMemory, type MemoryReading } from './memory-backend';
 import { createReadGate } from './read-gate-core';
-import { focusReadDue } from '@web/transfer/refresh-core';
-import { asked, noteReply } from '@web/transfer/connection-state';
-import { checkRuntime, emulatorRuntime, sameTarget, target } from '@web/transfer/target';
-import { failureLine } from '@web/transfer/wait-core';
+import { focusReadDue } from '@digi/workbench-core/transfer/refresh-core.ts';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
+import { sameTarget } from '@digi/workbench-core/transfer/target.ts';
+import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import { reloadWithRuntime } from './emulator-actions';
 import './card-panel.css';
 import './memory-panel.css';
@@ -47,6 +47,9 @@ export default function MemoryPanel(props: {
   /** Set when the panel is a tab of the column (SidePanels.tsx): the tabpanel's id and the id of its tab. */
   tabpanel?: { id: string; labelledBy: string };
 }): JSX.Element {
+  const app = useTransferApp();
+  const { asked, noteReply } = app.connection;
+  const { checkRuntime, emulatorRuntime, target } = app.target;
   const [reading, setReading] = createSignal<MemoryReading>();
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -66,7 +69,9 @@ export default function MemoryPanel(props: {
         if (readsTarget()) await asked(async () => check());
         else check();
         const s = await props.session();
-        const r = readsTarget() ? await asked(() => readMemory(s)) : await readMemory(s);
+        const r = readsTarget()
+          ? await asked(() => readMemory(s, app.loadLibrary))
+          : await readMemory(s, app.loadLibrary);
         if (current()) {
           setReading(r);
           setError('');
@@ -183,6 +188,17 @@ export default function MemoryPanel(props: {
                         </div>
                       )}
                     </Show>
+                    <ul class="mem-mods" aria-label={`${bar.label} by module`}>
+                      <For each={moduleRows(bar)}>
+                        {(m) => (
+                          <li>
+                            <span class={`swatch ${m.kind}`} />
+                            <span class="name">{m.label}</span>
+                            <span class="amount">{m.text}</span>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
                     <Show when={noteText(bar)}>
                       {(note) => (
                         <span class="mem-note" classList={{ over: bar.over }}>

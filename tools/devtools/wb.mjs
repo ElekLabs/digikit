@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Workbench actions from the command line, through the workbench's own code: the dk-session TypeScript (prepareUpload, openSamples, put,
 // verify) over the dkmidi Rust MIDI port (packages/dkmidi, the code the desktop app uses), here as a child process on stdin and stdout.
+// The workbench's Host (packages/workbench-core/src/host/host.ts) is the NodeHost here (src/node/node-host.ts): `ports` lists the MIDI ports
+// and the samples commands read the device profile through it, the calls the desktop app makes through its Tauri Host.
 //
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] info
@@ -10,7 +12,15 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store ls [PREFIX]
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store put LOCAL REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store rm REMOTE
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer install ID... [--stock STOCK.syx]   (modules with the services they need; tools/devtools/wb_transfer.mjs)
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer delete PATH...
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
+//     node tools/devtools/wb.mjs [--format json|text] addrmap lookup ADDR... | module analyse DKM DKO | profile report FILE | profile record --seconds N --out FILE [--cpu cf|sharc]
+//
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] profile spans [--start|--stop|--reset] [--out FILE]   (a device command: reads the runtime span counters; --start resets them, then starts)
+//
+// The `--format` line above is the offline group (no device, no dkmidi): names for addresses, module DSP analysis and profiles, through dkprof.wasm (`mise run wasm:dkprof`).
+// Its options and output are in tools/devtools/wb_prof.mjs and docs/ADDRMAP.md, docs/INSTRUMENTATION.md and packages/dksharc/README.md.
 //
 // `log card` prints the card log state of the debug module (the log written to data/digikit/debug on the card, kept across restarts); `on` / `off` switch it;
 // `get` reads the card log files and writes each raw (.bin) and decoded (.txt) to DIR (default out/runs/cardlog/<YYYYmmdd-HHMMSS>/), the older boot first.
@@ -24,9 +34,13 @@
 // --speed MASK (4 bits, decimal or 0x): sets the four speed switches through usb-fast STATUS 'S' before the put (bit 0 hash once, bit 1 USB receive ring,
 // bit 2 read-back hash overlap, bit 3 large card commands; all on at boot); the run prints the resulting mask and the usb-fast STATUS words 18 (staging bytes)
 // and 19 (receive ring slots): the hardware A/B of docs/findings/126-usb-fast-transfer-ceilings.md.
+// The files go with the batch commit (runtime 0.8.3, usb-fast): the device verifies each file at END and names up to 16 of them in one table commit; `samples put`
+// sends COMMIT after the last file and reports the files as saved then (docs/plans/usb-fast-batch.md). A device without the batch
+// commit commits at END and says so (4-byte END reply).
 // link and MB/s of every file and of the run: the repeatable bench (docs/plans/usb-fast.md step 6): run it once with --bulk off and once with auto.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -39,6 +53,9 @@ import {
 import { ProcessTransport } from '../../packages/dk-session/src/process-transport.ts';
 import { Sample, prepareUpload } from '../../packages/dk-session/src/dksample.ts';
 import { openSamples, skipVerifyAfterBulk } from '../../packages/dk-session/src/samples.ts';
+import { createNodeHost } from '../../packages/workbench-core/src/node/node-host.ts';
+import { profCommand, profSpans } from './wb_prof.mjs';
+import { transferCommand } from './wb_transfer.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 // the patchkit rule (tools/emulator/native_target.py): a worktree builds into its own target dir; no generated core is the "nogen" key
@@ -46,7 +63,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | log card [on|off|get [--out DIR]]';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--stock STOCK.syx] | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE]';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -58,7 +75,12 @@ const opts = {
   verify: 'auto',
   speed: undefined,
   'bulk-bin': process.env.DKBULK_BIN || path.join(targetRoot, 'nogen/release/dkbulk'),
+  format: undefined,
+  ret: false,
 };
+// the offline group takes these several times
+const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse']);
+const OFFLINE = ['addrmap', 'module', 'profile'];
 const words = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
@@ -70,11 +92,31 @@ for (let i = 0; i < args.length; i++) {
     a === '--verify' ||
     a === '--bulk-bin' ||
     a === '--speed' ||
-    a === '--out'
+    a === '--out' ||
+    a === '--stock' ||
+    [
+      '--format',
+      '--map',
+      '--image',
+      '--loads',
+      '--snapshot',
+      '--load',
+      '--dsp-base',
+      '--analyse',
+      '--cpu',
+      '--top',
+      '--seconds',
+      '--run-dir',
+    ].includes(a)
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);
-    opts[a.slice(2)] = args[++i];
-  } else if (a.startsWith('--')) fail(`unknown option ${a}\n${usage}`);
+    const key = a.slice(2);
+    if (REPEATED.has(key)) (opts[key] ??= []).push(args[++i]);
+    else opts[key] = args[++i];
+  } else if (a === '--ret') opts.ret = true;
+  else if (a === '--since-boot') opts['since-boot'] = true;
+  else if (a === '--start' || a === '--stop' || a === '--reset') opts.op = a.slice(2);
+  else if (a.startsWith('--')) fail(`unknown option ${a}\n${usage}`);
   else words.push(a);
 }
 
@@ -107,7 +149,20 @@ function fail(msg, code = 2) {
   process.exit(code);
 }
 
-if (!existsSync(opts.bin)) fail(`no dkmidi binary at ${opts.bin} (run: mise run dkmidi:build)`);
+const host = createNodeHost({ root, dkmidiBin: opts.bin, dkbulkBin: opts['bulk-bin'] });
+
+/** The samples backend the device profile names (`[storage] samples`), as the desktop app reads it; the stock +Drive when the device or its profile is unknown. */
+async function samplesKind(info) {
+  try {
+    return (await host.library.deviceStorage(info.port)).samples;
+  } catch {
+    return 'stock-rpc';
+  }
+}
+
+const SPANS = words[0] === 'profile' && words[1] === 'spans';
+if ((!OFFLINE.includes(words[0]) || SPANS) && !existsSync(opts.bin))
+  fail(`no dkmidi binary at ${opts.bin} (run: mise run dkmidi:build)`);
 
 /** Start the bridge on the port and open a session on it. */
 function connect(timeoutMs = 60000) {
@@ -291,9 +346,17 @@ async function cardLogGet(session, outDir) {
 
 const [cmd, sub, ...rest] = words;
 let status = 0;
-if (cmd === 'ports') {
-  const r = spawnSync(opts.bin, ['ports'], { stdio: 'inherit' });
-  status = r.status ?? 1;
+if (SPANS) {
+  await withSession((session) => profSpans({ opts, session, fail }));
+} else if (OFFLINE.includes(cmd)) {
+  status = await profCommand({ cmd, sub, rest, opts, root, fail });
+} else if (cmd === 'ports') {
+  try {
+    for (const name of await host.ports.midi.ports()) console.log(name);
+  } catch (e) {
+    console.error(`wb: ${e instanceof Error ? e.message : e}`);
+    status = 1;
+  }
 } else if (cmd === 'info') {
   await withSession(async (session) => {
     console.log(JSON.stringify(await session.info(), null, 2));
@@ -330,7 +393,7 @@ if (cmd === 'ports') {
         (i) => {
           devInfo = i;
           isDt2 = i.port === 'dt2';
-          return i.port === 'dn2' ? 'digikit' : 'stock-rpc';
+          return samplesKind(i);
         },
         () => 'stock-rpc',
       );
@@ -350,37 +413,95 @@ if (cmd === 'ports') {
       let tVerify = 0;
       let count = 0;
       const t0 = performance.now();
-      for (const file of rest) {
+      let tCommit = 0;
+      /** The verify (or its skip) and the line of one file that the device has named in the store. */
+      const finish = async ({ prepared, n, prep, putMs, saved }) => {
+        // the bulk END of the Digitakt II +Drive and of a runtime with the READBACK capability compares a hash the device computed from the written
+        // file; the SysEx verify is skipped then (see skipVerifyAfterBulk)
+        const skip = skipVerifyAfterBulk(opts.verify, link(), kind, devInfo, isDt2);
+        const t = performance.now();
+        const v = skip
+          ? {
+              ok: true,
+              message:
+                opts.verify === 'never'
+                  ? 'verify skipped'
+                  : `device hash checked at END${saved ? ', saved by the batch commit' : ''}`,
+            }
+          : await backend.verify(opts.folder, prepared);
+        const ver = performance.now() - t;
+        tVerify += ver;
+        const s = putMs / 1000;
+        console.log(
+          `${v.ok ? 'ok  ' : 'FAIL'} ${kind === 'digikit' ? 'samples' : '+Drive'}/${opts.folder ? `${opts.folder}/` : ''}${prepared.name}  ${v.message}  ${n} bytes ${s.toFixed(2)} s ${(n / 1e6 / s).toFixed(2)} MB/s via ${link()} prep ${prep.toFixed(0)} ms put ${putMs.toFixed(0)} ms verify ${ver.toFixed(0)} ms`,
+        );
+        if (!v.ok) status = 1;
+      };
+      // files the device verified and holds pending: named by a reply that shows 0 pending, or by the COMMIT after the last file
+      let waiting = [];
+      const flush = async () => {
+        for (const w of waiting.splice(0)) await finish(w);
+      };
+      // The next file is read and prepared while this one is sent. The promise never rejects: a failure is a value that the next iteration reports on its file.
+      const readyFile = async (file) => {
         try {
           if (!statSync(file).isFile()) throw new Error('not a file');
-          let t = performance.now();
-          const prepared = prepareUpload(sample, path.basename(file), Uint8Array.from(readFileSync(file)));
-          const prep = performance.now() - t;
-          t = performance.now();
-          await backend.put(opts.folder, prepared, undefined, { exists: names.has(prepared.name), folderReady: true });
+          const t = performance.now();
+          const prepared = prepareUpload(sample, path.basename(file), Uint8Array.from(await readFile(file)));
+          return { prepared, prep: performance.now() - t };
+        } catch (error) {
+          return { error };
+        }
+      };
+      let ahead = rest.length > 0 ? readyFile(rest[0]) : undefined;
+      for (const [index, file] of rest.entries()) {
+        try {
+          const got = await ahead;
+          ahead = index + 1 < rest.length ? readyFile(rest[index + 1]) : undefined;
+          if (got.error) throw got.error;
+          const { prepared, prep } = got;
+          const t = performance.now();
+          const r = await backend.put(opts.folder, prepared, undefined, {
+            exists: names.has(prepared.name),
+            folderReady: true,
+            defer: backend.commit !== undefined,
+          });
           names.add(prepared.name);
           const putMs = performance.now() - t;
-          const s = putMs / 1000;
           const n = prepared.stored.length;
           total += n;
-          // the bulk END of the Digitakt II +Drive and of a runtime with the READBACK capability compares a hash the device computed from the written
-          // file; the SysEx verify is skipped then (see skipVerifyAfterBulk)
-          const skip = skipVerifyAfterBulk(opts.verify, link(), kind, devInfo, isDt2);
-          t = performance.now();
-          const v = skip
-            ? { ok: true, message: opts.verify === 'never' ? 'verify skipped' : 'device hash checked at END' }
-            : await backend.verify(opts.folder, prepared);
-          const ver = performance.now() - t;
           tPrep += prep;
           tPut += putMs;
-          tVerify += ver;
           count++;
-          console.log(
-            `${v.ok ? 'ok  ' : 'FAIL'} ${kind === 'digikit' ? 'samples' : '+Drive'}/${opts.folder ? `${opts.folder}/` : ''}${prepared.name}  ${v.message}  ${n} bytes ${s.toFixed(2)} s ${(n / 1e6 / s).toFixed(2)} MB/s via ${link()} prep ${prep.toFixed(0)} ms put ${putMs.toFixed(0)} ms verify ${ver.toFixed(0)} ms`,
-          );
-          if (!v.ok) status = 1;
+          const item = { prepared, n, prep, putMs, saved: r !== undefined };
+          if (r && r.pending > 0) {
+            console.log(`pend ${prepared.name}  ${r.pending} pending on the device`);
+            waiting.push(item);
+          } else {
+            await flush();
+            await finish(item);
+          }
         } catch (e) {
           console.error(`FAIL ${file}: ${e instanceof Error ? e.message : e}`);
+          status = 1;
+        }
+      }
+      if (waiting.length) {
+        const t = performance.now();
+        try {
+          const left = await backend.commit();
+          if (left > 0)
+            throw new Error(
+              `${left} files are still held back on the device (a file they replace is being read): not confirmed, run again`,
+            );
+          tCommit = performance.now() - t;
+          console.log(`commit ${waiting.length} files in ${tCommit.toFixed(0)} ms`);
+          await flush();
+        } catch (e) {
+          console.error(
+            `FAIL commit (${waiting.length} files not saved, send again): ${e instanceof Error ? e.message : e}`,
+          );
+          waiting = [];
           status = 1;
         }
       }
@@ -390,7 +511,7 @@ if (cmd === 'ports') {
       );
       if (speedMask !== undefined) console.log(await speedReport(holder.link.session));
       console.log(
-        `phases prep ${tPrep.toFixed(0)} ms put ${tPut.toFixed(0)} ms verify ${tVerify.toFixed(0)} ms, ${count} files ${(count / s).toFixed(2)} files/s`,
+        `phases prep ${tPrep.toFixed(0)} ms put ${tPut.toFixed(0)} ms commit ${tCommit.toFixed(0)} ms verify ${tVerify.toFixed(0)} ms, ${count} files ${(count / s).toFixed(2)} files/s`,
       );
     })();
   } finally {
@@ -407,10 +528,7 @@ if (cmd === 'ports') {
   });
   const sample = await loadSample();
   await withSession(async (session) => {
-    const kind = await session.info().then(
-      (i) => (i.port === 'dn2' ? 'digikit' : 'stock-rpc'),
-      () => 'stock-rpc',
-    );
+    const kind = await session.info().then(samplesKind, () => 'stock-rpc');
     const backend = openSamples(kind, {
       session,
       hashOf: (d) => sample.hash(d),
@@ -439,6 +557,10 @@ if (cmd === 'ports') {
     else if (what === 'get') await cardLogGet(session);
     else if (what === undefined) console.log(cardLogText(await session.cardLog()));
     else fail(usage);
+  });
+} else if (cmd === 'transfer') {
+  await withSession(async (session) => {
+    status = await transferCommand({ host, session, sub, rest, opts, fail });
   });
 } else if (cmd === 'store' && sub === 'ls') {
   await withSession(async (session) => {

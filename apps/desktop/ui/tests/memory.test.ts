@@ -1,5 +1,5 @@
 import type { Bar, KnownModule } from '../src/memory-core.ts';
-import type { Caps } from '../../../web/src/modules/fit.ts';
+import type { Caps } from '@digi/workbench-core/modules/fit.ts';
 // The Memory panel's model (apps/desktop/ui/src/memory-core.ts): one bar per resource the device limits, a segment per loaded module coloured by its
 // type, "other" for the rest of what is used, and the texts.
 import assert from 'node:assert/strict';
@@ -10,6 +10,7 @@ import {
   freeTitle,
   noteText,
   kibText,
+  moduleRows,
   segmentTitle,
   slotCells,
   SPECS,
@@ -239,4 +240,29 @@ test('slots past the limit are drawn after it and marked', () => {
     cells.map((x) => x.over),
     [false, true],
   );
+});
+
+test('per-module rows list what each loaded module takes of a bar, from the fixed capacity and the needs of its file', () => {
+  const bars = buildBars(dn2, loaded, library);
+  // DSP memory: only the machine takes it; the rest of `used` is none (259 KiB of 259 KiB)
+  assert.deepEqual(moduleRows(by(bars, 'DSP_AREA')), [
+    { id: 'test/sine', label: 'sine', kind: 'machine', text: '259 KiB' },
+  ]);
+  // CPU memory: largest first, then the runtime's own 6 KiB as Other
+  assert.deepEqual(
+    moduleRows(by(bars, 'ARENA')).map((r) => [r.label, r.text]),
+    [
+      ['sine', '4 KiB'],
+      ['chorus', '2 KiB'],
+      ['remote', '1 KiB'],
+      ['Other', '6 KiB'],
+    ],
+  );
+  // a count: one row per module that takes a slot
+  assert.deepEqual(
+    moduleRows(by(bars, 'MACHINE_ROWS')).map((r) => [r.label, r.text]),
+    [['sine', '1']],
+  );
+  // a resource nothing takes has no rows
+  assert.deepEqual(moduleRows(by(bars, 'PAGE_ROWS')), []);
 });

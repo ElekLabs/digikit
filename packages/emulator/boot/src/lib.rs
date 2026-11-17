@@ -20,6 +20,7 @@ mod nor_records;
 pub mod panel_leds;
 #[cfg(feature = "play")]
 pub mod pcm_play;
+mod pcprobe;
 mod ram_clear;
 mod runtime;
 #[cfg(feature = "sharc")]
@@ -35,6 +36,7 @@ pub use capture::Dspi2Capture;
 pub use common::FlashWrites;
 pub use cputime::thread_cpu_ns;
 pub use guard::{GUARD_HIT_LIMIT, GuardHit, GuardRange, GuardReport, parse_guard_spec};
+pub use pcprobe::{DEFAULT_KEEP, PcProbeSpec, ProbeSpec, parse_spec as parse_pc_probe_spec};
 pub use periph::clock;
 pub use telemetry::DiagnosticReport;
 pub use watch::{After, FlushHit, WatchConfig, Writer, parse_ranges};

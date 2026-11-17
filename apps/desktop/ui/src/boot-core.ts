@@ -1,6 +1,6 @@
 // The pure part of the loading state in Console.tsx: what the status bar and the Log say while a firmware starts.
 // Host tests: apps/desktop/ui/tests/boot.test.ts.
-import { deviceNameOf, type DeviceId } from '../../../web/src/data/device-profiles';
+import { deviceNameOf, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 
 export type BootDevice = DeviceId;
 /** A firmware that is starting: its file name, and the device when the image tells it (`deviceOfImage`). */

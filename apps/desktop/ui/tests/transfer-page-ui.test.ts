@@ -1,23 +1,26 @@
-import type { UploadEvent, Uploads } from '../src/samples-core.ts';
+import type { UploadEvent, Uploads } from '@digi/workbench-core/transfer/sample-upload.ts';
 type WithoutFolder<T> = T extends unknown ? Omit<T, 'folder'> : never;
 type UploadEventWithoutFolder = WithoutFolder<Exclude<UploadEvent, { event: 'note' }>>;
 // The pure logic behind the Transfer page's behaviour: select all, the speed and the time left, when the page reads by itself, when it says
-// "Waiting for ...", the bottom bar of both modes (apps/web/src/transfer: select-core, rate-core, refresh-core, wait-core, activity, transfer-core,
+// "Waiting for ...", the bottom bar of both modes (packages/workbench-core/src/transfer: select-core, rate-core, refresh-core, wait-core, activity, transfer-core,
 // samples-core). The pictures of the page are checked with `node tools/devtools/ui_shots.mjs` (docs/TESTING.md).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { instrument } from '../../../web/src/transfer/activity.ts';
-import { createRate, etaSeconds, fmtEta, fmtRate, statsLine } from '../../../web/src/transfer/rate-core.ts';
-import { FOCUS_GAP_MS, canAutoRefresh, focusReadDue, listingChanged } from '../../../web/src/transfer/refresh-core.ts';
+import { instrument } from '@digi/workbench-core/transfer/activity.ts';
+import { createRate, etaSeconds, fmtEta, fmtRate, statsLine } from '@digi/workbench-core/transfer/rate-core.ts';
+import {
+  FOCUS_GAP_MS,
+  canAutoRefresh,
+  focusReadDue,
+  listingChanged,
+} from '@digi/workbench-core/transfer/refresh-core.ts';
+import { folderStatus, samplesBar, uploadStatus } from '@digi/workbench-core/transfer/samples-core.ts';
 import {
   applyUpload,
-  folderStatus,
-  samplesBar,
   uploadCancelled,
   uploadFailure,
   uploadLines,
-  uploadStatus,
-} from '../src/samples-core.ts';
+} from '@digi/workbench-core/transfer/sample-upload.ts';
 import {
   MARQUEE_SLOP,
   ROWS_TYPE,
@@ -37,10 +40,10 @@ import {
   selectState,
   tickSelect,
   toggleAll,
-} from '../../../web/src/transfer/select-core.ts';
-import { countLabel, applyEvent, modulesBar, startProgress } from '../../../web/src/transfer/transfer-core.ts';
-import { beginJob, busy, endJob, error, setError } from '../../../web/src/transfer/transfer-state.ts';
-import { WAIT_QUIET_MS, createActivity, waitShown } from '../../../web/src/transfer/wait-core.ts';
+} from '@digi/workbench-core/transfer/select-core.ts';
+import { countLabel, applyEvent, modulesBar, startProgress } from '@digi/workbench-core/transfer/transfer-core.ts';
+import { createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
+import { WAIT_QUIET_MS, createActivity, waitShown } from '@digi/workbench-core/transfer/wait-core.ts';
 
 test('select all: none, some or all of the visible rows; a click ticks all, or clears them when all are ticked', () => {
   const keys = ['a', 'b', 'c'];
@@ -181,7 +184,7 @@ test('a transport reports its traffic: a message is activity, a recv in flight i
   assert.equal(sent.length, 1);
   const pending = t.recv(1000);
   // the module's tracker is shared: a request is now in flight
-  const { quietMs } = await import('../../../web/src/transfer/activity.ts');
+  const { quietMs } = await import('@digi/workbench-core/transfer/activity.ts');
   assert.notEqual(quietMs(), undefined, 'a recv in flight is a waiting request');
   reply = Uint8Array.of(2);
   release();
@@ -341,15 +344,20 @@ const KEYS = ['a', 'b', 'c', 'd', 'e', 'f'];
 const NONE = { shift: false, mod: false };
 const sorted = (s: { selected: Set<string> }) => [...s.selected].sort();
 
-test('click: one row; Cmd or Ctrl toggles; Shift takes the range from the anchor; Shift and Cmd add the range', () => {
+test('click: a plain click or Cmd or Ctrl toggles a row; Shift adds the range from the anchor and keeps earlier ticks', () => {
   let s = clickSelect(KEYS, new Set(), undefined, 'b', NONE);
   assert.deepEqual([sorted(s), s.anchor], [['b'], 'b']);
   s = clickSelect(KEYS, s.selected, s.anchor, 'd', { shift: true, mod: false });
   assert.deepEqual([sorted(s), s.anchor], [['b', 'c', 'd'], 'b'], 'the anchor stays for the next Shift');
-  s = clickSelect(KEYS, s.selected, s.anchor, 'f', { shift: true, mod: false });
-  assert.deepEqual(sorted(s), ['b', 'c', 'd', 'e', 'f'], 'the range replaces the selection');
-  s = clickSelect(KEYS, s.selected, s.anchor, 'a', { shift: true, mod: false });
-  assert.deepEqual(sorted(s), ['a', 'b'], 'a range upwards');
+  s = clickSelect(KEYS, new Set(['a', 'b']), 'b', 'd', { shift: true, mod: false });
+  assert.deepEqual(sorted(s), ['a', 'b', 'c', 'd'], 'Shift keeps the earlier ticks');
+  s = clickSelect(KEYS, new Set(['f', 'c']), 'c', 'a', { shift: true, mod: false });
+  assert.deepEqual(sorted(s), ['a', 'b', 'c', 'f'], 'a range upwards');
+  // a plain click on a second row keeps the first; on a selected row it unticks it
+  s = clickSelect(KEYS, new Set(['a']), 'a', 'c', NONE);
+  assert.deepEqual([sorted(s), s.anchor], [['a', 'c'], 'c']);
+  s = clickSelect(KEYS, s.selected, s.anchor, 'a', NONE);
+  assert.deepEqual(sorted(s), ['c']);
   // Cmd toggles one row and moves the anchor
   s = clickSelect(KEYS, new Set(['a']), 'a', 'c', { shift: false, mod: true });
   assert.deepEqual([sorted(s), s.anchor], [['a', 'c'], 'c']);
@@ -358,14 +366,14 @@ test('click: one row; Cmd or Ctrl toggles; Shift takes the range from the anchor
   // Shift and Cmd: the range is added to what is selected
   s = clickSelect(KEYS, new Set(['a']), 'c', 'e', { shift: true, mod: true });
   assert.deepEqual(sorted(s), ['a', 'c', 'd', 'e']);
-  // a plain click on a selected row among many selects only it (Finder does too)
+  // a plain click on a selected row among many unticks only it
   s = clickSelect(KEYS, new Set(['a', 'b', 'c']), 'a', 'b', NONE);
-  assert.deepEqual(sorted(s), ['b']);
-  // Shift without an anchor (or one that is gone): just the clicked row
+  assert.deepEqual(sorted(s), ['a', 'c']);
+  // Shift without an anchor (or one that is gone): just the clicked row is added
   s = clickSelect(KEYS, new Set(), undefined, 'c', { shift: true, mod: false });
   assert.deepEqual([sorted(s), s.anchor], [['c'], 'c']);
-  s = clickSelect(KEYS, new Set(['x']), 'x', 'c', { shift: true, mod: false });
-  assert.deepEqual(sorted(s), ['c']);
+  s = clickSelect(KEYS, new Set(['a']), 'x', 'c', { shift: true, mod: false });
+  assert.deepEqual(sorted(s), ['a', 'c']);
   assert.deepEqual(modsOf({ shiftKey: true, metaKey: false, ctrlKey: true }), { shift: true, mod: true });
   assert.deepEqual(modsOf({ shiftKey: false, metaKey: true, ctrlKey: false }), { shift: false, mod: true });
 });
@@ -381,15 +389,15 @@ test('the tick of a row toggles that row only; select everything; ticks of rows 
   assert.deepEqual(rangeKeys(KEYS, 'a', 'x'), []);
 });
 
-test('the marquee: the rows the band touches; Shift or Cmd keeps the selection from before; no band is a click that clears', () => {
+test('the marquee: the rows the band touches; a band adds to the selection from before, with or without a modifier; no band is a click that changes nothing', () => {
   const rows = KEYS.map((key, i) => ({ key, top: i * 26, bottom: i * 26 + 25 }));
   assert.deepEqual(marqueeKeys(rows, 30, 60), ['b', 'c'], 'a band that touches the edge of a row takes it');
   assert.deepEqual(marqueeKeys(rows, 60, 30), ['b', 'c'], 'either direction');
   assert.deepEqual(marqueeKeys(rows, 300, 400), [], 'below the last row');
   assert.deepEqual(marqueeKeys(rows, -10, 5), ['a'], 'above the first row');
   assert.deepEqual(marqueeKeys(rows, 0, 1000), KEYS);
-  assert.deepEqual([...marqueeSelection(new Set(['a']), ['c', 'd'], false)], ['c', 'd']);
-  assert.deepEqual([...marqueeSelection(new Set(['a']), ['c', 'd'], true)], ['a', 'c', 'd']);
+  assert.deepEqual([...marqueeSelection(new Set(['a']), ['c', 'd'])], ['a', 'c', 'd']);
+  assert.deepEqual([...marqueeSelection(new Set(['a']), [])], ['a'], 'a band that touches no row keeps the selection');
   assert.ok(MARQUEE_SLOP > 0, 'a press that hardly moves is a click');
 });
 
@@ -439,11 +447,12 @@ test('arrows move the selection by one row; Shift extends from the anchor; the e
   assert.equal(moveSelect([], undefined, undefined, 1, false), undefined);
 });
 
-test('a drag carries the whole selection when it starts on a selected row, else just that row (which becomes the selection)', () => {
+test('a drag carries the whole selection when it starts on a selected row, else just that row; it never changes the selection', () => {
   const sel = new Set(['d', 'b']);
-  assert.deepEqual(dragKeys(KEYS, sel, 'd'), { keys: ['b', 'd'], selected: new Set(['d', 'b']) }, 'list order');
-  assert.deepEqual(dragKeys(KEYS, sel, 'e'), { keys: ['e'], selected: new Set(['e']) });
-  assert.deepEqual(dragKeys(KEYS, new Set(), 'a'), { keys: ['a'], selected: new Set(['a']) });
+  assert.deepEqual(dragKeys(KEYS, sel, 'd'), ['b', 'd'], 'list order');
+  assert.deepEqual(dragKeys(KEYS, sel, 'e'), ['e']);
+  assert.deepEqual([...sel].sort(), ['b', 'd'], 'the selection is unchanged');
+  assert.deepEqual(dragKeys(KEYS, new Set(), 'a'), ['a']);
 });
 
 test('drop targets: the folder row the drop is on, else the open folder; rows of our list or files from outside, nothing else', () => {
@@ -458,6 +467,7 @@ test('drop targets: the folder row the drop is on, else the open folder; rows of
 });
 
 test('the busy action outlives the page: a page that comes back during an upload sees it, and its end clears it once', () => {
+  const { beginJob, busy, endJob, error, setError } = createFakeTransferApp().state;
   assert.equal(beginJob('Uploading'), true);
   // a second page (a new mount) reads busy from the shared state: the bar stays running, the buttons stay off, no job starts
   assert.equal(busy(), 'Uploading');
@@ -485,6 +495,23 @@ test('the busy action outlives the page: a page that comes back during an upload
   assert.equal(endJob(), false, 'the read is asked for once');
   assert.equal(busy(), '');
   setError('');
+});
+
+test('a write job is a target job in the shared store, a read is not', () => {
+  const app = createFakeTransferApp();
+  const { beginJob, busy, endJob } = app.state;
+  const { jobs } = app.jobs;
+  assert.equal(beginJob('Uploading'), true);
+  assert.deepEqual(
+    jobs().list.map((j) => [j.group, j.label]),
+    [['target', 'Uploading']],
+  );
+  endJob();
+  assert.equal(jobs().list.length, 0);
+  assert.equal(beginJob('Reading'), true);
+  assert.equal(jobs().list.length, 0);
+  assert.equal(busy(), 'Reading');
+  endJob();
 });
 
 test('the bar of a resumed upload: files on the device are done at once, but add nothing to the bytes behind the speed and the time left', () => {

@@ -1,11 +1,11 @@
-// A fake runtime log for the Log drawer in the preview (?page=log&log=both|fault|frozen|empty|nodebug: a runtime without the debug module, so without the LOG capability). Each origin is a script of events on a clock:
+// A fake runtime log for the Log drawer in the preview (?page=log&log=both|fault|frozen|empty|nodebug|crash (the emulator found a CPU crash in a module, named through dkprof.wasm): a runtime without the debug module, so without the LOG capability). Each origin is a script of events on a clock:
 // a boot, modules, MOD_LOG lines, then (log=both) a gap in the device's ring, a restart of the emulator, and a boot of the device that found a
 // stopped DSP. The sessions answer as the follower needs them (log-follow-core.ts); the events are the runtime's (docs/findings/46-digikit-debug.md).
 import type { CardLogState, DkLogEvent, Fault, LogConfig } from '@digi/dk-session';
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { FollowSession } from '../src/log-follow-core';
 
-type Mode = 'both' | 'fault' | 'frozen' | 'empty' | 'nodebug';
+type Mode = 'both' | 'fault' | 'frozen' | 'empty' | 'nodebug' | 'crash';
 const query = new URLSearchParams(location.search);
 export const logMode: Mode = (query.get('log') as Mode) ?? 'both';
 /** How much faster than real time the script runs (a screenshot does not wait ten seconds). */
@@ -133,6 +133,43 @@ const emulatorBoot1: Boot = {
   ],
 };
 
+/** Where DKRT_STATE sits in the fake guest, and its bytes: ten header words, 13 words per slot (used, name[32], version, base, size, fini); slot 0 holds test/dyn-demo. */
+export const PREVIEW_STATE = 0x40100000;
+const previewState = (() => {
+  const m = new DataView(new ArrayBuffer(40 + 52 * 2));
+  m.setUint32(40, 1);
+  [...'test/dyn-demo'].forEach((c, i) => m.setUint8(44 + i, c.charCodeAt(0)));
+  m.setUint32(40 + 4 + 32 + 4, 0x47e10000);
+  m.setUint32(40 + 4 + 32 + 8, 0x80);
+  return new Uint8Array(m.buffer);
+})();
+
+/** Where the preview's module sits and the addresses of the crash it shows; `previewNames` (log=crash) knows them. */
+export const CRASH_BASE = 0x47e10000;
+export const CRASH_PC = CRASH_BASE + 0x44;
+// the boot after a crash of test/dyn-demo: the crash found, the module, the stack (two return addresses and a plain word)
+const emulatorCrash: Boot = {
+  start: 0,
+  items: [
+    ...boot(1),
+    ...mod(0, 'test/dyn-demo'),
+    ev(0, 'CRASH_FOUND', [CRASH_PC, 2, 0x2700, 0x40200000, 150], lv(0, 0, true)),
+    ev(0, 'CRASH_MOD', [0, 2, ...words('test/dyn-demo', 3)], lv(0, 0, true)),
+    ev(0, 'CRASH_STACK', [0, 0x40200010, CRASH_BASE + 0x52, 0x40101010, 0xdeadbeef], lv(0, 0, true)),
+    ev(300, 'UI_FIRST', [450, 0, 1], lv(2)),
+  ],
+};
+const emulatorCrashFault: Fault = {
+  kind: 'cpu',
+  site: 0,
+  stage: 0,
+  id: 0,
+  step: 0,
+  at: CRASH_PC,
+  runtime: 0x050300,
+  module: 'test/dyn-demo',
+};
+
 interface Script {
   boots: Boot[];
   caps: number;
@@ -191,7 +228,13 @@ function session(script: Script): FollowSession {
   return {
     async info() {
       await gate();
-      return { caps: script.caps };
+      return { caps: script.caps, port: 'dt2-1.17', image_id: '0123456789abcdef' };
+    },
+    // PEEK of the fake guest: the module table only
+    async peek(addr, len) {
+      await gate();
+      if (addr < PREVIEW_STATE || addr + len > PREVIEW_STATE + previewState.length) throw new Error('E_PEEK');
+      return previewState.slice(addr - PREVIEW_STATE, addr - PREVIEW_STATE + len);
     },
     async logPage(from) {
       await gate();
@@ -237,12 +280,13 @@ const RUNTIME_CAPS = (1 << CAP.SERVICE_CMDS) | (1 << CAP.SETTINGS);
 const LOG_CAPS = RUNTIME_CAPS | (1 << CAP.LOG) | (1 << CAP.PEEK) | (1 << CAP.LOGCFG);
 const noDebug = logMode === 'nodebug';
 const both = logMode === 'both';
+const crash = logMode === 'crash';
 const emulatorScript: Script = {
-  boots: both ? [emulatorBoot0, emulatorBoot1] : [emulatorBoot0],
+  boots: crash ? [emulatorCrash] : both ? [emulatorBoot0, emulatorBoot1] : [emulatorBoot0],
   caps: noDebug ? RUNTIME_CAPS : LOG_CAPS,
   debug: { level: 2, modules: Array<number>(8).fill(0xff), debug: true },
-  modules: [{ index: 0, name: 'freqshift' }],
-  faults: [],
+  modules: [{ index: 0, name: crash ? 'test/dyn-demo' : 'freqshift' }],
+  faults: crash ? [emulatorCrashFault] : [],
 };
 const deviceScript: Script = {
   boots: logMode === 'fault' ? [{ ...deviceBoot1, start: 0 }] : both ? [deviceBoot0, deviceBoot1] : [deviceBoot0],

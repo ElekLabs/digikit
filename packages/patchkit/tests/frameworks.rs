@@ -97,13 +97,6 @@ impl Main {
     }
 }
 
-fn err_of(r: patchkit::Result<Applied>) -> String {
-    match r {
-        Ok(_) => panic!("expected an error"),
-        Err(e) => e.0,
-    }
-}
-
 fn stock_len(file: &str) -> usize {
     Firmware::parse(&image(file).unwrap())
         .unwrap()
@@ -135,32 +128,17 @@ fn section<'a>(p: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
         .unwrap_or_else(|| panic!("no section {name}"))
 }
 
-const PL: [&str; 4] = [
-    "core/dsp-voice",
-    "core/machines",
-    "core/params",
-    "test/patched-pluck",
-];
+const PAIR: [&str; 2] = ["core/machines", "core/params"];
 
 #[test]
 fn the_selection_order_does_not_change_the_bytes() {
     let Some(lib) = library(vec![]) else {
         return;
     };
-    let Some(r1) = run(DT2_117, &lib, &PL) else {
+    let Some(r1) = run(DT2_117, &lib, &PAIR) else {
         return;
     };
-    let r2 = run(
-        DT2_117,
-        &lib,
-        &[
-            "test/patched-pluck",
-            "core/params",
-            "core/machines",
-            "core/dsp-voice",
-        ],
-    )
-    .unwrap();
+    let r2 = run(DT2_117, &lib, &["core/params", "core/machines"]).unwrap();
     assert!(r1.unwrap().syx == r2.unwrap().syx);
 }
 
@@ -170,8 +148,8 @@ fn every_instruction_the_framework_places_decodes() {
         return;
     };
     for (file, ids) in [
-        (DT2_117, &PL[..]),
-        (DN2_112, &["core/machines", "test/dn2-clone"][..]),
+        (DT2_117, &["core/machines"][..]),
+        (DN2_112, &["core/machines"][..]),
     ] {
         let Some(r) = run(file, &lib, ids) else {
             continue;
@@ -199,22 +177,18 @@ fn every_instruction_the_framework_places_decodes() {
 }
 
 #[test]
-fn digitone_ii_clone_gets_type_5() {
+fn the_image_keeps_only_the_machine_hooks_that_stay_in_it() {
     let Some(lib) = library(vec![]) else {
         return;
     };
     for file in [DN2_112] {
-        let Some(r) = run(file, &lib, &["core/machines", "test/dn2-clone"]) else {
+        let Some(r) = run(file, &lib, &["core/machines"]) else {
             continue;
         };
         let a = r.unwrap();
         let p = plan(&a);
-        let m = reg(&p, "machines");
-        assert_eq!(
-            (m["first"].as_u64(), m["count"].as_u64()),
-            (Some(5), Some(1))
-        );
-        assert_eq!(m["entries"][0]["index"], 5);
+        // a machine is a run-time module: the registry has no patch-time entry
+        assert_eq!(reg(&p, "machines")["entries"].as_array().unwrap().len(), 0);
         // no DSP selector table and no per-type byte on the Digitone II
         assert!(
             p["sections"]
@@ -229,80 +203,25 @@ fn digitone_ii_clone_gets_type_5() {
             .iter()
             .map(|h| h["anchor"].as_str().unwrap().to_string())
             .collect();
+        // the image keeps the dispatch hook, the list entry and the frame type stub; the other hooks are the machines service file's (R12-6)
         for h in [
             "cf.machine.fn.dispatch",
-            "cf.machine.site.group",
-            "cf.machine.site.type_reader.load",
-            "cf.machine.site.owner_type_load",
+            "cf.machine.fn.list.entry",
             "cf.machine.site.frametype",
-            "cf.machine.fn.type_page.count",
         ] {
             assert!(hooks.iter().any(|x| x == h), "{file}: no hook on {h}");
         }
-    }
-}
-
-#[test]
-fn core_params_and_pluck_assign_codes_and_relocate_the_table() {
-    let Some(lib) = library(vec![]) else {
-        return;
-    };
-    for file in [DT2_117] {
-        let Some(r) = run(
-            file,
-            &lib,
-            &[
-                "core/dsp-voice",
-                "core/machines",
-                "core/params",
-                "test/patched-pluck",
-            ],
-        ) else {
-            continue;
-        };
-        let a = r.unwrap();
-        let p = plan(&a);
-        let pr = reg(&p, "params");
-        assert_eq!(
-            (pr["first"].as_u64(), pr["count"].as_u64()),
-            (Some(0x113), Some(4))
-        );
-        assert_eq!(pr["entries"][0]["index"], 0x113);
-        assert_eq!(pr["row_size"], 28);
-        let t = section(&p, "pf_table");
-        assert_eq!(t["copied"], 0x113 * 60);
-        assert_eq!(t["appended_rows"], 4);
-        // 56 references repointed, 54 bounds raised
-        let refs = a
-            .plan
-            .writes
-            .iter()
-            .filter(|w| w.what.contains("cf.param.sites.descriptor_table.ref."))
-            .count();
-        let bounds = a
-            .plan
-            .writes
-            .iter()
-            .filter(|w| w.what.contains("cf.param.sites.descriptor_table.bound."))
-            .count();
-        assert_eq!((refs, bounds), (56, 54), "{file}");
-        // the machine's fields carry the assigned codes
-        let m = reg(&p, "machines");
-        let main = Main::new(&a.syx, stock_len(file));
-        // PLUCK's permanent number is 9: rows 7 and 8 are gaps (clones of type 0, not listed)
-        assert_eq!(m["gaps"], serde_json::json!([7, 8]));
-        assert_eq!(m["entries"][0]["index"], 9);
-        let rows = main.u32s(m["addr"].as_u64().unwrap() as u32, 48);
-        assert_eq!(rows[16 + 12], 0xffff_ffff, "gap row position: hidden");
-        assert_eq!(rows[16 + 11], 0, "gap row clones type 0");
-        let rows = &rows[32..];
-        assert_eq!(
-            &rows[2..11],
-            &[0xca, 0x113, 0x114, 0, 0x115, 0x116, 0, 0xd1, 0x0a]
-        );
-        // the voice registry ends in a zero row
-        let v = reg(&p, "voices");
-        assert_eq!(v["count"], 1);
+        for h in [
+            "cf.machine.site.group",
+            "cf.machine.site.type_reader.load",
+            "cf.machine.site.owner_type_load",
+            "cf.machine.fn.type_page.count",
+        ] {
+            assert!(
+                !hooks.iter().any(|x| x == h),
+                "{file}: the image hooks {h}, which machines.dks takes"
+            );
+        }
     }
 }
 

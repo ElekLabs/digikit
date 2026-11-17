@@ -32,9 +32,9 @@ pub type GenFile = (String, String);
 #[derive(Deserialize)]
 struct Doc {
     device: Dev,
-    capabilities: Option<CapabilitiesDoc>,
     board: Option<Board>,
     digikit: Option<Digikit>,
+    capabilities: Option<Capabilities>,
     card: Option<Card>,
     limits: Option<Limits>,
     adapter: Option<AdapterDoc>,
@@ -163,10 +163,6 @@ struct Dev {
     short: String,
 }
 #[derive(Deserialize)]
-struct CapabilitiesDoc {
-    dsp: String,
-}
-#[derive(Deserialize)]
 struct Board {
     console_uart_base: u64,
     ddr_cached_base: u64,
@@ -177,6 +173,12 @@ struct Board {
     /// The three DSP facts are present when `[capabilities] dsp = "sharc"` and absent otherwise.
     dsp_clock_hz: Option<u64>,
     dsp_blocks_per_second: Option<u64>,
+}
+/// `[capabilities]`: only `dsp` and `card` are read here (the device-registry schema has more keys).
+#[derive(Deserialize)]
+struct Capabilities {
+    dsp: String,
+    card: String,
 }
 #[derive(Deserialize)]
 struct Digikit {
@@ -189,7 +191,12 @@ struct Digikit {
     dsp_tail_words: Option<u64>,
     keep_base: u64,
     keep_bytes: u64,
+    sample_path_max: u64,
     peek: Vec<[u64; 2]>,
+    #[serde(default)]
+    span_clock: u64,
+    #[serde(default)]
+    span_clock_hz: u64,
 }
 #[derive(Deserialize)]
 struct Card {
@@ -224,6 +231,24 @@ struct Entry {
     input: InputF,
     fx: FxF,
     profile: ProfileF,
+    /// DSP instructions per block left for modules (`dkprof::budget`: the block at the default margin, less the stock firmware's load). 0 where `devices/cycle-factors.json`
+    /// has no entry for the device, and in the wasm build (which has no `dkprof`).
+    dsp_headroom: u64,
+}
+
+/// The DSP headroom of a device: see `Entry::dsp_headroom`.
+#[cfg(not(target_arch = "wasm32"))]
+fn dsp_headroom(short: &str, b: &Board, voices: u64) -> u64 {
+    match (b.dsp_clock_hz, b.dsp_blocks_per_second) {
+        (Some(clock), Some(blocks)) => {
+            crate::budget_cli::headroom(short, clock, blocks, voices).unwrap_or(0)
+        }
+        _ => 0, // a device without a DSP has no headroom
+    }
+}
+#[cfg(target_arch = "wasm32")]
+fn dsp_headroom(_short: &str, _b: &Board, _voices: u64) -> u64 {
+    0
 }
 /// The device facts of the builder commit (`core/runtime` reads them from `dynreg_info` version 3): what the packer took from `[modules]` and
 /// `[adapter.machine]` before modules declared through builder calls. All 0 on a device without `[modules]`.
@@ -372,7 +397,11 @@ struct DigikitF {
     dsp_tail_words: u64,
     keep_base: u64,
     keep_bytes: u64,
+    sample_path_max: u64,
+    samples_in_store: bool,
     peek: Vec<[u64; 2]>,
+    span_clock: u64,
+    span_clock_hz: u64,
 }
 #[derive(Debug)]
 struct StoreF {
@@ -424,10 +453,22 @@ impl Facts {
                     "{short}: [capabilities] dsp = \"none\" forbids [board] dsp_* and [digikit] dsp_* facts"
                 ));
             }
-            let caps = (u64::from(dsp) * DEV_HAS_DSP)
+            let cap_bits = (u64::from(dsp) * DEV_HAS_DSP)
                 | (u64::from(s.is_some()) * DEV_HAS_STORE)
                 | (u64::from(b.esdhc_base.is_some()) * DEV_HAS_SDHC)
                 | (u64::from(k.safe_key.is_some()) * DEV_HAS_SAFE_KEY);
+            let samples_in_store = match cap.card.as_str() {
+                "slots" => true,
+                "path-fs" => false,
+                other => {
+                    return Err(err!(
+                        "{short}: [capabilities] card = {other:?}: a digikit device is \"slots\" (samples in the store) or \"path-fs\" (the firmware's folder filesystem)"
+                    ));
+                }
+            };
+            if k.sample_path_max == 0 || k.sample_path_max > 254 {
+                return Err(err!("{short}: [digikit] sample_path_max is 1 to 254"));
+            }
             if k.peek.len() > PEEK_MAX {
                 return Err(err!(
                     "{short}: [digikit] peek lists at most {PEEK_MAX} ranges"
@@ -466,6 +507,7 @@ impl Facts {
             let sample_pool = sample_pool_facts(&short, sample_pool)?;
             let adapter =
                 adapter_facts(&short, adapter_machine, d.modules.and_then(|m| m.frame), &b)?;
+            let dsp_headroom = dsp_headroom(&short, &b, adapter.as_ref().map_or(0, |a| a.voices));
             if docs
                 .insert(
                     short.clone(),
@@ -488,7 +530,11 @@ impl Facts {
                             dsp_tail_words: k.dsp_tail_words.unwrap_or(0),
                             keep_base: k.keep_base,
                             keep_bytes: k.keep_bytes,
+                            sample_path_max: k.sample_path_max,
+                            samples_in_store,
                             peek: k.peek,
+                            span_clock: k.span_clock,
+                            span_clock_hz: k.span_clock_hz,
                         },
                         store: s.map(|s| StoreF {
                             first: s.first_sector,
@@ -497,7 +543,7 @@ impl Facts {
                             settings_sectors: s.settings_sectors,
                             header_b: s.header_b_sector,
                         }),
-                        caps,
+                        caps: cap_bits,
                         limits: LimitsF {
                             modules: l.modules,
                             machine_rows: l.machine_rows,
@@ -513,6 +559,7 @@ impl Facts {
                         input,
                         fx,
                         profile: profile_facts(&short, models.by_device.get(&short))?,
+                        dsp_headroom,
                     },
                 )
                 .is_some()
@@ -1140,6 +1187,16 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "[digikit] name, NUL padded, as a big-endian word",
         ),
         c(
+            "SAMPLES_IN_STORE",
+            k.samples_in_store as u64,
+            "[capabilities] card = \"slots\": the samples are files of the digikit store",
+        ),
+        c(
+            "SAMPLE_PATH_MAX",
+            k.sample_path_max,
+            "[digikit] sample_path_max",
+        ),
+        c(
             "STORE_FIRST",
             store_first,
             "[card.store] first_sector (0: no store)",
@@ -1197,6 +1254,16 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "DEV_HAS_* bits (core/runtime/abi.toml), derived from [capabilities] and the tables present",
         ),
         c(
+            "DSP_HEADROOM",
+            e.dsp_headroom,
+            "DSP instructions per block left for modules: the block at 85 percent (projected with the high cycle factor) less the stock firmware's load (devices/cycle-factors.json, dkprof::budget)",
+        ),
+        c(
+            "DSP_VOICES",
+            e.adapter.as_ref().map_or(0, |a| a.voices),
+            "[adapter.machine] voices: the voices a machine's per-voice DSP cost counts for",
+        ),
+        c(
             "DL_AREA_BYTES",
             k.dsp_area_bytes,
             "[digikit] dsp_area_bytes",
@@ -1247,6 +1314,16 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "PEEK_N",
             k.peek.len() as u64,
             "[digikit] peek: number of ranges",
+        ),
+        c(
+            "SPAN_CLOCK",
+            k.span_clock,
+            "[digikit] span_clock (address of the profiling clock; 0 none)",
+        ),
+        c(
+            "SPAN_CLOCK_HZ",
+            k.span_clock_hz,
+            "[digikit] span_clock_hz (its frequency)",
         ),
     ];
     let inp = &e.input;
@@ -1660,6 +1737,60 @@ fn hex(v: i64) -> String {
 const NOTE: &str =
     "generated by `patchkit gen` from the device files and core/machines types.toml; do not edit";
 
+/// `DeviceProfile` constants of every device (the type is `dkrt_abi::platform::DeviceProfile`): what the real platform reads from the device object
+/// (`device.s`, `dkrt_dev`) and what the host tests' `FakePlatform` and a service (through the device id) take their facts from, so they cannot differ.
+fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) -> Result<String> {
+    let mut s = format!(
+        "// {module}: {NOTE}.\n// One DeviceProfile for each device file, from the same facts as the device objects' words.\n\nuse crate::platform::DeviceProfile;\n"
+    );
+    let mut names = vec![];
+    for (dev, e) in docs {
+        let cs = constants(lib, dev, e)?;
+        let v = |name: &str| -> Result<u64> {
+            cs.iter()
+                .find(|k| k.name == name)
+                .map(|k| k.value as u64)
+                .ok_or_else(|| err!("{module}: no device constant {name}"))
+        };
+        let k = &e.digikit;
+        let up = dev.to_uppercase();
+        let safe_key = if e.caps & DEV_HAS_SAFE_KEY != 0 {
+            format!("Some({})", k.safe_key)
+        } else {
+            "None".to_string()
+        };
+        let _ = writeln!(
+            s,
+            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    dyn_type_first: {},\n    dyn_types: {},\n}};",
+            v("DEVICE_ID")?,
+            hex(v("DEVICE_NAME_WORD")? as i64),
+            e.digikit.samples_in_store,
+            v("SAMPLE_PATH_MAX")?,
+            v("DSP_HEADROOM")?,
+            v("DSP_VOICES")?,
+            e.caps & DEV_HAS_DSP != 0,
+            e.caps & DEV_HAS_STORE != 0,
+            e.caps & DEV_HAS_SDHC != 0,
+            hex(v("DDR_CACHED_BASE")? as i64),
+            hex(v("DDR_BYTES")? as i64),
+            hex(v("KEEP_BASE")? as i64),
+            hex(v("KEEP_BYTES")? as i64),
+            hex(v("ESDHC_BASE")? as i64),
+            v("DSP_BLOCK_CYCLES")?,
+            v("DYN_TYPE_FIRST")?,
+            v("DYN_TYPES")?,
+        );
+        names.push(up);
+    }
+    let _ = writeln!(
+        s,
+        "\n/// Every device file's profile.\npub const ALL: [DeviceProfile; {}] = [{}];",
+        names.len(),
+        names.join(", ")
+    );
+    Ok(s)
+}
+
 /// A C header of the contract maxima of `sdk/sdk.toml` `[limits.max]` that a ColdFire object shared by all devices checks against: the
 /// DSP area's size is a device value, but the link's word offset (17 bits) is the contract's.
 fn c_shared(module: &str) -> String {
@@ -1891,6 +2022,14 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
                 out.push((g.path.clone(), gas_dkdv_offsets(module)));
+            }
+            "rust-profiles" => {
+                if g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `rust-profiles` gen is one file for all devices"
+                    ));
+                }
+                out.push((g.path.clone(), rust_profiles(module, lib, &facts.docs)?));
             }
             "c-shared" => {
                 if g.path.contains("{dev}") {

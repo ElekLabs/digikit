@@ -15,7 +15,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
         mpsc,
     },
     thread,
@@ -702,6 +702,8 @@ struct Actor {
     events: Events,
     on_quit: Option<Box<dyn Fn() + Send>>,
     runtime: Option<Runtime>,
+    /// DSP blocks, instructions and idle-skipped instructions the worker had counted when `sharc.profile` started counting.
+    sharc_profile_base: (u64, u64, u64),
     /// The session id the webview protocol checks.
     session: u64,
     /// Raised whenever the runtime is replaced, whoever asked.
@@ -758,6 +760,8 @@ struct Actor {
     runtime_info: Option<Value>,
     /// The ready state `dev.reload` restores before it writes module code (see `rpc_dev_reload`).
     reload: Option<ReloadState>,
+    /// The `runtime.maps` answer for the image with this SHA-256 (the apply that makes it takes about a second).
+    maps_cache: Option<(String, Value)>,
     quit: bool,
     /// Fault, DSP halt and main-loop stall detection (events `fault`, `halt`, `stall`).
     health: Health,
@@ -779,6 +783,8 @@ struct Actor {
     boot_resets: u32,
     /// CPU exceptions run the guest's handler (RPC `cpu.exceptions`), for every runtime installed from now on.
     deliver_exceptions: bool,
+    /// The PC probe (RPC `pc.probe.set`), armed in every runtime installed from now on, so it is active from reset.
+    pc_probe: Option<elektron_native_boot::PcProbeSpec>,
     /// The RAM range the model keeps across a soft reset (`keep_ram` of the device profile), as the guest left it, for the cold boot that follows.
     reset_ram: Option<Vec<u8>>,
 }
@@ -835,6 +841,7 @@ impl Actor {
             events: config.events,
             on_quit: config.on_quit,
             runtime: None,
+            sharc_profile_base: (0, 0, 0),
             session: 0,
             epoch: 0,
             loaded: None,
@@ -880,6 +887,7 @@ impl Actor {
             repo_root: config.repo_root,
             runtime_info: None,
             reload: None,
+            maps_cache: None,
             quit: false,
             health: Health::new(
                 std::env::var("DIGI_STALL_MS")
@@ -894,6 +902,7 @@ impl Actor {
             overlay_set_aside: false,
             boot_resets: 0,
             deliver_exceptions: false,
+            pc_probe: None,
             reset_ram: None,
             dsp: config.dsp.unwrap_or(true),
             dsp_flag: config.dsp,
@@ -1289,6 +1298,9 @@ impl Actor {
 
     fn install(&mut self, mut runtime: Runtime, error: Option<ReadError>) {
         runtime.set_deliver_exceptions(self.deliver_exceptions);
+        if let Some(spec) = &self.pc_probe {
+            runtime.set_pc_probe(spec);
+        }
         // DSP off on a device with a second CPU that runs a program: the mailbox responder answers instead (no peer audio, fast UI).
         if !self.dsp && runtime.has_peer_cpu() {
             runtime.use_peer_responder();
@@ -2027,9 +2039,18 @@ impl Actor {
             "flash.read" => self.rpc_flash_read(&p).map(Some),
             "mem.cf.write" => self.rpc_mem_write(&p).map(Some),
             "dev.reload" => self.rpc_dev_reload(&p, &reply),
+            "runtime.maps" => self.rpc_runtime_maps(&p).map(Some),
             "guard.set" => self.rpc_guard_set(&p).map(Some),
             "guard.report" => self
                 .with_runtime(|r| Ok(serde_json::to_value(r.guard_report()).unwrap_or(Value::Null)))
+                .map(Some),
+            "pc.probe.set" => self.rpc_pc_probe_set(&p).map(Some),
+            "pc.probe.report" => self.with_runtime(|r| Ok(r.pc_probe_report())).map(Some),
+            "pc.probe.clear" => self
+                .with_runtime(|r| {
+                    r.clear_pc_probe();
+                    Ok(json!({"cleared": true}))
+                })
                 .map(Some),
             "guard.clear" => self
                 .with_runtime(|r| {
@@ -2072,6 +2093,7 @@ impl Actor {
                     }
                 })
                 .map(Some),
+            "sharc.profile" => self.rpc_sharc_profile(&p).map(Some),
             "dsp.peek" => self.rpc_dsp_peek(&p).map(Some),
             "dsp.peek_word" => self.rpc_dsp_peek_word(&p).map(Some),
             "dsp.patch" => self.rpc_dsp_patch(&p).map(Some),
@@ -2082,7 +2104,7 @@ impl Actor {
             "card.folder_set" => self.rpc_card_folder_set(&p).map(Some),
             "card.sync" => self.rpc_card_sync().map(Some),
             "card.reset_overlay" => self.rpc_card_reset_overlay().map(Some),
-            "card.cancel" => Ok(Some(json!({"cancelled": self.cancel_card()}))),
+            "job.cancel" => Ok(Some(json!({"cancelled": self.cancel_job()}))),
             "quit" => {
                 self.quit = true;
                 self.finish_card();
@@ -2206,18 +2228,37 @@ impl Actor {
                 "runtime": self.runtime_info,
             })
         });
-        let job = self
-            .job
-            .as_ref()
-            .map(|j| json!({"kind": j.label, "wall_seconds": j.started.elapsed().as_secs_f64()}));
-        // Progress of a cold boot in `firmware.load`. The count restarts at 0 when a soft reset
-        // reboots the job, so a client counts any change as progress.
-        let boot = self.patch_job.as_ref().map(|j| {
-            json!({"icount": j.progress.load(Ordering::Relaxed), "wall_s": j.started.elapsed().as_secs_f64()})
-        });
+        // One job: a cold boot, else a card load, else a stepping job.
+        let job = if let Some(j) = &self.patch_job {
+            // The count restarts at 0 when a soft reset reboots the job, so a client counts any change as progress.
+            let (phase, progress) = match j.phase.load(Ordering::Relaxed) {
+                PHASE_DSP => ("starting the DSP", Value::Null),
+                PHASE_COLDFIRE => (
+                    "booting",
+                    json!(f64::from_bits(j.fraction.load(Ordering::Relaxed))),
+                ),
+                _ => ("booting", Value::Null),
+            };
+            Some(json!({
+                "kind": "boot", "phase": phase,
+                "icount": j.progress.load(Ordering::Relaxed),
+                "progress": progress,
+                "wall_seconds": j.started.elapsed().as_secs_f64(),
+            }))
+        } else if let Some(j) = &self.card_job {
+            let status = j.status.lock().map(|s| s.clone()).unwrap_or(Value::Null);
+            Some(json!({
+                "kind": "card", "phase": status["phase"], "progress": status["fraction"],
+                "wall_seconds": j.started.elapsed().as_secs_f64(),
+            }))
+        } else {
+            self.job.as_ref().map(
+                |j| json!({"kind": j.label, "wall_seconds": j.started.elapsed().as_secs_f64()}),
+            )
+        };
         let scheduled = self.schedule.len();
         let Some(runtime) = self.runtime.as_mut() else {
-            return Ok(json!({"firmware": null, "job": job, "boot": boot}));
+            return Ok(json!({"firmware": null, "job": job}));
         };
         let status = runtime.status();
         let cf = serde_json::to_value(&status).unwrap_or(Value::Null);
@@ -2227,7 +2268,7 @@ impl Actor {
         let frame = runtime.current_frame().map(|(revision, _)| revision);
         Ok(json!({
             "controller_cpu_ns": elektron_native_boot::thread_cpu_ns(),
-            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "dsp_enabled": self.dsp, "dsp_flag": self.dsp_flag, "job": job, "boot": boot,
+            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "dsp_enabled": self.dsp, "dsp_flag": self.dsp_flag, "job": job,
             "scheduled_inputs": scheduled, "frame_revision": frame,
             "heartbeat": {"mainloop_hits": cf["mainloop_hits"], "stalled": self.health.stalled(),
                           "stall_count": self.health.stall_count, "stall_ms": self.health.stall_ms,
@@ -2278,6 +2319,52 @@ impl Actor {
             .map(|digest| json!({"digest": digest}))
             .map_err(|e| RpcError::new(code::GUEST_FAULT, e))
         })
+    }
+
+    /// `runtime.maps {modules_dir?}`: what a host needs to name addresses of the image that runs now: `{image_sha256, matches, ship, symbols}`.
+    /// `ship` is the ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` to their byte
+    /// addresses, the memory the host reads (`mem.cf.peek`) for the load table. The map is made from the running image's patch record, so
+    /// after a `dev.reload` swap the next call answers for the new image. `matches` is false when the image on disk gives other bytes than
+    /// the running ones (a hot DSP injection, or an object changed since): the names may be wrong. An image with no patch record is an error.
+    fn rpc_runtime_maps(&mut self, p: &Params) -> RpcResult {
+        let rejected =
+            |m: String| RpcError::new(code::FIRMWARE_REJECTED, format!("runtime.maps: {m}"));
+        let loaded = self.loaded.as_ref().ok_or_else(RpcError::no_firmware)?;
+        let sha = firmware::sha256_hex(&loaded.current);
+        if let Some((s, v)) = &self.maps_cache
+            && *s == sha
+        {
+            return Ok(v.clone());
+        }
+        let record = patchkit::verify::patch_record(&loaded.current)
+            .map_err(|e| rejected(e.to_string()))?
+            .ok_or_else(|| rejected("the running image has no patch record (load a patched image or `runtime: true`)".into()))?;
+        let root = runtime_patch::find_root(
+            p.opt_str("modules_dir")?
+                .map(Path::new)
+                .or(self.repo_root.as_deref()),
+        )
+        .map_err(&rejected)?;
+        let stock = loaded
+            .base
+            .clone()
+            .filter(|b| firmware::sha256_hex(b) == record.base_sha256)
+            .or_else(|| runtime_patch::find_stock(&root, &record.base_sha256))
+            .ok_or_else(|| {
+                rejected(format!(
+                    "the stock image {} is not in firmware/",
+                    record.base_sha256
+                ))
+            })?;
+        let maps = runtime_patch::image_maps(&root, &stock, &loaded.current).map_err(&rejected)?;
+        let value = json!({
+            "image_sha256": sha,
+            "matches": maps.matches,
+            "ship": maps.ship,
+            "symbols": maps.symbols,
+        });
+        self.maps_cache = Some((sha, value.clone()));
+        Ok(value)
     }
 
     /// `mem.cf.peek {addr}`: one guest longword, read without side effects.
@@ -2828,6 +2915,37 @@ impl Actor {
         Ok(json!({"protect": ranges, "allow_pc": allowed}))
     }
 
+    /// `pc.probe.set {task_ptr?, keep?, probes: [{pc, label?, words?: [addr], stack?, frame?}]}` or `{file, name?}` (the spec is the
+    /// JSON file, or its member `name`): set the ColdFire PC probe
+    /// (docs/INSTRUMENTATION.md "PC probe"). The spec is kept and armed in every runtime installed later, so a probe set
+    /// before `firmware.load` or `restart` is active from reset; with a runtime loaded it is armed now too, and its hits
+    /// start from zero. Empty `probes` removes it.
+    fn rpc_pc_probe_set(&mut self, p: &Params) -> RpcResult {
+        let from_file = match p.opt_str("file")? {
+            Some(path) => {
+                let text = std::fs::read_to_string(path)
+                    .map_err(|e| RpcError::io(format!("pc.probe.set: {path}: {e}")))?;
+                let mut doc: Value = serde_json::from_str(&text)
+                    .map_err(|e| RpcError::bad_params(format!("pc.probe.set: {path}: {e}")))?;
+                if let Some(name) = p.opt_str("name")? {
+                    doc = doc.get(name).cloned().ok_or_else(|| {
+                        RpcError::bad_params(format!("pc.probe.set: no entry {name} in {path}"))
+                    })?;
+                }
+                Some(doc)
+            }
+            None => None,
+        };
+        let spec = elektron_native_boot::parse_pc_probe_spec(from_file.as_ref().unwrap_or(p.0))
+            .map_err(RpcError::bad_params)?;
+        let count = spec.probes.len();
+        if let Some(r) = self.runtime.as_mut() {
+            r.set_pc_probe(&spec);
+        }
+        self.pc_probe = Some(spec).filter(|s| !s.probes.is_empty());
+        Ok(json!({"probes": count}))
+    }
+
     /// `flash.status`: what the guest wrote to the container area of the flash since the boot (the OS upgrade): `{erases, programs, bytes}`.
     fn rpc_flash_status(&mut self) -> RpcResult {
         let w = self.with_runtime(|r| Ok(r.flash_writes()))?;
@@ -3314,6 +3432,73 @@ impl Actor {
             Err(RpcError::new(
                 code::AUDIO_UNAVAILABLE,
                 "this build has no coupled audio",
+            ))
+        }
+    }
+
+    /// `sharc.profile {enable?}`: DSP instruction counts as raw `dk.profile/1` counters (docs/CONTROL.md). `enable: true` starts (and clears) the
+    /// counting, `enable: false` stops and clears it; no `enable` reads the cumulative counts. Only with the `sharc-profile` feature.
+    fn rpc_sharc_profile(&mut self, p: &Params) -> RpcResult {
+        #[cfg(feature = "sharc-profile")]
+        {
+            let enable = p.opt_bool("enable")?;
+            let started = self.sharc_profile_base;
+            let mut now = None;
+            let answer = self.with_runtime(|r| {
+                let unavailable = |m: &str| RpcError::new(code::AUDIO_UNAVAILABLE, m);
+                if let Some(on) = enable {
+                    if !r.set_sharc_profile(on) {
+                        return Err(unavailable("no DSP audio session"));
+                    }
+                    let frames = r.frames_sent();
+                    now = r.worker_report().map(|w| {
+                        let t = w.tiers.as_ref();
+                        (
+                            frames,
+                            t.map_or(0, |t| t.icount),
+                            t.map_or(0, |t| t.idle_skipped),
+                        )
+                    });
+                    return Ok(json!({"enabled": on}));
+                }
+                let w = r
+                    .worker_report()
+                    .ok_or_else(|| unavailable("no DSP audio session"))?;
+                let (Some(regions), Some(hist)) = (w.region_profile.as_ref(), w.pc_hist.as_ref())
+                else {
+                    return Err(unavailable(
+                        "the DSP profile is off (call sharc.profile with enable: true)",
+                    ));
+                };
+                let counts = crate::sharc_profile::SharcCounts {
+                    blocks: r.frames_sent().saturating_sub(started.0),
+                    icount: w
+                        .tiers
+                        .as_ref()
+                        .map_or(0, |t| t.icount.saturating_sub(started.1)),
+                    idle_skipped: w
+                        .tiers
+                        .as_ref()
+                        .map_or(0, |t| t.idle_skipped.saturating_sub(started.2)),
+                    regions: regions
+                        .entries()
+                        .map(|(pc, e)| (pc, e.fast.instructions, e.aot.instructions))
+                        .collect(),
+                    hist: hist.clone(),
+                };
+                Ok(crate::sharc_profile::profile_json(&counts))
+            })?;
+            if let Some(base) = now {
+                self.sharc_profile_base = base;
+            }
+            Ok(answer)
+        }
+        #[cfg(not(feature = "sharc-profile"))]
+        {
+            let _ = p;
+            Err(RpcError::new(
+                code::METHOD_NOT_FOUND,
+                "built without sharc-profile",
             ))
         }
     }
@@ -4144,6 +4329,10 @@ struct PatchBooted {
     dsp_start_seconds: f64,
 }
 
+const PHASE_DSP: u8 = 0;
+const PHASE_COLDFIRE: u8 = 1;
+const PHASE_STARTING: u8 = 2;
+
 struct PatchJob {
     done: mpsc::Receiver<Result<PatchBooted, String>>,
     cancel: Arc<AtomicBool>,
@@ -4152,6 +4341,10 @@ struct PatchJob {
     /// Instruction count of the running boot, stored by the worker's progress callback.
     /// It restarts at 0 when a soft reset reboots the job, so a client counts any change as progress.
     progress: Arc<AtomicU64>,
+    /// Estimated boot fraction 0..1 (`f64` bits), stored with `progress`.
+    fraction: Arc<AtomicU64>,
+    /// The boot phase: `PHASE_DSP`, `PHASE_COLDFIRE`, or `PHASE_STARTING` before the first callback.
+    phase: Arc<AtomicU8>,
     install: PatchInstall,
     /// The card writes of a boot that ended in a soft reset (see `digi_coupled::cold::SOFT_RESET`).
     reset_out: Arc<Mutex<Option<Vec<emmc_card::CardOverlaySector>>>>,
@@ -4430,6 +4623,10 @@ impl Actor {
         let cancel = Arc::new(AtomicBool::new(false));
         let progress = Arc::new(AtomicU64::new(0));
         let worker_progress = progress.clone();
+        let fraction = Arc::new(AtomicU64::new(0f64.to_bits()));
+        let worker_fraction = fraction.clone();
+        let phase = Arc::new(AtomicU8::new(PHASE_STARTING));
+        let worker_phase = phase.clone();
         let (done_tx, done) = mpsc::channel();
         let (worker_cancel, worker_bytes, worker_card, worker_base) = (
             cancel.clone(),
@@ -4468,7 +4665,15 @@ impl Actor {
                         &inputs,
                         &pair,
                         &worker_cancel,
-                        |p| worker_progress.store(p.icount, Ordering::Relaxed),
+                        |p| {
+                            worker_progress.store(p.icount, Ordering::Relaxed);
+                            worker_fraction.store(p.fraction.to_bits(), Ordering::Relaxed);
+                            let phase = match p.phase {
+                                digi_coupled::cold::ColdPhase::Dsp => PHASE_DSP,
+                                digi_coupled::cold::ColdPhase::ColdFire => PHASE_COLDFIRE,
+                            };
+                            worker_phase.store(phase, Ordering::Relaxed);
+                        },
                     )
                 });
                 let _ = done_tx.send(result.map(|r| PatchBooted {
@@ -4485,6 +4690,8 @@ impl Actor {
             reply: reply.clone(),
             started: Instant::now(),
             progress,
+            fraction,
+            phase,
             install,
             reset_out,
             keep_out,
@@ -4628,6 +4835,7 @@ impl Actor {
         }
         let seconds = job.started.elapsed().as_secs_f64();
         let result = match outcome {
+            Err(e) if e == "cancelled" => Err(RpcError::new(code::CANCELLED, "cancelled")),
             Err(e) => Err(RpcError::new(code::GUEST_FAULT, e)),
             Ok(booted) => {
                 self.boot_resets = 0;
@@ -4641,9 +4849,10 @@ impl Actor {
             }
         };
         let installed = result.is_ok();
+        let cancelled = matches!(&result, Err(e) if e.code == code::CANCELLED);
         self.emit(
             "firmware.loaded",
-            json!({"ok": result.is_ok(), "seconds": seconds,
+            json!({"ok": result.is_ok(), "seconds": seconds, "cancelled": cancelled,
                    "error": result.as_ref().err().map(|e| e.message.clone())}),
         );
         let _ = job.reply.send(result.map(|mut report| {
@@ -4843,10 +5052,30 @@ impl Actor {
         };
         job.cancel.store(true, Ordering::Relaxed);
         if let Some(reply) = job.reply {
-            let _ = reply.send(Err(RpcError::new(code::BUSY, "card load cancelled")));
+            let _ = reply.send(Err(RpcError::new(code::CANCELLED, "card load cancelled")));
         }
         self.card_last = json!({"state": "idle", "message": "Card load cancelled"});
         true
+    }
+
+    /// Cancel the long job that runs (`job.cancel`): a cold boot (its worker stops at the next chunk and the load answers
+    /// CANCELLED), a card load, or a stepping job. Returns the kind cancelled, or None.
+    fn cancel_job(&mut self) -> Option<&'static str> {
+        if let Some(j) = &self.patch_job {
+            // The job stays until `poll_patch` takes the worker's result.
+            j.cancel.store(true, Ordering::Relaxed);
+            return Some("boot");
+        }
+        if self.card_job.is_some() {
+            self.cancel_card();
+            return Some("card");
+        }
+        if let Some(j) = &self.job {
+            let label = j.label;
+            self.finish_job(Err(RpcError::new(code::CANCELLED, "cancelled")));
+            return Some(label);
+        }
+        None
     }
 
     fn rpc_card_load(&mut self, p: &Params, reply: &RpcReply) -> Result<Option<Value>, RpcError> {
@@ -5500,6 +5729,20 @@ mod initial_button_tests {
 #[cfg(test)]
 mod reset_tests {
     use super::*;
+
+    #[test]
+    fn job_cancel_ends_a_stepping_job_with_cancelled() {
+        let (_commands, rx) = mpsc::channel();
+        let mut controller = Actor::new(rx, Config::new(None));
+        let (reply, result) = mpsc::channel();
+        controller
+            .start_job(JobKind::Steps { end: 100 }, &reply, None, json!({}), "step")
+            .unwrap();
+        assert_eq!(controller.cancel_job(), Some("step"));
+        assert!(controller.job.is_none());
+        let error = result.try_recv().unwrap().unwrap_err();
+        assert_eq!(error.code, code::CANCELLED);
+    }
 
     #[test]
     #[ignore = "requires DT2 1.17 and DN2 1.12 firmware"]

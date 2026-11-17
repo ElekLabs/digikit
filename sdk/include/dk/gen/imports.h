@@ -26,6 +26,7 @@ typedef struct dk_page_event dk_page_event;
 
 /* Callback types ([handle.callbacks]): `arg` is the user-data pointer the module gave with the callback. */
 typedef void dk_files_event_fn(uint32_t client, uint32_t request, int32_t state, void *arg);
+typedef void dk_helper_fn(void *arg);
 typedef int32_t dk_host_cmd_fn(uint32_t cmd, uint32_t seq, const void *body, uint32_t len, void *out);
 typedef void dk_intro_done_fn(void *arg);
 typedef const uint8_t *dk_intro_frame_fn(uint32_t tick, void *arg);
@@ -54,6 +55,12 @@ void dk_log(uint32_t level, const char *msg, uint32_t value);
 
 /* Log one event as the runtime's own call does (the sink and the small ring see it): `kind` and `flags` as in `dk_log_ev`, `a` five words. The source is the module that is running unless `flags` names another. Context: any. Since runtime 0.7.0. */
 void dk_log_event(uint32_t kind, uint32_t flags, const uint32_t *a);
+
+/* Set (or, with 0, clear) the sink of a runtime channel for the calling module: DK_SINK_LOG (0) gets `void sink(const dk_log_ev *e)` for every event the runtime logs, DK_SINK_SPAN (1) gets `void sink(const dk_span *s)`, an (owner, cycles) record. A sink runs in the producer's task with interrupts masked: short, no waiting, no logging. A channel has one owner; the runtime clears it after the owner's fini. Returns 0, DK_E_RANGE (no such channel), DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the channel). See <dk/core/sink.h>. Context: any. Since runtime 0.7.1. */
+int32_t dk_sink_set(uint32_t channel, uint8_t *sink);
+
+/* Take the span channel like `dk_sink_set(DK_SINK_SPAN, emit)` and also store the clock the runtime reads for the spans: `u32 clock(void)`, a free-running counter that wraps. The runtime reads the clock before and after a call it measures and passes the difference to `emit` as the cycles of the span. (0, 0) clears both. Returns 0, DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the channel). With no sink or no clock the runtime reads no clock. See <dk/core/sink.h>. Context: any. Since runtime 0.8.1. */
+int32_t dk_span_sink_set(uint8_t *emit, uint8_t *clock);
 
 /* The 1500 Hz block clock (wraps), for a module that wants to measure time; 0 when the image has no counter. See <dk/core/time.h>. Context: any. Since runtime 0.7.0. */
 uint32_t dk_time_blocks(void);
@@ -97,19 +104,19 @@ int32_t dk_files_open(dk_module_ctx *ctx, dk_files **out);
 /* Copy a canonical root-relative directory request; positive ticket or negative error. Supersedes prior results. The optional deferred UI-task notify and its context stay module-owned. No I/O here. Context: ui. Since runtime 0.7.0. */
 int32_t dk_files_list(dk_files *f, uint32_t root, const char *path, dk_files_event_fn *notify, void *arg);
 
-/* No I/O: 0 pending, 1 copied 304-byte dk_file_entry, 2 end, negative error. The output is unchanged unless 1. Context: ui. Since runtime 0.7.0. */
+/* No I/O: 0 pending, 1 copied 304-byte dk_file_entry, 2 end, negative error. The output is unchanged unless 1. A listing that is not polled for 10 s is released and its next poll returns E_LOST. Context: ui. Since runtime 0.7.0. */
 int32_t dk_files_poll(dk_files *f, uint32_t ticket, void *out, uint32_t capacity);
 
 /* Invalidate the matching request, its results and its queued notification without waiting for active work or a callback. Context: ui. Since runtime 0.7.0. */
 int32_t dk_files_cancel(dk_files *f, uint32_t ticket);
 
-/* Open the one write session for the file `path` of `size` bytes under `root` (DK_FILES_STORE or DK_FILES_SAMPLES). `hash4`: NULL, or the expected file hash; dk_files_close then checks it. `flags`: 0 or DK_FILE_REPLACE (1). Returns a handle > 0 owned by this module, or a negative status (DK_E_BUSY: try again; DK_E_EXISTS, DK_E_FILE_IN_USE, DK_E_PATH, DK_E_FULL, DK_E_NOSTORE, DK_E_INUSE, DK_E_WRITE; DK_E_CONTEXT outside an I/O step). See <dk/platform/files.h>. Context: io-step. Since runtime 0.7.0. */
+/* Open the one write session for the file `path` of `size` bytes under `root` (DK_FILES_STORE or DK_FILES_SAMPLES). `hash4`: NULL, or the expected file hash; dk_files_close then checks it. `flags`: 0, DK_FILE_REPLACE (1) or DK_FILE_DEFER (2, a deferred file: dk_files_close checks it but names it in the store only at dk_files_commit or the runtime's own commit). Returns a handle > 0 owned by this module, or a negative status (DK_E_BUSY: try again; DK_E_EXISTS, DK_E_FILE_IN_USE, DK_E_PATH, DK_E_FULL, DK_E_NOSTORE, DK_E_INUSE, DK_E_WRITE; DK_E_CONTEXT outside an I/O step). See <dk/platform/files.h>. Context: io-step. Since runtime 0.7.0. */
 int32_t dk_files_create(dk_files *f, uint32_t root, const char *path, uint32_t size, const void *hash4, uint32_t flags);
 
 /* Write `len` bytes at `offset`, the next byte of the file. `buf` is 16-byte aligned; `len` a multiple of 512 except for the last piece (the tail sector is padded with zeros). Returns 0 or DK_E_STATE, DK_E_OFFSET, DK_E_LENGTH, DK_E_WRITE, DK_E_CONTRACT (unaligned buf), DK_E_BUSY (nothing was written: call again). Context: io-step. Since runtime 0.7.0. */
 int32_t dk_files_write(dk_files *f, int32_t h, uint32_t offset, const void *buf, uint32_t len);
 
-/* End the file. All `size` bytes must have been written (DK_E_LENGTH) and match `hash4` when it was given (DK_E_HASH); the table is committed (power-cut safe). `hash_out` (4 bytes, may be NULL) gets the file hash of the bytes written. The session is closed whatever the result, except for DK_E_BUSY (try again). Context: io-step. Since runtime 0.7.0. */
+/* End the file. All `size` bytes must have been written (DK_E_LENGTH) and match `hash4` when it was given (DK_E_HASH); the table is committed (power-cut safe), or, for a DK_FILE_DEFER file, the file becomes pending (see dk_files_commit; a dk_files_create with DK_FILE_DEFER that would pass DK_FILE_PENDING_MAX files or 16 MiB commits them first). `hash_out` (4 bytes, may be NULL) gets the file hash of the bytes written. The session is closed whatever the result, except for DK_E_BUSY (try again). Context: io-step. Since runtime 0.7.0. */
 int32_t dk_files_close(dk_files *f, int32_t h, void *hash_out);
 
 /* Drop the session and the partial file. Returns 0 or DK_E_STATE. Context: io-step. Since runtime 0.7.0. */
@@ -117,6 +124,12 @@ int32_t dk_files_abort(dk_files *f, int32_t h);
 
 /* Remove a file or folder entry. Returns 0, DK_E_NOFILE, DK_E_FILE_IN_USE (a reader still reads it: try again later), DK_E_BUSY or a path or store status. Context: io-step. Since runtime 0.7.0. */
 int32_t dk_files_delete(dk_files *f, uint32_t root, const char *path);
+
+/* Name all pending files of this module (closed with DK_FILE_DEFER) in the store in one table commit (power-cut safe). Returns 0 or a negative status (DK_E_BUSY: try again; DK_E_FILE_IN_USE, DK_E_FULL, DK_E_WRITE). The files stay pending after an error, and a pending file whose replaced file a reader still reads stays pending too (returns 0, the pending count says so; DK_E_FILE_IN_USE when none could commit). The runtime also commits them 1 s after the module's last file call, when its job ends or the module is unloaded. DK_E_CONTEXT outside an I/O step. See <dk/platform/files.h>. Context: io-step. Since runtime 0.8.3. */
+int32_t dk_files_commit(dk_files *f);
+
+/* The number of pending files of this module (closed with DK_FILE_DEFER, not yet named in the store). Always 0 for the DT2 samples root: its files are named at dk_files_close. DK_E_CONTEXT outside an I/O step. Context: io-step. Since runtime 0.8.3. */
+int32_t dk_files_pending(dk_files *f);
 
 /* Run `step(arg)` on the runtime's I/O task (<dk/platform/io.h>). The step may block and call dk_files_create, dk_files_write, dk_files_close, dk_files_abort and dk_files_delete. It returns DK_IO_MORE (run again), DK_IO_WAIT (sleep until dk_io_wake), 0 (done) or a negative error. `done(arg, status)` runs once in the UI task. Returns a job id > 0, DK_E_CONTRACT (no step) or DK_E_BUSY (8 jobs). Context: any. Since runtime 0.7.0. */
 int32_t dk_io_post(dk_io_step_fn *step, dk_io_done_fn *done, void *arg);
@@ -126,6 +139,12 @@ int32_t dk_io_cancel(int32_t id);
 
 /* Wake a job whose step returned DK_IO_WAIT. Callable from an interrupt handler, an adapter or any task. Unknown ids are ignored. Context: isr. Since runtime 0.7.0. */
 void dk_io_wake(int32_t id);
+
+/* Run `work(arg)` on the runtime's helper task (priority 3, 4 KiB stack) while the I/O step does something that blocks, such as dk_files_write; collect it with dk_helper_wait in the same step. `work` is pure compute: it calls no import, does not wait and keeps to the 4 KiB stack. One run at a time: DK_E_BUSY while a run (this module's, or the runtime's own close read-back hash, which never overlaps a step's own calls) is not collected; the caller then does the work itself. DK_E_NOT_FOUND: the kernel gave no task (same). DK_E_CONTRACT: no function. DK_E_CONTEXT outside an I/O step. A run the step leaves uncollected is collected when the step returns. See <dk/platform/io.h>. Context: io-step. Since runtime 0.8.3. */
+int32_t dk_helper_run(dk_helper_fn *work, void *arg);
+
+/* Wait until the run started by dk_helper_run has finished (the I/O task sleeps). Returns 0, DK_E_STATE when this module has no run, or DK_E_CONTEXT outside an I/O step. See <dk/platform/io.h>. Context: io-step. Since runtime 0.8.3. */
+int32_t dk_helper_wait(void);
 
 /* Run `step(arg)` on the background worker until it returns 0 or a negative error (DK_JOB_MORE: call again; <dk/platform/job.h>). `done(arg, status)` is called once in the UI task. Returns a job id > 0, DK_E_BUSY (8 jobs are queued) or DK_E_CONTRACT (no step). Context: ui. Since runtime 0.7.0. */
 int32_t dk_job_post(dk_job_step_fn *step, dk_job_done_fn *done, void *arg);
@@ -145,8 +164,32 @@ uint32_t dk_hash32_finish(void *state);
 /* Replace the stock boot animation. `frame(tick, arg)` returns the 1024-byte native bitmap of tick 0 .. ticks-1 (30 ticks a second), or NULL to end the animation; it runs on the intro task, must not block and must not call any import. `done(arg)` (may be NULL) runs once in the UI task at the first UI pass. `ticks` is 1 to 300. Returns 0, DK_E_NOT_FOUND outside init, DK_E_CONTRACT, DK_E_BUSY (taken already) or DK_E_BOOT_ONLY. See <dk/platform/intro.h>. Context: init. Since runtime 0.7.0. */
 int32_t dk_intro_take(dk_intro_frame_fn *frame, dk_intro_done_fn *done, void *arg, uint32_t ticks);
 
+/* Declare one record of a generic kind (`[records.kinds]` `generic = true`; a service of the runtime owns the kind). `len` is the record's length less its 8-byte header; the bytes are copied. A kind that is unknown or not generic, or a wrong length, returns DK_E_FORMAT, a full collection DK_E_DECL_FULL; the owning service checks the record at the commit. Context: init. Since runtime 0.8.0. */
+int32_t dk_record_add(dk_module_ctx *ctx, uint32_t kind, const void *bytes, uint32_t len);
+
+/* A service module declares a record kind it owns: `len` is the whole record with its 8-byte header, `handler` the function that handles the records. The runtime compares every dk_service_declare_* call of `init` with the header table (KINDS, SLOTS, HOOKS, EXPORTS, RESOURCES entries) at the commit: a difference refuses the module with DK_E_DECL_KIND. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_kind(dk_module_ctx *ctx, uint32_t kind, uint32_t len, const void *handler);
+
+/* A service module declares a plug-in point (slot) it takes, with the function that fills it. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_slot(dk_module_ctx *ctx, uint32_t slot, uint32_t flags, const void *entry);
+
+/* A service module declares a hook site it takes, with the function that runs there. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_hook(dk_module_ctx *ctx, uint32_t site, const void *entry);
+
+/* A service module declares a function it offers to other modules: `name_hash` is the FNV-1a 32 hash of its name. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_export(dk_module_ctx *ctx, uint32_t name_hash, const void *entry);
+
+/* A service module declares a resource it adds, with its limit. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL. Context: init. Since runtime 0.8.0. */
+int32_t dk_service_declare_resource(dk_module_ctx *ctx, uint32_t resource, uint32_t limit);
+
 /* The RAM ranges `[lo, hi)` of the device file's `[digikit] peek`: returns how many there are, and for `i` below that writes `lo, hi` to `out[0..2]`. For a module that implements PEEK. See <dk/platform/debug.h>. Context: any. Since runtime 0.7.0. */
 uint32_t dk_debug_peek(uint32_t i, uint32_t *out);
+
+/* The profiling clock of the device file (`[digikit] span_clock`): returns the address of a read-only 32-bit free-running counter (0 when the device has none) and, when `out_hz` is not null and there is a clock, writes its frequency in Hz to `*out_hz`. The counter is never written. See <dk/platform/debug.h>. Context: any. Since runtime 0.8.1. */
+uint32_t dk_debug_span_clock(uint32_t *out_hz);
+
+/* The poll function in slot 0 to 3 of `dkrt_poll_add` and its owner: returns 0 for an empty slot (or a slot past 3), 1 + the record index of the module whose loaded code holds the function, or 0xff for a function outside every module (the firmware image: the patched-in core modules). Writes the function's address to `*out_fn` when `out_fn` is not null and the slot is used. For a profiler that names the rows of the poll spans. Context: any. Since runtime 0.8.2. */
+uint32_t dk_debug_poll(uint32_t slot, uint32_t *out_fn);
 
 /* The machine type of track 0 to 15 of the active kit, read from the firmware (read-only); -1 for a track the firmware has no type for, -2 when there is no project yet. Context: ui. Since runtime 0.7.0. */
 int32_t dk_debug_track_type(uint32_t track);
@@ -162,7 +205,7 @@ uint32_t dk_debug_speed_flags(uint32_t clear, uint32_t set);
 
 /* ---- service samples ---- */
 
-/* Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none, declares a bank too, or this is not init; `*out` is untouched then. Context: init. Since runtime 0.7.0. */
+/* Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none or this is not init; `*out` is untouched then. Context: init. Since runtime 0.7.0. */
 int32_t dk_sample_pool_open(dk_module_ctx *ctx, dk_sample_pool **out);
 
 /* Add a stereo-capable sample file to the pool (copies the path, no file IO here). Returns the pool index 0..15: the first free entry, or the entry that already holds this path. DK_E_POOL when all 16 are in use; DK_E_SEL_PATH for an empty or too long path. See <dk/sample/pool.h>. Context: ui. Since runtime 0.7.0. */

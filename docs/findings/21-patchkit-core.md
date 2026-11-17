@@ -95,7 +95,7 @@ module whenever an object is placed in `cf.expansion` and puts the `DKPR` record
 
 `apps/web/public/patchkit.wasm` (638 KB, gitignored, built by `tools/emulator/native_wasm.py`; it embeds no port and no
 firmware hash) applies `digikit/master-gain` to DT2 1.17 and DN2 1.12 byte-identically to the command line, plan.json
-included, and refuses what the command line refuses (`apps/web/tests/patchkit.test.mjs`).
+included, and refuses what the command line refuses (`apps/web/tests/patchkit.wasm.test.ts`).
 
 ## Limits and open **[O]**
 

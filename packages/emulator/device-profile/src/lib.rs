@@ -1228,7 +1228,7 @@ mod tests {
         assert!(dn2.path_fs.is_none());
     }
 
-    /// A device may have no kit pool (finding 131 "Storage": its MmcFs has none): its kit slot count is 0 and the pool is not listed.
+    /// A device may have no kit pool (finding 138 "Storage": its MmcFs has none): its kit slot count is 0 and the pool is not listed.
     #[test]
     fn a_card_layout_may_have_no_kit_pool() {
         let registry = Registry::embedded().unwrap();

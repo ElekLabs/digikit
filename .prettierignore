@@ -16,6 +16,7 @@
 !/tests/regression/
 /tools/**/*.json
 /packages/emulator/**/*.json
+/packages/dksharc/tests/fixtures/*.json
 **/*.md
 
 # Generated or local
@@ -28,4 +29,4 @@ apps/web/.local/
 apps/web/public/modules/
 apps/web/public/*.wasm
 pnpm-lock.yaml
-/apps/web/src/transfer/module-files.generated.ts
+/packages/workbench-core/src/transfer/module-files.generated.ts

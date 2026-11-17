@@ -57,8 +57,8 @@ doc = "DkrtModule.state: its DSP part is still being sent."
 [[const]]
 name = "CAP_MAX"
 type = "usize"
-value = 16
-doc = "Room for the entries a caller of dkrt_capacity gives (the runtime has 14 kinds; new kinds are appended)."
+value = 20
+doc = "Room for the entries a caller of dkrt_capacity gives (the runtime has 16 kinds; new kinds are appended)."
 
 [[const]]
 name = "ARENA_BYTES"
@@ -439,7 +439,7 @@ fields = [
 
 [[struct]]
 name = "DkrtStoreEntry"
-doc = "A store file for the DIGIKIT menu (dkrt_store_list): its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes."
+doc = "A store file as the runtime lists it: its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes."
 fields = [
     "u8 path[64]",
     "u32 first",
@@ -510,6 +510,8 @@ fields = [
     "u32 dsp_wait // reserved (0): the boot does not wait for DSP code",
     "u32 stable // 1 once the boot counter is back to 0: after STABLE_BLOCKS DSP blocks of UI loop in a normal boot, at the first UI-loop pass in a safe boot",
     "u8 needs[SEL_MAX][NEEDS_LEN] // per selected module with result E_IMPORT: the first module its imports need that is not in the image, without the `core/` prefix (usb-bulk); empty otherwise",
+    "u8 states[SEL_MAX] // per selected module: its STATE_* ([load.state] of sdk/sdk.toml); a selection index at or above count is STATE_SELECTED",
+    "u32 detail[SEL_MAX][2] // per selected module with state STATE_REFUSED: what the plan refused on (E_PLAN_KIND the kind; E_MISSING the name hash of the service whose provider is missing or did not load; E_PLAN_OWNER the kind, slot or hook site; E_PLAN_KEY the kind and the key; E_PLAN_FIT the CAPK_* kind); zeros otherwise",
 ]
 
 [[struct]]
@@ -564,6 +566,8 @@ fields = [
     "u32 need_param_rows",
     "u32 need_page_rows",
     "u32 need_fx_slots",
+    "u32 need_dsp_cost_voice // the module's DSP cost of one voice, instructions per block (header table, USES; 0: none)",
+    "u32 need_dsp_cost_fx // the module's DSP cost of its effects, instructions per block (0: none)",
 ]
 
 [[struct]]
@@ -627,24 +631,14 @@ sig = "u32 dkrt_blocks()"
 doc = "DSP blocks since boot (a 1500 Hz clock); 0 without core/health."
 
 [[fn]]
-name = "dkrt_poll_set"
-sig = "void dkrt_poll_set(usize f)"
-doc = "Register (or, with 0, remove) a function that the UI loop calls once per pass, in the UI task. One caller only."
-
-[[fn]]
 name = "dkrt_diag"
 sig = "void dkrt_diag(DkrtDiag *out)"
 doc = "The card check, the debug log, the DSP watch and the crash record (finding 46)."
 
 [[fn]]
-name = "dkrt_store_list"
-sig = "i32 dkrt_store_list(const u8 *prefix, DkrtStoreEntry *out, u32 max)"
-doc = "The files of the module store whose path starts with prefix (NUL-terminated), sorted by path, at most max into out: the count, or a negative code (E_NOT_FOUND: no store)."
-
-[[fn]]
 name = "dkrt_poll_add"
 sig = "i32 dkrt_poll_add(usize f)"
-doc = "Add a function that the UI loop calls once per pass, in the UI task, next to the one of dkrt_poll_set (room for 4). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick."
+doc = "Add a function that the UI loop calls once per pass, in the UI task (room for 4: the DIGIKIT menu's HEALTH page and core/ui's dk_ui_tick). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick."
 
 [[fn]]
 name = "dkrt_poll_remove"
@@ -742,7 +736,7 @@ at = "scan"
 name = "dkrt_pool_done"
 sig = "void dkrt_pool_done(u32 req, i32 result)"
 doc = "Adapter to runtime: the load `req` of dkpool_load finished. result is OK (the handle `out` is filled), E_POOL, E_READ or E_FORMAT. Only from dkpool_tick."
-at = "tracks"
+at = "handlers::exports"
 
 [[fn]]
 name = "dkrt_job_post"
@@ -778,10 +772,10 @@ at = "aux"
 name = "dkrt_pool_lost"
 sig = "void dkrt_pool_lost()"
 doc = "Adapter to runtime: the backing was lost (a stock reset), every handle is invalid. Only from dkpool_tick."
-at = "tracks"
+at = "handlers::exports"
 
 [[fn]]
 name = "dkrt_project_changed"
 sig = "void dkrt_project_changed(u32 slot)"
 doc = "Adapter to runtime: the current project slot changed. The runtime never reads the byte."
-at = "tracks"
+at = "handlers::exports"

@@ -11,9 +11,9 @@ Start from docs/plans/syntakt.md (phases and the follow-up list). Findings: 70, 
 ## State
 - Firmware query works for `st-1.42` and `st-1.42-peer` (`tools/coldfire/fw.py -i st-1.42`).
 - The device registry (`devices/*.toml`, `@digi/devices`) drives apps, Python tools and patchkit; `tools/nx/device-literals.mjs` passes.
-- The Syntakt emulator boots MAIN to the main screen with the second ColdFire CPU (the peer, section 7) running and with digital audio (finding 129). Native kernels (finding 133, env `DIGI_CF_NATIVE`) run the peer's voice oscillator: same WAV hash as the interpreter, 25 percent less peer wall time. Generated kernel code lives in `out/native/cf-native/NAME` (never committed); a build without `CF_NATIVE_DIR` has no kernels.
+- The Syntakt emulator boots MAIN to the main screen with the second ColdFire CPU (the peer, section 7) running and with digital audio (finding 136). Native kernels (finding 140, env `DIGI_CF_NATIVE`) run the peer's voice oscillator: same WAV hash as the interpreter, 25 percent less peer wall time. Generated kernel code lives in `out/native/cf-native/NAME` (never committed); a build without `CF_NATIVE_DIR` has no kernels.
 - The faceplate, and the workbench with the DSP toggle, work for the Syntakt.
-- The digikit runtime, the debug module and Transfer work on the emulated Syntakt (finding 132). Patch set and facts: findings 130 and 131.
+- The digikit runtime, the debug module and Transfer work on the emulated Syntakt (finding 139). Patch set and facts: findings 137 and 138.
 - patchkit: `verify` needs the stock base for a device with read-only sections (only a known stock image needs none); the web bundle may carry `[[firmware]]` hashes.
 - Speed: 0.37 of real time with audio on this host.
 
@@ -27,7 +27,7 @@ Start from docs/plans/syntakt.md (phases and the follow-up list). Findings: 70, 
 - No hardware flashing yet: first the open runtime items below, in the emulator or statically.
 
 ## Next, in order
-1. Store write safety: bound the offsets that the remote stream handler takes from the host (finding 131).
+1. Store write safety: bound the offsets that the remote stream handler takes from the host (finding 138).
 2. Verify the `core/ui` HEALTH and MEMORY pages and `dk_input_turn` on the Syntakt.
 3. Fix the Nx cache gap: `core/input:test-device--dt2` replayed after `modules/core/adapters/ui/build/ui.dko.json` changed (a missing input).
 4. Speed: thread per CPU (about 1.7x), peer RAM fast path (about 1.25x), more kernels including MAIN's vector 191 mixer.

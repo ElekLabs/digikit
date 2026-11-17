@@ -19,7 +19,8 @@
 //!
 //! The reads go through the staging buffer (`DKRT_STAGE`), so `check` must not run while a module file is staged: the boot hook runs it first.
 use crate::dlog;
-use crate::{block_read, rd32, DKRT_STAGE};
+use crate::{rd32, DKRT_STAGE, PLATFORM};
+use dkrt_abi::platform::Platform;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::sel;
 use dkrt_sdk::store::{self, Hdr};
@@ -63,7 +64,7 @@ pub fn info() -> &'static mut CardInfo {
 /// The state of the card's store area. A device without a store (`DEV_HAS_STORE` clear) has the state of a card too small for one: nothing is read or
 /// written, uploads answer `E_NOSTORE`, the boot goes on.
 pub fn state() -> u32 {
-    if !crate::dev::has_store() {
+    if !crate::has_store() {
         return CARD_TOO_SMALL;
     }
     unsafe { read_volatile(addr_of!(DKRT_CARD.state)) }
@@ -147,9 +148,9 @@ fn probe_state(results: &[Option<bool>; 4]) -> Option<u32> {
 }
 
 /// Is the sector at absolute `sector` one of ours (a valid store header, or one of another version: that store counts as empty; for the record sectors a valid selection copy)? `None`: the read failed.
-unsafe fn ours_at(sector: u32, kind: u32) -> Option<bool> {
+unsafe fn ours_at<P: Platform>(p: &P, sector: u32, kind: u32) -> Option<bool> {
     let buf = stage();
-    if block_read(sector, 512, buf) != 0 {
+    if p.block_read(sector, 512, buf) != 0 {
         return None;
     }
     Some(if kind == 0 {
@@ -161,24 +162,29 @@ unsafe fn ours_at(sector: u32, kind: u32) -> Option<bool> {
 
 /// Decide the state of the card's area (once). The result is logged.
 pub unsafe fn check() {
+    check_with(&PLATFORM)
+}
+
+/// `check` over a platform (the host tests drive it with `FakePlatform`).
+pub unsafe fn check_with<P: Platform>(p: &P) {
     let c = info();
     if c.checked != 0 {
         return;
     }
     c.checked = 1;
-    if !crate::dev::has_store() {
+    if !p.has_store() {
         c.state = CARD_TOO_SMALL;
         return;
     }
     let l = lay();
     // the card must reach the end of the area: the firmware's block read refuses a start at or past the card's capacity
-    if block_read(l.first + l.sectors - 1, 512, stage()) != 0 {
+    if p.block_read(l.first + l.sectors - 1, 512, stage()) != 0 {
         c.state = CARD_TOO_SMALL;
         report();
         return;
     }
-    let p = probes(&l);
-    let results = [ours_at(p[0].0, p[0].1), ours_at(p[1].0, p[1].1), ours_at(p[2].0, p[2].1), ours_at(p[3].0, p[3].1)];
+    let pr = probes(&l);
+    let results = [ours_at(p, pr[0].0, pr[0].1), ours_at(p, pr[1].0, pr[1].1), ours_at(p, pr[2].0, pr[2].1), ours_at(p, pr[3].0, pr[3].1)];
     c.read_errors = 0;
     let mut k = 0;
     while k < 4 {
@@ -197,7 +203,7 @@ pub unsafe fn check() {
     let mut found = false;
     while sector < BLANK_SECTORS && !found {
         let n = if BLANK_SECTORS - sector > CHUNK_SECTORS { CHUNK_SECTORS } else { BLANK_SECTORS - sector };
-        if block_read(l.first + sector, n * 512, stage()) != 0 {
+        if p.block_read(l.first + sector, n * 512, stage()) != 0 {
             c.read_errors += 1;
             c.state = CARD_UNREADABLE;
             report();
@@ -235,7 +241,7 @@ fn count_refusal(sector: u32, bytes: u32, reason: u32) {
 }
 
 /// Write the empty store header pair (both copies, `seq` 1): the runtime's mark on a blank range.
-unsafe fn claim() -> bool {
+unsafe fn claim<P: Platform>(p: &P) -> bool {
     let l = lay();
     let h = Hdr { seq: 1, ..Hdr::empty(&l) };
     let buf = addr_of_mut!(CLAIM_BUF) as *mut u8;
@@ -243,8 +249,8 @@ unsafe fn claim() -> bool {
     // set first: a second task that writes meanwhile sees a claimed card
     info().state = CARD_OURS;
     info().claims += 1;
-    let b = crate::raw_block_write(l.first + l.header_b(), 512, buf) == 0;
-    let a = crate::raw_block_write(l.first, 512, buf) == 0;
+    let b = p.block_write_raw(l.first + l.header_b(), 512, buf) == 0;
+    let a = p.block_write_raw(l.first, 512, buf) == 0;
     a && b
 }
 
@@ -292,9 +298,14 @@ fn gate(l: &store::Layout, state: u32, sector: u32, bytes: u32) -> Gate {
 
 /// The gate of `block_write`: `OK`, `E_RANGE` or `E_CARD_RO`. May claim a blank range.
 pub unsafe fn admit(sector: u32, bytes: u32) -> i32 {
+    admit_with(&PLATFORM, sector, bytes)
+}
+
+/// `admit` over a platform.
+pub unsafe fn admit_with<P: Platform>(p: &P, sector: u32, bytes: u32) -> i32 {
     let mut g = gate(&lay(), state(), sector, bytes);
     if g == Gate::Check {
-        check();
+        check_with(p);
         g = gate(&lay(), state(), sector, bytes);
     }
     if g == Gate::Allow {
@@ -305,7 +316,7 @@ pub unsafe fn admit(sector: u32, bytes: u32) -> i32 {
         return OK;
     }
     if g == Gate::Claim {
-        if claim() {
+        if claim(p) {
             return OK;
         }
         count_refusal(sector, bytes, 3);

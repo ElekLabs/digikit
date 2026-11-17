@@ -57,11 +57,7 @@ name is `out/patch/<firmware>+<modules>.syx`. The command verifies the result be
 - The input must be a stock image. A patched image is refused.
 - Everything under `out/` is derived from firmware and is never committed.
 
-A machine needs its framework modules, which are added for you (`test/patched-pluck` is the patched-in test machine; the project's PLUCK, `digikit/pluck`, is a run-time module, see below):
-
-```sh
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules test/patched-pluck -o out/patch/pluck.syx
-```
+A machine is a run-time module (the project's PLUCK, `digikit/pluck`, see below): `machines.dks` on the card acts on its rows. patchkit refuses a patch-time `[[entry]]` row of the `machines` registry.
 
 ### Inspect, check, explain, verify
 
@@ -71,7 +67,7 @@ uv run python -m tools.patchkit.patchkit inspect out/patch/fx.syx               
 uv run python -m tools.patchkit.patchkit check --firmware firmware/Digitakt_II_OS1.17.syx           # which modules fit this firmware
 uv run python -m tools.patchkit.patchkit verify out/patch/fx.syx --base firmware/Digitakt_II_OS1.17.syx   # re-decode and check
 mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx
-mise run patch:mem -- core/machines test/patched-pluck --device dt2 --firmware 1.17    # bytes used and free per region
+mise run patch:mem -- core/machines core/params --device dt2 --firmware 1.17    # bytes used and free per region
 ```
 
 - `check` prints `ok` or `refused` plus the reason for every module (for example "built for dn2-1.12").
@@ -85,6 +81,108 @@ mise run patch:mem -- core/machines test/patched-pluck --device dt2 --firmware 1
 - `explain` lists the allocation map (what went where, per region), each patched site with the bytes before and
   after, and the SHARC+ listing of DSP sites. Its output contains disassembly of firmware code: keep it out of
   commits.
+
+### Compare two objects after a move
+
+`patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json] [--strict] [--erase TYPE]...` proves that two ColdFire objects hold the same code when only
+names, order and addresses differ (the check for moving Rust items between modules of the runtime crate). A byte compare of such
+objects always fails: mangled names contain the module path, functions change order, and relocations name section symbols.
+
+- Functions and named data are matched by a normalized name: demangled, crate and module path removed (`dkrt::foo::rd32` is `rd32`;
+  `<dkrt::a::T>::m` is `<T>::m`). Two items with one normalized name are paired by equal content first. A C symbol or `#[no_mangle]`
+  item keeps its exact name: adding, removing or renaming one is a `c-symbol` difference.
+- Merged string rodata (an anonymous constant with no relocation inside) is cut at the places the object refers to, and each piece is one
+  string (trailing zero padding removed). A relocation into it is compared by the content of the string it names, wherever the pool
+  placed it; a reference to the end of a string that the same function reads is compared as "the end of that string". The strings are
+  also compared as one multiset (content and count), so an unused changed string is caught: `only-old` or `only-new string constant`.
+- A panic location (`core::panic::Location`: 16 bytes, one relocation at 0 to its file name) is ignored when only file, line or column
+  differ: the runtime is `panic=abort`. The result says `ignored: N panic locations`. `--strict` compares them like any constant.
+- `--erase TYPE` (repeatable) removes `::<TYPE>` and `<TYPE>` from every Rust name before matching, so a function that became generic over one
+  type (`fx_entry` and `fx_entry::<RealCore>`, `Fx` and `Fx<RealCore>`) is the same item. Use it for a move into a crate that is generic over the core. When the erase makes two different names of one object the same (`info` and `info::<RealCore>`), the report lists them as `warning:` lines: such items are paired by content, then in order.
+- Other anonymous constants (with relocations inside) are matched by content.
+- Code and data are compared byte by byte with every relocated field masked. A relocation is compared by its normalized target
+  plus addend, never by address. The first difference of a function is shown as an instruction with its relocation.
+- Undefined symbols (anchors, `memcpy`) are compared as a set (`extern`).
+- Exit 0 and `identical: N functions, M data objects` (then `ignored: N panic locations` when there are any), or exit 1 and the list.
+
+```text
+$ patchkit objdiff modules/core/runtime/build/runtime.dko.json modules/core/runtime/build/runtime.dko.json
+identical: 666 functions, 291 data objects
+
+$ patchkit objdiff modules/core/runtime/build/runtime.dko.json R2A-DELETIONS.dko.json
+differences: 57 (638 functions and 276 data objects match)
+...
+differs   dkrt_poll_add
+            first difference at +0xe (relocation); old, then new
+              +0x0008  4a89         tst.l
+              +0x000a  6728         beq.b
+            - +0x000c  41f900000000 lea.l  [reloc +0x2 .bss.DKRT_POLLS+0]
+            + +0x000c  41f900000000 lea.l  [reloc +0x2 .bss.POLL_TABLE+0]
+differs   dkrt_scan
+            size 5780 -> 5896 bytes
+            first difference at +0x3 (bytes); old, then new
+            - +0x0000  4e56fc50     link.w
+            + +0x0000  4e56fcfc     link.w
+c-symbol  dkrt_poll_set
+            exact-name symbol .text.dkrt_poll_set (only-new)
+```
+
+`--format json` prints `{identical, functions, data_objects, differences: [{kind, name, detail}]}`.
+
+### Bind a service to your firmware
+
+`patchkit bind IN.dks --firmware FW.syx -o OUT.dks` binds a packed service (`.dks`) to the firmware of the user. A service is packed without
+firmware. Each hook it declares (the `HOOKS` list of its header table) needs a trampoline, and the trampoline copies the stock bytes of the
+hook site. Bind adds both from your own image. The bound file holds firmware bytes: never commit it.
+
+What it writes:
+
+- For each declared hook, a trampoline appended to the image (4-byte aligned). It saves the registers the hook may not clobber, calls the
+  service handler with the arguments the hook declares, restores, runs the displaced instructions (mode `before`) and jumps back to the
+  return address. Mode `replace` has no displaced instructions.
+- One `BIND` item per hook in the v2 header table: the hook name hash, the site address, the trampoline offset and the stock bytes. Every other
+  list of the table stays.
+- The image grows, so the `.bss` moves: base-relative relocations that point into `.bss` are shifted by the growth.
+
+From a clean checkout, with your image in `firmware/` (git ignores it) and the output in `dist/`:
+
+```text
+patchkit pack SERVICE-ID -o dist/service.dks
+patchkit bind dist/service.dks --firmware firmware/IMAGE.syx -o dist/service.bound.dks
+```
+
+`SERVICE-ID` is a service module that declares hooks. The test fixture `test/svc-test` declares one: `cf.menu.hook.settings_list.tail`, the last step of the
+SETTINGS list rebuild.
+Bind creates the output directory and prints one JSON object per hook. This is the format the command prints, not a captured run:
+
+```text
+[
+  {
+    "hook": "cf.menu.hook.settings_list.tail",
+    "site_hash": "0x........",
+    "site_addr": "0x........",
+    "site_len": 8,
+    "stock": "<hex of the stock bytes at the site>",
+    "tramp_off": 1234,
+    "displaced": ["<one line per displaced instruction>"],
+    "ret": "0x........"
+  }
+]
+```
+
+`site_hash` is the name hash of the hook, `tramp_off` the offset of the trampoline in the image, `ret` the address the trampoline jumps back
+to. `displaced` is empty for mode `replace`.
+
+Bind refuses, with an error and no output file:
+
+- The input is not a service (role is not service).
+- The service declares more than 24 hooks. A service that declares none (lfo) is returned unchanged: its bound file is its built file.
+- The service is bound already (it has `BIND` items).
+- The firmware is not a stock image with a port, or a hook name is not declared on that firmware.
+- A hook handler offset is outside the image.
+- A site holds more than 64 stock bytes.
+- A displaced instruction depends on its address (PC-relative), or the hook mode is not `before` or `replace`.
+- The output path is inside the source tree and not under `dist/` or `out/`. A path outside the tree is allowed.
 
 ### Run it in the emulator
 
@@ -114,16 +212,16 @@ has a patch record is loaded as it is. Details: docs/CONTROL.md.
 Headless daemon with DSP audio (the flags `tools/control/digi_client.py` uses for its own daemons):
 
 ```sh
-R=out/ready-pk-dt2-117
+R=out/snapshots/dt2-audio-ready-cold-2026-10-20
 mise run emu:serve -- --auto-coupled --audio-profile-syx firmware/Digitakt_II_OS1.17.syx \
   --dsp-image $R/digi-audio-dn2-image.bin --dsp-state $R/digi-audio-m5.snap.dsp \
   --cf-snapshot $R/digi-audio-m5.snap --no-audio firmware/Digitakt_II_OS1.17.syx
 mise run emu:ctl status       # from another shell; `mise run emu:ctl quit` stops the daemon
 ```
 
-The ready inputs come from `uv run python -m tools.emulator.ready dt2 --syx firmware/Digitakt_II_OS1.17.syx --out out/ready-pk-dt2-117
---force` (about 2 minutes). The test harness looks for them in the table at the top of `tools/patchkit/pk_harness.py`;
-`DIGI_PK_READY_<DEV>_<VER>` (for example `DIGI_PK_READY_DT2_117`) overrides the directory. The harness refuses ready
+The ready inputs come from `mise run emu:ready -- dt2` (about 2 minutes). It writes them to the directory in
+`tools/emulator/ready_inputs.json`, where the test harness reads them; `DIGI_PK_READY_<DEV>_<VER>` (for example
+`DIGI_PK_READY_DT2_117`) overrides the directory. The harness refuses ready
 inputs that are stale or belong to another `.syx`.
 
 ### Test a run-time module in the emulator
@@ -157,7 +255,7 @@ Use `DIGI_PLUS_DRIVE=DIR` or `-- --plus-drive DIR` for a scratch folder instead 
 The desktop app has a target selector in the Transfer and Remote pages: the emulator, or a MIDI port (the app opens it itself, through the Rust crate
 midir; it starts no process). The Transfer page then lists, installs and deletes on the device. The Remote page shows the target's own screen (the
 firmware's Screenshot, polled) on the faceplate, and its keys and knobs press and turn on the target through `digikit/remote`, a run-time module:
-install it on the Transfer page (`out/modules/<device>/digikit/remote.dkm` after `mise run module:pack-all`), select it in MODULES on the device, apply and
+install it on the Transfer page (`out/modules/<device>/digikit/remote.dkm`; the workbench app builds and packs it when it reads the library), select it in MODULES on the device, apply and
 restart. The commands work while the module is loaded; its check mark in MODULES is the only switch, and its SETTINGS... page (in the MODULES side panel) shows the held keys and
 has RELEASE ALL KEYS (`modules/tools/remote/README.md`). From a terminal: `uv run python -m tools.device.dkupload --emu remote state|key CODE|turn ENC N`
 (`--port NAME` for a device).
@@ -242,7 +340,7 @@ in, checks the image and offers it as a download, flashes it over Web MIDI, or r
 starts the patched image in the browser core (screen and controls, no DSP audio yet). Machines and effects are installed over USB on
 `/transfer/`. The page reads module.toml at build time. `patchkit.wasm` reads
 `public/modules/bundle.json`, which `apps/web/scripts/gen-modules.mjs` generates from the committed `modules/` and
-`devices/ports/` (never from `out/`). `patchkit.wasm` produces the same bytes as the command line (`apps/web/tests/patchkit.test.mjs`). The
+`devices/ports/` (never from `out/`). `patchkit.wasm` produces the same bytes as the command line (`apps/web/tests/patchkit.wasm.test.ts`). The
 first `pnpm dev` in a fresh tree compiles the browser cores and takes several minutes.
 
 ## How it works
@@ -253,7 +351,7 @@ first `pnpm dev` in a fresh tree compiles the browser cores and takes several mi
 |---|---|---|
 | Port | Per-firmware facts: named anchors with SHA-256 of the expected bytes, free regions, container limits. Generated, keyed by the `.syx` SHA-256. | `devices/ports/dt2-1.17.toml` |
 | Framework module | Hooks firmware sites once and exports a registry that other modules add entries to. Ordinary assembly plus a manifest. | `core/machines`, `core/params`, `core/dsp-voice`, `core/expansion` |
-| Content module | Own code and declarative registry entries. No addresses. | `test/patched-pluck` |
+| Content module | Own code and declarative registry entries. No addresses. | `test/registry-demo` |
 
 Device, board and firmware facts are data (`devices/*.toml`, `devices/ports/*.toml`, `modules/core/adapters/machines/types.toml`); code that needs a constant gets it from `patchkit gen` (`[[gen]]` in a `module.toml`). Where each fact lives and what a new device needs: `docs/design/device-data.md`.
 
@@ -305,6 +403,51 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   (`hook = "<hook name>"`, `to = "<symbol>"`). Mode `before` copies the displaced instructions to a tail
   (`hook.<site>[.<offset>].tail`; PC-relative forms are re-encoded or refused) so that the routine can run them and
   return (`.return`). Mode `replace` drops them. Mode `retarget` rewrites the target of an existing call.
+- **Pointer-slot stubs.** A `[[slot]] name = "frame_type"` reserves a 4-byte word, zero at build, in the module's
+  `cf.expansion` data (`place =` changes the region); `slot.<name>` is the address of the word. An `op = "stub"` (`hook`, `slot`, `scratch`, optional `tail`) puts a `jmp.l`
+  at the hook site that enters a generated stub in `hook.<site>[.<offset>].tail`. The stub loads the slot into `scratch`;
+  a zero slot runs the displaced instructions (re-encoded like a `before` hook) and jumps back to `.return`, so the image
+  behaves as stock; a non-zero slot is jumped to. Use it for interrupt-level sites that a service loaded later has to
+  serve (the service writes its handler address into the slot, and clears it to go back to stock). The hook's `mode` is
+  ignored; `retarget` hooks are refused. `scratch` (required) is `d0`..`d7` or `a0`..`a6`: pick a register of the hook's
+  `regs.clobbers` in `devices/fw/` (the stub also changes the condition codes, so `ccr` must be listed). patchkit refuses a
+  register that a displaced instruction reads before it writes it. The handler is entered with `scratch` holding its own
+  address. Address registers use `movea.l slot,aN; tst.l aN; beq.b +2; jmp (aN)`; data registers use `move.l slot,dN;
+  beq.b +4; move.l dN,-(sp); rts` (12 bytes each). A site whose displaced code patchkit cannot re-encode (a `(d8,PC,Xn)`
+  operand) is refused with the site named; `tail = "<symbol>"` gives a hand-written stock path (`jmp.l` there) and the
+  displaced instructions are dropped.
+- **The image's info table.** The image has one export table, `dkrt_info_table`: big endian `{magic 0x444b4954 "DKIT", count}`,
+  then per entry `{FNV-1a name hash, address, kind}` (kind 1: a `[[slot]]` word, 0: an `[[info]]` data table; 12 bytes per entry). patchkit writes it from the `[[slot]]` entries (the address of the word) and the
+  `[[info]]` entries (`name`, `symbol`: an expression that gives the address, by default the symbol `name`; `devices`) of every
+  adapter of the image, and refuses two entries with one hash (`slots_max` and `info_max` in `sdk/sdk.toml` bound the counts).
+  The runtime reads it through `Platform::info(name_hash)` (`CoreApi::info`, the core import `dkc_info`) and names no adapter
+  table: a service finds the data table of its adapter, or a slot word, by the hash of the name. A service file's `SLOTS` item fills only an entry of kind slot
+  (`Platform::info_slot`); a fill that names a data entry refuses the file (`E_FORMAT`) before anything is installed. An image without entries has no
+  table (the optional link of the runtime resolves to 0).
+- **Capacity limits in the info table.** An image adapter that reserves a capacity exports its limit as an `[[info]]` entry named
+  `cap_<kind>` (the kind name of `[capacity.kinds]` in `sdk/sdk.toml` in lower case, e.g. `cap_machine_rows`, `cap_param_rows`,
+  `cap_page_rows`, `cap_voice_rows`, `cap_fx_slots`, `cap_send_slots`). `symbol` is the address of a u32 word that holds the limit
+  (for example `dynreg_info + 32`, the word `M_DYN_N` of the table). `dkrt_capacity` reports per kind: the answer of a loaded service
+  (it wins and owns `used`), else the `cap_<kind>` entry as the limit with `used` 0, else zeros. The planner therefore knows the
+  limits before any service file is loaded. The runtime names no adapter or service: it builds the entry name from the generic
+  kind table (`CAP_INFO_HASHES`).
+- **Raw hooks and their tails.** A hook with no `handler` in `devices/fw/` is a raw hook: its entry takes the whole control
+  flow of the site (mode `replace`), so `patchkit bind` makes the entry itself the `BIND` trampoline and the runtime writes
+  `jmp entry` at the site. When the entry falls through to the displaced stock instructions, the hook declares the exit
+  `tail = true`. The asm refers to the tail by the undefined symbol `dk_tail_<8 hex digits of name_hash(hook)>`
+  (`bind::tail_import`), which `patchkit pack` keeps as an import. `bind` appends the tail, the displaced instructions of the
+  site as in the user's firmware (PC-relative forms are refused as for a `before` hook) followed by `jmp.l` to site + length,
+  turns each reference into a base-relative relocation to it and drops the import. The `BIND` item carries the stock bytes of
+  the site as for any hook, so the runtime refuses a firmware that differs with E_HOOK_STOCK before it installs anything. An
+  unbound `.dks` has no firmware bytes.
+- **Hooks per device.** One `.dks` serves both devices. `[[hook]]` in the module's `module.toml` has `devices`; the `service!`
+  call lists `(name, entry)` for every device, `(name, entry, dt2)` or `(name, entry, dn2)` for one, and declares at `init` those of
+  the running device. The packer writes the device set of each hook into the unbound file: an item of `HOOKS` is `{name hash, word}`,
+  and the top byte of the word is a device mask (bit `i` is device `i` of the device files in file-name order; 0: every device), the low
+  24 bits the handler's image offset. `bind` reads the mask from the file: it skips a hook for another device, refuses a hook for the
+  firmware's device that the port does not declare (naming it), and writes the remaining hooks into `HOOKS` of the bound file with the
+  plain offset (no mask), which is what the runtime reads. The CLI, the Nx `bind` target and the page (`pk_bind`) share this rule.
+  A reader of an unbound file masks the word with `0x00ffffff`. `patchkit service-check` compares the manifest and the call per device.
 - **Sections copied from the image.** `[[section]]` copies bytes of the user's image at patch time (a stock table),
   may append one row per registry entry, and places the result. This is how a framework extends a firmware table
   without storing it.
@@ -491,8 +634,8 @@ after that the button is gone. Flash is on only when every check
 passed and the device is the image's model. A small link, "Use the OS UPGRADE menu instead", brings back the old flow (the box "The device shows WAITING FOR
 SYSEX", paced sending, six steps). The page code is `apps/web/src/firmware/` (rules in `firmware-core.ts`, the runs in `firmware-flow.ts`); the checks, the
 2 ms sender and the RPC state machine (`patchkit::flash_rpc::RpcFlash`) are the Rust ones (`patchkit.wasm` in the browser and in the workbench).
-Proof: `apps/web/tests/firmware-core.test.ts`, `firmware-flow.test.ts`, `firmware-rpc-flow.test.ts`, `firmware-kit.test.mjs` (the wasm image equals `patchkit flash --save`), the
-state machine's tests in `packages/patchkit/src/flash_rpc.rs`, and `firmware-emulator.test.ts`, which runs the page's flash against an emulated device
+Proof: `apps/web/tests/firmware-core.test.ts`, `firmware-flow.wasm.test.ts`, `firmware-rpc-flow.wasm.test.ts`, `firmware-kit.wasm.test.ts` (the wasm image equals `patchkit flash --save`), the
+state machine's tests in `packages/patchkit/src/flash_rpc.rs`, and `firmware-emulator.wasm.test.ts`, which runs the page's flash against an emulated device
 (`tools/emulator/os_upgrade_rig.py ... --rpc --exec`, finding 75). Screenshots of both apps: `node tools/devtools/firmware_shots.mjs --app web|desktop`.
 
 **Flashing with Transfer** (Em's description of the Transfer route; the screens were not checked here):
@@ -577,8 +720,7 @@ presses from the top of the list in the rehearsal), press **YES**. The track pag
 bug of an image built before 2026-10-19 (finding 50). Rebuild the image to get one page.
 (The emulator rig pressed YES twice, 300 ms apart; if the track page does not show those parameters after one press, press YES once more.)
 
-**8. Play:** press **TRIG 1** (hold it for a few seconds). Expected: a plucked-string tone, decaying (the rehearsal's note is sample for sample the
-patched-in `test/patched-pluck`). Keep the key down for 10 to 20 seconds once, then read the log again (command of step 6, new `--out`):
+**8. Play:** press **TRIG 1** (hold it for a few seconds). Expected: a plucked-string tone, decaying (the rehearsal's note matched the retired patched-in twin sample for sample; its PCM is pinned in `modules/machines/pluck/tests/equiv.device.test.ts`). Keep the key down for 10 to 20 seconds once, then read the log again (command of step 6, new `--out`):
 
 Good log (dispatches and returns rise together; this is the rehearsal's):
 
@@ -829,7 +971,7 @@ The PNG is 512x256 (4 times the OLED); `--scale N` changes it. It sends only a r
 Runtime 5 (finding 51) clamps pluck's pitch (the LFO-on-TUNE failure: Inf/NaN in the string state silenced every track) and adds a guard to the voice wrapper
 `core/dsp-voice`: the machine's parameter words are clamped to the ranges its `[[param]]` declare, a block that is not finite or above 8.0 is zeroed, the voice ends,
 the fault is counted, and a machine type that faults 8 times in a second is switched off until the next start. The log gets `MACHINE_FAULT` and `MACHINE_DISABLED`; INFO says
-`runtime: 5`. **The device has not run it**; rehearsed in the emulator and on the SHARC rig (`debug-guard`, `test_dsp_guard.py`).
+`runtime: 5`. **The device has not run it**; rehearsed in the emulator and on the SHARC rig (`debug-guard`, `dsp-guard.rig.test.ts`).
 
 One flash, and the `.dkm` files must be packed again (a DSP section of version 2 needs runtime 5; `dk run` packs and uploads the new file, because its sha256 differs).
 

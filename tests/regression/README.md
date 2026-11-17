@@ -17,7 +17,7 @@ time (the stock project may run files in parallel, `REGRESSION_JOBS`, set by the
 Device tests for a module live in that module: `modules/**/tests/*.device.test.ts` (patched runtime on DT2 1.17
 and DN2 1.12). The owner's `project.json` lists them in `metadata.runtimeAcceptance`, with paths relative
 to that project. A record with `dksampleWasm: true` makes the target depend on `dksample:wasm`, which builds
-`apps/web/public/dksample.wasm`. A record with `pythonTools: true` hashes the Python tools in `PYTHON_TOOL_SOURCES`, and `pythonTools: "client"` only those in `PYTHON_CLIENT_SOURCES` (`tools/nx/module-targets.mjs`), for tests that spawn Python tools. Runtime acceptance belongs to `modules/core/runtime/tests/project.json`
+`apps/web/public/dksample.wasm`; `dkprofWasm: true` does the same with `dkprof:wasm` and `apps/web/public/dkprof.wasm`. Python tools a record lists in `sources` are hashed with the `tools.*` files they import (`tools/nx/py-imports.mjs`); a test that runs a new Python tool must list it there. Runtime acceptance belongs to `modules/core/runtime/tests/project.json`
 (`core/runtime-tests`) except CF-only service commands and settings, owned by nested `service-commands/project.json`
 and `settings/project.json` (`core/runtime-service-tests` and `core/runtime-settings-tests`). Run an owner's
 `test-device` directly; `module:check core/runtime` discovers all owners. Checks that run over
@@ -101,9 +101,9 @@ Helpers in `runtime/devices.ts`, `ready.ts`, `waits.ts`, `install.ts`, `artifact
 - `runtimeTests(name, body, opts)`: one test per device, after `expectRuntimeBoot`.
 - `liveOptions(device, extra)`: daemon binary, firmware version and card for `withPatchedSession`.
 - `expectRuntimeReady`: wait for the runtime's normal UI hook on a fresh free-running daemon.
-- `waitEmulated`: wait for emulated time (DSP frames); wall time is only a hang guard.
+- `rt.ui`, `rt.listen()`, `pollUntil`: panel inputs with their waits, runtime-log waits and polls, all in emulated time; wall time is only a hang guard.
 - `installModule`, `moduleArtifact`: install a prepared `.dkm` and locate it.
-- `tap`, `record`: panel key presses and a log line in the run artifacts.
+- `record`: a log line in the run artifacts.
 - `liveArtifacts`: the run artifact directory.
 
 Helpers in `support.ts`:
