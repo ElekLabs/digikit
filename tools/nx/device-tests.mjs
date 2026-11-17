@@ -3,6 +3,7 @@
 import { globSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
+import { checkDspModes, taskMode } from './dsp-mode.mjs';
 import { mergeTests, manifestClosure, read, records } from './module-manifests.mjs';
 import {
   DEVICE_INPUTS,
@@ -78,6 +79,8 @@ export const deviceTarget = (
       // the key holds the patchkit binary (a full key, or a live closure): runtime/patchkit-exec.ts runs patchkit only then
       env: {
         DIGI_PATCHKIT_LIVE: (!opts.narrow && !opts.merge) || patchkitLive ? '1' : '',
+        // the DSP mode of the files (records' `dsp`, checked against the sources): emu-slot.mjs takes the cores of the task from it
+        DIGI_EMU_DSP: taskMode(tests, recs),
         // the `-all` twins run the full tier: `full: true` tests (tests/regression/runtime/devices.ts FULL_TIER) run too
         ...(opts.fullTier ? { DIGIKIT_TIER: 'full' } : {}),
       },
@@ -230,7 +233,13 @@ export const conformanceTarget = (workspaceRoot, root, m, f, importInputs) => ({
   outputs: [],
   options: {
     command: `${EMU_SLOT} pnpm --filter @digi/regression test:conformance`,
-    env: { DIGI_CONFORMANCE_MODULES: m.id, DIGI_CONFORMANCE_MANIFEST: f, DIGI_PATCHKIT_LIVE: '1' },
+    env: {
+      DIGI_CONFORMANCE_MODULES: m.id,
+      DIGI_CONFORMANCE_MANIFEST: f,
+      DIGI_PATCHKIT_LIVE: '1',
+      // as tests/conformance/manifests.ts: a dynamic module that is no service runs with the SHARC
+      DIGI_EMU_DSP: m.dynamic === true && m.type !== 'service' ? 'sharc' : 'zero',
+    },
     cwd: '.',
   },
 });
@@ -259,6 +268,7 @@ export const testOnlyNodes = (
     if (!tests.length) continue;
     const recs = records(join(workspaceRoot, root));
     checkAcceptanceTags(root, recs, tests, moduleInfo);
+    checkDspModes(workspaceRoot, root, recs, importInputs);
     if (recs.some((rec) => Object.keys(rec.aliases ?? {}).length))
       throw new Error(`Test-only project ${config.name} needs explicit pack-aliases support`);
     // Explicit fixture images build only their manifest requirements; ordinary owners keep the default image.

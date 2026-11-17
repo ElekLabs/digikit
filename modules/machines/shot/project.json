@@ -6,6 +6,7 @@
       {
         "files": ["tests/shot-dt2.device.test.ts"],
         "devices": ["dt2"],
+        "dsp": "sharc",
         "tags": ["S:machines", "S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines"],
         "plusdrive": true,
@@ -14,7 +15,8 @@
       {
         "files": ["tests/shot-dn2-pool.device.test.ts"],
         "devices": ["dn2"],
-        "tags": ["S:machines", "S:samples"],
+        "dsp": "sharc",
+        "tags": ["S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "test/track-select", "core/services/machines"],
         "plusdrive": true,
         "dksampleWasm": true
@@ -22,7 +24,8 @@
       {
         "files": ["tests/shot-dn2-link.device.test.ts"],
         "devices": ["dn2"],
-        "tags": ["S:machines", "S:samples"],
+        "dsp": "sharc",
+        "tags": ["S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "test/track-select", "test/dyn-fx-gain", "core/services/fx", "core/services/machines"],
         "plusdrive": true,
         "dksampleWasm": true
@@ -30,7 +33,8 @@
       {
         "files": ["tests/shot-dn2-lease.device.test.ts"],
         "devices": ["dn2"],
-        "tags": ["S:machines", "S:samples"],
+        "dsp": "sharc",
+        "tags": ["S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "test/track-select", "core/services/machines"],
         "plusdrive": true,
         "dksampleWasm": true
@@ -38,6 +42,7 @@
       {
         "files": ["tests/shot-dn2-audio.device.test.ts"],
         "devices": ["dn2"],
+        "dsp": "sharc",
         "tags": ["C:dsp", "S:machines", "S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "test/track-select", "core/services/machines"],
         "plusdrive": true,
@@ -46,6 +51,7 @@
       {
         "files": ["tests/shot-dn2-supersede.device.test.ts"],
         "devices": ["dn2"],
+        "dsp": "sharc",
         "tags": ["M:digikit/remote", "S:machines", "S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "digikit/remote", "test/track-select", "core/services/machines"],
         "plusdrive": true,
@@ -54,6 +60,7 @@
       {
         "files": ["tests/shot-picker.device.test.ts"],
         "devices": ["dt2"],
+        "dsp": "sharc",
         "tags": ["S:machines", "S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines"],
         "plusdrive": true,

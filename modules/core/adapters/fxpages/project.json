@@ -5,6 +5,7 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/fx-bipolar.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/fxpages", "C:state"],
         "modules": ["test/dyn-fx-gain-bipolar", "test/sine", "core/services/machines", "core/services/fx"],
         "sources": [
@@ -17,6 +18,7 @@
       },
       {
         "files": ["tests/fx-kit-persist.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/fxpages", "C:state"],
         "modules": ["test/dyn-fx-gain", "test/dyn-fx-gain-b", "test/sine", "core/services/fx", "core/services/machines"],
         "sources": [
@@ -28,6 +30,7 @@
       },
       {
         "files": ["tests/fx-pages.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/fxpages"],
         "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
         "sources": [
@@ -39,6 +42,7 @@
       },
       {
         "files": ["tests/fx-track-route-stock.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/fxpages"],
         "modules": ["test/dyn-fx-gain-both", "test/sine", "core/services/fx", "core/services/machines"],
         "aliases": {
@@ -55,6 +59,7 @@
       },
       {
         "files": ["tests/fx-track-route-send.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/fxpages"],
         "modules": ["test/dyn-fx-gain-both", "test/sine", "core/services/fx", "core/services/machines"],
         "aliases": {
@@ -71,6 +76,7 @@
       },
       {
         "files": ["tests/fx-track-route-kit.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/fxpages", "C:state"],
         "modules": ["test/dyn-fx-gain-both", "test/sine", "core/services/fx", "core/services/machines"],
         "aliases": {
@@ -87,6 +93,7 @@
       },
       {
         "files": ["tests/fx-track-route-limit.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/fxpages"],
         "modules": ["test/dyn-fx-gain-both", "test/sine", "core/services/fx", "core/services/machines"],
         "aliases": {
@@ -103,6 +110,7 @@
       },
       {
         "files": ["tests/fx-track-route-lock.device.test.ts"],
+        "dsp": "sharc",
         "tags": ["A:core/fxpages"],
         "modules": ["test/dyn-fx-gain-both", "test/sine", "core/services/fx", "core/services/machines"],
         "aliases": {
