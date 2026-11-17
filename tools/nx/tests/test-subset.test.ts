@@ -56,7 +56,7 @@ it('adds gate-smoke and gate-pins, and runs one call when the cross product is e
 it('splits the calls when a project would run a target that was not selected', () => {
   const both = [
     ...projects,
-    project('core/c', ['test-device--dn2'], [{ files: ['c.device.test.ts'], tags: ['C:state'] }]),
+    project('core/c', ['test-device--dn2'], [{ files: ['tests/c.device.test.ts'], tags: ['C:state'] }]),
   ];
   const pairs = [
     { project: 'core/b', target: 'test-device--dt2' },
@@ -67,4 +67,34 @@ it('splits the calls when a project would run a target that was not selected', (
     ['run-many', '-t', 'test-device--dt2', '-p', 'core/b'],
     ['run-many', '-t', 'test-device--dn2', '-p', 'core/c'],
   ]);
+});
+
+it('selects the records whose subject changed since a base, beside the tags', () => {
+  const graph = [
+    {
+      ...project(
+        'core/a',
+        ['test-device--dt2'],
+        [{ files: ['tests/x.device.test.ts'], tags: ['C:boot'], modules: ['core/b'] }],
+      ),
+      root: 'modules/a',
+    },
+    {
+      ...project('core/b', ['test-device--dt2'], [{ files: ['b.device.test.ts'], tags: ['C:state'], dsp: 'sharc' }]),
+      root: 'modules/b',
+    },
+    {
+      ...project('core/c', ['test-device--dt2'], [{ files: ['tests/c.device.test.ts'], tags: ['C:tick'] }]),
+      root: 'modules/c',
+    },
+  ];
+  const files = (changed: string[]) =>
+    resolveSubset([], graph, changed)
+      .tests.map((t) => t.project)
+      .sort();
+  // a change in core/b reaches the record that loads it; a project.json or a test change of another project does not
+  expect(files(['modules/b/src/x.c'])).toEqual(['core/a', 'core/b']);
+  expect(files(['modules/c/project.json', 'modules/c/tests/other.device.test.ts', 'docs/x.md'])).toEqual([]);
+  expect(files(['modules/c/tests/c.device.test.ts'])).toEqual(['core/c']);
+  expect(resolveSubset([], graph, ['modules/b/src/x.c']).tests.find((t) => t.project === 'core/b')?.dsp).toBe('sharc');
 });
