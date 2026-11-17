@@ -101,7 +101,7 @@ Plugin sources are not inputs of module device targets. A `runtimeAcceptance` re
 
 | Command | What runs |
 | --- | --- |
-| `mise run test:changed` | `nx affected` against `DIGI_GATE_BASE` (default `main`) over the targets `lint`, `fmt-check`, `typecheck`, `test-host` and `python-checks`. Does not run Rust, module builds or devices. |
+| `mise run test:changed` | `nx affected` against `DIGI_GATE_BASE` (default `main`) over the targets `lint`, `fmt-check`, `typecheck`, `test-host`, `python-checks` and `objects-check` (about 25 s uncached; `patchkit` is affected by edits of its own files, of core module sources, manifests or toolchain inputs, so a stale committed `.dko.json` fails here). Does not run Rust, module builds or devices. |
 | `pnpm test:host` | The Vitest projects of `vitest.host.projects.json` except `web-wasm` (the Nx `test-host` set): control-client, test-support, dk-session, web-transfer, desktop-host, regression-host, module-tests, nx-host, dkbs. One worker by default; `-- --maxWorkers N` changes it. |
 | `pnpm verify:host` | oxlint, Prettier check, host Vitest, typecheck of control-client, dk-session, test-support, regression and desktop. Stops at the first failure. |
 | `pnpm --filter @digi/web test-wasm` | The Vitest project `web-wasm` (`tests/*.wasm.test.ts`, 120 s limit per test). Needs `public/*.wasm` (`@digi/web:test-wasm` builds it). Cases that need firmware skip when absent. |
@@ -1064,6 +1064,7 @@ sharc-rt, dkmidi). Those run
 Their runtime key includes the sorted present `CARGO_PROFILE_RELEASE_*` names and values, including
 build-override options; changing these environment settings requires a direct target invocation when
 there is no tracked change selecting the crate.
+The service crates `modules/core/services/*/dks` are no members of the root workspace (own `[workspace]` and Cargo.lock); `standaloneRustTests` in `tools/nx/cargo.mjs` gives the module project of every such crate an uncached `rust-tests` (`cargo nextest run --manifest-path <crate>/Cargo.toml --release --locked --offline --no-tests=pass`), found by the `[workspace]` table, so a new service crate needs no list entry. Its inputs are the project files, the production files of its path dependencies (transitively) and the toolchain. Run one with `pnpm nx:pilot run core/services/machines:rust-tests`; `core/services/fx` and `core/services/lfo` have no host tests and pass with none.
 Other crates run uncached through `node tools/nx/rust-env.mjs --`; only `sharc-native` and the desktop crate
 add `--gen`, because only they need the generated core. Crates without tests have no `rust-tests`
 target. `workspace:fmt-check` is not cached: prettier also opens files it never formats (`.py`, `.rs`),

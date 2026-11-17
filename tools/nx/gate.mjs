@@ -41,7 +41,7 @@ const MERGE_TARGETS = [
 
 export const TIERS = {
   changed: {
-    targets: ['lint', 'fmt-check', 'rust-fmt', 'typecheck', 'test-host', 'python-checks'],
+    targets: ['lint', 'fmt-check', 'rust-fmt', 'typecheck', 'test-host', 'python-checks', 'objects-check'],
     access: 'rw',
     narrow: false,
   },
