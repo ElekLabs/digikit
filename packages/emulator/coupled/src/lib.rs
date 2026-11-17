@@ -20,6 +20,8 @@ use std::{
 pub const STEP_CHUNK: u32 = 250_000;
 
 #[cfg(feature = "coupled-audio")]
+pub mod audio_out;
+#[cfg(feature = "coupled-audio")]
 pub mod cold;
 #[cfg(feature = "coupled-audio")]
 pub mod dsp_core;
@@ -32,7 +34,9 @@ const INPUT_LOG_LIMIT: usize = 100_000;
 const SINK_EVENTS_STATUS_TAIL: usize = 200;
 
 #[cfg(feature = "coupled-audio")]
-pub use coupled::{PcmTap, gates};
+pub use audio_out::{AudioOut, PcmSink, PcmTap};
+#[cfg(feature = "coupled-audio")]
+pub use coupled::gates;
 #[cfg(feature = "coupled-audio")]
 pub use elektron_native_boot::sharc_peer::{ExecutionProfile, WorkerReport};
 #[cfg(feature = "coupled-audio")]
@@ -501,12 +505,12 @@ impl CoupledRuntime {
     /// nothing without coupled audio.
     pub fn observe_pcm(&mut self, keep: bool) {
         if let Some(audio) = &mut self.audio {
-            audio.pcm_tap = Some(PcmTap::new(keep));
+            audio.out.observe(keep);
         }
     }
     /// PCM seen since `observe_pcm`, up to the last `snapshot()`/`sync`.
     pub fn pcm_tap(&self) -> Option<&PcmTap> {
-        self.audio.as_ref()?.pcm_tap.as_ref()
+        self.audio.as_ref()?.out.tap()
     }
     /// Why the DSP stopped, once it has (set when a frame exchange fails).
     pub fn dsp_halted(&self) -> Option<String> {
@@ -588,214 +592,13 @@ impl CoupledRuntime {
 #[cfg(feature = "coupled-audio")]
 mod coupled {
     use super::*;
+    use crate::audio_out::{AudioOut, PACE_MIN_SECONDS, PcmSink, player_settings};
     use elektron_native_boot::{
         pcm_play::{Mode, PcmPlayer, Recovery, SOURCE_RATE},
         sharc_peer::{DEFAULT_PERIOD, Shared, ThreadedHandle, ThreadedTimingProfile},
-        wav::WavWriter,
     };
     use serde_json::json;
-    use std::{
-        cell::RefCell,
-        fs::File,
-        io::{self, Write},
-        rc::Rc,
-        time::Instant,
-    };
-
-    #[cfg(test)]
-    const PCM_CAPTURE_LIMIT: u64 = SOURCE_RATE as u64 * 2 * 10;
-
-    /// Running statistics of the PCM the DSP produced, for headless hosts.
-    pub struct PcmTap {
-        /// Interleaved f32 values seen.
-        pub count: u64,
-        pub nonzero: u64,
-        pub non_finite: u64,
-        pub peak: f32,
-        pub sum_sq: f64,
-        /// 100 ms windows whose RMS is above 1e-3 (a coarse activity measure).
-        pub active_windows: u64,
-        pub windows: u64,
-        /// RMS of each 100 ms window, in order (at most `TAP_WINDOW_LIMIT`).
-        pub window_rms: Vec<f32>,
-        win_n: u64,
-        win_sq: f64,
-        hasher: sha2::Sha256,
-        /// Every sample, when asked for.
-        pub kept: Option<Vec<f32>>,
-    }
-
-    /// Interleaved values in 100 ms of stereo audio.
-    const TAP_WINDOW: u64 = SOURCE_RATE as u64 / 10 * 2;
-    const TAP_WINDOW_LIMIT: usize = 36_000;
-
-    impl PcmTap {
-        pub fn new(keep: bool) -> Self {
-            use sha2::Digest;
-            Self {
-                count: 0,
-                nonzero: 0,
-                non_finite: 0,
-                peak: 0.0,
-                sum_sq: 0.0,
-                active_windows: 0,
-                windows: 0,
-                window_rms: Vec::new(),
-                win_n: 0,
-                win_sq: 0.0,
-                hasher: sha2::Sha256::new(),
-                kept: keep.then(Vec::new),
-            }
-        }
-        fn feed(&mut self, pcm: &[f32]) {
-            use sha2::Digest;
-            let mut bytes = Vec::with_capacity(pcm.len() * size_of::<f32>());
-            for &v in pcm {
-                bytes.extend_from_slice(&v.to_le_bytes());
-                self.count += 1;
-                if !v.is_finite() {
-                    self.non_finite += 1;
-                    continue;
-                }
-                self.nonzero += (v != 0.0) as u64;
-                self.peak = self.peak.max(v.abs());
-                let sq = f64::from(v) * f64::from(v);
-                self.sum_sq += sq;
-                self.win_sq += sq;
-                self.win_n += 1;
-                if self.win_n == TAP_WINDOW {
-                    self.windows += 1;
-                    let rms = (self.win_sq / TAP_WINDOW as f64).sqrt();
-                    self.active_windows += (rms > 1e-3) as u64;
-                    if self.window_rms.len() < TAP_WINDOW_LIMIT {
-                        self.window_rms.push(rms as f32);
-                    }
-                    self.win_n = 0;
-                    self.win_sq = 0.0;
-                }
-            }
-            self.hasher.update(&bytes);
-            if let Some(kept) = &mut self.kept {
-                kept.extend_from_slice(pcm);
-            }
-        }
-        /// SHA-256 of the little-endian f32 bytes seen so far.
-        pub fn sha256_hex(&self) -> String {
-            use sha2::Digest;
-            format!("{:x}", self.hasher.clone().finalize())
-        }
-        pub fn rms(&self) -> f64 {
-            if self.count == 0 {
-                0.0
-            } else {
-                (self.sum_sq / self.count as f64).sqrt()
-            }
-        }
-        /// Audio seconds covered (stereo).
-        pub fn seconds(&self) -> f64 {
-            self.count as f64 / 2.0 / SOURCE_RATE as f64
-        }
-    }
-
-    enum CaptureOut {
-        Raw(File),
-        Wav(WavWriter),
-    }
-
-    struct PcmCapture {
-        out: Option<CaptureOut>,
-        path: String,
-        count: u64,
-        /// Most interleaved samples written.
-        limit: u64,
-        error: Option<String>,
-    }
-
-    impl PcmCapture {
-        fn from_env() -> Option<Self> {
-            let path = std::env::var_os("DIGI_EMU_PCM_F32LE")?;
-            // Unset means unlimited.
-            let limit = std::env::var("DIGI_EMU_PCM_SECONDS")
-                .ok()
-                .and_then(|text| text.parse::<f64>().ok())
-                .filter(|seconds| seconds.is_finite() && *seconds >= 0.0)
-                .map_or(u64::MAX, |seconds| {
-                    (seconds * SOURCE_RATE as f64 * 2.0) as u64
-                });
-            Some(Self::open(&PathBuf::from(path), limit))
-        }
-
-        /// A `.wav` path gets a float WAV, anything else raw f32le. A failed
-        /// open is recorded in `error` and nothing is written.
-        fn open(path: &std::path::Path, limit: u64) -> Self {
-            let wav = path
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("wav"));
-            let opened = if wav {
-                WavWriter::create(path, SOURCE_RATE, 2).map(CaptureOut::Wav)
-            } else {
-                File::create(path).map(CaptureOut::Raw)
-            };
-            let (out, error) = match opened {
-                Ok(out) => (Some(out), None),
-                Err(error) => (None, Some(format!("PCM capture open: {error}"))),
-            };
-            Self {
-                out,
-                path: path.display().to_string(),
-                count: 0,
-                limit,
-                error,
-            }
-        }
-
-        fn write(&mut self, pcm: &[f32]) {
-            let Some(out) = &mut self.out else {
-                return;
-            };
-            let result = match out {
-                CaptureOut::Raw(file) => write_pcm_f32le(file, &mut self.count, pcm, self.limit),
-                CaptureOut::Wav(wav) => {
-                    let samples = pcm
-                        .len()
-                        .min(self.limit.saturating_sub(self.count) as usize);
-                    if samples == 0 {
-                        Ok(())
-                    } else {
-                        let result = wav.write(&pcm[..samples]);
-                        if result.is_ok() {
-                            self.count += samples as u64;
-                        }
-                        result
-                    }
-                }
-            };
-            if let Err(error) = result {
-                self.out = None;
-                self.error = Some(format!("PCM capture write: {error}"));
-            }
-        }
-    }
-
-    fn write_pcm_f32le(
-        writer: &mut impl Write,
-        count: &mut u64,
-        pcm: &[f32],
-        limit: u64,
-    ) -> io::Result<()> {
-        let samples = pcm.len().min(limit.saturating_sub(*count) as usize);
-        if samples == 0 {
-            return Ok(());
-        }
-        let mut bytes = Vec::with_capacity(samples * size_of::<f32>());
-        for sample in &pcm[..samples] {
-            bytes.extend_from_slice(&sample.to_le_bytes());
-        }
-        writer.write_all(&bytes)?;
-        *count += samples as u64;
-        Ok(())
-    }
+    use std::{cell::RefCell, rc::Rc, time::Instant};
 
     fn continuation(data: &[u8]) -> Result<(u64, u64, &[u8]), String> {
         if data.len() <= 24 || &data[..8] != b"DT2DSP01" {
@@ -807,36 +610,24 @@ mod coupled {
             &data[24..],
         ))
     }
-    /// The free-running pace target without prefill (`--audio-buffer 0`).
-    const PACE_MIN_SECONDS: f64 = 0.05;
-
     pub(super) struct AudioSession {
         pub(super) handle: ThreadedHandle,
         pub(super) shared: Rc<RefCell<Shared>>,
-        player: Option<PcmPlayer>,
-        device_error: Option<String>,
-        playback_requested: bool,
+        pub(super) out: AudioOut,
         /// The DSP image name of the generated core this session runs (`dn2-1.11`, `dt2-1.16`).
         dsp_core: &'static str,
         pub(super) frames: u64,
-        samples: u64,
         initial_instructions: u64,
-        started: Instant,
         link_timing: bool,
         pub(super) cf_step_calls: u64,
         pub(super) cf_step_wall_ns: u64,
         pub(super) pcm_handoff_ns: u64,
         pub(super) audio_poll_wall_ns: u64,
         pub(super) audio_sync_wall_ns: u64,
-        pcm_capture: Option<PcmCapture>,
-        pub(super) pcm_tap: Option<PcmTap>,
         /// When the tier counters were last printed (every 10 s, link timing only).
         tiers_printed: std::cell::Cell<Option<Instant>>,
         audio_mode: crate::AudioMode,
         spike: Option<elektron_native_boot::spikelog::CfWindow>,
-        /// Queued audio at which free running waits: the prefill, at least
-        /// `PACE_MIN_SECONDS`.
-        pace_seconds: f64,
     }
     impl AudioSession {
         fn new_with_player(
@@ -903,51 +694,28 @@ mod coupled {
             }
             shared.borrow_mut().dsp_instructions = initial_instructions;
             emulator.set_dspi2_peer(peer.boxed());
-            let mode = if options.buffer_seconds == 0.0 {
-                Mode::Live
-            } else {
-                Mode::Buffer(options.buffer_seconds)
-            };
-            // The refill threshold must fit the ~1 s output ring.
-            let refill = options.buffer_seconds.clamp(0.2, 0.9);
+            let (mode, recovery) = player_settings(options.buffer_seconds, options.audio_mode);
+            // The prefill, at least `PACE_MIN_SECONDS`.
             let pace_seconds = options.buffer_seconds.max(PACE_MIN_SECONDS);
-            let recovery = match options.audio_mode {
-                crate::AudioMode::Rebuffer => Recovery::Rebuffer(refill),
-                crate::AudioMode::Stretch => Recovery::Stretch(refill),
-                crate::AudioMode::Gap => Recovery::Gap,
-            };
-            let (player, device_error) = if options.playback {
-                match player(mode, recovery) {
-                    Ok(p) => (Some(p), None),
-                    Err(e) => (None, Some(e)),
-                }
-            } else {
-                (None, None)
-            };
-            let pcm_capture = PcmCapture::from_env();
+            let out = AudioOut::new(options.playback, pace_seconds, || {
+                player(mode, recovery).map(|p| Box::new(p) as Box<dyn PcmSink>)
+            });
             Ok(Self {
                 handle,
                 shared,
-                player,
-                device_error,
-                playback_requested: options.playback,
+                out,
                 dsp_core: core.image,
                 frames: 0,
-                samples: 0,
                 initial_instructions,
-                started: Instant::now(),
                 link_timing,
                 cf_step_calls: 0,
                 cf_step_wall_ns: 0,
                 pcm_handoff_ns: 0,
                 audio_poll_wall_ns: 0,
                 audio_sync_wall_ns: 0,
-                pcm_capture,
-                pcm_tap: None,
                 tiers_printed: std::cell::Cell::new(None),
                 audio_mode: options.audio_mode,
                 spike: elektron_native_boot::spikelog::CfWindow::open(),
-                pace_seconds,
             })
         }
         pub(super) fn new(emulator: &mut Emulator, options: &AudioOptions) -> Result<Self, String> {
@@ -956,19 +724,14 @@ mod coupled {
         /// Close the PCM capture, if any, after the samples produced so far.
         pub(super) fn stop_capture(&mut self) {
             self.sync();
-            self.pcm_capture = None;
+            self.out.stop_capture();
         }
         /// Replace the PCM capture with one for `path` (no length limit).
         pub(super) fn capture_pcm(&mut self, path: &std::path::Path) -> Result<(), String> {
             // The DSP worker runs ahead of the host by a number of frames that depends on host timing. Drain them first, so that the
             // capture starts at the frame the ColdFire has sent (the same stream position in every run), not at a varying one.
             self.sync();
-            let capture = PcmCapture::open(path, u64::MAX);
-            if let Some(error) = capture.error {
-                return Err(format!("{}: {error}", path.display()));
-            }
-            self.pcm_capture = Some(capture);
-            Ok(())
+            self.out.start_capture(path)
         }
         pub(super) fn link_timing_enabled(&self) -> bool {
             self.link_timing
@@ -985,16 +748,7 @@ mod coupled {
             let handoff_start = self.link_timing.then(Instant::now);
             let mut shared = self.shared.borrow_mut();
             self.frames += shared.frames.len() as u64;
-            self.samples += shared.pcm.len() as u64;
-            if let Some(capture) = &mut self.pcm_capture {
-                capture.write(&shared.pcm);
-            }
-            if let Some(player) = &self.player {
-                player.push(&shared.pcm);
-            }
-            if let Some(tap) = &mut self.pcm_tap {
-                tap.feed(&shared.pcm);
-            }
+            self.out.push(&shared.pcm);
             // Host observation histories are not DSP state. Keep production storage bounded
             // by one host step; retain the peer's cumulative counters and halt information.
             shared.pcm.clear();
@@ -1037,11 +791,7 @@ mod coupled {
                 .handle
                 .timing_profile()
                 .map_or(0, |t| t.host_reply_wait_ns);
-            let queue = self.player.as_ref().map_or(serde_json::Value::Null, |p| {
-                let mut queue = serde_json::json!(p.queue_state());
-                queue["pace_seconds"] = self.pace_seconds.into();
-                queue
-            });
+            let queue = self.out.queue_json();
             spike.flush(reply_wait_ns, self.handle.frames_sent(), queue);
         }
 
@@ -1051,18 +801,10 @@ mod coupled {
             self.shared.borrow().halted.clone()
         }
         pub(super) fn sink_underruns(&self) -> Option<u64> {
-            self.player
-                .as_ref()
-                .map(|p| p.queue_state().underrun_events)
+            self.out.sink_underruns()
         }
         pub(super) fn queue_ahead(&self) -> bool {
-            self.player.as_ref().is_some_and(|p| {
-                let q = p.queue_state();
-                // Pending frames are at the 48 kHz source rate (pcm_play::SOURCE_RATE).
-                let queued = q.queued_device_frames as f64 / f64::from(q.device_rate.max(1))
-                    + q.feeder_pending_source_frames as f64 / 48_000.0;
-                queued >= self.pace_seconds
-            })
+            self.out.queue_ahead()
         }
         pub(super) fn sync(&mut self) {
             let wall_start = self.link_timing.then(Instant::now);
@@ -1117,40 +859,28 @@ mod coupled {
                     .is_none_or(|at| at.elapsed().as_secs_f64() >= 10.0)
             {
                 let mut line = json!({"dsp_tiers": dsp_tiers.clone()});
-                line["source_audio_seconds"] =
-                    (self.samples as f64 / 2.0 / SOURCE_RATE as f64).into();
-                line["session_wall_seconds"] = self.started.elapsed().as_secs_f64().into();
+                line["source_audio_seconds"] = self.out.audio_seconds().into();
+                line["session_wall_seconds"] = self.out.wall_seconds().into();
                 eprintln!("native_audio_report={line}");
                 self.tiers_printed.set(Some(Instant::now()));
             }
             let shared = self.shared.borrow();
-            let sink = self.player.as_ref().map(PcmPlayer::stats);
-            let output_device = self.player.as_ref().map(|player| player.device.clone());
-            let connected = sink.as_ref().is_some_and(|s| s.error.is_none());
-            let wall = self.started.elapsed().as_secs_f64();
-            let audio = self.samples as f64 / 2.0 / SOURCE_RATE as f64;
             let mut report = json!({
                 "schema_version": 1, "peer": "threaded", "sample_rate": SOURCE_RATE,
-                "output_device_sample_rate": self.player.as_ref().map(|player| player.device_rate),
                 "period_instructions": DEFAULT_PERIOD, "ssi_period_instructions": 96_000,
-                "frames": self.frames, "source_pcm_frames": self.samples / 2,
-                "source_audio_seconds": audio, "session_wall_seconds": wall,
-                "audio_seconds_per_session_wall_second": if wall > 0.0 { audio / wall } else { 0.0 },
+                "frames": self.frames,
                 "dsp_instructions_since_restore": shared.dsp_instructions.saturating_sub(self.initial_instructions),
                 "missing_blocks": shared.missing_blocks, "nonzero_replies": shared.nonzero_replies,
-                "halted": shared.halted, "flow_started": self.samples > 0,
-                "playback_requested": self.playback_requested, "sink_connected": connected,
+                "halted": shared.halted,
                 "dsp_core": self.dsp_core,
-                "device_error": self.device_error, "output_device": output_device, "sink": sink,
                 "sink_stats_note": "async feeder snapshot; excludes PCM messages still in the channel",
                 "audio_mode": self.audio_mode.name(),
                 "dsp_tiers": dsp_tiers,
             });
-            if let Some(capture) = &self.pcm_capture {
-                report["pcm_capture_path"] = capture.path.clone().into();
-                report["pcm_capture_count"] = capture.count.into();
-                report["pcm_capture_error"] = capture.error.clone().into();
-            }
+            report
+                .as_object_mut()
+                .expect("object")
+                .extend(self.out.report_fields());
             if self.link_timing {
                 let timing = self.handle.timing_profile().expect("enabled link timing");
                 report["link_timing"] = link_timing_json(
@@ -1236,68 +966,6 @@ mod coupled {
             data.extend([7, 8]);
             assert_eq!(continuation(&data).unwrap(), (123, 456, &[7, 8][..]));
         }
-        #[test]
-        fn pcm_tap_hashes_the_le_bytes_and_measures_activity() {
-            use sha2::{Digest, Sha256};
-            let mut tap = PcmTap::new(true);
-            // One second of stereo: half silent, half a constant 0.5.
-            let pcm: Vec<f32> = (0..SOURCE_RATE as usize * 2)
-                .map(|i| if i < SOURCE_RATE as usize { 0.0 } else { 0.5 })
-                .collect();
-            // Fed in uneven pieces, as the drain does.
-            tap.feed(&pcm[..1001]);
-            tap.feed(&pcm[1001..]);
-            let bytes: Vec<u8> = pcm.iter().flat_map(|v| v.to_le_bytes()).collect();
-            assert_eq!(tap.sha256_hex(), format!("{:x}", Sha256::digest(&bytes)));
-            assert_eq!(tap.count, pcm.len() as u64);
-            assert_eq!(tap.nonzero, SOURCE_RATE as u64);
-            assert_eq!(tap.peak, 0.5);
-            assert!((tap.rms() - (0.5f64 * 0.5 / 2.0).sqrt()).abs() < 1e-9);
-            assert!((tap.seconds() - 1.0).abs() < 1e-12);
-            assert_eq!((tap.windows, tap.active_windows), (10, 5));
-            assert_eq!(tap.kept.as_deref(), Some(&pcm[..]));
-            tap.feed(&[f32::NAN]);
-            assert_eq!(tap.non_finite, 1);
-        }
-        #[test]
-        fn pcm_capture_writer_uses_little_endian_and_respects_the_limit() {
-            let mut bytes = Vec::new();
-            let mut count = 0;
-            write_pcm_f32le(&mut bytes, &mut count, &[-1.0, 0.0, 0.5], PCM_CAPTURE_LIMIT).unwrap();
-            assert_eq!(count, 3);
-            assert_eq!(
-                bytes,
-                [
-                    (-1.0f32).to_le_bytes(),
-                    0.0f32.to_le_bytes(),
-                    0.5f32.to_le_bytes()
-                ]
-                .concat()
-            );
-
-            let mut bounded = Vec::new();
-            let mut count = PCM_CAPTURE_LIMIT - 1;
-            write_pcm_f32le(&mut bounded, &mut count, &[0.25, 0.75], PCM_CAPTURE_LIMIT).unwrap();
-            assert_eq!(count, PCM_CAPTURE_LIMIT);
-            assert_eq!(bounded, 0.25f32.to_le_bytes());
-        }
-        #[test]
-        fn pcm_capture_writer_returns_the_write_error_without_advancing_count() {
-            struct FailingWriter;
-            impl std::io::Write for FailingWriter {
-                fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-                    Err(std::io::Error::other("expected write failure"))
-                }
-                fn flush(&mut self) -> std::io::Result<()> {
-                    Ok(())
-                }
-            }
-            let mut count = 0;
-            assert!(
-                write_pcm_f32le(&mut FailingWriter, &mut count, &[0.5], PCM_CAPTURE_LIMIT).is_err()
-            );
-            assert_eq!(count, 0);
-        }
     }
 
     /// The ignored fixture gates, callable from any crate that has the private
@@ -1308,8 +976,8 @@ mod coupled {
         use super::*;
         fn captured(audio: &AudioSession) -> &[f32] {
             audio
-                .pcm_tap
-                .as_ref()
+                .out
+                .tap()
                 .and_then(|tap| tap.kept.as_deref())
                 .expect("observe_pcm(true)")
         }
