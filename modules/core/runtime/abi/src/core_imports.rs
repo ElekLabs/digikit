@@ -18,6 +18,8 @@ macro_rules! core_imports {
         $m! {
             // ---- the registry's rows
             fn dkc_boot_index() -> u32;
+            // `out` points at 8 words; the count of keys written
+            fn dkc_keys_of(at: u32, kind: u32, out: *mut u32) -> u32;
             // `out` points at 32 bytes
             fn dkc_legacy_state(out: *mut u8);
             fn dkc_legacy_state_clear() -> i32;

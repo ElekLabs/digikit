@@ -264,6 +264,9 @@ def fw_hooks(root: Path) -> list[dict]:
             }
             if "devices" in e:
                 hook["devices"] = e["devices"]
+            clobbers = e.get("regs", {}).get("clobbers")
+            if clobbers:
+                hook["clobbers"] = list(clobbers)
             hook["_source"] = source
             hooks.append(hook)
     return hooks
@@ -887,6 +890,8 @@ def render(
         if h["offset"]:
             o.append(f"offset = {toml_int(h['offset'])}")
         o.append(f'mode = "{h["mode"]}"')
+        if h.get("clobbers"):
+            o.append("clobbers = [" + ", ".join(f'"{c}"' for c in h["clobbers"]) + "]")
     return "\n".join(o) + "\n"
 
 
@@ -978,7 +983,9 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
             raise ResolveError(
                 f"{h['name']}: cpu {h['cpu']} differs from the cpu {site['cpu']} of site {h['site']}"
             )
-        hooks.append({k: h[k] for k in ("name", "site", "offset", "mode")})
+        hooks.append(
+            {k: h[k] for k in ("name", "site", "offset", "mode", "clobbers") if k in h}
+        )
     cave = (
         manual_cave(cf, prof["cf_flash_cave"]) if prof["cf_flash_cave"] else cf.cave()
     )

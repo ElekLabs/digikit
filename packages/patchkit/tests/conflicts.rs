@@ -349,6 +349,7 @@ fn retarget_of_something_that_is_not_a_call_is_refused() {
             site: "dsp.master.fn.q31_converter".into(),
             offset: 0,
             mode: "retarget".into(),
+            clobbers: vec![],
         });
     }
     expect_err(run_with(&reg, &lib, &["t/r"]), "not a direct CALL");

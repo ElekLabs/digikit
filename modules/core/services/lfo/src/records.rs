@@ -30,22 +30,39 @@ pub const SETTING: &[u8] = b"lfo.shapes";
 /// Bytes of the name of a shape.
 pub const NAME_LEN: usize = 4;
 
+/// One cell of a shape, as the tick reads it: the sample as Q31 and the step to the next sample (the next of sample 31 is sample 0). The step needs 17 bits, so it is an `i32`.
+/// 4-byte aligned on purpose: the ColdFire GCC gives an `i32` an alignment of 2, which would put the cells of a shape at an offset of 6 and make the tick read them misaligned.
 #[derive(Clone, Copy)]
+#[repr(C, align(4))]
+struct Cell {
+    /// `samples[i] << 16`
+    v: i32,
+    /// `samples[(i + 1) & 31] - samples[i]`
+    d: i32,
+}
+
+/// `repr(C)` with `owner` first: a loop over the table that compares the address of the `owner` of the element after the last one with a running pointer makes a relocated
+/// word that points at the end of `SHAPES`, not past it (`shift_bss_words` of patchkit accepts a word up to the end of `.bss` only).
+#[derive(Clone, Copy)]
+#[repr(C)]
 struct Shape {
     /// module record index + 1; 0: free
     owner: u8,
     /// the shape is unipolar: no sample is negative
     unipolar: bool,
     name: [u8; NAME_LEN],
-    samples: [i16; SAMPLES],
+    /// the delta table, built by `apply_record` from the record's samples
+    cells: [Cell; SAMPLES],
 }
 
 const FREE: Shape = Shape {
     owner: 0,
     unipolar: false,
     name: [0; NAME_LEN],
-    samples: [0; SAMPLES],
+    cells: [Cell { v: 0, d: 0 }; SAMPLES],
 };
+// FREE only initialises the table (zero: `.bss`). Code never copies it: a copy of a whole shape would be a 264-byte `.rodata` object aligned to 32, which the packer refuses
+// (the arena's alignment is 16). A shape is freed by clearing `owner` alone: every reader tests it first.
 static mut SHAPES: [Shape; MAX_SHAPES] = [FREE; MAX_SHAPES];
 
 /// The keys of the boot's selection and the numbers `settle` gave them.
@@ -102,7 +119,15 @@ fn kept(t: &[Shape; MAX_SHAPES], number: u32) -> Option<usize> {
 /// The samples of the shape with wave number `number`, if a module keeps it.
 pub fn shape(number: u32) -> Option<[i16; SAMPLES]> {
     let t = unsafe { &*addr_of!(SHAPES) };
-    kept(t, number).map(|i| t[i].samples)
+    kept(t, number).map(|i| {
+        let mut out = [0i16; SAMPLES];
+        let mut k = 0;
+        while k < SAMPLES {
+            out[k] = (t[i].cells[k].v >> 16) as i16;
+            k += 1;
+        }
+        out
+    })
 }
 
 /// The owner (module record index + 1) of wave number `number`; 0 when no module keeps it.
@@ -138,6 +163,7 @@ pub fn used() -> usize {
 }
 
 /// The built-in triangle (the stock TRI function): the fallback of a number whose shape is not loaded. Full scale, 0 at phase 0.
+#[inline]
 pub fn tri(phase: u32) -> i32 {
     let d = phase.wrapping_add(0x4000_0000);
     let mask = if d >> 31 != 0 { 0xffff_ffffu32 } else { 0 };
@@ -145,24 +171,63 @@ pub fn tri(phase: u32) -> i32 {
 }
 
 /// The value of 32 samples at a 32-bit phase, as signed Q31: the sample at the top 5 bits and the next, linearly interpolated with the next 15 bits (integer
-/// arithmetic only; the product of the difference and the 15-bit fraction fits 32 bits).
+/// arithmetic only; the product of the difference and the 15-bit fraction fits 32 bits). This is the formula in its plain form, from the samples; `interp_cells` gives
+/// the same value from the delta table that the tick reads.
+///
+/// No panic path: no bounds check and no overflow check. Both indexes are below `SAMPLES` by construction (`phase >> 27` is at most 31, and `j` is masked), and the
+/// arithmetic wraps.
+#[inline]
 pub fn interp(s: &[i16; SAMPLES], phase: u32) -> i32 {
     let i = (phase >> 27) as usize;
     let j = (i + 1) & (SAMPLES - 1);
     let f = ((phase >> 12) & 0x7fff) as i32;
-    let a = s[i] as i32;
-    let b = s[j] as i32;
-    (a << 16).wrapping_add(((b - a) * f).wrapping_shl(1))
+    // SAFETY: i <= 31 and j <= 31, `SAMPLES` is 32
+    let (a, b) = unsafe { (*s.get_unchecked(i) as i32, *s.get_unchecked(j) as i32) };
+    (a << 16).wrapping_add(b.wrapping_sub(a).wrapping_mul(f).wrapping_shl(1))
+}
+
+/// The delta table of 32 samples: `{ s[i] << 16, s[(i + 1) & 31] - s[i] }` for each `i`.
+fn cells_of(s: &[i16; SAMPLES]) -> [Cell; SAMPLES] {
+    let mut c = [Cell { v: 0, d: 0 }; SAMPLES];
+    let mut i = 0;
+    while i < SAMPLES {
+        let a = s[i] as i32;
+        let b = s[(i + 1) & (SAMPLES - 1)] as i32;
+        c[i] = Cell {
+            v: a << 16,
+            d: b - a,
+        };
+        i += 1;
+    }
+    c
+}
+
+/// The same value as `interp`, from the delta table: one load of a cell, one multiply, one shift and one add. `d` is at most 17 bits and `f` 15, so the product fits an `i32`.
+#[inline]
+fn interp_cells(c: &[Cell; SAMPLES], phase: u32) -> i32 {
+    let i = (phase >> 27) as usize;
+    let f = ((phase >> 12) & 0x7fff) as i32;
+    // SAFETY: i <= 31, `SAMPLES` is 32
+    let cell = unsafe { c.get_unchecked(i) };
+    cell.v.wrapping_add(cell.d.wrapping_mul(f).wrapping_shl(1))
 }
 
 /// The value of the wave `number` at `phase`, signed Q31: the shape's samples interpolated, or TRI when no module keeps the number. This is what the
-/// interrupt site of the LFO tick calls for a wave above RAND: it reads the table and writes nothing.
+/// interrupt site of the LFO tick calls for a wave above RAND: it reads the table and writes nothing, and it has no panic path (no bounds check: `number - RANGE.lo`
+/// is below `MAX_SHAPES` before the table is read).
+#[inline]
 pub fn eval(number: u32, phase: u32) -> i32 {
-    let t = unsafe { &*addr_of!(SHAPES) };
-    match kept(t, number) {
-        Some(i) => interp(&t[i].samples, phase),
-        None => tri(phase),
+    const _: () = assert!(RANGE.hi - RANGE.lo + 1 == MAX_SHAPES as u32);
+    let idx = number.wrapping_sub(RANGE.lo);
+    if idx >= MAX_SHAPES as u32 {
+        return tri(phase);
     }
+    // SAFETY: idx < MAX_SHAPES, the length of SHAPES; the table is only read here
+    let sh = unsafe { &*(addr_of!(SHAPES) as *const Shape).add(idx as usize) };
+    if sh.owner == 0 {
+        return tri(phase);
+    }
+    interp_cells(&sh.cells, phase)
 }
 
 fn words(raw: &[u8; MAX_SHAPES * 4]) -> [u32; MAX_SHAPES] {
@@ -240,10 +305,13 @@ impl<C: CoreApi> Service<C> for Lfo {
         clean(RANGE, &from, &mut map);
         let mut k = 0;
         while k < s.modules {
+            // the shape keys of the module (none for one the plan refused)
+            let mut keys = [0u32; 8];
+            let have = core.keys_of(k as u32, KIND_LFO_SHAPE, &mut keys);
             let mut i = 0;
-            while i < sel.shape_nkeys[k] as usize && s.n < MAX_KEYS {
+            while i < have && s.n < MAX_KEYS {
                 s.at[s.n] = k as u8;
-                s.key[s.n] = sel.shape_keys[k][i];
+                s.key[s.n] = keys[i];
                 s.num[s.n] = 0;
                 s.n += 1;
                 i += 1;
@@ -251,7 +319,15 @@ impl<C: CoreApi> Service<C> for Lfo {
             k += 1;
         }
         let n = s.n;
-        let dirty = assign(RANGE, &from, &mut map, &s.key, &mut s.num, n, &mut |_: &Event| {});
+        let dirty = assign(
+            RANGE,
+            &from,
+            &mut map,
+            &s.key,
+            &mut s.num,
+            n,
+            &mut |_: &Event| {},
+        );
         // a refused write is tried again at the next boot: the same map gives the same numbers
         if dirty != 0 {
             save(core, &map);
@@ -324,18 +400,22 @@ impl<C: CoreApi> Service<C> for Lfo {
         if t[i].owner != 0 {
             return E_TYPE_USED;
         }
-        let mut sh = FREE;
-        sh.owner = c.owner;
-        sh.name
-            .copy_from_slice(core::slice::from_raw_parts(body.add(4), NAME_LEN));
+        let mut name = [0u8; NAME_LEN];
+        name.copy_from_slice(core::slice::from_raw_parts(body.add(4), NAME_LEN));
+        let mut samples = [0i16; SAMPLES];
         let mut s = 0;
         let mut neg = false;
         while s < SAMPLES {
-            sh.samples[s] = i16::from_be_bytes([*body.add(8 + 2 * s), *body.add(9 + 2 * s)]);
-            neg |= sh.samples[s] < 0;
+            samples[s] = i16::from_be_bytes([*body.add(8 + 2 * s), *body.add(9 + 2 * s)]);
+            neg |= samples[s] < 0;
             s += 1;
         }
-        sh.unipolar = !neg;
+        let sh = Shape {
+            owner: c.owner,
+            unipolar: !neg,
+            name,
+            cells: cells_of(&samples),
+        };
         // the tick reads the entry in an interrupt: no half-written shape
         let sr = core.irq_mask();
         t[i] = sh;
@@ -349,7 +429,7 @@ impl<C: CoreApi> Service<C> for Lfo {
         while i < MAX_SHAPES {
             if t[i].owner == owner {
                 let sr = core.irq_mask();
-                t[i] = FREE;
+                t[i].owner = 0;
                 core.irq_restore(sr);
             }
             i += 1;

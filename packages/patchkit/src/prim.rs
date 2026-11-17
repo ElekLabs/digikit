@@ -144,6 +144,19 @@ pub fn validate_manifest(m: &Manifest) -> Result<()> {
                 if let Some(t) = &op.tail {
                     expr::parse(t).map_err(|e| err!("{id}: stub {slot}: tail: {e}"))?;
                 }
+                match op.when.as_deref() {
+                    None | Some("taken" | "fallthrough") => {}
+                    Some(w) => {
+                        return Err(err!(
+                            "{id}: stub {slot}: when is `taken` or `fallthrough`, not {w:?}"
+                        ));
+                    }
+                }
+                if op.when.is_some() && op.tail.is_some() {
+                    return Err(err!(
+                        "{id}: stub {slot}: `when` lays out the stock path itself, so it takes no `tail`"
+                    ));
+                }
                 let set = [
                     ("to", op.to.is_some()),
                     ("anchor", !op.anchor.is_empty()),
@@ -182,6 +195,7 @@ pub fn validate_manifest(m: &Manifest) -> Result<()> {
                 ("slot", op.slot.is_some()),
                 ("scratch", op.scratch.is_some()),
                 ("tail", op.tail.is_some()),
+                ("when", op.when.is_some()),
             ] {
                 if set {
                     return Err(err!(
@@ -1196,6 +1210,92 @@ pub fn scratch_read_by(insns: &[DispInsn], reg: u8) -> Option<&DispInsn> {
     None
 }
 
+/// The parts of a site that `when` can lay out: the bytes of the instructions before the last one, the condition code of the last one (a short or long `Bcc`, not `bra` or
+/// `bsr`) and its target. The instructions before the branch must not branch themselves.
+fn guarded_parts(s: &CfSite) -> Result<(usize, u8, u32)> {
+    use coldfire::{Form, Operand};
+    let Some((last, pre)) = s.insns.split_last() else {
+        return Err(err!("the site has no instruction"));
+    };
+    if pre.is_empty() || !matches!(last.insn.form, Form::Bcc) {
+        return Err(err!(
+            "`when` needs a site of instructions that set the flags and end in a conditional branch (the site at {:#x} ends in {})",
+            s.addr,
+            last.insn
+        ));
+    }
+    if let Some(d) = pre
+        .iter()
+        .find(|d| matches!(d.insn.form, Form::Bra | Form::Bsr | Form::Bcc))
+    {
+        return Err(err!(
+            "`when`: the instruction at {:#x} ({}) before the final branch branches itself",
+            d.addr,
+            d.insn
+        ));
+    }
+    let cc = last.raw[0] & 0x0f;
+    let target = last.insn.operands().iter().find_map(|o| match o {
+        Operand::Target(t) => Some(*t),
+        _ => None,
+    });
+    match (cc, target) {
+        (2..=15, Some(t)) => {
+            let mut n = 0;
+            for d in pre {
+                n += relocate_insn(d, 0)?.len();
+            }
+            Ok((n, cc, t as u32))
+        }
+        _ => Err(err!(
+            "`when`: the final branch at {:#x} ({}) is not a conditional branch with a target",
+            last.addr,
+            last.insn
+        )),
+    }
+}
+
+/// Bytes of a `when` stub: the instructions before the branch, the 2-byte branch around the slot test, the 12-byte slot test and two `jmp.l`.
+pub fn guarded_stub_len(s: &CfSite) -> Result<usize> {
+    Ok(guarded_parts(s)?.0 + 2 + STUB_PREFIX_LEN + 2 * CF_JMP_LEN)
+}
+
+/// The stub of `op = "stub"` with `when`, at `base`. The displaced instructions before the final branch run as they did; the stock branch then decides:
+///
+/// - `taken_only` (the slot is tested where the stock branch is taken): `b<not cc>.b L; <slot test>; jmp.l <target>; L: jmp.l ret`;
+/// - otherwise (the slot is tested where it falls through): `b<cc>.b L; <slot test>; jmp.l ret; L: jmp.l <target>`.
+///
+/// The slot test overwrites `scratch` and the flags only on the path that tests the slot; the other outcome leaves them as the stock code would.
+pub fn cf_guarded_stub(
+    s: &CfSite,
+    base: u64,
+    ret: u64,
+    scratch: u8,
+    slot_addr: u32,
+    taken_only: bool,
+) -> Result<Vec<u8>> {
+    let (_, cc, target) = guarded_parts(s)?;
+    let mut out: Vec<u8> = vec![];
+    for d in &s.insns[..s.insns.len() - 1] {
+        out.extend(relocate_insn(d, base + out.len() as u64)?);
+    }
+    // the branch around the slot test and its `jmp.l` skips 12 + 6 bytes
+    let skip = (STUB_PREFIX_LEN + CF_JMP_LEN) as u16;
+    let cond = if taken_only { cc ^ 1 } else { cc };
+    out.extend_from_slice(&(0x6000 | (cond as u16) << 8 | skip).to_be_bytes());
+    out.extend(stub_prefix(scratch, slot_addr));
+    let (first, second) = if taken_only {
+        (target as u64, ret)
+    } else {
+        (ret, target as u64)
+    };
+    for to in [first, second] {
+        out.extend_from_slice(&CF_JMP_L.to_be_bytes());
+        out.extend_from_slice(&(to as u32).to_be_bytes());
+    }
+    Ok(out)
+}
+
 /// The stub prefix: load the slot word into `scratch`, run the handler when it is not zero, else fall through to the stock path.
 ///
 /// Address register: `movea.l slot,aN; tst.l aN; beq.b +2; jmp (aN)`. Data register (flags come from the move): `move.l slot,dN; beq.b +4;
@@ -1327,6 +1427,65 @@ mod tests {
         let s = site(&code, 0x4000_0000).unwrap();
         let e = cf_tail(&s, 0x47e8_c000, 0x4000_0008).unwrap_err();
         assert!(e.0.contains("refused"), "{e}");
+    }
+
+    #[test]
+    fn a_guarded_stub_keeps_the_stock_compare_and_tests_the_slot_on_one_outcome_only() {
+        // moveq #6,d7; cmp.l d3,d7; beq.b +0x28 (to 0x4000002e) at 0x40000000
+        let beq = [0x7e, 0x06, 0xbe, 0x83, 0x67, 0x28];
+        let s = site(&beq, 0x4000_0000).unwrap();
+        let slot = 0x47e8_b000;
+        // `taken`: the slot is tested where the stock beq jumps: bne.b around it, the slot test, jmp.l target, jmp.l ret
+        let t = cf_guarded_stub(&s, 0x47e8_c000, 0x4000_0006, 0, slot, true).unwrap();
+        assert_eq!(t.len(), guarded_stub_len(&s).unwrap());
+        assert_eq!(
+            &t[..4],
+            &beq[..4],
+            "the moveq and the compare run first, as stock"
+        );
+        assert_eq!(
+            &t[4..6],
+            [0x66, 18],
+            "bne.b over the slot test and the jump after it"
+        );
+        assert_eq!(&t[6..18], stub_prefix(0, slot).as_slice());
+        assert_eq!(
+            &t[18..24],
+            [0x4e, 0xf9, 0x40, 0x00, 0x00, 0x2e],
+            "an empty slot: the stock target"
+        );
+        assert_eq!(
+            &t[24..],
+            [0x4e, 0xf9, 0x40, 0x00, 0x00, 0x06],
+            "the other outcome: the stock fall-through"
+        );
+        // `fallthrough` on a bne: the slot is tested where the stock bne does not jump
+        let bne = [0x74, 0x06, 0xb4, 0x83, 0x66, 0x2a];
+        let s = site(&bne, 0x4000_0000).unwrap();
+        let t = cf_guarded_stub(&s, 0x47e8_c000, 0x4000_0006, 2, slot, false).unwrap();
+        assert_eq!(&t[..4], &bne[..4]);
+        assert_eq!(
+            &t[4..6],
+            [0x66, 18],
+            "bne.b to the stock target, over the slot test"
+        );
+        assert_eq!(&t[6..18], stub_prefix(2, slot).as_slice());
+        assert_eq!(
+            &t[18..24],
+            [0x4e, 0xf9, 0x40, 0x00, 0x00, 0x06],
+            "an empty slot: the stock fall-through"
+        );
+        assert_eq!(
+            &t[24..],
+            [0x4e, 0xf9, 0x40, 0x00, 0x00, 0x30],
+            "the stock branch target"
+        );
+        // a site that does not end in a conditional branch, or has no instruction before it, is refused
+        let plain = [0x20, 0x3c, 0x00, 0x00, 0x00, 0x01, 0x4e, 0x75];
+        let e = guarded_stub_len(&site(&plain, 0x4000_0000).unwrap()).unwrap_err();
+        assert!(e.0.contains("conditional branch"), "{e}");
+        let alone = [0x66, 0x00, 0x00, 0x20, 0x4e, 0x71, 0x4e, 0x71, 0x4e, 0x71];
+        assert!(guarded_stub_len(&site(&alone, 0x4000_0000).unwrap()).is_err());
     }
 
     #[test]

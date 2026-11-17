@@ -253,9 +253,6 @@ pub struct SettleCtx {
     pub count: usize,
     pub nkeys: [u8; dkrt_sdk::SEL_MAX],
     pub keys: [[u32; 8]; dkrt_sdk::SEL_MAX],
-    /// The LFO shape keys of each module (`shape_nkeys[k]` of the 8 words of `shape_keys[k]`), as the machine keys above.
-    pub shape_nkeys: [u8; dkrt_sdk::SEL_MAX],
-    pub shape_keys: [[u32; 8]; dkrt_sdk::SEL_MAX],
 }
 
 impl SettleCtx {
@@ -264,8 +261,6 @@ impl SettleCtx {
             count: 0,
             nkeys: [0; dkrt_sdk::SEL_MAX],
             keys: [[0; 8]; dkrt_sdk::SEL_MAX],
-            shape_nkeys: [0; dkrt_sdk::SEL_MAX],
-            shape_keys: [[0; 8]; dkrt_sdk::SEL_MAX],
         }
     }
 }

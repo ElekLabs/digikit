@@ -68,10 +68,9 @@ impl Drop for Loaded {
 
 /// The boot's settle over one module (selection index 0) that provides these shape keys, and that module loading.
 fn settle(keys: &[u32]) {
+    crate::loader::test_accept(0, &table(&[(KIND_LFO_SHAPE, keys)]));
     let mut sel = SettleCtx::new();
     sel.count = 1;
-    sel.shape_nkeys[0] = keys.len() as u8;
-    sel.shape_keys[0][..keys.len()].copy_from_slice(keys);
     unsafe {
         <Lfo as dkrt_abi::service::Service<RealCore>>::settle(&crate::core_api::REAL_CORE, &sel);
         crate::selection::BOOT_IDX = 0;
@@ -174,6 +173,10 @@ fn the_planner_knows_the_kind_from_the_service_table_refuses_an_unowned_kind_and
     let p = plan_of(&[one.clone(), same, other]);
     assert_eq!(p.verdicts[..3], [Verdict::Accepted, Verdict::Refused(Reason::DuplicateKey(KIND_LFO_SHAPE, 7)), Verdict::Accepted]);
     assert_eq!(p.verdicts[1].result(), E_PLAN_KEY);
+    // a shape key twice in one module is refused too, so the assignment (`sticky::assign`) never sees a repeated key
+    let twice = table(&[(KIND_LFO_SHAPE, &[5, 5])]);
+    let p = plan_of(&[twice]);
+    assert_eq!(p.verdicts[0], Verdict::Refused(Reason::DuplicateKey(KIND_LFO_SHAPE, 5)));
     // a kind no service owns
     let p = plan_of(&[table(&[(77, &[1])])]);
     assert_eq!(p.verdicts[0], Verdict::Refused(Reason::UnownedKind(77)));

@@ -298,6 +298,7 @@ fn module(sel: u32, keys: fn() -> KeysCopy, init: fn(&mut Init), salt: u32) -> M
     Module {
         sel,
         keys,
+        groups: &[],
         init,
         dsp: Dsp {
             voices: 1,

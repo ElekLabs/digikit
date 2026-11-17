@@ -767,6 +767,10 @@ pub struct Op {
     /// stub: expression of a hand-written stock path; the stub jumps there instead of running the re-encoded displaced instructions
     #[serde(default)]
     pub tail: Option<String>,
+    /// stub: `taken` or `fallthrough`: the site ends in a conditional branch, and the stub looks at its slot only when that branch would be taken (`taken`) or would not be
+    /// (`fallthrough`). The displaced instructions before the branch run first, then the stock branch decides, so the other outcome runs the stock path without a slot test.
+    #[serde(default)]
+    pub when: Option<String>,
 }
 
 /// `[[info]] name = "fxpages_info", symbol = "fxpages_info", devices = ["dt2"]`: an entry of the image's info table: the hash of `name` and the address that the

@@ -74,6 +74,7 @@
         "core/services/fx:bind",
         "core/services/machines:bind",
         "core/services/samples:bind",
+        "core/services/lfo:bind",
         "test/svc-test:bind",
         "patchkit:device-images"
       ],

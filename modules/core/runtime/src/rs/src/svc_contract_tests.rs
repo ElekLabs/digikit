@@ -34,6 +34,17 @@ fn plain_values_and_pointers_come_back_as_through_the_real_core() {
 }
 
 #[test]
+fn the_keys_of_an_accepted_module_come_through_the_c_shape() {
+    let _g = lock();
+    let ic = ImportCore;
+    // no plan accepted index 3: none, as through the real core
+    let (mut a, mut b) = ([9u32; 8], [9u32; 8]);
+    assert_eq!(ic.keys_of(3, 8, &mut a), 0);
+    assert_eq!(REAL_CORE.keys_of(3, 8, &mut b), 0);
+    assert_eq!((a, b), ([9; 8], [9; 8]), "no key is written for no module");
+}
+
+#[test]
 fn slices_and_status_results_are_converted_both_ways() {
     let _g = lock();
     let ic = ImportCore;

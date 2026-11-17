@@ -9,16 +9,11 @@ use dkrt_svc_lfo::records::Lfo;
 
 mod hooks;
 
-/// The first step of `init`: nothing to bind (the slots are named by `fills`; a file without `core/lfo` in the image is refused for its missing slots).
-unsafe fn setup<C: dkrt_svc_rt::dkrt_abi::core_api::CoreApi>(_core: &C) -> i32 {
-    0
-}
-
 dkrt_svc_rt::service!(
     Lfo,
     "lfo",
     &KINDS_LFO,
-    setup = setup::<dkrt_svc_rt::ImportCore>,
+    setup = hooks::setup,
     hooks = [],
     fills = [
         ("lfo_dt2_tick_call", hooks::lfo_dt2_tick_call, dt2),

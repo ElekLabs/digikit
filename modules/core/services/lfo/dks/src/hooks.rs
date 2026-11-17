@@ -10,6 +10,11 @@ global_asm!(include_str!("hooks-dt2.s"));
 #[cfg(target_arch = "m68k")]
 global_asm!(include_str!("hooks-dn2.s"));
 
+/// The first step of `init`: nothing to bind (the slots are named by `fills`; a file without `core/lfo` in the image is refused for its missing slots).
+pub unsafe fn setup(_core: &dkrt_svc_rt::ImportCore) -> i32 {
+    0
+}
+
 macro_rules! entries {
     ($($name:ident,)*) => {
         $(
@@ -40,7 +45,7 @@ entries! {
 
 #[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
 /// The value of the shape with wave number `wave` at the 32-bit `phase`, signed Q31 (TRI when no module keeps the number): what the LFO tick takes from the function table for
-/// a wave of 0 to 5. C calling convention; the routines of the hooks call it with the phase and the wave on the stack.
+/// a stock wave; the routines call it for a wave of 7 to 14. C calling convention; the routines of the hooks call it with the phase and the wave on the stack.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub extern "C" fn dk_lfo_eval(phase: u32, wave: u32) -> i32 {
     dkrt_svc_lfo::records::eval(wave, phase)

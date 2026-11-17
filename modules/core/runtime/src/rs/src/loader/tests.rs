@@ -1391,3 +1391,38 @@ fn settle_hands_the_services_the_keys_of_accepted_modules_only() {
     assert_eq!((sel.count, sel.nkeys[0], sel.nkeys[1]), (2, 2, 0));
     assert_eq!(sel.keys[0][..2], keys);
 }
+
+#[test]
+fn keys_of_gives_the_keys_of_a_kind_for_an_accepted_module_only() {
+    use dkneeds::keys::{write_table, KeyGroup, Table};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let (shapes, machines) = ([0x300u32, 0x400, 0x500], [0x100u32]);
+    let t = Table {
+        keys: &[
+            KeyGroup { kind: dkneeds::KIND_MACHINE, keys: &machines },
+            KeyGroup { kind: dkneeds::KIND_LFO_SHAPE, keys: &shapes },
+        ],
+        ..Default::default()
+    };
+    let mut bytes = vec![0u8; dkneeds::keys::table_size(&t)];
+    write_table(&t, &mut bytes).unwrap();
+    unsafe {
+        let mut l = loader(Init::Ok);
+        l.reset_plan();
+        for k in 0..2 {
+            l.tables[k][..bytes.len()].copy_from_slice(&bytes);
+            l.table_len[k] = bytes.len();
+        }
+        // before settle nothing is accepted
+        let mut out = [0u32; 8];
+        assert_eq!(l.keys_of(0, dkneeds::KIND_LFO_SHAPE, &mut out), 0);
+        l.accepted[0] = true;
+        assert_eq!(l.keys_of(0, dkneeds::KIND_LFO_SHAPE, &mut out), 3);
+        assert_eq!(out[..3], shapes);
+        // another kind, a kind the table does not list, a module the plan refused and an index past the selection
+        assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut out), 1);
+        assert_eq!(l.keys_of(0, dkneeds::KIND_EFFECT, &mut out), 0);
+        assert_eq!(l.keys_of(1, dkneeds::KIND_LFO_SHAPE, &mut out), 0);
+        assert_eq!(l.keys_of(SEL_MAX as u32, dkneeds::KIND_LFO_SHAPE, &mut out), 0);
+    }
+}

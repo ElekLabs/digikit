@@ -85,13 +85,11 @@ place = "cf.expansion"
 
 # The exits of the hooks of devices/fw/lfo.toml (`hook.<hook>.exit` is the end of the site, `.exit.N` the Nth entry of its `exits`), as aliases `patchkit pack` makes into imports.
 [object.externs]
-lfo_x_tick_call = "hook.cf.lfo.hook.tick_call.exit"
 lfo_x_tick_rand = "hook.cf.lfo.hook.tick_call.exit.1"
 lfo_x_tick_done = "hook.cf.lfo.hook.tick_call.exit.2"
 lfo_x_tick_slew = "hook.cf.lfo.hook.tick_slew.exit"
 lfo_x_tick_start = "hook.cf.lfo.hook.tick_start.exit"
 lfo_x_tick_start_rand = "hook.cf.lfo.hook.tick_start.exit.1"
-lfo_x_read_call = "hook.cf.lfo.hook.read_call.exit"
 lfo_x_read_rand = "hook.cf.lfo.hook.read_call.exit.1"
 lfo_x_read_done = "hook.cf.lfo.hook.read_call.exit.2"
 lfo_x_read_slew = "hook.cf.lfo.hook.read_slew.exit"

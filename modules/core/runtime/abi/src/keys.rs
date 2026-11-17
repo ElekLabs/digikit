@@ -3,7 +3,7 @@
 use crate::service::Declare;
 use dkneeds::MAX_RECORDS;
 // The key groups of the header table (the .dkm format, `dkneeds::keys`), not record kinds: the core reads the table, whoever uses its keys.
-use dkneeds::{KIND_EFFECT, KIND_LFO_SHAPE, KIND_MACHINE};
+use dkneeds::{KIND_EFFECT, KIND_MACHINE};
 use dkrt_sdk::{E_CONTRACT, E_FORMAT};
 
 /// A copy of the keys table (the staged file is overwritten by anything `init` reads from the store).
@@ -14,9 +14,6 @@ pub struct KeysCopy {
     pub page_rows: u32,
     pub nm: usize,
     pub nf: usize,
-    /// the number of LFO shape keys, and the keys (`hash24 << 8`)
-    pub ns: usize,
-    pub sk: [u32; MAX_RECORDS as usize],
     pub mk: [u32; MAX_RECORDS as usize],
     pub fk: [u32; MAX_RECORDS as usize],
     /// the KINDS, SLOTS, HOOKS, EXPORTS and RESOURCES entries of the table, as `init`'s declarations must repeat them (`decl_matches`)
@@ -31,8 +28,6 @@ impl KeysCopy {
             page_rows: 0,
             nm: 0,
             nf: 0,
-            ns: 0,
-            sk: [0; MAX_RECORDS as usize],
             mk: [0; MAX_RECORDS as usize],
             fk: [0; MAX_RECORDS as usize],
             decl: Declare::new(),
@@ -72,12 +67,6 @@ impl KeysCopy {
                     }
                     k.fk[k.nf] = v;
                     k.nf += 1;
-                } else if kind == KIND_LFO_SHAPE {
-                    if k.ns >= MAX_RECORDS as usize {
-                        return Err(E_FORMAT);
-                    }
-                    k.sk[k.ns] = v;
-                    k.ns += 1;
                 }
             }
         }
@@ -102,4 +91,28 @@ impl KeysCopy {
         }
         Ok(k)
     }
+}
+
+/// The keys of group `kind` in a header table (`table` empty or damaged: none), at most 8, into `out`; their count. The core reads the table, whoever uses its
+/// keys: a service asks for the group of its own kind (`CoreApi::keys_of`).
+pub fn keys_of(table: &[u8], kind: u32, out: &mut [u32; 8]) -> usize {
+    let keys = match dkneeds::keys::Keys::parse(table) {
+        Ok(k) => k,
+        Err(_) => return 0,
+    };
+    let mut n = 0;
+    let mut g = 0;
+    while let Some((k, list)) = keys.group(g) {
+        g += 1;
+        if k != kind {
+            continue;
+        }
+        let mut j = 0;
+        while j < list.len() && n < out.len() {
+            out[n] = list.get(j);
+            n += 1;
+            j += 1;
+        }
+    }
+    n
 }

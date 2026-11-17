@@ -54,26 +54,16 @@ fn state(_core: &FakeCore) -> Vec<u32> {
     v
 }
 
-fn keys_of(k: u32) -> KeysCopy {
-    let mut c = KeysCopy::empty();
-    c.sk[0] = k;
-    c.ns = 1;
-    c
-}
-fn keys_a() -> KeysCopy {
-    keys_of(SHAPE_A)
-}
-fn keys_b() -> KeysCopy {
-    keys_of(SHAPE_B)
-}
-fn keys_bad() -> KeysCopy {
-    keys_of(SHAPE_BAD)
+/// The modules list no machine keys; their shape keys are the group of kind `KIND_LFO_SHAPE` of the header table (`CoreApi::keys_of`).
+fn keys() -> KeysCopy {
+    KeysCopy::empty()
 }
 
-fn module(sel: u32, keys: fn() -> KeysCopy, init: fn(&mut Init)) -> Module {
+fn module(sel: u32, groups: &'static [(u32, &'static [u32])], init: fn(&mut Init)) -> Module {
     Module {
         sel,
         keys,
+        groups,
         init,
         dsp: Dsp::default(),
     }
@@ -86,9 +76,9 @@ fn fixture(device: u32) -> Fixture {
         kinds: &KINDS_LFO,
         image: |_| {},
         state,
-        a: module(0, keys_a, a),
-        b: module(1, keys_b, b),
-        a2: module(0, keys_a, a2),
+        a: module(0, &[(KIND_LFO_SHAPE, &[SHAPE_A])], a),
+        b: module(1, &[(KIND_LFO_SHAPE, &[SHAPE_B])], b),
+        a2: module(0, &[(KIND_LFO_SHAPE, &[SHAPE_A])], a2),
         enable: &[],
         kept: |_, _, _| false,
         kept_dsp: |_, _| false,
@@ -98,7 +88,7 @@ fn fixture(device: u32) -> Fixture {
             ("dsp", "an LFO shape has no DSP section"),
             ("settings", "a load writes no setting"),
         ],
-        bad: module(2, keys_bad, bad),
+        bad: module(2, &[(KIND_LFO_SHAPE, &[SHAPE_BAD])], bad),
         // none: `check` refuses a table that is too full or an id kept already, and `apply_record` has no other limit
         bad_late: None,
     }

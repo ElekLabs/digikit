@@ -7,21 +7,22 @@
 
 /* One period, 32 samples of signed 16-bit (Q15): replace them with your own. A shape that has no negative sample is unipolar (like the stock EXPO and RAMP). */
 static const int16_t samples[32] = {
-    0, 6393, 12539, 18204, 23170, 27245, 30273, 32137,
-    32767, 32137, 30273, 27245, 23170, 18204, 12539, 6393,
-    0, -6393, -12539, -18204, -23170, -27245, -30273, -32137,
-    -32767, -32137, -30273, -27245, -23170, -18204, -12539, -6393,
+    0,      6393,   12539,  18204,  23170,  27245,  30273,  32137,  32767,  32137,  30273,
+    27245,  23170,  18204,  12539,  6393,   0,      -6393,  -12539, -18204, -23170, -27245,
+    -30273, -32137, -32767, -32137, -30273, -27245, -23170, -18204, -12539, -6393,
 };
 
 static int32_t init(dk_module_ctx *ctx)
 {
     uint8_t body[DK_RECORD_LEN_LFO_SHAPE - 8];
     uint32_t i;
-    body[0] = (uint8_t)(DK_KEY___UPPER__ >> 24); /* the key, big-endian: DK_KEY_<id of module.toml> */
+    /* the key, big-endian: DK_KEY_<id of module.toml> */
+    body[0] = (uint8_t)(DK_KEY___UPPER__ >> 24);
     body[1] = (uint8_t)(DK_KEY___UPPER__ >> 16);
     body[2] = (uint8_t)(DK_KEY___UPPER__ >> 8);
     body[3] = (uint8_t)DK_KEY___UPPER__;
-    body[4] = 'S'; /* the name on the MOD page: 4 characters, space to tilde (the Digitone II shows the first 3) */
+    /* the name on the MOD page: 4 characters, space to tilde (the Digitone II shows the first 3) */
+    body[4] = 'S';
     body[5] = 'H';
     body[6] = 'P';
     body[7] = ' ';

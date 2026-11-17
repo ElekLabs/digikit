@@ -210,11 +210,14 @@ pub struct HandlerPlan {
 /// The handler plan of the declared hook `hook` on the device `device_short` (`dt2`, `dn2`). `decls` are the texts of the `devices/fw/` files
 /// ([`fw_texts`]).
 pub fn handler_plan(decls: &[&str], device_short: &str, hook: &str) -> Result<HandlerPlan> {
+    let mut other_device = false;
     for text in decls.iter().copied() {
         let f: Files = toml::from_str(text).map_err(|e| err!("devices/fw: {e}"))?;
         for h in f.hook.iter().filter(|h| h.name == hook) {
+            // a hook may be declared once for each device (the same name, `devices` apart): this device's entry is the one
             if !h.devices.is_empty() && !h.devices.iter().any(|d| d == device_short) {
-                return Err(err!("{hook}: not declared for the device {device_short}"));
+                other_device = true;
+                continue;
             }
             let Some(handler) = &h.handler else {
                 return Err(err!("{hook}: the hook has no handler"));
@@ -224,6 +227,9 @@ pub fn handler_plan(decls: &[&str], device_short: &str, hook: &str) -> Result<Ha
             let (save, args) = plan_of(hook, &inputs, &clobbers, &handler.args)?;
             return Ok(HandlerPlan { save, args });
         }
+    }
+    if other_device {
+        return Err(err!("{hook}: not declared for the device {device_short}"));
     }
     Err(err!("{hook}: no declared hook with a handler"))
 }
@@ -251,14 +257,20 @@ fn declared_hook<T>(
     hook: &str,
     f: impl Fn(&Hook) -> T,
 ) -> Result<T> {
+    let mut other_device = false;
     for text in decls.iter().copied() {
         let files: Files = toml::from_str(text).map_err(|e| err!("devices/fw: {e}"))?;
         for h in files.hook.iter().filter(|h| h.name == hook) {
+            // a hook may be declared once for each device (the same name, `devices` apart): this device's entry is the one
             if !h.devices.is_empty() && !h.devices.iter().any(|d| d == device_short) {
-                return Err(err!("{hook}: not declared for the device {device_short}"));
+                other_device = true;
+                continue;
             }
             return Ok(f(h));
         }
+    }
+    if other_device {
+        return Err(err!("{hook}: not declared for the device {device_short}"));
     }
     Err(err!("{hook}: no declared hook"))
 }
@@ -978,7 +990,7 @@ fn known_reg(cf: bool, r: &str) -> bool {
 }
 
 /// The register names of a list, with ranges such as `d0-d3` expanded.
-fn expand_regs(name: &str, cf: bool, list: &[String]) -> Result<Vec<String>> {
+pub(crate) fn expand_regs(name: &str, cf: bool, list: &[String]) -> Result<Vec<String>> {
     let mut out = Vec::new();
     for item in list {
         let names: Vec<String> = match item.split_once('-') {

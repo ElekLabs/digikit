@@ -80,6 +80,9 @@ impl CoreApi for ImportCore {
     fn boot_index(&self) -> u32 {
         unsafe { dkc_boot_index() }
     }
+    fn keys_of(&self, at: u32, kind: u32, out: &mut [u32; 8]) -> usize {
+        unsafe { dkc_keys_of(at, kind, out.as_mut_ptr()) as usize }
+    }
     fn legacy_state(&self) -> [u8; 32] {
         let mut b = [0u8; 32];
         unsafe { dkc_legacy_state(b.as_mut_ptr()) };

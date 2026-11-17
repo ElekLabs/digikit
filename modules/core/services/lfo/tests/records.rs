@@ -32,8 +32,7 @@ fn settle(core: &FakeCore, modules: &[&[u32]]) {
     let mut sel = SettleCtx::new();
     sel.count = modules.len();
     for (k, keys) in modules.iter().enumerate() {
-        sel.shape_nkeys[k] = keys.len() as u8;
-        sel.shape_keys[k][..keys.len()].copy_from_slice(keys);
+        core.set_keys(k as u32, KIND_LFO_SHAPE, keys);
     }
     unsafe { <Lfo as Service<FakeCore>>::settle(core, &sel) };
 }
@@ -101,12 +100,19 @@ fn the_wave_numbers_are_above_rand_and_below_the_stock_sign_bit() {
 fn a_shape_gets_a_number_goes_through_check_apply_and_remove() {
     let (_g, core) = fresh();
     settle(&core, &[&[KEY_A]]);
-    assert_eq!(number_of(0, KEY_A), 7, "the first key takes the first number");
+    assert_eq!(
+        number_of(0, KEY_A),
+        7,
+        "the first key takes the first number"
+    );
     core.boot_index.set(0);
     let sec = section(&[(KEY_A, -1000)]);
     assert_eq!(check(&core, check_step::RECORDS, &sec), OK);
     assert_eq!(check(&core, check_step::ROWS, &sec), OK);
-    assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", -1000)), OK);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", -1000)),
+        OK
+    );
     let s = shape(7).expect("apply_record kept the shape");
     assert_eq!((s[0], s[1], s[31]), (-1000, -900, 2100));
     assert_eq!((owner_of(7), used()), (1, 1));
@@ -152,11 +158,19 @@ fn a_key_that_the_module_does_not_provide_or_a_bad_name_or_a_key_twice_is_refuse
         "a literal key that the KEYS entry does not list"
     );
     assert_eq!(
-        check(&core, check_step::RECORDS, &section(&[(KEY_A, 0), (KEY_A, 1)])),
+        check(
+            &core,
+            check_step::RECORDS,
+            &section(&[(KEY_A, 0), (KEY_A, 1)])
+        ),
         E_TYPE_USED
     );
     assert_eq!(
-        check(&core, check_step::RECORDS, &section(&[(KEY_A, 0), (0x00c3_0300, 1)])),
+        check(
+            &core,
+            check_step::RECORDS,
+            &section(&[(KEY_A, 0), (0x00c3_0300, 1)])
+        ),
         OK
     );
     let mut sec = section(&[(KEY_A, 0)]);
@@ -167,10 +181,15 @@ fn a_key_that_the_module_does_not_provide_or_a_bad_name_or_a_key_twice_is_refuse
 #[test]
 fn a_number_that_a_module_keeps_already_and_a_full_table_are_refused() {
     let (_g, core) = fresh();
-    let keys: Vec<u32> = (0..MAX_SHAPES as u32).map(|i| 0x0010_0000 + (i << 8)).collect();
+    let keys: Vec<u32> = (0..MAX_SHAPES as u32)
+        .map(|i| 0x0010_0000 + (i << 8))
+        .collect();
     settle(&core, &[&keys[..4], &keys[4..]]);
     core.boot_index.set(0);
-    assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &body(keys[0], b"A   ", 0)), OK);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(keys[0], b"A   ", 0)),
+        OK
+    );
     assert_eq!(
         apply(&core, 2, KIND_LFO_SHAPE, &body(keys[0], b"B   ", 0)),
         E_TYPE_USED
@@ -180,7 +199,9 @@ fn a_number_that_a_module_keeps_already_and_a_full_table_are_refused() {
         E_TYPE_USED
     );
     // a key that settle gave no number (a ninth key of the boot) has no place
-    let nine: Vec<u32> = (0..MAX_SHAPES as u32 + 1).map(|i| 0x0020_0000 + (i << 8)).collect();
+    let nine: Vec<u32> = (0..MAX_SHAPES as u32 + 1)
+        .map(|i| 0x0020_0000 + (i << 8))
+        .collect();
     settle(&core, &[&nine[..5], &nine[5..]]);
     core.boot_index.set(1);
     assert_eq!(number_of(1, nine[MAX_SHAPES]), 0);
@@ -189,7 +210,12 @@ fn a_number_that_a_module_keeps_already_and_a_full_table_are_refused() {
         E_TABLE_FULL
     );
     assert_eq!(
-        apply(&core, 1, KIND_LFO_SHAPE, &body(nine[MAX_SHAPES], b"X   ", 0)),
+        apply(
+            &core,
+            1,
+            KIND_LFO_SHAPE,
+            &body(nine[MAX_SHAPES], b"X   ", 0)
+        ),
         E_TABLE_FULL
     );
 }
@@ -209,7 +235,10 @@ fn the_writes_to_the_table_leave_the_interrupt_mask_released() {
     let (_g, core) = fresh();
     settle(&core, &[&[KEY_A]]);
     core.boot_index.set(0);
-    assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)), OK);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)),
+        OK
+    );
     assert_eq!(core.host.masked.get(), 0);
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
     assert_eq!(core.host.masked.get(), 0);
@@ -269,11 +298,18 @@ fn eval_reads_the_shape_of_the_number_and_falls_back_to_tri_when_no_module_keeps
         tri(0x4000_0000),
         "no module keeps number 7 yet"
     );
-    assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", -1000)), OK);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", -1000)),
+        OK
+    );
     assert_eq!(eval(7, 0), -1000 << 16);
     assert_eq!(eval(7, 1 << 26), -950 << 16);
     assert_eq!(eval(8, 1 << 26), tri(1 << 26), "number 8 has no shape");
-    assert_eq!(eval(100, 0x4000_0000), tri(0x4000_0000), "a number outside the range");
+    assert_eq!(
+        eval(100, 0x4000_0000),
+        tri(0x4000_0000),
+        "a number outside the range"
+    );
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
     assert_eq!(eval(7, 0), tri(0), "an unloaded shape falls back");
 }
@@ -283,7 +319,75 @@ fn a_shape_without_a_negative_sample_is_unipolar() {
     let (_g, core) = fresh();
     settle(&core, &[&[KEY_A]]);
     core.boot_index.set(0);
-    assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"UNI ", 0)), OK);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"UNI ", 0)),
+        OK
+    );
     assert!(unipolar_of(7));
     assert!(!unipolar_of(8));
+}
+
+/// A fixed pseudo-random sequence (xorshift32), so a failure repeats.
+fn next(x: &mut u32) -> u32 {
+    *x ^= *x << 13;
+    *x ^= *x >> 17;
+    *x ^= *x << 5;
+    *x
+}
+
+#[test]
+fn the_delta_table_gives_the_same_value_as_the_plain_formula_for_random_tables_and_phases() {
+    let (_g, core) = fresh();
+    settle(&core, &[&[KEY_A]]);
+    core.boot_index.set(0);
+    let mut x = 0x2468_ace1u32;
+    for round in 0..40 {
+        let mut samples = [0i16; SAMPLES];
+        for (i, v) in samples.iter_mut().enumerate() {
+            *v = match round {
+                // the largest steps: full swing up and down
+                0 => {
+                    if i % 2 == 0 {
+                        i16::MIN
+                    } else {
+                        i16::MAX
+                    }
+                }
+                1 => {
+                    if i % 2 == 0 {
+                        i16::MAX
+                    } else {
+                        i16::MIN
+                    }
+                }
+                _ => next(&mut x) as i16,
+            };
+        }
+        let mut b = KEY_A.to_be_bytes().to_vec();
+        b.extend_from_slice(b"RND ");
+        for v in samples {
+            b.extend_from_slice(&v.to_be_bytes());
+        }
+        unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
+        assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &b), OK);
+        assert_eq!(shape(7), Some(samples), "the samples are read back");
+        let mut phases = vec![
+            0,
+            u32::MAX,
+            0x7fff_ffff,
+            0x8000_0000,
+            31 << 27,
+            (31 << 27) | 0x07ff_ffff,
+        ];
+        for _ in 0..2000 {
+            phases.push(next(&mut x));
+        }
+        for p in phases {
+            assert_eq!(
+                eval(7, p),
+                interp(&samples, p),
+                "round {round} phase {p:#x}"
+            );
+        }
+    }
 }
