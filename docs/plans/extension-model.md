@@ -545,7 +545,8 @@ What:
    them: the fx `remove` published the kit table (`DKRT_FXP_DEFS`) before it cleared the row's defaults, so the defaults of an unloaded effect stayed in
    the table (fixed in `fxpage::remove`, unit test `an_unloaded_effect_leaves_no_defaults_in_the_table_of_the_kit_hooks`). Left on purpose, named in
    the fixtures' `kept`: the machines `remove` keeps `O_POS` of a hidden row (255, the end marker, the same for every module), and the fx `remove` keeps
-   the name and title pointers of an unlisted page row and the list buffer entries after the count. Mutations of each service's `remove`, `dsp_clear` or
+   the list buffer entries after the count. The fx `remove` sets the name and title pointers of its page row to the service's empty string
+   (`DKRT_FXP_EMPTY`; found by the suite: they pointed to the strings of the effect that left). Mutations of each service's `remove`, `dsp_clear` or
    `dsp_release` (one item of each kind left behind: row words, a page row, a send cell, an IDS halfword, a DEFS halfword, a DSP row field, an owner, a
    DSP row's off word, a link value) fail the suite.
 

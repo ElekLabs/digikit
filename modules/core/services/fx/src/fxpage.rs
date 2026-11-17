@@ -134,6 +134,8 @@ pub static mut DKRT_FXP_TAB: [u32; TAB_WORDS] = [0; TAB_WORDS];
 /// The page rows of the effect pages (`ROW_BYTES` each: name, title, 9 codes), and the send page's row after them.
 #[no_mangle]
 pub static mut DKRT_FXP_ROWS: [u8; ROW_BYTES * MAX_FX] = [0; ROW_BYTES * MAX_FX];
+/// The empty firmware string (`make_rep` of "": length 0, capacity 0, refcount -1, NUL) that the name and title words of a released page row point to.
+pub static mut DKRT_FXP_EMPTY: [u8; 16] = [0; 16];
 #[no_mangle]
 pub static mut DKRT_FXP_SEND_ROW: [u8; ROW_BYTES] = [0; ROW_BYTES];
 /// The count cell of the track FX key's list (0: the stock list; 2: the send page follows).
@@ -611,6 +613,14 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
                 core.wr(row + 8 + 4 * c as u32, 0);
                 c += 1;
             }
+            // name and title: the empty string, so no word of the row points to the state of the effect that left
+            let empty = dkrt_svc_params::make_rep(
+                addr_of_mut!(DKRT_FXP_EMPTY) as *mut u8,
+                b"\0".as_ptr(),
+                false,
+            );
+            core.wr(row, empty);
+            core.wr(row + 4, empty);
             // the defaults go to 0 before the row's table is published: the kit hooks must not keep the defaults of the effect that left
             let mut j = 0;
             while j < WORDS {

@@ -133,15 +133,11 @@ const ENABLE: [(u32, u32, u32); 4] = [
     (WIN_FX, FX_ROW_WORDS * 9 + FXW_PC, FX_FREE_PC),
 ];
 
-/// What a release leaves of a page row on purpose: the name and title pointers of a page row (the row leaves the list, and the strings it points to are the
-/// service's own and stay valid), and the entries of the list buffer after the count (the count cell says how many are in it).
+/// What a release leaves on purpose: the entries of the list buffer after the count (the count cell says how many are in it).
 fn kept(addr: u32) -> bool {
     unsafe {
-        let rows = addr_of!(fxpage::DKRT_FXP_ROWS) as u32;
         let list = addr_of!(fxpage::DKRT_FXP_LIST_BUF) as u32;
-        let in_rows =
-            addr >= rows && addr < rows + 0x2c * 4 && matches!((addr - rows) % 0x2c, 0 | 4);
-        in_rows || (addr >= list && addr < list + 4 * 8)
+        addr >= list && addr < list + 4 * 8
     }
 }
 
@@ -284,4 +280,23 @@ fn an_unloaded_effect_leaves_no_defaults_in_the_table_of_the_kit_hooks() {
         defs().iter().all(|d| *d == 0),
         "the defaults of the unloaded effect are gone"
     );
+}
+
+/// After an unload the name and title words of the effect's page row point to the service's empty string, not to the strings of the effect that left.
+#[test]
+fn an_unloaded_effect_page_row_points_to_the_empty_string() {
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Fx>::new(&f);
+    let rows = unsafe { addr_of!(fxpage::DKRT_FXP_ROWS) } as u32;
+    let words = || unsafe { (FwMem::rd(&l.core, rows), FwMem::rd(&l.core, rows + 4)) };
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    let (tab, title) = words();
+    let empty = unsafe { addr_of!(fxpage::DKRT_FXP_EMPTY) } as u32 + 12;
+    assert!(
+        tab != empty && title != empty,
+        "a loaded page has its strings"
+    );
+    l.unload(0);
+    assert_eq!(words(), (empty, empty));
 }
