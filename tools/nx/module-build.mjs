@@ -143,8 +143,9 @@ export const bindTarget = (workspaceRoot, m, devices) => {
     cache: true,
     inputs: ds
       .flatMap((d) => [
-        `{workspaceRoot}/${packOut(d, m)}`,
-        `{workspaceRoot}/${packMap(d, m)}`,
+        // The packed files are gitignored dist/ outputs of the pack target: a file input would not hash them, so the key reads them as outputs of the dependency.
+        { dependentTasksOutputFiles: packOut(d, m) },
+        { dependentTasksOutputFiles: packMap(d, m) },
         `{workspaceRoot}/${STOCK_FIRMWARE[d]}`,
       ])
       .concat([{ input: 'production', projects: ['patchkit'] }]), // the tool too: what bind writes (the .dks, its map and its .src.json sidecar) depends on it

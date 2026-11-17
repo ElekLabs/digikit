@@ -1006,6 +1006,11 @@ These producers are uncached; patchkit's source hashes skip current objects. Con
 remain in place, so existing graph edges can overselect preparation; narrowing awaits clearer test ownership.
 Repeated per-owner generation checks currently repeat shared SDK/interface checks. This is a future optimization.
 
+The packed `.dks` and `.dkm` files, the bound files in `dist/svc-bound/` and the image info tables are gitignored `dist/`
+outputs, and Nx hashes a file input only when git tracks it. So `<service>:bind` and `core/runtime:test-assembly` name them as
+`dependentTasksOutputFiles` of their `pack`, `bind` and `device-images` dependencies: a changed ABI word changes the packed
+bytes, and the key changes with it. The stock firmware files stay plain file inputs.
+
 Catalog selection has a scoped proof: hypothetical edits to a shipped manifest and a fixture manifest both
 select `patchkit:catalog-check`; an edit to Pluck's C source does not. This verifies selection behavior only.
 
