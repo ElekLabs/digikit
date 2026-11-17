@@ -1039,7 +1039,14 @@ fn parse(text: &str) -> Result<Sdk> {
         parse_runtime(&sdk.runtime.table),
         parse_runtime(&sdk.runtime.version),
     ) {
-        (Ok(t), Ok(v)) if t <= v => {}
+        (Ok(t), Ok(v)) if t <= v && t >> 8 == v >> 8 => {}
+        (Ok(t), Ok(v)) if t <= v => {
+            return Err(err!(
+                "{SOURCE}: [runtime] table {} has another MAJOR.MINOR than version {}: the loader accepts only the MAJOR and MINOR of its own runtime, so a module that links nothing newer needs `table` raised with `version` at every MINOR",
+                sdk.runtime.table,
+                sdk.runtime.version
+            ));
+        }
         _ => {
             return Err(err!(
                 "{SOURCE}: [runtime] table is not a version, or is newer than version"
