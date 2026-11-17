@@ -7,7 +7,7 @@ import pytest
 from tools.device import dkupload
 from tools.firmware import config
 from tools.patchkit import pk_devreload as dev
-from tools.patchkit import pk_dkrt
+from tools.patchkit import pk_dkrt, pk_services
 
 
 def test_cf_target_and_synthetic_store_use_zero():
@@ -140,6 +140,9 @@ def store_build(monkeypatch, tmp_path):
     monkeypatch.setattr(dev, "pack_store", pack)
     monkeypatch.setattr(pk_dkrt, "Tools", Mock(return_value=tools))
     monkeypatch.setattr(config, "stock", Mock(return_value=tmp_path / "stock.syx"))
+    # the services of the card come from `patchkit services` (needs the stock firmware): none here
+    monkeypatch.setattr(pk_services, "is_service", Mock(return_value=False))
+    monkeypatch.setattr(pk_services, "bound_services", Mock(return_value=[]))
     card_build = Mock(side_effect=build_card)
     selection = Mock()
     stop = Mock()
