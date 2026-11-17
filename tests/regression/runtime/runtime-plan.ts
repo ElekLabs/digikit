@@ -32,6 +32,7 @@ const shipMaps = new WeakMap<RuntimePlan, string>();
 /** Remember the address map of the image of `plan` (`<plan>.addrmap.json`, written beside the plan by `patchkit apply --addrmap`): every plan this file prepares has it, so the
  * symbols of a loaded service file (`serviceSymbol`) resolve for it. */
 export function rememberShipMap(plan: RuntimePlan, planFile: string): void {
+  shipMaps.set(plan, planFile.replace(/\.plan\.json$/, '.addrmap.json'));
 }
 /** The address map of the image of `plan`, when it was prepared by `rememberShipMap`'s caller. */
 export const shipMapOf = (plan: RuntimePlan): string | undefined => shipMaps.get(plan);

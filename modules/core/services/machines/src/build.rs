@@ -15,13 +15,14 @@ use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::iw;
-use dkrt_svc_params::builder::{fail, find, len_of, put_text, room, Gate};
-use dkrt_svc_params::dynreg::w;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::records::{
-    KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM, LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
+    KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
+    LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
 };
 use dkrt_sdk::*;
+use dkrt_svc_params::builder::{fail, find, len_of, put_text, room, Gate};
+use dkrt_svc_params::dynreg::w;
 
 /// The most machines, pages and records (machines, pages, parameters and click actions together) of one module.
 pub const MAX_M: usize = limits::MACHINE_ROWS;
@@ -122,9 +123,36 @@ pub struct CParam {
     pub click_arg: u32,
 }
 
-const M0: CMachine = CMachine { index: 0, name: [0; TEXT], short: [0; TEXT] };
-const G0: CPage = CPage { owner: 0, name: [0; TEXT], short: [0; TEXT], canvas: false, flags: 0, draw: 0, event: 0, arg: 0, nbind: 0, binds: [[0; 3]; 8], nparam: 0 };
-const P0: CParam = CParam { page: 0, name: [0; 32], short: [0; 16], min: 0, max: 127 * 256, def: 0, glyph: 0, latched: false, click: 0, click_arg: 0 };
+const M0: CMachine = CMachine {
+    index: 0,
+    name: [0; TEXT],
+    short: [0; TEXT],
+};
+const G0: CPage = CPage {
+    owner: 0,
+    name: [0; TEXT],
+    short: [0; TEXT],
+    canvas: false,
+    flags: 0,
+    draw: 0,
+    event: 0,
+    arg: 0,
+    nbind: 0,
+    binds: [[0; 3]; 8],
+    nparam: 0,
+};
+const P0: CParam = CParam {
+    page: 0,
+    name: [0; 32],
+    short: [0; 16],
+    min: 0,
+    max: 127 * 256,
+    def: 0,
+    glyph: 0,
+    latched: false,
+    click: 0,
+    click_arg: 0,
+};
 
 /// What `init` declared of the machines.
 pub struct Build {
@@ -140,7 +168,16 @@ pub struct Build {
 
 impl Build {
     pub const fn new() -> Build {
-        Build { err: 0, machines: [M0; MAX_M], nm: 0, pages: [G0; MAX_PG], np: 0, params: [P0; MAX_PA], nparam: 0, records: 0 }
+        Build {
+            err: 0,
+            machines: [M0; MAX_M],
+            nm: 0,
+            pages: [G0; MAX_PG],
+            np: 0,
+            params: [P0; MAX_PA],
+            nparam: 0,
+            records: 0,
+        }
     }
 
     /// Nothing was declared.
@@ -205,7 +242,13 @@ impl Build {
     }
 
     /// `dk_page_add_param`: `def` is in knob units. A handle of another service (an effect's page) is a machine parameter on an effect page: refused.
-    pub fn page_add_param(&mut self, p: *mut u8, name: *const u8, short: *const u8, def: u32) -> *mut u8 {
+    pub fn page_add_param(
+        &mut self,
+        p: *mut u8,
+        name: *const u8,
+        short: *const u8,
+        def: u32,
+    ) -> *mut u8 {
         let pg = match find(&self.pages, p) {
             Some(i) => i,
             None => {
@@ -351,21 +394,38 @@ pub unsafe fn end() {
 
 // the builder calls (exported by the service file: `dks/src/builder.rs`); a call that names a handle comes from the module whose `init` is open
 
-pub unsafe fn add_machine<C: CoreApi>(core: &C, ctx: *mut u8, index: u32, name: *const u8, short: *const u8) -> *mut u8 {
+pub unsafe fn add_machine<C: CoreApi>(
+    core: &C,
+    ctx: *mut u8,
+    index: u32,
+    name: *const u8,
+    short: *const u8,
+) -> *mut u8 {
     if gate().open_for(core, ctx) {
         build().add_machine(index, name, short)
     } else {
         placeholder()
     }
 }
-pub unsafe fn machine_add_page<C: CoreApi>(core: &C, m: *mut u8, name: *const u8, short: *const u8) -> *mut u8 {
+pub unsafe fn machine_add_page<C: CoreApi>(
+    core: &C,
+    m: *mut u8,
+    name: *const u8,
+    short: *const u8,
+) -> *mut u8 {
     if gate().open_any(core) {
         build().machine_add_page(m, name, short)
     } else {
         placeholder()
     }
 }
-pub unsafe fn page_add_param<C: CoreApi>(core: &C, p: *mut u8, name: *const u8, short: *const u8, def: u32) -> *mut u8 {
+pub unsafe fn page_add_param<C: CoreApi>(
+    core: &C,
+    p: *mut u8,
+    name: *const u8,
+    short: *const u8,
+    def: u32,
+) -> *mut u8 {
     if gate().open_any(core) {
         build().page_add_param(p, name, short, def)
     } else {
@@ -392,7 +452,14 @@ pub unsafe fn param_on_click<C: CoreApi>(core: &C, prm: *mut u8, f: u32, arg: u3
         build().param_on_click(prm, f, arg);
     }
 }
-pub unsafe fn page_canvas<C: CoreApi>(core: &C, p: *mut u8, flags: u32, draw: u32, event: u32, arg: u32) {
+pub unsafe fn page_canvas<C: CoreApi>(
+    core: &C,
+    p: *mut u8,
+    flags: u32,
+    draw: u32,
+    event: u32,
+    arg: u32,
+) {
     if gate().open_any(core) {
         build().page_canvas(p, flags, draw, event, arg);
     }
@@ -442,7 +509,14 @@ pub struct Plan {
 
 impl Plan {
     pub const fn new() -> Plan {
-        Plan { file: [u8::MAX; MAX_PA], nfile: 0, of_file: [0; MAX_PA], pos: [0; MAX_PA], word: [0; MAX_PA], machine: [0; MAX_PA] }
+        Plan {
+            file: [u8::MAX; MAX_PA],
+            nfile: 0,
+            of_file: [0; MAX_PA],
+            pos: [0; MAX_PA],
+            word: [0; MAX_PA],
+            machine: [0; MAX_PA],
+        }
     }
 }
 
@@ -475,7 +549,15 @@ fn knob_page(b: &Build, m: usize) -> Result<Option<usize>, i32> {
 
 /// Lower the collection into `o`: the records of PARAM, MACHINE, PAGE, ACTION and native page kinds. `o` without a buffer only measures. `base` turns callback addresses into image
 /// offsets. `voice[m]`: the DSP section has a voice for machine `m` (only then may it render with its own DSP routine). The errors are refusals of the commit.
-pub fn lower(b: &Build, p: &Profile, keys: &KeysCopy, voice: &[bool; MAX_M], base: u32, o: &mut RecordSink, plan: &mut Plan) -> Result<(), i32> {
+pub fn lower(
+    b: &Build,
+    p: &Profile,
+    keys: &KeysCopy,
+    voice: &[bool; MAX_M],
+    base: u32,
+    o: &mut RecordSink,
+    plan: &mut Plan,
+) -> Result<(), i32> {
     if b.err != 0 {
         return Err(b.err);
     }
@@ -709,7 +791,10 @@ pub struct ApplyArgs {
 }
 
 pub fn apply_args(b: &Build, plan: &Plan) -> ApplyArgs {
-    let mut a = ApplyArgs { click: [0; 32], native: [0; 8] };
+    let mut a = ApplyArgs {
+        click: [0; 32],
+        native: [0; 8],
+    };
     let mut n = 0;
     let mut i = 0;
     while i < b.nparam {
@@ -881,7 +966,15 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
         return OK;
     }
     // DECLARE: the walker's check found nothing wrong. The plan of the lowering gives each machine's knob positions again (a measuring pass writes nothing).
-    if let Err(e) = lower(b, &p, c.keys, &voice, c.base, &mut RecordSink::measure(), &mut plan) {
+    if let Err(e) = lower(
+        b,
+        &p,
+        c.keys,
+        &voice,
+        c.base,
+        &mut RecordSink::measure(),
+        &mut plan,
+    ) {
         return e;
     }
     // the ranges and latch mask of each machine's voice row
@@ -891,7 +984,11 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
         if let Some(row) = dsp::voice_row(core, rec, t) {
             let (rng, latched) = voice_declared(b, &plan, m);
             if latched != 0 {
-                core.log(logk::MODULE_LATCH, LOG_INFO, [core.boot_index(), m as u32, latched, 0, 0]);
+                core.log(
+                    logk::MODULE_LATCH,
+                    LOG_INFO,
+                    [core.boot_index(), m as u32, latched, 0, 0],
+                );
             }
             let r = dsp::set_declared(core, row, rng, latched);
             if r != OK {

@@ -78,7 +78,10 @@ impl<const N: usize> PageSet<N> {
 /// The word `k` of the image table `machines_info` (`info::w`), 0 when the image has no usable table (another magic or version) or the adapter did not bind the word.
 unsafe fn word<C: CoreApi>(core: &C, k: usize) -> u32 {
     let t = core.info(name_hash("machines_info"));
-    if t.is_null() || iw(t, info::w::MAGIC) != info::MAGIC || iw(t, info::w::VERSION) != info::VERSION {
+    if t.is_null()
+        || iw(t, info::w::MAGIC) != info::MAGIC
+        || iw(t, info::w::VERSION) != info::VERSION
+    {
         return 0;
     }
     iw(t, k)
@@ -86,7 +89,16 @@ unsafe fn word<C: CoreApi>(core: &C, k: usize) -> u32 {
 
 /// Whether the image has the native page calls of record kind `kind` (`KIND` or `KIND_V2`).
 pub fn available<C: CoreApi>(core: &C, kind: u32) -> bool {
-    unsafe { word(core, if kind == KIND_V2 { info::w::N_REGISTER_V2 } else { info::w::N_REGISTER }) != 0 }
+    unsafe {
+        word(
+            core,
+            if kind == KIND_V2 {
+                info::w::N_REGISTER_V2
+            } else {
+                info::w::N_REGISTER
+            },
+        ) != 0
+    }
 }
 
 /// Body excludes kind/length. PARAM indexes belong to this file; the caller also
@@ -208,16 +220,52 @@ pub unsafe fn apply<C: CoreApi>(
     } else {
         0
     };
-    let (title, draw, event) = (body.add(16) as usize, (base + rd32(body.add(8))) as usize, (base + rd32(body.add(12))) as usize);
-    let (bindings, words, count) = (bindings.as_ptr() as usize, words.as_ptr() as usize, words.len());
+    let (title, draw, event) = (
+        body.add(16) as usize,
+        (base + rd32(body.add(8))) as usize,
+        (base + rd32(body.add(12))) as usize,
+    );
+    let (bindings, words, count) = (
+        bindings.as_ptr() as usize,
+        words.as_ptr() as usize,
+        words.len(),
+    );
     let (arg, with_arg) = (arg as usize, with_arg as usize);
     let r = if kind == KIND_V2 {
         let f = word(core, info::w::N_REGISTER_V2);
         let page = page_index(kind, body) as usize;
-        core.call(f, &[owner as usize, page, flags as usize, title, draw, event, bindings, words, count, arg, with_arg])
+        core.call(
+            f,
+            &[
+                owner as usize,
+                page,
+                flags as usize,
+                title,
+                draw,
+                event,
+                bindings,
+                words,
+                count,
+                arg,
+                with_arg,
+            ],
+        )
     } else {
         let f = word(core, info::w::N_REGISTER);
-        core.call(f, &[owner as usize, title, draw, event, bindings, words, count, arg, with_arg])
+        core.call(
+            f,
+            &[
+                owner as usize,
+                title,
+                draw,
+                event,
+                bindings,
+                words,
+                count,
+                arg,
+                with_arg,
+            ],
+        )
     };
     r as i32
 }
@@ -229,7 +277,10 @@ pub unsafe fn remove<C: CoreApi>(core: &C, kind: u32) {
 
 /// The native handler of an encoder turn on `view`: nonzero when it consumed the turn.
 pub unsafe fn turn<C: CoreApi>(core: &C, view: *const u8, event: *const u8) -> u32 {
-    core.call(word(core, info::w::N_TURN), &[view as usize, event as usize]) as u32
+    core.call(
+        word(core, info::w::N_TURN),
+        &[view as usize, event as usize],
+    ) as u32
 }
 
 #[cfg(test)]

@@ -73,7 +73,10 @@ pub struct Gate {
 
 impl Gate {
     pub const fn new() -> Gate {
-        Gate { token: 0, open: u32::MAX }
+        Gate {
+            token: 0,
+            open: u32::MAX,
+        }
     }
     /// The placeholder handle: the address of this gate, no element of any state.
     pub fn placeholder(&self) -> *mut u8 {

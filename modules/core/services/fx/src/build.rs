@@ -14,10 +14,10 @@ use dkneeds::{FXF_DEFAULT_SEND, FXF_NOMASTER, FXF_SEND};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::MAX_FX;
 use dkrt_abi::keys::KeysCopy;
-use dkrt_svc_params::builder::{fail, find, len_of, put_text, room, Gate};
-use dkrt_abi::MAX_MODULES;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
+use dkrt_abi::MAX_MODULES;
 use dkrt_sdk::*;
+use dkrt_svc_params::builder::{fail, find, len_of, put_text, room, Gate};
 
 const MAX_PA: usize = dkneeds::MAX_RECORDS as usize;
 const TEXT: usize = 24;
@@ -61,9 +61,30 @@ pub struct CParam {
     pub fdef: u32,
 }
 
-const F0: CFx = CFx { index: 0, name: [0; TEXT], short: [0; TEXT], routes_set: false, allowed: 0, def: 0, mix: 127, page: -1 };
-const G0: CPage = CPage { owner: 0, name: [0; TEXT], short: [0; TEXT] };
-const P0: CParam = CParam { page: 0, name: [0; 32], short: [0; 16], kind: 0, fmin: 0, fmax: 0, fdef: 0 };
+const F0: CFx = CFx {
+    index: 0,
+    name: [0; TEXT],
+    short: [0; TEXT],
+    routes_set: false,
+    allowed: 0,
+    def: 0,
+    mix: 127,
+    page: -1,
+};
+const G0: CPage = CPage {
+    owner: 0,
+    name: [0; TEXT],
+    short: [0; TEXT],
+};
+const P0: CParam = CParam {
+    page: 0,
+    name: [0; 32],
+    short: [0; 16],
+    kind: 0,
+    fmin: 0,
+    fmax: 0,
+    fdef: 0,
+};
 
 /// What `init` declared of the effects.
 pub struct Build {
@@ -79,7 +100,16 @@ pub struct Build {
 
 impl Build {
     pub const fn new() -> Build {
-        Build { err: 0, fxs: [F0; MAX_FX], nf: 0, pages: [G0; MAX_FX], np: 0, params: [P0; MAX_PA], nparam: 0, records: 0 }
+        Build {
+            err: 0,
+            fxs: [F0; MAX_FX],
+            nf: 0,
+            pages: [G0; MAX_FX],
+            np: 0,
+            params: [P0; MAX_PA],
+            nparam: 0,
+            records: 0,
+        }
     }
 
     /// Nothing was declared.
@@ -151,7 +181,16 @@ impl Build {
 
     /// `dk_page_add_fx_param`. A handle of another service (a machine's page) is an effect parameter on a machine page: refused.
     #[allow(clippy::too_many_arguments)]
-    pub fn page_add_fx_param(&mut self, p: *mut u8, name: *const u8, short: *const u8, kind: u32, min: f32, max: f32, def: f32) -> *mut u8 {
+    pub fn page_add_fx_param(
+        &mut self,
+        p: *mut u8,
+        name: *const u8,
+        short: *const u8,
+        kind: u32,
+        min: f32,
+        max: f32,
+        def: f32,
+    ) -> *mut u8 {
         let pg = match find(&self.pages, p) {
             Some(i) => i,
             None => {
@@ -240,14 +279,25 @@ pub unsafe fn release(rec: usize) {
 
 // the builder calls (exported by the service file: `dks/src/builder.rs`); a call that names a handle comes from the module whose `init` is open
 
-pub unsafe fn add_fx<C: CoreApi>(core: &C, ctx: *mut u8, index: u32, name: *const u8, short: *const u8) -> *mut u8 {
+pub unsafe fn add_fx<C: CoreApi>(
+    core: &C,
+    ctx: *mut u8,
+    index: u32,
+    name: *const u8,
+    short: *const u8,
+) -> *mut u8 {
     if gate().open_for(core, ctx) {
         build().add_fx(index, name, short)
     } else {
         placeholder()
     }
 }
-pub unsafe fn fx_add_page<C: CoreApi>(core: &C, f: *mut u8, name: *const u8, short: *const u8) -> *mut u8 {
+pub unsafe fn fx_add_page<C: CoreApi>(
+    core: &C,
+    f: *mut u8,
+    name: *const u8,
+    short: *const u8,
+) -> *mut u8 {
     if gate().open_any(core) {
         build().fx_add_page(f, name, short)
     } else {
@@ -255,7 +305,16 @@ pub unsafe fn fx_add_page<C: CoreApi>(core: &C, f: *mut u8, name: *const u8, sho
     }
 }
 #[allow(clippy::too_many_arguments)]
-pub unsafe fn page_add_fx_param<C: CoreApi>(core: &C, p: *mut u8, name: *const u8, short: *const u8, kind: u32, min: f32, max: f32, def: f32) -> *mut u8 {
+pub unsafe fn page_add_fx_param<C: CoreApi>(
+    core: &C,
+    p: *mut u8,
+    name: *const u8,
+    short: *const u8,
+    kind: u32,
+    min: f32,
+    max: f32,
+    def: f32,
+) -> *mut u8 {
     if gate().open_any(core) {
         build().page_add_fx_param(p, name, short, kind, min, max, def)
     } else {
@@ -315,7 +374,11 @@ pub fn lower(b: &Build, keys: &KeysCopy, o: &mut RecordSink) -> Result<(), i32> 
             o.p32(n as u32);
             o.p32(fx_id(keys, fx));
             let mut tab = [0u8; 8];
-            let label = if len_of(&g.short) > 0 { &g.short } else { &fx.short };
+            let label = if len_of(&g.short) > 0 {
+                &g.short
+            } else {
+                &fx.short
+            };
             let mut j = 0;
             while j < FX_SHORT && j < len_of(label) {
                 tab[j] = label[j];
@@ -495,7 +558,11 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
         let mut f = 0;
         while f < b.nf {
             let fx = &b.fxs[f];
-            let par = if fx.page >= 0 { Some(fx_defaults(b, f)) } else { None };
+            let par = if fx.page >= 0 {
+                Some(fx_defaults(b, f))
+            } else {
+                None
+            };
             if !crate::dsp::fx_set_declared(core, rec, fx.index, Some(fx_flags_of_decl(fx)), par) {
                 return E_FORMAT; // no such effect in the module's DSP section
             }

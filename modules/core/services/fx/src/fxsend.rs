@@ -347,7 +347,11 @@ unsafe fn release<C: CoreApi>(core: &C, inf: *const u32, k: usize) {
     }
     let c = s.cell[k] as usize - 1;
     wr(iw(inf, w::ROW) + 8 + 4 * c as u32, 0);
-    dkrt_svc_params::reset_param_row(core, dkrt_svc_params::dynreg(core), iw(inf, w::P_SEND) + c as u32);
+    dkrt_svc_params::reset_param_row(
+        core,
+        dkrt_svc_params::dynreg(core),
+        iw(inf, w::P_SEND) + c as u32,
+    );
     s.row[c] = 0;
     s.cell[k] = 0;
     s.route[k] = 0;

@@ -233,7 +233,11 @@ pub fn context(p: &Pending, owners: &[u8], first: u32) -> Option<Ctx> {
 
 /// The context of the queued click: the owner is read from the core's parameter rows.
 pub fn click_context<C: CoreApi>(c: &C, p: &Pending) -> Option<Ctx> {
-    context(p, crate::records::param_owners(), crate::records::param_first(c))
+    context(
+        p,
+        crate::records::param_owners(),
+        crate::records::param_first(c),
+    )
 }
 
 /// The UI loop pass: run the queued action (`void fn(u32 track)`). `param_get` and `param_set` serve the clicked view from here until the page
@@ -246,8 +250,9 @@ pub unsafe fn tick<C: CoreApi>(core: &C) {
             return;
         };
         (*addr_of_mut!(HELD)).begin(ctx);
-        let (with_arg, arg) = (*addr_of!(ARGS))
-            [(p.code.wrapping_sub(crate::records::param_first(core))) as usize % limits::PARAM_ROWS];
+        let (with_arg, arg) =
+            (*addr_of!(ARGS))[(p.code.wrapping_sub(crate::records::param_first(core))) as usize
+                % limits::PARAM_ROWS];
         if with_arg {
             let call: unsafe extern "C" fn(u32, u32) = core::mem::transmute(p.callback as usize);
             call(arg, p.track);

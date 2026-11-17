@@ -179,11 +179,23 @@ impl RecordSink {
 
     /// A sink that only measures.
     pub const fn measure() -> RecordSink {
-        RecordSink { buf: core::ptr::null_mut(), cap: 0, at: RecordSink::HEADER, count: 0, rows: [0; 3] }
+        RecordSink {
+            buf: core::ptr::null_mut(),
+            cap: 0,
+            at: RecordSink::HEADER,
+            count: 0,
+            rows: [0; 3],
+        }
     }
     /// A sink over `cap` bytes at `buf` (null: measures).
     pub const fn over(buf: *mut u8, cap: usize) -> RecordSink {
-        RecordSink { buf, cap, at: RecordSink::HEADER, count: 0, rows: [0; 3] }
+        RecordSink {
+            buf,
+            cap,
+            at: RecordSink::HEADER,
+            count: 0,
+            rows: [0; 3],
+        }
     }
     pub fn p32(&mut self, v: u32) {
         if !self.buf.is_null() && self.at + 4 <= self.cap {
@@ -245,7 +257,11 @@ pub struct SettleCtx {
 
 impl SettleCtx {
     pub const fn new() -> SettleCtx {
-        SettleCtx { count: 0, nkeys: [0; dkrt_sdk::SEL_MAX], keys: [[0; 8]; dkrt_sdk::SEL_MAX] }
+        SettleCtx {
+            count: 0,
+            nkeys: [0; dkrt_sdk::SEL_MAX],
+            keys: [[0; 8]; dkrt_sdk::SEL_MAX],
+        }
     }
 }
 
@@ -624,10 +640,16 @@ mod thunk {
     pub unsafe extern "C" fn on_loaded<C: CoreApi, S: Service<C>>(core: *const c_void, rec: usize) {
         S::on_loaded(&*(core as *const C), rec)
     }
-    pub unsafe extern "C" fn settle<C: CoreApi, S: Service<C>>(core: *const c_void, s: *const SettleCtx) {
+    pub unsafe extern "C" fn settle<C: CoreApi, S: Service<C>>(
+        core: *const c_void,
+        s: *const SettleCtx,
+    ) {
         S::settle(&*(core as *const C), &*s)
     }
-    pub unsafe extern "C" fn module_begin<C: CoreApi, S: Service<C>>(core: *const c_void, rec: usize) {
+    pub unsafe extern "C" fn module_begin<C: CoreApi, S: Service<C>>(
+        core: *const c_void,
+        rec: usize,
+    ) {
         S::module_begin(&*(core as *const C), rec)
     }
     pub unsafe extern "C" fn module_commit<C: CoreApi, S: Service<C>>(

@@ -41,7 +41,10 @@ pub enum Call {
         value: u32,
     },
     /// A call of the image's or the firmware's function at `addr` (`FwMem::call`) with its arguments.
-    Fw { addr: u32, args: Vec<usize> },
+    Fw {
+        addr: u32,
+        args: Vec<usize>,
+    },
 }
 
 /// The platform facts of a `FakeCore` (`SampleHost`): the sample files in a `FakeStorage`, whether the pool adapter is in the image and whether the
@@ -231,7 +234,10 @@ impl dkrt_abi::mem::FwMem for FakeCore {
         if a == 0 {
             return 0;
         }
-        self.rec(Call::Fw { addr: a, args: args.to_vec() });
+        self.rec(Call::Fw {
+            addr: a,
+            args: args.to_vec(),
+        });
         match self.on_call.borrow_mut().as_mut() {
             Some(f) => f(a, args),
             None => self.fw_result.get(),

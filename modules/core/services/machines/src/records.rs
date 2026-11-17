@@ -7,16 +7,16 @@ use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspSec;
 use dkrt_abi::mem::{cstr_len, iw, rd, rd32, wr};
 use dkrt_abi::registry::each;
-use dkrt_svc_params::dynreg::{w, RegState, MACH_TEXT};
 use dkrt_abi::service::{
-    check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, RowWrite, Service,
-    ModuleCommitCtx, SettleCtx,
+    check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, ModuleCommitCtx,
+    RowWrite, Service, SettleCtx,
 };
 use dkrt_sdk::records::{
     KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
     LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
 };
 use dkrt_sdk::*;
+use dkrt_svc_params::dynreg::{w, RegState, MACH_TEXT};
 
 /// The registry's state: who owns each reserved machine, parameter and page row (module record index + 1, 0 free) and the strings the rows use. One machines
 /// service, one state: a static of this crate, so it lives in `machines.dks` (the symbol stays for the test tools).
@@ -102,9 +102,17 @@ impl<C: CoreApi> Service<C> for Machines {
         if inf.is_null() || !fits(inf) {
             // the machine, parameter, page, action and native page records need this registry: a section without them does not
             let none = counts_of(c.reg) == (0, 0, 0, 0, 0);
-            return if step == st::COUNTS && !none { E_NO_REGISTRY } else { OK };
+            return if step == st::COUNTS && !none {
+                E_NO_REGISTRY
+            } else {
+                OK
+            };
         }
-        let c = &Ctx { reg: c.reg, image_size: c.image_size, inf };
+        let c = &Ctx {
+            reg: c.reg,
+            image_size: c.image_size,
+            inf,
+        };
         if step == st::COUNTS {
             ck_counts(c)
         } else if step == st::ACTIONS {
@@ -127,9 +135,21 @@ impl<C: CoreApi> Service<C> for Machines {
     unsafe fn apply(core: &C, c: &ApplyCtx) -> i32 {
         let inf = dkrt_svc_params::dynreg(core);
         if inf.is_null() {
-            return if counts_of(c.reg) == (0, 0, 0, 0, 0) { OK } else { E_NO_REGISTRY };
+            return if counts_of(c.reg) == (0, 0, 0, 0, 0) {
+                OK
+            } else {
+                E_NO_REGISTRY
+            };
         }
-        apply(core, &AppCtx { owner: c.owner, reg: c.reg, base: c.base, inf })
+        apply(
+            core,
+            &AppCtx {
+                owner: c.owner,
+                reg: c.reg,
+                base: c.base,
+                inf,
+            },
+        )
     }
 
     unsafe fn apply_record(core: &C, kind: u32, body: *const u8, c: &ApplyCtx) -> i32 {
@@ -234,7 +254,9 @@ struct AppCtx {
 
 /// The table must fit this registry's state (a table that says more rows than the state has would index past it).
 unsafe fn fits(inf: *const u32) -> bool {
-    !(iw(inf, w::M_DYN_N) as usize > MAX_MACH || iw(inf, w::P_DYN_N) as usize > MAX_PARAM || iw(inf, w::PG_DYN_N) as usize > MAX_PAGE)
+    !(iw(inf, w::M_DYN_N) as usize > MAX_MACH
+        || iw(inf, w::P_DYN_N) as usize > MAX_PARAM
+        || iw(inf, w::PG_DYN_N) as usize > MAX_PAGE)
 }
 
 /// A NUL-terminated printable-ASCII text of exactly `field` bytes, 1 to `field - 1` characters.
@@ -578,7 +600,8 @@ unsafe fn ck_rows<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
 
 /// Fill the reserved parameter, action, page and machine rows from the (checked) records.
 unsafe fn apply<C: CoreApi>(core: &C, ctx: &AppCtx) -> i32 {
-    let (owner, reg, base, inf, args) = (ctx.owner, ctx.reg, ctx.base, ctx.inf, crate::build::args());
+    let (owner, reg, base, inf, args) =
+        (ctx.owner, ctx.reg, ctx.base, ctx.inf, crate::build::args());
     let s = rstate();
     // parameters first: their codes are what the machines' knobs name
     let mut codes = [0u32; MAX_PARAM];
@@ -681,7 +704,10 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &AppCtx) -> i32 {
         wr(s0 + 4 * KNOBS as u32, 0);
         wr(row + iw(inf, w::PGO_NAME), name);
         wr(row + iw(inf, w::PGO_TITLE), title);
-        wr(row + iw(inf, w::PGO_MACH), crate::assign::resolve(core, rd32(b))); // the page belongs to its machine from this store on
+        wr(
+            row + iw(inf, w::PGO_MACH),
+            crate::assign::resolve(core, rd32(b)),
+        ); // the page belongs to its machine from this store on
     });
     // machines
     let knobs = iw(inf, w::KNOBS) as usize;

@@ -41,7 +41,15 @@ pub struct State {
 }
 
 #[no_mangle]
-pub static mut DKRT_ASSIGN: State = State { magic: 0, n: 0, dirty: 0, map: [0; MAP_N], idx: [0; MAX_KEYS], key: [0; MAX_KEYS], ty: [0; MAX_KEYS] };
+pub static mut DKRT_ASSIGN: State = State {
+    magic: 0,
+    n: 0,
+    dirty: 0,
+    map: [0; MAP_N],
+    idx: [0; MAX_KEYS],
+    key: [0; MAX_KEYS],
+    ty: [0; MAX_KEYS],
+};
 
 fn st() -> &'static mut State {
     unsafe { &mut *addr_of_mut!(DKRT_ASSIGN) }
@@ -111,10 +119,17 @@ pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
         k += 1;
     }
     let n = a.n;
-    a.dirty = assign(&from, &mut a.map, &a.key, &mut a.ty, n, &mut |ev: &Event| {
-        let flags = if ev.error { logk::F_ERROR } else { LOG_INFO };
-        core.log(ev.kind, flags, ev.args);
-    });
+    a.dirty = assign(
+        &from,
+        &mut a.map,
+        &a.key,
+        &mut a.ty,
+        n,
+        &mut |ev: &Event| {
+            let flags = if ev.error { logk::F_ERROR } else { LOG_INFO };
+            core.log(ev.kind, flags, ev.args);
+        },
+    );
     // Save when the map changed or still comes from the old place. A refused write leaves `dirty` set and the old place as it is: the next boot reads the same map, assigns the
     // same numbers and tries again. Once the key holds the map the old bytes are zeroed, so that a later erase of the key cannot bring back a stale map; a refused zeroing
     // is tried again at every boot while the old bytes are not 0.

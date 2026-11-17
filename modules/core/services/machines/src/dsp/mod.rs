@@ -152,9 +152,12 @@ pub(crate) unsafe fn check_types<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         }
         let mut j = 0;
         while j < i {
-            if crate::assign::resolve(core, rd32(s.add(
-                voice_off as usize + vstride as usize * j as usize + VOICE_TYPE as usize,
-            ))) == t
+            if crate::assign::resolve(
+                core,
+                rd32(
+                    s.add(voice_off as usize + vstride as usize * j as usize + VOICE_TYPE as usize),
+                ),
+            ) == t
             {
                 return E_DSP_TYPE; // twice in this file
             }
