@@ -1,5 +1,5 @@
 """Paired counter runs of coupled-run binaries on runtime fixtures: steady-state host
-instruction counts, tier counters, PCM and DSP state parity, and fast-tier exit tables.
+instruction counts, tier counters, PCM, DSP state and ColdFire state parity, and fast-tier exit tables.
 
     uv run python -m tools.devtools.sharc_cells A=BIN_A B=BIN_B --state dn2-reset --state dt2 \\
         [--seconds 3,6] [--jobs 4] [--scenario NAME] [--cov] \\
@@ -16,8 +16,11 @@ This tool does not take the bench lock. Host instruction counts
 may run in parallel (--jobs, under `nice -n 10`). They say nothing about time: do the final
 timing A/B with tools/devtools/coupled_ab.py, which holds the lock.
 
-The exit code is non-zero when a run fails or PCM or DSP state differs from the first
-label's at the same length.
+The ColdFire state is `state_sha256` of the report (`Emulator::state_digest_arch`: the machine
+state without the three instruction-path counters), taken at the end of the run.
+
+The exit code is non-zero when a run fails or PCM, DSP state or ColdFire state differs from the
+first label's at the same length.
 """
 
 from __future__ import annotations
@@ -213,6 +216,7 @@ def run_cell(
         "rtf": sc.get("real_time_factor"),
         "pcm": sc["pcm"]["sha256"],
         "state": hashlib.sha256(dump.read_bytes()).hexdigest(),
+        "cf_state": sc["state_sha256"],
     }
 
 
@@ -238,7 +242,7 @@ def state_table(
     lines = [
         f"== {state['name']} ({state['device']}, {scenario}), lengths {lengths} s, "
         "steady state per audio s ==",
-        head + "   B/A insns   rtf per length   parity (pcm/state per length)",
+        head + "   B/A insns   rtf per length   parity (pcm/dsp/cf per length)",
     ]
     data = {}
     base = None
@@ -249,7 +253,7 @@ def state_table(
         par = []
         for n, r in zip(lengths, rs, strict=True):
             a = runs[(ref, n)]
-            same = (r["pcm"] == a["pcm"], r["state"] == a["state"])
+            same = tuple(r[k] == a[k] for k in ("pcm", "state", "cf_state"))
             ok &= all(same)
             par.append(f"{n:g}s:" + "/".join("=" if x else "DIFF" for x in same))
         lines.append(
@@ -403,7 +407,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, indent=1))
     if not ok:
-        print("\nFAILED: a run failed or PCM/state differs from the first label")
+        print("\nFAILED: a run failed or PCM/DSP/CF state differs from the first label")
     return 0 if ok else 1
 
 

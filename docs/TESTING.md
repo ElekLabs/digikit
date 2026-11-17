@@ -957,7 +957,16 @@ A missing or stale profile prints one warning: a stale profile is still applied 
 `uv run python -m tools.emulator.native_pgo clean [--dry-run] [--days N]` removes bench, ab, raw and train output and unreferenced profiles older than N days (default 14) under `out/native/pgo`. It keeps profiles named by `manifest.json` or the newest four `by-key` entries. `train` calls it at its end when `AUTO_CLEAN` is set.
 `DIGI_EMU_PGO=0` turns PGO off. Measuring tools (`coupled_ab`, `sharc_matrix`, `perf`, `fastcov`, `fast_roots`) keep their own builds.
 
-`tools/devtools/sharc_cells.py` compares host instruction counts of two built `coupled-run` binaries on runtime fixtures (`uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --jobs 2 --cov`). It runs each binary at two lengths, prints steady-state counters per audio second, the B/A instruction ratio and PCM and DSP state parity (non-zero exit on a difference), and with `--cov` the fast-tier root and exit tables. It does not take the bench lock, because counters are not timing; use `coupled_ab` for the final timing A/B.
+`tools/devtools/sharc_cells.py` compares host instruction counts of two built `coupled-run` binaries on runtime fixtures (`uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --jobs 2 --cov`). It runs each binary at two lengths, prints steady-state counters per audio second, the B/A instruction ratio and PCM, DSP state and ColdFire state parity (`pcm/dsp/cf` per length; the ColdFire state is `state_sha256` of the `coupled-run` report, taken at the end of the run; non-zero exit on a difference), and with `--cov` the fast-tier root and exit tables. It does not take the bench lock, because counters are not timing; use `coupled_ab` for the final timing A/B.
+
+```text
+== dt2 (dt2, dt2-sample-trig), lengths [3.0, 6.0] s, steady state per audio s ==
+label    insn G    cyc G   aot M  fast M  interp  idle M   blk M  fcall M   B/A insns   rtf per length   parity (pcm/dsp/cf per length)
+A        25.510    4.811   294.1    18.6    1.80   685.4    2.17     0.31   1.0000     0.43/0.45        3s:=/=/= 6s:=/=/=
+B        25.518    4.908   294.1    18.6    1.80   685.4    2.17     0.31   1.0003     0.45/0.50        3s:=/=/= 6s:=/=/=
+```
+
+A `DIFF` in `pcm`, `dsp` or `cf` makes the exit code non-zero. `A` and `B` ran the same binary here. The ColdFire state needs a `coupled-run` built from PR 0 or later.
 
 ## Render cache
 

@@ -557,6 +557,11 @@ impl CoupledRuntime {
         let (blob, icount) = self.audio.as_ref()?.handle.export();
         (!blob.is_empty()).then_some((blob, icount))
     }
+    /// SHA-256 of the ColdFire machine state without the three instruction-path counters
+    /// (`Emulator::state_digest_arch`): equal for two builds that run the same guest.
+    pub fn cf_state_digest(&mut self) -> Result<String, String> {
+        self.emulator.state_digest_arch()
+    }
     /// The native audio health report (includes link timing when enabled).
     pub fn audio_report(&self) -> Option<Value> {
         self.audio.as_ref().map(coupled::AudioSession::report)
