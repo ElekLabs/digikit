@@ -44,6 +44,11 @@ impl PcmSink for PcmPlayer {
     }
 }
 
+/// The queued audio at which free running waits: the prefill, at least `PACE_MIN_SECONDS`.
+pub fn pace_seconds(buffer_seconds: f64) -> f64 {
+    buffer_seconds.max(PACE_MIN_SECONDS)
+}
+
 /// The output player mode and underrun policy for a buffer length and audio mode.
 pub fn player_settings(buffer_seconds: f64, audio_mode: crate::AudioMode) -> (Mode, Recovery) {
     let mode = if buffer_seconds == 0.0 {
@@ -77,11 +82,13 @@ pub struct AudioOut {
 
 impl AudioOut {
     /// Without `playback` no device is opened. A failed `open` is recorded as the device error and
-    /// the output goes on without a sink. The capture named by `DIGI_EMU_PCM_F32LE` starts here.
+    /// the output goes on without a sink. `capture` runs after `open` and gives
+    /// the capture to start with, if any (the caller decides where it comes from).
     pub fn new(
         playback: bool,
         pace_seconds: f64,
         open: impl FnOnce() -> Result<Box<dyn PcmSink>, String>,
+        capture: impl FnOnce() -> Option<PcmCapture>,
     ) -> Self {
         let (sink, device_error) = if playback {
             match open() {
@@ -97,7 +104,7 @@ impl AudioOut {
             playback_requested: playback,
             samples: 0,
             started: Instant::now(),
-            pcm_capture: PcmCapture::from_env(),
+            pcm_capture: capture(),
             pcm_tap: None,
             pace_seconds,
         }
@@ -304,7 +311,7 @@ enum CaptureOut {
     Wav(WavWriter),
 }
 
-struct PcmCapture {
+pub struct PcmCapture {
     out: Option<CaptureOut>,
     path: String,
     count: u64,
@@ -314,7 +321,8 @@ struct PcmCapture {
 }
 
 impl PcmCapture {
-    fn from_env() -> Option<Self> {
+    /// The capture named by `DIGI_EMU_PCM_F32LE`, if set.
+    pub fn from_env() -> Option<Self> {
         let path = std::env::var_os("DIGI_EMU_PCM_F32LE")?;
         // Unset means unlimited.
         let limit = std::env::var("DIGI_EMU_PCM_SECONDS")

@@ -592,7 +592,7 @@ impl CoupledRuntime {
 #[cfg(feature = "coupled-audio")]
 mod coupled {
     use super::*;
-    use crate::audio_out::{AudioOut, PACE_MIN_SECONDS, PcmSink, player_settings};
+    use crate::audio_out::{AudioOut, PcmCapture, PcmSink, pace_seconds, player_settings};
     use elektron_native_boot::{
         pcm_play::{Mode, PcmPlayer, Recovery, SOURCE_RATE},
         sharc_peer::{DEFAULT_PERIOD, Shared, ThreadedHandle, ThreadedTimingProfile},
@@ -695,11 +695,12 @@ mod coupled {
             shared.borrow_mut().dsp_instructions = initial_instructions;
             emulator.set_dspi2_peer(peer.boxed());
             let (mode, recovery) = player_settings(options.buffer_seconds, options.audio_mode);
-            // The prefill, at least `PACE_MIN_SECONDS`.
-            let pace_seconds = options.buffer_seconds.max(PACE_MIN_SECONDS);
-            let out = AudioOut::new(options.playback, pace_seconds, || {
-                player(mode, recovery).map(|p| Box::new(p) as Box<dyn PcmSink>)
-            });
+            let out = AudioOut::new(
+                options.playback,
+                pace_seconds(options.buffer_seconds),
+                || player(mode, recovery).map(|p| Box::new(p) as Box<dyn PcmSink>),
+                PcmCapture::from_env,
+            );
             Ok(Self {
                 handle,
                 shared,

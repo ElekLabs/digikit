@@ -103,7 +103,7 @@ impl PcmSink for FakeSink {
 fn fake_out(pace: f64) -> (AudioOut, Rc<RefCell<FakeState>>) {
     let state = Rc::new(RefCell::new(FakeState::default()));
     let sink = Rc::clone(&state);
-    let out = AudioOut::new(true, pace, move || Ok(Box::new(FakeSink(sink))));
+    let out = AudioOut::new(true, pace, move || Ok(Box::new(FakeSink(sink))), || None);
     (out, state)
 }
 
@@ -140,7 +140,12 @@ fn queue_ahead_needs_device_and_pending_audio_to_reach_the_pace_target() {
 
 #[test]
 fn without_a_sink_the_queue_is_never_ahead_and_underruns_are_unknown() {
-    let out = AudioOut::new(false, 0.5, || unreachable!("no playback requested"));
+    let out = AudioOut::new(
+        false,
+        0.5,
+        || unreachable!("no playback requested"),
+        || None,
+    );
     assert!(!out.queue_ahead());
     assert_eq!(out.sink_underruns(), None);
     assert!(out.queue_json().is_null());
@@ -149,7 +154,7 @@ fn without_a_sink_the_queue_is_never_ahead_and_underruns_are_unknown() {
 
 #[test]
 fn a_failed_device_open_is_reported_and_pcm_still_counts() {
-    let mut out = AudioOut::new(true, 0.5, || Err("no device".into()));
+    let mut out = AudioOut::new(true, 0.5, || Err("no device".into()), || None);
     out.push(&[0.5; 8]);
     let report = out.report_fields();
     assert_eq!(report["device_error"], "no device");
@@ -186,20 +191,65 @@ fn rebuffer_recovery_refills_to_the_buffer_length_inside_the_ring() {
 }
 
 #[test]
-fn pace_target_equal_to_the_refill_level_keeps_a_stalled_run_stepping() {
+fn pace_target_and_refill_level_for_several_buffer_lengths() {
     // After an underrun the player stays silent until `refill` seconds are queued. The controller
-    // waits while `queue_ahead` is true, so the pace target must not lie below that level.
-    let buffer = 0.5;
-    let Recovery::Rebuffer(refill) = player_settings(buffer, crate::AudioMode::Rebuffer).1 else {
-        unreachable!()
-    };
-    let (out, state) = fake_out(buffer.max(PACE_MIN_SECONDS));
-    state.borrow_mut().underruns = 1;
-    state.borrow_mut().queued_device_frames = (refill * 44_100.0) as u64 - 100;
+    // waits while `queue_ahead` is true, so the pace target should not lie below that level. This
+    // holds for buffers of 0.2 s and more. For buffer 0 the pace (0.05) is below the refill (0.2);
+    // main uses `Mode::Live` for that case. For buffers above 0.9 the refill is clamped to 0.9.
+    for (buffer, pace, refill) in [
+        (0.0, 0.05, 0.2),
+        (0.05, 0.05, 0.2),
+        (0.2, 0.2, 0.2),
+        (0.3, 0.3, 0.3),
+        (1.0, 1.0, 0.9),
+    ] {
+        assert_eq!(pace_seconds(buffer), pace, "pace for buffer {buffer}");
+        let Recovery::Rebuffer(got) = player_settings(buffer, crate::AudioMode::Rebuffer).1 else {
+            unreachable!()
+        };
+        assert_eq!(got, refill, "refill for buffer {buffer}");
+    }
+    assert!(matches!(
+        player_settings(0.0, crate::AudioMode::Rebuffer).0,
+        Mode::Live
+    ));
+}
+
+fn temp_capture_path(name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("audio_out_{}_{name}", std::process::id()))
+}
+
+#[test]
+fn start_capture_reports_an_open_error_with_the_path() {
+    let (mut out, _state) = fake_out(0.5);
+    let path = temp_capture_path("missing_dir").join("no").join("out.f32");
+    let error = out.start_capture(&path).unwrap_err();
     assert!(
-        !out.queue_ahead(),
-        "below the refill level the run keeps stepping"
+        error.starts_with(&format!("{}: ", path.display())),
+        "{error}"
     );
-    state.borrow_mut().queued_device_frames = (refill * 44_100.0) as u64 + 100;
-    assert!(out.queue_ahead());
+    assert!(!out.report_fields().contains_key("pcm_capture_path"));
+}
+
+#[test]
+fn start_capture_writes_pushed_samples_until_stopped() {
+    let (mut out, _state) = fake_out(0.5);
+    let path = temp_capture_path("ok.f32");
+    out.start_capture(&path).unwrap();
+    out.push(&[0.5, -1.0, 0.25]);
+    let fields = out.report_fields();
+    assert_eq!(fields["pcm_capture_path"], path.display().to_string());
+    assert_eq!(fields["pcm_capture_count"], 3);
+    assert!(fields["pcm_capture_error"].is_null());
+    out.stop_capture();
+    assert!(!out.report_fields().contains_key("pcm_capture_count"));
+    let bytes = std::fs::read(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(
+        bytes,
+        [0.5f32, -1.0, 0.25]
+            .iter()
+            .flat_map(|v| v.to_le_bytes())
+            .collect::<Vec<u8>>()
+    );
 }
