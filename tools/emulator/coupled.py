@@ -289,11 +289,13 @@ def ensure_binary(
 def run_env(
     overrides: dict[str, str] | None = None, *, syx: pathlib.Path | None = None
 ) -> dict[str, str]:
-    env = {**os.environ, **(overrides or {})}
+    device = digi_env.device_for_syx(syx or digi_env.firmware(os.environ)) or "dn2"
+    # The core of a device reads the lists with the suffix of its device: names given without it (in the overrides or
+    # the environment) are renamed for DEVICE (`digi_env.slot_env`), so a DT2 run never reads DN2's lists.
+    env = digi_env.slot_env(device, {**os.environ, **(overrides or {})})
     env.update(digi_env.fast_env(env, syx=syx))
     # The binary holds no DSP core: the library of the firmware's device comes from the core store (an explicit
     # DIGI_SHARC_CORE_LIB_<DEV> wins).
-    device = digi_env.device_for_syx(syx or digi_env.firmware(env)) or "dn2"
     try:
         env.update(core_store.library_env([device], environ=env))
     except core_store.CoreStoreError as exc:

@@ -31,8 +31,8 @@ pub fn core_lib_var(device: &str) -> String {
 /// The core for a device id (`dn2`, `dt2`) and the DSP image its firmware runs (`DspProfile::image`, `dn2-1.12`),
 /// loaded from the library `DIGI_SHARC_CORE_LIB_<DEV>` names. Fails when the variable is missing or empty, when
 /// the library is refused, and when the core is made for another device. A core of the same device but another
-/// image version is accepted: the engine checks the loaded image against the core's and interprets what the
-/// core's blocks do not cover.
+/// image version is accepted: the engine checks the loaded code against the core's `CODE_RANGES` and bars the
+/// blocks whose code no longer matches, so it interprets what the core's blocks do not cover.
 pub fn core_for_device(device: &str, dsp_image: &str) -> Result<&'static GenCore, String> {
     let var = core_lib_var(device);
     let Some(path) = std::env::var_os(&var).filter(|p| !p.is_empty()) else {

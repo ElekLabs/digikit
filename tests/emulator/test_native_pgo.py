@@ -206,6 +206,26 @@ def test_each_device_sets_the_region_lists_of_its_own_engine_slot():
     }
 
 
+def test_run_env_gives_a_dt2_run_the_lists_of_the_dt2_core(monkeypatch, tmp_path):
+    from tools.devtools import core_store
+    from tools.emulator import coupled
+
+    monkeypatch.setattr(core_store, "library_env", lambda *a, **k: {})
+    monkeypatch.setattr(digi_env, "fast_env", lambda env, syx=None, **k: {})
+    syx = tmp_path / "dt2.syx"
+    syx.write_bytes(b"x")
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda path: "dt2")
+    monkeypatch.delenv("SHARC_FAST_REGIONS_2", raising=False)
+    env = coupled.run_env(
+        {"SHARC_FAST_REGIONS": "", "SHARC_BLOCKTRANS": "0x2"}, syx=syx
+    )
+    assert env["SHARC_FAST_REGIONS_2"] == "" and env["SHARC_BLOCKTRANS_2"] == "0x2"
+    assert "SHARC_FAST_REGIONS" not in env and "SHARC_BLOCKTRANS" not in env
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda path: "dn2")
+    env = coupled.run_env({"SHARC_BLOCKTRANS": "0x2"}, syx=syx)
+    assert env["SHARC_BLOCKTRANS"] == "0x2" and "SHARC_BLOCKTRANS_2" not in env
+
+
 # --- clean -------------------------------------------------------------------------------
 
 NOW = 1_800_000_000.0

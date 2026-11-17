@@ -1109,7 +1109,11 @@ def run_workload(
     app: bool = False,
 ) -> Result:
     """Run the workload under /usr/bin/time and enforce the gates."""
-    env_pairs = {**run_env(binary.parent), **(extra_env or {})}
+    env_pairs = {
+        **run_env(binary.parent),
+        **core_library_env("dn2"),  # the workload is the DN2 one
+        **(extra_env or {}),
+    }
     env_pairs["SHARC_FAST_FALLBACK_REGIONS"] = fallback_regions(
         {**os.environ, **(extra_env or {})}
     )
