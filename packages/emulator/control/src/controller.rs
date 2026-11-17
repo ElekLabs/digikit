@@ -2233,7 +2233,9 @@ impl Actor {
         let job = if let Some(j) = &self.patch_job {
             // The count restarts at 0 when a soft reset reboots the job, so a client counts any change as progress.
             let (phase, progress) = match j.phase.load(Ordering::Relaxed) {
-                PHASE_DSP => ("starting the DSP", Value::Null),
+                // The phase is only reported with a DSP start; a load without the DSP just boots.
+                PHASE_DSP if self.dsp => ("starting the DSP", Value::Null),
+                PHASE_DSP => ("booting", Value::Null),
                 PHASE_COLDFIRE => (
                     "booting",
                     json!(f64::from_bits(j.fraction.load(Ordering::Relaxed))),

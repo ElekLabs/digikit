@@ -164,7 +164,8 @@ export default function Console(props: { host: Host }) {
   // a memo: `status` is set once per display frame, and the panels must hear of a change of this value only
   const sidePanelsShown = createMemo(() => page() === 'emulator');
   const panelsActive = createMemo(() => !!status());
-  const knownDevice = () => status()?.device ?? booting()?.device ?? failed()?.device ?? lastDevice();
+  // While an image boots, only its own device counts: an unknown image has none (no stale device, no faceplate).
+  const knownDevice = () => status()?.device ?? (booting() ? booting()!.device : (failed()?.device ?? lastDevice()));
   const device = () => {
     const d = knownDevice();
     return d !== undefined && Object.hasOwn(panels, d) ? d : defaultFaceplate;
@@ -365,6 +366,7 @@ export default function Console(props: { host: Host }) {
                 : Promise.reject(new Error('no reload')),
             file?.name ?? path,
             withRuntime,
+            file?.device ?? undefined,
           );
           if (ok) {
             writePref(LAST_FIRMWARE_KEY, path);
@@ -1074,7 +1076,11 @@ export default function Console(props: { host: Host }) {
               </span>
             </header>
             <div class="emu-row">
-              <main class="stage" aria-label={`${panel().name} front panel`}>
+              <main
+                class="stage"
+                aria-label={`${panel().name} front panel`}
+                style={{ visibility: booting() && !knownDevice() ? 'hidden' : undefined }}
+              >
                 <div class="surface">
                   <LivePanel
                     panel={panel()}
