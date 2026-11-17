@@ -189,6 +189,16 @@ mark = "D"
 rule = "fw/lfo:cf_func"
 
 [[anchor]]
+name = "cf.lfo.site.t1_range"
+cpu = "cf"
+kind = "code"
+addr = 0x400dbff0
+len = 6
+sha256 = "d6c9f1f60272197a17511f496fc19dd21ddd7df5f1f1ec0cab7a16cad60b0609"
+mark = "D"
+rule = "fw/lfo:cf_words"
+
+[[anchor]]
 name = "cf.lfo.site.tick_call"
 cpu = "cf"
 kind = "code"
@@ -247,6 +257,26 @@ len = 2
 sha256 = "43a286effac35df5d4864a650a8e64ba60367543d984a7b95f9ae0a8b702d4d8"
 mark = "D"
 rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.wave_name"
+cpu = "cf"
+kind = "code"
+addr = 0x400e34ac
+len = 6
+sha256 = "4fdd4081a0412168b702fa9b583f4a1be59b33b477f2979cb1ab3e2a5fb36d6d"
+mark = "D"
+rule = "fw/lfo:cf_words"
+
+[[anchor]]
+name = "cf.lfo.site.wave_name3"
+cpu = "cf"
+kind = "code"
+addr = 0x4000766c
+len = 6
+sha256 = "4fdd4081a0412168b702fa9b583f4a1be59b33b477f2979cb1ab3e2a5fb36d6d"
+mark = "D"
+rule = "fw/lfo:cf_words"
 
 [[anchor]]
 name = "cf.link.fn.block_isr"
@@ -3848,6 +3878,12 @@ mode = "replace"
 clobbers = ["d2", "ccr"]
 
 [[hook]]
+name = "cf.lfo.hook.t1_range"
+site = "cf.lfo.site.t1_range"
+mode = "replace"
+clobbers = ["d0", "d1", "ccr"]
+
+[[hook]]
 name = "cf.lfo.hook.tick_call"
 site = "cf.lfo.site.tick_call"
 mode = "replace"
@@ -3864,6 +3900,18 @@ name = "cf.lfo.hook.tick_start"
 site = "cf.lfo.site.tick_start"
 mode = "replace"
 clobbers = ["d2", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.wave_name"
+site = "cf.lfo.site.wave_name"
+mode = "replace"
+clobbers = ["d0", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.wave_name3"
+site = "cf.lfo.site.wave_name3"
+mode = "replace"
+clobbers = ["d0", "ccr"]
 
 [[hook]]
 name = "cf.link.hook.block_isr"

@@ -6,8 +6,8 @@ use dkrt_abi::service::{check_step, ApplyCtx, CheckCtx, Declare, Service, Settle
 use dkrt_sdk::records::{KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
 use dkrt_svc_lfo::records::{
-    eval, interp, name_of, number_of, owner_of, shape, tri, unipolar_of, used, Lfo, MAX_SHAPES,
-    NAME_LEN, RANGE, SAMPLES, SETTING,
+    eval, highest, interp, name_into, name_of, number_of, owner_of, shape, tri, unipolar_of, used,
+    wave_max, Lfo, MAX_SHAPES, NAME_LEN, RANGE, SAMPLES, SETTING,
 };
 use dkrt_test_support::FakeCore;
 use std::sync::{Mutex, MutexGuard};
@@ -242,6 +242,82 @@ fn the_writes_to_the_table_leave_the_interrupt_mask_released() {
     assert_eq!(core.host.masked.get(), 0);
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
     assert_eq!(core.host.masked.get(), 0);
+}
+
+/// `name_into` for the WAVE value `value` with a buffer of `width + 1` bytes filled with 0xaa: (characters written, the buffer).
+fn name(value: i32, width: usize) -> (usize, [u8; 8]) {
+    let mut buf = [0xaau8; 8];
+    let n = unsafe { name_into(value, buf.as_mut_ptr(), width) };
+    (n, buf)
+}
+
+/// Loads shape `key` at selection index `at` as record owner `owner` with `name`.
+fn load(core: &FakeCore, owner: u8, key: u32, nm: &[u8; NAME_LEN]) {
+    core.boot_index.set(0);
+    assert_eq!(apply(core, owner, KIND_LFO_SHAPE, &body(key, nm, 0)), OK);
+}
+
+#[test]
+fn the_name_formatters_get_the_name_of_a_loaded_shape_and_stock_behaviour_otherwise() {
+    let (_g, core) = fresh();
+    settle(&core, &[&[KEY_A, KEY_B]]);
+    // nothing loaded: no name for any wave number, in or out of the range
+    for wave in [0i32, 6, 7, 8, 14, 15, 127] {
+        assert_eq!(name(wave << 8, 4).0, 0, "wave {wave}");
+    }
+    load(&core, 1, KEY_A, b"RAMP");
+    let (n, buf) = name(7 << 8, 4);
+    assert_eq!(
+        (n, &buf[..6]),
+        (4, &b"RAMP\0\xaa"[..]),
+        "four characters and the NUL"
+    );
+    // the low byte of the value is ignored, as the stock formatter does
+    assert_eq!(name((7 << 8) | 0x7f, 4).0, 4);
+    // the three-character formatter of the Digitone II: the first three characters, then the NUL
+    let (n, buf) = name(7 << 8, 3);
+    assert_eq!((n, &buf[..5]), (3, &b"RAM\0\xaa"[..]));
+    // a number that no module keeps (8 is assigned, not loaded), stock numbers, numbers above the range and negative values: no name, nothing written
+    for value in [8 << 8, 6 << 8, 15 << 8, 127 << 8, -1, i32::MIN, 0] {
+        let (n, buf) = name(value, 4);
+        assert_eq!((n, buf), (0, [0xaa; 8]), "value {value:#x}");
+    }
+    load(&core, 2, KEY_B, b"SAW2");
+    assert_eq!(name(8 << 8, 4).0, 4);
+    unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
+    assert_eq!(
+        name(7 << 8, 4).0,
+        0,
+        "an unloaded shape prints as stock again"
+    );
+}
+
+#[test]
+fn the_wave_maximum_follows_the_highest_loaded_wave_number() {
+    let (_g, core) = fresh();
+    settle(&core, &[&[KEY_A], &[KEY_B]]);
+    assert_eq!(
+        (highest(), wave_max()),
+        (0, 0),
+        "no shape: 0 leaves the stock maximum 0x600"
+    );
+    // the second key is loaded first: the maximum is its number, not the count
+    core.boot_index.set(1);
+    assert_eq!(
+        apply(&core, 2, KIND_LFO_SHAPE, &body(KEY_B, b"UP  ", 0)),
+        OK
+    );
+    assert_eq!((highest(), wave_max()), (8, 0x800));
+    core.boot_index.set(0);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"DOWN", 0)),
+        OK
+    );
+    assert_eq!((highest(), wave_max()), (8, 0x800));
+    unsafe { <Lfo as Service<FakeCore>>::remove(&core, 2) };
+    assert_eq!((highest(), wave_max()), (7, 0x700));
+    unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
+    assert_eq!((highest(), wave_max()), (0, 0));
 }
 
 /// The 32 samples `s[i] = 1000 * i`, so that every value of the interpolation is easy to compute by hand.

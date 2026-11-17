@@ -621,8 +621,13 @@ What:
      clamp (DT2 `0x40139698`, DN2 `0x40137b56`) and its function-table call and RAND compares (DT2 `0x40139804`, `0x4013986c`), and the second
      function-table reader with its own clamp (DT2 `FUN_401392d4`, DN2 `FUN_401376bc`). Without the clamp hook a wave of 7 or more becomes RAND
      before the table call.
-   - UI-task sites, as `lfo.dks` hooks (B1 bind resolves the addresses): the name formatter (DT2 one; DN2 two, 4- and 3-character names), the
-     graph clamp and the unipolar table, and the T1 maximum of codes 79, 89, 99 so the panel can reach the new values.
+   - UI-task sites, as `lfo.dks` hooks (B1 bind resolves the addresses; routines in `services/lfo/dks/src/hooks-ui.s`, sites in `devices/fw/lfo.toml`,
+     finding 143 "The panel hooks"): the name formatter (`wave_name`: DT2 0x400e1b68 and DN2 0x400e3610, four characters; `wave_name3`: DN2
+     0x4000766c, the first three characters), and the T1 range accessor (`t1_range`: DT2 0x400da368, DN2 0x400dc154, 171 callers on DT2, among them the
+     live-set clamp the encoder reaches), which raises the maximum of the codes 79, 89 and 99 to the highest loaded wave number << 8 at run time and
+     leaves the T1 row untouched, so with the service absent the maximum stays 0x600. DT2 binds two sites, DN2 three (`bind_max` 24 per file;
+     installed sites DT2 18, DN2 22 of 48). **No graph hook**: the LFO page draws a waveform as a path object from a RAM table of seven vectors
+     indexed by the clamped wave, not with per-wave code, so a wave of 7 to 14 draws the RAND path until a shape path is built (open item O7).
 2. The slot code: for an extended wave value, compute signed Q31 from the 32-bit phase with the module's 32-sample table and integer linear
    interpolation (the service keeps a delta table of 32 cells `{ v = s[i] << 16, d = s[i+1] - s[i] }`, built when the shape loads, so the tick makes
    `v + ((d * f) << 1)`); mark unipolar shapes in the service's own table. Cost budget, from the CPU and the tick period: the core runs at 264 MHz
@@ -737,7 +742,7 @@ runtime-and-services.md.
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |
-| 7 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | active |
+| 7 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | built (branch e6/lfo-shapes); shape graph open (O7) |
 | 8 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8 | filter test plus subset | todo |
 | 9 | E8 regroup and names | E1, open branches merged | full run of its batch | todo |
 
@@ -786,6 +791,9 @@ Open:
 - O4 (decided in E6): the LFO_SHAPE record stays a generic `dk_record_add`. Writing the fixture and the template showed only byte packing as the awkward part (key, name and 32 samples as big-endian bytes, 80 bytes); the service check now refuses a body key that the module's KEYS entry does not list, so a literal key is caught. A typed `dk_lfo_add_shape` would add an import, a `since` and collector plumbing for no new capability; if packing proves error-prone for authors, add a header helper that fills the body in `sdk/include/dk`, with no runtime change.
 - O6: E7 stored filter choice: digikit's store with a stock fallback in the sound (recommended, rule 7), or patch the stock loader bound
   (7 to 32) so the extended type survives in kit files; with the patch, a kit opened on stock firmware falls back to filter 0.
+- O7: E6 shape graph. The MOD page draws the RAND path for a shape (the stock clamp). A shape graph needs a path object in the format of the 28-byte
+  elements of the seven vectors at RAM 0x44d2e37c (finding 143, "The panel hooks"): read that format and the DN2 function, then hook the vector
+  lookup (`wave * 12 + 0x44d2e37c`) for the waves 7 to 14. Not needed for the sound; payoff is the picture only.
 
 ## 10. Changes to other documents when items land
 

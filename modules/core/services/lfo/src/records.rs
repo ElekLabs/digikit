@@ -142,6 +142,47 @@ pub fn name_of(number: u32) -> Option<[u8; NAME_LEN]> {
     kept(t, number).map(|i| t[i].name)
 }
 
+/// The highest wave number a loaded shape has (0 when none is loaded).
+pub fn highest() -> u32 {
+    let t = unsafe { &*addr_of!(SHAPES) };
+    let mut hi = 0;
+    let mut i = 0;
+    while i < MAX_SHAPES {
+        if t[i].owner != 0 {
+            hi = RANGE.lo + i as u32;
+        }
+        i += 1;
+    }
+    hi
+}
+
+/// The largest value of the LFO WAVE parameter (`wave << 8`) while shapes are loaded: the T1 maximum of codes 79, 89 and 99 follows the highest loaded wave number,
+/// so the encoder reaches no number above it. 0 when no shape is loaded: the stock maximum stays (finding 143, "The panel hooks").
+pub fn wave_max() -> u32 {
+    highest() << 8
+}
+
+/// Writes the name of the shape that the WAVE parameter value `value` (`wave << 8`; the stock formatter ignores the low byte) names, `width` characters at most, then a NUL, and
+/// returns the number of characters (0 when no module keeps that wave number: nothing is written and the stock formatter prints its "ERR"). `out` has room for `width + 1` bytes.
+///
+/// # Safety
+/// `out` is valid for `width + 1` bytes.
+pub unsafe fn name_into(value: i32, out: *mut u8, width: usize) -> usize {
+    let wave = (value >> 8) as u32;
+    let name = match name_of(wave) {
+        Some(n) => n,
+        None => return 0,
+    };
+    let n = if width < NAME_LEN { width } else { NAME_LEN };
+    let mut i = 0;
+    while i < n {
+        *out.add(i) = name[i];
+        i += 1;
+    }
+    *out.add(n) = 0;
+    n
+}
+
 /// Is the shape with wave number `number` unipolar (false for a number no module keeps: the fallback is TRI)?
 pub fn unipolar_of(number: u32) -> bool {
     let t = unsafe { &*addr_of!(SHAPES) };

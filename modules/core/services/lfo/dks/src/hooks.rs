@@ -9,6 +9,8 @@ use core::arch::global_asm;
 global_asm!(include_str!("hooks-dt2.s"));
 #[cfg(target_arch = "m68k")]
 global_asm!(include_str!("hooks-dn2.s"));
+#[cfg(target_arch = "m68k")]
+global_asm!(include_str!("hooks-ui.s"));
 
 /// The first step of `init`: nothing to bind (the slots are named by `fills`; a file without `core/lfo` in the image is refused for its missing slots).
 pub unsafe fn setup(_core: &dkrt_svc_rt::ImportCore) -> i32 {
@@ -41,6 +43,9 @@ entries! {
     lfo_dn2_read_call,
     lfo_dn2_read_slew,
     lfo_dn2_read_start,
+    lfo_ui_name4,
+    lfo_ui_name3,
+    lfo_ui_range,
 }
 
 #[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
@@ -49,4 +54,22 @@ entries! {
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub extern "C" fn dk_lfo_eval(phase: u32, wave: u32) -> i32 {
     dkrt_svc_lfo::records::eval(wave, phase)
+}
+
+/// The name of the shape that the WAVE parameter value `value` (`wave << 8`) names, written to `buf` (`width` characters at most, then a NUL): the number of characters, 0 when no
+/// shape is loaded for that wave number. What the name formatters of the MOD page call (`hooks-ui.s`). C calling convention.
+///
+/// # Safety
+/// `buf` is valid for `width + 1` bytes.
+#[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
+#[cfg_attr(target_arch = "m68k", no_mangle)]
+pub unsafe extern "C" fn dk_lfo_name(value: i32, buf: *mut u8, width: u32) -> u32 {
+    dkrt_svc_lfo::records::name_into(value, buf, width as usize) as u32
+}
+
+/// The maximum of the WAVE parameter while shapes are loaded (the highest loaded wave number << 8), 0 when none is: the range accessor of the T1 rows calls it for the codes 79, 89 and 99.
+#[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
+#[cfg_attr(target_arch = "m68k", no_mangle)]
+pub extern "C" fn dk_lfo_range_max() -> u32 {
+    dkrt_svc_lfo::records::wave_max()
 }

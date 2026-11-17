@@ -675,6 +675,28 @@ fn an_lfo_loads_with_the_lfo_service_file() {
             fits(*dev, "emulator", &[&LFO_SHAPE], &["lfo"]);
         }
         let _ = clean_state();
+        // the UI-task hooks: the bound file has one BIND item for each hook the device has (the name formatter and the T1 range accessor; the Digitone II also its three-character
+        // formatter), each over the stock bytes the bind compared with the firmware: `link.w A6,-0x1c; moveq 6,D0` and `move.l D2,-(SP); move.l 8(SP),D1`
+        let bound = service_file(*dev, "lfo", "core/services/lfo");
+        let table = table_of(&bound);
+        let keys = Keys::parse(&table).unwrap();
+        let mut got = Vec::new();
+        let mut i = 0;
+        while let Some(b) = keys.bind(i) {
+            got.push((b.site, b.stock[..b.len as usize].to_vec()));
+            i += 1;
+        }
+        let name = |h: &str| name_hash(std::format!("cf.lfo.hook.{h}").as_str());
+        let mut want = std::vec![
+            (name("wave_name"), std::vec![0x4e, 0x56, 0xff, 0xe4, 0x70, 0x06]),
+            (name("t1_range"), std::vec![0x2f, 0x02, 0x22, 0x2f, 0x00, 0x08]),
+        ];
+        if dev.name == "dn2" {
+            want.push((name("wave_name3"), std::vec![0x4e, 0x56, 0xff, 0xe4, 0x70, 0x06]));
+        }
+        got.sort();
+        want.sort();
+        assert_eq!(got, want, "{}: the BIND items of lfo.dks", dev.name);
     }
 }
 
