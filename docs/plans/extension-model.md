@@ -316,7 +316,8 @@ modules/core/
 
 - `dsp-stereo-proof` moves into the tests of `dsp-voice` (`services/machines/image/dsp-voice/tests/stereo-proof/`): its sources become test
   assets of the call sites it proves. Its id stays.
-- `file-catalog-proof` moves to `proofs/file-catalog/`, or goes if E1 finds a shipped test that covers its path.
+- `file-catalog-proof` moves to `proofs/file-catalog/` (E1: the gate covers directory open and next through `plusdrive-write`'s lookups,
+  but nothing else covers `path.size`).
 - Proofs are in no patch set; moving them changes no shipped image.
 - `overdrive` stays as an adapter folder until E9 decides its owner; it moves to `services/<owner>/image/` or becomes a content module.
 
@@ -405,6 +406,10 @@ What:
 Gate: static checks; no device run.
 
 Done when: the decision on `file-catalog-proof` is written into this plan (4.1) and, if it goes, the deletion PR is merged.
+
+Outcome: keep. `plusdrive-write-files` (gate, DT2) reaches directory open and next through `pdw.c` `lookup()`; no shipped test or caller
+uses `path.size`. To delete the proof later, first add gate checks that list a populated +Drive folder and read a size. The `users` lists of
+`cf.storage.fn.directory.open` and `.next` in `devices/fw/storage.toml` name `core/runtime`, which does not call them; E8 removes it.
 
 Estimate: 1-2 h. Payoff: small. Confidence: high. Depends on: nothing.
 
@@ -598,7 +603,8 @@ What: section 4.1 and 4.2, as one mechanical PR after the open branches merge.
 - Merge `usb-bulk-audio` into `usb-bulk`: one module; the patch sets name `core/usb-bulk`; the `core/usb-bulk-audio` id goes (it is a
   platform module with no stored identity).
 - `InitWindow` rename (4.2).
-- Proofs (4.1): `dsp-stereo-proof` into the tests of `dsp-voice`, `storage-fault-proof` (and `file-catalog-proof` if E1 keeps it) to `proofs/`.
+- Proofs (4.1): `dsp-stereo-proof` into the tests of `dsp-voice`, `storage-fault-proof` and `file-catalog-proof` to `proofs/`.
+- `devices/fw/storage.toml`: drop `core/runtime` from the `users` of `cf.storage.fn.directory.open` and `.next` (E1).
 - Docs: ARCHITECTURE.md (layers, folder map), LAYOUT.md, AGENTS.md directory map, runtime-and-services.md wording.
 
 Tests: `git diff -M --stat` shows renames plus path edits only; image and `.dks` hashes unchanged except the usb-bulk merge (its image
@@ -623,7 +629,7 @@ runtime-and-services.md.
 | --- | --- | --- | --- | --- |
 | 1 | E0b static spikes (extended) | - | none | done: findings 141, 142, 143; 135, 02, 06, 53 corrected (branch e0b/findings) |
 | 1 | E0a filter DSP experiment | profile under the native core; UI chooser | one, about 10 min | parked: first attempt did not settle it (finding 142); retry before E7 |
-| 2 | E1 proof coverage check | - | none | todo |
+| 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
 | 2 | E2 boilerplate codegen | - | none; objdiff | todo |
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | todo |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | todo |
