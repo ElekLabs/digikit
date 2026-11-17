@@ -18,6 +18,7 @@ dkfw = { path = "../../../fw/rs" }
 [dev-dependencies]
 dkrt-test-support = { path = "../../test-support" }
 dkrt-svc-rt = { path = "../../svc-rt" }
+toml = "0.9.12"
 dkrt-svc-lfo = { path = "../../../services/lfo" }
 dkrt-svc-fx = { path = "../../../services/fx" }
 dkrt-svc-machines = { path = "../../../services/machines" }

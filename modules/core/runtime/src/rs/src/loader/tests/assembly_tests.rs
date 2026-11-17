@@ -125,19 +125,63 @@ impl Registry for DeviceRegistry {
     }
 }
 
-/// The roots of patch set `set` in the device file: the line `<set> = ["core/a", ...]` under `[patch_sets]`.
-fn set_roots(dev: Dev, set: &str) -> Vec<String> {
+/// The modules of patch set `set` in the device file: its roots (`[patch_sets]`) and what they require, transitively (`requires` of each `module.toml`), as
+/// `Library::with_requires` of patchkit expands them. patchkit is not a dependency here (it pulls the emulator crates and a second lock), so the walk is this one.
+fn set_modules(dev: Dev, set: &str) -> Vec<String> {
     let text = String::from_utf8(read(&repo().join(dev.toml), "git checkout devices")).unwrap();
-    let sets = text.split("[patch_sets]").nth(1).expect("no [patch_sets]");
-    let line = sets.lines().find(|l| l.starts_with(&std::format!("{set} = ["))).unwrap_or_else(|| panic!("{}: no patch set {set}", dev.name));
-    line.split('"').skip(1).step_by(2).map(String::from).collect()
+    let file: toml::Table = text.parse().unwrap_or_else(|e| panic!("{}: {e}", dev.toml));
+    let roots = file["patch_sets"].get(set).unwrap_or_else(|| panic!("{}: no patch set {set}", dev.name));
+    let requires = module_requires();
+    let mut all: Vec<String> = Vec::new();
+    let mut todo: Vec<String> = strings(roots);
+    while let Some(id) = todo.pop() {
+        if !all.contains(&id) {
+            todo.extend(requires.get(&id).unwrap_or_else(|| panic!("{}: set {set} names {id}, which no module.toml under modules/ declares", dev.name)).clone());
+            all.push(id);
+        }
+    }
+    all
+}
+
+fn strings(v: &toml::Value) -> Vec<String> {
+    v.as_array().map(|a| a.iter().map(|x| x.as_str().unwrap().to_string()).collect()).unwrap_or_default()
+}
+
+/// The `requires` of every module under `modules/`, by id (`[module] id` and `requires` of each `module.toml`).
+fn module_requires() -> std::collections::BTreeMap<String, Vec<String>> {
+    fn walk(dir: &Path, out: &mut std::collections::BTreeMap<String, Vec<String>>) {
+        for e in std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()) {
+            if e.is_dir() {
+                if !["build", "target", "node_modules"].contains(&e.file_name().unwrap().to_str().unwrap()) {
+                    walk(&e, out);
+                }
+            } else if e.file_name().unwrap() == "module.toml" {
+                let t: toml::Table = std::fs::read_to_string(&e).unwrap().parse().unwrap_or_else(|x| panic!("{}: {x}", e.display()));
+                let m = &t["module"];
+                out.insert(m["id"].as_str().unwrap().to_string(), m.get("requires").map(strings).unwrap_or_default());
+            }
+        }
+    }
+    let mut out = std::collections::BTreeMap::new();
+    walk(&repo().join("modules"), &mut out);
+    out
+}
+
+/// The module an SDK import needs (`requires` of its `[[import]]` in `sdk/sdk.toml`, the source of the runtime's `optional` link list); `None` for an import
+/// without `requires`.
+fn adapter_of(import: &str) -> Option<String> {
+    let text = String::from_utf8(read(&repo().join("sdk/sdk.toml"), "git checkout sdk")).unwrap();
+    let sdk: toml::Table = text.parse().unwrap();
+    let imports = sdk["import"].as_array().unwrap();
+    let row = imports.iter().find(|i| i["name"].as_str() == Some(import))?;
+    row.get("requires").map(|r| r.as_str().unwrap().to_string())
 }
 
 /// The info table of a patched image (`set-<set>.info`): name, hash, kind (0 data, 1 slot), address and the words of a data entry.
 struct Image {
     entries: Vec<(String, u32, u32, Vec<u32>)>,
-    /// The root modules of the set (`[patch_sets]` of the device file): the adapters the image has.
-    roots: Vec<String>,
+    /// The modules of the set (`[patch_sets]` of the device file and what they require): the adapters the image has.
+    modules: Vec<String>,
 }
 
 impl Image {
@@ -152,7 +196,7 @@ impl Image {
                 (w[0].to_string(), hex(w[1]), w[2].parse().unwrap(), w[4..].iter().map(|x| hex(x)).collect())
             })
             .collect();
-        Image { entries, roots: set_roots(dev, set) }
+        Image { entries, modules: set_modules(dev, set) }
     }
 
     /// The platform of the device with this image's table. `limits`: replacement values of the `cap_<kind>` words.
@@ -440,16 +484,6 @@ fn binds_of(l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
     out
 }
 
-/// The imports of the adapters an image may leave out, with the adapter module that gives them (the `optional` list of the runtime): the runtime links one to the
-/// adapter's function, or to a stub; the host has neither.
-const ADAPTER_IMPORTS: [(&str, &str); 5] = [
-    ("dk_ui_", "core/ui"),
-    ("dk_input_", "core/input"),
-    ("dk_usb_bulk_", "core/usb-bulk"),
-    ("dk_sdhc_large_", "core/sdhc-large"),
-    ("dk_dsp_link_", "core/dsp-link"),
-];
-
 /// Every name the file imports resolves: against the runtime's tables (and the service-only ones for a service file) or an export of a loaded provider. The loader
 /// does the same at a load; a module with a DSP section is not loaded on the host, so its imports are looked at here.
 unsafe fn imports_resolve(l: &mut Boot, image: &Image, file: &[u8], what: &str) -> bool {
@@ -469,9 +503,9 @@ unsafe fn imports_resolve(l: &mut Boot, image: &Image, file: &[u8], what: &str) 
         }
         // a service of an image adapter: the host cannot link it, so it is accepted when the image set has the adapter (the module then loads there, and its `_open`
         // answers DK_E_MISSING on a device without it); an image without the adapter is no place for the module
-        let adapter = ADAPTER_IMPORTS.iter().find(|(p, _)| name.starts_with(p.as_bytes())).map(|(_, m)| *m);
-        if let (0, Some(m)) = (a, adapter) {
-            if image.roots.iter().any(|r| r == m) {
+        let adapter = if a == 0 { adapter_of(std::str::from_utf8(&name[..len]).unwrap()) } else { None };
+        if let Some(m) = adapter {
+            if image.modules.iter().any(|r| *r == m) {
                 adapter_imports = true;
                 continue;
             }
@@ -608,7 +642,7 @@ fn a_sample_pool_user_is_refused_when_the_image_has_no_sample_pool_adapter() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware() && d.name == "dn2") {
         let image = Image::read(*dev, "device");
-        assert!(!image.roots.iter().any(|r| r == "core/sample-pool"), "the set is expected to leave the adapter out");
+        assert!(!image.modules.iter().any(|r| r == "core/sample-pool"), "the set is expected to leave the adapter out");
         unsafe {
             let (mut l, mut plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
             // the plan finds the file and cannot tell what the image lacks: the file fails its own check (its `requires` word) and the module then misses its service
@@ -633,7 +667,7 @@ fn an_adapter_import_resolves_only_in_an_image_with_the_adapter() {
             let (mut l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
             l.load_providers(&plan);
             assert!(imports_resolve(&mut l, &image, &file, "track-select"), "{}: the image has core/ui", dev.name);
-            let bare = Image { entries: Vec::new(), roots: Vec::new() };
+            let bare = Image { entries: Vec::new(), modules: Vec::new() };
             let refused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| imports_resolve(&mut l, &bare, &file, "track-select")));
             assert!(refused.is_err(), "{}: an image without core/ui accepted dk_ui_*", dev.name);
         }
