@@ -45,16 +45,25 @@ impl<P: Platform, M: Images, R: Registry> RoleSteps<P, M, R> {
         }
     }
 
-    /// A module has no step of its own.
-    pub const MODULE: Self = RoleSteps { check: no_check, place: no_place, activate: no_activate, undo: no_undo };
+    /// A module has only a check: its header table has no PROVIDES, HOOKS or BIND item.
+    pub const MODULE: Self = RoleSteps { check: module_check, place: no_place, activate: no_activate, undo: no_undo };
 
     /// A service (a provider record): the check refuses an unknown ABI, a DSP section, a bad table and a hook site that is not stock, all before anything is
     /// allocated; place keeps the table; activate publishes the exports and installs the hooks, last; undo withdraws and frees.
     pub const SERVICE: Self = RoleSteps { check: service_check, place: service_place, activate: service_activate, undo: service_undo };
 }
 
-unsafe fn no_check<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, _: *const u8, _: &Head) -> i32 {
-    OK
+unsafe fn module_check<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, file: *const u8, _: &Head) -> i32 {
+    // only the role is checked here; a table outside the file or damaged keeps the error of the later steps
+    let (off, len) = (crate::rd32(file.add(super::H_REG_OFF)), crate::rd32(file.add(super::H_REG_SIZE)));
+    let size = crate::rd32(file.add(dkneeds::H_SIZE as usize));
+    if !super::in_file(off, len, size) {
+        return OK;
+    }
+    match table_of(file, off, len) {
+        Ok(k) => role_ok(0, &k).err().unwrap_or(OK),
+        Err(_) => OK,
+    }
 }
 unsafe fn no_place<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, _: usize, _: &PlaceArgs) -> i32 {
     OK

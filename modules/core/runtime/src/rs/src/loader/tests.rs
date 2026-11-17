@@ -399,6 +399,26 @@ fn a_damaged_file_is_refused_before_anything_is_allocated() {
 }
 
 #[test]
+fn a_module_file_with_provides_or_hooks_is_refused_before_anything_is_allocated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        for hooks_only in [false, true] {
+            let mut table = svc_table(&[]);
+            if hooks_only {
+                table.provides = &[];
+            }
+            let mut file = service_file(&table, 0);
+            put(&mut file, dkneeds::H_ROLE, 0);
+            seal(&mut file);
+            let mut l = loader_of(Init::Ok, file);
+            assert_eq!(l.load(PATH.as_ptr()), E_FORMAT, "hooks_only={hooks_only}");
+            assert_eq!(l.m.allocs, 0);
+            assert!(l.r.log.is_empty());
+        }
+    }
+}
+
+#[test]
 fn relocations_name_the_block_or_an_import_of_the_runtime() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
