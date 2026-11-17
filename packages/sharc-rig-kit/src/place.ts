@@ -5,7 +5,7 @@
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { STOCK_BP, TABLE, TYPE_CACHE, FRAME, PARAM_REC, RELEASE, UNPACK_BP } from './context.ts';
+import { SLOTS, STOCK_BP, TABLE, TYPE_CACHE, FRAME, PARAM_REC, RELEASE, UNPACK_BP } from './context.ts';
 import { ROOT } from './rig.ts';
 import { ConformError, type MachineSpec } from './spec.ts';
 import { assembleSource, link, sharcIncludeDirs, type Linked, type SharcObject } from './toolchain.ts';
@@ -17,7 +17,7 @@ export const DATA_END = 0x20100000;
 /** The adapter's sources of a device, assembled as separate objects that see each other's data symbols. */
 const DSP = path.join(ROOT, 'modules/core/adapters/dsp-voice/src/dsp');
 const WRAPPER: Record<string, string[]> = {
-  dt2: [path.join(DSP, 'dsp-voice.s')],
+  dt2: [path.join(DSP, 'dsp-voice.s'), path.join(DSP, 'dsp-voice-dispatch.s')],
   dn2: [path.join(DSP, 'dsp-voice-dn2.s'), path.join(DSP, 'dsp-voice-dn2-stereo.s')],
 };
 const FX_DSP = path.join(ROOT, 'modules/core/adapters/fx/src/dsp');
@@ -160,6 +160,7 @@ function externsFixed(device: string): Record<string, number> {
     _fw_unpack: UNPACK_BP,
     _dv_table: TABLE,
   };
+  if (device === 'dt2') fixed._dl_slots = SLOTS; // the slot block of core/dsp-link, which the stubs of core/dsp-voice read
   if (device === 'dn2') STEREO_STANDINS.forEach((n, i) => (fixed[n] = STOCK_BP + 0x10 + 4 * i));
   return fixed;
 }

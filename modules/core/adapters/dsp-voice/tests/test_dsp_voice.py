@@ -4,7 +4,7 @@
 import re
 
 import pytest
-from support.dsp_voice_rig import CORE
+from support.dsp_voice_rig import CORE, DISPATCH
 
 from tools.patchkit import pk_sharc, pk_toolchains
 
@@ -36,7 +36,7 @@ def test_no_build_of_the_module_stores_a_same_dag_register_through_an_index_regi
     frame save goes through R2 in every build, and a module build that has such a store fails (pk_sharc.sharc_object)."""
 
     def stores(defines):
-        text = pk_sharc.apply_conditionals(CORE.read_text(), defines)
+        text = pk_sharc.apply_conditionals(DISPATCH.read_text(), defines)
         return [
             ln.strip()
             for ln in text.splitlines()
@@ -47,7 +47,7 @@ def test_no_build_of_the_module_stores_a_same_dag_register_through_an_index_regi
     for defines in (frozenset(), *C3_VARIANTS.values()):
         assert stores(defines) == []
         pk_sharc.sharc_object(
-            [CORE], INCLUDES, defines
+            [CORE, DISPATCH], INCLUDES, defines
         )  # raises BuildError on an excluded store
     # the DN2 copy too
     dn2 = CORE.with_name("dsp-voice-dn2.s")

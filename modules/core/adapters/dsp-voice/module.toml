@@ -9,7 +9,7 @@ author = "digikit"
 status = "experimental"
 summary = "Per-voice render hook of the SHARC engine: machine types registered by other modules render with their own DSP routine, every other type renders as stock"
 ports = ["dt2-1.17", "dn2-1.12"]
-requires = []
+requires = ["core/dsp-link"]
 conflicts = []
 
 # Test status per firmware; patchkit does not read it.
@@ -19,7 +19,7 @@ conflicts = []
 
 [[object]]
 path = "build/dsp-voice-dsp.dko.json"
-sources = ["src/dsp/dsp-voice.s"]
+sources = ["src/dsp/dsp-voice.s", "src/dsp/dsp-voice-dispatch.s"]
 place = "dsp.l2"
 devices = ["dt2"]
 
