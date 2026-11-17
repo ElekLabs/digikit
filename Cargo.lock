@@ -1238,6 +1238,7 @@ dependencies = [
 name = "dkrt-svc-params"
 version = "0.1.0"
 dependencies = [
+ "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
 ]
