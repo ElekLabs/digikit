@@ -78,15 +78,14 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
     binary = final / "digi-emud"
     if binary.is_file():
         # an entry written without files.txt (older code sharing the store) gets one from its depfile, or counts as a miss
-        if emud_key.backfill_files(final):
-            (final / "key.txt").touch()
+        if emud_key.backfill_files(final) and store.mark_used(final):
             print(f"{device} daemon: restored {key[:12]}", flush=True)
             return binary
         print(
             f"{device} daemon: entry {key[:12]} has no usable files list: rebuilding",
             flush=True,
         )
-        shutil.rmtree(final, ignore_errors=True)
+        store.remove(final)
     built, target = build_one(device, syx)
     inputs = emud_key.inputs(device)
     after = emud_key.key_of(inputs)

@@ -8,16 +8,20 @@ library store (`sharc-core-cache`, group = image, tools/devtools/core_store.py).
 - An entry is built in `<group>/.tmp-<pid>` and inserted with one rename, so a reader sees a whole entry or none.
   When two processes insert the same key, one rename wins and the other uses the winner's entry.
 - The use time of an entry is the mtime of its `key.txt`: set on insert, refreshed on every restore.
-- Eviction keeps the KEEP most recently used keys of a group, the key just used, and every key that
-  `dist/daemons.json` of any worktree of the clone points at (a value `<store>/<group>/<key>/<file>`).
+- Eviction keeps the KEEP most recently used keys of a group, the key just used, every entry used less than an hour ago,
+  and every key that `dist/daemons.json` of any worktree of the clone points at (a value `<store>/<group>/<key>/<file>`).
+  An entry is renamed to `.tmp-evict-*` before it is removed, so a reader that opened it keeps a whole entry or finds none.
+  Stale `.tmp-*` directories (over an hour old) are removed too.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import subprocess
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -71,25 +75,74 @@ def referenced_keys(group_dir: Path, worktrees: list[Path]) -> set[str]:
     return keys
 
 
+FRESH_SECONDS = 3600  # an entry used less than this long ago is never evicted
+STALE_TEMP_SECONDS = (
+    3600  # a `.tmp-*` directory older than this is a dead insert or eviction
+)
+
+
+def remove(entry: Path) -> None:
+    """Delete ENTRY so that no reader sees half of it: rename it to `.tmp-evict-<pid>-<random>`, then remove the copy."""
+    aside = entry.parent / f".tmp-evict-{os.getpid()}-{secrets.token_hex(4)}"
+    try:
+        os.rename(entry, aside)
+    except OSError:
+        return  # gone already, or another process removes it
+    shutil.rmtree(aside, ignore_errors=True)
+
+
+def mark_used(entry: Path) -> bool:
+    """Refresh the use time of ENTRY (mtime of its existing `key.txt`). False when there is no `key.txt`: the entry is not whole.
+
+    Never creates the file."""
+    try:
+        os.utime(entry / "key.txt")
+    except OSError:
+        return False
+    return True
+
+
 def evict(
-    group_dir: Path, keep_key: str, referenced: set[str] | frozenset[str] = frozenset()
-) -> None:
-    """Keep the KEEP most recently used keys of a group, KEEP_KEY, and every key in REFERENCED.
+    group_dir: Path,
+    keep_key: str,
+    referenced: set[str] | frozenset[str] = frozenset(),
+    now: float | None = None,
+) -> list[str]:
+    """Keep the KEEP most recently used keys of a group, KEEP_KEY, every key in REFERENCED and every entry used less than
+    FRESH_SECONDS ago; remove the others (see `remove`) and return their names.
 
     The use time is the mtime of key.txt: it is set on insert and refreshed on every restore.
+    Also removes `.tmp-*` and `.tmp-evict-*` directories older than STALE_TEMP_SECONDS.
     """
+    now = time.time() if now is None else now
     entries = []
     for entry in group_dir.iterdir():
-        if entry.name.startswith(".") or not entry.is_dir():
+        if not entry.is_dir():
+            continue
+        if entry.name.startswith("."):
+            try:
+                if entry.name.startswith(".tmp-") and (
+                    now - entry.stat().st_mtime > STALE_TEMP_SECONDS
+                ):
+                    shutil.rmtree(entry, ignore_errors=True)
+            except OSError:
+                pass
             continue
         try:
             entries.append((entry.joinpath("key.txt").stat().st_mtime, entry))
         except OSError:
             entries.append((0.0, entry))
     entries.sort(key=lambda item: item[0], reverse=True)
-    for _mtime, entry in entries[KEEP:]:
-        if entry.name != keep_key and entry.name not in referenced:
-            shutil.rmtree(entry, ignore_errors=True)
+    removed = []
+    for used, entry in entries[KEEP:]:
+        if (
+            entry.name != keep_key
+            and entry.name not in referenced
+            and now - used >= FRESH_SECONDS
+        ):
+            remove(entry)
+            removed.append(entry.name)
+    return removed
 
 
 def insert(

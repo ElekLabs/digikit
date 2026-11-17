@@ -368,9 +368,11 @@ def audit(inputs: EmudInputs, depfile_text: str, target_dir: Path) -> list[str]:
     return missing
 
 
-def repo_files(root: Path = ROOT) -> dict[str, Path]:
-    """Files of the repository (tracked, or untracked and not ignored) that match SOURCE_GLOBS and RECIPE_FILES."""
-    specs = [f":(glob){g}" for g in (*SOURCE_GLOBS, *RECIPE_FILES)]
+def repo_files(
+    root: Path = ROOT, globs: Sequence[str] | None = None
+) -> dict[str, Path]:
+    """Files of the repository (tracked, or untracked and not ignored) that match GLOBS (default: SOURCE_GLOBS and RECIPE_FILES)."""
+    specs = [f":(glob){g}" for g in (globs or (*SOURCE_GLOBS, *RECIPE_FILES))]
     done = subprocess.run(
         ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *specs],
         cwd=root, check=True, capture_output=True,

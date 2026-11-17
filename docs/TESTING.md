@@ -1141,25 +1141,31 @@ repeats the check on a kept file.
 ### Core library store
 
 `verify_build cores` keeps the generated SHARC core of each device as a library in
-`<git common dir>/sharc-core-cache/<image>/<key>/` (the library, `key.txt`, `header.json`; the image is the device id).
-It uses the same mechanics as the daemon store (`tools/devtools/store.py`: insert by one rename, the use time is the mtime of
-`key.txt`, the last 4 keys per image stay plus every key that `dist/daemons.json` of any worktree names), so two processes that
-insert one key are safe: one rename wins and the other restores the winner's entry. `DIGI_SHARC_CORE_STORE` moves the store
-(tests only). The key (`tools/devtools/core_store.py`) is a sha256 over the files of the gen dir (`out/native/<dev>-audio/gen`),
-the sources of `packages/emulator/sharc-rt`, `rustc -vV`, the target triple, `RUSTFLAGS`, the cargo profile and the PGO profile
-hash (`plain` without one).
+`<git common dir>/sharc-core-cache/<image>/<key>/` (the library, `key.txt`, `header.json`; the image is the device id). An
+entry is a hit only with all three files. It uses the mechanics of the daemon store (`tools/devtools/store.py`): insert by one
+rename, so two processes that insert one key are safe; the use time is the mtime of `key.txt` (a hit refreshes it, never
+creates it). Eviction keeps the last 4 keys per image, every key that `dist/daemons.json` of any worktree names, and every entry
+used within the last hour; it renames an entry to `.tmp-evict-*` before it removes it and removes `.tmp-*` directories older
+than an hour. `DIGI_SHARC_CORE_STORE` moves the store (tests only).
+
+Key and build come from one description, `core_store.build_plan` (the argv and environment of the cargo call). The key follows the
+daemon key's scheme (`emud_key.key_of`): the content of the repository files in `CORE_SOURCE_GLOBS` (the `sharc-core-lib`,
+`sharc-gen` and `sharc-rt` crates, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo`) and `CORE_RECIPE_FILES`, every file of
+the gen dir, the PGO profile content (or `plain`), `rustc -vV`, the target triple, the argv without the target dir (profile,
+features) and the rustc flag and `CARGO_PROFILE_*` variables of the build environment. The key is known before the first build, so
+a lookup needs no build. After a build the dependency file of cargo is audited against the key: a file the build read that the key
+does not cover fails the build and stores nothing (add it to `CORE_SOURCE_GLOBS`).
 
 ```sh
 uv run python -m tools.devtools.verify_build cores --device dn2,dt2
 # dn2 core: built 040713e7aaac        (a miss: builds and inserts)
 # dn2 core: restored 040713e7aaac     (a hit)
-# dn2 core: evicted 91350c44d39f      (a key beyond the last 4 that no worktree names)
+# dn2 core: evicted 91350c44d39f      (a key beyond the last 4 that no worktree names and that was not used within the hour)
 ```
 
-The build is `core_store.build_core`; `build_command` names the cargo call for the crate `sharc-core-lib`. The crate is not in
-the tree yet, so a miss stops with `the crate packages/emulator/sharc-core-lib does not exist yet; the build would be: ...`
-(exit 1). The Nx target and the `dist/daemons.json` entries come with the wiring PR. `tests/devtools/test_core_store.py` covers the
-key and the store with a stand-in library (miss, hit, concurrent insert, eviction).
+The build is `core_store.build_core`. The crate `sharc-core-lib` is not in the tree yet, so a miss stops with `the crate
+packages/emulator/sharc-core-lib does not exist yet; the build would be: ...` (exit 1). The Nx target and the `dist/daemons.json`
+entries come with the wiring PR. `tests/devtools/test_core_store.py` covers the key and the store with a stand-in library.
 
 To clear the Nx cache: `pnpm nx:pilot reset`.
 
