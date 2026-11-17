@@ -36,7 +36,7 @@ async function loadAddress(
  */
 export function serviceMapEntries(device: Session['options']['device'], service: string): Map<string, number> {
   const file = boundMapPath(device, service);
-  if (!fs.existsSync(file)) throw new Error(`${file}: run nx run <the ${service} service module>:bind`);
+  if (!fs.existsSync(file)) throw new Error(`${file}: run nx run core/services/${service}:bind`);
   const map = JSON.parse(fs.readFileSync(file, 'utf8')) as { entries: { cpu: string; addr: number; name: string }[] };
   return new Map(map.entries.filter((e) => e.cpu === 'cf').map((e) => [e.name, e.addr]));
 }
