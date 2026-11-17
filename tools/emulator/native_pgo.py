@@ -357,15 +357,23 @@ def local_package_dirs(features: str = FEATURES) -> list[str]:
 _PACKAGES_MEMO: dict[str, list[str]] = {}
 
 
-def tree_packages() -> list[str]:
-    """`local_package_dirs()` of this tree, without a `cargo metadata` call when nothing changed: the list is kept once per
-    process and in `dist/pgo-packages.json` under the key sha256(Cargo.lock + the root Cargo.toml + the features)
-    (a crate is added or removed only by a manifest or lock edit). The file is per worktree (`dist/` is ignored)."""
+def _packages_key() -> str:
+    """Cache key of `tree_packages`: Cargo.lock, the root Cargo.toml, the features and this file's source (an edit of
+    LIBRARY_CRATES or the package filters changes the list)."""
     digest = hashlib.sha256()
     for name in ("Cargo.lock", "Cargo.toml"):
         digest.update((ROOT / name).read_bytes() + b"\0")
-    digest.update(FEATURES.encode())
-    key = digest.hexdigest()
+    digest.update(FEATURES.encode() + b"\0")
+    digest.update(pathlib.Path(__file__).read_bytes())
+    return digest.hexdigest()
+
+
+def tree_packages() -> list[str]:
+    """`local_package_dirs()` of this tree, without a `cargo metadata` call when nothing changed: the list is kept once per
+    process and in `dist/pgo-packages.json` under the key sha256(Cargo.lock + the root Cargo.toml + the features + this
+    file's source) (a crate is added or removed only by a manifest or lock edit). The file is per worktree (`dist/` is
+    ignored)."""
+    key = _packages_key()
     if key in _PACKAGES_MEMO:
         return _PACKAGES_MEMO[key]
     cache = ROOT / "dist" / "pgo-packages.json"
@@ -378,10 +386,14 @@ def tree_packages() -> list[str]:
         pass
     packages = local_package_dirs()
     _PACKAGES_MEMO[key] = packages
-    cache.parent.mkdir(parents=True, exist_ok=True)
     partial = cache.with_suffix(f".{os.getpid()}.part")
-    partial.write_text(json.dumps({"key": key, "packages": packages}))
-    os.replace(partial, cache)
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        partial.write_text(json.dumps({"key": key, "packages": packages}))
+        os.replace(partial, cache)
+    except OSError:
+        with contextlib.suppress(OSError):
+            partial.unlink()
     return packages
 
 
@@ -661,7 +673,9 @@ def resolve(
         except (
             subprocess.CalledProcessError,
             OSError,
-        ):  # no cargo graph here: the manifest decides
+            ValueError,
+            KeyError,
+        ):  # no cargo graph here (or unreadable metadata): the manifest decides
             packages = None
         if packages is not None:
             fresh, _ = compute_components(

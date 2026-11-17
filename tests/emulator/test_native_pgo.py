@@ -377,3 +377,61 @@ def test_the_package_list_of_a_tree_is_computed_once_per_lock_state(
     monkeypatch.setattr(native_pgo, "_PACKAGES_MEMO", {})
     native_pgo.tree_packages()
     assert len(calls) == 2
+
+
+def test_an_edit_of_native_pgo_changes_the_package_list_key(tmp_path, monkeypatch):
+    (tmp_path / "Cargo.lock").write_text("lock")
+    (tmp_path / "Cargo.toml").write_text("[workspace]")
+    monkeypatch.setattr(native_pgo, "ROOT", tmp_path)
+    source = tmp_path / "native_pgo.py"
+    source.write_text("LIBRARY_CRATES = ('a',)")
+    monkeypatch.setattr(native_pgo, "__file__", str(source))
+    before = native_pgo._packages_key()
+    source.write_text("LIBRARY_CRATES = ('a', 'b')")
+    assert native_pgo._packages_key() != before
+
+
+def test_resolve_falls_back_when_cargo_metadata_is_malformed(tmp_path, monkeypatch):
+    class Hasher:
+        def __init__(self, path):
+            pass
+
+        def save(self):
+            pass
+
+    def malformed():
+        raise ValueError("bad json")
+
+    monkeypatch.setattr(
+        native_pgo, "read_manifest", lambda device: {"components": {}, "packages": []}
+    )
+    monkeypatch.setattr(native_pgo, "toolchain_dir", lambda: tmp_path)
+    monkeypatch.setattr(native_pgo, "device_state", lambda device: tmp_path)
+    monkeypatch.setattr(native_pgo, "FileHasher", Hasher)
+    monkeypatch.setattr(native_pgo, "compute_components", lambda *a: ({}, 0))
+    monkeypatch.setattr(native_pgo, "desktop_digest", lambda hasher: "d")
+    monkeypatch.setattr(native_pgo, "read_by_key", lambda device, key: None)
+    monkeypatch.setattr(
+        native_pgo, "profdata_path", lambda manifest, device: tmp_path / "none.profdata"
+    )
+    monkeypatch.setattr(native_pgo, "tree_packages", malformed)
+    result = native_pgo.resolve("dn2", gen=tmp_path)
+    assert result.status == "missing"
+
+
+def test_a_failed_cache_write_keeps_the_list_and_leaves_no_part_file(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "Cargo.lock").write_text("lock")
+    (tmp_path / "Cargo.toml").write_text("[workspace]")
+    monkeypatch.setattr(native_pgo, "ROOT", tmp_path)
+    monkeypatch.setattr(native_pgo, "_PACKAGES_MEMO", {})
+    monkeypatch.setattr(native_pgo, "local_package_dirs", lambda: ["packages/a"])
+
+    def refuse(src, dst):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(native_pgo.os, "replace", refuse)
+    assert native_pgo.tree_packages() == ["packages/a"]
+    assert list((tmp_path / "dist").glob("*.part")) == []
+    assert not (tmp_path / "dist" / "pgo-packages.json").exists()
