@@ -11,6 +11,7 @@ import { memory } from '@digi/regression/runtime/memory.ts';
 import { panelKeys } from '@digi/regression/runtime/flows/panel-keys.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';
 import { expectedWindow, setSmp, trackApi as sharedTrackApi } from './shot-support.ts';
 import { emulatedClockMs, expectPollEmulated, pollEmulated } from '@digi/regression/runtime/waits.ts';
 
@@ -394,17 +395,19 @@ runtimeTests(
       let resetAt = 0;
       const trace: { t: number; state: number; token: number }[] = [];
       // Reset-phase timeline: every poll peeks the track's DSP record (ready, token) and control word (CLOSED) at the table addresses the runtime
-      // keeps (`RECORDS`, `CONTROL` of client 0), next to the runtime status and the capture clock.
-      const tablePlan = await prepareRuntimePlan(session, artifacts, ['RECORDS', 'CONTROL', '_dv_params']);
+      // keeps (`DKRT_SMP_RECORDS`, `DKRT_SMP_CONTROL` of client 0, in the samples service), next to the runtime status and the capture clock.
+      const tablePlan = await prepareRuntimePlan(session, artifacts, ['_dv_params']);
       const tableMem = memory(session);
-      const tableBase = async (name: string) => (await tableMem.cf(planSymbol(tablePlan, name))) + (name === 'RECORDS' ? 32 : 16) * TRACK;
+      const tableBase = async (name: 'DKRT_SMP_RECORDS' | 'DKRT_SMP_CONTROL') =>
+        (await tableMem.cf(await serviceSymbol({ session }, tablePlan, 'samples', name))) +
+        (name === 'DKRT_SMP_RECORDS' ? 32 : 16) * TRACK;
       const dspWords = async (addr: number, n: number) => {
         const peek = await tableMem.dsp(addr, n * 4);
         const b = Buffer.from(peek.hex, 'hex');
         return peek.unknown ? [] : Array.from({ length: n }, (_, i) => b.readUInt32LE(i * 4));
       };
-      const recAddr = await tableBase('RECORDS');
-      const ctlAddr = await tableBase('CONTROL');
+      const recAddr = await tableBase('DKRT_SMP_RECORDS');
+      const ctlAddr = await tableBase('DKRT_SMP_CONTROL');
       const timeline: { ms: number; frame: number; state: number; ready?: number; token?: number; closed?: number }[] = [];
       log.tableAddresses = { recAddr, ctlAddr, now: [await dspWords(recAddr, 2), await dspWords(ctlAddr, 1)] };
       const noteReset = await captureNote(runtime, path.join(artifacts, 'reset.wav'), async (clock) => {

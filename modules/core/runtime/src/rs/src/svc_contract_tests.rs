@@ -18,10 +18,9 @@ fn plain_values_and_pointers_come_back_as_through_the_real_core() {
     let ic = ImportCore;
     unsafe {
         assert_eq!(ic.device_id(), REAL_CORE.device_id());
-        assert_eq!(ic.param_first(), REAL_CORE.param_first());
-        assert_eq!(ic.type_map_used(), REAL_CORE.type_map_used());
+        assert_eq!(ic.boot_index(), REAL_CORE.boot_index());
+        assert_eq!(ic.legacy_state(), REAL_CORE.legacy_state());
         assert_eq!(ic.current_source(), REAL_CORE.current_source());
-        assert_eq!(ic.dynreg(), REAL_CORE.dynreg());
         assert_eq!(ic.dsp_info(), REAL_CORE.dsp_info());
         assert_eq!(ic.fx_info(), REAL_CORE.fx_info());
         assert_eq!(ic.info(0x1111), REAL_CORE.info(0x1111));
@@ -29,14 +28,9 @@ fn plain_values_and_pointers_come_back_as_through_the_real_core() {
         assert_eq!(ic.module_name(1), REAL_CORE.module_name(1));
         assert_eq!(ic.guard_faults(0), REAL_CORE.guard_faults(0));
         assert_eq!(ic.guard_disabled(0), REAL_CORE.guard_disabled(0));
-        assert_eq!(ic.native_available(dkrt_sdk::records::KIND_NATIVE_PAGE), REAL_CORE.native_available(dkrt_sdk::records::KIND_NATIVE_PAGE));
     }
     // a reference to the core's state is the same object, a slice is the same bytes (length and address)
-    assert!(core::ptr::eq(ic.reg_state() as *const _, REAL_CORE.reg_state() as *const _));
     assert!(core::ptr::eq(ic.dsp() as *const _, REAL_CORE.dsp() as *const _));
-    let (a, b) = (ic.param_owners(), REAL_CORE.param_owners());
-    assert_eq!((a.len(), a.as_ptr()), (b.len(), b.as_ptr()));
-    assert!(!a.is_empty());
 }
 
 #[test]
@@ -51,13 +45,6 @@ fn slices_and_status_results_are_converted_both_ways() {
         assert_eq!(x, y);
         let value = [1u8, 2, 3];
         assert_eq!(ic.settings_put(b"nokey", &value), REAL_CORE.settings_put(b"nokey", &value));
-        // a firmware string: the characters are where the core put them, relative to the buffer
-        let (mut r1, mut r2) = ([0u8; 64], [0u8; 64]);
-        // (the address is a `u32`: truncated on a 64-bit host, so compare the distance in 32 bits)
-        let a = ic.make_rep(r1.as_mut_ptr(), b"Name\0".as_ptr(), false).wrapping_sub(r1.as_ptr() as usize as u32);
-        let b = REAL_CORE.make_rep(r2.as_mut_ptr(), b"Name\0".as_ptr(), false).wrapping_sub(r2.as_ptr() as usize as u32);
-        assert_eq!(a, b);
-        assert_eq!(r1, r2);
         // the log takes five words
         ic.log(dkrt_sdk::logk::MODULE_COMMIT, LOG_INFO, [1, 2, 3, 4, 5]);
     }

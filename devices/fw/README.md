@@ -35,6 +35,11 @@ A virtual function whose hash is shared by more than four functions gets a `cf_v
 (`{ kind = "cf_vtable_slot", class = "ConfirmWindow", slot = 4, offset = 0, len = 8 }`; `offset_to_top` defaults to 0):
 it names the RTTI class and the vtable slot, and a class with another name on the other device gets its own rule.
 
+A raw hook (mode `replace`, no `handler`) may name the places a service leaves it besides the end of its site, and the tail:
+`tail = true` (the displaced instructions, then the end of the site) and `exits = ["cf.machine.site.clone.5 + 12", "cf.machine.site.clone.5.alt"]`
+(anchor names with an optional offset, evaluated on the port of the bound firmware; the first is exit 1). A service reaches them with the imports
+`dk_tail_<hook>` and `dk_exit_<hook>_<n>` (n = 0 is the end of the site); see "Firmware references" in docs/PATCHING.md.
+
 `declare` prints a `mark = "O"` entry (a shared rule, or one rule per device) and with `--write` adds it to the
 subsystem file in name order. Review the entry and raise the mark after a check against image bytes.
 

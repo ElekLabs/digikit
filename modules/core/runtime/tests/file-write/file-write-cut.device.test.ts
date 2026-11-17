@@ -4,6 +4,7 @@ import { be32, type DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
 import { blob, listing, pokeKnob, sha, type Files } from '@digi/regression/runtime/card-kit.ts';
 import { cardRig, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { rawModule } from '@digi/regression/runtime/service-files.ts';
 import { word, SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
@@ -79,6 +80,7 @@ for (const device of DEVICES) {
       const old = blob(3000, 21);
       const oldFile = path.join(rig.artifacts, 'old.dkm');
       fs.writeFileSync(oldFile, old);
+      rawModule(oldFile);
       const mod = rig.mod('test/file-write');
       const moduleBytes = fs.readFileSync(mod.file);
       const base = await rig.card({
@@ -118,6 +120,7 @@ for (const device of DEVICES) {
       const old = blob(3000, 21);
       const oldFile = path.join(rig.artifacts, 'old-r.dkm');
       fs.writeFileSync(oldFile, old);
+      rawModule(oldFile);
       const prev = pattern(1500);
       const prevFile = path.join(rig.artifacts, 'prev.bin');
       fs.writeFileSync(prevFile, prev);
@@ -154,6 +157,7 @@ for (const device of DEVICES) {
       const old = blob(3000, 21);
       const oldFile = path.join(rig.artifacts, 'old-b.dkm');
       fs.writeFileSync(oldFile, old);
+      rawModule(oldFile);
       const mod = rig.mod('test/file-write');
       const moduleBytes = fs.readFileSync(mod.file);
       const base = await rig.card({ name: 'cut-batch-base', modules: [mod, { name: 'modules/old.dkm', file: oldFile }], selection: [mod.name] });

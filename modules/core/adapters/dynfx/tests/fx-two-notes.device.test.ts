@@ -23,7 +23,7 @@ for (const device of DEVICES) {
         name: 'fx-chain',
         modules: [...RT, 'core/dynfx', 'core/fxpages'],
         inventory: [SINE, GAIN],
-        symbols: ['DKRT_BOOT', 'DKRT_ASSIGN', 'dynreg_info', 'fx.rows', '_dl_area', 'DKRT_TABLE_BAD', 'DKRT_LOG', 'DKRT_LOG_COUNT'],
+        symbols: ['DKRT_BOOT', 'dynreg_info', 'fx.rows', '_dl_area', 'DKRT_TABLE_BAD', 'DKRT_LOG', 'DKRT_LOG_COUNT'],
         policy: 'default',
       },
       initial: 'wet',

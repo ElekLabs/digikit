@@ -149,7 +149,7 @@ they are (finding 96 cites them); `tools/nx/rig-tests.mjs` now lists them as inp
 
 The Python file is deleted (this PR) after independent review.
 
-Gap: the rig checks load counts, not load addresses, so a load with the right count and a wrong address passes. The ordered-route and helper-reset read bounds and the held period have no substitute; the held period is partly covered by the repeated-word check. The rig core runs with `assume_nw32` on by default (`packages/emulator/sharc-rt`), the setting Python enabled per group. The Python step bound of 12000 is kept, though the two cores may count steps differently (longest rig call 4302). Follow-up: roadmap item T1i (rig read hook).
+Read checks: the rig records loads (`loads: true`, roadmap T1i; docs/TESTING.md "SHARC-only rig") and the file checks them as `LoadRule` data: table, audio-plane and ring-backing address ranges, the ordered-route and helper-reset read bounds and the held period. The rig core runs with `assume_nw32` on by default (`packages/emulator/sharc-rt`), the setting Python enabled per group. The Python step bound of 12000 is kept, though the two cores may count steps differently (longest rig call 4302). 
 
 Python on main (this branch, `uv run pytest tests/patchkit/test_dsp_stereo_shadow_replay.py -rf`): 23 failed, 21 passed, 44.3 s. The failures are not only `max-steps`: the Python core halts on
 `unsupported full compute opcode 0xe3` (recurrences), `fork (2 successors)` (prepared, 3 + 2 reset cases), `no form matches` (gain, 4), `unsupported full compute opcode 0xc3` (ring, 2), and `max-steps` at 12000
@@ -173,9 +173,5 @@ Not ported: `test_base_image_overlay_and_decode_cache_isolation` (passes in Pyth
 places every object over the stock image and every case runs one core per process. One observation from the mutations: `_prepare` with 13 instead of 14 control words does not fail the base
 cases (word 13 is not read before the stage writes it), so the Python test does not pin that copy either.
 
-**Not reproduced: the load checks.** The Python core logs every DM read; the rig records stores only (`watch`). The Python test uses reads in six groups (prepared, gain, ring, source, ordered, helper reset)
-to check that the table and audio loads stay in range (address range of each load at its PC) and that the loaded values are finite (held period `1 < p < 32`). The port keeps what the rig can say:
-the number of times the load instructions run, which equals the Python count of loads (held 1 load = 4 bytes, prepared 64, ring 128, source 16 double-word sample loads and 2 table loads; the counts
-are the Python byte counts divided by the width of the load) and which of the gain table loads ran. The address ranges, the ordered-route and reset read bounds and the held period are **open**:
-they need a read record in the rig (a read analogue of `watch`, i.e. a read hook in the SHARC runtime `_dm_read` paths, which is a change to `packages/emulator/sharc-rt` and so to the generated-core key).
+**Load checks (restored by T1i).** The Python core logged every DM read; the rig records loads with the read hook (`St::read_log_on`) and the port checks, per group, the address range of each load at its PC, the byte counts (Python byte counts; a word load is 4 bytes) and the held period. Old Python check to rig rule: ordered-route read bounds to `ordered-route read bounds` (every load of a phase inside the words it may read and its image tables), helper-reset read bounds to `helper-reset read bounds`, held period `1 < p < 32` to `wordToFloat` of the loaded word, table and plane ranges to the `within` ranges of the held, prepared, gain, ring and source rules.
 Store checks are complete: the rig reports one run per instruction, split here into words (a long-word or SIMD store of two words is one run of 8 bytes).

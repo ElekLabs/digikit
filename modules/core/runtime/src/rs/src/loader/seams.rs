@@ -2,7 +2,7 @@
 //! module entry and the registry; the fakes of the host tests log the calls. Each trait has one real implementation, so there is no `dyn`.
 
 use crate::entry::Ctx;
-use dkrt_abi::service::ServiceRow;
+use dkrt_abi::service::{ModuleCommitCtx, ServiceRow};
 
 /// A staged file: `size` bytes at `ptr`, valid until the next `stage`.
 #[derive(Clone, Copy)]
@@ -49,6 +49,10 @@ pub trait Registry {
     unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>) -> i32;
     /// Take everything record `rec` published down (idempotent).
     unsafe fn remove(&mut self, rec: usize);
+    /// The `init` of record `rec` is about to run: every service forgets what an earlier module collected (`Service::module_begin`).
+    unsafe fn module_begin(&mut self, rec: usize);
+    /// The services' commit of record `rec` (`Service::module_commit`): the first refusal is the result.
+    unsafe fn module_commit(&mut self, rec: usize, c: &ModuleCommitCtx) -> i32;
 }
 
 /// The store, the arena and the module entry of the device.
@@ -126,5 +130,11 @@ impl Registry for RealRegistry {
             crate::registry::remove(rec as u8 + 1);
         }
         crate::svc_rows::remove(rec);
+    }
+    unsafe fn module_begin(&mut self, rec: usize) {
+        crate::handlers::services().module_begin(rec)
+    }
+    unsafe fn module_commit(&mut self, rec: usize, c: &ModuleCommitCtx) -> i32 {
+        crate::handlers::services().module_commit(rec, c)
     }
 }

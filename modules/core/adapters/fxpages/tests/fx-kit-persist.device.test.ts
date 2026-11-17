@@ -116,6 +116,8 @@ for (const device of DEVICES) {
         context.rememberEpoch(boot.epoch);
       };
       const protocols: DkSession[] = [];
+      // The card holds the machines service, so the safety policy allows the settings copies. Only the first boot that loads a machine
+      // writes them (machines.types); a restart on the same card must not, because the type map is no longer dirty.
       const restart = async (selection: string[], tag: string, names: string[]) => {
         await context.evidence(runtime, `${tag}-before-restart`);
         await withPausedFxProtocol(runtime, (dk) => dk.select(selection));

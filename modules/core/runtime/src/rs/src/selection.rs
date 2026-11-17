@@ -2,7 +2,8 @@
 //! if a write is cut. The record is the only thing the runtime writes to the card here, through `block_write`.
 
 use crate::dlog;
-use crate::platform::{block_read, block_write};
+use crate::platform::block_read;
+use crate::block_write;
 use crate::card;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::sel::{self, Record};

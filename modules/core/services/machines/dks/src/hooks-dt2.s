@@ -2,17 +2,17 @@
 |
 | Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (`patchkit bind` made the hook raw: no trampoline). The routine takes the whole
 | control flow of the site and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, made by
-| `patchkit bind`) or, when a branch is among them, by pushing an exit address of the table `MF_TAB` and doing `rts` (the stack is as it was at the site, so the pair changes no
-| register or flag).
-| `MF_TAB` is the image table `machines_info` of core/machines, copied by `setup` (lib.rs); its words give the registry rows and counts, the addresses of the
-| firmware and of the adapter's routines, and where each hook continues. Offsets T_* below; the same layout is in hooks-dn2.s and in `image.rs`.
+| `patchkit bind`) or, when a branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `devices/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address `patchkit bind` resolves:
+| the jump changes no register or flag). The aliases `mf_x_*`, `mf_spt` are the `[object.externs]` of module.toml.
+| `MF_TAB` is the image table `machines_info` of core/machines, copied by `setup` (lib.rs); its words give the registry rows and counts and the addresses of the
+| adapter's routines. Offsets T_* below; the same layout is in hooks-dn2.s and in `image.rs`.
 |
 | Hook convention: registers the stock site frees are scratch (`devices/fw/machine.toml` lists them per hook); everything else a routine saves.
 | The image keeps `mf_ensure` (the tables of the registry are built once, on first use), the machine list and rank hooks, and the dispatch hook: it is the one
 | routine `mf_ensure` is called through (`mf_call_ensure`).
 
     .text
-    .balign 4
+    .balignw 4, 0x4e71
 
 | row layout (bytes), the field order of core/machines' [[registry.field]]
     .equ O_CLONE,  44
@@ -20,20 +20,14 @@
 
 
 | the table (byte offsets of the words of MF_TAB; `image.rs` has the same layout)
-    .equ T_FIRST, 24
-    .equ T_COUNT, 28
-    .equ T_ROWS, 36
-    .equ T_N_PAGE_COUNT, 44
-    .equ T_N_CODE, 52
-    .equ T_N_DRAW, 56
-    .equ T_N_OVERLAY, 60
-    .equ T_SPT, 64
-    .equ T_SLOTMAP, 68
-    .equ T_R_C5_NE, 80
-    .equ T_R_C5_EQ, 84
-    .equ T_X_TYPEARG, 88
-    .equ T_R_SP_STOCK, 92
-    .equ T_R_SP_ALT, 96
+    .equ T_FIRST, 12
+    .equ T_COUNT, 16
+    .equ T_ROWS, 24
+    .equ T_N_PAGE_COUNT, 32
+    .equ T_N_CODE, 40
+    .equ T_N_DRAW, 44
+    .equ T_N_OVERLAY, 48
+    .equ T_SLOTMAP, 52
 
 | mfd_row: d0 = index k (< count) -> a0 = &machines.rows[k]. Preserves every other register (not the flags).
 mfd_row:
@@ -63,10 +57,8 @@ mf_clone5:
     moveq   #4,%d1
     cmp.l   %d0,%d1
     bne.s   2f
-    move.l  MF_TAB+T_R_C5_EQ,-(%sp)
-    rts
-2:  move.l  MF_TAB+T_R_C5_NE,-(%sp)
-    rts
+    jmp     mf_x_c5_eq
+2:  jmp     mf_x_c5_ne
 
 | ---- type argument of the parameter mapping: `FUN(index, type, filter)` answers the parameter code of a (mirror index 25..34, machine type) pair. For an added type:
 | the slots with a descriptor field answer with the entry's field, the two without (29, 30: MANUAL SLICE's Sample Bank / Slot rows, which the stock map holds for its
@@ -93,8 +85,7 @@ mf_typearg:
     move.l  (%a0,%d2.l),%d0
     movem.l (%sp),%d1-%d2/%a0/%a2
     lea     16(%sp),%sp
-    move.l  MF_TAB+T_X_TYPEARG,-(%sp)   | the second exit of the stock code, with d0 = the field
-    rts
+    jmp     mf_x_typearg                | the second exit of the stock code, with d0 = the field
 6:  bsr.w   mfd_row
     move.l  O_CLONE(%a0),%d0
     movem.l (%sp),%d1-%d2/%a0/%a2
@@ -115,8 +106,7 @@ mf_typearg:
     .globl mf_srcpage
 mf_srcpage:
     move.l  %a2,-(%sp)
-    movea.l MF_TAB+T_SPT,%a1
-    jsr     (%a1)
+    jsr     mf_spt
     addq.l  #4,%sp
     cmp.l   MF_TAB+T_FIRST,%d0
     blt.s   1f
@@ -132,8 +122,7 @@ mf_srcpage:
     cmp.l   0x90(%a2),%d0
     bhi.s   4f
     clr.l   0x90(%a2)
-4:  move.l  MF_TAB+T_R_SP_ALT,-(%sp)
-    rts
+4:  jmp     mf_x_sp_alt
 1:  move.l  0x80(%a2),%d0           | any other type: the stock vector again if an added type cut it
     sub.l   0x7c(%a2),%d0
     subq.l  #4 * SRC_PAGES,%d0
@@ -143,7 +132,5 @@ mf_srcpage:
     move.l  %d1,0x80(%a2)
 2:  tst.l   0x90(%a2)
     beq.w   3f
-    move.l  MF_TAB+T_R_SP_STOCK,-(%sp)
-    rts
-3:  move.l  MF_TAB+T_R_SP_ALT,-(%sp)
-    rts
+    jmp     mf_x_sp_stock
+3:  jmp     mf_x_sp_alt

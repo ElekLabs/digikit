@@ -15,6 +15,7 @@ dkrt-abi = { path = "../../../runtime/abi" }
 dkrt-sdk = { path = "../../../runtime/sdk" }
 dkrt-svc-rt = { path = "../../../runtime/svc-rt" }
 dkrt-svc-machines = { path = ".." }
+dkfw = { path = "../../../fw/rs" }
 
 [dev-dependencies]
 dkrt-test-support = { path = "../../../runtime/test-support" }

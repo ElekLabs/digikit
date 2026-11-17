@@ -4,6 +4,7 @@ export * from './checks.ts';
 export * from './conform.ts';
 export * from './context.ts';
 export * from './fx.ts';
+export * from './loads.ts';
 export * from './machine.ts';
 export * from './ops.ts';
 export * from './place.ts';

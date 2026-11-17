@@ -118,10 +118,10 @@ fn the_tick_is_early_only_and_needs_the_pool_adapter() {
     let core = FakeCore::new();
     unsafe {
         // no sample-pool adapter in the image: nothing runs
-        core.host.pool.set(false);
+        dkrt_svc_samples::pool::set(None);
         <S as Service<FakeCore>>::tick(&core, tick_phase::EARLY);
         // a late tick is not the service's
-        core.host.pool.set(true);
+        dkrt_svc_samples::pool::set(Some(dkrt_svc_samples::pool::refusing()));
         <S as Service<FakeCore>>::tick(&core, tick_phase::LATE);
     }
     assert!(core.calls().is_empty());
@@ -131,4 +131,5 @@ fn the_tick_is_early_only_and_needs_the_pool_adapter() {
         <S as Service<FakeCore>>::tick(&core, tick_phase::EARLY);
     }
     assert!(core.link.borrow().t.wire.is_empty());
+    dkrt_svc_samples::pool::set(None);
 }

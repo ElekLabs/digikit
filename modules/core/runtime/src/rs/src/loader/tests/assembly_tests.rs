@@ -35,10 +35,12 @@ struct Dev {
     profile: dkrt_abi::platform::DeviceProfile,
     /// The stock firmware the images and the bound files are made from (the acceptance cells).
     firmware: &'static str,
+    /// The device file whose `[patch_sets]` name the roots of each image set.
+    toml: &'static str,
 }
 
-const DT2: Dev = Dev { name: "dt2", profile: profiles::DT2, firmware: "firmware/Digitakt_II_OS1.17.syx" };
-const DN2: Dev = Dev { name: "dn2", profile: profiles::DN2, firmware: "firmware/Digitone_II_OS1.12.syx" };
+const DT2: Dev = Dev { name: "dt2", profile: profiles::DT2, firmware: "firmware/Digitakt_II_OS1.17.syx", toml: "devices/digitakt-ii.toml" };
+const DN2: Dev = Dev { name: "dn2", profile: profiles::DN2, firmware: "firmware/Digitone_II_OS1.12.syx", toml: "devices/digitone-ii.toml" };
 const DEVICES: [Dev; 2] = [DT2, DN2];
 
 impl Dev {
@@ -121,11 +123,71 @@ impl Registry for DeviceRegistry {
     unsafe fn remove(&mut self, rec: usize) {
         RealRegistry.remove(rec)
     }
+    unsafe fn module_begin(&mut self, rec: usize) {
+        RealRegistry.module_begin(rec)
+    }
+    unsafe fn module_commit(&mut self, rec: usize, c: &dkrt_abi::service::ModuleCommitCtx) -> i32 {
+        RealRegistry.module_commit(rec, c)
+    }
+}
+
+/// The modules of patch set `set` in the device file: its roots (`[patch_sets]`) and what they require, transitively (`requires` of each `module.toml`), as
+/// `Library::with_requires` of patchkit expands them. patchkit is not a dependency here (it pulls the emulator crates and a second lock), so the walk is this one.
+fn set_modules(dev: Dev, set: &str) -> Vec<String> {
+    let text = String::from_utf8(read(&repo().join(dev.toml), "git checkout devices")).unwrap();
+    let file: toml::Table = text.parse().unwrap_or_else(|e| panic!("{}: {e}", dev.toml));
+    let roots = file["patch_sets"].get(set).unwrap_or_else(|| panic!("{}: no patch set {set}", dev.name));
+    let requires = module_requires();
+    let mut all: Vec<String> = Vec::new();
+    let mut todo: Vec<String> = strings(roots);
+    while let Some(id) = todo.pop() {
+        if !all.contains(&id) {
+            todo.extend(requires.get(&id).unwrap_or_else(|| panic!("{}: set {set} names {id}, which no module.toml under modules/ declares", dev.name)).clone());
+            all.push(id);
+        }
+    }
+    all
+}
+
+fn strings(v: &toml::Value) -> Vec<String> {
+    v.as_array().map(|a| a.iter().map(|x| x.as_str().unwrap().to_string()).collect()).unwrap_or_default()
+}
+
+/// The `requires` of every module under `modules/`, by id (`[module] id` and `requires` of each `module.toml`).
+fn module_requires() -> std::collections::BTreeMap<String, Vec<String>> {
+    fn walk(dir: &Path, out: &mut std::collections::BTreeMap<String, Vec<String>>) {
+        for e in std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()) {
+            if e.is_dir() {
+                if !["build", "target", "node_modules"].contains(&e.file_name().unwrap().to_str().unwrap()) {
+                    walk(&e, out);
+                }
+            } else if e.file_name().unwrap() == "module.toml" {
+                let t: toml::Table = std::fs::read_to_string(&e).unwrap().parse().unwrap_or_else(|x| panic!("{}: {x}", e.display()));
+                let m = &t["module"];
+                out.insert(m["id"].as_str().unwrap().to_string(), m.get("requires").map(strings).unwrap_or_default());
+            }
+        }
+    }
+    let mut out = std::collections::BTreeMap::new();
+    walk(&repo().join("modules"), &mut out);
+    out
+}
+
+/// The module an SDK import needs (`requires` of its `[[import]]` in `sdk/sdk.toml`, the source of the runtime's `optional` link list); `None` for an import
+/// without `requires`.
+fn adapter_of(import: &str) -> Option<String> {
+    let text = String::from_utf8(read(&repo().join("sdk/sdk.toml"), "git checkout sdk")).unwrap();
+    let sdk: toml::Table = text.parse().unwrap();
+    let imports = sdk["import"].as_array().unwrap();
+    let row = imports.iter().find(|i| i["name"].as_str() == Some(import))?;
+    row.get("requires").map(|r| r.as_str().unwrap().to_string())
 }
 
 /// The info table of a patched image (`set-<set>.info`): name, hash, kind (0 data, 1 slot), address and the words of a data entry.
 struct Image {
     entries: Vec<(String, u32, u32, Vec<u32>)>,
+    /// The modules of the set (`[patch_sets]` of the device file and what they require): the adapters the image has.
+    modules: Vec<String>,
 }
 
 impl Image {
@@ -140,7 +202,7 @@ impl Image {
                 (w[0].to_string(), hex(w[1]), w[2].parse().unwrap(), w[4..].iter().map(|x| hex(x)).collect())
             })
             .collect();
-        Image { entries }
+        Image { entries, modules: set_modules(dev, set) }
     }
 
     /// The platform of the device with this image's table. `limits`: replacement values of the `cap_<kind>` words.
@@ -358,12 +420,15 @@ const DYN_DN2: Fixture = Fixture { leaf: "dyn-dn2", nx: "test/dyn-dn2" };
 const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
 const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
 const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
+/// A module that calls `dk_sample_pool_open` and the pool calls without owning a table: a user of the samples service file, no DSP section.
+const TRACK_SELECT: Fixture = Fixture { leaf: "track-select", nx: "test/track-select" };
 
-/// The service files of the card: the three services of the runtime and the test service.
-const SERVICES: [Fixture; 4] = [
+/// The service files of the card: the four services of the runtime and the test service.
+const SERVICES: [Fixture; 5] = [
     Fixture { leaf: "fx", nx: "core/services/fx" },
     Fixture { leaf: "machines", nx: "core/services/machines" },
     Fixture { leaf: "lfo", nx: "core/services/lfo" },
+    Fixture { leaf: "samples", nx: "core/services/samples" },
     Fixture { leaf: "svc-test", nx: "test/svc-test" },
 ];
 
@@ -427,7 +492,8 @@ fn binds_of(l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
 
 /// Every name the file imports resolves: against the runtime's tables (and the service-only ones for a service file) or an export of a loaded provider. The loader
 /// does the same at a load; a module with a DSP section is not loaded on the host, so its imports are looked at here.
-unsafe fn imports_resolve(l: &mut Boot, file: &[u8], what: &str) {
+unsafe fn imports_resolve(l: &mut Boot, image: &Image, file: &[u8], what: &str) -> bool {
+    let mut adapter_imports = false;
     let role = be(file, dkneeds::H_ROLE);
     let (off, n) = (be(file, dkneeds::H_IMPORT_OFF) as usize, be(file, dkneeds::H_IMPORT_N) as usize);
     for i in 0..n {
@@ -441,8 +507,18 @@ unsafe fn imports_resolve(l: &mut Boot, file: &[u8], what: &str) {
         if a == 0 {
             a = l.exports.resolve(name_hash(std::str::from_utf8(&name[..len]).unwrap())).unwrap_or(0);
         }
+        // a service of an image adapter: the host cannot link it, so it is accepted when the image set has the adapter (the module then loads there, and its `_open`
+        // answers DK_E_MISSING on a device without it); an image without the adapter is no place for the module
+        let adapter = if a == 0 { adapter_of(std::str::from_utf8(&name[..len]).unwrap()) } else { None };
+        if let Some(m) = adapter {
+            if image.modules.iter().any(|r| *r == m) {
+                adapter_imports = true;
+                continue;
+            }
+        }
         assert_ne!(a, 0, "{what} imports {}, which the runtime and the loaded services do not have", String::from_utf8_lossy(&name[..len]));
     }
+    adapter_imports
 }
 
 /// The seam of a fixture with its provider: the plan accepts the module and finds `want` on the card, the providers load (the ABI word, the stock bytes of every
@@ -486,8 +562,9 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
     // each module: its imports resolve, and without a DSP section it loads
     for (k, m) in modules.iter().enumerate() {
         let file = packed(dev, m.leaf, "dkm", m.nx);
-        imports_resolve(&mut l, &file, m.leaf);
-        if be(&file, dkneeds::H_DSP_SIZE) == 0 {
+        // a module with a service of an image adapter among its imports (core/ui) is not loaded here: its link needs the adapter
+        let adapter_imports = imports_resolve(&mut l, &image, &file, m.leaf);
+        if be(&file, dkneeds::H_DSP_SIZE) == 0 && !adapter_imports {
             l.phase = Phase::Boot;
             let path = std::format!("modules/{}.dkm\0", m.leaf);
             let r = l.load(path.as_ptr());
@@ -537,6 +614,73 @@ fn an_lfo_loads_with_the_lfo_service_file() {
     }
 }
 
+/// A module that uses the sample pool is found by its needs: the search finds `services/samples.dks`, the file loads (ABI word, declare check, exports and the
+/// two pool slots as the bind records say), and the module's imports (`dk_sample_pool_*`) resolve to the file's exports.
+#[test]
+fn a_sample_pool_user_loads_with_the_samples_service_file() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        unsafe {
+            fits(*dev, "emulator", &[&TRACK_SELECT], &["samples"]);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// The same module on a card without `samples.dks`: the plan refuses it (its need of the samples service is missing), nothing is loaded.
+#[test]
+fn a_sample_pool_user_is_refused_without_the_samples_service_file() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (_l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &[]);
+            assert_ne!(plan.verdicts[0], Verdict::Accepted, "{}: the module needs a service the card does not hold", dev.name);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// `samples.dks` is on the card and the image set has no sample-pool adapter (the DN2 device set): the plan refuses the user of the samples service with a reason, and
+/// nothing is loaded.
+#[test]
+fn a_sample_pool_user_is_refused_when_the_image_has_no_sample_pool_adapter() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware() && d.name == "dn2") {
+        let image = Image::read(*dev, "device");
+        assert!(!image.modules.iter().any(|r| r == "core/sample-pool"), "the set is expected to leave the adapter out");
+        unsafe {
+            let (mut l, mut plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
+            // the plan finds the file and cannot tell what the image lacks: the file fails its own check (its `requires` word) and the module then misses its service
+            assert_eq!(plan.np, 1);
+            l.load_providers(&plan);
+            assert!(!l.loaded[0], "{}: samples.dks loaded without the sample-pool adapter", dev.name);
+            l.settle(&mut plan, 1);
+            assert!(matches!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(_))), "{}: {:?}", dev.name, plan.verdicts[0]);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// An import of an image adapter that the host cannot link is accepted when the image set has the adapter, and not when it lacks it.
+#[test]
+fn an_adapter_import_resolves_only_in_an_image_with_the_adapter() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        let file = packed(*dev, TRACK_SELECT.leaf, "dkm", TRACK_SELECT.nx);
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
+            l.load_providers(&plan);
+            assert!(imports_resolve(&mut l, &image, &file, "track-select"), "{}: the image has core/ui", dev.name);
+            let bare = Image { entries: Vec::new(), modules: Vec::new() };
+            let refused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| imports_resolve(&mut l, &bare, &file, "track-select")));
+            assert!(refused.is_err(), "{}: an image without core/ui accepted dk_ui_*", dev.name);
+        }
+        let _ = clean_state();
+    }
+}
+
 #[test]
 fn a_c_service_with_the_abi_word_0_is_accepted_and_its_user_loads() {
     let _g = clean();
@@ -555,11 +699,17 @@ fn every_service_of_the_card_loads_together_on_the_emulator_and_the_device_image
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         for set in ["emulator", "device"] {
             let mut modules: Vec<&Fixture> = std::vec![&SINE, &FX_GAIN, &LFO_SHAPE, &SVC_USER];
+            let mut want = std::vec!["machines", "fx", "lfo", "svc-test"];
+            // the samples service file needs the sample-pool adapter (`requires`), which the DN2 device image leaves out (the DN2 pool is not proven on hardware)
+            if !(dev.name == "dn2" && set == "device") {
+                modules.push(&TRACK_SELECT);
+                want.push("samples");
+            }
             if dev.name == "dn2" {
                 modules.push(&DYN_DN2);
             }
             unsafe {
-                fits(*dev, set, &modules, &["machines", "fx", "lfo", "svc-test"]);
+                fits(*dev, set, &modules, &want);
             }
             let _ = clean_state();
         }
@@ -599,6 +749,79 @@ fn a_card_without_the_service_file_refuses_its_user_naming_the_service() {
     }
 }
 
+/// The same refusal for an effect: its builder calls name the `fx` service, so a card with the machines and lfo services and no `fx.dks` refuses it.
+#[test]
+fn a_card_without_the_fx_service_file_refuses_an_effect_naming_the_service() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (_l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES[1..]); // machines, lfo and the test service
+            assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(name_hash("fx"))), "{}", dev.name);
+            assert_eq!(plan.verdicts[0].result(), E_MISSING);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// The builder imports of the machines service and of the fx service (`provided = true` in sdk/sdk.toml): a module links them to the exports of the file that owns them.
+const MACHINE_BUILDERS: [&str; 10] = [
+    "dk_module_ctx_add_machine",
+    "dk_machine_add_page",
+    "dk_page_add_param",
+    "dk_param_range",
+    "dk_param_glyph",
+    "dk_param_latched",
+    "dk_param_on_click",
+    "dk_page_canvas",
+    "dk_page_bind",
+    "dk_page_bind_local",
+];
+const FX_BUILDERS: [&str; 5] = ["dk_module_ctx_add_fx", "dk_fx_add_page", "dk_page_add_fx_param", "dk_fx_routes", "dk_fx_mix"];
+
+/// The names a file imports.
+fn import_names(file: &[u8]) -> Vec<String> {
+    let (off, n) = (be(file, dkneeds::H_IMPORT_OFF) as usize, be(file, dkneeds::H_IMPORT_N) as usize);
+    (0..n)
+        .map(|i| {
+            let at = off + i * dkneeds::CF_IMPORT_LEN as usize;
+            let name = &file[at..at + dkneeds::CF_IMPORT_LEN as usize];
+            String::from_utf8_lossy(&name[..name.iter().position(|c| *c == 0).unwrap()]).to_string()
+        })
+        .collect()
+}
+
+/// The seam of the builder calls: every builder import of a module is an export of the service file that owns it, published when that file loaded (the loader links
+/// it from the exports, not from the runtime's table). `test/sine` calls the machine builders, `test/dyn-fx-gain` the effect ones.
+#[test]
+fn the_builder_calls_of_a_module_resolve_to_the_exports_of_the_service_that_owns_them() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        for (module, service, builders) in [(&SINE, "machines", &MACHINE_BUILDERS[..]), (&FX_GAIN, "fx", &FX_BUILDERS[..])] {
+            let image = Image::read(*dev, "emulator");
+            unsafe {
+                let (mut l, plan) = planned(*dev, &image, &[], &[module], &SERVICES);
+                l.load_providers(&plan);
+                let file = packed(*dev, module.leaf, "dkm", module.nx);
+                let used: Vec<String> = import_names(&file).into_iter().filter(|n| builders.contains(&n.as_str())).collect();
+                assert!(used.len() >= 3, "{} {}: the module calls {used:?} of the {service} builders", dev.name, module.leaf);
+                for n in &used {
+                    assert!(l.exports.resolve(name_hash(n)).is_some(), "{} {}: {n} is no export of {service}.dks", dev.name, module.leaf);
+                }
+                // and the file that owns them lists them in its header table
+                let owner = service_file(*dev, service, if service == "fx" { "core/services/fx" } else { "core/services/machines" });
+                let t = table_of(&owner);
+                let keys = Keys::parse(&t).unwrap();
+                let listed: Vec<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
+                for n in &used {
+                    assert!(listed.contains(&name_hash(n)), "{} {service}.dks: the header table does not export {n}", dev.name);
+                }
+            }
+            let _ = clean_state();
+        }
+    }
+}
+
 /// A service file built for another ABI is refused by its own load; one whose hook site is not stock changes nothing.
 #[test]
 fn a_provider_with_another_abi_word_or_a_site_that_is_not_stock_is_refused_before_anything_is_written() {
@@ -632,6 +855,84 @@ fn a_provider_with_another_abi_word_or_a_site_that_is_not_stock_is_refused_befor
             l.phase = Phase::Boot;
             assert_eq!(l.load_provider(b"services/fx.dks\0".as_ptr(), j), E_HOOK_STOCK, "{}", dev.name);
             assert!(!l.p.calls.borrow().iter().any(|c| matches!(c, Call::Write { .. } | Call::Word { .. })), "no site is written");
+            assert_eq!(l.installer.count(), 0);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// The identity of the firmware: the image (`patchkit apply`) has the entry `fw_id` and a bound service file (`patchkit bind`) the `FW` item, both the first 8 bytes of
+/// the SHA-256 of the stock image, so a file bound from the same firmware matches. The same file on an image of another firmware is refused as a site that is not stock,
+/// before anything is written (the check runs before the stock bytes and before `init`).
+#[test]
+fn a_bound_file_carries_the_identity_of_its_image_and_a_file_for_another_firmware_is_refused_before_anything_is_written()
+ {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        let id = image
+            .entries
+            .iter()
+            .find(|e| e.1 == name_hash("fw_id"))
+            .unwrap_or_else(|| panic!("{}: the image has no fw_id entry", dev.name));
+        assert_eq!(
+            (id.2, id.3.len() >= 2),
+            (0, true),
+            "{}: fw_id is a data entry of at least two words",
+            dev.name
+        );
+        let words = [id.3[0], id.3[1]];
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
+            let j = (0..plan.np)
+                .find(|j| l.found.path(*j) == b"services/fx.dks")
+                .unwrap();
+            let file =
+                l.m.files
+                    .iter()
+                    .find(|(n, _)| n == b"services/fx.dks")
+                    .unwrap()
+                    .1
+                    .clone();
+            let t = table_of(&file);
+            let keys = Keys::parse(&t).unwrap();
+            assert_eq!(
+                keys.fw_count(),
+                1,
+                "{}: fx.dks is bound and carries its firmware identity",
+                dev.name
+            );
+            let fw = keys.fw(0).unwrap();
+            let be32 = |b: &[u8]| u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
+            assert_eq!(
+                [be32(&fw[..4]), be32(&fw[4..])],
+                words,
+                "{}: the file is bound to the firmware of the image",
+                dev.name
+            );
+            // another firmware: the image's id differs by one bit
+            let h = name_hash("fw_id");
+            l.p.info_entries
+                .borrow_mut()
+                .iter_mut()
+                .find(|(x, _)| *x == h)
+                .unwrap()
+                .1[1] ^= 1;
+            l.phase = Phase::Boot;
+            assert_eq!(
+                l.load_provider(b"services/fx.dks\0".as_ptr(), j),
+                E_HOOK_STOCK,
+                "{}",
+                dev.name
+            );
+            assert!(l.m.live.is_empty(), "nothing is allocated");
+            assert!(
+                !l.p.calls
+                    .borrow()
+                    .iter()
+                    .any(|c| matches!(c, Call::Write { .. } | Call::Word { .. } | Call::Mask)),
+                "nothing is written"
+            );
             assert_eq!(l.installer.count(), 0);
         }
         let _ = clean_state();
@@ -762,5 +1063,59 @@ fn clean_state() {
         *dsp::ds() = core::mem::zeroed();
         dsp::init_once();
         CALLED_NEED = [0; NEEDS_LEN];
+    }
+}
+
+/// The boot's own loop (`Loader::boot`) over a plan of real files: the accepted module loads in plan order and is reported to the boot record, the refused one is
+/// reported with the planner's reason and detail words and its file is never staged.
+#[test]
+fn the_boot_loop_loads_accepted_modules_in_plan_order_and_reports_a_refused_one_without_loading_it() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        if be(&packed(*dev, SVC_USER.leaf, "dkm", SVC_USER.nx), dkneeds::H_DSP_SIZE) != 0 {
+            eprintln!("SKIP {}: {} has a DSP section, which the host cannot load", dev.name, SVC_USER.leaf);
+            continue;
+        }
+        unsafe {
+            // a machine row limit of 0 refuses `sine` (the plan names the resource); `svc-test-user` needs no machine row
+            let (mut l, mut plan) = planned(*dev, &image, &[(CAPK_MACHINE_ROWS, 0)], &[&SVC_USER, &SINE], &SERVICES);
+            l.load_providers(&plan);
+            l.settle(&mut plan, 2);
+            assert_eq!(plan.verdicts[0], Verdict::Accepted, "{}", dev.name);
+            assert_eq!(plan.verdicts[1], Verdict::Refused(Reason::Fit(CAPK_MACHINE_ROWS)), "{}", dev.name);
+
+            // the boot record as `dkrt_boot` leaves it before the loop: the verdicts are in
+            *crate::boot::info() = core::mem::zeroed();
+            crate::boot::info().count = 2;
+            crate::boot::states().begin();
+            for k in 0..2 {
+                crate::boot::states().planned(k, plan.verdicts[k]);
+            }
+            let mut rec = dkrt_sdk::sel::Record::empty();
+            rec.count = 2;
+            for (k, m) in [&SVC_USER, &SINE].iter().enumerate() {
+                let path = std::format!("modules/{}.dkm", m.leaf);
+                rec.paths[k][..path.len()].copy_from_slice(path.as_bytes());
+            }
+            l.boot(&rec, &plan);
+
+            let b = crate::boot::info();
+            assert_eq!(b.results[..2], [OK, E_PLAN_FIT], "{}", dev.name);
+            assert_eq!(b.loaded, 1, "{}", dev.name);
+            assert_eq!((b.states[0], b.states[1]), (STATE_ACTIVE, STATE_REFUSED), "{}", dev.name);
+            assert_eq!(b.detail[1], [CAPK_MACHINE_ROWS as u32, 0], "{}", dev.name);
+            // the accepted module is live in the first record; the refused file was never read from the store
+            assert_eq!((st().modules[0].used, st().modules[1].used, st().loads), (1, 0, 1), "{}", dev.name);
+            assert_eq!(l.m.staged_path, b"modules/svc-test-user.dkm".to_vec(), "{}: the last file staged", dev.name);
+            // each result names its file's leaf
+            let leaf = |k: usize| core::slice::from_raw_parts(crate::boot::boot_name(k), dkrt_abi::state::NAME_LEN).to_vec();
+            assert_eq!(&leaf(0)[..17], b"svc-test-user.dkm");
+            assert_eq!(&leaf(1)[..8], b"sine.dkm");
+            // the loop leaves the loader closed
+            assert!(l.phase == Phase::Closed);
+            assert_eq!(l.load(b"modules/svc-test-user.dkm\0".as_ptr()), E_BOOT_ONLY);
+        }
+        let _ = clean_state();
     }
 }

@@ -184,22 +184,16 @@ mf_strbuf:   .space REPSIZE * 2 * MAXN
 mf_native_type:
     jmp     _mf_spt
 
-| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the image and the firmware (modules/core/services/machines/dks/src/
-| image.rs has the layout; the word index is the byte offset / 4). Addresses only: the file's hooks continue in the stock code through the tails `patchkit bind` makes, or
-| through the exits below. 1 = the Digitakt II.
+| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (modules/core/services/machines/dks/src/
+| image.rs has the layout; the word index is the byte offset / 4): the registry, `mf_ensure`, the native page functions, the slot map and the page rows (version 3: and the native page calls of the registry). The firmware
+| addresses are not here: the file names them and `patchkit bind` resolves them. 1 = the Digitakt II.
     .section .rodata
     .balign 4
     .globl machines_info
 machines_info:
-    .long   0x4d414348, 1, 1                | magic MACH, version, device
-    .long   _mf_k_keydown, _mf_k_setvalue, _mf_k_viewtrack
+    .long   0x4d414348, 3, 1                | magic MACH, version, device
     .long   _mf_first, _mf_count, _mf_entries, _mf_rows
     .long   mf_ensure
     .long   mf_native_page_count, mf_native_descriptor, mf_native_code, mf_native_draw, mf_native_overlay
-    .long   _mf_spt, mf_slotmap, 0, 0       | current track type, the slot map, (page rows, page count: Digitone II)
-    .long   _mf_c5 + 12, _mf_c5a            | clone.5: not equal, equal
-    .long   _mf_x_typearg                   | the second exit of the parameter code
-    .long   _mf_sp + 8, _mf_spa             | SRC page: the stock path, the knob-page branch
-    .long   0, 0                            | group (Digitone II)
-    .long   0, 0, 0                         | frame type, type reader, owner test (Digitone II)
-    .space  4 * 9                           | the calls of the type reader (Digitone II)
+    .long   mf_slotmap, 0, 0                | the slot map, (page rows, page count: Digitone II)
+    .long   mf_native_register, mf_native_register_v2, mf_native_remove, mf_native_turn | the native page calls of the registry

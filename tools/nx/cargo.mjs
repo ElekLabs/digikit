@@ -290,13 +290,51 @@ export const pathDeps = (workspaceRoot, crateRoot) => {
   return [...new Set(deps)];
 };
 
+// Package names of the path dependencies of a crate, transitively (each is a project of this plugin).
+const pathDepNames = (workspaceRoot, crateRoot, seen = new Set()) => {
+  for (const dep of pathDeps(workspaceRoot, crateRoot)) {
+    const { name } = read(workspaceRoot, join(dep, 'Cargo.toml')).package;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    pathDepNames(workspaceRoot, dep, seen);
+  }
+  return [...seen].sort();
+};
+
+// `rust-tests` of a standalone crate: a crate with its own `[workspace]` and Cargo.lock inside a module directory (the
+// service crates `modules/core/services/*/dks`), so no member of the root workspace. modules.mjs gives it to every module
+// project whose root holds such a crate. Uncached like the non-hermetic members. The inputs are the project's own files
+// (crate, Cargo.lock, tests), the production files of the projects it depends on by path (listed,
+// transitively, from the Cargo.toml path dependencies) and the toolchain. A crate without tests passes (`--no-tests=pass`).
+export const standaloneRustTests = (workspaceRoot, root) => {
+  const manifest = join(root, 'Cargo.toml');
+  if (!existsSync(join(workspaceRoot, manifest)) || !read(workspaceRoot, manifest).workspace) return null;
+  return {
+    executor: 'nx:run-commands',
+    cache: false,
+    inputs: [
+      ...rustInputs(workspaceRoot),
+      { input: 'production', projects: pathDepNames(workspaceRoot, root) },
+      '{workspaceRoot}/tools/nx/rust-env.mjs',
+    ],
+    options: {
+      command: `node tools/nx/rust-env.mjs -- cargo nextest run --manifest-path ${manifest} --release --locked --offline --no-tests=pass`,
+      cwd: '.',
+    },
+  };
+};
+
+const rustInputs = (workspaceRoot) => {
+  const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock'];
+  if (existsSync(join(workspaceRoot, 'rust-toolchain.toml'))) inputs.push('{workspaceRoot}/rust-toolchain.toml');
+  return inputs;
+};
+
 export const createNodesV2 = [
   'Cargo.toml',
   (files, _opts, ctx) =>
     files.map((f) => {
-      const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock'];
-      if (existsSync(join(ctx.workspaceRoot, 'rust-toolchain.toml')))
-        inputs.push('{workspaceRoot}/rust-toolchain.toml');
+      const inputs = rustInputs(ctx.workspaceRoot);
       const rust = read(ctx.workspaceRoot, 'mise.toml').tools.rust;
       const hermeticInputs = [
         'default',

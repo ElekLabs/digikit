@@ -22,6 +22,7 @@
           "core/services/fx"
         ],
         "plusdrive": true,
+        "dsp": "sharc",
         "tags": [
           "C:loading",
           "S:lfo"

@@ -372,24 +372,42 @@ pub struct Core<const CL: usize, const EN: usize, const PR: usize> {
 
 impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
     pub const fn new() -> Self {
-        let mut proj = [Proj {
-            used: false,
-            slot: NO_SLOT,
-            age: 0,
-            sel: [[SEL0; TRACKS]; CL],
-        }; PR];
-        proj[0].used = true;
+        let mut c = Self::zeroed();
+        c.start();
+        c
+    }
+
+    /// The state with every byte 0 (a static of it is zero-initialised: no bytes in a file): not usable before `start`.
+    pub const fn zeroed() -> Self {
         Self {
             open: [false; CL],
             tracks: [[TRACK0; TRACKS]; CL],
             entries: [ENTRY0; EN],
-            next_req: 1,
-            next_token: 1,
-            proj,
+            next_req: 0,
+            next_token: 0,
+            proj: [Proj {
+                used: false,
+                slot: 0,
+                age: 0,
+                sel: [[SEL0; TRACKS]; CL],
+            }; PR],
             cur: 0,
-            clock: 1,
+            clock: 0,
             drops: 0,
         }
+    }
+
+    /// The few non-zero starting values of a `zeroed` state.
+    pub const fn start(&mut self) {
+        let mut i = 0;
+        while i < PR {
+            self.proj[i].slot = NO_SLOT;
+            i += 1;
+        }
+        self.proj[0].used = true;
+        self.next_req = 1;
+        self.next_token = 1;
+        self.clock = 1;
     }
 
     /// Log a dropped handle: the first 64 drops, then every 64th.

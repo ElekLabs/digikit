@@ -4,14 +4,13 @@
 //! `core/dsp-link`. It lives in a crate of its own, below the services and the runtime, so a service crate tests against it without naming the runtime.
 extern crate std;
 mod pool;
+pub mod routes;
 mod storage;
 use core::cell::{Cell, RefCell};
-use dkrt_abi::core_api::{CoreApi, SampleCore};
+use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspState;
 use dkrt_abi::fw::Fw;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
-use dkrt_abi::platform::SampleHost;
-use dkrt_abi::registry::RegState;
 use dkrt_link::fake::{link, FakeLink};
 use dkrt_link::Link;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
@@ -23,22 +22,8 @@ pub use storage::FakeStorage;
 /// One call the service made, in order.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Call {
-    ParamRow {
-        code: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-    },
-    FxRow {
-        code: u32,
-        mirror: u32,
-        def: u32,
-    },
-    SendRow {
-        code: u32,
-        mirror: u32,
-    },
-    ResetRow(u32),
+    /// A word written to firmware memory by address (`FwMem::wr`): the rows and tables of the image. The fake keeps them (`FwMem::rd` reads them back).
+    Wr(u32, u32),
     SettingsPut(Vec<u8>, Vec<u8>),
     Log {
         kind: u16,
@@ -55,20 +40,11 @@ pub enum Call {
         slot: Slot,
         value: u32,
     },
-    /// A native page registered for machine type `owner`: the callbacks and the snapshot words.
-    NativeRegister {
-        kind: u32,
-        owner: u32,
-        page: u32,
-        flags: u32,
-        draw: u32,
-        event: u32,
-        words: Vec<u32>,
-        arg: u32,
-        with_arg: u32,
+    /// A call of the image's or the firmware's function at `addr` (`FwMem::call`) with its arguments.
+    Fw {
+        addr: u32,
+        args: Vec<usize>,
     },
-    NativeRemove(u32),
-    NativeTurn,
 }
 
 /// The platform facts of a `FakeCore` (`SampleHost`): the sample files in a `FakeStorage`, whether the pool adapter is in the image and whether the
@@ -97,22 +73,13 @@ impl Default for FakeHost {
     }
 }
 
-impl SampleHost for FakeHost {
-    type Store = FakeStorage;
-    fn store(&self) -> &FakeStorage {
-        &self.storage
-    }
-    fn pool_present(&self) -> bool {
-        self.pool.get()
-    }
-    fn files_in_store(&self) -> bool {
-        self.in_store.get()
-    }
-    fn mask_irq(&self) -> u32 {
+impl FakeHost {
+    /// Mask interrupts (a counter: `masked` says how many masks are open); the old status register.
+    pub fn mask_irq(&self) -> u32 {
         self.masked.set(self.masked.get() + 1);
         0x2700
     }
-    fn restore_irq(&self, _sr: u32) {
+    pub fn restore_irq(&self, _sr: u32) {
         self.masked.set(self.masked.get() - 1);
     }
 }
@@ -132,10 +99,19 @@ struct FakeJob {
 /// A core that records what services ask of it. Its link is the real queue over a model of `core/dsp-link` (`link::fake::FakeLink`): the tests read the
 /// wire from `link.borrow().t.wire` and let the model's time pass with `pump`. `fx_table` is the words of `dynfx_info` the fake hands out (first row 0).
 pub struct FakeCore {
+    /// The firmware words written so far, by address.
+    pub mem: RefCell<std::collections::BTreeMap<u32, u32>>,
     pub calls: RefCell<Vec<Call>>,
-    pub first: u32,
-    pub owners: Vec<u8>,
     pub source: Cell<u8>,
+    /// The module `CoreApi::module_of` names for any context: record index + 1 of the code that runs (0: none).
+    pub running: Cell<u8>,
+    /// The selection index of the module being loaded (`CoreApi::boot_index`).
+    pub boot_index: Cell<u32>,
+    /// The bytes `CoreApi::legacy_state` hands out; `legacy_state_clear` zeroes them (and answers `legacy_clear_result`).
+    pub legacy: Cell<[u8; 32]>,
+    pub legacy_clear_result: Cell<i32>,
+    /// What `settings_put` answers (0: stored); a stored value is read back by `settings_get`.
+    pub put_result: Cell<i32>,
     pub settings: RefCell<Vec<(Vec<u8>, Vec<u8>)>>,
     pub link: RefCell<&'static mut Link<FakeLink>>,
     pub name: String,
@@ -143,44 +119,49 @@ pub struct FakeCore {
     /// The info entries `CoreApi::info` hands out, by name hash: the words of each. Empty: the image has no table.
     pub info_tables: Vec<(u32, Vec<u32>)>,
     pub device: u32,
-    /// The words of `dynreg_info` the fake hands out (empty: no registry, `dynreg` is null).
-    pub dynreg_table: Vec<u32>,
-    /// What `native_available` answers, what `native_register` returns and what `native_turn` returns.
-    pub native_available: bool,
-    pub native_status: i32,
-    pub native_consumes: u32,
+    /// What a call of a firmware function (`FwMem::call`) answers when `on_call` is not set.
+    pub fw_result: Cell<usize>,
+    /// Runs at every `FwMem::call`, while the arguments (pointers into the caller's frame) are valid: a test reads what the function would have read, and answers.
+    pub on_call: RefCell<Option<Box<dyn FnMut(u32, &[usize]) -> usize>>>,
     /// The platform facts (`CoreApi::host`).
     pub host: FakeHost,
     jobs: RefCell<Vec<FakeJob>>,
     next_job: Cell<u32>,
-    reg: *mut RegState,
     dsp: *mut DspState,
 }
 
 impl FakeCore {
+    /// The image has the table `dynreg_info` with these words (word 0, the magic, is set here): `dkrt_svc_params::dynreg` finds it through `CoreApi::info`.
+    pub fn set_dynreg(&mut self, mut table: Vec<u32>) {
+        table[0] = 0x4459_4e52;
+        let hash = fnv1a("dynreg_info");
+        self.info_tables.retain(|(h, _)| *h != hash);
+        self.info_tables.push((hash, table));
+    }
+
     pub fn new() -> Self {
         // zero is every state's valid initial value (the real objects are zeroed statics)
-        let reg: &'static mut RegState = Box::leak(Box::new(unsafe { core::mem::zeroed() }));
         let dsp: &'static mut DspState = Box::leak(Box::new(unsafe { core::mem::zeroed() }));
         FakeCore {
+            mem: RefCell::new(std::collections::BTreeMap::new()),
             calls: RefCell::new(Vec::new()),
-            first: 100,
-            owners: Vec::new(),
             source: Cell::new(0),
+            running: Cell::new(0),
+            boot_index: Cell::new(u32::MAX),
+            legacy: Cell::new([0; 32]),
+            legacy_clear_result: Cell::new(0),
+            put_result: Cell::new(0),
             settings: RefCell::new(Vec::new()),
             link: RefCell::new(Box::leak(Box::new(link()))),
             name: String::from("fake\0"),
             fx_table: std::vec![0; 8],
             info_tables: Vec::new(),
             device: 0,
-            dynreg_table: Vec::new(),
-            native_available: true,
-            native_status: 0,
-            native_consumes: 0,
+            fw_result: Cell::new(0),
+            on_call: RefCell::new(None),
             host: FakeHost::new(),
             jobs: RefCell::new(Vec::new()),
             next_job: Cell::new(0),
-            reg,
             dsp,
         }
     }
@@ -225,84 +206,42 @@ impl FakeCore {
     }
 }
 
-impl SampleCore for FakeCore {
-    type Host = FakeHost;
-    fn host(&self) -> &FakeHost {
-        &self.host
+impl dkrt_abi::mem::FwMem for FakeCore {
+    unsafe fn rd(&self, a: u32) -> u32 {
+        self.mem.borrow().get(&a).copied().unwrap_or(0)
+    }
+    unsafe fn wr(&self, a: u32, v: u32) {
+        self.mem.borrow_mut().insert(a, v);
+        self.rec(Call::Wr(a, v));
+    }
+    unsafe fn call(&self, a: u32, args: &[usize]) -> usize {
+        if a == 0 {
+            return 0;
+        }
+        self.rec(Call::Fw {
+            addr: a,
+            args: args.to_vec(),
+        });
+        match self.on_call.borrow_mut().as_mut() {
+            Some(f) => f(a, args),
+            None => self.fw_result.get(),
+        }
     }
 }
 
 impl CoreApi for FakeCore {
-    unsafe fn dynreg(&self) -> *const u32 {
-        if self.dynreg_table.is_empty() {
-            core::ptr::null()
-        } else {
-            self.dynreg_table.as_ptr()
+    fn boot_index(&self) -> u32 {
+        self.boot_index.get()
+    }
+    fn legacy_state(&self) -> [u8; 32] {
+        self.legacy.get()
+    }
+    unsafe fn legacy_state_clear(&self) -> i32 {
+        let r = self.legacy_clear_result.get();
+        if r == 0 {
+            self.legacy.set([0; 32]);
         }
-    }
-    fn reg_state(&self) -> &'static mut RegState {
-        unsafe { &mut *self.reg }
-    }
-    fn param_first(&self) -> u32 {
-        self.first
-    }
-    fn param_owners(&self) -> &[u8] {
-        &self.owners
-    }
-    unsafe fn write_param_row(
-        &self,
-        _inf: *const u32,
-        code: u32,
-        _t: u32,
-        _slot: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-        _n: u32,
-        _s: u32,
-    ) {
-        self.rec(Call::ParamRow {
-            code,
-            min,
-            max,
-            def,
-        })
-    }
-    unsafe fn write_fx_param_row(
-        &self,
-        code: u32,
-        _t: u32,
-        mirror: u32,
-        _min: u32,
-        _max: u32,
-        def: u32,
-        _n: u32,
-        _s: u32,
-    ) {
-        self.rec(Call::FxRow { code, mirror, def })
-    }
-    unsafe fn write_send_param_row(
-        &self,
-        code: u32,
-        _c: u32,
-        _o: u32,
-        mirror: u32,
-        _n: u32,
-        _s: u32,
-    ) {
-        self.rec(Call::SendRow { code, mirror })
-    }
-    unsafe fn reset_param_row(&self, code: u32) {
-        self.rec(Call::ResetRow(code))
-    }
-    unsafe fn make_rep(&self, rep: *mut u8, _src: *const u8, _upper: bool) -> u32 {
-        rep as u32
-    }
-    unsafe fn type_resolve(&self, key: u32) -> u32 {
-        key & 0xff
-    }
-    fn type_map_used(&self) -> u32 {
-        0
+        r
     }
     unsafe fn guard_faults(&self, _ty: u32) -> u32 {
         0
@@ -316,6 +255,28 @@ impl CoreApi for FakeCore {
     unsafe fn module_name(&self, _owner: u8) -> *const u8 {
         self.name.as_ptr()
     }
+    unsafe fn module_of(&self, _ctx: *const u8) -> u8 {
+        self.running.get()
+    }
+    unsafe fn storage_stat(&self, root: u32, path: &[u8]) -> Result<dkrt_abi::storage::Stat, i32> {
+        use dkrt_abi::storage::Storage;
+        self.host.storage.stat(root, path)
+    }
+    unsafe fn storage_stat_head(
+        &self,
+        root: u32,
+        path: &[u8],
+        head: &mut [u8; 64],
+    ) -> Result<(dkrt_abi::storage::Stat, usize), i32> {
+        use dkrt_abi::storage::Storage;
+        self.host.storage.stat_head(root, path, head)
+    }
+    fn irq_mask(&self) -> u32 {
+        self.host.mask_irq()
+    }
+    fn irq_restore(&self, sr: u32) {
+        self.host.restore_irq(sr)
+    }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         for (k, v) in self.settings.borrow().iter() {
             if k == key {
@@ -327,7 +288,13 @@ impl CoreApi for FakeCore {
     }
     unsafe fn settings_put(&self, key: &[u8], value: &[u8]) -> i32 {
         self.rec(Call::SettingsPut(key.to_vec(), value.to_vec()));
-        0
+        let r = self.put_result.get();
+        if r == 0 {
+            let mut s = self.settings.borrow_mut();
+            s.retain(|(k, _)| k != key);
+            s.push((key.to_vec(), value.to_vec()));
+        }
+        r
     }
     unsafe fn log(&self, kind: u16, _flags: u16, args: [u32; 5]) {
         self.rec(Call::Log { kind, args })
@@ -370,45 +337,6 @@ impl CoreApi for FakeCore {
             }
             None => 0,
         }
-    }
-    fn native_available(&self, _kind: u32) -> bool {
-        self.native_available
-    }
-    unsafe fn native_register(
-        &self,
-        kind: u32,
-        owner: u32,
-        page: u32,
-        flags: u32,
-        _title: *const u8,
-        draw: u32,
-        event: u32,
-        _bindings: *const u32,
-        words: *const u32,
-        word_count: u32,
-        arg: u32,
-        with_arg: u32,
-    ) -> i32 {
-        let words = core::slice::from_raw_parts(words, word_count as usize).to_vec();
-        self.rec(Call::NativeRegister {
-            kind,
-            owner,
-            page,
-            flags,
-            draw,
-            event,
-            words,
-            arg,
-            with_arg,
-        });
-        self.native_status
-    }
-    unsafe fn native_remove(&self, kind: u32) {
-        self.rec(Call::NativeRemove(kind))
-    }
-    unsafe fn native_turn(&self, _view: *const u8, _event: *const u8) -> u32 {
-        self.rec(Call::NativeTurn);
-        self.native_consumes
     }
     fn dsp(&self) -> &'static mut DspState {
         unsafe { &mut *self.dsp }
@@ -559,4 +487,14 @@ impl Fw for FakeFw {
         self.rec(FwCall::ParamCode { view, enc });
         self.param_code
     }
+}
+
+/// `dkneeds::keys::name_hash`: FNV-1a 32 of a name.
+fn fnv1a(name: &str) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for b in name.bytes() {
+        h ^= b as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    h
 }

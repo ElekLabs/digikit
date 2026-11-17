@@ -76,7 +76,7 @@ fn emits() -> Vec<(u32, u32)> {
 
 #[test]
 fn no_sink_means_no_clock_read_and_no_span() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset(0, 5);
         (*addr_of_mut!(DKRT_POLLS))[0] = fake_poll as *const () as usize;
@@ -91,7 +91,7 @@ fn no_sink_means_no_clock_read_and_no_span() {
 
 #[test]
 fn an_emit_without_a_clock_measures_nothing() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset(0, 5);
         assert_eq!(in_module(|| dlog::dk_sink_set(SINK_SPAN, p(fake_emit as *const () as usize))), OK);
@@ -110,7 +110,7 @@ fn an_emit_without_a_clock_measures_nothing() {
 /// difference, a wrap of the counter included. The 32-bit `DKRT_TICKS` table cannot hold a fake's address on a 64-bit host, so `tick_all` itself is not run here.
 #[test]
 fn spanned_emits_one_span_per_call_with_its_owner() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset(u32::MAX - 2, 10);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -139,7 +139,7 @@ fn spanned_emits_one_span_per_call_with_its_owner() {
 
 #[test]
 fn a_phase_and_each_poll_carry_their_own_owner() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset(u32::MAX - 2, 10);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -159,7 +159,7 @@ fn a_phase_and_each_poll_carry_their_own_owner() {
 
 #[test]
 fn releasing_the_sinks_clears_the_clock() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset(0, 5);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -177,7 +177,7 @@ fn releasing_the_sinks_clears_the_clock() {
 
 #[test]
 fn dk_sink_set_on_the_span_channel_clears_the_clock() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset(0, 5);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -201,7 +201,7 @@ fn dk_sink_set_on_the_span_channel_clears_the_clock() {
 /// `dkrt_poll_add` records the owner of a slot: the module record whose loaded range holds the function, the runtime marker for any other address.
 #[test]
 fn a_poll_slot_records_the_module_that_registered_it() {
-    let _g = LOCK.lock().unwrap();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset(0, 5);
         let s = crate::st();

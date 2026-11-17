@@ -67,12 +67,8 @@ pub(crate) unsafe fn cmd_list(seq: u32, buf: *mut u8, body: *const u8, blen: usi
     let from = if plen == 0 { first } else { 0 };
     let r = store::scan_from(&io(), &lay(), &t.h, from, buf.add(IN_AT), TBL_CAP, |_, e| {
         if plen != 0 {
-            let mut i = 0;
-            while i < plen {
-                if *e.add(i) != *prefix.add(i) {
-                    return true;
-                }
-                i += 1;
+            if !crate::store::listed(e, prefix, plen, crate::store::Filter::All) {
+                return true;
             }
             seen += 1;
             if seen <= first || full {

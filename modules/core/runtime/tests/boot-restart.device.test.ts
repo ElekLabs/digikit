@@ -28,7 +28,7 @@ cardRigs(
   {
     dsp: 'sharc',
     roots: RT,
-    symbols: [...CARD_SYMBOLS, 'voices.rows', 'dyndsp_info', 'DKRT_ASSIGN'],
+    symbols: [...CARD_SYMBOLS, 'voices.rows', 'dyndsp_info'],
   },
   (h) => {
     test(

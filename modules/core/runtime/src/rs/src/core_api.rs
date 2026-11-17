@@ -5,21 +5,16 @@
 //! `RealCore` is a zero-sized type that delegates to the core functions, so a call through it costs what the direct call cost. A function that a host test must
 //! drive takes a generic `C: CoreApi` (no `dyn`: the runtime has no allocator and no vtables); everything else calls the `REAL_CORE` constant.
 use crate::{dlog, registry, settings, worker};
-use core::ptr::addr_of;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use dkrt_abi::dsp::DspState;
-use dkrt_abi::registry::RegState;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
-pub use dkrt_abi::core_api::{CoreApi, SampleCore, JOB_E_CANCELLED, LOG_INFO};
+pub use dkrt_abi::core_api::{CoreApi, JOB_E_CANCELLED, LOG_INFO};
 
 // The platform facts a service may read (the device profile, the interrupt mask, the sample-pool provider): the only platform names a service has.
 pub use crate::platform::PLATFORM;
 pub use dkrt_abi::platform::{Platform, SamplePool};
 pub use dkrt_abi::storage::Storage;
-
-// The C-API glue of the services' imports (`dk_sample_pool_*`): the handle a module holds and the record behind a context.
-pub(crate) use crate::entry::{client, give, own_rec};
 
 /// What the services' host tests use of the core's job queue.
 #[cfg(test)]
@@ -35,46 +30,27 @@ pub struct RealCore;
 /// The value a function that needs no host test passes to a `CoreApi` call.
 pub const REAL_CORE: RealCore = RealCore;
 
-impl SampleCore for RealCore {
-    type Host = crate::platform::RealPlatform;
-    fn host(&self) -> &crate::platform::RealPlatform {
-        &PLATFORM
-    }
-}
+impl dkrt_abi::mem::FwMem for RealCore {}
 
 impl CoreApi for RealCore {
-    unsafe fn dynreg(&self) -> *const u32 {
-        registry::info()
+    fn boot_index(&self) -> u32 {
+        unsafe { core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)) }
     }
-    fn reg_state(&self) -> &'static mut RegState {
-        registry::rs()
+    fn legacy_state(&self) -> [u8; 32] {
+        let map = unsafe { (*core::ptr::addr_of!(crate::selection::REC)).map };
+        let mut b = [0u8; 32];
+        let mut i = 0;
+        while i < map.len() {
+            b[4 * i..4 * i + 4].copy_from_slice(&map[i].to_be_bytes());
+            i += 1;
+        }
+        b
     }
-    fn param_first(&self) -> u32 {
-        registry::param_first()
-    }
-    fn param_owners(&self) -> &[u8] {
-        unsafe { &(*addr_of!(registry::DKRT_REG)).param_owner }
-    }
-    unsafe fn write_param_row(&self, inf: *const u32, code: u32, template: u32, slot: u32, min: u32, max: u32, def: u32, name: u32, short: u32) {
-        crate::params::write_param_row(inf, code, template, slot, min, max, def, name, short)
-    }
-    unsafe fn write_fx_param_row(&self, code: u32, template: u32, mirror: u32, min: u32, max: u32, def: u32, name: u32, short: u32) {
-        crate::params::write_fx_param_row(code, template, mirror, min, max, def, name, short)
-    }
-    unsafe fn write_send_param_row(&self, code: u32, class: u32, owner_of: u32, mirror: u32, name: u32, short: u32) {
-        crate::params::write_send_param_row(code, class, owner_of, mirror, name, short)
-    }
-    unsafe fn reset_param_row(&self, code: u32) {
-        crate::params::reset_param_row(code)
-    }
-    unsafe fn make_rep(&self, rep: *mut u8, src: *const u8, upper: bool) -> u32 {
-        crate::params::make_rep(rep, src, upper)
-    }
-    unsafe fn type_resolve(&self, key: u32) -> u32 {
-        crate::assign::resolve(key)
-    }
-    fn type_map_used(&self) -> u32 {
-        crate::assign::map_used()
+    unsafe fn legacy_state_clear(&self) -> i32 {
+        use crate::selection::{update, REC, REC_COPY, REC_VALID};
+        let mut r = REC;
+        r.map = [0; dkrt_sdk::sel::MAP_N];
+        update(r, REC_COPY, REC_VALID)
     }
     unsafe fn guard_faults(&self, ty: u32) -> u32 {
         crate::watch::guard_faults(ty)
@@ -87,6 +63,24 @@ impl CoreApi for RealCore {
     }
     unsafe fn module_name(&self, owner: u8) -> *const u8 {
         crate::st().modules[owner as usize - 1].name.as_ptr()
+    }
+    unsafe fn module_of(&self, ctx: *const u8) -> u8 {
+        match crate::entry::own_rec(ctx as *mut u8) {
+            Some(rec) => (rec + 1) as u8,
+            None => 0,
+        }
+    }
+    unsafe fn storage_stat(&self, root: u32, path: &[u8]) -> Result<dkrt_abi::storage::Stat, i32> {
+        PLATFORM.stat(root, path)
+    }
+    unsafe fn storage_stat_head(&self, root: u32, path: &[u8], head: &mut [u8; 64]) -> Result<(dkrt_abi::storage::Stat, usize), i32> {
+        PLATFORM.stat_head(root, path, head)
+    }
+    fn irq_mask(&self) -> u32 {
+        PLATFORM.irq_mask()
+    }
+    fn irq_restore(&self, sr: u32) {
+        PLATFORM.irq_restore(sr)
     }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         settings::get(key, out)
@@ -105,32 +99,6 @@ impl CoreApi for RealCore {
     }
     unsafe fn job_cancel(&self, owner: u8, id: u32) -> i32 {
         worker::cancel(owner, id)
-    }
-    fn native_available(&self, kind: u32) -> bool {
-        crate::native::available(kind)
-    }
-    unsafe fn native_register(
-        &self,
-        kind: u32,
-        owner: u32,
-        page: u32,
-        flags: u32,
-        title: *const u8,
-        draw: u32,
-        event: u32,
-        bindings: *const u32,
-        words: *const u32,
-        word_count: u32,
-        arg: u32,
-        with_arg: u32,
-    ) -> i32 {
-        crate::native::register(kind, owner, page, flags, title, draw, event, bindings, words, word_count, arg, with_arg)
-    }
-    unsafe fn native_remove(&self, kind: u32) {
-        crate::native::remove(kind)
-    }
-    unsafe fn native_turn(&self, view: *const u8, event: *const u8) -> u32 {
-        crate::native::turn(view, event)
     }
     fn dsp(&self) -> &'static mut DspState {
         crate::dsp::ds()

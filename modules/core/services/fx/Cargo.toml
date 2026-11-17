@@ -11,6 +11,7 @@ path = "src/lib.rs"
 [dependencies]
 dkrt-abi = { path = "../../runtime/abi" }
 dkrt-sdk = { path = "../../runtime/sdk" }
+dkrt-svc-params = { path = "../params" }
 dkneeds = { path = "../../../../packages/dkneeds" }
 
 [dev-dependencies]
