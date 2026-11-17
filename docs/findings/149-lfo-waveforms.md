@@ -17,16 +17,21 @@ DT2 OS 1.17 and DN2 OS 1.12. Static reading of MAIN OS bytes (file offset = addr
 ## The tick
 
 - DT2 FUN_4013961e (806 bytes). Its only caller is the vector 191 handler (0x4002dd0c), call at 0x4002e91c. DN2 FUN_40137a06 (1028 bytes), handler 0x40025e36, call at 0x400272d4. **[D]**
-- Clamp: DT2 0x40139698..0x401396a8, DN2 0x40137b56..0x40137b66. Code: `mvs.b (offset,A),D3; if D3 < 0 then D3 = 0; if D3 > 6 then D3 = 6`. **[V]** The read is a signed byte at offset +2 of A3 (DT2) and +0x4c of A4 (DN2). That this byte is the wave (value >> 8) was not traced. So "7..127 gives 6 (RAND), a value of 0x8000 or more gives 0 (TRI)" is **[O]**.
+- Clamp: DT2 0x40139698..0x401396a8, DN2 0x40137b56..0x40137b66. Code: `mvs.b (offset,A),D3; if D3 < 0 then D3 = 0; if D3 > 6 then D3 = 6`. **[D]**
+- The clamped byte is the high byte of the live wave word, so it is `value >> 8` as a signed byte. **[D]** Trace: the sound loader (DT2 FUN_400db3b2) writes sound word i to live word `idx[i] + 10` of the sound struct (`idx` = table 0x40213b64, entries of u32: LFO k of parameter n is live n, n+8, n+16), so the live words of LFO1, 2 and 3 are at struct+0x14 + 2*L with L = 1..8, 9..16, 17..24 in the order SPD, MULT, FADE, DEST, WAVE, SPH, MODE, DEPTH. The loader remaps DEST (live 4, 12, 20) and leaves WAVE (live 5, 13, 21, struct+0x1e, +0x2e, +0x3e) raw. The tick gets the struct as argument, steps A5 to the live array (`lea 0x22,A5`; the 0x8e clear in the loader is the array size and the per-track stride of the tick), and for the three LFOs of a track uses A3 = array + 0x28 - 0x10*k; `(A3)` is the DEST byte (limit 0x46) and `(2,A3)` is the WAVE byte (array + 0x2a for LFO3). DN2 has the same shape (`(0x4c,A4)`, DEST `(0x4a,A4)`, second reader `(0x2a,A4)`).
+- So on stock code a wave of 7 to 127 (words 0x0700..0x7fxx) becomes 6 and runs as RAND, and a wave byte of 0x80 or more (words 0x8000 and up) becomes 0 and runs as TRI. The low byte of the word is ignored. **[D]** (static; the formatter and graph clamps show the same split by their comparisons, not traced for 0x80 and up)
+- The clamped D3 also indexes three 7-entry tables with zero initial values (DT2 0x40222780, 0x4022279c, 0x402227b8; DN2 0x4020b7a4, 0x4020b7c0, 0x4020b7dc), so the clamp must keep D3 in 0..6 for any wave. A hook that leaves the clamp alone and tests the raw byte again where the code compares D3 with 6 keeps this. **[D]**
 - After the clamp, wave 6 branches to the random code: `moveq 6; cmp D3,D7; beq` at 0x40139804 (DT2) and 0x40137cc6 (DN2). Otherwise the code loads the function table and calls it (DT2 `lea` 0x40139818, `jsr (A1)` 0x40139828; DN2 0x40137cda and 0x40137ce6). **[V]**
 - A second compare at 0x4013986c (DT2) and 0x40137d1e (DN2) falls to the slew code. **[D]**
+- A third compare of D3 with 6 at DT2 0x4013977e and DN2 0x40137c40 sets the start phase at a trigger to 0 for RAND instead of the SPH-based phase. A new waveform needs it too, or its start phase is ignored. **[D]**
+- Each of the three compares is `moveq 6,Dn; cmp.l D3,Dn; beq|bne` in 6 bytes (the size of a `jmp.l`); the scratch registers at each are D0 and D7 or D2, A0 and A1, and D1 is live (the stock code saves it around the table call). **[D]**
 - The stock tick never indexes the table above 5, so stock code cannot jump into data. An earlier plan claim of "no upper range check, wave 7 jumps into data" is wrong. **[V]**
 
 ## Function table and second reader
 
 - DT2 table 0x402227d4, six entries: 0x40139156 TRI, 0x4013916c SINE, 0x40139138 SQR, 0x4013914a SAW, 0x401391c6 EXPO, 0x401391b6 RAMP. Slot 6 (0x402227ec) is the first long of the slew table. **[V]**
 - DN2 table 0x4020b7f8, six entries: 0x4013753e TRI, 0x40137554 SINE, 0x40137520 SQR, 0x40137532 SAW, 0x401375ae EXPO, 0x4013759e RAMP. **[V]**
-- Second reader of the table: DT2 FUN_401392d4 (842 bytes; caller FUN_4012c590 at 0x4012c6ec and 0x4012cc92). Same clamp at 0x401393a0..0x401393a6, table read at 0x401394e6. DN2 FUN_401376bc: clamp at 0x40137788, table read at 0x401378d0, caller FUN_4012ac88. **[V]** (DT2); DN2 **[D]**. A new waveform must patch both readers.
+- Second reader of the table: DT2 FUN_401392d4 (842 bytes; caller FUN_4012c590 at 0x4012c6ec and 0x4012cc92). Same clamp at 0x401393a0..0x401393a6, table read at 0x401394e6. DN2 FUN_401376bc: clamp at 0x40137788, table read at 0x401378d0, caller FUN_4012ac88. **[V]** (DT2); DN2 **[D]**. A new waveform must patch both readers. In the second reader the three compares are at DT2 0x4013944e, 0x401394dc, 0x4013954a and DN2 0x40137836, 0x401378c4, 0x40137932; the raw wave byte is `(0x2a,A4)` on both devices, and the phase is made with `muls.l #0x32` and `mac 0x7f421f4f` before the table call. **[D]**
 
 ## Slew table
 
@@ -49,7 +54,6 @@ DT2 0x402227ec: 0x00000000, 0x4c6c8ea9, 0x63a9faba, 0x6cdaca2f, ... DN2 0x4020b8
 ## Stock result for wave 7 or more
 
 - A loaded wave of 7 or more is not clamped by the loader. The consumers clamp. The MOD page shows ERR, the graph draws it as a RAND-class curve, and the sound runs like RAND. The stored value (for example 0x700) stays in the sound and in saved files. **[V]** for the consumers and the formatter.
-- **[O]** Which field the tick clamp reads, and so whether a value of 0x8000 or more gives TRI (see above).
 - **[O]** Other readers of the wave word (modulation destination lists, MIDI feedback, mirror copy to the DSP frame). None appear among the data references of the T1 table, but code that indexes the parameter array by a literal offset would not show there.
 
 ## Interrupt context and rate
