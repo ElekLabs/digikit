@@ -787,7 +787,7 @@ max = 0.5
 
 An effect case has `[case.input]` (`kind` = `sine` with `freq` and `amp`, `table` with a `file` of float32 words (64 per block: left,
 then right), `square-noise`, or a test signal of the conformance cases), `observe = "scratch"` (the effect's own block, the default) or
-`"master"`, `mix` (a float32 word) and steps with `params_f32 = [..]` (the effect's float parameters) and `blocks`.
+`"master"`, `mix` (a float32 word) and steps with `params_f32 = [..]` (the effect's float parameters), `blocks` and `mix` (a float32 word written to the row before the step's first block: a MIX change during the run, which the adapter ramps over the next block).
 
 A machine that plays a sample has `[[case.pool]]` tables (`index`, `frames`, `rate`, `channels`, `token`, `planes` = a file of int16 words, left then right;
 the kit publishes the planes and the record before the first block), `pool_ctl` (the data symbol of the control sets: the count word must be 0 after every
@@ -800,7 +800,7 @@ fine, the module writes only its own memory, the output is finite). Check kinds:
 `expect`, `cents`, `method = "crossings"` or `"bandpass"`, `skip_periods`), `tone` and `tone-stable` (effects), `sample-at`, `differs`
 (`other = [first, end)`), `voice-ends` (`within`, `after`), `instructions` (`max`, `of` = `first`, `steady` or `idle`),
 `cursor` (a word of the voice's state block, `signed`, `tol`), `voice-active`, `tone-fit` (least-squares amplitude of a tone), `description`, `state-word`,
-`state-untouched-beyond` and `master-equals-input`, `master-equals-scratch` (effects), and the references `matches-table` (`file` of float32 words next to the toml,
+`state-untouched-beyond` and `master-equals-input`, `master-equals-scratch`, `scales-input` (effects; `gain`, error within `rel_peak` of the reference peak, default 2**-20), and the references `matches-table` (`file` of float32 words next to the toml,
 `atol`, `channel`) and `same-as` (`sha256` of the float32 words). The analysis is `packages/sharc-rig-kit/src/analysis.ts`, tested on
 synthetic signals. A reference table is the output of the old float32 model of the module (or of the rig, for a new pin) as float32
 words; changing one is a re-pin and needs review like a PCM pin of `tests/scenarios`.
