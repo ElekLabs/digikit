@@ -619,6 +619,7 @@ fn golden_case(name: &str, c: &Collect, p: &Profile, k: &KeysCopy, base: u32) ->
     let mut at = 16;
     while at < size {
         let (kind, len) = (rd(&buf, at), rd(&buf, at + 4) as usize);
+        assert!(len >= 8, "a record of kind {kind} has no length: its service is not in the table");
         recs.push((kind, buf[at..at + len].to_vec()));
         at += len;
     }
@@ -724,6 +725,8 @@ fn golden_text() -> std::string::String {
 
 #[test]
 fn the_lowered_records_of_the_golden_cases_are_the_recorded_bytes() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _fx = crate::handlers::fx_fixture::LoadedFx::new(); // the lengths of the effect records come from the fx service's row
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../../tests/fixtures/records/lowered.golden");
     let text = golden_text();
     if std::env::var_os("DKRT_UPDATE_GOLDEN").is_some() {
