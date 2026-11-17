@@ -54,6 +54,8 @@ pub struct FakePlatform {
     pub info_entries: RefCell<Vec<(u32, Vec<u32>)>>,
     /// Name hashes of `info_entries` that are `[[info]]` data tables; every other entry is a `[[slot]]` word (`Platform::info_slot`).
     pub info_data: RefCell<Vec<u32>>,
+/// The DSP slots of the image's info table (`Platform::info_dsp_slot`): name hash and slot index.
+pub info_dsp: RefCell<Vec<(u32, u32)>>,
     pub pool: Cell<bool>,
     pub staged: Cell<bool>,
     pub worker: Cell<u32>,
@@ -111,6 +113,7 @@ impl FakePlatform {
             code: RefCell::new(BTreeMap::new()),
             info_entries: RefCell::new(Vec::new()),
             info_data: RefCell::new(Vec::new()),
+info_dsp: RefCell::new(Vec::new()),
             calls: RefCell::new(Vec::new()),
             storage,
         }
@@ -181,6 +184,9 @@ impl Platform for FakePlatform {
             return core::ptr::null();
         }
         self.info(name_hash)
+    }
+    unsafe fn info_dsp_slot(&self, name_hash: u32) -> Option<u32> {
+        self.info_dsp.borrow().iter().find(|(h, _)| *h == name_hash).map(|(_, i)| *i)
     }
     unsafe fn write_word(&self, addr: u32, value: u32) {
         self.calls.borrow_mut().push(Call::Word { addr, value });

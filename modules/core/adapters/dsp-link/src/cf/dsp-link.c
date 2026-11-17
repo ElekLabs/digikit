@@ -14,9 +14,8 @@
  *
  * Interface for the runtime (C ABI, no struct results):
  *   int dl_send(u32 dst_l2, const void *buf, u32 len);   0 started; -1 busy; -2 bad destination or size
- *   int dl_send_win(u32 win, u32 dst_word, const void *buf, u32 len);   the same into window `win` (0: the slot block, words 0 to 15, DL_SLOT_WORDS;
- *       1: the voices registry, 2: the effect rows of core/fx), the destination in words from the start of the window; the DSP checks it
- *       against the window's size (status 3). A write into window 0 must end at word 15: the slot block is a window of its own.
+ *   int dl_send_win(u32 win, u32 dst_word, const void *buf, u32 len);   the same into window `win` (1: the voices registry, 2: the effect rows of core/fx),
+ *       the destination in words from the start of the window; the DSP checks it against the window's size (status 3)
  *   int dl_poll(DlStatus *st);                           the state (DL_IDLE, DL_BUSY, DL_DONE, DL_ERROR), and *st filled
  *   int dl_diag(u32 *out, u32 n);                        the DSP's diagnostic words of the last block (layout: README.md and
  *       src/dsp/dsp-link.inc); returns the number of words written (at most n, at most DL_DG_WORDS), -1 when the image has no record
@@ -25,7 +24,8 @@
  *   The one per-block callback of a module is set with dk_dsp_link_set_tick (below): `void cb(const volatile u16 *rec)` (NULL: off), called from dl_tick
  *       with the copy of the previous reply, in the block interrupt. It must be a short C function with no allocation and no logging. Off costs one pointer test.
  *   void dl_tick_cb_drop(u32 lo, u32 hi);   the runtime calls it after a module's fini: clears the callback when it points into [lo, hi)
- * dst_l2 is a byte address in the DSP's reserved area (_dl_area; DL_AREA_BYTES - DL_SLOT_WORDS * 4 long: window 0 starts with the slot block), 4-aligned; len is a multiple of 4;
+ * dst_l2 is a byte address in window 0 of the DSP: the reserved area (_dl_area; DL_AREA_BYTES - DL_SLOT_WORDS * 4 long) or the slot block of the hook stubs (DL_SLOT_WORDS words directly
+ * below _dl_area, which a write may not leave), 4-aligned; len is a multiple of 4;
  * buf must stay valid until the state is DL_DONE or DL_ERROR. DL_DONE means the DSP has taken every chunk, has the bytes
  * in L2 and has invalidated its instruction caches. */
 
@@ -139,12 +139,17 @@ int dl_send(u32 dst_l2, const void *buf, u32 len)
     u32 st = l->state;
     if (st == DL_BUSY || st == DL_START || l->ending)
         return -1;
-    if ((dst_l2 & 3u) || (len & 3u) || len == 0u || dst_l2 < lo || dst_l2 - lo >= DL_AREA_BYTES - 4u * DL_SLOT_WORDS ||
-        len > DL_AREA_BYTES - 4u * DL_SLOT_WORDS - (dst_l2 - lo) || buf == 0)
+    /* window 0 is the slot block (DL_SLOT_WORDS words directly below _dl_area) and then the area; one transfer stays inside one of the two (the DSP refuses a chunk that
+     * crosses word 16) */
+    u32 slots = lo - 4u * DL_SLOT_WORDS;
+    if ((dst_l2 & 3u) || (len & 3u) || len == 0u || dst_l2 < slots || buf == 0)
+        return -2;
+    if (dst_l2 < lo ? len > lo - dst_l2
+                    : dst_l2 - lo >= DL_AREA_BYTES - 4u * DL_SLOT_WORDS || len > DL_AREA_BYTES - 4u * DL_SLOT_WORDS - (dst_l2 - lo))
         return -2;
     l->win = 0;
     l->buf = (u32)buf;
-    l->dst_off = ((dst_l2 - lo) >> 2) + DL_SLOT_WORDS;
+    l->dst_off = (dst_l2 - slots) >> 2;
     l->nwords = len >> 2;
     l->err = 0;
     l->acked = 0;
@@ -159,8 +164,7 @@ int dl_send_win(u32 win, u32 dst_word, const void *buf, u32 len)
     u32 st = l->state;
     if (st == DL_BUSY || st == DL_START || l->ending)
         return -1;
-    if (win > 2u || (len & 3u) || len == 0u || dst_word >= DL_AREA_MAX_WORDS || buf == 0 ||
-        (win == 0u && (dst_word >= DL_SLOT_WORDS || (len >> 2) > DL_SLOT_WORDS - dst_word)))
+    if (win == 0u || win > 2u || (len & 3u) || len == 0u || dst_word >= DL_AREA_MAX_WORDS || buf == 0)
         return -2;
     l->win = win;
     l->buf = (u32)buf;

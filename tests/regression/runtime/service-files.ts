@@ -35,7 +35,9 @@ export function requireCoupledForServices(files: { name: string; file: string }[
   if (dsp === 'sharc') return;
   const bad = files.filter((f) => f.name.startsWith('services/') && hasDspPart(f.file)).map((f) => f.name);
   if (bad.length)
-    throw new Error(`${bad.join(', ')} ha${bad.length > 1 ? 've' : 's'} a DSP part, but this card runs with dsp:'${dsp ?? 'zero'}': pass dsp:'sharc' to the test`);
+    throw new Error(
+      `${bad.join(', ')} ha${bad.length > 1 ? 've' : 's'} a DSP part, but ${dsp === undefined ? 'the DSP mode is not known here (pass the session)' : `this card runs with dsp:'${dsp}'`}: the test needs dsp:'sharc'`,
+    );
 }
 
 /** The store path of a service file. */

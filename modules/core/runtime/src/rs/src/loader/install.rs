@@ -5,8 +5,31 @@
 //! lines and fills the slot words. Standalone for now: the Loader calls it in R12-3a/R12-3.
 
 use dkneeds::keys::BindRef;
+use dkrt_abi::link::Sequence;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::*;
+
+/// What one installer backend installs for one record and takes down again. The ColdFire backend ([`Installer`]) writes `jmp.l` over hook sites and fills slot words in
+/// the image; the DSP backend ([`DspInstaller`]) claims words of core/dsp-link's slot block. Both belong to the one lifecycle of the Loader: a file that fails after its
+/// install, a module whose DSP part fails and an unload (hot reload) all end in `restore`.
+pub trait Backend {
+    /// The items of one install.
+    type Items<'a>;
+    /// Install `items` for record `rec`, all or nothing.
+    unsafe fn install<P: Platform>(&mut self, p: &P, rec: u8, items: &Self::Items<'_>) -> Result<(), i32>;
+    /// Take everything of `rec` down again (hook sites back to stock, slots cleared or released). Nothing of `rec` is left behind.
+    unsafe fn restore<P: Platform>(&mut self, p: &P, rec: u8);
+    /// Items installed for all records.
+    fn count(&self) -> usize;
+}
+
+/// The ColdFire items of one record: its hook sites (`binds`, with the trampolines in the image at `image_base`) and the slot words it fills (address, value).
+pub struct CfItems<'a> {
+    pub binds: &'a [BindRef<'a>],
+    pub image_base: u32,
+    pub image_size: u32,
+    pub slots: &'a [(u32, u32)],
+}
 
 /// Installed sites at most (`[limits.format] install_sites` of sdk/sdk.toml): machines 21 + fx 9 and room.
 pub const SITES_MAX: usize = dkneeds::INSTALL_SITES as usize;
@@ -26,16 +49,21 @@ pub struct Site {
 
 const EMPTY_SITE: Site = Site { rec: 0, addr: 0, len: 0, stock: [0; 64] };
 
+/// The slot words the ColdFire backend filled for each record, kept so that `restore` needs only the record.
+const SLOT_WORDS_MAX: usize = dkneeds::SLOTS_MAX as usize * dkrt_sdk::PROVIDER_MAX;
+
 pub struct Installer {
     sites: [Site; SITES_MAX],
     n: usize,
+    slot_words: [(u8, u32); SLOT_WORDS_MAX],
+    ns: usize,
     /// False in safe mode: `install` does nothing.
     armed: bool,
 }
 
 impl Installer {
     pub const fn new() -> Installer {
-        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, armed: true }
+        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, slot_words: [(0, 0); SLOT_WORDS_MAX], ns: 0, armed: true }
     }
 
     pub fn set_armed(&mut self, armed: bool) {
@@ -137,15 +165,22 @@ impl Installer {
         while i < slots.len() {
             p.write_word(slots[i].0, slots[i].1);
             p.flush(slots[i].0 & !15, 16);
+            if self.ns < SLOT_WORDS_MAX {
+                self.slot_words[self.ns] = (rec, slots[i].0);
+                self.ns += 1;
+            }
             i += 1;
         }
         p.irq_restore(sr);
         Ok(())
     }
 
-    /// Write the stock bytes back for every site of `rec`, clear its slot words (`slots`: their addresses) and drop the sites. One mask. Kept for
-    /// hot reload.
-    pub unsafe fn restore<P: Platform>(&mut self, p: &P, rec: u8, slots: &[u32]) {
+    /// Write the stock bytes back for every site of `rec`, clear the slot words it filled and drop the sites. One mask.
+    pub unsafe fn restore<P: Platform>(&mut self, p: &P, rec: u8) {
+        // a record that installed nothing (a file that failed before its install) costs no platform call
+        if !self.sites[..self.n].iter().any(|s| s.rec == rec) && !self.slot_words[..self.ns].iter().any(|s| s.0 == rec) {
+            return;
+        }
         let sr = p.irq_mask();
         let mut i = 0;
         while i < self.n {
@@ -161,12 +196,148 @@ impl Installer {
             }
         }
         let mut i = 0;
-        while i < slots.len() {
-            p.write_word(slots[i], 0);
-            p.flush(slots[i] & !15, 16);
-            i += 1;
+        while i < self.ns {
+            if self.slot_words[i].0 == rec {
+                let at = self.slot_words[i].1;
+                p.write_word(at, 0);
+                p.flush(at & !15, 16);
+                self.ns -= 1;
+                self.slot_words[i] = self.slot_words[self.ns];
+                self.slot_words[self.ns] = (0, 0);
+            } else {
+                i += 1;
+            }
         }
         p.irq_restore(sr);
+    }
+}
+
+impl Backend for Installer {
+    type Items<'a> = CfItems<'a>;
+    unsafe fn install<P: Platform>(&mut self, p: &P, rec: u8, items: &CfItems<'_>) -> Result<(), i32> {
+        Installer::install(self, p, rec, items.binds, items.image_base, items.image_size, items.slots)
+    }
+    unsafe fn restore<P: Platform>(&mut self, p: &P, rec: u8) {
+        Installer::restore(self, p, rec)
+    }
+    fn count(&self) -> usize {
+        self.n
+    }
+}
+
+/// The words of core/dsp-link's slot block (window 0 words 0 to 15; `[dsp.slots]` of sdk/sdk.toml): a hook stub of the image reads one, zero takes the stock path.
+pub const DSP_SLOT_WORDS: u32 = 16;
+/// Bytes of the slot block: it lies directly below the area in the byte addresses of window 0 (`dl_send` takes them).
+const DSP_SLOT_BYTES: u32 = 4 * DSP_SLOT_WORDS;
+
+/// The slots one record claimed: (slot index, value) and whether a write of them was sent (so that teardown must clear them).
+#[derive(Clone, Copy)]
+struct DspClaim {
+    rec: u8,
+    used: bool,
+    n: usize,
+    slots: [(u32, u32); dkneeds::SLOTS_MAX as usize],
+    sent: bool,
+}
+
+const NO_CLAIM: DspClaim = DspClaim { rec: 0, used: false, n: 0, slots: [(0, 0); dkneeds::SLOTS_MAX as usize], sent: false };
+
+/// The DSP items of one record: the slots it fills, (index in the slot block, the pc of its dispatch code).
+pub struct DspItems<'a> {
+    pub slots: &'a [(u32, u32)],
+}
+
+/// The DSP backend: the slot writes of a service file whose DSP code is in the area. `install` claims the slots (a slot has one owner); the write itself is one
+/// `Sequence` through window 0 that the DSP loader sends after the code is acknowledged (`sequence`), and the clear is the same sequence of zeros (`clear_sequence`).
+/// `restore` drops the claim. The slot words are DSP memory: the stub reads them once per call, so a slot is zero before the code behind it is freed.
+pub struct DspInstaller {
+    claims: [DspClaim; dkrt_sdk::PROVIDER_MAX],
+}
+
+impl DspInstaller {
+    pub const fn new() -> DspInstaller {
+        DspInstaller { claims: [NO_CLAIM; dkrt_sdk::PROVIDER_MAX] }
+    }
+
+    fn of(&self, rec: u8) -> Option<&DspClaim> {
+        self.claims.iter().find(|c| c.used && c.rec == rec)
+    }
+
+    /// Whether `rec` holds a claim.
+    pub fn claimed(&self, rec: u8) -> bool {
+        self.of(rec).is_some()
+    }
+
+    /// The write of the slots of `rec`: one sequence of window 0 steps (the byte address of each slot word in the area's addressing: the block lies below
+    /// `area_base`), or `None` when `rec` claims no slot. Marks the claim as sent: the slots may be live from here on.
+    pub fn sequence(&mut self, rec: u8, area_base: u32) -> Option<Sequence> {
+        let c = self.claims.iter_mut().find(|c| c.used && c.rec == rec)?;
+        let mut s = Sequence::new();
+        let mut i = 0;
+        while i < c.n {
+            s.push(0, area_base - DSP_SLOT_BYTES + 4 * c.slots[i].0, c.slots[i].1);
+            i += 1;
+        }
+        c.sent = true;
+        (s.n != 0).then_some(s)
+    }
+
+    /// The sequence of zeros that clears the slots of `rec`, or `None` when no write of them was ever sent.
+    pub fn clear_sequence(&self, rec: u8, area_base: u32) -> Option<Sequence> {
+        let c = self.of(rec)?;
+        if !c.sent {
+            return None;
+        }
+        let mut s = Sequence::new();
+        let mut i = 0;
+        while i < c.n {
+            s.push(0, area_base - DSP_SLOT_BYTES + 4 * c.slots[i].0, 0);
+            i += 1;
+        }
+        (s.n != 0).then_some(s)
+    }
+}
+
+impl Backend for DspInstaller {
+    type Items<'a> = DspItems<'a>;
+    unsafe fn install<P: Platform>(&mut self, _p: &P, rec: u8, items: &DspItems<'_>) -> Result<(), i32> {
+        if items.slots.is_empty() {
+            return Ok(());
+        }
+        if items.slots.len() > dkneeds::SLOTS_MAX as usize {
+            return Err(E_FORMAT);
+        }
+        let mut i = 0;
+        while i < items.slots.len() {
+            let (idx, _) = items.slots[i];
+            if idx >= DSP_SLOT_WORDS {
+                return Err(E_RANGE);
+            }
+            // a slot has one owner, also within one item list
+            if self.claims.iter().any(|c| c.used && c.slots[..c.n].iter().any(|s| s.0 == idx)) || items.slots[..i].iter().any(|s| s.0 == idx) {
+                return Err(E_PLAN_OWNER);
+            }
+            i += 1;
+        }
+        let at = match self.claims.iter().position(|c| !c.used) {
+            Some(a) => a,
+            None => return Err(E_PLAN_FIT),
+        };
+        let mut c = NO_CLAIM;
+        c.rec = rec;
+        c.used = true;
+        c.n = items.slots.len();
+        c.slots[..c.n].copy_from_slice(items.slots);
+        self.claims[at] = c;
+        Ok(())
+    }
+    unsafe fn restore<P: Platform>(&mut self, _p: &P, rec: u8) {
+        if let Some(c) = self.claims.iter_mut().find(|c| c.used && c.rec == rec) {
+            *c = NO_CLAIM;
+        }
+    }
+    fn count(&self) -> usize {
+        self.claims.iter().filter(|c| c.used).map(|c| c.n).sum()
     }
 }
 
@@ -333,7 +504,7 @@ mod tests {
         let mut ins = Installer::new();
         unsafe { ins.install(&f, 4, &bs, BASE, SIZE, &[(0x2000_0000, 0x4100_0080)]).unwrap() };
         f.calls.borrow_mut().clear();
-        unsafe { ins.restore(&f, 4, &[0x2000_0000]) };
+        unsafe { ins.restore(&f, 4) };
         assert_eq!(code(&f, 0x1000_0000, 6), sa);
         assert_eq!(code(&f, 0x1000_0100, 6), sb);
         assert_eq!(code(&f, 0x2000_0000, 4), [0, 0, 0, 0]);
@@ -355,7 +526,7 @@ mod tests {
         unsafe {
             ins.install(&f, 1, &a, BASE, SIZE, &[]).unwrap();
             ins.install(&f, 2, &b, BASE, SIZE, &[]).unwrap();
-            ins.restore(&f, 1, &[]);
+            ins.restore(&f, 1);
         }
         assert_eq!(ins.count(), 1);
         assert_eq!(code(&f, 0x1000_0000, 6), sa);
@@ -385,5 +556,41 @@ mod tests {
         // exactly the capacity fits, and the next provider then finds no room
         unsafe { ins.install(&f, 0, &bs[..SITES_MAX], BASE, SIZE, &[]).unwrap() };
         assert_eq!(unsafe { ins.check(&f, &bs[SITES_MAX..], BASE, SIZE) }, Err(E_PLAN_FIT));
+    }
+
+    #[test]
+    fn the_dsp_backend_claims_slots_once_writes_one_sequence_and_clears_only_what_was_sent() {
+        let f = FakePlatform::new(profiles::DT2);
+        let mut d = DspInstaller::new();
+        let area = 0x2000_0000;
+        unsafe { d.install(&f, 7, &DspItems { slots: &[(0, 0xb80100), (1, 0xb80140)] }).unwrap() };
+        // a slot has one owner, in another record and twice in one list; an index outside the block is out of range
+        assert_eq!(unsafe { d.install(&f, 8, &DspItems { slots: &[(1, 5)] }) }, Err(E_PLAN_OWNER));
+        assert_eq!(unsafe { d.install(&f, 8, &DspItems { slots: &[(2, 5), (2, 6)] }) }, Err(E_PLAN_OWNER));
+        assert_eq!(unsafe { d.install(&f, 8, &DspItems { slots: &[(DSP_SLOT_WORDS, 5)] }) }, Err(E_RANGE));
+        assert_eq!((d.count(), d.claimed(8)), (2, false), "a refused install claims nothing");
+        // nothing was sent: nothing to clear
+        assert!(d.clear_sequence(7, area).is_none());
+        // one sequence of window 0 steps; the slot block lies directly below the area
+        let s = d.sequence(7, area).unwrap();
+        assert_eq!(s.n, 2);
+        assert_eq!((s.steps[0].win, s.steps[0].at, s.steps[0].value), (0, area - 64, 0xb80100));
+        assert_eq!((s.steps[1].win, s.steps[1].at, s.steps[1].value), (0, area - 64 + 4, 0xb80140));
+        // sent: the clear is the same words with zeros
+        let z = d.clear_sequence(7, area).unwrap();
+        assert_eq!((z.n, z.steps[0].at, z.steps[0].value, z.steps[1].value), (2, area - 64, 0, 0));
+        unsafe { d.restore(&f, 7) };
+        assert_eq!((d.count(), d.claimed(7)), (0, false));
+        assert!(d.sequence(7, area).is_none());
+        // the platform saw nothing: the DSP backend writes through the link, not through the ColdFire
+        assert!(f.calls.borrow().is_empty());
+    }
+
+    #[test]
+    fn restore_of_a_record_that_installed_nothing_costs_no_platform_call() {
+        let f = FakePlatform::new(profiles::DN2);
+        let mut ins = Installer::new();
+        unsafe { ins.restore(&f, 3) };
+        assert!(f.calls.borrow().is_empty());
     }
 }

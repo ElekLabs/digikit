@@ -275,7 +275,17 @@ def test_dl_send_checks_its_arguments(machine, built):
         and lk["nwords"] == 16
         and lk["buf"] == src
     )
+    # the slot block lies directly below the area: window 0 words 0 to 15; a write stays inside it
+    ok_slots = run(
+        machine,
+        built,
+        {src: bytes(8)},
+        [call(built, "dl_send", [AREA - 64 + 56, src, 8])],
+    )
+    assert ok_slots[0].d0 == 0
     bad = [
+        [AREA - 68, src, 4],  # below the slot block
+        [AREA - 64 + 60, src, 8],  # leaves the slot block into the area
         [AREA + 1, src, 64],  # unaligned destination
         [AREA, src, 63],  # length not a multiple of 4
         [AREA, src, 0],
@@ -471,21 +481,8 @@ def test_window_transfers_carry_the_window_and_refuse_bad_arguments(machine, bui
     w = tail_words(r[1].reads[1], 0x402, 174)
     assert w[0] == MAGIC | (0 << 16) | (2 << 30)
     assert (w[1] & 0x1FFFF, (w[1] >> 17) & 0xFF, (w[1] >> 25) & 1) == (5, 2, 1)
-    # window 0 words 0 to 15 are the slot block
-    r = run(
-        machine,
-        built,
-        {src: data},
-        [call(built, "dl_send_win", [0, 14, src, 8]), tick],
-    )
-    assert r[0].d0 == 0
-    w = tail_words(r[1].reads[1], 0x402, 174)
-    assert w[0] == MAGIC | (0 << 16) | (0 << 30)
-    assert (w[1] & 0x1FFFF, (w[1] >> 17) & 0xFF, (w[1] >> 25) & 1) == (14, 2, 1)
     bad = [
-        [0, 16, src, 4],  # window 0 through this call is the slot block: words 0 to 15
-        [0, 15, src, 8],  # crosses word 16
-        [0, 0, src, 68],
+        [0, 0, src, 8],  # window 0 is dl_send's
         [3, 0, src, 8],  # no window 3
         [1, 0, src, 0],
         [1, 0, src, 6],
