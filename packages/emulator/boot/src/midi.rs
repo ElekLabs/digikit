@@ -66,6 +66,10 @@ pub(crate) struct UsbPort {
     pub bulk_out_zlps: u64,
     /// The controller's system error: set when a dTD made the DMA fault; no USB traffic after it, as on hardware, where only a module reset recovers.
     pub sys_error: Option<String>,
+    /// `usb.ctrl`: the guest's EP0 send function, watched for the answer to a control request. 0: not armed.
+    pub ctrl_send: u32,
+    /// The (length, bytes) of each entry to `ctrl_send` since the last `usb.ctrl`.
+    pub ctrl_sent: Vec<(u32, Vec<u8>)>,
 }
 
 /// FNV-1a over `bytes`: the payload id in the USB trace lines (`DIGI_USB_TRACE`).
