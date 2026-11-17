@@ -94,17 +94,41 @@ def store_root() -> Path:
     return store.store_root(STORE_NAME, "DIGI_SHARC_CORE_STORE")
 
 
+def absolute(value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else ROOT / path
+
+
 def device_gen(device: str, environ: Mapping[str, str] | None = None) -> Path:
-    """The generated core of DEVICE: SHARC_GEN_DIR_<DEV>, else (DN2 only: slot 1 of a two-core build) SHARC_GEN_DIR, else
-    out/native/<dev>-audio/gen."""
+    """The generated core of DEVICE, whose image must start with `<dev>-` (the `IMAGE` const of its `image.rs`).
+
+    SHARC_GEN_DIR_<DEV> wins and is refused with a message when it is another device's core. The generic SHARC_GEN_DIR is
+    used only when its image is this device's; otherwise it is ignored. Else `out/native/<dev>-audio/gen`."""
     environ = os.environ if environ is None else environ
-    configured = environ.get(f"SHARC_GEN_DIR_{device.upper()}") or (
-        environ.get("SHARC_GEN_DIR") if device == "dn2" else None
-    )
-    if configured:
-        path = Path(configured)
-        return path if path.is_absolute() else ROOT / path
+    own = environ.get(f"SHARC_GEN_DIR_{device.upper()}")
+    if own:
+        gen = absolute(own)
+        if not gen_is(gen, device):
+            raise CoreStoreError(
+                f"SHARC_GEN_DIR_{device.upper()}={own} is not a {device.upper()} core (image {gen_image_or_none(gen)})"
+            )
+        return gen
+    generic = environ.get("SHARC_GEN_DIR")
+    if generic and gen_is(absolute(generic), device):
+        return absolute(generic)
     return ROOT / "out" / "native" / f"{device}-audio" / "gen"
+
+
+def gen_image_or_none(gen: Path) -> str | None:
+    try:
+        return gen_image(gen)
+    except CoreStoreError:
+        return None
+
+
+def gen_is(gen: Path, device: str) -> bool:
+    image = gen_image_or_none(gen)
+    return image is not None and image.startswith(f"{device}-")
 
 
 def build_plan(
@@ -202,36 +226,25 @@ def build_core(plan: Plan, inputs: emud_key.EmudInputs) -> Path:
     return plan.library
 
 
-class _Header(ctypes.Structure):
-    """`sharc_rt::header::CoreHeader` (`repr(C)`: u32, NUL-padded strings, u64 layout entries)."""
-
-    _fields_ = [
-        ("abi_version", ctypes.c_uint32),
-        ("sharc_rt_sha256", ctypes.c_char * 64),
-        ("rustc", ctypes.c_char * 96),
-        ("target", ctypes.c_char * 64),
-        ("flags", ctypes.c_char * 128),
-        ("layout", ctypes.c_uint64 * 52),
-    ]
-
-
-def read_header(library: Path) -> dict[str, object]:
-    """The header of a built library, read through ctypes (`sharc_core_header`). The layout length is checked by the
-    pointer arithmetic of the host loader; here a wrong `LAYOUT_LEN` shows as a different `abi_version`."""
+def read_header(library: Path) -> tuple[dict[str, object] | None, str | None]:
+    """The header of a built library and the image name, as the JSON of its `sharc_core_header_json` symbol: (header, None),
+    or (None, the reason) for a library without the symbol (an older build) or one that cannot be loaded."""
     try:
         lib = ctypes.CDLL(str(library))
-        lib.sharc_core_header.restype = ctypes.POINTER(_Header)
-        header = lib.sharc_core_header().contents
-    except (OSError, AttributeError) as exc:
-        raise CoreStoreError(f"{library}: cannot read the core header: {exc}") from exc
-    return {
-        "abi_version": header.abi_version,
-        "sharc_rt_sha256": header.sharc_rt_sha256.decode(),
-        "rustc": header.rustc.decode(),
-        "target": header.target.decode(),
-        "flags": header.flags.decode(),
-        "layout": list(header.layout),
-    }
+    except OSError as exc:
+        return None, f"cannot load {library}: {exc}"
+    try:
+        function = lib.sharc_core_header_json
+    except AttributeError:
+        return (
+            None,
+            "the library has no sharc_core_header_json symbol (built from older sources)",
+        )
+    function.restype = ctypes.c_char_p
+    try:
+        return json.loads((function() or b"").decode()), None
+    except ValueError as exc:
+        return None, f"sharc_core_header_json is not JSON: {exc}"
 
 
 def gen_image(gen: Path) -> str:
@@ -257,7 +270,7 @@ def ensure_core(
     *,
     resolve: Callable[[], tuple[Plan, emud_key.EmudInputs]] | None = None,
     build: Callable[[Plan, emud_key.EmudInputs], Path] = build_core,
-    header: Callable[[Path], dict[str, object]] = read_header,
+    header: Callable[[Path], tuple[dict[str, object] | None, str | None]] = read_header,
     worktrees: list[Path] | None = None,
 ) -> Path:
     """The stored library of DEVICE: restored when its key is in ROOT, else built and inserted.
@@ -281,12 +294,14 @@ def ensure_core(
     def fill(tmp: Path) -> None:
         shutil.copyfile(built, tmp / lib_name())
         (tmp / lib_name()).chmod(0o755)
+        read, reason = header(tmp / lib_name())
         record = {
             "device": device,
             "image": gen_image(plan.gen),
             "key": key,
             "build_flags": inputs.flags,
-            "header": header(tmp / lib_name()),
+            "header": read,
+            **({"header_unavailable": reason} if read is None else {}),
         }
         (tmp / "header.json").write_text(json.dumps(record, indent=1) + "\n")
 

@@ -158,7 +158,17 @@ def core_env(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
                     flush=True,
                 )
                 continue
-        library = core_store.ensure_core(device, root)
+        try:
+            library = core_store.ensure_core(device, root)
+        except (core_store.CoreStoreError, OSError, SystemExit) as exc:
+            # a missing or stale generated core, a failed build: the daemon still works on its static core
+            reason = " ".join(str(exc).split()) or type(exc).__name__
+            print(
+                f"{device} core: unavailable: {reason}; build with: "
+                f"uv run python -m tools.devtools.verify_build cores --device {device}",
+                flush=True,
+            )
+            continue
         env[CORE_LIB_VAR.format(device.upper())] = str(library)
         keys[device] = library.parent.name
     return env, keys
@@ -201,7 +211,7 @@ def build_cores(devices: list[str], env_out: Path | None = None) -> int:
             library = core_store.ensure_core(device, root)
             env[CORE_LIB_VAR.format(device.upper())] = str(library)
             print(f"{device} core: {library}", flush=True)
-    except (core_store.CoreStoreError, FileNotFoundError, SystemExit) as exc:
+    except (core_store.CoreStoreError, OSError, SystemExit) as exc:
         print(f"verify_build: {exc}", file=sys.stderr)
         return 1
     if env_out:

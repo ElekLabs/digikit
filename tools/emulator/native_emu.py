@@ -701,11 +701,12 @@ def core_library_env(args: list[str], plan: object | None) -> dict[str, str]:
         return {}
     from tools.devtools import core_store
 
-    cores = {}
-    if os.environ.get("SHARC_GEN_DIR_2"):
+    cores: dict[str, pathlib.Path] = {}
+    if "--also-coupled" in args and os.environ.get("SHARC_GEN_DIR_2"):
+        # Two cores: the launcher (`default_audio_args`) stored the DN2 core in SHARC_GEN_DIR and the DT2 core in SHARC_GEN_DIR_2
         cores = {
-            "dn2": pathlib.Path(os.environ["SHARC_GEN_DIR"]),
-            "dt2": pathlib.Path(os.environ["SHARC_GEN_DIR_2"]),
+            "dn2": core_store.absolute(os.environ["SHARC_GEN_DIR"]),
+            "dt2": core_store.absolute(os.environ["SHARC_GEN_DIR_2"]),
         }
     elif (device := digi_env.device_for_syx(syx_from_args(args))) is not None:
         cores = {device: generated_core(args)}
@@ -717,7 +718,7 @@ def core_library_env(args: list[str], plan: object | None) -> dict[str, str]:
                 device, root, resolve=lambda d=device, g=gen: core_store.current(d, g)
             )
             env[f"DIGI_SHARC_CORE_LIB_{device.upper()}"] = str(library)
-    except (core_store.CoreStoreError, FileNotFoundError) as exc:
+    except (core_store.CoreStoreError, OSError) as exc:
         raise SystemExit(f"core library: {exc}") from exc
     return env
 

@@ -6,6 +6,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import pytest
+
 from tools.devtools import core_store, emud_key, store
 
 
@@ -117,7 +119,7 @@ class Stand:
             root,
             resolve=self.resolve,
             build=self.build,
-            header=lambda _library: {"abi_version": 2},
+            header=lambda _library: ({"abi_version": 2}, None),
             worktrees=[] if worktrees is None else worktrees,
         )
 
@@ -238,3 +240,48 @@ def test_old_temp_dirs_are_removed_and_fresh_ones_kept(tmp_path: Path) -> None:
     store.evict(group, "k0")
     assert not old.exists() and not stale_evict.exists()
     assert fresh.is_dir()
+
+
+def make_gen(path: Path, image: str) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "image.rs").write_text(f'pub const IMAGE: &str = "{image}";\n')
+    return path
+
+
+def test_a_generic_gen_dir_of_another_device_is_not_used(tmp_path: Path) -> None:
+    dt2 = make_gen(tmp_path / "dt2gen", "dt2-1.16")
+    dn2 = make_gen(tmp_path / "dn2gen", "dn2-1.11")
+    # SHARC_GEN_DIR names a DT2 core: ignored for DN2, used for DT2
+    env = {"SHARC_GEN_DIR": str(dt2)}
+    assert (
+        core_store.device_gen("dn2", env)
+        == core_store.ROOT / "out/native/dn2-audio/gen"
+    )
+    assert core_store.device_gen("dt2", env) == dt2
+    # an explicit SHARC_GEN_DIR_<DEV> of another device is refused with a message
+    with pytest.raises(core_store.CoreStoreError, match="not a DN2 core"):
+        core_store.device_gen("dn2", {"SHARC_GEN_DIR_DN2": str(dt2)})
+    assert core_store.device_gen("dn2", {"SHARC_GEN_DIR_DN2": str(dn2)}) == dn2
+
+
+def test_daemons_continue_when_a_core_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from tools.devtools import verify_build
+
+    monkeypatch.setenv("DIGI_SHARC_CORE_STORE", str(tmp_path / "store"))
+    monkeypatch.setattr(
+        verify_build, "daemon_pgo", lambda _device: (None, "off", "", False)
+    )
+
+    def refuse(_device: str, _root: Path) -> Path:
+        raise SystemExit("generated core is stale")
+
+    monkeypatch.setattr(verify_build.core_store, "ensure_core", refuse)
+    env, keys = verify_build.core_env(["dt2"])
+    assert (
+        env == {} and keys == {}
+    )  # no variable, no key: the test key stays the daemon's
+    out = capsys.readouterr().out
+    assert "dt2 core: unavailable: generated core is stale; build with:" in out
+    assert "verify_build cores --device dt2" in out
