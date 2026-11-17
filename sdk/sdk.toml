@@ -382,7 +382,7 @@ service = "runtime"
 since = "0.7.0"
 context = "init"
 sig = "i32 (dk_files *files, const char *path, void *buf, u32 cap)"
-doc = "Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`."
+doc = "Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code: `E_NOT_FOUND` for a missing file or a folder, `E_SEL_PATH` for an empty path, `E_TOO_BIG` for a path over 159 bytes or a file larger than `cap`. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`."
 
 [[import]]
 name = "dk_host_register"
@@ -820,6 +820,7 @@ doc = "Set the default of the effect's MIX knob, 0 to 127 (127 when this is not 
 [[import]]
 name = "dk_sample_pool_open"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, dk_sample_pool **out)"
@@ -828,6 +829,7 @@ doc = "Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS
 [[import]]
 name = "dk_sample_pool_add"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, const char *path)"
@@ -836,6 +838,7 @@ doc = "Add a stereo-capable sample file to the pool (copies the path, no file IO
 [[import]]
 name = "dk_sample_pool_clear"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index)"
@@ -844,6 +847,7 @@ doc = "Close the entry's generation, drop its reference and set it UNUSED, a hol
 [[import]]
 name = "dk_sample_pool_status"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index)"
@@ -852,6 +856,7 @@ doc = "DK_SAMPLE_UNUSED, QUEUED, LOADING, READY, or a negative error; an error i
 [[import]]
 name = "dk_sample_pool_info"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, void *out)"
@@ -860,6 +865,7 @@ doc = "Copy a 16-byte dk_sample_info (frames, rate, channels, token) of a READY 
 [[import]]
 name = "dk_sample_pool_path"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, char *buf, u32 cap)"
@@ -868,6 +874,7 @@ doc = "Copy the root-relative path of the entry into `buf` and return its length
 [[import]]
 name = "dk_sample_pool_set"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, const char *path)"
@@ -876,6 +883,7 @@ doc = "Load a sample file into pool entry `index` (0..15), replacing what was th
 [[import]]
 name = "dk_sample_pool_peaks"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, u32 token, void *out, u32 capacity)"
@@ -884,6 +892,7 @@ doc = "Copy bounded PCM16 min/max overview pairs of a READY pool entry matching 
 [[import]]
 name = "dk_sample_pool_peaks_window"
 service = "samples"
+provided = true
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, u32 token, u32 first, u32 frames, u32 columns, void *out, u32 capacity)"
@@ -1710,7 +1719,6 @@ DSP_VOICES = { id = 16, fit = true, label = "DSP voices" }   # voices the machin
 # and its `[records.kinds]`.
 [[service]]
 name = "samples"
-rust = "dkrt_svc_samples::records::Samples"
 
 [[service]]
 name = "machines"

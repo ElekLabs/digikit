@@ -125,15 +125,6 @@ import_table! {
     ("dk_service_declare_hook", collect::dk_service_declare_hook),
     ("dk_service_declare_export", collect::dk_service_declare_export),
     ("dk_service_declare_resource", collect::dk_service_declare_resource),
-    ("dk_sample_pool_open", crate::handlers::exports::dk_sample_pool_open),
-    ("dk_sample_pool_add", crate::handlers::exports::dk_sample_pool_add),
-    ("dk_sample_pool_clear", crate::handlers::exports::dk_sample_pool_clear),
-    ("dk_sample_pool_status", crate::handlers::exports::dk_sample_pool_status),
-    ("dk_sample_pool_info", crate::handlers::exports::dk_sample_pool_info),
-    ("dk_sample_pool_path", crate::handlers::exports::dk_sample_pool_path),
-    ("dk_sample_pool_set", crate::handlers::exports::dk_sample_pool_set),
-    ("dk_sample_pool_peaks", crate::handlers::exports::dk_sample_pool_peaks),
-    ("dk_sample_pool_peaks_window", crate::handlers::exports::dk_sample_pool_peaks_window),
     ("dk_debug_peek", debug_peek),
     ("dk_debug_span_clock", debug_span_clock),
     ("dk_debug_poll", debug_poll),
@@ -191,15 +182,6 @@ const _: dkrt_sdk::api::DkServiceDeclareSlotFn = collect::dk_service_declare_slo
 const _: dkrt_sdk::api::DkServiceDeclareHookFn = collect::dk_service_declare_hook;
 const _: dkrt_sdk::api::DkServiceDeclareExportFn = collect::dk_service_declare_export;
 const _: dkrt_sdk::api::DkServiceDeclareResourceFn = collect::dk_service_declare_resource;
-const _: dkrt_sdk::api::DkSamplePoolOpenFn = crate::handlers::exports::dk_sample_pool_open;
-const _: dkrt_sdk::api::DkSamplePoolAddFn = crate::handlers::exports::dk_sample_pool_add;
-const _: dkrt_sdk::api::DkSamplePoolClearFn = crate::handlers::exports::dk_sample_pool_clear;
-const _: dkrt_sdk::api::DkSamplePoolStatusFn = crate::handlers::exports::dk_sample_pool_status;
-const _: dkrt_sdk::api::DkSamplePoolInfoFn = crate::handlers::exports::dk_sample_pool_info;
-const _: dkrt_sdk::api::DkSamplePoolPathFn = crate::handlers::exports::dk_sample_pool_path;
-const _: dkrt_sdk::api::DkSamplePoolSetFn = crate::handlers::exports::dk_sample_pool_set;
-const _: dkrt_sdk::api::DkSamplePoolPeaksFn = crate::handlers::exports::dk_sample_pool_peaks;
-const _: dkrt_sdk::api::DkSamplePoolPeaksWindowFn = crate::handlers::exports::dk_sample_pool_peaks_window;
 const _: dkrt_sdk::api::DkDebugPeekFn = debug_peek;
 const _: dkrt_sdk::api::DkDebugSpanClockFn = debug_span_clock;
 const _: dkrt_sdk::api::DkDebugPollFn = debug_poll;

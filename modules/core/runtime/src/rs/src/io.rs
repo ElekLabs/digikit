@@ -115,6 +115,18 @@ pub fn step_job() -> u32 {
     unsafe { read_volatile(addr_of!(STEP_ID)) }
 }
 
+/// Host tests: run `f` as the step of a job of `owner` in the I/O task (what `step_owner` and `step_job` see), without a job table entry: the `file_*`
+/// calls of the store writer accept only that context.
+#[cfg(test)]
+pub(crate) unsafe fn test_in_step<R>(owner: u8, f: impl FnOnce() -> R) -> R {
+    TEST_CURRENT = io_tcb();
+    write_volatile(addr_of_mut!(STEP_OWNER), owner);
+    write_volatile(addr_of_mut!(STEP_ID), 1);
+    let r = f();
+    write_volatile(addr_of_mut!(STEP_ID), 0);
+    r
+}
+
 unsafe fn locked<T>(f: impl FnOnce() -> T) -> T {
     dkrt_abi::platform::locked(&crate::PLATFORM, f)
 }

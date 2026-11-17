@@ -55,6 +55,34 @@ pub mod shims {
         REAL_CORE.module_of(ctx)
     }
     #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_storage_stat(root: u32, path: *const u8, len: u32, out: *mut dkrt_abi::storage::StatWire) -> i32 {
+        match REAL_CORE.storage_stat(root, core::slice::from_raw_parts(path, len as usize)) {
+            Ok(s) => {
+                *out = dkrt_abi::storage::StatWire::of(&s);
+                dkrt_sdk::OK
+            }
+            Err(e) => e,
+        }
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_storage_stat_head(root: u32, path: *const u8, len: u32, out: *mut dkrt_abi::storage::StatWire, head: *mut u8) -> i32 {
+        match REAL_CORE.storage_stat_head(root, core::slice::from_raw_parts(path, len as usize), &mut *(head as *mut [u8; 64])) {
+            Ok((s, n)) => {
+                *out = dkrt_abi::storage::StatWire::of(&s);
+                n as i32
+            }
+            Err(e) => e,
+        }
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_irq_mask() -> u32 {
+        REAL_CORE.irq_mask()
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_irq_restore(sr: u32) {
+        REAL_CORE.irq_restore(sr)
+    }
+    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_settings_get(key: *const u8, key_len: u32, out: *mut u8, out_len: u32) -> i32 {
         REAL_CORE.settings_get(core::slice::from_raw_parts(key, key_len as usize), core::slice::from_raw_parts_mut(out, out_len as usize))
     }

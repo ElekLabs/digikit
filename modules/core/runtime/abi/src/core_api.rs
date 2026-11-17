@@ -9,11 +9,10 @@
 //! The DSP link belongs to the core (`link.rs` of the runtime crate): a service sets live values with `link_set` and sends owned streams with
 //! `link_submit` (types in `crate::link`). It never asks whether the link is busy.
 //!
-//! Platform facts: the samples service reads the few it needs through `SampleCore::host` (`platform::SampleHost`); `SampleCore` extends `CoreApi` and is not part
-//! of interface C of a `.dks` (no import carries a platform handle). The device profile comes with the device id.
+//! Platform facts: a service reads the few it needs through `CoreApi` (`device_id`, `storage_stat`, `storage_stat_head`, `irq_mask`, `info`). The device profile comes with the device id.
 use crate::dsp::DspState;
 use crate::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
-use crate::platform::SampleHost;
+use crate::storage::Stat;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
 /// The `done` status of a job that was cancelled (`sdk/include/dk/platform/job.h`).
@@ -21,14 +20,6 @@ pub const JOB_E_CANCELLED: i32 = -80;
 
 /// The flags of an info-level log record.
 pub const LOG_INFO: u16 = dkrt_sdk::logk::L_INFO << dkrt_sdk::logk::LEVEL_SHIFT;
-
-/// `CoreApi` with the platform facts the samples service reads. Only the in-crate samples service takes this bound; a service file has no such core.
-pub trait SampleCore: CoreApi {
-    /// What this core's platform is: the real one in the runtime, a small fake in a host test.
-    type Host: SampleHost;
-    /// The platform facts the samples service may read (`SampleHost`).
-    fn host(&self) -> &Self::Host;
-}
 
 pub trait CoreApi: crate::mem::FwMem {
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
@@ -54,6 +45,20 @@ pub trait CoreApi: crate::mem::FwMem {
     /// The record of the module whose context is `ctx`, as record index + 1, when that module is the code running now (a call with another module's context, or
     /// from no module, gives 0). The services use it for the handle a module opens.
     unsafe fn module_of(&self, ctx: *const u8) -> u8;
+
+    // ---- the files and the interrupt mask ---------------------------------------------------------------------------------------
+    /// `Storage::stat` of the platform (`ROOT_SAMPLES` or `ROOT_STORE`, root-relative path): the services name no platform.
+    unsafe fn storage_stat(&self, root: u32, path: &[u8]) -> Result<Stat, i32>;
+    /// `Storage::stat_head`: the `Stat` and the first 64 bytes (the count is 0 for the root and 64 for a file).
+    unsafe fn storage_stat_head(
+        &self,
+        root: u32,
+        path: &[u8],
+        head: &mut [u8; 64],
+    ) -> Result<(Stat, usize), i32>;
+    /// Mask interrupts; the old status register to give back to `irq_restore`.
+    fn irq_mask(&self) -> u32;
+    fn irq_restore(&self, sr: u32);
 
     // ---- settings --------------------------------------------------------------------------------------------------------
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32;
