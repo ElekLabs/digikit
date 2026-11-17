@@ -454,28 +454,46 @@ crates).
 
 ### E3 Keys, the trait, and the role check
 
-What:
-1. The planner key rule (`plan.rs` `keys_clash`) checks every kind: drop the `is_generic` condition at `plan.rs:403`. `is_generic` stays for
-   `dk_record_add` only. The rule is a function over two key tables, so E5 can call it for a candidate against the live set.
-2. LFO shape keys become `hash24(<module id>:<shape id>) << 8`, computed by patchkit at pack time (`module.rs`, `major3.rs`). Machine keys
-   and effect ids stay as they are (rule 5).
-3. A duplicate machine key in one boot (`assign.rs` rule 4) becomes a planner refusal.
-4. Generalise `dkrt_sdk::sticky`: the number range and the map size become parameters (`Range { lo, hi }`). machines keeps its map format
-   and its settings key `machines.types` unchanged.
-5. `role_ok` refuses KINDS and SLOTS in a content module (rule 3).
-6. Trait (4.3): `fx_entry`, `guard_state`, `owned_ids` become exports found by name hash; one `SVC_ABI` change; all `.dks` rebuild.
-7. The per-service duplicate checks (`E_FX_ID_DUP`, the lfo `E_TYPE_USED` path) stay until E5; E5 deletes them with their refusal-table rows.
+Facts (read on `int/shared-gate`): `GENERIC_KINDS` is only `[KIND_LFO_SHAPE]`, so `keys_clash` (`plan.rs:367-434`) checks duplicates only
+for LFO shapes; for MACHINE and EFFECT it checks only that the kind has an owner. `keys_clash` never compares a table with itself (a repeated
+`[[record]]` key is refused by patchkit, two machine or effect ids that hash alike are not). Assign rule 4 lives in `sticky.rs:147-152` and
+`:200-205`. No packer writes KINDS or SLOTS for a content module. There is no `dkrt_export`: the loader's `Exports` table
+(`loader/exports.rs`, `resolve(hash)`) is the lookup.
 
-Tests:
-- Unit: planner cases in `plan.rs` for a duplicate key of a typed kind, the same module twice, two modules with the same local id
-  (accepted), and a forced hash collision (two key tables with the same key from different ids). `sticky` cases with two ranges. `role_ok`
-  cases. dkneeds and patchkit host tests: a clash refused at pack and at the workbench fit check.
-- Assembly: one case, two packed fixtures with the same key, refused by the boot plan.
-- Device: the subset `C:loading` plus the fx and machines device tests that read FX ROUTES and MODULES (the trait change reaches them).
+What, as separate commits:
+1. `dkneeds` `Keys::first_shared_key(&self, other) -> Option<(kind, key)>` and `Keys::first_repeat(&self) -> Option<(kind, key)>` next to
+   `has_key` (`keys.rs:534`), with host tests. patchkit, the workbench fit check, the planner and E5's live-set check all use them.
+2. `plan.rs`: `keys_clash` keeps the owner check and uses the two functions for every kind (the `is_generic` condition goes; `is_generic`
+   is deleted if nothing else uses it). Expose `key_refusal(t, others) -> Option<Reason>` for E5. Plan tests: duplicate machine key, duplicate
+   effect id, the same module twice, the same local id in two modules (accepted), a forced hash collision, a key repeated inside one table.
+3. `dkrt_sdk::sticky`: `Range { lo, hi }` and map slices instead of `DYN_TYPE_*` and `[u32; MAP_N]`; machines passes its range and map, and
+   `machines.types` stays byte-identical (the existing format test guards it). New case with another range. Then delete rule 4 (the `first`
+   loop, the fresh-number branch and its test `a_repeated_key_takes_a_fresh_number_and_is_not_recorded`) and document that `assign` takes
+   unique keys, with a debug assertion.
+4. `role_ok` (`role.rs:256-271`): role 0 also refuses KINDS and SLOTS; unit cases next to the existing ones.
+5. LFO shape keys: `[[record]]` takes a local `id` string; patchkit puts `hash24(<module id>:<id>) << 8` (low byte 0) into KEYS and generates
+   a per-module constant `DK_KEY_<ID>` (as `module_ids.h` gives machine ids) that `module.c` writes into the record body, so the key has one
+   source. The lfo service keeps `id != 0` and `E_TYPE_USED` until E5. Fixtures `lfo-shape` and `lfo-shape-dup` and the tests that name key
+   7 change.
+6. Trait (4.3), last and on its own: `fx_entry`, `guard_state`, `owned_ids` leave `Service`, `ServiceRow` and the thunks. Each service
+   declares an export (`fx.routes_entry`, `machines.guard_state`, `machines.owned_ids`): a plain `extern "C"` function with no core argument
+   (the `.dks` code reaches the core through `ImportCore`, as the builder exports do). The runtime adds `find_export(hash)` over
+   `Loader.exports.resolve`; `dkrt_fx` (menu FX ROUTES) and the MODULES reply call it and keep their behaviour when the export is absent
+   (`E_NOT_FOUND`, 0, none). `SVC_ABI` changes once; every `.dks` and the runtime object rebuild (`objects-check`).
+7. One assembly case: two packed fixtures with the same machine key refused by the boot plan. Doc updates (service.rs and handlers.rs doc
+   comments that name the three methods).
+8. The per-service duplicate checks (`E_FX_ID_DUP`, the lfo `E_TYPE_USED` path) stay until E5; E5 deletes them with their refusal-table rows.
+
+Before landing: scan the KEYS of every packed fixture and real module for pairs the wider rule would now refuse (a pinned type used twice,
+an effect-id collision).
+
+Tests: as listed per commit. Device subset (DT2 and DN2): `C:loading`, `S:machines`, `S:lfo`, the runtime lfo and refusal tests, the tests
+that read FX ROUTES (fixtures `dyn-fx-gain-send`, `dyn-fx-gain-sendonly`) and the MODULES reply, plus `gate-smoke` and `gate-pins`.
 
 Done when: every kind's keys are checked by the one rule; the trait names no kind; layercheck `kind-free` covers the trait.
 
-Estimate: 1.5 days. Payoff: one conflict rule for all kinds, a kind-free trait. Confidence: high. Depends on: nothing.
+Estimate: 1.5 days. Payoff: one conflict rule for all kinds, a kind-free trait. Confidence: high. Depends on: E2 (both touch `module.rs`
+and the service crates).
 
 ### E4 Service contract suite
 
