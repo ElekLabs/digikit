@@ -430,6 +430,15 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
         ? null
         : `the largest difference to ${String(c.file)} is ${d} (limit ${num(c, 'atol')})`;
     }
+    case 'scales-input': {
+      // an effect's output is its input times `gain`: the largest error is within `rel_peak` (default 2**-20, the bound of tools/patchkit/hook_ab.py) of the peak of the reference
+      const ref = signal({ ...t, out: t.input }, c).map((v) => v * num(c, 'gain'));
+      const err = maxAbsDiff(x(), ref);
+      const bound = num(c, 'rel_peak', 2 ** -20) * peak(ref);
+      return err <= bound
+        ? null
+        : `the output is not the input times ${num(c, 'gain')}: error ${err} is above ${bound} (${num(c, 'rel_peak', 2 ** -20)} of the reference peak ${peak(ref)})`;
+    }
     case 'same-as': {
       const h = wordsHash(x());
       if (h === String(c.sha256)) return null;

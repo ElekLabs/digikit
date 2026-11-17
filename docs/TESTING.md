@@ -797,7 +797,7 @@ fine, the module writes only its own memory, the output is finite). Check kinds:
 `expect`, `cents`, `method = "crossings"` or `"bandpass"`, `skip_periods`), `tone` and `tone-stable` (effects), `sample-at`, `differs`
 (`other = [first, end)`), `voice-ends` (`within`, `after`), `instructions` (`max`, `of` = `first`, `steady` or `idle`),
 `cursor` (a word of the voice's state block, `signed`, `tol`), `voice-active`, `tone-fit` (least-squares amplitude of a tone), `description`, `state-word`,
-`state-untouched-beyond` and `master-equals-input`, `master-equals-scratch` (effects), and the references `matches-table` (`file` of float32 words next to the toml,
+`state-untouched-beyond` and `master-equals-input`, `master-equals-scratch`, `scales-input` (effects; `gain`, error within `rel_peak` of the reference peak, default 2**-20), and the references `matches-table` (`file` of float32 words next to the toml,
 `atol`, `channel`) and `same-as` (`sha256` of the float32 words). The analysis is `packages/sharc-rig-kit/src/analysis.ts`, tested on
 synthetic signals. A reference table is the output of the old float32 model of the module (or of the rig, for a new pin) as float32
 words; changing one is a re-pin and needs review like a PCM pin of `tests/scenarios`.
