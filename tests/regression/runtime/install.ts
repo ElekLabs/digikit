@@ -6,7 +6,7 @@ import { emulatorClock, repoRoot, type Device, type Session } from '@digi/test-s
 import { expect } from 'vitest';
 import { type PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
-import { boundService, neededServices, servicePath, SERVICE_MODULES } from './service-files.ts';
+import { boundService, neededServices, requireCoupledForServices, servicePath, SERVICE_MODULES } from './service-files.ts';
 import { bootClockOf, pollEmulated, waitForBootEmulated } from './waits.ts';
 
 /** Emulated milliseconds the boot-time loads of the installed modules may take after the boot is seen. */
@@ -49,9 +49,9 @@ export async function installModules(
       }
       if (device) {
         for (const name of neededServices(modules.map((m) => m.artifact))) {
-          const bound = fs.readFileSync(
-            await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
-          );
+          const boundFile = await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!));
+          if (session) requireCoupledForServices([{ name: servicePath(name), file: boundFile }], (await session.status()).dsp);
+          const bound = fs.readFileSync(boundFile);
           await timePhase('service.upload', () => dk.put(servicePath(name), bound));
           expect(
             await dk.verifyFile(servicePath(name), bound),

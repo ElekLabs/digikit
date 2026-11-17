@@ -354,8 +354,8 @@ A module keeps its tests in its own folder, `modules/<kind>/<name>/tests/`. No l
   `mise run module:check core/runtime` discovers and runs all owners serially.
   `pnpm nx:pilot run <module-id>:test-device` runs one module's files; `pnpm nx:pilot run <module-id>:test-conformance`
   loads the module through the shared conformance suite. Uploadable modules without a DSP image run
-  with the zero SSI peer and no SHARC audio session; modules with DSP images retain coupled execution
-  and the DSP registration wait. Both paths retain upload/restart, persisted bytes/hash, SDK contract,
+  with the zero SSI peer and no SHARC audio session; modules and services with a DSP part (a `.dks` with a DSP section, such as the DT2 `machines.dks`) retain coupled execution
+  (`dsp: 'sharc'`) and the DSP registration wait; the zero peer never acknowledges a DSP transfer, so the card rig and `installModules` refuse a service with a DSP part in a session that is not coupled (`requireCoupledForServices`). Both paths retain upload/restart, persisted bytes/hash, SDK contract,
   registration, UI and fault acceptance, including the same forbidden runtime log kinds. Task and
   cache ownership remain per module.
 - `scenarios/*.toml`: digikit scenarios. `pk_digikit_scen list|run NAME` and the tiers find them in `tests/digikit/scenarios/` and `modules/*/*/tests/scenarios/`.

@@ -21,6 +21,23 @@ export function neededServices(files: string[]): string[] {
   return Object.keys(SERVICE_MODULES).filter((name) => needed.has(nameHash(name)));
 }
 
+/** Header word H_DSP_SIZE of a .dkm or .dks: bytes of its DSP section (0: none). */
+const H_DSP_SIZE = 0x9c;
+
+/** The file has a DSP part (a service too: its dispatch code behind the hook stubs of the image). */
+export const hasDspPart = (file: string): boolean => fs.readFileSync(file).readUInt32BE(H_DSP_SIZE) > 0;
+
+/**
+ * The one rule for service files on a card: the loader acknowledges a DSP part only from the DSP, and the zero peer and the cold boot never answer, so a service with a DSP part
+ * (all-or-nothing: it then fails as a whole) needs `dsp: 'sharc'`. Throws, naming the file, instead of letting the test see a refused service.
+ */
+export function requireCoupledForServices(files: { name: string; file: string }[], dsp: string | undefined): void {
+  if (dsp === 'sharc') return;
+  const bad = files.filter((f) => f.name.startsWith('services/') && hasDspPart(f.file)).map((f) => f.name);
+  if (bad.length)
+    throw new Error(`${bad.join(', ')} ha${bad.length > 1 ? 've' : 's'} a DSP part, but this card runs with dsp:'${dsp ?? 'zero'}': pass dsp:'sharc' to the test`);
+}
+
 /** The store path of a service file. */
 export const servicePath = (name: string) => `services/${name}.dks`;
 

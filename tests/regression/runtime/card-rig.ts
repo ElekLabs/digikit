@@ -34,7 +34,7 @@ import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices, servicePath, SERVICE_MODULES } from './service-files.ts';
+import { boundService, neededServices, requireCoupledForServices, servicePath, SERVICE_MODULES } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { RING_SYMBOLS } from './runtime-menu.ts';
 import {
@@ -270,6 +270,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
           file: await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
         })),
     );
+    requireCoupledForServices([...files, ...services], o.dsp);
     const options = {
       ...(o.project ? { syx: resolveInputs(device, FIRMWARE[device]).syx } : {}),
       ...rest,
