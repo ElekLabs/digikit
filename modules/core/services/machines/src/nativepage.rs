@@ -4,7 +4,7 @@
 use crate::info;
 use dkneeds::keys::name_hash;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::mem::{iw, rd32, FwMem};
+use dkrt_abi::mem::{iw, rd32};
 use dkrt_sdk::*;
 
 pub const KIND: u32 = records::KIND_NATIVE_PAGE;

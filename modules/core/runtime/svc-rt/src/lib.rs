@@ -100,6 +100,9 @@ impl CoreApi for ImportCore {
     unsafe fn module_name(&self, owner: u8) -> *const u8 {
         dkc_module_name(owner)
     }
+    unsafe fn module_of(&self, ctx: *const u8) -> u8 {
+        dkc_module_of(ctx)
+    }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         dkc_settings_get(
             key.as_ptr(),

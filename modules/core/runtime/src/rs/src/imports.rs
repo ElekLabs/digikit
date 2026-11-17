@@ -119,27 +119,12 @@ import_table! {
     ("dk_hash32_update", imp_hash32_update),
     ("dk_hash32_finish", imp_hash32_finish),
     ("dk_intro_take", imp_intro_take),
-    ("dk_module_ctx_add_machine", collect::dk_module_ctx_add_machine),
-    ("dk_module_ctx_add_fx", collect::dk_module_ctx_add_fx),
     ("dk_record_add", collect::dk_record_add),
     ("dk_service_declare_kind", collect::dk_service_declare_kind),
     ("dk_service_declare_slot", collect::dk_service_declare_slot),
     ("dk_service_declare_hook", collect::dk_service_declare_hook),
     ("dk_service_declare_export", collect::dk_service_declare_export),
     ("dk_service_declare_resource", collect::dk_service_declare_resource),
-    ("dk_machine_add_page", collect::dk_machine_add_page),
-    ("dk_fx_add_page", collect::dk_fx_add_page),
-    ("dk_page_add_param", collect::dk_page_add_param),
-    ("dk_page_add_fx_param", collect::dk_page_add_fx_param),
-    ("dk_param_range", collect::dk_param_range),
-    ("dk_param_glyph", collect::dk_param_glyph),
-    ("dk_param_latched", collect::dk_param_latched),
-    ("dk_param_on_click", collect::dk_param_on_click),
-    ("dk_page_canvas", collect::dk_page_canvas),
-    ("dk_page_bind", collect::dk_page_bind),
-    ("dk_page_bind_local", collect::dk_page_bind_local),
-    ("dk_fx_routes", collect::dk_fx_routes),
-    ("dk_fx_mix", collect::dk_fx_mix),
     ("dk_sample_pool_open", crate::handlers::exports::dk_sample_pool_open),
     ("dk_sample_pool_add", crate::handlers::exports::dk_sample_pool_add),
     ("dk_sample_pool_clear", crate::handlers::exports::dk_sample_pool_clear),
@@ -200,27 +185,12 @@ const _: dkrt_sdk::api::DkHash32InitFn = imp_hash32_init;
 const _: dkrt_sdk::api::DkHash32UpdateFn = imp_hash32_update;
 const _: dkrt_sdk::api::DkHash32FinishFn = imp_hash32_finish;
 const _: dkrt_sdk::api::DkIntroTakeFn = imp_intro_take;
-const _: dkrt_sdk::api::DkModuleCtxAddMachineFn = collect::dk_module_ctx_add_machine;
-const _: dkrt_sdk::api::DkModuleCtxAddFxFn = collect::dk_module_ctx_add_fx;
-const _: dkrt_sdk::api::DkMachineAddPageFn = collect::dk_machine_add_page;
-const _: dkrt_sdk::api::DkFxAddPageFn = collect::dk_fx_add_page;
-const _: dkrt_sdk::api::DkPageAddParamFn = collect::dk_page_add_param;
-const _: dkrt_sdk::api::DkPageAddFxParamFn = collect::dk_page_add_fx_param;
-const _: dkrt_sdk::api::DkParamRangeFn = collect::dk_param_range;
-const _: dkrt_sdk::api::DkParamGlyphFn = collect::dk_param_glyph;
-const _: dkrt_sdk::api::DkParamLatchedFn = collect::dk_param_latched;
-const _: dkrt_sdk::api::DkParamOnClickFn = collect::dk_param_on_click;
-const _: dkrt_sdk::api::DkPageCanvasFn = collect::dk_page_canvas;
-const _: dkrt_sdk::api::DkPageBindFn = collect::dk_page_bind;
-const _: dkrt_sdk::api::DkPageBindLocalFn = collect::dk_page_bind_local;
-const _: dkrt_sdk::api::DkFxRoutesFn = collect::dk_fx_routes;
 const _: dkrt_sdk::api::DkRecordAddFn = collect::dk_record_add;
 const _: dkrt_sdk::api::DkServiceDeclareKindFn = collect::dk_service_declare_kind;
 const _: dkrt_sdk::api::DkServiceDeclareSlotFn = collect::dk_service_declare_slot;
 const _: dkrt_sdk::api::DkServiceDeclareHookFn = collect::dk_service_declare_hook;
 const _: dkrt_sdk::api::DkServiceDeclareExportFn = collect::dk_service_declare_export;
 const _: dkrt_sdk::api::DkServiceDeclareResourceFn = collect::dk_service_declare_resource;
-const _: dkrt_sdk::api::DkFxMixFn = collect::dk_fx_mix;
 const _: dkrt_sdk::api::DkSamplePoolOpenFn = crate::handlers::exports::dk_sample_pool_open;
 const _: dkrt_sdk::api::DkSamplePoolAddFn = crate::handlers::exports::dk_sample_pool_add;
 const _: dkrt_sdk::api::DkSamplePoolClearFn = crate::handlers::exports::dk_sample_pool_clear;

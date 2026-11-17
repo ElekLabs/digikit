@@ -51,6 +51,10 @@ pub mod shims {
         REAL_CORE.module_name(owner)
     }
     #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_module_of(ctx: *const u8) -> u8 {
+        REAL_CORE.module_of(ctx)
+    }
+    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_settings_get(key: *const u8, key_len: u32, out: *mut u8, out_len: u32) -> i32 {
         REAL_CORE.settings_get(core::slice::from_raw_parts(key, key_len as usize), core::slice::from_raw_parts_mut(out, out_len as usize))
     }

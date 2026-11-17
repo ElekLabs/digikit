@@ -1,7 +1,7 @@
 //! Host tests of the `lfo` service through the runtime (the crate `dkrt-svc-lfo` has its own over `FakeCore`): the proof that a kind the registry, the collector, the loader, dkneeds and patchkit do not name works end to end
 //! (R7): a fixture's record goes through `dk_record_add`'s collector, the `register` section, the registry walkers and the planner.
 use super::exports::{owner_of, shape, used, Lfo, MAX_SHAPES, SAMPLES};
-use crate::collect::{self, Collect, KeysCopy, Plan, Profile};
+use crate::collect::Collect;
 use super::tests::LOCK;
 use crate::plan::{self, Env};
 use crate::registry;
@@ -9,28 +9,12 @@ use dkneeds::keys::{write_table, KeyGroup, Keys, Table};
 use crate::core_api::RealCore;
 use crate::svc_rows;
 use dkrt_abi::plan::{Reason, Verdict};
-use dkrt_abi::service::ServiceRow;
+use dkrt_abi::service::{RecordSink, ServiceRow};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::records::{KIND_LFO_SHAPE, KINDS_LFO, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
 use std::vec;
 use std::vec::Vec;
-
-const DT2: Profile = Profile {
-    device: 1,
-    pages: false,
-    slot_base: 0,
-    clone_of: 0,
-    level: 10,
-    own_dsp: false,
-    tune_code: 0xca,
-    tune_slot: 0,
-    level_code: 0xd1,
-    level_knob: 7,
-    nslots: 6,
-    slots: [1, 2, 4, 5, 6, 7, 0, 0],
-    tpl: [0xcc, 0xd1, 0x47, 0x32, 0xca, 0xcb],
-};
 
 /// The body of a shape record: the id, then the 32 samples (a ramp from `from`), big-endian.
 fn body(id: u32, from: i16) -> Vec<u8> {
@@ -41,18 +25,22 @@ fn body(id: u32, from: i16) -> Vec<u8> {
     b
 }
 
-/// What a fixture module's `init` does: `dk_record_add` for each shape; then the commit lowers the collection to a `register` section.
+/// What a fixture module's `init` does: `dk_record_add` for each shape; then the commit appends them to the `register` section.
 fn section(shapes: &[(u32, i16)]) -> Vec<u8> {
     let mut c = Collect::new();
     for (id, from) in shapes {
         let b = body(*id, *from);
         assert_eq!(c.add_record(KIND_LFO_SHAPE, b.as_ptr(), b.len() as u32), OK);
     }
-    let keys = KeysCopy::empty();
-    let mut plan = Plan::new();
-    let size = collect::lower(&c, &DT2, &keys, &[false; limits::MACHINE_ROWS], 0x1000, core::ptr::null_mut(), 0, &mut plan).unwrap();
-    let mut buf = vec![0u8; size];
-    collect::lower(&c, &DT2, &keys, &[false; limits::MACHINE_ROWS], 0x1000, buf.as_mut_ptr(), size, &mut plan).unwrap();
+    // the commit appends the generic records to the block the services write, behind the header (magic, version, device, count)
+    let mut sink = RecordSink::measure();
+    c.write_generic(&mut sink);
+    let mut buf = vec![0u8; sink.at];
+    let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
+    c.write_generic(&mut out);
+    for (at, word) in [(0, 0x444b_5247u32), (4, 1), (8, 1), (12, out.count)] {
+        buf[at..at + 4].copy_from_slice(&word.to_be_bytes());
+    }
     buf
 }
 

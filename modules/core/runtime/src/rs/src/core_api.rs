@@ -64,6 +64,12 @@ impl CoreApi for RealCore {
     unsafe fn module_name(&self, owner: u8) -> *const u8 {
         crate::st().modules[owner as usize - 1].name.as_ptr()
     }
+    unsafe fn module_of(&self, ctx: *const u8) -> u8 {
+        match crate::entry::own_rec(ctx as *mut u8) {
+            Some(rec) => (rec + 1) as u8,
+            None => 0,
+        }
+    }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         settings::get(key, out)
     }

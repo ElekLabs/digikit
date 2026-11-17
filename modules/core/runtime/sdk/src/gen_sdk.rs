@@ -635,7 +635,7 @@ pub mod api {
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`, and not provided by a service file.
-    pub const BUILTIN_NAMES: [&str; 83] = [
+    pub const BUILTIN_NAMES: [&str; 68] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -682,27 +682,12 @@ pub mod api {
         "dk_hash32_update",
         "dk_hash32_finish",
         "dk_intro_take",
-        "dk_module_ctx_add_machine",
-        "dk_module_ctx_add_fx",
         "dk_record_add",
         "dk_service_declare_kind",
         "dk_service_declare_slot",
         "dk_service_declare_hook",
         "dk_service_declare_export",
         "dk_service_declare_resource",
-        "dk_machine_add_page",
-        "dk_fx_add_page",
-        "dk_page_add_param",
-        "dk_page_add_fx_param",
-        "dk_param_range",
-        "dk_param_glyph",
-        "dk_param_latched",
-        "dk_param_on_click",
-        "dk_page_canvas",
-        "dk_page_bind",
-        "dk_page_bind_local",
-        "dk_fx_routes",
-        "dk_fx_mix",
         "dk_sample_pool_open",
         "dk_sample_pool_add",
         "dk_sample_pool_clear",

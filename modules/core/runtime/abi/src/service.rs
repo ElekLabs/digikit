@@ -10,12 +10,11 @@
 //! - the DSP section parts it owns: `dsp_check_*`, `dsp_admit`, `dsp_claim`, `dsp_release`, `dsp_clear`, `dsp_row_step`
 //!   (the DSP loader in `dsp/mod.rs` keeps the area, the row table and the state machine);
 //! - capacity counts (`caps`), the module behind a fault site (`attribute`), the guard's state of a machine type (`guard_state`);
-//! - the declarations of a module's DSP rows (`has_voice`, `declare_voice`, `declare_fx`) and `on_loaded`;
+//! - `on_loaded` (every row of a module is in the DSP);
 //! - the module lifecycle: `module_begin` before a module's `init`, `module_commit` after it (two passes over a `RecordSink`), and `remove`;
 //! - the boot: `settle`, once, after the services are loaded and before the first module, with the machine keys of the boot's selection.
 use crate::core_api::CoreApi;
 use crate::dsp::{DspSec, Job};
-use crate::registry::ApplyArgs;
 use core::ffi::c_void;
 use dkrt_sdk::*;
 
@@ -39,7 +38,6 @@ const fn svc_abi() -> u32 {
         size_of::<GuardState>(),
         size_of::<DeclItem>(),
         size_of::<Declare>(),
-        size_of::<ApplyArgs>(),
         size_of::<crate::registry::RegState>(),
         size_of::<Job>(),
         size_of::<DspSec>(),
@@ -114,13 +112,11 @@ pub struct CheckCtx {
 
 /// What the registry walker gives `apply`: the (checked) section of module record `owner - 1`, loaded at `base`.
 #[repr(C)]
-pub struct ApplyCtx<'a> {
+pub struct ApplyCtx {
     pub owner: u8,
     pub reg: *const u8,
     pub base: u32,
     pub inf: *const u32,
-    /// The callback arguments the commit set (`registry::set_args`).
-    pub args: Option<&'a ApplyArgs>,
 }
 
 /// What `dsp::reserve` gives `dsp_claim`: the module's range is placed at `base` (byte address), and the states of its voices and
@@ -470,32 +466,6 @@ pub trait Service<C: CoreApi> {
         0
     }
 
-    /// Did module `rec` claim a voice row for machine type `ty`?
-    unsafe fn has_voice(core: &C, rec: usize, ty: u32) -> bool {
-        false
-    }
-    /// The ranges and latch mask `init` declared for the voice of type `ty` (`has_voice` is true). `Some(E_*)` or `Some(OK)` if this
-    /// service owns the voice.
-    unsafe fn declare_voice(
-        core: &C,
-        rec: usize,
-        ty: u32,
-        rng: [u32; 8],
-        latched: u32,
-    ) -> Option<i32> {
-        None
-    }
-    /// The route flags and defaults `init` declared for effect record `ordinal` of module `rec`; `Some(false)`: no such effect.
-    unsafe fn declare_fx(
-        core: &C,
-        rec: usize,
-        ordinal: u32,
-        flags: Option<u32>,
-        par: Option<[u32; 8]>,
-    ) -> Option<bool> {
-        None
-    }
-
     /// The `init` of module record `rec` is about to run: forget what an earlier module collected. Called on every service that is loaded.
     unsafe fn module_begin(core: &C, rec: usize) {}
     /// The commit of module `rec`, after its `init` (`commit_phase`: a `PREPARE` pass, then a `WRITE` pass). A service checks what its builder calls collected, writes its
@@ -569,11 +539,6 @@ pub struct ServiceRow {
     tick: unsafe extern "C" fn(*const c_void, u32),
     fx_entry: unsafe extern "C" fn(*const c_void, u32, *mut DkrtFx) -> i32,
     machine_types_of: unsafe extern "C" fn(*const c_void, u8, *mut u8) -> u32,
-    has_voice: unsafe extern "C" fn(*const c_void, usize, u32) -> bool,
-    declare_voice:
-        unsafe extern "C" fn(*const c_void, usize, u32, *const u32, u32, *mut i32) -> bool,
-    declare_fx:
-        unsafe extern "C" fn(*const c_void, usize, u32, *const u32, *const u32, *mut bool) -> bool,
     dsp_check_sections: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
     dsp_check_rows: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
     dsp_check_types: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
@@ -700,65 +665,6 @@ mod thunk {
     ) -> u32 {
         S::machine_types_of(&*(core as *const C), owner, &mut *(out as *mut [u8; 8]))
     }
-    pub unsafe extern "C" fn has_voice<C: CoreApi, S: Service<C>>(
-        core: *const c_void,
-        rec: usize,
-        ty: u32,
-    ) -> bool {
-        S::has_voice(&*(core as *const C), rec, ty)
-    }
-    /// `rng` points at eight words; `out` receives the result when the service owns the voice.
-    pub unsafe extern "C" fn declare_voice<C: CoreApi, S: Service<C>>(
-        core: *const c_void,
-        rec: usize,
-        ty: u32,
-        rng: *const u32,
-        latched: u32,
-        out: *mut i32,
-    ) -> bool {
-        let mut r = [0u32; 8];
-        let mut i = 0;
-        while i < 8 {
-            r[i] = *rng.add(i);
-            i += 1;
-        }
-        match S::declare_voice(&*(core as *const C), rec, ty, r, latched) {
-            Some(v) => {
-                *out = v;
-                true
-            }
-            None => false,
-        }
-    }
-    /// `flags` is null for `None`, else a pointer to one word; `par` is null for `None`, else a pointer to eight words.
-    pub unsafe extern "C" fn declare_fx<C: CoreApi, S: Service<C>>(
-        core: *const c_void,
-        rec: usize,
-        ordinal: u32,
-        flags: *const u32,
-        par: *const u32,
-        out: *mut bool,
-    ) -> bool {
-        let f = if flags.is_null() { None } else { Some(*flags) };
-        let p = if par.is_null() {
-            None
-        } else {
-            let mut r = [0u32; 8];
-            let mut i = 0;
-            while i < 8 {
-                r[i] = *par.add(i);
-                i += 1;
-            }
-            Some(r)
-        };
-        match S::declare_fx(&*(core as *const C), rec, ordinal, f, p) {
-            Some(v) => {
-                *out = v;
-                true
-            }
-            None => false,
-        }
-    }
     pub unsafe extern "C" fn dsp_check_sections<C: CoreApi, S: Service<C>>(
         core: *const c_void,
         sec: *const DspSec,
@@ -845,9 +751,6 @@ impl ServiceRow {
             tick: thunk::tick::<C, S>,
             fx_entry: thunk::fx_entry::<C, S>,
             machine_types_of: thunk::machine_types_of::<C, S>,
-            has_voice: thunk::has_voice::<C, S>,
-            declare_voice: thunk::declare_voice::<C, S>,
-            declare_fx: thunk::declare_fx::<C, S>,
             dsp_check_sections: thunk::dsp_check_sections::<C, S>,
             dsp_check_rows: thunk::dsp_check_rows::<C, S>,
             dsp_check_types: thunk::dsp_check_types::<C, S>,
@@ -1167,65 +1070,6 @@ impl ServiceTable {
             i += 1;
         }
         E_NOT_FOUND
-    }
-    #[inline]
-    pub unsafe fn has_voice(&self, rec: usize, ty: u32) -> bool {
-        let mut i = 0;
-        while i < self.rows.len() {
-            if (self.row(i).has_voice)(self.core, rec, ty) {
-                return true;
-            }
-            i += 1;
-        }
-        false
-    }
-    #[inline]
-    pub unsafe fn declare_voice(
-        &self,
-        rec: usize,
-        ty: u32,
-        rng: [u32; 8],
-        latched: u32,
-    ) -> Option<i32> {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let mut r = 0i32;
-            if (self.row(i).declare_voice)(self.core, rec, ty, rng.as_ptr(), latched, &mut r) {
-                return Some(r);
-            }
-            i += 1;
-        }
-        None
-    }
-    #[inline]
-    pub unsafe fn declare_fx(
-        &self,
-        rec: usize,
-        ordinal: u32,
-        flags: Option<u32>,
-        par: Option<[u32; 8]>,
-    ) -> Option<bool> {
-        let fl = flags.unwrap_or(0);
-        let fp = if flags.is_some() {
-            &fl as *const u32
-        } else {
-            core::ptr::null()
-        };
-        let pv = par.unwrap_or([0; 8]);
-        let pp = if par.is_some() {
-            pv.as_ptr()
-        } else {
-            core::ptr::null()
-        };
-        let mut i = 0;
-        while i < self.rows.len() {
-            let mut r = false;
-            if (self.row(i).declare_fx)(self.core, rec, ordinal, fp, pp, &mut r) {
-                return Some(r);
-            }
-            i += 1;
-        }
-        None
     }
     #[inline]
     pub unsafe fn dsp_check_sections(&self, sec: &DspSec) -> i32 {

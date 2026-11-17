@@ -9,7 +9,7 @@
 //! - the DSP section parts it owns: `dsp_check_*`, `dsp_admit`, `dsp_claim`, `dsp_release`, `dsp_clear`, `dsp_row_step`
 //!   (the DSP loader in `dsp/mod.rs` keeps the area, the row table and the state machine);
 //! - capacity counts (`cap`, per capacity kind), the module behind a fault site (`attribute`), the guard's state of a machine type (`guard_state`);
-//! - the declarations of a module's DSP rows (`has_voice`, `declare_voice`, `declare_fx`) and `on_loaded`.
+//! - `on_loaded` (every row of a module is in the DSP).
 pub use dkrt_abi::service::*;
 
 /// The table over the runtime's own core.
@@ -46,9 +46,7 @@ pub mod exports {
     pub unsafe fn fx_entry(index: u32, out: &mut dkrt_sdk::DkrtFx) -> i32 {
         super::services().fx_entry(index, out)
     }
-    /// Host tests only: the page set of the machines service, and its row as a loaded service file has it (`svc_rows::test_machines`).
-    #[cfg(test)]
-    pub(crate) use dkrt_svc_machines::nativepage::PageSet;
+    /// Host tests only: the machines service's row as a loaded service file has it (`svc_rows::test_machines`).
     #[cfg(test)]
     pub(crate) fn machines_row() -> &'static dkrt_abi::service::ServiceRow {
         static ROW: dkrt_abi::service::ServiceRow =

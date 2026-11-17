@@ -27,6 +27,8 @@ macro_rules! core_imports {
             fn dkc_device_id() -> u32;
             // ---- the module table
             fn dkc_module_name(owner: u8) -> *const u8;
+            // The module whose context `ctx` is, when it is the code running now: record index + 1, else 0.
+            fn dkc_module_of(ctx: *const u8) -> u8;
             // ---- settings
             fn dkc_settings_get(key: *const u8, key_len: u32, out: *mut u8, out_len: u32) -> i32;
             fn dkc_settings_put(key: *const u8, key_len: u32, value: *const u8, value_len: u32) -> i32;

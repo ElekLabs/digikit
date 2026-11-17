@@ -6,7 +6,6 @@
 //!
 //! The DSP side is a table (`dyndsp_info`) that the test builds: the device, the area and the symbols the section imports.
 use crate::cleanup_tests as ct;
-use crate::collect;
 use crate::dsp::{self, Job, INFO_MAGIC, I_AREA, I_AREA_BYTES, I_DEVICE, I_IMPORTS, I_MAGIC, I_NIMPORT, I_VFREE, I_VROWS, L2_BYTE_BASE};
 use crate::test_lock::LOCK;
 use dkneeds::{fx, keys::Keys, machine};
@@ -89,6 +88,13 @@ fn imports_of(f: &[u8]) -> Vec<String> {
         .collect()
 }
 
+/// The machine keys of the header table of a whole `.dkm` file (the runtime's reader of the table: the boot's `loader::machine_keys`); their count.
+fn machine_keys_of_file(f: &[u8], out: &mut [u32; 8]) -> usize {
+    let be = |at: usize| u32::from_be_bytes([f[at], f[at + 1], f[at + 2], f[at + 3]]) as usize;
+    let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
+    crate::loader::machine_keys(&f[off..off + len], out)
+}
+
 /// Run the runtime's check of the DSP section of `f` on a DSP of `device`: the result code and what the check found.
 fn check(f: &[u8], device: u32) -> (i32, Job) {
     let _lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -99,7 +105,7 @@ fn check(f: &[u8], device: u32) -> (i32, Job) {
     let (off, size) = section(f);
     // the boot's type assignment for the machines of the header table (`plan` does it before the loads)
     let mut keys = [0u32; 8];
-    let n = collect::machine_keys(f, &mut keys);
+    let n = machine_keys_of_file(f, &mut keys);
     unsafe {
         let _info = ct::VoiceInfoGuard::set(info.as_ptr());
         dkrt_svc_machines::assign::seed_for_test(&keys[..n], dkrt_abi::core_api::CoreApi::boot_index(&crate::core_api::REAL_CORE));
@@ -206,7 +212,7 @@ fn the_machine_fixture_passes_the_check_and_reads_back_what_it_declares() {
         assert!(keys.has_key(dkneeds::KIND_MACHINE, word(dkneeds::VOICE_TYPE)), "{device}");
         // the runtime's own reader of the table finds the same machine key
         let mut found = [0u32; 8];
-        assert_eq!(collect::machine_keys(&f, &mut found), 1, "{device}");
+        assert_eq!(machine_keys_of_file(&f, &mut found), 1, "{device}");
         assert_eq!(found[0], word(dkneeds::VOICE_TYPE), "{device}");
         assert_eq!(keys.machine_rows(), declared_use(&manifest, device, "machine_rows"), "{device}");
         assert_eq!(keys.param_rows(), declared_use(&manifest, device, "param_rows"), "{device}");

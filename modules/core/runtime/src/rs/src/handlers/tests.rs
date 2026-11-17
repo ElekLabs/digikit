@@ -19,7 +19,6 @@ pub(crate) enum Call {
     Apply { svc: u8, owner: u8, kind: u32, body: Vec<u8> },
     Remove { svc: u8, owner: u8 },
     Attribute { svc: u8, site: u32, id: u32 },
-    DeclareVoice { svc: u8, rec: usize, ty: u32 },
     OnLoaded { svc: u8, rec: usize },
     Tick { svc: u8, phase: u32 },
 }
@@ -114,15 +113,6 @@ impl<const N: u8, C: CoreApi> Service<C> for Fake<N> {
             OK
         } else {
             E_NOT_FOUND
-        }
-    }
-
-    unsafe fn declare_voice(_: &C, rec: usize, ty: u32, _: [u32; 8], _: u32) -> Option<i32> {
-        log().push(Call::DeclareVoice { svc: N, rec, ty });
-        if ty == N as u32 {
-            Some(OK)
-        } else {
-            None
         }
     }
 }
@@ -272,9 +262,6 @@ fn attribution_asks_the_services_in_order_until_one_answers() {
             vec![Call::Attribute { svc: 1, site: 2, id: 7 }, Call::Attribute { svc: 2, site: 2, id: 7 }]
         );
         assert_eq!(TWO.attribute(9, 7), None);
-        reset();
-        assert_eq!(TWO.declare_voice(0, 1, [0; 8], 0), Some(OK));
-        assert_eq!(*log(), vec![Call::DeclareVoice { svc: 1, rec: 0, ty: 1 }]);
     }
 }
 

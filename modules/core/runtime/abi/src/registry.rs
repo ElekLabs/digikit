@@ -1,4 +1,4 @@
-//! The registry's shared types: the words of `dynreg_info`, the ownership and string state of the reserved rows (`RegState`), the callback arguments of a commit
+//! The registry's shared types: the words of `dynreg_info`, the ownership and string state of the reserved rows (`RegState`)
 //! and the walk over a validated `register` section. The machines service owns the object `DKRT_REG`.
 use crate::mem::rd32;
 use dkrt_sdk::*;
@@ -93,14 +93,6 @@ pub struct RegState {
     /// An empty std::string representation (length 0, capacity 0, reference count -1, NUL) for a free machine row.
     pub empty_rep: [u32; 4],
     pub s: Strings,
-}
-
-/// The arguments of the callbacks of the records `apply` is about to write (modules): the k-th ACTION record's `arg` and the k-th
-/// native page record's `arg`. Set by the commit just before `apply`, cleared by it.
-#[repr(C)]
-pub struct ApplyArgs {
-    pub click: [u32; 32],
-    pub native: [u32; 8],
 }
 
 /// Walk the records of a validated section. Calls `f(kind, body)` for each.

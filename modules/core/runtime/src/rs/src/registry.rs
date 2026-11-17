@@ -13,7 +13,6 @@
 //! strings the rows point to live in this module's own state, never in the arena, so unload cannot leave a dangling pointer.
 use crate::handlers::{check_step, services, ApplyCtx, CheckCtx, ServiceTable};
 use crate::rd32;
-use core::ptr::{addr_of, addr_of_mut};
 #[cfg(not(test))]
 use core::ptr::read_volatile;
 use dkrt_sdk::*;
@@ -27,7 +26,7 @@ const MAX_PAGE: usize = limits::PAGE_ROWS;
 const KNOBS: usize = limits::PAGE_KNOBS;
 
 pub(crate) use dkrt_abi::mem::iw;
-pub(crate) use dkrt_abi::registry::{each, w, ApplyArgs};
+pub(crate) use dkrt_abi::registry::{each, w};
 
 extern "C" {
     /// Data symbol of core/dynreg; resolves to 0 when the module is not in the image (`[object] optional`).
@@ -55,59 +54,6 @@ unsafe fn info_table() -> *const u32 {
         return core::ptr::null();
     }
     p
-}
-
-/// The device facts of the builder lowering (`collect::lower`) from `dynreg_info` version 3; None without a registry or with an older table.
-pub unsafe fn profile() -> Option<crate::collect::Profile> {
-    let inf = info();
-    if inf.is_null() || iw(inf, w::VERSION) < 3 {
-        return None;
-    }
-    let mut p = crate::collect::Profile {
-        device: iw(inf, w::DEVICE),
-        pages: iw(inf, w::PG_ROWS) != 0,
-        slot_base: iw(inf, w::SLOT_BASE),
-        clone_of: iw(inf, w::P_CLONE),
-        level: iw(inf, w::P_LEVEL),
-        own_dsp: iw(inf, w::P_OWN) != 0,
-        tune_code: iw(inf, w::P_TUNE),
-        tune_slot: iw(inf, w::P_TUNE_SLOT),
-        level_code: iw(inf, w::P_LEVEL_CODE),
-        level_knob: iw(inf, w::P_LEVEL_KNOB),
-        nslots: iw(inf, w::P_NSLOTS).min(8),
-        slots: [0; 8],
-        tpl: [0; 6],
-    };
-    let mut i = 0;
-    while i < 8 {
-        p.slots[i] = iw(inf, w::P_SLOTS + i);
-        i += 1;
-    }
-    i = 0;
-    while i < 6 {
-        p.tpl[i] = iw(inf, w::P_TPL + i);
-        i += 1;
-    }
-    Some(p)
-}
-
-/// Free reserved machine, parameter and page rows, for the commit of a builder module: each service that counts a kind gives (limit, used).
-pub unsafe fn free_rows() -> Option<crate::collect::Free> {
-    if info().is_null() {
-        return None;
-    }
-    let free = |kind: u8| services().cap(kind).map_or(0, |(limit, used)| limit.saturating_sub(used));
-    Some(crate::collect::Free {
-        machine_rows: free(proto::CAPK_MACHINE_ROWS),
-        param_rows: free(proto::CAPK_PARAM_ROWS),
-        page_rows: free(proto::CAPK_PAGE_ROWS),
-    })
-}
-
-static mut ARGS: Option<ApplyArgs> = None;
-
-pub unsafe fn set_args(a: Option<ApplyArgs>) {
-    *addr_of_mut!(ARGS) = a;
 }
 
 /// Validate the `register` records of a module file. `reg` points into the file (the staging buffer). Nothing is written.
@@ -183,7 +129,7 @@ pub(crate) unsafe fn apply_with(l: ServiceTable, owner: u8, reg: *const u8, size
     if inf.is_null() {
         return E_NO_REGISTRY;
     }
-    let c = ApplyCtx { owner, reg, base, inf, args: (*addr_of!(ARGS)).as_ref() };
+    let c = ApplyCtx { owner, reg, base, inf };
     let mut rc = l.apply(&c);
     if rc == OK {
         // the records that register callbacks and pages, in file order; the first failure stops the walk
@@ -193,7 +139,6 @@ pub(crate) unsafe fn apply_with(l: ServiceTable, owner: u8, reg: *const u8, size
             }
         });
     }
-    *addr_of_mut!(ARGS) = None;
     rc
 }
 

@@ -147,13 +147,12 @@ fn run_check(core: &FakeCore, step: u32, reg: &[u8]) -> i32 {
     unsafe { <Machines as Service<FakeCore>>::check(core, step, &check_ctx(reg, &inf)) }
 }
 
-fn apply_ctx<'a>(reg: &'a [u8], inf: &'a [u32]) -> ApplyCtx<'a> {
+fn apply_ctx(reg: &[u8], inf: &[u32]) -> ApplyCtx {
     ApplyCtx {
         owner: OWNER,
         reg: reg.as_ptr(),
         base: BASE,
         inf: inf.as_ptr(),
-        args: None,
     }
 }
 

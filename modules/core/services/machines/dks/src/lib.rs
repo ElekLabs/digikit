@@ -1,5 +1,5 @@
 //! The `machines` service as a service file (`services/machines.dks`): the crate `dkrt-svc-machines` over the `dkc_*` imports, the hooks of the machine framework (`hooks.rs`),
-//! the click flow's firmware calls and the exports `dk_param_get` and `dk_param_set` (`fw.rs`); the image table `machines_info` is bound by `image::setup`
+//! the click flow's firmware calls and the exports `dk_param_get` and `dk_param_set` (`fw.rs`) and the builder calls of the machines (`builder.rs`); the image table `machines_info` is bound by `image::setup`
 //! (docs/plans/runtime-and-services.md section 13.2, R12-6).
 // a host build (the assembly test of the runtime) has std; the file is `no_std` on the ColdFire
 #![cfg_attr(target_arch = "m68k", no_std)]
@@ -8,6 +8,7 @@
 use dkrt_sdk::records::KINDS_MACHINES;
 use dkrt_svc_machines::records::Machines;
 
+mod builder;
 mod fw;
 mod guard;
 mod hooks;
@@ -36,6 +37,16 @@ dkrt_svc_rt::service!(
     fills = [("frametype", hooks::mf_frametype, dn2)],
     exports = [
         ("dk_param_get", fw::dk_param_get),
-        ("dk_param_set", fw::dk_param_set)
+        ("dk_param_set", fw::dk_param_set),
+        ("dk_module_ctx_add_machine", builder::dk_module_ctx_add_machine),
+        ("dk_machine_add_page", builder::dk_machine_add_page),
+        ("dk_page_add_param", builder::dk_page_add_param),
+        ("dk_param_range", builder::dk_param_range),
+        ("dk_param_glyph", builder::dk_param_glyph),
+        ("dk_param_latched", builder::dk_param_latched),
+        ("dk_param_on_click", builder::dk_param_on_click),
+        ("dk_page_canvas", builder::dk_page_canvas),
+        ("dk_page_bind", builder::dk_page_bind),
+        ("dk_page_bind_local", builder::dk_page_bind_local)
     ]
 );

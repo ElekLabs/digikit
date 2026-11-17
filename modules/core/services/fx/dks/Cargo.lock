@@ -25,6 +25,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
+ "dkrt-svc-params",
 ]
 
 [[package]]
@@ -34,6 +35,14 @@ dependencies = [
  "dkrt-sdk",
  "dkrt-svc-fx",
  "dkrt-svc-rt",
+]
+
+[[package]]
+name = "dkrt-svc-params"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-sdk",
 ]
 
 [[package]]

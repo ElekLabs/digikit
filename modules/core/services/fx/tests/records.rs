@@ -36,7 +36,6 @@ fn without_effect_pages_a_record_is_refused_and_the_tick_is_silent() {
         reg: core::ptr::null(),
         base: 0,
         inf: core::ptr::null(),
-        args: None,
     };
     unsafe {
         assert_eq!(
@@ -66,12 +65,12 @@ fn a_declared_effect_publishes_its_words_in_order() {
     unsafe {
         // effect ordinal 0 of the module is the claimed row 1; ordinal 1 does not exist
         assert_eq!(
-            <Fx as Service<FakeCore>>::declare_fx(&core, REC, 0, Some(2), Some(par)),
-            Some(true)
+            dkrt_svc_fx::dsp::fx_set_declared(&core, REC, 0, Some(2), Some(par)),
+            true
         );
         assert_eq!(
-            <Fx as Service<FakeCore>>::declare_fx(&core, REC, 1, Some(2), None),
-            Some(false)
+            dkrt_svc_fx::dsp::fx_set_declared(&core, REC, 1, Some(2), None),
+            false
         );
         let d = core.dsp();
         assert_eq!((d.fx_flags[1], d.fx_par[1]), (2, par));

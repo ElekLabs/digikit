@@ -51,6 +51,9 @@ pub trait CoreApi: crate::mem::FwMem {
     // ---- the module table ------------------------------------------------------------------------------------------------
     /// The NUL-terminated id of module record `owner - 1` (`owner` is 1 or more).
     unsafe fn module_name(&self, owner: u8) -> *const u8;
+    /// The record of the module whose context is `ctx`, as record index + 1, when that module is the code running now (a call with another module's context, or
+    /// from no module, gives 0). The services use it for the handle a module opens.
+    unsafe fn module_of(&self, ctx: *const u8) -> u8;
 
     // ---- settings --------------------------------------------------------------------------------------------------------
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32;

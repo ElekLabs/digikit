@@ -9,7 +9,7 @@ use dkrt_abi::mem::{cstr_len, iw, rd, rd32, wr};
 use dkrt_abi::registry::{each, w, RegState, MACH_TEXT};
 use dkrt_abi::service::{
     check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, RowWrite, Service,
-    SettleCtx,
+    ModuleCommitCtx, SettleCtx,
 };
 use dkrt_sdk::records::{
     KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
@@ -132,7 +132,16 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn remove(core: &C, owner: u8) {
+        crate::build::end();
         remove(core, owner)
+    }
+
+    unsafe fn module_begin(_core: &C, rec: usize) {
+        crate::build::begin(rec)
+    }
+
+    unsafe fn module_commit(core: &C, rec: usize, c: &ModuleCommitCtx) -> i32 {
+        crate::build::commit(core, rec, c)
     }
 
     unsafe fn tick(core: &C, phase: u32) {
@@ -172,20 +181,6 @@ impl<C: CoreApi> Service<C> for Machines {
             faults: core.guard_faults(ty),
             disabled: core.guard_disabled(ty),
         })
-    }
-
-    unsafe fn has_voice(core: &C, rec: usize, ty: u32) -> bool {
-        dsp::voice_row(core, rec, ty).is_some()
-    }
-
-    unsafe fn declare_voice(
-        core: &C,
-        rec: usize,
-        ty: u32,
-        rng: [u32; 8],
-        latched: u32,
-    ) -> Option<i32> {
-        dsp::voice_row(core, rec, ty).map(|row| dsp::set_declared(core, row, rng, latched))
     }
 
     unsafe fn dsp_check_sections(core: &C, sec: &DspSec) -> i32 {
@@ -558,7 +553,7 @@ unsafe fn ck_rows<C: CoreApi>(core: &C, c: &CheckCtx) -> i32 {
 
 /// Fill the reserved parameter, action, page and machine rows from the (checked) records.
 unsafe fn apply<C: CoreApi>(core: &C, ctx: &ApplyCtx) -> i32 {
-    let (owner, reg, base, inf, args) = (ctx.owner, ctx.reg, ctx.base, ctx.inf, ctx.args);
+    let (owner, reg, base, inf, args) = (ctx.owner, ctx.reg, ctx.base, ctx.inf, crate::build::args());
     let s = rstate();
     // parameters first: their codes are what the machines' knobs name
     let mut codes = [0u32; MAX_PARAM];
@@ -754,7 +749,7 @@ unsafe fn apply_record<C: CoreApi>(core: &C, kind: u32, b: *const u8, c: &ApplyC
     if !nativepage::is_kind(kind) {
         return OK;
     }
-    let (reg, base, args) = (c.reg, c.base, c.args);
+    let (reg, base, args) = (c.reg, c.base, crate::build::args());
     let st = &mut *addr_of_mut!(APPLIED);
     let (codes, np, ni) = (&st.codes, st.np, st.ni);
     let mut rc = OK;

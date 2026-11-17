@@ -58,7 +58,6 @@ fn apply(core: &FakeCore, owner: u8, kind: u32, body: &[u8]) -> i32 {
         reg: core::ptr::null(),
         base: 0,
         inf: core::ptr::null(),
-        args: None,
     };
     unsafe { <Lfo as Service<FakeCore>>::apply_record(core, kind, body.as_ptr(), &c) }
 }

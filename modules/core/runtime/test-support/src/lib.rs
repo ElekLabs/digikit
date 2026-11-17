@@ -109,6 +109,8 @@ pub struct FakeCore {
     pub mem: RefCell<std::collections::BTreeMap<u32, u32>>,
     pub calls: RefCell<Vec<Call>>,
     pub source: Cell<u8>,
+    /// The module `CoreApi::module_of` names for any context: record index + 1 of the code that runs (0: none).
+    pub running: Cell<u8>,
     /// The selection index of the module being loaded (`CoreApi::boot_index`).
     pub boot_index: Cell<u32>,
     /// The map `CoreApi::legacy_type_map` hands out.
@@ -141,6 +143,7 @@ impl FakeCore {
             mem: RefCell::new(std::collections::BTreeMap::new()),
             calls: RefCell::new(Vec::new()),
             source: Cell::new(0),
+            running: Cell::new(0),
             boot_index: Cell::new(u32::MAX),
             legacy_map: Cell::new([0; dkrt_sdk::sel::MAP_N]),
             settings: RefCell::new(Vec::new()),
@@ -251,6 +254,9 @@ impl CoreApi for FakeCore {
     }
     unsafe fn module_name(&self, _owner: u8) -> *const u8 {
         self.name.as_ptr()
+    }
+    unsafe fn module_of(&self, _ctx: *const u8) -> u8 {
+        self.running.get()
     }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         for (k, v) in self.settings.borrow().iter() {
