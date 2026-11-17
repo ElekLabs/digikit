@@ -663,7 +663,8 @@ export async function pinRigFile(module: string, file: string, o: RunOptions = {
     const devices: string[] = isFx
       ? ['fx']
       : (c.device ?? [...DEVICES]).filter((d): d is Device => (DEVICES as readonly string[]).includes(d));
-    if (devices.length !== 1) throw new Error(`${c.name}: a machine case with a same-as check names exactly one device`);
+    if (devices.length !== 1)
+      throw new Error(`${c.name}: a machine case with a same-as check names exactly one device`);
     try {
       const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, devices[0] as Device, c, dir, o);
       if (t.failure !== null) throw new Error(t.failure);

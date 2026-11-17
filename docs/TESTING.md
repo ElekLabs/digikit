@@ -60,7 +60,7 @@ iteration checks do not replace this gate. `mise run test:plan` explains task se
 | Framework module, runtime | `core/runtime:rust-tests` for runtime units, `core/runtime:test-assembly` for the seams to the service files and the image; an acceptance owner's `test-device` for iteration (runtime owners are listed below). Use `test:plan` for affected consumers. The default gate runs every owner's `test-device` and `test-conformance` and replays unchanged ones from the cache. |
 | SHARC core or transpiler | regenerate the cores, then `test:changed` |
 | Emulator crates | `test:changed`; the crates' Rust tests |
-| PCM pins (`tests/scenarios/*.json`, device-test `pcmSha256`, rig pins and fingerprints) | from the signal report (section "PCM pins"); a change in how a module sounds goes to Em |
+| PCM pins (`tests/scenarios/*.json`, device-test `<case>.pcm.json` pins, rig pins and fingerprints) | from the signal report (section "PCM pins"); a change in how a module sounds goes to Em |
 
 ## Commands
 
@@ -608,7 +608,7 @@ and a table named like the kind. Kinds:
 
 | Kind | Checks |
 | --- | --- |
-| `equiv` | Machine, parameter, page and voice rows of a boot with set S equal those of a boot of no module (apart from S's own machines); the note is audible, and the TypeScript cells pin its PCM by `pcmSha256` (Em approves a new value). |
+| `equiv` | Machine, parameter, page and voice rows of a boot with set S equal those of a boot of no module (apart from S's own machines); the note is audible, and the TypeScript cells pin its PCM with a `<case>.pcm.json` fingerprint pin ("PCM pins"; a change in how the note sounds goes to Em). |
 | `upload` | Module upload over USB SysEx: only `rust` is Python. The other parts are in `modules/core/runtime/tests/upload.device.test.ts` and `upload-faults.device.test.ts`. |
 | `menu` | Ticking a set in SETTINGS > DIGIKIT > MODULES and restarting loads the set: the machine is in the list, claims its voice row and plays an audible note. |
 | `pages` | Parameter pages of a machine on track 1: an added machine has one SRC page (no page dots, no sample view) and the stock sample machines keep two. |
@@ -1210,7 +1210,7 @@ To clear the Nx cache: `pnpm nx:pilot reset`.
 
 ## PCM pins
 
-A PCM pin (`tests/scenarios/*.json`, the device-test `pcmSha256` pins, the rig pins) is set or changed from a numeric report of the captured signal (pitch against the expected note, crest factor, harmonics, level envelope, onset, stereo match), with the WAV kept for listening; never from a hash alone. Claude approves when the report matches what the fixture should produce; a change in how a module sounds goes to Em. The harness keeps the capture: a pending or changed device pin prints its artifacts directory, which holds `run.wav` (stereo float32, 48 kHz). The report for a pin names the expected values (for `test/sine` at note 60: 261.63 Hz, crest 1.414, no harmonics, a steady level) beside the measured ones. Fingerprint pins (a numeric fingerprint with tolerances compared by a tool, replacing the hashes) are written by the pin CLI of `@digi/sharc-rig-kit` (docs/plans/test-architecture.md T2).
+A PCM pin (`tests/scenarios/*.json`, the device pins `<case>.pcm.json`, the rig pins) is set or changed from a numeric report of the captured signal (pitch against the expected note, crest factor, harmonics, level envelope, onset, stereo match), with the WAV kept for listening; never from a hash alone. Claude approves when the report matches what the fixture should produce; a change in how a module sounds goes to Em. The harness keeps the capture: a pending or changed device pin prints its artifacts directory, which holds `run.wav` (stereo float32, 48 kHz). The report for a pin names the expected values (for `test/sine` at note 60: 261.63 Hz, crest 1.414, no harmonics, a steady level) beside the measured ones. Fingerprint pins (a numeric fingerprint with tolerances compared by a tool, replacing the hashes) are written by the pin CLI of `@digi/sharc-rig-kit` (docs/plans/test-architecture.md T2).
 
 `tests/sharc/integration/test_sharc_golden.py`
 hashes six SHARC core outputs: a refactor keeps them; an intended change updates them with
@@ -1252,14 +1252,14 @@ the sound within tolerance passes without a re-pin.
 
 **Device pins**: `modules/core/adapters/dynreg/tests/pins/<case>.pcm.json` (`pcmPinFile`), checked by `defineEquiv` over 12000 stereo frames
 from the onset (`checkCapture`). Cases of a plain sine (`sine: { note }`) also assert properties that hold whatever the pin says:
-pitch within 5 cents of the note, crest factor within 1 % of sqrt(2), harmonics under -60 dB, level steady within 0.5 dB.
+pitch within 5 cents of the note, crest factor of the second half of the window within 1 % of sqrt(2) (`crest_settled`: the amplitude of the DT2 sine starts 1.7 % high and settles within about 0.15 s, which the whole-window crest includes), harmonics under -60 dB, level steady within 0.5 dB.
 
 **Failure and report**: a failed or missing pin prints the differences and the full report, expected beside measured (format, onset, peak,
 stereo, level range, loudest bands, pitch, crest factor, harmonics), and writes `<case>.plot.png` (the window and the pin's band curve) and
 `<case>.window.wav` beside the capture (`out/runs/...` of the case for a device pin, `out/rig/<key>/plot.png` and `out.wav` for a rig pin) for listening.
 
-**Approving a pin**: read the report; Claude approves a pin that states the fixture's own facts (for the DT2 sine: 261.67 Hz = MIDI 60, crest
-1.420, harmonics -119 dB, peak -23.9 dBFS, steady level, L = R) and a change that keeps the sound; a change of the sound goes to Em. Then write it from the capture
+**Approving a pin**: read the report; Claude approves a pin that states the fixture's own facts (for the DT2 sine: 261.63 Hz = MIDI 60, crest
+1.438 over the window and 1.412 in its second half, harmonics -115 dB, peak -23.9 dBFS, level within 0.4 dB, L = R) and a change that keeps the sound; a change of the sound goes to Em. Then write it from the capture
 (the WAV the device test keeps beside the run, `run.wav`, or the window WAV) with the CLI:
 
 ```sh

@@ -50,6 +50,8 @@ export interface Periodic {
   pitch: { hz: number; midi: number };
   /** peak over RMS of the analysed window */
   crest: number;
+  /** peak over RMS of the second half of the window: the start-up settling of a note is over (the `sineProblems` rule reads it; a pin does not compare it) */
+  crest_settled?: number;
   /** harmonics 2..6, dB re the fundamental */
   harmonics_db: number[];
 }
@@ -210,9 +212,12 @@ export function periodicity(x: readonly number[], rate = FS): Periodic | null {
     h * kf < half - guard ? dec(10 * Math.log10(Math.max(top(h * kf), 1e-30) / fund), 1) : FLOOR_DB,
   );
   const r0 = rms(x);
+  const tail = x.slice(n >> 1);
+  const r1 = rms(tail);
   return {
     pitch: { hz: dec(hz, 3), midi: dec(69 + 12 * Math.log2(hz / 440), 3) },
     crest: dec(r0 > 0 ? peak(x) / r0 : 0, 4),
+    crest_settled: dec(r1 > 0 ? peak(tail) / r1 : 0, 4),
     harmonics_db: harmonics,
   };
 }
@@ -404,7 +409,12 @@ function lines(fp: FingerprintV2): [string, string][] {
   ];
   if (fp.periodic) {
     rows.push(['pitch', `${fp.periodic.pitch.hz} Hz = MIDI ${fp.periodic.pitch.midi}`]);
-    rows.push(['crest factor', String(fp.periodic.crest)]);
+    rows.push([
+      'crest factor',
+      fp.periodic.crest_settled === undefined
+        ? String(fp.periodic.crest)
+        : `${fp.periodic.crest} (second half ${fp.periodic.crest_settled})`,
+    ]);
     rows.push(['harmonics 2..6', `${fp.periodic.harmonics_db.join(', ')} dB re the fundamental`]);
   } else rows.push(['periodic', 'no']);
   return rows;
@@ -561,7 +571,7 @@ export interface SineLimits {
 }
 
 /**
- * Properties of a plain sine at MIDI `note` that hold whatever the pin says: pitch within 5 cents of the note, crest factor within 1 % of
+ * Properties of a plain sine at MIDI `note` that hold whatever the pin says: pitch within 5 cents of the note, crest factor of the second half of the window (after the start-up settling) within 1 % of
  * sqrt(2), harmonics under -60 dB, the level steady within 0.5 dB. Returns the problems.
  */
 export function sineProblems(fp: FingerprintV2, l: SineLimits): string[] {
@@ -572,8 +582,9 @@ export function sineProblems(fp: FingerprintV2, l: SineLimits): string[] {
   const cents = 1200 * Math.log2(p.pitch.hz / want);
   if (Math.abs(cents) > (l.pitch_cents ?? 5))
     out.push(`pitch ${p.pitch.hz} Hz is ${sign(cents)} cents from the note ${l.note} (${want.toFixed(3)} Hz)`);
-  const crest = (100 * (p.crest - Math.SQRT2)) / Math.SQRT2;
-  if (Math.abs(crest) > (l.crest_pct ?? 1)) out.push(`crest factor ${p.crest} is ${sign(crest)} % from sqrt(2)`);
+  const settled = p.crest_settled ?? p.crest;
+  const crest = (100 * (settled - Math.SQRT2)) / Math.SQRT2;
+  if (Math.abs(crest) > (l.crest_pct ?? 1)) out.push(`crest factor ${settled} is ${sign(crest)} % from sqrt(2)`);
   const hi = Math.max(...p.harmonics_db);
   if (hi >= (l.harmonic_db ?? -60))
     out.push(`a harmonic is at ${hi} dB re the fundamental (limit ${l.harmonic_db ?? -60})`);
