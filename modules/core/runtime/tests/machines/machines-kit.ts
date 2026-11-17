@@ -9,9 +9,8 @@ import { halfword } from '@digi/regression/runtime/fx-track-ui.ts';
 
 /** Helpers of the machine fixture tests on a run-time machine: what the firmware shows after `machines.dks` has acted on the rows the loader made. */
 
-/** Plan symbols that `decodeTables` and `dynType` read (the Digitakt II has no page rows). */
+/** Plan symbols that `decodeTables` reads (`dynType` finds `DKRT_ASSIGN` in machines.dks: `serviceSymbol`) (the Digitakt II has no page rows). */
 export const tableSymbols = (device: Device) => [
-  'DKRT_ASSIGN',
   'machines.rows',
   'machines.count',
   'machines.first',
