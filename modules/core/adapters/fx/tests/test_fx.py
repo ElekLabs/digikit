@@ -50,7 +50,10 @@ def test_the_empty_chain_stores_only_in_the_adapters_scratch_words():
     rig.sess.record_stores()
     rig.block(SIGNALS["ramp"], ctx="friendly")
     syms = rig.built.data
-    own = {syms[n] for n in ("_fx_s_r0", "_fx_s_i4", "_fx_s_l4", "_fx_sv_m13", "_fx_sv_i12")}
+    own = {
+        syms[n]
+        for n in ("_fx_s_r0", "_fx_s_i4", "_fx_s_l4", "_fx_sv_m13", "_fx_sv_i12")
+    }
     # the core keeps a store to a not yet mapped address at the loader alias (pk_sharc.SW_ALIAS_BASE + address)
     stores = {
         e.address - pk_sharc.SW_ALIAS_BASE
@@ -64,7 +67,9 @@ def test_the_empty_chain_stores_only_in_the_adapters_scratch_words():
 def test_the_empty_chain_costs_a_few_instructions():
     rig = FxRig([])
     b = rig.block(SIGNALS["dc"], ctx="friendly")
-    assert 10 <= b.instructions <= 30, b.instructions  # 27 measured: the stub's slot test and the dispatch entry on top of the quick scan
+    assert 10 <= b.instructions <= 30, (
+        b.instructions
+    )  # 27 measured: the stub's slot test and the dispatch entry on top of the quick scan
     print(f"empty chain: {b.instructions} instructions per block on the concrete core")
 
 
@@ -289,7 +294,9 @@ def test_the_cost_of_a_chain_in_instructions():
     print(
         f"one effect: steady {steady}, fade {fade_out}, off {off} instructions per block (the effect itself is 64 samples of 3 instructions)"
     )
-    assert steady < 1200 and fade_out < 1800 and off < 215  # off: 206 measured, the stub's slot test included
+    assert (
+        steady < 1200 and fade_out < 1800 and off < 215
+    )  # off: 206 measured, the stub's slot test included
 
 
 def blend(dry, wet, mix: float, w=None):
@@ -489,9 +496,7 @@ def test_the_dsp_diff_of_the_patched_image_is_the_hook_and_the_placed_code(
     # their first instruction, a 48-bit jump; the rest is appended L2.
     alias = 0x28000000
     hooks = {ln[1]: ln[2] for ln in lines if int(ln[1], 16) >= alias}
-    assert all(
-        int(ln[1], 16) >= 0x2001AB7C for ln in lines if int(ln[1], 16) < alias
-    )
+    assert all(int(ln[1], 16) >= 0x2001AB7C for ln in lines if int(ln[1], 16) < alias)
     for site in (0x1C207B, 0x1C80F2):
         assert len(hooks[f"{0x28000000 + 2 * site:x}"]) == 12
 
