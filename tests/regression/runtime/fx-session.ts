@@ -13,15 +13,15 @@ import { plusdriveBinary } from './card-kit.ts';
 import { FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
 import { boundService, neededServices } from './service-files.ts';
-import { bindServiceSymbols, rememberShipMap } from './service-symbols.ts';
+import { bindServiceSymbols } from './service-symbols.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { moduleResultsNote } from './runtime-menu.ts';
 import { pollEmulated } from './waits.ts';
 import {
   analysisJson,
-  audibleRequired,
   bounded,
   evidence,
+  evidenceCollector,
   options,
   pickSine,
   word,
@@ -250,10 +250,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
     if (typeof epoch !== 'number') throw new Error('route status lacks epoch');
     epochs.add(epoch);
   };
-  const collectEvidence = async (runtime: PatchedSession, tag: string, requireAudible?: boolean) => {
-    rememberEpoch((await bounded(() => runtime.session.status())).epoch);
-    await evidence(runtime, artifacts, tag, overlays, audibleRequired(config, runtime, requireAudible));
-  };
+  const collectEvidence = evidenceCollector(config, () => artifacts, overlays, rememberEpoch, evidence);
   const fixture = withReusablePatchedSession(
     {
       ...options(device),
@@ -270,7 +267,6 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
           { modules },
         );
         planSymbol(prepared.plan, 'DKRT_BOOT');
-        rememberShipMap(prepared.plan, prepared.planFile);
         profile = await analysisJson<FxProfile>(
           'tools.patchkit.pk_digikit_fxroutes',
           ['profile', '--device', device],
