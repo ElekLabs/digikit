@@ -15,7 +15,9 @@ use crate::rt::{
     s_set_r,
 };
 
-/// One generated core: image tables, string tables and interpreter entry points.
+/// One generated core: image tables, string tables and interpreter entry points. Copying the table
+/// copies the references and function pointers, not the core.
+#[derive(Clone, Copy)]
 pub struct GenCore {
     /// A transpiled core is linked (false: the runtime fallbacks, every instruction traps).
     pub generated: bool,
@@ -32,7 +34,9 @@ pub struct GenCore {
     /// The `explicit_memory_model` setting the image's block code was generated for.
     pub explicit_memory_model: bool,
     /// Suffix of the environment variables that hold this core's fast-tier address lists
-    /// (`SHARC_FAST_REGIONS` plus the suffix): they name addresses of one device's image.
+    /// (`SHARC_FAST_REGIONS` plus the suffix): they name addresses of one device's image. It belongs to the
+    /// host's slot for the device, not to the core: the host sets it on a loaded core
+    /// (`sharc_native::core_lib::load`).
     pub env_suffix: &'static str,
     /// AOT blocks by entry PC.
     pub blocks: &'static [(u32, BlockFn)],

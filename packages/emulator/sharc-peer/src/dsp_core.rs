@@ -17,14 +17,36 @@ use crate::dsp_patch::DspPatch;
 use crate::{DspEngine, IdleLoop, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched};
 use sharc_native::GenCore;
 
-/// The core for a device id (`dn2`, `dt2`): the one made for that device's image.
-pub fn core_for_device(device: &str) -> &'static GenCore {
+/// The static core for a device id (`dn2`, `dt2`): the one made for that device's image.
+fn static_core_for_device(device: &str) -> &'static GenCore {
     #[cfg(feature = "second-core")]
     if !sharc_gen::CORE.image.starts_with(device) && sharc_gen_2::CORE.image.starts_with(device) {
         return &sharc_gen_2::CORE;
     }
     let _ = device;
     &sharc_gen::CORE
+}
+
+/// The core for a device id (`dn2`, `dt2`): the static core made for that device's image, or, when
+/// `DIGI_SHARC_CORE_LIB_<DEV>` (`DIGI_SHARC_CORE_LIB_DN2`) names a core library
+/// (`packages/emulator/sharc-core-lib`), the core loaded from it. The library is refused unless its
+/// header equals the host's (`sharc_native::core_lib::load`) and its image is the one the static core
+/// would have served.
+pub fn core_for_device(device: &str) -> Result<&'static GenCore, String> {
+    let served = static_core_for_device(device);
+    let var = format!("DIGI_SHARC_CORE_LIB_{}", device.to_ascii_uppercase());
+    let Some(path) = std::env::var_os(&var).filter(|p| !p.is_empty()) else {
+        return Ok(served);
+    };
+    let core = sharc_native::core_lib::load(std::path::Path::new(&path), served.env_suffix)
+        .map_err(|e| format!("{var}: {e}"))?;
+    if core.image != served.image {
+        return Err(format!(
+            "{var}: the library is for DSP image {}, {device} runs {}",
+            core.image, served.image
+        ));
+    }
+    Ok(core)
 }
 
 /// Everything `open_engine_patched` needs; it runs on the worker thread.

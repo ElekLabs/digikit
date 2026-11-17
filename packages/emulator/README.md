@@ -43,6 +43,8 @@ root). The directory name is not always the package name; use the package name w
 | `packages/emulator/sharc-stats` | `sharc-stats` | The counters and profiles the engine reports (shared by every engine). |
 | `packages/emulator/sharc` | `sharc-native` | The DSP engine: interpreter, AOT block dispatch and the fast tier (`src/fast/`). It runs the `GenCore` it is opened with (`Engine::new(mem, core)`). |
 | `packages/emulator/sharc-fast-cl` | `sharc-fast-cl` | Cranelift backend for the fast-tier kernel IR. |
+| `packages/emulator/sharc-core-lib` | `sharc-core-lib` | One generated core as a shared library (cdylib over `sharc-gen`, `SHARC_GEN_DIR` picks the device): `sharc_core_header` and `sharc_core`. See "Core libraries". |
+| `packages/emulator/dynlib` | `dynlib` | `dlopen`/`LoadLibraryW` and symbol lookup, no dependencies (used by `live` and the core loader). |
 | `packages/emulator/sharc-gen-2` | `sharc-gen-2` | The second core: the sources of `sharc-gen`, built on `SHARC_GEN_DIR_2` (see "Two cores in one binary"). Empty without that variable. |
 | `packages/emulator/sharc-fast-wasm` | `sharc-fast-wasm` | WebAssembly backend for the same IR, plus the V8 gate tools. |
 | `packages/emulator/live` | `live-audio` | Live audio output: SPSC ring, frame repeater, cpal callback. |
@@ -145,6 +147,27 @@ Use:
   `out/runs/lanes/dualcore-shots/` or `--shots DIR`) and `--bench dt2 --binary LABEL=PATH ... --pairs 3` (DSP CPU per audio second, AOT share and real-time factor of a device
   with the runtime patched in, alternating the `digi-emud` builds given; a build with DT2 as `SHARC_GEN_DIR` against one with it
   as `SHARC_GEN_DIR_2` measures what the second-core role costs).
+
+## Core libraries
+
+A generated core can run from a shared library instead of the static `sharc-gen` crates (opt-in; the static core
+stays the default). Build one library per device, with the device's generated directory:
+
+```text
+SHARC_GEN_DIR=out/native/dn2-audio/gen CARGO_BUILD_JOBS=4 nice -n 10 \
+  node tools/nx/rust-env.mjs --gen -- cargo build --release --locked -p sharc-core-lib
+```
+
+The library is `libsharc_core_lib` in the target dir of that core (`tools/nx/rust-env.mjs` names it). Use it by
+setting `DIGI_SHARC_CORE_LIB_DN2` or `DIGI_SHARC_CORE_LIB_DT2` to its path when `digi-emud` or `coupled-run` starts;
+`sharc-peer/src/dsp_core.rs` (`core_for_device`) loads it instead of the static core of that device. The load is refused,
+with the first differing field named, unless the library's header equals the host's: header version, SHA-256 of the
+`sharc-rt` sources (`sharc-rt/build.rs`), rustc version, target, and the size, alignment and selected field offsets
+of `St`, `Mem`, `Insn`, `V`, `Cfg` and `GenCore` (`sharc-rt/src/header.rs`). It is also refused when its DSP image is
+not the one the static core of the device has. Example message after an edit of `sharc-rt` that the host does not have:
+`DIGI_SHARC_CORE_LIB_DT2: /path/dt2.dylib: core library refused: sharc-rt source sha256: library ..., host ...`.
+The loader is `sharc_native::core_lib::load`; the library is never unloaded. Compare a loaded core with the
+static one with `sharc_cells ... --env B:DIGI_SHARC_CORE_LIB_DN2=PATH` ([testing](../../docs/TESTING.md)).
 
 ## Headless coupled runner (`coupled-run`) and the matrix
 
