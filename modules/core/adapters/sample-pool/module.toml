@@ -52,6 +52,8 @@ devices = ["dt2"]
 
 [object.externs]
 sp_dsp_pool_base = "dsp.voice.value.sample.pool_base"
+sp_slot_pool_done = "slot.pool_done"
+sp_slot_pool_lost = "slot.pool_lost"
 
 # The stock reply copy (LP0, DN2 1.12), the stock short sleep and the SampleLoader worker's getter and queue. The pages go out through our own
 # sender (src/cf/dn2/send.c): the stock sender is not used.
@@ -64,6 +66,8 @@ devices = ["dn2"]
 [object.externs]
 sp_stock_copy = "cf.link.fn.reply_copy"
 sp_stock_sleep = "cf.rtos.fn.sleep_us"
+sp_slot_pool_done = "slot.pool_done"
+sp_slot_pool_lost = "slot.pool_lost"
 
 [[object]]
 path = "build/sample-pool-dsp-dn2.dko.json"
@@ -126,3 +130,16 @@ devices = ["dn2"]
 [[claim]]
 resource = "dsp.cache.rr4"
 devices = ["dn2"]
+
+# The data table of this adapter (the calls of dkrt_pool.h) and the two pointer slots of its events, exported to the image's info table (`dkrt_info_table`): the samples
+# service file finds the table by the hash of its name (`CoreApi::info`) and fills the slots with its routines. See src/cf/pool_events.h.
+[[info]]
+name = "sample_pool_info"
+symbol = "sample_pool_info"
+devices = ["dt2", "dn2"]
+
+[[slot]]
+name = "pool_done"
+
+[[slot]]
+name = "pool_lost"

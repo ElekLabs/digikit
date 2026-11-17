@@ -1221,6 +1221,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
+ "dkrt-svc-params",
  "dkrt-test-support",
 ]
 
@@ -1241,7 +1242,17 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
+ "dkrt-svc-params",
  "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-svc-params"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
 ]
 
 [[package]]

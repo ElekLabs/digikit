@@ -34,7 +34,7 @@ import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices, servicePath, SERVICE_MODULES } from './service-files.ts';
+import { boundService, neededServices, servicePath } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { RING_SYMBOLS } from './runtime-menu.ts';
 import {
@@ -221,6 +221,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   let cap: number | undefined;
   let stepping: { dk: DkSession; transport: EmuUsbTransport } | undefined;
   const overlays: string[] = [];
+  const cardServices = new Set<string>();
   const epochs = new Set<number>();
   const extra = new Set(o.storeExtra ?? []);
   const symbols = [...(o.plain ? [] : ['DKRT_BOOT']), ...(o.symbols ?? [])];
@@ -262,14 +263,17 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     const { modules = [], name: _name, ...rest } = spec;
     const files = modules.map((m) => (typeof m === 'string' ? mod(m) : m));
     // the services that these modules need go on the card too, bound to the stock firmware (`service-files.ts`)
+    // only the files of `modules/` are modules: samples, other data and the service files of a test have no NEEDS
+    const needed = neededServices(files.filter((m) => m.name.startsWith('modules/')).map((m) => m.file));
     const services = await Promise.all(
-      neededServices(files.map((m) => m.file))
-        .filter((name) => !files.some((m) => m.name === servicePath(name)))
-        .map(async (name) => ({
-          name: servicePath(name),
-          file: await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
+      needed
+        .filter((n) => !files.some((m) => m.name === servicePath(n.service)))
+        .map(async (n) => ({
+          name: servicePath(n.service),
+          file: await boundService(device, n, moduleArtifact(device, n.moduleId)),
         })),
     );
+    for (const n of needed) cardServices.add(n.service);
     const options = {
       ...(o.project ? { syx: resolveInputs(device, FIRMWARE[device]).syx } : {}),
       ...rest,
@@ -342,7 +346,15 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       tempDirs: () => [artifacts],
       afterClose: async (_session) => {
         if (o.plain) return;
-        const report = runtimeSafety(device, watchOutput, overlays, Math.max(1, epochs.size), 'default', [...extra]);
+        const report = runtimeSafety(
+          device,
+          watchOutput,
+          overlays,
+          Math.max(1, epochs.size),
+          'default',
+          [...extra],
+          [...cardServices],
+        );
         record(artifacts, 'lifetime-safety', report);
         expect(report.write_events, 'write-watch on cf.expansion over every boot: no stray write').toBe(0);
         expect(report.flush_hits, 'flush check over every boot: no hit').toBe(0);
@@ -359,8 +371,8 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
         else
           for (const card of report.overlays) {
             expect(
-              card.invalid_store.filter((s) => !extra.has(s)),
-              'card writes in the store range: only the two selection sectors and the sectors the scenario writes on purpose',
+              card.invalid_store,
+              'card writes in the store range: only the two selection sectors, the settings copies of a settings-writing service and the sectors the scenario writes on purpose',
             ).toEqual([]);
             expect(card.invalid_low, 'card writes elsewhere: only the firmware project sectors from 0x50000').toEqual(
               [],

@@ -5,13 +5,13 @@ pub const DSP_HEADER: u32 = 64;
 pub const MAX_RECORDS: u32 = 32;
 pub const MAX_RELOCS: u32 = 4096;
 pub const MAX_IMPORTS: u32 = 32;
-pub const MAX_CF_IMPORTS: u32 = 64;
+pub const MAX_CF_IMPORTS: u32 = 128;
 pub const MAX_STATE_VOICES: u32 = 64;
 pub const MAX_STATE_BYTES: u32 = 16777216;
 pub const GRANULE: u32 = 64;
 pub const DSP_SLACK: u32 = 8;
 pub const ARENA_HDR: u32 = 16;
-pub const COLLECT_BYTES: u32 = 7486;
+pub const COLLECT_BYTES: u32 = 1618;
 pub const TABLE_MAGIC: u32 = 1145787458;
 pub const TABLE_VERSION: u32 = 2;
 pub const PROVIDER_MAX: u32 = 6;
@@ -218,9 +218,6 @@ pub const KINDS: [(u32, u32, &str); 8] = [
     (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2, "machines"),
     (KIND_LFO_SHAPE, LEN_LFO_SHAPE, "lfo"),
 ];
-/// The kinds of the `samples` service: (kind, record length).
-pub const KINDS_SAMPLES: [(u32, u32); 0] = [
-];
 /// The kinds of the `machines` service: (kind, record length).
 pub const KINDS_MACHINES: [(u32, u32); 6] = [
     (KIND_PARAM, LEN_PARAM),
@@ -239,9 +236,8 @@ pub const KINDS_LFO: [(u32, u32); 1] = [
     (KIND_LFO_SHAPE, LEN_LFO_SHAPE),
 ];
 /// The services of `[handle] services` that are in the runtime image (not the ones a `.dks` provides): the names a module's `NEEDS` meets without a provider (hashed by `dkneeds::keys::name_hash`).
-pub const HANDLE_SERVICES: [&str; 7] = [
+pub const HANDLE_SERVICES: [&str; 6] = [
     "runtime",
-    "samples",
     "ui",
     "input",
     "usb_bulk",

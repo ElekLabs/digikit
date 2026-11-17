@@ -141,10 +141,11 @@ export const builtSourceExclusions = (root, base = '.') =>
 export const serviceLeaves = (byId) =>
   new Set([...byId].filter(([, { manifest }]) => manifest.role === 'service').map(([id]) => id.split('/').at(-1)));
 
-// A service that takes hooks is bound to the firmware before it goes on a card (target `bind`, module-build.mjs); `bindableIds`: the ids of those.
-export const isBindable = (manifest, hooks) => manifest.role === 'service' && (hooks?.length ?? 0) > 0;
+// Every service is bound to the firmware before it goes on a card (target `bind`, module-build.mjs): the harness binds each service a module needs, and a
+// service with no hook and no firmware name (lfo) is bound unchanged. Hooks do not decide: samples refers to firmware names and has none. `bindableIds`: the ids.
+export const isBindable = (manifest) => manifest.role === 'service';
 export const bindableIds = (byId) =>
-  new Set([...byId].filter(([, { manifest, hooks }]) => isBindable(manifest, hooks)).map(([id]) => id));
+  new Set([...byId].filter(([, { manifest }]) => isBindable(manifest)).map(([id]) => id));
 
 // The cache inputs of one device test target, and whether its key holds the patchkit binary (`patchkitLive`).
 // `opts`: `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
@@ -239,3 +240,9 @@ export const deviceInputs = (
   ];
   return { inputs, patchkitLive, patchkitWasm };
 };
+
+// Files that every device test's key holds (the shared reads, the test reads, the SDK and the toolchain), as repository globs.
+// `test:subset --base` cannot select by path for a change in them (tools/nx/test-subset.mjs).
+export const SHARED_INPUT_GLOBS = [...SHARED_READS.map(({ file }) => file), ...TEST_READS, ...COMPILE_INPUTS].map(
+  (glob) => glob.replace('{workspaceRoot}/', ''),
+);

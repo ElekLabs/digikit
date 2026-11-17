@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 #include "cf/dn2/xfer.h"
+#include "cf/pool_events.h"
 
 typedef uint32_t u32;
 typedef int32_t i32;
@@ -219,3 +220,11 @@ i32 dkpool_window_step(const dkpool_handle *h, const u8 *path, u32 first, u32 fr
     *cursor = at;
     return at < first + frames ? 1 : 0;
 }
+
+/* The table the samples service reads (src/cf/pool_events.h). */
+const void *const sample_pool_info[11] = {
+    (const void *)SP_INFO_MAGIC,      (const void *)DKPOOL_VERSION,     (const void *)0,
+    (const void *)dkpool_load,        (const void *)dkpool_release,     (const void *)dkpool_check,
+    (const void *)dkpool_free_frames, (const void *)dkpool_tick,        (const void *)dkpool_cancel,
+    (const void *)dkpool_peaks,       (const void *)dkpool_window_step,
+};

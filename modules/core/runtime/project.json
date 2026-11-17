@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime",
-  "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-samples", "dkneeds", "dkfw"],
+  "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-samples", "dkneeds", "dkfw"],
   "metadata": {
     "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user"] }]
   },
@@ -13,7 +13,7 @@
         "{projectRoot}/src/rs/**/*",
         {
           "input": "production",
-          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-samples", "dkneeds", "dkfw"]
+          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-samples", "dkneeds", "dkfw"]
         },
         "{workspaceRoot}/.cargo/**/*",
         "{workspaceRoot}/rust-toolchain*",
@@ -40,7 +40,7 @@
         "{projectRoot}/src/rs/**/*",
         {
           "input": "production",
-          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-samples", "dkneeds", "dkfw"]
+          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-samples", "dkneeds", "dkfw"]
         },
         "{workspaceRoot}/.cargo/**/*",
         "{workspaceRoot}/rust-toolchain*",
@@ -50,36 +50,13 @@
         "{workspaceRoot}/modules/core/services/fx/dks/build/fx.dko.json",
         "{workspaceRoot}/modules/core/services/machines/dks/build/machines.dko.json",
         "{workspaceRoot}/modules/core/services/lfo/dks/build/lfo.dko.json",
-        "{workspaceRoot}/modules/core/services/{fx,machines,lfo}/dks/{Cargo.toml,src/**/*}",
+        "{workspaceRoot}/modules/core/services/samples/dks/build/samples.dko.json",
+        "{workspaceRoot}/modules/core/services/{fx,machines,lfo,samples}/dks/{Cargo.toml,src/**/*}",
         "{workspaceRoot}/tools/nx/device-images.mjs",
-        "{workspaceRoot}/dist/modules/dt2/sine.dkm",
-        "{workspaceRoot}/dist/modules/dt2/dyn-fx-gain.dkm",
-        "{workspaceRoot}/dist/modules/dt2/lfo-shape.dkm",
-        "{workspaceRoot}/dist/modules/dt2/svc-test-user.dkm",
-        "{workspaceRoot}/dist/modules/dt2/fx.dks",
-        "{workspaceRoot}/dist/modules/dt2/machines.dks",
-        "{workspaceRoot}/dist/modules/dt2/lfo.dks",
-        "{workspaceRoot}/dist/modules/dt2/svc-test.dks",
-        "{workspaceRoot}/dist/svc-bound/dt2/fx.dks",
-        "{workspaceRoot}/dist/svc-bound/dt2/machines.dks",
-        "{workspaceRoot}/dist/svc-bound/dt2/svc-test.dks",
-        "{workspaceRoot}/dist/bytes/images/dt2/set-emulator.info",
-        "{workspaceRoot}/dist/bytes/images/dt2/set-device.info",
+        { "dependentTasksOutputFiles": "dist/modules/*/*", "transitive": false },
+        { "dependentTasksOutputFiles": "dist/svc-bound/*/*", "transitive": false },
+        { "dependentTasksOutputFiles": "dist/bytes/images/*/*.info", "transitive": false },
         "{workspaceRoot}/firmware/Digitakt_II_OS1.17.syx",
-        "{workspaceRoot}/dist/modules/dn2/sine.dkm",
-        "{workspaceRoot}/dist/modules/dn2/dyn-dn2.dkm",
-        "{workspaceRoot}/dist/modules/dn2/dyn-fx-gain.dkm",
-        "{workspaceRoot}/dist/modules/dn2/lfo-shape.dkm",
-        "{workspaceRoot}/dist/modules/dn2/svc-test-user.dkm",
-        "{workspaceRoot}/dist/modules/dn2/fx.dks",
-        "{workspaceRoot}/dist/modules/dn2/machines.dks",
-        "{workspaceRoot}/dist/modules/dn2/lfo.dks",
-        "{workspaceRoot}/dist/modules/dn2/svc-test.dks",
-        "{workspaceRoot}/dist/svc-bound/dn2/fx.dks",
-        "{workspaceRoot}/dist/svc-bound/dn2/machines.dks",
-        "{workspaceRoot}/dist/svc-bound/dn2/svc-test.dks",
-        "{workspaceRoot}/dist/bytes/images/dn2/set-emulator.info",
-        "{workspaceRoot}/dist/bytes/images/dn2/set-device.info",
         "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx"
       ],
       "dependsOn": [
@@ -92,8 +69,11 @@
         "core/services/fx:pack",
         "core/services/machines:pack",
         "core/services/lfo:pack",
+        "core/services/samples:pack",
+        "test/track-select:pack",
         "core/services/fx:bind",
         "core/services/machines:bind",
+        "core/services/samples:bind",
         "test/svc-test:bind",
         "patchkit:device-images"
       ],

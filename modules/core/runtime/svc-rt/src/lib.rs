@@ -14,7 +14,6 @@ pub use dkrt_abi;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspState;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
-use dkrt_abi::registry::RegState;
 use dkrt_abi::service::ServiceRow;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
@@ -75,76 +74,19 @@ use sys::*;
 #[derive(Clone, Copy)]
 pub struct ImportCore;
 
+impl dkrt_abi::mem::FwMem for ImportCore {}
+
 impl CoreApi for ImportCore {
-    unsafe fn dynreg(&self) -> *const u32 {
-        dkc_dynreg()
+    fn boot_index(&self) -> u32 {
+        unsafe { dkc_boot_index() }
     }
-    fn reg_state(&self) -> &'static mut RegState {
-        unsafe { &mut *dkc_reg_state() }
+    fn legacy_state(&self) -> [u8; 32] {
+        let mut b = [0u8; 32];
+        unsafe { dkc_legacy_state(b.as_mut_ptr()) };
+        b
     }
-    fn param_first(&self) -> u32 {
-        unsafe { dkc_param_first() }
-    }
-    fn param_owners(&self) -> &[u8] {
-        unsafe {
-            let mut n = 0u32;
-            let p = dkc_param_owners(&mut n);
-            if p.is_null() {
-                &[]
-            } else {
-                core::slice::from_raw_parts(p, n as usize)
-            }
-        }
-    }
-    unsafe fn write_param_row(
-        &self,
-        inf: *const u32,
-        code: u32,
-        template: u32,
-        slot: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-        name: u32,
-        short: u32,
-    ) {
-        dkc_write_param_row(inf, code, template, slot, min, max, def, name, short)
-    }
-    unsafe fn write_fx_param_row(
-        &self,
-        code: u32,
-        template: u32,
-        mirror: u32,
-        min: u32,
-        max: u32,
-        def: u32,
-        name: u32,
-        short: u32,
-    ) {
-        dkc_write_fx_param_row(code, template, mirror, min, max, def, name, short)
-    }
-    unsafe fn write_send_param_row(
-        &self,
-        code: u32,
-        class: u32,
-        owner_of: u32,
-        mirror: u32,
-        name: u32,
-        short: u32,
-    ) {
-        dkc_write_send_param_row(code, class, owner_of, mirror, name, short)
-    }
-    unsafe fn reset_param_row(&self, code: u32) {
-        dkc_reset_param_row(code)
-    }
-    unsafe fn make_rep(&self, rep: *mut u8, src: *const u8, upper: bool) -> u32 {
-        dkc_make_rep(rep, src, upper)
-    }
-    unsafe fn type_resolve(&self, key: u32) -> u32 {
-        dkc_type_resolve(key)
-    }
-    fn type_map_used(&self) -> u32 {
-        unsafe { dkc_type_map_used() }
+    unsafe fn legacy_state_clear(&self) -> i32 {
+        dkc_legacy_state_clear()
     }
     unsafe fn guard_faults(&self, ty: u32) -> u32 {
         dkc_guard_faults(ty)
@@ -157,6 +99,42 @@ impl CoreApi for ImportCore {
     }
     unsafe fn module_name(&self, owner: u8) -> *const u8 {
         dkc_module_name(owner)
+    }
+    unsafe fn module_of(&self, ctx: *const u8) -> u8 {
+        dkc_module_of(ctx)
+    }
+    unsafe fn storage_stat(&self, root: u32, path: &[u8]) -> Result<dkrt_abi::storage::Stat, i32> {
+        let mut w = dkrt_abi::storage::StatWire::empty();
+        let r = dkc_storage_stat(root, path.as_ptr(), path.len() as u32, &mut w);
+        if r < 0 {
+            return Err(r);
+        }
+        Ok(w.stat())
+    }
+    unsafe fn storage_stat_head(
+        &self,
+        root: u32,
+        path: &[u8],
+        head: &mut [u8; 64],
+    ) -> Result<(dkrt_abi::storage::Stat, usize), i32> {
+        let mut w = dkrt_abi::storage::StatWire::empty();
+        let r = dkc_storage_stat_head(
+            root,
+            path.as_ptr(),
+            path.len() as u32,
+            &mut w,
+            head.as_mut_ptr(),
+        );
+        if r < 0 {
+            return Err(r);
+        }
+        Ok((w.stat(), r as usize))
+    }
+    fn irq_mask(&self) -> u32 {
+        unsafe { dkc_irq_mask() }
+    }
+    fn irq_restore(&self, sr: u32) {
+        unsafe { dkc_irq_restore(sr) }
     }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         dkc_settings_get(
@@ -191,35 +169,6 @@ impl CoreApi for ImportCore {
     }
     unsafe fn job_cancel(&self, owner: u8, id: u32) -> i32 {
         dkc_job_cancel(owner, id)
-    }
-    fn native_available(&self, kind: u32) -> bool {
-        unsafe { dkc_native_available(kind) }
-    }
-    unsafe fn native_register(
-        &self,
-        kind: u32,
-        owner: u32,
-        page: u32,
-        flags: u32,
-        title: *const u8,
-        draw: u32,
-        event: u32,
-        bindings: *const u32,
-        words: *const u32,
-        word_count: u32,
-        arg: u32,
-        with_arg: u32,
-    ) -> i32 {
-        dkc_native_register(
-            kind, owner, page, flags, title, draw, event, bindings, words, word_count, arg,
-            with_arg,
-        )
-    }
-    unsafe fn native_remove(&self, kind: u32) {
-        dkc_native_remove(kind)
-    }
-    unsafe fn native_turn(&self, view: *const u8, event: *const u8) -> u32 {
-        dkc_native_turn(view, event)
     }
     fn dsp(&self) -> &'static mut DspState {
         unsafe { &mut *dkc_dsp() }

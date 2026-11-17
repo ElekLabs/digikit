@@ -246,6 +246,17 @@ describe('effect checks', () => {
     ).toBeNull();
   });
 
+  it('scales-input holds the output to the input times a gain within a part of the reference peak', () => {
+    const t = fx(
+      () => block(0.5),
+      () => block(0.75),
+      () => block(0.5),
+    );
+    expect(check(t, { kind: 'scales-input', gain: 1.5, channel: 'both' })).toBeNull();
+    expect(check(t, { kind: 'scales-input', gain: 1.4, channel: 'both' })).toContain('error');
+    expect(check(t, { kind: 'scales-input', gain: 1.5 + 1e-5, channel: 'both' })).toContain('error');
+  });
+
   it('take one channel of the output', () => {
     const t = fx(
       () => block(0),

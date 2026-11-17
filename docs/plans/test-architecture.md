@@ -90,7 +90,9 @@ Reading the table:
 - First cases: load SDK-built FX and machine fixtures through the runtime's descriptor parsers on the host and check sizes and offsets against the generated SDK constants; one Storage contract suite run against FakeStorage on the host and the real adapter once on the device.
 - Proof: both implementations run the suite.
 - Depends on: R2c (`CoreApi`, `Service`), R3 (`Platform`).
-- [x] Parts 1 and 2, descriptor contract: the layout numbers of the `.dkm` and its DSP section are `[format]` of `sdk/sdk.toml`, generated into `dkneeds` with the `[fx]` and `[machine]` descriptor offsets; the runtime, the packer and `dksharc` read them (no second copy). `core/runtime:rust-tests` packs `test/dyn-fx-gain` and `test/sine` (`dependsOn`) and runs the runtime's DSP section check (`dsp::check`, with the fx, machines and samples checks) on both devices: it accepts them, what it reads back (parameter count, state bytes, route flags, voice entries, machine key, rows) equals the module's declaration, and broken variants (section magic, descriptor magic, record against descriptor, short descriptor, bad voice entry, other device) are refused with `E_DSP_FORMAT` or `E_DSP_DEVICE`. Open: the Storage suite (needs R3) and the `Service` suite.
+- [x] Parts 1 and 2, descriptor contract: the layout numbers of the `.dkm` and its DSP section are `[format]` of `sdk/sdk.toml`, generated into `dkneeds` with the `[fx]` and `[machine]` descriptor offsets; the runtime, the packer and `dksharc` read them (no second copy). `core/runtime:rust-tests` packs `test/dyn-fx-gain` and `test/sine` (`dependsOn`) and runs the runtime's DSP section check (`dsp::check`, with the fx, machines and samples checks) on both devices: it accepts them, what it reads back (parameter count, state bytes, route flags, voice entries, machine key, rows) equals the module's declaration, and broken variants (section magic, descriptor magic, record against descriptor, short descriptor, bad voice entry, other device) are refused with `E_DSP_FORMAT` or `E_DSP_DEVICE`.
+
+- [x] Part 3, Storage contract: one case table (`modules/core/runtime/tests/storage/contract.toml`, 57 host cases, 11 on the device). `FakeStorage` answers every row on the host (`fake_storage.rs`); the real adapter answers the `device = "list"` rows on each device (`storage.device.test.ts`). The interface C of a service file is checked with both sides linked on the host (`svc_contract_tests.rs`). Open: a host suite of the `Service` trait with a fake and a real service.
 
 ### T1d Device-test audit
 
@@ -295,7 +297,7 @@ Deleted at the end: `waits.ts tap`, `fx-session.ts tap/advance` (stepped clock),
 
 | Phase | Stream | Owns | Gate |
 |---|---|---|---|
-| 0 | C: wall-clock fixes with today's `pollEmulated` | shot-dn2-supersede, shot-dn2-lease, shot-dt2, samples-store-live, patched-dsp-startup, dsp-cache-registers, dsp-ddr-monitor, remote.ts `expectRemoteEnabled`, runtime-menu.ts deadlines, install.ts:51; dk-session host tests rpc-emulated-wait, emu-usb-transport | host tests + device subset of those files |
+| 0 | C: wall-clock fixes with today's `pollEmulated` | shot-dn2-supersede, shot-dn2-pool (lease phase), shot-dt2, samples-store-live, patched-dsp-startup, dsp-cache-registers, dsp-ddr-monitor, remote.ts `expectRemoteEnabled`, runtime-menu.ts deadlines, install.ts:51; dk-session host tests rpc-emulated-wait, emu-usb-transport | host tests + device subset of those files |
 | 1 | A: dk-session | runtime-events.ts (new), dkupload-core.ts waitForBoot, wait-for-boot.test.ts, runtime-events.test.ts | dk-session host tests, workbench-core host tests |
 | 1 | B: test-support | emulated-clock.ts, input.ts (new) + host tests | test-support host tests |
 | 2 | core (serial) | support.ts, ui.ts (new), install.ts, waits.ts, flows/menu.ts | device subset: gate-smoke, gate-pins, one test per fixture kind |

@@ -87,7 +87,7 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     /// The first item that `init`'s declarations and the header table do not both hold, of the last load that failed with E_DECL_KIND: (tag of the item, its first
     /// word), and 0x100 added to the tag when only the header has it. `(0, 0)`: none (`report_provider` logs it).
     decl_diff: (u32, u32),
-    /// The header table of the module at each selection index, kept while `assign::plan` reads each file once (`capture`); `table_len` 0: none (the file
+    /// The header table of the module at each selection index, kept while the boot reads each file once (`capture`); `table_len` 0: none (the file
     /// is missing, torn, of the old format or has a larger table).
     tables: [[u8; TABLE_MAX]; SEL_MAX],
     table_len: [usize; SEL_MAX],
@@ -301,7 +301,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let name = f.add(H_NAME);
         let total = image_size + bss;
         // imports: every name must be in the runtime's table
-        let mut import_addrs = [0u32; 64];
+        let mut import_addrs = [0u32; dkneeds::MAX_CF_IMPORTS as usize];
         let mut i = 0;
         while i < import_n as usize {
             let p = f.add(import_off as usize + i * dkneeds::CF_IMPORT_LEN as usize);
@@ -506,6 +506,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         };
         let block = blk.ptr;
         crate::collect::begin(block as *mut crate::collect::Collect);
+        self.r.module_begin(rec);
         if init != 0 {
             let ctx = crate::entry::ctx_addr(rec) as usize as *const Ctx;
             CALLED_NEED = [0; NEEDS_LEN];
@@ -571,10 +572,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     }
 
 
-    /// The commit of 6.3 steps 1 to 3: check, fill the voice rows, apply the records; the record block stays in the arena.
+    /// The commit of 6.3 steps 1 to 3: the declarations of a service file against its header table, the services' part (they check what their builder calls collected, write their
+    /// records and declare their DSP rows), the registry walker over the block; the record block stays in the arena.
     unsafe fn commit(&mut self, rec: usize, c: &crate::collect::Collect, keys: &crate::collect::KeysCopy, image_size: u32) -> i32 {
         use crate::collect as col;
-        let owner = rec as u8 + 1;
         let base = records::module(rec).base;
         // the declarations of a service module against its header table (declare-check-commit)
         if let Some(d) = col::decl_diff(c, keys, base) {
@@ -587,111 +588,101 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return r;
         }
-        let declared = c.nm + c.nf + c.nparam + c.np + c.ng != 0;
-        // a provider adds no machine, effect or page row of its own (the machines and fx services move in R12-5 and R12-6)
-        if rec >= MAX_MODULES && declared {
+        // an error of a generic record (`dk_record_add`); a provider adds no record of its own
+        if c.err != 0 {
+            return c.err;
+        }
+        if rec >= MAX_MODULES && c.ng != 0 {
             return E_FORMAT;
         }
-        let mut block: *mut u8 = core::ptr::null_mut();
-        let mut baddr = 0u32;
-        let mut size = 0usize;
-        let mut rows = (0u32, 0u32, 0u32);
-        if declared {
-            let p = match crate::registry::profile() {
-                Some(p) => p,
-                None => return E_NO_REGISTRY,
-            };
-            let free = match crate::registry::free_rows() {
-                Some(f) => f,
-                None => return E_NO_REGISTRY,
-            };
-            let mut loaded = [0u32; MAX_MODULES * col::MAX_RECORDS];
-            let n = col::loaded_fx_ids(rec, &mut loaded);
-            let r = col::check_commit(c, &p, keys, &loaded[..n], &free);
-            if r != OK {
-                return r;
-            }
-            let mut plan = col::Plan::new();
-            let mut voice = [false; limits::MACHINE_ROWS];
-            let mut m = 0;
-            while m < c.nm {
-                voice[m] = services().has_voice(rec, crate::assign::resolve(col::machine_key(keys, &c.machines[m])));
-                m += 1;
-            }
-            size = match col::lower(c, &p, keys, &voice, base, core::ptr::null_mut(), 0, &mut plan) {
-                Ok(n) => n,
-                Err(e) => return e,
-            };
-            match self.m.alloc(size as u32) {
-                Some(b) => {
-                    block = b.ptr;
-                    baddr = b.addr;
-                }
-                None => return E_NOMEM,
-            }
-            if let Err(e) = col::lower(c, &p, keys, &voice, base, block, size, &mut plan) {
-                self.m.free(baddr);
-                return e;
-            }
-            let r = crate::registry::check(block, size as u32, image_size);
-            if r != OK {
-                self.m.free(baddr);
-                return r;
-            }
-            // the ranges and latch mask of each machine's voice row, the routes and defaults of each effect's row
-            let mut m = 0;
-            while m < c.nm {
-                let t = crate::assign::resolve(col::machine_key(keys, &c.machines[m]));
-                if services().has_voice(rec, t) {
-                    let (rng, latched) = col::voice_declared(c, &plan, m);
-                    if latched != 0 {
-                        crate::dlog::ev(
-                            logk::MODULE_LATCH,
-                            crate::dlog::INFO,
-                            [read_volatile(addr_of!(BOOT_IDX)), m as u32, latched, 0, 0],
-                        );
-                    }
-                    let r = services().declare_voice(rec, t, rng, latched).unwrap_or(OK);
-                    if r != OK {
-                        self.m.free(baddr);
-                        return r;
-                    }
-                }
-                m += 1;
-            }
-            let mut f = 0;
-            while f < c.nf {
-                let fx = &c.fxs[f];
-                let ord = fx.index; // the index in the keys table is the ordinal of the effect record
-                // without `dk_fx_routes` the effect runs on the master only (the rule of the old `routes` field: unset means the default route)
-                let flags = Some(col::fx_flags_of_decl(fx));
-                let par = if fx.page >= 0 { Some(col::fx_defaults(c, f)) } else { None };
-                if (flags.is_some() || par.is_some()) && !services().declare_fx(rec, ord, flags, par).unwrap_or(false) {
-                    self.m.free(baddr);
-                    return E_FORMAT; // no such effect in the module's DSP section
-                }
-                f += 1;
-            }
-            crate::registry::set_args(Some(col::apply_args(c, &plan)));
-            let r = crate::registry::apply(owner, block, size as u32, base);
-            crate::registry::set_args(None);
-            if r != OK {
-                self.m.free(baddr);
-                return r;
-            }
-            rows = col::counts_of(c, &p);
-        }
+        // the services' part of the commit (interface B): they check what their builder calls collected and write their records
+        let (baddr, size, rows) = match self.commit_services(rec, c, keys, base, image_size) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
         if rec < MAX_MODULES {
-            col::keep(rec, baddr, size as u32, keys);
+            col::keep(rec, baddr, size);
         }
         crate::dlog::ev(
             logk::MODULE_COMMIT,
             crate::dlog::INFO,
-            [read_volatile(addr_of!(BOOT_IDX)), rows.0 | rows.1 << 8 | rows.2 << 16, baddr, size as u32, 0],
+            [read_volatile(addr_of!(BOOT_IDX)), rows.0 | rows.1 << 8 | rows.2 << 16, baddr, size, 0],
         );
         OK
     }
 
+
+    /// The commit of the services (`Service::module_commit`): a `PREPARE` pass checks and measures the records, the loader takes one arena block for them, a `WRITE` pass fills it
+    /// (the generic records of the module follow the services' records), and the registry walker checks and applies it. Returns the block (address, size; 0, 0 when no record was
+    /// written) and the rows the module uses. Nothing stays allocated on an error; the caller's undo gives the services their `remove`.
+    unsafe fn commit_services(&mut self, rec: usize, c: &crate::collect::Collect, keys: &crate::collect::KeysCopy, base: u32, image_size: u32) -> Result<(u32, u32, (u32, u32, u32)), i32> {
+        use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
+        let mut sink = RecordSink::measure();
+        let ctx = ModuleCommitCtx { phase: commit_phase::PREPARE, base, image_size, keys, sink: &mut sink };
+        let r = self.r.module_commit(rec, &ctx);
+        if r != OK {
+            return Err(r);
+        }
+        c.write_generic(&mut sink);
+        let (size, count) = (sink.at, sink.count);
+        let blk = if size > RecordSink::HEADER {
+            match self.m.alloc(size as u32) {
+                Some(b) => Some(b),
+                None => return Err(E_NOMEM),
+            }
+        } else {
+            None
+        };
+        let mut out = match blk {
+            Some(b) => RecordSink::over(b.ptr, size),
+            None => RecordSink::over(core::ptr::null_mut(), 0),
+        };
+        let ctx = ModuleCommitCtx { phase: commit_phase::WRITE, base, image_size, keys, sink: &mut out };
+        let r = self.r.module_commit(rec, &ctx);
+        let free = |l: &mut Self| {
+            if let Some(b) = blk {
+                l.m.free(b.addr);
+            }
+        };
+        if r != OK {
+            free(self);
+            return Err(r);
+        }
+        c.write_generic(&mut out);
+        let rows = (out.rows[0], out.rows[1], out.rows[2]);
+        if let Some(b) = blk {
+            if out.at != size || out.count != count {
+                free(self);
+                return Err(E_FORMAT); // a service wrote another size than it measured
+            }
+            wr32(b.ptr, 0x444b_5247);
+            wr32(b.ptr.add(4), 1);
+            wr32(b.ptr.add(8), self.p.device_id());
+            wr32(b.ptr.add(12), count);
+            // check before anything of the module's rows is declared: a refusal leaves everything as it was
+            let r = crate::registry::check(b.ptr, size as u32, image_size, self.p.device_id());
+            if r != OK {
+                free(self);
+                return Err(r);
+            }
+        }
+        let ctx = ModuleCommitCtx { phase: commit_phase::DECLARE, base, image_size, keys, sink: &mut out };
+        let r = self.r.module_commit(rec, &ctx);
+        if r != OK {
+            free(self);
+            return Err(r);
+        }
+        let b = match blk {
+            Some(b) => b,
+            None => return Ok((0, 0, rows)),
+        };
+        let r = crate::registry::apply(rec as u8 + 1, b.ptr, size as u32, base);
+        if r != OK {
+            free(self);
+            return Err(r);
+        }
+        Ok((b.addr, size as u32, rows))
+    }
 
     /// The DSP part of a module published at boot failed (the machine rows and `init` are in already): take it down again.
     pub unsafe fn undo_early(&mut self, rec: usize) -> i32 {
@@ -881,7 +872,28 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         let provs = parse_provs(&self.found, planned.np);
         plan::settle(&services(), planned, &mods[..n], &provs[..planned.np], &self.loaded[..planned.np]);
+        // every service of the boot is loaded and no module yet: the services plan what they keep per selected module
+        let mut sel = dkrt_abi::service::SettleCtx::new();
+        sel.count = n;
+        let mut i = 0;
+        while i < n {
+            sel.nkeys[i] = table_keys(&self.tables[i][..self.table_len[i]], &mut sel.keys[i]) as u8;
+            i += 1;
+        }
+        services().settle(&sel);
     }
+}
+
+/// The keys of a module's header table that `settle` hands to the services (`table` empty: none), at most 8; their count.
+#[inline(never)]
+pub(crate) fn table_keys(table: &[u8], out: &mut [u32; 8]) -> usize {
+    let k = match dkrt_abi::keys::KeysCopy::from_bytes(table) {
+        Ok(k) => k,
+        Err(_) => return 0,
+    };
+    let n = k.nm.min(8);
+    out[..n].copy_from_slice(&k.mk[..n]);
+    n
 }
 
 /// The header tables of the first `n` providers the search found.

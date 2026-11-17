@@ -146,203 +146,112 @@
    "addend": 0,
    "offset": 12,
    "section": ".rodata",
-   "symbol": "_mf_k_keydown",
+   "symbol": "_mf_first",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 16,
    "section": ".rodata",
-   "symbol": "_mf_k_setvalue",
+   "symbol": "_mf_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 20,
    "section": ".rodata",
-   "symbol": "_mf_k_viewtrack",
+   "symbol": "_mf_entries",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 24,
    "section": ".rodata",
-   "symbol": "_mf_first",
+   "symbol": "_mf_rows",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 28,
    "section": ".rodata",
-   "symbol": "_mf_count",
+   "symbol": ".sec..text",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 32,
    "section": ".rodata",
-   "symbol": "_mf_entries",
+   "symbol": "mf_native_page_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 36,
    "section": ".rodata",
-   "symbol": "_mf_rows",
+   "symbol": "mf_native_descriptor",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 40,
    "section": ".rodata",
-   "symbol": ".sec..text",
+   "symbol": "mf_native_code",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 44,
    "section": ".rodata",
-   "symbol": "mf_native_page_count",
+   "symbol": "mf_native_draw",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 48,
    "section": ".rodata",
-   "symbol": "mf_native_descriptor",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 52,
-   "section": ".rodata",
-   "symbol": "mf_native_code",
+   "symbol": "mf_native_overlay",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 56,
    "section": ".rodata",
-   "symbol": "mf_native_draw",
+   "symbol": "_mf_pgrows",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 60,
    "section": ".rodata",
-   "symbol": "mf_native_overlay",
+   "symbol": "_mf_pgn",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 64,
+   "section": ".rodata",
+   "symbol": "mf_native_register",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".rodata",
+   "symbol": "mf_native_register_v2",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 72,
    "section": ".rodata",
-   "symbol": "_mf_pgrows",
+   "symbol": "mf_native_remove",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 76,
    "section": ".rodata",
-   "symbol": "_mf_pgn",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 100,
-   "section": ".rodata",
-   "symbol": "_mf_g",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 104,
-   "section": ".rodata",
-   "symbol": "_mf_ga",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 108,
-   "section": ".rodata",
-   "symbol": "_mf_ft",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 112,
-   "section": ".rodata",
-   "symbol": "_mf_rd",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 116,
-   "section": ".rodata",
-   "symbol": "_mf_ow",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 120,
-   "section": ".rodata",
-   "symbol": "_mf_rc0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 124,
-   "section": ".rodata",
-   "symbol": "_mf_rc1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 128,
-   "section": ".rodata",
-   "symbol": "_mf_rc2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 132,
-   "section": ".rodata",
-   "symbol": "_mf_rc3",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 136,
-   "section": ".rodata",
-   "symbol": "_mf_rc4",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 140,
-   "section": ".rodata",
-   "symbol": "_mf_rc5",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 144,
-   "section": ".rodata",
-   "symbol": "_mf_rc6",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 148,
-   "section": ".rodata",
-   "symbol": "_mf_rc7",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 152,
-   "section": ".rodata",
-   "symbol": "_mf_rc8",
+   "symbol": "mf_native_turn",
    "type": "cf.32"
   }
  ],
@@ -363,13 +272,13 @@
   },
   {
    "align": 4,
-   "hex": "4d4143480000000100000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "4d41434800000003000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 156
+   "size": 80
   }
  ],
- "source_sha256": "b18079904a593e8d82a27db69f64d4d484904f8dcb3314cada04fc7de9ea0e6e",
+ "source_sha256": "525a192e81dd68de71453239cd460d0f60f29e72aa0395850c34cee2039d6320",
  "symbols": [
   {
    "global": false,
@@ -403,49 +312,7 @@
   },
   {
    "global": true,
-   "name": "_mf_ft",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_g",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_ga",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_k_keydown",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_k_setvalue",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_k_viewtrack",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
    "name": "_mf_list_stock",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_ow",
    "section": null,
    "value": 0
   },
@@ -458,66 +325,6 @@
   {
    "global": true,
    "name": "_mf_pgrows",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rc0",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rc1",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rc2",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rc3",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rc4",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rc5",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rc6",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rc7",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rc8",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_mf_rd",
    "section": null,
    "value": 0
   },
@@ -600,6 +407,30 @@
    "value": 0
   },
   {
+   "global": true,
+   "name": "mf_native_register",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_register_v2",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_remove",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_native_turn",
+   "section": null,
+   "value": 0
+  },
+  {
    "global": false,
    "name": "mf_pgstr",
    "section": ".bss",
@@ -629,7 +460,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "111",
-  "isa_check": "25b68f0ba35c8984159e52bde000b20f0f8884a8b3b0117ab507c43cf6789c8b",
+  "isa_check": "4fda86de446369c07ca037add753f23b71a2fe2d62bb6afef9cf237411dd7789",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

@@ -19,6 +19,9 @@ export const dkmMap = (dev, id) => dkm(dev, id).replace(/\.dkm$/, '.addrmap.json
 // Pack output of a module, given its parsed [module] table: a service packs to .dks, every other module to .dkm.
 export const packOut = (dev, manifest, id = manifest.id) =>
   manifest.role === 'service' ? dkm(dev, id).replace(/\.dkm$/, '.dks') : dkm(dev, id);
+/** The services that the packed file needs (`patchkit services`, one JSON line each), written beside it by the pack target. */
+export const servicesOut = (dev, manifest, id = manifest.id) =>
+  packOut(dev, manifest, id).replace(/\.dk[ms]$/, '.services.json');
 export const packMap = (dev, manifest) => packOut(dev, manifest).replace(/\.dk[ms]$/, '.addrmap.json');
 export const records = (root) => {
   const file = join(root, 'project.json');

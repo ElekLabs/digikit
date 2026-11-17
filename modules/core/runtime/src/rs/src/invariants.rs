@@ -11,7 +11,7 @@
 //!    is a row it owns; an unused record has no DSP range, no rows and no registry rows, and every registry row has a used owner;
 //!    The effect rows follow the same rule (`mod_fx`, a bit for each row of the chain a record owns).
 //! 4. no two used records have the same name.
-use crate::{cstr_eq, dlog, dsp, registry, st, ARENA_BYTES, DKRT_ARENA, MAX_MODULES};
+use crate::{cstr_eq, dlog, dsp, st, ARENA_BYTES, DKRT_ARENA, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::*;
 
@@ -122,28 +122,6 @@ pub unsafe fn check() -> u32 {
             k += 1;
         }
         i += 1;
-    }
-    let r = &*addr_of!(registry::DKRT_REG);
-    k = 0;
-    while k < r.mach_owner.len() {
-        if !owner_used(r.mach_owner[k]) {
-            return fail(3, k, 0x100 | r.mach_owner[k] as u32, 0);
-        }
-        k += 1;
-    }
-    k = 0;
-    while k < r.param_owner.len() {
-        if !owner_used(r.param_owner[k]) {
-            return fail(3, k, 0x200 | r.param_owner[k] as u32, 0);
-        }
-        k += 1;
-    }
-    k = 0;
-    while k < r.page_owner.len() {
-        if !owner_used(r.page_owner[k]) {
-            return fail(3, k, 0x300 | r.page_owner[k] as u32, 0);
-        }
-        k += 1;
     }
     // 4. names are unique
     i = 0;

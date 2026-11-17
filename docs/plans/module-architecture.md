@@ -66,8 +66,8 @@ and `core/sample-pool` reach `main` with that branch. Paths without a directory 
 - Adapter code is small: from about 30 B of data (`dynfx`) to about 6 KB of text (`ui`).
 - The runtime calls adapters through optional symbols (`modules/core/runtime/module.toml:30`: `dynreg_info`, `dl_send`, `dyndsp_info`,
   `dynfx_info`, `fxpages_info`, `dkpool_*`, `health_*`, `input_*`, `dk_ui_*`). Each resolves to 0 when its adapter is not in the image.
-- Most adapters list `requires = ["core/runtime"]`, but **only `core/sample-pool` imports runtime symbols** (`dkrt_pool_done`,
-  `dkrt_pool_lost`). The others import only firmware anchors and other adapters' symbols (checked in every `build/*.dko.json` of
+- Most adapters list `requires = ["core/runtime"]`, but **only `core/sample-pool` imports runtime symbols** (the slots `pool_done`,
+  `pool_lost`, which `samples.dks` fills). The others import only firmware anchors and other adapters' symbols (checked in every `build/*.dko.json` of
   `modules/core/adapters/`). So `requires` mixes "useful only with the runtime" with "calls the runtime".
 
 ### 3.3 Hooks today
@@ -257,7 +257,7 @@ Rules:
 3. A capability uses the core only through the core API, and another capability only through that capability's declared API, never its
    state.
 4. An adapter uses firmware bindings and other adapters' headers. It calls the runtime only through declared callbacks (today
-   `dkrt_pool_done`, `dkrt_pool_lost`, `dkrt_project_changed`, all of `core/sample-pool`).
+   the pointer slots `pool_done` and `pool_lost` of `core/sample-pool`, filled by `samples.dks`).
 5. An app (`modules/core/apps/*`) has no `[[op]]` and no `[[claim]]`; an adapter calls it through an optional `dk_app_*` symbol.
 6. `requires` is a code dependency; `[patch_sets]` compose an image.
 7. A device value comes from TOML through `patchkit gen`. A source never includes a device-named file (`device-dt2.inc`).

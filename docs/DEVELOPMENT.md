@@ -232,7 +232,7 @@ All tools are indexed in [docs/TOOLS.md](TOOLS.md).
 
 Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, `wb addrmap lookup`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).
 Usage of the object compare for moves of runtime code (`patchkit objdiff OLD NEW`): [PATCHING.md](PATCHING.md#compare-two-objects-after-a-move).
-Usage of the service binder (`patchkit bind IN.dks --firmware FW.syx -o OUT.dks`): [PATCHING.md](PATCHING.md#bind-a-service-to-your-firmware).
+Usage of the service binder (`patchkit bind IN.dks --firmware FW.syx -o OUT.dks`): [PATCHING.md](PATCHING.md#bind-a-service-to-your-firmware). Which services a module needs (`patchkit services`): [PATCHING.md](PATCHING.md#which-services-a-module-needs).
 Usage of Transfer install, restart and delete with services (`mise run transfer`, `wb transfer install --restart`, `wb transfer delete`): [MODULES.md](MODULES.md#install-with-services-from-the-command-line).
 
 Core library store (`verify_build cores`, `tools/devtools/store.py`, shared with the daemon store): [TESTING.md](TESTING.md#core-library-store).

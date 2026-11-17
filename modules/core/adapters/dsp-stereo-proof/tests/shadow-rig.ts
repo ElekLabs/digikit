@@ -14,7 +14,9 @@ import {
   link,
   openImageSession,
   type CallResult,
+  type ByteRange,
   type Linked,
+  type Load,
   type StereoSession,
 } from '@digi/sharc-rig-kit';
 
@@ -46,6 +48,11 @@ export const canonical = (byteAddress: number): number => (byteAddress >= 0x8000
 
 export type Store = [pc: number, address: number, width: number];
 
+/** the byte range of `words` words at the normal-word address `base`, as the rig reports an access to it */
+export const wordRange = (base: number, words: number): ByteRange => [canonical(toByte(base)), canonical(toByte(base)) + 4 * words];
+/** the byte range of `words` words of the stock image at the byte address `base` (a table of the firmware: the image bytes sit at the loader alias) */
+export const imageRange = (base: number, words: number): ByteRange => [canonical(base), canonical(base) + 4 * words];
+
 const sdk = (): string[] => [path.join(ROOT, 'sdk')];
 const fixture = (name: string): string => readFileSync(path.join(ROOT, 'tests/fixtures/dsp', name), 'utf8');
 
@@ -75,12 +82,9 @@ export interface CallOptions {
   readRegs?: string[];
   breaks?: number[];
   resume?: boolean;
-  profile?: boolean;
+  /** record the loads of the call (`Shadow.loads`) */
+  loads?: boolean;
 }
-
-/** how often the call executed the instructions at `pcs` (the rig does not record loads: a load that runs once reads once) */
-export const executed = (r: CallResult, pcs: readonly number[]): number =>
-  (r.profile ?? []).filter(([pc]) => pcs.includes(pc)).reduce((n, [, c]) => n + c, 0);
 
 /** The rig reports the bytes one instruction stored as runs: a long-word or SIMD store of two words is one run of 8 bytes. The Python core logs one event per word. */
 export function wordStores(runs: Store[]): Store[] {
@@ -92,6 +96,8 @@ export function wordStores(runs: Store[]): Store[] {
 export class Shadow {
   /** the stores of the last call */
   stores: Store[] = [];
+  /** the loads of the last call, when it asked for them (`CallOptions.loads`); empty otherwise */
+  loads: Load[] = [];
   readonly raw: StereoSession;
   private readonly symbols: Record<string, number>;
 
@@ -123,6 +129,11 @@ export class Shadow {
     return this.raw.words(toByte(address), count);
   }
 
+  /** the word at a byte address as the rig reports it (a load address: L2 at the loader alias, an image word at its alias) */
+  async wordAt(address: number): Promise<number> {
+    return (await this.raw.words(address, 1))[0]!;
+  }
+
   async peek(address: number): Promise<number> {
     return (await this.words(address, 1))[0]!;
   }
@@ -135,9 +146,10 @@ export class Shadow {
       readRegs: o.readRegs,
       breaks: o.breaks,
       resume: o.resume,
-      profile: o.profile,
+      loads: o.loads,
     });
     this.stores = wordStores(result.stores);
+    this.loads = result.loads ?? [];
     return result;
   }
 }

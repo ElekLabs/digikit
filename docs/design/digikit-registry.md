@@ -135,7 +135,7 @@ effect-row order. Facts of the firmware and the measurements are in `docs/findin
 
 - **Reserved resources** (patch time): one page row for each effect slot (page numbers `[fx] page_first` and up, answered by a hook in the page accessor), the list the FX view reads its pages from
   (a hook in the view builder), the tab label and graph hooks, and 24 parameter rows (`params.fp0` ..): effect row k owns the rows `8k .. 8k + 7`, seven knobs and MIX. `fxpages_info` is the table
-  the runtime reads (rows, list, anchors of the stock list, the first parameter code, the kit pointer and array offset, the template codes and the value indices, all device-file facts: `[fx]`).
+  the runtime reads (rows, list, the first parameter code, the kit pointer and array offset, the template codes and the value indices, all device-file facts: `[fx]`).
 - **What an EFFECT record makes** (`fxpage::apply`, in `registry::apply` after the machines, when `dsp::reserve` has claimed the effect's chain row k): the parameter rows `8k + j` from the
   knobs (template by display: `template_percent` or `template_bipolar`, range 0 to 0x7f00, default `round((default - min) / (max - min) * 0x7f00)`, names; mirror index `value_indices[8k + j]`), MIX
   as row `8k + 7` (template `template_mix`, name "Mix", short "MIX", default `mix * 256`), the page row (tab, title, the knob codes at their positions, MIX on the level slot), then the page list and its

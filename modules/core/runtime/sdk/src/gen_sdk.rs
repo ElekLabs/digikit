@@ -106,9 +106,6 @@ pub mod records {
         (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2, "machines"),
         (KIND_LFO_SHAPE, LEN_LFO_SHAPE, "lfo"),
     ];
-    /// The kinds of the `samples` service: (kind, record length).
-    pub const KINDS_SAMPLES: [(u32, u32); 0] = [
-    ];
     /// The kinds of the `machines` service: (kind, record length).
     pub const KINDS_MACHINES: [(u32, u32); 6] = [
         (KIND_PARAM, LEN_PARAM),
@@ -127,9 +124,8 @@ pub mod records {
         (KIND_LFO_SHAPE, LEN_LFO_SHAPE),
     ];
     /// The services of `[handle] services` that are in the runtime image (not the ones a `.dks` provides): the names a module's `NEEDS` meets without a provider (hashed by `dkneeds::keys::name_hash`).
-    pub const HANDLE_SERVICES: [&str; 7] = [
+    pub const HANDLE_SERVICES: [&str; 6] = [
         "runtime",
-        "samples",
         "ui",
         "input",
         "usb_bulk",
@@ -635,7 +631,7 @@ pub mod api {
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`, and not provided by a service file.
-    pub const BUILTIN_NAMES: [&str; 83] = [
+    pub const BUILTIN_NAMES: [&str; 59] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -682,36 +678,12 @@ pub mod api {
         "dk_hash32_update",
         "dk_hash32_finish",
         "dk_intro_take",
-        "dk_module_ctx_add_machine",
-        "dk_module_ctx_add_fx",
         "dk_record_add",
         "dk_service_declare_kind",
         "dk_service_declare_slot",
         "dk_service_declare_hook",
         "dk_service_declare_export",
         "dk_service_declare_resource",
-        "dk_machine_add_page",
-        "dk_fx_add_page",
-        "dk_page_add_param",
-        "dk_page_add_fx_param",
-        "dk_param_range",
-        "dk_param_glyph",
-        "dk_param_latched",
-        "dk_param_on_click",
-        "dk_page_canvas",
-        "dk_page_bind",
-        "dk_page_bind_local",
-        "dk_fx_routes",
-        "dk_fx_mix",
-        "dk_sample_pool_open",
-        "dk_sample_pool_add",
-        "dk_sample_pool_clear",
-        "dk_sample_pool_status",
-        "dk_sample_pool_info",
-        "dk_sample_pool_path",
-        "dk_sample_pool_set",
-        "dk_sample_pool_peaks",
-        "dk_sample_pool_peaks_window",
         "dk_debug_peek",
         "dk_debug_span_clock",
         "dk_debug_poll",
@@ -760,7 +732,7 @@ pub mod api {
     /// `dk_fw_block_read`: The firmware's eMMC block read: `bytes` (a multiple of 512) from `sector` into `buf`; 0 = ok. Reads the whole card, not only the store.
     pub type DkFwBlockReadFn = unsafe extern "C" fn(sector: u32, bytes: u32, buf: *mut u8) -> i32;
 
-    /// `dk_files_read`: Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`.
+    /// `dk_files_read`: Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code: `E_NOT_FOUND` for a missing file or a folder, `E_SEL_PATH` for an empty path, `E_TOO_BIG` for a path over 159 bytes or a file larger than `cap`. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`.
     pub type DkFilesReadFn = unsafe extern "C" fn(files: *mut u8, path: *const u8, buf: *mut u8, cap: u32) -> i32;
 
     /// `dk_host_register`: Register the SysEx commands `first .. first + count` with `fn`. The range must lie inside one of the ranges sdk/sdk.toml [protocol.ranges] reserves and overlap no registered one; else it returns DK_E_CMD_RANGE. The range is released with the module. Returns 0. See <dk/platform/host.h>.

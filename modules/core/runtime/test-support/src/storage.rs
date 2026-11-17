@@ -158,9 +158,6 @@ impl Storage for FakeStorage {
         }
         Ok(Self::stat_of(&self.found(root, path)?))
     }
-    unsafe fn read_head(&self, root: u32, path: &[u8], out: &mut [u8; 64]) -> Result<(), i32> {
-        Self::head(&self.file(root, path)?, out)
-    }
     unsafe fn stat_head(
         &self,
         root: u32,
@@ -174,19 +171,6 @@ impl Storage for FakeStorage {
         let n = self.found(root, path)?;
         Self::head(&n, out)?;
         Ok((Self::stat_of(&n), 64))
-    }
-    unsafe fn read_range(
-        &self,
-        root: u32,
-        path: &[u8],
-        offset: u32,
-        out: &mut [u8],
-    ) -> Result<usize, i32> {
-        let n = self.file(root, path)?;
-        let start = (offset as usize).min(n.bytes.len());
-        let k = out.len().min(n.bytes.len() - start);
-        out[..k].copy_from_slice(&n.bytes[start..start + k]);
-        Ok(k)
     }
     unsafe fn read_all(&self, root: u32, path: &[u8], dst: *mut u8, cap: u32) -> Result<u32, i32> {
         let n = self.file(root, path)?;
