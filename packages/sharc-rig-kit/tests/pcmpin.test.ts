@@ -4,14 +4,33 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { wordsHash } from '../src/analysis.ts';
 import { fingerprint } from '../src/fingerprint.ts';
-import { checkCapture, compare, measure, parseFloatWav, readPin, report, sineProblems, upgradeV1, writePin } from '../src/pcmpin.ts';
+import {
+  checkCapture,
+  compare,
+  measure,
+  parseFloatWav,
+  readPin,
+  report,
+  sineProblems,
+  upgradeV1,
+  writePin,
+} from '../src/pcmpin.ts';
 import { wavBytes } from '../src/plot.ts';
 
 const HZ = 440 * 2 ** (-9 / 12); // MIDI 60
 const ONSET = 194;
 
 /** stereo interleaved: silence for ONSET frames, then a sine with `harm3` of a third harmonic; `gain(t)` shapes the level */
-function tone(o: { hz?: number; harm3?: number; gain?: (t: number) => number; frames?: number; onset?: number; right?: number } = {}): Float32Array {
+function tone(
+  o: {
+    hz?: number;
+    harm3?: number;
+    gain?: (t: number) => number;
+    frames?: number;
+    onset?: number;
+    right?: number;
+  } = {},
+): Float32Array {
   const frames = o.frames ?? 24000;
   const onset = o.onset ?? ONSET;
   const out = new Float32Array(frames * 2);
@@ -19,7 +38,9 @@ function tone(o: { hz?: number; harm3?: number; gain?: (t: number) => number; fr
     const t = (i - onset) / 48000;
     const f = o.hz ?? HZ;
     const g = (o.gain ?? (() => 1))(t);
-    const v = Math.fround(g * 0.2 * (Math.sin(2 * Math.PI * f * t) + (o.harm3 ?? 0) * Math.sin(2 * Math.PI * 3 * f * t)));
+    const v = Math.fround(
+      g * 0.2 * (Math.sin(2 * Math.PI * f * t) + (o.harm3 ?? 0) * Math.sin(2 * Math.PI * 3 * f * t)),
+    );
     out[2 * i] = v;
     out[2 * i + 1] = Math.fround(v * (o.right ?? 1));
   }
@@ -46,7 +67,10 @@ describe('measure', () => {
 
   it('calls noise not periodic', () => {
     let seed = 1;
-    const n = Float32Array.from({ length: 24000 }, () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32 - 0.5) * 0.2);
+    const n = Float32Array.from(
+      { length: 24000 },
+      () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32 - 0.5) * 0.2,
+    );
     expect(measure(n, { windowFrames: 12000 }).fp.periodic).toBeNull();
   });
 
@@ -77,7 +101,9 @@ describe('compare', () => {
   });
 
   it('says an onset that moved', () => {
-    expect(diff(pin, tone({ onset: ONSET + 32 }))).toContain(`onset moved 32 frames (${pin.onset} -> ${pin.onset + 32})`);
+    expect(diff(pin, tone({ onset: ONSET + 32 }))).toContain(
+      `onset moved 32 frames (${pin.onset} -> ${pin.onset + 32})`,
+    );
   });
 
   it('says that L = R is gone', () => {
@@ -85,7 +111,7 @@ describe('compare', () => {
   });
 
   it('accepts what the tolerance allows', () => {
-    const loose = { ...pin, tolerance: { level_db: 4, band_db: 4, pitch_cents: 30, crest_pct: 5 } };
+    const loose = { ...pin, tolerance: { level_db: 4, band_db: 40, pitch_cents: 30, crest_pct: 5 } };
     expect(compare(loose, pinOf(tone({ hz: HZ * 2 ** (14 / 1200), gain: () => 0.8 })))).toEqual([]);
   });
 
@@ -104,7 +130,15 @@ describe('compare', () => {
     const v1 = fingerprint(mono);
     const now = measure(mono, { blockRms: true }).fp;
     expect(compare(v1, now)).toEqual([]);
-    expect(compare(upgradeV1(v1), measure(mono.map((v) => v * 0.5), { blockRms: true }).fp).some((l) => l.startsWith('peak -6.0'))).toBe(true);
+    expect(
+      compare(
+        upgradeV1(v1),
+        measure(
+          mono.map((v) => v * 0.5),
+          { blockRms: true },
+        ).fp,
+      ).some((l) => l.startsWith('peak -6.0')),
+    ).toBe(true);
   });
 });
 

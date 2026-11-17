@@ -26,14 +26,7 @@ import {
   wordsHash,
 } from './analysis.ts';
 import { signalBlock } from './checks.ts';
-import {
-  classify,
-  fingerprintFile,
-  readRef,
-  rigKey,
-  writeRef,
-  cacheDir,
-} from './fingerprint.ts';
+import { classify, fingerprintFile, readRef, rigKey, writeRef, cacheDir } from './fingerprint.ts';
 import { asV1, compare, measure, readPin, writePin } from './pcmpin.ts';
 import { plotPng, writePng, writeWav } from './plot.ts';
 import { REC, RECORDS, f2w, nw } from './context.ts';
@@ -450,7 +443,11 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
       const mismatch = `the words hash is ${h}, the pin is ${String(c.sha256)}`;
       if (!key) return mismatch;
       const diffs = pin?.version === 2 ? compare(pin, measure(x(), { blockRms: true }).fp) : [];
-      const more = diffs.length ? `\n  fingerprint: ${diffs.join('; ')}` : pin?.version === 2 ? '\n  fingerprint: equal within tolerance (only bits differ)' : '';
+      const more = diffs.length
+        ? `\n  fingerprint: ${diffs.join('; ')}`
+        : pin?.version === 2
+          ? '\n  fingerprint: equal within tolerance (only bits differ)'
+          : '';
       return `${mismatch}${more}\n  ${classify(x(), readRef(key), asV1(pin)).line}`;
     }
     case 'instructions': {
@@ -717,9 +714,17 @@ export async function reportRigFile(module: string, file: string, o: RunOptions 
       if (ref) writeWav(path.join(out, 'ref.wav'), ref);
       writePng(
         path.join(out, 'plot.png'),
-        plotPng(`${module} ${device} ${c.name}`, `${same ? 'PIN MATCHES' : 'PIN DIFFERS'}  ${v.line}`, x, ref, pin?.bandDb ?? null),
+        plotPng(
+          `${module} ${device} ${c.name}`,
+          `${same ? 'PIN MATCHES' : 'PIN DIFFERS'}  ${v.line}`,
+          x,
+          ref,
+          pin?.bandDb ?? null,
+        ),
       );
-      lines.push(`${key}: ${same ? 'pin matches' : 'PIN DIFFERS'}; ${v.line}${verdict ? `\n  fingerprint: ${verdict}` : ''}\n  ${path.join(out, 'plot.png')}`);
+      lines.push(
+        `${key}: ${same ? 'pin matches' : 'PIN DIFFERS'}; ${v.line}${verdict ? `\n  fingerprint: ${verdict}` : ''}\n  ${path.join(out, 'plot.png')}`,
+      );
     } catch (e) {
       lines.push(`${key}: not run: ${(e as Error).message}`);
     }

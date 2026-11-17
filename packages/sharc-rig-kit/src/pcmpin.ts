@@ -119,7 +119,8 @@ export function measure(x: ArrayLike<number>, o: MeasureOptions = {}): Measured 
   const frames = Math.floor(window.length / ch);
   window = window.slice(0, frames * ch);
   const chans = Array.from({ length: ch }, (_, c) => Array.from({ length: frames }, (_, i) => window[i * ch + c]!));
-  const mono = ch === 1 ? chans[0]! : Array.from({ length: frames }, (_, i) => chans.reduce((s, c) => s + c[i]!, 0) / ch);
+  const mono =
+    ch === 1 ? chans[0]! : Array.from({ length: frames }, (_, i) => chans.reduce((s, c) => s + c[i]!, 0) / ch);
   let stereo: FingerprintV2['stereo'] = null;
   if (ch === 2) {
     const maxDiff = chans[0]!.reduce((m, v, i) => Math.max(m, Math.abs(v - chans[1]![i]!)), 0);
@@ -183,7 +184,10 @@ export function periodicity(x: readonly number[], rate = FS): Periodic | null {
   const kf = kp + (Number.isFinite(d) ? d : 0);
   const hz = (kf * rate) / size;
   const guard = Math.ceil((3 * size) / n);
-  const band = (k0: number): [number, number] => [Math.max(1, Math.round(k0) - guard), Math.min(half - 1, Math.round(k0) + guard)];
+  const band = (k0: number): [number, number] => [
+    Math.max(1, Math.round(k0) - guard),
+    Math.min(half - 1, Math.round(k0) + guard),
+  ];
   const power = (k0: number): number => {
     const [l, h] = band(k0);
     let s = 0;
@@ -202,7 +206,9 @@ export function periodicity(x: readonly number[], rate = FS): Periodic | null {
   for (let h = 1; h <= 6 && h * kf < half - guard; h++) tonal += power(h * kf);
   if (tonal / total < PERIODIC_SHARE) return null;
   const fund = top(kf);
-  const harmonics = HARMONICS.map((h) => (h * kf < half - guard ? dec(10 * Math.log10(Math.max(top(h * kf), 1e-30) / fund), 1) : FLOOR_DB));
+  const harmonics = HARMONICS.map((h) =>
+    h * kf < half - guard ? dec(10 * Math.log10(Math.max(top(h * kf), 1e-30) / fund), 1) : FLOOR_DB,
+  );
   const r0 = rms(x);
   return {
     pitch: { hz: dec(hz, 3), midi: dec(69 + 12 * Math.log2(hz / 440), 3) },
@@ -289,23 +295,33 @@ export function compare(pinIn: Pin, got: FingerprintV2, o: CompareOptions = {}):
   if (Math.abs(pin.peak_db - got.peak_db) > tol.level_db)
     out.push(`peak ${sign(got.peak_db - pin.peak_db, 2)} dB (${pin.peak_db} -> ${got.peak_db} dBFS)`);
   if (pin.stereo && got.stereo) {
-    if (pin.stereo.identical && !got.stereo.identical) out.push(`L and R differ now (max |L-R| ${got.stereo.max_diff}), the pin has L = R`);
-    else if (!pin.stereo.identical && got.stereo.identical) out.push(`L = R now, the pin has max |L-R| ${pin.stereo.max_diff}`);
+    if (pin.stereo.identical && !got.stereo.identical)
+      out.push(`L and R differ now (max |L-R| ${got.stereo.max_diff}), the pin has L = R`);
+    else if (!pin.stereo.identical && got.stereo.identical)
+      out.push(`L = R now, the pin has max |L-R| ${pin.stereo.max_diff}`);
     else if (!pin.stereo.identical) {
       const dd = db20(got.stereo.max_diff) - db20(pin.stereo.max_diff);
-      if (Math.abs(dd) > tol.level_db) out.push(`max |L-R| ${sign(dd)} dB (${pin.stereo.max_diff} -> ${got.stereo.max_diff})`);
+      if (Math.abs(dd) > tol.level_db)
+        out.push(`max |L-R| ${sign(dd)} dB (${pin.stereo.max_diff} -> ${got.stereo.max_diff})`);
     }
   }
   // level per window: the first moved run says where, the others are counted
   const nw = Math.min(pin.rms_db.length, got.rms_db.length);
   const ms = (i: number): number => Math.round((i * pin.rms_window * 1000) / pin.rate);
-  const moved = runs(nw, (i) => Math.abs(got.rms_db[i]! - pin.rms_db[i]!) > tol.level_db && Math.max(got.rms_db[i]!, pin.rms_db[i]!) > tol.rms_floor_db);
+  const moved = runs(
+    nw,
+    (i) =>
+      Math.abs(got.rms_db[i]! - pin.rms_db[i]!) > tol.level_db &&
+      Math.max(got.rms_db[i]!, pin.rms_db[i]!) > tol.rms_floor_db,
+  );
   if (moved.length) {
     const [a, b] = moved[0]!;
     let mean = 0;
     for (let i = a; i <= b; i++) mean += got.rms_db[i]! - pin.rms_db[i]!;
     mean /= b - a + 1;
-    out.push(`level ${sign(mean)} dB from ${ms(a)} ms${b > a ? ` to ${ms(b + 1)} ms` : ''}${moved.length > 1 ? ` (and ${moved.length - 1} more spans)` : ''}`);
+    out.push(
+      `level ${sign(mean)} dB from ${ms(a)} ms${b > a ? ` to ${ms(b + 1)} ms` : ''}${moved.length > 1 ? ` (and ${moved.length - 1} more spans)` : ''}`,
+    );
   }
   if (pin.rms_db.length === 0 && pin.block_rms && got.block_rms && pin.block === got.block) {
     // a v1 rig pin: the level per block, where it is above 60 dB under the peak
@@ -366,7 +382,9 @@ export function compare(pinIn: Pin, got: FingerprintV2, o: CompareOptions = {}):
 // ---- the report -----------------------------------------------------------------------------------------------------------------
 
 function lines(fp: FingerprintV2): [string, string][] {
-  const lvl = fp.rms_db.length ? `${Math.min(...fp.rms_db)} .. ${Math.max(...fp.rms_db)} dBFS (${fp.rms_db.length} x ${Math.round((fp.rms_window * 1000) / fp.rate)} ms)` : 'not stored';
+  const lvl = fp.rms_db.length
+    ? `${Math.min(...fp.rms_db)} .. ${Math.max(...fp.rms_db)} dBFS (${fp.rms_db.length} x ${Math.round((fp.rms_window * 1000) / fp.rate)} ms)`
+    : 'not stored';
   const topBands = fp.bandDb
     .map((v, i) => [v, i] as const)
     .sort((a, b) => b[0] - a[0])
@@ -374,7 +392,10 @@ function lines(fp: FingerprintV2): [string, string][] {
     .map(([v, i]) => `${Math.round(fp.bandHz[i]!)} Hz ${v}`)
     .join(', ');
   const rows: [string, string][] = [
-    ['format', `${fp.rate} Hz, ${fp.channels} ch, ${fp.frames} frames${fp.window_frames === null ? '' : ` from the onset`}`],
+    [
+      'format',
+      `${fp.rate} Hz, ${fp.channels} ch, ${fp.frames} frames${fp.window_frames === null ? '' : ` from the onset`}`,
+    ],
     ['onset', `${fp.onset} frames`],
     ['peak', `${fp.peak_db} dBFS`],
     ['stereo', fp.stereo ? (fp.stereo.identical ? 'L = R' : `max |L-R| ${fp.stereo.max_diff}`) : '-'],
@@ -396,7 +417,9 @@ export function report(got: FingerprintV2, pinIn: Pin | null): string {
   const b = lines(got);
   const w = Math.max(...b.map(([k]) => k.length));
   return b
-    .map(([k, v], i) => (a ? `  ${k.padEnd(w)}  expected ${a[i]![1]}\n  ${' '.repeat(w)}  measured ${v}` : `  ${k.padEnd(w)}  ${v}`))
+    .map(([k, v], i) =>
+      a ? `  ${k.padEnd(w)}  expected ${a[i]![1]}\n  ${' '.repeat(w)}  measured ${v}` : `  ${k.padEnd(w)}  ${v}`,
+    )
     .join('\n');
 }
 
@@ -432,7 +455,7 @@ export function writePin(file: string, fp: FingerprintV2, extras: PinExtras = {}
 
 // ---- the check of a capture -----------------------------------------------------------------------------------------------------
 
-export interface CheckResult {
+export interface PinCheckResult {
   ok: boolean;
   differences: string[];
   /** the report to print: measured (and expected) numbers */
@@ -456,11 +479,16 @@ export interface CheckOptions {
  * Compares a capture with the pin file. A missing pin is `pending` and not ok; the result's text is the full report. On a failure the plot
  * (`plot.png`, the capture over the pin's band curve) and `<name>.window.wav` are written to `outDir` for listening.
  */
-export function checkCapture(pinFile: string, pcm: ArrayLike<number>, o: CheckOptions): CheckResult {
+export function checkCapture(pinFile: string, pcm: ArrayLike<number>, o: CheckOptions): PinCheckResult {
   const pin = readPin(pinFile);
   const ch = o.channels ?? 1;
   const windowFrames = pin ? (pin.version === 2 ? pin.window_frames : null) : (o.windowFrames ?? null);
-  const m = measure(pcm, { rate: o.rate, channels: ch, windowFrames, blockRms: pin !== null && (pin.version === 1 || pin.block_rms !== undefined) });
+  const m = measure(pcm, {
+    rate: o.rate,
+    channels: ch,
+    windowFrames,
+    blockRms: pin !== null && (pin.version === 1 || pin.block_rms !== undefined),
+  });
   if (pin === null) {
     writeArtifacts(o, m, null, 'NO PIN');
     return {
@@ -488,7 +516,7 @@ function writeArtifacts(o: CheckOptions, m: Measured, pin: Pin | null, verdict: 
 }
 
 /** The failure message of a test: the differences, the report and the files. */
-export function failureMessage(name: string, pinFile: string, r: CheckResult, outDir?: string): string {
+export function failureMessage(name: string, pinFile: string, r: PinCheckResult, outDir?: string): string {
   const head = r.pending
     ? `${name}: the PCM pin is missing (${pinFile}); measured:`
     : `${name}: the PCM differs from the pin (${pinFile}):\n${r.differences.map((d) => `  - ${d}`).join('\n')}\nexpected vs measured:`;
@@ -542,12 +570,15 @@ export function sineProblems(fp: FingerprintV2, l: SineLimits): string[] {
   if (!p) return ['the capture is not periodic'];
   const want = 440 * 2 ** ((l.note - 69) / 12);
   const cents = 1200 * Math.log2(p.pitch.hz / want);
-  if (Math.abs(cents) > (l.pitch_cents ?? 5)) out.push(`pitch ${p.pitch.hz} Hz is ${sign(cents)} cents from the note ${l.note} (${want.toFixed(3)} Hz)`);
+  if (Math.abs(cents) > (l.pitch_cents ?? 5))
+    out.push(`pitch ${p.pitch.hz} Hz is ${sign(cents)} cents from the note ${l.note} (${want.toFixed(3)} Hz)`);
   const crest = (100 * (p.crest - Math.SQRT2)) / Math.SQRT2;
   if (Math.abs(crest) > (l.crest_pct ?? 1)) out.push(`crest factor ${p.crest} is ${sign(crest)} % from sqrt(2)`);
   const hi = Math.max(...p.harmonics_db);
-  if (hi >= (l.harmonic_db ?? -60)) out.push(`a harmonic is at ${hi} dB re the fundamental (limit ${l.harmonic_db ?? -60})`);
+  if (hi >= (l.harmonic_db ?? -60))
+    out.push(`a harmonic is at ${hi} dB re the fundamental (limit ${l.harmonic_db ?? -60})`);
   const spread = Math.max(...fp.rms_db) - Math.min(...fp.rms_db);
-  if (spread > (l.steady_db ?? 0.5)) out.push(`the level moves by ${spread.toFixed(2)} dB (limit ${l.steady_db ?? 0.5})`);
+  if (spread > (l.steady_db ?? 0.5))
+    out.push(`the level moves by ${spread.toFixed(2)} dB (limit ${l.steady_db ?? 0.5})`);
   return out;
 }

@@ -67,7 +67,7 @@ export function bandLevels(x: readonly number[], rate = FS): number[] {
     if (f < edges[0]! || f >= edges[BANDS]!) continue;
     let b = Math.floor(Math.log(f / BAND_LO) / Math.log(edges[1]! / edges[0]!));
     b = Math.min(BANDS - 1, Math.max(0, b));
-    power[b] += (2 * (r[k]! ** 2 + im[k]! ** 2)) / (norm * FFT_SIZE);
+    power[b]! += (2 * (r[k]! ** 2 + im[k]! ** 2)) / (norm * FFT_SIZE);
   }
   return power.map(db10);
 }

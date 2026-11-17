@@ -1,5 +1,4 @@
-import { pcmPinFile } from '@digi/sharc-rig-kit/pins';
-import { defineEquiv, DT2_TRIG, type Equiv } from '@digi/regression/runtime/equiv.ts';
+import { defineEquiv, DT2_TRIG, pcmPinFile, type Equiv } from '@digi/regression/runtime/equiv.ts';
 
 const SCENARIOS: Equiv[] = [
   {

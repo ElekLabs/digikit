@@ -21,7 +21,9 @@ const arg = (name: string): string | undefined => {
 const wav = arg('wav');
 const pinFile = arg('pin');
 if ((cmd !== 'show' && cmd !== 'write') || !wav || !pinFile) {
-  console.error('usage: pin-cli.ts show|write --wav CAPTURE.wav --pin PIN.json [--window FRAMES] [--exact] [--tol key=value,...]');
+  console.error(
+    'usage: pin-cli.ts show|write --wav CAPTURE.wav --pin PIN.json [--window FRAMES] [--exact] [--tol key=value,...]',
+  );
   process.exit(2);
 }
 const { rate, channels, samples } = parseFloatWav(readFileSync(wav));
@@ -32,7 +34,8 @@ const m = measure(samples, { rate, channels, windowFrames, blockRms: pin?.versio
 console.log(pin ? 'expected (the pin) vs measured:' : 'measured (no pin yet):');
 console.log(report(m.fp, pin));
 const diffs = pin ? compare(pin, m.fp, { sha256: wordsHash(m.window) }) : [];
-if (pin) console.log(diffs.length ? `differences:\n${diffs.map((d) => `  - ${d}`).join('\n')}` : 'within the tolerances');
+if (pin)
+  console.log(diffs.length ? `differences:\n${diffs.map((d) => `  - ${d}`).join('\n')}` : 'within the tolerances');
 if (cmd === 'show') process.exit(pin && diffs.length === 0 ? 0 : 1);
 const tolerance: Partial<Tolerance> = {};
 for (const kv of (arg('tol') ?? '').split(',').filter(Boolean)) {
