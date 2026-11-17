@@ -280,7 +280,12 @@ function fxObject(file: string): SharcObject {
 }
 
 function buildFxUncached(sources: readonly string[], device: 'dt2' | 'dn2'): FxBuilt {
-  const objs = [fxObject(FX_ADAPTER), fxObject(FX_SEND[device]!), fxObject(FX_DISPATCH[device]!), ...sources.map(fxObject)];
+  const objs = [
+    fxObject(FX_ADAPTER),
+    fxObject(FX_SEND[device]!),
+    fxObject(FX_DISPATCH[device]!),
+    ...sources.map(fxObject),
+  ];
   const layout = placeData(objs, DATA_BASE);
   let { end: addr } = layout;
   const { data, inits } = layout;
