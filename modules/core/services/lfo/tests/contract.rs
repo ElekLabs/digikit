@@ -72,7 +72,14 @@ fn fixture(device: u32) -> Fixture {
         b: module(1, b),
         a2: module(0, a2),
         enable: &[],
-        kept: |_| false,
+        kept: |_, _, _| false,
+        kept_dsp: |_, _| false,
+        live: None,
+        salt_same: &[
+            ("memory", "the shape table is the service's own state, shown by the state view; no firmware word"),
+            ("dsp", "an LFO shape has no DSP section"),
+            ("settings", "a load writes no setting"),
+        ],
         bad: module(2, bad),
         // none: `check` refuses a table that is too full or an id kept already, and `apply_record` has no other limit
         bad_late: None,

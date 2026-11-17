@@ -1,7 +1,10 @@
 //! The service contract suite (`dkrt_test_support::contract`) for the fx service on both profiles. The call lists below stand for the shared fixtures
 //! `tests/fixtures/modules/dyn-fx-gain` and `dyn-fx-gain-b`: each makes the builder calls of its `src/module.c` through the service's `build::*`.
 use core::ptr::addr_of;
-use dkrt_abi::dsp::{FXW_PC, FX_FREE_PC, FX_ROW_WORDS, F_FIRST, F_FREE, WIN_FX};
+use dkrt_abi::core_api::CoreApi;
+use dkrt_abi::dsp::{
+    DspState, FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, F_FIRST, F_FREE, MAX_FX, MIX_ONE, WIN_FX,
+};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::{ALL, DT2};
@@ -133,13 +136,38 @@ const ENABLE: [(u32, u32, u32); 4] = [
     (WIN_FX, FX_ROW_WORDS * 9 + FXW_PC, FX_FREE_PC),
 ];
 
-/// What a release leaves on purpose: the entries of the list buffer after the count (the count cell says how many are in it).
-fn kept(addr: u32) -> bool {
-    unsafe {
-        let list = addr_of!(fxpage::DKRT_FXP_LIST_BUF) as u32;
-        addr >= list && addr < list + 4 * 8
+/// The memory words that differ from the start after a release, on purpose (each a free value of the service):
+/// - the name and title words of a page row (offsets 0 and 4): they point to the service's empty string, so no word of the row points to the effect that left;
+/// - the entries of the page list buffer at or past the count in the count cell: the buffer is not cleared, the count says how many entries are in it (the test
+///   image has no stock entries, so the cell holds the number of entries).
+fn kept(core: &FakeCore, addr: u32, _value: u32) -> bool {
+    let rows = addr_of!(fxpage::DKRT_FXP_ROWS) as u32;
+    if addr >= rows && addr < rows + 0x2c * MAX_FX as u32 && matches!((addr - rows) % 0x2c, 0 | 4) {
+        return true;
     }
+    let list = addr_of!(fxpage::DKRT_FXP_LIST_BUF) as u32;
+    let count = unsafe { core.rd(addr_of!(fxpage::DKRT_FXP_COUNT) as u32) };
+    addr >= list + 4 * count && addr < list + 4 * 8
 }
+
+/// The DSP state bytes that differ from the start after a release, on purpose: the MIX word of a released effect row is 1.0f (`MIX_ONE`, the mix of a row without
+/// a page; the start state holds 0 because no row was ever released).
+fn kept_dsp(at: usize, value: u8) -> bool {
+    let mix = core::mem::offset_of!(DspState, fx_mix);
+    at >= mix && at < mix + 4 * MAX_FX && value == MIX_ONE.to_le_bytes()[(at - mix) % 4]
+}
+
+/// What the effect pages do while an effect runs: a changed knob queues the new value on the link (`link_set`) for the row of the effect. For each row a module
+/// owns, one live value on its first parameter word.
+const LIVE: Option<fn(&FakeCore)> = Some(|core| unsafe {
+    for k in 0..MAX_FX {
+        if dkrt_svc_fx::dsp::fx_owner_of(core, k) != 0 {
+            let slot =
+                dkrt_svc_fx::dsp::fx_slot(core, k, FXW_P0).expect("the image has effect rows");
+            core.link_set(slot, 0x3f00_0000);
+        }
+    }
+});
 
 fn keys_of(id: u32) -> KeysCopy {
     let mut k = KeysCopy::empty();
@@ -239,6 +267,10 @@ fn fixture(device: u32) -> Fixture {
         a2: module(0, keys_a, fx_alt, 2),
         enable: &ENABLE,
         kept,
+        kept_dsp,
+        // the route of an effect is a setting of the FX ROUTES menu; a module load never writes one
+        live: LIVE,
+        salt_same: &[("settings", "a load writes no setting")],
         bad: module(2, keys_none, dyn_fx_gain, 1),
         bad_late: Some(Late {
             bad: four_rows(four_effects),
@@ -299,4 +331,16 @@ fn an_unloaded_effect_page_row_points_to_the_empty_string() {
     );
     l.unload(0);
     assert_eq!(words(), (empty, empty));
+    // the string is what `make_rep` writes for "": length 0, capacity 0, refcount 0xffffffff (all big-endian words), then the NUL
+    // `make_rep` writes the buffer in the host's memory (the static itself), not through the core
+    let at = addr_of!(fxpage::DKRT_FXP_EMPTY) as *const u8;
+    assert_eq!(
+        at as usize % 4,
+        0,
+        "make_rep writes words: the buffer is aligned"
+    );
+    assert_eq!(empty, at as usize as u32 + 12);
+    let word = |off: usize| unsafe { dkrt_abi::mem::rd32(at.add(off)) };
+    assert_eq!((word(0), word(4), word(8)), (0, 0, 0xffff_ffff));
+    assert_eq!(unsafe { *at.add(12) }, 0);
 }

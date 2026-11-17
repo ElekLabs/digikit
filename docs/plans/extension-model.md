@@ -236,7 +236,10 @@ pub struct Fixture {
     pub b: Module,                 // module B: different keys
     pub a2: Module,                // the keys of A, other content in every table the service fills (names, defaults, DSP fields)
     pub enable: &'static [(u32, u32, u32)], // link words that turn a DSP row off: (window, word, off value)
-    pub kept: fn(u32) -> bool,     // memory words a release leaves on purpose (documented free values)
+    pub kept: fn(&FakeCore, u32, u32) -> bool, // (address, value): a memory word that may differ from the start after a release, with the value it may hold
+    pub kept_dsp: fn(usize, u8) -> bool,       // the same for a DSP state byte (offset, value)
+    pub live: Option<fn(&FakeCore)>,           // queues live values for the loaded module's rows, as a knob turn does
+    pub salt_same: &'static [(&'static str, &'static str)], // areas where A and a2 may be equal, each with its reason
     pub bad: Module,               // a module the service must refuse at the commit
     pub bad_late: Option<Late>,    // a module refused during apply, after rows were written, and its reference that loads
 }
@@ -266,12 +269,15 @@ Cases:
    both: `cap` counts and the view are at their start.
 5. A refused commit (`bad`), then the loader's `remove`: the snapshot equals the one before.
 6. Case 3 ten times: no growth in any table, no drift in sticky maps after the first assignment.
-7. An unload leaves nothing. From the same fresh start, the state after "load `A`, unload `A`" equals the state after "load `a2`, unload `a2`" in memory
-   words, DSP state bytes, link queue and requests, enable words, settings, `cap` counts and the view (the last words sent for a row's content differ with
-   the module and stay in the DSP memory until the next row overwrites them: they are not compared). Besides: no queued link value or request is left;
-   every enable word is 0 or its off value after the unload; and no memory word that the load of `A` (or `a2`) wrote is still at that value unless the
-   unload wrote it (its free value) or `Fixture::kept` names it. A comparison that sees no difference between the loaded `A` and the loaded `a2` fails
-   (the case would be blind).
+7. An unload leaves nothing. Two comparisons. (a) From the same fresh start, the state after "load `A`, unload `A`" equals the state after "load `a2`, unload `a2`"
+   in memory words, DSP state bytes, link queue and requests, enable words, settings, `cap` counts and the view (the last words sent for a row's content
+   differ with the module and stay in the DSP memory until the next row overwrites them: they are not compared). Loaded `A` and loaded `a2` must differ in
+   each area (memory, DSP, settings, view), or the fixture lists the area in `salt_same` with a reason; a listed area that differs fails too. (b) The state after the
+   unload is compared with the state before the load: every memory word, DSP state byte and the settings that differ from the start fail, unless `Fixture::kept`
+   (address and value) or `kept_dsp` (byte offset and value) names the word with the value it may hold. A value that the module wrote, or that the unload wrote
+   back from the module, is not a free value, so an unload that writes `A`'s own value back, or leaves a constant such as an owner or active byte, fails. The
+   harness starts every voice row free, as the runtime's `init_once` does. Besides: no queued link value or request is left (`Fixture::live` queues live values
+   while the module is loaded, so a release that does not forget them shows), and every enable word is 0 or its off value after the unload.
 8. A commit refused during apply (`bad_late`: rows are written, then a record is refused), then the loader's undo, leaves what the unload of
    `same_but_ok` leaves (a module that claims the same DSP rows and writes the same rows and loads), as in case 7 but without the enable words (a row
    that was never published sends none); also with B loaded when the module fits beside it. The failure must come after at least one record applied.
@@ -544,11 +550,12 @@ What:
    itself, so it could not see a release that left words behind; case 7 and 8 and the `a2` and `bad_late` modules were added for that. Found with
    them: the fx `remove` published the kit table (`DKRT_FXP_DEFS`) before it cleared the row's defaults, so the defaults of an unloaded effect stayed in
    the table (fixed in `fxpage::remove`, unit test `an_unloaded_effect_leaves_no_defaults_in_the_table_of_the_kit_hooks`). Left on purpose, named in
-   the fixtures' `kept`: the machines `remove` keeps `O_POS` of a hidden row (255, the end marker, the same for every module), and the fx `remove` keeps
-   the list buffer entries after the count. The fx `remove` sets the name and title pointers of its page row to the service's empty string
-   (`DKRT_FXP_EMPTY`; found by the suite: they pointed to the strings of the effect that left). Mutations of each service's `remove`, `dsp_clear` or
+   the fixtures' `kept` with the value each word may hold: the machines and fx `remove` give a row back as a free row (the empty string or empty representation for
+   names, the track level code, the reserve template and slot of a parameter row, `PG_FREE` of a page row; the machines `O_POS` of a hidden row is not written
+   and is no order; the fx list buffer entries at or past the count; the MIX word of a released DSP effect row is `MIX_ONE`, in `kept_dsp`). The fx `remove` sets the name and title pointers of its page row to the service's empty string
+   (`DKRT_FXP_EMPTY`, 4-byte aligned, the layout `make_rep` writes for "": length 0, capacity 0, refcount -1, NUL; found by the suite: they pointed to the strings of the effect that left). Mutations of each service's `remove`, `dsp_clear` or
    `dsp_release` (one item of each kind left behind: row words, a page row, a send cell, an IDS halfword, a DEFS halfword, a DSP row field, an owner, a
-   DSP row's off word, a link value) fail the suite.
+   DSP row's off word, a link value, an unload that writes the module's own value back into a row word, a DSP release that leaves an owner byte that has the same value for `A` and `a2`) fail the suite.
 
 Tests: the suite itself (unit). Check with `pnpm nx:pilot show target inputs <service>:rust-tests` that each service's target hashes the
 test-support crate and the fixtures it reads.

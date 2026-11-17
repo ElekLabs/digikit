@@ -135,7 +135,10 @@ pub static mut DKRT_FXP_TAB: [u32; TAB_WORDS] = [0; TAB_WORDS];
 #[no_mangle]
 pub static mut DKRT_FXP_ROWS: [u8; ROW_BYTES * MAX_FX] = [0; ROW_BYTES * MAX_FX];
 /// The empty firmware string (`make_rep` of "": length 0, capacity 0, refcount -1, NUL) that the name and title words of a released page row point to.
-pub static mut DKRT_FXP_EMPTY: [u8; 16] = [0; 16];
+pub static mut DKRT_FXP_EMPTY: Aligned16 = Aligned16([0; 16]);
+/// Four-byte alignment for a buffer that `make_rep` writes in words.
+#[repr(C, align(4))]
+pub struct Aligned16(pub [u8; 16]);
 #[no_mangle]
 pub static mut DKRT_FXP_SEND_ROW: [u8; ROW_BYTES] = [0; ROW_BYTES];
 /// The count cell of the track FX key's list (0: the stock list; 2: the send page follows).

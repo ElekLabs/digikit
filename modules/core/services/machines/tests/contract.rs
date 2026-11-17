@@ -1,6 +1,7 @@
 //! The service contract suite (`dkrt_test_support::contract`) for the machines service on both profiles. The call lists below stand for the shared fixture
 //! `tests/fixtures/modules/sine` (`src/module.c`: one machine with a page of one parameter) and a second machine with another key: each makes the builder calls through
 //! the service's `build::*`. The image tables are those of the device profiles (`Profile` of `tests/build.rs`) as `core/dynreg` writes them, over the fake core's memory.
+use core::ptr::addr_of;
 use dkneeds::keys::name_hash;
 use dkrt_abi::dsp::{FREE_TYPE, I_AREA_BYTES, I_VFIRST, I_VFREE, ROW_WORDS, WIN_VOICES};
 use dkrt_abi::keys::KeysCopy;
@@ -101,14 +102,51 @@ const ENABLE: [(u32, u32, u32); 4] = [
     (WIN_VOICES, ROW_WORDS * 5, FREE_TYPE),
 ];
 
-/// What `remove` leaves of a machine row on purpose: the position in the list (`O_POS`; the row is hidden by its empty name, so its position is no order).
-fn kept(addr: u32) -> bool {
-    const ROWS: u32 = 0x30_0000;
-    const SIZE: u32 = 0x100;
-    const O_POS: u32 = 0x44;
-    addr >= ROWS
-        && (addr - ROWS) / SIZE < limits::MACHINE_ROWS as u32
-        && (addr - ROWS) % SIZE == O_POS
+/// The words that differ from the start after a release, with the value each may hold (`remove` gives a row back as a gap row, which the start state of this
+/// image does not hold; any other value, such as the one the module wrote, is a leftover). The offsets are those of `image`:
+/// - machine row (`0x30_0000`, 0x100 bytes): the name (0) and the short name (0x4c) are the empty firmware string; the long and short text (4, 8) are the service's
+///   empty representation; word 0x30 after the eight knob codes (`O_F0 + 4 * KNOBS`) is the track level code 10; the position in the list (0x44) is not written by
+///   `remove` and is no order in a hidden row (any value);
+/// - names table (`0x40_0000`, 12 bytes per type), the types of the module rows: tab and title are the empty string;
+/// - parameter registry row (`0x20_0000`, 0x20 bytes): name and short are the empty string, the template (8) is `RESERVE_TEMPLATE`, the slot (0xc) is `SLOT_BASE`;
+/// - Digitone II page row (`0x60_0000`, 0x80 bytes): name and title are the empty representation, the level code after the eight knob codes (0x28) is 10, the machine
+///   (0x70) is the free machine `PG_FREE` (0xff).
+fn kept(_core: &FakeCore, addr: u32, value: u32) -> bool {
+    const EMPTY: u32 = 0x50_0000;
+    let rep = addr_of!(rstate().empty_rep) as u32 + 12;
+    let in_rows = |base: u32, size: u32, n: usize| {
+        (addr >= base && ((addr - base) / size) < n as u32).then(|| (addr - base) % size)
+    };
+    if let Some(off) = in_rows(0x30_0000, 0x100, limits::MACHINE_ROWS) {
+        return match off {
+            0 | 0x4c => value == EMPTY,
+            4 | 8 => value == rep,
+            0x30 => value == 10,
+            0x44 => true,
+            _ => false,
+        };
+    }
+    if let Some(off) = in_rows(0x20_0000, 0x20, limits::PARAM_ROWS) {
+        return match off {
+            0 | 4 => value == EMPTY,
+            8 => value == 7,
+            0xc => value == 25,
+            _ => false,
+        };
+    }
+    if let Some(off) = in_rows(0x60_0000, 0x80, limits::PAGE_ROWS) {
+        return match off {
+            0 | 4 => value == rep,
+            0x28 => value == 10,
+            0x70 => value == 0xff,
+            _ => false,
+        };
+    }
+    let names = 0x40_0000 + 12 * DYN_TYPE_FIRST;
+    if let Some(off) = in_rows(names, 12, limits::MACHINE_ROWS) {
+        return matches!(off, 0 | 4) && value == EMPTY;
+    }
+    false
 }
 
 fn keys_of(mk: &[u32]) -> KeysCopy {
@@ -281,6 +319,16 @@ fn fixture(device: u32) -> Fixture {
         a2: module(0, keys_a, sine_alt, 2),
         enable: &ENABLE,
         kept,
+        kept_dsp: |_, _| false,
+        // the machines service queues no live value for its rows
+        live: None,
+        salt_same: &[
+            ("settings", "a load writes no setting"),
+            (
+                "state",
+                "a2 has the keys of A: the same rows, owners and type ids",
+            ),
+        ],
         bad: module(2, keys_none, sine, 1),
         bad_late: Some(Late {
             bad: module(3, keys_late, native_page_fails, 1),

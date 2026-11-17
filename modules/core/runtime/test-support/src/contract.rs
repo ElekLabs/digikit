@@ -9,11 +9,12 @@
 //! check is `dkrt_abi::regcheck::check_layout`, the function the runtime's walker calls; the suite calls it with the kinds of the one service under test.
 //!
 //! A module that is loaded and unloaded must leave nothing: case 7 compares the whole state after "load `A`, unload `A`" with the state after "load `a2`, unload `a2`"
-//! (`a2` has the keys of `A` and other content in every table the service fills), and checks that no word `A` wrote is still at `A`'s value after the unload.
+//! (`a2` has the keys of `A` and other content in every table the service fills), and compares the state after the unload with the state before the load: a memory
+//! word, DSP state byte or setting that differs from the start is a leftover unless the fixture's `kept` or `kept_dsp` names it with the value it may hold.
 //!
 //! The call lists that stand for the shared fixtures (`tests/fixtures/modules`) are in each service's `tests/contract.rs`: they name the service's own `build::*`, and this
 //! crate cannot depend on a service.
-use crate::{Call, FakeCore};
+use crate::FakeCore;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{
     DspState, Job, FX_DESC, FX_PARAMS, FX_PROCESS, FX_REC, FX_STATE, L2_BYTE_BASE,
@@ -120,8 +121,18 @@ pub struct Fixture {
     /// The link words the DSP reads to run a row (`(window, word, off)`: the pc of an effect row, the type of a voice row, and the value that turns the row off): a
     /// release must send the word that turns the row off. The words other than these are the content of a row, which stays in the DSP memory until the next module's row overwrites it.
     pub enable: &'static [(u32, u32, u32)],
-    /// The words of firmware memory a release leaves as the module wrote them on purpose (the service's documented free values, such as the position of a hidden row).
-    pub kept: fn(u32) -> bool,
+    /// `(core, address, value)`: whether a word of firmware memory may hold `value` after a release although the start state holds another (the service's documented
+    /// free values, such as the empty string a released row points to). The value is part of the question: a word that holds anything else, such as the value `A`
+    /// wrote, is a leftover.
+    pub kept: fn(&FakeCore, u32, u32) -> bool,
+    /// The same for the DSP state: `(byte offset in DspState, value)` pairs a release leaves other than at the start, on purpose. Each entry has a reason in the fixture.
+    pub kept_dsp: fn(usize, u8) -> bool,
+    /// What the service does while a module runs that the loader does not do: queue live values for the module's rows, as a knob turn does (`None`: the service
+    /// queues none). Case 7 calls it with the module loaded, so a release that leaves a value queued on the link shows.
+    pub live: Option<fn(&FakeCore)>,
+    /// The areas (`memory`, `dsp`, `settings`, `state`) in which loaded `A` and loaded `a2` may be equal, each with its reason. Every other area must differ, or the
+    /// comparison of case 7 cannot see a leftover there.
+    pub salt_same: &'static [(&'static str, &'static str)],
     /// A module the service must refuse at its commit (a record it checks, or a builder call it refuses).
     pub bad: Module,
     /// A module the service refuses while it applies the records, after the rows of earlier records were written (`None`: the service has no such path; its
@@ -204,33 +215,78 @@ impl Snapshot {
         out
     }
 
-    /// What a module left behind in firmware memory: the words that `self` (the state with the module loaded) changed against `start` and that `end` (the state after
-    /// the unload) still holds at `self`'s value, and that the unload did not write (`touched`: the aligned addresses of its writes; a word the service writes back on
-    /// purpose is its free value) and `kept` does not name. Lists the first 8. The DSP state and the link are compared between two modules instead
-    /// (`same_after_unload`), as their free values are not words the unload writes by address.
+    /// What an unload leaves of the start state. `self` is the state with the module loaded, `start` the state before the load, `end` the state after the unload.
+    /// Two rules, each over memory words, DSP state bytes and settings; the exceptions are `kept` (memory addresses) and `kept_dsp` (DSP state byte offsets), never
+    /// the words the unload wrote:
+    /// - a word that the load changed and that holds the loaded value after the unload is a leftover (this includes an unload that writes the module's own value back);
+    /// - a word that differs from `start` after the unload is a leftover (a constant such as an active flag, or another value).
+    ///
+    /// Settings are compared whole. Lists the first 8 of each area.
     pub fn survivors(
         &self,
         start: &Snapshot,
         end: &Snapshot,
-        touched: &BTreeSet<u32>,
-        kept: fn(u32) -> bool,
+        kept: &dyn Fn(u32, u32) -> bool,
+        kept_dsp: fn(usize, u8) -> bool,
     ) -> String {
         let mut out = String::new();
         let mut n = 0;
-        for (k, v) in &self.mem {
-            if start.mem.get(k) != Some(v)
-                && end.mem.get(k) == Some(v)
-                && !touched.contains(k)
-                && !kept(*k)
-                && n < 8
-            {
+        let keys: BTreeSet<u32> = self
+            .mem
+            .keys()
+            .chain(start.mem.keys())
+            .chain(end.mem.keys())
+            .copied()
+            .collect();
+        for k in keys {
+            let get = |s: &Snapshot| s.mem.get(&k).copied().unwrap_or(0);
+            let (l, s, e) = (get(self), get(start), get(end));
+            if e != s && !kept(k, e) && n < 8 {
+                let why = if e == l {
+                    "the load wrote it, the unload left it"
+                } else {
+                    "not the start value"
+                };
                 out.push_str(&std::format!(
-                    "  mem {k:x}: {v:#x} written by the load, not written by the unload\n"
+                    "  mem {k:x}: start {s:#x}, loaded {l:#x}, after the unload {e:#x} ({why})\n"
                 ));
                 n += 1;
             }
         }
+        let mut n = 0;
+        for i in 0..end.dsp.len() {
+            if end.dsp[i] != start.dsp[i] && !kept_dsp(i, end.dsp[i]) && n < 8 {
+                out.push_str(&std::format!(
+                    "  dsp state byte {i}: start {:#x}, loaded {:#x}, after the unload {:#x}\n",
+                    start.dsp[i],
+                    self.dsp[i],
+                    end.dsp[i]
+                ));
+                n += 1;
+            }
+        }
+        if end.settings != start.settings {
+            out.push_str("  settings after the unload differ from the start\n");
+        }
         out
+    }
+
+    /// The areas in which two snapshots differ: memory, DSP state, settings, the service's view.
+    pub fn differing_areas(&self, other: &Snapshot) -> Vec<&'static str> {
+        let mut v = Vec::new();
+        if self.mem != other.mem {
+            v.push("memory");
+        }
+        if self.dsp != other.dsp {
+            v.push("dsp");
+        }
+        if self.settings != other.settings {
+            v.push("settings");
+        }
+        if self.state != other.state {
+            v.push("state");
+        }
+        v
     }
 
     /// The state after a module's unload as another module with the same keys leaves it: memory words, DSP state bytes, the queue of the link and the words that turn
@@ -338,8 +394,6 @@ pub struct Lifecycle<'f, S: Service<FakeCore>> {
     at: core::cell::Cell<&'static str>,
     /// The last run of the registry check inside a load: the state before and after it, the core calls it made and its answer.
     check_run: core::cell::RefCell<Option<CheckRun>>,
-    /// The aligned addresses of the firmware words the last `unload` wrote.
-    unload_writes: core::cell::RefCell<BTreeSet<u32>>,
     _s: core::marker::PhantomData<S>,
 }
 
@@ -372,9 +426,12 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             applied: core::cell::Cell::new(0),
             at: core::cell::Cell::new(""),
             check_run: core::cell::RefCell::new(None),
-            unload_writes: core::cell::RefCell::new(BTreeSet::new()),
             _s: core::marker::PhantomData,
         };
+        // the runtime's `init_once`: every voice row starts free
+        for t in l.core.dsp().row_type.iter_mut() {
+            *t = dkrt_abi::dsp::FREE_TYPE;
+        }
         for owner in 1..=MAX_MODULES as u8 {
             unsafe { S::remove(&l.core, owner) };
         }
@@ -650,6 +707,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
 
     fn load_inner(&self, rec: usize, m: &Module) -> Result<Vec<u8>, i32> {
         let core = &self.core;
+        self.applied.set(0);
         let owner = rec as u8 + 1;
         unsafe {
             let (mut job, _fxs, _voices, bank) = self.job(m);
@@ -731,25 +789,10 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
     /// Take module record `rec` down: the DSP rows cleared, the services' `remove`, the DSP range released.
     pub fn unload(&self, rec: usize) {
         let core = &self.core;
-        let calls = core.calls().len();
         unsafe {
             assert!(S::dsp_clear(core, rec), "the DSP rows clear");
             S::remove(core, rec as u8 + 1);
             S::dsp_release(core, rec);
-        }
-        let mut w = self.unload_writes.borrow_mut();
-        w.clear();
-        for c in &core.calls()[calls..] {
-            match c {
-                Call::Wr(a, _) | Call::Wr8(a, _) => {
-                    w.insert(a & !3);
-                }
-                Call::Wr16(a, _) => {
-                    w.insert(a & !3);
-                    w.insert((a + 1) & !3);
-                }
-                _ => {}
-            }
         }
     }
 
@@ -1043,6 +1086,9 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     let start = l.snapshot();
     assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
+    if let Some(live) = f.live {
+        live(&l.core);
+    }
     let loaded_a = l.snapshot();
     l.unload(0);
     let end_a = l.snapshot();
@@ -1064,6 +1110,11 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
         end_a.enable
     );
     assert!(
+        f.live.is_none() || loaded_a.live != start.live,
+        "{}: the live hook queues no value: the check of the link queue sees nothing",
+        f.name
+    );
+    assert!(
         f.enable.is_empty() || on(&loaded_a) > 0,
         "{}: the load of A publishes no row: the check of the words that turn a row off sees nothing",
         f.name
@@ -1077,7 +1128,7 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
         end_a.live,
         end_a.reqs
     );
-    let left = loaded_a.survivors(&start, &end_a, &l.unload_writes.borrow(), f.kept);
+    let left = loaded_a.survivors(&start, &end_a, &|a, v| (f.kept)(&l.core, a, v), f.kept_dsp);
     assert!(
         left.is_empty(),
         "{} ({}): the unload of A left what A wrote\n{left}",
@@ -1088,15 +1139,38 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     assert!(l.snapshot() == start, "{}: a fresh start differs", f.name);
     assert_eq!(l.load(0, &f.a2), OK, "{}: module a2 is refused", f.name);
+    if let Some(live) = f.live {
+        live(&l.core);
+    }
     let loaded_a2 = l.snapshot();
     assert!(
         loaded_a.same_after_unload(&loaded_a2, true).is_err(),
         "{}: a2 loads to the same state as A: the comparison cannot see a leftover",
         f.name
     );
+    // each area has its own salt: an area where A and a2 are equal cannot show a leftover of its content
+    let differ = loaded_a.differing_areas(&loaded_a2);
+    let wrong: Vec<String> = ["memory", "dsp", "settings", "state"]
+        .iter()
+        .filter_map(|area| {
+            let allowed = f.salt_same.iter().any(|(a, _)| a == area);
+            (differ.contains(area) == allowed).then(|| {
+                std::format!(
+                    "{area}: loaded A and a2 {} (salt_same {})",
+                    if allowed { "differ" } else { "are equal" },
+                    if allowed {
+                        "lists it"
+                    } else {
+                        "does not list it"
+                    }
+                )
+            })
+        })
+        .collect();
+    assert!(wrong.is_empty(), "{} ({}): {wrong:?}", f.name, profile(f));
     l.unload(0);
     let end_a2 = l.snapshot();
-    let left = loaded_a2.survivors(&start, &end_a2, &l.unload_writes.borrow(), f.kept);
+    let left = loaded_a2.survivors(&start, &end_a2, &|a, v| (f.kept)(&l.core, a, v), f.kept_dsp);
     assert!(
         left.is_empty(),
         "{} ({}): the unload of a2 left what a2 wrote\n{left}",

@@ -58,7 +58,14 @@ fn fixture(device: u32) -> Fixture {
         // the keys of `a` and another local id
         a2: module(0, 3, nothing),
         enable: &[],
-        kept: |_| false,
+        kept: |_, _, _| false,
+        kept_dsp: |_, _| false,
+        live: None,
+        salt_same: &[
+            ("memory", "the track table is the service's own state, shown by the state view; no firmware word"),
+            ("dsp", "a track-table record changes no DSP state"),
+            ("settings", "a load writes no setting"),
+        ],
         bad: module(2, 1, stray_record),
         // none: the service has no `apply`; its only refusals are `dsp_admit` and the checks of the section, before any row is written
         bad_late: None,
