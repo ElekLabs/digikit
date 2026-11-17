@@ -263,10 +263,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     const files = modules.map((m) => (typeof m === 'string' ? mod(m) : m));
     // the services that these modules need go on the card too, bound to the stock firmware (`service-files.ts`)
     const services = await Promise.all(
-      neededServices(
-        device,
-        files.map((m) => m.file),
-      )
+      neededServices(files.map((m) => m.file))
         .filter((needed) => !files.some((m) => m.name === servicePath(needed.service)))
         .map(async (needed) => ({
           name: servicePath(needed.service),

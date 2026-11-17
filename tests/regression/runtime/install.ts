@@ -48,10 +48,7 @@ export async function installModules(
         paths.push(storePath);
       }
       if (device) {
-        for (const needed of neededServices(
-          device,
-          modules.map((m) => m.artifact),
-        )) {
+        for (const needed of neededServices(modules.map((m) => m.artifact))) {
           const name = needed.service;
           const bound = fs.readFileSync(await boundService(device, needed, moduleArtifact(device, needed.moduleId)));
           await timePhase('service.upload', () => dk.put(servicePath(name), bound));

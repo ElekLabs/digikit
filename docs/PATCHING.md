@@ -1015,5 +1015,5 @@ that `--module` (id) or `--service` (name) names, in name order. This is the for
 
 With `--firmware` and `--bind-dir` it also packs each service for the device, binds it to the stock image as `DIR/<name>.dks` and adds `bound_path`. A file
 whose `DIR/<name>.src.json` sidecar names the same packed bytes and image is kept; any other is bound again. The device tests, `dk:dev` and `module:check`
-all call it; the tests only ask which services (no `--bind-dir`) and take the bound file from the Nx target `<service id>:bind`. Its Rust tests are
+all call it. The Nx target `<module id>:pack` runs it on each packed file and writes `dist/modules/<device>/<leaf>.services.json` beside it; the device tests read that file (they run no patchkit) and take the bound file from the target `<service id>:bind`. Its Rust tests are
 `packages/patchkit/tests/services.rs` (they skip without the m68k-elf toolchain).

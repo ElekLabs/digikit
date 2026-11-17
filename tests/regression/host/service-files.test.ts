@@ -17,18 +17,13 @@ const dir = vi.hoisted(() => {
 // the device table reads repository files when it loads; the test needs only its firmware versions
 vi.mock('../runtime/devices.ts', () => ({ FIRMWARE: { dt2: '1.17', dn2: '1.12' } }));
 vi.mock('../runtime/addrmap.ts', () => ({ readLoadTable: vi.fn() }));
-// `patchkit services` is the rule for which service a module needs (packages/patchkit/tests/services.rs): here a file named gain.dkm stands for an effect
-vi.mock('../runtime/patchkit-exec.ts', () => ({
-  patchkitServices: (_device: string, { files = [] }: { files?: string[] }) =>
-    files.some((f) => f.endsWith('gain.dkm')) ? [{ service: 'fx', moduleId: 'core/services/fx' }] : [],
-}));
 vi.mock('@digi/test-support', async (original) => ({
   ...(await original<object>()),
   resolveInputs: () => ({ syx: '/stock.syx' }),
   repoRoot: () => dir,
 }));
 import { installModules } from '../runtime/install.ts';
-import { boundService } from '../runtime/service-files.ts';
+import { boundService, neededServices } from '../runtime/service-files.ts';
 import { bindServiceSymbols, serviceMapEntries } from '../runtime/service-symbols.ts';
 
 // the packed service the harness finds under dist/modules/<device>/<leaf>.dks
@@ -44,11 +39,24 @@ const sidecar = path.join(dir, 'dist/svc-bound/dt2/fx.src.json');
 fs.writeFileSync(sidecar, JSON.stringify({ unbound_sha256: sha('packed'), firmware_sha256: 'x' }));
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
+// the pack target writes `<leaf>.services.json` (`patchkit services`, one JSON line per service) beside the file: here gain.dkm is an effect
 const write = (name: string) => {
   const file = path.join(dir, name);
   fs.writeFileSync(file, 'packed module');
+  fs.writeFileSync(
+    file.replace(/\.dkm$/, '.services.json'),
+    name === 'gain.dkm' ? '{"service":"fx","module_id":"core/services/fx","store_path":"services/fx.dks"}\n' : '',
+  );
   return file;
 };
+
+test('the needed services are read from the files that the pack target wrote', () => {
+  expect(neededServices([write('gain.dkm'), write('plain.dkm')])).toEqual([FX]);
+  expect(neededServices([write('plain.dkm')])).toEqual([]);
+  expect(() => neededServices([path.join(dir, 'unpacked.dkm')])).toThrow(
+    /missing .*unpacked\.services\.json: run nx run/,
+  );
+});
 
 test('install puts the bound service on the card before the selection and the restart', async () => {
   const order: string[] = [];

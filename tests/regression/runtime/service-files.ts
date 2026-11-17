@@ -3,20 +3,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot, resolveInputs, type Device } from '@digi/test-support';
 import { FIRMWARE } from './devices.ts';
-import { patchkitServices, type CardService } from './patchkit-exec.ts';
+
+/** A service the card needs: its name (`services/<name>.dks`) and the module that provides it. */
+export type CardService = { service: string; moduleId: string };
 
 /**
  * Services that are files of the card (`services/<name>.dks`, docs/plans/runtime-and-services.md section 13.2). A module that needs one has a hard NEEDS item for its hash
  * (the packer adds it for a record kind of that service), and the runtime finds the file by its name at boot. The harness puts the file on the card of every test that
- * installs such a module, so a test never lists the service by hand. `patchkit services` says which (from the NEEDS and the manifests: no list here).
+ * installs such a module, so a test never lists the service by hand. Which services a packed `.dkm` needs is `patchkit services` (the NEEDS and the manifests: no list
+ * here); the Nx target `<module id>:pack` runs it and writes `<leaf>.services.json` beside the file, so a test only reads it and runs no patchkit.
  */
-export function neededServices(device: Device, files: string[]): CardService[] {
-  return files.length ? patchkitServices(device, { files }) : [];
-}
-
-/** The module that provides the service `name` (its manifest has `role = "service"`, `service = NAME`). */
-export function serviceModuleId(device: Device, name: string): string {
-  return patchkitServices(device, { names: [name] })[0]!.moduleId;
+export function neededServices(files: string[]): CardService[] {
+  const found = new Map<string, CardService>();
+  for (const file of files) {
+    const list = file.replace(/\.dk[ms]$/, '.services.json');
+    if (!fs.existsSync(list)) throw new Error(`missing ${list}: run nx run <module id>:pack`);
+    for (const line of fs.readFileSync(list, 'utf8').split('\n').filter(Boolean)) {
+      const v = JSON.parse(line) as { service: string; module_id: string };
+      found.set(v.service, { service: v.service, moduleId: v.module_id });
+    }
+  }
+  return [...found.values()].sort((x, y) => x.service.localeCompare(y.service));
 }
 
 /** The store path of a service file. */

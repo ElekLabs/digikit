@@ -199,10 +199,9 @@ export async function inspectFxBoot(
   const fields = await Promise.all(Array.from({ length: 10 }, (_, i) => word(session, boot + i * 4)));
   // the symbols of the fx service file for this boot (`symbolsOf`): the runtime loads the file only when a selected module needs it, so a boot of machines
   // alone (or a preset with `noServices`) has none; any other boot without them fails here
-  const needsFx = neededServices(
-    session.options.device,
-    expectedNames.map((id) => moduleArtifact(session.options.device, id)),
-  ).some((s) => s.service === 'fx');
+  const needsFx = neededServices(expectedNames.map((id) => moduleArtifact(session.options.device, id))).some(
+    (s) => s.service === 'fx',
+  );
   await bindServiceSymbols(runtime, plan, 'fx', { expected: !dropsService(readiness.noServices, 'fx') && needsFx });
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([expectedResults.length, expectedNames.length, 1]);
@@ -299,10 +298,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
           const files = inventory.map((id, index) => ({ name: `m${index}.dkm`, file: moduleArtifact(device, id) }));
           // the services the inventory needs (fx.dks), bound to the stock firmware, go to digikit/services; a preset with `noServices` leaves out all (`true`) or the named ones (the effect is refused)
           const services = await Promise.all(
-            neededServices(
-              device,
-              files.map((f) => f.file),
-            )
+            neededServices(files.map((f) => f.file))
               .filter((needed) => !dropsService(preset.noServices, needed.service))
               .map(async (needed) => ({
                 name: `${needed.service}.dks`,

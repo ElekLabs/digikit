@@ -82,10 +82,7 @@ async function baseline(
   const selection = ['modules/sine.dkm', ...(wet ? ['modules/dyn-fx-gain.dkm'] : [])];
   // the services the gain effect needs (fx.dks), bound to the stock firmware, go to digikit/services
   const services = await Promise.all(
-    neededServices(
-      device,
-      files.map((f) => f.file),
-    ).map(async (needed) => ({
+    neededServices(files.map((f) => f.file)).map(async (needed) => ({
       name: `${needed.service}.dks`,
       file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
     })),
