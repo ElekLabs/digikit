@@ -212,7 +212,8 @@ consts = [
 # `provided = true`: the import is a function of a service file (`.dks`), not of the runtime's table; the file exports it, and its export list is these imports in this
 # order (the header table sorts them by name hash). `wrapper = "<module>"`: with `provided`, the function is written by hand in that module of the service's `dks/src`
 # (`fw`, `builder`, `glue`: it converts a callback, takes the click state or a client handle). Without `wrapper` the function is a pure wrapper: `patchkit gen` writes
-# it to `modules/core/services/<service>/dks/src/gen_exports.rs` as `build::<name without dk_ and module_ctx_>(&ImportCore, args...)` and a callback argument is an error.
+# it to `modules/core/services/<service>/dks/src/gen_exports.rs` as a call of `build::<name without dk_ and a leading module_ctx_>(&ImportCore, args...)` (so `dk_module_ctx_add_machine`
+# calls `build::add_machine`) and a callback argument is an error. If the service crate's function has another name, or the call is not a plain forward, use `wrapper`.
 [[import]]
 name = "memcpy"
 sig = "u8 *(u8 *d, const u8 *s, u32 n)"

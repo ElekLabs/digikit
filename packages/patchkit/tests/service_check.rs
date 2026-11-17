@@ -437,6 +437,35 @@ fn service_exports_are_the_generated_list_of_the_provided_imports() {
     ));
     // a provided import of the service: the call must take the generated list (an import of another service does not count)
     append(&sdk, provided);
+    // a stale generated list (not the provided imports, in order) is refused
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call(", exports = gen_exports::exports()"),
+    )
+    .unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "does not list the `provided` imports"
+    ));
+    let listed =
+        "pub fn exports() { [(dkrt_svc_rt::name_hash(\"dk_sweep_go\"), f as *const u8)] }\n";
+    fs::write(dir.join("dks/src/gen_exports.rs"), listed).unwrap();
+    let found = problems(&dir, &sdk);
+    assert_eq!(found, Vec::<String>::new(), "{found:?}");
+    // a test-only provided import is an export of the file too
+    append(
+        &sdk,
+        "\n[[import]]\nname = \"dk_sweep_t\"\nservice = \"sweep\"\nprovided = true\ntest = true\n",
+    );
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "does not list the `provided` imports"
+    ));
+    fs::write(
+        dir.join("dks/src/gen_exports.rs"),
+        format!("{listed}(dkrt_svc_rt::name_hash(\"dk_sweep_t\"), t as *const u8)\n"),
+    )
+    .unwrap();
     let found = problems(&dir, &sdk);
     assert_eq!(found, Vec::<String>::new(), "{found:?}");
     fs::write(dir.join("dks/src/lib.rs"), call("")).unwrap();
@@ -466,7 +495,7 @@ fn service_exports_are_the_generated_list_of_the_provided_imports() {
         "dks/src/gen_exports.rs is missing"
     ));
     // [[export]] in the manifest is not read
-    fs::write(dir.join("dks/src/gen_exports.rs"), "").unwrap();
+    fs::write(dir.join("dks/src/gen_exports.rs"), listed).unwrap();
     append(
         &dir.join("dks/module.toml"),
         "\n[[export]]\nname = \"dk_sweep_go\"\n",

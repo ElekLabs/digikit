@@ -2312,8 +2312,13 @@ fn callback_types(sdk: &Sdk) -> Result<Vec<(&String, Sig)>> {
     Ok(v)
 }
 
-/// The imports with their signatures, checked.
+/// The imports with their signatures, checked; a test-only import is left out (it is in no generated output but the export list of its service file).
 fn imports(sdk: &Sdk) -> Result<Vec<(&Import, Option<Sig>)>> {
+    imports_checked(sdk, false)
+}
+
+/// The imports with their signatures, checked; `with_test` keeps the test-only ones.
+fn imports_checked(sdk: &Sdk, with_test: bool) -> Result<Vec<(&Import, Option<Sig>)>> {
     let mut v = Vec::new();
     let handles: Vec<&str> = sdk.handle.types.iter().map(String::as_str).collect();
     callback_types(sdk)?;
@@ -2425,8 +2430,7 @@ fn imports(sdk: &Sdk) -> Result<Vec<(&Import, Option<Sig>)>> {
                 ));
             }
         }
-        // a test-only import is checked but is in no generated output
-        if !im.test {
+        if with_test || !im.test {
             v.push((im, sig));
         }
     }
@@ -2692,8 +2696,9 @@ fn gen_exports_rs(service: &str, imps: &[(&Import, Option<Sig>)]) -> String {
 }
 
 /// The `gen_exports.rs` of every service with a `dks/` folder under `root` and `provided` imports, by path. A service file with provided imports and no `dks/` folder is no file yet: it has none.
+/// Its list is `provided_exports`, test-only imports included: the header EXPORTS and `exports()` of a file are equal.
 fn gen_exports(sdk: &Sdk, root: &std::path::Path) -> Result<Vec<(String, String)>> {
-    let imps = imports(sdk)?;
+    let imps = imports_checked(sdk, true)?;
     let mut out = vec![];
     for d in sdk.service.iter().filter(|d| d.rust.is_none()) {
         let has = imps

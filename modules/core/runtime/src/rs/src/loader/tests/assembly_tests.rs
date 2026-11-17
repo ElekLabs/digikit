@@ -872,6 +872,23 @@ fn the_builder_calls_of_a_module_resolve_to_the_exports_of_the_service_that_owns
     }
 }
 
+/// The header EXPORTS of a service file are exactly its `provided` imports of sdk/sdk.toml, by name hash (the file's `exports()` is generated from the same list).
+#[test]
+fn the_header_exports_of_a_service_file_are_its_provided_imports() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        for service in ["machines", "fx", "samples"] {
+            let owner = service_file(*dev, service, &format!("core/services/{service}"));
+            let table = table_of(&owner);
+            let keys = Keys::parse(&table).unwrap();
+            let listed: std::collections::BTreeSet<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
+            let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().map(name_hash).collect();
+            assert!(!want.is_empty(), "{service} provides nothing in sdk/sdk.toml");
+            assert_eq!(listed, want, "{} {service}.dks: header EXPORTS differ from the provided imports", dev.name);
+        }
+    }
+}
+
 /// A service file built for another ABI is refused by its own load; one whose hook site is not stock changes nothing.
 #[test]
 fn a_provider_with_another_abi_word_or_a_site_that_is_not_stock_is_refused_before_anything_is_written() {

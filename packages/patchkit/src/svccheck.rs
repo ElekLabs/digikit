@@ -218,7 +218,7 @@ fn manifest(sdk: &Path, name: &str) -> Result<(BTreeSet<String>, Option<Option<S
     Ok((kinds, row))
 }
 
-/// The names of the `provided = true` imports of service `name` in `sdk`: the exports of its file (`patchkit gen` writes them to `dks/src/gen_exports.rs`).
+/// The names of the `provided = true` imports of service `name` in `sdk` (test-only ones too): the exports of its file (`patchkit gen` writes them to `dks/src/gen_exports.rs`).
 fn provided_imports(sdk: &Path, name: &str) -> Result<Vec<String>> {
     let text = std::fs::read_to_string(sdk).map_err(|e| err!("{}: {e}", sdk.display()))?;
     let v: toml::Table = text.parse().map_err(|e| err!("{}: {e}", sdk.display()))?;
@@ -235,7 +235,7 @@ fn provided_imports(sdk: &Path, name: &str) -> Result<Vec<String>> {
         .collect())
 }
 
-/// The entries of the list `key` (`hooks`, `fills` or `exports`) of the `service!` call in `dks/src/lib.rs`: (first string, device filter: `None` for every
+/// The entries of the list `key` (`hooks` or `fills`) of the `service!` call in `dks/src/lib.rs`: (first string, device filter: `None` for every
 /// device, or `dt2` / `dn2`).
 fn service_list(lib: &str, key: &str) -> Option<Vec<(String, Option<String>)>> {
     let at = lib.find("service!(")?;
@@ -551,8 +551,21 @@ fn check_dks(
         } else if provided.is_empty() && generated {
             out.push("dks/src/lib.rs: `exports = gen_exports::exports()` but the service has no `provided` import in sdk/sdk.toml".into());
         }
-        if !provided.is_empty() && get("src/gen_exports.rs").is_none() {
-            out.push("dks/src/gen_exports.rs is missing: run `patchkit gen`".into());
+        match get("src/gen_exports.rs") {
+            None if !provided.is_empty() => {
+                out.push("dks/src/gen_exports.rs is missing: run `patchkit gen`".into())
+            }
+            Some(g) => {
+                let named: Vec<String> = Regex::new(r#"name_hash\("(\w+)"\)"#)
+                    .unwrap()
+                    .captures_iter(g)
+                    .map(|c| c[1].to_string())
+                    .collect();
+                if named != provided {
+                    out.push("dks/src/gen_exports.rs does not list the `provided` imports of sdk/sdk.toml in order: run `patchkit gen`".into());
+                }
+            }
+            None => {}
         }
         let called = |key: &str| -> Vec<(String, Vec<String>)> {
             service_list(lib, key)

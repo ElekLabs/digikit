@@ -55,6 +55,7 @@
         "{workspaceRoot}/modules/core/runtime/include/dkrt.h",
         "{workspaceRoot}/modules/core/runtime/sdk/src/gen_*.rs",
         "{workspaceRoot}/modules/core/runtime/src/rs/src/gen_abi_check.rs",
+        "{workspaceRoot}/modules/core/services/*/dks/src/gen_exports.rs",
         "{workspaceRoot}/modules/core/fw/**/*",
         "{workspaceRoot}/tools/device/dklog_kinds.py",
         "{workspaceRoot}/tools/device/dkproto.py",

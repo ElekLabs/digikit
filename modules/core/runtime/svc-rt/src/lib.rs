@@ -322,7 +322,7 @@ macro_rules! hook_device {
 /// it owns (`&'static [(u32, u32)]`, as `dkrt_sdk::records::KINDS_*`). It emits `dk_module`, `dk_svc_abi` and (on the ColdFire) the panic handler.
 ///
 /// After the kinds: `setup = f`, `hooks = [...]`, `fills = [...]` and `exports = gen_exports::exports()` (the list `patchkit gen` writes for a service with `provided` imports in `sdk/sdk.toml`:
-/// `[(name hash, entry); N]`) or, for a test, `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the hash of the name), each optional list in this order. Every form also emits `dk_svc_declare(ctx, device)`: the declarations
+/// `[(name hash, entry); N]`) or, only in tests (`patchkit service-check` refuses it in a service crate), `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the hash of the name), each optional list in this order. Every form also emits `dk_svc_declare(ctx, device)`: the declarations
 /// of `init` without `setup` (the host test of the assembly runs it and compares the result with the header table).
 ///
 /// The symbols are `no_mangle` on the ColdFire only: a host test links the service crates of all three files into one binary.
