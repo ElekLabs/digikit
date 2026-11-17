@@ -33,7 +33,11 @@ ROOT = pk_conform.ROOT
 _DSP = ROOT / "modules/core/adapters/dsp-voice/src/dsp"
 WRAPPER = {  # the adapter's sources of a device, assembled as separate objects that see each other's data symbols
     "dt2": (_DSP / "dsp-voice.s", dv.DISPATCH),
-    "dn2": (_DSP / "dsp-voice-dn2.s", _DSP / "dsp-voice-dn2-stereo.s"),
+    "dn2": (
+        _DSP / "dsp-voice-dn2.s",
+        _DSP / "dsp-voice-dn2-stereo.s",
+        ROOT / "modules/core/services/machines/dks/dsp/dispatch-dn2.s",
+    ),
 }
 CODE_BASE = 0xB90000
 CODE_END = dv.STOCK_BP  # code must end below the stand-ins at STOCK_BP / RETURN_SW
@@ -141,10 +145,9 @@ def _externs_fixed(device: str, spec: pk_conform.MachineSpec) -> dict[str, int]:
         "_fw_unpack": dv.UNPACK_BP,
         "_dv_table": dv.TABLE,
     }
-    if device == "dt2":
-        fixed["_dl_slots"] = (
-            dv.SLOTS
-        )  # the slot block of core/dsp-link, read by the stubs of core/dsp-voice
+    fixed["_dl_slots"] = (
+        dv.SLOTS
+    )  # the slot block of core/dsp-link, read by the stubs of core/dsp-voice
     if device == "dn2":
         fixed.update(
             {n: dv.STOCK_BP + 0x10 + 4 * i for i, n in enumerate(STEREO_STANDINS)}
@@ -303,12 +306,11 @@ class MachineRig:
                 poke(nw(dv.TABLE) + k, 0)
             poke(nw(dv.TABLE), self.spec.machine_type)
             poke(nw(dv.TABLE) + 1, b.symbols[self.spec.entry])
-            if (
-                self.device == "dt2"
-            ):  # what the machines service installs: the stubs jump to the dispatch entries through the slots
-                for k in range(dv.SLOT_WORDS):
-                    poke(nw(dv.SLOTS) + k, 0)
-                poke(nw(dv.SLOTS), b.symbols["_dv_run"])
+            # what the machines service installs: the stubs jump to the dispatch entries through the slots
+            for k in range(dv.SLOT_WORDS):
+                poke(nw(dv.SLOTS) + k, 0)
+            poke(nw(dv.SLOTS), b.symbols["_dv_run"])
+            if self.device == "dt2":
                 poke(nw(dv.SLOTS) + 1, b.symbols["_dv_unpack_run"])
             for p in self.spec.params:  # words 2 to 9: the declared range of knob j (min | max << 16; none for a stock knob)
                 if not p.stock and 0 <= p.lo <= p.hi <= 0xFFFF:

@@ -18,7 +18,11 @@ export const DATA_END = 0x20100000;
 const DSP = path.join(ROOT, 'modules/core/adapters/dsp-voice/src/dsp');
 const WRAPPER: Record<string, string[]> = {
   dt2: [path.join(DSP, 'dsp-voice.s'), path.join(ROOT, 'modules/core/services/machines/dks/dsp/dispatch-dt2.s')],
-  dn2: [path.join(DSP, 'dsp-voice-dn2.s'), path.join(DSP, 'dsp-voice-dn2-stereo.s')],
+  dn2: [
+    path.join(DSP, 'dsp-voice-dn2.s'),
+    path.join(DSP, 'dsp-voice-dn2-stereo.s'),
+    path.join(ROOT, 'modules/core/services/machines/dks/dsp/dispatch-dn2.s'),
+  ],
 };
 const FX_DSP = path.join(ROOT, 'modules/core/adapters/fx/src/dsp');
 const FX_ADAPTER = path.join(FX_DSP, 'fx.s');
@@ -160,7 +164,7 @@ function externsFixed(device: string): Record<string, number> {
     _fw_unpack: UNPACK_BP,
     _dv_table: TABLE,
   };
-  if (device === 'dt2') fixed._dl_slots = SLOTS; // the slot block of core/dsp-link, which the stubs of core/dsp-voice read
+  fixed._dl_slots = SLOTS; // the slot block of core/dsp-link, which the stubs of core/dsp-voice read
   if (device === 'dn2') STEREO_STANDINS.forEach((n, i) => (fixed[n] = STOCK_BP + 0x10 + 4 * i));
   return fixed;
 }

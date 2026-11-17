@@ -168,12 +168,10 @@ export class MachineRig {
     for (let k = 0; k < 2 * ROW_WORDS; k++) q.poke(nw(TABLE) + k, 0);
     q.poke(nw(TABLE), spec.machineType);
     q.poke(nw(TABLE) + 1, b.symbols[spec.entry]!);
-    if (this.device === 'dt2') {
-      // what the machines service installs (R12-8): the stubs of core/dsp-voice jump to the dispatch entries through these slots
-      for (let k = 0; k < SLOT_WORDS; k++) q.poke(nw(SLOTS) + k, 0);
-      q.poke(nw(SLOTS), b.symbols._dv_run!);
-      q.poke(nw(SLOTS) + 1, b.symbols._dv_unpack_run!);
-    }
+    // what the machines service installs (R12-8): the stubs of core/dsp-voice jump to the dispatch entries through these slots
+    for (let k = 0; k < SLOT_WORDS; k++) q.poke(nw(SLOTS) + k, 0);
+    q.poke(nw(SLOTS), b.symbols._dv_run!);
+    if (this.device === 'dt2') q.poke(nw(SLOTS) + 1, b.symbols._dv_unpack_run!);
     for (const p of spec.params)
       // words 2 to 9: the declared range of knob j (min | max << 16; none for a stock knob)
       if (!p.stock && 0 <= p.lo && p.lo <= p.hi && p.hi <= 0xffff) q.poke(nw(TABLE) + 2 + p.knob, p.lo | (p.hi << 16));
@@ -237,6 +235,11 @@ export class MachineRig {
     }
     for (const p of this.spec.params) this.setParam(p.id, p.default);
     this.setNote(60, 100);
+  }
+
+  /** Slot `index` of core/dsp-link's slot block for the following calls (0: the stub takes the stock path). */
+  setSlot(index: number, pc: number): void {
+    this.q.poke(nw(SLOTS) + index, pc);
   }
 
   /** Write a DM word (a fixture's memory: the sample pool). */

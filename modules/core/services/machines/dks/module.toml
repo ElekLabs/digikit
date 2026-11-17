@@ -124,8 +124,9 @@ slot = "frametype"
 entry = "mf_frametype"
 devices = ["dn2"]
 
-# The dispatch code of the DT2 machine voices (the part of core/dsp-voice behind its hook stubs: mask scan, contract adapter, output guard, breadcrumbs). The image keeps the stubs, the heartbeat and all data
-# of the adapter; this object reaches them through DSP imports (the table of core/dyndsp) and fills the two slots the stubs read. DN2 keeps its dispatch in the image.
+# The dispatch code of the machine voices (the part of core/dsp-voice behind its hook stubs: mask scan, contract adapter, output guard, breadcrumbs). The image keeps the stubs, the heartbeat and all data
+# of the adapter (on DN2 also the stereo code, which shares data with the dispatch both ways); the object reaches them through DSP imports (the table of core/dyndsp) and fills the slots the stubs read
+# (DT2 two, DN2 the render slot).
 [[fill]]
 slot = "voice_render"
 entry = "_dv_run"
@@ -138,6 +139,12 @@ entry = "_dv_unpack_run"
 space = "dsp"
 devices = ["dt2"]
 
+[[fill]]
+slot = "voice_render"
+entry = "_dv_run"
+space = "dsp"
+devices = ["dn2"]
+
 [[gen]]
 kind = "sharc-adapter"
 path = "build/gen/adapter-{dev}.inc"
@@ -147,6 +154,12 @@ path = "build/machines-dsp-dt2.dko.json"
 sources = ["dsp/dispatch-dt2.s"]
 place = "dsp.l2"
 devices = ["dt2"]
+
+[[object]]
+path = "build/machines-dsp-dn2.dko.json"
+sources = ["dsp/dispatch-dn2.s"]
+place = "dsp.l2"
+devices = ["dn2"]
 
 # Rust and assembler (the assembler is in `src/hooks.rs`), built with rustc_codegen_gcc for -mcpu=54418 (`patchkit build`). Packed as a .dks (`patchkit pack core/services/machines`): the file is `machines.dks`.
 [[object]]

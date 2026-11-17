@@ -70,6 +70,9 @@ _dd_vcount = "voices.count"
 _dd_exp2 = "_dv_exp2"
 _dd_frame_hw = "_dv_frame_hw"
 _dd_frame_sw = "_dv_frame_sw"
+# the table of a run-time DSP object's imports also holds the firmware addresses that the dispatch code of core/dsp-voice uses
+_dv_table = "voices.rows"
+_fw_frame = "dsp.voice.value.frame_base"
 
 [[entry]]
 registry = "voices"

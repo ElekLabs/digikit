@@ -51,7 +51,7 @@ def test_no_build_of_the_module_stores_a_same_dag_register_through_an_index_regi
         )  # raises BuildError on an excluded store
     # the DN2 copy too
     dn2 = CORE.with_name("dsp-voice-dn2.s")
-    pk_sharc.sharc_object([dn2], INCLUDES, frozenset())
+    pk_sharc.sharc_object([dn2, DISPATCH.with_name("dispatch-dn2.s")], INCLUDES, frozenset())
     # and a source with one fails, with the parcel address in the message
     bad = tmp_path / "bad.s"
     bad.write_text(".SECTION/PM seg_pmco;\n_x:\n    DM(-16, I6) = I0;\n    RTS;\n")
