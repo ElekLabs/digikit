@@ -415,25 +415,42 @@ Estimate: 1-2 h. Payoff: small. Confidence: high. Depends on: nothing.
 
 ### E2 Builder boilerplate from sdk.toml
 
-What: `patchkit gen` writes, per service, from the `provided = true` imports of that service in `sdk/sdk.toml`:
-1. `services/<s>/dks/src/gen_exports.rs`: the `extern "C"` wrappers and an `EXPORTS` list. Signatures come from the existing `api::Dk…Fn`
-   types (`sdkgen.rs` already writes them); the body calls `build::<fn>(&ImportCore, ...)` by a fixed name rule
-   (`dk_module_ctx_add_fx` calls `build::add_fx`).
-2. Wrappers that convert arguments (the two callback wrappers of machines `builder.rs:32-38`) stay hand-written; `sdk.toml` marks them
-   `wrapper = "manual"` and the generated list includes them by name.
-3. `service!` takes `exports = gen_exports::EXPORTS`. The hand-written `builder.rs` files keep only the manual wrappers.
-4. `[[export]]` entries leave `dks/module.toml`; patchkit and `service-check` read the exports from `sdk.toml`.
-5. `MACHINE_BUILDERS` and `FX_BUILDERS` in `assembly_tests.rs` come from the generated `gen_sdk.rs` (a per-service list).
-6. `layercheck.py` builds `RT_KIND_FREE` from `sdk.toml` (builder names and the kind names of `[records.kinds]`).
-7. Check `samples/dks/src/glue.rs` for the same treatment.
+Facts (read on `int/shared-gate`): `sdk/sdk.toml` has 26 `provided = true` imports (machines 12, fx 5, samples 9). 13 have pure forwarding
+wrappers (`build::<rule(name)>(&ImportCore, args...)`, rule: drop `dk_`, then a leading `module_ctx_`; it fits all 13). The other 13 are
+hand-written: machines `dk_param_get` and `dk_param_set` (`fw.rs`), `dk_param_on_click` and `dk_page_canvas` (`builder.rs`, they convert
+callbacks), and all 9 samples wrappers (`glue.rs`). `[[export]]` is read by service-check (`svccheck.rs:426-451`) and by
+`Module::provided_service` (`module.rs:188-198`, the `.dks` header's export list).
 
-Tests: `patchkit gen --check` covers the generated files (host consistency). `service-check` host tests cover a missing or extra export.
-Acceptance of the refactor: `patchkit objdiff` of `machines.dks` and `fx.dks` before and after is identical or differs only in symbol order,
-and the `EXPORTS` lists are equal. The committed `.dko.json` files change.
+What:
+1. `sdk.toml`: an optional import field `wrapper = "<dks module>"` (the file of a hand-written function, e.g. `fw`, `builder`, `glue`); allowed
+   only with `provided`; a pure wrapper with a callback argument is a generator error. 13 imports carry it (or a `[[service]]` default for
+   samples).
+2. `patchkit gen` writes `modules/core/services/<s>/dks/src/gen_exports.rs` for each service with a `dks/` folder, in `sdk.toml` order: the pure
+   `extern "C"` wrappers (`#[cfg_attr(target_arch = "m68k", no_mangle)]`, as today), a `const _: api::Dk…Fn` check for every export, and
+   `pub fn exports() -> [(u32, *const u8); N]` (a function, because a function address cannot become a pointer in a `const`). Crate path by
+   the convention `dkrt_svc_<name>`. `gen --check` covers the files.
+3. `service!` (`svc-rt/src/lib.rs`) gains an arm `exports = $e:expr`; the literal list form stays (the service-check tests use it). The three
+   `dks/src/lib.rs` call `exports = gen_exports::exports()`. fx `builder.rs` goes; machines `builder.rs` keeps its two callback wrappers.
+4. `module.rs`: a service's exports are its `provided` imports from `sdk.toml` (`import_infos()` gains `provided`); the `[[export]]` entries
+   leave the three `dks/module.toml`. Service-check refuses a literal `exports = [` and requires `gen_exports::exports()` when the service has
+   provided imports.
+5. `rust_api` writes `pub const PROVIDED: [(&str, &str); 26]` (service, import); `MACHINE_BUILDERS` and `FX_BUILDERS` in `assembly_tests.rs`
+   filter it. `layercheck.py` builds the builder part of `RT_KIND_FREE` from `sdk.toml`; the kind names stay literal until a generated set is
+   proven a superset.
+6. Nx: the dks projects' build inputs must include `sdk/sdk.toml` (check with `pnpm nx:pilot show target inputs ... --check sdk/sdk.toml`).
+
+Before building: confirm the loader and `bind.rs` do not depend on the order of the `.dks` export table; the generated order is `sdk.toml`
+order, not today's `lib.rs` order.
+
+Tests: `patchkit gen --check`; sdkgen host tests for pure and hand-written output and a bad `wrapper`; service-check tests rewritten (a missing
+`gen_exports` call fails, a literal list fails, fills unchanged). Acceptance: copy the three committed `.dko.json` first, then
+`patchkit objdiff OLD NEW --strict` for machines, fx and samples (code identical, names and placement ignored), equal export sets,
+`pnpm nx:pilot run core/runtime:test-assembly` and `mise run objects-check`.
 
 Done when: adding a builder call touches `sdk.toml`, the service's `build.rs` and its tests, plus the generated files.
 
-Estimate: 4-6 h. Payoff: every later API. Confidence: high. Depends on: nothing.
+Estimate: 4-6 h. Payoff: every later API. Confidence: high. Depends on: nothing (after the gate merge, to avoid conflicts in the service
+crates).
 
 ### E3 Keys, the trait, and the role check
 
