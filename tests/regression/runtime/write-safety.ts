@@ -244,11 +244,11 @@ export function runtimeSafety(
   device: Device,
   output: string,
   overlays: string[],
-  minEmulators = 1,
-  policy: SafetyPolicy = 'default',
-  storeExtra: readonly number[] = [],
-  /** Names of the service files on the card (`neededServices`). */
-  cardServices: readonly string[] = [],
+  minEmulators: number,
+  policy: SafetyPolicy,
+  storeExtra: readonly number[],
+  /** Names of the service files on the card (`neededServices`): a settings writer widens the policy. */
+  cardServices: readonly string[],
 ) {
   if (minEmulators < 1 || !overlays.length)
     throw new Error('runtime safety needs observed emulators and exported overlays');

@@ -31,7 +31,7 @@ import type { FxExpectations } from './dkm-parse.ts';
 import { committedFxExpectations } from './pack-needs.ts';
 import { serviceSymbol } from './service-symbols.ts';
 import { planSymbol, prepareRuntimePlanOffline, validateRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
-import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
+import { runtimeSafety, runtimeWatchEnv, type SafetyPolicy } from './write-safety.ts';
 import { GAIN, SINE } from './fixtures.ts';
 import { drainInputs } from './fx-session.ts';
 import { moduleResultsNote } from './runtime-menu.ts';
@@ -66,6 +66,7 @@ async function baseline(
   plan: RuntimePlan,
   wet: boolean,
   artifacts: string,
+  cardServices: Set<string>,
 ): Promise<RuntimeBaseline> {
   const tag = wet ? 'wet' : 'dry';
   const binary = plusdriveBinary();
@@ -85,7 +86,7 @@ async function baseline(
   // the services the gain effect needs (fx.dks), bound to the stock firmware, go to digikit/services
   const services = await Promise.all(
     neededServices(files.map((f) => f.file)).map(async (needed) => ({
-      name: `${needed.service}.dks`,
+      name: (cardServices.add(needed.service), `${needed.service}.dks`),
       file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
     })),
   );
@@ -117,6 +118,22 @@ async function baseline(
     // A targeted run-time invariant guard, not the legacy launch-time expansion write-watch/flush proof.
     guard: { protect: [{ lo: boot, hi: boot + 8, label: 'runtime boot identity' }], allow_pc: [] },
   };
+}
+
+/** After the owned emulators exit: every watch log and exported overlay meets the safety policy of the card's services. One call site for every session kind. */
+export function expectLifetimeSafety(run: {
+  device: Device;
+  watchOutput: string;
+  overlays: string[];
+  epochs: Set<number>;
+  artifacts: string;
+  policy: SafetyPolicy;
+  cardServices: Iterable<string>;
+}) {
+  const { device, watchOutput, overlays, epochs, artifacts, policy, cardServices } = run;
+  const report = runtimeSafety(device, watchOutput, overlays, epochs.size, policy, [], [...cardServices]);
+  record(artifacts, 'lifetime-safety', report);
+  expect(report.pass, 'every emulator and exported overlay meets the write-safety policy').toBe(true);
 }
 
 /** The frame hash once the screen holds still: two reads 100 ms of emulated time apart are equal (a redraw may follow the first tap after a boot). */
@@ -582,6 +599,7 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
   let closed = 0;
   let watchOutput: string;
   const overlays: string[] = [];
+  const cardServices = new Set<string>();
   const epochs = new Set<number>();
   const rememberEpoch = (epoch: unknown) => {
     if (typeof epoch !== 'number') throw new Error('runtime status lacks epoch');
@@ -614,16 +632,14 @@ export function withGainFxSession(device: Device, scope: string, config: GainFxS
     {
       prepareBaseline: async (session) => {
         rememberEpoch((await bounded(() => session.status())).epoch);
-        dry = await baseline(session, plan, false, artifacts);
-        wet = await baseline(session, plan, true, artifacts);
+        dry = await baseline(session, plan, false, artifacts, cardServices);
+        wet = await baseline(session, plan, true, artifacts, cardServices);
         return config.initial === 'wet' ? wet : dry;
       },
       finishCase: (runtime) => collectEvidence(runtime, `case-${++closed}`),
       tempDirs: () => [artifacts],
       afterClose: async () => {
-        const report = runtimeSafety(device, watchOutput, overlays, epochs.size);
-        record(artifacts, 'lifetime-safety', report);
-        expect(report.pass, 'every emulator and exported overlay meets legacy safety policy').toBe(true);
+        expectLifetimeSafety({ device, watchOutput, overlays, epochs, artifacts, policy: 'default', cardServices });
       },
     },
     scope,

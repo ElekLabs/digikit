@@ -27,6 +27,7 @@ import {
   word,
   type RequireAudible,
   type Rt,
+  expectLifetimeSafety,
 } from './fx-live.ts';
 import {
   planSymbol,
@@ -35,7 +36,7 @@ import {
   type PreparedRuntimePlan,
   type RuntimePlan,
 } from './runtime-plan.ts';
-import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
+import { runtimeWatchEnv } from './write-safety.ts';
 
 const exec = promisify(execFile);
 const root = repoRoot();
@@ -368,9 +369,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
       afterClose: async () => {
         const results = await Promise.allSettled([
           (async () => {
-            const report = runtimeSafety(device, watchOutput, overlays, epochs.size, policy, [], [...cardServices]);
-            record(artifacts, 'lifetime-safety', report);
-            expect(report.pass, 'every route emulator and exported overlay meets legacy safety policy').toBe(true);
+            expectLifetimeSafety({ device, watchOutput, overlays, epochs, artifacts, policy, cardServices });
           })(),
           analysisJson('tools.patchkit.pk_digikit_fxroutes', ['render-shots', artifacts], artifacts, 'rendered-shots'),
         ]);
