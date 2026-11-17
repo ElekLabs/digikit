@@ -201,6 +201,7 @@ pnpm test:host                # host Vitest projects; no device
 pnpm verify:host              # host lint, format, tests and types
 mise run test                 # the gate: Nx targets of the affected projects
 mise run test:subset -- S:machines  # the device tests of record tags plus gate-smoke and gate-pins; add --run to run them (docs/TESTING.md "Named device subset")
+uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --seconds 3,6   # paired counter runs of two coupled-run binaries: DSP and ColdFire host instructions per audio second, B/A ratios, parity (docs/TESTING.md)
 mise run module:check ID      # one module: conformance and its own tests
 pnpm nx:pilot run @digi/sharc-rig-kit:test-conformance-rig   # machine and effect conformance of every module on the SHARC-only rig (docs/TESTING.md "The Vitest kit")
 DIGI_RIG_REPORT=1 pnpm exec vitest run --config vitest.host.config.ts --project module-rig modules/machines/analog/tests/   # verdict, plot.png and wav files for the pinned cases (docs/TESTING.md "Classifying a changed pin")
