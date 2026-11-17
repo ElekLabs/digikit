@@ -1,6 +1,6 @@
 // The header of a core library names the sharc-rt source it was built from (`src/header.rs`): the
 // SHA-256 of every `.rs` file under src/ plus Cargo.toml and build.rs (relative path, NUL, bytes, NUL,
-// sorted), the rustc version, the target and the build flags that change code generation or layout. The hash code is the crate's own `src/sha256.rs`.
+// sorted), the rustc version, the target and the build flags that change code generation or layout (not the PGO profile flags). The hash code is the crate's own `src/sha256.rs`.
 #[path = "src/sha256.rs"]
 mod sha256;
 
@@ -52,8 +52,29 @@ fn main() {
         std::env::var("TARGET").expect("target")
     );
     let var = |name: &str| std::env::var(name).unwrap_or_default();
+    // PGO changes optimisation, not layout or ABI: a host built with a profile accepts a plain library
+    // and the other way round, so the profile flags stay out of the hash.
+    let encoded = var("CARGO_ENCODED_RUSTFLAGS");
+    let mut kept: Vec<&str> = Vec::new();
+    let mut parts = encoded.split('\x1f').filter(|p| !p.is_empty());
+    while let Some(part) = parts.next() {
+        let (is_c, value) = match part {
+            "-C" => (true, parts.clone().next().unwrap_or("")),
+            p => (p.starts_with("-C"), p.trim_start_matches("-C")),
+        };
+        let pgo = ["profile-use=", "profile-generate=", "profile-sample-use="]
+            .iter()
+            .any(|k| value.starts_with(k));
+        if is_c && pgo {
+            if part == "-C" {
+                parts.next();
+            }
+            continue;
+        }
+        kept.push(part);
+    }
     let mut f = sha256::Sha256::new();
-    f.update(var("CARGO_ENCODED_RUSTFLAGS").as_bytes());
+    f.update(kept.join("\x1f").as_bytes());
     let rustflags: String = f
         .finish()
         .iter()

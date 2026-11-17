@@ -17,7 +17,7 @@ use std::mem::{align_of, offset_of, size_of};
 
 /// Version of the header layout itself. A host refuses a header of another version without reading
 /// further.
-pub const HEADER_ABI: u32 = 2;
+pub const HEADER_ABI: u32 = 3;
 
 pub const SHA_LEN: usize = 64;
 pub const RUSTC_LEN: usize = 96;
@@ -154,7 +154,9 @@ pub struct CoreHeader {
     pub target: [u8; TARGET_LEN],
     /// What changes code generation or layout for the same source, as the build script of `sharc-rt` saw it:
     /// `panic=unwind opt=3 profile=release debug=false rustflags=<16 hex of the SHA-256 of
-    /// CARGO_ENCODED_RUSTFLAGS>`. The panic strategy matters because a panic crosses the boundary.
+    /// CARGO_ENCODED_RUSTFLAGS without `-Cprofile-use=`, `-Cprofile-generate=` and `-Cprofile-sample-use=`>`.
+    /// The panic strategy matters because a panic crosses the boundary. PGO changes optimisation, not layout
+    /// or ABI, so a PGO host accepts a plain library and the other way round.
     pub flags: [u8; FLAGS_LEN],
     /// `LAYOUT`.
     pub layout: [u64; LAYOUT_LEN],
