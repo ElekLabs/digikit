@@ -18,11 +18,12 @@ import {
 
 for (const device of DEVICES) {
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} FX SEND`, () => {
-    const context = withGainFxSession(device, 'FX SEND zero/dry/full', { initial: 'wet', requireAudible: true });
-    // The device proof is the bus wiring through the patched stock image: a zero amount equals the dry PCM bit for bit and a full amount adds half
-    // the input. The squared gain law (half, other amounts) and the isolation of the other tracks' amounts are proved on the rig by
-    // fx-send.rig.test.ts ('the gain is the amount squared over 127 squared', 'only tracks with an amount contribute').
-    test('isolates a zero send amount and adds half the input at a full amount', async () => {
+    const context = withGainFxSession(device, 'FX SEND zero/dry/other/full', { initial: 'wet', requireAudible: true });
+    // The rig (fx-send.rig.test.ts) proves the squared gain law ('the gain is the amount squared over 127 squared') and the routine's indexing
+    // ('only tracks with an amount contribute'). The device cases prove the bus wiring through the patched stock image: zero equals dry bit for bit,
+    // `other` (track 0 amount 0, track 1 amount 127, sine on track 0) is also bit-identical to dry, which is the only real-bus proof of track
+    // isolation, and a full amount adds half the input.
+    test('isolates common send amounts and adds half the input at a full amount', async () => {
       const { fixture, plan, dry, wet, slots, artifacts, rememberEpoch } = context;
       // Legacy fx-send-{dt2,dn2}.toml list positions. This is the accepted audible-input
       // contract; direct selected-type observations remain in the legacy basic dry/full legs.
@@ -37,6 +38,7 @@ for (const device of DEVICES) {
       for (const [tag, amount] of [
         ['zero', 0],
         ['dry', null],
+        ['other', 0x7f00],
         ['full', 0x7f],
       ] as const) {
         const runtime = tag === 'zero' ? initial : await fixture.reload(amount === null ? dry : wet);
@@ -77,7 +79,9 @@ for (const device of DEVICES) {
           record(artifacts, `send-${tag}-after-note`, { row: after, counts: [n0, n1] });
         }
       }
-      await compare(pcm.get('dry')!, pcm.get('zero')!, 1, artifacts, 'send-zero', true);
+      for (const tag of ['zero', 'other']) {
+        await compare(pcm.get('dry')!, pcm.get(tag)!, 1, artifacts, `send-${tag}`, true);
+      }
       const added = async (tag: string) => {
         const result = await analysisJson<{ added_factor: number }>(
           'tools.patchkit.pk_digikit_fxsend',
