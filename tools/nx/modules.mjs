@@ -36,10 +36,7 @@ export const createNodesV2 = [
     const byId = new Map(
       files.map((f) => {
         const parsed = read(ctx.workspaceRoot, f);
-        return [
-          parsed.module.id,
-          { file: f, manifest: parsed.module, objects: parsed.object ?? [], hooks: parsed.hook ?? [] },
-        ];
+        return [parsed.module.id, { file: f, manifest: parsed.module, objects: parsed.object ?? [] }];
       }),
     );
     // id -> { category, root }, for the module tags of metadata.runtimeAcceptance (acceptance-tags.mjs).
@@ -90,7 +87,7 @@ export const createNodesV2 = [
       }
     }
     const nodes = files.map((f) => {
-      const { module: m, object: objects = [], hook: hooks = [] } = read(ctx.workspaceRoot, f);
+      const { module: m, object: objects = [] } = read(ctx.workspaceRoot, f);
       const root = dirname(f);
       const project = { name: m.id, root, tags: ['module', `type:${m.type}`] };
       if (root.startsWith('modules/') && m.category !== 'core') project.tags.push('release-module');
@@ -119,7 +116,7 @@ export const createNodesV2 = [
           coreManifests,
         );
       if (devices.length && packable.has(m.id)) targets.pack = packTarget(ctx.workspaceRoot, byId, m, devices);
-      if (devices.length && packable.has(m.id) && isBindable(m, hooks))
+      if (devices.length && packable.has(m.id) && isBindable(m))
         targets.bind = bindTarget(ctx.workspaceRoot, m, devices);
       const aliasesTarget = packAliasesTarget(ctx.workspaceRoot, byId, recs);
       if (aliasesTarget) targets['pack-aliases'] = aliasesTarget;

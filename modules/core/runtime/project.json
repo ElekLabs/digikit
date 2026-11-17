@@ -73,6 +73,7 @@
         "test/track-select:pack",
         "core/services/fx:bind",
         "core/services/machines:bind",
+        "core/services/samples:bind",
         "test/svc-test:bind",
         "patchkit:device-images"
       ],
