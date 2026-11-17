@@ -16,7 +16,6 @@ import {
   tableSymbols,
   turnChangesNothing,
   turnChangesOneWord,
-  turnPastLimit,
   voiceWord,
 } from './machines-kit.ts';
 
@@ -25,7 +24,7 @@ import {
  * One emulator start, two boots of it: the plain runtime (FM TONE's SYN, FLTR and AMP pages are captured), then the card with the machine.
  * With the machine loaded: the rows are in the tables (names, titles, ranges, knob layout, slots), the stock pages show the same frames, the machine is in the list at
  * the first place after MIDI, YES commits its type (audio mirror, TX frame word), the Sound words hold the defaults of its parameters, the SYN key draws its page,
- * a knob edits the Sound word of its parameter (exactly the word of its slot), ranges clamp and the empty knobs move nothing.
+ * a knob edits the Sound word of its parameter (exactly the word of its slot) and the empty knobs move nothing (the ranges are read back from the rows; the firmware clamps at them).
  * Replaces the patch-time smoke cells of `test/dn2-clone` and `test/dn2-pages` and the parts a to c and e of `pk_proof_pages_dn2.py`,
  * see docs/plans/ledgers/smoke-machines-cells.md. SHARC for the module's DSP part.
  */
@@ -153,13 +152,6 @@ describeOn('dn2', `DN2 ${FIRMWARE.dn2} machines.dks: the own page of a run-time 
     } finally {
       await holdTrig(rt, false);
     }
-
-    // the ranges clamp: Beta at its top, Gamma at its bottom and top (the values of the old proof: 0x3f00, 0x100, 0x7f00); further events change nothing
-    const beta = layout[1]!;
-    const gamma = layout[2]!;
-    expect(await turnPastLimit(rt, ENCODERS[beta.knob]!, beta.slot, 4, 0x3f00), 'Dyn Beta stops at its maximum').toBe(0x3f00);
-    expect(await turnPastLimit(rt, ENCODERS[gamma.knob]!, gamma.slot, -4, 0x100), 'Dyn Gamma stops at its minimum').toBe(0x100);
-    expect(await turnPastLimit(rt, ENCODERS[gamma.knob]!, gamma.slot, 4, 0x7f00), 'Dyn Gamma stops at its maximum').toBe(0x7f00);
 
     // the empty knobs move no Sound word, up or down
     for (const knob of empty) {

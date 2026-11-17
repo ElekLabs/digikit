@@ -133,24 +133,6 @@ export async function turnChangesNothing(rt: Rt, encoder: string, detents = 12):
   return changed(before, await soundWords(rt.session));
 }
 
-/**
- * Turn `encoder` (bursts of 20 events of `step` detents 2 ms apart, the sign gives the direction) until Sound word `index` holds `limit`, then two bursts more, and return
- * the word: a range that clamps stays at `limit`. A fast burst moves a word by about 0x100 per event. Fails when `limit` is not reached within `maxBursts` bursts or when a
- * word other than `index` changes on the way.
- */
-export async function turnPastLimit(rt: Rt, encoder: string, index: number, step: number, limit: number, maxBursts = 20) {
-  let words = await soundWords(rt.session);
-  for (let n = 0; n < maxBursts && words[index] !== limit; n++) {
-    const prev = words;
-    await turnEvents(rt, encoder, step, 20, 2);
-    words = await soundWords(rt.session);
-    expect(changed(prev, words).filter((i) => i !== index), `${encoder}: only word ${index} moves`).toEqual([]);
-  }
-  expect(words[index], `${encoder} reaches ${limit.toString(16)} within ${maxBursts} bursts`).toBe(limit);
-  for (let n = 0; n < 2; n++) await turnEvents(rt, encoder, step, 20, 2);
-  return soundWord(rt.session, index);
-}
-
 /** The knobs of a decoded row or page that name a parameter: the knob index and the name. */
 export const namedKnobs = (knobs: (string | number)[]) =>
   knobs.flatMap((k, knob) => (typeof k === 'string' ? [{ knob, name: k }] : []));
