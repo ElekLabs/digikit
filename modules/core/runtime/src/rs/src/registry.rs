@@ -4,11 +4,7 @@
 //! and `remove` in reverse order. It names no service and no table of an adapter; what a service needs of the image it finds itself (`CoreApi::info`). Everything here runs in the
 //! UI task. The loader calls it (`apply` from the completion step of the boot-time load, `remove` from the undo); it never calls the loader.
 use crate::handlers::{check_step, services, ApplyCtx, CheckCtx, ServiceTable};
-use crate::rd32;
 use dkrt_sdk::*;
-
-const REG_MAGIC: u32 = 0x444b_5247; // "DKRG"
-const MAX_RECORDS: u32 = dkneeds::MAX_RECORDS;
 
 pub(crate) use dkrt_abi::registry::each;
 
@@ -22,37 +18,10 @@ pub(crate) unsafe fn check_with(l: ServiceTable, reg: *const u8, size: u32, imag
     if size == 0 {
         return OK;
     }
-    if size < 16 || rd32(reg) != REG_MAGIC || rd32(reg.add(4)) != 1 {
-        return E_FORMAT;
-    }
-    if rd32(reg.add(8)) != device {
-        return E_REG_DEVICE;
-    }
-    let n = rd32(reg.add(12));
-    if n > MAX_RECORDS {
-        return E_FORMAT;
-    }
     // the layout: every record has a kind some service declared, and that kind's length
-    let mut at: u32 = 16;
-    let mut i = 0;
-    while i < n {
-        if at > size || size - at < 8 {
-            return E_FORMAT;
-        }
-        let kind = rd32(reg.add(at as usize));
-        let len = rd32(reg.add(at as usize + 4));
-        let want = match l.len(kind) {
-            Some(want) => want,
-            None => return E_FORMAT,
-        };
-        if len != want || size - at < len {
-            return E_FORMAT;
-        }
-        at += len;
-        i += 1;
-    }
-    if at != size {
-        return E_FORMAT;
+    let r = dkrt_abi::regcheck::check_layout(reg, size, device, |kind| l.len(kind));
+    if r != OK {
+        return r;
     }
     // the steps of the old single body, each over every service's records in file order
     let c = CheckCtx { reg, image_size };
