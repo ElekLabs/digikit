@@ -354,3 +354,26 @@ def test_fresh_profiles_prefer_the_both_profile_and_fall_back_to_the_device(
         ),
     )
     assert native_pgo.fresh_profiles(["dn2"], {}) == {"dn2": pathlib.Path("/both.p")}
+
+
+def test_the_package_list_of_a_tree_is_computed_once_per_lock_state(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "Cargo.lock").write_text("lock 1")
+    (tmp_path / "Cargo.toml").write_text("[workspace]")
+    calls = []
+    monkeypatch.setattr(native_pgo, "ROOT", tmp_path)
+    monkeypatch.setattr(native_pgo, "_PACKAGES_MEMO", {})
+    monkeypatch.setattr(
+        native_pgo, "local_package_dirs", lambda: calls.append(1) or ["packages/a"]
+    )
+    assert native_pgo.tree_packages() == ["packages/a"]
+    assert native_pgo.tree_packages() == ["packages/a"] and len(calls) == 1
+    # a new process (no memo) reads dist/pgo-packages.json
+    monkeypatch.setattr(native_pgo, "_PACKAGES_MEMO", {})
+    assert native_pgo.tree_packages() == ["packages/a"] and len(calls) == 1
+    # a lock edit recomputes it
+    (tmp_path / "Cargo.lock").write_text("lock 2")
+    monkeypatch.setattr(native_pgo, "_PACKAGES_MEMO", {})
+    native_pgo.tree_packages()
+    assert len(calls) == 2

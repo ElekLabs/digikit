@@ -354,6 +354,37 @@ def local_package_dirs(features: str = FEATURES) -> list[str]:
     return sorted(d for d in dirs if is_emulation_package(d))
 
 
+_PACKAGES_MEMO: dict[str, list[str]] = {}
+
+
+def tree_packages() -> list[str]:
+    """`local_package_dirs()` of this tree, without a `cargo metadata` call when nothing changed: the list is kept once per
+    process and in `dist/pgo-packages.json` under the key sha256(Cargo.lock + the root Cargo.toml + the features)
+    (a crate is added or removed only by a manifest or lock edit). The file is per worktree (`dist/` is ignored)."""
+    digest = hashlib.sha256()
+    for name in ("Cargo.lock", "Cargo.toml"):
+        digest.update((ROOT / name).read_bytes() + b"\0")
+    digest.update(FEATURES.encode())
+    key = digest.hexdigest()
+    if key in _PACKAGES_MEMO:
+        return _PACKAGES_MEMO[key]
+    cache = ROOT / "dist" / "pgo-packages.json"
+    try:
+        saved = json.loads(cache.read_text())
+        if saved.get("key") == key:
+            _PACKAGES_MEMO[key] = list(saved["packages"])
+            return _PACKAGES_MEMO[key]
+    except (OSError, ValueError, KeyError, AttributeError):
+        pass
+    packages = local_package_dirs()
+    _PACKAGES_MEMO[key] = packages
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    partial = cache.with_suffix(f".{os.getpid()}.part")
+    partial.write_text(json.dumps({"key": key, "packages": packages}))
+    os.replace(partial, cache)
+    return packages
+
+
 def _pgo_tiers(environ: dict[str, str] | os._Environ[str] | None):
     environ = os.environ if environ is None else environ
     return digi_env.resolve_tiers("pgo", digi_env.firmware(environ), "", environ)
@@ -578,17 +609,15 @@ def resolve(
 ) -> Resolved:
     """Choose the profile of DEVICE for this tree.
 
-    1. Compute the current key. The package list comes from the shared manifest
-       (no extra metadata call). If ``by-key/<key>.json`` exists and its profile
-       file is there, that is an exact match: ``ok``. A key covers every input
-       listed in compute_components, so an exact match cannot be stale. It does not
-       cover the fixtures' content (only the workload name), the fast-region lists
-       or the apps/ crates; a profile trained on other fixtures or lists is at worst
-       slightly less tuned, never wrong (LLVM drops counters of changed functions).
-    2. Otherwise the shared manifest decides as before: ok, partial (only the
-       sources digest differs) or stale. If the package list itself changed (a
-       crate added or removed), the computed key matches no by-key file and the
-       shared manifest answers; that is safe, it only loses the exact match.
+    1. Compute the current key with the package list of the shared manifest (no ``cargo metadata`` call). If
+       ``by-key/<key>.json`` exists and its profile file is there, that is an exact match: ``ok``. A key covers every
+       input listed in compute_components, so an exact match cannot be stale. It does not cover the fixtures' content
+       (only the workload name), the fast-region lists or the apps/ crates; a profile trained on other fixtures or lists
+       is at worst slightly less tuned, never wrong (LLVM drops counters of changed functions).
+    2. No exact match: the manifest may hold another package list than this tree trained with (another tree trained
+       last, a crate was added), so the key is computed again with this tree's list (``tree_packages``: kept once per
+       process and in ``dist/pgo-packages.json``, recomputed when Cargo.lock or the root Cargo.toml change).
+    3. Still none: the shared manifest decides: ok, partial (only the sources digest differs) or stale.
 
     DEVICE selects the profile (``train --device``); a DT2 profile's key also
     carries the DT2 workload name. For ``both``, GEN is the DN2 core (slot 1) and
@@ -625,21 +654,29 @@ def resolve(
     hasher.save()
     exact = read_by_key(device, key_of(components))
     if exact is None:
-        # The shared manifest may hold an older package list than this tree's training used (another tree trained last, or
-        # a crate was added): try the list of this tree's build graph before giving up the exact match.
-        fresh, _ = compute_components(
-            local_package_dirs(),
-            gen,
-            hasher,
-            fast,
-            blocktrans,
-            gen2 if device == BOTH else None,
-        )
-        if device == "dt2":
-            fresh["workload"] = DT2_WORKLOAD_NAME
-        if device == BOTH:
-            fresh["workload"] = both_workload_name(reset_fixture_present())
-        exact = read_by_key(device, key_of(fresh))
+        # The shared manifest may hold another package list than this tree trained with (another tree trained last, a
+        # crate was added): try the list of this tree's build graph before giving up the exact match.
+        try:
+            packages = tree_packages()
+        except (
+            subprocess.CalledProcessError,
+            OSError,
+        ):  # no cargo graph here: the manifest decides
+            packages = None
+        if packages is not None:
+            fresh, _ = compute_components(
+                packages,
+                gen,
+                hasher,
+                fast,
+                blocktrans,
+                gen2 if device == BOTH else None,
+            )
+            if device == "dt2":
+                fresh["workload"] = DT2_WORKLOAD_NAME
+            if device == BOTH:
+                fresh["workload"] = both_workload_name(reset_fixture_present())
+            exact = read_by_key(device, key_of(fresh))
     if exact is not None and profdata_path(exact, device).is_file():
         return Resolved(
             exact,
