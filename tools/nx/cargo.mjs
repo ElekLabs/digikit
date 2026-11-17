@@ -234,7 +234,6 @@ const GATE = {
 const NO_TESTS = new Set([
   'sharc-stats',
   'sharc-gen',
-  'sharc-gen-2',
   'dkfw',
   'dkrt-test-support',
   'sharc-fast-cl',

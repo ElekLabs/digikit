@@ -1,11 +1,11 @@
 //! Which generated DSP core runs a firmware's DSP.
 //!
-//! A build holds one generated core (`SHARC_GEN_DIR`, `sharc_gen::CORE`), or two with the `second-core`
-//! feature (`SHARC_GEN_DIR_2` is the second one's slot, `sharc_gen_2::CORE`; the names do not say which
-//! device a core is for). Each core knows the DSP image it was made for (`dn2-1.12`, `dt2-1.17`), and the
-//! core whose image name starts with the firmware's device id runs that firmware's DSP. A device without
-//! a core of its own gets the first core, as a single-core build always did (the image's blocks then do
-//! not match and the engine interprets). One engine runs either core: the core is the value passed to it.
+//! A host holds no generated core. Each device's core is a library (`packages/emulator/sharc-core-lib`)
+//! that `DIGI_SHARC_CORE_LIB_<DEV>` names (`DIGI_SHARC_CORE_LIB_DN2`, `DIGI_SHARC_CORE_LIB_DT2`; the launchers
+//! take it from the store, `uv run python -m tools.devtools.verify_build cores`). The loader refuses a library
+//! whose header differs from the host's (`sharc_native::core_lib::load`). Each core knows the DSP image it was
+//! made for (`dn2-1.12`, `dt2-1.17`); it must be a core of the firmware's device. One engine runs either
+//! core: the core is the value passed to it.
 
 use std::{
     cell::RefCell,
@@ -17,36 +17,42 @@ use crate::dsp_patch::DspPatch;
 use crate::{DspEngine, IdleLoop, Shared, ThreadedHandle, ThreadedPeer, open_engine_patched};
 use sharc_native::GenCore;
 
-/// The static core for a device id (`dn2`, `dt2`): the one made for that device's image.
-fn static_core_for_device(device: &str) -> &'static GenCore {
-    #[cfg(feature = "second-core")]
-    if !sharc_gen::CORE.image.starts_with(device) && sharc_gen_2::CORE.image.starts_with(device) {
-        return &sharc_gen_2::CORE;
-    }
-    let _ = device;
-    &sharc_gen::CORE
+/// The suffix of the per-core environment variables of a device (`SHARC_FAST_REGIONS_2`): the DN2 has none, the
+/// DT2 has `_2`.
+fn env_suffix(device: &str) -> &'static str {
+    if device == "dt2" { "_2" } else { "" }
 }
 
-/// The core for a device id (`dn2`, `dt2`): the static core made for that device's image, or, when
-/// `DIGI_SHARC_CORE_LIB_<DEV>` (`DIGI_SHARC_CORE_LIB_DN2`) names a core library
-/// (`packages/emulator/sharc-core-lib`), the core loaded from it. The library is refused unless its
-/// header equals the host's (`sharc_native::core_lib::load`) and its image is the one the static core
-/// would have served.
-pub fn core_for_device(device: &str) -> Result<&'static GenCore, String> {
-    let served = static_core_for_device(device);
-    let var = format!("DIGI_SHARC_CORE_LIB_{}", device.to_ascii_uppercase());
+/// The name of the variable that names the core library of DEVICE (`dn2`, `dt2`).
+pub fn core_lib_var(device: &str) -> String {
+    format!("DIGI_SHARC_CORE_LIB_{}", device.to_ascii_uppercase())
+}
+
+/// The core for a device id (`dn2`, `dt2`) and the DSP image its firmware runs (`DspProfile::image`, `dn2-1.12`),
+/// loaded from the library `DIGI_SHARC_CORE_LIB_<DEV>` names. Fails when the variable is missing or empty, when
+/// the library is refused, and when the core is made for another device. A core of the same device but another
+/// image version is accepted: the engine checks the loaded image against the core's and interprets what the
+/// core's blocks do not cover.
+pub fn core_for_device(device: &str, dsp_image: &str) -> Result<&'static GenCore, String> {
+    let var = core_lib_var(device);
     let Some(path) = std::env::var_os(&var).filter(|p| !p.is_empty()) else {
-        return Ok(served);
-    };
-    let core = sharc_native::core_lib::load(std::path::Path::new(&path), served.env_suffix)
-        .map_err(|e| format!("{var}: {e}"))?;
-    if core.image != served.image {
         return Err(format!(
-            "{var}: the library is for DSP image {}, {device} runs {}",
-            core.image, served.image
+            "{var} is not set: this build holds no DSP core; build the {device} core library with `uv run python -m tools.devtools.verify_build cores --device {device}` and set {var} to it"
         ));
-    }
+    };
+    let core = sharc_native::core_lib::load(std::path::Path::new(&path), env_suffix(device))
+        .map_err(|e| format!("{var}: {e}; rebuild it with `uv run python -m tools.devtools.verify_build cores --device {device}`"))?;
+    check_image(&var, core.image, device, dsp_image)?;
     Ok(core)
+}
+
+fn check_image(var: &str, core_image: &str, device: &str, dsp_image: &str) -> Result<(), String> {
+    if core_image == dsp_image || core_image.starts_with(&format!("{device}-")) {
+        return Ok(());
+    }
+    Err(format!(
+        "{var}: the library is for DSP image {core_image}, {device} runs {dsp_image}"
+    ))
 }
 
 /// Everything `open_engine_patched` needs; it runs on the worker thread.
@@ -286,6 +292,18 @@ mod tests {
                 .unwrap_err()
                 .contains("regenerate ready inputs")
         );
+    }
+
+    #[test]
+    fn a_core_of_another_device_is_refused() {
+        check_image("V", "dn2-1.12", "dn2", "dn2-1.12").unwrap();
+        check_image("V", "dt2-1.16", "dt2", "dt2-1.17").unwrap();
+        let msg = check_image("V", "dt2-1.17", "dn2", "dn2-1.12").unwrap_err();
+        assert!(
+            msg.contains("dt2-1.17") && msg.contains("dn2-1.12"),
+            "{msg}"
+        );
+        check_image("V", "none", "dn2", "dn2-1.12").unwrap_err();
     }
 
     #[test]

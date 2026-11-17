@@ -129,6 +129,12 @@ test('coupled launch defaults follow actual firmware bytes and preserve explicit
       SHARC_FAST_REGIONS: '',
       SHARC_BLOCKTRANS: 'explicit',
     });
+    firmware(dt2); // The DT2 core reads the lists with the `_2` suffix.
+    assert.deepEqual(coupledEnv('dt2.syx', {}, 'dt2'), {
+      SHARC_FAST_REGIONS_2: 'dt2-regions',
+      SHARC_BLOCKTRANS_2: 'dt2-roots',
+      SHARC_FAST_FALLBACK_REGIONS_2: 'dt2-fallback',
+    });
     firmware(Buffer.from('unknown firmware'));
     assert.deepEqual(coupledEnv('unknown.syx', {}), {});
     assert.deepEqual(coupledEnv('not-read.syx', { DIGI_EMU_FAST: '0' }), {});

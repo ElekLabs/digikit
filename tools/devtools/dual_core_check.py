@@ -1,4 +1,4 @@
-"""Prove that one `digi-emud` with both generated cores boots either device coupled.
+"""Prove that one `digi-emud` with both core libraries boots either device coupled.
 
 The daemon starts on the first device (DN2) with the second device's ready inputs passed as
 `--also-coupled`. Then it opens the other firmware (`firmware.load replace`, as the app's Open does),
@@ -10,8 +10,9 @@ report's `dsp_core` of that device, advancing DSP frames, no DSP halt and (with 
         uv run python -m tools.devtools.dual_core_check --bench dt2 --binary second=BIN_A --binary first=BIN_B --pairs 3
         uv run python -m tools.devtools.dual_core_check --menu <machine id> --menu <effect id> [--shots DIR]
 
-The binary comes from `cargo build --release -p digi-control --features second-core --bin digi-emud`
-with SHARC_GEN_DIR (DN2) and SHARC_GEN_DIR_2 (DT2) set. It stops its daemon on exit.
+The binary comes from `cargo build --release -p digi-control --features sharc,play --bin digi-emud`; the core libraries
+of both devices come from the store (`uv run python -m tools.devtools.verify_build cores`, DIGI_SHARC_CORE_LIB_DN2 and
+DIGI_SHARC_CORE_LIB_DT2). It stops its daemon on exit.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from tools import python_env
 from tools.control.digi_client import ROOT, Emu
 from tools.device import dkrun
 from tools.device import dkupload as D
+from tools.devtools import core_store
 from tools.emulator import digi_env
 from tools.patchkit import modroots
 from tools.patchkit import pk_harness as H
@@ -313,7 +315,11 @@ def bench_once(
     BINARY that started on START. The tier counters over SLICES run slices, after three warm-up slices. No fast tier (the lists
     exist for DN2 only, so a DT2 core has none in the launcher either)."""
     with Emu.spawn(
-        *daemon_args(start, ready), binary=binary, run_dir=keep, timeout=600.0
+        *daemon_args(start, ready),
+        binary=binary,
+        run_dir=keep,
+        timeout=600.0,
+        env=core_store.library_env(["dn2", "dt2"]),
     ) as emu:
         emu.step(STEP)
         emu.call(
@@ -502,7 +508,12 @@ def main() -> int:
         "--no-audio",
     ]
     results: list[dict[str, Any]] = []
-    with Emu.spawn(*first, run_dir=keep, timeout=300.0) as emu:
+    with Emu.spawn(
+        *first,
+        run_dir=keep,
+        timeout=300.0,
+        env=core_store.library_env(["dn2", "dt2"]),
+    ) as emu:
         results.append(phase(emu, f"{start} at start", args.steps, start, args.pcm))
         for device, came_from in ((other, start), (start, other)):
             inputs = ready[device]

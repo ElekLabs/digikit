@@ -18,7 +18,7 @@ After a build, `build_core` audits cargo's dependency file against the key (`emu
 read that the key does not cover fails the build and nothing is stored. Add the path to CORE_SOURCE_GLOBS.
 
 The last 4 used keys per image stay, plus every key that `dist/daemons.json` of any worktree names and every
-entry used within the last hour. The build is `build_core`; the crate `sharc-core-lib` is not in the tree yet.
+entry used within the last hour. The build is `build_core`.
 """
 
 from __future__ import annotations
@@ -138,15 +138,14 @@ def build_plan(
 
     The command is the documented one (packages/emulator/README.md "Core libraries"): `cargo build --release --locked -p
     sharc-core-lib` with SHARC_GEN_DIR set, in the target dir of that core (as tools/nx/rust-env.mjs --gen picks it, so the
-    compiled `sharc-gen` of the host builds is reused). The library is always a plain build (no PGO flags: the header
-    carries the rustflags, so a PGO host refuses a plain library and stays on its static core). GEN overrides the device's generated core (the launcher knows it)."""
+    compiled `sharc-gen` of the host builds is reused). The library is always a plain build (no PGO flags; the header
+    leaves the PGO flags out, so a PGO host accepts it). GEN overrides the device's generated core (the launcher knows it)."""
     from tools.emulator import digi_env, native_target
 
     environ = os.environ if environ is None else environ
     gen = device_gen(device, environ) if gen is None else gen
     target = Path(native_target.target_dir(gen))
     env = {**digi_env.rust_env(environ), "SHARC_GEN_DIR": str(gen)}
-    env.pop("SHARC_GEN_DIR_2", None)  # a one-core library
     argv = [
         "rustup", "run", digi_env.TOOLCHAIN, "cargo", "build",
         f"--{PROFILE}", "--locked", "-p", CRATE_NAME,
@@ -316,3 +315,40 @@ def ensure_core(
     for gone in store.evict(group, key, store.referenced_keys(group, trees)):
         print(f"{device} core: evicted {gone[:12]}", flush=True)
     return final / lib_name()
+
+
+CORE_LIB_VAR = "DIGI_SHARC_CORE_LIB_{}"
+
+
+def library_env(
+    devices: Mapping[str, Path | None] | list[str],
+    root: Path | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """`DIGI_SHARC_CORE_LIB_<DEV>` for DEVICES (`dn2`, `dt2`) from the store: a miss builds the library. A host holds no
+    generated core, so every launcher of a coupled run calls this. DEVICES is a list, or a map from a device to the generated
+    core to build from (None: the device's own, see `device_gen`). A variable already set in ENVIRON (default: the process
+    environment) wins and nothing is built for that device. A library that cannot be built raises CoreStoreError with the build
+    command in the message."""
+    environ = os.environ if environ is None else environ
+    wanted = dict.fromkeys(devices) if isinstance(devices, list) else dict(devices)
+    root = store_root() if root is None else root
+    env: dict[str, str] = {}
+    for device, gen in wanted.items():
+        var = CORE_LIB_VAR.format(device.upper())
+        if environ.get(var):
+            continue
+        try:
+            library = ensure_core(
+                device,
+                root,
+                resolve=(lambda d=device, g=gen: current(d, g)) if gen else None,
+            )
+        except (CoreStoreError, OSError, SystemExit) as exc:
+            reason = " ".join(str(exc).split()) or type(exc).__name__
+            raise CoreStoreError(
+                f"{device} core library unavailable: {reason}; build with: "
+                f"uv run python -m tools.devtools.verify_build cores --device {device}"
+            ) from exc
+        env[var] = str(library)
+    return env

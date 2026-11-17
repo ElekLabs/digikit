@@ -335,7 +335,7 @@ export class Session {
           : prepareEnv;
       controller?.signal.throwIfAborted();
       const env = {
-        ...(options.dsp === 'sharc' ? coupledEnv(inp.syx) : {}),
+        ...(options.dsp === 'sharc' ? coupledEnv(inp.syx, process.env, options.device) : {}),
         ...(options.dsp === 'sharc' ? coreLibEnv(options.device) : {}),
         ...(options.snapshotDir ? { DIGI_SNAPSHOT_DIR: options.snapshotDir } : {}),
         ...extraEnv,

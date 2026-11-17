@@ -2,7 +2,9 @@
 """Shared cargo target dirs for the native workspace, keyed by generated core.
 
 The generated SHARC core (``packages/emulator/sharc-gen``, includes ``SHARC_GEN_DIR``) is
-80 MB of Rust and takes minutes to compile. Cargo recompiles it for every
+80 MB of Rust and takes minutes to compile. Hosts (the app, the daemon, ``coupled-run``) hold no generated core
+and use the ``nogen`` dir; the core library of the store (tools/devtools/core_store.py), the unit tests and the examples
+that link a core use the dir of their core. Cargo recompiles ``sharc-gen`` for every
 distinct target dir and every distinct ``SHARC_GEN_DIR``, so every tool picks
 its target dir from here:
 
@@ -10,8 +12,8 @@ its target dir from here:
 
 ``gen-key`` names the generated core, never the tool:
 
-    prod       out/native/dn2-audio/gen (what the desktop app and PGO use)
-    nogen      no generated core (SHARC_GEN_DIR unset or missing)
+    prod       out/native/dn2-audio/gen (the DN2 core library, tests and examples of that core)
+    nogen      no generated core (SHARC_GEN_DIR unset or missing): the hosts, CF-only builds, wasm CF
     generic    any other transpile-only gen (no image.rs), e.g. the browser
                measurement's out/native/dn2-audio/gen-generic
     g-<hash>   any other gen with an image: hash of its resolved path
@@ -26,8 +28,8 @@ per gen and then reuses it.
 
 Builds that differ by RUSTFLAGS (PGO instrument / use) cannot share compiled
 crates and get their own ``variant`` subdir under the same key. Plain release
-builds, the desktop app, the sharc-fast-cl examples and the tests all use the
-key dir itself, so they reuse one sharc-gen.
+builds of the hosts use the ``nogen`` key dir itself; the library, the sharc-fast-cl examples and the tests of one
+core use its key dir, so they reuse one sharc-gen.
 
     uv run python -m tools.emulator.native_target key [--gen DIR]
     uv run python -m tools.emulator.native_target dir [--gen DIR] [--variant NAME]
@@ -79,15 +81,11 @@ def gen_from_env(
 def target_dir(
     gen: str | os.PathLike[str] | None = None,
     variant: str = "",
-    second: str | os.PathLike[str] | None = None,
 ) -> pathlib.Path:
-    """Target dir for a gen (default: the SHARC_GEN_DIR environment variable); with a SECOND gen (the
-    second-core build, SHARC_GEN_DIR_2) the key names both."""
+    """Target dir for a gen (default: the SHARC_GEN_DIR environment variable)."""
     if gen is None:
         gen = gen_from_env()
     key = gen_key(gen)
-    if second is not None and str(second) != "":
-        key = f"{key}+{gen_key(second)}"
     path = TARGET_ROOT / key
     return path / variant if variant else path
 

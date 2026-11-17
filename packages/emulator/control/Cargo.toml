@@ -26,8 +26,6 @@ sharc-profile = ["sharc", "play", "digi-coupled/region-profile"]
 sharc = ["digi-coupled/sharc"]
 # Playback through the default output device.
 play = ["digi-coupled/play"]
-# Both devices' generated cores in one binary (SHARC_GEN_DIR and SHARC_GEN_DIR_2).
-second-core = ["sharc", "play", "digi-coupled/second-core"]
 
 [dependencies]
 digi-coupled = { path = "../coupled" }

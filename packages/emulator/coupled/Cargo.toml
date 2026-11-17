@@ -16,9 +16,6 @@ name = "digi_coupled"
 sharc = ["sharc-peer/host", "dep:sharc-native"]
 # Playback through the default output device (cpal).
 play = ["elektron-native-boot/play"]
-# A second generated core (SHARC_GEN_DIR_2, crate sharc-gen-2) next to the first: the firmware's device
-# picks the core (sharc-peer src/dsp_core.rs). Implies `sharc` and `play`.
-second-core = ["sharc", "play", "sharc-peer/second-core"]
 # Enable this with `sharc`; it forwards to the optional native cores.
 region-profile = ["sharc-native?/region-profile"]
 # Exact ColdFire instruction mix per PC (boot/src/cfmix.rs); DIGI_CF_MIX_OUT=DIR makes coupled-run write it.

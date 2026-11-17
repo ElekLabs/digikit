@@ -13,14 +13,11 @@ name = "sharc_peer"
 
 [features]
 default = []
-# The SharcPeer, the engine glue and the threaded worker. Needs a generated core only where one is named
-# (`host`); the browser core builds with `sharc` alone.
+# The SharcPeer, the engine glue and the threaded worker. The browser core builds with `sharc` alone.
 sharc = ["dep:sharc-native"]
-# The native host: the device's generated core (SHARC_GEN_DIR), the fast tier's Cranelift backend, the cold
-# boot to ready (`dsp_core`, `cold`).
-host = ["sharc", "dep:sharc-gen", "dep:sharc-fast-cl"]
-# A second generated core (SHARC_GEN_DIR_2, crate sharc-gen-2) next to the first. Implies `host`.
-second-core = ["host", "dep:sharc-gen-2"]
+# The native host: core selection and loading from a core library (`dsp_core`), the fast tier's Cranelift backend,
+# the cold boot to ready (`cold`). It holds no generated core.
+host = ["sharc", "dep:sharc-fast-cl"]
 # Opt-in PCM playback in the examples (packages/emulator/live through the boot crate).
 play = ["elektron-native-boot/play"]
 
@@ -33,9 +30,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 sharc-native = { path = "../sharc", optional = true }
-sharc-gen = { path = "../sharc-gen", optional = true }
-sharc-gen-2 = { path = "../sharc-gen-2", optional = true }
 sharc-fast-cl = { path = "../sharc-fast-cl", optional = true }
+
+[dev-dependencies]
+# Unit tests and examples run on the linked generated core (SHARC_GEN_DIR); a host build links none.
+sharc-gen = { path = "../sharc-gen" }
 
 [[example]]
 name = "sharc_live"

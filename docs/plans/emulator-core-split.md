@@ -134,7 +134,8 @@ Risks: the slice fails its pass marks (known after PR 3); PGO parity for the lib
 - [ ] PR 3 core library slice
 - [ ] PR 4a store tooling
 - [ ] PR 4b store wiring
-- [ ] PR 5 loading by default
+- [x] PR 5a loading by default: hosts hold no generated core; `sharc-gen-2`, `second-core` and `SHARC_GEN_DIR_2` deleted; the header flags hash leaves out the PGO flags
+- [ ] PR 5b PGO libraries and the PGO retrain (the profile covers the host crates only until then)
 - [ ] PR 6 move to sharc-peer
 - [ ] PR 7 AudioOut
 - [ ] PR 8 Companion

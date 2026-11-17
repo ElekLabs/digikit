@@ -18,8 +18,8 @@ the result with one rename. The last 4 used keys per device stay, and every key 
 to --env-out (JSON); a stored file is never rewritten, so the test processes run it and ask cargo for nothing.
 `pk_harness.daemon_binary` takes that variable before anything else.
 
-`daemons` also provides the core library of each device whose daemon is a plain build (`DIGI_SHARC_CORE_LIB_<DEV>` in the
---env-out file, and the library key in the daemon test key). `cores` provides the generated SHARC core of each device as a library from the same kind of store
+`daemons` also provides the core library of each device (`DIGI_SHARC_CORE_LIB_<DEV>` in the
+--env-out file, and the library key in the daemon test key); a daemon has no static core. `cores` provides the generated SHARC core of each device as a library from the same kind of store
 (`sharc-core-cache`, tools/devtools/core_store.py); both use the mechanics of tools/devtools/store.py.
 """
 
@@ -139,36 +139,26 @@ def ensure_daemon(device: str, syx: Path, root: Path) -> Path:
     return binary
 
 
-CORE_LIB_VAR = "DIGI_SHARC_CORE_LIB_{}"
+CORE_LIB_VAR = core_store.CORE_LIB_VAR
 
 
 def core_env(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
     """Provide the core libraries of DEVICES from the store: the variables `DIGI_SHARC_CORE_LIB_<DEV>` (store paths) that
-    make a host load the library, and the store key of each device. A library is a plain build, so a device whose daemon is
-    profile-guided stays on its static core (the header carries the rustflags, the host would refuse the library)."""
+    make a host load the library, and the store key of each device. A library is a plain build; a profile-guided host accepts
+    it (the header leaves the PGO flags out). A device whose library cannot be provided is an error."""
     env: dict[str, str] = {}
     keys: dict[str, str] = {}
     root = core_store.store_root()
     for device in devices:
-        if device in pk_emud_pgo.FIRMWARE:
-            profile, _state, _message, stale = daemon_pgo(device)
-            if profile is not None or stale:
-                print(
-                    f"{device} core: skipped, the {device} daemon is profile-guided (static core)",
-                    flush=True,
-                )
-                continue
         try:
             library = core_store.ensure_core(device, root)
         except (core_store.CoreStoreError, OSError, SystemExit) as exc:
-            # a missing or stale generated core, a failed build: the daemon still works on its static core
+            # no static fallback: a host without its core library cannot run the DSP
             reason = " ".join(str(exc).split()) or type(exc).__name__
-            print(
-                f"{device} core: unavailable: {reason}; build with: "
-                f"uv run python -m tools.devtools.verify_build cores --device {device}",
-                flush=True,
-            )
-            continue
+            raise pk_harness.HarnessError(
+                f"{device} core library unavailable: {reason}; build with: "
+                f"uv run python -m tools.devtools.verify_build cores --device {device}"
+            ) from exc
         env[CORE_LIB_VAR.format(device.upper())] = str(library)
         keys[device] = library.parent.name
     return env, keys

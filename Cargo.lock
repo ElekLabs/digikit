@@ -4107,13 +4107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sharc-gen-2"
-version = "0.0.1"
-dependencies = [
- "sharc-rt",
-]
-
-[[package]]
 name = "sharc-native"
 version = "0.0.1"
 dependencies = [
@@ -4137,7 +4130,6 @@ dependencies = [
  "sha2",
  "sharc-fast-cl",
  "sharc-gen",
- "sharc-gen-2",
  "sharc-native",
 ]
 

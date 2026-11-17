@@ -264,24 +264,57 @@ def test_a_generic_gen_dir_of_another_device_is_not_used(tmp_path: Path) -> None
     assert core_store.device_gen("dn2", {"SHARC_GEN_DIR_DN2": str(dn2)}) == dn2
 
 
-def test_daemons_continue_when_a_core_is_unavailable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_a_daemon_without_its_core_library_is_an_error_with_the_build_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from tools.devtools import verify_build
+    from tools.patchkit import pk_harness
 
     monkeypatch.setenv("DIGI_SHARC_CORE_STORE", str(tmp_path / "store"))
-    monkeypatch.setattr(
-        verify_build, "daemon_pgo", lambda _device: (None, "off", "", False)
-    )
 
     def refuse(_device: str, _root: Path) -> Path:
         raise SystemExit("generated core is stale")
 
     monkeypatch.setattr(verify_build.core_store, "ensure_core", refuse)
-    env, keys = verify_build.core_env(["dt2"])
-    assert (
-        env == {} and keys == {}
-    )  # no variable, no key: the test key stays the daemon's
-    out = capsys.readouterr().out
-    assert "dt2 core: unavailable: generated core is stale; build with:" in out
-    assert "verify_build cores --device dt2" in out
+    with pytest.raises(pk_harness.HarnessError) as error:
+        verify_build.core_env(["dt2"])
+    message = str(error.value)
+    assert "dt2 core library unavailable: generated core is stale" in message
+    assert "verify_build cores --device dt2" in message
+
+
+def test_library_env_builds_a_miss_once_and_lets_the_environment_win(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[str] = []
+
+    def fake(device: str, _root: Path, **_kw: object) -> Path:
+        asked.append(device)
+        return tmp_path / device / "key0" / core_store.lib_name()
+
+    monkeypatch.setattr(core_store, "ensure_core", fake)
+    env = core_store.library_env(["dn2", "dt2"], tmp_path, environ={})
+    assert env == {
+        "DIGI_SHARC_CORE_LIB_DN2": str(tmp_path / "dn2/key0" / core_store.lib_name()),
+        "DIGI_SHARC_CORE_LIB_DT2": str(tmp_path / "dt2/key0" / core_store.lib_name()),
+    }
+    # a variable already set names the library: nothing is built for that device
+    asked.clear()
+    set_by_hand = {"DIGI_SHARC_CORE_LIB_DN2": "/mine"}
+    assert list(
+        core_store.library_env(["dn2", "dt2"], tmp_path, environ=set_by_hand)
+    ) == ["DIGI_SHARC_CORE_LIB_DT2"]
+    assert asked == ["dt2"]
+
+
+def test_library_env_names_the_build_command_when_a_library_cannot_be_built(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(_device: str, _root: Path, **_kw: object) -> Path:
+        raise core_store.CoreStoreError("cargo failed")
+
+    monkeypatch.setattr(core_store, "ensure_core", refuse)
+    with pytest.raises(
+        core_store.CoreStoreError, match="verify_build cores --device dn2"
+    ):
+        core_store.library_env(["dn2"], tmp_path, environ={})

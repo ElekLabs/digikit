@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import functools
 import hashlib
 import json
 import os
@@ -40,7 +41,7 @@ import time
 from collections import defaultdict
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-from tools.devtools import coupled_ab  # noqa: E402
+from tools.devtools import core_store, coupled_ab  # noqa: E402
 from tools.emulator import coupled, digi_env  # noqa: E402
 
 FIXTURES = ROOT / "out" / "fixtures" / "runtime"
@@ -167,6 +168,15 @@ def load_state(name: str) -> dict:
     }
 
 
+@functools.cache
+def core_library_env(device: str) -> dict[str, str]:
+    """`DIGI_SHARC_CORE_LIB_<DEV>` from the core store (a miss builds the library), once per device."""
+    try:
+        return core_store.library_env([device])
+    except core_store.CoreStoreError as exc:
+        raise SystemExit(f"sharc_cells: {exc}") from exc
+
+
 def cell_env(
     state: dict, label: str, add: dict, remove: dict, extra: dict | None = None
 ) -> dict[str, str]:
@@ -187,6 +197,8 @@ def cell_env(
     env.update(
         digi_env.slot_env(state["device"], {k: v for k, v in lists.items() if v})
     )
+    # A host without a static core loads the library of the device from the core store (a static binary ignores it).
+    env.update(core_library_env(state["device"]))
     env.update((extra or {}).get(label, {}))
     return env
 

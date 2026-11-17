@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import hashlib
 import json
 import math
@@ -22,6 +23,7 @@ from pathlib import Path
 from tools import python_env
 from tools.devtools import (
     benchlock,
+    core_store,
     coupled_ab,
     portable_flock,
     render_cache,
@@ -89,8 +91,23 @@ def overlay(*layers: dict) -> dict[str, str]:
     return result
 
 
+@functools.cache
+def core_libraries() -> dict[str, str]:
+    """`DIGI_SHARC_CORE_LIB_<DEV>` of both devices from the core store: a host holds no DSP core (a static binary ignores them)."""
+    try:
+        return core_store.library_env(list(DEVICES), environ={})
+    except core_store.CoreStoreError as exc:
+        raise Invalid(str(exc)) from exc
+
+
 def child_env(env: dict[str, str]) -> dict[str, str]:
-    return python_env({**{k: v for k, v in os.environ.items() if not knob(k)}, **env})
+    return python_env(
+        {
+            **{k: v for k, v in os.environ.items() if not knob(k)},
+            **core_libraries(),
+            **env,
+        }
+    )
 
 
 @contextlib.contextmanager
@@ -197,9 +214,8 @@ def freeze(folder: Path, imported: Path | None) -> None:
                     item["coupled"] = str(
                         stablebin.stable_copy(coupled.build(device), target)
                     )
-                # Explicit core avoids native_emu's ambient/default core selection.
-                gen = coupled.generated(device)
-                target = Path(native_emu.target_dir_for(gen))
+                # The daemon holds no generated core: the no-core target dir.
+                target = Path(native_emu.target_dir_for())
                 command = native_emu.daemon_command(
                     ["--coupled", str(item["profile_firmware"])]
                 )
@@ -211,9 +227,7 @@ def freeze(folder: Path, imported: Path | None) -> None:
                     subprocess.run(
                         native_emu.build_command(command),
                         cwd=ROOT,
-                        env=digi_env.rust_env(
-                            {**child_env({}), "SHARC_GEN_DIR": str(gen)}
-                        ),
+                        env=digi_env.rust_env(child_env({})),
                         check=True,
                     )
                     item["daemon"] = str(

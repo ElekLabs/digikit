@@ -26,7 +26,7 @@ sharc-gen = { path = "../sharc-gen" }
 sharc-fast-cl = { path = "../sharc-fast-cl" }
 
 [features]
-default = ["c-abi"]
+default = []
 # The C ABI (`sharc_native_create`, ...) creates engines on the linked sharc-gen core. The engine itself
 # takes its core as a value (`Engine::new(mem, core)`) and needs no generated core to build.
 c-abi = ["dep:sharc-gen"]

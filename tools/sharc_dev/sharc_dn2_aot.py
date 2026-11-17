@@ -422,7 +422,7 @@ class Pipeline:
             RUSTFLAGS="--remap-path-prefix=%s=/sharc-gen" % gen,
         )
         cmd = [str(self.tc / "bin" / "cargo"), "rustc", "--release", "--offline",
-               "--locked", "--lib"]  # fmt: skip
+               "--locked", "--lib", "--features", "c-abi"]  # fmt: skip
         ext = ".dylib" if platform.system() == "Darwin" else ".so"
         if ext == ".dylib":
             cmd += ["--", "-Clink-arg=-Wl,-install_name,@rpath/libsharc_native.dylib"]

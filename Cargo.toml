@@ -23,7 +23,6 @@ members = [
     "packages/emulator/sharc-fast-cl",
     "packages/emulator/sharc-fast-wasm",
     "packages/emulator/sharc-gen",
-    "packages/emulator/sharc-gen-2",
     "packages/emulator/sharc-peer",
     "packages/emulator/sharc-rt",
     "packages/emulator/sharc-stats",

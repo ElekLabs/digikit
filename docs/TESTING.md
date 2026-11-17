@@ -583,8 +583,8 @@ reuse, because provenance can name further external files. LP0 case-selection fl
 Ignored/external edits alone do not trigger Git affected selection: invoke the owning Nx target
 directly after changing an override binary/root or ignored firmware/ready/card input.
 FX targets run the coupled-run binary, not a daemon. `digi-coupled:build` and `build-dt2` write
-`dist/coupled-dn2.json` and `dist/coupled-dt2.json` (`coupled build --id-out`): the sha256 of the built binary, without
-its path. The FX key has this file (as a dependent task output), the named source globs `fxDn2` and `fxDt2` (they also
+`dist/coupled-dn2.json` and `dist/coupled-dt2.json` (`coupled build --id-out`): the sha256 of the built binary and the store
+key of the core library it loads, without paths. The FX key has this file (as a dependent task output), the named source globs `fxDn2` and `fxDt2` (they also
 drive `affected`), and `tools/nx/coupled-inputs.mjs`. That digest covers the firmware and the ready inputs that
 `tools/emulator/coupled.py` boots from (`tools/emulator/ready_inputs.json`, and the `DIGI_EMU_SYX*`,
 `DIGI_COUPLED_SYX`, `DIGI_EMU_READY_DIR*` and `DIGI_EMU_DSP_*` overrides by file content). These are not the
@@ -592,7 +592,7 @@ patchkit ready dirs of `device-inputs.mjs`. Env in the key: `DIGI_FX_SWEEP`, `DI
 `DIGI_NO_PROGRESS_MS`, `DIGI_DT2_CARD` (its file content too), `DIGI_COUPLED_FEATURES`, `SHARC_AOT`, the `SHARC_FAST_*`
 switches, `SHARC_BLOCKTRANS` and `UPDATE_GOLDENS`. The render cache (`out/cache/renders`) is keyed by content and is safe
 to share. The tier targets write reports under `out/runs/fx-tier/<step>`; nothing reads them back. Not covered:
-`SHARC_GEN_DIR` (the generated core is checked by `--check-generated` and is built into the binary hash) and
+`SHARC_GEN_DIR` itself (the generated core enters through the store key of the core library in the identity file) and
 `out/sections/*` (derived from the firmware file).
 Not in the key on purpose: `dist/session-cache` (boot cache, cannot
 change a result) and directory scans such as `modules/README.md`. Failed tasks are not cached.
@@ -957,7 +957,7 @@ A missing or stale profile prints one warning: a stale profile is still applied 
 `uv run python -m tools.emulator.native_pgo clean [--dry-run] [--days N]` removes bench, ab, raw and train output and unreferenced profiles older than N days (default 14) under `out/native/pgo`. It keeps profiles named by `manifest.json` or the newest four `by-key` entries. `train` calls it at its end when `AUTO_CLEAN` is set.
 `DIGI_EMU_PGO=0` turns PGO off. Measuring tools (`coupled_ab`, `sharc_matrix`, `perf`, `fastcov`, `fast_roots`) keep their own builds.
 
-`tools/devtools/sharc_cells.py` compares host instruction counts of two built `coupled-run` binaries on runtime fixtures (`uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --jobs 2 --cov`). It runs each binary at two lengths, prints steady-state counters per audio second, the B/A instruction ratio and PCM, DSP state and ColdFire state parity (`pcm/dsp/cf` per length; the ColdFire state is `state_sha256` of the `coupled-run` report, taken at the end of the run, see below; non-zero exit on a difference), and with `--cov` the fast-tier root and exit tables. `--env LABEL:NAME=VALUE` (repeatable) sets one variable for the runs of one label only (the cell environment is otherwise clean), for example `--env B:DIGI_SHARC_CORE_LIB_DN2=PATH` to run B with a loaded core library. It does not take the bench lock, because counters are not timing; use `coupled_ab` for the final timing A/B.
+`tools/devtools/sharc_cells.py` compares host instruction counts of two built `coupled-run` binaries on runtime fixtures (`uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --jobs 2 --cov`). It runs each binary at two lengths, prints steady-state counters per audio second, the B/A instruction ratio and PCM, DSP state and ColdFire state parity (`pcm/dsp/cf` per length; the ColdFire state is `state_sha256` of the `coupled-run` report, taken at the end of the run, see below; non-zero exit on a difference), and with `--cov` the fast-tier root and exit tables. `--env LABEL:NAME=VALUE` (repeatable) sets one variable for the runs of one label only (the cell environment is otherwise clean), for example `--env B:DIGI_SHARC_CORE_LIB_DN2=PATH` to run B with a loaded core library. The environment of a cell includes `DIGI_SHARC_CORE_LIB_<DEV>` from the core store, so a binary without a static core runs without `--env` (a static binary ignores it). It does not take the bench lock, because counters are not timing; use `coupled_ab` for the final timing A/B.
 
 ```text
 == dt2 (dt2, dt2-sample-trig), lengths [3.0, 6.0] s, steady state per audio s ==
@@ -1164,21 +1164,25 @@ uv run python -m tools.devtools.verify_build cores --device dn2,dt2 [--env-out F
 
 The build is the documented one, `cargo build --release --locked -p sharc-core-lib` with `SHARC_GEN_DIR` set to the device's core
 (`SHARC_GEN_DIR_<DEV>`, for DN2 also `SHARC_GEN_DIR`, else `out/native/<dev>-audio/gen`), in the target dir of that core, so a
-host build's compiled `sharc-gen` is reused. A stale generated core is refused as `tools/nx/rust-env.mjs --gen` refuses it. The
-library is always a plain build: its header carries the rustflags, so a profile-guided host refuses it and keeps its static core.
+compiled `sharc-gen` of that core is reused. A stale generated core is refused as `tools/nx/rust-env.mjs --gen` refuses it. The
+library is always a plain build; a profile-guided host accepts it, because the header leaves the PGO flags out.
 `header.json` holds the device, the image name (the `IMAGE` const of the gen dir's `image.rs`), the key, the build flags and the
 header of the built library (read through ctypes from `sharc_core_header`: ABI version, `sharc-rt` sha256, rustc, target, flags,
 layout). The audit of cargo's dependency file runs on every build.
 
-`verify_build daemons` also provides the library of each device whose daemon is a plain build (a profile-guided daemon, also with
-a stale profile, is skipped with a note) and writes `DIGI_SHARC_CORE_LIB_<DEV>` (the store path) into the same `--env-out` file
+`verify_build daemons` also provides the library of each device (a daemon holds no static core; a library that cannot be built
+fails the command with the build command in the message) and writes `DIGI_SHARC_CORE_LIB_<DEV>` (the store path) into the same `--env-out` file
 (`dist/daemons.json`); the key of the library is part of the device's line in `dist/bytes/daemon-test.key`, so a core change
 invalidates the merge keys of device tests. The variables reach the daemons as follows: `packages/test-support` (`coreLibEnv`,
 used by `Session.start` for a session with DSP) reads them from the environment or `dist/daemons.json` and passes them to the
-daemon; `tools/nx/daemon-env.mjs` puts the whole file into the environment of the Python harnesses. `tools/emulator/native_emu.py`
-calls the same `ensure_core` for the cores of a coupled launch (the desktop app and `--daemon`; not for a profile-guided build)
-and sets the variables for the process it starts; a library that cannot be built stops the launch with the build command. The
-static core stays the default of every other host. `tests/devtools/test_core_store.py` covers the key and the store with a
+daemon; `tools/nx/daemon-env.mjs` puts the whole file into the environment of the Python harnesses. Every other launcher calls `core_store.library_env` (the same `ensure_core`): `tools/emulator/native_emu.py` for the cores of a
+coupled launch (the desktop app and `--daemon`, with the other device's core for `--also-coupled`), `tools/emulator/coupled.py`
+(`run_env`: `scenario`, `replay`, `bisect`, `coupled_ab.py`, `fastcov.py`; `cmd_gates`), `tools/devtools/sharc_cells.py`,
+`sharc_matrix.py`, `rt_matrix.py`, `dual_core_check.py` and `Emu.spawn_coupled`; a variable already in the environment wins and
+nothing is built for that device. A library that cannot be built stops the launch with the build command. The hosts
+(`digi-emud`, `coupled-run`, the app) build into the no-core target dir and compile no `sharc-gen`; the core library, the unit
+tests of `sharc-peer` and `sharc-native`, `sharc-rig` and the browser core link it. Region lists of a DT2 run use the `_2` names
+(`digi_env.resolve_tiers`, `coupledEnv(syx, env, device)`). `tests/devtools/test_core_store.py` covers the key and the store with a
 stand-in library.
 
 To clear the Nx cache: `pnpm nx:pilot reset`.

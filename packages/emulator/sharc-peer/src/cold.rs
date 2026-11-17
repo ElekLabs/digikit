@@ -186,7 +186,7 @@ pub fn boot_emulator_to_ready(
     };
     let sample_link = dsp.sample_link == Some(device_profile::SampleLink::Lp0);
     emulator.enable_ssi_diagnostic(96_000)?;
-    let core = crate::dsp_core::core_for_device(&profile.device)?;
+    let core = crate::dsp_core::core_for_device(&profile.device, &dsp.image)?;
     let engine_inputs = if inputs.dsp_patch.is_some() {
         let path = inputs.cold_state.as_ref().ok_or(
             "raw DSP cold.state is required; regenerate ready inputs with `mise run emu:ready -- <device> --force`",

@@ -2,7 +2,6 @@
 
 import json
 import os
-import pathlib
 
 import pytest
 
@@ -148,7 +147,7 @@ def both_state(tree):
     return native_pgo.check_state(tree / "gen", "", "", "both", tree / "gen2")
 
 
-def test_both_key_covers_the_second_core_the_feature_and_the_slot_order(tree):
+def test_both_key_covers_the_second_core_and_the_workload(tree):
     hasher = native_pgo.FileHasher(tree / "state" / "hash-cache.json")
     (tree / "gen2").mkdir()
     (tree / "gen2/core.rs").write_text("dt2 core")
@@ -158,9 +157,9 @@ def test_both_key_covers_the_second_core_the_feature_and_the_slot_order(tree):
     )
     assert "generated2" not in one
     assert two["generated2"] != two["generated"]
-    assert two["features"] == "second-core"
+    assert two["features"] == one["features"]
     assert two["workload"] == "both-v1"
-    assert two["slots"] == "generated=dn2,generated2=dt2"
+    assert two["devices"] == "generated=dn2,generated2=dt2"
     assert native_pgo.key_of(one) != native_pgo.key_of(two)
 
 
@@ -173,25 +172,24 @@ def test_both_profile_is_current_until_either_core_changes(both):
     assert both_state(both)[:2] == ("stale", "changed: generated")
 
 
-def test_both_build_never_lands_in_the_single_core_pgo_use_dir(tmp_path, monkeypatch):
+def test_each_device_profile_builds_into_its_own_pgo_use_dir(tmp_path, monkeypatch):
     from tools.emulator import native_target
 
-    gens = {}
-    for name in ("dn2", "dt2"):
-        gens[name] = tmp_path / name
-        gens[name].mkdir()
-        (gens[name] / "image.rs").write_text("")
+    gen = tmp_path / "dn2"
+    gen.mkdir()
+    (gen / "image.rs").write_text("")
     monkeypatch.setattr(native_target, "TARGET_ROOT", tmp_path / "target")
     monkeypatch.setattr(native_pgo, "toolchain_rustc", lambda: "/fake/rustc")
-    single = {"SHARC_GEN_DIR": str(gens["dn2"])}
-    two = {**single, "SHARC_GEN_DIR_2": str(gens["dt2"])}
-    one_dir = native_pgo.plan_for("p", single).cargo_args[3]
-    two_dir = native_pgo.plan_for("p", two).cargo_args[3]
-    assert two_dir != one_dir
-    assert two_dir.endswith("/pgo-use")
-    assert pathlib.Path(two_dir).parent.name.count("+") == 1
-    assert str(native_pgo.pgo_binary(two)).startswith(two_dir)
-    assert not str(native_pgo.pgo_binary(single)).startswith(two_dir)
+    env = {"SHARC_GEN_DIR": str(gen)}
+    dirs = {
+        device: native_pgo.plan_for("p", env, device).cargo_args[3]
+        for device in ("dn2", "dt2", "both")
+    }
+    assert len(set(dirs.values())) == 3
+    assert dirs["dn2"].endswith("/pgo-use")  # the launcher's reserved dir
+    assert dirs["both"].endswith("/pgo-use-both")
+    for device, target in dirs.items():
+        assert str(native_pgo.pgo_binary(env, device)).startswith(target)
 
 
 def test_each_device_sets_the_region_lists_of_its_own_engine_slot():

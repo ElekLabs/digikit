@@ -207,12 +207,17 @@ class Emu:
         """`spawn` a daemon with DSP audio (no sound card): SYX is loaded, READY_DIR holds the ready inputs
         (`tools/emulator/ready.py`: digi-audio-dn2-image.bin, digi-audio-m5.snap, digi-audio-m5.snap.dsp). The fast tier
         is on as in the launcher."""
+        from tools.devtools import core_store
         from tools.emulator import digi_env
 
         syx = pathlib.Path(syx).resolve()
         ready = pathlib.Path(ready_dir).resolve()
         # The table only: no fallback roots, and neither the environment nor DIGI_EMU_FAST is read.
-        env = digi_env.resolve_tiers("tests", syx, "", {}, fallback=False).add
+        env = digi_env.resolve_tiers("tests", syx, None, {}, fallback=False).add
+        # The daemon holds no DSP core: the library of the firmware's device comes from the core store (a variable
+        # already in the environment wins).
+        device = digi_env.device_for_syx(syx) or "dn2"
+        env = {**env, **core_store.library_env([device])}
         return cls.spawn(
             str(syx),
             "--auto-coupled",

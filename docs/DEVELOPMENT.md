@@ -91,9 +91,10 @@ same folder restores in well under a second. It needs the DT2 ready inputs (`mis
 dt2` once: the DSP image and `cold-idle.dsp` come from there). The app remembers the last card
 (`<run dir>/cards/last.json`) and mounts it again when a DT2 starts without `--card-image`, in
 well under a second; the toolbar shows "Samples: NAME (N files)", or "Choose samples to load a
-folder of WAVs" when nothing is cached. A DT2 launch without `SHARC_GEN_DIR` uses the generated
-core its PGO profile was trained on (the launcher prints which core and why), so no environment
-settings are needed. To choose a core: `SHARC_GEN_DIR_DN2` sets the DN2 core, `SHARC_GEN_DIR_DT2`
+folder of WAVs" when nothing is cached. The app holds no generated core: the launcher builds
+the core library of each device into the shared store (first time only, minutes) and passes it as
+`DIGI_SHARC_CORE_LIB_<DEV>` (`uv run python -m tools.devtools.verify_build cores` does the same by hand).
+To choose the core a library is built from: `SHARC_GEN_DIR_DN2` sets the DN2 core, `SHARC_GEN_DIR_DT2`
 sets the DT2 core, and `SHARC_GEN_DIR` sets one core for both devices (the device variable wins).
 Without any of them the core registered for the DSP image is used (`out/native/gen-index.json`). The browser shows the button
 disabled ("desktop only for now"). Headless: the control socket's `card.load {dir}`,

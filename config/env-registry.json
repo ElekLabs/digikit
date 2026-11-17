@@ -661,10 +661,6 @@
    "owner": "rust:packages/emulator",
    "purpose": "Directory of the generated SHARC core (first core); read by sharc-gen build.rs."
   },
-  "SHARC_GEN_DIR_2": {
-   "owner": "rust:packages/emulator",
-   "purpose": "internal: slot-2 core of a two-core build, set by native_emu from SHARC_GEN_DIR_DT2; not a user setting."
-  },
   "SHARC_GEN_DIR_DN2": {
    "owner": "python:tools/emulator",
    "purpose": "Directory of the generated SHARC core of the Digitone II; wins over SHARC_GEN_DIR for DN2."
