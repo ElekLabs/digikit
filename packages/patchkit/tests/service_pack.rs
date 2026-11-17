@@ -188,12 +188,16 @@ fn a_service_with_an_unknown_service_or_a_foreign_export_is_refused() {
         ),
         (
             "DSP fill of a slot that is not in [dsp.slots]",
-            &|t| format!("{t}\n[[fill]]\nslot = \"no_such_slot\"\nentry = \"_x\"\nspace = \"dsp\"\n"),
+            &|t| {
+                format!("{t}\n[[fill]]\nslot = \"no_such_slot\"\nentry = \"_x\"\nspace = \"dsp\"\n")
+            },
             "has no such slot",
         ),
         (
             "fill in another space",
-            &|t| format!("{t}\n[[fill]]\nslot = \"voice_render\"\nentry = \"_x\"\nspace = \"pru\"\n"),
+            &|t| {
+                format!("{t}\n[[fill]]\nslot = \"voice_render\"\nentry = \"_x\"\nspace = \"pru\"\n")
+            },
             "is not \"cf\" or \"dsp\"",
         ),
         (
@@ -372,7 +376,13 @@ fn a_service_with_dsp_code_packs_a_dsp_section_and_a_dsp_slot_fill_for_its_devic
     let d = scratch("dsp");
     let r = d.join("root");
     building_root(&r, &with_dsp_part);
-    let dkm = Dkm::parse(&pack_for(&r, "test/svc-test", "dt2", &d.join("svc-test.dks"))).unwrap();
+    let dkm = Dkm::parse(&pack_for(
+        &r,
+        "test/svc-test",
+        "dt2",
+        &d.join("svc-test.dks"),
+    ))
+    .unwrap();
     // the section is image, relocations and imports of the one DSP object: no voices, no effects
     let dsp = patchkit::dkmdsp::DspSection::parse(&dkm.dsp).unwrap();
     assert_eq!(dsp.imports, ["_svctest_dsp_back", "_svctest_dsp_word"]);
@@ -391,7 +401,13 @@ fn a_service_with_dsp_code_packs_a_dsp_section_and_a_dsp_slot_fill_for_its_devic
         dsp.image.len()
     );
     // the other device has no DSP object and no fill of its own: a file without DSP section and without the item
-    let dn2 = Dkm::parse(&pack_for(&r, "test/svc-test", "dn2", &d.join("svc-test-dn2.dks"))).unwrap();
+    let dn2 = Dkm::parse(&pack_for(
+        &r,
+        "test/svc-test",
+        "dn2",
+        &d.join("svc-test-dn2.dks"),
+    ))
+    .unwrap();
     assert!(dn2.dsp.is_empty());
     assert_eq!(Keys::parse(&dn2.register).unwrap().slots().count(), 0);
     let _ = std::fs::remove_dir_all(&d);
@@ -406,7 +422,10 @@ fn a_dsp_fill_without_a_dsp_object_for_the_device_is_refused() {
     let r = d.join("root");
     // the fill is there for every device, the DSP object only for the DT2
     building_root(&r, &|t| {
-        with_dsp_part(t).replace("entry = \"_svctest_dsp_entry\"\nspace = \"dsp\"\ndevices = [\"dt2\"]", "entry = \"_svctest_dsp_entry\"\nspace = \"dsp\"")
+        with_dsp_part(t).replace(
+            "entry = \"_svctest_dsp_entry\"\nspace = \"dsp\"\ndevices = [\"dt2\"]",
+            "entry = \"_svctest_dsp_entry\"\nspace = \"dsp\"",
+        )
     });
     let out = Command::new(env!("CARGO_BIN_EXE_patchkit"))
         .arg("--root")

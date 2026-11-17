@@ -295,7 +295,12 @@ pub fn compatible(m: &Module, port: &Port) -> Result<()> {
             }
         }
     }
-    for sl in m.manifest.slot.iter().filter(|s| on(&s.devices, dev) && !s.is_dsp()) {
+    for sl in m
+        .manifest
+        .slot
+        .iter()
+        .filter(|s| on(&s.devices, dev) && !s.is_dsp())
+    {
         let place = slot_place(sl);
         if port.region(&place).is_none() {
             missing.push(format!("region {place}"));
@@ -1225,9 +1230,8 @@ pub fn apply_with(
         })
         .collect();
     // the entries of the modules, and patchkit's own `fw_id` (the first 8 bytes of the stock image's SHA-256: a bound service file is checked against it) in every table that exists
-    let n_modules = slot_defs.iter().map(|(_, d)| d.len()).sum::<usize>()
-        + dsp_slots.len()
-        + info_defs.len();
+    let n_modules =
+        slot_defs.iter().map(|(_, d)| d.len()).sum::<usize>() + dsp_slots.len() + info_defs.len();
     let n_info = n_modules + usize::from(n_modules > 0);
     if n_info > dkneeds::INFO_MAX as usize {
         return Err(err!(

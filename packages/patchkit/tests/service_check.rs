@@ -518,15 +518,23 @@ fn with_dsp_fill(test: &str, asm_name: &str, asm: &str) -> (PathBuf, PathBuf, Pa
 #[test]
 fn a_dsp_fill_needs_dispatch_code_and_imports_that_the_dyndsp_table_has() {
     // a DSP fill is not a Rust function: the service! call does not list it, and the check wants the dispatch code and a DSP object
-    let found_in = |d: &Path, s: &Path, a: &Path| patchkit::svccheck::check_with_adapters(d, s, a).unwrap();
+    let found_in =
+        |d: &Path, s: &Path, a: &Path| patchkit::svccheck::check_with_adapters(d, s, a).unwrap();
     let asm = ".EXTERN _dv_diag;\n.EXTERN _fw_frame;\n";
     let (dir, sdk, ad) = with_dsp_fill("dsp-ok", "dispatch-dt2.s", asm);
     assert_eq!(found_in(&dir, &sdk, &ad), Vec::<String>::new());
 
-    let (dir, sdk, ad) = with_dsp_fill("dsp-bad-import", "dispatch-dt2.s", ".EXTERN _dv_diag;\n.EXTERN _dv_nowhere;\n");
+    let (dir, sdk, ad) = with_dsp_fill(
+        "dsp-bad-import",
+        "dispatch-dt2.s",
+        ".EXTERN _dv_diag;\n.EXTERN _dv_nowhere;\n",
+    );
     let found = found_in(&dir, &sdk, &ad);
     assert!(
-        mentions(&found, "`.EXTERN _dv_nowhere` is not a DSP_IMPORT of core/dyndsp"),
+        mentions(
+            &found,
+            "`.EXTERN _dv_nowhere` is not a DSP_IMPORT of core/dyndsp"
+        ),
         "{found:?}"
     );
     assert!(!mentions(&found, "_dv_diag"), "{found:?}");
@@ -535,12 +543,19 @@ fn a_dsp_fill_needs_dispatch_code_and_imports_that_the_dyndsp_table_has() {
     assert!(mentions(&found_in(&dir, &sdk, &ad), "holds no .s file"));
 
     let (dir, sdk, ad) = with_dsp_fill("dsp-no-device", "dispatch.s", asm);
-    assert!(mentions(&found_in(&dir, &sdk, &ad), "must end in -<device>"));
+    assert!(mentions(
+        &found_in(&dir, &sdk, &ad),
+        "must end in -<device>"
+    ));
 
     // an unknown slot name
     let (dir, sdk, ad) = with_dsp_fill("dsp-bad-slot", "dispatch-dt2.s", asm);
     let m = fs::read_to_string(dir.join("dks/module.toml")).unwrap();
-    fs::write(dir.join("dks/module.toml"), m.replace("voice_render", "no_such_slot")).unwrap();
+    fs::write(
+        dir.join("dks/module.toml"),
+        m.replace("voice_render", "no_such_slot"),
+    )
+    .unwrap();
     assert!(mentions(&found_in(&dir, &sdk, &ad), "has no such slot"));
 }
 

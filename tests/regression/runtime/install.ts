@@ -52,7 +52,10 @@ export async function installModules(
           const name = needed.service;
           const boundFile = await boundService(device, needed, moduleArtifact(device, needed.moduleId));
           // the rule holds whenever a service goes on the card: a call without a session cannot show the mode, so it is refused for a service with a DSP part
-          requireCoupledForServices([{ name: servicePath(name), file: boundFile }], session ? (await session.status()).dsp : undefined);
+          requireCoupledForServices(
+            [{ name: servicePath(name), file: boundFile }],
+            session ? (await session.status()).dsp : undefined,
+          );
           const bound = fs.readFileSync(boundFile);
           await timePhase('service.upload', () => dk.put(servicePath(name), bound));
           expect(

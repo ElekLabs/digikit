@@ -378,7 +378,12 @@ fn check_dks(dir: &Path, needs_dks: bool, neutral: &[(String, String)]) -> Vec<S
             .flatten()
             .filter_map(|h| h.as_table())
             .filter(|t| is_dsp(t))
-            .map(|t| t.get("slot").and_then(|n| n.as_str()).unwrap_or("").to_string())
+            .map(|t| {
+                t.get("slot")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string()
+            })
             .collect();
         let dsp_names = crate::sdkgen::dsp_slot_names();
         for s in &dsp_fills {
@@ -402,14 +407,22 @@ fn check_dks(dir: &Path, needs_dks: bool, neutral: &[(String, String)]) -> Vec<S
             // every import of the DSP code must be in the import table of core/dyndsp for its device (the loader resolves a DSP import against that table only)
             let ext = Regex::new(r"(?m)^\s*\.EXTERN\s+([A-Za-z_][A-Za-z0-9_]*)\s*;").unwrap();
             let imp = Regex::new(r"(?m)^\s*DSP_IMPORT\s+([A-Za-z_][A-Za-z0-9_]*)\s*$").unwrap();
-            for e in std::fs::read_dir(dks.join("dsp")).into_iter().flatten().flatten() {
+            for e in std::fs::read_dir(dks.join("dsp"))
+                .into_iter()
+                .flatten()
+                .flatten()
+            {
                 let path = e.path();
                 let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
                 let file = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
                 if path.extension().is_none_or(|x| x != "s") {
                     continue;
                 }
-                let Some(dev) = stem.rsplit('-').next().filter(|d| crate::devdata::by_short(d).is_some()) else {
+                let Some(dev) = stem
+                    .rsplit('-')
+                    .next()
+                    .filter(|d| crate::devdata::by_short(d).is_some())
+                else {
                     out.push(format!("dks/dsp/{file}: the name must end in -<device> (dt2 or dn2): a DSP object is for one device"));
                     continue;
                 };
@@ -417,11 +430,15 @@ fn check_dks(dir: &Path, needs_dks: bool, neutral: &[(String, String)]) -> Vec<S
                 let rel = format!("modules/core/adapters/dyndsp/src/cf/dyndsp-{dev}.s");
                 let table = dir.ancestors().map(|a| a.join(&rel)).find(|p| p.is_file());
                 let Some(table_text) = table.and_then(|p| std::fs::read_to_string(p).ok()) else {
-                    out.push(format!("dks/dsp/{file}: core/dyndsp has no import table for {dev}"));
+                    out.push(format!(
+                        "dks/dsp/{file}: core/dyndsp has no import table for {dev}"
+                    ));
                     continue;
                 };
-                let known: std::collections::BTreeSet<&str> =
-                    imp.captures_iter(&table_text).map(|c| c.get(1).unwrap().as_str()).collect();
+                let known: std::collections::BTreeSet<&str> = imp
+                    .captures_iter(&table_text)
+                    .map(|c| c.get(1).unwrap().as_str())
+                    .collect();
                 let text = std::fs::read_to_string(&path).unwrap_or_default();
                 for c in ext.captures_iter(&text) {
                     let n = c.get(1).unwrap().as_str();

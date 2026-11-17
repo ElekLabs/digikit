@@ -335,7 +335,10 @@ export class VoiceRig {
     const { port, first } = await this.open({
       return_sw: RETURN_SW,
       breaks,
-      code: [this.b.core, this.b.dispatch, this.b.routine].map((l) => ({ address: SW_ALIAS_BASE + 2 * l.baseSw, hex: l.codeBoot })),
+      code: [this.b.core, this.b.dispatch, this.b.routine].map((l) => ({
+        address: SW_ALIAS_BASE + 2 * l.baseSw,
+        hex: l.codeBoot,
+      })),
       ops: [
         { poke: [...this.dm].map(([a, w]) => [a, u32(w)] as [number, number]) },
         {

@@ -205,7 +205,8 @@ pub unsafe fn info_find_dsp_slot(table: *const u32, hash: u32) -> Option<u32> {
     let mut i = 0;
     while i < n as usize {
         if read_volatile(table.add(2 + 3 * i)) == hash {
-            return (read_volatile(table.add(4 + 3 * i)) == INFO_KIND_DSP_SLOT).then(|| read_volatile(table.add(3 + 3 * i)));
+            return (read_volatile(table.add(4 + 3 * i)) == INFO_KIND_DSP_SLOT)
+                .then(|| read_volatile(table.add(3 + 3 * i)));
         }
         i += 1;
     }

@@ -241,7 +241,9 @@ impl Manifest {
                 }
             }
             match f.space.as_deref() {
-                None | Some("cf") => fills.push((f.slot.clone(), f.entry.clone(), f.devices.clone())),
+                None | Some("cf") => {
+                    fills.push((f.slot.clone(), f.entry.clone(), f.devices.clone()))
+                }
                 Some("dsp") => {
                     let names = crate::sdkgen::dsp_slot_names();
                     if !names.contains(&f.slot) {
@@ -260,8 +262,9 @@ impl Manifest {
                 }
                 Some(s) => {
                     return Err(err!(
-                        "{id}: [[fill]] {:?}: space {s:?} is not \"cf\" or \"dsp\""
-                    , f.slot));
+                        "{id}: [[fill]] {:?}: space {s:?} is not \"cf\" or \"dsp\"",
+                        f.slot
+                    ));
                 }
             }
         }
