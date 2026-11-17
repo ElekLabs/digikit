@@ -23,6 +23,7 @@
 .GLOBAL _dv_idle;
 .GLOBAL _dv_slots;
 .EXTERN _fw_render_next;
+.EXTERN _fw_frame;
 .EXTERN _dl_slots;
 .EXTERN _gs_block;
 

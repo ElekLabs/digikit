@@ -41,6 +41,7 @@ place = "dsp.l2"
 devices = ["dn2"]
 
 [object.externs]
+_fw_frame = "dsp.voice.value.frame_base"
 _fw_render_next = "dsp.voice.site.render_entry.next"
 # The stereo hooks (dsp-voice-dn2-stereo.s, docs/design/dn2-stereo.md): the stock stages the wrappers call or jump to, the engine's base and two sites of the pan loop.
 _gs_fo_stock = "dsp.voice.fn.first_order_process"
