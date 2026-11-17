@@ -339,7 +339,9 @@ async function filterCall(s: Shadow, family: string, side: string, histories: nu
     checkLoads(s, `${side} ${family}`, [loads]);
     if (family === 'held') {
       // the period the leaf loads is a finite entry between 1 and 32 samples
-      const period = wordToFloat(await s.wordAt(s.loads[0]![1]));
+      const held = s.loads.find(([pc]) => pc === TABLE_LOADS.held!.pcs![0]);
+      expect(held, 'the held table load ran').toBeDefined();
+      const period = wordToFloat(await s.wordAt(held![1]));
       expect(period > 1 && period < 32, `held period ${period}`).toBe(true);
     }
   }
