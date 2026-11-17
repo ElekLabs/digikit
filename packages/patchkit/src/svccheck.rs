@@ -410,7 +410,12 @@ fn check_dks(dir: &Path, needs_dks: bool, neutral: &[(String, String)]) -> Vec<S
 }
 
 /// The `devices` of every `[[slot]]` of the `module.toml` files under `at` (an image adapter's pointer slots), by slot name; an empty list is every device.
-fn adapter_slots(at: &Path, out: &mut std::collections::BTreeMap<String, Vec<String>>) {
+/// A slot name declared in two places for a common device (or for every device) is listed in `twice`; on disjoint devices the lists are joined.
+fn adapter_slots(
+    at: &Path,
+    out: &mut std::collections::BTreeMap<String, Vec<String>>,
+    twice: &mut Vec<String>,
+) {
     let Ok(rd) = std::fs::read_dir(at) else {
         return;
     };
@@ -423,7 +428,7 @@ fn adapter_slots(at: &Path, out: &mut std::collections::BTreeMap<String, Vec<Str
                 .and_then(|n| n.to_str())
                 .is_some_and(|n| matches!(n, "target" | "build" | "dist" | "node_modules"));
             if !skip {
-                adapter_slots(&p, out);
+                adapter_slots(&p, out, twice);
             }
         } else if p.file_name().is_some_and(|n| n == "module.toml") {
             let Some(t) = std::fs::read_to_string(&p)
@@ -442,7 +447,21 @@ fn adapter_slots(at: &Path, out: &mut std::collections::BTreeMap<String, Vec<Str
                 let Some(name) = sl.get("name").and_then(|n| n.as_str()) else {
                     continue;
                 };
-                out.insert(name.to_string(), strings(sl.get("devices")));
+                let devices = strings(sl.get("devices"));
+                match out.get_mut(name) {
+                    None => {
+                        out.insert(name.to_string(), devices);
+                    }
+                    // the same name on disjoint devices is one slot per device; an empty list is every device
+                    Some(have)
+                        if have.is_empty()
+                            || devices.is_empty()
+                            || devices.iter().any(|d| have.contains(d)) =>
+                    {
+                        twice.push(name.to_string());
+                    }
+                    Some(have) => have.extend(devices),
+                }
             }
         }
     }
@@ -463,18 +482,29 @@ fn strings(v: Option<&toml::Value>) -> Vec<String> {
 /// `devices`) takes any fill; a slot limited to some devices takes only fills that name `devices`, all of them among the slot's.
 fn fill_problems(dir: &Path, adapters: &Path) -> Vec<String> {
     let mut out = vec![];
-    // without an adapters folder (a service checked on its own) there is nothing to compare with
-    if !adapters.is_dir() {
-        return out;
-    }
+    // an unparsable dks/module.toml is reported by `check_dks`
     let Some(m) = std::fs::read_to_string(dir.join("dks/module.toml"))
         .ok()
         .and_then(|t| t.parse::<toml::Table>().ok())
     else {
         return out;
     };
+    // the fills cannot be compared without the adapters folder: that is an error, not a skip
+    if m.get("fill").is_some() && !adapters.is_dir() {
+        out.push(format!(
+            "the adapters folder {} is missing: the [[fill]] entries of dks/module.toml cannot be checked",
+            adapters.display()
+        ));
+        return out;
+    }
     let mut slots = std::collections::BTreeMap::new();
-    adapter_slots(adapters, &mut slots);
+    let mut twice = vec![];
+    adapter_slots(adapters, &mut slots, &mut twice);
+    for name in twice {
+        out.push(format!(
+            "the slot `{name}` is declared twice ([[slot]] in the adapter module.toml files)"
+        ));
+    }
     for f in m
         .get("fill")
         .and_then(|f| f.as_array())

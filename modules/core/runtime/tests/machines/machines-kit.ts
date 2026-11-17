@@ -1,5 +1,6 @@
 import { button, encoder as encoderCode, pollUntil, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
+import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { bootInfo, E_LOADING } from '@digi/regression/runtime/card-kit.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
@@ -81,6 +82,9 @@ export async function soundWord(session: Session, index: number, track = 1): Pro
 /** The reason of the one fixed wait of a turn that must change nothing: the firmware has no state that says "ignored". */
 export const IGNORED = 'emulated time for the firmware to act on a turn that must change nothing (no observable state)';
 
+/** The most bursts a turn sends to get past the lead-in of the encoder filter (finding 03). */
+const TURN_BURSTS = 4;
+
 /**
  * `count` encoder events of `step` detents, `gapMs` apart in emulated time, then a settle for the firmware to store the last one. The stock encoder scales a turn by its
  * event rate (12 detents moved a word by 256 at a gap of 30 ms, 3 events of 4 detents), so a test that needs a larger move sends a faster burst.
@@ -94,19 +98,27 @@ async function turnEvents(rt: Rt, encoder: string, step: number, count: number, 
 }
 
 /**
- * Turn `encoder` by `detents` (negative: down) in events of 4, 30 ms apart (the timing the diagnostic run showed to move the word: 8192 to 8448 for 12 detents). Waits
- * until a Sound word differs from the one before the turn (the firmware stored the value). Returns the Sound index it changed with the values before and after (fails
- * when it changed none or several).
+ * Turn `encoder` by `detents` (negative: down) in events of 4, 30 ms apart, and repeat the burst (up to TURN_BURSTS times) until a Sound word moves. Waits until a Sound
+ * word differs from the one before the turn (the firmware stored the value). Returns the Sound index it changed with the values before and after (fails when it
+ * changed none or several). The size of the change depends on how many bursts the lead-in filter swallowed, so it is not a fixed delta (one burst of 12 detents moved a
+ * word from 8192 to 8448): a test checks the direction, not an exact step.
  */
 export async function turnChangesOneWord(rt: Rt, encoder: string, detents = 12) {
   const before = await soundWords(rt.session);
-  await turnEvents(rt, encoder, detents < 0 ? -4 : 4, Math.abs(detents) / 4);
-  await rt.ui.wait({
-    state: () => soundWords(rt.session),
-    done: (w: number[]) => changed(before, w).length > 0,
-    withinMs: 3000,
-    what: `${encoder} changed a Sound word`,
-  });
+  // like a hand: the stock encoder filter of an idle control swallows its first counts (finding 03, the lead-in counter), so repeat the burst until a word moves
+  for (let n = 0; n < TURN_BURSTS && changed(before, await soundWords(rt.session)).length === 0; n++)
+    await turnEvents(rt, encoder, detents < 0 ? -4 : 4, Math.abs(detents) / 4);
+  try {
+    await rt.ui.wait({
+      state: () => soundWords(rt.session),
+      done: (w: number[]) => changed(before, w).length > 0,
+      withinMs: 3000,
+      what: `${encoder} changed a Sound word`,
+    });
+  } catch (error) {
+    console.info(`knob-timeout screen: ${await captureRemoteOled(rt.session, 'knob-timeout')}`);
+    throw error;
+  }
   const after = await soundWords(rt.session);
   const diff = changed(before, after);
   expect(diff, `${encoder} changes one parameter word`).toHaveLength(1);
@@ -116,7 +128,8 @@ export async function turnChangesOneWord(rt: Rt, encoder: string, detents = 12) 
 /** Turn `encoder` by `detents` in events of 4 and return the indices of the Sound words that changed (none is a valid answer: the knob is empty). */
 export async function turnChangesNothing(rt: Rt, encoder: string, detents = 12): Promise<number[]> {
   const before = await soundWords(rt.session);
-  await turnEvents(rt, encoder, detents < 0 ? -4 : 4, Math.abs(detents) / 4);
+  // as many bursts as `turnChangesOneWord` may need, so that a real knob would have moved (the lead-in filter, finding 03): no change is then not a vacuous pass
+  for (let n = 0; n < TURN_BURSTS; n++) await turnEvents(rt, encoder, detents < 0 ? -4 : 4, Math.abs(detents) / 4);
   await rt.ui.wait({ ms: 200, why: IGNORED });
   return changed(before, await soundWords(rt.session));
 }
