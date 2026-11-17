@@ -35,7 +35,7 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
 
 - The `Service<C: CoreApi>` trait (`modules/core/runtime/abi/src/service.rs:436`). The four services implement it (machines, fx, lfo,
   samples: `modules/core/services/*/src/records.rs`): `declare`, `check`, `apply`, `apply_record`, `remove(owner)`, `cap`, `attribute`,
-  `guard_state`, `on_loaded`, `tick`, `fx_entry`, `owned_ids`, `module_begin`, `module_commit`, `settle`.
+  `on_loaded`, `tick`, `module_begin`, `module_commit`, `settle` (E3 removed `guard_state`, `fx_entry` and `owned_ids`: see 4.3).
 - `[records.kinds]` in `sdk/sdk.toml` maps each record kind to its owning service. machines owns PARAM, MACHINE, PAGE, ACTION,
   NATIVE_PAGE and NATIVE_PAGE_V2; fx owns EFFECT; lfo owns LFO_SHAPE (`generic = true`). A kind is added there and in its service only.
 - The runtime names no kind: registry walker (`registry.rs`), collector (`collect.rs`), boot planner (`plan.rs`). Layercheck `kind-free`
@@ -47,12 +47,11 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
   - Effect ids are FNV-1a 32 of `<module id>:<effect id>` folded to 16 bits, 0 turned into 1 (`register.rs:74-84`). The kit stores the id as
     a halfword beside the effect's values (`modules/core/services/fx/src/fxpage.rs:15-17`). It is module-derived already, and its width is
     part of the kit format.
-  - LFO shape ids are a global u32 the module chooses (`[[record]] key`, `packages/patchkit/src/module.rs:59`). Nothing stores them yet.
-- The planner refuses a duplicate key, but only for generic kinds (`plan.rs:403`, `is_generic`), and only over the tables captured at boot
+  - LFO shape ids were a global u32 the module chose (`[[record]] key`). E3: `[[record]] id` and a derived key, like machines.
+- Before E3 the planner refused a duplicate key only for generic kinds (`is_generic`); now `keys_clash` and `key_refusal` check every kind, over the tables captured at boot
   (`plan.rs:367`, `loader/mod.rs:770-787`). It refuses two owners of the same kind, slot or hook site (`owner_clash`, `plan.rs:299`) and
   checks capacity (`take_fit`, `plan.rs:263`).
-- The loader refuses a content module with HOOKS or PROVIDES (`loader/role.rs`, `role_ok`). It does not refuse KINDS or SLOTS in a content
-  module (`role.rs:259`).
+- The loader refuses a content module with HOOKS, PROVIDES, KINDS or SLOTS (`loader/role.rs`, `role_ok`; E3 added KINDS and SLOTS).
 - Sticky numbers: `dkrt_sdk::sticky` (`modules/core/runtime/sdk/src/sticky.rs`) assigns machine type numbers from machine keys and keeps them
   in the settings key `machines.types` (8 words) across boots (`modules/core/services/machines/src/assign.rs`). It is written for machine
   types only (`in_range`). `resolve` answers only from the boot's `settle` table (`assign.rs:151-165`); outside a load `boot_index` is
@@ -84,8 +83,8 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
   `extern "C"` wrappers (`dks/src/builder.rs`: 10 in machines, 5 in fx; two machines wrappers convert callbacks, `builder.rs:32-38`),
   `[[export]]` in `dks/module.toml` (12 in machines, with `dk_param_get` and `dk_param_set`), `MACHINE_BUILDERS` and `FX_BUILDERS` in
   `loader/tests/assembly_tests.rs:768,780`, and the builder names in `RT_KIND_FREE` (`layercheck.py:965`).
-- Kind-specific methods on the generic `Service` trait: `fx_entry` (effects for DIGIKIT > FX ROUTES), `guard_state` (machine types),
-  `owned_ids` (machine type numbers for the MODULES reply). The handover of 2026-11-17 already deferred `fx_entry` to `dkrt_export(name_hash)`.
+- Kind-specific methods were on the generic `Service` trait: `fx_entry` (effects for DIGIKIT > FX ROUTES), `guard_state` (machine types),
+  `owned_ids` (machine type numbers for the MODULES reply). E3 made them `internal` exports found by name (`dk_fx_routes_entry`, `dk_machines_guard_state`, `dk_machines_owned_ids`).
 - "Adapter" covers two things: the firmware half of a service (reserved rows, stubs, slots, info tables) and the runtime's own platform code.
   `modules/core/adapters/` holds 25 folders of both.
 - Proof adapters: three firmware experiments that back findings, in no patch set and required by no module. An image holds one only when a test
@@ -185,7 +184,7 @@ new table family is the number of direct readers of its stored number; E0b count
 2. **The API follows the domain; what the device can do grows inside the service.** A call the firmware cannot support yet is refused
    with a status code (for example `DK_E_PAGE_FULL`). When a hook later makes it possible, the same call succeeds. No API is designed ahead
    of a firmware capability.
-3. **Content modules own no hooks.** `role_ok` refuses HOOKS and PROVIDES in a content module. E3 adds KINDS and SLOTS to that refusal.
+3. **Content modules own no hooks.** `role_ok` refuses HOOKS, PROVIDES, KINDS and SLOTS in a content module.
    Content modules can then only clash on keys and capacity.
 4. **Module code runs only through its service, in the UI task.** Module data that the firmware reads in an interrupt (an LFO shape) is
    data: a sample table, not a callback. Module callbacks (click actions, canvas draw) run only in the UI task through the service, and
@@ -337,8 +336,10 @@ Module ids keep the word they have (`core/dynreg` and so on); only folders, role
 ### 4.3 Service trait
 
 - `fx_entry`, `guard_state` and `owned_ids` leave the trait (rule 12). They become service exports found by name hash
-  (`dkrt_export(name_hash)`, the handover's deferred item): `fx.routes_entry`, `machines.guard_state`, `machines.owned_ids`. The menu and the
-  MODULES reply look them up. The runtime's `kind-free` rule then also holds for the trait.
+  (the handover's deferred item): `dk_fx_routes_entry`, `dk_machines_guard_state`, `dk_machines_owned_ids`. They are `[[import]]` entries of
+  `sdk/sdk.toml` with `provided`, `wrapper = "rt"` and `internal = true` (in the export list and `gen_exports.rs`, in no header, document or module import
+  table). `handlers::exports` looks them up with `find_export(name)` over the loader's export table; the menu and the MODULES reply keep their
+  behaviour when the file is not loaded. The runtime's `kind-free` rule then also holds for the trait.
 - The trait keeps the generic lifecycle: `declare`, `check`, `apply`, `apply_record`, `remove`, `cap`, `attribute`, `on_loaded`, `tick`,
   `module_begin`, `module_commit`, `settle`.
 - `ServiceRow` and `SVC_ABI` change once for this (E3), together with any other trait change, so every `.dks` rebuilds once.
@@ -462,9 +463,9 @@ for LFO shapes; for MACHINE and EFFECT it checks only that the kind has an owner
 
 What, as separate commits:
 1. `dkneeds` `Keys::first_shared_key(&self, other) -> Option<(kind, key)>` and `Keys::first_repeat(&self) -> Option<(kind, key)>` next to
-   `has_key` (`keys.rs:534`), with host tests. patchkit, the workbench fit check, the planner and E5's live-set check all use them.
+   `has_key` (`keys.rs:534`), with host tests. The planner and E5's live-set check use them. (The workbench fit check calls `pk_fit` for capacity only; the key check there is E5 item 2b.)
 2. `plan.rs`: `keys_clash` keeps the owner check and uses the two functions for every kind (the `is_generic` condition goes; `is_generic`
-   is deleted if nothing else uses it). Expose `key_refusal(t, others) -> Option<Reason>` for E5. Plan tests: duplicate machine key, duplicate
+   is deleted if nothing else uses it). `settle` hands the services the keys of the modules the plan accepted only (`settle_ctx`), so a module refused with `E_PLAN_KEY` takes no number. Expose `key_refusal(t, others) -> Option<Reason>` for E5. Plan tests: duplicate machine key, duplicate
    effect id, the same module twice, the same local id in two modules (accepted), a forced hash collision, a key repeated inside one table.
 3. `dkrt_sdk::sticky`: `Range { lo, hi }` and map slices instead of `DYN_TYPE_*` and `[u32; MAP_N]`; machines passes its range and map, and
    `machines.types` stays byte-identical (the existing format test guards it). New case with another range. Then delete rule 4 (the `first`
@@ -473,19 +474,22 @@ What, as separate commits:
 4. `role_ok` (`role.rs:256-271`): role 0 also refuses KINDS and SLOTS; unit cases next to the existing ones.
 5. LFO shape keys: `[[record]]` takes a local `id` string; patchkit puts `hash24(<module id>:<id>) << 8` (low byte 0) into KEYS and generates
    a per-module constant `DK_KEY_<ID>` (as `module_ids.h` gives machine ids) that `module.c` writes into the record body, so the key has one
-   source. The lfo service keeps `id != 0` and `E_TYPE_USED` until E5. Fixtures `lfo-shape` and `lfo-shape-dup` and the tests that name key
-   7 change.
+   source. The lfo service keeps `id != 0` and `E_TYPE_USED` until E5. The fixture `lfo-shape-dup` is deleted (it only repeated shape id 7); the lfo
+   and refusal device tests make the second owner of a key by renaming a copy of the `lfo-shape` file.
 6. Trait (4.3), last and on its own: `fx_entry`, `guard_state`, `owned_ids` leave `Service`, `ServiceRow` and the thunks. Each service
-   declares an export (`fx.routes_entry`, `machines.guard_state`, `machines.owned_ids`): a plain `extern "C"` function with no core argument
-   (the `.dks` code reaches the core through `ImportCore`, as the builder exports do). The runtime adds `find_export(hash)` over
+   declares an export (`dk_fx_routes_entry`, `dk_machines_guard_state`, `dk_machines_owned_ids`, in `dks/src/rt.rs`): a plain `extern "C"` function with no core
+   argument (the `.dks` code reaches the core through `ImportCore`, as the builder exports do). The runtime adds `find_export(name)` over
    `Loader.exports.resolve`; `dkrt_fx` (menu FX ROUTES) and the MODULES reply call it and keep their behaviour when the export is absent
    (`E_NOT_FOUND`, 0, none). `SVC_ABI` changes once; every `.dks` and the runtime object rebuild (`objects-check`).
 7. One assembly case: two packed fixtures with the same machine key refused by the boot plan. Doc updates (service.rs and handlers.rs doc
    comments that name the three methods).
-8. The per-service duplicate checks (`E_FX_ID_DUP`, the lfo `E_TYPE_USED` path) stay until E5; E5 deletes them with their refusal-table rows.
+8. The per-service duplicate checks (`E_FX_ID_DUP`, the lfo `E_TYPE_USED` path) stay until E5; E5 deletes them with their refusal-table rows. At boot the plan now
+   refuses the repeated key first (`E_PLAN_KEY`), so the commit test of a repeated effect id expects `E_PLAN_KEY` and the `E_FX_ID_DUP` row of the refusal table is a host
+   row (the fx unit test of `check_commit`).
 
-Before landing: scan the KEYS of every packed fixture and real module for pairs the wider rule would now refuse (a pinned type used twice,
-an effect-id collision).
+Scan before landing (done, from the manifests of 57 modules, with the hash of `register.rs`): no two shipped modules or fixtures share a machine key or an
+effect id, and no module repeats a key. Two test paths relied on the old gap and changed: the commit test that repeats an effect id (now `E_PLAN_KEY`), and the
+capacity set `fullSet` (`tests/regression/runtime/synth.ts`), whose refused voice module `cap/full-y` pinned the same type as `cap/full-v` and now pins `typeFirst - 1`, a type outside the run-time range that no reference module or V holds, so it still reaches `E_DSP_ROWS`.
 
 Tests: as listed per commit. Device subset (DT2 and DN2): `C:loading`, `S:machines`, `S:lfo`, the runtime lfo and refusal tests, the tests
 that read FX ROUTES (fixtures `dyn-fx-gain-send`, `dyn-fx-gain-sendonly`) and the MODULES reply, plus `gate-smoke` and `gate-pins`.
@@ -526,6 +530,7 @@ What:
    transport function returns non-zero (playing or paused; declared in `devices/fw` as `cf.project.fn.transport_state`, found by hash on
    both images), card operations, safe mode, an open module view or the machine selection view.
 2. Validation before unload: the planner over the live set (E3 rule as a function), keys check of 3.6 step 2.
+2b. Workbench fit check: `pk_fit` in `patchkit.wasm` checks capacity only. Add a key check beside it that calls `Keys::first_shared_key` and `first_repeat` (through a `pk_` export) for a ticked set and for a module against the live set, with one test, so the workbench refuses a repeated machine key or effect id before the upload.
 3. Run-time numbering: `sticky` assigns for a load outside `settle` (kept keys keep numbers; new keys take free ones); `resolve` answers from
    the live table, not only the boot table.
 4. In-flight counter for module SysEx commands; clear the span clock pointer under a mask; `unload_rec` resumes after `E_BUSY`; retry
@@ -585,6 +590,7 @@ What:
    the slot falls back to TRI.
 8. Builder: `dk_record_add` with the generic LFO_SHAPE record; a typed `dk_lfo_add_shape` only if writing the fixture shows `dk_record_add`
    is awkward in C.
+8b. The lfo service checks a record's body key against the module's KEYS entry. Today nothing ties them: a literal body id bypasses the planner's key rule, so the check refuses a record whose key is not in the module's table.
 9. Template `sdk/templates/lfo/` and a fixture `tests/fixtures/modules/test/lfo-shape`.
 
 Tests: unit (lfo service: lookup, interpolation, fallback, contract suite); assembly (one case, the lfo fixture binds its hooks and the image
@@ -666,7 +672,7 @@ runtime-and-services.md.
 | 1 | E0a filter DSP experiment | profile under the native core; UI chooser | one, about 10 min | parked: first attempt did not settle it (finding 148); retry before E7 |
 | 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
 | 2 | E2 boilerplate codegen | - | none; objdiff | built and reviewed (branch e2/exports-codegen); PR after the gate merge |
-| 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | active (branch e3/keys) |
+| 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | built (branch e3/keys) |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | todo |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |
