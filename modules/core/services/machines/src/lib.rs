@@ -11,6 +11,7 @@
 extern crate std;
 pub mod assign;
 pub mod dsp;
+pub mod info;
 pub mod nativepage;
 pub mod paramapi;
 pub mod records;

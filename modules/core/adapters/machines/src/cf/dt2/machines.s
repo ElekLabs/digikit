@@ -185,14 +185,15 @@ mf_native_type:
     jmp     _mf_spt
 
 | ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (modules/core/services/machines/dks/src/
-| image.rs has the layout; the word index is the byte offset / 4): the registry, `mf_ensure`, the native page functions, the slot map and the page rows. The firmware
+| image.rs has the layout; the word index is the byte offset / 4): the registry, `mf_ensure`, the native page functions, the slot map and the page rows (version 3: and the native page calls of the registry). The firmware
 | addresses are not here: the file names them and `patchkit bind` resolves them. 1 = the Digitakt II.
     .section .rodata
     .balign 4
     .globl machines_info
 machines_info:
-    .long   0x4d414348, 2, 1                | magic MACH, version, device
+    .long   0x4d414348, 3, 1                | magic MACH, version, device
     .long   _mf_first, _mf_count, _mf_entries, _mf_rows
     .long   mf_ensure
     .long   mf_native_page_count, mf_native_descriptor, mf_native_code, mf_native_draw, mf_native_overlay
     .long   mf_slotmap, 0, 0                | the slot map, (page rows, page count: Digitone II)
+    .long   mf_native_register, mf_native_register_v2, mf_native_remove, mf_native_turn | the native page calls of the registry

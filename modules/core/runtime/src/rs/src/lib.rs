@@ -18,7 +18,6 @@ use dkrt_sdk::*;
 mod api;
 mod arena;
 pub mod core_api;
-mod native;
 pub mod collect;
 mod handlers;
 #[rustfmt::skip]

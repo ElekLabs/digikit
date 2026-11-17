@@ -36,24 +36,6 @@ macro_rules! core_imports {
             // ---- jobs
             fn dkc_job_post(owner: u8, step: Option<$crate::core_imports::JobStepFn>, done: Option<$crate::core_imports::JobDoneFn>, ctx: *mut u8) -> i32;
             fn dkc_job_cancel(owner: u8, id: u32) -> i32;
-            // ---- the native page adapter: `bindings` points at 24 words (eight triples)
-            fn dkc_native_available(kind: u32) -> bool;
-            fn dkc_native_register(
-                kind: u32,
-                owner: u32,
-                page: u32,
-                flags: u32,
-                title: *const u8,
-                draw: u32,
-                event: u32,
-                bindings: *const u32,
-                words: *const u32,
-                word_count: u32,
-                arg: u32,
-                with_arg: u32,
-            ) -> i32;
-            fn dkc_native_remove(kind: u32);
-            fn dkc_native_turn(view: *const u8, event: *const u8) -> u32;
             // ---- the DSP loader's state and tables
             fn dkc_dsp() -> *mut $crate::dsp::DspState;
             fn dkc_dsp_info() -> *const u32;

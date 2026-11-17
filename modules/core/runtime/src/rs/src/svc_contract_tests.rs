@@ -29,7 +29,6 @@ fn plain_values_and_pointers_come_back_as_through_the_real_core() {
         assert_eq!(ic.module_name(1), REAL_CORE.module_name(1));
         assert_eq!(ic.guard_faults(0), REAL_CORE.guard_faults(0));
         assert_eq!(ic.guard_disabled(0), REAL_CORE.guard_disabled(0));
-        assert_eq!(ic.native_available(dkrt_sdk::records::KIND_NATIVE_PAGE), REAL_CORE.native_available(dkrt_sdk::records::KIND_NATIVE_PAGE));
     }
     // a reference to the core's state is the same object, a slice is the same bytes (length and address)
     assert!(core::ptr::eq(ic.dsp() as *const _, REAL_CORE.dsp() as *const _));

@@ -5,45 +5,13 @@
 //! (the `dk_fw_`, `dk_exit_`, `dk_ret_` and `dk_stock_` imports of docs/PATCHING.md "Firmware references"). The file reads the table through `CoreApi::info` and copies it into its
 //! own bss (`bind_table`, from `setup`), where its hooks (`hooks-dt2.s`, `hooks-dn2.s`) read it as `MF_TAB`. One layout for both devices; a word a device does not use is 0.
 //!
-//! The words are big endian in the image (ColdFire is big endian, so a read of the word is the value).
+//! The layout (`w`) is `dkrt_svc_machines::info`: the crate reads the native page functions from the table too. The words are big endian in the image (ColdFire is big endian, so a read of the word is the value).
 use core::ptr::{read_volatile, write_volatile};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_sdk::{E_NO_REGISTRY, OK};
 use dkrt_svc_rt::name_hash;
 
-/// `MACH`.
-pub const MAGIC: u32 = 0x4d41_4348;
-/// Version 2: the firmware addresses left the table.
-pub const VERSION: u32 = 2;
-/// Words of the table.
-pub const WORDS: usize = 16;
-
-/// Word indexes of the table (byte offset = 4 * index; `hooks-dt2.s` and `hooks-dn2.s` name the byte offsets `T_*`, and a test compares them). The hooks leave through the
-/// imports `patchkit bind` resolves, so the table has no word for a firmware address.
-pub mod w {
-    pub const MAGIC: usize = 0;
-    pub const VERSION: usize = 1;
-    /// 1 Digitakt II, 2 Digitone II (`[digikit] id` of the device file).
-    pub const DEVICE: usize = 2;
-    /// The registry: `machines.first`, `.count`, `.entries`, `.rows`.
-    pub const FIRST: usize = 3;
-    pub const COUNT: usize = 4;
-    pub const ENTRIES: usize = 5;
-    pub const ROWS: usize = 6;
-    /// `mf_ensure` of the image (builds the registry's run-time tables once).
-    pub const ENSURE: usize = 7;
-    /// The adapter's native page functions (`mf_native_*`).
-    pub const N_PAGE_COUNT: usize = 8;
-    pub const N_DESCRIPTOR: usize = 9;
-    pub const N_CODE: usize = 10;
-    pub const N_DRAW: usize = 11;
-    pub const N_OVERLAY: usize = 12;
-    /// Digitakt II: the table `mf_slotmap`.
-    pub const SLOTMAP: usize = 13;
-    /// Digitone II: the page rows `pages.rows` and `pages.count`.
-    pub const PGROWS: usize = 14;
-    pub const PGN: usize = 15;
-}
+pub use dkrt_svc_machines::info::{w, MAGIC, VERSION, WORDS};
 
 /// The byte offsets the assembler files name (`.equ T_NAME, offset`), for the test that compares them with `w`.
 pub const ASM_OFFSETS: &[(&str, usize)] = &[

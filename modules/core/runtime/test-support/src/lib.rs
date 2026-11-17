@@ -40,20 +40,8 @@ pub enum Call {
         slot: Slot,
         value: u32,
     },
-    /// A native page registered for machine type `owner`: the callbacks and the snapshot words.
-    NativeRegister {
-        kind: u32,
-        owner: u32,
-        page: u32,
-        flags: u32,
-        draw: u32,
-        event: u32,
-        words: Vec<u32>,
-        arg: u32,
-        with_arg: u32,
-    },
-    NativeRemove(u32),
-    NativeTurn,
+    /// A call of the image's or the firmware's function at `addr` (`FwMem::call`) with its arguments.
+    Fw { addr: u32, args: Vec<usize> },
 }
 
 /// The platform facts of a `FakeCore` (`SampleHost`): the sample files in a `FakeStorage`, whether the pool adapter is in the image and whether the
@@ -134,10 +122,10 @@ pub struct FakeCore {
     pub device: u32,
     /// The words of `dynreg_info` the fake hands out (empty: no registry, `dynreg` is null).
     pub dynreg_table: Vec<u32>,
-    /// What `native_available` answers, what `native_register` returns and what `native_turn` returns.
-    pub native_available: bool,
-    pub native_status: i32,
-    pub native_consumes: u32,
+    /// What a call of a firmware function (`FwMem::call`) answers when `on_call` is not set.
+    pub fw_result: Cell<usize>,
+    /// Runs at every `FwMem::call`, while the arguments (pointers into the caller's frame) are valid: a test reads what the function would have read, and answers.
+    pub on_call: RefCell<Option<Box<dyn FnMut(u32, &[usize]) -> usize>>>,
     /// The platform facts (`CoreApi::host`).
     pub host: FakeHost,
     jobs: RefCell<Vec<FakeJob>>,
@@ -162,9 +150,8 @@ impl FakeCore {
             info_tables: Vec::new(),
             device: 0,
             dynreg_table: Vec::new(),
-            native_available: true,
-            native_status: 0,
-            native_consumes: 0,
+            fw_result: Cell::new(0),
+            on_call: RefCell::new(None),
             host: FakeHost::new(),
             jobs: RefCell::new(Vec::new()),
             next_job: Cell::new(0),
@@ -226,6 +213,16 @@ impl dkrt_abi::mem::FwMem for FakeCore {
     unsafe fn wr(&self, a: u32, v: u32) {
         self.mem.borrow_mut().insert(a, v);
         self.rec(Call::Wr(a, v));
+    }
+    unsafe fn call(&self, a: u32, args: &[usize]) -> usize {
+        if a == 0 {
+            return 0;
+        }
+        self.rec(Call::Fw { addr: a, args: args.to_vec() });
+        match self.on_call.borrow_mut().as_mut() {
+            Some(f) => f(a, args),
+            None => self.fw_result.get(),
+        }
     }
 }
 
@@ -309,45 +306,6 @@ impl CoreApi for FakeCore {
             }
             None => 0,
         }
-    }
-    fn native_available(&self, _kind: u32) -> bool {
-        self.native_available
-    }
-    unsafe fn native_register(
-        &self,
-        kind: u32,
-        owner: u32,
-        page: u32,
-        flags: u32,
-        _title: *const u8,
-        draw: u32,
-        event: u32,
-        _bindings: *const u32,
-        words: *const u32,
-        word_count: u32,
-        arg: u32,
-        with_arg: u32,
-    ) -> i32 {
-        let words = core::slice::from_raw_parts(words, word_count as usize).to_vec();
-        self.rec(Call::NativeRegister {
-            kind,
-            owner,
-            page,
-            flags,
-            draw,
-            event,
-            words,
-            arg,
-            with_arg,
-        });
-        self.native_status
-    }
-    unsafe fn native_remove(&self, kind: u32) {
-        self.rec(Call::NativeRemove(kind))
-    }
-    unsafe fn native_turn(&self, _view: *const u8, _event: *const u8) -> u32 {
-        self.rec(Call::NativeTurn);
-        self.native_consumes
     }
     fn dsp(&self) -> &'static mut DspState {
         unsafe { &mut *self.dsp }

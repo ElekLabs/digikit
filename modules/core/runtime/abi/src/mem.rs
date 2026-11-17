@@ -69,13 +69,42 @@ pub unsafe fn wr16(a: u32, v: i32) {
     write_volatile((a + 1) as *mut u8, v as u8);
 }
 
-/// Word reads and writes of firmware memory by address: the rows and tables of the image that a service fills. A service takes the core as a `CoreApi`, which has this
-/// as a supertrait, so a host test gives a core that logs the writes (`FakeCore`) instead of dereferencing an address that is not a host pointer.
+/// Call the function at address `a` with `args` (at most `CALL_ARGS` words) and give its result. The ColdFire C calling convention passes the arguments on the stack and the
+/// caller takes them off, so a function that wants fewer arguments reads the first of them. An address of 0 is a word that nobody bound: nothing is called and the answer is 0.
+///
+/// # Safety
+/// `a` is the address of a function of the C calling convention that takes the first words of `args` (the image's code or the firmware's), or 0.
+pub unsafe fn call(a: u32, args: &[usize]) -> usize {
+    if a == 0 {
+        return 0;
+    }
+    let mut v = [0usize; CALL_ARGS];
+    let n = if args.len() < CALL_ARGS { args.len() } else { CALL_ARGS };
+    let mut i = 0;
+    while i < n {
+        v[i] = args[i];
+        i += 1;
+    }
+    type F = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize, usize, usize, usize, usize, usize) -> usize;
+    let f: F = core::mem::transmute(a as usize);
+    f(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11])
+}
+
+/// The most arguments `call` passes.
+pub const CALL_ARGS: usize = 12;
+
+/// Firmware memory and code by address: word reads and writes of the rows and tables of the image that a service fills, and calls of the image's functions. A service
+/// takes the core as a `CoreApi`, which has this as a supertrait, so a host test gives a core that logs the writes and the calls (`FakeCore`) instead of dereferencing an address that
+/// is not a host pointer.
 pub trait FwMem {
     unsafe fn rd(&self, a: u32) -> u32 {
         rd(a)
     }
     unsafe fn wr(&self, a: u32, v: u32) {
         wr(a, v)
+    }
+    /// `call`: the function at `a` (0: none, answers 0).
+    unsafe fn call(&self, a: u32, args: &[usize]) -> usize {
+        call(a, args)
     }
 }

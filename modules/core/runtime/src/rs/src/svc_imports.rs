@@ -76,35 +76,6 @@ pub mod shims {
         REAL_CORE.job_cancel(owner, id)
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_native_available(kind: u32) -> bool {
-        REAL_CORE.native_available(kind)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_native_register(
-        kind: u32,
-        owner: u32,
-        page: u32,
-        flags: u32,
-        title: *const u8,
-        draw: u32,
-        event: u32,
-        bindings: *const u32,
-        words: *const u32,
-        word_count: u32,
-        arg: u32,
-        with_arg: u32,
-    ) -> i32 {
-        REAL_CORE.native_register(kind, owner, page, flags, title, draw, event, bindings, words, word_count, arg, with_arg)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_native_remove(kind: u32) {
-        REAL_CORE.native_remove(kind)
-    }
-    #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_native_turn(view: *const u8, event: *const u8) -> u32 {
-        REAL_CORE.native_turn(view, event)
-    }
-    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_dsp() -> *mut DspState {
         REAL_CORE.dsp()
     }
