@@ -229,31 +229,41 @@ One generic function in the test-support crate, run by every service crate in it
 // modules/core/runtime/test-support/src/contract.rs
 pub struct Fixture {
     pub device: u32,               // DT2 or DN2 profile
-    pub a: fn(&Builder),           // module A's init: the fixture's module.c compiled for the host, or a Rust call list
-    pub b: fn(&Builder),           // module B: different keys
-    pub bad: fn(&Builder),         // an init the service must refuse at the commit
+    pub kinds: &'static [(u32, u32)], // [records.kinds] of the service
+    pub image: fn(&mut FakeCore),  // the image tables of the profile
+    pub state: fn(&FakeCore) -> Vec<u32>, // the service's own view (owners, ids)
+    pub a: Module,                 // module A: keys, a call list that stands for the fixture's module.c, its DSP rows
+    pub b: Module,                 // module B: different keys
+    pub bad: Module,               // a module the service must refuse at the commit
 }
 
 pub fn contract<S: Service<FakeCore>>(f: &Fixture) { /* cases below */ }
 ```
 
-A shared lifecycle driver in test-support runs a module the way the loader does: `module_begin`, the init calls, `module_commit` (PREPARE,
-WRITE), the registry check and apply, DSP claim, and on unload `remove`, DSP clear and release. Its state snapshot is `FakeCore.mem`, the
-recorded calls, the link wire, the settings store, `cap` counts and `owned_ids`.
+A shared lifecycle driver in test-support (`Lifecycle`) runs a module the way the loader does: `settle`, DSP admit and claim, `module_begin`, the
+init calls, `module_commit` (PREPARE, WRITE), the registry check, DECLARE, apply, row publication, and on unload `dsp_clear`, `remove` and DSP
+release. Its state snapshot is `FakeCore.mem`, the DSP state, the last word on each link slot, the settings store, `cap` counts and the service's
+own view (`Fixture::state`: `fxpage::page_owner`, `owned_ids`, `tracks::has`).
 
 Cases:
 
 1. `declare` gives exactly the kinds that `[records.kinds]` assigns to this service (`Declare::matches_kinds`).
 2. `check` writes nothing: the snapshot is unchanged.
-3. Re-commit equivalence: the snapshot after `A` equals the snapshot after `A, unload A, A`; the snapshot after `B` equals the snapshot after
-   `A, unload A, B`. `cap` counts and `owned_ids` return to their starting values after `unload A`. This is the reload property.
-4. Commit A, commit B, unload A: B's rows, B's DSP rows and B's `owned_ids` are unchanged.
+3. Re-commit equivalence: the snapshot after `A` equals the snapshot after `A, unload A, A`. What `B` alone writes is the same after
+   `A, unload A, B`: a row that `A` held and released keeps the service's free values, which a never used row does not have, so the words of `B`
+   are compared, not the whole memory. `cap` counts and the service's view return to their starting values after `unload A`. This is the
+   reload property.
+4. Load B, load A, unload A: B's words, DSP state and ids are those of B alone, and another cycle of A changes nothing. Load A, load B, unload
+   both: `cap` counts and the view are at their start.
 5. A refused commit (`bad`), then the loader's `remove`: the snapshot equals the one before.
 6. Case 3 ten times: no growth in any table, no drift in sticky maps after the first assignment.
 
-Fixtures are the shared ones in `tests/fixtures/modules`. Their `module.c` is compiled for the host against the services' `build::*`
-functions (the pattern of `modules/core/adapters/ui/host`); a fixture whose init cannot compile on the host gets a Rust call list in the same
-fixture folder. No hand-built record bytes.
+Fixtures are the shared ones in `tests/fixtures/modules` (`lfo-shape`, `dyn-fx-gain`, `dyn-fx-gain-b`, `sine`). Each module of the suite is a Rust
+call list that makes the builder calls of the fixture's `module.c` through the service's `build::*` (or `Init::record` for `dk_record_add`); it
+sits in the service's `tests/contract.rs`, because it names `build::*` and test-support is below the services. The fixtures' sources are inputs of
+the crate's `rust-tests`. Host compilation of the `module.c` files is not done. The samples service has no kind and no builder call: its module
+is a track-table record in the DSP section (`Dsp::bank`), and its `bad` module is a stray `dk_record_add` that the commit refuses after the claim.
+No hand-built record bytes where a builder call exists.
 
 Service statics are reset by `module_begin` and `remove`; the suite takes the shared test lock.
 
@@ -502,13 +512,15 @@ and the service crates).
 ### E4 Service contract suite
 
 What:
-1. Route the machines row writers through `FwMem` (`core.wr`/`core.rd`) instead of the raw `wr`/`rd` (machines `records.rs:8`), so a host
-   test reaches machine and page rows. Same for any other raw writer the suite finds.
-2. The shared lifecycle driver and `contract.rs` in `modules/core/runtime/test-support/src/` (3.5).
-3. Host compilation of fixture `module.c` files against the services' `build::*` (pattern of `modules/core/adapters/ui/host`), or a Rust call
-   list per fixture.
-4. `tests/contract.rs` in machines, fx, lfo and samples with DT2 and DN2 fixtures.
-5. Fix what the suite finds. Expected: residue after `remove` in tables that `remove` does not reset, statics not cleared, sticky map drift.
+1. Route the row writers of machines and fx through `FwMem` (`core.wr`/`core.rd`, new `rd8`, `wr8`, `rd16`, `wr16`, `wr_half`) instead of raw
+   addresses (machines `records.rs`; fx `fxpage.rs` and `fxsend.rs`), so a host test reaches machine, page, effect page and send rows. Done;
+   objdiff of `machines.dko.json` shows 5 changed functions, of `fx.dko.json` 9 changed and one new (`ImportCore::rd16`).
+2. The shared lifecycle driver and `contract.rs` in `modules/core/runtime/test-support/src/` (3.5). Done.
+3. A Rust call list per fixture, in the service's `tests/contract.rs`. Done; host compilation of the `module.c` files is not planned.
+4. `tests/contract.rs` in machines, fx, lfo and samples with DT2 and DN2 fixtures. Done.
+5. Fix what the suite finds. Found: the fx and machines rows were unreachable on the host (item 1); the machines `rust-tests` did not compile
+   on e3/keys and two of its tests shared a static without the lock (fixed). The six cases found no residue in the four services as they
+   stand: a mutation of each service's `remove` or `dsp_release` (a table entry left behind) fails the suite.
 
 Tests: the suite itself (unit). Check with `pnpm nx:pilot show target inputs <service>:rust-tests` that each service's target hashes the
 test-support crate and the fixtures it reads.
@@ -673,7 +685,7 @@ runtime-and-services.md.
 | 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
 | 2 | E2 boilerplate codegen | - | none; objdiff | built and reviewed (branch e2/exports-codegen); PR after the gate merge |
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | built (branch e3/keys) |
-| 4 | E4 contract suite | E3, `nx/dks-tests` | none | todo |
+| 4 | E4 contract suite | E3, `nx/dks-tests` | none | built (branch e4/contract-suite) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |
 | 7 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | todo |

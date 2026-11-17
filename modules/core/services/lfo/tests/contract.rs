@@ -37,7 +37,9 @@ fn state(_core: &FakeCore) -> Vec<u32> {
     let mut v = vec![used() as u32];
     for id in [SHAPE_A, SHAPE_B] {
         v.push(owner_of(id) as u32);
-        v.push(shape(id).map_or(0xffff, |s| s[0] as u16 as u32 | (s[SAMPLES - 1] as u16 as u32) << 16));
+        v.push(shape(id).map_or(0xffff, |s| {
+            s[0] as u16 as u32 | (s[SAMPLES - 1] as u16 as u32) << 16
+        }));
     }
     v
 }
@@ -46,8 +48,9 @@ fn keys() -> KeysCopy {
     KeysCopy::empty()
 }
 
-fn module(init: fn(&mut Init)) -> Module {
+fn module(sel: u32, init: fn(&mut Init)) -> Module {
     Module {
+        sel,
         keys,
         init,
         dsp: Dsp::default(),
@@ -61,9 +64,9 @@ fn fixture(device: u32) -> Fixture {
         kinds: &KINDS_LFO,
         image: |_| {},
         state,
-        a: module(a),
-        b: module(b),
-        bad: module(bad),
+        a: module(0, a),
+        b: module(1, b),
+        bad: module(2, bad),
     }
 }
 

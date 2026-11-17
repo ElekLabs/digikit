@@ -429,6 +429,7 @@ fn the_capacity_counts_need_a_registry_and_the_ui_pass_runs_the_click_last() {
 
 #[test]
 fn the_machine_types_of_a_module_are_its_machine_rows_in_type_order() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = core();
     let s = rstate();
     s.mach_owner[1] = 4;
@@ -439,10 +440,12 @@ fn the_machine_types_of_a_module_are_its_machine_rows_in_type_order() {
     assert_eq!(types_of(&core, 4, &mut out), 2);
     assert_eq!(&out[..2], [first + 1, first + 5]);
     assert_eq!(types_of(&core, 7, &mut out), 0);
+    s.mach_owner = [0; limits::MACHINE_ROWS];
 }
 
 #[test]
 fn the_machine_types_of_a_module_and_the_guard_counts_are_what_the_runtime_exports_ask_for() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = core();
     rstate().mach_owner[3] = 2;
     let mut out = [0u8; 8];
@@ -454,4 +457,5 @@ fn the_machine_types_of_a_module_and_the_guard_counts_are_what_the_runtime_expor
     assert_eq!((g.faults, g.disabled), unsafe {
         (core.guard_faults(16), core.guard_disabled(16))
     });
+    rstate().mach_owner[3] = 0;
 }

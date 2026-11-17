@@ -124,11 +124,15 @@ fn state(core: &FakeCore) -> Vec<u32> {
     v
 }
 
-fn module(keys: fn() -> KeysCopy, init: fn(&mut Init)) -> Module {
+fn module(sel: u32, keys: fn() -> KeysCopy, init: fn(&mut Init)) -> Module {
     Module {
+        sel,
         keys,
         init,
-        dsp: Dsp { voices: 0, fxs: 1 },
+        dsp: Dsp {
+            fxs: 1,
+            ..Dsp::default()
+        },
     }
 }
 
@@ -139,9 +143,9 @@ fn fixture(device: u32) -> Fixture {
         kinds: &KINDS_FX,
         image,
         state,
-        a: module(keys_a, dyn_fx_gain),
-        b: module(keys_b, dyn_fx_gain_b),
-        bad: module(keys_none, dyn_fx_gain),
+        a: module(0, keys_a, dyn_fx_gain),
+        b: module(1, keys_b, dyn_fx_gain_b),
+        bad: module(2, keys_none, dyn_fx_gain),
     }
 }
 

@@ -284,6 +284,7 @@ const FIXTURE_SOURCE = {
     '{workspaceRoot}/tests/fixtures/modules/dyn-fx-gain/src/**/*',
     '{workspaceRoot}/tests/fixtures/modules/dyn-fx-gain-b/src/**/*',
   ],
+  'dkrt-svc-machines': ['{workspaceRoot}/tests/fixtures/modules/sine/src/**/*'],
 };
 
 // Files outside the crate embedded by patchkit's source, unit tests and build.rs.

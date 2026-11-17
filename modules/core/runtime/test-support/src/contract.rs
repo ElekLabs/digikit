@@ -12,13 +12,13 @@
 //! crate cannot depend on a service.
 use crate::FakeCore;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::dsp::{Job, DspState, FX_REC, L2_BYTE_BASE, VOICE_V3};
+use dkrt_abi::dsp::{DspState, Job, FX_REC, L2_BYTE_BASE, VOICE_ENTRY, VOICE_TYPE, VOICE_V3};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::link::{Owner, Sequence};
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
     check_step, commit_phase, ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, RecordSink,
-    Service,
+    Service, SettleCtx,
 };
 use dkrt_abi::MAX_MODULES;
 use dkrt_sdk::*;
@@ -64,15 +64,26 @@ impl Init<'_> {
     }
 }
 
-/// The DSP section a module brings: how many voice and effect rows its records claim (the fields of the entries stay 0).
+/// The DSP section a module brings: how many voice and effect rows its records claim (the fields of the entries stay 0), and whether it has a track-table record
+/// (version 5; the module's local id).
 #[derive(Clone, Copy, Default)]
 pub struct Dsp {
     pub voices: u32,
     pub fxs: u32,
+    pub bank: Option<u32>,
 }
 
-/// One module of a fixture: its header's keys, its `init` and its DSP rows.
+impl Dsp {
+    fn any(&self) -> bool {
+        self.voices + self.fxs > 0 || self.bank.is_some()
+    }
+}
+
+/// One module of a fixture: its place in the selection, its header's keys, its `init` and its DSP rows (a voice for each machine key of the keys table, an effect
+/// record for each `fxs`).
 pub struct Module {
+    /// The module's index in the boot's selection (`CoreApi::boot_index` while it loads; `settle` gets the keys of every module of the fixture in this order).
+    pub sel: u32,
     pub keys: fn() -> KeysCopy,
     pub init: fn(&mut Init),
     pub dsp: Dsp,
@@ -120,19 +131,28 @@ impl Snapshot {
         let mut n = 0;
         for (k, v) in &self.mem {
             if other.mem.get(k).copied().unwrap_or(0) != *v && n < 8 {
-                out.push_str(&std::format!("  mem {k:x}: {v:#x} -> {:#x}\n", other.mem.get(k).copied().unwrap_or(0)));
+                out.push_str(&std::format!(
+                    "  mem {k:x}: {v:#x} -> {:#x}\n",
+                    other.mem.get(k).copied().unwrap_or(0)
+                ));
                 n += 1;
             }
         }
         for (k, v) in &self.link {
             if other.link.get(k).copied().unwrap_or(0) != *v && n < 8 {
-                out.push_str(&std::format!("  link {k:x?}: {v:#x} -> {:#x}\n", other.link.get(k).copied().unwrap_or(0)));
+                out.push_str(&std::format!(
+                    "  link {k:x?}: {v:#x} -> {:#x}\n",
+                    other.link.get(k).copied().unwrap_or(0)
+                ));
                 n += 1;
             }
         }
         for (i, b) in self.dsp.iter().enumerate() {
             if *b != 0 && other.dsp[i] != *b && n < 8 {
-                out.push_str(&std::format!("  dsp state byte {i}: {b:#x} -> {:#x}\n", other.dsp[i]));
+                out.push_str(&std::format!(
+                    "  dsp state byte {i}: {b:#x} -> {:#x}\n",
+                    other.dsp[i]
+                ));
                 n += 1;
             }
         }
@@ -140,7 +160,11 @@ impl Snapshot {
             out.push_str("  settings differ\n");
         }
         if self.state != other.state {
-            out.push_str(&std::format!("  state {:x?} -> {:x?}\n", self.state, other.state));
+            out.push_str(&std::format!(
+                "  state {:x?} -> {:x?}\n",
+                self.state,
+                other.state
+            ));
         }
         out
     }
@@ -156,7 +180,10 @@ impl Snapshot {
         ) {
             let mut n = 0;
             for k in a.keys().chain(b.keys()) {
-                let (x, y) = (a.get(k).copied().unwrap_or(0), b.get(k).copied().unwrap_or(0));
+                let (x, y) = (
+                    a.get(k).copied().unwrap_or(0),
+                    b.get(k).copied().unwrap_or(0),
+                );
                 if x != y && n < 8 {
                     out.push_str(&std::format!("  {what} {k:x?}: {x:#x} -> {y:#x}\n"));
                     n += 1;
@@ -166,7 +193,9 @@ impl Snapshot {
         map(&mut out, "mem", &self.mem, &other.mem);
         map(&mut out, "link", &self.link, &other.link);
         if self.dsp != other.dsp {
-            let at = (0..self.dsp.len()).find(|i| self.dsp[*i] != other.dsp[*i]).unwrap_or(0);
+            let at = (0..self.dsp.len())
+                .find(|i| self.dsp[*i] != other.dsp[*i])
+                .unwrap_or(0);
             out.push_str(&std::format!("  dsp state differs from byte {at}\n"));
         }
         if self.settings != other.settings {
@@ -177,10 +206,18 @@ impl Snapshot {
             ));
         }
         if self.caps != other.caps {
-            out.push_str(&std::format!("  caps {:?} -> {:?}\n", self.caps, other.caps));
+            out.push_str(&std::format!(
+                "  caps {:?} -> {:?}\n",
+                self.caps,
+                other.caps
+            ));
         }
         if self.state != other.state {
-            out.push_str(&std::format!("  state {:x?} -> {:x?}\n", self.state, other.state));
+            out.push_str(&std::format!(
+                "  state {:x?} -> {:x?}\n",
+                self.state,
+                other.state
+            ));
         }
         out
     }
@@ -212,6 +249,15 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         for owner in 1..=MAX_MODULES as u8 {
             unsafe { S::remove(&l.core, owner) };
         }
+        // the boot: the services settle once over the keys of the selection, before the first module loads
+        let mut sel = SettleCtx::new();
+        for (i, m) in [&f.a, &f.b, &f.bad].iter().enumerate() {
+            let k = (m.keys)();
+            sel.count = i + 1;
+            sel.nkeys[i] = k.nm.min(8) as u8;
+            sel.keys[i][..k.nm.min(8)].copy_from_slice(&k.mk[..k.nm.min(8)]);
+        }
+        unsafe { S::settle(&l.core, &sel) };
         l
     }
 
@@ -241,7 +287,13 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             }
         }
         Snapshot {
-            mem: core.mem.borrow().iter().filter(|(_, v)| **v != 0).map(|(k, v)| (*k, *v)).collect(),
+            mem: core
+                .mem
+                .borrow()
+                .iter()
+                .filter(|(_, v)| **v != 0)
+                .map(|(k, v)| (*k, *v))
+                .collect(),
             dsp,
             link,
             settings,
@@ -257,16 +309,30 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         d
     }
 
-    fn job(&self, m: &Module) -> (Job, Vec<u8>, Vec<u8>) {
+    fn job(&self, m: &Module) -> (Job, Vec<u8>, Vec<u8>, [u8; 32]) {
         let mut fxs = std::vec![0u8; FX_REC as usize * m.dsp.fxs as usize];
         let mut voices = std::vec![0u8; VOICE_V3 as usize * m.dsp.voices as usize];
+        let keys = (m.keys)();
+        for i in 0..m.dsp.voices as usize {
+            let e = VOICE_V3 as usize * i;
+            let key = keys.mk.get(i).copied().unwrap_or(0);
+            voices[e + VOICE_TYPE as usize..][..4].copy_from_slice(&key.to_be_bytes());
+            voices[e + VOICE_ENTRY as usize..][..4].copy_from_slice(&0x40u32.to_be_bytes());
+        }
         let mut j = Job::empty();
         j.fxs = fxs.as_mut_ptr();
         j.nfx = m.dsp.fxs;
         j.voices = voices.as_mut_ptr();
         j.nvoice = m.dsp.voices;
         j.vstride = VOICE_V3;
-        (j, fxs, voices)
+        // the track-table record of a DSP section (little-endian words): kind 2, the local id, the offsets of its records and control sets
+        let mut bank = [0u8; 32];
+        if let Some(local) = m.dsp.bank {
+            for (i, w) in [2u32, local, 0x100, 0x200].iter().enumerate() {
+                bank[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
+            }
+        }
+        (j, fxs, voices, bank)
     }
 
     /// The services' part of one module's load, up to the walker's apply; returns the section the walker checked, or the refusal.
@@ -290,7 +356,11 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             return Err(init.err);
         }
         let mut sink = RecordSink::measure();
-        let r = S::module_commit(core, rec, &sink_ctx(commit_phase::PREPARE, &mut sink, &keys));
+        let r = S::module_commit(
+            core,
+            rec,
+            &sink_ctx(commit_phase::PREPARE, &mut sink, &keys),
+        );
         if r != OK {
             return Err(r);
         }
@@ -389,10 +459,21 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
     /// `load`, giving the section the walker checked.
     pub fn load_staged(&self, rec: usize, m: &Module) -> Result<Vec<u8>, i32> {
         let core = &self.core;
+        core.boot_index.set(m.sel);
+        let r = self.load_inner(rec, m);
+        core.boot_index.set(u32::MAX);
+        r
+    }
+
+    fn load_inner(&self, rec: usize, m: &Module) -> Result<Vec<u8>, i32> {
+        let core = &self.core;
         let owner = rec as u8 + 1;
         unsafe {
-            let (mut job, _fxs, _voices) = self.job(m);
-            let dsp = m.dsp.fxs + m.dsp.voices > 0;
+            let (mut job, _fxs, _voices, bank) = self.job(m);
+            if m.dsp.bank.is_some() {
+                job.bank = bank.as_ptr();
+            }
+            let dsp = m.dsp.any();
             if dsp {
                 let r = S::dsp_admit(core, &job);
                 if r != OK {
@@ -490,12 +571,7 @@ fn profile(f: &Fixture) -> String {
 
 fn expect(what: &str, f: &Fixture, a: &Snapshot, b: &Snapshot) {
     if a != b {
-        panic!(
-            "{} ({}): {what}\n{}",
-            f.name,
-            profile(f),
-            a.diff(b)
-        );
+        panic!("{} ({}): {what}\n{}", f.name, profile(f), a.diff(b));
     }
 }
 
@@ -531,23 +607,45 @@ fn check_writes_nothing<S: Service<FakeCore>>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     let calls = l.core.calls().len();
     // a module's section, staged and not applied: load it, take its rows down, and check the section again with the rows in
-    let sec = l.load_staged(0, &f.a).unwrap_or_else(|e| panic!("{}: module A is refused with {e}", f.name));
+    let sec = l
+        .load_staged(0, &f.a)
+        .unwrap_or_else(|e| panic!("{}: module A is refused with {e}", f.name));
     let before = l.snapshot();
     let calls_before = l.core.calls().len();
     let _ = l.check_only(&sec);
-    expect("check wrote to the core (module loaded)", f, &before, &l.snapshot());
-    assert_eq!(l.core.calls().len(), calls_before, "{}: check made calls (module loaded)", f.name);
+    expect(
+        "check wrote to the core (module loaded)",
+        f,
+        &before,
+        &l.snapshot(),
+    );
+    assert_eq!(
+        l.core.calls().len(),
+        calls_before,
+        "{}: check made calls (module loaded)",
+        f.name
+    );
     l.unload(0);
     let before = l.snapshot();
     let calls_before = l.core.calls().len();
     let _ = l.check_only(&sec);
-    expect("check wrote to the core (module unloaded)", f, &before, &l.snapshot());
-    assert_eq!(l.core.calls().len(), calls_before, "{}: check made calls (module unloaded)", f.name);
+    expect(
+        "check wrote to the core (module unloaded)",
+        f,
+        &before,
+        &l.snapshot(),
+    );
+    assert_eq!(
+        l.core.calls().len(),
+        calls_before,
+        "{}: check made calls (module unloaded)",
+        f.name
+    );
     let _ = calls;
 }
 
-/// Case 3: the state after `A` is the state after `A`, unload `A`, `A`; the state after `B` is the state after `A`, unload `A`, `B`; the capacity counts and the
-/// service's view return to their start after the unload.
+/// Case 3: the state after `A` is the state after `A`, unload `A`, `A`; what `B` alone writes is the same after `A`, unload `A`, `B` (and the capacity counts and
+/// the service's view are `B`'s); the capacity counts and the service's view return to their start after the unload.
 fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     let start = l.snapshot();
@@ -555,7 +653,12 @@ fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
     let after_a = l.snapshot();
     l.unload(0);
     expect_small("after unload A", f, &start, &l.snapshot());
-    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused after its unload", f.name);
+    assert_eq!(
+        l.load(0, &f.a),
+        OK,
+        "{}: module A is refused after its unload",
+        f.name
+    );
     expect("A, unload A, A differs from A", f, &after_a, &l.snapshot());
     l.unload(0);
 
@@ -565,8 +668,22 @@ fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
     l.unload(0);
     assert_eq!(l.load(0, &f.a), OK);
     l.unload(0);
-    assert_eq!(l.load(0, &f.b), OK, "{}: module B is refused after A", f.name);
-    expect("A, unload A, B differs from B", f, &after_b, &l.snapshot());
+    assert_eq!(
+        l.load(0, &f.b),
+        OK,
+        "{}: module B is refused after A",
+        f.name
+    );
+    // what `A` held and released stays as the service's free values (a machine row is `A`'s by its key, whatever loads next), which `B` alone never wrote: `B`'s own
+    // words, DSP state and ids are what is compared, and the capacity counts
+    let lost = after_b.lost_in(&l.snapshot());
+    assert!(
+        lost.is_empty(),
+        "{} ({}): A, unload A, B differs from B\n{lost}",
+        f.name,
+        profile(f)
+    );
+    expect_small("A, unload A, B", f, &after_b, &l.snapshot());
     l.unload(0);
 }
 
@@ -591,20 +708,45 @@ fn another_module_is_untouched<S: Service<FakeCore>>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     assert_eq!(l.load(1, &f.b), OK, "{}: module B is refused", f.name);
     let b_alone = l.snapshot();
-    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused beside B", f.name);
+    assert_eq!(
+        l.load(0, &f.a),
+        OK,
+        "{}: module A is refused beside B",
+        f.name
+    );
     l.unload(0);
     let lost = b_alone.lost_in(&l.snapshot());
-    assert!(lost.is_empty(), "{} ({}): A's unload changed what B holds\n{lost}", f.name, profile(f));
+    assert!(
+        lost.is_empty(),
+        "{} ({}): A's unload changed what B holds\n{lost}",
+        f.name,
+        profile(f)
+    );
     let once = l.snapshot();
-    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused beside B again", f.name);
+    assert_eq!(
+        l.load(0, &f.a),
+        OK,
+        "{}: module A is refused beside B again",
+        f.name
+    );
     l.unload(0);
-    expect("a second cycle of A beside B differs from the first", f, &once, &l.snapshot());
+    expect(
+        "a second cycle of A beside B differs from the first",
+        f,
+        &once,
+        &l.snapshot(),
+    );
     l.unload(1);
 
     let l = Lifecycle::<S>::new(f);
     let start = l.snapshot();
     assert_eq!(l.load(0, &f.a), OK);
-    assert_eq!(l.load(1, &f.b), OK, "{}: module B is refused beside A", f.name);
+    assert_eq!(
+        l.load(1, &f.b),
+        OK,
+        "{}: module B is refused beside A",
+        f.name
+    );
     l.unload(0);
     l.unload(1);
     expect_small("A, B, unload A, unload B", f, &start, &l.snapshot());
@@ -618,7 +760,11 @@ fn a_refused_commit_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
     l.unload(0);
     let before = l.snapshot();
     let r = l.load(0, &f.bad);
-    assert_ne!(r, OK, "{}: the module that must be refused is accepted", f.name);
+    assert_ne!(
+        r, OK,
+        "{}: the module that must be refused is accepted",
+        f.name
+    );
     expect("a refused commit left something", f, &before, &l.snapshot());
     // with a module loaded the refusal of another leaves that module alone
     assert_eq!(l.load(1, &f.b), OK);
@@ -626,7 +772,12 @@ fn a_refused_commit_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
     l.unload(0);
     let with_b = l.snapshot();
     assert_ne!(l.load(0, &f.bad), OK);
-    expect("a refused commit changed a loaded module's state", f, &with_b, &l.snapshot());
+    expect(
+        "a refused commit changed a loaded module's state",
+        f,
+        &with_b,
+        &l.snapshot(),
+    );
     l.unload(1);
 }
 
@@ -637,8 +788,18 @@ fn reload_ten_times<S: Service<FakeCore>>(f: &Fixture) {
     let first = l.snapshot();
     for i in 0..10 {
         l.unload(0);
-        assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused at reload {i}", f.name);
-        expect(&std::format!("reload {i} of A drifted"), f, &first, &l.snapshot());
+        assert_eq!(
+            l.load(0, &f.a),
+            OK,
+            "{}: module A is refused at reload {i}",
+            f.name
+        );
+        expect(
+            &std::format!("reload {i} of A drifted"),
+            f,
+            &first,
+            &l.snapshot(),
+        );
     }
     l.unload(0);
     assert_eq!(l.load(0, &f.b), OK);
@@ -647,8 +808,18 @@ fn reload_ten_times<S: Service<FakeCore>>(f: &Fixture) {
         l.unload(0);
         assert_eq!(l.load(0, &f.a), OK);
         l.unload(0);
-        assert_eq!(l.load(0, &f.b), OK, "{}: module B is refused at round {i}", f.name);
-        expect(&std::format!("round {i} of A and B drifted"), f, &first_b, &l.snapshot());
+        assert_eq!(
+            l.load(0, &f.b),
+            OK,
+            "{}: module B is refused at round {i}",
+            f.name
+        );
+        expect(
+            &std::format!("round {i} of A and B drifted"),
+            f,
+            &first_b,
+            &l.snapshot(),
+        );
     }
     l.unload(0);
 }

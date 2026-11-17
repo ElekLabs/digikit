@@ -121,6 +121,8 @@ pub struct FakeCore {
     pub link: RefCell<&'static mut Link<FakeLink>>,
     pub name: String,
     pub fx_table: Vec<u32>,
+    /// The words of `dyndsp_info` the fake hands out (`CoreApi::dsp_info`); empty: the image has no voice rows.
+    pub dsp_table: Vec<u32>,
     /// The info entries `CoreApi::info` hands out, by name hash: the words of each. Empty: the image has no table.
     pub info_tables: Vec<(u32, Vec<u32>)>,
     pub device: u32,
@@ -160,6 +162,7 @@ impl FakeCore {
             link: RefCell::new(Box::leak(Box::new(link()))),
             name: String::from("fake\0"),
             fx_table: std::vec![0; 8],
+            dsp_table: Vec::new(),
             info_tables: Vec::new(),
             device: 0,
             fw_result: Cell::new(0),
@@ -377,7 +380,11 @@ impl CoreApi for FakeCore {
         unsafe { &mut *self.dsp }
     }
     unsafe fn dsp_info(&self) -> *const u32 {
-        core::ptr::null()
+        if self.dsp_table.is_empty() {
+            core::ptr::null()
+        } else {
+            self.dsp_table.as_ptr()
+        }
     }
     unsafe fn fx_info(&self) -> *const u32 {
         self.fx_table.as_ptr()

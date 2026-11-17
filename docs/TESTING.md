@@ -24,6 +24,7 @@ execution requirements, not levels. A successful boot proves only what the run a
 | Unit (web) | Web app suites in `apps/web/tests`: Vitest `*.test.ts` (`test-host`, no wasm) and the real-wasm suites `*.wasm.test.ts` (`test-wasm`) | `pnpm nx:pilot run @digi/web:test-host`, `@digi/web:test-wasm` |
 | Unit (Python) | RE, firmware and dev tools | pytest on named files under `tests/<owner>/`; `mise run test:pypy` for the PyPy subset |
 | Unit (Rust) | Workspace and standalone dkrt | Explicit Nx project target `rust-tests`; runtime-only: `pnpm nx:pilot run core/runtime:rust-tests` |
+| Contract (Rust, host) | The reload property of each service (`lfo`, `fx`, `machines`, `samples`): one generic suite over `FakeCore`, six cases, both device profiles | `pnpm nx:pilot run dkrt-svc-<service>:rust-tests` (the file `modules/core/services/<service>/tests/contract.rs`) |
 | Assembly (Rust, host) | The seams between the real packed artifacts of the runtime: fixtures, service files, bound files, the runtime object and the info table of the image, through the boot's plan, role checks and installs over `FakePlatform` | `pnpm nx:pilot run core/runtime:test-assembly` (seconds; every `test-device` and `test-conformance` target depends on it) |
 | Component | Module DSP conformance on the SHARC core | `mise run module:check ID` |
 | Device: stock UI | DT2 stock pages and transport goldens (zero DSP) | `mise run test:stock` |
@@ -144,6 +145,16 @@ Wait without polling: run a long command with a long tool timeout (up to 2 hours
 
 `uv run python -m tools.devtools.test_outcomes BEFORE.xml AFTER.xml --renames-from REF` compares
 outcomes and skip reasons test by test after moving tests.
+
+### Service contract suite
+
+`dkrt_test_support::contract::contract::<S>(&Fixture)` (`modules/core/runtime/test-support/src/contract.rs`) proves for a `Service` that a module can be loaded, unloaded and loaded again (docs/plans/extension-model.md 3.5). Each service crate runs it in `tests/contract.rs` for the DT2 and the DN2 profile; it is part of the crate's `rust-tests` (about a second): `pnpm nx:pilot run dkrt-svc-lfo:rust-tests` (and `-fx`, `-machines`, `-samples`).
+
+`Lifecycle` runs a module as the loader does over a `FakeCore`: `settle` of the selection, the DSP reservation (`dsp_admit`, `dsp_claim`), `module_begin`, the module's `init`, the `PREPARE` and `WRITE` passes of `module_commit`, the registry walker's check, `DECLARE`, `apply` and `apply_record`, and the publication of the DSP rows. A refusal at any step gives the service `remove`, `dsp_clear` and `dsp_release`; an unload runs `dsp_clear`, `remove`, `dsp_release`. The cases: (1) `declare` gives the kinds of `[records.kinds]`; (2) `check` writes nothing; (3) the state after `A` is the state after `A`, unload `A`, `A`, and `B`'s own words are the same after `A`, unload `A`, `B`; (4) unloading `A` leaves `B`'s words, DSP state and ids as they were; (5) a refused commit and the loader's `remove` leave the state as it was; (6) ten reloads do not grow a table or move a sticky value. The state is the words of the fake firmware memory, the DSP state, the last word on each link slot, the settings, the `cap` counts and the service's own view (`Fixture::state`).
+
+A service gives the suite a `Fixture`: the profile, `[records.kinds]`, the image tables of the profile, three modules (`a`, `b` with other keys, `bad` that the commit refuses) and its state view. A module is a call list: the same builder calls (`build::*`) as the `module.c` of the shared fixture it is named after (`tests/fixtures/modules`), or `Init::record` for `dk_record_add`; no hand-built record bytes where a builder call exists. The call lists are in the service's `tests/contract.rs`, because they name the service's `build::*` and `dkrt-test-support` sits below the services. The fixtures' sources are inputs of the crate's `rust-tests` (`FIXTURE_SOURCE` in `tools/nx/cargo.mjs`): when a fixture changes, read its call list against it. The samples service has no kind and no builder call; its modules are a track-table record in the DSP section (`Dsp::bank`) and no shared fixture has one.
+
+A service passes by writing its rows through `FwMem` (`core.rd`, `core.wr`, `rd8`, `wr8`, `rd16`, `wr16`, `wr_half`), not at raw firmware addresses, so the fake memory sees them. A failure names the case, the profile and the words that differ.
 
 ### Assembly tests
 
