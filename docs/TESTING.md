@@ -784,7 +784,7 @@ max = 0.5
 
 An effect case has `[case.input]` (`kind` = `sine` with `freq` and `amp`, `table` with a `file` of float32 words (64 per block: left,
 then right), `square-noise`, or a test signal of the conformance cases), `observe = "scratch"` (the effect's own block, the default) or
-`"master"`, `mix` (a float32 word) and steps with `params_f32 = [..]` (the effect's float parameters) and `blocks`.
+`"master"`, `mix` (a float32 word) and steps with `params_f32 = [..]` (the effect's float parameters), `blocks` and `mix` (a float32 word written to the row before the step's first block: a MIX change during the run, which the adapter ramps over the next block).
 
 A machine that plays a sample has `[[case.pool]]` tables (`index`, `frames`, `rate`, `channels`, `token`, `planes` = a file of int16 words, left then right;
 the kit publishes the planes and the record before the first block), `pool_ctl` (the data symbol of the control sets: the count word must be 0 after every

@@ -169,3 +169,25 @@ kind = "scales-input"
 channel = "both"
 blocks = [1, 8]
 gain = 1.328125
+
+[[case]]
+name = "MIX driven from top to 0 during the run bypasses: gain 1.0"
+observe = "master"
+mix = 1065353216
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [42.0]
+blocks = 4
+
+[[case.step]]
+mix = 0
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+blocks = [5, 12]
+gain = 1.0

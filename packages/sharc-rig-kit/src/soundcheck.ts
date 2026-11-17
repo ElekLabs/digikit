@@ -40,7 +40,7 @@ import {
 import { plotPng, writePng, writeWav } from './plot.ts';
 import { REC, RECORDS, f2w, nw } from './context.ts';
 import { PLANE_L, PLANE_R, TOKEN, publish, writePlanes } from './samplepool.ts';
-import { P0, FxRig } from './fx.ts';
+import { MIX, P0, FxRig } from './fx.ts';
 import { MachineRig } from './machine.ts';
 import type { RigOpener } from './ops.ts';
 import { PyRandom } from './prng.ts';
@@ -335,6 +335,8 @@ async function runFx(module: string, c: RigCase, dir: string, o: RunOptions): Pr
     let k = 0;
     for (const [si, step] of steps.entries()) {
       ((step.params_f32 as number[] | undefined) ?? []).forEach((v, j) => rig.setRowWord(0, P0 + j, f2w(v)));
+      // `mix` of a step: a float32 word written to the row before the step's first block (the run-time change of the MIX knob)
+      if (typeof step.mix === 'number') rig.setRowWord(0, MIX, step.mix);
       for (let n = 0; n < (step.blocks ?? 1); n++, k++) {
         const x = inputBlock(input, k, table, rng);
         const last = k === total - 1;
