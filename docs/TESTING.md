@@ -1140,6 +1140,13 @@ repeats the check on a kept file.
 
 ### Core library store
 
+A device with a fresh PGO profile gets a profile-guided library as a store entry of its own key (the profile content is in the key,
+the build is `-Cprofile-use` with `--target`, in the target dir variant `pgo-lib-use`). `native_pgo train` builds the instrumented
+libraries (variant `pgo-lib-instrument`, never stored) and loads them in the training run, so the profile covers the host and the DSP
+hot loop (`packages/emulator/README.md` "Profile-guided libraries"). `verify_build cores --pgo` provides them by hand; `verify_build
+daemons` gives a PGO daemon the library built with its profile and records the plain entry as `DIGI_SHARC_CORE_LIB_<DEV>_PLAIN`
+when it is stored, so the eviction keeps both.
+
 `verify_build cores` keeps the generated SHARC core of each device as a library in
 `<git common dir>/sharc-core-cache/<image>/<key>/` (the library, `key.txt`, `header.json`; the image is the device id). An
 entry is a hit only with all three files. It uses the mechanics of the daemon store (`tools/devtools/store.py`): insert by one

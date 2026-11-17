@@ -77,6 +77,9 @@ class Plan:
     library: Path
     gen: Path
     profdata: Path | None
+    target: Path | None = (
+        None  # the cargo target dir (the audit allows the files under it)
+    )
 
 
 def lib_name() -> str:
@@ -127,28 +130,46 @@ def gen_is(gen: Path, device: str) -> bool:
 
 
 def build_plan(
-    device: str, environ: Mapping[str, str] | None = None, gen: Path | None = None
+    device: str,
+    environ: Mapping[str, str] | None = None,
+    gen: Path | None = None,
+    profdata: Path | None = None,
+    instrument: Path | None = None,
 ) -> Plan:
     """The one description of the build of DEVICE: `key_inputs` hashes it and `build_core` runs it.
 
     The command is the documented one (packages/emulator/README.md "Core libraries"): `cargo build --release --locked -p
     sharc-core-lib` with SHARC_GEN_DIR set, in the target dir of that core (as tools/nx/rust-env.mjs --gen picks it, so the
-    compiled `sharc-gen` of the host builds is reused). The library is always a plain build (no PGO flags; the header
-    leaves the PGO flags out, so a PGO host accepts it). GEN overrides the device's generated core (the launcher knows it)."""
-    from tools.emulator import digi_env, native_target
+    compiled `sharc-gen` of the host builds is reused). A plain build has no PGO flags (the header leaves the PGO flags
+    out, so a PGO host accepts it and the other way round). With PROFDATA the library is built with `-Cprofile-use=PROFDATA`
+    (a store entry: the profile content is part of its key); with INSTRUMENT (a directory for `.profraw` files) it is built
+    with `-Cprofile-generate=INSTRUMENT` for a training run (never stored). Both use `--target <triple>`, so the flags skip
+    build scripts, and a target dir of their own. GEN overrides the device's generated core (the launcher knows it)."""
+    from tools.emulator import digi_env, native_pgo, native_target
 
     environ = os.environ if environ is None else environ
     gen = device_gen(device, environ) if gen is None else gen
-    target = Path(native_target.target_dir(gen))
+    flags = None
+    variant = ""
+    if profdata is not None:
+        flags, variant = native_pgo.profile_use_flags(str(profdata)), "pgo-lib-use"
+    elif instrument is not None:
+        flags, variant = f"-Cprofile-generate={instrument}", "pgo-lib-instrument"
+    target = Path(native_target.target_dir(gen, variant))
     env = {**digi_env.rust_env(environ), "SHARC_GEN_DIR": str(gen)}
+    if flags:
+        env.pop("CARGO_ENCODED_RUSTFLAGS", None)
+        env["RUSTFLAGS"] = flags
     argv = [
         "rustup", "run", digi_env.TOOLCHAIN, "cargo", "build",
         f"--{PROFILE}", "--locked", "-p", CRATE_NAME,
+        *(["--target", digi_env.TRIPLE] if flags else []),
         "--target-dir", str(target),
     ]  # fmt: skip
     if FEATURES:
         argv += ["--features", ",".join(FEATURES)]
-    return Plan(argv, env, target / PROFILE / lib_name(), gen, None)
+    built = target / digi_env.TRIPLE if flags else target
+    return Plan(argv, env, built / PROFILE / lib_name(), gen, profdata, target)
 
 
 def key_inputs(
@@ -179,15 +200,17 @@ def key_inputs(
     return emud_key.EmudInputs(names, {"gen": plan.gen}, plan.profdata, rustc, flags)
 
 
-def current(device: str, gen: Path | None = None) -> tuple[Plan, emud_key.EmudInputs]:
+def current(
+    device: str, gen: Path | None = None, profdata: Path | None = None
+) -> tuple[Plan, emud_key.EmudInputs]:
     from tools.emulator import digi_env
 
-    plan = build_plan(device, gen=gen)
+    plan = build_plan(device, gen=gen, profdata=profdata)
     return plan, key_inputs(plan, digi_env.TRIPLE, emud_key.rustc_version())
 
 
-def core_key(device: str) -> str:
-    return emud_key.key_of(current(device)[1])
+def core_key(device: str, profdata: Path | None = None) -> str:
+    return emud_key.key_of(current(device, profdata=profdata)[1])
 
 
 def build_core(plan: Plan, inputs: emud_key.EmudInputs) -> Path:
@@ -211,7 +234,9 @@ def build_core(plan: Plan, inputs: emud_key.EmudInputs) -> Path:
     depfile = plan.library.with_suffix(".d")
     if not depfile.is_file():
         raise CoreStoreError(f"cargo wrote no {depfile}")
-    missing = emud_key.audit(inputs, depfile.read_text(), plan.library.parent.parent)
+    missing = emud_key.audit(
+        inputs, depfile.read_text(), plan.target or plan.library.parent.parent
+    )
     if missing:
         lines = "".join(f"\n  {p}" for p in missing)
         raise CoreStoreError(
@@ -276,8 +301,9 @@ def ensure_core(
     key = emud_key.key_of(inputs)
     group = root / device
     final = group / key
+    kind = " (profile-guided)" if plan.profdata else ""
     if whole(final) and store.mark_used(final):
-        print(f"{device} core: restored {key[:12]}", flush=True)
+        print(f"{device} core: restored {key[:12]}{kind}", flush=True)
         return final / lib_name()
     if final.exists():  # a partial entry: not a hit
         store.remove(final)
@@ -293,6 +319,7 @@ def ensure_core(
             "device": device,
             "image": gen_image(plan.gen),
             "key": key,
+            "pgo": plan.profdata is not None,
             "build_flags": inputs.flags,
             "header": read,
             **({"header_unavailable": reason} if read is None else {}),
@@ -300,7 +327,7 @@ def ensure_core(
         (tmp / "header.json").write_text(json.dumps(record, indent=1) + "\n")
 
     if store.insert(group, key, "header.json", fill):
-        print(f"{device} core: built {key[:12]}", flush=True)
+        print(f"{device} core: built {key[:12]}{kind}", flush=True)
     else:
         print(
             f"{device} core: restored {key[:12]} (inserted by another process)",
@@ -319,12 +346,14 @@ def library_env(
     devices: Mapping[str, Path | None] | list[str],
     root: Path | None = None,
     environ: Mapping[str, str] | None = None,
+    profiles: Mapping[str, Path] | None = None,
 ) -> dict[str, str]:
     """`DIGI_SHARC_CORE_LIB_<DEV>` for DEVICES (`dn2`, `dt2`) from the store: a miss builds the library. A host holds no
     generated core, so every launcher of a coupled run calls this. DEVICES is a list, or a map from a device to the generated
     core to build from (None: the device's own, see `device_gen`). A variable already set in ENVIRON (default: the process
-    environment) wins and nothing is built for that device. A library that cannot be built raises CoreStoreError with the build
-    command in the message."""
+    environment) wins and nothing is built for that device. PROFILES maps a device to a PGO profile: its library is then the
+    one built with `-Cprofile-use=<profile>` (a store entry of its own key); a device without one gets the plain library.
+    A library that cannot be built raises CoreStoreError with the build command in the message."""
     environ = os.environ if environ is None else environ
     wanted = dict.fromkeys(devices) if isinstance(devices, list) else dict(devices)
     root = store_root() if root is None else root
@@ -333,11 +362,14 @@ def library_env(
         var = CORE_LIB_VAR.format(device.upper())
         if environ.get(var):
             continue
+        profile = (profiles or {}).get(device)
         try:
             library = ensure_core(
                 device,
                 root,
-                resolve=(lambda d=device, g=gen: current(d, g)) if gen else None,
+                resolve=(lambda d=device, g=gen, p=profile: current(d, g, p))
+                if gen or profile
+                else None,
             )
         except (CoreStoreError, OSError, SystemExit) as exc:
             reason = " ".join(str(exc).split()) or type(exc).__name__
@@ -349,10 +381,13 @@ def library_env(
     return env
 
 
-def restored_library(device: str, root: Path | None = None) -> Path | None:
-    """The stored library of DEVICE for the current inputs, or None: restore only, nothing is built."""
+def restored_library(
+    device: str, root: Path | None = None, profdata: Path | None = None
+) -> Path | None:
+    """The stored library of DEVICE for the current inputs (and PROFDATA: the PGO one), or None: restore only, nothing is
+    built."""
     try:
-        key = emud_key.key_of(current(device)[1])
+        key = emud_key.key_of(current(device, profdata=profdata)[1])
     except (CoreStoreError, OSError, SystemExit):
         return None
     entry = (store_root() if root is None else root) / device / key

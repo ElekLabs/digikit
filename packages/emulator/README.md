@@ -132,11 +132,26 @@ The load is refused, with the first differing field named, unless the library's 
 SHA-256 of the `sharc-rt` sources (`sharc-rt/build.rs`), rustc version, target, the code generation flags and the size,
 alignment and selected field offsets of `St`, `Mem`, `Insn`, `V`, `Cfg` and `GenCore` (`sharc-rt/src/header.rs`). The
 flags hash leaves out `-Cprofile-use=`, `-Cprofile-generate=` and `-Cprofile-sample-use=`: PGO changes optimisation, not
-layout or ABI, so a PGO host accepts a plain library and the other way round. The core must belong to the firmware's
+layout or ABI, so a PGO host accepts a plain library and the other way round (see "Profile-guided libraries"). The core must belong to the firmware's
 device (its image name, `dn2-1.12`, `dt2-1.17`, starts with the device id); a core made for another version of the same
 device is accepted, and the engine interprets what its blocks do not cover. Example message after an edit of `sharc-rt` that
 the host does not have: `DIGI_SHARC_CORE_LIB_DT2: /path/dt2.dylib: core library refused: sharc-rt source sha256: library
 ..., host ...`. The loader is `sharc_native::core_lib::load`; the library is never unloaded.
+
+### Profile-guided libraries
+
+The DSP hot loop (the generated blocks and the interpreter) runs in the library, so PGO covers it only when the library
+is profile-guided. `uv run python -m tools.emulator.native_pgo train [--device dn2|dt2|both]` (`mise run perf:pgo`, or
+`perf:pgo:dn2`, `perf:pgo:dt2`, `perf:pgo:both`) builds the host and the library of each device it runs with
+`-Cprofile-generate`, runs the workload with `DIGI_SHARC_CORE_LIB_<DEV>` naming the instrumented libraries (own target dir,
+never the store) and merges the host's and the libraries' `.profraw` files into one profile per training target. A launch
+with a fresh profile uses it for the host (`-Cprofile-use`) and for the library of every device the profile covers (`dn2`:
+the DN2 library, `dt2`: the DT2 one, `both`: both): the library is a store entry whose key holds the profile content, so
+it is built once per profile. The launchers (`native_emu.py`, `verify_build daemons`) pick it when the profile is fresh and
+fall back to the plain library otherwise; `verify_build cores --pgo` builds or restores them by hand; an explicit
+`DIGI_SHARC_CORE_LIB_<DEV>` wins. Because the header leaves the PGO flags out, any host works with any library.
+`verify_build daemons` also writes `DIGI_SHARC_CORE_LIB_<DEV>_PLAIN` (when the plain entry is stored) so that the eviction
+keeps both entries. Compare plain and PGO builds with `sharc_cells.py` / `coupled_ab.py` and `--env B:DIGI_SHARC_CORE_LIB_<DEV>=PATH`.
 
 One process can run both devices: the other device's ready inputs go to `digi-emud` and the app as
 `--also-coupled DSP_IMAGE DSP_STATE CF_SNAPSHOT SYX` (repeatable), and a firmware load for that device then boots coupled

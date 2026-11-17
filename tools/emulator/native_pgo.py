@@ -12,11 +12,19 @@ State lives under ``out/native/pgo/dn2/<host-triple>/`` (ignored by git):
     bench-<time>/          copied binaries, logs, bench.tsv, summary.json
 
 The hosts (app, ``coupled-run``, ``digi-emud``) hold no generated core: the DSP hot loop (the generated blocks and
-interpreter of a device) runs in the core library that the host loads from the store, and the libraries are plain builds.
-So a host profile covers the ColdFire emulation, the SHARC engine glue and the fast tier, not the generated core, and
-every A/B number is plain-vs-plain for the DSP loop until the profile-guided libraries (PR 5b of
-docs/plans/emulator-core-split.md) exist. The generated core stays an input of the profile key (a stale core marks the
-profile stale), but not of any build.
+interpreter of a device) runs in the core library that the host loads from the store. Training covers both: every
+``train`` builds the host AND the core library of each device it runs instrumented (``-Cprofile-generate``, the library
+through ``core_store.build_plan(instrument=...)``, in its own target dir, never a store entry), runs the workload with
+``DIGI_SHARC_CORE_LIB_<DEV>`` naming the instrumented libraries, and merges the ``.profraw`` files of the host and the
+libraries into one profile per training target (the libraries write theirs through the same ``LLVM_PROFILE_FILE``). The
+profile is used twice: ``-Cprofile-use`` for the host (the launcher's ``pgo-use`` build) and for the library of each
+device it covers (``profile_devices``: ``dn2`` the DN2 library, ``dt2`` the DT2 one, ``both`` both). A profile-guided
+library is a store entry whose key holds the profile content (``core_store.build_plan(profdata=...)``;
+``tools/devtools/verify_build.py cores --pgo``); the launcher (``native_emu.core_library_env``) and ``verify_build
+daemons`` give a launch with a fresh profile (status ok or partial) that library and every other launch the plain one. The
+header ignores the PGO flags, so PGO and plain hosts and libraries work together; an explicit
+``DIGI_SHARC_CORE_LIB_<DEV>`` wins. The generated core is an input of the profile key (a stale core marks the profile
+stale) and the library crates are in its package list.
 
 Cargo target dirs come from tools/emulator/native_target.py. Host builds use the no-core dir
 (``out/native/target/nogen``): the benchmark control is the plain release build in the dir itself (shared with the
@@ -62,8 +70,7 @@ desktop build runs an engine of each device (it loads both core libraries, ``DIG
 ``DIGI_SHARC_CORE_LIB_DT2``, from the store) and has its own profile in ``out/native/pgo/both/<triple>/``. The DN2
 core is ``SHARC_GEN_DIR_DN2``, else ``SHARC_GEN_DIR``, else the one registered for the DN2 DSP image; the DT2 core is
 ``SHARC_GEN_DIR_DT2``, else the one registered for the DT2 DSP image; they enter the key. The engine is chosen by
-the firmware's device at run time. The profile covers the host crates only: the libraries are plain builds (the
-profile-guided libraries are a later step).
+the firmware's device at run time. The profile covers the host and both libraries.
 Training runs an instrumented ``coupled-run``, one process per workload item:
 the DN2 ``exactness-100m`` scenario (the ``coupled_ready_exactness`` workload), the DT2
 :data:`DT2_WORKLOAD`, and one runtime replay per device from a fixture directory
@@ -297,6 +304,10 @@ def tree_digest(
 DESKTOP_DIR = str(pathlib.PurePosixPath(MANIFEST_PATH).parent)
 
 
+# Crates of the core libraries (not in the host's build graph): sharc-rt is, the generated core and the library crate are not.
+LIBRARY_CRATES = ("packages/emulator/sharc-gen", "packages/emulator/sharc-core-lib")
+
+
 def is_emulation_package(rel: str) -> bool:
     """True for a crate that shapes hot code; the UI shell under apps/ does not.
 
@@ -338,6 +349,8 @@ def local_package_dirs(features: str = FEATURES) -> list[str]:
             dirs.add(
                 str(pathlib.Path(package["manifest_path"]).parent.relative_to(ROOT))
             )
+    # the core libraries are built apart from the host and trained with it: their crates shape the profile too
+    dirs.update(LIBRARY_CRATES)
     return sorted(d for d in dirs if is_emulation_package(d))
 
 
@@ -674,6 +687,8 @@ class LaunchPlan:
     prefix: list[str]
     cargo_args: list[str]
     env: dict[str, str]
+    profdata: str = ""  # the profile of the plan: the core libraries of its devices are built with it too
+    device: str = "dn2"  # the training target of the profile: dn2, dt2 or both
 
 
 def pgo_state(
@@ -730,7 +745,44 @@ def plan_for(
             str(native_target().target_dir("", pgo_variant(environ, device))),
         ],
         env={"RUSTFLAGS": profile_use_flags(profdata), "RUSTC": toolchain_rustc()},
+        profdata=profdata,
+        device=device,
     )
+
+
+def profile_devices(device: str) -> tuple[str, ...]:
+    """The devices whose core library a profile of training target DEVICE covers: `both` trained both libraries, `dn2` and
+    `dt2` one each (a profile of another device's core would match nothing in it)."""
+    return ("dn2", "dt2") if device == BOTH else (device,)
+
+
+def library_profiles(
+    plan: LaunchPlan | None, environ: dict[str, str] | os._Environ[str] | None = None
+) -> dict[str, pathlib.Path]:
+    """device -> the PGO profile its core library is built with, for a launch with PLAN (None, or a profile that is not
+    fresh: nothing, the plain libraries). One helper for the launcher, `verify_build` and the daemons."""
+    if plan is None or not plan.profdata:
+        return {}
+    return {d: pathlib.Path(plan.profdata) for d in profile_devices(plan.device)}
+
+
+def fresh_profiles(
+    devices: tuple[str, ...] | list[str],
+    environ: dict[str, str] | os._Environ[str] | None = None,
+) -> dict[str, pathlib.Path]:
+    """device -> its fresh profile (status ok or partial): the `both` profile when it is fresh and covers the device, else the
+    device's own. Devices without one are left out (they get the plain library)."""
+    environ = os.environ if environ is None else environ
+    found: dict[str, pathlib.Path] = {}
+    for target in (BOTH, *devices):
+        try:
+            plan, _ = launch_plan(environ, target)
+        except SystemExit:  # `both` needs both generated cores
+            continue
+        for device, path in library_profiles(plan, environ).items():
+            if device in devices:
+                found.setdefault(device, path)
+    return found
 
 
 def train_hint(device: str = "dn2") -> str:
@@ -1112,9 +1164,11 @@ def run_workload(
     """Run the workload under /usr/bin/time and enforce the gates."""
     env_pairs = {
         **run_env(binary.parent),
-        **core_library_env("dn2"),  # the workload is the DN2 one
         **(extra_env or {}),
     }
+    env_pairs.update(
+        core_library_env("dn2", {**os.environ, **env_pairs})
+    )  # the workload is the DN2 one
     env_pairs["SHARC_FAST_FALLBACK_REGIONS"] = fallback_regions(
         {**os.environ, **(extra_env or {})}
     )
@@ -1198,6 +1252,32 @@ def fresh_raw_dir(target: pathlib.Path) -> pathlib.Path:
     return raw
 
 
+def build_instrumented_library(
+    device: str, raw: pathlib.Path, gen: pathlib.Path, log: pathlib.Path
+) -> pathlib.Path:
+    """The core library of DEVICE built with `-Cprofile-generate=RAW` (its own target dir, never a store entry). A training
+    run loads it through `DIGI_SHARC_CORE_LIB_<DEV>`: the profile then holds the counters of the DSP hot loop, which runs in
+    the library, beside those of the host."""
+    from tools.devtools import core_store
+
+    digi_env.check_generated(gen)
+    plan = core_store.build_plan(device, gen=gen, instrument=raw)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with (
+        benchlock("shared", f"pgo instrumented {device} core library"),
+        log.open("w") as handle,
+    ):
+        done = subprocess.run(
+            plan.argv, cwd=ROOT, env=plan.env, stdout=handle, stderr=subprocess.STDOUT
+        )
+    if done.returncode or not plan.library.is_file():
+        tail = "".join(log.read_text().splitlines(keepends=True)[-30:])
+        raise SystemExit(
+            f"instrumented {device} core library failed (see {log}):\n{tail}"
+        )
+    return plan.library
+
+
 def cmd_train(args: argparse.Namespace) -> None:
     gen = generated_dir()
     require_inputs(gen)
@@ -1231,6 +1311,9 @@ def cmd_train(args: argparse.Namespace) -> None:
         state / "instrument-build.log",
         app=True,
     )
+    library = build_instrumented_library(
+        "dn2", raw, gen, state / "instrument-lib-dn2.log"
+    )
     t = phase("instrumented-build", t)
 
     gates = []
@@ -1241,6 +1324,7 @@ def cmd_train(args: argparse.Namespace) -> None:
                 state / f"train-{number}.log",
                 {
                     "LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw"),
+                    "DIGI_SHARC_CORE_LIB_DN2": str(library),
                     "SHARC_FAST_REGIONS": fast,
                     "SHARC_FAST_FALLBACK_REGIONS": fallback_regions(),
                     "SHARC_BLOCKTRANS": blocktrans,
@@ -1289,6 +1373,7 @@ def cmd_train(args: argparse.Namespace) -> None:
         },
         "train_commands": {
             "build_rustflags": f"-Cprofile-generate={raw}",
+            "libraries": ["dn2"],
             "runs": args.runs,
             "merge": merge[:4] + ["<raw>..."],
             "workload": f"{WORKLOAD} --pgo-train",
@@ -1485,12 +1570,15 @@ def dt2_items() -> list[WorkItem]:
     ]
 
 
-def core_library_env(device: str) -> dict[str, str]:
-    """`DIGI_SHARC_CORE_LIB_<DEV>` from the core store for a training process (the binary holds no DSP core)."""
+def core_library_env(
+    device: str, environ: dict[str, str] | os._Environ[str] | None = None
+) -> dict[str, str]:
+    """`DIGI_SHARC_CORE_LIB_<DEV>` from the core store for a process that runs with ENVIRON (the binary holds no DSP core).
+    A training run names the instrumented library in its environment; that wins and nothing is taken from the store."""
     from tools.devtools import core_store
 
     try:
-        return core_store.library_env([device])
+        return core_store.library_env([device], environ=environ)
     except core_store.CoreStoreError as exc:
         raise SystemExit(f"native_pgo: {exc}") from exc
 
@@ -1522,7 +1610,7 @@ def run_items(
         env = {**os.environ, **extra_env}
         fast = digi_env.fast_env(env, syx=item.fast_syx, context="pgo")
         env.update(digi_env.slot_env(item.device, fast) if slots else fast)
-        env.update(core_library_env(item.device))
+        env.update(core_library_env(item.device, env))
         done = subprocess.run(
             argv,
             cwd=ROOT,
@@ -1571,6 +1659,9 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
         gen,
         state / "instrument-build.log",
     )
+    library = build_instrumented_library(
+        "dt2", raw, gen, state / "instrument-lib-dt2.log"
+    )
     print(f"instrumented build {time.monotonic() - started:.1f} s", flush=True)
     seconds = []
     for number in range(1, args.runs + 1):
@@ -1581,7 +1672,10 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
                 run_dt2_workload(
                     binary,
                     outdir,
-                    {"LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw")},
+                    {
+                        "LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw"),
+                        "DIGI_SHARC_CORE_LIB_DT2": str(library),
+                    },
                 )
             )
         print(f"train run {number}: {seconds[-1]:.1f} s", flush=True)
@@ -1847,6 +1941,14 @@ def cmd_train_both(args: argparse.Namespace) -> None:
         gen,
         state / "instrument-build.log",
     )
+    libraries = {
+        "dn2": build_instrumented_library(
+            "dn2", raw, gen, state / "instrument-lib-dn2.log"
+        ),
+        "dt2": build_instrumented_library(
+            "dt2", raw, gen2, state / "instrument-lib-dt2.log"
+        ),
+    }
     print(f"instrumented build {time.monotonic() - started:.1f} s", flush=True)
     seconds = []
     for number in range(1, args.runs + 1):
@@ -1857,7 +1959,13 @@ def cmd_train_both(args: argparse.Namespace) -> None:
                 run_items(
                     binary,
                     outdir,
-                    {"LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw")},
+                    {
+                        "LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw"),
+                        **{
+                            f"DIGI_SHARC_CORE_LIB_{d.upper()}": str(p)
+                            for d, p in libraries.items()
+                        },
+                    },
                     items,
                     slots=True,
                 )

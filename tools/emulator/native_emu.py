@@ -642,18 +642,21 @@ def syx_from_args(args: list[str]) -> pathlib.Path:
     return pathlib.Path(syx_arg) if syx_arg else digi_env.firmware(os.environ)
 
 
-def core_library_env(args: list[str]) -> dict[str, str]:
+def core_library_env(args: list[str], plan: object | None = None) -> dict[str, str]:
     """`DIGI_SHARC_CORE_LIB_<DEV>` of both devices for a coupled launch, from the core library store
     (tools/devtools/core_store.py: a hit takes about 0.2 s, a miss builds the library once), whichever device the firmware
     is and with or without `--also-coupled`, so choosing a firmware of the other device in the app boots it coupled. A
-    profile-guided build uses the same plain libraries (the header leaves the PGO flags out). Nothing for a launch without
+    profile-guided build works with either library (the header leaves the PGO flags out). Nothing for a launch without
     coupled audio. When one device's library cannot be built the launch goes on with the other and one line names the
     missing one and the build command; the launch stops when no library can be provided. An explicit
-    `DIGI_SHARC_CORE_LIB_<DEV>` wins."""
+    `DIGI_SHARC_CORE_LIB_<DEV>` wins. With a PGO PLAN (a fresh profile) the library of each device the profile covers is the
+    one built with that profile (its own store entry); the other device gets the plain library."""
     if not ("--coupled" in args or "--auto-coupled" in args):
         return {}
     from tools.devtools import core_store
+    from tools.emulator import native_pgo
 
+    profiles = native_pgo.library_profiles(plan)  # type: ignore[arg-type]
     own = digi_env.device_for_syx(syx_from_args(args))
     second: dict[str, str] = {}
     if "--also-coupled" in args:
@@ -673,7 +676,7 @@ def core_library_env(args: list[str]) -> dict[str, str]:
             )
             gen = other_core(device, image)
         try:
-            env.update(core_store.library_env({device: gen}))
+            env.update(core_store.library_env({device: gen}, profiles=profiles))
         except core_store.CoreStoreError as exc:
             missing[device] = str(exc)
     if len(missing) == 2:
@@ -777,7 +780,7 @@ def main(args: list[str] | None = None) -> None:
     if build_only:
         print(binary)
         return
-    env.update(core_library_env(args))
+    env.update(core_library_env(args, plan))
     if not daemon:
         env.update(pgo_env())
         # Workbench default from config/emulator.json; an explicit value, including an empty one, still wins.

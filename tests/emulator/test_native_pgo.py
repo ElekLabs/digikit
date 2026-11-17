@@ -2,6 +2,7 @@
 
 import json
 import os
+import pathlib
 
 import pytest
 
@@ -313,3 +314,43 @@ def test_not_current_notice_names_the_command_per_device():
 )
 def test_decide_set_current(set_current, at_main, head, origin, expected):
     assert native_pgo.decide_set_current(set_current, at_main, head, origin) is expected
+
+
+def test_a_profile_covers_the_libraries_of_its_training_target():
+    assert native_pgo.profile_devices("dn2") == ("dn2",)
+    assert native_pgo.profile_devices("dt2") == ("dt2",)
+    assert native_pgo.profile_devices("both") == ("dn2", "dt2")
+    plan = native_pgo.LaunchPlan([], [], {}, profdata="/p.profdata", device="both")
+    assert native_pgo.library_profiles(plan) == {
+        "dn2": pathlib.Path("/p.profdata"),
+        "dt2": pathlib.Path("/p.profdata"),
+    }
+    # no plan, or no profile: the plain libraries
+    assert native_pgo.library_profiles(None) == {}
+    assert native_pgo.library_profiles(native_pgo.LaunchPlan([], [], {})) == {}
+
+
+def test_fresh_profiles_prefer_the_both_profile_and_fall_back_to_the_device(
+    monkeypatch,
+):
+    def launch_plan(environ, target):
+        profiles = {"dn2": "/dn2.p", "both": None, "dt2": "/dt2.p"}
+        path = profiles[target]
+        return (native_pgo.LaunchPlan([], [], {}, path, target) if path else None), ""
+
+    monkeypatch.setattr(native_pgo, "launch_plan", launch_plan)
+    assert native_pgo.fresh_profiles(["dn2", "dt2"], {}) == {
+        "dn2": pathlib.Path("/dn2.p"),
+        "dt2": pathlib.Path("/dt2.p"),
+    }
+    monkeypatch.setattr(
+        native_pgo,
+        "launch_plan",
+        lambda environ, target: (
+            native_pgo.LaunchPlan([], [], {}, "/both.p", target)
+            if target == "both"
+            else None,
+            "",
+        ),
+    )
+    assert native_pgo.fresh_profiles(["dn2"], {}) == {"dn2": pathlib.Path("/both.p")}

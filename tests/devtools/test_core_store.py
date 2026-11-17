@@ -278,10 +278,13 @@ def test_a_daemon_without_its_core_library_is_an_error_with_the_build_command(
 
     monkeypatch.setenv("DIGI_SHARC_CORE_STORE", str(tmp_path / "store"))
 
-    def refuse(_device: str, _root: Path) -> Path:
+    def refuse(_device: str, _root: Path, **_kw: object) -> Path:
         raise SystemExit("generated core is stale")
 
     monkeypatch.setattr(verify_build.core_store, "ensure_core", refuse)
+    monkeypatch.setattr(
+        verify_build, "daemon_pgo", lambda _device: (None, "off", "", False)
+    )
     with pytest.raises(pk_harness.HarnessError) as error:
         verify_build.core_env(["dt2"])
     message = str(error.value)
@@ -324,3 +327,74 @@ def test_library_env_names_the_build_command_when_a_library_cannot_be_built(
         core_store.CoreStoreError, match="verify_build cores --device dn2"
     ):
         core_store.library_env(["dn2"], tmp_path, environ={})
+
+
+def test_a_pgo_library_has_its_own_key_from_the_profile_content(
+    tmp_path: Path,
+) -> None:
+    gen = tmp_path / "gen"
+    gen.mkdir()
+    (gen / "image.rs").write_text('pub const IMAGE: &str = "dn2-1.12";\n')
+    profile = tmp_path / "p.profdata"
+    profile.write_text("profile 1")
+    repo = make_repo(tmp_path)
+
+    def pgo_key() -> str:
+        plan = core_store.build_plan("dn2", gen=gen, profdata=profile)
+        return emud_key.key_of(core_store.key_inputs(plan, "t", "rustc 1", repo))
+
+    plain = core_store.build_plan("dn2", gen=gen)
+    plan = core_store.build_plan("dn2", gen=gen, profdata=profile)
+    # profile-use flags go through --target, so they skip build scripts, into a target dir of their own
+    assert "--target" in plan.argv and "--target" not in plain.argv
+    assert f"-Cprofile-use={profile}" in plan.env["RUSTFLAGS"]
+    assert (
+        plan.target != plain.target and plan.library.parent.parent.parent == plan.target
+    )
+    plain_key = emud_key.key_of(core_store.key_inputs(plain, "t", "rustc 1", repo))
+    first = pgo_key()
+    assert first != plain_key
+    # the key holds the profile's content, not its path
+    moved = tmp_path / "other" / "p.profdata"
+    moved.parent.mkdir()
+    moved.write_text("profile 1")
+    profile_path = profile
+    profile = moved
+    assert pgo_key() == first
+    profile = profile_path
+    profile.write_text("profile 2")
+    assert pgo_key() != first
+
+
+def test_an_instrumented_library_builds_apart_with_profile_generate(
+    tmp_path: Path,
+) -> None:
+    gen = tmp_path / "gen"
+    gen.mkdir()
+    plan = core_store.build_plan("dn2", gen=gen, instrument=tmp_path / "raw")
+    assert plan.env["RUSTFLAGS"] == f"-Cprofile-generate={tmp_path / 'raw'}"
+    assert plan.profdata is None and "--target" in plan.argv
+    assert plan.target != core_store.build_plan("dn2", gen=gen).target
+
+
+def test_library_env_gives_a_device_with_a_profile_its_pgo_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, Path | None] = {}
+
+    def fake(device: str, _root: Path, *, resolve=None, **_kw: object) -> Path:
+        plan, _ = resolve() if resolve else (None, None)
+        seen[device] = plan.profdata if plan else None
+        return tmp_path / device / "k" / core_store.lib_name()
+
+    monkeypatch.setattr(core_store, "ensure_core", fake)
+    monkeypatch.setattr(
+        core_store,
+        "current",
+        lambda d, g=None, p=None: (core_store.Plan([], {}, Path(), Path(), p), None),
+    )
+    profile = tmp_path / "p.profdata"
+    core_store.library_env(
+        ["dn2", "dt2"], tmp_path, environ={}, profiles={"dt2": profile}
+    )
+    assert seen == {"dn2": None, "dt2": profile}

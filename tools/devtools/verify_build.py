@@ -144,14 +144,24 @@ CORE_LIB_VAR = core_store.CORE_LIB_VAR
 
 def core_env(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
     """Provide the core libraries of DEVICES from the store: the variables `DIGI_SHARC_CORE_LIB_<DEV>` (store paths) that
-    make a host load the library, and the store key of each device. A library is a plain build; a profile-guided host accepts
-    it (the header leaves the PGO flags out). A device whose library cannot be provided is an error."""
+    make a host load the library, and the store key of each device. A device whose daemon is profile-guided with a fresh
+    profile gets the library built with that profile (a store entry of its own key; the header leaves the PGO flags out, so
+    either library works with either daemon), else the plain one; `..._PLAIN` then names the plain entry when it is stored,
+    so that the eviction pins both. A device whose library cannot be provided is an error."""
     env: dict[str, str] = {}
     keys: dict[str, str] = {}
     root = core_store.store_root()
     for device in devices:
+        profile = daemon_pgo(device)[0] if device in pk_emud_pgo.FIRMWARE else None
+        profdata = Path(str(profile)) if profile else None
         try:
-            library = core_store.ensure_core(device, root)
+            library = core_store.ensure_core(
+                device,
+                root,
+                resolve=(lambda d=device, p=profdata: core_store.current(d, None, p))
+                if profdata
+                else None,
+            )
         except (core_store.CoreStoreError, OSError, SystemExit) as exc:
             # no static fallback: a host without its core library cannot run the DSP
             reason = " ".join(str(exc).split()) or type(exc).__name__
@@ -161,6 +171,8 @@ def core_env(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
             ) from exc
         env[CORE_LIB_VAR.format(device.upper())] = str(library)
         keys[device] = library.parent.name
+        if profdata and (plain := core_store.restored_library(device, root)):
+            env[CORE_LIB_VAR.format(device.upper()) + "_PLAIN"] = str(plain)
     return env, keys
 
 
@@ -191,14 +203,25 @@ def build_daemons(devices: list[str]) -> tuple[dict[str, str], dict[str, str]]:
     return env, test_keys
 
 
-def build_cores(devices: list[str], env_out: Path | None = None) -> int:
-    """`verify_build cores`: the core libraries of DEVICES from the store (tools/devtools/core_store.py)."""
+def build_cores(
+    devices: list[str], env_out: Path | None = None, pgo: bool = False
+) -> int:
+    """`verify_build cores`: the core libraries of DEVICES from the store (tools/devtools/core_store.py). With PGO the
+    library of a device with a fresh profile (`native_pgo` status ok or partial) is the one built with it."""
     try:
         env: dict[str, str] = {}
+        profiles = pk_emud_pgo.native_pgo.fresh_profiles(devices) if pgo else {}
         for device in devices:
             # standalone: every library is built, whatever the daemon build of the device is
             root = core_store.store_root()
-            library = core_store.ensure_core(device, root)
+            profile = profiles.get(device)
+            library = core_store.ensure_core(
+                device,
+                root,
+                resolve=(lambda d=device, p=profile: core_store.current(d, None, p))
+                if profile
+                else None,
+            )
             env[CORE_LIB_VAR.format(device.upper())] = str(library)
             print(f"{device} core: {library}", flush=True)
     except (core_store.CoreStoreError, OSError, SystemExit) as exc:
@@ -216,6 +239,11 @@ def main(argv: list[str] | None = None) -> int:
         "--device", default="dt2,dn2", help="comma-separated (default: dt2,dn2)"
     )
     ap.add_argument(
+        "--pgo",
+        action="store_true",
+        help="cores: the library of a device with a fresh PGO profile is built with it (store entry of its own key)",
+    )
+    ap.add_argument(
         "--env-out",
         type=Path,
         help="write the pinned DIGI_EMUD_<DEV> and DIGI_SHARC_CORE_LIB_<DEV> variables here (JSON)",
@@ -223,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     devices = [d for d in args.device.split(",") if d]
     if args.what == "cores":
-        return build_cores(devices, args.env_out)
+        return build_cores(devices, args.env_out, args.pgo)
     unknown = sorted(set(devices) - set(pk_emud_pgo.FIRMWARE))
     if unknown:
         ap.error(f"unknown devices: {', '.join(unknown)}")
