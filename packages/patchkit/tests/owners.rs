@@ -3,7 +3,7 @@
 use patchkit::dko::{Dko, DkoReloc, DkoSection, DkoSymbol};
 use patchkit::error::hex;
 use patchkit::objdiff::diff_owned;
-use patchkit::owners::{hashes, Owners};
+use patchkit::owners::{Owners, hashes};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
