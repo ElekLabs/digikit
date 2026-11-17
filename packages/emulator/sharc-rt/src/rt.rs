@@ -1002,6 +1002,8 @@ pub struct St {
     /// on the stack ends at one of them (block code assumes it).
     pub loop_ends: &'static [i64],
     pub loops_ok: bool,
+    /// The generated core the engine runs on (`GenCore::NONE` until the engine sets it).
+    pub core: &'static crate::GenCore,
     /// Set by the Engine around a block call: stores the peripheral model
     /// acts on trap out of the block (TRAP_BLOCK_MODEL).
     pub in_block: bool,
@@ -1131,6 +1133,7 @@ impl St {
             core_mmr_reset: Vec::new(),
             loop_ends: &[],
             loops_ok: true,
+            core: &crate::GenCore::NONE,
             in_block: false,
             mmr_windows: Vec::new(),
             mmr_page: vec![false; 1 << 16],
