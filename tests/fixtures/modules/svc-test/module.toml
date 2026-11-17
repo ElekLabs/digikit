@@ -17,13 +17,6 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The functions the provider exports: each is an [[import]] of its service in sdk/sdk.toml.
-[[export]]
-name = "dk_svctest_ping"
-
-[[export]]
-name = "dk_svctest_hits"
-
 # The hook it takes: the last step of the SETTINGS list rebuild of the firmware (stock on an image without core/digikit-menu, which hooks the same site). The
 # bind step of the user's firmware adds the trampoline; `init` repeats the hook with dk_service_declare_hook.
 [[hook]]

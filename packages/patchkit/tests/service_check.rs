@@ -382,52 +382,96 @@ fn call_with(dir: &Path, extra: &str) {
 }
 
 #[test]
-fn service_exports_and_fills_equal_the_manifest_entries() {
+fn service_fills_equal_the_manifest_entries() {
     let call = |extra: &str| {
         format!(
             "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, setup = hooks::setup, hooks = [], {extra});\n"
         )
     };
-    let (dir, sdk, adapters) = adapters_with("exports-fills", "devices = [\"dn2\"]");
+    let (dir, sdk, adapters) = adapters_with("fills", "devices = [\"dn2\"]");
     let problems = |dir: &Path, sdk: &Path| {
         patchkit::svccheck::check_with_adapters(dir, sdk, &adapters).unwrap()
     };
     fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
     fs::write(
         dir.join("dks/src/lib.rs"),
-        call("fills = [(\"frametype\", hooks::f, dn2)], exports = [(\"dk_a\", fw::dk_a)]"),
+        call("fills = [(\"frametype\", hooks::f, dn2)]"),
     )
     .unwrap();
-    // the call has a fill and an export the manifest has not
+    // the call has a fill the manifest has not
     let found = problems(&dir, &sdk);
     assert!(
         mentions(&found, "service! takes the fill `frametype` on dn2"),
         "{found:?}"
     );
-    assert!(
-        mentions(&found, "service! takes the export `dk_a` on dt2"),
-        "{found:?}"
-    );
-    // the manifest has them (the fill for dn2 only)
+    // the manifest has it (for dn2 only)
     append(
         &dir.join("dks/module.toml"),
-        "\n[[fill]]\nslot = \"frametype\"\nentry = \"f\"\ndevices = [\"dn2\"]\n\n[[export]]\nname = \"dk_a\"\n",
+        "\n[[fill]]\nslot = \"frametype\"\nentry = \"f\"\ndevices = [\"dn2\"]\n",
     );
     assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
-    // the manifest has an export the call has not
+}
+
+#[test]
+fn service_exports_are_the_generated_list_of_the_provided_imports() {
+    let call = |exports: &str| {
+        format!(
+            "#![no_std]\nmod hooks;\nmod gen_exports;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, setup = hooks::setup, hooks = [], fills = []{exports});\n"
+        )
+    };
+    let provided = "\n[[import]]\nname = \"dk_sweep_go\"\nservice = \"sweep\"\nprovided = true\n\n[[import]]\nname = \"dk_other\"\nservice = \"elsewhere\"\nprovided = true\n";
+    // no provided import: no exports, and the generated list is refused
+    let (dir, sdk) = service("exports-none", &[]);
+    fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
+    fs::write(dir.join("dks/src/gen_exports.rs"), "").unwrap();
+    fs::write(dir.join("dks/src/lib.rs"), call("")).unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
     fs::write(
         dir.join("dks/src/lib.rs"),
-        call("fills = [(\"frametype\", hooks::f, dn2)], exports = []"),
+        call(", exports = gen_exports::exports()"),
     )
     .unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "service has no `provided` import"
+    ));
+    // a provided import of the service: the call must take the generated list (an import of another service does not count)
+    append(&sdk, provided);
     let found = problems(&dir, &sdk);
-    assert!(
-        mentions(
-            &found,
-            "[[export]] `dk_a` on dn2 is not in the service! export list"
-        ),
-        "{found:?}"
+    assert_eq!(found, Vec::<String>::new(), "{found:?}");
+    fs::write(dir.join("dks/src/lib.rs"), call("")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "service! needs `exports = gen_exports::exports()`"
+    ));
+    // a literal list is refused, with or without provided imports
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call(", exports = [(\"dk_sweep_go\", fw::dk_sweep_go)]"),
+    )
+    .unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "literal `exports = [...]` list"
+    ));
+    // the generated file must exist
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call(", exports = gen_exports::exports()"),
+    )
+    .unwrap();
+    fs::remove_file(dir.join("dks/src/gen_exports.rs")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "dks/src/gen_exports.rs is missing"
+    ));
+    // [[export]] in the manifest is not read
+    fs::write(dir.join("dks/src/gen_exports.rs"), "").unwrap();
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[export]]\nname = \"dk_sweep_go\"\n",
     );
+    assert!(mentions(&problems(&dir, &sdk), "[[export]] is not read"));
 }
 
 #[test]

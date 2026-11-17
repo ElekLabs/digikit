@@ -964,11 +964,26 @@ def check_service_crates(root: Path) -> list[Violation]:
     return out
 
 
-# What the core does not name any more after RS-C (the machines and fx content): builder calls, their record kinds, the adapters' tables and the registry state.
+def kind_free_builders() -> list[str]:
+    """The builder calls of the services machines and fx: their `provided` imports in sdk/sdk.toml (the core does not name them)."""
+    sdk = tomllib.loads(
+        (Path(__file__).resolve().parents[2] / "sdk/sdk.toml").read_text(
+            encoding="utf-8"
+        )
+    )
+    return [
+        i["name"]
+        for i in sdk["import"]
+        if i.get("provided") and i.get("service") in ("machines", "fx")
+    ]
+
+
+# What the core does not name any more after RS-C (the machines and fx content): builder calls (from sdk/sdk.toml), their record kinds, the adapters' tables and the registry state.
+# The kind names stay literal.
 RT_KIND_FREE = re.compile(
-    r"\b(?:dk_module_ctx_add_machine|dk_module_ctx_add_fx|dk_machine_add_page|dk_fx_add_page|dk_page_add_param|dk_page_add_fx_param|dk_param_range|dk_param_glyph|dk_param_latched"
-    r"|dk_param_on_click|dk_page_canvas|dk_page_bind|dk_page_bind_local|dk_fx_routes|dk_fx_mix"
-    r"|KIND_MACHINE|KIND_PARAM|KIND_PAGE|KIND_ACTION|KIND_NATIVE_PAGE|KIND_NATIVE_PAGE_V2|KIND_EFFECT|KINDS_MACHINES|KINDS_FX"
+    r"\b(?:"
+    + "|".join(kind_free_builders())
+    + r"|KIND_MACHINE|KIND_PARAM|KIND_PAGE|KIND_ACTION|KIND_NATIVE_PAGE|KIND_NATIVE_PAGE_V2|KIND_EFFECT|KINDS_MACHINES|KINDS_FX"
     r"|dynreg_info|machines_info|fxpages_info|mf_native_\w+|RegState|DKRT_REG|DKRT_ASSIGN)\b"
 )
 KIND_FREE_EXEMPT = ("handlers.rs", "gen_services.rs")

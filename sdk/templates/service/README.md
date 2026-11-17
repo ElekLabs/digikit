@@ -34,10 +34,10 @@ Make it a real service:
    `_s = "hook.cf.x.hook.y.stock"` then `jsr _s` (`dk_stock_`, the stock path called from inside the hook; it returns);
    `_r = "hook.cf.x.hook.y.ret"` then `jmp _r` (`dk_ret_`, leave as `rts` does). See docs/PATCHING.md "Firmware references".
    A fill (the pointer slot of a fixed firmware site) is one `[[fill]]` (`slot`, `entry`, optional `devices`) in `dks/module.toml` and one `fills = [("slot", hooks::fill_fn, dn2)]` entry;
-   as for hooks, an entry with `dt2` or `dn2` is for that device. The long forms of `service!` need `setup = f` (the image half), and `fills` and `exports` must match their `[[fill]]` and `[[export]]` entries.
+   as for hooks, an entry with `dt2` or `dn2` is for that device. The long forms of `service!` need `setup = f` (the image half), and `fills` must match the `[[fill]]` entries (`exports` comes from `sdk/sdk.toml`).
    `dks/module.toml` and `dks/src/lib.rs` hold commented examples of each.
    A service that needs an image table (like `machines_info`) requires the adapter that provides it, as `core/services/machines` requires `core/machines`: put the adapter in `requires` of `dks/module.toml`.
-   A service that offers functions to other modules: one `[[export]]` in `dks/module.toml` for each and `exports = [("dk_name", fw::dk_name)]` after `fills =` (`hooks =` and `fills =` come first; pass `fills = []` when there is none). `service!` declares each export in `init`:
-   a header entry `init` does not declare refuses the file with `E_DECL_KIND`.
+   A service that offers functions to other modules: each is an `[[import]]` of the service in `sdk/sdk.toml` with `provided = true` (a function that is not a thin wrapper over the crate's `build::*` names its module in `wrapper = "fw"`). `patchkit gen` writes `dks/src/gen_exports.rs` (the pure wrappers and `exports()`); `lib.rs` declares `#[rustfmt::skip] mod gen_exports;` and passes `exports = gen_exports::exports()` after `fills =` (`hooks =` and `fills =` come first; pass `fills = []` when there is none). `service!` declares each export in `init`:
+   a header entry `init` does not declare refuses the file with `E_DECL_KIND`. `dks/module.toml` has no `[[export]]`: the header lists the provided imports.
 4. `mise run module:check -- service/__NAME__` runs `patchkit service-check` (the layout above, the `service!` hooks against `[[hook]]` per device, assembler only in `dks/src/hooks.rs`, firmware names only under `dks/`,
    the one exported entry, the declarations against `sdk.toml`) and the crate's tests.

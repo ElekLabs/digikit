@@ -144,7 +144,7 @@ fn the_output_name_must_match_the_role() {
 #[test]
 fn a_service_with_an_unknown_service_or_a_foreign_export_is_refused() {
     let d = scratch("bad");
-    let cases: [(&str, &dyn Fn(&str) -> String, &str); 9] = [
+    let cases: [(&str, &dyn Fn(&str) -> String, &str); 8] = [
         (
             "unknown service",
             &|t| t.replace("service = \"svc-test\"", "service = \"no-such\""),
@@ -156,14 +156,9 @@ fn a_service_with_an_unknown_service_or_a_foreign_export_is_refused() {
             "needs `service",
         ),
         (
-            "export that is no import",
-            &|t| t.replace("name = \"dk_svctest_ping\"", "name = \"dk_not_an_import\""),
-            "is not an [[import]] of the service",
-        ),
-        (
-            "export of another service",
-            &|t| t.replace("name = \"dk_svctest_ping\"", "name = \"dk_settings_open\""),
-            "is not an [[import]] of the service",
+            "export in the manifest",
+            &|t| format!("{t}\n[[export]]\nname = \"dk_svctest_ping\"\n"),
+            "[[export]] \"dk_svctest_ping\" is not read",
         ),
         (
             "id that is not the service name",
@@ -195,7 +190,7 @@ fn a_service_with_an_unknown_service_or_a_foreign_export_is_refused() {
             "is not \"cf\" or \"dsp\"",
         ),
         (
-            "service and export without the role",
+            "service without the role",
             &|t| t.replace("role = \"service\"\n", ""),
             "belong to a module with `role = \"service\"`",
         ),
