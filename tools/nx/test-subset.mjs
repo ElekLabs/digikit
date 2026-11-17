@@ -10,7 +10,11 @@ import { mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AREAS, SERVICES } from './acceptance-tags.mjs';
+import { matchesGlob } from 'node:path';
+import { SHARED_PROJECTS } from './device-tests.mjs';
+import { SHARED_INPUT_GLOBS } from './device-test-keys.mjs';
 import { budget, startAtOnce, workCores } from './resources.mjs';
+import { closureFiles, testImportInputs } from './ts-imports.mjs';
 
 // Gate projects whose suites run with every subset: the patchkit smoke matrix and the PCM pins.
 export const FIXED = [
@@ -33,29 +37,65 @@ const isSource = (file, root) =>
   !file.endsWith('/project.json') &&
   !file.slice(root.length + 1).startsWith('tests/');
 
-// Whether a record's subject changed: a changed source file of its project or of a project in `rec.modules`, or a changed
-// test file the record lists. `rootOf`: project or module id -> root.
-export const subjectChanged = (rec, own, changed, rootOf, subjects = []) => {
-  const roots = [own, ...subjects, ...(rec.modules ?? [])].map((id) => rootOf.get(id) ?? id).filter(Boolean);
-  const files = (rec.files ?? []).map((f) => `${own}/${f}`);
-  return changed.some((file) => files.includes(file) || roots.some((root) => isSource(file, root)));
+// The roots of the projects a record's subject is made of: its own project, the projects its test-only project tests, and the
+// modules it loads. A module id that is no project is an error: a silent miss would drop the record from the selection.
+const subjectRoots = (rec, root, subjects, rootOf) =>
+  [root, ...subjects, ...(rec.modules ?? [])].map((id) => {
+    if (id === root) return root;
+    const found = rootOf.get(id);
+    if (found === undefined)
+      throw new Error(`test:subset: ${id} (of a runtimeAcceptance record in ${root}) is no Nx project`);
+    return found;
+  });
+
+// The changed files that are source of a record's subject, or a test file it lists.
+export const subjectFiles = (rec, root, changed, rootOf, subjects = []) => {
+  const roots = subjectRoots(rec, root, subjects, rootOf);
+  const files = (rec.files ?? []).map((f) => `${root}/${f}`);
+  return changed.filter((file) => files.includes(file) || roots.some((r) => isSource(file, r)));
+};
+
+// Why a changed file is a shared input of every device test, or '' when it is not: the source of the projects every device task
+// depends on (patchkit, the daemons, the runtime image), or a file the device-test keys hold for every test.
+export const sharedInput = (file, projects) => {
+  for (const name of SHARED_PROJECTS) {
+    const root = projects.find((p) => p.name === name)?.root;
+    if (root && isSource(file, root)) return `the source of ${name}`;
+  }
+  const glob = SHARED_INPUT_GLOBS.find((g) => matchesGlob(file, g));
+  return glob ? `the shared key input ${glob}` : '';
 };
 
 // `projects`: [{ name, root, subjects, targets: string[], metadata }] (the nodes of the Nx project graph).
-// `changed`: changed files relative to the repository root (optional): records whose subject changed join the tag selection.
-// Returns { tests: [{ project, file, tags, dsp, targets }], unknown } where `targets` are the leaf targets of the file, one per device
-// it runs on: `test-device--<file>--<dev>`, or `test-device--<dev>` for a project with one device test file.
-export const resolveSubset = (tags, projects, changed = []) => {
+// `opts.changed`: changed files relative to the repository root: records whose subject changed, or whose test files import a changed
+// file (`opts.closureOf(projectRoot, file)`: the import closure of a test file, repository-relative), join the tag selection.
+// `opts.sharedOf(file)`: why a file is a shared input (see sharedInput), or ''.
+// Returns { tests: [{ project, file, tags, dsp, targets }], unknown, shared: [{ file, why }] } where `targets` are the leaf targets of
+// the file, one per device it runs on: `test-device--<file>--<dev>`, or `test-device--<dev>` for a project with one device test file.
+// `shared` lists the changed files that no record's subject covers (or always, for the projects of every device task).
+export const resolveSubset = (tags, projects, opts = {}) => {
+  const { changed = [], closureOf, sharedOf } = opts;
   const wanted = new Set(tags);
   const found = new Set();
   const tests = [];
+  const covered = new Set();
   const rootOf = new Map(projects.map((p) => [p.name, p.root]));
-  rootOf.set(undefined, undefined);
-  for (const { name, root, subjects, targets, metadata } of projects) {
+  const tsChanged = changed.filter((f) => f.endsWith('.ts'));
+  for (const { name, root, subjects = [], targets, metadata } of projects) {
     const have = new Set(targets);
     for (const rec of metadata?.runtimeAcceptance ?? []) {
       const own = (rec.tags ?? []).filter((tag) => wanted.has(tag));
-      const byPath = changed.length > 0 && root !== undefined && subjectChanged(rec, root, changed, rootOf, subjects);
+      let byPath = false;
+      if (changed.length && root !== undefined) {
+        const hits = subjectFiles(rec, root, changed, rootOf, subjects);
+        hits.forEach((f) => covered.add(f));
+        byPath = hits.length > 0;
+        if (!byPath && closureOf && tsChanged.length)
+          byPath = (rec.files ?? []).some((f) => {
+            const closure = new Set(closureOf(root, f));
+            return tsChanged.some((c) => closure.has(c));
+          });
+      }
       if (!own.length && !byPath) continue;
       own.forEach((tag) => found.add(tag));
       for (const file of rec.files ?? []) {
@@ -67,7 +107,12 @@ export const resolveSubset = (tags, projects, changed = []) => {
       }
     }
   }
-  return { tests, unknown: tags.filter((tag) => !found.has(tag)) };
+  const shared = [];
+  for (const file of changed) {
+    const why = sharedOf?.(file) ?? '';
+    if (why && (why.startsWith('the source of') || !covered.has(file))) shared.push({ file, why });
+  }
+  return { tests, unknown: tags.filter((tag) => !found.has(tag)), shared };
 };
 
 // The tasks of a selection by DSP mode, and how many start at once with the machine's core budget and slots.
@@ -95,6 +140,31 @@ export const selectionPairs = (tests, projects) => {
   const known = new Set(projects.map((p) => p.name));
   const fixed = FIXED.filter((f) => known.has(f.project));
   return [...tests.flatMap((t) => t.targets.map((target) => ({ project: t.project, target }))), ...fixed];
+};
+
+// Files changed since `base`: the tracked diff (committed and working tree) and the untracked files. `git`: runs git in `root`.
+export const changedFiles = (root, base, git = defaultGit) => [
+  ...new Set([...git(root, 'diff', '--name-only', base), ...git(root, 'ls-files', '--others', '--exclude-standard')]),
+];
+const defaultGit = (root, ...args) => {
+  const done = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  if (done.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${done.stderr}`);
+  return done.stdout.split('\n').filter(Boolean);
+};
+
+// Why a `--base` selection must not run, or '': without tags, a selection must not be empty or silently partial.
+export const baseProblem = ({ tags, base, changed, tests, shared }) => {
+  if (!base || tags.length) return '';
+  const advice = 'Name tags (test:subset -- S:... C:...) or run the full set.';
+  if (!changed.length) return `no file changed since ${base}. ${advice}`;
+  if (shared.length) {
+    const [first] = shared;
+    const more = shared.length > 1 ? ` (and ${shared.length - 1} more shared files)` : '';
+    return `${first.file} is ${first.why}${more}: it reaches every device test. ${advice}`;
+  }
+  if (!tests.length)
+    return `${changed.length} changed files since ${base} select no device test record (first: ${changed.slice(0, 3).join(', ')}). ${advice}`;
+  return '';
 };
 
 const vocabulary = () => [
@@ -132,13 +202,24 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   }
   const root = resolve(fileURLToPath(import.meta.url), '../../..');
   const projects = loadProjects(root);
-  let changed = [];
+  let opts = {};
   if (base) {
-    const diff = spawnSync('git', ['diff', '--name-only', base], { cwd: root, encoding: 'utf8' });
-    if (diff.status !== 0) throw new Error(`git diff ${base} failed:\n${diff.stderr}`);
-    changed = diff.stdout.split('\n').filter(Boolean);
+    const changed = changedFiles(root, base);
+    const importInputs = testImportInputs(root);
+    opts = {
+      changed,
+      closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
+      sharedOf: (file) => sharedInput(file, projects),
+    };
   }
-  const { tests, unknown } = resolveSubset(tags, projects, changed);
+  const { tests, unknown, shared } = resolveSubset(tags, projects, opts);
+  const problem = baseProblem({ tags, base, changed: opts.changed ?? [], tests, shared });
+  if (problem) {
+    console.error(`test:subset: ${problem}`);
+    process.exit(2);
+  }
+  if (shared.length && tags.length)
+    console.log(`test:subset: note: ${shared.length} changed shared files; the tags decide`);
   if (unknown.length) {
     console.error(
       `test:subset: no device test has the tags ${unknown.join(' ')}\nvocabulary: ${vocabulary().join(' ')}`,

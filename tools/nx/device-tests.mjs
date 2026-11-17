@@ -23,6 +23,10 @@ export const DEVICE_IMAGES = 'patchkit:device-images';
 export const PACK_VERDICTS = 'patchkit:pack-verdicts';
 // The host assembly tests of the runtime (modules/core/runtime): the seams between the real packed outputs. No device task starts while they fail.
 export const TEST_ASSEMBLY = 'core/runtime:test-assembly';
+// Tasks every device task depends on: the patchkit binary, the daemons and the runtime assembly tests. Their projects are the
+// shared inputs of every device test (`test:subset --base` cannot select by path for them).
+export const SHARED_TASKS = ['patchkit:cli', 'digi-control:daemons', TEST_ASSEMBLY];
+export const SHARED_PROJECTS = SHARED_TASKS.map((task) => task.split(':')[0]);
 // Device and conformance tasks run behind this wrapper: it takes one machine-wide emulator slot. It only schedules and is
 // no input: it cannot change a result, and Nx does not cache failures.
 export const EMU_SLOT = 'node tools/devtools/emu-slot.mjs --';
@@ -38,15 +42,7 @@ export const deviceTarget = (
   uploadable = false,
   opts = {},
 ) => {
-  const dependsOn = [
-    'patchkit:cli',
-    'digi-control:daemons',
-    IMAGE_BUILD,
-    DEVICE_BYTES,
-    DEVICE_IMAGES,
-    PACK_VERDICTS,
-    TEST_ASSEMBLY,
-  ];
+  const dependsOn = [...SHARED_TASKS, IMAGE_BUILD, DEVICE_BYTES, DEVICE_IMAGES, PACK_VERDICTS];
   if (uploadable) dependsOn.push('pack');
   for (const rec of recs) {
     for (const id of rec.modules ?? []) {
