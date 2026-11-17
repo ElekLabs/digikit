@@ -778,7 +778,8 @@ def check_runtime_platform(root: Path) -> list[Violation]:
 
 
 SERVICE_CRATES = "modules/core/services"
-SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds"}
+# dkrt-svc-params is the parameter row writers that machines and fx share (no service names the other)
+SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds", "dkrt-svc-params"}
 SERVICE_DEV_DEPS = SERVICE_DEPS | {"dkrt-test-support"}
 # `dkrt_svc_rt` is the support crate of a service file (modules/core/runtime/svc-rt), not a service
 SERVICE_CRATE_REF = re.compile(r"\bdkrt_svc_(?!rt\b)\w+")
