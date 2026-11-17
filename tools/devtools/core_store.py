@@ -11,9 +11,12 @@ Key and build come from one source: `build_plan` returns the exact argv and envi
 `key_inputs` hashes the parts of that plan that change the library (the argv without the target dir, the rustc
 flag variables after `digi_env.rust_env` and the PGO flags, the cargo profile variables). The key scheme is the
 daemon key's (tools/devtools/emud_key.py `key_of`): a fixed list of source globs (CORE_SOURCE_GLOBS: the
-`sharc-core-lib`, `sharc-gen` and `sharc-rt` crates, Cargo.toml, Cargo.lock, rust-toolchain, .cargo) and the
-recipe scripts (CORE_RECIPE_FILES), every file of the gen dir, the PGO profile content (or `plain`), the pinned
-toolchain and `rustc -vV`. Like the daemon key it is known before the first build, so a lookup needs no build.
+`sharc-core-lib`, `sharc-gen` and `sharc-rt` crates, Cargo.toml, Cargo.lock, rust-toolchain, .cargo), every file of
+the gen dir, the PGO profile content (or `plain`), the pinned toolchain (in the argv) and `rustc -vV`. The tooling scripts
+are not in the key: what they decide (argv, environment, flags, target) is in the plan, so an edit of a script that leaves
+the plan alone keeps every stored library (the DN2 one takes 13 to 20 minutes). The library file and `header.json` (made
+from the library and the gen dir) are all that an entry holds. Like the daemon key it is known before the first build, so a
+lookup needs no build.
 After a build, `build_core` audits cargo's dependency file against the key (`emud_key.audit`): a file the build
 read that the key does not cover fails the build and nothing is stored. Add the path to CORE_SOURCE_GLOBS.
 
@@ -58,14 +61,6 @@ CORE_SOURCE_GLOBS = (
     "packages/emulator/sharc-rt/**",
     "packages/emulator/sharc-gen/**",
     f"{CRATE}/**",
-)
-# The scripts that decide how the build runs.
-CORE_RECIPE_FILES = (
-    "tools/devtools/core_store.py",
-    "tools/devtools/store.py",
-    "tools/emulator/digi_env.py",
-    "tools/emulator/native_pgo.py",
-    "tools/emulator/native_target.py",
 )
 
 
@@ -180,7 +175,7 @@ def key_inputs(
                 value = value.replace(str(plan.profdata), "<profdata>")
             flags[f"env:{name}"] = value
     flags["pgo"] = "profdata" if plan.profdata else "plain"
-    names = emud_key.repo_files(root, (*CORE_SOURCE_GLOBS, *CORE_RECIPE_FILES))
+    names = emud_key.repo_files(root, CORE_SOURCE_GLOBS)
     return emud_key.EmudInputs(names, {"gen": plan.gen}, plan.profdata, rustc, flags)
 
 

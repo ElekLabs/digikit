@@ -22,6 +22,8 @@ def make_repo(tmp_path: Path) -> Path:
         "packages/emulator/sharc-gen/build.rs": "fn main() {}",
         "packages/emulator/sharc-core-lib/src/lib.rs": "fn lib() {}",
         "packages/emulator/other/src/lib.rs": "fn other() {}",
+        "tools/devtools/core_store.py": "recipe 1",
+        "tools/emulator/digi_env.py": "recipe 1",
     }
     for name, text in files.items():
         path = repo / name
@@ -70,6 +72,10 @@ def test_key_follows_every_input(tmp_path: Path) -> None:
     # a crate the library does not link stays out of the key
     other = repo / "packages/emulator/other/src/lib.rs"
     other.write_text("changed")
+    assert key(repo, plan) == base
+    # the tooling that builds it is not an input: what it decides (argv, environment, flags) is in the plan
+    for script in ("tools/devtools/core_store.py", "tools/emulator/digi_env.py"):
+        (repo / script).write_text("recipe 2")
     assert key(repo, plan) == base
     assert key(repo, plan, "rustc 2") != base
     (plan.gen / "new.rs").write_text("")
