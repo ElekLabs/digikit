@@ -45,8 +45,10 @@ static mut CORE_STARTED: bool = false;
 /// control sets, and whether its DSP image is in (table writes may start).
 static mut OWNER: [usize; CLIENTS] = [usize::MAX; CLIENTS];
 static mut LOCAL: [u32; CLIENTS] = [0; CLIENTS];
-static mut RECORDS: [u32; CLIENTS] = [0; CLIENTS];
-static mut CONTROL: [u32; CLIENTS] = [0; CLIENTS];
+#[no_mangle]
+pub static mut DKRT_SMP_RECORDS: [u32; CLIENTS] = [0; CLIENTS];
+#[no_mangle]
+pub static mut DKRT_SMP_CONTROL: [u32; CLIENTS] = [0; CLIENTS];
 static mut LIVE: [bool; CLIENTS] = [false; CLIENTS];
 /// The client slot of a module that is taken down (`usize::MAX`: none): nothing reads its tracks any more, so close drains at once and
 /// writes are dropped. Other clients are stepped normally meanwhile.
@@ -102,8 +104,8 @@ fn complete(op: &Op) -> bool {
 /// The next write of an op: (destination L2 byte address, the words, their count). None when the op is complete.
 /// If chains, not a `match`: dense arms become a PC-relative jump table, which is not ColdFire code.
 unsafe fn next_write(c: usize, k: usize, op: &Op) -> Option<(u32, [u32; 7], usize)> {
-    let rec = RECORDS[c] + 32 * k as u32;
-    let ctl = CONTROL[c] + 16 * k as u32;
+    let rec = DKRT_SMP_RECORDS[c] + 32 * k as u32;
+    let ctl = DKRT_SMP_CONTROL[c] + 16 * k as u32;
     let mut w = [0u32; 7];
     if op.kind == OP_CLOSE {
         if op.step == 0 {
@@ -424,8 +426,8 @@ pub unsafe fn reserve(rec: usize, local_id: u32, records: u32, control: u32) -> 
         if OWNER[i] == usize::MAX && core_().open(i) {
             OWNER[i] = rec;
             LOCAL[i] = local_id;
-            RECORDS[i] = records;
-            CONTROL[i] = control;
+            DKRT_SMP_RECORDS[i] = records;
+            DKRT_SMP_CONTROL[i] = control;
             LIVE[i] = false;
             (*addr_of_mut!(OPS))[i] = [OP0; TRACKS];
             return true;
@@ -731,8 +733,8 @@ mod tests {
         FLIGHT = NO_FLIGHT;
         LIVE = [false; CLIENTS];
         LIVE[0] = true;
-        RECORDS[0] = 0x1000;
-        CONTROL[0] = 0x2000;
+        DKRT_SMP_RECORDS[0] = 0x1000;
+        DKRT_SMP_CONTROL[0] = 0x2000;
         (*addr_of_mut!(OPS))[0][1] = Op {
             kind,
             step: 0,

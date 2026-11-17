@@ -12,7 +12,7 @@ import { dn2Tests, type Dn2 } from './shot-dn2-support.ts';
 //
 // DN2 OS 1.12, patch set `sample-tracks` (it has core/fxpages, core/dynfx, core/sample-pool and core/dsp-link). Written for the batched gate; not run yet.
 //
-// Read back: the effect row's p0 word and the track record through `dsp.peek` (the plan symbols `fx.rows` and `RECORDS`), and the page writer's counters in
+// Read back: the effect row's p0 word and the track record through `dsp.peek` (the plan symbols `fx.rows` and the samples service `DKRT_SMP_RECORDS`), and the page writer's counters in
 // `DKRT_FXP` (word 4 `sent`: values the link confirmed; word 5 `errors`: live writes that failed).
 
 const FXP_SENT = 16;
