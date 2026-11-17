@@ -283,7 +283,7 @@ def state_table(
         f"== {state['name']} ({state['device']}, {scenario}), lengths {lengths} s, "
         "steady state per audio s ==",
         head
-        + "   B/A insns   cf G   B/A cf   rtf per length   parity (pcm/dsp/cf per length)",
+        + "   B/A insns    cf G   B/A cf    rtf per length   parity (pcm/dsp/cf per length)",
     ]
     data = {}
     base = cf_base = None
