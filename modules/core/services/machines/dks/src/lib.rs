@@ -9,6 +9,7 @@ use dkrt_sdk::records::KINDS_MACHINES;
 use dkrt_svc_machines::records::Machines;
 
 mod fw;
+mod guard;
 mod hooks;
 mod image;
 

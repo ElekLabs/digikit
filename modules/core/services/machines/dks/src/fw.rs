@@ -1,7 +1,7 @@
 //! The firmware calls of the machines service file: `DkFw`, the firmware's parameter page as the service reaches it (`dkrt_abi::fw::Fw`; the page's vtable slots as
 //! `RuntimeFw` did, the same offsets, and the three firmware functions through the `dkfw` crate, whose names `patchkit pack` turns into `dk_fw_` imports that `patchkit bind`
-//! resolves), and the entries that use it: the page's key and turn (called by the hooks), and the exports `dk_param_get` and `dk_param_set`. A host build has no firmware: the calls
-//! are no-ops with the neutral answer.
+//! resolves), and the entries that use it: the page's key and turn (called by the hooks), and the exports `dk_param_get` and `dk_param_set`. A host build has no firmware, and a firmware function that is not bound (address 0, `guard.rs`):
+//! the calls are no-ops with the neutral answer.
 use core::ptr::read_volatile;
 use dkrt_abi::fw::{Fw, MODE_KEYS};
 use dkrt_svc_machines::slots;
@@ -12,14 +12,18 @@ pub struct DkFw;
 /// The three firmware functions of the click flow (`cf.input.fn.key_down`, `cf.param.fn.set_value`, `cf.page.fn.view_track`).
 #[cfg(target_arch = "m68k")]
 mod native {
+    use crate::guard::call_if_bound;
+
     pub unsafe fn key_down(key: u32) -> u32 {
-        dkfw::input::key_down(key)
+        call_if_bound(dkfw::input::key_down as usize, 0, || dkfw::input::key_down(key))
     }
     pub unsafe fn set_value(obj: *const u8, code: u32, raw: i32, track: u32) {
-        dkfw::param::set_value(obj, code, raw, track, 1, 1, 1);
+        call_if_bound(dkfw::param::set_value as usize, (), || {
+            dkfw::param::set_value(obj, code, raw, track, 1, 1, 1);
+        })
     }
     pub unsafe fn view_track(track_ref: *const u8) -> u32 {
-        dkfw::page::view_track(track_ref)
+        call_if_bound(dkfw::page::view_track as usize, 0, || dkfw::page::view_track(track_ref))
     }
 }
 #[cfg(not(target_arch = "m68k"))]
