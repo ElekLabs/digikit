@@ -1570,6 +1570,56 @@ fn a_stub_loads_its_slot_and_falls_through_to_the_stock_path() {
     assert_eq!(j["hooks"][0]["to"], tail);
 }
 
+/// A module with one `[[slot]]` of `space = "dsp"` and no ColdFire stub.
+fn dsp_slot_body(name: &str, extra: &str) -> String {
+    format!(
+        "[[object]]\npath = \"x.json\"\nplace = \"cf.expansion\"\n[[slot]]\nname = \"{name}\"\nspace = \"dsp\"\ndevices = [\"dn2\"]\n{extra}\n"
+    )
+}
+
+#[test]
+fn a_dsp_slot_is_an_info_entry_with_its_index_and_has_no_word() {
+    need_image!(DN2);
+    let lib = library(vec![module(
+        "t/s",
+        "",
+        &dsp_slot_body("voice_unpack", ""),
+        Some(cf_obj()),
+    )]);
+    let out = run_on(DN2, &registry(), &lib, &["t/s"]).unwrap();
+    // the slot reserves no word in the image: its entry carries the index in core/dsp-link's slot block, in the order of `[dsp.slots]`
+    assert!(
+        !out.plan
+            .symbols
+            .contains_key("t/s@1.0.0:slot.voice_unpack"),
+        "a DSP slot has no address"
+    );
+    let tab = sym(&out, "t/s", "dkrt_info_table");
+    let b = read_cf(&out, tab, 8 + 12);
+    assert_eq!(be32(&b[0..]), 0x444b_4954);
+    assert_eq!(be32(&b[4..]), 2, "the DSP slot and fw_id");
+    assert_eq!(be32(&b[8..]), dkneeds::keys::name_hash("voice_unpack"));
+    assert_eq!(be32(&b[12..]), 1, "voice_unpack is the second entry of [dsp.slots]");
+    assert_eq!(be32(&b[16..]), 2, "the DSP slot kind");
+}
+
+#[test]
+fn a_dsp_slot_must_be_an_entry_of_dsp_slots_and_has_no_place() {
+    // the manifest check refuses both when the module loads
+    expect_err(
+        try_module("t/s", "", &dsp_slot_body("no_such_slot", ""), Some(cf_obj())),
+        "names an entry of `[dsp.slots]`",
+    );
+    let with_place = dsp_slot_body("voice_render", "").replace(
+        "space = \"dsp\"\n",
+        "space = \"dsp\"\nplace = \"cf.expansion\"\n",
+    );
+    expect_err(
+        try_module("t/s", "", &with_place, Some(cf_obj())),
+        "`place` belongs to a ColdFire slot",
+    );
+}
+
 #[test]
 fn an_info_symbol_may_be_a_symbol_plus_an_offset() {
     need_image!(DN2);

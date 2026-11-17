@@ -221,6 +221,7 @@ impl Manifest {
             hooks.push((h.name.clone(), h.entry.clone(), h.devices.clone()));
         }
         let mut fills: Vec<(String, String, Vec<String>)> = vec![];
+        let mut dsp_fills: Vec<crate::dkm::DspFill> = vec![];
         for f in &self.fills {
             if f.slot.is_empty() || f.entry.is_empty() {
                 return Err(err!(
@@ -239,12 +240,35 @@ impl Manifest {
                     ));
                 }
             }
-            fills.push((f.slot.clone(), f.entry.clone(), f.devices.clone()));
+            match f.space.as_deref() {
+                None | Some("cf") => fills.push((f.slot.clone(), f.entry.clone(), f.devices.clone())),
+                Some("dsp") => {
+                    let names = crate::sdkgen::dsp_slot_names();
+                    if !names.contains(&f.slot) {
+                        return Err(err!(
+                            "{id}: [[fill]] {:?} has space \"dsp\", but `[dsp.slots]` of sdk/sdk.toml has no such slot ({})",
+                            f.slot,
+                            names.join(", ")
+                        ));
+                    }
+                    dsp_fills.push(crate::dkm::DspFill {
+                        slot: f.slot.clone(),
+                        entry: f.entry.clone(),
+                        devices: f.devices.clone(),
+                        offset: None,
+                    });
+                }
+                Some(s) => {
+                    return Err(err!(
+                        "{id}: [[fill]] {:?}: space {s:?} is not \"cf\" or \"dsp\""
+                    , f.slot));
+                }
+            }
         }
-        if fills.len() > dkneeds::SLOTS_MAX as usize {
+        if fills.len() + dsp_fills.len() > dkneeds::SLOTS_MAX as usize {
             return Err(err!(
                 "{id}: {} [[fill]] entries, over the {} a service file fills",
-                fills.len(),
+                fills.len() + dsp_fills.len(),
                 dkneeds::SLOTS_MAX
             ));
         }
@@ -253,6 +277,7 @@ impl Manifest {
             exports,
             hooks,
             fills,
+            dsp_fills,
         }))
     }
 }
@@ -274,7 +299,11 @@ pub struct ExportDef {
 #[serde(deny_unknown_fields)]
 pub struct ServiceFill {
     pub slot: String,
+    /// A global function of the ColdFire object, or with `space = "dsp"` a global text symbol of the DSP object.
     pub entry: String,
+    /// `"cf"` (default), or `"dsp"` for a slot declared with `space = "dsp"`: the entry is then a pc in the file's DSP section.
+    #[serde(default)]
+    pub space: Option<String>,
     /// The devices the fill is for (`dt2`, `dn2`); empty: every device. Needed when the slot is limited to some devices (`devices` of its `[[slot]]`).
     #[serde(default)]
     pub devices: Vec<String>,
@@ -734,9 +763,20 @@ pub struct SlotDef {
     pub name: String,
     #[serde(default)]
     pub devices: Vec<String>,
-    /// region of the slot words (default `cf.expansion`)
+    /// region of the slot words (default `cf.expansion`); a CF slot only
     #[serde(default)]
     pub place: Option<String>,
+    /// `"cf"` (default): a pointer word in the module's data that a ColdFire `op = "stub"` loads. `"dsp"`: the slot of a SHARC hook stub: `name` is an entry of `[dsp.slots]` of
+    /// `sdk/sdk.toml` (a word of core/dsp-link's slot block, which the module's DSP stub reads); the module reserves no word, the info table gets the entry with the slot's index.
+    #[serde(default)]
+    pub space: Option<String>,
+}
+
+impl SlotDef {
+    /// The slot is a word of core/dsp-link's slot block (`space = "dsp"`).
+    pub fn is_dsp(&self) -> bool {
+        self.space.as_deref() == Some("dsp")
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

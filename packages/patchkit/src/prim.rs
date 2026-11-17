@@ -197,6 +197,30 @@ pub fn validate_manifest(m: &Manifest) -> Result<()> {
         if !ident_ok(&sl.name) {
             return Err(err!("{id}: slot name {:?} is not [a-z][a-z0-9_]*", sl.name));
         }
+        match sl.space.as_deref() {
+            None | Some("cf") => {}
+            Some("dsp") => {
+                if sl.place.is_some() {
+                    return Err(err!(
+                        "{id}: slot {}: `place` belongs to a ColdFire slot, a DSP slot has no word in the module",
+                        sl.name
+                    ));
+                }
+                if !crate::sdkgen::dsp_slot_names().contains(&sl.name) {
+                    return Err(err!(
+                        "{id}: slot {}: space \"dsp\" names an entry of `[dsp.slots]` in sdk/sdk.toml ({})",
+                        sl.name,
+                        crate::sdkgen::dsp_slot_names().join(", ")
+                    ));
+                }
+            }
+            Some(s) => {
+                return Err(err!(
+                    "{id}: slot {}: space {s:?} is not \"cf\" or \"dsp\"",
+                    sl.name
+                ));
+            }
+        }
         for o in &m.slot[..i] {
             let clash = crate::devdata::all()
                 .iter()
@@ -1185,8 +1209,11 @@ pub fn stub_prefix(scratch: u8, slot_addr: u32) -> Vec<u8> {
 
 /// The kind of an info table entry: a data table (`[[info]]`).
 pub const INFO_KIND_DATA: u32 = 0;
-/// The kind of an info table entry: a pointer slot word (`[[slot]]`), the only kind a service file's `SLOTS` item may fill.
+/// The kind of an info table entry: a pointer slot word (`[[slot]]`), a kind a service file's `SLOTS` item may fill.
 pub const INFO_KIND_SLOT: u32 = 1;
+/// The kind of an info table entry: a DSP slot (`[[slot]] space = "dsp"`). The value is the word index in core/dsp-link's slot block (window 0 of the link), not an address. A
+/// `SLOTS` item with the flag `dkneeds::keys::SLOT_DSP` fills it.
+pub const INFO_KIND_DSP_SLOT: u32 = 2;
 
 /// The image's one info table, `dkrt_info_table`: big endian `{magic "DKIT", count}`, then one `{name hash, address, kind}` per entry (`entries` in order: the
 /// `[[slot]]` and `[[info]]` entries of all image adapters; kind is [`INFO_KIND_SLOT`] or [`INFO_KIND_DATA`]). `dkrt_abi::platform::info_find` searches it.

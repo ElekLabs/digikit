@@ -150,7 +150,7 @@ fn the_output_name_must_match_the_role() {
 #[test]
 fn a_service_with_an_unknown_service_or_a_foreign_export_is_refused() {
     let d = scratch("bad");
-    let cases: [(&str, &dyn Fn(&str) -> String, &str); 7] = [
+    let cases: [(&str, &dyn Fn(&str) -> String, &str); 9] = [
         (
             "unknown service",
             &|t| t.replace("service = \"svc-test\"", "service = \"no-such\""),
@@ -185,6 +185,16 @@ fn a_service_with_an_unknown_service_or_a_foreign_export_is_refused() {
                 )
             },
             "at most 50",
+        ),
+        (
+            "DSP fill of a slot that is not in [dsp.slots]",
+            &|t| format!("{t}\n[[fill]]\nslot = \"no_such_slot\"\nentry = \"_x\"\nspace = \"dsp\"\n"),
+            "has no such slot",
+        ),
+        (
+            "fill in another space",
+            &|t| format!("{t}\n[[fill]]\nslot = \"voice_render\"\nentry = \"_x\"\nspace = \"pru\"\n"),
+            "is not \"cf\" or \"dsp\"",
         ),
         (
             "service and export without the role",
@@ -320,5 +330,93 @@ fn fx_packs_to_a_dks_that_owns_effect_and_takes_nine_hooks_by_entry() {
     let needs: Vec<_> = k.needs().filter(|n| n.service == name_hash("fx")).collect();
     assert_eq!(needs.len(), 1);
     assert!(needs[0].hard);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// The DSP part of the fixture (`src/dsp/svc_test_dsp.s`, no part of the manifest of `test/svc-test`) added as an object for the DT2 and a DSP fill of the slot `voice_unpack`.
+fn with_dsp_part(t: &str) -> String {
+    format!(
+        "{t}\n[[object]]\npath = \"build/svc-test-dsp.dko.json\"\nsources = [\"src/dsp/svc_test_dsp.s\"]\nplace = \"dsp.l2\"\ndevices = [\"dt2\"]\n\n[[fill]]\nslot = \"voice_unpack\"\nentry = \"_svctest_dsp_entry\"\nspace = \"dsp\"\ndevices = [\"dt2\"]\n"
+    )
+}
+
+/// `manifest_root` with the toolchains of the repository (`out/tools`), for a test that builds the fixture's objects in the scratch root.
+fn building_root(dir: &Path, edit: &dyn Fn(&str) -> String) {
+    manifest_root(dir, edit);
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    std::os::unix::fs::symlink(root().join("out/tools"), dir.join("out/tools")).unwrap();
+}
+
+/// `patchkit --root ROOT pack ID --device DEVICE -o OUT`.
+fn pack_for(root: &Path, id: &str, device: &str, out: &Path) -> Vec<u8> {
+    let r = Command::new(env!("CARGO_BIN_EXE_patchkit"))
+        .arg("--root")
+        .arg(root)
+        .args(["pack", id, "--device", device, "-o"])
+        .arg(out)
+        .output()
+        .unwrap();
+    assert!(
+        r.status.success(),
+        "pack {id} --device {device} failed:\n{}",
+        String::from_utf8_lossy(&r.stderr)
+    );
+    std::fs::read(out).unwrap()
+}
+
+#[test]
+fn a_service_with_dsp_code_packs_a_dsp_section_and_a_dsp_slot_fill_for_its_device() {
+    if !toolchain() {
+        return;
+    }
+    let d = scratch("dsp");
+    let r = d.join("root");
+    building_root(&r, &with_dsp_part);
+    let dkm = Dkm::parse(&pack_for(&r, "test/svc-test", "dt2", &d.join("svc-test.dks"))).unwrap();
+    // the section is image, relocations and imports of the one DSP object: no voices, no effects
+    let dsp = patchkit::dkmdsp::DspSection::parse(&dkm.dsp).unwrap();
+    assert_eq!(dsp.imports, ["_svctest_dsp_back", "_svctest_dsp_word"]);
+    assert_eq!((dsp.voices.len(), dsp.fxs.len()), (0, 0));
+    assert_eq!(dsp.relocs.len(), 3, "the data word twice and the jump");
+    // the SLOTS item names the slot by hash, carries the DSP flag and the byte offset of the entry in the DSP image: behind the first instruction
+    let keys = Keys::parse(&dkm.register).unwrap();
+    let slots: Vec<_> = keys.slots().collect();
+    assert_eq!(slots.len(), 1);
+    assert_eq!(slots[0].id, name_hash("voice_unpack"));
+    assert_eq!(slots[0].flags, dkneeds::keys::SLOT_DSP);
+    assert!(
+        slots[0].entry > 0 && (slots[0].entry as usize) < dsp.image.len(),
+        "entry {} in an image of {} bytes",
+        slots[0].entry,
+        dsp.image.len()
+    );
+    // the other device has no DSP object and no fill of its own: a file without DSP section and without the item
+    let dn2 = Dkm::parse(&pack_for(&r, "test/svc-test", "dn2", &d.join("svc-test-dn2.dks"))).unwrap();
+    assert!(dn2.dsp.is_empty());
+    assert_eq!(Keys::parse(&dn2.register).unwrap().slots().count(), 0);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn a_dsp_fill_without_a_dsp_object_for_the_device_is_refused() {
+    if !toolchain() {
+        return;
+    }
+    let d = scratch("dspnone");
+    let r = d.join("root");
+    // the fill is there for every device, the DSP object only for the DT2
+    building_root(&r, &|t| {
+        with_dsp_part(t).replace("entry = \"_svctest_dsp_entry\"\nspace = \"dsp\"\ndevices = [\"dt2\"]", "entry = \"_svctest_dsp_entry\"\nspace = \"dsp\"")
+    });
+    let out = Command::new(env!("CARGO_BIN_EXE_patchkit"))
+        .arg("--root")
+        .arg(&r)
+        .args(["pack", "test/svc-test", "--device", "dn2", "-o"])
+        .arg(d.join("y.dks"))
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let e = String::from_utf8_lossy(&out.stderr);
+    assert!(e.contains("no DSP section that defines it"), "{e}");
     let _ = std::fs::remove_dir_all(&d);
 }

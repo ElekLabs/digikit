@@ -420,6 +420,13 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   beq.b +4; move.l dN,-(sp); rts` (12 bytes each). A site whose displaced code patchkit cannot re-encode (a `(d8,PC,Xn)`
   operand) is refused with the site named; `tail = "<symbol>"` gives a hand-written stock path (`jmp.l` there) and the
   displaced instructions are dropped.
+- **DSP slots.** A `[[slot]] name = "voice_render", space = "dsp"` is a slot of a SHARC hook stub, not a ColdFire word: the name is an entry of `[dsp.slots]` in `sdk/sdk.toml` (the slots of
+  the hook stubs, in index order) and the module reserves nothing. The slots are words 0 to 15 of window 0 of core/dsp-link (`_dl_slots`, `.PKDATA`, zero at boot); the stub of the image reads one,
+  zero takes the stock path and anything else is the pc of dispatch code. `patchkit gen` writes the byte offsets as `DK_SLOT_*` into `sdk/dsp/contract/dk_stub.inc`, which is part of the
+  service ABI hash. The info table entry has kind 2 and the slot's index as its value. A service fills it with `[[fill]] slot = "voice_render", entry = "_dv_run", space = "dsp"`: the entry is a global
+  text symbol of the service's DSP object (one `[[object]]` with `place = "dsp.l2"` per device, sources in `dks/dsp/*-<device>.s`). `pack` writes the DSP section of the file (code, relocations and imports,
+  no voices or effects) and a `SLOTS` item with the flag `SLOT_DSP` and the byte offset of the entry in the DSP image. Every `.EXTERN` of the dispatch code is a `DSP_IMPORT` of core/dyndsp
+  for the device (`patchkit service-check`).
 - **The image's info table.** The image has one export table, `dkrt_info_table`: big endian `{magic 0x444b4954 "DKIT", count}`,
   then per entry `{FNV-1a name hash, address, kind}` (kind 1: a `[[slot]]` word, 0: an `[[info]]` data table; 12 bytes per entry). patchkit writes it from the `[[slot]]` entries (the address of the word) and the
   `[[info]]` entries (`name`, `symbol`: an expression that gives the address, by default the symbol `name`; `devices`) of every

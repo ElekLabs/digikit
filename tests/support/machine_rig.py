@@ -32,7 +32,7 @@ from tools.patchkit import pk_conform, pk_sharc
 ROOT = pk_conform.ROOT
 _DSP = ROOT / "modules/core/adapters/dsp-voice/src/dsp"
 WRAPPER = {  # the adapter's sources of a device, assembled as separate objects that see each other's data symbols
-    "dt2": (_DSP / "dsp-voice.s", _DSP / "dsp-voice-dispatch.s"),
+    "dt2": (_DSP / "dsp-voice.s", dv.DISPATCH),
     "dn2": (_DSP / "dsp-voice-dn2.s", _DSP / "dsp-voice-dn2-stereo.s"),
 }
 CODE_BASE = 0xB90000
@@ -163,6 +163,11 @@ def build(module: str, device: str) -> _Built:
 _BUILT: dict[tuple[object, ...], _Built] = {}
 
 
+def _module_dir(source: Path) -> Path:
+    """The module around a source file: the nearest folder with a module.toml."""
+    return next(p for p in source.parents if (p / "module.toml").is_file())
+
+
 def build_spec(sp: pk_conform.MachineSpec) -> _Built:
     """`build` for a spec the caller made (a fixture source of a module: `dataclasses.replace(spec, sources=..., entry=..., note_on=..., desc=...)`)."""
     key = (sp.module, sp.device, sp.sources, sp.entry, sp.note_on, sp.desc, sp.params)
@@ -174,7 +179,7 @@ def build_spec(sp: pk_conform.MachineSpec) -> _Built:
 def _build(sp: pk_conform.MachineSpec) -> _Built:
     module, device = sp.module, sp.device
     nwrap = len(WRAPPER[device])
-    objs = [_assemble(w, w.parents[2]) for w in WRAPPER[device]]
+    objs = [_assemble(w, _module_dir(w)) for w in WRAPPER[device]]
     objs += [_assemble(Path(s), sp.moddir) for s in sp.sources]
     # data symbols: one 4-byte aligned run per section, in L2 above the stand-ins
     addr = DATA_BASE

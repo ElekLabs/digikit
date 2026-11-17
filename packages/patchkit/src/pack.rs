@@ -215,6 +215,52 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
     } else {
         vec![]
     };
+    // a service may carry DSP code (its dispatch code behind the hook stubs of the image): one DSP object for the device, packed as a section without voices or effects.
+    // The fills of DSP slots take the byte offset of their entry in that image.
+    if !dynamic && m.manifest.module.role == Some(crate::module::ModuleRole::Service) {
+        let any_sharc = m.objects.iter().any(|x| x.arch == "sharc");
+        if any_sharc {
+            let dev = o.device.clone().ok_or_else(|| {
+                Error(format!(
+                    "{id} has a DSP object: pack it with --device {}",
+                    crate::devdata::short_list()
+                ))
+            })?;
+            let sharc: Vec<_> = m
+                .objects
+                .iter()
+                .zip(&m.manifest.object)
+                .filter(|(x, r)| {
+                    x.arch == "sharc"
+                        && (r.devices.is_empty() || r.devices.iter().any(|d| *d == dev))
+                })
+                .collect();
+            if sharc.len() > 1 {
+                return Err(Error(format!(
+                    "{id} has {} DSP objects for {dev}; a service file packs one",
+                    sharc.len()
+                )));
+            }
+            if let Some((obj, _)) = sharc.first() {
+                dsp = crate::dkmdsp::pack_with_gate(
+                    obj,
+                    crate::register::device_id(&dev)?,
+                    &[],
+                    &[],
+                    None,
+                )?
+                .0;
+                if let Some(s) = opts.service.as_mut() {
+                    let names: Vec<&str> = s.dsp_fills.iter().map(|f| f.entry.as_str()).collect();
+                    let at = crate::dkmdsp::text_entries(obj, &names)?;
+                    for (f, off) in s.dsp_fills.iter_mut().zip(at) {
+                        f.offset = Some(off);
+                    }
+                }
+                dsp_obj = Some((*obj).clone());
+            }
+        }
+    }
     // a service file names firmware through import names that `patchkit bind` resolves (`bind::import_for_target`)
     let service_obj = match cf.first() {
         Some((dko, r)) if m.manifest.module.role == Some(crate::module::ModuleRole::Service) => {

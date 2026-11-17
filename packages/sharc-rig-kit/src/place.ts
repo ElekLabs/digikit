@@ -17,7 +17,7 @@ export const DATA_END = 0x20100000;
 /** The adapter's sources of a device, assembled as separate objects that see each other's data symbols. */
 const DSP = path.join(ROOT, 'modules/core/adapters/dsp-voice/src/dsp');
 const WRAPPER: Record<string, string[]> = {
-  dt2: [path.join(DSP, 'dsp-voice.s'), path.join(DSP, 'dsp-voice-dispatch.s')],
+  dt2: [path.join(DSP, 'dsp-voice.s'), path.join(ROOT, 'modules/core/services/machines/dks/dsp/dispatch-dt2.s')],
   dn2: [path.join(DSP, 'dsp-voice-dn2.s'), path.join(DSP, 'dsp-voice-dn2-stereo.s')],
 };
 const FX_DSP = path.join(ROOT, 'modules/core/adapters/fx/src/dsp');
@@ -179,7 +179,7 @@ function buildMachineUncached(sp: MachineSpec): MachineBuilt {
   const wrappers = WRAPPER[sp.device]!;
   const nwrap = wrappers.length;
   const objs = [
-    ...wrappers.map((w) => assembleSource(w, includeDirs(path.resolve(path.dirname(w), '../..')))),
+    ...wrappers.map((w) => assembleSource(w, includeDirs(moduleAround(w)!))),
     ...sp.sources.map((s) => assembleSource(s, includeDirs(sp.moddir))),
   ];
   const layout = placeData(objs, DATA_BASE);

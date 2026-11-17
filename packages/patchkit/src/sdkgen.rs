@@ -39,6 +39,8 @@ pub const C_RECORDS_OUT: &str = "sdk/include/dk/gen/records.h";
 pub const C_SAMPLE_OUT: &str = "sdk/include/dk/gen/sample.h";
 /// The generated SHARC+ include of the sample pool record layout, relative to the repository root.
 pub const SAMPLE_INC_OUT: &str = "sdk/dsp/contract/dk_sample_pool.inc";
+/// The generated slot offsets of the hook stubs (`[dsp.slots]`).
+pub const STUB_INC_OUT: &str = "sdk/dsp/contract/dk_stub.inc";
 /// The generated register classes of the DSP contract for the rules check of `dksharc`, relative to the repository root.
 pub const RULES_RS_OUT: &str = "packages/dksharc/src/rules_table.rs";
 /// The generated document of the DSP register contract, relative to the repository root.
@@ -93,6 +95,16 @@ struct Sdk {
 #[serde(deny_unknown_fields)]
 struct DspToml {
     registers: DspRegisters,
+    slots: DspSlots,
+}
+/// `[dsp.slots]`: the slot block of core/dsp-link that the hook stubs of the image read.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DspSlots {
+    /// Words of the block (`DK_SLOTS`).
+    words: u32,
+    /// The slots in index order (`DK_SLOT_<NAME>` is the byte offset 4 * index).
+    names: Vec<String>,
 }
 /// `[dsp.registers]`: the register contract of module DSP code. Entries are names (`B3`), ranges (`R0-R15`) or groups (`MR`, `ASTAT`, `STKY`, `LCNTR`).
 #[derive(Deserialize)]
@@ -718,6 +730,15 @@ pub fn limits_max() -> LimitsMax {
         .expect("sdk/sdk.toml parses")
         .limits
         .max
+}
+
+/// The slots of the hook stubs, in index order: the names of `[dsp.slots]` of the `sdk/sdk.toml` this crate was built with.
+pub fn dsp_slot_names() -> Vec<String> {
+    parse(include_str!("../../../sdk/sdk.toml"))
+        .expect("sdk/sdk.toml parses")
+        .dsp
+        .slots
+        .names
 }
 
 /// `[limits.max]` of a `sdk/sdk.toml` text (for the tests).
@@ -1976,6 +1997,29 @@ fn sample_inc(sdk: &Sdk) -> Result<String> {
     Ok(s)
 }
 
+/// `sdk/dsp/contract/dk_stub.inc`: the slot offsets of the hook stubs, decimal. Part of the service ABI hash (`SVC_ABI_FILES`).
+fn stub_inc(sdk: &Sdk) -> Result<String> {
+    let d = &sdk.dsp.slots;
+    if d.names.len() as u32 > d.words {
+        return Err(err!(
+            "[dsp.slots]: {} names for {} words",
+            d.names.len(),
+            d.words
+        ));
+    }
+    let mut s = format!(
+        "// {HEADER}\n// The contract between the hook stubs of the image and the dispatch code of a service (docs/plans/runtime-and-services.md, R12-8).\n//\n// A hook site of the image keeps a stub. The stub reads one slot, a word of core/dsp-link's slot block (`_dl_slots`, window 0 words 0 to {} of the link). A slot of 0\n// means that no service owns the site: the stub runs the displaced instruction and the stock path. Any other value is the pc of the service's dispatch entry. The stub\n// then saves the registers it pins in image words, pins M13 = 0 and jumps with `JUMP (M13, I12)`. The entry restores the saved registers first, so the dispatch code\n// sees the registers as the firmware left them at the hook. DK_SLOT_* are byte offsets into `_dl_slots`. Decimal values: the assembler upper-cases macro text.\n#ifndef DK_STUB_INC\n#define DK_STUB_INC\n",
+        d.words - 1
+    );
+    let _ = writeln!(s, "#define DK_SLOTS {}", d.words);
+    let _ = writeln!(s, "#define DK_SLOT_BYTES {}", 4 * d.words);
+    for (i, n) in d.names.iter().enumerate() {
+        let _ = writeln!(s, "#define DK_SLOT_{} {}", n.to_uppercase(), 4 * i);
+    }
+    s.push_str("#endif\n");
+    Ok(s)
+}
+
 /// `sdk/include/dk/gen/machine_consts.h`: the numbers of `sdk/include/dk/gen/machine.h`.
 fn machine_consts_h(sdk: &Sdk) -> String {
     let m = &sdk.machine;
@@ -2963,6 +3007,7 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (C_STATUS_OUT.to_string(), status_h(&sdk)),
         (C_SAMPLE_OUT.to_string(), sample_h(&sdk)?),
         (SAMPLE_INC_OUT.to_string(), sample_inc(&sdk)?),
+        (STUB_INC_OUT.to_string(), stub_inc(&sdk)?),
         (PROTO_PY_OUT.to_string(), python_proto(&sdk)),
         (PROTO_RS_OUT.to_string(), rust_proto(&sdk)),
         (PROTO_TS_OUT.to_string(), ts_proto(&sdk)),
@@ -3021,7 +3066,7 @@ pub(crate) fn abi_inputs(text: &str) -> Result<AbiInputs> {
 
 /// The files of `dkrt-abi` that a service file and the runtime share across the boundary (interfaces B and C), relative to the repository root. `gen_svc_abi.rs`
 /// itself and the other files of the crate are not in the list.
-pub const SVC_ABI_FILES: [&str; 7] = [
+pub const SVC_ABI_FILES: [&str; 8] = [
     "modules/core/runtime/abi/src/service.rs",
     "modules/core/runtime/abi/src/core_api.rs",
     "modules/core/runtime/abi/src/link.rs",
@@ -3029,6 +3074,8 @@ pub const SVC_ABI_FILES: [&str; 7] = [
     "modules/core/runtime/abi/src/registry.rs",
     "modules/core/runtime/abi/src/core_imports.rs",
     "modules/core/runtime/abi/src/platform.rs",
+    // the slot offsets of the hook stubs: the image stubs and the dispatch code of a service must agree on them
+    STUB_INC_OUT,
 ];
 
 /// FNV-1a (32 bits) over each file as its name, a zero byte, its bytes and a zero byte, in the given order. Never 0 (0 means "no interface B or C" in the

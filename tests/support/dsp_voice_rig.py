@@ -10,7 +10,9 @@ from tools.patchkit import pk_sharc  # noqa: E402
 CORE = (
     ROOT / "modules" / "core" / "adapters" / "dsp-voice" / "src" / "dsp" / "dsp-voice.s"
 )
-DISPATCH = CORE.with_name("dsp-voice-dispatch.s")  # the code behind the stubs of CORE
+DISPATCH = (
+    ROOT / "modules" / "core" / "services" / "machines" / "dks" / "dsp" / "dispatch-dt2.s"
+)  # the code behind the stubs of CORE: the machines service carries it
 # a sine routine of the raw (no contract) form
 SINE = ROOT / "tests" / "support" / "raw_sine.s"
 CORE_BASE, SINE_BASE = 0xB90000, 0xB92000

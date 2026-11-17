@@ -295,7 +295,7 @@ pub fn compatible(m: &Module, port: &Port) -> Result<()> {
             }
         }
     }
-    for sl in m.manifest.slot.iter().filter(|s| on(&s.devices, dev)) {
+    for sl in m.manifest.slot.iter().filter(|s| on(&s.devices, dev) && !s.is_dsp()) {
         let place = slot_place(sl);
         if port.region(&place).is_none() {
             missing.push(format!("region {place}"));
@@ -1176,11 +1176,28 @@ pub fn apply_with(
                 m.manifest
                     .slot
                     .iter()
-                    .filter(|s| on(&s.devices, &dev))
+                    .filter(|s| on(&s.devices, &dev) && !s.is_dsp())
                     .collect::<Vec<_>>(),
             )
         })
         .filter(|(_, v)| !v.is_empty())
+        .collect();
+    // DSP slots: no word in the image, an info table entry with the slot's index in core/dsp-link's slot block (the order of `[dsp.slots]`)
+    let dsp_names = crate::sdkgen::dsp_slot_names();
+    let dsp_slots: Vec<(&Module, &crate::module::SlotDef, u32)> = order
+        .iter()
+        .map(|id| lib.get(id).unwrap())
+        .flat_map(|m| {
+            m.manifest
+                .slot
+                .iter()
+                .filter(|s| on(&s.devices, &dev) && s.is_dsp())
+                .map(move |s| (m, s))
+        })
+        .map(|(m, s)| {
+            let at = dsp_names.iter().position(|n| *n == s.name).unwrap_or(0) as u32;
+            (m, s, at)
+        })
         .collect();
     // the slot words of one module are one chunk in the region of its first slot: a slot with another `place` would be put in the wrong region
     for (m, defs) in &slot_defs {
@@ -1208,7 +1225,9 @@ pub fn apply_with(
         })
         .collect();
     // the entries of the modules, and patchkit's own `fw_id` (the first 8 bytes of the stock image's SHA-256: a bound service file is checked against it) in every table that exists
-    let n_modules = slot_defs.iter().map(|(_, d)| d.len()).sum::<usize>() + info_defs.len();
+    let n_modules = slot_defs.iter().map(|(_, d)| d.len()).sum::<usize>()
+        + dsp_slots.len()
+        + info_defs.len();
     let n_info = n_modules + usize::from(n_modules > 0);
     if n_info > dkneeds::INFO_MAX as usize {
         return Err(err!(
@@ -1221,6 +1240,11 @@ pub fn apply_with(
         let names = slot_defs
             .iter()
             .flat_map(|(m, d)| d.iter().map(move |s| (m.id().to_string(), s.name.as_str())))
+            .chain(
+                dsp_slots
+                    .iter()
+                    .map(|(m, s, _)| (m.id().to_string(), s.name.as_str())),
+            )
             .chain(
                 info_defs
                     .iter()
@@ -1435,6 +1459,7 @@ pub fn apply_with(
             let owner = slot_defs
                 .first()
                 .map(|(m, _)| *m)
+                .or_else(|| dsp_slots.first().map(|(m, _, _)| *m))
                 .unwrap_or_else(|| info_defs[0].0);
             add(owner, "dkrt_info_table".to_string(), addr)?;
         }
@@ -1657,6 +1682,7 @@ pub fn apply_with(
                     owner: slot_defs
                         .first()
                         .map(|(m, _)| m.tag())
+                        .or_else(|| dsp_slots.first().map(|(m, _, _)| m.tag()))
                         .unwrap_or_else(|| info_defs[0].0.tag()),
                     cpu: fw_cpu,
                     region: slot_defs
@@ -1669,6 +1695,14 @@ pub fn apply_with(
                     bss: 0,
                     what: "the firmware id (fw_id of the info table)".into(),
                 });
+            }
+            for (_, s, at) in &dsp_slots {
+                entries.push((
+                    dkneeds::keys::name_hash(&s.name),
+                    *at,
+                    prim::INFO_KIND_DSP_SLOT,
+                ));
+                names.push(s.name.clone());
             }
             for (m, inf) in &info_defs {
                 let text = inf.symbol.as_deref().unwrap_or(&inf.name);
@@ -1709,6 +1743,7 @@ pub fn apply_with(
             let owner = slot_defs
                 .first()
                 .map(|(m, _)| m.tag())
+                .or_else(|| dsp_slots.first().map(|(m, _, _)| m.tag()))
                 .unwrap_or_else(|| info_defs[0].0.tag());
             chunks.push(Chunk {
                 owner,

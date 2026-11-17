@@ -49,8 +49,8 @@ import {
 
 /** the hook stubs, which stay in the image */
 export const VOICE_CORE = path.join(ROOT, 'modules/core/adapters/dsp-voice/src/dsp/dsp-voice.s');
-/** the dispatch code behind the stubs, which a service will carry (R12-8) */
-export const VOICE_DISPATCH = path.join(ROOT, 'modules/core/adapters/dsp-voice/src/dsp/dsp-voice-dispatch.s');
+/** the dispatch code behind the stubs, which the machines service carries (R12-8) */
+export const VOICE_DISPATCH = path.join(ROOT, 'modules/core/services/machines/dks/dsp/dispatch-dt2.s');
 /** a sine routine of the raw (no contract) form */
 export const VOICE_SINE = path.join(ROOT, 'tests/support/raw_sine.s');
 export const CORE_BASE = 0xb90000;

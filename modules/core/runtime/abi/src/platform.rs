@@ -198,6 +198,10 @@ pub const INFO_MAGIC: u32 = 0x444b_4954;
 /// The kind word of an info table entry that is a pointer slot word (`[[slot]]`); `0` is a data table (`[[info]]`).
 pub const INFO_KIND_SLOT: u32 = 1;
 
+/// The kind word of an info table entry that is a DSP slot (`[[slot]] space = "dsp"`): the value is the word index in the slot block of core/dsp-link (window 0 of the link),
+/// not an address. A `SLOTS` item with `dkneeds::keys::SLOT_DSP` fills it.
+pub const INFO_KIND_DSP_SLOT: u32 = 2;
+
 /// The address that entry `hash` of the info table at `table` holds, or null: no table (null), another magic, a count over `dkneeds::INFO_MAX`, or no such entry.
 /// The table is big endian words (the image's data): `{magic "DKIT", count}`, then `{name hash, address, kind}` per entry (`kind` is [`INFO_KIND_SLOT`] for a
 /// `[[slot]]` word, 0 for an `[[info]]` data table); `patchkit` writes it from the `[[info]]` and `[[slot]]` entries of the image adapters and refuses two entries
