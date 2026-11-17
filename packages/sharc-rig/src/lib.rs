@@ -490,7 +490,8 @@ pub fn run_call(
             halt = "breakpoint".into();
             break;
         }
-        let insn = match bnd::decode_at(&mut e.s, (), None, pc as Int) {
+        let sym_of = e.s.core.sym_of;
+        let insn = match bnd::decode_at_with(&mut e.s, pc as Int, sym_of) {
             Ok(i) => i,
             Err(t) => {
                 halt = format!("trap: {}", trap_name(t));

@@ -1847,7 +1847,8 @@ fn forms(args: &[String]) {
                 let executes = pred(cond, s.r[118], s.r[114].b);
                 let special = expect_special(check, s, mode_build & (1 << 13) != 0)
                     && executes != Some(false);
-                let insn = sharc_native::rt::bnd::decode_at(s, (), None, CODE_PC as Int)
+                let sym_of = s.core.sym_of;
+                let insn = sharc_native::rt::bnd::decode_at_with(s, CODE_PC as Int, sym_of)
                     .expect("decode of the assembled instruction");
                 let res = exec_insn(s, insn);
                 let interp = Snap::take(s);
@@ -2202,7 +2203,8 @@ fn loops(args: &[String]) {
     let interp_to = |s: &mut St, target: u64| {
         while s.icount < target {
             let pc = s.pc_sw;
-            let insn = sharc_native::rt::bnd::decode_at(s, (), None, pc).expect("decode");
+            let sym_of = s.core.sym_of;
+            let insn = sharc_native::rt::bnd::decode_at_with(s, pc, sym_of).expect("decode");
             if exec_insn(s, insn).is_err() {
                 break;
             }

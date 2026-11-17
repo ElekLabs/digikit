@@ -562,7 +562,7 @@ fn fast_bench(args: &[String]) {
                 .unwrap_or_else(|| panic!("no block at {pc:X}"));
             let light = Light::save(&e.s);
             let mut fe = FastEngine::new(Box::<sharc_fast_cl::ClBackend>::default(), &[pc]);
-            if sharc_native::fast::blocktrans_roots().contains(&pc) {
+            if sharc_native::fast::blocktrans_roots(sharc_native::default_core()).contains(&pc) {
                 // SHARC_BLOCKTRANS names PC: a block-translator cluster root.
                 fe = fe.with_clusters(&[pc]);
             }
