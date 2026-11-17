@@ -1,5 +1,5 @@
 //! The role of a `.dkm` or `.dks` file (docs/plans/runtime-and-services.md section 13.2): the role word of the header and what the header table may hold for it.
-//! `RoleSteps` are the steps that differ by role, chosen from the role word: a module has none, a service (`.dks`) checks, keeps its table, publishes its exports and
+//! `RoleSteps` are the steps that differ by role, chosen from the role word: a module has only a check (its table has no PROVIDES, HOOKS or BIND item), a service (`.dks`) checks, keeps its table, publishes its exports and
 //! installs its hooks (the row of the service is R12-4).
 //! The service search (`discover.rs`) uses `role_of` and `role_ok`; the loader runs the steps.
 use super::exports::EXPORTS_MAX;
