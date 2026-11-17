@@ -84,8 +84,8 @@ name = "st"
 # The key held at power-on for safe mode. The runtime asks the firmware's `key_down(k)` with a FIRMWARE key index, not a panel code. On the
 # Syntakt the two differ (finding 138 "Safe key"): trig 16 (panel code 16) is key index 39 (trigs 1..16 are 24..39). Unproven at power-on **[O]**.
 safe_key = 39
-# Run-time modules (ids) that the workbench installs after a flash: the debug log only; digikit/remote has no Syntakt port yet.
-default_modules = ["digikit/debug"]
+# Run-time modules (ids) that the workbench installs after a flash, as on the DT2 and DN2.
+default_modules = ["digikit/debug", "digikit/remote"]
 # The longest sample path the runtime accepts, in bytes, relative to the samples root. The device has no path filesystem (OS 1.42 has the MmcFs only;
 # finding 138 "Storage"), so the only sample path is a digikit store path: the store path limit 159 less the 8 bytes of the `samples/` prefix, as on the DN2.
 sample_path_max = 151
@@ -95,6 +95,10 @@ keep_base = 0x47bf0000
 keep_bytes = 0x1000
 # RAM the PEEK command may read: image, data, bss and heap up to the first DMA arena, then the runtime's region with the keep area.
 peek = [[0x40000000, 0x45570000], [0x478c0000, 0x47bf1000]]
+# The profiling clock: DTIM2 DTCN2 (not DTIM0 as on the DT2 and DN2), started by the boot loader; MAIN only reads it (6 reads, no write to
+# 0xfc078000..0xfc07800f) and stamps it per audio frame itself (0x400a2058, 0x40101d30). Bus clock 132 MHz with prescale 1 assumed **[D]**.
+span_clock = 0xfc07800c
+span_clock_hz = 132000000
 
 # The runtime's static arrays have the sizes of core/runtime/abi.toml (`arena_bytes`, `stage_bytes`); the run-time machine type count is 0 without a DSP.
 [limits]
