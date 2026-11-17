@@ -4,11 +4,14 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import { DkError } from '@digi/dk-session';
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import type { EmuRpc } from '@digi/workbench-core/host/host.ts';
 import { ownerName } from '@digi/workbench-core/profile/profile-core.ts';
 import type { LibraryModule } from '@digi/workbench-core/modules/dktransfer.ts';
 import { createRecorder, isDebugMissing, type ProfileSession } from '../src/profile-backend.ts';
 
+/** A device of the registry without a DSP (its profile has no sharc.profile). */
+const noDsp = registry.devices.find((d) => d.capabilities.dsp !== 'sharc')!;
 const HZ = 132_000_000;
 const NOW = new Date('2026-11-15T12:34:56Z');
 
@@ -17,6 +20,10 @@ interface FakeState {
   running: boolean;
   elapsed: bigint;
   missing: boolean;
+  /** The port the session reports (default: a DSP device). */
+  port?: string;
+  /** PROFILE_STATE start answers E_PROTO (the debug module has no span clock). */
+  noClock?: boolean;
   calls: string[];
   health?: { avg: number; max: number };
   polls?: ({ owner: number | 'runtime'; fn: number } | undefined)[];
@@ -39,7 +46,7 @@ function fakeSession(st: FakeState): ProfileSession {
     maxTicks: max,
   });
   return {
-    info: async () => ({ port: 'dn2-1.12', caps: st.caps }),
+    info: async () => ({ port: st.port ?? 'dn2-1.12', caps: st.caps }),
     modules: async () => [
       { index: 0, name: 'test/saw' },
       { index: 1, name: 'someone/mystery' },
@@ -47,6 +54,7 @@ function fakeSession(st: FakeState): ProfileSession {
     capacity: async () => ({ DSP_COST: { limit: 92_796, used: 0, largest: 0 } }),
     profileState: async (op: 'get' | 'start' | 'stop' | 'reset') => {
       st.calls.push(`state:${op}`);
+      if (st.noClock && op === 'start') throw new DkError({ error: 'no clock', kind: 'device', status: 'E_PROTO' });
       if (op === 'start') st.running = true;
       if (op === 'stop') st.running = false;
       if (op === 'reset') st.elapsed = 0n;
@@ -287,6 +295,41 @@ describe('the emulator', () => {
     if (!r.noDebug) assert.match(r.note ?? '', /cf\.profile and sharc\.profile not available/);
   });
 
+  test('a device without a DSP does not call sharc.profile and says there is no DSP', async () => {
+    const st = state({ port: `${noDsp.id}-1.0`, elapsed: 10n });
+    const rpcCalls: string[] = [];
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc(rpcCalls, { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+    });
+    await rec.start();
+    await rec.stop();
+    assert.ok(!rpcCalls.some((c) => c.startsWith('sharc.profile')));
+    st.running = true;
+    const r = await rec.read();
+    assert.ok(!r.noDebug);
+    if (!r.noDebug) assert.match(r.note ?? '', /no DSP on this device/);
+    if (!r.noDebug) assert.doesNotMatch(r.note ?? '', /built without/);
+  });
+
+  test('"built without" is said only for a daemon that lacks the method; another error shows its own message', async () => {
+    const st = state({ elapsed: 10n });
+    const rpc: EmuRpc = {
+      call: async <T>(method: string) => {
+        if (method === 'sharc.profile') throw new Error('sharc is busy');
+        return cfAnswer as T;
+      },
+    };
+    const rec = createRecorder({ session: async () => fakeSession(st), rpc, loadLibrary: library });
+    await rec.start();
+    const r = await rec.read();
+    assert.ok(!r.noDebug);
+    if (r.noDebug) return;
+    assert.match(r.note ?? '', /sharc\.profile: sharc is busy/);
+    assert.doesNotMatch(r.note ?? '', /built without/);
+  });
+
   test('Reset zeroes the span counters and counts the instruction profiles from now', async () => {
     const st = state();
     const rpcCalls: string[] = [];
@@ -305,6 +348,22 @@ describe('the emulator', () => {
 });
 
 describe('a device', () => {
+  test('Start on a device without a profiling clock says so; without the debug module it says that', async () => {
+    const noClock = createRecorder({
+      session: async () => fakeSession(state({ port: `${noDsp.id}-1.0`, noClock: true })),
+      loadLibrary: library,
+    });
+    await assert.rejects(
+      noClock.start(),
+      new RegExp(`no profiling clock on this device \\(devices/${noDsp.stem}\\.toml`),
+    );
+    const noModule = createRecorder({
+      session: async () => fakeSession(state({ caps: 0, noClock: true })),
+      loadLibrary: library,
+    });
+    await assert.rejects(noModule.start(), /debug module not loaded/);
+  });
+
   test('Start and Stop are the spans only, and Export writes the spans', async () => {
     const st = state({ elapsed: 777n });
     const rec = createRecorder({ session: async () => fakeSession(st), loadLibrary: library, now: () => NOW });

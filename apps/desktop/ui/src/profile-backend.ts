@@ -5,6 +5,7 @@
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { DkError, type DkSession, type PollSlot } from '@digi/dk-session';
 import type { DkProf } from '@digi/dk-session/dkprof';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import type { EmuRpc } from '@digi/workbench-core/host/host.ts';
 import type { LibraryModule } from '@digi/workbench-core/modules/dktransfer.ts';
 import {
@@ -81,6 +82,39 @@ const KINDS: Record<LibraryModule['group'], OwnerKind> = {
 
 const asFault = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+const METHOD_NOT_FOUND = -32601;
+
+/** The daemon answered "method not found" or "built without ..." (a feature compiled out), not another error. */
+export const isBuiltWithout = (e: unknown): boolean =>
+  (e as { code?: number } | null)?.code === METHOD_NOT_FOUND || /built without|method not found/i.test(asFault(e));
+
+/** A device file says the device has no DSP; a device the registry does not know is taken to have one. */
+export const deviceHasDsp = (device: string): boolean =>
+  !registry.ids.includes(device) || registry.get(device).capabilities.dsp === 'sharc';
+
+export const NO_DSP_NOTE = 'no DSP on this device';
+
+/** What the emulator's instruction profiles could not give: methods the daemon lacks, other errors, no DSP. */
+interface ProfileFaults {
+  without: string[];
+  other: string[];
+  noDsp?: boolean;
+}
+
+function addFault(f: ProfileFaults, method: string, e: unknown): void {
+  if (isBuiltWithout(e)) f.without.push(method);
+  else f.other.push(`${method}: ${asFault(e)}`);
+}
+
+function noteOf(f: ProfileFaults): string | undefined {
+  const lines: string[] = [];
+  if (f.without.length)
+    lines.push(`${f.without.join(' and ')} not available: the emulator daemon was built without it (docs/CONTROL.md).`);
+  lines.push(...f.other);
+  if (f.noDsp) lines.push(`sharc.profile: ${NO_DSP_NOTE}.`);
+  return lines.length ? lines.join(' ') : undefined;
+}
+
 export interface Recorder {
   /** Read the state, the spans and the modules (and, on the emulator, the DSP per block). */
   read(): Promise<ProfileReading>;
@@ -153,24 +187,44 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     return deps.rpc.call<T>(method, params);
   };
 
+  const hasDsp = (): boolean => deviceHasDsp(device);
+
+  /** The message for an E_PROTO of PROFILE_STATE: the debug module is loaded (PEEK) but has no span clock, or it is not loaded. */
+  const stateFault = (e: unknown, info: { port?: string | null; caps: number | null }): unknown => {
+    if (!isDebugMissing(e)) return e;
+    if (info.caps === null || ((info.caps >>> CAP.PEEK) & 1) === 0) return new Error('debug module not loaded');
+    const stem = registry.ids.includes(device) ? registry.get(device).stem : '<device>';
+    return new Error(`no profiling clock on this device (devices/${stem}.toml [digikit] span_clock)`);
+  };
+
+  /** PROFILE_STATE with the E_PROTO of a missing debug module or span clock said in words. */
+  const state = async (s: ProfileSession, op: Parameters<ProfileSession['profileState']>[0]) => {
+    try {
+      return await s.profileState(op);
+    } catch (e) {
+      throw stateFault(e, await s.info());
+    }
+  };
+
   /** The instruction profiles of the emulator since the start; a daemon without a feature answers an error, said once in `note`. */
   async function instructionParts(): Promise<{ cf?: Part; sharc?: Part }> {
     if (!deps.rpc) return {};
     const out: { cf?: Part; sharc?: Part } = {};
-    const missing: string[] = [];
+    const faults: ProfileFaults = { without: [], other: [] };
     try {
       out.cf = cfPart(cfBase, await call<CfAnswer>('cf.profile'));
-    } catch {
-      missing.push('cf.profile');
+    } catch (e) {
+      addFault(faults, 'cf.profile', e);
     }
-    try {
-      out.sharc = sharcPart(await call<SharcAnswer>('sharc.profile'));
-    } catch {
-      missing.push('sharc.profile');
+    if (!hasDsp()) faults.noDsp = true;
+    if (hasDsp()) {
+      try {
+        out.sharc = sharcPart(await call<SharcAnswer>('sharc.profile'));
+      } catch (e) {
+        addFault(faults, 'sharc.profile', e);
+      }
     }
-    instructionNote = missing.length
-      ? `${missing.join(' and ')} not available: the emulator daemon was built without it (docs/CONTROL.md).`
-      : undefined;
+    instructionNote = noteOf(faults);
     return out;
   }
 
@@ -255,7 +309,8 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     async start() {
       const s = await deps.session();
       kept = {};
-      await s.profileState('reset');
+      device = ((await s.info()).port ?? '').split('-')[0] || device;
+      await state(s, 'reset');
       if (deps.rpc) {
         counting = false;
         try {
@@ -263,37 +318,39 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         } catch {
           // no names: the DSP view has the total only
         }
-        const missing: string[] = [];
+        const faults: ProfileFaults = { without: [], other: [] };
         try {
           cfBase = await call<CfAnswer>('cf.profile');
-        } catch {
+        } catch (e) {
           cfBase = undefined;
-          missing.push('cf.profile');
+          addFault(faults, 'cf.profile', e);
         }
-        try {
-          await call('sharc.profile', { enable: true });
-          counting = true;
-        } catch {
-          missing.push('sharc.profile');
-        }
+        if (hasDsp()) {
+          try {
+            await call('sharc.profile', { enable: true });
+            counting = true;
+          } catch (e) {
+            addFault(faults, 'sharc.profile', e);
+          }
+        } else faults.noDsp = true;
         counting ||= cfBase !== undefined;
-        instructionNote = missing.length
-          ? `${missing.join(' and ')} not available: the emulator daemon was built without it (docs/CONTROL.md).`
-          : undefined;
+        instructionNote = noteOf(faults);
       }
-      await s.profileState('start');
+      await state(s, 'start');
     },
 
     async stop() {
       const s = await deps.session();
-      await s.profileState('stop');
+      await state(s, 'stop');
       if (deps.rpc && counting) {
         kept = await instructionParts();
         counting = false;
-        try {
-          await call('sharc.profile', { enable: false });
-        } catch {
-          // the daemon had nothing counting
+        if (hasDsp()) {
+          try {
+            await call('sharc.profile', { enable: false });
+          } catch {
+            // the daemon had nothing counting
+          }
         }
       }
     },
@@ -305,7 +362,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       if (deps.rpc && counting) {
         try {
           cfBase = await call<CfAnswer>('cf.profile');
-          await call('sharc.profile', { enable: true });
+          if (hasDsp()) await call('sharc.profile', { enable: true });
         } catch (e) {
           instructionNote = asFault(e);
         }
