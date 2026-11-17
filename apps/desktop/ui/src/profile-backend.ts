@@ -151,6 +151,8 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   let active: { cf?: Source<Part>; sharc?: Source<Part> } = {};
   const counting = (): boolean => active.cf !== undefined || active.sharc !== undefined;
   let instructionNote: string | undefined;
+  /** Per source: how often the daemon started a new runtime during the recording (its counters restart with each). */
+  let restarts: { cf?: number; sharc?: number } = {};
   /** What could not start for the running recording; read faults come on top. */
   let startFaults: ProfileFaults = { without: [], other: [] };
 
@@ -229,8 +231,16 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     reset: async () => void (await call(method, { enable: true })),
     read: async () => part(await call<A>(method)),
   });
-  const cfSource = (): Source<Part> => emuSource<CfAnswer, Part>('cf.profile', (a) => cfPart(undefined, a));
-  const sharcSource = (): Source<Part> => emuSource<SharcAnswer, Part>('sharc.profile', sharcPart);
+  const cfSource = (): Source<Part> =>
+    emuSource<CfAnswer, Part>('cf.profile', (a) => {
+      restarts.cf = a.restarts;
+      return cfPart(undefined, a);
+    });
+  const sharcSource = (): Source<Part> =>
+    emuSource<SharcAnswer, Part>('sharc.profile', (a) => {
+      restarts.sharc = a.restarts;
+      return sharcPart(a);
+    });
 
   const spansSource = (s: ProfileSession): Source<void> => ({
     start: async () => {
@@ -255,6 +265,13 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       }
     }
     if (!hasDsp()) faults.noDsp = true;
+    for (const key of ['cf', 'sharc'] as const) {
+      const n = restarts[key];
+      if (n)
+        faults.other.push(
+          `${key}.profile: the firmware reloaded ${n} time${n === 1 ? '' : 's'} during the recording; counts cover only the time since the last reload.`,
+        );
+    }
     instructionNote = noteOf(faults);
     return out;
   }
@@ -345,6 +362,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       await spansSource(s).start();
       if (!deps.rpc) return;
       active = {};
+      restarts = {};
       try {
         await deps.names?.refresh(s); // the maps of the image that runs now (a reload changes them)
       } catch {
@@ -368,18 +386,28 @@ export function createRecorder(deps: ProfileDeps): Recorder {
 
     async stop() {
       const s = await deps.session();
-      await spansSource(s).stop();
-      if (!deps.rpc || !counting()) return;
-      kept = await instructionParts();
-      const stopping = Object.values(active);
-      active = {};
-      for (const src of stopping) {
-        try {
-          await src.stop();
-        } catch {
-          // the daemon had nothing counting
-        }
+      let spansError: unknown;
+      try {
+        await spansSource(s).stop();
+      } catch (e) {
+        spansError = e; // the instruction sources still stop; the error comes after
       }
+      if (deps.rpc && counting()) {
+        kept = await instructionParts();
+        const stopping = Object.entries(active) as [keyof typeof active, Source<Part>][];
+        active = {};
+        const faults: ProfileFaults = { without: [], other: [] };
+        for (const [key, src] of stopping) {
+          try {
+            await src.stop();
+          } catch (e) {
+            addFault(faults, `${key}.profile stop`, e);
+          }
+        }
+        const stopNote = noteOf(faults);
+        if (stopNote) instructionNote = instructionNote ? `${instructionNote} ${stopNote}` : stopNote;
+      }
+      if (spansError !== undefined) throw spansError;
     },
 
     async reset() {

@@ -705,6 +705,12 @@ struct Actor {
     runtime: Option<Runtime>,
     /// DSP blocks, instructions and idle-skipped instructions the worker had counted when `sharc.profile` started counting.
     sharc_profile_base: (u64, u64, u64),
+    /// `cf.profile` and `sharc.profile` were switched on and not off since: a new runtime (firmware load, restart) starts them again.
+    cf_profile_wanted: bool,
+    sharc_profile_wanted: bool,
+    /// How many new runtimes were installed since the last explicit `enable` of either profile: the counters of a read
+    /// restarted that many times, and the reader can tell its recording has a gap.
+    profile_restarts: u64,
     /// The session id the webview protocol checks.
     session: u64,
     /// Raised whenever the runtime is replaced, whoever asked.
@@ -843,6 +849,9 @@ impl Actor {
             on_quit: config.on_quit,
             runtime: None,
             sharc_profile_base: (0, 0, 0),
+            cf_profile_wanted: false,
+            sharc_profile_wanted: false,
+            profile_restarts: 0,
             session: 0,
             epoch: 0,
             loaded: None,
@@ -1305,6 +1314,18 @@ impl Actor {
         // DSP off on a device with a second CPU that runs a program: the mailbox responder answers instead (no peer audio, fast UI).
         if !self.dsp && runtime.has_peer_cpu() {
             runtime.use_peer_responder();
+        }
+        self.sharc_profile_base = (0, 0, 0);
+        #[cfg(feature = "cf-profile")]
+        if self.cf_profile_wanted {
+            runtime.set_cf_profile(true);
+        }
+        #[cfg(feature = "sharc-profile")]
+        if self.sharc_profile_wanted {
+            runtime.set_sharc_profile(true);
+        }
+        if self.cf_profile_wanted || self.sharc_profile_wanted {
+            self.profile_restarts += 1;
         }
         self.runtime = Some(runtime);
         self.overlay_set_aside = false;
@@ -3428,15 +3449,22 @@ impl Actor {
         #[cfg(feature = "cf-profile")]
         {
             let enable = p.opt_bool("enable")?;
-            self.with_runtime(|r| {
+            let restarts = self.profile_restarts;
+            let answer = self.with_runtime(|r| {
                 if let Some(on) = enable {
                     r.set_cf_profile(on);
                     return Ok(json!({"enabled": on}));
                 }
                 let mut v = r.cf_profile();
                 v["controller_cpu_ns"] = elektron_native_boot::thread_cpu_ns().into();
+                v["restarts"] = restarts.into();
                 Ok(v)
-            })
+            })?;
+            if let Some(on) = enable {
+                self.cf_profile_wanted = on;
+                self.profile_restarts = 0;
+            }
+            Ok(answer)
         }
         #[cfg(not(feature = "cf-profile"))]
         {
@@ -3455,6 +3483,7 @@ impl Actor {
         {
             let enable = p.opt_bool("enable")?;
             let started = self.sharc_profile_base;
+            let restarts = self.profile_restarts;
             let mut now = None;
             let answer = self.with_runtime(|r| {
                 let unavailable = |m: &str| RpcError::new(code::AUDIO_UNAVAILABLE, m);
@@ -3498,8 +3527,14 @@ impl Actor {
                         .collect(),
                     hist: hist.clone(),
                 };
-                Ok(crate::sharc_profile::profile_json(&counts))
+                let mut v = crate::sharc_profile::profile_json(&counts);
+                v["restarts"] = restarts.into();
+                Ok(v)
             })?;
+            if let Some(on) = enable {
+                self.sharc_profile_wanted = on;
+                self.profile_restarts = 0;
+            }
             if let Some(base) = now {
                 self.sharc_profile_base = base;
             }

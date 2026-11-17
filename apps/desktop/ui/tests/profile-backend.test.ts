@@ -299,6 +299,43 @@ describe('the emulator', () => {
     if (!r.noDebug) assert.match(r.note ?? '', /cf\.profile and sharc\.profile not available/);
   });
 
+  test('a firmware reload during the recording is said in the note', async () => {
+    const st = state({ running: true, elapsed: 10n });
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], {
+        'cf.profile': { ...cfAnswer, restarts: 2 },
+        'sharc.profile': sharcAnswer,
+      }),
+      loadLibrary: library,
+    });
+    await rec.start();
+    const r = await rec.read();
+    assert.ok(!r.noDebug);
+    if (!r.noDebug) assert.match(r.note ?? '', /cf\.profile: the firmware reloaded 2 times/);
+    if (!r.noDebug) assert.doesNotMatch(r.note ?? '', /sharc\.profile: the firmware reloaded/);
+  });
+
+  test('Stop switches every source off even when one fails, and the spans error still comes out', async () => {
+    const st = state({ running: true, elapsed: 10n });
+    const calls: string[] = [];
+    const rpc: EmuRpc = {
+      call: async <T>(method: string, params?: Record<string, unknown>) => {
+        calls.push(params ? `${method} ${JSON.stringify(params)}` : method);
+        if (method === 'cf.profile' && params?.enable === false) throw new Error('cf stop failed');
+        return (method === 'cf.profile' ? cfAnswer : sharcAnswer) as T;
+      },
+    };
+    const rec = createRecorder({ session: async () => fakeSession(st), rpc, loadLibrary: library });
+    await rec.start();
+    calls.length = 0;
+    await rec.stop();
+    assert.ok(calls.includes('cf.profile {"enable":false}') && calls.includes('sharc.profile {"enable":false}'));
+    const r = await rec.read();
+    assert.ok(!r.noDebug);
+    if (!r.noDebug) assert.match(r.note ?? '', /cf\.profile stop: cf stop failed/);
+  });
+
   test('a device without a DSP does not call sharc.profile and says there is no DSP', async () => {
     const st = state({ port: `${noDsp.id}-1.0`, elapsed: 10n });
     const rpcCalls: string[] = [];

@@ -286,7 +286,7 @@ export default function ProfilePanel(props: {
                       ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz)
                       : ''}
                     {' · clock '}
-                    {fmtMhz(r().snap.hz)} {emu() ? '(emulated time)' : '(DTIM0)'}
+                    {fmtMhz(r().snap.hz)} {emu() ? '(emulated time)' : '(device clock)'}
                   </span>
                   <span class="elapsed">{r().snap.running ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz) : ''}</span>
                 </div>
