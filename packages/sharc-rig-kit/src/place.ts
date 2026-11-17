@@ -27,6 +27,12 @@ const WRAPPER: Record<string, string[]> = {
 const FX_DSP = path.join(ROOT, 'modules/core/adapters/fx/src/dsp');
 const FX_ADAPTER = path.join(FX_DSP, 'fx.s');
 const FX_SEND: Record<string, string> = { dt2: path.join(FX_DSP, 'fxsend.s'), dn2: path.join(FX_DSP, 'fxsend-dn2.s') };
+/** The dispatch code of the fx service for a device (master chain and send route). */
+const FX_DISPATCH: Record<string, string> = {
+  dt2: path.join(ROOT, 'modules/core/services/fx/dks/dsp/fx-dt2.s'),
+  dn2: path.join(ROOT, 'modules/core/services/fx/dks/dsp/fx-dn2.s'),
+};
+const FX_FIXED_OBJECTS = 3; // the adapter's stub, the send stub and the dispatch object
 
 /** The stock functions and sites the stereo hooks of the DN2 adapter name; the machine rig does not run them, the stand-ins only have to link. */
 const STEREO_STANDINS = [
@@ -274,7 +280,7 @@ function fxObject(file: string): SharcObject {
 }
 
 function buildFxUncached(sources: readonly string[], device: 'dt2' | 'dn2'): FxBuilt {
-  const objs = [fxObject(FX_ADAPTER), fxObject(FX_SEND[device]!), ...sources.map(fxObject)];
+  const objs = [fxObject(FX_ADAPTER), fxObject(FX_SEND[device]!), fxObject(FX_DISPATCH[device]!), ...sources.map(fxObject)];
   const layout = placeData(objs, DATA_BASE);
   let { end: addr } = layout;
   const { data, inits } = layout;
@@ -294,6 +300,7 @@ function buildFxUncached(sources: readonly string[], device: 'dt2' | 'dn2'): FxB
   const externs: Record<string, number> = {
     _fx_table: TABLE,
     _fx_master: FX_MASTER,
+    _dl_slots: SLOTS,
     _fx_back: STOCK_BP,
     _fxs_back: STOCK_BP, // one entry runs in a call: both tails end at the stand-in
     _fxs_trackbus: FX_TRACKBUS,
@@ -311,7 +318,9 @@ function buildFxUncached(sources: readonly string[], device: 'dt2' | 'dn2'): FxB
     data,
     inits,
     symbols,
-    moduleCode: objs.slice(2).map((o, i) => [bases[2 + i]!, bases[2 + i]! + o.parcels]),
-    moduleData: own.slice(2).flat(),
+    moduleCode: objs
+      .slice(FX_FIXED_OBJECTS)
+      .map((o, i) => [bases[FX_FIXED_OBJECTS + i]!, bases[FX_FIXED_OBJECTS + i]! + o.parcels]),
+    moduleData: own.slice(FX_FIXED_OBJECTS).flat(),
   };
 }

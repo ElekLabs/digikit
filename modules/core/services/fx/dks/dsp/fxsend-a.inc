@@ -1,37 +1,13 @@
-// core/fx send route, the part both devices share (fxsend.s: Digitakt II, fxsend-dn2.s: Digitone II): the entry, the row loop, the send bus clear and the 16 gains.
-// The wrappers hold the device's header comment, its externs, the mix of the tracks or slots (fxsend-tracks.inc, fxsend-slots.inc) and the data of that mix.
+// core/fx send route, the part both devices share (fx-dt2.s: Digitakt II, fx-dn2.s: Digitone II): the dispatch entry, the row loop, the send bus clear and the 16 gains.
+// The device file holds the header comment, the externs and the mix of the tracks or slots (fxsend-tracks.inc, fxsend-slots.inc). The data is in the image (fxsend.s, fxsend-dn2.s).
 
-#include "dk_fx.inc"
-
-#define FX_PC 0
-#define FX_EN 3
-#define FX_WAS 12
-#define FX_MIX 13
-#define FX_DIS 14
-#define FX_ROUTE 18
-#define FX_AMT0_BYTES 76                  // word 19
-#define FX_ROW_BYTES 96
 #define FXS_TRACKS 16
 #define FXS_TRACK_BYTES 256               // a track bus: 64 floats
 #define FXS_RIGHT_BYTES 128               // the right channel of a bus of 32 + 32 floats
 
-.SECTION/PM seg_pmco;
-.GLOBAL _fxs_entry;
-.EXTERN _fx_table;
-.EXTERN _fx_enter;
-.EXTERN _fx_leave;
-.EXTERN _fx_exec;
-.EXTERN _fx_c;
-.EXTERN _fx_in;
-.EXTERN _fx_scratch;
-.EXTERN _fx_s_r0;
-.EXTERN _fx_s_i4;
-.EXTERN _fx_s_l4;
-.EXTERN _fxs_return;
-.EXTERN _fxs_back;
-
-_fxs_entry:
-    DM(_fx_s_r0) = R0;
+_fxs_dispatch:
+    M13 = DM(_fx_sv_m13);                 // what the stub saved: from here on the registers are as the firmware left them (R0 is in _fx_s_r0)
+    I12 = DM(_fx_sv_i12);
     R0 = I4;
     DM(_fx_s_i4) = R0;
     R0 = L4;
@@ -79,8 +55,7 @@ _fxs_none:
     L4 = R0;
     R0 = DM(_fx_s_i4);
     I4 = R0;
-    R0 = DM(_fx_s_r0);
-    JUMP _fxs_back;                       // the displaced instruction, then the master function
+    JUMP _fxs_idle;                       // R0, the displaced instruction, then the master function (the stub)
 
 _fxs_run:
     CALL _fx_enter;

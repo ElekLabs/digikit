@@ -71,6 +71,30 @@ entry = "fxp_keylist"
 name = "cf.page.hook.sound_load_exit"
 entry = "fxp_sound"
 
+# The dispatch code of the effects (the part of core/fx behind its hook stubs: the master chain with the output guard and the send route). The image keeps the stubs and all data of the adapter; the object
+# reaches them through DSP imports (the table of core/dyndsp) and fills the two slots the stubs read.
+[[fill]]
+slot = "fx_entry"
+entry = "_fx_dispatch"
+space = "dsp"
+
+[[fill]]
+slot = "fx_send"
+entry = "_fxs_dispatch"
+space = "dsp"
+
+[[object]]
+path = "build/fx-dsp-dt2.dko.json"
+sources = ["dsp/fx-dt2.s"]
+place = "dsp.l2"
+devices = ["dt2"]
+
+[[object]]
+path = "build/fx-dsp-dn2.dko.json"
+sources = ["dsp/fx-dn2.s"]
+place = "dsp.l2"
+devices = ["dn2"]
+
 # Rust, built with rustc_codegen_gcc for -mcpu=54418 (`patchkit build`). Packed as a .dks (`patchkit pack core/services/fx`): the file is `fx.dks`.
 [[object]]
 path = "build/fx.dko.json"

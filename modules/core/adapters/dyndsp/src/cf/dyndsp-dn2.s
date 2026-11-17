@@ -36,7 +36,7 @@ dyndsp_info:
     .long   _dd_vfirst
     .long   DYN_TYPES
     .long   _dd_vcount
-    .long   34
+    .long   61
     DSP_IMPORT _dv_exp2
     DSP_IMPORT _dv_frame_hw
     DSP_IMPORT _dv_frame_sw
@@ -71,3 +71,30 @@ dyndsp_info:
     DSP_IMPORT _dv_c
     DSP_IMPORT _dv_cst
     DSP_IMPORT _dv_slots
+    DSP_IMPORT _fx_table
+    DSP_IMPORT _fx_master
+    DSP_IMPORT _fx_sv_m13
+    DSP_IMPORT _fx_sv_i12
+    DSP_IMPORT _fx_idle
+    DSP_IMPORT _fx_s_i4
+    DSP_IMPORT _fx_s_l4
+    DSP_IMPORT _fx_save
+    DSP_IMPORT _fx_ctx
+    DSP_IMPORT _fx_blk
+    DSP_IMPORT _fx_in
+    DSP_IMPORT _fx_scratch
+    DSP_IMPORT _fx_c
+    DSP_IMPORT _fx_diag
+    DSP_IMPORT _fx_rec
+    DSP_IMPORT _fxs_idle
+    DSP_IMPORT _fxs_return
+    DSP_IMPORT _fxs_bus
+    DSP_IMPORT _fxs_gnew
+    DSP_IMPORT _fxs_prev
+    DSP_IMPORT _fxs_c
+    DSP_IMPORT _fxs_slotbus
+    DSP_IMPORT _fxs_slotmap
+    DSP_IMPORT _fxs_fadetab
+    DSP_IMPORT _fxs_trk
+    DSP_IMPORT _fxs_flg
+    DSP_IMPORT _fxs_fbuf
