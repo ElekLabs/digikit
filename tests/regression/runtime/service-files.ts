@@ -30,12 +30,23 @@ export function neededServices(files: string[]): CardService[] {
 export const servicesSidecar = (file: string) => file.replace(/\.dk[ms]$/, '.services.json');
 
 /**
- * A card file under `modules/` that a test wrote as bytes (a blob, or a byte-edited copy of a packed fixture): no packer made it, so no NEEDS answer exists.
- * This declares that it needs no service, in the same sidecar; a module packed at test time gets its answer from `patchkit services` instead (synth.ts).
+ * A card file under `modules/` that a test wrote as raw bytes with no packer behind it (a blob): it needs no service, and this writes that answer in the sidecar.
+ * A copy or byte edit of a packed module is `derivedModule` instead; a module packed at test time gets its answer from `patchkit services` (synth.ts).
  */
 export function rawModule(file: string): string {
   fs.writeFileSync(servicesSidecar(file), '');
   return file;
+}
+
+/**
+ * A card file that a test made by copying or byte-editing the packed module `original` (a patch that leaves its NEEDS table alone): it needs what the original
+ * needs, so it inherits the sidecar of the original. Throws when the original has none (it was not packed by the Nx pack target).
+ */
+export function derivedModule(original: string, copy: string): string {
+  const from = servicesSidecar(original);
+  if (!fs.existsSync(from)) throw new Error(`missing ${from}: run nx run <module id>:pack`);
+  fs.copyFileSync(from, servicesSidecar(copy));
+  return copy;
 }
 
 /** The store path of a service file. */

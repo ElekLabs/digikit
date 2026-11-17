@@ -23,7 +23,7 @@ vi.mock('@digi/test-support', async (original) => ({
   repoRoot: () => dir,
 }));
 import { installModules } from '../runtime/install.ts';
-import { boundService, neededServices, rawModule } from '../runtime/service-files.ts';
+import { boundService, derivedModule, neededServices, rawModule } from '../runtime/service-files.ts';
 import { bindServiceSymbols, serviceMapEntries } from '../runtime/service-symbols.ts';
 
 // the packed service the harness finds under dist/modules/<device>/<leaf>.dks
@@ -60,6 +60,14 @@ test('the needed services are read from the files that the pack target wrote', (
 
 test('a hand-built module file declares that it needs no service', () => {
   expect(neededServices([rawModule(path.join(dir, 'blob.dkm'))])).toEqual([]);
+});
+
+test('a copy of a packed module needs what the original needs', () => {
+  const copy = derivedModule(write('gain.dkm'), path.join(dir, 'gain-copy.dkm'));
+  expect(neededServices([copy])).toEqual([FX]);
+  expect(() => derivedModule(path.join(dir, 'unpacked.dkm'), path.join(dir, 'x.dkm'))).toThrow(
+    /missing .*unpacked\.services\.json/,
+  );
 });
 
 test('install puts the bound service on the card before the selection and the restart', async () => {
