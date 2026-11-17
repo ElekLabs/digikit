@@ -35,10 +35,12 @@ struct Dev {
     profile: dkrt_abi::platform::DeviceProfile,
     /// The stock firmware the images and the bound files are made from (the acceptance cells).
     firmware: &'static str,
+    /// The device file whose `[patch_sets]` name the roots of each image set.
+    toml: &'static str,
 }
 
-const DT2: Dev = Dev { name: "dt2", profile: profiles::DT2, firmware: "firmware/Digitakt_II_OS1.17.syx" };
-const DN2: Dev = Dev { name: "dn2", profile: profiles::DN2, firmware: "firmware/Digitone_II_OS1.12.syx" };
+const DT2: Dev = Dev { name: "dt2", profile: profiles::DT2, firmware: "firmware/Digitakt_II_OS1.17.syx", toml: "devices/digitakt-ii.toml" };
+const DN2: Dev = Dev { name: "dn2", profile: profiles::DN2, firmware: "firmware/Digitone_II_OS1.12.syx", toml: "devices/digitone-ii.toml" };
 const DEVICES: [Dev; 2] = [DT2, DN2];
 
 impl Dev {
@@ -123,9 +125,19 @@ impl Registry for DeviceRegistry {
     }
 }
 
+/// The roots of patch set `set` in the device file: the line `<set> = ["core/a", ...]` under `[patch_sets]`.
+fn set_roots(dev: Dev, set: &str) -> Vec<String> {
+    let text = String::from_utf8(read(&repo().join(dev.toml), "git checkout devices")).unwrap();
+    let sets = text.split("[patch_sets]").nth(1).expect("no [patch_sets]");
+    let line = sets.lines().find(|l| l.starts_with(&std::format!("{set} = ["))).unwrap_or_else(|| panic!("{}: no patch set {set}", dev.name));
+    line.split('"').skip(1).step_by(2).map(String::from).collect()
+}
+
 /// The info table of a patched image (`set-<set>.info`): name, hash, kind (0 data, 1 slot), address and the words of a data entry.
 struct Image {
     entries: Vec<(String, u32, u32, Vec<u32>)>,
+    /// The root modules of the set (`[patch_sets]` of the device file): the adapters the image has.
+    roots: Vec<String>,
 }
 
 impl Image {
@@ -140,7 +152,7 @@ impl Image {
                 (w[0].to_string(), hex(w[1]), w[2].parse().unwrap(), w[4..].iter().map(|x| hex(x)).collect())
             })
             .collect();
-        Image { entries }
+        Image { entries, roots: set_roots(dev, set) }
     }
 
     /// The platform of the device with this image's table. `limits`: replacement values of the `cap_<kind>` words.
@@ -428,9 +440,19 @@ fn binds_of(l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
     out
 }
 
+/// The imports of the adapters an image may leave out, with the adapter module that gives them (the `optional` list of the runtime): the runtime links one to the
+/// adapter's function, or to a stub; the host has neither.
+const ADAPTER_IMPORTS: [(&str, &str); 5] = [
+    ("dk_ui_", "core/ui"),
+    ("dk_input_", "core/input"),
+    ("dk_usb_bulk_", "core/usb-bulk"),
+    ("dk_sdhc_large_", "core/sdhc-large"),
+    ("dk_dsp_link_", "core/dsp-link"),
+];
+
 /// Every name the file imports resolves: against the runtime's tables (and the service-only ones for a service file) or an export of a loaded provider. The loader
 /// does the same at a load; a module with a DSP section is not loaded on the host, so its imports are looked at here.
-unsafe fn imports_resolve(l: &mut Boot, file: &[u8], what: &str) -> bool {
+unsafe fn imports_resolve(l: &mut Boot, image: &Image, file: &[u8], what: &str) -> bool {
     let mut adapter_imports = false;
     let role = be(file, dkneeds::H_ROLE);
     let (off, n) = (be(file, dkneeds::H_IMPORT_OFF) as usize, be(file, dkneeds::H_IMPORT_N) as usize);
@@ -445,12 +467,14 @@ unsafe fn imports_resolve(l: &mut Boot, file: &[u8], what: &str) -> bool {
         if a == 0 {
             a = l.exports.resolve(name_hash(std::str::from_utf8(&name[..len]).unwrap())).unwrap_or(0);
         }
-        // a service of an image adapter (core/ui, core/input, core/usb-bulk, core/sdhc-large, core/dsp-link): the runtime links it as optional, the module loads without
-        // it and its `_open` answers DK_E_MISSING; the adapters are not part of this card
-        let adapter_service = ["dk_ui_", "dk_input_", "dk_usb_bulk_", "dk_sdhc_large_", "dk_dsp_link_"].iter().any(|p| name.starts_with(p.as_bytes()));
-        if a == 0 && adapter_service {
-            adapter_imports = true;
-            continue;
+        // a service of an image adapter: the host cannot link it, so it is accepted when the image set has the adapter (the module then loads there, and its `_open`
+        // answers DK_E_MISSING on a device without it); an image without the adapter is no place for the module
+        let adapter = ADAPTER_IMPORTS.iter().find(|(p, _)| name.starts_with(p.as_bytes())).map(|(_, m)| *m);
+        if let (0, Some(m)) = (a, adapter) {
+            if image.roots.iter().any(|r| r == m) {
+                adapter_imports = true;
+                continue;
+            }
         }
         assert_ne!(a, 0, "{what} imports {}, which the runtime and the loaded services do not have", String::from_utf8_lossy(&name[..len]));
     }
@@ -499,7 +523,7 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
     for (k, m) in modules.iter().enumerate() {
         let file = packed(dev, m.leaf, "dkm", m.nx);
         // a module with a service of an image adapter among its imports (core/ui) is not loaded here: its link needs the adapter
-        let adapter_imports = imports_resolve(&mut l, &file, m.leaf);
+        let adapter_imports = imports_resolve(&mut l, &image, &file, m.leaf);
         if be(&file, dkneeds::H_DSP_SIZE) == 0 && !adapter_imports {
             l.phase = Phase::Boot;
             let path = std::format!("modules/{}.dkm\0", m.leaf);
@@ -572,6 +596,46 @@ fn a_sample_pool_user_is_refused_without_the_samples_service_file() {
         unsafe {
             let (_l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &[]);
             assert_ne!(plan.verdicts[0], Verdict::Accepted, "{}: the module needs a service the card does not hold", dev.name);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// `samples.dks` is on the card and the image set has no sample-pool adapter (the DN2 device set): the plan refuses the user of the samples service with a reason, and
+/// nothing is loaded.
+#[test]
+fn a_sample_pool_user_is_refused_when_the_image_has_no_sample_pool_adapter() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware() && d.name == "dn2") {
+        let image = Image::read(*dev, "device");
+        assert!(!image.roots.iter().any(|r| r == "core/sample-pool"), "the set is expected to leave the adapter out");
+        unsafe {
+            let (mut l, mut plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
+            // the plan finds the file and cannot tell what the image lacks: the file fails its own check (its `requires` word) and the module then misses its service
+            assert_eq!(plan.np, 1);
+            l.load_providers(&plan);
+            assert!(!l.loaded[0], "{}: samples.dks loaded without the sample-pool adapter", dev.name);
+            l.settle(&mut plan, 1);
+            assert!(matches!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(_))), "{}: {:?}", dev.name, plan.verdicts[0]);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// An import of an image adapter that the host cannot link is accepted when the image set has the adapter, and not when it lacks it.
+#[test]
+fn an_adapter_import_resolves_only_in_an_image_with_the_adapter() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        let file = packed(*dev, TRACK_SELECT.leaf, "dkm", TRACK_SELECT.nx);
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
+            l.load_providers(&plan);
+            assert!(imports_resolve(&mut l, &image, &file, "track-select"), "{}: the image has core/ui", dev.name);
+            let bare = Image { entries: Vec::new(), roots: Vec::new() };
+            let refused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| imports_resolve(&mut l, &bare, &file, "track-select")));
+            assert!(refused.is_err(), "{}: an image without core/ui accepted dk_ui_*", dev.name);
         }
         let _ = clean_state();
     }

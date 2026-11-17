@@ -11,7 +11,7 @@ fn client(h: *mut u8) -> u32 {
     h as usize as u32
 }
 
-/// `setup` of the file (the first step of `init`): the adapter's calls from `sample_pool_info`. No adapter is not a refusal: every add then answers `E_CONTRACT`.
+/// `setup` of the file (the first step of `init`): the adapter's calls from `sample_pool_info`. Without the adapter the file does not load (`requires = core/sample-pool` of its module.toml, so its users are refused with a missing need); `None` here is a host build, where there is no way to call the adapter.
 pub unsafe fn setup(core: &ImportCore) -> i32 {
     pool::set(pool::from_info(core));
     OK

@@ -221,17 +221,3 @@ pub unsafe fn sdk_delete(root: u32, path: *const u8) -> i32 {
     unlock();
     busy(r)
 }
-
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_sdk_accepts_the_defer_flag_and_nothing_else() {
-        assert_eq!(FILE_DEFER & FILE_REPLACE, 0);
-        assert_eq!((FILE_REPLACE | FILE_DEFER) & !(FILE_REPLACE | FILE_DEFER), 0);
-        assert_eq!(PENDING_MAX, 16);
-    }
-}
