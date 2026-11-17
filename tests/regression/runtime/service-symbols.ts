@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { Session } from '@digi/test-support';
 import { readLoadTable } from './addrmap.ts';
 import { planSymbol, rememberShipMap, shipMapOf, type RuntimePlan } from './runtime-plan.ts';
-import { boundMapPath, SERVICE_MODULES } from './service-files.ts';
+import { boundMapPath } from './service-files.ts';
 
 /** What a lookup needs of a runtime: its session (`PatchedSession`, `TestRuntime` and `Rt` all have it). */
 type WithSession = { readonly session: Session };
@@ -15,7 +15,7 @@ export interface LookupOptions {
 }
 
 /**
- * The load address of service `service`: its record in the device load table (`readLoadTable`, docs/ADDRMAP.md), found by the module id of the service file. The table
+ * The load address of service `service`: its record in the device load table (`readLoadTable`, docs/ADDRMAP.md), found by the last part of the module id (a service module's id ends in the service name). The table
  * is read from the running device's memory, so it works while the daemon is paused. The test that asks is a live-patchkit task (it decodes the table with `patchkit addr`).
  */
 async function loadAddress(
@@ -24,18 +24,14 @@ async function loadAddress(
   service: string,
   opts: LookupOptions,
 ): Promise<number> {
-  const id = SERVICE_MODULES[service];
-  if (!id) throw new Error(`unknown service ${service}`);
   const shipMap = opts.shipMap ?? shipMapOf(plan);
   if (!shipMap)
     throw new Error(
       `no address map for the image of this plan: call rememberShipMap(plan, planFile) when the plan is prepared`,
     );
-  const hit = (await readLoadTable(runtime.session, plan, shipMap)).find((l) => l.id === id);
+  const hit = (await readLoadTable(runtime.session, plan, shipMap)).find((l) => l.id.split('/').at(-1) === service);
   if (!hit)
-    throw new Error(
-      `service ${service} (${id}) is not in the load table: the card has no ${service}.dks, or it was refused`,
-    );
+    throw new Error(`service ${service} is not in the load table: the card has no ${service}.dks, or it was refused`);
   return hit.base;
 }
 
@@ -45,7 +41,7 @@ async function loadAddress(
  */
 export function serviceMapEntries(device: Session['options']['device'], service: string): Map<string, number> {
   const file = boundMapPath(device, service);
-  if (!fs.existsSync(file)) throw new Error(`${file}: run nx run ${SERVICE_MODULES[service]}:bind`);
+  if (!fs.existsSync(file)) throw new Error(`${file}: run nx run core/services/${service}:bind`);
   const map = JSON.parse(fs.readFileSync(file, 'utf8')) as { entries: { cpu: string; addr: number; name: string }[] };
   return new Map(map.entries.filter((e) => e.cpu === 'cf').map((e) => [e.name, e.addr]));
 }

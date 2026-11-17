@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, expect, test, vi } from 'vitest';
 import type { DkSession } from '@digi/dk-session';
-import { neededServiceHashes, nameHash } from '../runtime/dkm-parse.ts';
 
 // hoisted: the mock below (and the modules that call `repoRoot` when they load) need the directory first
 const dir = vi.hoisted(() => {
@@ -33,49 +32,30 @@ fs.writeFileSync(path.join(dir, 'dist/modules/dt2/fx.dks'), 'packed');
 // the file the Nx target `core/services/fx:bind` wrote
 fs.mkdirSync(path.join(dir, 'dist/svc-bound/dt2'), { recursive: true });
 fs.writeFileSync(path.join(dir, 'dist/svc-bound/dt2/fx.dks'), 'bound');
+const FX = { service: 'fx', moduleId: 'core/services/fx' };
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 // the sidecar `patchkit bind` writes: what the bound file was made from (the stock image of this test does not exist, so only the packed file is compared)
 const sidecar = path.join(dir, 'dist/svc-bound/dt2/fx.src.json');
 fs.writeFileSync(sidecar, JSON.stringify({ unbound_sha256: sha('packed'), firmware_sha256: 'x' }));
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-/** A packed .dkm reduced to its header pair and a header table whose NEEDS entry holds `hashes` (hard needs). */
-function dkm(hashes: number[]): Buffer {
-  const needs = Buffer.alloc(8 + 12 * hashes.length);
-  needs.writeUInt16BE(1, 0);
-  needs.writeUInt16BE(hashes.length, 2);
-  needs.writeUInt32BE(12 * hashes.length, 4);
-  hashes.forEach((h, i) => {
-    needs.writeUInt32BE(h, 8 + 12 * i);
-    needs.writeUInt32BE(1, 16 + 12 * i);
-  });
-  const head = Buffer.alloc(8);
-  head.writeUInt32BE(0x444b5442, 0);
-  head.writeUInt16BE(1, 4);
-  head.writeUInt16BE(1, 6);
-  const file = Buffer.alloc(0xa0);
-  file.writeUInt32BE(0xa0, 0x90);
-  file.writeUInt32BE(head.length + needs.length, 0x94);
-  return Buffer.concat([file, head, needs]);
-}
-
-const write = (name: string, hashes: number[]) => {
+// the pack target writes `<leaf>.services.json` (`patchkit services`, one JSON line per service) beside the file: here gain.dkm is an effect
+const write = (name: string) => {
   const file = path.join(dir, name);
-  fs.writeFileSync(file, dkm(hashes));
+  fs.writeFileSync(file, 'packed module');
+  fs.writeFileSync(
+    file.replace(/\.dkm$/, '.services.json'),
+    name === 'gain.dkm' ? '{"service":"fx","module_id":"core/services/fx","store_path":"services/fx.dks"}\n' : '',
+  );
   return file;
 };
 
-test('the needs of a packed module are read from its header table', () => {
-  expect(neededServiceHashes(dkm([nameHash('fx'), nameHash('lfo')]))).toEqual([nameHash('fx'), nameHash('lfo')]);
-  expect(neededServiceHashes(dkm([]))).toEqual([]);
-});
-
-test('only the services that a .dks provides (the table of service files) are named', () => {
-  const effect = write('effect.dkm', [nameHash('fx'), nameHash('runtime-only')]);
-  const machine = write('machine.dkm', [nameHash('machines')]);
-  expect(neededServices([effect, machine])).toEqual(['machines', 'fx']);
-  expect(neededServices([machine])).toEqual(['machines']);
-  expect(neededServices([effect])).toEqual(['fx']);
+test('the needed services are read from the files that the pack target wrote', () => {
+  expect(neededServices([write('gain.dkm'), write('plain.dkm')])).toEqual([FX]);
+  expect(neededServices([write('plain.dkm')])).toEqual([]);
+  expect(() => neededServices([path.join(dir, 'unpacked.dkm')])).toThrow(
+    /missing .*unpacked\.services\.json: run nx run/,
+  );
 });
 
 test('install puts the bound service on the card before the selection and the restart', async () => {
@@ -89,7 +69,7 @@ test('install puts the bound service on the card before the selection and the re
     waitForBoot: async () => void order.push('boot'),
     modules: async () => [{ name: 'test/dyn-fx-gain' }],
   } as unknown as DkSession;
-  const effect = write('gain.dkm', [nameHash('fx')]);
+  const effect = write('gain.dkm');
   await installModules(dk, [{ id: 'test/dyn-fx-gain', artifact: effect }], { device: 'dt2' });
   expect(order).toEqual(['put modules/dyn-fx-gain.dkm', 'put services/fx.dks', 'select', 'restart', 'boot']);
   expect(sent.get('services/fx.dks'), 'the bound file of the Nx bind target goes on the card').toBe('bound');
@@ -106,13 +86,13 @@ test('a bound file made from other bytes than the packed service is refused with
   const now = Date.now() / 1000;
   fs.utimesSync(bound, now + 10, now + 10);
   fs.utimesSync(packed, now, now);
-  await expect(boundService('dt2', 'fx', packed)).resolves.toBe(bound);
+  await expect(boundService('dt2', FX, packed)).resolves.toBe(bound);
   fs.writeFileSync(sidecar, JSON.stringify({ unbound_sha256: sha('an older pack'), firmware_sha256: 'x' }));
-  await expect(boundService('dt2', 'fx', packed)).rejects.toThrow(
+  await expect(boundService('dt2', FX, packed)).rejects.toThrow(
     /was bound from another fx\.dks: run nx run core\/services\/fx:bind/,
   );
   fs.rmSync(sidecar);
-  await expect(boundService('dt2', 'fx', packed)).rejects.toThrow(/no \.src\.json sidecar .*: run nx run/);
+  await expect(boundService('dt2', FX, packed)).rejects.toThrow(/no \.src\.json sidecar .*: run nx run/);
   fs.writeFileSync(sidecar, JSON.stringify({ unbound_sha256: sha('packed'), firmware_sha256: 'x' }));
 });
 

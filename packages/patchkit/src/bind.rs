@@ -1090,6 +1090,39 @@ pub fn output_allowed(root: &Path, out: &Path) -> bool {
         || out.starts_with(root.join("out"))
 }
 
+/// The sidecar `<name>.src.json` of a bound file: what it was made from (the unbound file and the firmware image, by sha256), so a harness tells a stale copy by content.
+pub fn sidecar_json(dks: &[u8], firmware: &[u8]) -> String {
+    format!(
+        "{{\"unbound_sha256\":\"{}\",\"firmware_sha256\":\"{}\"}}\n",
+        sha256_hex(dks),
+        sha256_hex(firmware)
+    )
+}
+
+/// The sidecar path of a bound file `out` (`x.dks` to `x.src.json`).
+pub fn sidecar_path(out: &Path) -> std::path::PathBuf {
+    out.with_extension("src.json")
+}
+
+/// Why the bound file `out` does not match the packed file `dks` and the firmware image `firmware_sha256` (its sidecar), or `None` when it does.
+/// A missing file or sidecar is stale too.
+pub fn stale_binding(out: &Path, dks: &[u8], firmware_sha256: &str) -> Option<String> {
+    if !out.is_file() {
+        return Some("is missing".into());
+    }
+    let Ok(text) = std::fs::read_to_string(sidecar_path(out)) else {
+        return Some("has no .src.json sidecar".into());
+    };
+    let src: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+    if src["unbound_sha256"].as_str() != Some(sha256_hex(dks).as_str()) {
+        return Some("was bound from another packed file".into());
+    }
+    if src["firmware_sha256"].as_str() != Some(firmware_sha256) {
+        return Some("was bound to another firmware image".into());
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -126,8 +126,8 @@ function fakeDk() {
 }
 
 /**
- * Every read returns `text`, except dist/bytes/images.sha256, which covers the DT2 1.17 emulator set (runtime-plan.ts assertCovered), and a packed `.dkm`, a stand-in
- * with no header table (it needs no service).
+ * Every read returns `text`, except dist/bytes/images.sha256, which covers the DT2 1.17 emulator set (runtime-plan.ts assertCovered), and a packed `.dkm`, a stand-in,
+ * and its `.services.json` (empty: it needs no service).
  */
 const readFiles = (text: string) =>
   fake.read.mockImplementation((file: string) =>
@@ -135,7 +135,9 @@ const readFiles = (text: string) =>
       ? 'dt2-1.17 emulator image x plan y addrmap z\n'
       : String(file).endsWith('.dkm')
         ? Buffer.alloc(16)
-        : text,
+        : String(file).endsWith('.services.json')
+          ? ''
+          : text,
   );
 
 beforeEach(() => {

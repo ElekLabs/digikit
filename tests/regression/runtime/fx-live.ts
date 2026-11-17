@@ -24,7 +24,7 @@ import { plusdriveBinary } from './card-kit.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { daemonBinary, FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices, SERVICE_MODULES } from './service-files.ts';
+import { boundService, neededServices } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { deviceProfile } from './device-data.ts';
 import type { FxExpectations } from './dkm-parse.ts';
@@ -84,9 +84,9 @@ async function baseline(
   const selection = ['modules/sine.dkm', ...(wet ? ['modules/dyn-fx-gain.dkm'] : [])];
   // the services the gain effect needs (fx.dks), bound to the stock firmware, go to digikit/services
   const services = await Promise.all(
-    neededServices(files.map((f) => f.file)).map(async (name) => ({
-      name: `${name}.dks`,
-      file: await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
+    neededServices(files.map((f) => f.file)).map(async (needed) => ({
+      name: `${needed.service}.dks`,
+      file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
     })),
   );
   const key = cardKey(device, {

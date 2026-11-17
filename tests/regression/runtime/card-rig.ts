@@ -34,7 +34,7 @@ import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices, servicePath, SERVICE_MODULES } from './service-files.ts';
+import { boundService, neededServices, servicePath } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { RING_SYMBOLS } from './runtime-menu.ts';
 import {
@@ -264,10 +264,10 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     // the services that these modules need go on the card too, bound to the stock firmware (`service-files.ts`)
     const services = await Promise.all(
       neededServices(files.map((m) => m.file))
-        .filter((name) => !files.some((m) => m.name === servicePath(name)))
-        .map(async (name) => ({
-          name: servicePath(name),
-          file: await boundService(device, name, moduleArtifact(device, SERVICE_MODULES[name]!)),
+        .filter((needed) => !files.some((m) => m.name === servicePath(needed.service)))
+        .map(async (needed) => ({
+          name: servicePath(needed.service),
+          file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
         })),
     );
     const options = {
