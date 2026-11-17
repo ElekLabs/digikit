@@ -34,7 +34,7 @@
 //! A call with `"profile": true` also answers `profile`: one `[pc, count]` row per pc the call executed, in pc order (the counts
 //! add up to `instructions`; no key without the option, and the loop only counts when it is on).
 //!
-//! `image` is a boot stream as the firmware keeps it (section 7 of an image): it is parsed by the boot crate's own
+//! `image` is a boot stream as the firmware keeps it (section 7 of an image): it is parsed by the sharc-peer crate's own
 //! `LoadedMemory::from_stream` (later blocks win, FILL blocks repeat their argument) and loaded before `code`, so the code
 //! is placed over the stock bytes as `CallSession(base_memory=...)` does. `stock_reads` answers bytes of that image as it
 //! was loaded (before any `code`, poke or store), `null` for a range the stream does not fully write.
@@ -57,7 +57,7 @@
 
 mod json;
 
-// The boot crate's stream reader, compiled in place (a dependency on the crate would change Cargo.lock, which is an
+// The sharc-peer crate's stream reader, compiled in place (a dependency on the crate would change Cargo.lock, which is an
 // input of the device tests). `dsp_stream` uses `crate::dsp_patch`.
 #[allow(dead_code)]
 #[path = "../../emulator/sharc-peer/src/dsp_patch.rs"]
