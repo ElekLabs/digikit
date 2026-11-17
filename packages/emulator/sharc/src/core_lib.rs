@@ -9,7 +9,7 @@
 //! Host and library must use the system allocator (no `#[global_allocator]` exists in the workspace:
 //! a `Vec` or `Box` made on one side is freed on the other) and the `unwind` panic strategy; the header's
 //! `flags` field carries the panic strategy, the optimisation level, the profile and a hash of the
-//! rustflags (PGO profile flags excluded: a PGO host and a plain library accept each other), and a library built
+//! rustflags (PGO-only flags excluded: a PGO host and a plain library accept each other), and a library built
 //! with other flags is refused.
 
 #![cfg(any(unix, windows))]
