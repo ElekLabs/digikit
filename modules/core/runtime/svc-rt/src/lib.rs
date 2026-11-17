@@ -158,6 +158,42 @@ impl CoreApi for ImportCore {
     unsafe fn module_name(&self, owner: u8) -> *const u8 {
         dkc_module_name(owner)
     }
+    unsafe fn module_of(&self, ctx: *const u8) -> u8 {
+        dkc_module_of(ctx)
+    }
+    unsafe fn storage_stat(&self, root: u32, path: &[u8]) -> Result<dkrt_abi::storage::Stat, i32> {
+        let mut w = dkrt_abi::storage::StatWire::empty();
+        let r = dkc_storage_stat(root, path.as_ptr(), path.len() as u32, &mut w);
+        if r < 0 {
+            return Err(r);
+        }
+        Ok(w.stat())
+    }
+    unsafe fn storage_stat_head(
+        &self,
+        root: u32,
+        path: &[u8],
+        head: &mut [u8; 64],
+    ) -> Result<(dkrt_abi::storage::Stat, usize), i32> {
+        let mut w = dkrt_abi::storage::StatWire::empty();
+        let r = dkc_storage_stat_head(
+            root,
+            path.as_ptr(),
+            path.len() as u32,
+            &mut w,
+            head.as_mut_ptr(),
+        );
+        if r < 0 {
+            return Err(r);
+        }
+        Ok((w.stat(), r as usize))
+    }
+    fn irq_mask(&self) -> u32 {
+        unsafe { dkc_irq_mask() }
+    }
+    fn irq_restore(&self, sr: u32) {
+        unsafe { dkc_irq_restore(sr) }
+    }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         dkc_settings_get(
             key.as_ptr(),

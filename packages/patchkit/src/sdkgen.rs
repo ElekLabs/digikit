@@ -570,9 +570,21 @@ fn rust_services(sdk: &Sdk) -> String {
         .iter()
         .map(|d| format!("{:?}", d.name))
         .collect::<Vec<_>>();
+    // Without in-crate rows there is no `HEAD`: a static of zero size has no section, and a pointer to it would be a relocation against nothing.
+    let (head, table) = if n == 0 {
+        (
+            String::new(),
+            "ServiceTable::new(&[], &REAL_CORE)".to_string(),
+        )
+    } else {
+        (
+            format!("static HEAD: RowPtrs<{n}> = RowPtrs::of(&SERVICES);\n\n"),
+            "ServiceTable::new(&HEAD.0, &REAL_CORE)".to_string(),
+        )
+    };
     let _ = write!(
         s,
-        "/// The name of every `[[service]]`, in file order: the ordinal of a service. The rows a `.dks` adds follow the in-crate rows sorted by it (`svc_rows.rs`).\npub const ORDER: [&str; {}] = [{}];\n\n/// The length of the row table: the in-crate rows, then room for `PROVIDER_MAX` rows of loaded service files.\npub const ROWS_LEN: usize = STATIC + dkrt_sdk::PROVIDER_MAX;\n\n/// The row table: the in-crate rows first, then the loaded ones (written by `svc_rows.rs` only; the null tail is not part of any table).\npub static mut ROWS: [*const ServiceRow; ROWS_LEN] = rows_with_tail(&SERVICES);\n\nstatic HEAD: RowPtrs<{n}> = RowPtrs::of(&SERVICES);\n\n/// The table of the in-crate rows alone (the declare check and `is_runtime_service`).\npub const TABLE: ServiceTable = ServiceTable::new(&HEAD.0, &REAL_CORE);\n",
+        "/// The name of every `[[service]]`, in file order: the ordinal of a service. The rows a `.dks` adds follow the in-crate rows sorted by it (`svc_rows.rs`).\npub const ORDER: [&str; {}] = [{}];\n\n/// The length of the row table: the in-crate rows, then room for `PROVIDER_MAX` rows of loaded service files.\npub const ROWS_LEN: usize = STATIC + dkrt_sdk::PROVIDER_MAX;\n\n/// The row table: the in-crate rows first, then the loaded ones (written by `svc_rows.rs` only; the null tail is not part of any table).\npub static mut ROWS: [*const ServiceRow; ROWS_LEN] = rows_with_tail(&SERVICES);\n\n{head}/// The table of the in-crate rows alone (the declare check and `is_runtime_service`).\npub const TABLE: ServiceTable = {table};\n",
         order.len(),
         order.join(", ")
     );

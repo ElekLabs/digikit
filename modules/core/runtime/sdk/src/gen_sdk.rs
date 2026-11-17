@@ -106,9 +106,6 @@ pub mod records {
         (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2, "machines"),
         (KIND_LFO_SHAPE, LEN_LFO_SHAPE, "lfo"),
     ];
-    /// The kinds of the `samples` service: (kind, record length).
-    pub const KINDS_SAMPLES: [(u32, u32); 0] = [
-    ];
     /// The kinds of the `machines` service: (kind, record length).
     pub const KINDS_MACHINES: [(u32, u32); 6] = [
         (KIND_PARAM, LEN_PARAM),
@@ -127,9 +124,8 @@ pub mod records {
         (KIND_LFO_SHAPE, LEN_LFO_SHAPE),
     ];
     /// The services of `[handle] services` that are in the runtime image (not the ones a `.dks` provides): the names a module's `NEEDS` meets without a provider (hashed by `dkneeds::keys::name_hash`).
-    pub const HANDLE_SERVICES: [&str; 7] = [
+    pub const HANDLE_SERVICES: [&str; 6] = [
         "runtime",
-        "samples",
         "ui",
         "input",
         "usb_bulk",
@@ -635,7 +631,7 @@ pub mod api {
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`, and not provided by a service file.
-    pub const BUILTIN_NAMES: [&str; 83] = [
+    pub const BUILTIN_NAMES: [&str; 74] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -703,15 +699,6 @@ pub mod api {
         "dk_page_bind_local",
         "dk_fx_routes",
         "dk_fx_mix",
-        "dk_sample_pool_open",
-        "dk_sample_pool_add",
-        "dk_sample_pool_clear",
-        "dk_sample_pool_status",
-        "dk_sample_pool_info",
-        "dk_sample_pool_path",
-        "dk_sample_pool_set",
-        "dk_sample_pool_peaks",
-        "dk_sample_pool_peaks_window",
         "dk_debug_peek",
         "dk_debug_span_clock",
         "dk_debug_poll",

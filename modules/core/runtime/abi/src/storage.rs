@@ -33,6 +33,51 @@ pub struct Stat {
     pub hash: [u8; 32],
 }
 
+/// `Stat` in C shape: the out parameter of the `dkc_storage_stat*` imports of a service file (`kind` 0 file, 1 directory; `hash_valid` 0 or 1).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct StatWire {
+    pub kind: u32,
+    pub size: u32,
+    pub hash_kind: u32,
+    pub hash_valid: u32,
+    pub hash: [u8; 32],
+}
+
+impl StatWire {
+    pub const fn empty() -> StatWire {
+        StatWire {
+            kind: 0,
+            size: 0,
+            hash_kind: 0,
+            hash_valid: 0,
+            hash: [0; 32],
+        }
+    }
+    pub fn of(s: &Stat) -> StatWire {
+        StatWire {
+            kind: if s.kind == EntryKind::Dir { 1 } else { 0 },
+            size: s.size,
+            hash_kind: s.hash_kind as u32,
+            hash_valid: s.hash_valid as u32,
+            hash: s.hash,
+        }
+    }
+    pub fn stat(&self) -> Stat {
+        Stat {
+            kind: if self.kind == 1 {
+                EntryKind::Dir
+            } else {
+                EntryKind::File
+            },
+            size: self.size,
+            hash_kind: self.hash_kind as u8,
+            hash_valid: self.hash_valid != 0,
+            hash: self.hash,
+        }
+    }
+}
+
 /// One listing entry. `name` holds the entry's own name (not the path), `name_len` bytes of it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DirEntry {

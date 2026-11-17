@@ -11,15 +11,12 @@ use dkrt_abi::dsp::DspState;
 use dkrt_abi::registry::RegState;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
-pub use dkrt_abi::core_api::{CoreApi, SampleCore, JOB_E_CANCELLED, LOG_INFO};
+pub use dkrt_abi::core_api::{CoreApi, JOB_E_CANCELLED, LOG_INFO};
 
 // The platform facts a service may read (the device profile, the interrupt mask, the sample-pool provider): the only platform names a service has.
 pub use crate::platform::PLATFORM;
 pub use dkrt_abi::platform::{Platform, SamplePool};
 pub use dkrt_abi::storage::Storage;
-
-// The C-API glue of the services' imports (`dk_sample_pool_*`): the handle a module holds and the record behind a context.
-pub(crate) use crate::entry::{client, give, own_rec};
 
 /// What the services' host tests use of the core's job queue.
 #[cfg(test)]
@@ -34,13 +31,6 @@ pub struct RealCore;
 
 /// The value a function that needs no host test passes to a `CoreApi` call.
 pub const REAL_CORE: RealCore = RealCore;
-
-impl SampleCore for RealCore {
-    type Host = crate::platform::RealPlatform;
-    fn host(&self) -> &crate::platform::RealPlatform {
-        &PLATFORM
-    }
-}
 
 impl CoreApi for RealCore {
     unsafe fn dynreg(&self) -> *const u32 {
@@ -87,6 +77,24 @@ impl CoreApi for RealCore {
     }
     unsafe fn module_name(&self, owner: u8) -> *const u8 {
         crate::st().modules[owner as usize - 1].name.as_ptr()
+    }
+    unsafe fn module_of(&self, ctx: *const u8) -> u8 {
+        match crate::entry::own_rec(ctx as *mut u8) {
+            Some(rec) => (rec + 1) as u8,
+            None => 0,
+        }
+    }
+    unsafe fn storage_stat(&self, root: u32, path: &[u8]) -> Result<dkrt_abi::storage::Stat, i32> {
+        PLATFORM.stat(root, path)
+    }
+    unsafe fn storage_stat_head(&self, root: u32, path: &[u8], head: &mut [u8; 64]) -> Result<(dkrt_abi::storage::Stat, usize), i32> {
+        PLATFORM.stat_head(root, path, head)
+    }
+    fn irq_mask(&self) -> u32 {
+        PLATFORM.irq_mask()
+    }
+    fn irq_restore(&self, sr: u32) {
+        PLATFORM.irq_restore(sr)
     }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         settings::get(key, out)

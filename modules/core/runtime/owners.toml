@@ -35,7 +35,6 @@ shared = [
   "dkrt::debug_selected_params",
 ]
 
-"S:samples" = ["dkrt_svc_samples"]
 "S:lfo" = ["dkrt_svc_lfo"]
 
 "C:state" = ["dkrt::settings", "dkrt::selection"]

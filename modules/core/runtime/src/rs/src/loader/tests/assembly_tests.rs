@@ -358,12 +358,15 @@ const DYN_DN2: Fixture = Fixture { leaf: "dyn-dn2", nx: "test/dyn-dn2" };
 const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
 const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
 const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
+/// A module that calls `dk_sample_pool_open` and the pool calls without owning a table: a user of the samples service file, no DSP section.
+const TRACK_SELECT: Fixture = Fixture { leaf: "track-select", nx: "test/track-select" };
 
-/// The service files of the card: the three services of the runtime and the test service.
-const SERVICES: [Fixture; 4] = [
+/// The service files of the card: the four services of the runtime and the test service.
+const SERVICES: [Fixture; 5] = [
     Fixture { leaf: "fx", nx: "core/services/fx" },
     Fixture { leaf: "machines", nx: "core/services/machines" },
     Fixture { leaf: "lfo", nx: "core/services/lfo" },
+    Fixture { leaf: "samples", nx: "core/services/samples" },
     Fixture { leaf: "svc-test", nx: "test/svc-test" },
 ];
 
@@ -427,7 +430,8 @@ fn binds_of(l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
 
 /// Every name the file imports resolves: against the runtime's tables (and the service-only ones for a service file) or an export of a loaded provider. The loader
 /// does the same at a load; a module with a DSP section is not loaded on the host, so its imports are looked at here.
-unsafe fn imports_resolve(l: &mut Boot, file: &[u8], what: &str) {
+unsafe fn imports_resolve(l: &mut Boot, file: &[u8], what: &str) -> bool {
+    let mut adapter_imports = false;
     let role = be(file, dkneeds::H_ROLE);
     let (off, n) = (be(file, dkneeds::H_IMPORT_OFF) as usize, be(file, dkneeds::H_IMPORT_N) as usize);
     for i in 0..n {
@@ -441,8 +445,16 @@ unsafe fn imports_resolve(l: &mut Boot, file: &[u8], what: &str) {
         if a == 0 {
             a = l.exports.resolve(name_hash(std::str::from_utf8(&name[..len]).unwrap())).unwrap_or(0);
         }
+        // a service of an image adapter (core/ui, core/input, core/usb-bulk, core/sdhc-large, core/dsp-link): the runtime links it as optional, the module loads without
+        // it and its `_open` answers DK_E_MISSING; the adapters are not part of this card
+        let adapter_service = ["dk_ui_", "dk_input_", "dk_usb_bulk_", "dk_sdhc_large_", "dk_dsp_link_"].iter().any(|p| name.starts_with(p.as_bytes()));
+        if a == 0 && adapter_service {
+            adapter_imports = true;
+            continue;
+        }
         assert_ne!(a, 0, "{what} imports {}, which the runtime and the loaded services do not have", String::from_utf8_lossy(&name[..len]));
     }
+    adapter_imports
 }
 
 /// The seam of a fixture with its provider: the plan accepts the module and finds `want` on the card, the providers load (the ABI word, the stock bytes of every
@@ -486,8 +498,9 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
     // each module: its imports resolve, and without a DSP section it loads
     for (k, m) in modules.iter().enumerate() {
         let file = packed(dev, m.leaf, "dkm", m.nx);
-        imports_resolve(&mut l, &file, m.leaf);
-        if be(&file, dkneeds::H_DSP_SIZE) == 0 {
+        // a module with a service of an image adapter among its imports (core/ui) is not loaded here: its link needs the adapter
+        let adapter_imports = imports_resolve(&mut l, &file, m.leaf);
+        if be(&file, dkneeds::H_DSP_SIZE) == 0 && !adapter_imports {
             l.phase = Phase::Boot;
             let path = std::format!("modules/{}.dkm\0", m.leaf);
             let r = l.load(path.as_ptr());
@@ -537,6 +550,33 @@ fn an_lfo_loads_with_the_lfo_service_file() {
     }
 }
 
+/// A module that uses the sample pool is found by its needs: the search finds `services/samples.dks`, the file loads (ABI word, declare check, exports and the
+/// two pool slots as the bind records say), and the module's imports (`dk_sample_pool_*`) resolve to the file's exports.
+#[test]
+fn a_sample_pool_user_loads_with_the_samples_service_file() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        unsafe {
+            fits(*dev, "emulator", &[&TRACK_SELECT], &["samples"]);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// The same module on a card without `samples.dks`: the plan refuses it (its need of the samples service is missing), nothing is loaded.
+#[test]
+fn a_sample_pool_user_is_refused_without_the_samples_service_file() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (_l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &[]);
+            assert_ne!(plan.verdicts[0], Verdict::Accepted, "{}: the module needs a service the card does not hold", dev.name);
+        }
+        let _ = clean_state();
+    }
+}
+
 #[test]
 fn a_c_service_with_the_abi_word_0_is_accepted_and_its_user_loads() {
     let _g = clean();
@@ -555,11 +595,17 @@ fn every_service_of_the_card_loads_together_on_the_emulator_and_the_device_image
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         for set in ["emulator", "device"] {
             let mut modules: Vec<&Fixture> = std::vec![&SINE, &FX_GAIN, &LFO_SHAPE, &SVC_USER];
+            let mut want = std::vec!["machines", "fx", "lfo", "svc-test"];
+            // the samples service file needs the sample-pool adapter (`requires`), which the DN2 device image leaves out (the DN2 pool is not proven on hardware)
+            if !(dev.name == "dn2" && set == "device") {
+                modules.push(&TRACK_SELECT);
+                want.push("samples");
+            }
             if dev.name == "dn2" {
                 modules.push(&DYN_DN2);
             }
             unsafe {
-                fits(*dev, set, &modules, &["machines", "fx", "lfo", "svc-test"]);
+                fits(*dev, set, &modules, &want);
             }
             let _ = clean_state();
         }

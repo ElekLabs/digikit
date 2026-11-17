@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include "dkrt_pool.h"
 #include "cf/pool_core.h"
+#include "cf/pool_events.h"
 #include "cf/pool_peaks.h"
 #include "dk_fw_samples.h"
 #include "dk_fw_storage.h"
@@ -347,7 +348,7 @@ void dkpool_tick(void)
             r->state = RQ_FREE;
             if (release)
                 queue_release(slot_of); /* loaded for nobody */
-            dkrt_pool_done(req, result);
+            sp_pool_done(req, result);
         }
     }
     /* 2. releases that waited for a request */
@@ -362,7 +363,7 @@ void dkpool_tick(void)
         for (slot = SP_SLOTS - 1u; slot >= sp_dev_slot_floor && slot < SP_SLOTS; slot--)
             if (slot_state[slot] == SL_OWNED)
                 set_slot(slot, SL_FREE);
-        dkrt_pool_lost();
+        sp_pool_lost();
     }
 }
 
@@ -422,3 +423,11 @@ i32 dkpool_window_step(const dkpool_handle *h, const u8 *path, u32 first, u32 fr
     *cursor = at;
     return at < first + frames ? 1 : 0;
 }
+
+/* The table the samples service reads (src/cf/pool_events.h). */
+const void *const sample_pool_info[11] = {
+    (const void *)SP_INFO_MAGIC,      (const void *)DKPOOL_VERSION,     (const void *)0,
+    (const void *)dkpool_load,        (const void *)dkpool_release,     (const void *)dkpool_check,
+    (const void *)dkpool_free_frames, (const void *)dkpool_tick,        (const void *)dkpool_cancel,
+    (const void *)dkpool_peaks,       (const void *)dkpool_window_step,
+};

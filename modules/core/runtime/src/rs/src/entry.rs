@@ -290,7 +290,6 @@ mod tests {
             let mut out: *mut u8 = core::ptr::null_mut();
             assert_eq!(dk_settings_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert_eq!(dk_files_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
-            assert_eq!(crate::handlers::exports::dk_sample_pool_open(core::ptr::null_mut(), &mut out), E_CONTRACT);
             assert!(out.is_null());
         }
     }

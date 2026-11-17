@@ -7,11 +7,10 @@ mod pool;
 pub mod routes;
 mod storage;
 use core::cell::{Cell, RefCell};
-use dkrt_abi::core_api::{CoreApi, SampleCore};
+use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspState;
 use dkrt_abi::fw::Fw;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
-use dkrt_abi::platform::SampleHost;
 use dkrt_abi::registry::RegState;
 use dkrt_link::fake::{link, FakeLink};
 use dkrt_link::Link;
@@ -98,22 +97,13 @@ impl Default for FakeHost {
     }
 }
 
-impl SampleHost for FakeHost {
-    type Store = FakeStorage;
-    fn store(&self) -> &FakeStorage {
-        &self.storage
-    }
-    fn pool_present(&self) -> bool {
-        self.pool.get()
-    }
-    fn files_in_store(&self) -> bool {
-        self.in_store.get()
-    }
-    fn mask_irq(&self) -> u32 {
+impl FakeHost {
+    /// Mask interrupts (a counter: `masked` says how many masks are open); the old status register.
+    pub fn mask_irq(&self) -> u32 {
         self.masked.set(self.masked.get() + 1);
         0x2700
     }
-    fn restore_irq(&self, _sr: u32) {
+    pub fn restore_irq(&self, _sr: u32) {
         self.masked.set(self.masked.get() - 1);
     }
 }
@@ -137,6 +127,8 @@ pub struct FakeCore {
     pub first: u32,
     pub owners: Vec<u8>,
     pub source: Cell<u8>,
+    /// What `module_of` answers: the record of the module whose context a call names (0: none).
+    pub module: Cell<u8>,
     pub settings: RefCell<Vec<(Vec<u8>, Vec<u8>)>>,
     pub link: RefCell<&'static mut Link<FakeLink>>,
     pub name: String,
@@ -168,6 +160,7 @@ impl FakeCore {
             first: 100,
             owners: Vec::new(),
             source: Cell::new(0),
+            module: Cell::new(1),
             settings: RefCell::new(Vec::new()),
             link: RefCell::new(Box::leak(Box::new(link()))),
             name: String::from("fake\0"),
@@ -223,13 +216,6 @@ impl FakeCore {
     }
     fn rec(&self, c: Call) {
         self.calls.borrow_mut().push(c);
-    }
-}
-
-impl SampleCore for FakeCore {
-    type Host = FakeHost;
-    fn host(&self) -> &FakeHost {
-        &self.host
     }
 }
 
@@ -316,6 +302,28 @@ impl CoreApi for FakeCore {
     }
     unsafe fn module_name(&self, _owner: u8) -> *const u8 {
         self.name.as_ptr()
+    }
+    unsafe fn module_of(&self, _ctx: *const u8) -> u8 {
+        self.module.get()
+    }
+    unsafe fn storage_stat(&self, root: u32, path: &[u8]) -> Result<dkrt_abi::storage::Stat, i32> {
+        use dkrt_abi::storage::Storage;
+        self.host.storage.stat(root, path)
+    }
+    unsafe fn storage_stat_head(
+        &self,
+        root: u32,
+        path: &[u8],
+        head: &mut [u8; 64],
+    ) -> Result<(dkrt_abi::storage::Stat, usize), i32> {
+        use dkrt_abi::storage::Storage;
+        self.host.storage.stat_head(root, path, head)
+    }
+    fn irq_mask(&self) -> u32 {
+        self.host.mask_irq()
+    }
+    fn irq_restore(&self, sr: u32) {
+        self.host.restore_irq(sr)
     }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         for (k, v) in self.settings.borrow().iter() {
