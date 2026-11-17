@@ -6,7 +6,8 @@ use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspSec;
 use dkrt_abi::mem::{cstr_len, iw, rd, rd32, wr};
-use dkrt_abi::registry::{each, w, RegState, MACH_TEXT};
+use dkrt_abi::registry::each;
+use dkrt_svc_params::dynreg::{w, RegState, MACH_TEXT};
 use dkrt_abi::service::{
     check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, RowWrite, Service,
     ModuleCommitCtx, SettleCtx,

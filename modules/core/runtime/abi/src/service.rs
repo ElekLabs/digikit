@@ -12,7 +12,7 @@
 //! - capacity counts (`caps`), the module behind a fault site (`attribute`), the guard's state of a machine type (`guard_state`);
 //! - `on_loaded` (every row of a module is in the DSP);
 //! - the module lifecycle: `module_begin` before a module's `init`, `module_commit` after it (two passes over a `RecordSink`), and `remove`;
-//! - the boot: `settle`, once, after the services are loaded and before the first module, with the machine keys of the boot's selection.
+//! - the boot: `settle`, once, after the services are loaded and before the first module, with the keys of the boot's selection.
 use crate::core_api::CoreApi;
 use crate::dsp::{DspSec, Job};
 use core::ffi::c_void;
@@ -38,7 +38,6 @@ const fn svc_abi() -> u32 {
         size_of::<GuardState>(),
         size_of::<DeclItem>(),
         size_of::<Declare>(),
-        size_of::<crate::registry::RegState>(),
         size_of::<Job>(),
         size_of::<DspSec>(),
         size_of::<crate::dsp::DspState>(),
@@ -231,8 +230,8 @@ pub struct ModuleCommitCtx<'a> {
     pub sink: *mut RecordSink,
 }
 
-/// What the loader gives `settle`: the machine keys of each module of the boot's selection (the keys table of its header; `nkeys[k]` of the 8 words of `keys[k]`), in
-/// selection order. A module whose file could not be read has none.
+/// What the loader gives `settle`: the keys of each module of the boot's selection that a service numbers (the keys table of its header; `nkeys[k]` of the 8 words of
+/// `keys[k]`), in selection order. A module whose file could not be read has none. What the keys name is the service's business.
 #[repr(C)]
 pub struct SettleCtx {
     /// The modules of the selection.
@@ -467,7 +466,7 @@ pub trait Service<C: CoreApi> {
     unsafe fn module_commit(core: &C, rec: usize, c: &ModuleCommitCtx) -> i32 {
         OK
     }
-    /// The boot has loaded every service its selection needs and loads no module yet; `s` names the machine keys of each selected module. Called once per boot
+    /// The boot has loaded every service its selection needs and loads no module yet; `s` has the keys of each selected module. Called once per boot
     /// on every service that is loaded. A service that keeps state across boots (the machines service: its type numbers) plans and saves it here.
     unsafe fn settle(core: &C, s: &SettleCtx) {}
 

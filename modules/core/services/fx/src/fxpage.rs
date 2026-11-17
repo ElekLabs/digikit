@@ -890,8 +890,8 @@ mod tests {
         let mut core = FakeCore::new();
         // the parameter table of the firmware, as a fake: rows of 0x40 bytes at 0x1000, the mirror index in the second word
         let mut t = std::vec![0; 96];
-        t[dkrt_abi::registry::w::P_TABLE] = 0x1000;
-        t[dkrt_abi::registry::w::PF_SIZE] = 0x40;
+        t[dkrt_svc_params::dynreg::w::P_TABLE] = 0x1000;
+        t[dkrt_svc_params::dynreg::w::PF_SIZE] = 0x40;
         core.set_dynreg(t);
         unsafe {
             s.min[2][1] = 0f32.to_bits();

@@ -46,8 +46,21 @@ impl CoreApi for RealCore {
     fn boot_index(&self) -> u32 {
         unsafe { core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)) }
     }
-    fn legacy_type_map(&self) -> [u32; dkrt_sdk::sel::MAP_N] {
-        unsafe { (*core::ptr::addr_of!(crate::selection::REC)).map }
+    fn legacy_state(&self) -> [u8; 32] {
+        let map = unsafe { (*core::ptr::addr_of!(crate::selection::REC)).map };
+        let mut b = [0u8; 32];
+        let mut i = 0;
+        while i < map.len() {
+            b[4 * i..4 * i + 4].copy_from_slice(&map[i].to_be_bytes());
+            i += 1;
+        }
+        b
+    }
+    unsafe fn legacy_state_clear(&self) -> i32 {
+        use crate::selection::{update, REC, REC_COPY, REC_VALID};
+        let mut r = REC;
+        r.map = [0; dkrt_sdk::sel::MAP_N];
+        update(r, REC_COPY, REC_VALID)
     }
     unsafe fn guard_faults(&self, ty: u32) -> u32 {
         crate::watch::guard_faults(ty)

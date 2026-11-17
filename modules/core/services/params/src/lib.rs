@@ -1,5 +1,5 @@
 //! Parameter table rows of the run-time registry: the kind-free writers that machines, effect knobs and send knobs share
-//! (docs/design/digikit-registry.md). They read the row layout from `dynreg_info` (`inf`, the words of `dkrt_abi::registry::w`).
+//! (docs/design/digikit-registry.md). They read the row layout from `dynreg_info` (`inf`, the words of `dynreg::w`).
 //!
 //! The crate is compiled into `machines.dks` and `fx.dks`; neither service needs the other. Each writes only the rows its adapter reserves: the machines service
 //! the rows `core/dynreg` reserves (`P_DYN0` for `P_DYN_N` rows of `dynreg_info`), the fx service the rows `core/fxpages` reserves (`P_FIRST` for 9 per effect row and
@@ -7,12 +7,13 @@
 #![no_std]
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::{cstr_len, iw, wr32, FwMem};
-use dkrt_abi::registry::{w, MACH_TEXT};
+pub mod dynreg;
+use dynreg::{w, MACH_TEXT};
 
 /// `DYNR`, the first word of `dynreg_info`.
 pub const DYNREG_MAGIC: u32 = 0x4459_4e52;
 
-/// The words of `dynreg_info` (`dkrt_abi::registry::w`), the table `core/dynreg` exports to the image's info table (`CoreApi::info`); null when the image has no such
+/// The words of `dynreg_info` (`dynreg::w`), the table `core/dynreg` exports to the image's info table (`CoreApi::info`); null when the image has no such
 /// table or it is not one.
 pub unsafe fn dynreg<C: CoreApi>(core: &C) -> *const u32 {
     let t = core.info(dkneeds::keys::name_hash("dynreg_info"));

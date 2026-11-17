@@ -1,7 +1,7 @@
 //! The builder calls of the machines and their commit over a `FakeCore`: the collection, its refusals, the lowering to the records of the `register` section (the records the packer
 //! wrote before builders, and `tests/fixtures/records/lowered.golden`, recorded before the collect moved into the services), and the two passes of `module_commit`.
 use dkrt_abi::keys::KeysCopy;
-use dkrt_abi::registry::w;
+use dkrt_svc_params::dynreg::w;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink, Service};
 use dkrt_sdk::records::*;
 use dkrt_sdk::*;

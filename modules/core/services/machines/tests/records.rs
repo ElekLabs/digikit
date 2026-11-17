@@ -2,7 +2,7 @@
 //! record and the capacity counts. A machine or a page row is written at absolute addresses of the firmware's tables (`wr`), which a host cannot
 //! reach: those parts run in the device tests (`core/dynreg`, `core/input`).
 use dkrt_abi::mem::FwMem;
-use dkrt_abi::registry::w;
+use dkrt_svc_params::dynreg::w;
 use dkrt_abi::service::*;
 use dkrt_sdk::records::*;
 use dkrt_sdk::*;

@@ -113,8 +113,11 @@ pub struct FakeCore {
     pub running: Cell<u8>,
     /// The selection index of the module being loaded (`CoreApi::boot_index`).
     pub boot_index: Cell<u32>,
-    /// The map `CoreApi::legacy_type_map` hands out.
-    pub legacy_map: Cell<[u32; dkrt_sdk::sel::MAP_N]>,
+    /// The bytes `CoreApi::legacy_state` hands out; `legacy_state_clear` zeroes them (and answers `legacy_clear_result`).
+    pub legacy: Cell<[u8; 32]>,
+    pub legacy_clear_result: Cell<i32>,
+    /// What `settings_put` answers (0: stored); a stored value is read back by `settings_get`.
+    pub put_result: Cell<i32>,
     pub settings: RefCell<Vec<(Vec<u8>, Vec<u8>)>>,
     pub link: RefCell<&'static mut Link<FakeLink>>,
     pub name: String,
@@ -151,7 +154,9 @@ impl FakeCore {
             source: Cell::new(0),
             running: Cell::new(0),
             boot_index: Cell::new(u32::MAX),
-            legacy_map: Cell::new([0; dkrt_sdk::sel::MAP_N]),
+            legacy: Cell::new([0; 32]),
+            legacy_clear_result: Cell::new(0),
+            put_result: Cell::new(0),
             settings: RefCell::new(Vec::new()),
             link: RefCell::new(Box::leak(Box::new(link()))),
             name: String::from("fake\0"),
@@ -238,8 +243,15 @@ impl CoreApi for FakeCore {
     fn boot_index(&self) -> u32 {
         self.boot_index.get()
     }
-    fn legacy_type_map(&self) -> [u32; dkrt_sdk::sel::MAP_N] {
-        self.legacy_map.get()
+    fn legacy_state(&self) -> [u8; 32] {
+        self.legacy.get()
+    }
+    unsafe fn legacy_state_clear(&self) -> i32 {
+        let r = self.legacy_clear_result.get();
+        if r == 0 {
+            self.legacy.set([0; 32]);
+        }
+        r
     }
     unsafe fn guard_faults(&self, _ty: u32) -> u32 {
         0
@@ -267,7 +279,13 @@ impl CoreApi for FakeCore {
     }
     unsafe fn settings_put(&self, key: &[u8], value: &[u8]) -> i32 {
         self.rec(Call::SettingsPut(key.to_vec(), value.to_vec()));
-        0
+        let r = self.put_result.get();
+        if r == 0 {
+            let mut s = self.settings.borrow_mut();
+            s.retain(|(k, _)| k != key);
+            s.push((key.to_vec(), value.to_vec()));
+        }
+        r
     }
     unsafe fn log(&self, kind: u16, _flags: u16, args: [u32; 5]) {
         self.rec(Call::Log { kind, args })

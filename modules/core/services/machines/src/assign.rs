@@ -4,8 +4,8 @@
 //! `<module id>:<machine id>`, the low byte is 0), and the service gives it a number in the run-time range when the boot starts. A key with hash 0 is a pinned number
 //! (the low byte). The service remembers the numbers in a map of up to 8 entries (entry = `hash24 << 8 | type`, 0 = empty) in the settings key `machines.types`
 //! (32 bytes, 8 words, big endian), so a machine keeps its number while it stays in the map, and a project that names the number keeps playing that machine.
-//! Before this service owned it, the map was in the reserved bytes of the selection record: `legacy_type_map` is read when the settings key is not there yet,
-//! and the map is saved to the key as soon as it is read (the migration, one release).
+//! Before this service owned it, the map was in the reserved bytes of the selection record: `legacy_state` is read when the settings key is not there yet,
+//! the map is saved to the key as soon as it is read, and the old bytes are zeroed once the key holds it (the migration, one release).
 //!
 //! `settle` (`Service::settle`) runs once per boot, after the services are loaded and before the first module: it reads the machine keys of every selected module,
 //! assigns all numbers in load order and leaves the table `resolve` answers from. Doing it for the whole selection first is what lets the eviction rule see which
@@ -60,29 +60,34 @@ pub fn map_used() -> u32 {
     n
 }
 
-/// The stored map and whether it came from the old location: the settings key, else the selection record's bytes.
+fn words(raw: &[u8; MAP_N * 4]) -> [u32; MAP_N] {
+    let mut map = [0u32; MAP_N];
+    let mut i = 0;
+    while i < MAP_N {
+        map[i] = u32::from_be_bytes([raw[4 * i], raw[4 * i + 1], raw[4 * i + 2], raw[4 * i + 3]]);
+        i += 1;
+    }
+    map
+}
+
+/// The stored map: the settings key; while the key is not there, the bytes the selection record kept (`legacy`: true then).
 unsafe fn stored<C: CoreApi>(core: &C) -> ([u32; MAP_N], bool) {
     let mut raw = [0u8; MAP_N * 4];
     if core.settings_get(SETTING, &mut raw) == raw.len() as i32 {
-        let mut map = [0u32; MAP_N];
-        let mut i = 0;
-        while i < MAP_N {
-            map[i] = u32::from_be_bytes([raw[4 * i], raw[4 * i + 1], raw[4 * i + 2], raw[4 * i + 3]]);
-            i += 1;
-        }
-        return (map, false);
+        return (words(&raw), false);
     }
-    (core.legacy_type_map(), true)
+    (words(&core.legacy_state()), true)
 }
 
-unsafe fn save<C: CoreApi>(core: &C, map: &[u32; MAP_N]) {
+/// Write the map to the settings key; true when it is stored.
+unsafe fn save<C: CoreApi>(core: &C, map: &[u32; MAP_N]) -> bool {
     let mut raw = [0u8; MAP_N * 4];
     let mut i = 0;
     while i < MAP_N {
         raw[4 * i..4 * i + 4].copy_from_slice(&map[i].to_be_bytes());
         i += 1;
     }
-    core.settings_put(SETTING, &raw);
+    core.settings_put(SETTING, &raw) == OK
 }
 
 /// Assign the numbers of every machine of the selected modules (`Service::settle`).
@@ -110,8 +115,19 @@ pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
         let flags = if ev.error { logk::F_ERROR } else { LOG_INFO };
         core.log(ev.kind, flags, ev.args);
     });
+    // Save when the map changed or still comes from the old place. A refused write leaves `dirty` set and the old place as it is: the next boot reads the same map, assigns the
+    // same numbers and tries again. Once the key holds the map the old bytes are zeroed, so that a later erase of the key cannot bring back a stale map; a refused zeroing
+    // is tried again at every boot while the old bytes are not 0.
     if a.dirty != 0 || (legacy && from != [0; MAP_N]) {
-        save(core, &a.map);
+        if save(core, &a.map) {
+            a.dirty = 0;
+        } else {
+            a.dirty = 1;
+            return;
+        }
+    }
+    if core.legacy_state() != [0u8; 32] {
+        core.legacy_state_clear();
     }
 }
 

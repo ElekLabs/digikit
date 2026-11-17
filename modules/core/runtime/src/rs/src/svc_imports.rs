@@ -22,13 +22,17 @@ pub mod shims {
         REAL_CORE.boot_index()
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_legacy_type_map(out: *mut u32) {
-        let map = REAL_CORE.legacy_type_map();
+    pub unsafe extern "C" fn dkc_legacy_state(out: *mut u8) {
+        let b = REAL_CORE.legacy_state();
         let mut i = 0;
-        while i < map.len() {
-            *out.add(i) = map[i];
+        while i < b.len() {
+            *out.add(i) = b[i];
             i += 1;
         }
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_legacy_state_clear() -> i32 {
+        REAL_CORE.legacy_state_clear()
     }
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_guard_faults(ty: u32) -> u32 {

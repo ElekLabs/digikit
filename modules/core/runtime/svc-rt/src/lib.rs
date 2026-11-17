@@ -80,10 +80,13 @@ impl CoreApi for ImportCore {
     fn boot_index(&self) -> u32 {
         unsafe { dkc_boot_index() }
     }
-    fn legacy_type_map(&self) -> [u32; dkrt_sdk::sel::MAP_N] {
-        let mut map = [0u32; dkrt_sdk::sel::MAP_N];
-        unsafe { dkc_legacy_type_map(map.as_mut_ptr()) };
-        map
+    fn legacy_state(&self) -> [u8; 32] {
+        let mut b = [0u8; 32];
+        unsafe { dkc_legacy_state(b.as_mut_ptr()) };
+        b
+    }
+    unsafe fn legacy_state_clear(&self) -> i32 {
+        dkc_legacy_state_clear()
     }
     unsafe fn guard_faults(&self, ty: u32) -> u32 {
         dkc_guard_faults(ty)

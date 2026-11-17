@@ -15,7 +15,7 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::{cstr_len, iw};
-use dkrt_abi::registry::w;
+use dkrt_svc_params::dynreg::w;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::records::{
     KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM, LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,

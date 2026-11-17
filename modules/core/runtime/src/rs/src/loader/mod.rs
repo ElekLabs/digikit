@@ -868,16 +868,16 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         sel.count = n;
         let mut i = 0;
         while i < n {
-            sel.nkeys[i] = machine_keys(&self.tables[i][..self.table_len[i]], &mut sel.keys[i]) as u8;
+            sel.nkeys[i] = table_keys(&self.tables[i][..self.table_len[i]], &mut sel.keys[i]) as u8;
             i += 1;
         }
         services().settle(&sel);
     }
 }
 
-/// The machine keys of a module's header table (`table` empty: none), at most 8; their count.
+/// The keys of a module's header table that `settle` hands to the services (`table` empty: none), at most 8; their count.
 #[inline(never)]
-pub(crate) fn machine_keys(table: &[u8], out: &mut [u32; 8]) -> usize {
+pub(crate) fn table_keys(table: &[u8], out: &mut [u32; 8]) -> usize {
     let k = match dkrt_abi::keys::KeysCopy::from_bytes(table) {
         Ok(k) => k,
         Err(_) => return 0,

@@ -18,8 +18,9 @@ macro_rules! core_imports {
         $m! {
             // ---- the registry's rows
             fn dkc_boot_index() -> u32;
-            // `out` points at the eight words of the map
-            fn dkc_legacy_type_map(out: *mut u32);
+            // `out` points at 32 bytes
+            fn dkc_legacy_state(out: *mut u8);
+            fn dkc_legacy_state_clear() -> i32;
             fn dkc_guard_faults(ty: u32) -> u32;
             fn dkc_guard_disabled(ty: u32) -> bool;
             // ---- the device

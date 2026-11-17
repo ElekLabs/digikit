@@ -19,7 +19,7 @@ fn plain_values_and_pointers_come_back_as_through_the_real_core() {
     unsafe {
         assert_eq!(ic.device_id(), REAL_CORE.device_id());
         assert_eq!(ic.boot_index(), REAL_CORE.boot_index());
-        assert_eq!(ic.legacy_type_map(), REAL_CORE.legacy_type_map());
+        assert_eq!(ic.legacy_state(), REAL_CORE.legacy_state());
         assert_eq!(ic.current_source(), REAL_CORE.current_source());
         assert_eq!(ic.dsp_info(), REAL_CORE.dsp_info());
         assert_eq!(ic.fx_info(), REAL_CORE.fx_info());

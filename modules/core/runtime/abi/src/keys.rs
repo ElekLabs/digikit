@@ -2,7 +2,8 @@
 //! keys and effect ids (the keys table), and the declarations of a service file.
 use crate::service::Declare;
 use dkneeds::MAX_RECORDS;
-use dkrt_sdk::records::{KIND_EFFECT, KIND_MACHINE};
+// The key groups of the header table (the .dkm format, `dkneeds::keys`), not record kinds: the core reads the table, whoever uses its keys.
+use dkneeds::{KIND_EFFECT, KIND_MACHINE};
 use dkrt_sdk::{E_CONTRACT, E_FORMAT};
 
 /// A copy of the keys table (the staged file is overwritten by anything `init` reads from the store).
