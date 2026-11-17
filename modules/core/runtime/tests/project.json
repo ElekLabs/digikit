@@ -43,7 +43,7 @@
           "packages/dk-session/src/dksample.ts",
           "packages/dk-session/src/rpcfiles.ts",
           "packages/dk-session/src/samples.ts",
-          "apps/desktop/ui/src/samples-core.ts"
+          "packages/workbench-core/src/transfer/sample-upload.ts"
         ],
         "plusdrive": true,
         "dksampleWasm": true
@@ -68,7 +68,7 @@
           "packages/dk-session/src/dksample.ts",
           "packages/dk-session/src/rpcfiles.ts",
           "packages/dk-session/src/samples.ts",
-          "apps/desktop/ui/src/samples-core.ts"
+          "packages/workbench-core/src/transfer/sample-upload.ts"
         ],
         "dksampleWasm": true
       },
@@ -144,7 +144,9 @@
       {
         "files": ["log-names.device.test.ts"],
         "tags": ["C:diagnostics", "C:layout"],
-        "modules": ["digikit/debug", "test/dyn-demo"]
+        "modules": ["digikit/debug", "test/dyn-demo"],
+        "sources": ["packages/dk-session/src/log-names.ts"],
+        "dkprofWasm": true
       },
       {
         "files": ["memaudit.device.test.ts"],
