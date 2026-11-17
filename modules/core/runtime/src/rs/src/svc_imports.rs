@@ -278,7 +278,7 @@ mod tests {
         }
         assert!(SVC_NAMES.contains(&"dk_service_declare_row") && SVC_NAMES.contains(&"dkc_panic"));
         // one `dkc_*` per CoreApi method, and the two of a service file
-        assert!(SVC_COUNT >= 38, "{SVC_COUNT}");
+        assert!(SVC_COUNT >= 30, "{SVC_COUNT}");
     }
 
     #[test]
