@@ -35,7 +35,9 @@ root). The directory name is not always the package name; use the package name w
 | `packages/emulator/loader` | `dt2-firmware-loader` | Decoder for the `.syx` container (ELE3 sections, no I/O). |
 | `packages/emulator/device-profile` | `device-profile` | Hash-bound device and firmware identities, embedded from `devices/*.toml`. |
 | `packages/emulator/plusdrive` | `plusdrive-format` | +Drive image format encoders; the `plusdrive` CLI. |
-| `packages/emulator/boot` | `elektron-native-boot` | Bounded cold boot, the ColdFire runtime, the DSP peer (`sharc_peer`), DSP patches, and the examples (`card_boot`, `dsp_cold`, `sharc_live`, `turn_probe`; the headless tools `boot_gate`, `panel_drive` and `sysex_bridge`, see their headers). Also the wasm ABI. |
+| `packages/emulator/boot` | `elektron-native-boot` | Bounded cold boot, the ColdFire runtime (no SHARC dependency: the DSP side is the `periph::dspi::Peer` trait), and the examples (`card_boot`, `turn_probe`; the headless tools `boot_gate`, `panel_drive` and `sysex_bridge`, see their headers). |
+| `packages/emulator/sharc-peer` | `sharc-peer` | The SHARC+ side of a coupled run: the DSPI2 peer and worker thread (`peer.rs`), engine glue, DSP patches and streams, DDR monitor; with feature `host` the core selection (`dsp_core`), the cold boot (`cold`) and the examples `dsp_cold`, `sharc_live`, `regions_probe`. |
+| `packages/emulator/wasm-core` | `digi-wasm-core` | The browser core: the raw wasm ABI (`abi.rs`) over `boot`, with features `sharc` and `fast-wasm` for the coupled core. Built by `tools/nx/wasm.mjs` into `emulator-core*.wasm`. |
 | `packages/emulator/sharc-rt` | `sharc-rt` | Runtime under the generated core: state, memory, decoder, instruction table, and `GenCore`, the table of one generated core. |
 | `packages/emulator/sharc-gen` | `sharc-gen` | The generated SHARC+ core (from `SHARC_GEN_DIR`), compiled apart from the engine; `sharc_gen::CORE` is its `GenCore`. |
 | `packages/emulator/sharc-stats` | `sharc-stats` | The counters and profiles the engine reports (shared by every engine). |
@@ -106,8 +108,8 @@ device's firmware coupled holds two: `SHARC_GEN_DIR` and `SHARC_GEN_DIR_2` name 
 feature `second-core` (digi-coupled, digi-control, digiemu-desktop) links both. `sharc-gen-2` compiles the
 sources of `sharc-gen` again (`[lib] path`, `build = ...`) against the second directory, so a build has two data
 crates, `sharc_gen::CORE` and `sharc_gen_2::CORE`, and one engine: `Engine::new(mem, core)` and
-`elektron_native_boot::sharc_peer::open_engine_patched(core, ...)` take the core as a value. The core the DSP worker
-runs is chosen when the session starts: `coupled/src/dsp_core.rs` takes the core whose DSP image
+`sharc_peer::open_engine_patched(core, ...)` take the core as a value. The core the DSP worker
+runs is chosen when the session starts: `sharc-peer/src/dsp_core.rs` takes the core whose DSP image
 name (`dn2-1.12`, `dt2-1.17`) starts with the loaded firmware's device id. Calls into a core's interpreter
 (`exec_insn`, interrupts, loop stacks) are indirect calls through its `GenCore`. The second core reads its own
 fast-tier lists (`SHARC_FAST_REGIONS_2`, `SHARC_BLOCKTRANS_2`; `GenCore::env_suffix`). The other device's ready inputs go to `digi-emud` and the app as

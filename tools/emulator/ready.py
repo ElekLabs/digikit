@@ -66,8 +66,8 @@ def build_examples(gen: pathlib.Path | None = None) -> pathlib.Path:
     for example in ("dsp_cold", "sharc_live"):
         cmd = [
             "rustup", "run", digi_env.TOOLCHAIN, "cargo", "build", "--release",
-            "--manifest-path", "packages/emulator/boot/Cargo.toml",
-            "--features", "sharc", "--example", example,
+            "--manifest-path", "packages/emulator/sharc-peer/Cargo.toml",
+            "--features", "host", "--example", example,
             "--target-dir", str(target),
         ]  # fmt: skip
         with benchlock.hold("shared", f"ready build {example}"):

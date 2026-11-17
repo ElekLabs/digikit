@@ -17,10 +17,8 @@ use std::{
     time::Instant,
 };
 
-use elektron_native_boot::{
-    Emulator,
-    sharc_peer::{IdleLoop, period_from_env},
-};
+use crate::{IdleLoop, period_from_env};
+use elektron_native_boot::Emulator;
 use emmc_card::Card;
 
 const DSP_MAGIC: &[u8; 8] = b"DT2DSP01";
@@ -48,7 +46,7 @@ pub struct ColdInputs {
     pub cold_state: Option<PathBuf>,
     /// The firmware DSP diff, applied once to raw reset state before DSP initialization.
     /// The DSP must reach idle before the ColdFire starts. `None` restores cold-idle unchanged.
-    pub dsp_patch: Option<elektron_native_boot::dsp_patch::DspPatch>,
+    pub dsp_patch: Option<crate::dsp_patch::DspPatch>,
     /// Ready at the main panel, without waiting for the filesystem check (a soft reset on a card an earlier boot used).
     pub relax_fs_check: bool,
     /// Where the boot leaves the card writes when the guest asks for a soft reset (RCM.RCR) before it is ready: the boot then ends

@@ -592,7 +592,7 @@ a channel by calling `dk_sink_set(channel, sink)` (an import, runtime 0.7.1). Th
 
 ## MIDI input and output, panel scripts, safety runs (ColdFire, native)
 
-Finding 25. `regions_probe` (`packages/emulator/boot/examples/regions_probe.rs`, built by
+Finding 25. `regions_probe` (`packages/emulator/sharc-peer/examples/regions_probe.rs`, built by
 `tools/coldfire/regions.py probe_binary`) takes, besides the options of `regions.py confirm`:
 
 | option | effect |

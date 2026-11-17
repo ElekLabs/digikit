@@ -60,10 +60,10 @@ mod json;
 // The boot crate's stream reader, compiled in place (a dependency on the crate would change Cargo.lock, which is an
 // input of the device tests). `dsp_stream` uses `crate::dsp_patch`.
 #[allow(dead_code)]
-#[path = "../../emulator/boot/src/dsp_patch.rs"]
+#[path = "../../emulator/sharc-peer/src/dsp_patch.rs"]
 mod dsp_patch;
 #[allow(dead_code)]
-#[path = "../../emulator/boot/src/dsp_stream.rs"]
+#[path = "../../emulator/sharc-peer/src/dsp_stream.rs"]
 mod dsp_stream;
 
 use dsp_stream::LoadedMemory;

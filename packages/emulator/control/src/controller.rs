@@ -26,9 +26,10 @@ use digi_coupled::{
     AudioOptions, CoupledRuntime as Runtime, STEP_CHUNK,
     scenario::{self, Action, Scenario},
 };
-use elektron_native_boot::{Snapshot, dsp_patch::DspPatch};
+use elektron_native_boot::Snapshot;
 use emmc_card::{Card, CardIdentity, RandomAccessRead};
 use serde_json::{Value, json};
+use sharc_peer::dsp_patch::DspPatch;
 
 use crate::{
     cardmirror::Mirror,
@@ -3524,7 +3525,7 @@ impl Actor {
     /// Actions apply to the active coupled DSP. Event kind names describe
     /// helper paths, including host peeks; they do not prove guest provenance.
     fn rpc_dsp_ddr_monitor(&mut self, p: &Params) -> RpcResult {
-        use elektron_native_boot::ddr_monitor::{DdrMonitorCommand, DdrMonitorRange};
+        use sharc_peer::ddr_monitor::{DdrMonitorCommand, DdrMonitorRange};
         let command = match p.opt_str("action")?.unwrap_or("status") {
             "status" => DdrMonitorCommand::Status,
             "clear" => DdrMonitorCommand::Clear,

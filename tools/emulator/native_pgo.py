@@ -880,6 +880,7 @@ GUARDED_CRATES = (
     "sharc_gen",
     "sharc_rt",
     "elektron_native_boot",
+    "sharc_peer",
     "sharc_gen_2",
 )
 CRATE_NAME_RE = re.compile(

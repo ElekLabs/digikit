@@ -1048,6 +1048,7 @@ dependencies = [
  "plusdrive-format",
  "serde_json",
  "sha2",
+ "sharc-peer",
 ]
 
 [[package]]
@@ -1059,10 +1060,21 @@ dependencies = [
  "emmc-card",
  "serde_json",
  "sha2",
- "sharc-fast-cl",
- "sharc-gen",
- "sharc-gen-2",
  "sharc-native",
+ "sharc-peer",
+]
+
+[[package]]
+name = "digi-wasm-core"
+version = "0.1.0"
+dependencies = [
+ "elektron-native-boot",
+ "periph",
+ "serde_json",
+ "sharc-fast-wasm",
+ "sharc-gen",
+ "sharc-native",
+ "sharc-peer",
 ]
 
 [[package]]
@@ -1393,9 +1405,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "sharc-fast-wasm",
- "sharc-gen",
- "sharc-native",
 ]
 
 [[package]]
@@ -4099,6 +4108,23 @@ dependencies = [
  "sharc-gen",
  "sharc-rt",
  "sharc-stats",
+]
+
+[[package]]
+name = "sharc-peer"
+version = "0.1.0"
+dependencies = [
+ "device-profile",
+ "elektron-native-boot",
+ "emmc-card",
+ "periph",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sharc-fast-cl",
+ "sharc-gen",
+ "sharc-gen-2",
+ "sharc-native",
 ]
 
 [[package]]

@@ -9,9 +9,9 @@
 //! sharc --example dsp_cold. Output is firmware-derived: keep it out of the
 //! repository.
 
-use elektron_native_boot::dsp_patch::DspPatch;
-use elektron_native_boot::sharc_peer::{DN2_IDLE, DT2_IDLE, open_engine_patched};
 use sha2::{Digest, Sha256};
+use sharc_peer::dsp_patch::DspPatch;
+use sharc_peer::{DN2_IDLE, DT2_IDLE, open_engine_patched};
 use std::{env, fs, time::Instant};
 
 fn main() {

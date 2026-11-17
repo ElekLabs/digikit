@@ -31,6 +31,7 @@ second-core = ["coupled-audio", "digi-coupled/second-core"]
 digi-coupled = { path = "../coupled" }
 dt2-firmware-loader = { path = "../loader" }
 elektron-native-boot = { path = "../boot" }
+sharc-peer = { path = "../sharc-peer" }
 emmc-card = { path = "../card" }
 patchkit = { path = "../../patchkit" }
 plusdrive-format = { path = "../plusdrive" }
