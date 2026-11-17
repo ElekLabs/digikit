@@ -18,8 +18,11 @@ import {
 
 for (const device of DEVICES) {
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} FX SEND`, () => {
-    const context = withGainFxSession(device, 'FX SEND zero/dry/other/full/half', { initial: 'wet', requireAudible: true });
-    test('isolates common send amounts and preserves the squared send gain law', async () => {
+    const context = withGainFxSession(device, 'FX SEND zero/dry/full', { initial: 'wet', requireAudible: true });
+    // The device proof is the bus wiring through the patched stock image: a zero amount equals the dry PCM bit for bit and a full amount adds half
+    // the input. The squared gain law (half, other amounts) and the isolation of the other tracks' amounts are proved on the rig by
+    // fx-send.rig.test.ts ('the gain is the amount squared over 127 squared', 'only tracks with an amount contribute').
+    test('isolates a zero send amount and adds half the input at a full amount', async () => {
       const { fixture, plan, dry, wet, slots, artifacts, rememberEpoch } = context;
       // Legacy fx-send-{dt2,dn2}.toml list positions. This is the accepted audible-input
       // contract; direct selected-type observations remain in the legacy basic dry/full legs.
@@ -34,9 +37,7 @@ for (const device of DEVICES) {
       for (const [tag, amount] of [
         ['zero', 0],
         ['dry', null],
-        ['other', 0x7f00],
         ['full', 0x7f],
-        ['half', 0x40],
       ] as const) {
         const runtime = tag === 'zero' ? initial : await fixture.reload(amount === null ? dry : wet);
         expect(runtime.session).toBe(initial.session);
@@ -76,9 +77,7 @@ for (const device of DEVICES) {
           record(artifacts, `send-${tag}-after-note`, { row: after, counts: [n0, n1] });
         }
       }
-      for (const tag of ['zero', 'other']) {
-        await compare(pcm.get('dry')!, pcm.get(tag)!, 1, artifacts, `send-${tag}`, true);
-      }
+      await compare(pcm.get('dry')!, pcm.get('zero')!, 1, artifacts, 'send-zero', true);
       const added = async (tag: string) => {
         const result = await analysisJson<{ added_factor: number }>(
           'tools.patchkit.pk_digikit_fxsend',
@@ -89,11 +88,7 @@ for (const device of DEVICES) {
         return result.added_factor;
       };
       const full = await added('full');
-      const half = await added('half');
       expect(Math.abs(full / 0.5 - 1), 'full send adds half the input').toBeLessThan(0.001);
-      expect(Math.abs(half / full / (64 / 127) ** 2 - 1), 'send amount follows the stock squared law').toBeLessThan(
-        0.01,
-      );
       // ZERO is independently bit-identical to DRY above; a nonzero added factor
       // against ZERO proves FULL differs from DRY without treating an expected
       // comparator mismatch (its nonzero CLI exit) as an analysis failure.
