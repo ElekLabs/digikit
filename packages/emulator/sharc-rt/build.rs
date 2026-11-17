@@ -1,6 +1,6 @@
 // The header of a core library names the sharc-rt source it was built from (`src/header.rs`): the
-// SHA-256 of every file under src/ (relative path, NUL, bytes, NUL, sorted), the rustc version and the
-// target. The hash code is the crate's own `src/sha256.rs`.
+// SHA-256 of every `.rs` file under src/ plus Cargo.toml and build.rs (relative path, NUL, bytes, NUL,
+// sorted), the rustc version, the target and the build flags that change code generation or layout. The hash code is the crate's own `src/sha256.rs`.
 #[path = "src/sha256.rs"]
 mod sha256;
 
@@ -12,7 +12,7 @@ fn files(dir: &Path, out: &mut Vec<PathBuf>) {
         let path = entry.expect("dir entry").path();
         if path.is_dir() {
             files(&path, out);
-        } else {
+        } else if path.extension().is_some_and(|e| e == "rs") {
             out.push(path);
         }
     }
@@ -24,10 +24,14 @@ fn main() {
     println!("cargo:rerun-if-changed={}", src.display());
     let mut list = Vec::new();
     files(&src, &mut list);
+    list.push(root.join("build.rs"));
+    list.push(root.join("Cargo.toml"));
     list.sort();
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=build.rs");
     let mut h = sha256::Sha256::new();
     for path in &list {
-        let rel = path.strip_prefix(&src).expect("under src");
+        let rel = path.strip_prefix(&root).expect("under the manifest dir");
         h.update(rel.to_string_lossy().replace('\\', "/").as_bytes());
         h.update(&[0]);
         h.update(&std::fs::read(path).expect("read source"));
@@ -47,4 +51,23 @@ fn main() {
         "cargo:rustc-env=SHARC_RT_TARGET={}",
         std::env::var("TARGET").expect("target")
     );
+    let var = |name: &str| std::env::var(name).unwrap_or_default();
+    let mut f = sha256::Sha256::new();
+    f.update(var("CARGO_ENCODED_RUSTFLAGS").as_bytes());
+    let rustflags: String = f
+        .finish()
+        .iter()
+        .take(8)
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    println!(
+        "cargo:rustc-env=SHARC_RT_FLAGS=panic={} opt={} profile={} debug={} rustflags={rustflags}",
+        var("CARGO_CFG_PANIC"),
+        var("OPT_LEVEL"),
+        var("PROFILE"),
+        var("DEBUG")
+    );
+    for name in ["CARGO_ENCODED_RUSTFLAGS", "PROFILE", "OPT_LEVEL", "DEBUG"] {
+        println!("cargo:rerun-if-env-changed={name}");
+    }
 }

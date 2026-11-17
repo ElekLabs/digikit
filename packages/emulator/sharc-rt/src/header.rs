@@ -5,20 +5,24 @@
 //! ABI cross the boundary. That is sound only when both sides were built from the same `sharc-rt`
 //! source by the same compiler for the same target, and lay out `St`, `Mem`, `Insn`, `V`, `Cfg` and
 //! `GenCore` alike. The header states each of these as a field; [`CoreHeader::first_difference`] names
-//! the first field that differs. The strings are NUL-padded ASCII so that the header is `repr(C)` and
+//! the first field that differs. The function pointer types of `GenCore` and the field types of the
+//! generated tables are not fingerprinted one by one: the same source (hashed in `sharc_rt_sha256`),
+//! rustc and build flags give them the same types. The strings are NUL-padded ASCII so that the header is `repr(C)` and
 //! can be read before any Rust type of the library is trusted.
 
+use crate::BlockFn;
 use crate::gencore::GenCore;
-use crate::rt::{Cfg, Insn, St, V};
+use crate::rt::{Cfg, Insn, St, Sym, Trap, V};
 use std::mem::{align_of, offset_of, size_of};
 
 /// Version of the header layout itself. A host refuses a header of another version without reading
 /// further.
-pub const HEADER_ABI: u32 = 1;
+pub const HEADER_ABI: u32 = 2;
 
 pub const SHA_LEN: usize = 64;
 pub const RUSTC_LEN: usize = 96;
 pub const TARGET_LEN: usize = 64;
+pub const FLAGS_LEN: usize = 128;
 
 /// Names of the `layout` entries, in order.
 pub const LAYOUT_NAMES: [&str; LAYOUT_LEN] = [
@@ -62,9 +66,21 @@ pub const LAYOUT_NAMES: [&str; LAYOUT_LEN] = [
     "GenCore.insn_at offset",
     "GenCore.exec_insn offset",
     "GenCore.packed_counter_laddr offset",
+    "Trap size",
+    "Trap align",
+    "Sym size",
+    "Sym align",
+    "Option<Insn> size",
+    "Option<Insn> align",
+    "(u32, BlockFn) size",
+    "(u32, BlockFn) align",
+    "(u32, u32, &str) size",
+    "(u32, u32, &str) align",
+    "Option<&[&[u32]]> size",
+    "Option<&[&[u32]]> align",
 ];
 
-pub const LAYOUT_LEN: usize = 40;
+pub const LAYOUT_LEN: usize = 52;
 
 /// Size, alignment and selected field offsets of the types that cross the boundary.
 pub const LAYOUT: [u64; LAYOUT_LEN] = {
@@ -110,6 +126,18 @@ pub const LAYOUT: [u64; LAYOUT_LEN] = {
         offset_of!(GenCore, insn_at) as u64,
         offset_of!(GenCore, exec_insn) as u64,
         offset_of!(GenCore, packed_counter_laddr) as u64,
+        size_of::<Trap>() as u64,
+        align_of::<Trap>() as u64,
+        size_of::<Sym>() as u64,
+        align_of::<Sym>() as u64,
+        size_of::<Option<Insn>>() as u64,
+        align_of::<Option<Insn>>() as u64,
+        size_of::<(u32, BlockFn)>() as u64,
+        align_of::<(u32, BlockFn)>() as u64,
+        size_of::<(u32, u32, &str)>() as u64,
+        align_of::<(u32, u32, &str)>() as u64,
+        size_of::<Option<&[&[u32]]>>() as u64,
+        align_of::<Option<&[&[u32]]>>() as u64,
     ]
 };
 
@@ -124,6 +152,10 @@ pub struct CoreHeader {
     pub rustc: [u8; RUSTC_LEN],
     /// The target triple.
     pub target: [u8; TARGET_LEN],
+    /// What changes code generation or layout for the same source, as the build script of `sharc-rt` saw it:
+    /// `panic=unwind opt=3 profile=release debug=false rustflags=<16 hex of the SHA-256 of
+    /// CARGO_ENCODED_RUSTFLAGS>`. The panic strategy matters because a panic crosses the boundary.
+    pub flags: [u8; FLAGS_LEN],
     /// `LAYOUT`.
     pub layout: [u64; LAYOUT_LEN],
 }
@@ -151,6 +183,7 @@ pub const HOST: CoreHeader = CoreHeader {
     sharc_rt_sha256: pad(env!("SHARC_RT_SRC_SHA256")),
     rustc: pad(env!("SHARC_RT_RUSTC")),
     target: pad(env!("SHARC_RT_TARGET")),
+    flags: pad(env!("SHARC_RT_FLAGS")),
     layout: LAYOUT,
 };
 
@@ -172,6 +205,7 @@ impl CoreHeader {
             ),
             ("rustc", &self.rustc[..], &host.rustc[..]),
             ("target", &self.target[..], &host.target[..]),
+            ("build flags", &self.flags[..], &host.flags[..]),
         ] {
             if a != b {
                 return Some(format!("{name}: library {}, host {}", text(a), text(b)));
@@ -205,6 +239,10 @@ mod tests {
         h.layout[20] += 1;
         let msg = h.first_difference(&HOST).unwrap();
         assert!(msg.starts_with("layout St.mem offset"), "{msg}");
+        h.flags = pad("panic=abort");
+        let msg = h.first_difference(&HOST).unwrap();
+        assert!(msg.starts_with("build flags"), "{msg}");
+        h.flags = HOST.flags;
         h.target = pad("other-target");
         assert!(h.first_difference(&HOST).unwrap().starts_with("target"));
         h.sharc_rt_sha256[0] ^= 1;

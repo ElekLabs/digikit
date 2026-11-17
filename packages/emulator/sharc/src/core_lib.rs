@@ -5,6 +5,11 @@
 //! (`sharc_rt::header::HOST`: header version, `sharc-rt` source hash, rustc, target, layouts of
 //! `St`, `Mem`, `Insn`, `V`, `Cfg` and `GenCore`). Only then does it hand out the core. A library is
 //! never unloaded, so the core is `'static`.
+//!
+//! Host and library must use the system allocator (no `#[global_allocator]` exists in the workspace:
+//! a `Vec` or `Box` made on one side is freed on the other) and the `unwind` panic strategy; the header's
+//! `flags` field carries the panic strategy, the optimisation level, the profile and a hash of the
+//! rustflags, and a library built with other flags is refused.
 
 #![cfg(any(unix, windows))]
 
