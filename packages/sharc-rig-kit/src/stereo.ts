@@ -222,6 +222,8 @@ export interface RawCallOptions {
   readSpecials?: string[];
   /** count the instructions executed at each pc (`CallResult.profile`) */
   profile?: boolean;
+  /** record the loads of instructions at the session's `watch` pcs (`CallResult.loads`) */
+  loads?: boolean;
 }
 
 export class StereoRig {
@@ -369,6 +371,7 @@ export class StereoSession {
     specials?: Record<string, [string, string]>;
     read_specials?: string[];
     profile?: boolean;
+    loads?: boolean;
   }): Promise<CallResult> {
     this.q.push({
       call: {
@@ -383,6 +386,7 @@ export class StereoSession {
         ...(call.specials ? { specials: call.specials } : {}),
         ...(call.read_specials ? { read_specials: call.read_specials } : {}),
         ...(call.profile ? { profile: true } : {}),
+        ...(call.loads ? { loads: true } : {}),
       },
     });
     const results = await this.port.run(this.q.take());
@@ -402,6 +406,7 @@ export class StereoSession {
       specials: o.specials,
       read_specials: o.readSpecials,
       profile: o.profile,
+      loads: o.loads,
     });
   }
 }
