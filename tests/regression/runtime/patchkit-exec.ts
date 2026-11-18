@@ -45,7 +45,7 @@ const underNx = () =>
 export function patchkit(args: string[], options: Options = {}) {
   if (underNx() && process.env.DIGI_PATCHKIT_LIVE !== '1')
     throw new Error(
-      `patchkit ${args[0]}: this task's cache key does not follow patchkit. Import runtime/patchkit.ts in the test (that marks it live), or read the result from dist/bytes (images.sha256, pack-verdicts.json).`,
+      `patchkit ${args[0]}: this task's cache key does not follow patchkit. Import runtime/patchkit.ts in the test (that marks it live), or read the result from dist/bytes (images-<device>.sha256, daemon-test-<device>.key, pack-verdicts.json; live halves key on patchkit-test-<device>.key).`,
     );
   return run(args, options);
 }

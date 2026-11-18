@@ -460,7 +460,7 @@ the OS-upgrade receiver, finding 146; the NOR end 0x80000 + 0x1FFE00 stays below
 at 0x300000 and 0x380000). Chip geometry the bootstrap
 recognises: S25FL127S-class 512-byte pages / 256 KiB sectors; other vendors 256 B / 64 KiB
 (0x800024ec). DSP blob limits: section 7 stored size <= 0x100000 and depacked size
-<= 0x100000 (checked at 0x400cd1d4 / 0x400cd20c), about 700 KB free for the SHARC append. **[V]**
+<= 0x100000 (checked at 0x400cd1d4 / 0x400cd20c). The free space for appends is the cap minus the patched container. All current DT2 1.17 and DN2 1.12 acceptance images fit under the cap. DN2 has the least margin: about 72 KB for the largest patched image. **[V]**
 
 ### [C] `tools.firmware.build.rebuild` is not a size to flash
 

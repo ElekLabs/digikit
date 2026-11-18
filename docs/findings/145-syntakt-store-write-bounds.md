@@ -1,6 +1,6 @@
 # Syntakt store write bounds: who writes the card, and where a bound belongs
 
-Marks: **[D]** read once, static, in the decompiled MAIN of OS 1.42 (`st-1.42`) and in the repository sources; **[O]** open. No emulator, no device. Context:
+Marks: **[V]** checked against image bytes by a second agent; **[D]** read once, static, in the decompiled MAIN of OS 1.42 (`st-1.42`) and in the repository sources; **[O]** open. No emulator, no device. Context:
 [138](138-syntakt-runtime-facts.md) "Storage", [142](142-syntakt-sample-storage.md) section 6, `modules/core/runtime/src/rs/src/storage/card.rs`. Plan item:
 `docs/plans/syntakt.md` "Store write safety".
 
@@ -46,8 +46,7 @@ Result: a header with a large size at +0x19, followed by that much data, writes 
 The start can never move below the slot. The same is true for the other two routes with their own descriptor sizes **[O]** (their size source was not traced).
 The MmcFs guard (refuse sector `>= 0x180000`, `FUN_40111628`) is not on this path. `Clear` (`FUN_400b639a`) takes its range from the descriptor **[O]**.
 
-Correction of [138](138-syntakt-runtime-facts.md): "the offsets are the host's" was too wide. The start offset is path-derived; the host controls the size (and the
-path). 138 is updated in place.
+The start offset is path-derived; the host controls the size (and the path).
 
 DT2 and DN2: `FUN_4010bd9a` and its writers are the shared Elektron code (finding 142: the dispatcher shape is the DT2's), so the same exposure exists there. The
 digikit store of those devices sits at the same sector `0x800000`. Whether the DN2 and DT2 chains differ in a bound was not compared function by function **[O]**.

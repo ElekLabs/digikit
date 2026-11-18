@@ -72,7 +72,7 @@ apply = "restart"
 # devices/ports/st-1.42.toml). There are no dsp_* keys: the device has no DSP (`[capabilities] dsp = "none"`).
 [patch]
 # The container (the OS image in the NOR flash) is at most 0x1FFE00 bytes: the OS-upgrade receiver stages it in RAM at 0x403d10d0, 2 MiB, 101 bytes per
-# message and no size check (finding 146 section 4), so at most 20763 messages = 2,097,055 bytes, rounded down to a 0x200 flash page. The stock container is
+# message and no size check (finding 146 section 4), so 20763 messages of 101 bytes = 2,097,063 bytes fit the stage, rounded down to a 0x200 page: 0x1FFE00. The stock container is
 # 2,029,486 bytes; the emulator dry run 2,000,880 (finding 137). Written from 0x80000, so it also stays below the calibration record at 0x300000.
 container_max = 0x1FFE00
 # The MAIN OS image (decoded) is staged at the load address and may not reach the next 4 MiB boundary: 0x40400000 - 0x40000400. Same

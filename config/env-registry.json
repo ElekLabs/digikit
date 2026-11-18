@@ -17,13 +17,13 @@
    "owner": "ts:packages/test-support",
    "purpose": "Directory of shared content-named card images for device tests (default dist/session-cache/cards)"
   },
-  "DIGI_CARD_TRACE": {
-   "owner": "rust:packages/emulator",
-   "purpose": "1 logs one record per card command (CMD8, CMD12, CMD18, CMD23, CMD25) into the write-watch JSONL (tools/devtools/card_phases.py reads it)"
-  },
   "DIGI_CARD_IDENTITY": {
    "owner": "rust:packages/emulator",
    "purpose": "Selects the emulated card identity (a test sets small for a 1 MiB blank card)"
+  },
+  "DIGI_CARD_TRACE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "1 logs one record per card command (CMD8, CMD12, CMD18, CMD23, CMD25) into the write-watch JSONL (tools/devtools/card_phases.py reads it)"
   },
   "DIGI_CATALOG_CARD": {
    "owner": "ts:tools/nx",
@@ -113,6 +113,10 @@
    "owner": "rust:packages/emulator",
    "purpose": "1 makes the desktop Trig 1 capture test fail on silent PCM; 0 or unset allows it"
   },
+  "DIGI_DEVICE": {
+   "owner": "ts:tests/regression",
+   "purpose": "dt2 or dn2 runs a device test file for that device only (unset: both); Nx sets it for the --dt2 and --dn2 halves"
+  },
   "DIGI_DEVICES_DIR": {
    "owner": "rust:packages/emulator",
    "purpose": "Directory of the devices/*.toml device profiles, read at run time (else devices/ found from cwd)"
@@ -165,13 +169,13 @@
    "owner": "python:tests/patchkit",
    "purpose": "Path to the DN2 digi-emud daemon binary; overrides DIGI_EMUD for DN2"
   },
-  "DIGI_EMUD_STORE": {
-   "owner": "python:tools/devtools",
-   "purpose": "Directory of the daemon store instead of <git common dir>/emud-cache (tests only)"
-  },
   "DIGI_EMUD_DT2": {
    "owner": "python:tests/patchkit",
    "purpose": "Path to the DT2 digi-emud daemon binary; overrides DIGI_EMUD for DT2"
+  },
+  "DIGI_EMUD_STORE": {
+   "owner": "python:tools/devtools",
+   "purpose": "Directory of the daemon store instead of <git common dir>/emud-cache (tests only)"
   },
   "DIGI_EMU_CF_SNAPSHOT": {
    "owner": "python:tools/devtools",
@@ -185,14 +189,6 @@
    "owner": "python:tools/devtools",
    "purpose": "Path of the DSP ready state (default READY/digi-audio-m5.snap.dsp)"
   },
-  "DIGI_EMU_PEER_AUDIO": {
-   "owner": "rust:packages/emulator",
-   "purpose": "1 plays the audio a device's MAIN mixes from its peer CPU ([emulator.peer_audio] in devices/*.toml); 0 or unset leaves it off. The workbench launcher sets 1 unless --cf-only."
-  },
-  "DIGI_DEVICE": {
-   "owner": "ts:tests/regression",
-   "purpose": "dt2 or dn2 runs a device test file for that device only (unset: both); Nx sets it for the --dt2 and --dn2 halves"
-  },
   "DIGI_EMU_FAST": {
    "owner": "python:tests/emulator",
    "purpose": "0 turns off the SHARC fast regions (no region list is added)"
@@ -204,6 +200,10 @@
   "DIGI_EMU_PCM_SECONDS": {
    "owner": "rust:packages/emulator",
    "purpose": "Seconds of PCM to capture for DIGI_EMU_PCM_F32LE (unset means unlimited)"
+  },
+  "DIGI_EMU_PEER_AUDIO": {
+   "owner": "rust:packages/emulator",
+   "purpose": "1 plays the audio a device's MAIN mixes from its peer CPU ([emulator.peer_audio] in devices/*.toml); 0 or unset leaves it off. The workbench launcher sets 1 unless --cf-only."
   },
   "DIGI_EMU_PGO": {
    "owner": "python:tests/emulator",
@@ -221,6 +221,10 @@
    "owner": "python:tools/devtools",
    "purpose": "Directory of the DN2 ready inputs (overrides `[acceptance] ready_dir` of devices/digitone-ii.toml)"
   },
+  "DIGI_EMU_RESERVE": {
+   "owner": "ts:tools/nx",
+   "purpose": "Cores that stay idle for the rest of the machine when emu-slot admits an emulator (default: the efficiency cores, else a quarter of the cores, at least 2)."
+  },
   "DIGI_EMU_SECOND_CORE": {
    "owner": "python:tests/emulator",
    "purpose": "1 enables, 0 disables the second device core in the desktop launcher (default on for desktop)"
@@ -228,6 +232,10 @@
   "DIGI_EMU_SINK_WAV": {
    "owner": "rust:packages/emulator",
    "purpose": "Output WAV path: the audio that the output device actually played, as float WAV"
+  },
+  "DIGI_EMU_SLOTS": {
+   "owner": "ts:tools/nx",
+   "purpose": "Fixed number of machine-wide emulator slots, with no idle-core check (default: the ceiling from cores and RAM)."
   },
   "DIGI_EMU_SYX": {
    "owner": "rust:packages/emulator",
@@ -337,10 +345,6 @@
    "owner": "rust:packages/emulator",
    "purpose": "File path; the emulator appends one line per front-panel UART8 drain and per injected panel button."
   },
-  "DIGI_PEER_PROFILE": {
-   "owner": "rust:packages/emulator",
-   "purpose": "Set to 1 to add a profile of the peer CPU's frame handler to the panel_drive peer report."
-  },
   "DIGI_PATCHED_CACHE_MAX_GB": {
    "owner": "python:tools/patchkit",
    "purpose": "Size cap in GB of the patched boot-pair cache; the patchkit harness removes the oldest entries above it (default 30)."
@@ -356,6 +360,10 @@
   "DIGI_PATCHKIT_BIN": {
    "owner": "ts:tools/nx",
    "purpose": "Path to the patchkit binary used by the patched DSP startup and stereo proof device tests."
+  },
+  "DIGI_PEER_PROFILE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Set to 1 to add a profile of the peer CPU's frame handler to the panel_drive peer report."
   },
   "DIGI_PGO_DETAIL": {
    "owner": "rust:apps/desktop",
@@ -417,6 +425,10 @@
    "owner": "python:tests/emulator",
    "purpose": "Set to 1 to make a stale or missing PGO profile a fatal error in native_pgo.py."
   },
+  "DIGI_REQUIRE_TOOLCHAINS": {
+   "owner": "rust:packages/patchkit",
+   "purpose": "1 makes a patchkit test fail when the m68k toolchain (out/tools/m68k-elf) is missing, instead of skipping; the patchkit rust-tests Nx target sets it"
+  },
   "DIGI_RIG_ROOT": {
    "owner": "ts:packages/sharc-rig-kit",
    "purpose": "Root of the checkout whose module sources the rig kit reads (read-only); default: this checkout."
@@ -424,6 +436,18 @@
   "DIGI_RUNTIME_MODULES": {
    "owner": "ts:tests/regression",
    "purpose": "Directory of the built runtime modules installed by device tests (default dist/modules)."
+  },
+  "DIGI_SHARC_CORE_LIB_DN2": {
+   "owner": "rust:packages/emulator/sharc-peer",
+   "purpose": "Path of the DN2 core library (sharc-core-lib) that the host loads instead of its static core; verify_build writes it to dist/daemons.json"
+  },
+  "DIGI_SHARC_CORE_LIB_DT2": {
+   "owner": "rust:packages/emulator/sharc-peer",
+   "purpose": "Path of the DT2 core library (sharc-core-lib) that the host loads instead of its static core; verify_build writes it to dist/daemons.json"
+  },
+  "DIGI_SHARC_CORE_STORE": {
+   "owner": "python:tools/devtools",
+   "purpose": "Directory of the core library store instead of <git common dir>/sharc-core-cache (tests only)"
   },
   "DIGI_SHARC_RIG": {
    "owner": "ts:packages/sharc-rig-kit",
@@ -689,6 +713,10 @@
    "owner": "python:tools/emulator",
    "purpose": "Directory of the generated SHARC core of the Digitakt II; wins over SHARC_GEN_DIR for DT2."
   },
+  "SHARC_GEN_ENV_SUFFIX": {
+   "owner": "rust:packages/emulator/sharc-gen",
+   "purpose": "Build-time: the suffix of the region-list variables of the core (set by its build script)"
+  },
   "SHARC_IRQ_PROBE": {
    "owner": "rust:packages/emulator",
    "purpose": "LO-HI[,..]:MASK[:EVERY]: latches interrupt bits at instruction boundaries in PC windows (diagnostic)."
@@ -801,6 +829,22 @@
    "owner": "rust:packages/emulator",
    "purpose": "Comma list of 32-bit word indexes of the reply record to count; others are ignored."
   },
+  "SHARC_RT_FLAGS": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (build flags) that the core library header carries"
+  },
+  "SHARC_RT_RUSTC": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (rustc version) that the core library header carries"
+  },
+  "SHARC_RT_SRC_SHA256": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (source hash) that the core library header carries"
+  },
+  "SHARC_RT_TARGET": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (target triple) that the core library header carries"
+  },
   "SHARC_TIER_TIME": {
    "owner": "rust:packages/emulator",
    "purpose": "Set to 1 to report host time per SHARC tier and per thread in audio.report (dsp_tiers.tier_time); also turns link timing on."
@@ -824,46 +868,6 @@
   "SHARC_WWATCH_OUT": {
    "owner": "rust:packages/emulator",
    "purpose": "Output path of the SHARC_WWATCH CSV (default wwatch.csv in the diagnostics dir)."
-  },
-  "DIGI_EMU_RESERVE": {
-   "owner": "ts:tools/nx",
-   "purpose": "Cores that stay idle for the rest of the machine when emu-slot admits an emulator (default: the efficiency cores, else a quarter of the cores, at least 2)."
-  },
-  "DIGI_EMU_SLOTS": {
-   "owner": "ts:tools/nx",
-   "purpose": "Fixed number of machine-wide emulator slots, with no idle-core check (default: the ceiling from cores and RAM)."
-  },
-  "DIGI_SHARC_CORE_STORE": {
-   "owner": "python:tools/devtools",
-   "purpose": "Directory of the core library store instead of <git common dir>/sharc-core-cache (tests only)"
-  },
-  "DIGI_SHARC_CORE_LIB_DN2": {
-   "owner": "rust:packages/emulator/sharc-peer",
-   "purpose": "Path of the DN2 core library (sharc-core-lib) that the host loads instead of its static core; verify_build writes it to dist/daemons.json"
-  },
-  "DIGI_SHARC_CORE_LIB_DT2": {
-   "owner": "rust:packages/emulator/sharc-peer",
-   "purpose": "Path of the DT2 core library (sharc-core-lib) that the host loads instead of its static core; verify_build writes it to dist/daemons.json"
-  },
-  "SHARC_GEN_ENV_SUFFIX": {
-   "owner": "rust:packages/emulator/sharc-gen",
-   "purpose": "Build-time: the suffix of the region-list variables of the core (set by its build script)"
-  },
-  "SHARC_RT_FLAGS": {
-   "owner": "rust:packages/emulator/sharc-rt",
-   "purpose": "Build-time value from sharc-rt/build.rs (build flags) that the core library header carries"
-  },
-  "SHARC_RT_RUSTC": {
-   "owner": "rust:packages/emulator/sharc-rt",
-   "purpose": "Build-time value from sharc-rt/build.rs (rustc version) that the core library header carries"
-  },
-  "SHARC_RT_SRC_SHA256": {
-   "owner": "rust:packages/emulator/sharc-rt",
-   "purpose": "Build-time value from sharc-rt/build.rs (source hash) that the core library header carries"
-  },
-  "SHARC_RT_TARGET": {
-   "owner": "rust:packages/emulator/sharc-rt",
-   "purpose": "Build-time value from sharc-rt/build.rs (target triple) that the core library header carries"
   }
  },
  "prefixes": {
