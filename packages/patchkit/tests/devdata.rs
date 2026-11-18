@@ -583,7 +583,7 @@ fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    // the runtime, what it stands on, the DIGIKIT menu (core/digikit-menu on core/ui) and the panel modules; no DSP, machine or effect module
+    // the runtime, what it stands on, the DIGIKIT menu (core/digikit-menu on core/ui), the panel modules and the peer image (the second CPU's section stored packed); no DSP, machine or effect module
     for dev in devdata::all()
         .iter()
         .filter(|d| !d.patch_sets.is_empty() && d.identity.capabilities.dsp == "none")
@@ -598,6 +598,7 @@ fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
                     "core/expansion",
                     "core/health",
                     "core/input",
+                    "core/peer-image",
                     "core/platform",
                     "core/runtime",
                     "core/ui"

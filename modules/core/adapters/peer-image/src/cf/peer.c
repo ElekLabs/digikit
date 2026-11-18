@@ -20,11 +20,12 @@
 typedef uint32_t u32;
 typedef uint8_t u8;
 
-#define PEER_DEST 0x4f84f2c6u      /* where the stock thread reads section 7 (uncached alias) */
-#define PEER_STAGE_END 0x4f8af2c1u /* the end of the buffer: 0x4f84f2c1 + 0x60000 */
-#define PEER_LEN_WORD                                                                              \
-    0x4f84f2c2u /* big-endian length of the payload, stored by the thread before the read */
-#define PEER_LEN 383760u /* the stock section 7 */
+/* Where the stock thread reads section 7 (uncached alias), the end of its buffer (0x4f84f2c1 + 0x60000), the big-endian length word the thread
+ * stores 4 bytes below the payload, and the length of the stock section 7. */
+#define PEER_DEST 0x4f84f2c6u
+#define PEER_STAGE_END 0x4f8af2c1u
+#define PEER_LEN_WORD 0x4f84f2c2u
+#define PEER_LEN 383760u
 
 /* SHA-256 of the stock section 7 */
 static const u8 PEER_SHA256[32] = {
