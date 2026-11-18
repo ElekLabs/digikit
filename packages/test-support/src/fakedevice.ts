@@ -13,7 +13,7 @@ export const be32 = (n: number): Uint8Array =>
   Uint8Array.of((n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255);
 export const cs = (s: string): Uint8Array => concat(Buffer.from(s), Uint8Array.of(0));
 
-export const ST = { E_STATE: -53, E_NOFILE: -59, E_HASH: -56, E_FULL: -52, E_OFFSET: -54 };
+export const ST = { E_BUSY: -12, E_STATE: -53, E_NOFILE: -59, E_HASH: -56, E_FULL: -52, E_OFFSET: -54 };
 
 type LogEvent = { seq: number; kind: number; flags: number; args: number[] };
 type Staged = { path: string; size: number; sha: Uint8Array; data: Uint8Array; last: number };
@@ -43,6 +43,8 @@ export class FakeDevice implements DkTransport {
   pingName: string | null = null; // the model name the stock MidiRpc Ping answers (null: no answer)
   noRuntime = false; // a stock device: the digikit commands get no answer, only the stock MidiRpc is answered
   infoStatus: number | null = null; // INFO answers this error status (null: INFO is answered)
+  infoBusy = 0; // INFO answers E_BUSY this many times, then normally
+  pingSilent = false; // the stock Ping gets no answer (the firmware intro), whatever pingName says
   pending = 0; // after a RESTART: requests that are still answered by the old boot before the reset
   reply(cmd: number, seq: number, status: number, body: Uint8Array = new Uint8Array()): Uint8Array {
     const packed = encode8in7(concat(Uint8Array.of(status & 255), body));
@@ -53,7 +55,7 @@ export class FakeDevice implements DkTransport {
     const body = decode8in7(msg.subarray(6, msg.length - 1));
     const type = body[4];
     let payload: Uint8Array;
-    if (type === 1 && this.pingName !== null) {
+    if (type === 1 && this.pingName !== null && !this.pingSilent) {
       // u8 blobLen, the blob of request types, the model name, a second string
       payload = concat([3], [1, 2, 3], cs(this.pingName), cs('rev'));
     } else if (type === 2 && this.os !== null) {
@@ -98,6 +100,10 @@ export class FakeDevice implements DkTransport {
     switch (cmd) {
       case CMD.INFO: {
         if (this.infoStatus !== null) return err(this.infoStatus);
+        if (this.infoBusy > 0) {
+          this.infoBusy--;
+          return err(ST.E_BUSY);
+        }
         const flags = this.staged ? 2 : 0;
         return ok(
           concat(

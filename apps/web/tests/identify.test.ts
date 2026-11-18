@@ -38,8 +38,23 @@ test('an unknown Ping name is an error that lists the known names', async () => 
 });
 
 test('a device that does not answer Ping cannot be identified', async () => {
-  const dev = Object.assign(new FakeDevice(), { os: '1.2' });
+  const dev = Object.assign(new FakeDevice(), { os: '1.2', noRuntime: true });
   await assert.rejects(identifyDevice(session(dev), devices), /does not answer Ping/);
+});
+
+test('a runtime whose store is busy still answers INFO after E_BUSY retries', async () => {
+  const dev = Object.assign(new FakeDevice(), { pingName: first.name, os: '9.9', infoBusy: 3 });
+  const who = await identifyDevice(session(dev), devices);
+  assert.equal(who.id, first.id);
+  assert.notEqual(who.runtime, null);
+});
+
+test('with Ping silent (firmware intro) the id comes from the runtime INFO port', async () => {
+  const dev = Object.assign(new FakeDevice(), { pingName: first.name, pingSilent: true });
+  const who = await identifyDevice(session(dev), devices);
+  // the id is the port the runtime INFO reports
+  assert.equal(who.id, (await session(new FakeDevice()).info()).port);
+  assert.notEqual(who.runtime, null);
 });
 
 test('an INFO error reply is thrown, it is not "no runtime"', async () => {

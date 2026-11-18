@@ -1,6 +1,6 @@
 // Which device is on the link, without the digikit runtime: the stock MidiRpc Ping names the model and SoftwareVersion gives the OS
 // (docs/findings/144-stock-device-identity.md). The runtime's INFO then only says whether the runtime is there and which version it is.
-import { fmtVersion, type DkInfoFull, type DkSession } from './dkupload-core.ts';
+import { fmtVersion, INFO_PROBE_TIMEOUT_MS, type DkInfoFull, type DkSession } from './dkupload-core.ts';
 
 /** The stock MidiRpc type of Ping (docs/MIDI-SYSEX-RPC.md): no payload. */
 export const RPC_PING = 0x01;
@@ -47,43 +47,50 @@ export interface DeviceIdentity {
 
 /** The wait for Ping and SoftwareVersion. */
 const RPC_MS = 1500;
-/** The wait for the runtime's INFO: a device without the runtime does not answer, and this is how long that takes to know. */
-const INFO_MS = 1000;
-
 const kindOf = (e: unknown): string | undefined => (e as { kind?: string } | null)?.kind;
 
 /**
- * Identify the device on `s`: Ping names the model (an exact match with a registry name), SoftwareVersion gives the OS, and one short INFO tells
- * whether the runtime is there. No INFO reply in time means no runtime; an INFO error reply (busy, protocol) is thrown, because it proves a runtime
- * answered. The id always comes from Ping.
+ * Identify the device on `s`: Ping names the model (an exact match with a registry name), SoftwareVersion gives the OS, and one INFO tells whether
+ * the runtime is there. INFO retries E_BUSY like any INFO and has one retry after a lost reply; only a lost reply means no runtime. Any other INFO
+ * error reply is thrown, because it proves a runtime answered. The id comes from Ping; when Ping is silent (the stock firmware drops requests during
+ * its intro) but the runtime answers INFO, the id comes from INFO's port, matched against the registry.
  */
 export async function identifyDevice(
   s: Pick<DkSession, 'rpc' | 'info'>,
   registry: IdentityRegistry,
 ): Promise<DeviceIdentity> {
   let name: string | undefined;
+  let pingSilent = false;
   try {
     name = parsePing(await s.rpc(RPC_PING, undefined, RPC_MS));
   } catch (e) {
     if (kindOf(e) !== 'timeout') throw e;
-    throw new Error('the device does not answer Ping, so it cannot be identified');
-  }
-  const os = await s.rpc(RPC_SOFTWARE_VERSION, undefined, RPC_MS).then(parseSoftwareVersion, (e: unknown) => {
-    if (kindOf(e) === 'cancelled') throw e;
-    return undefined;
-  });
-  const device = registry.devices.find((d) => d.name === name);
-  if (!device) {
-    const known = registry.devices.map((d) => d.name).join(', ');
-    throw new Error(
-      `unknown device ${name === undefined ? '(Ping gave no name)' : `"${name}"`}${os ? ` (OS ${os})` : ''}; known devices: ${known}`,
-    );
+    pingSilent = true;
   }
   let info: DkInfoFull | null = null;
   try {
-    info = await s.info(INFO_MS);
+    info = await s.info({ timeoutMs: INFO_PROBE_TIMEOUT_MS, retries: 1 });
   } catch (e) {
     if (kindOf(e) !== 'timeout') throw e;
+  }
+  if (pingSilent && !info) throw new Error('the device does not answer Ping, so it cannot be identified');
+  const os = pingSilent
+    ? undefined
+    : await s.rpc(RPC_SOFTWARE_VERSION, undefined, RPC_MS).then(parseSoftwareVersion, (e: unknown) => {
+        if (kindOf(e) === 'cancelled') throw e;
+        return undefined;
+      });
+  const device = pingSilent
+    ? registry.devices.find((d) => d.id === info?.port)
+    : registry.devices.find((d) => d.name === name);
+  if (!device) {
+    const known = registry.devices.map((d) => d.name).join(', ');
+    const what = pingSilent
+      ? `(Ping is silent, INFO port "${info?.port}")`
+      : name === undefined
+        ? '(Ping gave no name)'
+        : `"${name}"`;
+    throw new Error(`unknown device ${what}${os ? ` (OS ${os})` : ''}; known devices: ${known}`);
   }
   return { id: device.id, name: device.name, os, runtime: info ? fmtVersion(info.runtime) : null, info };
 }

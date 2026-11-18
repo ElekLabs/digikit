@@ -248,9 +248,9 @@ async function connectEmu() {
  * `connect`, then one quick Ping; a device that does not reply is tried again for up to `waitMs` with a new bridge. The device may still re-enumerate after
  * the previous run: its MIDI port may be gone or not answer yet (the device re-enumerates after a USB mode change). After the time the last link is returned anyway
  * and the first real request reports the error. An answer with an error status is no re-enumeration: no retry.
- * The probe is Ping and not INFO: every firmware answers Ping (stock or with the runtime), so a stock device is ready at once and does not wait out the
- * INFO timeouts. A runtime device that answers Ping has its port up again, which is what the loop waits for. The first `rpc` of a session also waits for
- * the stock service (the firmware drops requests during its intro), so Ping is not lost after a restart.
+ * The device is ready when a quick INFO or a Ping answers (INFO first, then Ping, about 1 s each). A runtime answers INFO even while the stock service
+ * drops requests during the firmware intro (after a restart Ping can time out for seconds); a stock device does not answer INFO but answers Ping, so it
+ * is ready after one INFO timeout. An answer of either kind means the port is up again, which is what the loop waits for.
  */
 async function connectReady(waitMs = 8000) {
   // a device named by --device skips the identification, so no probe
@@ -259,7 +259,13 @@ async function connectReady(waitMs = 8000) {
   for (;;) {
     const link = opts.emu ? await connectEmu() : connect();
     try {
-      await link.session.rpc(RPC_PING, undefined, 1000);
+      try {
+        await link.session.info(1000);
+      } catch (e) {
+        // an error reply of INFO is an answer: the runtime is up
+        if (e?.kind === 'timeout') await link.session.rpc(RPC_PING, undefined, 1000);
+        else if (e?.kind === 'cancelled') throw e;
+      }
       return link;
     } catch (e) {
       if (e?.kind !== 'timeout' || Date.now() > deadline) return link;
