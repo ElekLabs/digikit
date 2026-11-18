@@ -215,7 +215,10 @@ send_indices = [100]
 # What patchkit needs of this device: the container and section limits of a port (written into devices/ports/*.toml by
 # tools/patchkit/port_resolve.py; docs/findings/01 "NOR flash map") and the DSP L2 range the free-region search runs in.
 [patch]
-container_max = 0x300000
+# The container (the OS image) is staged in RAM by the OS-upgrade receiver: 0x200000 bytes, copied in 101-byte messages with no size check
+# (finding 146 section 4, finding 75), so 20763 messages of 101 bytes = 2,097,063 bytes fit the 2 MiB stage; the writer reads whole NOR pages.
+# 0x1FFE00 is that bound rounded down to a 0x200 page. Above it the receiver overruns RAM; the NOR end 0x80000 + 0x1FFE00 stays below the records at 0x300000/0x380000.
+container_max = 0x1FFE00
 dsp_stored_max = 0x100000
 dsp_depacked_max = 0xfffff
 main_staged_max = 0x3ffc00

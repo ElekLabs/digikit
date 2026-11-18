@@ -4,7 +4,7 @@ import { prepareOfflineWith, type PreparedRuntimePlan } from './runtime-plan.ts'
 
 /**
  * Offline plan preparation for an explicit list of module roots (`apply --modules`). The result is not in dist/bytes/images.sha256, so a
- * test that imports this file counts as running patchkit live (its merge key keeps the patchkit binary).
+ * test that imports this file counts as running patchkit live (its merge key follows the patchkit key of its device).
  */
 export function prepareRuntimePlanModulesOffline(
   options: Pick<SessionOptions, 'device' | 'firmware' | 'runtime'>,

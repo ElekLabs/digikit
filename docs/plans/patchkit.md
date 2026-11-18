@@ -57,7 +57,7 @@ Backlog for patchkit itself (the rest lives in the plans named above):
   failure it prints UPGRADE ABORTED and writes nothing [V]. That the menu comes up with a broken MAIN OS is [O].
 - The bootstrap's receive and flash-write path has no size limit. NOR flash is 16 MiB; the container is written at
   flash offset 0x80000 and record sectors (tagged fields, serial number) start at 0x380000, so the container must
-  stay at or under 0x300000 bytes (finding 01, spike 0.2). DDR is 128 MiB [C] (finding 08, spike 0.3).
+  stay at or under 0x1FFE00 bytes (finding 146). DDR is 128 MiB [C] (finding 08, spike 0.3).
 - ColdFire space today: `flash_cave` only (DT2 1.16 2,108 B, DN2 1.11 2,136 B). `cave_b` is cleared at reset.
   `tools/cavefind.py` is lost (only its .pyc remains).
 - SHARC space: L2 past the loader looks free (about 900 KB DT2, 490 KB DN2), weak evidence. `dsp_patch.py` can only
@@ -261,7 +261,7 @@ Spec (decided 2026-10-13):
   `tools/patchkit/port_resolve.py` (rules -> port lockfile). `tools/patchkit/patchkit.py` wraps the Rust CLI for mise.
 - **Codec.** Untouched sections keep their stored bytes verbatim; changed sections are packed with an aPLib packer
   ported from `tools/firmware/aplibpack.py` that produces the **same bytes** as the Python packer (test on all 16 stock
-  sections). Hard limits from the port (`container_max` 0x300000, section 7 stored <= 0x100000 and depacked <=
+  sections). Hard limits from the port (`container_max` 0x1FFE00, section 7 stored <= 0x100000 and depacked <=
   0xfffff, MAIN staged image <= 0x3ffc00); sections 2, 4, 8 can never change. Every output is re-decoded and
   checked (checksum, HMAC, packet checksums, limits, record).
 - **Port lockfile** `devices/ports/<short>-<version>.toml`:

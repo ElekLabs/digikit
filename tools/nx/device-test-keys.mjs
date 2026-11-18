@@ -1,13 +1,14 @@
 // What a device test's cache key contains. It does not hold the shape of the targets (device-tests.mjs).
 // Three keys exist:
 // - full key (DEVICE_INPUTS): all shared reads plus the built outputs, including the patchkit binary;
-// - merge key: only the bytes the test loads (images.sha256, the daemon key, its packs) plus the reads its import
-//   closure needs; used for the files not listed in metadata.mergeTests;
+// - merge key: only the bytes the test loads (the image hashes and the daemon key of its device, its packs) plus the reads its
+//   import closure needs, without the files of the other devices; used for the files not listed in metadata.mergeTests;
 // - narrow key: the production files of the project, the packs the test loads and its imports.
 // Python tool inputs: the import closure (py-imports.mjs) of the `.py` tools a record lists in its `sources`. A test that
 // runs a new Python tool must list it there.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { nonCellGlobs, otherFiles } from './device-files.mjs';
 import { SHARED_SDK_INPUTS } from './module-build.mjs';
 
 export const PACK_NEEDS = '{workspaceRoot}/tests/regression/runtime/pack-needs.ts';
@@ -20,7 +21,7 @@ const SHARED_READS = [
   // tests/regression/runtime/device-data.ts and card-cache.ts read the profiles and the firmware ports
   { file: 'devices/**/*.toml' },
   // the manifests of the core modules: `patchkit apply` reads them with the objects (the image, plan and address map in
-  // dist/bytes/images.sha256 carry the effect); only the memaudit helper reads them itself
+  // dist/bytes/images-<device>.sha256 carry the effect); only the memaudit helper reads them itself
   { file: 'modules/core/**/module.toml', readers: ['tests/regression/runtime/memaudit-kit.ts'] },
   // upload-kit.ts reads the runtime version and the `since` of the imports
   { file: 'sdk/sdk.toml', readers: ['tests/regression/runtime/upload-kit.ts'] },
@@ -41,11 +42,17 @@ export const TEST_READS = [
 ];
 // Full keys list every shared file. A merge key lists a file only when the test (its import closure) reads it, or runs patchkit
 // live: the other effects of the file are in the bytes the key hashes.
-const sharedReads = (imports = null, patchkitLive = false) =>
-  SHARED_READS.filter(
+const NON_CELL = nonCellGlobs();
+const NODE_REGISTRY = workspaceFile('packages/devices/src/node.ts');
+const sharedReads = (imports = null, patchkitLive = false) => {
+  const files = SHARED_READS.filter(
     ({ readers }) =>
       !imports || !readers || patchkitLive || readers.some((reader) => imports.includes(workspaceFile(reader))),
   ).map(({ file }) => workspaceFile(file));
+  // devices without a cell are no input, unless the test loads the whole registry (packages/devices node.ts reads every file)
+  const registry = imports?.includes(NODE_REGISTRY);
+  return registry ? files : [...files, ...NON_CELL.map((glob) => `!{workspaceRoot}/${glob}`)];
+};
 export const READ_BY_TESTS = [...sharedReads(), ...TEST_READS];
 
 // Core-change policy. A change runs all device tests of the projects it edits. A device test that a change reaches
@@ -104,14 +111,21 @@ const SHARED_BUILT = [
 // (dist/daemons.json holds the path of the store entry, which is keyed on the patchkit sources too).
 const PATCHKIT_BINARIES = ['dist/patchkit/patchkit', 'dist/daemons.json'];
 // What a test result follows when it does not run patchkit itself: the patched images, plans and address maps, and the daemon key
-// without the sources that only patchkit reads (`emud_key.test_key_of`, written by `verify_build daemons`).
-const MERGE_BYTES = ['dist/bytes/images.sha256', 'dist/bytes/daemon-test.key'];
+// without the sources that only patchkit reads and without the files of the other devices (`emud_key.test_key_of`, written by
+// `verify_build daemons`). Both files are per device: `{device}` is replaced for each half by `forDevice`.
+const MERGE_BYTES = ['dist/bytes/images-{device}.sha256', 'dist/bytes/daemon-test-{device}.key'];
 export const BUILT_OUTPUTS = outputFiles([...SHARED_BUILT, ...PATCHKIT_BINARIES]);
-// Merge keys: the same without the binaries; a test that runs patchkit live keeps `dist/patchkit/patchkit` (PATCHKIT_LIVE).
+// Merge keys: the same without the binaries; a test that runs patchkit live (PATCHKIT_LIVE) follows the patchkit key of its device instead
+// (tools/nx/patchkit-key.mjs, written by `patchkit:cli`): the sources patchkit was built from, without the other devices' files.
+// `{device}` is replaced for each half by `forDevice`.
+export const PATCHKIT_TEST_KEY = 'dist/bytes/patchkit-test-{device}.key';
+// Stands for the negative globs of the files of the other devices; `forDevice` expands it.
+export const OTHER_DEVICE_FILES = '!{workspaceRoot}/{other-device-files}';
 export const MERGE_OUTPUTS = outputFiles([...SHARED_BUILT, ...MERGE_BYTES]);
 // A test whose import closure holds one of these runs patchkit (every module that executes it imports patchkit.ts, or is listed):
-// its key keeps the binary. Only runtime-plan.ts does not count: it runs `apply --set`, and its image, plan and address map are
-// hashed in dist/bytes/images.sha256. (An explicit module list goes through runtime-plan-modules.ts, which imports patchkit.ts.)
+// its key follows patchkit (the patchkit key of the half; the binary only in a full key). Only runtime-plan.ts does not count: it runs
+// `apply --set`, and its image, plan and address map are hashed in dist/bytes/images-<device>.sha256. (An explicit module list goes
+// through runtime-plan-modules.ts, which imports patchkit.ts.)
 export const PATCHKIT_LIVE = ['tests/regression/runtime/patchkit.ts'].map((file) => `{workspaceRoot}/${file}`);
 export const DEVICE_INPUTS = [...READ_BY_TESTS, ...BUILT_OUTPUTS, ...DEVICE_COMMON];
 // A test whose import closure holds one of these runs `wb transfer`, which loads apps/web/public/patchkit.wasm (the target depends on
@@ -124,9 +138,23 @@ export const mergeDeviceInputs = (imports, patchkitLive) => [
   ...sharedReads(imports, patchkitLive),
   ...TEST_READS,
   ...MERGE_OUTPUTS,
-  ...(patchkitLive ? outputFiles(['dist/patchkit/patchkit']) : []),
+  ...(patchkitLive ? outputFiles([PATCHKIT_TEST_KEY]) : []),
+  // a half reads the files of its own device; a test that loads the whole registry (node.ts) reads them all
+  ...(imports?.includes(NODE_REGISTRY) ? [] : [OTHER_DEVICE_FILES]),
   ...DEVICE_COMMON,
 ];
+
+// The inputs of one half: `device` (a device short) fills the placeholders of the per-device files and expands the other devices' files
+// into negative globs; null (the no-op parent of the halves) takes the files of every device and no exclusion. A full key holds no
+// placeholder: unchanged.
+export const forDevice = (inputs, device) =>
+  inputs.flatMap((input) => {
+    if (input === OTHER_DEVICE_FILES) return device ? otherFiles(device).map((glob) => `!{workspaceRoot}/${glob}`) : [];
+    const pattern = input?.dependentTasksOutputFiles;
+    if (typeof pattern === 'string' && pattern.includes('{device}'))
+      return [{ ...input, dependentTasksOutputFiles: pattern.replaceAll('{device}', device ?? '*') }];
+    return [input];
+  });
 // Tests that run `patchkit build` or `pack` at run time, or patch with explicit fixture modules, compile sources:
 // they keep the SDK and the toolchain as inputs (record flag `compiles`, `patchModules`, or any Python tool the test names: the Python devtools may build or pack).
 export const COMPILE_INPUTS = [...SHARED_SDK_INPUTS, '{workspaceRoot}/tools/patchkit/toolchain/**/*'];
@@ -146,7 +174,7 @@ export const isBindable = (manifest) => manifest.role === 'service';
 export const bindableIds = (byId) =>
   new Set([...byId].filter(([, { manifest }]) => isBindable(manifest)).map(([id]) => id));
 
-// The cache inputs of one device test target, and whether its key holds the patchkit binary (`patchkitLive`).
+// The cache inputs of one device test target, and whether its key follows patchkit (`patchkitLive`).
 // `opts`: `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
 // `uploadable`); `subjects` are the projects a test-only project tests; `services` is the set of service leaves
 // (`serviceLeaves`): a narrow key follows the `.dks` pack of those, the `.dkm` pack of every other leaf.
@@ -180,7 +208,7 @@ export const deviceInputs = (
     ),
   ];
   // A test that runs patchkit for its own sake (or patches with explicit fixture modules) depends on the patchkit code, not only on
-  // the image bytes: its key keeps the binary.
+  // the image bytes: its key follows patchkit.
   const patchkitCompiles = recs.some((rec) => rec.patchModules?.length);
   const patchkitLive = imports.some((file) => PATCHKIT_LIVE.includes(file)) || patchkitCompiles;
   const patchkitWasm = imports.some((file) => PATCHKIT_WASM_USERS.includes(file));
@@ -188,7 +216,7 @@ export const deviceInputs = (
     ...(patchkitWasm ? [{ dependentTasksOutputFiles: 'apps/web/public/patchkit.wasm', transitive: true }] : []),
     // a test that reads the precomputed `needs` of committed packs keys on that file's content
     ...(imports.includes(PACK_NEEDS) ? outputFiles(['dist/bytes/pack-verdicts.json']) : []),
-    ...(opts.narrow && patchkitLive ? outputFiles(['dist/patchkit/patchkit']) : []),
+    ...(opts.narrow && patchkitLive ? outputFiles([PATCHKIT_TEST_KEY]) : []),
     ...(opts.narrow
       ? [
           ...DEVICE_COMMON,
@@ -242,6 +270,7 @@ export const deviceInputs = (
 
 // Files that every device test's key holds (the shared reads, the test reads, the SDK and the toolchain), as repository globs.
 // `test:subset --base` cannot select by path for a change in them (tools/nx/test-subset.mjs).
+export const NON_CELL_GLOBS = NON_CELL;
 export const SHARED_INPUT_GLOBS = [...SHARED_READS.map(({ file }) => file), ...TEST_READS, ...COMPILE_INPUTS].map(
   (glob) => glob.replace('{workspaceRoot}/', ''),
 );

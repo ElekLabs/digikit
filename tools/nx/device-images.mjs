@@ -1,12 +1,22 @@
 // Writes dist/bytes/images.sha256: `<device>-<version> <set> image <sha256> plan <sha256> addrmap <sha256>` for the image, the plan and the address map that `patchkit apply` makes from each
 // acceptance stock firmware (CELLS of device-inputs.mjs) with each patch set of its device profile (devices/*.toml). This is the
-// code path the daemon takes at boot (patchkit Library, Registry and apply::apply). The device tasks of a merge key hash this file
-// and not the patchkit binary: a patchkit edit that leaves every packed image byte alone changes no key. A missing firmware
+// code path the daemon takes at boot (patchkit Library, Registry and apply::apply). The same lines of each device go to
+// dist/bytes/images-<device>.sha256: the device tasks of a merge key hash the file of their own device and not the patchkit binary:
+// a patchkit edit that leaves every packed image byte alone changes no key, and an edit for one device changes no key of another. A missing firmware
 // file writes no line for it. Lines `roots:<id>` are the static `--modules` sets of tests/regression/runtime/image-roots.json (the tasks hash the firmware itself in device-inputs.mjs).
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
-import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  globSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,3 +105,10 @@ try {
 }
 mkdirSync(join(root, 'dist/bytes'), { recursive: true });
 writeFileSync(join(root, 'dist/bytes/images.sha256'), `${lines.join('\n')}\n`);
+// One file per device with a cell: the key of a device half hashes only its own device (device-test-keys.mjs).
+for (const name of readdirSync(join(root, 'dist/bytes')))
+  if (/^images-.*\.sha256$/.test(name)) rmSync(join(root, 'dist/bytes', name));
+for (const dev of new Set(cells.map((cell) => cell.dev))) {
+  const own = lines.filter((_, index) => jobs[index].cell.dev === dev);
+  writeFileSync(join(root, `dist/bytes/images-${dev}.sha256`), own.map((line) => `${line}\n`).join(''));
+}

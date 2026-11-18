@@ -8,7 +8,7 @@ main_sha256 = "1a9723b19fb54d0566c1f690379d2e6dfe43227f77e170ad731dd029430eb3e7"
 resolved_by = "tools/patchkit/port_resolve.py 1"
 
 [limits]
-container_max = 0x300000
+container_max = 0x1FFE00
 main_staged_max = 0x3ffc00
 
 [[region]]
@@ -917,16 +917,6 @@ mark = "D"
 rule = "fw/usb:cf_func"
 
 [[anchor]]
-name = "cf.usb.fn.mode_switch"
-cpu = "cf"
-kind = "code"
-addr = 0x40006f02
-len = 4
-sha256 = "e55cb9eb6848781ac430a42dab0c41908a214ea6edea999929995e5df4c3a358"
-mark = "D"
-rule = "fw/usb:cf_func"
-
-[[anchor]]
 name = "cf.usb.fn.restart"
 cpu = "cf"
 kind = "code"
@@ -964,17 +954,6 @@ addr = 0x405d44a4
 src = 0x40006f16
 len = 4
 sha256 = "7fbac58e604d16c1e684fa8c49afd47ff7137523ec916c3601989a716c781f73"
-mark = "D"
-rule = "fw/usb:cf_literal"
-
-[[anchor]]
-name = "cf.usb.value.config_mode"
-cpu = "cf"
-kind = "value"
-addr = 0x40653440
-src = 0x4006f26e
-len = 4
-sha256 = "cdba502ee22872b91a16dbd714651acfa0832a02cdfdffab1d387096ae3cf312"
 mark = "D"
 rule = "fw/usb:cf_literal"
 

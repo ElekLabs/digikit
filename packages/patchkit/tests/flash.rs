@@ -252,7 +252,7 @@ fn an_oversize_container_fails_the_limits() {
     let Some(p) = patched_dt2() else { return };
     let mut fw = Firmware::parse(&p.image).unwrap();
     let mut meta = fw.section(5).unwrap().data.clone();
-    // incompressible bytes in a section that is stored as it is, so that the container grows past the 3 MiB limit
+    // incompressible bytes in a section that is stored as it is, so that the container grows past the container limit
     let mut x: u32 = 1;
     meta.extend((0..1_700_000).map(|_| {
         x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
@@ -264,6 +264,17 @@ fn an_oversize_container_fails_the_limits() {
     let v = c.checks.iter().find(|c| c.name == "verify").unwrap();
     assert!(!v.ok && v.detail.contains("limit"), "{}", v.detail);
     assert!(!c.ok());
+}
+
+#[test]
+fn the_build_cap_is_the_container_length() {
+    let Some(p) = patched_dt2() else { return };
+    let fw = Firmware::parse(&p.image).unwrap();
+    // the refusal names the container length; a cap of exactly that length builds, one byte less does not
+    let e = fw.build(Some(1)).unwrap_err().to_string();
+    let len: usize = e.split_whitespace().nth(2).unwrap().parse().unwrap(); // "container is N bytes, ..."
+    assert!(fw.build(Some(len)).is_ok());
+    assert!(fw.build(Some(len - 1)).is_err());
 }
 
 #[test]

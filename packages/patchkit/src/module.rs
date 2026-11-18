@@ -1248,10 +1248,7 @@ impl Library {
         root: &std::path::Path,
         only: Option<&[String]>,
     ) -> Option<Library> {
-        if crate::build::toolchain::Env::new(root).m68k("gcc").is_err() {
-            eprintln!(
-                "SKIP: the m68k-elf toolchain is not installed, so the content modules cannot be built (uv run python -m tools.patchkit.pk_toolchains m68k)"
-            );
+        if !crate::build::toolchain::Env::new(root).m68k_or_skip() {
             return None;
         }
         Some(Self::scan_repo_for(root, false, only).unwrap_or_else(|e| panic!("{e}")))

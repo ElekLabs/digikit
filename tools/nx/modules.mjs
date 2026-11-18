@@ -12,7 +12,6 @@ import { deviceTargets, checkMergeTests, conformanceTarget, testOnlyNodes, regre
 import { serviceLeaves, isBindable, bindableIds } from './device-test-keys.mjs';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
 import { standaloneRustTests } from './cargo.mjs';
-import { checkDspModes } from './dsp-mode.mjs';
 import { rigTarget } from './rig-tests.mjs';
 import { testImportInputs } from './ts-imports.mjs';
 import { pythonImportInputs } from './py-imports.mjs';
@@ -133,7 +132,6 @@ export const createNodesV2 = [
         };
       checkMergeTests(ctx.workspaceRoot, root, deviceTests, false);
       checkAcceptanceTags(root, recs, deviceTests, moduleInfo);
-      checkDspModes(ctx.workspaceRoot, root, recs, importInputs);
       if (shipped && deviceTests.length)
         Object.assign(
           targets,

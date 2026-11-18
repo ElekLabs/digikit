@@ -108,7 +108,7 @@ test.skipIf(!have)('worker core: check and apply equal the command line (core/fx
     py('tools.patchkit.patchkit', 'patch', '--firmware', path, '--modules', 'core/fx', '-o', out);
     const r = kit.apply(fw, ['core/fx']);
     assert.ok(Buffer.from(r.syx).equals(readFileSync(out)), `${name}: output differs from the CLI`);
-    assert.equal(r.plan.record.modules[0].split('@')[0], 'core/fx');
+    assert.ok(r.plan.record.modules.some((m: string) => m.split('@')[0] === 'core/fx'));
     assert.ok(r.verify.checks.length > 0);
     assert.equal(r.sha256.length, 64);
     // always from stock: an already patched image is refused with patchkit's text

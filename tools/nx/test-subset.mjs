@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { AREAS, SERVICES } from './acceptance-tags.mjs';
 import { matchesGlob } from 'node:path';
 import { SHARED_PROJECTS } from './device-tests.mjs';
-import { SHARED_INPUT_GLOBS } from './device-test-keys.mjs';
+import { NON_CELL_GLOBS, SHARED_INPUT_GLOBS } from './device-test-keys.mjs';
 import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 
@@ -63,6 +63,7 @@ export const sharedInput = (file, projects) => {
     const root = projects.find((p) => p.name === name)?.root;
     if (root && isSource(file, root)) return `the source of ${name}`;
   }
+  if (NON_CELL_GLOBS.some((g) => matchesGlob(file, g))) return '';
   const glob = SHARED_INPUT_GLOBS.find((g) => matchesGlob(file, g));
   return glob ? `the shared key input ${glob}` : '';
 };

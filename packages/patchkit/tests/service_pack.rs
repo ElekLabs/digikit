@@ -66,13 +66,7 @@ fn refused(root: &Path, id: &str, out: &Path) -> String {
 }
 
 fn toolchain() -> bool {
-    if Env::new(&root()).m68k("gcc").is_err() {
-        eprintln!(
-            "SKIP: the m68k-elf toolchain is not installed (uv run python -m tools.patchkit.pk_toolchains m68k)"
-        );
-        return false;
-    }
-    true
+    Env::new(&root()).m68k_or_skip()
 }
 
 fn scratch(name: &str) -> PathBuf {

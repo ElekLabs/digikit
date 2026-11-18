@@ -285,7 +285,13 @@ export const QUICK_TIMEOUT_MS = 1000;
  * the caller ends with `signal` (a harness that measures the wait in emulated time) and that waits `ms` of wall time at most (default: `this.timeoutMs`,
  * a guard for a dead link); an ended probe fails with a `timeout` error like any lost request, so a wait loop treats it as no answer.
  */
-export type Quick = boolean | number | { signal: AbortSignal; ms?: number };
+export type Quick = boolean | number | { signal: AbortSignal; ms?: number } | { timeoutMs: number; retries?: number };
+
+/**
+ * The wait of the first try of an INFO that finds out whether a runtime answers (`{ timeoutMs, retries }` of `Quick`): unlike the other probes, E_BUSY
+ * is still retried (a runtime with a busy store answers E_BUSY), and only a lost reply counts as no runtime.
+ */
+export const INFO_PROBE_TIMEOUT_MS = 2500;
 
 export class DkClient {
   private dk: Dk;
@@ -980,16 +986,19 @@ export class DkSession {
   }
 
   private async exchange(cmd: number, body: Uint8Array, quick: Quick, signal: AbortSignal): Promise<RawReply> {
-    const retries = quick ? 0 : this.retries;
-    const probe = typeof quick === 'object' ? quick : null;
+    const probe = typeof quick === 'object' && 'signal' in quick ? quick : null;
+    const timed = typeof quick === 'object' && 'timeoutMs' in quick ? quick : null;
+    const retries = timed ? (timed.retries ?? 0) : quick ? 0 : this.retries;
     const timeoutMs = probe
       ? (probe.ms ?? this.timeoutMs)
-      : typeof quick === 'number'
-        ? quick
-        : quick
-          ? Math.min(this.timeoutMs, QUICK_TIMEOUT_MS)
-          : this.timeoutMs;
-    const retryBusy = !quick && STORE_COMMANDS.has(cmd);
+      : timed
+        ? timed.timeoutMs
+        : typeof quick === 'number'
+          ? quick
+          : quick
+            ? Math.min(this.timeoutMs, QUICK_TIMEOUT_MS)
+            : this.timeoutMs;
+    const retryBusy = (!quick || timed !== null) && STORE_COMMANDS.has(cmd);
     // the caller's signal ends the probe (a timeout), the session's signal cancels it
     const lost = () => new DkError({ error: 'no reply from the device', kind: 'timeout' });
     let both = signal;

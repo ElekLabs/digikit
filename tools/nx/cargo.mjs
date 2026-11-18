@@ -21,6 +21,7 @@ const CLI = {
     build: 'cargo build -p patchkit --release --offline --target-dir dist/cargo',
     bin: 'patchkit',
     dir: 'patchkit',
+    key: 'node tools/nx/patchkit-key.mjs', // dist/bytes/patchkit-test-<device>.key, the key of live device tests
   },
   'plusdrive-format': {
     build: 'cargo build -p plusdrive-format --bin plusdrive --release --locked --offline --target-dir dist/cargo',
@@ -28,15 +29,16 @@ const CLI = {
     dir: 'plusdrive',
   },
 };
-const cliTarget = ({ build, bin, dir }) => ({
+const cliTarget = ({ build, bin, dir, key }) => ({
   executor: 'nx:run-commands',
   cache: false,
   parallelism: true, // cargo locks dist/cargo itself and the install step is cp+mv, so it may run beside other tasks
-  outputs: [`{workspaceRoot}/dist/${dir}/${bin}`],
+  outputs: [`{workspaceRoot}/dist/${dir}/${bin}`, ...(key ? ['{workspaceRoot}/dist/bytes/patchkit-test-*.key'] : [])],
   options: {
     commands: [
       build,
       `mkdir -p dist/${dir} && cp dist/cargo/release/${bin} dist/${dir}/${bin}.tmp && mv -f dist/${dir}/${bin}.tmp dist/${dir}/${bin}`,
+      ...(key ? [key] : []),
     ],
     parallel: false,
     cwd: '.',
@@ -118,14 +120,18 @@ const CRATE_TARGETS = {
       cache: false, // a few seconds: the file it writes is part of the merge key of the device tasks
       parallelism: true,
       description:
-        'Writes dist/bytes/images.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set.',
+        'Writes dist/bytes/images.sha256 and dist/bytes/images-<device>.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set, in one file for all devices and one per device.',
       inputs: [
         '{workspaceRoot}/tools/nx/device-images.mjs',
         '{workspaceRoot}/tests/regression/runtime/image-roots.json',
         { dependentTasksOutputFiles: '**/*', transitive: true },
       ],
       dependsOn: ['cli', { target: 'build-objects', projects: ['tag:acceptance-image'] }],
-      outputs: ['{workspaceRoot}/dist/bytes/images.sha256', '{workspaceRoot}/dist/bytes/images'],
+      outputs: [
+        '{workspaceRoot}/dist/bytes/images.sha256',
+        '{workspaceRoot}/dist/bytes/images-*.sha256',
+        '{workspaceRoot}/dist/bytes/images',
+      ],
       options: { command: 'node tools/nx/device-images.mjs', cwd: '.' },
     },
   },
@@ -156,7 +162,11 @@ const GATE = {
       executor: 'nx:run-commands',
       cache: false,
       parallelism: true, // no gate task is exclusive; an exclusive task scheduled mid-run makes Nx wait for every running task
-      outputs: ['{workspaceRoot}/dist/daemons.json', '{workspaceRoot}/dist/bytes/daemon-test.key'],
+      outputs: [
+        '{workspaceRoot}/dist/daemons.json',
+        '{workspaceRoot}/dist/bytes/daemon-test.key',
+        '{workspaceRoot}/dist/bytes/daemon-test-*.key',
+      ],
       inputs: [
         // The sources the daemon is built from: SOURCE_GLOBS of tools/devtools/emud_key.py. The store keys the binary by
         // content; these inputs make a source edit select this task, and so every task that consumes dist/daemons.json.
@@ -373,6 +383,7 @@ export const createNodesV2 = [
               options: {
                 command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
                 cwd: '.',
+                ...(name === 'patchkit' && { env: { DIGI_REQUIRE_TOOLCHAINS: '1' } }),
               },
             };
       const projects = {};

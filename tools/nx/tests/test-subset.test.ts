@@ -1,9 +1,11 @@
 import { expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { globSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { parse } from 'smol-toml';
 import { tagProblem } from '../acceptance-tags.mjs';
+import { nonCellGlobs } from '../device-files.mjs';
 import {
   baseProblem,
   changedFiles,
@@ -136,6 +138,16 @@ it('reports a shared input, and refuses an empty or shared selection without tag
   expect(sharedInput('sdk/sdk.toml', graph)).toMatch(/shared key input/);
   expect(sharedInput('packages/patchkit/src/main.rs', graph)).toBe('the source of patchkit');
   expect(sharedInput('modules/c/src/x.c', graph)).toBe('');
+  // the files of a device without an acceptance cell are no shared input; those of a device with one are
+  const nonCell = nonCellGlobs().find((g) => /^devices\/[^*/]+\.toml$/.test(g));
+  if (!nonCell) throw new Error('no device without an acceptance cell in devices/*.toml');
+  const repoRoot = resolve(import.meta.dirname, '../../..');
+  const cell = globSync('devices/*.toml', { cwd: repoRoot })
+    .sort()
+    .find((f) => parse(readFileSync(join(repoRoot, f), 'utf8')).acceptance?.ready_dir);
+  if (!cell) throw new Error('no device with an acceptance cell in devices/*.toml');
+  expect(sharedInput(nonCell, graph)).toBe('');
+  expect(sharedInput(cell, graph)).not.toBe('');
   const sharedOf = (f: string) => sharedInput(f, graph);
   const run = (changed: string[], tags: string[] = []) => {
     const got = resolveSubset(tags, graph, { changed, sharedOf });

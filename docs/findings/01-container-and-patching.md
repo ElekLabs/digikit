@@ -455,11 +455,12 @@ commands in the same convention (inference **[D]**), so the record sectors are p
 protected on hardware. The bootstrap's receive path has no size limit, so an oversize
 container would erase the record sectors.
 
-**Size cap for patchkit: container <= 0x300000 = 3,145,728 bytes** (0x80000 + 0x300000 =
-0x380000, 12 whole sectors), ideally stock + a few hundred KB. Chip geometry the bootstrap
+**Size cap for patchkit: container <= 0x1FFE00 = 2,096,640 bytes** (the 2 MiB RAM stage of
+the OS-upgrade receiver, finding 146; the NOR end 0x80000 + 0x1FFE00 stays below the records
+at 0x300000 and 0x380000). Chip geometry the bootstrap
 recognises: S25FL127S-class 512-byte pages / 256 KiB sectors; other vendors 256 B / 64 KiB
 (0x800024ec). DSP blob limits: section 7 stored size <= 0x100000 and depacked size
-<= 0x100000 (checked at 0x400cd1d4 / 0x400cd20c), about 700 KB free for the SHARC append. **[V]**
+<= 0x100000 (checked at 0x400cd1d4 / 0x400cd20c). The free space for appends is the cap minus the patched container. All current DT2 1.17 and DN2 1.12 acceptance images fit under the cap. DN2 has the least margin: about 72 KB for the largest patched image. **[V]**
 
 ### [C] `tools.firmware.build.rebuild` is not a size to flash
 
@@ -634,7 +635,7 @@ being read. That is harmless while the stream is read ahead of the write point:
 image with 1 MiB of incompressible payload appended it is 2.1 MB with the
 packer below and 4.7 MB store-only. It is a hard limit if a section is stored
 with a ratio near 1 and the image is much longer. The flash side is in "NOR flash
-map (spike 0.2)" above: the container must stay at or under 0x300000 bytes, a
+map (spike 0.2)" above: the container must stay at or under 0x1FFE00 bytes (finding 146), a
 tighter limit than this one.
 
 ### aPLib packer (DT2 1.16 size rows [V]; DN2 rows and native depack harness [D])

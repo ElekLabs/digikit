@@ -14632,6 +14632,10 @@
         ]
       },
       "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
       "doc": "The entry of the USB init `FUN_40006c52(port)` (0x40006c52 on DT2 1.17 and DN2 1.12), a 6-byte prologue `move.l d2,-(sp); move.l (4,sp),d2`. It runs at boot and again from the firmware tick after a controller reset.",
       "file": "devices/fw/usb.toml",
       "kind": "site",
@@ -14644,11 +14648,6 @@
           "offset": 0
         },
         "dt2": {
-          "kind": "cf_func",
-          "len": 6,
-          "offset": 0
-        },
-        "st": {
           "kind": "cf_func",
           "len": 6,
           "offset": 0

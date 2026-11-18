@@ -269,11 +269,15 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.env_out:
         args.env_out.write_text(json.dumps(env, indent=2) + "\n")
-        # dist/bytes/daemon-test.key, one `device key` line each: device tasks of a merge key hash it instead of the daemon path,
-        # which moves with every patchkit edit
+        # dist/bytes/daemon-test-<device>.key, the key only: the device tasks of a merge key hash the file of their own device instead
+        # of the daemon path, which moves with every patchkit edit. dist/bytes/daemon-test.key lists all devices, one `device key` line each.
         key_file = args.env_out.parent / "bytes" / "daemon-test.key"
         key_file.parent.mkdir(parents=True, exist_ok=True)
         key_file.write_text("".join(f"{d} {k}\n" for d, k in sorted(test_keys.items())))
+        for stale in key_file.parent.glob("daemon-test-*.key"):
+            stale.unlink()
+        for d, k in test_keys.items():
+            (key_file.parent / f"daemon-test-{d}.key").write_text(f"{k}\n")
     return 0
 
 

@@ -3,13 +3,13 @@
 import { globSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
-import { checkDspModes, taskMode } from './dsp-mode.mjs';
 import { mergeTests, manifestClosure, read, records } from './module-manifests.mjs';
 import {
   DEVICE_INPUTS,
   VITEST_SETUP,
   builtSourceExclusions,
   deviceInputs,
+  forDevice,
   serviceLeaves,
 } from './device-test-keys.mjs';
 
@@ -30,6 +30,15 @@ export const SHARED_PROJECTS = SHARED_TASKS.map((task) => task.split(':')[0]);
 // Device and conformance tasks run behind this wrapper: it takes one machine-wide emulator slot. It only schedules and is
 // no input: it cannot change a result, and Nx does not cache failures.
 export const EMU_SLOT = 'node tools/devtools/emu-slot.mjs --';
+
+// The DSP mode of a run target: coupled when a record that lists one of its files says `"dsp": "sharc"`; no field is zero. emu-slot.mjs takes the cores of the
+// task from it (DIGI_EMU_DSP). A test that needs the DSP and runs in a zero record fails in `resolveDsp` (packages/test-support/src/session.ts).
+export const taskMode = (tests, recs) => {
+  for (const rec of recs)
+    if (rec.dsp !== undefined && !['zero', 'sharc'].includes(rec.dsp))
+      throw new Error(`metadata.runtimeAcceptance: dsp ${JSON.stringify(rec.dsp)} is not zero or sharc`);
+  return recs.some((rec) => rec.dsp === 'sharc' && (rec.files ?? []).some((f) => tests.includes(f))) ? 'sharc' : 'zero';
+};
 
 // `opts`: see deviceInputs (device-test-keys.mjs).
 export const deviceTarget = (
@@ -74,10 +83,10 @@ export const deviceTarget = (
     options: {
       command: `${EMU_SLOT} pnpm --filter @digi/regression test:runtime ${tests.map((t) => `../../${root}/${t}`).join(' ')}`,
       cwd: '.',
-      // the key holds the patchkit binary (a full key, or a live closure): runtime/patchkit-exec.ts runs patchkit only then
+      // a full key holds the patchkit binary, a live closure the patchkit key: runtime/patchkit-exec.ts runs patchkit only then
       env: {
         DIGI_PATCHKIT_LIVE: (!opts.narrow && !opts.merge) || patchkitLive ? '1' : '',
-        // the DSP mode of the files (records' `dsp`, checked against the sources): emu-slot.mjs takes the cores of the task from it
+        // the DSP mode of the files (the records' `dsp`): emu-slot.mjs takes the cores of the task from it
         DIGI_EMU_DSP: taskMode(tests, recs),
         // the `-all` twins run the full tier: `full: true` tests (tests/regression/runtime/devices.ts FULL_TIER) run too
         ...(opts.fullTier ? { DIGIKIT_TIER: 'full' } : {}),
@@ -120,11 +129,11 @@ export const deviceTargets = (
     }
     const devices = devicesOf(key);
     const halves = devices.map((device) => `${key}--${device}`);
-    split[key] = { executor: 'nx:noop', inputs: target.inputs, dependsOn: halves };
+    split[key] = { executor: 'nx:noop', inputs: forDevice(target.inputs, null), dependsOn: halves };
     devices.forEach((device, i) => {
       split[halves[i]] = {
         ...target,
-        inputs: [...target.inputs, { env: 'DIGI_DEVICE' }],
+        inputs: [...forDevice(target.inputs, device), { env: 'DIGI_DEVICE' }],
         options: { ...target.options, env: { ...target.options.env, DIGI_DEVICE: device } },
       };
     });
@@ -266,7 +275,6 @@ export const testOnlyNodes = (
     if (!tests.length) continue;
     const recs = records(join(workspaceRoot, root));
     checkAcceptanceTags(root, recs, tests, moduleInfo);
-    checkDspModes(workspaceRoot, root, recs, importInputs);
     if (recs.some((rec) => Object.keys(rec.aliases ?? {}).length))
       throw new Error(`Test-only project ${config.name} needs explicit pack-aliases support`);
     // Explicit fixture images build only their manifest requirements; ordinary owners keep the default image.

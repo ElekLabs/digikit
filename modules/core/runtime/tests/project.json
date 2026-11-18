@@ -39,6 +39,8 @@
           "packages/devices/src/node.ts",
           "packages/devices/src/parse.ts",
           "packages/dk-session/src/samples.ts",
+          "packages/dk-session/src/identify.ts",
+          "packages/dk-session/src/dkupload-core.ts",
           "packages/workbench-core/src/modules/dktransfer.ts",
           "packages/workbench-core/src/modules/dkbind.ts",
           "packages/workbench-core/src/node/node-host.ts",

@@ -69,14 +69,8 @@ export function lostReason(e: unknown): string {
   return raw.split('\n')[0] ?? raw;
 }
 
-/** The stock MidiRpc type of SoftwareVersion (docs/MIDI-SYSEX-RPC.md): no payload; the reply holds NUL-terminated strings, one of them the OS version. */
-export const RPC_SOFTWARE_VERSION = 0x02;
-
-/** The OS version in the reply of SoftwareVersion (`"00"`, `"79"`, `"1.17"`: the string that looks like a version), or undefined. */
-export function parseSoftwareVersion(payload: Uint8Array): string | undefined {
-  const text = new TextDecoder('latin1').decode(payload);
-  return text.split('\0').find((s) => /^\d+\.\d+[0-9A-Za-z.]*$/.test(s));
-}
+// The stock MidiRpc Ping and SoftwareVersion live in dk-session (identify.ts); the imports here keep working.
+export { RPC_PING, RPC_SOFTWARE_VERSION, parsePing, parseSoftwareVersion } from '@digi/dk-session';
 
 /** The id as shown: a long id is cut (the tooltip has all of it). */
 export function shortId(id: string): string {

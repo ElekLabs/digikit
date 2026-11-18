@@ -3,7 +3,7 @@
 // the native `sample_wasm`. The local side is the native `local_*` commands (local.rs): pick a folder, list a level, read a file.
 // Nothing is started and nothing is built here.
 import { errorLine } from '@digi/workbench-core/modules/backend.ts';
-import { failureModule, fmtVersion, hasCap, type DkSession, type LoadFailure } from '@digi/dk-session';
+import { failureModule, hasCap, identifyDevice, type DkSession, type LoadFailure } from '@digi/dk-session';
 import { Sample, converterOf, sourceKind, type Prepared } from '@digi/dk-session/dksample';
 import { openSamples, samplesUseBulk, type SamplesBackend, type SlotsOptions } from '@digi/dk-session/samples';
 import { chooseBulk, type BulkChoice } from '@digi/dk-session/bulk-select';
@@ -26,7 +26,10 @@ import {
 /** The device behind the target: its name, its runtime, the backend of its samples, and the open backend. */
 export interface OpenedSamples {
   name: string;
-  runtime: string;
+  /** The runtime version; null when the device has no runtime. */
+  runtime: string | null;
+  /** The device runs the digikit runtime. Without it there is no usb-fast and no restart request. */
+  hasRuntime: boolean;
   samples: string;
   /** When the device uses a changed sample: `restart` = at its next start. */
   apply: 'live' | 'restart';
@@ -83,7 +86,7 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
     | {
         s: DkSession;
         name: string;
-        runtime: string;
+        runtime: string | null;
         samples: string;
         slots?: SlotsOptions;
         apply: 'live' | 'restart';
@@ -121,17 +124,23 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
       last = undefined;
     }
     if (!last) {
-      const info = await asked(() => s.info());
-      const device = registry.get(info.port);
+      // Ping names the device; the runtime's INFO only says whether the runtime is there
+      const who = await asked(() => identifyDevice(s, registry));
+      const device = registry.get(who.id);
       if (!device.storage) throw new Error(`the ${device.name} profile has no [storage]`);
       noteConnection({
         type: 'answered',
-        device: { id: info.port, name: device.name, runtime: fmtVersion(info.runtime) },
+        device: {
+          id: who.id,
+          name: device.name,
+          ...(who.os ? { os: who.os } : {}),
+          ...(who.runtime !== null ? { runtime: who.runtime } : {}),
+        },
       });
       last = {
         s,
         name: device.name,
-        runtime: fmtVersion(info.runtime),
+        runtime: who.runtime,
         samples: device.storage.samples,
         slots: device.storage.slots,
         apply: device.storage.slots?.apply ?? 'live',
@@ -144,8 +153,10 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
       await Promise.resolve(had.link.close()).catch(() => {});
       last.bulk = undefined;
     }
-    if (!last.bulk && !last.failure) last.failure = { usbFast: await usbFastFailure(s) };
-    if (!last.bulk && samplesUseBulk(last.samples)) {
+    // usb-fast and its load failures belong to the runtime: a stock device sends its files over SysEx and asks nothing of the runtime
+    const hasRuntime = last.runtime !== null;
+    if (!last.bulk && !last.failure) last.failure = { usbFast: hasRuntime ? await usbFastFailure(s) : undefined };
+    if (!last.bulk && hasRuntime && samplesUseBulk(last.samples)) {
       const env = app.env.bulk;
       let choiceNote: string | undefined;
       last.bulk =
@@ -172,6 +183,7 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
     last.opened = {
       name: last.name,
       runtime: last.runtime,
+      hasRuntime,
       samples: last.samples,
       apply: last.apply,
       backend: openSamples(last.samples, {
@@ -203,7 +215,7 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
 
   /** Read the device's open folder, its free space and what the backend can do (the On device column of Samples mode). */
   async function readSamples(): Promise<void> {
-    const { name, runtime, samples, apply, backend } = await openDeviceSamples();
+    const { name, runtime, hasRuntime, samples, apply, backend } = await openDeviceSamples();
     const canMkdir = await backend.canMkdir();
     setSampleEntries(await backend.list(sampleFolder()));
     let free: number | undefined;
@@ -212,7 +224,7 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
     } catch {
       // the listing is what counts; the free space is a line
     }
-    setDeviceInfo({ name, runtime, samples, canMkdir, free, apply });
+    setDeviceInfo({ name, runtime, hasRuntime, samples, canMkdir, free, apply });
   }
 
   // ---- the local folder ---------------------------------------------------------------------------------------------------------------

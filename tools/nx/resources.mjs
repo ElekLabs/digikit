@@ -3,7 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { availableParallelism, cpus, totalmem } from 'node:os';
 
-// Cores of one emulator by DSP mode (tools/nx/dsp-mode.mjs): a zero-DSP run is the ColdFire thread plus host work, about 1 core;
+// Cores of one emulator by DSP mode (the records' `dsp`, device-tests.mjs `taskMode`): a zero-DSP run is the ColdFire thread plus host work, about 1 core;
 // a coupled run adds the SHARC thread and the audio path, about 3 cores (measured on a 16-core M3 Max).
 export const MODE_CORES = { zero: 1, sharc: 3 };
 // Cores per emulator for the ceiling of emulators: the cheapest mode. The core budget (budget().budget, summed over the

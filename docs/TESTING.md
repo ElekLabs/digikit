@@ -90,7 +90,7 @@ Nx rejects `--files` together with the main command's `--base`.
 TypeScript edits select TypeScript targets. An edit in `packages/workbench-core/src` or `ui` selects its own `test-host` and `typecheck`, `@digi/web:test-host`, `check`, `test-wasm` and `build`, and the desktop `test-host`, `typecheck`, `check:ui` and `build:ui` (both apps import it); an edit in `packages/workbench-core/tests` selects only its own two targets; an edit in `apps/web/src` selects the web targets and an edit in `apps/desktop/ui/src` only the desktop targets (the apps do not import each other). Neither selects a cargo, wasm-build, device or conformance target: `patchkit:wasm` reads the Rust crates, `digiemu-desktop:rust-tests` reads the crate and its Rust dependencies, and the desktop `test-host` reads its own `ui/`, the workbench-core sources, `dk-session`, `dkbs`, `devices/*.toml`, `modules/*/*/module.toml` and `config/emulator.json`. `@digi/web:test-host` runs the Vitest project `web-transfer` and does not load wasm; `@digi/workbench-core:test-host` runs the project `workbench-core` (the tests of the shared code and of the NodeHost, with temp folders and stand-in bridge programs). Tests that load the real `public/*.wasm` or compare it with the patchkit command line (`tests/*.wasm.test.ts`, Vitest project `web-wasm`, the only web runner besides `web-transfer`) are the target `@digi/web:test-wasm`, which depends on `patchkit:wasm` (replayed from the cache unless a Rust input changed). A new test that needs the wasm or the command line is named `*.wasm.test.ts`. The fake devices of the web tests (`FakeDevice`, `FakeDrive`, `FakeUpgrade`), the fake modules and the command-line helpers are in `apps/web/tests/support/`; the site's screenshot tools import them from there. The logic of the desktop Samples mode is tested in `packages/workbench-core/tests/samples-core.test.ts`; the upload engine is tested in `packages/workbench-core/tests/sample-upload.test.ts`.
 
 Control-client, test-support, dk-session, desktop-host and regression-host targets use local result
-caching; web-transfer and the per-module `test-host` targets remain uncached. tools/nx/modules.mjs infers, for each shipped module, a `test-host` target (host tests under `tests/`), a `test-device` target (its `tests/**/*.device.test.ts`, run with Vitest directly after its packs) and, for each shipped dynamic, service or `host` module, a `test-conformance` target (the shared conformance suite for that module). A project with several device test files has one cached target per file, `test-device--<file>`, and `test-device` is their no-op parent; a project with one file has only `test-device`. Tasks and Vitest workers follow the CPU budget below. Other Nx targets: `pack` (patchkit pack for each device, building stale module objects on demand, into `dist/modules/<device>/<leaf>.dkm`; only for the modules the gate packs, not for patched-in core modules or static fixtures), `pack-aliases` (renamed copies named by `runtimeAcceptance` aliases, same directory), `patchkit:cli` (`dist/patchkit/patchkit`) and `plusdrive-format:cli` (`dist/plusdrive/plusdrive`). Outputs go to `dist/`, never under `out/`. Shipped content modules (not `core/*`) depend on `core/runtime`; machines also on `core/dynreg` and `core/dsp-voice`, effects on `core/dynfx` and `core/fxpages`. Web tests retain ignored
+caching; web-transfer and the per-module `test-host` targets remain uncached. tools/nx/modules.mjs infers, for each shipped module, a `test-host` target (host tests under `tests/`), a `test-device` target (its `tests/**/*.device.test.ts`, run with Vitest directly after its packs) and, for each shipped dynamic, service or `host` module, a `test-conformance` target (the shared conformance suite for that module). A project with several device test files has one cached target per file, `test-device--<file>`, and `test-device` is their no-op parent; a project with one file has only `test-device`. Tasks and Vitest workers follow the CPU budget below. Other Nx targets: `pack` (patchkit pack for each device, building stale module objects on demand, into `dist/modules/<device>/<leaf>.dkm`; only for the modules the gate packs, not for patched-in core modules or static fixtures), `pack-aliases` (renamed copies named by `runtimeAcceptance` aliases, same directory), `patchkit:cli` (`dist/patchkit/patchkit` and `dist/bytes/patchkit-test-<device>.key`) and `plusdrive-format:cli` (`dist/plusdrive/plusdrive`). Outputs go to `dist/`, never under `out/`. Shipped content modules (not `core/*`) depend on `core/runtime`; machines also on `core/dynreg` and `core/dsp-voice`, effects on `core/dynfx` and `core/fxpages`. Web tests retain ignored
 generated WASM and optional inputs outside the cache boundary. Cache use assumes a frozen installation. New test helpers, environment
 reads or external inputs require input/output review and scoped invalidation/restoration evidence before relying on cached results. The
 [bounded cache observations](findings/nx-pilot.md) include dependency failure/restoration probes;
@@ -246,7 +246,7 @@ Tests that lack an input skip with a reason; `pytest -rs` lists them.
 | ColdFire dump `out/ghidra/<image>-emac` and cfdb | Needs Ghidra: `tools.coldfire.ghidradump`, then `tools.coldfire.cfdb build`. |
 | Native SHARC library, shared core | `mise run gen:native-lib` (firmware-free); `SHARC_NATIVE_LIB` overrides. `mise run gen:core` builds the generated core. |
 | Module toolchains in `out/tools` | `mise run patch:toolchains` (about 15 min); `uv run python -m tools.patchkit.pk_toolchains status`. Selache builds `selas`, `seld` and `seldump` only: `selcc` does not compile at the pinned revision, and only two tests use it (they skip without it). On Apple silicon with an Intel Homebrew in `/usr/local`, the m68k build compiles for x86_64 (`CC`/`CXX` with `-arch x86_64`) so it links the Homebrew libraries; set `CC` and `CXX` yourself to override. |
-| Objects of content modules and fixtures in `out/cache/dko` | Not committed. The Rust tests that scan the repository (`Library::scan_repo`), `module:pack`, the workbench app's library read (it packs the run-time modules of a device in-process), `dk:run`, `dk:dev` and the web gallery build the stale ones on demand (`patchkit build` does it by hand). Without the m68k-elf toolchain the Rust tests that need them print `SKIP` and return. A checkout with an empty `out/` passes after the first build. |
+| Objects of content modules and fixtures in `out/cache/dko` | Not committed. The Rust tests that scan the repository (`Library::scan_repo`), `module:pack`, the workbench app's library read (it packs the run-time modules of a device in-process), `dk:run`, `dk:dev` and the web gallery build the stale ones on demand (`patchkit build` does it by hand). Without the m68k-elf toolchain the Rust tests that need them print `SKIP` and return, except under `DIGI_REQUIRE_TOOLCHAINS=1` (set by the patchkit `rust-tests` Nx target), where they panic with the install command (`uv run python -m tools.patchkit.pk_toolchains m68k`). A checkout with an empty `out/` passes after the first build. |
 | Ready inputs | `mise run emu:ready -- dt2` or `-- dn2` (about 2 min). Its helpers build against the shared core (`mise run gen:core` first; `SHARC_GEN_DIR` overrides). It writes to the `[acceptance] ready_dir` directories of the device files; the patchkit harness and the device tests read the same key. `DIGI_PK_READY_<DEV>_<VER>` overrides the directory for the harness and the tests. |
 | Device generated cores `out/native/{dn2,dt2}-audio/gen` (AOT blocks) | `mise run perf:aot -- dn2` (about 4 min, then about 6 min for the first coupled build against it) or `-- dt2 --card-image IMG`; from the ready inputs, the SHARC database is built when missing. A DN2 core made otherwise (`sharc_dn2_aot`, from a capture) is kept: the tool refuses to overwrite it. Regenerate after a `CORE_FINGERPRINT` change. |
 | Captures `out/captures/*.dt2cap` | Not reproducible from the repository; those tests stay skipped. |
@@ -501,19 +501,25 @@ built bytes (full set; the narrow set of a file outside `mergeTests` is describe
 `dist/bytes/core-objects.sha256`, one line per committed core object (`modules/core/**/build/*.dko.json`) with its hash without
 `source_sha256`, the only field that follows the source text (a comment edit changes no other field; checked for Rust, C and assembly).
 The patched image is a function of these objects, the core manifests, the device files, the patchkit code and the firmware. A
-merge key (the target of a file in `mergeTests`) hashes the result instead of the patchkit code (a narrow key holds none of these files: only the packs the test loads, `pack-verdicts.json` when it imports `pack-needs.ts`, and the binary when it is live):
+merge key (the target of a file in `mergeTests`) hashes the result instead of the patchkit code (a narrow key holds none of these files: only the packs the test loads, `pack-verdicts.json` when it imports `pack-needs.ts`, and the patchkit key of its device when it is live):
 `patchkit:device-images` runs `patchkit apply` for each acceptance firmware (`CELLS` of `tools/nx/device-inputs.mjs`) with each patch set of
 its device file and writes `dist/bytes/images.sha256`, one line `<device>-<version> <set> image <sha256> plan <sha256> addrmap <sha256>`
-(the plan and the address map are what `runtime-plan.ts` reads). `digi-control:daemons` also writes `dist/bytes/daemon-test.key`, the
-daemon key without the patchkit sources: the repository files the daemon build read (its cargo dependency file, kept as `files.txt` in
+(the plan and the address map are what `runtime-plan.ts` reads), and the lines of each device again in `dist/bytes/images-<device>.sha256`:
+the key of a half hashes the file of its own device only. `digi-control:daemons` also writes `dist/bytes/daemon-test-<device>.key`, the
+daemon key of that device without the patchkit sources and without the files of the other devices: the repository files the daemon build read (its cargo dependency file, kept as `files.txt` in
 the store entry), the crates of its dependency closure (`cargo tree`, not the whole `Cargo.lock`), the generated core, the profile, rustc and the
 flags (`emud_key.test_key_of`, written by `verify_build daemons`). An unrelated workspace member leaves it unchanged; an emulator source edit
-changes it. The daemon store key is not touched by it.
+changes it. The daemon store key is not touched by it. `dist/bytes/daemon-test.key` lists the keys of all devices, one line each; no cache key reads it.
 So a patchkit edit that changes no packed byte (image, plan, address map, `.dkm`, core object) selects no merge target. A test that runs
-patchkit keeps `dist/patchkit/patchkit` in its key (merge and narrow keys) and runs with `DIGI_PATCHKIT_LIVE=1`. The rule is the import closure: it
+patchkit follows `dist/bytes/patchkit-test-<device>.key` in its merge or narrow key and runs with `DIGI_PATCHKIT_LIVE=1`. `patchkit:cli` writes that file
+for each device after the build (`tools/nx/patchkit-key.mjs`): one sha256 line per repository file that the build read (the dependency file
+`dist/cargo/release/patchkit.d`), without the files of the other devices (`tools/nx/device-files.mjs`) and without test-only Rust, plus the manifests,
+`Cargo.lock`, `.cargo/`, the device's own files (device file, peer file, ports), `rustc -vV` and the profile and rustflags environment. Paths are
+repository-relative, so lanes and the remote cache share keys. Any edit of a listed source changes the key, a comment too: the binary key ignored a
+trailing comment but not a new first line, which moves panic locations (measured). The script fails when the dependency file is missing, and so does `patchkit:cli`. The rule for a live test is the import closure: it
 holds `tests/regression/runtime/patchkit.ts` (the helper every module that runs patchkit imports: `dkm.ts` for `needs` and `fit`, `synth.ts`,
 `addrmap.ts`, `runtime-plan-modules.ts` for `apply --modules`, the opt-in proofs through `optInPatchkit`), or the record patches fixture
-modules (`patchModules`). Only `runtime-plan.ts` is exempt: its `apply --set` result is in `images.sha256`. All test code starts patchkit in
+modules (`patchModules`). Only `runtime-plan.ts` is exempt: its `apply --set` result is in `images-<device>.sha256`. All test code starts patchkit in
 `runtime/patchkit-exec.ts`, which throws under Nx unless `DIGI_PATCHKIT_LIVE` is set (full keys, conformance and live closures set it);
 `pnpm lint` runs `tools/nx/check-patchkit-spawn.mjs`, which rejects any other patchkit spawn or binary lookup in test code.
 `fx-live.ts` reads the `needs` of the gain pack from `dist/bytes/pack-verdicts.json` (`patchkit:pack-verdicts`, packs listed in
@@ -522,11 +528,12 @@ The static `--modules` root lists (`tests/regression/runtime/image-roots.json`: 
 `test-device-all` (a real run for every test, merge tests included), the non-twin targets (`test-device-full`) and `test-conformance`
 keep the full key: the patchkit binary and `dist/daemons.json`. A merge key lists a shared file of `SHARED_READS` (`sdk/sdk.toml`, `types.toml`, core `module.toml`) only when a
 helper in its closure reads it (`upload-kit.ts`, `synth.ts`, `memaudit-kit.ts`) or the test runs patchkit; the full key lists all of them.
+A half (`<target>--dt2`, `--dn2`) of a merge key leaves out the files of the other device (its device file, peer file and ports) unless the test loads the whole registry; a full key keeps them.
 The sources, SDK headers and `source_sha256` of the image are not inputs: a comment, an unused constant or a rebuilt object with the same
 bytes changes no key. The key also holds the pack outputs (`dist/modules/*/*.dkm`), the `plusdrive` and `dksample.wasm` outputs, the
 module's own production files without its object sources (`src`, `include`, `fit`, `sdk`; they reach the run through the packs and the
 object hashes), the files in `READ_BY_TESTS` (`tools/nx/device-test-keys.mjs`: `devices/**/*.toml`, `modules/core/**/module.toml`,
-`sdk/sdk.toml`, `types.toml`, fixture files, the Vitest and TypeScript config; tests read these without importing them),
+`sdk/sdk.toml`, `types.toml`, fixture files, the Vitest and TypeScript config; tests read these without importing them; the files of a device without an acceptance cell (`devices/syntakt*.toml`, its ports and peer file) are excluded, see "Three keys exist"),
 each record's `sources`. A record that runs `patchkit build` or `pack` at run time, or patches with explicit fixture modules (`patchModules`),
 also keeps the SDK and the toolchain as inputs (record flag `compiles`; a record that patches fixture modules or packs at run time sets it),
 the toolchain, the emulator env switches,
@@ -564,31 +571,34 @@ sources/includes, variant toolchains and mutable object caches have no proven bo
    "depOutputs": ["dist/bytes/pack-verdicts.json", "dist/modules/dn2/dyn-fx-gain.dkm", ... , "dist/plusdrive/plusdrive"]
    ```
 
-   Read `depOutputs`. `dist/bytes/images.sha256` (patched images, plans and address maps) and `dist/bytes/daemon-test.key` (the
-   daemon without the patchkit sources) key a merge target; `dist/bytes/pack-verdicts.json` keys a test that reads the `needs`
-   of a committed pack; `dist/modules/*/*.dkm` are the packs it loads. `dist/patchkit/patchkit` and `dist/daemons.json` appear
-   only on a full key (`test-device-all--*`, `test-device-full`, conformance) and on tests that run patchkit (live). `files` in the
-   same output lists the source files in the key, including the test's import closure.
+   Read `depOutputs`. `dist/bytes/images-<device>.sha256` (patched images, plans and address maps of the half's device) and
+   `dist/bytes/daemon-test-<device>.key` (the daemon without the patchkit sources) key a merge target; `dist/bytes/pack-verdicts.json`
+   keys a test that reads the `needs` of a committed pack; `dist/modules/*/*.dkm` are the packs it loads. `dist/patchkit/patchkit` and
+   `dist/daemons.json` appear only on a full key (`test-device-all--*`, `test-device-full`, conformance); a live test holds
+   `dist/bytes/patchkit-test-<device>.key` instead. `files` in the
+   same output lists the source files in the key, including the test's import closure. `show target inputs --check` lists file
+   inputs only: a patchkit source edit selects live tasks through the key file (a dependency output), so check it with a graph diff
+   or run `node tools/nx/patchkit-key.mjs` twice.
 
 3. Which tests are live, and why:
 
    ```text
    $ pnpm nx:pilot show target inputs core/runtime-tests:test-device--store-format --json
-   depOutputs: ["dist/bytes/pack-verdicts.json", "dist/patchkit/patchkit", "dist/plusdrive/plusdrive"]
+   depOutputs: ["dist/bytes/pack-verdicts.json", "dist/bytes/patchkit-test-dn2.key", "dist/plusdrive/plusdrive"]   # the --dn2 half
    files containing tests/regression/runtime/patchkit.ts
    $ pnpm nx:pilot show project core/runtime-tests --json   # targets["test-device--store-format--dn2"].options.env
    {"DIGI_PATCHKIT_LIVE": "1", "DIGI_DEVICE": "dn2"}      # test-device--safe-mode--dn2 has no DIGI_PATCHKIT_LIVE
    ```
 
    A test is live when its import closure holds `tests/regression/runtime/patchkit.ts` (it runs patchkit itself), or its record patches
-   fixture modules. The patchkit binary is then in its key and `DIGI_PATCHKIT_LIVE=1` is set. To find the import that made it live, look
+   fixture modules. The patchkit key of its device is then in its key (the binary only in a full key) and `DIGI_PATCHKIT_LIVE=1` is set. To find the import that made it live, look
    for `patchkit.ts` in `files` and follow the imports of the test (`runtime-plan-modules.ts`, `dkm.ts`, `synth.ts` and `addrmap.ts`
    each import it).
 
 4. What an undeclared use looks like. A task that is not live cannot start patchkit; the helper throws:
 
    ```text
-   patchkit needs: this task's cache key does not hold the patchkit binary. Import runtime/patchkit.ts in the test (that marks it
+   patchkit needs: this task's cache key does not follow patchkit. Import runtime/patchkit.ts in the test (that marks it
    live), or read the result from dist/bytes (images.sha256, pack-verdicts.json).
    ```
 
@@ -934,7 +944,7 @@ B = the performance core count on Apple Silicon, otherwise cores - 2, with a min
 
 The values assume at least 2 GB of RAM per emulator. On Apple Silicon B is the performance core count, so a 12P+4E machine has B 12.
 B is also the core budget of the emulators. A task has the cores of its DSP mode: a zero-DSP run (ColdFire only) uses about 1 core, a coupled run (`dsp: 'sharc'`) about 3 (measured on a 16-core M3 Max). The slot ceiling counts zero-DSP runs (12 slots at B 12); the core budget stops coupled runs from filling them: at most 4 coupled emulators, or 12 zero-DSP ones, or a mix with cores 3 x coupled + zero at most 12. (Counting 12 slots of mostly coupled tests put the load at 60 and made each emulator about 3 times slower.)
-The mode comes from the `metadata.runtimeAcceptance` record: `"dsp": "sharc"`, no field means zero. The Nx target passes it as `DIGI_EMU_DSP` (a conformance target takes it from the module: a dynamic non-service module is coupled). `tools/nx/dsp-mode.mjs` derives the mode from the test source (`dsp: 'sharc'` in the file, or in an exported helper it calls, such as `withRouteFxSession`; an option such as `sharc: true` of `uploadTests`) and fails the Nx graph load when a record disagrees with a file it lists: set `dsp` to the derived mode, one record per mode.
+The mode comes from the `metadata.runtimeAcceptance` record: `"dsp": "sharc"`, no field means zero. The Nx target passes it as `DIGI_EMU_DSP` (a conformance target takes it from the module: a dynamic non-service module is coupled). A test that needs the DSP (PCM, DSP memory or a machine or effect DSP path) and runs in a record without `dsp: 'sharc'` fails at run time: `resolveDsp` (`packages/test-support/src/session.ts`) throws on `pcm.*`, `dsp.*` and `audio.*` calls without it. A record that says zero while a file starts coupled sessions is not detected; the run takes 3 cores while the slot counted 1 (slower, not wrong): set `dsp` when a file passes `dsp: 'sharc'`.
 `tools/nx/resources.mjs` holds this policy.
 
 Each launcher run has its own budget, so several lanes could start more emulators than the machine runs well.
@@ -1064,10 +1074,12 @@ Where the targets come from:
 
 Three keys exist:
 - Full key: all shared reads and all built outputs, including the patchkit binary. Used by `test-device-all` and conformance.
-- Merge key: the key of files listed in `metadata.mergeTests`. It holds the bytes the test loads (its `.dkm` packs, `images.sha256`, the daemon key) and the reads its import closure needs.
+- Merge key: the key of files listed in `metadata.mergeTests`. It holds the bytes the test loads (its `.dkm` packs, `images-<device>.sha256`, the daemon key of the device) and the reads its import closure needs. A half of it leaves out the files of the other device.
 - Narrow key: the default for files not in `metadata.mergeTests`. It holds the production files of the project, the packs the test loads, and its imports.
 
 `mise run test` selects affected targets with merge keys. `mise run test:full` runs every file with full keys.
+
+Files of a device without an acceptance cell (`devices/syntakt*.toml`, its ports and peer file) are no input of a device test key, except of a test that loads the whole registry (its import closure holds `packages/devices/src/node.ts`); the daemon test key leaves them out too (`tools/nx/device-files.mjs`, `emud_key.non_cell_device_prefixes`). A live test follows `dist/bytes/patchkit-test-<device>.key`, which holds only the files of its own device; a merge half leaves out the other device's files (`filesOf` in `tools/nx/device-files.mjs`, `forDevice` in `device-test-keys.mjs`), and takes `images-<device>.sha256` and `daemon-test-<device>.key` of its own device. Full keys keep them all.
 
 Inputs computed from code:
 - The TypeScript import closure of the test file. A barrel (a file of only `export ... from`, for example `packages/dk-session/src/index.ts`) is followed per imported name: `import { A } from '@digi/dk-session'` reaches the file that exports A. A namespace, default, side-effect, dynamic or `require` import takes the whole file. A file that a test loads through a barrel without using one of its names is not an input.
@@ -1210,7 +1222,7 @@ layout). The audit of cargo's dependency file runs on every build.
 
 `verify_build daemons` also provides the library of each device (a daemon holds no static core; a library that cannot be built
 fails the command with the build command in the message) and writes `DIGI_SHARC_CORE_LIB_<DEV>` (the store path) into the same `--env-out` file
-(`dist/daemons.json`); the key of the library is part of the device's line in `dist/bytes/daemon-test.key`, so a core change
+(`dist/daemons.json`); the key of the library is part of `dist/bytes/daemon-test-<device>.key` (and the device's line in `dist/bytes/daemon-test.key`), so a core change
 invalidates the merge keys of device tests. The variables reach the daemons as follows: `packages/test-support` (`coreLibEnv`,
 used by `Session.start` for a session with DSP) reads them from the environment or `dist/daemons.json` and passes them to the
 daemon; `tools/nx/daemon-env.mjs` puts the whole file into the environment of the Python harnesses. Every other launcher calls `core_store.library_env` (the same `ensure_core`): `tools/emulator/native_emu.py` for the cores of a
