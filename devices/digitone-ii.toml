@@ -209,6 +209,10 @@ sound_off = 0x34
 sound_stride = 0x48b
 # The number of s16 parameter words in a Sound object's array (the stock getter's bound; finding 02): the debug log's parameter watch reads them.
 sound_words = 101
+# The array the LFO tick adds its output to, track 1 word 0 (finding 143, "Where the output lands": the smoother's return value plus 0x22; word i at +2 i, track t at +2 * sound_words * t),
+# and the phase accumulator (u32) of LFO 1 of track 1 in the tick's state. The device tests of the LFO read them.
+lfo_live = 0x80006906
+lfo_phase = 0x44640c18
 send_template = 0x44
 send_indices = [100]
 

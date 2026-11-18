@@ -106,7 +106,7 @@ cardRigs(
       const out: number[] = [];
       const quarters = [0, 32, 64, 96]; // SPH in 128ths of a cycle: phase 0, 1/4, 1/2, 3/4
       for (const sph of quarters) {
-        await rig.turnTo('SPH', sph << 8);
+        await rig.turnTo('SPH', sph << 8, 0x200); // within 1/64 of a cycle: the steps of the knob near the target are 0x200 to 0x400
         await rt.ui.tap('TRIG 1', { until: { ms: 200, why: 'the trigger starts the LFO at its start phase (no observable state)' } });
         out.push(await rig.live(dest));
       }
@@ -122,7 +122,7 @@ cardRigs(
       await rig.setWave(WAVE.TRI);
       const tri: number[] = [];
       for (const sph of quarters) {
-        await rig.turnTo('SPH', sph << 8);
+        await rig.turnTo('SPH', sph << 8, 0x200); // within 1/64 of a cycle: the steps of the knob near the target are 0x200 to 0x400
         await rt.ui.tap('TRIG 1', { until: { ms: 200, why: 'the trigger starts the LFO at its start phase (no observable state)' } });
         tri.push(await rig.live(dest));
       }

@@ -48,8 +48,11 @@ cardRigs(
       expect(await h.usb(rt2, (dk) => dk.modules()), 'no module is loaded').toEqual([]);
       await loadPanelProject(rt2);
       const rig2 = new LfoRig(rt2, rig.index);
+      // the loader writes the destination through its remap table: the array index after the load is read back, not assumed
+      const dest2 = await rig2.destination();
+      console.info(`destination before the save ${dest}, after the load ${dest2}`);
       expect(await rig2.word(waveIndex), 'the loader keeps the wave number: nothing clamps it').toBe(FIRST_SHAPE << 8);
-      const samples = await rig2.sample(dest, READS, GAP_MS);
+      const samples = await rig2.sample(dest2, READS, GAP_MS);
       const note = `TRI ${fitShape(samples, evalTri).err.toFixed(3)}, SQR ${fitShape(samples, evalSqr).err.toFixed(3)}, SINE ${fitShape(samples, evalSine).err.toFixed(3)}`;
       for (const [name, shape] of [
         ['TRI', evalTri],
@@ -59,14 +62,14 @@ cardRigs(
         expect(fitShape(samples, shape).err, `the stock tick plays RAND, not ${name} (${note})`).toBeGreaterThan(BAD);
       // the LFO is not stopped: the destination moves
       expect(new Set(samples.map((s) => s.v)).size, 'RAND moves the destination').toBeGreaterThan(1);
-      const err = await modPage(rig2, dest);
+      const err = await modPage(rig2, dest2);
       console.info(`ERR page screen: ${await captureRemoteOled(rt2.session, 'lfo-err-page')}`);
 
       // the value survives a save and a load of the project
       await savePanelProject(rt2);
       await loadPanelProject(rt2);
       expect(await rig2.word(waveIndex), 'the number survives save and load').toBe(FIRST_SHAPE << 8);
-      expect(await modPage(rig2, dest), 'the page is the same after the load').toBe(err);
+      expect(await modPage(rig2, dest2), 'the page is the same after the load').toBe(err);
       await rt2.session.expectNoFault('project with a shape number, no lfo.dks');
     }, 900_000);
 
@@ -87,20 +90,23 @@ cardRigs(
       expect((await shapeWords(h, rt2)).map((w) => w & 0xff), 'STEP keeps number 8').toContain(FIRST_SHAPE + 1);
       await loadPanelProject(rt2);
       const rig2 = new LfoRig(rt2, rig.index);
+      // the loader writes the destination through its remap table: the array index after the load is read back, not assumed
+      const dest2 = await rig2.destination();
+      console.info(`destination before the save ${dest}, after the load ${dest2}`);
       expect(await rig2.word(waveIndex), 'the project holds wave 7').toBe(FIRST_SHAPE << 8);
-      const samples = await rig2.sample(dest, READS, GAP_MS);
+      const samples = await rig2.sample(dest2, READS, GAP_MS);
       const tri = fitShape(samples, evalTri);
       const table = fitShape(samples, (p) => evalTable(RAMP_SAMPLES, p));
       expect(tri.err, `a number with no loaded shape plays TRI (TRI ${tri.err.toFixed(3)}, table ${table.err.toFixed(3)})`).toBeLessThan(OK);
       expect(table.err, 'and not the table of the shape that is gone').toBeGreaterThan(BAD);
 
       // the name: the one thing only the screen shows. The page of wave 7 (a gap: "----", the RAND graph) differs from the page the stock formatter gives (ERR, test above) and is pinned
-      const gap = await modPage(rig2, dest);
+      const gap = await modPage(rig2, dest2);
       console.info(`gap page screen: ${await captureRemoteOled(rt2.session, 'lfo-gap-page')}`);
       await rig2.setWave(FIRST_SHAPE + 1);
-      expect(await modPage(rig2, dest), 'wave 8 (STEP) shows another page than the gap').not.toBe(gap);
+      expect(await modPage(rig2, dest2), 'wave 8 (STEP) shows another page than the gap').not.toBe(gap);
       await rig2.setWave(WAVE.RAND);
-      expect(await modPage(rig2, dest), 'RAND shows another page than the gap (its name is RND)').not.toBe(gap);
+      expect(await modPage(rig2, dest2), 'RAND shows another page than the gap (its name is RND)').not.toBe(gap);
       golden(GOLDENS, `${rt2.session.options.device}.gap-page`, gap);
       await rt2.session.expectNoFault('project with a shape number, shape module missing');
     }, 900_000);

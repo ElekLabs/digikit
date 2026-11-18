@@ -39,7 +39,7 @@ cardRigs('lfo shapes: panel', { dsp: 'zero', symbols: CARD_SYMBOLS, initial: () 
     expect(new Set([rand, ramp, step]).size, 'RND, RAMP and STEP show three different pages (name and graph)').toBe(3);
 
     // the highest loaded number is the end of the range: three more detents change nothing
-    await rig.turn('WAVE', 1, 3);
+    await rig.turn('WAVE', 8, 4);
     expect(await rig.word(waveIndex), 'WAVE stops at the highest loaded number').toBe((FIRST_SHAPE + 1) << 8);
     await expect(rig.turnTo('WAVE', (FIRST_SHAPE + 2) << 8)).rejects.toThrow(/stops at/);
     expect(await page('step-top'), 'the page is the same at the end of the range').toBe(step);
