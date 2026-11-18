@@ -13,19 +13,20 @@ import { edits, patched, unhashed } from './dkm-patch.ts';
 
 /**
  * Refusal fixtures for the loader and the boot plan, with module states (docs/plans/runtime-and-services.md section 8, item R11; the table of codes is
- * `refusal-table.ts`). Each fixture is a copy of the packed `test/commit-demo` with one field changed (`dkm-patch.ts`) or a pair of lfo fixtures, so a must-fail
+ * `refusal-table.ts`). Each fixture is a copy of the packed `test/lfo-shape` (a module with no machine or effect, so the card needs no service with a DSP part and the boot stays
+ * cold) with one field changed (`dkm-patch.ts`), or a pair of lfo fixtures, so a must-fail
  * differs from the must-pass (the unchanged module) by that field only. The test reads three views of one boot and they must agree:
  *
  * - `DKRT_BOOT` (`results`, `states`, `detail`): the module's state and the code, read from guest memory;
  * - the LOADS command (version 2): the same record through the protocol, as Transfer reads it;
  * - MODULES: only the module that is ACTIVE is listed, so a refused or failed module left nothing behind.
  *
- * The boot runs without the SHARC (`dsp: 'cold'`): the good module's DSP part stays pending, so its state is DSP_LOADING there and ACTIVE with the SHARC.
+ * The boot runs without the SHARC (`dsp: 'cold'`): the good module has no DSP part, so it is ACTIVE.
  */
-const GOOD = 'test/commit-demo';
+const GOOD = 'test/lfo-shape';
 const LFO = 'test/lfo-shape';
 const LFO_DUP = 'test/lfo-shape-dup';
-/** The service of the lfo_shape kind is a file of the card (`services/lfo.dks`), not a part of the image: the two fixtures need it. */
+/** The service of the lfo_shape kind is a file of the card (`services/lfo.dks`), not a part of the image: every fixture here needs it. */
 const LFO_SERVICE = 'core/services/lfo';
 const UNOWNED_KIND = 90;
 
@@ -37,9 +38,12 @@ interface Seen {
   modules: string[];
 }
 
+/** The card file of the lfo service (not selected: the loader finds it for the NEEDS of every fixture). */
+const lfoService = (rig: CardRig) => ({ name: 'services/lfo.dks', file: moduleArtifact(rig.device, LFO_SERVICE) });
+
 /** One boot of `entries`, and everything the tests read from it as plain values (the tests do not touch the device again). */
-async function boot(rig: CardRig, tag: string, entries: Entry[], files: { name: string; file: string }[] = []): Promise<Seen> {
-  const got = await bootEntries(rig, tag, entries, files);
+async function boot(rig: CardRig, tag: string, entries: Entry[]): Promise<Seen> {
+  const got = await bootEntries(rig, tag, entries, [lfoService(rig)]);
   const loads = await rig.usb(got.rt, (dk) => dk.loadStates());
   return {
     results: got.info.results,
@@ -49,6 +53,12 @@ async function boot(rig: CardRig, tag: string, entries: Entry[], files: { name: 
     modules: got.mods.map((m) => m.name),
   };
 }
+
+/** `edit` with a key of its own for the fixture's record (the copies of one fixture would collide on `LFO_KEY`). */
+const withKey = (key: number, edit: (f: Buffer) => void = () => {}) => (f: Buffer) => {
+  edits.key(key)(f);
+  edit(f);
+};
 
 /** The state, code and detail of module `i` as the boot record and the LOADS reply both say them. */
 function expectModule(seen: Seen, i: number, state: string, code: number, detail?: [number, number]) {
@@ -88,13 +98,13 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
       const E_FORMAT = loadCode('E_FORMAT');
       const entries: Entry[] = [
         { name: GOOD, file: moduleArtifact(rig.device, GOOD), want: LOADED },
-        entryOf('test/c-format', patched(fixture(), 'test/c-format', edits.badMagic), E_FORMAT),
-        entryOf('test/c-sha', unhashed(patched(fixture(), 'test/c-sha')), loadCode('E_SHA')),
-        entryOf('test/c-newer', patched(fixture(), 'test/c-newer', edits.newerRuntime), loadCode('E_CONTRACT')),
-        entryOf('test/c-need', patched(fixture(), 'test/c-need', edits.needsNewerRuntime), loadCode('E_CONTRACT')),
-        entryOf('test/c-missing', patched(fixture(), 'test/c-missing', edits.needsMissingService), loadCode('E_MISSING')),
-        entryOf('test/c-kind', patched(fixture(), 'test/c-kind', edits.unownedKind(UNOWNED_KIND)), loadCode('E_PLAN_KIND')),
-        entryOf('test/c-fit', patched(fixture(), 'test/c-fit', edits.machineRows(RESOURCE.MACHINE_ROWS, 99)), loadCode('E_PLAN_FIT')),
+        entryOf('test/c-format', patched(fixture(), 'test/c-format', withKey(100, edits.badMagic)), E_FORMAT),
+        entryOf('test/c-sha', unhashed(patched(fixture(), 'test/c-sha', withKey(101))), loadCode('E_SHA')),
+        entryOf('test/c-newer', patched(fixture(), 'test/c-newer', withKey(102, edits.newerRuntime)), loadCode('E_CONTRACT')),
+        entryOf('test/c-need', patched(fixture(), 'test/c-need', withKey(103, edits.needsNewerRuntime)), loadCode('E_CONTRACT')),
+        entryOf('test/c-missing', patched(fixture(), 'test/c-missing', withKey(104, edits.needsMissingService)), loadCode('E_MISSING')),
+        entryOf('test/c-kind', patched(fixture(), 'test/c-kind', withKey(105, edits.unownedKind(UNOWNED_KIND))), loadCode('E_PLAN_KIND')),
+        entryOf('test/c-fit', patched(fixture(), 'test/c-fit', withKey(106, edits.recordBytes(0x01000000))), loadCode('E_PLAN_FIT')),
       ];
       return boot(rig, 'refusal-patched', entries);
     })();
@@ -138,8 +148,8 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
 
   test('uses over the capacity are refused with E_PLAN_FIT and the resource that is full', async () => {
     const seen = await patchedSeen();
-    expectModule(seen, 7, 'REFUSED', loadCode('E_PLAN_FIT'), [CAPACITY_KINDS.MACHINE_ROWS, 0]);
-    expect(moduleStateText(seen.loads[7]!)).toContain('refused: no room: the machine rows');
+    expectModule(seen, 7, 'REFUSED', loadCode('E_PLAN_FIT'), [CAPACITY_KINDS.ARENA, 0]);
+    expect(moduleStateText(seen.loads[7]!)).toContain('refused: no room: the CPU memory');
   });
 
   // the two failures that come after the plan, each in a boot of its own copy of the good module (they share its machine key and DSP part, so the good module is not in this boot)
@@ -148,8 +158,8 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
     failures ??= (async () => {
       await rig.first();
       const entries: Entry[] = [
-        entryOf('test/c-init', patched(fixture(), 'test/c-init', edits.failInit), loadCode('E_INIT')),
-        entryOf('test/c-decl', patched(fixture(), 'test/c-decl', edits.undeclaredKinds), loadCode('E_DECL_KIND')),
+        entryOf('test/c-init', patched(fixture(), 'test/c-init', withKey(107, edits.failInit)), loadCode('E_INIT')),
+        entryOf('test/c-decl', patched(fixture(), 'test/c-decl', withKey(108, edits.undeclaredKinds)), loadCode('E_DECL_KIND')),
       ];
       return boot(rig, 'refusal-failures', entries);
     })();
@@ -172,7 +182,7 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
   test('a selected file the card does not have is E_NOT_FOUND', async () => {
     await rig.first();
     const rt = await rig.load('refusal-gone', {
-      modules: [{ name: 'modules/m0.dkm', file: moduleArtifact(rig.device, GOOD) }],
+      modules: [{ name: 'modules/m0.dkm', file: moduleArtifact(rig.device, GOOD) }, lfoService(rig)],
       selection: ['modules/m0.dkm', 'modules/gone.dkm'],
     });
     const loads = await rig.usb(rt, (dk) => dk.loadStates());
@@ -188,7 +198,7 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
         { name: LFO, file: moduleArtifact(rig.device, LFO), want: LOADED },
         { name: LFO_DUP, file: moduleArtifact(rig.device, LFO_DUP), want: loadCode('E_PLAN_KEY') },
       ];
-      return boot(rig, 'refusal-owners', entries, [{ name: 'services/lfo.dks', file: moduleArtifact(rig.device, LFO_SERVICE) }]);
+      return boot(rig, 'refusal-owners', entries);
     })();
     return owners;
   };
