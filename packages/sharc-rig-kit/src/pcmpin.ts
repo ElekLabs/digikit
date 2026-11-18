@@ -9,6 +9,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { parse } from 'smol-toml';
 import { FS, fft, hanning, peak, rms, wordsHash } from './analysis.ts';
 import { BANDS, bandHz, bandLevels, type Fingerprint } from './fingerprint.ts';
 import { plotPng, wavBytes } from './plot.ts';
@@ -281,6 +282,24 @@ function runs(n: number, bad: (i: number) => boolean): [number, number][] {
 export interface CompareOptions {
   /** SHA-256 of the analysed float32 words of the capture (needed to check an exact pin) */
   sha256?: string;
+  /**
+   * Frames of one device DSP block (`deviceBlockFrames`). With it the onset may move by whole blocks, at most `onsetBlocks`: the key press
+   * lands in another block when a change makes each block cheaper (findings 45, 57); the signal from the onset on is the same.
+   */
+  block?: number;
+  /** most blocks the onset may move (default 2) */
+  onsetBlocks?: number;
+}
+
+/** Frames of one DSP block of a device (`dt2`, `dn2`): the sample rate over `dsp_blocks_per_second` of `devices/*.toml`. */
+export function deviceBlockFrames(device: 'dt2' | 'dn2', rate = FS): number {
+  const file = path.join(
+    import.meta.dirname,
+    '../../../devices',
+    device === 'dt2' ? 'digitakt-ii.toml' : 'digitone-ii.toml',
+  );
+  const board = (parse(readFileSync(file, 'utf8')) as { board: { dsp_blocks_per_second: number } }).board;
+  return Math.round(rate / board.dsp_blocks_per_second);
 }
 
 /**
@@ -295,8 +314,13 @@ export function compare(pinIn: Pin, got: FingerprintV2, o: CompareOptions = {}):
     return [`format ${got.rate} Hz x ${got.channels}, the pin has ${pin.rate} Hz x ${pin.channels}`];
   }
   if (pin.frames !== got.frames) out.push(`${got.frames} frames, the pin has ${pin.frames}`);
-  if (Math.abs(pin.onset - got.onset) > tol.onset)
-    out.push(`onset moved ${got.onset - pin.onset} frames (${pin.onset} -> ${got.onset})`);
+  const shift = got.onset - pin.onset;
+  const blocks = o.block ? Math.abs(shift) / o.block : 0;
+  const wholeBlocks = o.block !== undefined && Number.isInteger(blocks) && blocks <= (o.onsetBlocks ?? 2);
+  if (Math.abs(shift) > tol.onset && !wholeBlocks)
+    out.push(
+      `onset moved ${shift} frames (${pin.onset} -> ${got.onset})${o.block ? `; allowed: whole ${o.block}-frame blocks, at most ${o.onsetBlocks ?? 2}` : ''}`,
+    );
   if (Math.abs(pin.peak_db - got.peak_db) > tol.level_db)
     out.push(`peak ${sign(got.peak_db - pin.peak_db, 2)} dB (${pin.peak_db} -> ${got.peak_db} dBFS)`);
   if (pin.stereo && got.stereo) {
@@ -482,6 +506,9 @@ export interface CheckOptions {
   windowFrames?: number | null;
   /** where plot.png and the window WAV go on a failure (omit: none written) */
   outDir?: string;
+  /** frames of a device DSP block: the onset may move by whole blocks (`CompareOptions`) */
+  block?: number;
+  onsetBlocks?: number;
   name: string;
 }
 
@@ -509,7 +536,7 @@ export function checkCapture(pinFile: string, pcm: ArrayLike<number>, o: CheckOp
       text: `measured:\n${report(m.fp, null)}`,
     };
   }
-  const differences = compare(pin, m.fp, { sha256: wordsHash(m.window) });
+  const differences = compare(pin, m.fp, { sha256: wordsHash(m.window), block: o.block, onsetBlocks: o.onsetBlocks });
   if (differences.length) writeArtifacts(o, m, pin, `PIN DIFFERS  ${differences[0]}`);
   return { ok: differences.length === 0, pending: false, differences, fp: m.fp, text: report(m.fp, pin) };
 }

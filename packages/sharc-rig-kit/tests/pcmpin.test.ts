@@ -7,6 +7,7 @@ import { fingerprint } from '../src/fingerprint.ts';
 import {
   checkCapture,
   compare,
+  deviceBlockFrames,
   measure,
   parseFloatWav,
   readPin,
@@ -104,6 +105,38 @@ describe('compare', () => {
     expect(diff(pin, tone({ onset: ONSET + 32 }))).toContain(
       `onset moved 32 frames (${pin.onset} -> ${pin.onset + 32})`,
     );
+  });
+
+  describe('onset-aligned device pins', () => {
+    const aligned = (x: Float32Array, block?: number) => compare(pin, pinOf(x), { block });
+    it('a whole-block shift passes, either way', () => {
+      expect(aligned(tone({ onset: ONSET - 32 }), 32)).toEqual([]);
+      expect(aligned(tone({ onset: ONSET + 64 }), 32)).toEqual([]);
+    });
+    it('a shift that is not whole blocks fails', () => {
+      expect(aligned(tone({ onset: ONSET - 20 }), 32)[0]).toContain('onset moved -20 frames');
+    });
+    it('a 3-block shift fails', () => {
+      expect(aligned(tone({ onset: ONSET + 96 }), 32)[0]).toContain('onset moved 96 frames');
+    });
+    it('a changed sample after the onset fails', () => {
+      const x = tone({ onset: ONSET - 32 });
+      x[2 * 5000] = Math.fround(x[2 * 5000]! + 0.1);
+      expect(aligned(x, 32).length).toBeGreaterThan(0);
+    });
+    it('without a block size the onset is exact', () => {
+      expect(aligned(tone({ onset: ONSET + 32 }))[0]).toContain('onset moved 32 frames');
+    });
+    it('an exact pin hashes the signal from the onset: a block shift keeps the hash', () => {
+      const a = measure(tone(), { channels: 2, windowFrames: 12000 });
+      const b = measure(tone({ onset: ONSET - 32 }), { channels: 2, windowFrames: 12000 });
+      const exact = { ...a.fp, exact: { sha256: wordsHash(a.window) } };
+      expect(compare(exact, b.fp, { sha256: wordsHash(b.window), block: 32 })).toEqual([]);
+    });
+  });
+
+  it('reads the block of a device from its profile', () => {
+    expect([deviceBlockFrames('dt2'), deviceBlockFrames('dn2')]).toEqual([32, 32]);
   });
 
   it('says that L = R is gone', () => {

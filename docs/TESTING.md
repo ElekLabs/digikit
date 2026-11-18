@@ -1254,6 +1254,8 @@ the sound within tolerance passes without a re-pin.
 from the onset (`checkCapture`). Cases of a plain sine (`sine: { note }`) also assert properties that hold whatever the pin says:
 pitch within 5 cents of the note, crest factor of the second half of the window within 1 % of sqrt(2) (`crest_settled`: the amplitude of the DT2 sine starts 1.7 % high and settles within about 0.15 s, which the whole-window crest includes), harmonics under -60 dB, level steady within 0.5 dB.
 
+**Equiv pins are onset-aligned.** A device pin of `defineEquiv` compares the signal from the onset on (12000 frames, fixed length), so an exact pin's SHA-256 is taken over the onset-aligned signal. The onset stays in the fingerprint and the report, and it may move by whole DSP blocks, at most 2 (`block` of `checkCapture`: `deviceBlockFrames(device)`, the sample rate over `dsp_blocks_per_second` of the device profile, 32 frames on DT2 and DN2). A shift of another size, or of more than 2 blocks, fails. Reason: a change that makes each block cheaper (the fx stubs of R12-8) moves the block in which the key press lands, so the note starts a block earlier or later; the signal from the onset on is unchanged (findings 45, 57). A pin written after such a shift records the new onset.
+
 **Failure and report**: a failed or missing pin prints the differences and the full report, expected beside measured (format, onset, peak,
 stereo, level range, loudest bands, pitch, crest factor, harmonics), and writes `<case>.plot.png` (the window and the pin's band curve) and
 `<case>.window.wav` beside the capture (`out/runs/...` of the case for a device pin, `out/rig/<key>/plot.png` and `out.wav` for a rig pin) for listening.
