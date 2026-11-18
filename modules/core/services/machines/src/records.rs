@@ -183,13 +183,8 @@ impl<C: CoreApi> Service<C> for Machines {
     unsafe fn reload_done(core: &C) {
         // the placeholder rows the new version did not take over (a type it no longer has, or a load that failed)
         dsp::free_placeholders(core);
-    }
-
-    unsafe fn on_loaded(core: &C, _rec: usize) {
-        // a reload published machine rows after the firmware built the machine selection view's list (the view caches it): build it again
-        if core.reload_phase() != 0 {
-            refresh_view(core);
-        }
+        // the machine selection view caches the list: build it again, after a failed load too (the cached list would keep an entry the rows no longer have)
+        refresh_view(core);
     }
 
     unsafe fn remove(core: &C, owner: u8) {

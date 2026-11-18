@@ -60,6 +60,8 @@ CMD: dict[str, int] = {
     "MODULES": 0x03,
     "CAPACITY": 0x04,
     "LOADS": 0x05,
+    "RELOAD": 0x06,
+    "RELOAD_STATE": 0x07,
     "BEGIN": 0x10,
     "DATA": 0x11,
     "END": 0x12,
@@ -80,6 +82,8 @@ CMD_LIST = 0x02
 CMD_MODULES = 0x03
 CMD_CAPACITY = 0x04
 CMD_LOADS = 0x05
+CMD_RELOAD = 0x06
+CMD_RELOAD_STATE = 0x07
 CMD_BEGIN = 0x10
 CMD_DATA = 0x11
 CMD_END = 0x12
@@ -279,6 +283,7 @@ CAP: dict[str, int] = {
     "READBACK": 14,
     "LOADS": 15,
     "SVC_ABI": 16,
+    "RELOAD": 17,
 }
 
 RANGES: dict[str, tuple[int, int]] = {

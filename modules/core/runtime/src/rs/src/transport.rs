@@ -283,7 +283,7 @@ pub(crate) struct Cmd {
 }
 
 /// The built-in commands, looked up one after the other (a jump table is not ColdFire code).
-pub(crate) static CMDS: [Cmd; 19] = [
+pub(crate) static CMDS: [Cmd; 21] = [
     Cmd { cmd: CMD_INFO, flags: NOLOG | STORE, h: h_info },
     Cmd { cmd: CMD_LIST, flags: STORE, h: h_list },
     Cmd { cmd: CMD_MODULES, flags: NOLOG, h: h_modules },
@@ -303,6 +303,8 @@ pub(crate) static CMDS: [Cmd; 19] = [
     Cmd { cmd: CMD_FAULT, flags: 0, h: h_fault },
     Cmd { cmd: CMD_SELECT, flags: BIG, h: h_select },
     Cmd { cmd: CMD_RESTART, flags: 0, h: h_restart },
+    Cmd { cmd: CMD_RELOAD, flags: 0, h: h_reload },
+    Cmd { cmd: CMD_RELOAD_STATE, flags: NOLOG, h: h_reload_state },
 ];
 
 pub(crate) fn find(cmd: u8) -> Option<&'static Cmd> {

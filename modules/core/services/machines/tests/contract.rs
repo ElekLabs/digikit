@@ -669,7 +669,7 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
 /// The machine selection view caches the machine list: a reload rebuilds it through `dynreg_info` words 48 (the variable that holds the view) and 49 (the builder), once
 /// the module's rows are in the DSP (`on_loaded`), and a load outside a reload does not.
 #[test]
-fn the_machine_list_is_rebuilt_after_a_reload_and_not_after_a_boot_load() {
+fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
     use dkrt_abi::service::Service;
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -692,7 +692,7 @@ fn the_machine_list_is_rebuilt_after_a_reload_and_not_after_a_boot_load() {
             log.borrow_mut().push((a, args.to_vec()));
             0
         }));
-        unsafe { <Machines as Service<FakeCore>>::on_loaded(&core, 0) };
+        unsafe { <Machines as Service<FakeCore>>::reload_done(&core) };
         let got = calls.borrow().clone();
         calls.borrow_mut().clear();
         got
@@ -700,11 +700,12 @@ fn the_machine_list_is_rebuilt_after_a_reload_and_not_after_a_boot_load() {
     assert_eq!(
         run(table(VAR, BUILD), 0x1234_5678, 1),
         vec![(BUILD, vec![0x1234_5678])],
-        "a reload: the builder gets the stored view"
+        "the builder gets the stored view"
     );
-    assert!(
-        run(table(VAR, BUILD), 0x1234_5678, 0).is_empty(),
-        "a boot load: nothing to rebuild"
+    assert_eq!(
+        run(table(VAR, BUILD), 0x1234_5678, 0),
+        vec![(BUILD, vec![0x1234_5678])],
+        "after a reload that failed too"
     );
     assert!(
         run(table(VAR, BUILD), 0, 1).is_empty(),

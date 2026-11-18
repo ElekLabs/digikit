@@ -109,6 +109,9 @@ pub(crate) unsafe fn clear_rows<C: CoreApi>(core: &C, rec: usize) -> bool {
 /// A reload ended (new version loaded or not): free every placeholder row that the new version did not take over, so no row of owner `PLACEHOLDER_OWNER` outlives its
 /// reload. The type word first, then the disabled word; a failed write leaves the row for the next reload's end.
 pub(crate) unsafe fn free_placeholders<C: CoreApi>(core: &C) {
+    if core.dsp_info().is_null() {
+        return; // an image without the DSP loader has no voice rows
+    }
     let d = core.dsp();
     let first = iw(core.dsp_info(), I_VFIRST);
     let mut k = 0;

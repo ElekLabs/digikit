@@ -63,6 +63,8 @@ export const CMD = {
   MODULES: 0x03,
   CAPACITY: 0x04,
   LOADS: 0x05,
+  RELOAD: 0x06,
+  RELOAD_STATE: 0x07,
   BEGIN: 0x10,
   DATA: 0x11,
   END: 0x12,
@@ -236,6 +238,7 @@ export const CAP = {
   READBACK: 14,
   LOADS: 15,
   SVC_ABI: 16,
+  RELOAD: 17,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */

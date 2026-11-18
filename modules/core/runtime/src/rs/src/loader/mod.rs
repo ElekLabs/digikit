@@ -213,6 +213,20 @@ pub unsafe fn reload_quiesce(rec: usize) -> i32 {
     loader().reload_quiesce(rec)
 }
 
+/// The module record loaded from the store path `path` (NUL terminated), and its selection index: what a reload names its module by.
+pub unsafe fn rec_of_path(path: *const u8) -> Option<(usize, usize)> {
+    let l = loader();
+    let mut rec = 0;
+    while rec < MAX_MODULES {
+        if records::module(rec).used != 0 && cstr_eq(records::path(rec).as_ptr(), path) {
+            let k = l.sel_of_rec[rec] as usize;
+            return if k < SEL_MAX { Some((rec, k)) } else { None };
+        }
+        rec += 1;
+    }
+    None
+}
+
 /// A reload that cannot finish before the old code is gone: give the old module its tick back (`Loader::reload_abort`).
 #[allow(dead_code)] // the reload job calls it (E5 commit 8)
 pub unsafe fn reload_abort(rec: usize) -> bool {
