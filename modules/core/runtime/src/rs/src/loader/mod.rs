@@ -1140,6 +1140,23 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         OK
     }
 
+    /// The selection indices of the modules that are loaded, and `extra` (the index a reload is about to load into).
+    unsafe fn live_at(&self, extra: usize) -> [bool; SEL_MAX] {
+        let mut live = [false; SEL_MAX];
+        let mut r = 0;
+        while r < MAX_MODULES {
+            let at = self.sel_of_rec[r] as usize;
+            if records::module(r).used != 0 && at < SEL_MAX {
+                live[at] = true;
+            }
+            r += 1;
+        }
+        if extra < SEL_MAX {
+            live[extra] = true;
+        }
+        live
+    }
+
     /// The first step of a reload's teardown, called once per pass until it returns `OK`: close every way into the module's code, then wait until nothing is inside.
     /// The tick stops; its SysEx commands answer `E_BUSY` from now on; its sinks, with the span clock, are cleared (under the interrupt mask); the block count is
     /// noted. It returns `E_BUSY` until no command of the module is in flight and `DRAIN_BLOCKS` blocks have passed (no spinning: the next UI pass asks again).
@@ -1188,6 +1205,9 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             Err(e) => return e,
         }
         self.accepted[k] = true;
+        // the services number the live set again: the live modules keep their numbers (sticky), a key the new file adds takes a free one
+        let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
+        services().settle(&sel);
         self.phase = Phase::Reload;
         crate::selection::BOOT_IDX = k as u32;
         self.missing = [0; NEEDS_LEN];
@@ -1335,6 +1355,21 @@ pub(crate) fn settle_ctx(planned: &Plan, tables: &[[u8; TABLE_MAX]; SEL_MAX], le
     let mut i = 0;
     while i < n {
         if planned.verdicts[i].is_accepted() {
+            sel.nkeys[i] = table_keys(&tables[i][..lens[i]], &mut sel.keys[i]) as u8;
+        }
+        i += 1;
+    }
+    sel
+}
+
+/// What a reload's `settle` hands to the services: the keys of the modules in `live` (selection indices), in selection order. The count reaches the last live one.
+#[inline(never)]
+pub(crate) fn live_settle_ctx(tables: &[[u8; TABLE_MAX]; SEL_MAX], lens: &[usize; SEL_MAX], live: &[bool; SEL_MAX]) -> dkrt_abi::service::SettleCtx {
+    let mut sel = dkrt_abi::service::SettleCtx::new();
+    let mut i = 0;
+    while i < SEL_MAX {
+        if live[i] {
+            sel.count = i + 1;
             sel.nkeys[i] = table_keys(&tables[i][..lens[i]], &mut sel.keys[i]) as u8;
         }
         i += 1;

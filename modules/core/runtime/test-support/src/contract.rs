@@ -456,6 +456,21 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         l
     }
 
+    /// Run `Service::settle` again over the keys of `mods`, the modules that are loaded now, in selection order: what a reload does before it loads the new file.
+    pub fn settle_over(&self, mods: &[&Module]) {
+        let mut sel = SettleCtx::new();
+        for (i, m) in mods.iter().enumerate() {
+            let k = (m.keys)();
+            sel.count = i + 1;
+            sel.nkeys[i] = k.nm.min(8) as u8;
+            sel.keys[i][..k.nm.min(8)].copy_from_slice(&k.mk[..k.nm.min(8)]);
+            for (kind, keys) in m.groups {
+                self.core.set_keys(i as u32, *kind, keys);
+            }
+        }
+        unsafe { S::settle(&self.core, &sel) };
+    }
+
     /// The service's own view of its state, for the checks that compare it.
     pub fn snapshot(&self) -> Snapshot {
         let core = &self.core;
@@ -844,6 +859,7 @@ pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
     reload_ten_times::<S>(f);
     leaves_no_residue::<S>(f);
     a_refusal_during_apply_leaves_nothing::<S>(f);
+    settle_over_the_live_set_changes_nothing::<S>(f);
     // leave the statics empty for the next profile
     drop(Lifecycle::<S>::new(f));
 }
@@ -1104,6 +1120,26 @@ fn a_refused_commit_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
         &l.snapshot(),
     );
     l.unload(1);
+}
+
+/// Case 9: `settle` is idempotent. A reload runs it again over the modules that are loaded (the new file's keys are in the old one's slot); with modules A and B
+/// loaded, one run or two over the live set leave everything the service holds as it was, so the numbers of loaded modules do not move.
+fn settle_over_the_live_set_changes_nothing<S: Service<FakeCore>>(f: &Fixture) {
+    let l = Lifecycle::<S>::new(f);
+    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
+    assert_eq!(l.load(1, &f.b), OK, "{}: module B is refused", f.name);
+    let before = l.snapshot();
+    for run in 0..2 {
+        l.settle_over(&[&f.a, &f.b]);
+        expect(
+            &std::format!("settle over the live set (run {run}) changed what the service holds"),
+            f,
+            &before,
+            &l.snapshot(),
+        );
+    }
+    l.unload(1);
+    l.unload(0);
 }
 
 /// Case 6: case 3 ten times: no table grows and no sticky value drifts.

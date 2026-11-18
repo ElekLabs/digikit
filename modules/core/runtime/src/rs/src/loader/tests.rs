@@ -1681,3 +1681,29 @@ fn an_aborted_reload_gives_back_the_tick_and_the_commands_and_the_sinks_stay_rel
         crate::dlog::test_reset_sinks();
     }
 }
+
+#[test]
+fn a_reloads_settle_gets_the_keys_of_the_live_modules_and_the_new_file_in_its_slot() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
+        booted(&mut l, 1, PATH_B);
+        l.phase = Phase::Closed;
+        // module `a` is taken down for its reload and the new file's table is kept in its slot: `b` and the slot of `a` are live
+        l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 5]));
+        assert_eq!(l.unload_rec(0), OK);
+        let staged = l.m.stage(PATH.as_ptr()).unwrap();
+        l.capture(0, core::slice::from_raw_parts(staged.ptr, staged.size as usize));
+        let sel = live_settle_ctx(&l.tables, &l.table_len, &l.live_at(0));
+        assert_eq!(sel.count, 2);
+        assert_eq!((sel.nkeys[0], sel.keys[0][..3].to_vec()), (3, vec![1, 2, 5]));
+        assert_eq!((sel.nkeys[1], sel.keys[1][0]), (1, 9));
+        // a selection index with no live module hands over nothing, and the count stops at the last live one
+        assert_eq!(l.live_at(SEL_MAX), [false, true, false, false, false, false, false, false], "the unloaded record is not live");
+        let mut only_b = [false; SEL_MAX];
+        only_b[1] = true;
+        let sel = live_settle_ctx(&l.tables, &l.table_len, &only_b);
+        assert_eq!((sel.count, sel.nkeys[0], sel.nkeys[1]), (2, 0, 1));
+    }
+}

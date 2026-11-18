@@ -642,8 +642,9 @@ What:
    (`modules/core/services/machines/src/dsp/mod.rs:58`), which frees every row the record owns: it writes `FREE_TYPE` and clears `row_pub`. The reload therefore writes
    the placeholder row after `clear_rows`, owned by the module's fixed record index (item 4); the real row replaces it at `on_loaded`. Each placeholder uses one of the 16 type rows. The row keeps an empty list name, so the selection list leaves it out, and shows
    "MISSING" / "MISS". The E4 contract suite lists the placeholder values in `kept`.
-8. Numbering: re-run `settle` over the live set plus the candidate. Live modules keep their numbers (rule 1) and new keys take free numbers;
-   `dkrt_sdk::sticky` does not change. A service `settle` must be idempotent (one contract case).
+8. Numbering: re-run `settle` over the live set plus the candidate, after the old module is torn down and the new file's header table is kept in its slot
+   (`Loader::reload_load`; the keys of every loaded module and of the new file, in selection order). Live modules keep their numbers (rule 1) and new keys
+   take free numbers; `dkrt_sdk::sticky` does not change. A service `settle` must be idempotent: contract case 9 (`settle_over_the_live_set_changes_nothing`).
 9. Machine list rebuild after every reload, unconditional (the archive's behaviour, proven on the emulator only): port `refresh_view`
    (archive `registry.rs:479`) into the machines service, fill the `dynreg_info` words 48 and 49 (view variable and builder), declare both in
    `devices/fw`. The archived list-rebuild anchors (`cf.dynreg.msv_build`, deleted from `devices/ports` in a12048c46) come back under `devices/fw/machine.toml`, near the list builder entry. `on_loaded` already exists in the service ABI (`modules/core/runtime/abi/src/service.rs`, near line 562; called at `loader/mod.rs`, near line 754); only the machines implementation and `CoreApi::reload_phase` are new. In a reload the machines service writes the real rows in `on_loaded`, not in `apply_record`, so
@@ -927,7 +928,7 @@ runtime-and-services.md.
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | done: PR #609 (device: runtime-refusal-tests on DT2 and DN2) |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
-| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-4 done |
+| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-5 done |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |

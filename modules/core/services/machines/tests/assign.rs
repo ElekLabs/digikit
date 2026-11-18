@@ -221,3 +221,26 @@ fn after_the_migration_an_erased_key_does_not_bring_back_the_old_map() {
     settle(&again, &selection(&[&[A]]));
     assert_eq!(again.legacy.get(), [0u8; 32]);
 }
+
+#[test]
+fn a_second_settle_over_the_live_set_keeps_every_number_and_gives_a_key_a_reload_adds_a_free_one() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    const C: u32 = 0x00cc_00;
+    let core = dt2_core();
+    settle(&core, &selection(&[&[A, B]]));
+    core.boot_index.set(0);
+    let first = unsafe { (resolve(&core, A), resolve(&core, B)) };
+    assert_eq!(first, (FIRST, FIRST + 1));
+    assert_eq!(saved(&core).len(), 1);
+    // the same live set again (idempotent): the numbers stay, nothing more is written
+    settle(&core, &selection(&[&[A, B]]));
+    assert_eq!(unsafe { (resolve(&core, A), resolve(&core, B)) }, first);
+    assert_eq!(saved(&core).len(), 1, "nothing changed, nothing is saved");
+    // a reload of module 0 whose new file adds key C: A and B keep their numbers, C takes the next free one
+    settle(&core, &selection(&[&[A, B, C]]));
+    assert_eq!(
+        unsafe { (resolve(&core, A), resolve(&core, B), resolve(&core, C)) },
+        (FIRST, FIRST + 1, FIRST + 2)
+    );
+    assert_eq!(saved(&core).len(), 2);
+}
