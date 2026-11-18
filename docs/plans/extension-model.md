@@ -621,7 +621,7 @@ What:
 4. Fixed record index. A reload loads into the old record (`Slot::Module(rec)`), so owner ids (`rec + 1` in machine rows, DSP rows, menus,
    `sel_of_rec`) do not move.
 5. Progress mask in `unload_rec` (`torn` per record: fini done, undo done), so a second call after `E_BUSY` does not run `fini` or the
-   service `undo` twice. The steps before `fini` already repeat safely. On a timeout the old tick is restored and the old module stays live. `dsp::release` latches `PH_RETAINED` for the session when `quiesce` fails (`modules/core/runtime/src/rs/src/dsp/mod.rs`, near line 540), and later loads then see `retained()` and return `E_BUSY`. The reload timeout path therefore calls `quiesce` and `release_range` directly, or uses a variant that does not latch.
+   service `undo` twice. The steps before `fini` already repeat safely. On a timeout the old module stays live, so nothing is released: the reload restores the old tick and leaves the DSP rows as they were. `release_range` needs a confirmed quiesce (`modules/core/runtime/src/rs/src/dsp/mod.rs:536`), and `dsp::release` latches `PH_RETAINED` for the session when `quiesce` fails (`dsp/mod.rs:540-541`), after which every later load sees `retained()` and returns `E_BUSY`. The reload timeout path never calls `release`.
 6. DSP wait: the in-flight counter for module SysEx commands, the span clock cleared under a mask, and a two-block wait. R12-8 gives no
    voice stop and no block wait; unloading clears the voice rows, which cuts the voices, and the wait is new. `Platform::blocks` returns the
    block count; the wait reports `E_BUSY` until two blocks passed (no spin); with no DSP clock (host tests) it is skipped. DSP instruction
@@ -632,8 +632,9 @@ What:
    (`modules/core/services/machines/dks/dsp/dispatch-dt2.s`, `_dv_gdis` near line 1208, compares near lines 884 and 1288) renders a silent block
    for a disabled type; `modules/core/adapters/dsp-voice/tests/dsp-guard.rig.test.ts:169-200` shows it. `clone_of` does not reach the DSP selector
    table: `mf_selector` is fixed at patch time (`modules/core/adapters/machines/module.toml:268-274`). One rig case with a pre-set word 10 and a
-   sounding routine closes the question in commit 6. `dsp_clear` and `dsp_release` (`modules/core/services/machines/src/records.rs`, near lines
-   242-246) leave placeholder rows in place; the real row replaces them at `on_loaded`. Each placeholder uses one of the 16 type rows. The row keeps an empty list name, so the selection list leaves it out, and shows
+   sounding routine closes the question in commit 6. `dsp_clear` (`modules/core/services/machines/src/records.rs:246`) calls `clear_rows`
+   (`modules/core/services/machines/src/dsp/mod.rs:58`), which frees every row the record owns: it writes `FREE_TYPE` and clears `row_pub`. The reload therefore writes
+   the placeholder row after `clear_rows`, owned by the module's fixed record index (item 4); the real row replaces it at `on_loaded`. Each placeholder uses one of the 16 type rows. The row keeps an empty list name, so the selection list leaves it out, and shows
    "MISSING" / "MISS". The E4 contract suite lists the placeholder values in `kept`.
 8. Numbering: re-run `settle` over the live set plus the candidate. Live modules keep their numbers (rule 1) and new keys take free numbers;
    `dkrt_sdk::sticky` does not change. A service `settle` must be idempotent (one contract case).
@@ -656,7 +657,10 @@ Plan corrections the E5 design found (the text above already reflects them):
 - No firmware predicate says which view is on top. The rebuild is unconditional until E5b answers it.
 - The DSP placeholder window lasts about 200 ms past commit, because machines publish rows at commit and the voice rows follow; machines writes the real rows in `on_loaded` during a reload.
 - E3/E4 and R12-8 both rewrite five files (`loader/mod.rs`, `abi/src/service.rs`, `handlers.rs`, `svc-rt`, machines `records.rs` and `assign.rs`). The second to merge pays one rebase and an object rebuild.
-- E5 changes the image (dynreg words) and `SVC_ABI` (`reload_phase`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices.
+- The transport function has no anchor in `devices/fw` yet (commit 2 finds and declares it), so the transport refusal of item 3 cannot be built on a declared name before then.
+- `PH_RETAINED` latches for the session after one failed `quiesce`, so a reload timeout must not call `release` (item 5).
+- `clear_rows` frees every row of the record, so the DT2 placeholder row is written after it (item 7).
+- E5 changes the image (dynreg words) and `SVC_ABI` (`reload_phase`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices. The port file stack ([port-file.md](port-file.md) PR2) changes `SVC_ABI` again and merges after E5. Each change makes the runtime refuse old service files with `E_SVC_ABI`, and Transfer replaces them.
 
 Commit split (host checks per commit; device runs only at the end, one gate):
 
@@ -726,7 +730,7 @@ What:
      leaves the T1 row untouched, so with the service absent the maximum stays 0x600. The hook reads the status register first and runs the stock code in interrupt
      context. No caller scales a value onto 0..max (finding 149, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
      a CC value above 6 selects a shape number up to the highest one instead of clamping to RAND. Gaps: the maximum follows the highest loaded number, so a number below it
-     whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (installed sites DT2 18, DN2 22 of 48 before the graph site below).
+     whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (installed sites DT2 18, DN2 22 of 48 before the graph site below; table in [port-file.md](port-file.md) section 5).
    - Graph (decided, O7): see item 1b.
 1b. Graph (option A of the static design; finding 149 "Graph"). Built. The 28-byte elements of the seven RAM vectors are `Bitmap` objects (1-bit,
    column-major tiles of 28 x 15 pixels, both devices), and the cell blits them. A shape graph is a vector of four tiles.
@@ -855,7 +859,7 @@ What:
 5. DSP: a stub at the filter-type site with a slot, dispatch in the `machines.dks` DSP section (R12-8 pattern). Filter DSP is a new contract
    in `sdk/dsp/contract/` (input and output buffers per voice, state per voice).
 6. Hook budget: the six new hooks go through the port file ([port-file.md](port-file.md)). `machines.dks` declares 13 hooks; `BIND` items leave the services with the port file, so no per-file limit applies. The runtime's `install_sites` 48 still bounds the
-   installed hook sites: 26 are taken per device today, and E7 adds 6, which gives 32.
+   installed hook sites: 19 are taken on DT2 and 23 on DN2 today (table in port-file.md section 5), and E7 adds at most 6 per device, which gives 25 and 29.
 7. Template `sdk/templates/filter/` and a fixture `tests/fixtures/modules/test/filter-gain`.
 8. The filter response graph reuses the Bitmap and tile helpers of the shared crate (E6e), and the filter knob ranges use the registration call of E6c.
 
