@@ -393,7 +393,7 @@
   "packages/emulator/boot/src/late_send.rs": 1,
   "packages/emulator/boot/src/main.rs": 7,
   "packages/emulator/boot/src/midi.rs": 8,
-  "packages/emulator/boot/src/runtime.rs": 25,
+  "packages/emulator/boot/src/runtime.rs": 28,
   "packages/emulator/boot/tests/patched_boot.rs": 4,
   "packages/emulator/bootstrap/src/lib.rs": 3,
   "packages/emulator/card/tests/card.rs": 2,

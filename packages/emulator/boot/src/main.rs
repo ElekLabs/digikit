@@ -763,6 +763,7 @@ fn run() -> Result<(), String> {
             fs_last_complete,
             frames.latest_for(mainloop_tcb),
             fs_success_result,
+            false,
         );
         if cli.stop_at == "ready" && main_os_running {
             stop = String::from("VERIFIED_READY");
@@ -1060,6 +1061,7 @@ fn run() -> Result<(), String> {
         fs_last_complete,
         main_frame,
         fs_success_result,
+        false,
     );
     let ready = structural_ready && fs_ready;
     let frame_metadata = main_frame.map(|frame| json!({"owner_tcb":frame.owner_tcb,"ptr":frame.ptr,"sha256":frame.hash,"nonzero_bytes":frame.lit_bytes,"icount":frame.icount,"completed":true}));
@@ -1214,7 +1216,8 @@ mod tests {
             1,
             Some(10),
             Some(&frame),
-            Some(true)
+            Some(true),
+            false
         ));
         assert!(!readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1222,7 +1225,8 @@ mod tests {
             0,
             None,
             Some(&frame),
-            Some(true)
+            Some(true),
+            false
         ));
         assert!(!readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1230,7 +1234,8 @@ mod tests {
             1,
             Some(21),
             Some(&frame),
-            Some(false)
+            Some(false),
+            false
         ));
         assert!(!readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1238,7 +1243,8 @@ mod tests {
             1,
             None,
             Some(&frame),
-            None
+            None,
+            false
         ));
         assert!(!readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1246,7 +1252,8 @@ mod tests {
             1,
             Some(20),
             Some(&frame),
-            Some(true)
+            Some(true),
+            false
         ));
         assert!(readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1254,7 +1261,8 @@ mod tests {
             1,
             Some(20),
             Some(&frame),
-            Some(true)
+            Some(true),
+            false
         ));
         assert!(readiness_contract_ready(
             MainPanelV1,
@@ -1262,7 +1270,8 @@ mod tests {
             0,
             None,
             None,
-            None
+            None,
+            false
         ));
     }
 

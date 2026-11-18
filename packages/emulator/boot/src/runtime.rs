@@ -397,6 +397,8 @@ pub struct Emulator {
     flash_writes: FlashWrites,
     flash: Vec<u8>,
     fs_worker: Option<(u32, u32, u32, u32)>,
+    /// RAM words (mounted, state, checked) that tell whether the filesystem check is needed; resolved with `fs_worker`.
+    fs_flags: Option<(u32, u32, u32)>,
     intro_done: u32,
     intro_callback_return: u32,
     display_start: u32,
@@ -712,6 +714,12 @@ impl Emulator {
             &data_mask(FLASH_PROGRAM_SIG, None),
         )
         .ok();
+        let fs_flags = match contract {
+            device_profile::ReadinessContract::MainPanelFsCheckV1 => {
+                Some(resolve_fs_check_flags(&main)?)
+            }
+            device_profile::ReadinessContract::MainPanelV1 => None,
+        };
         let fs_worker = match contract {
             device_profile::ReadinessContract::MainPanelFsCheckV1 => {
                 Some(resolve_fs_worker(&main)?)
@@ -875,6 +883,7 @@ impl Emulator {
             flash_writes: FlashWrites::default(),
             flash,
             fs_worker,
+            fs_flags,
             intro_done,
             intro_callback_return,
             display_start,
@@ -1953,7 +1962,28 @@ impl Emulator {
         Ok(())
     }
 
+    /// The firmware's own predicate for starting the filesystem check is false: mounted, state 4 and checked set (a card whose
+    /// +Drive superblock is verified). Read from guest RAM; false when the contract has no check or a word cannot be read.
+    fn fs_check_not_needed(&self) -> bool {
+        let Some((mounted, state, checked)) = self.fs_flags else {
+            return false;
+        };
+        // `ram_peek` leaves no guest-access record, so a status poll does not change the guest state digest
+        let word = |addr: u32| {
+            let mut bytes = [0u8; 4];
+            self.bus
+                .board
+                .ram_peek(addr, &mut bytes)
+                .then(|| u32::from_be_bytes(bytes))
+        };
+        matches!(
+            (word(mounted), word(state), word(checked)),
+            (Some(m), Some(FS_STATE_DONE), Some(c)) if m != 0 && c != 0
+        )
+    }
+
     pub fn status(&mut self) -> Status {
+        let fs_not_needed = self.fs_check_not_needed();
         let main_frame = self.frames.latest_for(self.mainloop_tcb);
         let main_ui_reached = is_ready(
             self.intro_done_hits,
@@ -1971,6 +2001,7 @@ impl Emulator {
                 self.fs_last_complete,
                 main_frame,
                 self.fs_success_result,
+                fs_not_needed,
             );
         if ready {
             self.mark(Mark::Ready, "snapshot");
@@ -1996,7 +2027,10 @@ impl Emulator {
             frame_revision: self.frame_revision,
             frame_source: self.frame_source.clone(),
             main_ui_reached,
-            filesystem_verified: self.fs_worker.map(|_| self.fs_success_result).flatten(),
+            filesystem_verified: self.fs_worker.and_then(|_| {
+                self.fs_success_result
+                    .or((self.fs_starts == 0 && fs_not_needed).then_some(true))
+            }),
             input_ready: self.input_ready,
             input_pending: self.input_packets.len() + usize::from(self.rx_pending),
             input_irqs: self.input_irqs,
@@ -5609,6 +5643,80 @@ mod tests {
         }
     }
 
+    /// The filesystem-check flag words resolved from the image are the port anchors of the same image.
+    #[test]
+    fn fs_check_flags_equal_the_port_anchors() {
+        let Some(main) = main_of("Digitakt_II_OS1.17.syx") else {
+            eprintln!("skipped: Digitakt_II_OS1.17.syx not in firmware/");
+            return;
+        };
+        let port = std::fs::read_to_string("../../../devices/ports/dt2-1.17.toml").unwrap();
+        let anchor = |name: &str| -> u32 {
+            let at = port
+                .find(&format!("name = \"cf.storage.value.{name}\""))
+                .unwrap_or_else(|| panic!("anchor {name}"));
+            let line = port[at..]
+                .lines()
+                .find(|l| l.starts_with("addr = "))
+                .unwrap();
+            u32::from_str_radix(line.trim_start_matches("addr = 0x"), 16).unwrap()
+        };
+        assert_eq!(
+            resolve_fs_check_flags(&main).unwrap(),
+            (
+                anchor("fs_mounted"),
+                anchor("fs_state"),
+                anchor("fs_checked")
+            )
+        );
+    }
+
+    #[test]
+    fn fs_check_flags_resolver_rejects_a_missing_predicate() {
+        assert!(resolve_fs_check_flags(&[0; 256]).is_err());
+    }
+
+    #[test]
+    fn fs_check_not_needed_makes_the_strict_contract_ready_without_a_check() {
+        use device_profile::ReadinessContract::MainPanelFsCheckV1;
+        let frame = Frame {
+            owner_tcb: 1,
+            ptr: 2,
+            icount: 20,
+            hash: String::new(),
+            lit_bytes: 1,
+            raw: vec![],
+        };
+        assert!(readiness_contract_ready(
+            MainPanelFsCheckV1,
+            0,
+            0,
+            None,
+            Some(&frame),
+            None,
+            true
+        ));
+        // a check that started must complete, whatever the flags say
+        assert!(!readiness_contract_ready(
+            MainPanelFsCheckV1,
+            1,
+            0,
+            None,
+            Some(&frame),
+            None,
+            true
+        ));
+        assert!(!readiness_contract_ready(
+            MainPanelFsCheckV1,
+            0,
+            0,
+            None,
+            Some(&frame),
+            None,
+            false
+        ));
+    }
+
     fn main_of(file: &str) -> Option<Vec<u8>> {
         let syx = std::fs::read(format!("../../../firmware/{file}")).ok()?;
         let firmware = parse(&syx).unwrap();
@@ -5784,6 +5892,7 @@ mod tests {
             .is_ok(),
         );
         check("fs_worker", resolve_fs_worker(&main).is_ok());
+        check("fs_flags", resolve_fs_check_flags(&main).is_ok());
         check("sd_semaphores", resolve_sd_semaphores(&main).is_ok());
         check("intro_marks", resolve_intro_marks(&main).is_ok());
         check(
@@ -5809,7 +5918,7 @@ mod tests {
         let want: Vec<String> = if has_path_fs {
             Vec::new()
         } else {
-            vec!["fs_worker".to_owned()]
+            vec!["fs_worker".to_owned(), "fs_flags".to_owned()]
         };
         assert_eq!(failed, want, "{file}");
     }
