@@ -272,6 +272,13 @@ pub fn preflight(
             match reg.find(&base.syx_sha256) {
                 Some(p) => {
                     let l = &p.limits;
+                    // the flash path copies the image into a RAM stage without a size check, so it is refused here
+                    if rep.container_bytes > rep.container_max {
+                        o.fail(format!(
+                            "container is {} bytes, over the {} limit",
+                            rep.container_bytes, l.container_max
+                        ));
+                    }
                     let main = fw.main().map(|m| m.data.len()).unwrap_or(0);
                     match fw.dsp() {
                         Some(dsp) => o.ok(format!(

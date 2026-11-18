@@ -535,10 +535,13 @@ patchkit stores a `DKPR` record in the image: format version, the SHA-256 of the
   with an aPLib packer that produces the same bytes as `tools/firmware/aplibpack.py` and runs about 25 times faster.
 - **Sections 2 (bootstrap), 4 (updater) and 8 never change.** patchkit has no override. The bootstrap is what lets you
   recover from a bad MAIN OS.
-- The container is at most `0x300000` (3 MiB). The OS container is written to flash at `0x80000`; the record sectors
-  (tagged fields, serial number) start at `0x380000`, and the bootstrap's write loop has no size limit of its own.
-  Stock images are about 1.5 MB.
-- patchkit re-decodes and verifies every output before it reports success: checksums, HMAC, size limits, the patch
+- An image for flashing has a container of at most `container_max` (`0x1FFE00` bytes, a port limit): the OS-upgrade
+  receiver copies the image into a 2 MiB RAM stage without a size check ([finding 146](findings/146-syntakt-os-upgrade-receiver.md)).
+  The limit applies to images built for flashing: the Firmware page, `patchkit apply` without `--no-flash-cap`, and the
+  flash checks (`patchkit flash`, `patchkit preflight`; `patchkit verify` alone does not check it). An image that only the emulator boots (the runtime patch of the
+  workbench, `patchkit apply --no-flash-cap`) has no container limit. The OS container is written to flash at `0x80000`;
+  the record sectors (tagged fields, serial number) start at `0x380000`. Stock images are about 1.5 MB.
+- patchkit re-decodes and verifies every output before it reports success: checksums, HMAC, size limits (the container limit only for an image built to flash), the patch
   record, and (with a base) that sections 2, 4 and 8 equal the stock image.
 - Never flash the output of `tools.firmware.build.rebuild`: it stores sections without compression and exceeds the cap
   ([finding 01](findings/01-container-and-patching.md)).

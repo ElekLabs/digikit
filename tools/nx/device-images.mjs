@@ -85,6 +85,8 @@ try {
           '--firmware',
           syxPath(cell),
           ...select,
+          // the images are booted in the emulator; the flash sets (`device` and `device-*`, which the Firmware page offers) keep the container cap
+          ...(label === 'device' || label.startsWith('device-') ? [] : ['--no-flash-cap']),
           '-o',
           out,
           '--plan',

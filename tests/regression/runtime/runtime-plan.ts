@@ -195,6 +195,8 @@ export async function prepareOfflineWith(
       '--firmware',
       resolveInputs(device, firmware).syx,
       ...(selection ? ['--modules', selection.modules.join(',')] : ['--set', options.runtime?.patchSet ?? 'emulator']),
+      // the image is booted in the emulator, not flashed
+      '--no-flash-cap',
       '-o',
       syx,
       '--plan',

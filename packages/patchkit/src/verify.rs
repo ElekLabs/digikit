@@ -14,6 +14,9 @@ use serde::Serialize;
 pub struct Report {
     pub device: String,
     pub container_bytes: u64,
+    /// The container limit of the image's port (the device default without a port). It applies to images for flashing only:
+    /// `verify` does not check it, the flash checks do.
+    pub container_max: u64,
     pub data_messages: u64,
     pub sections: Vec<(u32, u64, u64)>,
     pub record: Option<Record>,
@@ -225,6 +228,7 @@ fn check(
             p.limits.clone()
         })
     };
+    // The container limit is not checked here: it protects the flash path only (the flash checks read it from the report).
     let (container_max, stored_max, depacked_max, main_max) = match &limits {
         Some(l) => (
             l.container_max as usize,
@@ -234,11 +238,6 @@ fn check(
         ),
         None => fw.device.limits(),
     };
-    if total > container_max {
-        return Err(err!(
-            "container is {total} bytes, over the {container_max} limit"
-        ));
-    }
     if let Some(dsp) = dsp
         && (dsp.stored.len() > stored_max || dsp.data.len() > depacked_max)
     {
@@ -323,6 +322,7 @@ fn check(
     Ok(Report {
         device: fw.device.short().into(),
         container_bytes: total as u64,
+        container_max: container_max as u64,
         data_messages: data.len() as u64,
         sections: fw
             .sections

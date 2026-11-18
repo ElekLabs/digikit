@@ -213,6 +213,94 @@ fn the_container_cap_is_enforced() {
     );
 }
 
+/// The emulator set of every device file, on every stock image in `firmware/` that a port knows: without the flash cap it always
+/// applies; with the cap, an image over the device's `container_max` is refused and names the limit.
+#[test]
+fn the_emulator_set_applies_without_the_flash_cap() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let reg = registry();
+    let mut checked = 0;
+    for dev in patchkit::devdata::all() {
+        let Some(set) = dev.patch_sets.get("emulator") else {
+            continue;
+        };
+        // The device's current OS: the acceptance firmware, else the highest port version.
+        let key = |v: &str| -> Vec<u64> { v.split('.').filter_map(|n| n.parse().ok()).collect() };
+        let Some(current) = dev
+            .identity
+            .acceptance
+            .as_ref()
+            .map(|a| a.firmware.clone())
+            .or_else(|| {
+                reg.ports
+                    .iter()
+                    .filter(|p| p.port.device == dev.short)
+                    .map(|p| p.port.version.clone())
+                    .max_by_key(|v| key(v))
+            })
+        else {
+            continue;
+        };
+        let Ok(files) = std::fs::read_dir(root().join("firmware")) else {
+            continue;
+        };
+        let mut names: Vec<_> = files.flatten().map(|e| e.path()).collect();
+        names.sort();
+        for path in names
+            .iter()
+            .filter(|p| p.extension().is_some_and(|e| e == "syx"))
+        {
+            let Ok(raw) = std::fs::read(path) else {
+                continue;
+            };
+            let Ok(fw) = Firmware::parse(&raw) else {
+                continue;
+            };
+            if fw.device.short() != dev.short {
+                continue;
+            }
+            let Some(port) = reg.find(&fw.syx_sha256) else {
+                continue;
+            };
+            if port.port.version != current {
+                continue;
+            }
+            let (ids, _) = lib.with_requires(set).unwrap();
+            let name = path.display();
+            let open = Options {
+                flash_cap: false,
+                ..Options::default()
+            };
+            let out = apply::apply_with(&raw, &reg, &lib, &ids, open).unwrap_or_else(|e| {
+                panic!("{name}: the emulator set must apply without the cap: {e}")
+            });
+            let bytes = patchkit::verify::verify(&out.syx, Some(&reg), Some(&raw))
+                .unwrap_or_else(|e| panic!("{name}: verify refuses the emulator image: {e}"))
+                .container_bytes;
+            let capped = apply::apply_with(&raw, &reg, &lib, &ids, Options::default());
+            if bytes > dev.container_max {
+                expect_err(
+                    capped,
+                    &format!("over the {}-byte limit", dev.container_max),
+                );
+            } else {
+                assert!(
+                    capped.is_ok(),
+                    "{name}: under the cap, so the cap must not refuse"
+                );
+            }
+            checked += 1;
+        }
+    }
+    if checked == 0 {
+        eprintln!(
+            "SKIPPED the_emulator_set_applies_without_the_flash_cap: no stock image of a device with an emulator set in firmware/"
+        );
+    }
+}
+
 #[test]
 fn sections_2_4_and_8_can_never_change() {
     need_image!();
