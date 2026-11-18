@@ -323,3 +323,43 @@ pub unsafe fn release_cmds(owner: u8) {
 }
 
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_lock::LOCK;
+    use crate::transport::{dkrt_midi_rx, DKRT_UPLOAD_LAST};
+    use dkrt_sdk::E_BUSY;
+
+    unsafe extern "C" fn answers_ok(_cmd: u32, _seq: u32, _body: *const u8, _len: u32, _out: *mut u8) -> i32 {
+        0
+    }
+
+    /// One request of command `cmd` with no body, through the MIDI hook; the status the runtime replied with.
+    unsafe fn ask(cmd: u8) -> i32 {
+        let msg = [0xf0, 0x7d, 0x64, 0x6b, VERSION, cmd, 1, 0xf7];
+        assert_eq!(dkrt_midi_rx(msg.as_ptr(), msg.len() as u32, 0), 1);
+        DKRT_UPLOAD_LAST
+    }
+
+    #[test]
+    fn a_command_of_a_module_that_is_being_reloaded_answers_busy_and_counts_nothing() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            // the runtime is initialised (the hook's `init_once` would set up the arena)
+            crate::st().magic = crate::state::STATE_MAGIC;
+            let prev = dlog::enter_module(0, dlog::PHASE_CALLBACK);
+            assert_eq!(host_register(0x38, 1, Some(answers_ok)), OK);
+            dlog::leave_module(prev);
+            assert_eq!(ask(0x38), OK, "it runs when the module is not draining");
+            assert_eq!(in_flight(1), 0, "and is not in flight once it returned");
+            set_draining(1, true);
+            assert_eq!(ask(0x38), E_BUSY, "its module is draining: the host asks again");
+            assert_eq!(in_flight(1), 0);
+            set_draining(1, false);
+            assert_eq!(ask(0x38), OK);
+            release_cmds(1);
+            assert_eq!(ask(0x38), E_PROTO, "released: nobody registered it");
+        }
+    }
+}

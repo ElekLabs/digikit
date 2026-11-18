@@ -1399,7 +1399,7 @@ fn settle_hands_the_services_the_keys_of_accepted_modules_only() {
 fn keys_of_gives_the_keys_of_a_kind_for_an_accepted_module_only() {
     use dkneeds::keys::{write_table, KeyGroup, Table};
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let (shapes, machines) = ([0x380u32, 0x400, 0x500], [0x100u32]);
+    let (shapes, machines) = ([0x300u32, 0x400, 0x500], [0x100u32]);
     let t = Table {
         keys: &[
             KeyGroup { kind: dkneeds::KIND_MACHINE, keys: &machines },
