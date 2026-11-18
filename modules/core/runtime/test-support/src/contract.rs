@@ -123,12 +123,18 @@ pub struct Fixture {
     /// The link words the DSP reads to run a row (`(window, word, off)`: the pc of an effect row, the type of a voice row, and the value that turns the row off): a
     /// release must send the word that turns the row off. The words other than these are the content of a row, which stays in the DSP memory until the next module's row overwrites it.
     pub enable: &'static [(u32, u32, u32)],
+    /// For the `enable` entry at the same index, the link word `(window, word)` that disables the row while it holds the same value as the enable word: a MISSING
+    /// placeholder row keeps its type word and disables it that way (docs/plans/extension-model.md E5 item 7), which counts as off. Empty: no row is disabled that way.
+    pub disabled: &'static [(u32, u32)],
     /// `(core, address, value)`: whether a word of firmware memory may hold `value` after a release although the start state holds another (the service's documented
     /// free values, such as the empty string a released row points to). The value is part of the question: a word that holds anything else, such as the value `A`
     /// wrote, is a leftover.
     pub kept: fn(&FakeCore, u32, u32) -> bool,
     /// The same for the DSP state: `(byte offset in DspState, value)` pairs a release leaves other than at the start, on purpose. Each entry has a reason in the fixture.
     pub kept_dsp: fn(usize, u8) -> bool,
+    /// The capacity counts `(kind, at the start, now)` that a release may leave other than at the start on purpose: a count of rows that a MISSING placeholder still
+    /// holds after the module's unload (docs/plans/extension-model.md E5 item 7). The module's next load frees them. `|_, _, _| false` for a service with none.
+    pub kept_caps: fn(u8, u32, u32) -> bool,
     /// What the service does while a module runs that the loader does not do: queue live values for the module's rows, as a knob turn does (`None`: the service
     /// queues none). Case 7 calls it with the module loaded, so a release that leaves a value queued on the link shows.
     pub live: Option<fn(&FakeCore)>,
@@ -176,9 +182,20 @@ impl Snapshot {
         (self.caps.clone(), self.state.clone())
     }
 
+    /// Whether the capacity counts and the service's view of `other` are those of `self`, but for the counts the fixture's `kept_caps` allows.
+    fn small_equal(&self, other: &Snapshot, kept_caps: fn(u8, u32, u32) -> bool) -> bool {
+        self.state == other.state
+            && self.caps.len() == other.caps.len()
+            && self
+                .caps
+                .iter()
+                .zip(&other.caps)
+                .all(|(a, b)| a == b || (a.0 == b.0 && a.1 == b.1 && kept_caps(a.0, a.2, b.2)))
+    }
+
     /// What `self` wrote and `other` does not hold any more: every word, link word and DSP state byte that is not 0 in `self` and has another value in `other`.
     /// `other` may have more (rows a module cleared hold the service's free values, rows that were never used hold 0). Each area lists its first 8.
-    pub fn lost_in(&self, other: &Snapshot) -> String {
+    pub fn lost_in(&self, other: &Snapshot, kept_dsp: fn(usize, u8) -> bool) -> String {
         let mut out = String::new();
         let mut n = 0;
         for (k, v) in &self.mem {
@@ -198,7 +215,7 @@ impl Snapshot {
         }
         let mut n = 0;
         for (i, b) in self.dsp.iter().enumerate() {
-            if *b != 0 && other.dsp[i] != *b && n < 8 {
+            if *b != 0 && other.dsp[i] != *b && !kept_dsp(i, other.dsp[i]) && n < 8 {
                 out.push_str(&std::format!(
                     "  dsp state byte {i}: {b:#x} -> {:#x}\n",
                     other.dsp[i]
@@ -308,6 +325,28 @@ impl Snapshot {
         } else {
             Err(a.diff(&b))
         }
+    }
+
+    /// `self` (the state after a module was unloaded) without what a MISSING placeholder holds there on purpose and `refused` (the state after a load that was refused
+    /// before it published anything) does not: the DSP state bytes the fixture's `kept_dsp` allows and the capacity counts its `kept_caps` allows.
+    fn without_parked(
+        &self,
+        refused: &Snapshot,
+        kept_dsp: fn(usize, u8) -> bool,
+        kept_caps: fn(u8, u32, u32) -> bool,
+    ) -> Snapshot {
+        let mut s = self.clone();
+        for i in 0..s.dsp.len().min(refused.dsp.len()) {
+            if s.dsp[i] != refused.dsp[i] && kept_dsp(i, s.dsp[i]) {
+                s.dsp[i] = refused.dsp[i];
+            }
+        }
+        for (a, b) in s.caps.iter_mut().zip(&refused.caps) {
+            if a != b && a.0 == b.0 && a.1 == b.1 && kept_caps(a.0, b.2, a.2) {
+                a.2 = b.2;
+            }
+        }
+        s
     }
 
     /// The first differences between two snapshots, for the failure message.
@@ -514,7 +553,14 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
                 .f
                 .enable
                 .iter()
-                .map(|k| link.get(&(k.0, k.1)).copied().unwrap_or(0))
+                .enumerate()
+                .map(|(i, k)| {
+                    let w = link.get(&(k.0, k.1)).copied().unwrap_or(0);
+                    match self.f.disabled.get(i).and_then(|d| link.get(d)) {
+                        Some(d) if *d != 0 && *d == w => k.2,
+                        _ => w,
+                    }
+                })
                 .collect(),
             link,
             settings,
@@ -1018,7 +1064,7 @@ fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
     );
     // what `A` held and released stays as the service's free values (a machine row is `A`'s by its key, whatever loads next), which `B` alone never wrote: `B`'s own
     // words, DSP state and ids are what is compared, and the capacity counts
-    let lost = after_b.lost_in(&l.snapshot());
+    let lost = after_b.lost_in(&l.snapshot(), f.kept_dsp);
     assert!(
         lost.is_empty(),
         "{} ({}): A, unload A, B differs from B\n{lost}",
@@ -1030,7 +1076,7 @@ fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
 }
 
 fn expect_small(what: &str, f: &Fixture, a: &Snapshot, b: &Snapshot) {
-    if a.small() != b.small() {
+    if !a.small_equal(b, f.kept_caps) {
         panic!(
             "{} ({}): {what}: capacity counts or the service's view are not back at their start\n  caps {:?} -> {:?}\n  state {:x?} -> {:x?}",
             f.name,
@@ -1057,7 +1103,7 @@ fn another_module_is_untouched<S: Service<FakeCore>>(f: &Fixture) {
         f.name
     );
     l.unload(0);
-    let lost = b_alone.lost_in(&l.snapshot());
+    let lost = b_alone.lost_in(&l.snapshot(), f.kept_dsp);
     assert!(
         lost.is_empty(),
         "{} ({}): A's unload changed what B holds\n{lost}",
@@ -1366,7 +1412,10 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
         );
         let refused = l.snapshot();
         expect_small("a refusal during apply", f, &before, &refused);
-        if let Err(d) = reference.same_after_unload(&refused, false) {
+        if let Err(d) = reference
+            .without_parked(&refused, f.kept_dsp, f.kept_caps)
+            .same_after_unload(&refused, false)
+        {
             panic!(
                 "{} ({}): the undo of a refusal during apply differs from an unload of the same rows{}\n{d}",
                 f.name,

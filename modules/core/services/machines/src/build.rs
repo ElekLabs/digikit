@@ -361,7 +361,8 @@ impl Build {
 
 // ---- the open collection and the placeholder ------------------------------------------------------------------------------------
 
-static mut BUILD: Build = Build::new();
+/// Zero at the start (a `.bss` of the service file, not 5 KiB of initialised data in it): `begin` writes `Build::new()` before the first builder call of every module.
+static mut BUILD: Build = unsafe { core::mem::zeroed() };
 static mut GATE: Gate = Gate::new();
 /// The callback arguments of the ACTION and native page records `WRITE` wrote, for `apply` (`take_args`).
 static mut ARGS: Option<ApplyArgs> = None;

@@ -3,7 +3,7 @@
  * The stub reads the slot `voice_render` of core/dsp-link: zero takes the stock helper and keeps the heartbeat, a set slot dispatches.
  */
 import { describe, expect, it } from 'vitest';
-import { MachineRig, STOCK_BP, machineSpecs } from '@digi/sharc-rig-kit';
+import { MachineRig, STOCK_BP, TABLE, machineSpecs, nw, w2f } from '@digi/sharc-rig-kit';
 
 const spec = machineSpecs().find((s) => s.device === 'dn2' && s.noteOn !== null)!;
 const nan = (x: number): boolean => (x >>> 0) === 0xffffffff || Number.isNaN(x);
@@ -42,6 +42,23 @@ describe('core/dsp-voice render stub on DN2', () => {
       expect(out.returned).toBe(true);
       expect(out.contextBad).toEqual([]);
       expect(out.samples.some((x) => !nan(x)), 'the machine rendered').toBe(true);
+    } finally {
+      await rig.close();
+    }
+  });
+
+  it('a row whose disabled word names its type renders silence, as the MISSING placeholder of the machines service does', async () => {
+    const rig = await MachineRig.open(spec);
+    try {
+      // the placeholder row: type and pc as published, word 10 pre-set to the type
+      rig.poke(nw(TABLE) + 10, spec.machineType);
+      rig.trigger();
+      await rig.block('friendly');
+      rig.trigger();
+      const out = await rig.block('friendly');
+      expect(out.returned).toBe(true);
+      expect(out.contextBad).toEqual([]);
+      expect(out.samples.every((x) => !nan(x) && w2f(x) === 0), 'a disabled type is a silent block').toBe(true);
     } finally {
       await rig.close();
     }

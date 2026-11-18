@@ -59,8 +59,10 @@ fn fixture(device: u32) -> Fixture {
         // the keys of `a` and another local id
         a2: module(0, 3, nothing),
         enable: &[],
+        disabled: &[],
         kept: |_, _, _| false,
         kept_dsp: |_, _| false,
+        kept_caps: |_, _, _| false,
         live: None,
         salt_same: &[
             ("memory", "the track table is the service's own state, shown by the state view; no firmware word"),

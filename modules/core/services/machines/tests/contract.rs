@@ -3,8 +3,10 @@
 //! the service's `build::*`. The image tables are those of the device profiles (`Profile` of `tests/build.rs`) as `core/dynreg` writes them, over the fake core's memory.
 use core::ptr::addr_of;
 use dkneeds::keys::name_hash;
+use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{FREE_TYPE, I_AREA_BYTES, I_VFIRST, I_VFREE, ROW_WORDS, WIN_VOICES};
 use dkrt_abi::keys::KeysCopy;
+use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::{DN2, DT2};
 use dkrt_sdk::limits;
 use dkrt_sdk::records::KINDS_MACHINES;
@@ -102,12 +104,20 @@ const ENABLE: [(u32, u32, u32); 4] = [
     (WIN_VOICES, ROW_WORDS * 5, FREE_TYPE),
 ];
 
+/// The disabled word (word 10) of each of those rows: a parked placeholder row has it equal to the type word.
+const DISABLED: [(u32, u32); 4] = [
+    (WIN_VOICES, ROW_WORDS * 2 + 10),
+    (WIN_VOICES, ROW_WORDS * 3 + 10),
+    (WIN_VOICES, ROW_WORDS * 4 + 10),
+    (WIN_VOICES, ROW_WORDS * 5 + 10),
+];
+
 /// The words that differ from the start after a release, with the value each may hold (`remove` gives a row back as a gap row, which the start state of this
 /// image does not hold; any other value, such as the one the module wrote, is a leftover). The offsets are those of `image`:
-/// - machine row (`0x30_0000`, 0x100 bytes): the name (0) and the short name (0x4c) are the empty firmware string; the long and short text (4, 8) are the service's
-///   empty representation; word 0x30 after the eight knob codes (`O_F0 + 4 * KNOBS`) is the track level code 10; the position in the list (0x44) is not written by
+/// - machine row (`0x30_0000`, 0x100 bytes): the name (0) is the empty firmware string; the long and short text (4, 8), the short name (0x4c) and the names table
+///   (tab and title) are the MISSING / MISS placeholder in the row's own buffers; own_dsp (0x48) is 1; word 0x30 after the eight knob codes (`O_F0 + 4 * KNOBS`) is the track level code 10; the position in the list (0x44) is not written by
 ///   `remove` and is no order in a hidden row (any value);
-/// - names table (`0x40_0000`, 12 bytes per type), the types of the module rows: tab and title are the empty string;
+/// - names table (`0x40_0000`, 12 bytes per type), the types of the module rows: tab and title are the placeholder buffers (above);
 /// - parameter registry row (`0x20_0000`, 0x20 bytes): name and short are the empty string, the template (8) is `RESERVE_TEMPLATE`, the slot (0xc) is `SLOT_BASE`;
 /// - Digitone II page row (`0x60_0000`, 0x80 bytes): name and title are the empty representation, the level code after the eight knob codes (0x28) is 10, the machine
 ///   (0x70) is the free machine `PG_FREE` (0xff).
@@ -117,10 +127,16 @@ fn kept(_core: &FakeCore, addr: u32, value: u32) -> bool {
     let in_rows = |base: u32, size: u32, n: usize| {
         (addr >= base && ((addr - base) / size) < n as u32).then(|| (addr - base) % size)
     };
+    // the MISSING placeholder of a row: the service's own text buffers of the row (long and short name, and their representations)
+    let s = &rstate().s;
+    let any = |f: &dyn Fn(usize) -> u32| (0..limits::MACHINE_ROWS).any(|k| f(k) == value);
     if let Some(off) = in_rows(0x30_0000, 0x100, limits::MACHINE_ROWS) {
         return match off {
-            0 | 0x4c => value == EMPTY,
-            4 | 8 => value == rep,
+            0 => value == EMPTY,
+            4 => any(&|k| s.rep_long[k].as_ptr() as u32 + 12),
+            8 => any(&|k| s.rep_short[k].as_ptr() as u32 + 12),
+            0x4c => any(&|k| s.mach_short[k].as_ptr() as u32),
+            0x48 => value == 1, // own_dsp: the DSP gets its own number, which no engine has
             0x30 => value == 10,
             0x44 => true,
             _ => false,
@@ -144,7 +160,11 @@ fn kept(_core: &FakeCore, addr: u32, value: u32) -> bool {
     }
     let names = 0x40_0000 + 12 * DYN_TYPE_FIRST;
     if let Some(off) = in_rows(names, 12, limits::MACHINE_ROWS) {
-        return matches!(off, 0 | 4) && value == EMPTY;
+        return match off {
+            0 => any(&|k| s.mach_name[k].as_ptr() as u32),
+            4 => any(&|k| s.mach_short[k].as_ptr() as u32),
+            _ => false,
+        };
     }
     false
 }
@@ -308,6 +328,17 @@ fn module(sel: u32, keys: fn() -> KeysCopy, init: fn(&mut Init), salt: u32) -> M
     }
 }
 
+/// The DSP state bytes a placeholder row leaves after the module's unload: the row keeps its type (a run-time machine number, 16 to 23, in the low byte), belongs to the
+/// placeholder owner, has the placeholder pc, until the next module that has a voice of the type takes the row.
+fn kept_dsp(at: usize, v: u8) -> bool {
+    use core::mem::offset_of;
+    use dkrt_abi::dsp::{DspState, MAX_ROWS, PLACEHOLDER_OWNER, PLACEHOLDER_PC};
+    let inside = |base: usize, width: usize| at >= base && at < base + MAX_ROWS * width;
+    (inside(offset_of!(DspState, row_type), 4) && v < 24)
+        || (inside(offset_of!(DspState, row_owner), 1) && v == PLACEHOLDER_OWNER)
+        || (inside(offset_of!(DspState, row_pc), 4) && PLACEHOLDER_PC.to_le_bytes().contains(&v))
+}
+
 fn fixture(device: u32) -> Fixture {
     Fixture {
         name: "sine",
@@ -319,8 +350,11 @@ fn fixture(device: u32) -> Fixture {
         b: module(1, keys_b, sine_two, 3),
         a2: module(0, keys_a, sine_alt, 2),
         enable: &ENABLE,
+        disabled: &DISABLED,
         kept,
-        kept_dsp: |_, _| false,
+        kept_dsp,
+        // a MISSING placeholder voice row holds one voice row after the unload, until the module's next load frees it
+        kept_caps: |kind, start, now| kind == dkrt_sdk::proto::CAPK_VOICE_ROWS && now > start,
         // the machines service queues no live value for its rows
         live: None,
         salt_same: &[
@@ -348,4 +382,139 @@ fn the_machines_service_passes_the_contract_on_the_dt2() {
 #[test]
 fn the_machines_service_passes_the_contract_on_the_dn2() {
     contract::<Machines>(&fixture(DN2.id));
+}
+
+// ---- the MISSING placeholder (docs/plans/extension-model.md E5 item 7) -------------------------------------------------------------------
+
+/// The last word written to (window, word) on the link, `None` when none was.
+fn link_word(core: &FakeCore, win: u32, word: u32) -> Option<u32> {
+    core.link
+        .borrow()
+        .t
+        .wire
+        .iter()
+        .rev()
+        .find(|w| w.win == win && w.dst == word)
+        .map(|w| u32::from_le_bytes([w.bytes[0], w.bytes[1], w.bytes[2], w.bytes[3]]))
+}
+
+fn voice_row_word(core: &FakeCore, row: usize, word: u32) -> Option<u32> {
+    let first = unsafe { dkrt_abi::mem::iw(core.dsp_info(), I_VFIRST) };
+    link_word(core, WIN_VOICES, ROW_WORDS * (first + row as u32) + word)
+}
+
+#[test]
+fn an_unloaded_voice_row_becomes_a_disabled_placeholder_that_keeps_its_type() {
+    use dkrt_abi::dsp::{PLACEHOLDER_OWNER, PLACEHOLDER_PC};
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    for dev in [DT2.id, DN2.id] {
+        let f = fixture(dev);
+        let l = Lifecycle::<Machines>::new(&f);
+        assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+        let d = l.core.dsp();
+        let row = (0..dkrt_abi::dsp::MAX_ROWS)
+            .find(|k| d.row_owner[*k] == 1)
+            .expect("the module owns a voice row");
+        let ty = d.row_type[row];
+        assert_eq!(
+            voice_row_word(&l.core, row, 0),
+            Some(ty),
+            "the row is published"
+        );
+        l.unload(0);
+        let d = l.core.dsp();
+        assert_eq!(
+            (d.row_owner[row], d.row_type[row], d.mod_rows[0]),
+            (PLACEHOLDER_OWNER, ty, 0),
+            "dev {dev}: parked, not freed"
+        );
+        // the DSP: the type word stays, the disabled word (10) names the type, the pc is the placeholder's
+        assert_eq!(voice_row_word(&l.core, row, 0), Some(ty));
+        assert_eq!(
+            voice_row_word(&l.core, row, 10),
+            Some(ty),
+            "the dispatch renders a silent block for it"
+        );
+        assert_eq!(voice_row_word(&l.core, row, 1), Some(PLACEHOLDER_PC));
+    }
+}
+
+#[test]
+fn the_module_of_the_same_number_takes_its_placeholder_row_and_another_module_leaves_it() {
+    use dkrt_abi::dsp::PLACEHOLDER_OWNER;
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    let row = (0..dkrt_abi::dsp::MAX_ROWS)
+        .find(|k| l.core.dsp().row_owner[*k] == 1)
+        .unwrap();
+    l.unload(0);
+    // module B (another key) loads: A's placeholder stays, B has its own row
+    assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+    let d = l.core.dsp();
+    assert_eq!(
+        d.row_owner[row], PLACEHOLDER_OWNER,
+        "B did not take A's placeholder"
+    );
+    assert_ne!(
+        (0..dkrt_abi::dsp::MAX_ROWS).find(|k| d.row_owner[*k] == 2),
+        Some(row)
+    );
+    // A loads again (its number is not refused for the placeholder): it takes its row, and the disabled word is cleared
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    let d = l.core.dsp();
+    assert_eq!(d.row_owner[row], 1, "A's row is the one it had");
+    assert_eq!(
+        voice_row_word(&l.core, row, 10),
+        Some(0),
+        "the disabled word is cleared when the row is published"
+    );
+    assert_eq!(voice_row_word(&l.core, row, 0), Some(d.row_type[row]));
+    l.unload(0);
+    l.unload(1);
+}
+
+#[test]
+fn an_unloaded_machine_row_shows_missing_and_plays_no_stock_sound() {
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    let f = fixture(DN2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    l.unload(0);
+    let s = &rstate().s;
+    let text = |b: &[u8]| {
+        String::from_utf8_lossy(&b[..b.iter().position(|c| *c == 0).unwrap()]).into_owned()
+    };
+    // the row's own text buffers hold the placeholder names; the first dynamic row is the one module A had
+    assert_eq!(
+        (text(&s.mach_name[0]), text(&s.mach_short[0])),
+        ("MISSING".to_string(), "MISS".to_string())
+    );
+    let rep = |b: &[u8]| {
+        (
+            u32::from_be_bytes(b[0..4].try_into().unwrap()),
+            text(&b[12..]),
+        )
+    };
+    assert_eq!(
+        rep(&s.rep_long[0]),
+        (7, "MISSING".to_string()),
+        "the descriptor's long name is a firmware string of the text"
+    );
+    assert_eq!(rep(&s.rep_short[0]), (4, "MISS".to_string()));
+    // own_dsp is 1 and the list name stays empty
+    let inf = unsafe { dkrt_svc_params::dynreg(&l.core) };
+    let row = unsafe {
+        dkrt_abi::mem::iw(inf, w::M_ROWS)
+            + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
+                * dkrt_abi::mem::iw(inf, w::M_ROW_SIZE)
+    };
+    assert_eq!(
+        unsafe { l.core.rd(row + dkrt_abi::mem::iw(inf, w::O_OWN)) },
+        1
+    );
 }

@@ -633,16 +633,21 @@ What:
    or cleared before the wait ends, `reload_abort` (a timeout) gives the old module its tick and commands back and leaves its DSP rows as they were. Its channel sinks stay released after an abort and are not set again (the debug module loses its logging until the next boot); this
    is kept on purpose, because the module's `init` is the only place that sets them. The legacy single sink and tick of `dlog` stay set: they point into code that stays
    mapped until the free, and `sink_drop` clears them just before it. DSP instruction cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
-7. MISSING placeholder, written by `remove` in every unload path (reload, boot failure, take-down), for the numbers the module held. A kit
-   names a type number, not a key. A gap row plays type 0's sound today, so the placeholder must be silent. DN2 sets `own_dsp = 1` (finding 33
-   saw silence without fault). DT2: the placeholder is a voice row `{type, pc nonzero, word 10 = type}`. The dispatch
-   (`modules/core/services/machines/dks/dsp/dispatch-dt2.s`, `_dv_gdis` near line 1208, compares near lines 884 and 1288) renders a silent block
-   for a disabled type; `modules/core/adapters/dsp-voice/tests/dsp-guard.rig.test.ts:169-200` shows it. `clone_of` does not reach the DSP selector
-   table: `mf_selector` is fixed at patch time (`modules/core/adapters/machines/module.toml:268-274`). One rig case with a pre-set word 10 and a
-   sounding routine closes the question in commit 6. `dsp_clear` (`modules/core/services/machines/src/records.rs:246`) calls `clear_rows`
-   (`modules/core/services/machines/src/dsp/mod.rs:58`), which frees every row the record owns: it writes `FREE_TYPE` and clears `row_pub`. The reload therefore writes
-   the placeholder row after `clear_rows`, owned by the module's fixed record index (item 4); the real row replaces it at `on_loaded`. Each placeholder uses one of the 16 type rows. The row keeps an empty list name, so the selection list leaves it out, and shows
-   "MISSING" / "MISS". The E4 contract suite lists the placeholder values in `kept`.
+7. MISSING placeholder, written in every unload path (reload, boot failure, take-down), for the numbers the module held. A kit names a type number, not a key.
+   A gap row plays type 0's sound today, so the placeholder must be silent. The machines service does two things, on both devices (no capability
+   separates them; the dispatch of both devices reads word 10 of a voice row as "the disabled type", `dispatch-dt2.s` `_dv_gdis`, `dispatch-dn2.s`
+   `_dv_contract`):
+   - `remove` writes the machine row as a placeholder: the list name stays empty (the selection list leaves it out), the long and short names (descriptor and
+     names table) are "MISSING" and "MISS" in the row's own text buffers, `own_dsp = 1` (DN2: finding 33 saw silence without fault).
+   - `dsp_clear` (`dsp::clear_rows`) parks each published voice row instead of freeing it: word 10 takes the row's type, the pc becomes
+     `PLACEHOLDER_PC`, the type word stays, and the row's owner becomes `dkrt_abi::dsp::PLACEHOLDER_OWNER` (0xfe, no record: the table check accepts it, and the
+     unload does not free it). A claim of a voice of the same type takes the placeholder row itself (`dsp::claim`), and the row publication clears word 10 and
+     writes the new words, so the window is silent from the unload to the publication; `check_rows` counts such a row as free for that voice and `check_types`
+     does not refuse its number. A placeholder that no module claims stays until the next boot and uses one of the 16 type rows. A module that comes back
+     without the DSP voice of a type keeps that type silent until the next boot.
+   One rig case on each device proves it: a row with word 10 pre-set to its type renders silence from a routine that sounds, without a fault
+   (`modules/core/adapters/dsp-voice/tests/dsp-guard.rig.test.ts` for the Digitakt II dispatch, `dsp-voice-dn2.rig.test.ts` for the Digitone II one). The machines
+   contract lists the placeholder values in `kept`, `kept_dsp` and `kept_caps`, and the `disabled` words of the rows that count as off.
 8. Numbering: re-run `settle` over the live set plus the candidate, after the old module is torn down and the new file's header table is kept in its slot
    (`Loader::reload_load`; the keys of every loaded module and of the new file, in selection order). Live modules keep their numbers (rule 1) and new keys
    take free numbers; `dkrt_sdk::sticky` does not change. A service `settle` must be idempotent: contract case 9 (`settle_over_the_live_set_changes_nothing`).
@@ -929,7 +934,7 @@ runtime-and-services.md.
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | done: PR #609 (device: runtime-refusal-tests on DT2 and DN2) |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
-| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-5 done |
+| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-6 done |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |

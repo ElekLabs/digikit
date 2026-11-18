@@ -87,8 +87,10 @@ fn fixture(device: u32) -> Fixture {
         b: module(1, &[(KIND_LFO_SHAPE, &[SHAPE_B])], b),
         a2: module(0, &[(KIND_LFO_SHAPE, &[SHAPE_A])], a2),
         enable: &[],
+        disabled: &[],
         kept: |_, _, _| false,
         kept_dsp: |_, _| false,
+        kept_caps: |_, _, _| false,
         live: None,
         salt_same: &[
             ("memory", "the shape table is the service's own state, shown by the state view; no firmware word"),

@@ -46,7 +46,7 @@ pub unsafe fn module_of_type<C: CoreApi>(core: &C, t: u32) -> Option<usize> {
     let d = core.dsp();
     let mut k = 0;
     while k < MAX_ROWS {
-        if d.row_owner[k] != 0 && d.row_type[k] == t {
+        if d.row_owner[k] != 0 && d.row_owner[k] != PLACEHOLDER_OWNER && d.row_type[k] == t {
             return Some(d.row_owner[k] as usize - 1);
         }
         k += 1;
@@ -54,19 +54,42 @@ pub unsafe fn module_of_type<C: CoreApi>(core: &C, t: u32) -> Option<usize> {
     None
 }
 
-/// Free the rows module record `rec` published: the type word first, so the scan skips the row at once.
+/// Row `k` of the voice table, as the service keeps it, to `owner`, `ty` and `pc` with every other field cleared (a free row, or a placeholder).
+#[inline(never)]
+unsafe fn reset_row(d: &mut DspState, k: usize, owner: u8, ty: u32, pc: u32) {
+    d.row_owner[k] = owner;
+    d.row_type[k] = ty;
+    d.row_pub[k] = 0;
+    d.row_pc[k] = pc;
+    d.row_rng[k] = [0; 8];
+    d.row_note_on[k] = 0;
+    d.row_state_base[k] = 0;
+    d.row_stride[k] = 0;
+    d.row_clear[k] = 0;
+    d.row_latched[k] = 0;
+}
+
+/// Take the rows module record `rec` published out of its hands, so the module's code can go: each published row becomes a MISSING placeholder. The disabled word
+/// (word 10) takes the row's type and the pc a harmless value, then the row belongs to no record (`PLACEHOLDER_OWNER`): the dispatch finds the type and renders a
+/// silent block for it, where a freed row would send the type to the first stock machine's sound (docs/plans/extension-model.md E5 item 7). The next module that
+/// claims a voice of the same type takes the placeholder row itself (`claim`) and publishes its words over the disabled one; a placeholder nobody claims stays until
+/// the next boot. A row that was claimed but never published is freed with the module (`release`). False when a write failed: the caller keeps everything.
 pub(crate) unsafe fn clear_rows<C: CoreApi>(core: &C, rec: usize) -> bool {
     let d = core.dsp();
     let first = iw(core.dsp_info(), I_VFIRST);
     let mut k = 0;
     while k < MAX_ROWS {
         if d.row_owner[k] == rec as u8 + 1 && d.row_pub[k] != 0 {
+            let at = ROW_WORDS * (first + k as u32);
             let mut seq = Sequence::new();
-            seq.push(WIN_VOICES, ROW_WORDS * (first + k as u32), FREE_TYPE);
+            seq.push(WIN_VOICES, at + 10, d.row_type[k]);
+            seq.push(WIN_VOICES, at + 1, PLACEHOLDER_PC);
             if !core.link_run(Owner::Core, &seq) {
                 return false;
             }
-            d.row_pub[k] = 0;
+            // the row is invalidated (disabled): `row_pub` stands for the module's own row
+            reset_row(d, k, PLACEHOLDER_OWNER, d.row_type[k], PLACEHOLDER_PC);
+            d.mod_rows[rec] &= !(1 << k);
         }
         k += 1;
     }
@@ -117,9 +140,27 @@ pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
 pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
     let nvoice = sec.nvoice;
     let d = core.dsp();
+    // a voice whose type has a placeholder row takes that row: it needs no free one
+    let mut parked = 0;
+    let mut i = 0;
+    while i < nvoice {
+        let e = sec
+            .s
+            .add(sec.voice_off as usize + sec.vstride as usize * i as usize);
+        let t = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
+        let mut k = 0;
+        while k < MAX_ROWS {
+            if d.row_owner[k] == PLACEHOLDER_OWNER && d.row_type[k] == t {
+                parked += 1;
+                break;
+            }
+            k += 1;
+        }
+        i += 1;
+    }
     capacity::dsp_rows(
         nvoice,
-        capacity::free_rows(&d.row_owner, iw(core.dsp_info(), I_VFREE)),
+        capacity::free_rows(&d.row_owner, iw(core.dsp_info(), I_VFREE)) + parked,
     )
 }
 
@@ -148,7 +189,8 @@ pub(crate) unsafe fn check_types<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         }
         let mut k = 0;
         while k < MAX_ROWS {
-            if d.row_owner[k] != 0 && d.row_type[k] == t {
+            // (a placeholder row keeps the number of an unloaded module: the module that loads again may take it)
+            if d.row_owner[k] != 0 && d.row_owner[k] != PLACEHOLDER_OWNER && d.row_type[k] == t {
                 return E_DSP_TYPE; // used by a module that is loaded or loading
             }
             k += 1;
@@ -187,11 +229,23 @@ pub(crate) unsafe fn claim<C: CoreApi>(core: &C, c: &mut Claim) {
             row += 1;
         }
         let e = job.voices.add(job.vstride as usize * v);
-        d.row_type[row] = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
-        d.row_pc[row] = L2_SW_BASE + (base + rd32(e.add(VOICE_ENTRY as usize)) - L2_BYTE_BASE) / 2;
+        let t = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
+        // the placeholder row of this type, if a module of the same number was unloaded: its disabled word keeps the type silent until the row is published
+        let mut parked = MAX_ROWS;
+        let mut p = 0;
+        while p < MAX_ROWS {
+            if d.row_owner[p] == PLACEHOLDER_OWNER && d.row_type[p] == t {
+                parked = p;
+            }
+            p += 1;
+        }
+        let fresh = parked == MAX_ROWS;
+        let at = if fresh { row } else { parked };
+        d.row_type[at] = t;
+        d.row_pc[at] = L2_SW_BASE + (base + rd32(e.add(VOICE_ENTRY as usize)) - L2_BYTE_BASE) / 2;
         let mut k = 0;
         while k < 8 {
-            d.row_rng[row][k] = match job.vstride {
+            d.row_rng[at][k] = match job.vstride {
                 VOICE_V2 => rd32(e.add(VOICE_V2_RANGES as usize + 4 * k)),
                 VOICE_V3 => rd32(e.add(VOICE_V3_RANGES as usize + 4 * k)),
                 _ => 0,
@@ -201,28 +255,30 @@ pub(crate) unsafe fn claim<C: CoreApi>(core: &C, c: &mut Claim) {
         if job.vstride == VOICE_V3 {
             let note_on = rd32(e.add(VOICE_NOTE_ON as usize));
             let stride = (rd32(e.add(VOICE_STATE_BYTES as usize)) + 7) & !7;
-            d.row_note_on[row] = if note_on == 0 {
+            d.row_note_on[at] = if note_on == 0 {
                 0
             } else {
                 L2_SW_BASE + (base + note_on - L2_BYTE_BASE) / 2
             };
             // the byte address of a data symbol at image offset `state_at`: nominal L2_BYTE_BASE + state_at, plus the byte shift
-            d.row_state_base[row] = L2_BYTE_BASE + state_at + byte_shift;
-            d.row_stride[row] = stride;
-            d.row_clear[row] = rd32(e.add(VOICE_CLEAR_BYTES as usize));
-            d.row_latched[row] = rd32(e.add(VOICE_LATCH as usize));
+            d.row_state_base[at] = L2_BYTE_BASE + state_at + byte_shift;
+            d.row_stride[at] = stride;
+            d.row_clear[at] = rd32(e.add(VOICE_CLEAR_BYTES as usize));
+            d.row_latched[at] = rd32(e.add(VOICE_LATCH as usize));
             state_at += rd32(e.add(VOICE_VOICES as usize)) * stride;
         } else {
-            d.row_note_on[row] = 0;
-            d.row_state_base[row] = 0;
-            d.row_stride[row] = 0;
-            d.row_clear[row] = 0;
-            d.row_latched[row] = 0;
+            d.row_note_on[at] = 0;
+            d.row_state_base[at] = 0;
+            d.row_stride[at] = 0;
+            d.row_clear[at] = 0;
+            d.row_latched[at] = 0;
         }
-        d.row_owner[row] = rec as u8 + 1;
-        d.row_pub[row] = 0;
-        claimed |= 1 << row;
-        row += 1;
+        d.row_owner[at] = rec as u8 + 1;
+        d.row_pub[at] = 0;
+        claimed |= 1 << at;
+        if fresh {
+            row += 1;
+        }
         v += 1;
     }
     c.state_at = state_at;
@@ -235,16 +291,7 @@ pub(crate) unsafe fn release<C: CoreApi>(core: &C, rec: usize) {
     let mut k = 0;
     while k < MAX_ROWS {
         if d.row_owner[k] == rec as u8 + 1 {
-            d.row_owner[k] = 0;
-            d.row_type[k] = FREE_TYPE;
-            d.row_pub[k] = 0;
-            d.row_pc[k] = 0;
-            d.row_rng[k] = [0; 8];
-            d.row_note_on[k] = 0;
-            d.row_state_base[k] = 0;
-            d.row_stride[k] = 0;
-            d.row_clear[k] = 0;
-            d.row_latched[k] = 0;
+            reset_row(d, k, 0, FREE_TYPE, 0);
         }
         k += 1;
     }
