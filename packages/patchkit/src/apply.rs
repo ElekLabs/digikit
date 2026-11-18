@@ -484,11 +484,17 @@ fn verify_anchor(mem: &Mem, a: &Anchor) -> Result<()> {
 pub struct Options {
     /// Write the `DKPR` record (always on for real patches; oracles compare against images made without).
     pub record: bool,
+    /// Refuse a container over the port's `container_max`. The limit protects the OS-upgrade flash path (the receiver
+    /// copies the image into a RAM stage without a size check); an image that is only booted in the emulator turns it off.
+    pub flash_cap: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options { record: true }
+        Options {
+            record: true,
+            flash_cap: true,
+        }
     }
 }
 
@@ -2237,7 +2243,7 @@ pub fn apply_with(
         }
         fw.replace(fw.device.main_section(), mem.main.clone())?;
     }
-    let syx = fw.build(Some(lim.container_max as usize))?;
+    let syx = fw.build(opts.flash_cap.then_some(lim.container_max as usize))?;
     let regions = allocs
         .iter()
         .map(|(k, v)| (k.clone(), (v.used, v.cap)))

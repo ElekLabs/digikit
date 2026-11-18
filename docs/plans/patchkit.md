@@ -261,7 +261,7 @@ Spec (decided 2026-10-13):
   `tools/patchkit/port_resolve.py` (rules -> port lockfile). `tools/patchkit/patchkit.py` wraps the Rust CLI for mise.
 - **Codec.** Untouched sections keep their stored bytes verbatim; changed sections are packed with an aPLib packer
   ported from `tools/firmware/aplibpack.py` that produces the **same bytes** as the Python packer (test on all 16 stock
-  sections). Hard limits from the port (`container_max` 0x1FFE00, section 7 stored <= 0x100000 and depacked <=
+  sections). Hard limits from the port (`container_max` 0x1FFE00 for images built for flashing only, not for emulator images; section 7 stored <= 0x100000 and depacked <=
   0xfffff, MAIN staged image <= 0x3ffc00); sections 2, 4, 8 can never change. Every output is re-decoded and
   checked (checksum, HMAC, packet checksums, limits, record).
 - **Port lockfile** `devices/ports/<short>-<version>.toml`:

@@ -307,15 +307,27 @@ fn finish(
     let mut messages: Vec<Range<usize>> = vec![];
     let rep = cs.run(
         "verify",
-        verify::verify(&image, Some(reg), base).map(|r| {
-            let d = format!(
-                "{}; container {} bytes, {} data messages",
-                r.checks.join("; "),
-                r.container_bytes,
-                r.data_messages
-            );
-            (r, d)
-        }),
+        verify::verify(&image, Some(reg), base)
+            .and_then(|r| {
+                // the receiver stages the image in RAM without a size check: a flash image over the limit is refused here
+                if r.container_bytes > r.container_max {
+                    return Err(err!(
+                        "container is {} bytes, over the {} limit",
+                        r.container_bytes,
+                        r.container_max
+                    ));
+                }
+                Ok(r)
+            })
+            .map(|r| {
+                let d = format!(
+                    "{}; container {} bytes, {} data messages",
+                    r.checks.join("; "),
+                    r.container_bytes,
+                    r.data_messages
+                );
+                (r, d)
+            }),
     );
     if let Some(r) = &rep
         && restore
