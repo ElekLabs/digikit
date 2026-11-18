@@ -434,7 +434,7 @@ pub async fn bind_bundle() -> Result<tauri::ipc::Response, String> {
             .map(tauri::ipc::Response::new)
             .map_err(|e| {
                 format!(
-                    "{}: {e} (build it: pnpm nx:pilot run @digi/web:bind-bundle)",
+                    "{}: {e}",
                     path.display()
                 )
             })

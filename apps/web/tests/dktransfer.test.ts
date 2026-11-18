@@ -36,7 +36,7 @@ import { setFitReader } from '@digi/workbench-core/modules/fit.ts';
 import { nameHash, readProvides, serviceFileOf, type ServiceFile } from '@digi/workbench-core/modules/services.ts';
 import { fileHashHex } from '@digi/dk-session';
 import { installOutcome, serviceRefusalText, DONE_ON_CARD } from '@digi/workbench-core/transfer/transfer-core.ts';
-import { BindUnavailableError, createServiceBinder } from '@digi/workbench-core/modules/dkbind.ts';
+import { createServiceBinder } from '@digi/workbench-core/modules/dkbind.ts';
 import { parseSoftwareVersion } from '@digi/workbench-core/transfer/connection-core.ts';
 import { FakeDevice, concat, hex, sha } from '@digi/test-support/fakedevice';
 import { dkm, everythingFits, needsOf } from './support/dkm.ts';
@@ -309,7 +309,7 @@ test('install: skip the same file hash, upload the rest with capped progress, VE
     [(await libraryModule(mach, needsOf))!, (await libraryModule(big, needsOf))!],
     (e) => events.push(e),
   );
-  assert.deepEqual(out, { uploaded: ['test/big'], selected: [], restarted: false });
+  assert.deepEqual(out, { uploaded: ['test/big'], onCard: ['someone/machine'], selected: [], restarted: false });
   assert.deepEqual(dev.files.get('modules/big.dkm') ?? dev.files.get('modules/big.dkm'), big);
   assert.ok(!dev.seen.includes('SELECT') && !dev.seen.includes('RESTART'));
   assert.equal(dev.seen.filter((c) => c === 'VERIFY').length, 2);
@@ -619,16 +619,51 @@ test('install with services: a missing bind bundle is bind-failed even without a
   assert.equal(out.refused?.[0]?.kind, 'bind-failed');
   assert.match(out.refused![0]!.error!, /bind data cannot be loaded \(bind.json: not found\)/);
   assert.match(serviceRefusalText(out.refused![0]!), /@digi\/web:bind-bundle/);
-  assert.ok(new BindUnavailableError(new Error('x')) instanceof Error);
 });
 
-test('installOutcome: all refused is an error with the refusal lines, some refused names them, none is done', () => {
+test('install with services: a loaded bind bundle but no stock bytes and no stock image is no-stock', async () => {
+  const fx = service('fx');
+  const dev = new FakeDevice();
+  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
+  const binder = createServiceBinder(
+    () =>
+      Promise.resolve({
+        bind: () => {
+          throw new Error('no stock');
+        },
+      } as never),
+    {
+      bytesOf: async () => undefined,
+    },
+  );
+  const out = await install(
+    session(dev),
+    ['someone/pluck'],
+    [pluck],
+    () => {},
+    depsOf([fx], { binder, firmwareHash: null }),
+  );
+  assert.equal(out.refused?.[0]?.kind, 'no-stock');
+});
+
+test('install with every module refused uploads nothing and finds nothing on the card', async () => {
+  const fx = service('fx');
+  const dev = new FakeDevice();
+  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
+  const failing = { bind: async () => Promise.reject(new Error('no port for this firmware')) };
+  const out = await install(session(dev), ['someone/pluck'], [pluck], () => {}, depsOf([fx], { binder: failing }));
+  assert.deepEqual([out.uploaded, out.onCard], [[], []]);
+});
+
+test('installOutcome: all refused is an error naming the modules, some refused names them, a module on the card counts as installed', () => {
   const r = (module: string) => ({ module, service: 'fx', kind: 'no-stock' as const });
-  const all = installOutcome({ uploaded: [], refused: [r('a/one'), r('a/two')] }, DONE_ON_CARD);
-  assert.ok('error' in all && all.error.split('\n').length === 2 && all.error.startsWith('a/one not installed'));
-  const some = installOutcome({ uploaded: ['a/plain'], refused: [r('a/one')] }, DONE_ON_CARD);
+  const all = installOutcome({ uploaded: [], onCard: [], refused: [r('a/one'), r('a/two')] }, DONE_ON_CARD);
+  assert.deepEqual(all, { error: 'nothing installed: a/one, a/two' });
+  const some = installOutcome({ uploaded: ['a/plain'], onCard: [], refused: [r('a/one')] }, DONE_ON_CARD);
   assert.deepEqual(some, { message: `${DONE_ON_CARD} Not installed: a/one.` });
-  assert.deepEqual(installOutcome({ uploaded: [], refused: [] }, DONE_ON_CARD), { message: DONE_ON_CARD });
+  const same = installOutcome({ uploaded: [], onCard: ['a/plain'], refused: [r('a/one')] }, DONE_ON_CARD);
+  assert.deepEqual(same, { message: `${DONE_ON_CARD} Not installed: a/one.` });
+  assert.deepEqual(installOutcome({ uploaded: [], onCard: [], refused: [] }, DONE_ON_CARD), { message: DONE_ON_CARD });
 });
 
 test('install with services: the bound file is made once per firmware and unbound hash', async () => {

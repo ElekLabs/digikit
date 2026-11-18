@@ -526,6 +526,7 @@ async function refuseUnbound(deps: InstallDeps, plan: ResolvedServices): Promise
           service: bad.stem,
           kind: 'bind-failed',
           error: e instanceof Error ? e.message : String(e),
+          ...(e instanceof BindUnavailableError ? { hint: 'bind-data' as const } : {}),
         });
     } else byModule.set(module, files);
   }
@@ -677,7 +678,13 @@ export async function install(
   library: LibraryModule[],
   emit: Emit = () => {},
   deps?: InstallDeps,
-): Promise<{ uploaded: string[]; selected: string[]; restarted: false; refused?: ServiceRefusal[] }> {
+): Promise<{
+  uploaded: string[];
+  onCard: string[];
+  selected: string[];
+  restarted: false;
+  refused?: ServiceRefusal[];
+}> {
   const info = await s.info();
   requireRuntime(info);
   const by = new Map(library.map((m) => [m.id, m]));
@@ -704,7 +711,7 @@ export async function install(
     for (const refusal of refused) emit({ event: 'refuse', refusal });
     const bad = new Set(refused.map((r) => r.module));
     ids = ids.filter((id) => !bad.has(id));
-    if (ids.length === 0) return { uploaded: [], selected: [], restarted: false, refused };
+    if (ids.length === 0) return { uploaded: [], onCard: [], selected: [], restarted: false, refused };
     order = plan.order;
   }
   emit({ event: 'start', device: info.port, modules: ids });
@@ -738,12 +745,14 @@ export async function install(
   }
   const have = new Map((await listModules(s, info)).map((c) => [c.path, c]));
   const uploaded: string[] = [];
+  const onCard: string[] = [];
   for (const id of ids) {
     const m = by.get(id)!;
     emit({ event: 'upload', id, path: m.path, bytes: m.file_size });
     const there = have.get(m.path);
     if (there && there.size === m.file_size && there.hash === m.hash) {
       emit({ event: 'skip', id, reason: 'same hash on the card' });
+      onCard.push(id);
     } else {
       const progress = uploadProgress(emit, id, m.file_size);
       await s.put(m.path, m.bytes, progress);
@@ -762,7 +771,9 @@ export async function install(
   }
   if (deps && canReadHeaders(info)) await removeUnusedServices(s, info, library, emit);
   emit({ event: 'done', restarted: false, selected: [] });
-  return deps ? { uploaded, selected: [], restarted: false, refused } : { uploaded, selected: [], restarted: false };
+  return deps
+    ? { uploaded, onCard, selected: [], restarted: false, refused }
+    : { uploaded, onCard, selected: [], restarted: false };
 }
 
 /**

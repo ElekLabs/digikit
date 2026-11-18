@@ -40,9 +40,10 @@ import type { WasmSource } from '../wasm-source';
 import type { TransferEnv } from './env';
 import { targetLabel, type TargetApp } from './target';
 
-/** What an install did: the modules uploaded (or already on the card) and the modules refused by the service check. */
+/** What an install did: the modules whose bytes were sent, the modules verified already on the card (same hash), and the modules refused by the service check. */
 export interface InstallResult {
   uploaded: string[];
+  onCard: string[];
   refused: ServiceRefusal[];
 }
 
@@ -235,7 +236,7 @@ export function createTransferBackend({
       const library = await loadLibrary(info.port);
       const deps = await installDeps(info.port);
       const out = await asked(() => install(s, modules, library, onEvent, deps));
-      return { uploaded: out.uploaded, refused: out.refused ?? [] };
+      return { uploaded: out.uploaded, onCard: out.onCard, refused: out.refused ?? [] };
     },
     /**
      * The Flash job's share, once the flashed runtime answers (it may still be booting: asked again for about a minute): the services the modules on

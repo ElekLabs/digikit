@@ -119,7 +119,7 @@ export function serviceRefusalText(r: ServiceRefusal): string {
       return (
         `${r.module} not installed. The ${r.service} service could not be prepared: ${r.error ?? 'unknown error'}. ` +
         `Nothing was uploaded for ${r.module}.` +
-        (/bind data/.test(r.error ?? '') ? ' Build the bind data with: pnpm nx:pilot run @digi/web:bind-bundle.' : '')
+        (r.hint === 'bind-data' ? ' Build the bind data with: pnpm nx:pilot run @digi/web:bind-bundle.' : '')
       );
     default:
       return `${r.module} not installed. It needs the ${r.service} service, which this workbench does not have.`;
@@ -181,20 +181,21 @@ export function eventText(e: TransferEvent): string {
   }
 }
 
-/** The text after a successful install. */
 /**
- * The end of an install from its result: nothing uploaded and something refused is an error (the refusal lines); some refused
- * adds the names to the done text; otherwise `done`.
+ * The end of an install from its result: nothing uploaded, nothing already on the card and something refused is an error (a short summary
+ * naming the modules; the `refuse` events carry each refusal line); some refused adds the names to the done text; otherwise `done`.
  */
 export function installOutcome(
-  r: { uploaded: string[]; refused: ServiceRefusal[] },
+  r: { uploaded: string[]; onCard: string[]; refused: ServiceRefusal[] },
   done: string,
 ): { error: string } | { message: string } {
   if (r.refused.length === 0) return { message: done };
-  if (r.uploaded.length === 0) return { error: r.refused.map(serviceRefusalText).join('\n') };
-  return { message: `${done} Not installed: ${[...new Set(r.refused.map((x) => x.module))].join(', ')}.` };
+  const names = [...new Set(r.refused.map((x) => x.module))].join(', ');
+  if (r.uploaded.length === 0 && r.onCard.length === 0) return { error: `nothing installed: ${names}` };
+  return { message: `${done} Not installed: ${names}.` };
 }
 
+/** The text after a successful install. */
 export const DONE_ON_CARD = 'On the card. Select it in MODULES on the device, then apply and restart.';
 
 /** The fit warning of a row, or ''. */

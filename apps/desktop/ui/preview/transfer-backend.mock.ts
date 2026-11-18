@@ -6,6 +6,7 @@ import {
   type TransferEvent,
   type TransferView,
 } from '@digi/workbench-core/modules/dktransfer.ts';
+import type { InstallResult } from '@digi/workbench-core/transfer/transfer-backend.ts';
 import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
 import { PAUSED } from '../src/desktop-env';
 import { LIBRARY, delay, deviceFiles, deviceRead, libraryById, pathOf, sim, simApp, view, control } from './sim';
@@ -49,7 +50,7 @@ export const transferBackend = {
         .map((m) => ({ ...m, on_card: 'no', loaded: false, warnings: [] })),
     };
   },
-  async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<void> {
+  async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<InstallResult> {
     await deviceRead();
     onEvent({ event: 'start', modules, device: 'dt2' });
     for (const id of modules) {
@@ -75,6 +76,7 @@ export const transferBackend = {
       onEvent({ event: 'verify', id, path, ok: true });
     }
     onEvent({ event: 'done', restarted: false });
+    return { uploaded: [...modules], onCard: [], refused: [] };
   },
   async remove(paths: string[], onEvent: (e: TransferEvent) => void): Promise<void> {
     for (const path of paths) {
