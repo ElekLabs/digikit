@@ -33,11 +33,7 @@ macro_rules! need_image {
 /// The content modules are built on demand (`Library::scan_repo`): a test that needs one skips without the toolchain.
 macro_rules! need_toolchain {
     () => {
-        if patchkit::build::toolchain::Env::new(&root())
-            .m68k("gcc")
-            .is_err()
-        {
-            eprintln!("SKIP: the m68k-elf toolchain is not installed");
+        if !patchkit::build::toolchain::Env::new(&root()).m68k_or_skip() {
             return;
         }
     };

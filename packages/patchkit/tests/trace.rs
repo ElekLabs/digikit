@@ -69,10 +69,7 @@ fn pack(root: &Path, out: &Path, trace: bool) -> Vec<u8> {
 
 #[test]
 fn trace_marks_cost_nothing_when_off_and_show_when_on() {
-    if Env::new(&root()).m68k("gcc").is_err() {
-        eprintln!(
-            "SKIP: the m68k-elf toolchain is not installed (uv run python -m tools.patchkit.pk_toolchains m68k)"
-        );
+    if !Env::new(&root()).m68k_or_skip() {
         return;
     }
     let d = std::env::temp_dir().join(format!("pk-trace-test-{}", std::process::id()));

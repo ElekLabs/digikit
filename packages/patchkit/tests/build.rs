@@ -20,7 +20,7 @@ fn tiny() -> Vec<u8> {
 
 fn toolchain() -> Option<Env> {
     let env = Env::new(&root());
-    env.m68k("gcc").is_ok().then_some(env)
+    env.m68k_or_skip().then_some(env)
 }
 
 fn find_objects(dir: &Path, out: &mut Vec<PathBuf>) {
