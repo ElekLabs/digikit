@@ -4400,23 +4400,69 @@ struct PatchJob {
     keep_out: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
-/// The card file's path, length and mtime, and the SHA-256 of its saved overlay (`overlay.bin`, "-" without one).
-/// `None` when the card file's metadata cannot be read.
+/// The identity of a card for snapshot keys: its content id, its length and the SHA-256 of its saved overlay (`overlay.bin`, "-"
+/// without one). `None` when the card file's metadata cannot be read.
+/// The content id is the text of `card.key` next to the image. The card builder writes it (`tests/regression/runtime/card-cache.ts`):
+/// it is derived from the inputs that make the card, so the same card in two worktrees gives the same key without hashing its bytes.
+/// A card without `card.key` (a desktop card, a custom image) falls back to its path and mtime with a `p:` prefix. Such an entry
+/// never matches in another worktree: it can miss, never restore a wrong state.
 fn card_identity(card: &Path) -> Option<String> {
     use sha2::{Digest, Sha256};
     let meta = std::fs::metadata(card).ok()?;
-    let modified = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_secs());
     let overlay = std::fs::read(overlay_path(card))
         .map_or_else(|_| "-".to_string(), |b| format!("{:x}", Sha256::digest(&b)));
-    Some(format!(
-        "{}:{}:{modified}:{overlay}",
-        card.display(),
-        meta.len()
-    ))
+    let content = match std::fs::read_to_string(card.with_file_name("card.key")) {
+        Ok(id) if !id.trim().is_empty() => format!("k:{}", id.trim()),
+        _ => {
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_secs());
+            format!("p:{}:{modified}", card.display())
+        }
+    };
+    Some(format!("{content}:{}:{overlay}", meta.len()))
+}
+
+/// A staging dir name inside the snapshot root for the cold boot of `stem`: unique per process and call.
+#[cfg_attr(not(feature = "sharc"), allow(dead_code))]
+fn pair_staging_name(stem: &str) -> String {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    format!(
+        ".tmp-{stem}-{}-{nanos:x}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// Publish the staged ready pair `tmp` as `pair` with one directory rename, so a reader never sees a `.dsp` of one boot with a
+/// `.snap` of another. When `pair` already holds a snapshot, the first writer wins: `tmp` is removed and this gives `Ok(false)`.
+/// A `pair` dir without a snapshot is an incomplete leftover: it is removed and the rename is tried once more.
+/// On an error `tmp` is removed too.
+#[cfg_attr(not(feature = "sharc"), allow(dead_code))]
+fn publish_pair(tmp: &Path, pair: &Path) -> std::io::Result<bool> {
+    let mut retried = false;
+    loop {
+        match std::fs::rename(tmp, pair) {
+            Ok(()) => return Ok(true),
+            Err(_) if pair.join("digi-audio-m5.snap").is_file() => {
+                let _ = std::fs::remove_dir_all(tmp);
+                return Ok(false);
+            }
+            Err(e) if retried => {
+                let _ = std::fs::remove_dir_all(tmp);
+                return Err(e);
+            }
+            Err(_) => {
+                retried = true;
+                let _ = std::fs::remove_dir_all(pair);
+            }
+        }
+    }
 }
 
 /// The file name suffix of a ColdFire-only ready state for `card` (empty without a card): the card file's identity and its saved
@@ -4642,7 +4688,20 @@ impl Actor {
                 Err(e) if start != "snapshot" => {
                     // A bad cache: drop it and boot cold.
                     report["cache_note"] = format!("cached pair unusable: {}", e.message).into();
-                    let _ = std::fs::remove_file(&snapshot);
+                    // Rename the pair aside first, then remove it: another lane may have republished
+                    // meanwhile, and a rename never leaves a mixed pair. A missing entry is fine.
+                    let nanos = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_nanos());
+                    let aside = pair.with_file_name(format!(
+                        "{}.bad-{}-{nanos}",
+                        pair.file_name()
+                            .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+                        std::process::id()
+                    ));
+                    if std::fs::rename(&pair, &aside).is_ok() {
+                        let _ = std::fs::remove_dir_all(&aside);
+                    }
                     return self.load_patched_coupled(
                         bytes,
                         card,
@@ -4664,8 +4723,7 @@ impl Actor {
                 pair.display()
             )));
         }
-        // The pair's presence is its snapshot: drop an old one first.
-        let _ = std::fs::remove_file(&snapshot);
+        // A cold start publishes through staging; an existing pair stays (first writer wins).
         install.report["start_used"] = "cold".into();
         install.report["cache_dir"] = pair.display().to_string().into();
         let cancel = Arc::new(AtomicBool::new(false));
@@ -4682,6 +4740,12 @@ impl Actor {
             card.clone(),
             base_sha.to_string(),
         );
+        // The cold boot writes into a staging dir; one rename publishes the pair (see `publish_pair`).
+        let pair_stem = pair
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        let pair_tmp = self.snapshot_root().join(pair_staging_name(&pair_stem));
+        let (worker_pair, worker_tmp) = (pair.clone(), pair_tmp);
         let synced = self.card_synced(card.as_deref());
         let mut inputs = digi_coupled::cold::ColdInputs {
             initial_buttons: initial_buttons.unwrap_or_default().to_vec(),
@@ -4706,12 +4770,12 @@ impl Actor {
                         let card = card_obj.get_or_insert_with(Card::default);
                         apply_overlay_sectors(card, sectors)?;
                     }
-                    digi_coupled::cold::boot_patched_to_ready(
+                    let booted = digi_coupled::cold::boot_patched_to_ready(
                         &worker_bytes,
                         card_obj,
                         &worker_base,
                         &inputs,
-                        &pair,
+                        &worker_tmp,
                         &worker_cancel,
                         |p| {
                             worker_progress.store(p.icount, Ordering::Relaxed);
@@ -4722,7 +4786,17 @@ impl Actor {
                             };
                             worker_phase.store(phase, Ordering::Relaxed);
                         },
-                    )
+                    );
+                    match booted {
+                        // The boot's own result is reported even when another boot published the same pair first.
+                        Ok(report) => publish_pair(&worker_tmp, &worker_pair)
+                            .map(|_| report)
+                            .map_err(|e| format!("publish {}: {e}", worker_pair.display())),
+                        Err(e) => {
+                            let _ = std::fs::remove_dir_all(&worker_tmp);
+                            Err(e)
+                        }
+                    }
                 });
                 let _ = done_tx.send(result.map(|r| PatchBooted {
                     icount: r.icount,
@@ -5325,7 +5399,10 @@ fn save_cache(runtime: &mut Runtime, path: &Path) -> Result<Option<String>, RpcE
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| RpcError::io(format!("{parent:?}: {e}")))?;
     }
-    let partial = path.with_extension("snap.part");
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let partial = path.with_extension(format!("snap.{}.{nanos}.part", std::process::id()));
     std::fs::write(&partial, data).map_err(|e| RpcError::io(format!("{partial:?}: {e}")))?;
     std::fs::rename(&partial, path).map_err(|e| RpcError::io(format!("{path:?}: {e}")))?;
     Ok(Some(path.display().to_string()))
@@ -5572,6 +5649,113 @@ mod card_key_tests {
         );
         assert_eq!(none, card_snapshot_key(Some(&card), false));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A card file of `len` zero bytes in a new dir under `root`, with `card.key` text `key` when given.
+    fn card_in(root: &std::path::Path, name: &str, key: Option<&str>) -> std::path::PathBuf {
+        let dir = root.join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        let card = dir.join("card.img");
+        std::fs::write(&card, vec![0u8; 512]).unwrap();
+        if let Some(key) = key {
+            std::fs::write(dir.join("card.key"), key).unwrap();
+        }
+        card
+    }
+
+    #[test]
+    fn a_card_with_a_content_id_gives_the_same_key_in_every_worktree() {
+        let root = std::env::temp_dir().join(format!("digi-card-id-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let a = card_in(&root, "lane-a", Some("abc"));
+        let b = card_in(&root, "lane-b", Some("abc\n"));
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&b)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+        let key = |card: &std::path::Path| card_snapshot_key(Some(card), false);
+        assert_eq!(key(&a), key(&b), "same content id, other path and mtime");
+        let other = card_in(&root, "lane-c", Some("abd"));
+        assert_ne!(key(&a), key(&other), "other content id");
+        std::fs::write(overlay_path(&b), b"saved writes").unwrap();
+        assert_ne!(key(&a), key(&b), "other overlay");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_card_without_a_content_id_never_matches_at_another_path() {
+        let root = std::env::temp_dir().join(format!("digi-card-noid-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let a = card_in(&root, "lane-a", None);
+        let b = card_in(&root, "lane-b", None);
+        let key = |card: &std::path::Path| card_snapshot_key(Some(card), false);
+        assert_ne!(key(&a), key(&b));
+        assert_eq!(key(&a), key(&a));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn two_boots_of_one_pair_publish_one_complete_pair() {
+        let root = std::env::temp_dir().join(format!("digi-publish-pair-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let pair = root.join("stem");
+        let staged: Vec<_> = ["one", "two"]
+            .iter()
+            .map(|content| {
+                let tmp = root.join(super::pair_staging_name("stem"));
+                std::fs::create_dir_all(&tmp).unwrap();
+                std::fs::write(tmp.join("digi-audio-m5.snap.dsp"), content).unwrap();
+                std::fs::write(tmp.join("digi-audio-m5.snap"), content).unwrap();
+                tmp
+            })
+            .collect();
+        assert_ne!(staged[0], staged[1]);
+        let wins: Vec<bool> = std::thread::scope(|s| {
+            let handles: Vec<_> = staged
+                .iter()
+                .map(|tmp| {
+                    let pair = &pair;
+                    s.spawn(move || super::publish_pair(tmp, pair).unwrap())
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        assert_eq!(wins.iter().filter(|w| **w).count(), 1, "first writer wins");
+        let snap = std::fs::read(pair.join("digi-audio-m5.snap")).unwrap();
+        assert_eq!(
+            snap,
+            std::fs::read(pair.join("digi-audio-m5.snap.dsp")).unwrap()
+        );
+        let names: Vec<_> = std::fs::read_dir(&root)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["stem"], "no staging dir is left");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_incomplete_pair_dir_is_replaced_by_a_published_one() {
+        let root = std::env::temp_dir().join(format!("digi-publish-stale-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let pair = root.join("stem");
+        std::fs::create_dir_all(&pair).unwrap();
+        std::fs::write(pair.join("digi-audio-m5.snap.dsp"), "old").unwrap();
+        let tmp = root.join(super::pair_staging_name("stem"));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("digi-audio-m5.snap.dsp"), "new").unwrap();
+        std::fs::write(tmp.join("digi-audio-m5.snap"), "new").unwrap();
+        assert!(super::publish_pair(&tmp, &pair).unwrap());
+        assert_eq!(
+            std::fs::read(pair.join("digi-audio-m5.snap")).unwrap(),
+            b"new"
+        );
+        assert!(!tmp.exists());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[cfg(feature = "sharc")]

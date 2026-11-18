@@ -17,7 +17,7 @@ import { portFile } from './runtime/device-data.ts';
 import { daemonBinary } from './runtime/devices.ts';
 import { Ui } from './runtime/ui.ts';
 import { bindBootClock, emulatorDk, pollEmulated, withEmulatedProbe } from './runtime/waits.ts';
-import type { RunDirClaim } from './runtime/run-claim.ts';
+import { removeEntry, type RunDirClaim } from './runtime/run-claim.ts';
 import { recordPhase, setTimingContext, timePhase, timingContext } from './timing.ts';
 import { startNoProgressWatchdog, type Watchdog } from './watchdog.ts';
 
@@ -248,7 +248,7 @@ export function withReusablePatchedSession(
   let needsFreshSession = false;
   const releaseClaim = () => {
     // A snapshot that a failed file's boots wrote is not reused: its state may be one that a check rejected.
-    if (failed) for (const entry of session?.writtenSnapshots ?? []) fs.rmSync(entry, { recursive: true, force: true });
+    if (failed) for (const entry of session?.writtenSnapshots ?? []) removeEntry(entry);
     claim?.release(failed);
     claim = undefined;
   };
@@ -393,7 +393,7 @@ export function withReusablePatchedSession(
       needsFreshSession = true;
       watchdog?.stop();
       // Snapshots of the failed session must not be reused; releaseClaim only sees the last session.
-      for (const entry of session?.writtenSnapshots ?? []) fs.rmSync(entry, { recursive: true, force: true });
+      for (const entry of session?.writtenSnapshots ?? []) removeEntry(entry);
       await session?.close({ preserveDiagnostics: true });
     }
   });

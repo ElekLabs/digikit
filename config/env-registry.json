@@ -455,7 +455,15 @@
   },
   "DIGI_SNAPSHOT_DIR": {
    "owner": "rust:packages/emulator",
-   "purpose": "Directory of the daemon's boot snapshots (default: <run dir>/patched, private to the run dir); device tests set one store per daemon build and device."
+   "purpose": "Directory of the daemon's boot snapshots (default: <run dir>/patched, private to the run dir); device tests set <git dir>/snap-cache/<daemon key>/<device>, shared by all worktrees."
+  },
+  "DIGI_SNAP_CAP_GIB": {
+   "owner": "ts:packages/test-support",
+   "purpose": "Cap in GiB of the shared boot-snapshot store <git dir>/snap-cache instead of SNAPSHOT_CAP_GIB_DEFAULT in packages/test-support/src/emulator-config.ts (20)"
+  },
+  "DIGI_SNAP_STORE": {
+   "owner": "ts:tests/regression",
+   "purpose": "Directory of the shared boot-snapshot store instead of <git dir>/snap-cache (tests only)"
   },
   "DIGI_SPIKE_LOG": {
    "owner": "rust:packages/emulator",

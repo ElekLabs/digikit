@@ -1,15 +1,16 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { cardCacheRoot, repoRoot, type Device } from '@digi/test-support';
 import { plusdriveBinary } from './card-kit.ts';
 
 /**
- * Content-named card images. The daemon's boot snapshot key holds the card's path, size and mtime and the sha256 of its `overlay.bin`, so
- * a card that is rebuilt into a new directory never matches an earlier snapshot. A card built here lives in
- * `dist/session-cache/cards/<key>/`, where the key is a hash of everything that goes into the card: the spec, the bytes of every input
- * file, the plusdrive binary, the device profiles and a format version. The same inputs give the same path, size and mtime, so the
- * snapshot of an earlier run is found. The files are read-only: a write to a shared card fails.
+ * Content-named card images. The daemon's boot snapshot key holds the card's content id (the text of `card.key` next to the image), its
+ * size and the sha256 of its `overlay.bin`; it holds no path or mtime. A card built here lives in `dist/session-cache/cards/<key>/`,
+ * where the key is a hash of everything that goes into the card: the spec, the bytes of every input file, the plusdrive binary, the
+ * device profiles and a format version. `card.key` holds that key. The same inputs give the same content id in every worktree, so the
+ * snapshot of an earlier run, or of another worktree, is found. The files are read-only: a write to a shared card fails.
  */
 
 /** Change it when the way a card is built changes in a way that the other key parts do not show. */
@@ -57,12 +58,69 @@ function toolIdentity(): { plusdrive: string; profiles: Record<string, string> }
   return { plusdrive: fileSha(plusdriveBinary()), profiles };
 }
 
+/**
+ * The TypeScript files of this directory that build card specs and seed card files: this file, the card kit, the rigs that make the
+ * specs (`card-rig`, `fx-session`, `fx-live`) and the helpers they use to lay out the card (services, plan, overlay, device data).
+ */
+const BUILDER_SOURCES = [
+  'card-cache.ts',
+  'card-kit.ts',
+  'card-rig.ts',
+  'fx-session.ts',
+  'fx-live.ts',
+  'service-files.ts',
+  'service-symbols.ts',
+  'runtime-plan.ts',
+  'write-safety.ts',
+  'device-data.ts',
+  'image-roots.ts',
+  'fixtures.ts',
+  'install.ts',
+];
+
+/** A hash of the bytes of the named files in `dir` (a missing file counts as absent). */
+export function sourcesHash(dir: string, names: readonly string[]): string {
+  const hash = createHash('sha256');
+  for (const name of names) {
+    const file = path.join(dir, name);
+    hash.update(`${name}\0`);
+    hash.update(fs.existsSync(file) ? fs.readFileSync(file) : 'absent');
+    hash.update('\0');
+  }
+  return hash.digest('hex');
+}
+
+let builderHash: string | undefined;
+
 /** The key of a card: `spec` is JSON-like, with each input file given as its sha256 (`fileSha`) and bytes as `Uint8Array`. */
 export function cardKey(device: Device, spec: unknown): string {
+  builderHash ??= sourcesHash(path.dirname(fileURLToPath(import.meta.url)), BUILDER_SOURCES);
   return createHash('sha256')
-    .update(canonical({ format: FORMAT, device, spec, tools: toolIdentity() }))
+    .update(canonical({ format: FORMAT, device, spec, tools: toolIdentity(), builders: builderHash }))
     .digest('hex')
     .slice(0, 32);
+}
+
+/**
+ * Write the read-only `card.key` of a card dir. The text goes to a unique temp file that is renamed onto the target, so two workers never
+ * write the same file. If the rename fails because another writer won, the existing text must equal ours.
+ */
+function writeIdFile(idFile: string, key: string): void {
+  const tmp = `${idFile}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+  fs.writeFileSync(tmp, key, { mode: 0o444 });
+  try {
+    fs.chmodSync(tmp, 0o444);
+    fs.renameSync(tmp, idFile);
+  } catch (error) {
+    fs.rmSync(tmp, { force: true });
+    let existing: string;
+    try {
+      existing = fs.readFileSync(idFile, 'utf8');
+    } catch {
+      throw error;
+    }
+    if (existing !== key) throw new Error(`${idFile} holds a different key (${existing}) than ${key}`);
+  }
 }
 
 /** The key of a cached card, or undefined for a card outside the cache (a card that a test or the guest wrote). */
@@ -85,6 +143,9 @@ export async function cachedCard(key: string, produce: (work: string) => Promise
   if (fs.existsSync(card)) {
     const now = new Date();
     fs.utimesSync(final, now, now);
+    // A card dir of an earlier build has no content id yet; the dir name is the key, so this is the same text the build writes.
+    const idFile = path.join(final, 'card.key');
+    if (!fs.existsSync(idFile)) writeIdFile(idFile, key);
     return card;
   }
   fs.mkdirSync(root, { recursive: true });
@@ -92,6 +153,8 @@ export async function cachedCard(key: string, produce: (work: string) => Promise
   try {
     const made = await produce(work);
     const dir = path.dirname(made);
+    // The content id the daemon puts in its snapshot key (see `card_identity` in packages/emulator/control).
+    fs.writeFileSync(path.join(dir, 'card.key'), key, { mode: 0o444 });
     for (const name of ['card.img', 'overlay.bin']) {
       const file = path.join(dir, name);
       if (fs.existsSync(file)) fs.chmodSync(file, 0o444);
