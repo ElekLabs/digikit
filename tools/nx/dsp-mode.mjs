@@ -141,15 +141,20 @@ export const dspModeOf = (source, helperSources = []) => {
 };
 
 // Derived mode of `file` (relative to project `root`). `importInputs`: the closure function of tools/nx/ts-imports.mjs.
-export const fileDspMode = (workspaceRoot, root, file, importInputs) => {
+// `texts`: a path -> text cache owned by the caller.
+export const fileDspMode = (workspaceRoot, root, file, importInputs, texts = new Map()) => {
   const self = join(root, file);
   const closure = closureFiles(importInputs, self).filter((p) => p !== self);
   const read = (p) => {
+    if (texts.has(p)) return texts.get(p);
+    let text;
     try {
-      return readFileSync(join(workspaceRoot, p), 'utf8');
+      text = readFileSync(join(workspaceRoot, p), 'utf8');
     } catch {
-      return '';
+      text = '';
     }
+    texts.set(p, text);
+    return text;
   };
   return dspModeOf(read(self), closure.map(read));
 };
@@ -165,13 +170,14 @@ export const taskMode = (tests, recs) =>
 
 // Throws when a record's `dsp` is no mode, or differs from the mode derived from a file it lists.
 export const checkDspModes = (workspaceRoot, root, recs, importInputs) => {
+  const texts = new Map(); // one read per file per call
   for (const rec of recs) {
     if (rec.dsp !== undefined && !DSP_MODES.includes(rec.dsp))
       throw new Error(
         `metadata.runtimeAcceptance of ${root}: dsp ${JSON.stringify(rec.dsp)} is not ${DSP_MODES.join(' or ')}`,
       );
     for (const file of rec.files ?? []) {
-      const derived = fileDspMode(workspaceRoot, root, file, importInputs);
+      const derived = fileDspMode(workspaceRoot, root, file, importInputs, texts);
       if (derived !== recordMode(rec))
         throw new Error(
           `metadata.runtimeAcceptance of ${root}: ${file} starts ${derived} sessions (it or a helper it calls passes dsp: 'sharc'?), ` +
