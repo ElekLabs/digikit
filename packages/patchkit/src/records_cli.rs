@@ -15,6 +15,7 @@ fn f32_of(bits: u32) -> f64 {
 }
 
 /// The records of the block BYTES grouped by kind, each kind's bodies in file order. The block's layout is the register table's (header of 16 bytes, then kind, length, body).
+#[cfg(not(target_arch = "wasm32"))]
 fn bodies_by_kind(bytes: &[u8]) -> Result<Vec<(u32, Vec<&[u8]>)>> {
     let word = |at: usize| -> Result<u32> {
         bytes
@@ -60,7 +61,20 @@ pub fn block_problems(bytes: &[u8]) -> Result<Vec<String>> {
 
 #[cfg(target_arch = "wasm32")]
 pub fn block_problems(_bytes: &[u8]) -> Result<Vec<String>> {
-    Ok(vec![])
+    Err(Error(
+        "records --check is not available on this target".into(),
+    ))
+}
+
+/// `problems` of `records --json`: the list, or `null` where the check is not available (wasm32), so that the decoded rows stay available there.
+#[cfg(not(target_arch = "wasm32"))]
+fn problems_json(bytes: &[u8]) -> Result<Value> {
+    Ok(json!(block_problems(bytes)?))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn problems_json(_bytes: &[u8]) -> Result<Value> {
+    Ok(Value::Null)
 }
 
 /// The decoded records of the block BYTES as JSON: `counts` (the three `[uses]` numbers) and the rows.
@@ -104,7 +118,7 @@ pub fn records_json(bytes: &[u8]) -> Result<Value> {
         .collect();
     Ok(json!({
         "counts": {"machine_rows": machines.len(), "param_rows": params.len(), "page_rows": pages.len()},
-        "problems": block_problems(bytes)?,
+        "problems": problems_json(bytes)?,
         "device": r.device,
         "machines": machines, "params": params, "pages": pages, "effects": effects,
     }))
@@ -198,7 +212,7 @@ mod tests {
             o.extend_from_slice(&key.to_be_bytes());
             o.extend_from_slice(*name);
             for i in 0..32i16 {
-                o.extend_from_slice(&(from + 2048 * i).to_be_bytes());
+                o.extend_from_slice(&from.wrapping_add(2048i16.wrapping_mul(i)).to_be_bytes());
             }
         }
         o
