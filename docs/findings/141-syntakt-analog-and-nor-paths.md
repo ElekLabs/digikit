@@ -34,7 +34,10 @@ DT2 1.17 and DN2 1.12 are compared in the last section. Purpose: which windows a
 ## FlexBus CS1 at 0: PCB revision
 
 - CS1 maps 128 KiB at address 0 (CSAR1 = 0). MAIN only reads it (byte 0: [70](70-syntakt-1-42.md) "Emulated NOR"). No store to it was found. A module
-  reading or writing low addresses reaches this device bus, not RAM: low addresses are protected for relocations (literal 0..0x1ffff is too common to scan).
+  reading or writing low addresses reaches this device bus, not RAM. The guard checks a window below 0x10000 against **absolute-symbol relocations
+  only** (a relocation against a symbol with a fixed address, plus its addend). It does not check literals, data words, addends or code operands
+  against it: a number below 64 KiB is an ordinary offset or constant, and checking them would refuse every module. So a module that builds
+  a low address in a register is not caught.
 
 ## DSPI 0xFC03C000 and GPIO
 
@@ -69,15 +72,28 @@ DT2 1.17 and DN2 1.12 are compared in the last section. Purpose: which windows a
   to the card at `0x7a000` and then erases the NOR copy ([138](138-syntakt-runtime-facts.md)).
 - The self-test `FUN_40080646` also writes NOR (erases `0x3c0000` via `FUN_40117672`, `FUN_40117794` is chip erase command `0xe4`, `FUN_4011794c` writes the status register). **[O]**: which cases a user can reach.
 
-## DT2 1.17 and DN2 1.12 (brief)
+## DT2 1.17 and DN2 1.12
 
-- Same NOR driver on DSPI `0xFC05C000` (20 functions on each device). OS write `FUN_4013ac54` (DT2, string "Writing Flash" at 0x4025b01e) and `FUN_40139104` (DN2, 0x40232e5f):
-  erase from `0x80000` (`FUN_401373e6`), program (`FUN_40137cbe`); called from `FUN_40107682` on DT2. Other program callers on DT2:
-  `FUN_400ca63a` family (the 0x200-byte records at NOR `0x380000` and `0x3c0000`), `console_task_entry` `FUN_400caff0`.
+Addresses are DT2 1.17 with the DN2 1.12 pair after a slash. Source: `datarefs` of cfdb (`image` `dt2-1.17-emac`, `dn2-1.12-emac`) by target
+range, and `tools/coldfire/refscan.py` over `section_3_MAIN_OS.bin` (96.8% and 96.6% byte coverage). All **[D]**.
+
+| Window in `devices/digitakt-ii.toml`, `digitone-ii.toml` | Evidence | Role |
+| --- | --- | --- |
+| DSPI `0xFC05C000` (page) | 19 functions touch `0xFC05C000-0xFC05CFFF` on each device, 14 of them are NOR primitives that call the GPIO helper below (`FUN_401367e6`, `FUN_401368ae`, ... / `FUN_40134bce`, ...), one is `FUN_400effd8` (/ `FUN_400f19b4`). The OS write `FUN_4013ac54` (/ `FUN_40139104`, string "Writing Flash") erases from `0x80000` and programs. | SPI NOR flash controller |
+| GPIO `0xEC094000-0xEC0940FF` | Each of the 14 NOR primitives calls one helper first, `FUN_401344dc(1)` (/ `FUN_401328c4`), then writes DSPI `0xFC05C0xx`. The helper touches `0xEC094010`, `0x1C`, `0x28`, `0x4E`, `0x51`: argument 1 writes `0xEC09401C = 0x10` and sets `0xEC09404E` bits; argument 0 writes `0xEC094028 = 0xEF`. This is the same shape as the Syntakt's NOR chip select `FUN_40114288` above (the pin number is not read here **[O]**). References to the block range `0xEC09400C-0xEC094070` in 40+ functions on each device (boot, frame link, UI helpers). | chip select of the NOR flash (one pin), the other pins are the firmware's |
+| DSPI2 `0xEC038000` (page) | Two functions: `FUN_400cd0d8` (/ `FUN_400cf4b0`, 8 references from `+0x00` to `+0x34`: MCR `0x80010c00`, CTAR `0xFA010000` and `0xBA010000`, PUSHR) and `FUN_400cd420` (/ `FUN_400cf922`, 7 references). `FUN_400cd0d8` also sets GPIO and the FlexBus bytes below. | SHARC program load at boot and the frame link ([04](04-coldfire-dsp-link.md) "FlexBus `0x8c000000`..." section) |
+| DSPI1 `0xFC03C000` (page) | Four functions on each device: `FUN_400cc7e8`, `FUN_400cc81c` (MCR `\|= 0xC00`, PUSHR `0x28000000`), `FUN_400cc9c8`, `FUN_400cd5ee` (/ `FUN_400cec1c`, `FUN_400cec50`, `FUN_400cedfc`, `FUN_400cf7f8`), offsets `+0x00` to `+0x34`. What the peer on its chip select is **[O]**. | a DSPI controller that only the firmware drives; role open |
+| FlexBus `0x8C000000-0x8C00000F` | `FUN_400ccf04`, `FUN_400ccf90`, `FUN_400cd0d8`, `FUN_40001a10` (/ `FUN_400cf2dc`, `FUN_400cf368`, `FUN_400cf4b0`, `FUN_40001a10`) reference offsets `0x0`, `0x2`, `0x4`, `0x6`, `0xA` only (request/ack handshake bytes and a reset strobe, [04](04-coldfire-dsp-link.md)). No reference to `0x8C000010-0x8CFFFFFF` on either device. | the SHARC side device behind FlexBus |
+
+- The extent of the FlexBus device is **not** evidenced beyond the 16 bytes above: `refscan.py` finds 0 references to the FlexBus registers
+  `0xFC008000-0xFC008FFF` (CSAR/CSMR/CSCR) in MAIN on both devices, and cfdb has none in `0xFC000000-0xFC00FFFF`. The chip select is set before MAIN
+  runs (the Syntakt sets it in MAIN, `FUN_400824ea` above). So the DT2 and DN2 windows cover `0x8C000000-0x8C00000F` only **[O]**: a wider
+  window needs the chip select setup of the boot loader.
 - Neither device has the string "RBOZ" or a `0x300000` record writer; no analog calibration.
-- FlexBus data window on both: `0x8C000000..0x8C00000F` (sample pages to link port 0: `FUN_400ccf04`, `FUN_400cd0d8`; DN2 `FUN_400cf368`, `FUN_400cf2dc`).
-- DSPI2 `0xEC038000` is the frame link to the SHARC; DSPI `0xFC03C000` is used by four functions (`vector_182_handler`, `FUN_400cd5ee`, `FUN_400cc81c`, `FUN_400cc9c8` on DT2); role **[O]**.
+- Other NOR users on DT2: `FUN_400ca63a` family (the 0x200-byte records at NOR `0x380000` and `0x3c0000`), `console_task_entry` `FUN_400caff0`, `FUN_40107682`
+  (calls the OS write).
 
 ## What the guard uses
 
-`[protect] windows` in `devices/*.toml` lists the windows above that are **[D]**. See `sdk/README.md` "Modules never touch hardware".
+`[protect] windows` in `devices/*.toml` lists the windows above that are **[D]**, each device with its own evidence (Syntakt: the tables above; DT2 and DN2:
+the last section). A window below 0x10000 is checked against absolute-symbol relocations only. See `sdk/README.md` "Modules never touch hardware".

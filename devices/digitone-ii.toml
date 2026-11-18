@@ -107,16 +107,17 @@ free_running_dtcn = [0]
 
 # Address windows that only the firmware and core/* drive: the packer refuses a content module that holds a 32-bit address in one of them
 # (docs/design/module-sdk.md "Modules never touch hardware"; packages/patchkit/src/protect.rs). Each window is [lo, hi), hi exclusive.
-# Evidence: docs/findings/141-syntakt-analog-and-nor-paths.md, DT2 and DN2 section **[D]**: the SPI NOR flash controller (DSPI at 0xFC05C000, the
-# NOR driver), DSPI 0xFC03C000 (frame bus), DSPI2 0xEC038000 (frame link to the SHARC), the GPIO block 0xEC094000 (chip selects, among them the
-# NOR's) and the FlexBus data window 0x8C000000 (sample pages to the SHARC link port).
+# Evidence: docs/findings/141-syntakt-analog-and-nor-paths.md, "DT2 1.17 and DN2 1.12" **[D]**: the SPI NOR flash controller (DSPI at 0xFC05C000),
+# the GPIO block 0xEC094000-0xEC0940FF (the NOR chip select helper and the other pins the firmware drives), DSPI2 0xEC038000 (SHARC program load
+# and frame link), DSPI1 0xFC03C000 (driven by four firmware functions, role open) and the FlexBus device bytes 0x8C000000-0x8C00000F (the
+# extent beyond them is open: the chip select is not set in MAIN).
 [protect]
 windows = [
   [0xFC05C000, 0xFC05D000],
   [0xFC03C000, 0xFC03D000],
   [0xEC038000, 0xEC039000],
-  [0xEC094000, 0xEC095000],
-  [0x8C000000, 0x8C010000],
+  [0xEC094000, 0xEC094100],
+  [0x8C000000, 0x8C000010],
 ]
 
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the

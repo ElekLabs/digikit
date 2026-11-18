@@ -98,10 +98,16 @@ instruction, data or import, and the `.dkm` is byte-identical to one built from 
 A content module (everything outside `core/*`) reaches the device only through the runtime table and the services. It does not address a
 peripheral, the flash, the FPGA or the peer CPU. Each device file lists the windows that only the firmware and `core/*` drive
 (`[protect] windows` in `devices/*.toml`, evidence in [finding 141](../docs/findings/141-syntakt-analog-and-nor-paths.md)). `patchkit pack`
-refuses a module whose objects hold an address in such a window of any device it is built for: a relocation addend, a word of a data
-section, or a 32-bit operand of an instruction (absolute long, immediate, `lea`, `jsr`, `addi`). The error names the window and the
-device. A content module imports only from the runtime table, so there is no firmware routine name to check. Windows below 0x10000 (the
-Syntakt's FlexBus CS1 at address 0) are listed for the record and not checked: such a word is an ordinary offset or constant.
+refuses a module whose objects hold an address in such a window of any device it is built for: the addend of a relocation, the value of
+an absolute symbol, a word of a data section, or a 32-bit operand of an instruction (absolute long or immediate `.l` of `move`, `lea`, `pea`,
+`jsr`, `jmp`, `ori` to `cmpi`, the bit instructions). The error names the window, the device, and the section and offset (or the relocation's
+section, offset and symbol). A content module imports only from the runtime table, so there is no firmware routine name to check.
+
+A window below 0x10000 (the Syntakt's FlexBus CS1 at address 0) is checked against absolute-symbol relocations only. A literal below 64 KiB is an
+ordinary offset or constant, so those are not checked: a module that builds a low address in a register is not caught.
+
+Accepted residual risk: a constant table can hold a word inside a window by chance (a 32-bit value such as `0xFC05C034` in a lookup table or a
+`.l` immediate). The pack refuses it. The module author changes the table layout (another scale, an offset, 16-bit entries). There is no override.
 
 ## Writing modules
 
