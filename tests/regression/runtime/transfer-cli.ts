@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { BOOT_WAIT_MS } from '@digi/dk-session';
 import { repoRoot, type Session } from '@digi/test-support';
 import { timePhase, timingContext } from '../timing.ts';
 
@@ -18,7 +19,7 @@ export async function transferCommand(
   session: Session,
   args: string[],
   artifactFile: string,
-  timeout = 90_000,
+  timeout = BOOT_WAIT_MS,
 ): Promise<TransferEvent[]> {
   return timePhase(
     `cli.${args[0] ?? 'command'}`,
@@ -63,7 +64,7 @@ export async function cliInstall(
   session: Session,
   moduleId: string,
   artifactDirectory: string,
-  timeout = 90_000,
+  timeout = BOOT_WAIT_MS,
   alongside: string[] = [],
 ): Promise<void> {
   await timePhase(

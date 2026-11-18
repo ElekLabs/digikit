@@ -9,28 +9,9 @@
 import { LOG_KIND } from './gen_proto.ts';
 import type { DkLogEvent, DkSession, Quick } from './dkupload-core.ts';
 import { runtimeEvent, type RuntimeEvent } from './runtime-log.ts';
+import { BOOT_WAIT_MS, type Clock, type WaitRecord } from './waits.ts';
 
 export type LogKindName = keyof typeof LOG_KIND;
-
-/** Time for waits, in ms. `pause` lets about `ms` pass and may throw when time cannot pass (a stuck emulator). */
-export interface Clock {
-  now(): Promise<number>;
-  pause(ms: number): Promise<void>;
-}
-
-export const wallClock: Clock = {
-  now: async () => Date.now(),
-  pause: (ms) => new Promise((r) => setTimeout(r, ms)),
-};
-
-/** What one wait reports; the test harness turns it into a timing record. */
-export interface WaitRecord {
-  kind: 'event' | 'state' | 'time';
-  what: string;
-  clockMs: number;
-  wallMs: number;
-  ok: boolean;
-}
 
 export interface LogPageSource {
   logPage(from: number, quick?: Quick): Promise<[oldest: number, newest: number, events: DkLogEvent[]]>;
@@ -223,11 +204,11 @@ export class RuntimeEvents {
   }
 
   untilBoot(opts?: WaitOpts) {
-    return this.until('BOOT_START', undefined, { withinMs: 90_000, ...opts });
+    return this.until('BOOT_START', undefined, { withinMs: BOOT_WAIT_MS, ...opts });
   }
   untilUiFirst({ loaded, ...opts }: WaitOpts & { loaded?: number } = {}) {
     return this.until('UI_FIRST', (e) => loaded === undefined || Number(e.fields.loaded) >= loaded, {
-      withinMs: 90_000,
+      withinMs: BOOT_WAIT_MS,
       ...opts,
     });
   }
@@ -239,10 +220,10 @@ export class RuntimeEvents {
   }
   /** The first UI-loop pass of this boot (FW_READY): the boot intro has ended and the stock MidiRpc service answers. */
   untilFwReady(opts?: WaitOpts) {
-    return this.until('FW_READY', undefined, { withinMs: 90_000, ...opts });
+    return this.until('FW_READY', undefined, { withinMs: BOOT_WAIT_MS, ...opts });
   }
   untilSafe(opts?: WaitOpts) {
-    return this.until('SAFE', undefined, { withinMs: 90_000, ...opts });
+    return this.until('SAFE', undefined, { withinMs: BOOT_WAIT_MS, ...opts });
   }
   untilSettingsWrite(opts?: WaitOpts) {
     return this.until('SETTINGS_WRITE', undefined, { withinMs: 10_000, ...opts });

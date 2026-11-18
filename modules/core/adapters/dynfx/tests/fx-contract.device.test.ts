@@ -26,10 +26,11 @@ import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { readSmallRing } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { bindBootClock, emulatorDk, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
+import { emulatorDk } from '@digi/regression/runtime/waits.ts';
 
 /** DSP frames added to the shared trigger frame: the hooked setup takes up to the shared frame (frames 6988 to 7005 of 7000 seen). */
-const SETUP_SLACK = 300;
+// The capture trigger is an absolute frame, and the frames reached after the free-running boot vary with host speed (frames 6235-7414 observed). 1500 covers the worst overshoot seen, about 500, with margin. A relative trigger in captureNote is the proper fix (follow-up).
+const SETUP_SLACK = 1500;
 
 // The FX contract suite of core/dynfx on test/dyn-fx-gain, one case per concern on one image per device (docs/plans/test-architecture.md T2):
 //   1. plain image: the unhooked sine is the audible reference;
@@ -151,11 +152,9 @@ for (const device of DEVICES) {
         await bounded(() => wet.dk.restart());
         wet.dk.cancelPending();
         const rebootDk = emulatorDk(wet.session);
-        bindBootClock(rebootDk, wet.session);
         const reboot = withWaitApi({ session: wet.session, dk: rebootDk, close: wet.close });
         try {
-          // The boot wait counts emulated time (waitForBootEmulated), not wall time.
-          await waitForBootEmulated(rebootDk, { emulatedMs: 90_000 });
+          await rebootDk.waitForBoot(); // 90 s of the session clock: emulated time
           await bounded(() => wet.session.client.guardSet(context.baseline('wet').guard));
           const deselected = await inspect(reboot, plan, slots, false, artifacts, 'deselected-boot', Number(epoch));
           rememberEpoch(deselected.epoch);

@@ -32,7 +32,7 @@ vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
   resolveInputs: () => ({ syx: '/stock.syx' }),
 }));
 import { expectRuntimeUi } from '../runtime/ready.ts';
-import { bindBootClock, pollEmulated, waitForBootEmulated, withEmulatedProbe } from '../runtime/waits.ts';
+import { pollEmulated, withEmulatedProbe } from '../runtime/waits.ts';
 import { expectRemoteEnabled, installRemote, prepareRemote, withRemoteRelease } from '../runtime/remote.ts';
 import { prepareRuntimePlanModulesOffline } from '../runtime/runtime-plan-modules.ts';
 import {
@@ -290,27 +290,6 @@ test('a halted DSP does not stop the emulated clock: the ColdFire instruction co
   await expect(
     pollEmulated(halted, async () => false, Boolean, { emulatedMs: 50, intervalMs: 1, hangMs: 40, message: 'm' }),
   ).rejects.toThrow('m: not seen within 50 ms of emulated time');
-  let waits = 0;
-  const sleeps: number[] = [];
-  const probeOpts: unknown[] = [];
-  const dk = {
-    waitForBoot: async (sleep: (ms: number) => Promise<void>, _t?: number, opts?: { probe?: unknown }) => {
-      probeOpts.push(typeof opts?.probe);
-      for (; waits < 3; waits++) await sleep(1).then(() => sleeps.push(waits));
-    },
-  };
-  bindBootClock(dk, make());
-  await expect(waitForBootEmulated(dk)).resolves.toBeUndefined();
-  expect(sleeps).toEqual([0, 1, 2]);
-  // every probe runs under an emulated-time bound (see waitForBootEmulated)
-  expect(probeOpts).toEqual(['function']);
-  const late = {
-    waitForBoot: async (sleep: (ms: number) => Promise<void>) => {
-      for (;;) await sleep(1);
-    },
-  };
-  bindBootClock(late, make());
-  await expect(waitForBootEmulated(late, { emulatedMs: 50 })).rejects.toThrow('no new boot: not seen within 50 ms');
 });
 
 test('installer failure still releases remote inputs without reaching scenario actions', async () => {
@@ -429,7 +408,7 @@ test('UI readiness requires a valid normal boot and both daemon and actual runti
   // A paused daemon's clock stands still: the stuck-clock guard fails the wait, naming the mode.
   status.mode = 'paused';
   await expect(expectRuntimeUi(daemon, plan, '/artifacts', { emulatedMs: 20, hangMs: 50 })).rejects.toThrow(
-    /emulated clock stuck at .* \(mode paused\)/,
+    /emulated clock stuck at .* \[mode paused/,
   );
   const stuck = fake.write.mock.calls.filter(([file]) => file.endsWith('readiness-post-install.json')).at(-1);
   expect(JSON.parse(stuck![1])).toMatchObject({ expired: false, stopped: expect.stringContaining('stuck') });

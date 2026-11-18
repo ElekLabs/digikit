@@ -757,7 +757,7 @@
   "tests/regression/host/fx-route-live.test.ts": 13,
   "tests/regression/host/remote-helpers.test.ts": 12,
   "tests/regression/host/reusable-runtime.test.ts": 2,
-  "tests/regression/host/run-claim.test.ts": 16,
+  "tests/regression/host/run-claim.test.ts": 13,
   "tests/regression/host/runtime.test.ts": 19,
   "tests/regression/host/service-files.test.ts": 18,
   "tests/regression/host/timing.test.ts": 4,

@@ -21,6 +21,8 @@ import {
 import { parseLoads, type ModuleState } from './loads.ts';
 import type { LoadFailure } from './runtime-log.ts';
 import { LogCursor } from './runtime-events.ts';
+import { BOOT_WAIT_MS, DEFAULT_HANG_MS, WALL_POLL_MS, poll, stuckGuard, wallClock, type Clock } from './waits.ts';
+import { PROBE_EMULATED_MS } from './emu-clock.ts';
 
 export interface DkInfo {
   protocol: number;
@@ -731,6 +733,26 @@ export interface DkSessionOptions {
    * fires after that much emulated time and a wall-time guard `ms` for a dead link. Unset (real hardware), `rpc` waits `timeoutMs` of wall time.
    */
   emulatedProbe?: EmulatedProbe;
+  /** Time source of `waitForBoot` and `waitForRestart` (default `wallClock`). A harness and `wb --emu` give `emulatedClock(status)`; a paused daemon gives a stepping clock. */
+  clock?: Clock;
+}
+
+/** Options of `waitForBoot` and `waitForRestart`. */
+export interface BootWaitOptions {
+  signal?: AbortSignal;
+  /** While true the deadline moves on: the wait gives up only after `timeoutMs` without a reported boot. */
+  stillBooting?: () => boolean;
+  /** Wait of each probe on a link without `emulatedProbe` (default: the 1 s quick probe); a loaded host sets it high. */
+  probeTimeoutMs?: number;
+  /** Clock ms between rounds (default: the clock's `pollMs`: 100 emulated, 500 wall). */
+  pollMs?: number;
+  /** Wall ms the clock may stand still before the wait fails (default DEFAULT_HANG_MS). */
+  hangMs?: number;
+  /**
+   * `waitForBoot` only. 'ready' (default): end at FW_READY of the new boot. 'boot': end at its BOOT_START, for a test of a crash, a fault or the boot itself,
+   * where the firmware may never reach its UI loop. `waitForRestart` always waits for 'ready'.
+   */
+  until?: 'boot' | 'ready';
 }
 
 /** See `DkSessionOptions.emulatedProbe`. */
@@ -743,6 +765,12 @@ export type EmulatedProbe = <T>(
 const WINDOW_CHUNKS = 8;
 /** The wait for the replies still in flight once a DATA request has failed. */
 const SETTLE_MS = 2000;
+/**
+ * FW_READY is logged on the first UI-loop pass, right after UI_FIRST (cb139ddec). Runtimes built before that commit log only UI_FIRST and carry the
+ * same version (0.8.3), so the fallback is a time window, not a version check. 2 s of clock time is 20 emulated poll rounds.
+ */
+export const FW_READY_GRACE_MS = 2000;
+
 /**
  * A reply of E_BUSY means the device's store was in use (an SDK file write or commit on its I/O task) and the command did nothing: the same request
  * is sent again after this wait, at most this many times (2 s in all) before the E_BUSY reaches the caller.
@@ -870,6 +898,7 @@ export class DkSession {
   private chunk: number;
   private depth: number;
   private emulatedProbe: EmulatedProbe | undefined;
+  private sessionClock: Clock;
   private fileHashOk = false;
   private turn: Promise<unknown> = Promise.resolve();
   /** False from `restart()` until a stock MidiRpc request has been answered in the new boot (`waitRpcService`). */
@@ -883,6 +912,20 @@ export class DkSession {
     this.chunk = options.chunk ?? MAX_CHUNK;
     this.depth = Math.max(1, Math.floor(options.depth ?? transport.dataDepth ?? 1));
     this.emulatedProbe = options.emulatedProbe;
+    this.sessionClock = options.clock ?? wallClock;
+  }
+
+  /** The clock of this session's waits. */
+  get clock(): Clock {
+    return this.sessionClock;
+  }
+
+  /**
+   * Run one bounded probe: with an `emulatedProbe`, `run` gets a signal that fires after PROBE_EMULATED_MS of emulated time (a lost request is one missed
+   * probe, not the session's `timeoutMs`); without, `run(quick)` (default: the 1 s quick probe).
+   */
+  probe<T>(run: (quick: Quick) => Promise<T>, quick: Quick = true): Promise<T> {
+    return this.emulatedProbe ? this.emulatedProbe((limit) => run(limit), PROBE_EMULATED_MS) : run(quick);
   }
 
   /** The transport's `rpcChunk`: how much data one MidiRpc write may carry on this link, or undefined (use the default). */
@@ -1165,11 +1208,11 @@ export class DkSession {
   }
 
   /** The loaded modules with their ranges, needed runtime versions and faults (MODULES, runtime 0.2.0, capability MODULES), every page. */
-  async modules(): Promise<DkModule[]> {
+  async modules(quick: Quick = false): Promise<DkModule[]> {
     const out: DkModule[] = [];
     let start = 0;
     for (;;) {
-      const b = await this.ok(GCMD.MODULES, 'modules', Uint8Array.of(start));
+      const b = await this.ok(GCMD.MODULES, 'modules', Uint8Array.of(start), quick);
       const total = b[16]!;
       const n = b[17]!;
       let at = 18;
@@ -1643,46 +1686,86 @@ export class DkSession {
   }
 
   /**
-   * After `restart()`: wait until the device has booted again. With the debug module loaded a reboot is seen in the log: the old boot's log holds the RESTART request
-   * (an UPLOAD event whose first argument is the command), the new boot's log starts with BOOT_START and never saw it. Without it there is no log (INFO has no LOG
-   * capability): the device is then taken as booted when it answers again after a failed read (the port is silent while it resets). The port may be silent for
-   * a while (the emulator boots on a worker): a failed read is a reason to wait and try again.
-   * `opts.probeTimeoutMs` is the wait of each probe (default: the 1 s quick probe); a harness on a loaded host sets it high. `opts.signal` cancels the wait. While `opts.stillBooting()` is true the deadline moves on: the wait gives up only after `timeoutMs` without a reported boot.
+   * After `restart()`: wait until the device has booted again and its UI loop runs. With the debug module loaded a reboot is seen in the log: the old
+   * boot's log holds the RESTART request (an UPLOAD event whose first argument is the command), the new boot's log starts with BOOT_START and never saw
+   * it; then FW_READY (first UI-loop pass, the stock MidiRpc service answers). A runtime older than FW_READY logs only UI_FIRST: FW_READY_GRACE_MS of
+   * clock time after UI_FIRST without FW_READY ends the wait. `opts.until: 'boot'` ends the wait at BOOT_START instead (a test of a crash, a fault or the boot itself). Without the
+   * log (INFO has no LOG capability) the device is taken as booted when it answers again after a failed read (the port is silent while it resets). Every
+   * request goes through `probe` (2 s emulated on the emulator, 1 s on hardware), so a request lost while the device resets costs one probe, not
+   * `timeoutMs` of the session. Time is the session clock (`timeoutMs` in its ms; default `wallClock`).
+   * `opts.signal` cancels the wait; `opts.stillBooting()` extends the deadline.
    */
-  async waitForBoot(
-    sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
-    timeoutMs = 90000,
-    opts: {
-      signal?: AbortSignal;
-      stillBooting?: () => boolean;
-      probeTimeoutMs?: number;
-      /** Runs one probe: calls `run` with the `Quick` that bounds it (a harness gives each probe a signal that ends in emulated time). Overrides `probeTimeoutMs`. */
-      probe?: <T>(run: (quick: Quick) => Promise<T>) => Promise<T>;
-    } = {},
-  ): Promise<void> {
-    let end = Date.now() + timeoutMs;
+  async waitForBoot(timeoutMs = BOOT_WAIT_MS, opts: BootWaitOptions = {}): Promise<void> {
+    await this.waitBooted(timeoutMs, opts);
+  }
+
+  /** `waitForBoot` (until 'ready'), then MODULES once (the modules of the selection load before UI_FIRST); a failing MODULES is retried for `loadedTimeoutMs` (default 20 s) of the session clock. */
+  async waitForRestart(
+    opts: BootWaitOptions & { timeoutMs?: number; loadedTimeoutMs?: number } = {},
+  ): Promise<DkModule[]> {
+    await this.waitBooted(opts.timeoutMs ?? BOOT_WAIT_MS, { ...opts, until: 'ready' });
+    return poll(
+      this.sessionClock,
+      async () => {
+        if (opts.signal?.aborted) throw cancelledError();
+        // one probe, like INFO and LOG: a lost reply costs the probe bound, and `poll` asks again
+        return this.probe((q) => this.modules(q), opts.probeTimeoutMs ?? true);
+      },
+      () => true,
+      {
+        withinMs: opts.loadedTimeoutMs ?? 20_000,
+        intervalMs: opts.pollMs ?? this.sessionClock.pollMs ?? WALL_POLL_MS,
+        message: 'MODULES after the restart',
+        retry: (e) => !(e instanceof DkError && e.kind === 'cancelled'),
+        hangMs: opts.hangMs,
+      },
+    );
+  }
+
+  private async waitBooted(timeoutMs: number, opts: BootWaitOptions): Promise<void> {
+    const clock = this.sessionClock;
+    const pollMs = opts.pollMs ?? clock.pollMs ?? WALL_POLL_MS;
+    const untilBoot = opts.until === 'boot';
+    const quick: Quick = opts.probeTimeoutMs ?? true;
+    const stuck = stuckGuard('boot wait', opts.hangMs ?? DEFAULT_HANG_MS, clock);
+    // The budget counts forward clock time only (as `poll` does): a clock that drops (a daemon restore) adds nothing and does not restart it.
+    let elapsed = 0;
+    let lastNow: number | undefined;
     let last = 'no answer';
     let silent = false;
-    const quick: Quick = opts.probeTimeoutMs ?? true;
-    const probe = opts.probe ?? (<T>(run: (q: Quick) => Promise<T>) => run(quick));
-    // The log is read once from the start of the boot, then from the cursor; `asked` and `started` describe the current boot's events read so far.
+    // The log is read once from the start of the boot, then from the cursor; the flags describe the current boot's events read so far.
     let cursor: LogCursor | null = null;
     let asked = false;
     let started = false;
-    while (Date.now() < end) {
+    let ready = false;
+    let uiFirstAt: number | undefined; // elapsed clock time when UI_FIRST of this boot was first seen
+    for (;;) {
       if (opts.signal?.aborted) throw cancelledError();
-      if (opts.stillBooting?.()) end = Math.max(end, Date.now() + timeoutMs);
+      const now = await clock.now();
+      await stuck(now);
+      if (lastNow !== undefined) elapsed += Math.max(0, now - lastNow);
+      lastNow = now;
+      if (opts.stillBooting?.()) {
+        elapsed = 0; // the budget starts again; so does the FW_READY grace window
+        if (uiFirstAt !== undefined) uiFirstAt = 0;
+      }
+      if (elapsed >= timeoutMs) break;
       try {
-        const info = await probe((q) => this.info(q));
-        if (info.caps !== null && ((info.caps >>> GCAP.LOG) & 1) === 1) {
+        const info = await this.probe((q) => this.info(q), quick);
+        if (hasCap(info, 'LOG')) {
           if (cursor === null) {
-            cursor = new LogCursor({ logPage: (from, q) => this.logPage(from, q) }, { probe });
+            cursor = new LogCursor(
+              { logPage: (from, q) => this.logPage(from, q) },
+              { probe: (run) => this.probe(run, quick) },
+            );
             cursor.fromBoot();
           }
           const read = await cursor.read();
           if (read.newBoot) {
             asked = false;
             started = false;
+            ready = false;
+            uiFirstAt = undefined;
           }
           for (const e of read.events) {
             if (e.kind === LOG_KIND.UPLOAD && e.args[0] === GCMD.RESTART) {
@@ -1693,10 +1776,15 @@ export class DkSession {
                 });
               asked = true;
             } else if (e.kind === LOG_KIND.BOOT_START) started = true;
+            else if (e.kind === LOG_KIND.UI_FIRST) uiFirstAt ??= elapsed;
+            else if (e.kind === LOG_KIND.FW_READY) ready = true;
           }
-          if (started && !asked) return;
+          if (started && !asked) {
+            if (untilBoot || ready || (uiFirstAt !== undefined && elapsed - uiFirstAt >= FW_READY_GRACE_MS)) return;
+            last = 'the new boot has not reached its UI loop';
+          } else last = 'the old boot still runs';
         } else if (silent) return;
-        last = 'the old boot still runs';
+        else last = 'the old boot still runs';
       } catch (e) {
         if (e instanceof DkError && e.kind === 'cancelled') throw e;
         silent = true;
@@ -1704,7 +1792,7 @@ export class DkSession {
         last = e instanceof Error ? e.message : String(e);
         if (e instanceof DkError && e.kind === 'refused') throw e;
       }
-      await sleep(500);
+      await clock.pause(pollMs);
       if (opts.signal?.aborted) throw cancelledError();
     }
     throw new DkError({ error: `no new boot within ${Math.round(timeoutMs / 1000)} s (${last})`, kind: 'timeout' });

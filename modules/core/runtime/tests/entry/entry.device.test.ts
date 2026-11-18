@@ -11,7 +11,7 @@ import { E_SET_NOKEY } from '@digi/regression/runtime/project-kit.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { linkedRuntimeNeed, runtimeVersion } from '@digi/regression/runtime/upload-kit.ts';
 import { emulatorClock, waitClock } from '@digi/test-support';
-import { pollEmulated, waitForBootEmulated, expectPollEmulated } from '@digi/regression/runtime/waits.ts';
+import { pollEmulated, expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
  * The entry point `dk_module` and the service imports (docs/plans/sdk.md section 5; the fixture test/entry-demo uses only the new contract).
@@ -110,7 +110,7 @@ async function expectVersionRefusal({ session, dk }: PatchedSession): Promise<vo
   await dk.put('modules/entry-demo.dkm', good);
   await dk.select(['modules/entry-major.dkm', 'modules/entry-minor.dkm', 'modules/entry-patch.dkm', 'modules/entry-demo.dkm']);
   await dk.restart();
-  await waitForBootEmulated(dk);
+  await dk.waitForBoot();
   await expectPollEmulated(session, async () => (await dk.modules()).map((m) => m.name), (value) => expect(value).toEqual(['test/entry-demo']), { emulatedMs: 30000, intervalMs: 500 });
   const boot = await bootInfo(session, plan);
   expect(boot.results, 'another major, another minor or a higher patch is E_CONTRACT, the real one loads').toEqual([E_CONTRACT, E_CONTRACT, E_CONTRACT, 0]);

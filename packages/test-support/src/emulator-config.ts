@@ -82,6 +82,16 @@ export function resolveTiers(o: TierOptions): TierResolution {
   return { add, explicit, off, sources, auto: environ.SHARC_FAST_AUTO ?? add.SHARC_FAST_AUTO };
 }
 
+/** Default cap of the shared boot-snapshot store in GiB. */
+export const SNAPSHOT_CAP_GIB_DEFAULT = 20;
+
+/** Cap of the shared boot-snapshot store in bytes: `DIGI_SNAP_CAP_GIB` (a positive number of GiB), else SNAPSHOT_CAP_GIB_DEFAULT. */
+export function snapshotCapBytes(environ: NodeJS.ProcessEnv = process.env): number {
+  const text = environ.DIGI_SNAP_CAP_GIB;
+  const gib = text !== undefined && text.trim() !== '' ? Number(text) : Number.NaN;
+  return (Number.isFinite(gib) && gib > 0 ? gib : SNAPSHOT_CAP_GIB_DEFAULT) * 1024 ** 3;
+}
+
 const count = (value: string | undefined) => (value ?? '').split(',').filter((x) => x.trim()).length;
 
 /** One line for a log: the context, SHARC_FAST_AUTO, list sizes and which values the environment set. */

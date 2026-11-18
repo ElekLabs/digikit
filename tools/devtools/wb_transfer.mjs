@@ -56,8 +56,9 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
     return 0;
   }
   if (sub === 'restart') {
-    const { loaded } = await restartDevice(session, emit, undefined, bootTimeoutMs ? 120_000 : undefined, {
+    const { loaded } = await restartDevice(session, emit, {
       bootTimeoutMs,
+      loadedTimeoutMs: bootTimeoutMs ? 120_000 : undefined,
     });
     emit({ event: 'loaded', loaded, missing: [] });
     return 0;
@@ -93,8 +94,9 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
   const chosen = rest.filter((id) => !refused.has(id));
   if (chosen.length === 0) return 1;
   await session.select(chosen.map((id) => modules.find((m) => m.id === id).path));
-  const { loaded } = await restartDevice(session, emit, undefined, bootTimeoutMs ? 120_000 : undefined, {
+  const { loaded } = await restartDevice(session, emit, {
     bootTimeoutMs,
+    loadedTimeoutMs: bootTimeoutMs ? 120_000 : undefined,
   });
   const missing = chosen.filter((id) => !loaded.includes(id));
   emit({ event: 'loaded', loaded, missing });

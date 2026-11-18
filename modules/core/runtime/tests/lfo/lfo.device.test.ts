@@ -7,7 +7,6 @@ import { DEBUG_MODULE, installModule, moduleArtifact } from '@digi/regression/ru
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { nameHash } from '../refusal/dkm-patch.ts';
-import { waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
 
 const A = 'test/lfo-shape';
 const B = 'test/lfo-shape-dup';
@@ -64,7 +63,7 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   await dk.put(stored(B), fs.readFileSync(moduleArtifact(device, B)));
   await dk.select([stored(A), stored(B)]);
   await dk.restart();
-  await waitForBootEmulated(dk);
+  await dk.waitForBoot();
   expect(
     (await dk.modules()).map((m) => m.name),
     'only the first owner loaded',
@@ -76,7 +75,7 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   // unload: no selection, a restart: MODULES and CAPACITY are what they were before the first load
   await dk.select([]);
   await dk.restart();
-  await waitForBootEmulated(dk);
+  await dk.waitForBoot();
   expect((await dk.modules()).map((m) => m.name)).toEqual(before.modules.map((m) => m.name));
   const after = await dk.capacity();
   for (const kind of ['MODULES', 'SELECTION', 'ARENA'] as const) {
@@ -94,7 +93,7 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   const expectNotLoaded = async (why: string) => {
     await dk.select([debug, stored(A)]);
     await dk.restart();
-    await waitForBootEmulated(dk);
+    await dk.waitForBoot();
     expect(
       (await dk.modules()).map((m) => m.name),
       `${why}: the fixture did not load`,
@@ -117,7 +116,7 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
 
   await dk.select([]);
   await dk.restart();
-  await waitForBootEmulated(dk);
+  await dk.waitForBoot();
   await session.expectNoFault('lfo shapes');
 }
 
