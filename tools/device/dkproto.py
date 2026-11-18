@@ -251,7 +251,10 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
         "reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read)",
     ),
     -84: ("E_RELOAD_MENUS", "reload refused: the module built menus of its own"),
-    -85: ("E_RELOAD_ROUTED", "reload refused: an effect of the module is on a route"),
+    -85: (
+        "E_RELOAD_ROUTED",
+        "reload refused: the module has a published effect row (no effect teardown yet)",
+    ),
     -86: (
         "E_RELOAD_KEYS",
         "reload refused: the new file lacks a key of the file it replaces",

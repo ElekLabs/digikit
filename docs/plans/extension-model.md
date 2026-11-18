@@ -311,7 +311,7 @@ Order:
 2. **Keys check**: the new file's `KEYS` must contain every key of the old file that kit data can name. If not, refuse (this replaces an
    `in_use` scan for reload; a key the new file drops needs unload, which waits for O5).
 3. **Refuse** while the transport plays or records, during card operations, in safe mode, when the module built its own menus (until
-   `core/ui` can tear down a module's menus, E5b), and for an fx module while the effect is on a route (E5b).
+   `core/ui` can tear down a module's menus, E5b), and for an fx module that has a published effect row (E5b).
 4. **Unload the old module**: stop its voices, wait for in-flight SysEx commands and the span clock, run `unload_rec`. `unload_rec` resumes
    after `E_BUSY` from the step that returned it. DSP code is freed after two confirmed blocks.
 5. **Placeholder window**: from unload to the new module's commit, a type number the kit names resolves to the MISSING placeholder row, so no
@@ -619,7 +619,7 @@ What:
    are not judged again (their rows are in the service table, which the boot's judgment refuses as a second owner) and the capacity counts that the live
    modules own start at 0 (`live_caps`), because the plan counts every live module again. Nothing is unloaded before both pass.
 3. Transport and state refusal: one function, in this order: safe mode; the firmware transport function returns non-zero (`cf.project.fn.transport_state`, declared in `devices/fw/project.toml`; `Platform::play_state`; a platform that cannot read it refuses);
-   card operations; the module built its own menus; then each service's `Service::reload_refusal(core, owner)` (required, like `validate_records`; the fx service answers `E_RELOAD_ROUTED` while an effect of the module is on a route, machines and lfo never refuse, samples never refuses: whether a pool entry is in use is not cheap to know, a follow-up). Refusing while the machine selection view
+   card operations; the module built its own menus; then each service's `Service::reload_refusal(core, owner)` (required, like `validate_records`; the fx service answers `E_RELOAD_ROUTED` for any module with a published effect row, because E5 has no fx teardown (route 0 is the master chain; E5b relaxes it), machines and lfo never refuse, samples never refuses: whether a pool entry is in use is not cheap to know, a follow-up). Refusing while the machine selection view
    is open is not needed: the list rebuild (item 9) is unconditional.
 4. Fixed record index. A reload loads into the old record (`Slot::Module(rec)`), so owner ids (`rec + 1` in machine rows, DSP rows, menus,
    `sel_of_rec`) do not move.

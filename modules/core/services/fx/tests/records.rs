@@ -126,20 +126,17 @@ fn clearing_a_module_sends_the_free_pc_first_and_frees_the_row() {
     assert!(!core.calls().iter().any(|c| matches!(c, Call::Log { .. })));
 }
 
-/// A reload waits while an effect of the module is on a route, and only that module's: an effect with no route, or another module's route, does not refuse it.
+/// E5 refuses the reload of a module with a published effect row, whatever its route (route 0 is the master chain), and only that module's.
 #[test]
-fn a_reload_waits_while_an_effect_of_the_module_is_on_a_route() {
+fn a_reload_is_refused_while_the_module_has_a_published_effect_row() {
     let core = core_with_row();
     let owner = REC as u8 + 1;
     let ask = |who: u8| unsafe { <Fx as Service<FakeCore>>::reload_refusal(&core, who) };
-    assert_eq!(ask(owner), OK, "the effect is published but on no route");
-    core.dsp().fx_route[1] = 1;
-    assert_eq!(ask(owner), dkrt_sdk::E_RELOAD_ROUTED);
-    assert_eq!(
-        ask(owner + 1),
-        OK,
-        "another module's reload is not held up by it"
-    );
-    core.dsp().fx_route[1] = 0;
-    assert_eq!(ask(owner), OK);
+    for route in [0, 1] {
+        core.dsp().fx_route[1] = route;
+        assert_eq!(ask(owner), dkrt_sdk::E_RELOAD_ROUTED, "route {route}");
+    }
+    assert_eq!(ask(owner + 1), OK, "another module's reload is not held up by it");
+    core.dsp().fx_pub[1] = 0;
+    assert_eq!(ask(owner), OK, "a row that was claimed and never published runs nothing");
 }

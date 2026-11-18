@@ -180,7 +180,7 @@
 #define DKRT_E_HOOK_STOCK (-82)          /* a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init */
 #define DKRT_E_RELOAD_PLAYING (-83)      /* reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read) */
 #define DKRT_E_RELOAD_MENUS (-84)        /* reload refused: the module built menus of its own */
-#define DKRT_E_RELOAD_ROUTED (-85)       /* reload refused: an effect of the module is on a route */
+#define DKRT_E_RELOAD_ROUTED (-85)       /* reload refused: the module has a published effect row (no effect teardown yet) */
 #define DKRT_E_RELOAD_KEYS (-86)         /* reload refused: the new file lacks a key of the file it replaces */
 
 /* Module states (DkrtBootInfo.states), from [load.state] of sdk/sdk.toml. */
