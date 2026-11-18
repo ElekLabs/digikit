@@ -14,6 +14,16 @@ mark = "D"
 users = ["core/digikit-menu"]
 doc = "The Brain singleton."
 
+[[value]]
+name = "cf.view.value.brain"
+cpu = "cf"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_literal", hash = "f3db18895f27b74988ae2789f17c1090", offset = 0xa, len = 4 }
+mark = "D"
+users = ["tests/regression"]
+codegen = false
+doc = "The Brain singleton pointer variable (u32 in RAM, 0 until the Brain is made): the operand of the `tst.l` at the start of the Brain getter (cf.view.fn.brain.instance). The address of each firmware is in its port file. The device tests read the view stack through it (the [ui] brain_ptr fact of the device files)."
+
 [[fn]]
 name = "cf.view.fn.brain.push"
 was = ["cf.menu.fn.push", "cf.view.fn.push_ctx"]
@@ -123,3 +133,13 @@ mark = "D"
 devices = ["dt2", "dn2"]
 users = ["core/ui"]
 doc = "Converting copy `shared_ptr<View>(const shared_ptr<Derived> &)` for a class with its View sub-object at +0x38 (the Menu views): out.ptr = src.ptr + 0x38 (0 stays 0), out.ctl = src.ctl, and the use count of the control block is incremented. It does not make a new control block; a raw pointer cannot be wrapped with it. The caller releases `out` afterwards."
+
+[[site]]
+name = "cf.view.site.main_screen_vptr_lit"
+cpu = "cf"
+devices = ["dt2"]
+rule = { kind = "cf_ptr", hash = "7160f06f3d6124dc745cdb7c75628c47", offset = 0x108, len = 4 }
+mark = "D"
+users = ["tests/regression"]
+codegen = false
+doc = "The vtable pointer that the MainScreenView constructor (0x40066584 on DT2 1.17) stores at +0 of its object; the anchor is that vtable. A device test knows that the main screen is the top view by it (the [ui.boot_window] main_vptr fact of the device file)."

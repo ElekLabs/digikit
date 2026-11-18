@@ -1342,6 +1342,37 @@ starts a daemon, `apps/desktop/ui/preview/live.vite.config.ts` serves the pages 
 (`DIGI_LIVE_SOCKET=SOCKET`), and `node tools/devtools/memory_live.mjs SOCKET [--check]` measures the
 Memory panel.
 
+## The boot window
+
+On a device whose firmware ends its boot with a ConfirmWindow (the Digitakt II: "FILE SYSTEM OK / PRESS Y/N TO CLOSE", after the filesystem check
+of a boot with a card), that window is the top view and takes every panel key until NO or YES answers it. A panel-driven test that starts before
+it is answered sends its keys to the window. The daemon's `auto_no` presses NO once at "ready", without looking at the screen: with relaxed
+readiness (`relaxFs` card rigs) the press can land while the "VERIFYING FILE SYSTEM..." progress view is on top, and the window opens later.
+
+`settleBootWindow` (`packages/test-support/src/boot-window.ts`) answers it from firmware state. It reads the top of the firmware's view stack
+(the facts are the `[ui]` and `[ui.boot_window]` tables of the device file; a device without `[ui.boot_window]` has no window and the step does
+nothing). The firmware decides about the check when the main screen opens: `MainScreenView::vfunc_5` starts it only if the filesystem is mounted
+and the superblock state word is 3 or its checked word is 0 (the "check pending" test of the facts); a successful check writes state 4 and checked 1 back to the
+superblock. Test cards are built verified (`build_superblock` of `plusdrive-format` writes state 4 and checked 1), so on a card built by our tools the check pending test is false at the first main screen and neither the progress view nor the window appears. The step stays as a guard for cards that are not verified (a card image from another source, a superblock the firmware rewrote to checked 0).
+So the step ends on firmware state, never after a quiet time. "Main screen reached" means the bottom view of the list is the MainScreenView: an overlay (the
+help bubble) sits above it whenever no modal is open, so the main screen is not always the top view. Each poll: the main screen at the bottom with no progress view
+or window on top and the check not pending is done; with the check pending it waits (for the progress view and the window, however late they come); a progress view
+means the check runs, so it waits; an unanswered window gets NO (again after 1 s if it is still there) and the step waits until the window is gone; the main screen
+with the check still pending after the window was answered is also done. No Brain, an empty view list, another bottom view and a read that fails (an unmapped
+address, a pointer that is not set yet) are "not yet": the step reads again at the next poll. If the check ends without the window (another ConfirmWindow is on top
+after the progress view while the check stays pending), the log and the error name its vtable pointer and title ("the filesystem check ended without FILE SYSTEM OK").
+It fails after 60 emulated seconds with the sequence seen, and logs the sequence once
+(`boot window: none @0 ms -> main(check pending) @... -> progress @... -> boot-window(unanswered) @... -> tap NO @... -> main(check not pending) @...`).
+The step takes a target with `read(addr, len)`, `ui.tap('NO')` and a clock, so a device can use it with `DkSession.peek`; `emulatorBootTarget` is
+the daemon's target (`mem.cf.peek`, the panel, the emulated clock).
+
+Runtime sessions of a device that has the facts run it themselves: `Session.start` and `reloadRuntimeBaseline` settle after ready and do not ask the
+daemon for `auto_no`, and the card rig's `restart` settles once the new boot has reached its main screen, before the rig's UI checks. `autoNo: false`
+turns it off. A device without the facts, a stock session and a paused baseline (`hold`), whose steps a test counts from the ready point (settling
+would step the emulator), keep the daemon's press of NO at ready as before. A test that restarts the device in another way calls `session.settleBootWindow()`
+after the boot reached the main screen. The rig's restart guard (daemon epoch and `main_ui_reached`) is emulator-only: a device run needs its own "new boot" signal
+(for example a changed Brain pointer). The address facts are checked against the port files by `tests/regression/host/device-facts.test.ts`.
+
 ## Known issues
 
 - fx-reuse: the onset shift varies by +-64 samples between identical runs (free-running coupled

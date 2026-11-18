@@ -485,6 +485,22 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       const dk = emulatorDk(session);
       // This controller can answer throughout the guest reset: settle proves the fresh ready epoch/UI hook.
       cap = undefined;
+      // The reset boots to the boot window again and no daemon press answers it, so the rig answers it before its UI checks, as `Session.start` and `reloadRuntimeBaseline` do:
+      // once the new boot has reached its main screen (the old boot's view stack stays in RAM until the reset clears it, so settling earlier could end on it).
+      // A held rig keeps the daemon's press of NO (its baseline is paused: settling would step the emulator that its tests count from the ready point).
+      if (!o.hold) {
+        await pollEmulated(
+          session,
+          async () => {
+            const status = await session.status();
+            // the epoch changes when the new runtime is installed and the new runtime starts with main_ui_reached false (controller.rs install, common.rs is_ready), so the old boot's state cannot pass
+            return typeof status.epoch === 'number' && status.epoch > before && status.cf?.main_ui_reached === true;
+          },
+          Boolean,
+          { emulatedMs: 120_000, intervalMs: 500, message: 'the restarted boot reached its main screen' },
+        );
+        await session.settleBootWindow();
+      }
       return settle(withWaitApi({ session, dk, close: runtime.close }), before);
     },
     usb: (runtime, run) => withPausedFxProtocol(runtime, run),

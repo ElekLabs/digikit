@@ -2889,6 +2889,17 @@ mark = "D"
 rule = "fw/view:cf_words"
 
 [[anchor]]
+name = "cf.view.value.brain"
+cpu = "cf"
+kind = "value"
+addr = 0x44648900
+src = 0x4018cbc6
+len = 4
+sha256 = "441fda190cd5562db1018ff465d993aeb75850047b56416c5823e186a050e088"
+mark = "D"
+rule = "fw/view:cf_literal"
+
+[[anchor]]
 name = "cf.window.fn.confirm_ctor"
 cpu = "cf"
 kind = "code"

@@ -2922,6 +2922,39 @@ mark = "D"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
+name = "cf.storage.value.fs_checked"
+cpu = "cf"
+kind = "value"
+addr = 0x46f4dce4
+src = 0x4015a914
+len = 4
+sha256 = "fba776944f7e3ac98c21598b213e33afaec27bfc06b818afdba0a033052e6137"
+mark = "D"
+rule = "fw/storage:cf_literal"
+
+[[anchor]]
+name = "cf.storage.value.fs_mounted"
+cpu = "cf"
+kind = "value"
+addr = 0x44f2bd68
+src = 0x4015a84c
+len = 4
+sha256 = "c6c7f1c74f7be630032892c1a1f671ab0984257c7a9ee416aa2e0d29b362805b"
+mark = "D"
+rule = "fw/storage:cf_literal"
+
+[[anchor]]
+name = "cf.storage.value.fs_state"
+cpu = "cf"
+kind = "value"
+addr = 0x46f4dcb4
+src = 0x4015a862
+len = 4
+sha256 = "ac343958c011b98d338a924326333d0868465da23fa1e16be1d331e21d77e589"
+mark = "D"
+rule = "fw/storage:cf_literal"
+
+[[anchor]]
 name = "cf.string.fn.shared_ptr.make"
 cpu = "cf"
 kind = "code"
@@ -3220,6 +3253,17 @@ mark = "D"
 rule = "fw/view:cf_func"
 
 [[anchor]]
+name = "cf.view.site.main_screen_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x401f7ac0
+src = 0x4006668c
+len = 4
+sha256 = "b92cf07f469597ca95c28e1ce0375afc9a98ed960a7dce564fd3a4008178add7"
+mark = "D"
+rule = "fw/view:cf_ptr"
+
+[[anchor]]
 name = "cf.view.site.ui_loop"
 cpu = "cf"
 kind = "code"
@@ -3238,6 +3282,17 @@ len = 4
 sha256 = "c5991db0da94b3495fb6fdea00f44ed9c71ceb94093f6d3936f467643baac174"
 mark = "D"
 rule = "fw/view:cf_words"
+
+[[anchor]]
+name = "cf.view.value.brain"
+cpu = "cf"
+kind = "value"
+addr = 0x44f37098
+src = 0x40198c2e
+len = 4
+sha256 = "31a2ab44a12f78d2b5b6bad828e9e87d4504969f0c72481390bf65def047506b"
+mark = "D"
+rule = "fw/view:cf_literal"
 
 [[anchor]]
 name = "cf.window.fn.confirm_ctor"
@@ -3312,6 +3367,17 @@ mark = "D"
 rule = "fw/window:cf_ptr"
 
 [[anchor]]
+name = "cf.window.site.confirm_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x4021cd50
+src = 0x401113d4
+len = 4
+sha256 = "74350518566e6a1e024946e10ab44998313a5d56dfeaa3df85d46fd18b3f1089"
+mark = "D"
+rule = "fw/window:cf_ptr"
+
+[[anchor]]
 name = "cf.window.site.multichoice_cb_vptr_lit"
 cpu = "cf"
 kind = "data"
@@ -3319,6 +3385,17 @@ addr = 0x40204fb4
 src = 0x400aa04e
 len = 4
 sha256 = "1c83d7d64eae2b2428fc2f4b51d66f88ff9f7954b0748d3a9ac09d6ddcd8ccd7"
+mark = "D"
+rule = "fw/window:cf_ptr"
+
+[[anchor]]
+name = "cf.window.site.progress_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x4021d980
+src = 0x401196e6
+len = 4
+sha256 = "e6a603c5609e6c0b4c7544f02b9bb573c02d7c8e33fe56d413fa35824b2aa715"
 mark = "D"
 rule = "fw/window:cf_ptr"
 

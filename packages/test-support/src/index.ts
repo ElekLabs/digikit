@@ -6,3 +6,5 @@ export * from './keys.ts';
 export * from './session.ts';
 export * from './emulated-clock.ts';
 export * from './input.ts';
+export * from './boot-window.ts';
+export * from './boot-window-emulator.ts';

@@ -26,7 +26,18 @@ import {
   type Device,
   type PreparedRuntimeImage,
 } from './inputs.ts';
+import { bootWindowFacts } from './boot-window.ts';
 import { button, encoder } from './keys.ts';
+
+/** Does a runtime session settle the boot window itself? Only a device with boot window facts, when `autoNo` is not false, and never a paused baseline (it keeps the daemon's press of NO). */
+function settlesBootWindow(options: Pick<SessionOptions, 'device' | 'runtime' | 'autoNo'>, paused = false): boolean {
+  return (
+    options.runtime !== undefined &&
+    !paused &&
+    (options.autoNo ?? true) &&
+    bootWindowFacts(options.device) !== undefined
+  );
+}
 
 /** Content-named card images that the device tests share between runs (tests/regression/runtime/card-cache.ts; `DIGI_CARD_CACHE` moves it for host tests). A baseline card may live here. */
 export const cardCacheRoot = (): string =>
@@ -103,7 +114,11 @@ export interface SessionOptions {
   onSession?: (session: Session) => void;
   /** Additional daemon environment, prepared before spawn. */
   env?: Record<string, string> | ((runDir: string) => Promise<Record<string, string>>);
-  /** Press NO automatically when ready; defaults to true. */
+  /**
+   * Answer the boot window (a ConfirmWindow that ends the boot on a device that has one: docs/TESTING.md "The boot window"); defaults to true. A runtime session of a device that has
+   * boot window facts settles the window itself (`settleBootWindow` reads the firmware's view stack and presses NO) and does not ask the daemon for `auto_no`. Every other session (a stock
+   * one, a device without the facts, a paused runtime baseline whose steps a test counts from the ready point) keeps the daemon's press of NO at ready. False: nothing answers it.
+   */
   autoNo?: boolean;
   /** Runtime boot uses firmware.load's existing patch/cache path, then runs freely. Stock defaults stay stepped. */
   runtime?: { patchSet?: string; reuse?: boolean };
@@ -377,13 +392,17 @@ export class Session {
           start: options.runtime ? 'auto' : 'snapshot',
           ...(options.runtime ? { runtime: true, patch_set: options.runtime.patchSet } : {}),
           force: true,
-          auto_no: options.autoNo ?? true,
+          // a runtime session of a device with boot window facts settles the window itself, below
+          auto_no: settlesBootWindow(options) ? false : (options.autoNo ?? true),
           ...(card ? { card } : {}),
         }),
       );
       session.#touchCacheHit(session.#load);
       await checked(c.watchdogConfig(options.stallMs ?? 1000));
-      if (options.runtime) await checked(c.call('run.mode', { mode: 'free' }));
+      if (options.runtime) {
+        await checked(c.call('run.mode', { mode: 'free' }));
+        if (settlesBootWindow(options)) await checked(session.settleBootWindow());
+      }
       return session;
     })();
     try {
@@ -505,7 +524,8 @@ export class Session {
           force: true,
           start: baseline.initialButtons === undefined ? 'auto' : 'cold',
           initial_buttons: baseline.initialButtons,
-          auto_no: this.options.autoNo ?? true,
+          // a paused baseline keeps the daemon's press of NO at ready: settling would step the emulator that a test counts from the ready point
+          auto_no: settlesBootWindow(this.options, baseline.paused) ? false : (this.options.autoNo ?? true),
         }),
       ));
       loadMs = performance.now() - loadStart;
@@ -543,6 +563,7 @@ export class Session {
           );
         }
       }
+      if (settlesBootWindow(this.options, baseline.paused)) await checked('boot.window', () => this.settleBootWindow());
       phase = 'commit.baseline';
       this.#load = load;
       this.#card = image;
@@ -581,6 +602,18 @@ export class Session {
     } finally {
       this.#reloading = false;
     }
+  }
+
+  /**
+   * Answer the boot window of the firmware that has reached its main screen (see `settleBootWindow`); does nothing on a device that has none. It steps a paused daemon
+   * and waits on a running one, so a caller that must keep the emulator where it is does not call it.
+   */
+  async settleBootWindow(): Promise<void> {
+    const facts = bootWindowFacts(this.options.device);
+    if (!facts) return;
+    // loaded here, not at the top: the clock and the panel import this file (a cycle at load time would reach `MS` too early)
+    const { settleEmulatorBootWindow } = await import('./boot-window-emulator.ts');
+    await settleEmulatorBootWindow(this, facts);
   }
 
   /** Back to the ready state of the running firmware, modal closed; clears collected events. */
