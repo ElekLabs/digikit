@@ -37,7 +37,7 @@ export const testImportInputs = (workspaceRoot) => {
     if (!texts.has(file)) texts.set(file, readFileSync(file, 'utf8'));
     return texts.get(file);
   };
-  const local =(file) => {
+  const local = (file) => {
     const path = relative(workspaceRoot, file);
     return !isAbsolute(path) && !path.startsWith('../') && !path.split('/').includes('node_modules');
   };
