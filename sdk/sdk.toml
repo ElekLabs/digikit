@@ -1,7 +1,7 @@
 # The module contract: version numbers, log kinds and the SysEx protocol numbers. `patchkit gen` writes
 # modules/core/runtime/sdk/src/gen_sdk.rs, tools/device/dklog_kinds.py, tools/device/dkproto.py and
 # packages/dkupload/src/gen_proto.rs, packages/dk-session/src/gen_proto.ts, sdk/dsp/contract/dk_machine.inc, sdk/dsp/contract/dk_fx.inc,
-# sdk/dsp/contract/dk_sample_pool.inc, sdk/include/dk/core/status.h and sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h, imports.h, page_consts.h, limits.h
+# sdk/dsp/contract/dk_sample_pool.inc, modules/core/services/<service>/dks/src/gen_exports.rs (a service file's export list and pure builder wrappers), sdk/include/dk/core/status.h and sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h, imports.h, page_consts.h, limits.h
 # and sample.h, sdk/dsp/REGISTERS.md and packages/dksharc/src/rules_table.rs from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
@@ -209,6 +209,11 @@ consts = [
 # call whose prototype is in another header (<dk/platform/ui.h>), so none in <dk/gen/imports.h>. `requires`: the module whose absence makes the address 0 (the
 # import is then not found). `absent`: with `requires`, the runtime hands out a stub instead of 0 and the module loads: the stub returns this value ("0", "-1"),
 # the status DK_E_MISSING ("missing") or nothing ("void"), and the signature must agree.
+# `provided = true`: the import is a function of a service file (`.dks`), not of the runtime's table; the file exports it, and its export list is these imports in this
+# order (the header table sorts them by name hash). `wrapper = "<module>"`: with `provided`, the function is written by hand in that module of the service's `dks/src`
+# (`fw`, `builder`, `glue`: it converts a callback, takes the click state or a client handle). Without `wrapper` the function is a pure wrapper: `patchkit gen` writes
+# it to `modules/core/services/<service>/dks/src/gen_exports.rs` as a call of `build::<name without dk_ and a leading module_ctx_>(&ImportCore, args...)` (so `dk_module_ctx_add_machine`
+# calls `build::add_machine`) and a callback argument is an error. If the service crate's function has another name, or the call is not a plain forward, use `wrapper`.
 [[import]]
 name = "memcpy"
 sig = "u8 *(u8 *d, const u8 *s, u32 n)"
@@ -627,6 +632,7 @@ doc = "Replace the stock boot animation. `frame(tick, arg)` returns the 1024-byt
 name = "dk_param_get"
 service = "machines"
 provided = true
+wrapper = "fw"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (u32 track, u32 word)"
@@ -636,6 +642,7 @@ doc = "Raw value (unit * 256) of parameter word `word` of the calling module on 
 name = "dk_param_set"
 service = "machines"
 provided = true
+wrapper = "fw"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (u32 track, u32 word, i32 raw)"
@@ -774,6 +781,7 @@ doc = "Latch the parameter at note_on (machine contract 1.3)."
 name = "dk_param_on_click"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_param *prm, param_click_fn fn, void *arg)"
@@ -783,6 +791,7 @@ doc = "Run `fn(arg, track)` when the parameter's knob is clicked on the machine'
 name = "dk_page_canvas"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_page *p, u32 flags, page_draw_fn draw, page_event_fn event, void *arg)"
@@ -828,6 +837,7 @@ doc = "Set the default of the effect's MIX knob, 0 to 127 (127 when this is not 
 name = "dk_sample_pool_open"
 service = "samples"
 provided = true
+wrapper = "glue"
 since = "0.7.0"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, dk_sample_pool **out)"
@@ -837,6 +847,7 @@ doc = "Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS
 name = "dk_sample_pool_add"
 service = "samples"
 provided = true
+wrapper = "glue"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, const char *path)"
@@ -846,6 +857,7 @@ doc = "Add a stereo-capable sample file to the pool (copies the path, no file IO
 name = "dk_sample_pool_clear"
 service = "samples"
 provided = true
+wrapper = "glue"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index)"
@@ -855,6 +867,7 @@ doc = "Close the entry's generation, drop its reference and set it UNUSED, a hol
 name = "dk_sample_pool_status"
 service = "samples"
 provided = true
+wrapper = "glue"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index)"
@@ -864,6 +877,7 @@ doc = "DK_SAMPLE_UNUSED, QUEUED, LOADING, READY, or a negative error; an error i
 name = "dk_sample_pool_info"
 service = "samples"
 provided = true
+wrapper = "glue"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, void *out)"
@@ -873,6 +887,7 @@ doc = "Copy a 16-byte dk_sample_info (frames, rate, channels, token) of a READY 
 name = "dk_sample_pool_path"
 service = "samples"
 provided = true
+wrapper = "glue"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, char *buf, u32 cap)"
@@ -882,6 +897,7 @@ doc = "Copy the root-relative path of the entry into `buf` and return its length
 name = "dk_sample_pool_set"
 service = "samples"
 provided = true
+wrapper = "glue"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, const char *path)"
@@ -891,6 +907,7 @@ doc = "Load a sample file into pool entry `index` (0..15), replacing what was th
 name = "dk_sample_pool_peaks"
 service = "samples"
 provided = true
+wrapper = "glue"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, u32 token, void *out, u32 capacity)"
@@ -900,6 +917,7 @@ doc = "Copy bounded PCM16 min/max overview pairs of a READY pool entry matching 
 name = "dk_sample_pool_peaks_window"
 service = "samples"
 provided = true
+wrapper = "glue"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_sample_pool *p, u32 index, u32 token, u32 first, u32 frames, u32 columns, void *out, u32 capacity)"
@@ -1239,6 +1257,7 @@ context = "any"
 sig = "i32 ()"
 doc = "Test only: returns 42 from the svc-test provider."
 test = true
+provided = true
 
 [[import]]
 name = "dk_svctest_hits"
@@ -1248,6 +1267,7 @@ context = "any"
 sig = "u32 ()"
 doc = "Test only: how often the provider's hook ran (the last step of the firmware's SETTINGS list rebuild)."
 test = true
+provided = true
 
 [[import]]
 name = "dk_debug_track_type"

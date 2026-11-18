@@ -16,43 +16,6 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The functions the file exports: each is an [[import]] of its service in sdk/sdk.toml.
-[[export]]
-name = "dk_param_get"
-
-[[export]]
-name = "dk_param_set"
-
-[[export]]
-name = "dk_module_ctx_add_machine"
-
-[[export]]
-name = "dk_machine_add_page"
-
-[[export]]
-name = "dk_page_add_param"
-
-[[export]]
-name = "dk_param_range"
-
-[[export]]
-name = "dk_param_glyph"
-
-[[export]]
-name = "dk_param_latched"
-
-[[export]]
-name = "dk_param_on_click"
-
-[[export]]
-name = "dk_page_canvas"
-
-[[export]]
-name = "dk_page_bind"
-
-[[export]]
-name = "dk_page_bind_local"
-
 # The hooks it takes (devices/fw/machine.toml and page.toml), for each device that has them. They have no `handler`: each is a routine of this file that runs in place of the
 # stock instructions at the site and continues in the stock code through the table `machines_info` of core/machines (`patchkit bind` makes the site jump straight to the entry).
 # `init` declares the hooks of its device again with dk_service_declare_hook.

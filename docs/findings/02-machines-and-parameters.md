@@ -51,7 +51,7 @@ and renders one row per vector entry. **[V]**
 | list | table | contents | built by |
 |---|---|---|---|
 | source | `0x401e1958`-`0x401e1974` | `{0,1,2,3,6,4,5}` — 7, in UI display order | `FUN_40051fbc` |
-| filter | `0x401e1940`-`0x401e1958` | `{0,1,4,3,5,2}` — 6, excludes MANUAL SLICE | `FUN_4005224c` |
+| filter | `0x401e1940`-`0x401e1958` (1.17: `0x401f5440`) | `{0,1,4,3,5,2}` — 6 filter-type indices in display order SVAR, LP4, LEGACY, COMB-, COMB+, EQ | `FUN_4005224c` (1.17: `FUN_40052c98`) |
 
 Every bound an eighth machine would have to clear, verified against the
 section bytes: the dispatch's `moveq #6` at `0x400caf48`, and the four `pea`

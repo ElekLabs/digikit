@@ -3751,7 +3751,7 @@
    "addend": 0,
    "offset": 388,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1k",
+   "symbol": ".sec..rodata.global.1l",
    "type": "cf.32"
   },
   {
@@ -3765,7 +3765,7 @@
    "addend": 0,
    "offset": 408,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1l",
+   "symbol": ".sec..rodata.global.1m",
    "type": "cf.32"
   },
   {
@@ -3779,7 +3779,7 @@
    "addend": 0,
    "offset": 428,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1m",
+   "symbol": ".sec..rodata.global.1n",
    "type": "cf.32"
   },
   {
@@ -3793,7 +3793,7 @@
    "addend": 0,
    "offset": 452,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1n",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
@@ -3807,7 +3807,7 @@
    "addend": 0,
    "offset": 472,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1o",
+   "symbol": ".sec..rodata.global.1p",
    "type": "cf.32"
   },
   {
@@ -6742,35 +6742,35 @@
    "align": 1,
    "hex": "646b5f66785f6d6978",
    "kind": "data",
-   "name": ".rodata.global.1o",
+   "name": ".rodata.global.1p",
    "size": 9
   },
   {
    "align": 1,
    "hex": "646b5f66785f726f75746573",
    "kind": "data",
-   "name": ".rodata.global.1n",
+   "name": ".rodata.global.1o",
    "size": 12
   },
   {
    "align": 1,
    "hex": "646b5f706167655f6164645f66785f706172616d",
    "kind": "data",
-   "name": ".rodata.global.1m",
+   "name": ".rodata.global.1n",
    "size": 20
   },
   {
    "align": 1,
    "hex": "646b5f66785f6164645f70616765",
    "kind": "data",
-   "name": ".rodata.global.1l",
+   "name": ".rodata.global.1m",
    "size": 14
   },
   {
    "align": 1,
    "hex": "646b5f6d6f64756c655f6374785f6164645f6678",
    "kind": "data",
-   "name": ".rodata.global.1k",
+   "name": ".rodata.global.1l",
    "size": 20
   },
   {
@@ -7999,7 +7999,7 @@
    "size": 28
   }
  ],
- "source_sha256": "bef6023a40c0200ec3a79afe7239ea12b111659429acef05a92ea05df74df7b9",
+ "source_sha256": "ccb216e7dcdf528f0d3bf7ba036ba2ecbc2ea67d59d20569f327c96a95b34728",
  "symbols": [
   {
    "global": false,
@@ -8171,12 +8171,6 @@
   },
   {
    "global": false,
-   "name": ".sec..rodata.global.1k",
-   "section": ".rodata.global.1k",
-   "value": 0
-  },
-  {
-   "global": false,
    "name": ".sec..rodata.global.1l",
    "section": ".rodata.global.1l",
    "value": 0
@@ -8197,6 +8191,12 @@
    "global": false,
    "name": ".sec..rodata.global.1o",
    "section": ".rodata.global.1o",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.global.1p",
+   "section": ".rodata.global.1p",
    "value": 0
   },
   {
@@ -10057,7 +10057,7 @@
  "toolchain": {
   "exports": "DKRT_FXP_FW dk_fx_add_page dk_fx_mix dk_fx_routes dk_module dk_module_ctx_add_fx dk_page_add_fx_param dk_svc_abi fxp_acc fxp_graph fxp_init fxp_keylist fxp_label fxp_list fxp_load fxp_save fxp_sound",
   "instructions_redecoded": "8431",
-  "isa_check": "83aa161400f2c95b072c81958d8672fb276c84cd12b0fb1b0a4ebcbc8834fd10",
+  "isa_check": "3d2b72f3663f47661c2fcb5ea43edf641ff53cea547ca3a3ab5094786dcebfad",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

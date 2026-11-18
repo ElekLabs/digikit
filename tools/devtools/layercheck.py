@@ -35,7 +35,7 @@ Rules:
             names a service crate (`dkrt_svc_*`) only in `gen_services.rs`, `handlers.rs` and the host-test files under `handlers/`. Final state (R12-1): no service is a folder of the
             runtime crate's `services/`; every service (fx, machines, samples, lfo) is a crate.
   kind-free The runtime's own code (the runtime crate's and the abi crate's sources without their host tests, inline `#[cfg(test)] mod x { }` blocks included, `handlers.rs`, the host-test files in `handlers/` and the generated `gen_services.rs`) names no machine or effect: no builder
-            call (`dk_module_ctx_add_machine`, `dk_page_add_param`, `dk_fx_*` ...), no record kind of a machine or an effect (`KIND_MACHINE`, `KIND_PARAM`, `KIND_PAGE`,
+            call (the `provided` imports of the services machines and fx in sdk/sdk.toml, but for those with `wrapper = "fw"`: `dk_module_ctx_add_machine`, `dk_page_add_param` ...), no record kind of a machine or an effect (`KIND_MACHINE`, `KIND_PARAM`, `KIND_PAGE`,
             `KIND_ACTION`, `KIND_NATIVE_PAGE*`, `KIND_EFFECT`, `KINDS_MACHINES`, `KINDS_FX`), no table of an image adapter that only a service reads (`dynreg_info`, `machines_info`,
             `fxpages_info`, `mf_native_*`) and no state of the machines registry (`RegState`, `DKRT_REG`, `DKRT_ASSIGN`). The services own them: the machines and fx service files
             export the builder calls and write their records in `Service::module_commit`; the loader only runs the generic part (docs/plans/runtime-slimming.md, RS-C).
@@ -964,13 +964,30 @@ def check_service_crates(root: Path) -> list[Violation]:
     return out
 
 
-# What the core does not name any more after RS-C (the machines and fx content): builder calls, their record kinds, the adapters' tables and the registry state.
-RT_KIND_FREE = re.compile(
-    r"\b(?:dk_module_ctx_add_machine|dk_module_ctx_add_fx|dk_machine_add_page|dk_fx_add_page|dk_page_add_param|dk_page_add_fx_param|dk_param_range|dk_param_glyph|dk_param_latched"
-    r"|dk_param_on_click|dk_page_canvas|dk_page_bind|dk_page_bind_local|dk_fx_routes|dk_fx_mix"
-    r"|KIND_MACHINE|KIND_PARAM|KIND_PAGE|KIND_ACTION|KIND_NATIVE_PAGE|KIND_NATIVE_PAGE_V2|KIND_EFFECT|KINDS_MACHINES|KINDS_FX"
-    r"|dynreg_info|machines_info|fxpages_info|mf_native_\w+|RegState|DKRT_REG|DKRT_ASSIGN)\b"
-)
+def kind_free_builders(root: Path) -> list[str]:
+    """The builder calls of the services machines and fx: their `provided` imports in the sdk/sdk.toml of `root` (the core does not name them).
+    An import with `wrapper = "fw"` (`dk_param_get`, `dk_param_set`) reads a value, it builds nothing."""
+    sdk = tomllib.loads((root / "sdk/sdk.toml").read_text(encoding="utf-8"))
+    return [
+        i["name"]
+        for i in sdk["import"]
+        if i.get("provided")
+        and i.get("service") in ("machines", "fx")
+        and i.get("wrapper") != "fw"
+    ]
+
+
+def rt_kind_free(root: Path) -> re.Pattern[str]:
+    """What the core does not name any more after RS-C (the machines and fx content): builder calls (from sdk/sdk.toml), their record kinds, the adapters' tables and the registry state.
+    The kind names stay literal."""
+    return re.compile(
+        r"\b(?:"
+        + "|".join(kind_free_builders(root))
+        + r"|KIND_MACHINE|KIND_PARAM|KIND_PAGE|KIND_ACTION|KIND_NATIVE_PAGE|KIND_NATIVE_PAGE_V2|KIND_EFFECT|KINDS_MACHINES|KINDS_FX"
+        r"|dynreg_info|machines_info|fxpages_info|mf_native_\w+|RegState|DKRT_REG|DKRT_ASSIGN)\b"
+    )
+
+
 KIND_FREE_EXEMPT = ("handlers.rs", "gen_services.rs")
 KIND_FREE_HINT = "the machines or the fx service owns it (modules/core/services/machines, fx): the core runs the generic part and calls the service through `Service` or `CoreApi`"
 
@@ -1025,6 +1042,7 @@ RT_ABI_SRC = "modules/core/runtime/abi/src"
 def check_core_kind_free(root: Path) -> list[Violation]:
     """The core names no machine or effect (rule `kind-free`): the runtime crate and the abi crate."""
     out: list[Violation] = []
+    pattern = rt_kind_free(root)
     for base in (RT_SRC, RT_ABI_SRC):
         src = root / base
         if not src.is_dir():
@@ -1047,7 +1065,7 @@ def check_core_kind_free(root: Path) -> list[Violation]:
                 rust_without_comments(f.read_text(encoding="utf-8")).splitlines()
             )
             for n, line in enumerate(lines, 1):
-                m = RT_KIND_FREE.search(line)
+                m = pattern.search(line)
                 if m:
                     out.append(
                         Violation(

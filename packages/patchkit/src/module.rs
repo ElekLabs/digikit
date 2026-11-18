@@ -60,7 +60,7 @@ pub struct Manifest {
     /// word of the record's body). The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
     #[serde(default, rename = "record")]
     pub records: Vec<RecordKey>,
-    /// `[[export]] name = "dk_svctest_ping"`: the functions a service module (`role = "service"`) exports; each is an `[[import]]` of its service in sdk/sdk.toml.
+    /// `[[export]]` is no longer read (an error): the functions a service module (`role = "service"`) exports are the `provided` imports of its service in sdk/sdk.toml.
     /// Their name hashes and entry offsets go in the `EXPORTS` entry of the header table.
     #[serde(default, rename = "export")]
     pub exports: Vec<ExportDef>,
@@ -145,7 +145,7 @@ impl Manifest {
     }
 
     /// What a `role = "service"` module provides (`None` for any other role). The service is a `[[service]]` of sdk/sdk.toml without `rust` (provided by a
-    /// `.dks`), and each `[[export]]` is an `[[import]]` of that service.
+    /// `.dks`), and its exports are the `provided` imports of that service, in `sdk/sdk.toml` order.
     pub fn provided_service(&self) -> Result<Option<crate::dkm::Provided>> {
         let id = &self.module.id;
         if self.module.role != Some(ModuleRole::Service) {
@@ -183,19 +183,13 @@ impl Manifest {
                 "{id}: the id's last part {leaf:?} must equal the provided service {service:?} (the file is `{service}.dks`: the runtime finds a provider by its file name)"
             ));
         }
-        let imports = crate::sdkgen::import_infos();
-        let mut exports = vec![];
-        for e in &self.exports {
-            match imports.get(&e.name) {
-                Some(i) if i.service == *service => exports.push(e.name.clone()),
-                _ => {
-                    return Err(err!(
-                        "{id}: [[export]] {:?} is not an [[import]] of the service {service:?} in sdk/sdk.toml",
-                        e.name
-                    ));
-                }
-            }
+        if let Some(e) = self.exports.first() {
+            return Err(err!(
+                "{id}: [[export]] {:?} is not read: the exports of a service file are the `provided = true` imports of its service in sdk/sdk.toml",
+                e.name
+            ));
         }
+        let exports = crate::sdkgen::provided_exports(service);
         let mut hooks: Vec<(String, String, Vec<String>)> = vec![];
         for h in &self.hooks {
             if h.name.is_empty() || h.entry.is_empty() {

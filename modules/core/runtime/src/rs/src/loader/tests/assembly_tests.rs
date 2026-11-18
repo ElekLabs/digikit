@@ -822,20 +822,10 @@ fn a_card_without_the_fx_service_file_refuses_an_effect_naming_the_service() {
     }
 }
 
-/// The builder imports of the machines service and of the fx service (`provided = true` in sdk/sdk.toml): a module links them to the exports of the file that owns them.
-const MACHINE_BUILDERS: [&str; 10] = [
-    "dk_module_ctx_add_machine",
-    "dk_machine_add_page",
-    "dk_page_add_param",
-    "dk_param_range",
-    "dk_param_glyph",
-    "dk_param_latched",
-    "dk_param_on_click",
-    "dk_page_canvas",
-    "dk_page_bind",
-    "dk_page_bind_local",
-];
-const FX_BUILDERS: [&str; 5] = ["dk_module_ctx_add_fx", "dk_fx_add_page", "dk_page_add_fx_param", "dk_fx_routes", "dk_fx_mix"];
+/// The builder imports of a service (`provided = true` in sdk/sdk.toml): a module links them to the exports of the file that owns them.
+fn builders_of(service: &str) -> Vec<&'static str> {
+    dkrt_sdk::api::PROVIDED.iter().filter(|(s, _)| *s == service).map(|(_, n)| *n).collect()
+}
 
 /// The names a file imports.
 fn import_names(file: &[u8]) -> Vec<String> {
@@ -855,7 +845,8 @@ fn import_names(file: &[u8]) -> Vec<String> {
 fn the_builder_calls_of_a_module_resolve_to_the_exports_of_the_service_that_owns_them() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
-        for (module, service, builders) in [(&SINE, "machines", &MACHINE_BUILDERS[..]), (&FX_GAIN, "fx", &FX_BUILDERS[..])] {
+        for (module, service) in [(&SINE, "machines"), (&FX_GAIN, "fx")] {
+            let builders = builders_of(service);
             let image = Image::read(*dev, "emulator");
             unsafe {
                 let (mut l, plan) = planned(*dev, &image, &[], &[module], &SERVICES);
@@ -877,6 +868,23 @@ fn the_builder_calls_of_a_module_resolve_to_the_exports_of_the_service_that_owns
                 }
             }
             let _ = clean_state();
+        }
+    }
+}
+
+/// The header EXPORTS of a service file are exactly its `provided` imports of sdk/sdk.toml, by name hash (the file's `exports()` is generated from the same list).
+#[test]
+fn the_header_exports_of_a_service_file_are_its_provided_imports() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        for service in ["machines", "fx", "samples"] {
+            let owner = service_file(*dev, service, &format!("core/services/{service}"));
+            let table = table_of(&owner);
+            let keys = Keys::parse(&table).unwrap();
+            let listed: std::collections::BTreeSet<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
+            let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().map(name_hash).collect();
+            assert!(!want.is_empty(), "{service} provides nothing in sdk/sdk.toml");
+            assert_eq!(listed, want, "{} {service}.dks: header EXPORTS differ from the provided imports", dev.name);
         }
     }
 }

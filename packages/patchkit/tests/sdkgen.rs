@@ -265,3 +265,63 @@ fn the_service_abi_hash_follows_every_byte_and_the_file_name_and_is_never_zero()
     );
     assert_ne!(sdkgen::svc_abi_hash(&[]), 0);
 }
+
+#[test]
+fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
+    let files = sdkgen::generate(&root()).unwrap();
+    let get = |path: &str| {
+        files
+            .iter()
+            .find(|(p, _)| p == path)
+            .unwrap_or_else(|| panic!("{path} is not generated"))
+            .1
+            .as_str()
+    };
+    // a pure wrapper is written, a hand-written function is named by its module, the list keeps the order of sdk.toml
+    let machines = get("modules/core/services/machines/dks/src/gen_exports.rs");
+    assert!(machines.contains("pub unsafe extern \"C\" fn dk_machine_add_page("));
+    assert!(machines.contains("build::machine_add_page(&ImportCore, m, name, short_name)"));
+    assert!(machines.contains("build::add_machine(&ImportCore,"));
+    assert!(!machines.contains("fn dk_param_get"));
+    assert!(machines.contains("const _: api::DkParamGetFn = crate::fw::dk_param_get;"));
+    assert!(machines.contains("const _: api::DkPageCanvasFn = crate::builder::dk_page_canvas;"));
+    assert!(machines.contains("pub fn exports() -> [(u32, *const u8); 12]"));
+    assert!(
+        machines.find("\"dk_param_get\"").unwrap()
+            < machines.find("\"dk_page_bind_local\"").unwrap()
+    );
+    // a service whose exports are all hand-written has no wrapper and no `build` import
+    let samples = get("modules/core/services/samples/dks/src/gen_exports.rs");
+    assert!(samples.contains("pub fn exports() -> [(u32, *const u8); 9]"));
+    assert!(!samples.contains("ImportCore"));
+    // the list `service!` declares is the provided imports: every one of them is in exactly one file
+    let total: usize = ["machines", "fx", "samples"]
+        .iter()
+        .map(|s| {
+            get(&format!("modules/core/services/{s}/dks/src/gen_exports.rs"))
+                .matches("name_hash(")
+                .count()
+        })
+        .sum();
+    assert_eq!(total, 26);
+    assert!(get(sdkgen::RUST_OUT).contains("pub const PROVIDED: [(&str, &str); 26]"));
+}
+
+#[test]
+fn a_bad_wrapper_is_refused() {
+    let text = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
+    // a pure wrapper cannot convert a callback: the function must name its hand-written module
+    let bad = text.replacen("wrapper = \"builder\"\n", "", 1);
+    assert_ne!(bad, text);
+    let e = sdkgen::render(&bad).unwrap_err().0;
+    assert!(e.contains("pure wrapper cannot take the callback"), "{e}");
+    // `wrapper` goes with `provided`
+    let bad = text.replacen(
+        "name = \"dk_debug_poll\"\n",
+        "name = \"dk_debug_poll\"\nwrapper = \"fw\"\n",
+        1,
+    );
+    assert_ne!(bad, text);
+    let e = sdkgen::render(&bad).unwrap_err().0;
+    assert!(e.contains("`wrapper`"), "{e}");
+}
