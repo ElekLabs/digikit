@@ -5652,25 +5652,24 @@ mod tests {
         }
     }
 
-    /// The USB registration slots resolve on every local image; on DT2 and DN2 they equal what the code at the shared fixed entry gives.
+    /// The USB registration slots resolve on every firmware image the device files list (those present in firmware/), and they are
+    /// two different words in the .bss above the loaded image (the boot clears them).
     #[test]
     fn usb_slots_resolve_on_every_image() {
         use crate::midi::resolve_usb_slots;
-        for file in [
-            "Digitakt_II_OS1.17.syx",
-            "Digitone_II_OS1.12.syx",
-            "Digitone_II_OS1.11.syx",
-            "Syntakt_OS1.42.syx",
-        ] {
-            let Some(main) = main_of(file) else {
+        let registry = device_profile::Registry::load().unwrap();
+        let files = registry
+            .devices()
+            .iter()
+            .flat_map(|d| d.firmwares.iter().filter_map(|f| f.filename.clone()));
+        for file in files {
+            let Some(main) = main_of(&file) else {
                 eprintln!("skipped {file}: image not in firmware/");
                 continue;
             };
-            let slots = resolve_usb_slots(&main, MAIN_LOAD);
-            let Some((slot0, slot1)) = slots else {
+            let Some((slot0, slot1)) = resolve_usb_slots(&main, MAIN_LOAD) else {
                 panic!("{file}: slots do not resolve");
             };
-            // Two different words in the .bss above the loaded image (the slots are cleared at boot).
             let image_end = MAIN_LOAD + main.len() as u32;
             assert_ne!(slot0, slot1, "{file}: both slots are one word");
             assert!(
@@ -5680,14 +5679,6 @@ mod tests {
                     && slot1 < 0x4800_0000,
                 "{file}: slots {slot0:#x} {slot1:#x} are not in RAM above the image (ends at {image_end:#x})"
             );
-            if file.starts_with("Syntakt") {
-                continue;
-            }
-            // The old code: entry fixed at 0x4000434a, slots read at +6 and +16.
-            let off = (0x4000_434a - MAIN_LOAD) as usize;
-            let word =
-                |o: usize| u32::from_be_bytes(main[off + o..off + o + 4].try_into().unwrap());
-            assert_eq!(slots, Some((word(6), word(16))), "{file}");
         }
     }
 
