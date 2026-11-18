@@ -26,6 +26,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools import python_env  # noqa: E402
 from tools.emulator import digi_env, emulator_config  # noqa: E402
+from tools.firmware import device as device_data  # noqa: E402
 
 
 def fast_regions_for(syx: pathlib.Path) -> str:
@@ -151,6 +152,9 @@ def default_audio_args(
     )
     syx = pathlib.Path(positional) if positional else digi_env.firmware()
     device = digi_env.device_for_syx(syx) or "dn2"
+    if device not in digi_env.READY_DIRS:
+        # A device with no DSP (no ready inputs, no generated core): ColdFire-only build; its audio, if any, is the peer's.
+        return args
     paths = digi_env.ready_inputs(device=device)
     if positional and device != "dn2":
         paths["firmware"] = syx
@@ -253,13 +257,27 @@ def ready_for(
     }
 
 
-def target_dir_for(gen: pathlib.Path | None = None) -> str:
+def target_dir_for(gen: pathlib.Path | None = None, variant: str = "") -> str:
     """The shared cargo target dir (tools/emulator/native_target.py) of a build against the generated core GEN. The app, the
-    daemon and the other hosts hold no generated core, so they all use the no-core dir (the default)."""
+    daemon and the other hosts hold no generated core, so they all use the no-core dir (the default).
+    A build with other cargo features needs its own `variant` (it cannot reuse the compiled crates of the plain build)."""
     from tools.emulator import native_target
 
     # "" means no generated core, whatever SHARC_GEN_DIR says.
-    return str(native_target.target_dir(gen if gen is not None else ""))
+    return str(
+        native_target.target_dir(gen if gen is not None else "", variant=variant)
+    )
+
+
+# Every workbench daemon has the run-time ColdFire profile (`cf.profile {enable}`, off until asked). The feature changes the
+# emulator crates, so these builds keep their own target dirs (variant suffix) and leave the plain ones as they are.
+CF_PROFILE = "cf-profile"
+CF_PROFILE_VARIANT = "cfprof"
+
+
+def has_peer_audio(data: device_data.Device) -> bool:
+    """The device's MAIN mixes the voices of a peer CPU (`[emulator.peer_audio]` in its device file)."""
+    return "peer_audio" in data.emulator
 
 
 def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
@@ -276,13 +294,21 @@ def cargo_command(args: list[str], pgo: object | None = None) -> list[str]:
         "apps/desktop/src-tauri/Cargo.toml",
     ]
     if "--coupled" in args or "--auto-coupled" in args:
-        command.extend(["--features", COUPLED_FEATURES])
+        command.extend(["--features", f"{COUPLED_FEATURES},{CF_PROFILE}"])
         if pgo is not None:
             command = [*pgo.prefix, *command, *pgo.cargo_args]  # type: ignore[attr-defined]
         else:
-            command.extend(["--target-dir", target_dir_for()])
+            command.extend(["--target-dir", target_dir_for(variant=CF_PROFILE_VARIANT)])
     else:
-        command.extend(["--target-dir", target_dir_for(None)])
+        # A device whose audio comes from its peer CPU needs the audio output in a ColdFire-only build (no generated core).
+        # It has its own target dir: switching devices does not rebuild the shared nogen one.
+        features = [CF_PROFILE]
+        variant = CF_PROFILE_VARIANT
+        if has_peer_audio(launch_device(syx_from_args(args))):
+            features.insert(0, "play")
+            variant = f"play-{CF_PROFILE_VARIANT}"
+        command.extend(["--features", ",".join(features)])
+        command.extend(["--target-dir", target_dir_for(None, variant=variant)])
     return [*command, "--", *args]
 
 
@@ -497,10 +523,22 @@ def daemon_command(args: list[str]) -> list[str]:
     ]
     if "--coupled" in args or "--auto-coupled" in args:
         command.extend(
-            ["--features", COUPLED_FEATURES, "--target-dir", target_dir_for()]
+            [
+                "--features",
+                f"{COUPLED_FEATURES},{CF_PROFILE}",
+                "--target-dir",
+                target_dir_for(variant=CF_PROFILE_VARIANT),
+            ]
         )
     else:
-        command.extend(["--target-dir", target_dir_for(None)])
+        command.extend(
+            [
+                "--features",
+                CF_PROFILE,
+                "--target-dir",
+                target_dir_for(None, variant=CF_PROFILE_VARIANT),
+            ]
+        )
     return [*command, "--", *args]
 
 
@@ -642,6 +680,20 @@ def syx_from_args(args: list[str]) -> pathlib.Path:
     return pathlib.Path(syx_arg) if syx_arg else digi_env.firmware(os.environ)
 
 
+def launch_device(syx: pathlib.Path) -> device_data.Device:
+    """The device data of a firmware file, by hash (a patched image by its patch record).
+
+    A file that no device file lists is an error: the launcher never guesses a device.
+    """
+    short = digi_env.device_for_syx(syx)
+    if short is None:
+        raise SystemExit(
+            f"{syx}: cannot tell which device this firmware is for (the file is unreadable, or no device file in "
+            "devices/ lists its sha256)"
+        )
+    return device_data.by_short(short)
+
+
 def core_library_env(args: list[str], plan: object | None = None) -> dict[str, str]:
     """`DIGI_SHARC_CORE_LIB_<DEV>` of both devices for a coupled launch, from the core library store
     (tools/devtools/core_store.py: a hit takes about 0.2 s, a miss builds the library once), whichever device the firmware
@@ -667,7 +719,8 @@ def core_library_env(args: list[str], plan: object | None = None) -> dict[str, s
             second[other] = args[at + 1]
     env: dict[str, str] = {}
     missing: dict[str, str] = {}
-    for device in ("dn2", "dt2"):
+    devices = device_data.dsp_shorts()  # a device without a DSP has no core library
+    for device in devices:
         if device == own:
             gen = generated_core(args, device)
         else:
@@ -679,7 +732,7 @@ def core_library_env(args: list[str], plan: object | None = None) -> dict[str, s
             env.update(core_store.library_env({device: gen}, profiles=profiles))
         except core_store.CoreStoreError as exc:
             missing[device] = str(exc)
-    if len(missing) == 2:
+    if len(missing) == len(devices):
         raise SystemExit(f"core library: {'; '.join(missing.values())}")
     for device, reason in missing.items():
         print(
@@ -709,8 +762,22 @@ def main(args: list[str] | None = None) -> None:
     if folder is not None and "--card-image" in args:
         raise SystemExit("--plus-drive/--samples and --card-image cannot be combined")
     syx = syx_from_args(args)
-    known = digi_env.device_for_syx(syx)
-    device = known or "dn2"
+    data = launch_device(syx)
+    device = data.short
+    # A device that is not a runtime target (no `[digikit]`) boots stock; a device without a DSP runs the ColdFire-only build.
+    if not data.runtime_target:
+        if "--runtime" in args:
+            raise SystemExit(f"{data.name} is not a digikit runtime target: --runtime")
+        if "--no-runtime" not in args:
+            print(
+                f"{data.name} is not a digikit runtime target: starting the stock firmware (--no-runtime)",
+                file=sys.stderr,
+            )
+            args = [*args, "--no-runtime"]
+    if folder is not None and not data.has_card():
+        raise SystemExit(
+            f"{data.name} has no card the launcher can seed: --plus-drive/--samples"
+        )
     if folder is not None:
         if plus_drive is None and samples is None:
             print(f"+Drive: {folder}", file=sys.stderr)
@@ -742,7 +809,7 @@ def main(args: list[str] | None = None) -> None:
     # when it holds something the card takes, and mirrors the module store to it while the emulator runs (the Card panel: files,
     # "Sync now"). --plus-drive/--samples name the folder of the first load instead (a card built here from it). --no-sync turns
     # the mirror and the export on exit off.
-    if known and "--device-folders" not in args:
+    if data.has_card() and "--device-folders" not in args:
         args = [
             *args,
             "--device-folders",
@@ -752,13 +819,20 @@ def main(args: list[str] | None = None) -> None:
         args = [*args, "--mirror-dir", str(folder.resolve())]
     if force_cf and ("--coupled" in args or "--auto-coupled" in args):
         raise SystemExit("--cf-only cannot be combined with coupled audio options")
-    if not force_cf and "--coupled" not in args and "--auto-coupled" not in args:
+    if not data.has_dsp() and ("--coupled" in args or "--auto-coupled" in args):
+        raise SystemExit(f"{data.name} has no DSP: coupled audio options do not apply")
+    if (
+        data.has_dsp()
+        and not force_cf
+        and "--coupled" not in args
+        and "--auto-coupled" not in args
+    ):
         args = default_audio_args(
             args, second_core_by_default=not daemon, load_default=daemon
         )
     fast = None
     if "--coupled" in args or "--auto-coupled" in args:
-        generated = generated_core(args, known)
+        generated = generated_core(args, device)
         if not generated.is_dir():
             raise SystemExit(
                 "--coupled needs a local generated core: SHARC_GEN_DIR_<DEV> (or SHARC_GEN_DIR) names it"
@@ -780,8 +854,11 @@ def main(args: list[str] | None = None) -> None:
     if build_only:
         print(binary)
         return
+    # Devices whose MAIN mixes the voices of a peer CPU play them (`[emulator.peer_audio]`); the other devices ignore it.
+    if not daemon and has_peer_audio(data):
+        env.setdefault("DIGI_EMU_PEER_AUDIO", "0" if force_cf else "1")
     env.update(core_library_env(args, plan))
-    if not daemon:
+    if not daemon and data.has_dsp():
         env.update(pgo_env())
         # Workbench default from config/emulator.json; an explicit value, including an empty one, still wins.
         context = digi_env.resolve_tiers(

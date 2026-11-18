@@ -3,10 +3,10 @@
 //! The sources are the device files (`devices/*.toml`: `[board]`, `[digikit]`, `[card.store]`) and the run-time type range of
 //! `core/machines` (`types.toml`). A module asks for a file with a `[[gen]]` entry in its `module.toml` (`module::GenDef`):
 //!
-//! - `rust`: `pub const`s for a crate that is one image for all devices (the digikit runtime). Only constants that every device file
-//!   agrees on are written; a difference is an error (the fact must then become a per-device value that the runtime reads from its
-//!   device object). Written file: one, with no `{dev}` in the path.
-//! - `gas-shared`: the same constants as `.equ NAME, value` lines for ColdFire assembly shared by all devices (one file).
+//! - `gas-dkdv`: the runtime's per-device data object `dkrt_dev` (struct `DkrtDevice` of `core/runtime/abi.toml`) as ColdFire assembly
+//!   data, one file per device. The runtime is one image for all devices: what differs between devices is data that it reads from this
+//!   object (`.include` it in the device object's `.rodata`). `gas-dkdv-offsets`: the field offsets as `.equ DKDV_<FIELD>, n` for
+//!   assembly that reads the object (one file, the same for all devices).
 //! - `gas`: `.equ NAME, value` lines for ColdFire assembly, one file per device (`#include "device-<dev>.inc"` in a source of
 //!   the module; `patchkit build` expands it, `.include` also works).
 //! - `sharc`: `#define NAME value` lines for SHARC+ assembly, one file per device (decimal values: the assembler upper-cases
@@ -168,23 +168,27 @@ struct Board {
     ddr_cached_base: u64,
     ddr_bytes: u64,
     ddr_uncached_alias: u64,
-    esdhc_base: u64,
-    dsp_clock_hz: u64,
-    dsp_blocks_per_second: u64,
+    /// Absent: the device has no eSDHC the runtime may poll (`DEV_HAS_SDHC` clear).
+    esdhc_base: Option<u64>,
+    /// The three DSP facts are present when `[capabilities] dsp = "sharc"` and absent otherwise.
+    dsp_clock_hz: Option<u64>,
+    dsp_blocks_per_second: Option<u64>,
 }
-/// `[capabilities]`: only `card` is read here (the device-registry schema has more keys).
+/// `[capabilities]`: only `dsp` and `card` are read here (the device-registry schema has more keys).
 #[derive(Deserialize)]
 struct Capabilities {
+    dsp: String,
     card: String,
 }
 #[derive(Deserialize)]
 struct Digikit {
     id: u64,
     name: String,
-    safe_key: u64,
-    dsp_area_bytes: u64,
-    dsp_tail_off: u64,
-    dsp_tail_words: u64,
+    /// Absent: no key starts safe mode (`DEV_HAS_SAFE_KEY` clear).
+    safe_key: Option<u64>,
+    dsp_area_bytes: Option<u64>,
+    dsp_tail_off: Option<u64>,
+    dsp_tail_words: Option<u64>,
     keep_base: u64,
     keep_bytes: u64,
     sample_path_max: u64,
@@ -217,7 +221,10 @@ pub struct Facts {
 struct Entry {
     board: BoardF,
     digikit: DigikitF,
-    store: StoreF,
+    /// `None`: no `[card.store]` (`DEV_HAS_STORE` clear).
+    store: Option<StoreF>,
+    /// `DEV_HAS_*` bits of `core/runtime/abi.toml`, derived from `[capabilities]` and the tables present.
+    caps: u64,
     limits: LimitsF,
     adapter: Option<AdapterF>,
     sample_pool: Option<SamplePoolF>,
@@ -232,7 +239,12 @@ struct Entry {
 /// The DSP headroom of a device: see `Entry::dsp_headroom`.
 #[cfg(not(target_arch = "wasm32"))]
 fn dsp_headroom(short: &str, b: &Board, voices: u64) -> u64 {
-    crate::budget_cli::headroom(short, b.dsp_clock_hz, b.dsp_blocks_per_second, voices).unwrap_or(0)
+    match (b.dsp_clock_hz, b.dsp_blocks_per_second) {
+        (Some(clock), Some(blocks)) => {
+            crate::budget_cli::headroom(short, clock, blocks, voices).unwrap_or(0)
+        }
+        _ => 0, // a device without a DSP has no headroom
+    }
 }
 #[cfg(target_arch = "wasm32")]
 fn dsp_headroom(_short: &str, _b: &Board, _voices: u64) -> u64 {
@@ -407,20 +419,45 @@ impl Facts {
         let models = crate::typed::Models::from_texts(texts.iter().copied())?;
         for t in texts {
             // a sidecar file (the LED maps) has no [device]
-            let Ok(d) = toml::from_str::<Doc>(t) else {
+            let table: toml::Table = toml::from_str(t)?;
+            if !table.contains_key("device") {
                 continue;
-            };
+            }
+            let d: Doc = toml::from_str(t)?;
             let short = d.device.short.clone();
-            let (Some(b), Some(k), Some(s), Some(l), Some(caps)) = (
-                d.board,
-                d.digikit,
-                d.card.and_then(|c| c.store),
-                d.limits,
-                d.capabilities,
-            ) else {
+            // only a runtime target (a file with [digikit]) has shared constants; an identity-only or patch-only device is skipped
+            let Some(k) = d.digikit else {
                 continue;
             };
-            let samples_in_store = match caps.card.as_str() {
+            let (Some(b), Some(l), Some(cap)) = (d.board, d.limits, d.capabilities) else {
+                return Err(err!(
+                    "{short}: [digikit] needs [board], [limits] and [capabilities] (a runtime target)"
+                ));
+            };
+            let s = d.card.and_then(|c| c.store);
+            let dsp = cap.dsp == "sharc";
+            let dsp_facts = [
+                b.dsp_clock_hz,
+                b.dsp_blocks_per_second,
+                k.dsp_area_bytes,
+                k.dsp_tail_off,
+                k.dsp_tail_words,
+            ];
+            if dsp && dsp_facts.iter().any(|f| f.is_none()) {
+                return Err(err!(
+                    "{short}: [capabilities] dsp = \"sharc\" needs [board] dsp_clock_hz and dsp_blocks_per_second, and [digikit] dsp_area_bytes, dsp_tail_off and dsp_tail_words"
+                ));
+            }
+            if !dsp && dsp_facts.iter().any(|f| f.is_some()) {
+                return Err(err!(
+                    "{short}: [capabilities] dsp = \"none\" forbids [board] dsp_* and [digikit] dsp_* facts"
+                ));
+            }
+            let cap_bits = (u64::from(dsp) * DEV_HAS_DSP)
+                | (u64::from(s.is_some()) * DEV_HAS_STORE)
+                | (u64::from(b.esdhc_base.is_some()) * DEV_HAS_SDHC)
+                | (u64::from(k.safe_key.is_some()) * DEV_HAS_SAFE_KEY);
+            let samples_in_store = match cap.card.as_str() {
                 "slots" => true,
                 "path-fs" => false,
                 other => {
@@ -455,7 +492,12 @@ impl Facts {
                     "{short}: [digikit] name must be 1 to 3 ASCII characters"
                 ));
             }
-            check_limits(&short, &l, k.dsp_area_bytes, &crate::sdkgen::limits_max())?;
+            check_limits(
+                &short,
+                &l,
+                k.dsp_area_bytes.unwrap_or(0),
+                &crate::sdkgen::limits_max(),
+            )?;
             let input = input_facts(&short, d.input, d.panel)?;
             let fx = fx_facts(&short, d.fx, l.fx_slots, l.send_slots)?;
             let (adapter_machine, sample_pool) = match d.adapter {
@@ -475,17 +517,17 @@ impl Facts {
                             ddr_cached_base: b.ddr_cached_base,
                             ddr_bytes: b.ddr_bytes,
                             ddr_uncached_alias: b.ddr_uncached_alias,
-                            esdhc_base: b.esdhc_base,
-                            dsp_clock_hz: b.dsp_clock_hz,
-                            dsp_blocks_per_second: b.dsp_blocks_per_second,
+                            esdhc_base: b.esdhc_base.unwrap_or(0),
+                            dsp_clock_hz: b.dsp_clock_hz.unwrap_or(0),
+                            dsp_blocks_per_second: b.dsp_blocks_per_second.unwrap_or(0),
                         },
                         digikit: DigikitF {
                             id: k.id,
                             name: k.name,
-                            safe_key: k.safe_key,
-                            dsp_area_bytes: k.dsp_area_bytes,
-                            dsp_tail_off: k.dsp_tail_off,
-                            dsp_tail_words: k.dsp_tail_words,
+                            safe_key: k.safe_key.unwrap_or(0),
+                            dsp_area_bytes: k.dsp_area_bytes.unwrap_or(0),
+                            dsp_tail_off: k.dsp_tail_off.unwrap_or(0),
+                            dsp_tail_words: k.dsp_tail_words.unwrap_or(0),
                             keep_base: k.keep_base,
                             keep_bytes: k.keep_bytes,
                             sample_path_max: k.sample_path_max,
@@ -494,13 +536,14 @@ impl Facts {
                             span_clock: k.span_clock,
                             span_clock_hz: k.span_clock_hz,
                         },
-                        store: StoreF {
+                        store: s.map(|s| StoreF {
                             first: s.first_sector,
                             end: s.end_sector,
                             selection_sectors: s.selection_sectors,
                             settings_sectors: s.settings_sectors,
                             header_b: s.header_b_sector,
-                        },
+                        }),
+                        caps: cap_bits,
                         limits: LimitsF {
                             modules: l.modules,
                             machine_rows: l.machine_rows,
@@ -812,7 +855,11 @@ fn adapter_facts(
         stride: f.stride,
         group: f.group.unwrap_or(0),
         gap: f.gap.unwrap_or(0),
-        block_cycles: (b.dsp_clock_hz + b.dsp_blocks_per_second / 2) / b.dsp_blocks_per_second,
+        block_cycles: b
+            .dsp_clock_hz
+            .zip(b.dsp_blocks_per_second)
+            .and_then(|(c, n)| block_cycles(c, n))
+            .ok_or_else(|| err!("{short}: [adapter.machine] needs [board] dsp_clock_hz and dsp_blocks_per_second"))?,
     }))
 }
 
@@ -894,7 +941,7 @@ const SAMPLE_POOL_STOCK_END: u64 = 0x8053_1000;
 
 /// The `SP_*` constants of one device.
 fn sample_pool_constants(p: &SamplePoolF) -> Vec<C> {
-    let v = |name, value: u64, note| c(name, value, Scope::PerDevice, note);
+    let v = |name, value: u64, note| c(name, value, note);
     vec![
         v(
             "SP_SLOT_FLOOR",
@@ -916,7 +963,7 @@ fn sample_pool_constants(p: &SamplePoolF) -> Vec<C> {
 
 /// The DSP's view of the same range: the NW32 word address of its first byte and its size in 4 KiB pages.
 fn sample_pool_dsp_constants(p: &SamplePoolF) -> Vec<C> {
-    let v = |name, value: u64, note| c(name, value, Scope::PerDevice, note);
+    let v = |name, value: u64, note| c(name, value, note);
     vec![
         v(
             "SP_DDR_BASE_NW32",
@@ -944,7 +991,7 @@ const ADM_SLOT_NAMES: [&str; ADM_SLOTS] = [
 
 /// The `ADM_*` constants of one device (what the machine adapter's assembly needs; names absent on a device are not written).
 fn adapter_constants(a: &AdapterF) -> Vec<C> {
-    let p = |name, value: u64, note| c(name, value, Scope::PerDevice, note);
+    let p = |name, value: u64, note| c(name, value, note);
     let mut v = vec![
         p("ADM_VOICES", a.voices, "[adapter.machine] voices"),
         p(
@@ -1024,7 +1071,6 @@ fn adapter_constants(a: &AdapterF) -> Vec<C> {
         v.push(C {
             name: *name,
             value: a.param_slots.get(i).map_or(ADM_NO_SLOT, |s| *s as i64),
-            scope: Scope::PerDevice,
             note: "[adapter.machine] param_slots: knob position of module parameter i (255: none)",
         });
     }
@@ -1039,25 +1085,16 @@ fn adapter_constants(a: &AdapterF) -> Vec<C> {
 /// Ranges of RAM the PEEK command may read, at most (a device lists fewer; the rest are 0, 0).
 const PEEK_MAX: usize = 4;
 
-/// Is a constant the same on every device (it may go into a runtime that is one image for all devices)?
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Scope {
-    Shared,
-    PerDevice,
-}
-
 struct C {
     name: &'static str,
     value: i64,
-    scope: Scope,
     note: &'static str,
 }
 
-fn c(name: &'static str, value: u64, scope: Scope, note: &'static str) -> C {
+fn c(name: &'static str, value: u64, note: &'static str) -> C {
     C {
         name,
         value: value as i64,
-        scope,
         note,
     }
 }
@@ -1077,31 +1114,59 @@ pub fn dyn_range(lib: &Library, dev: &str) -> Result<(i64, i64)> {
 
 /// The constants of one device.
 fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
-    use Scope::*;
-    let (first, last) = dyn_range(lib, dev)?;
-    let s = &e.store;
-    if s.selection_sectors != 2 {
-        return Err(err!(
-            "{dev}: [card.store] selection_sectors must be 2 (the runtime writes two copies of the selection record)"
-        ));
-    }
-    let set = crate::sdkgen::settings();
-    if s.settings_sectors != u64::from(set.copies) * u64::from(set.sectors) {
-        return Err(err!(
-            "{dev}: [card.store] settings_sectors must be {} (sdk/sdk.toml [settings]: {} copies of {} sectors)",
-            u64::from(set.copies) * u64::from(set.sectors),
-            set.copies,
-            set.sectors
-        ));
-    }
-    if s.header_b != s.end - s.selection_sectors - s.settings_sectors - 1 {
-        return Err(err!(
-            "{dev}: [card.store] header_b_sector must be the sector before the settings record, which lies before the selection record"
-        ));
-    }
+    let has_dsp = e.caps & DEV_HAS_DSP != 0;
+    // run-time machine types exist only where the DSP does
+    let (first, last) = if has_dsp {
+        dyn_range(lib, dev)?
+    } else {
+        (0, -1)
+    };
+    let (store_first, store_sectors) = match &e.store {
+        Some(s) => {
+            if s.selection_sectors != 2 {
+                return Err(err!(
+                    "{dev}: [card.store] selection_sectors must be 2 (the runtime writes two copies of the selection record)"
+                ));
+            }
+            let set = crate::sdkgen::settings();
+            if s.settings_sectors != u64::from(set.copies) * u64::from(set.sectors) {
+                return Err(err!(
+                    "{dev}: [card.store] settings_sectors must be {} (sdk/sdk.toml [settings]: {} copies of {} sectors)",
+                    u64::from(set.copies) * u64::from(set.sectors),
+                    set.copies,
+                    set.sectors
+                ));
+            }
+            if s.header_b != s.end - s.selection_sectors - s.settings_sectors - 1 {
+                return Err(err!(
+                    "{dev}: [card.store] header_b_sector must be the sector before the settings record, which lies before the selection record"
+                ));
+            }
+            (s.first, s.end - s.first)
+        }
+        None => (0, 0),
+    };
     let b = &e.board;
     let k = &e.digikit;
     let n = (last - first + 1) as u64;
+    let abi = abi_consts()?;
+    for (what, have, key) in [
+        ("arena_bytes", e.limits.arena_bytes, "ARENA_BYTES"),
+        ("stage_bytes", e.limits.stage_bytes, "STAGE_BYTES"),
+    ] {
+        if have != abi[key] {
+            return Err(err!(
+                "{dev}: [limits] {what} is {have}, but the runtime's static array ({key} of core/runtime/abi.toml) is {}",
+                abi[key]
+            ));
+        }
+    }
+    if n > abi["MACHINE_ROWS"] {
+        return Err(err!(
+            "{dev}: core/machines types.toml reserves {n} run-time machine types, more than the runtime's tables hold (MACHINE_ROWS {} of core/runtime/abi.toml)",
+            abi["MACHINE_ROWS"]
+        ));
+    }
     if e.limits.machine_rows != n {
         return Err(err!(
             "{dev}: [limits] machine_rows is {}, but core/machines types.toml reserves {n} run-time machine types (dynamic_first ..= last)",
@@ -1115,182 +1180,154 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         .take(4)
         .fold(0u64, |a, x| (a << 8) | x as u64);
     let mut v = vec![
-        c("DEVICE_ID", k.id, PerDevice, "[digikit] id"),
+        c("DEVICE_ID", k.id, "[digikit] id"),
         c(
             "DEVICE_NAME_WORD",
             name_word,
-            PerDevice,
             "[digikit] name, NUL padded, as a big-endian word",
         ),
         c(
             "SAMPLES_IN_STORE",
             k.samples_in_store as u64,
-            PerDevice,
             "[capabilities] card = \"slots\": the samples are files of the digikit store",
         ),
         c(
             "SAMPLE_PATH_MAX",
             k.sample_path_max,
-            PerDevice,
             "[digikit] sample_path_max",
         ),
         c(
             "STORE_FIRST",
-            s.first,
-            PerDevice,
-            "[card.store] first_sector",
+            store_first,
+            "[card.store] first_sector (0: no store)",
         ),
         c(
             "STORE_SECTORS",
-            s.end - s.first,
-            PerDevice,
-            "[card.store] end_sector - first_sector",
+            store_sectors,
+            "[card.store] end_sector - first_sector (0: no store)",
         ),
         c(
             "DYN_TYPE_FIRST",
             first as u64,
-            Shared,
-            "core/machines types.toml dynamic_first",
+            "core/machines types.toml dynamic_first (0: no DSP)",
         ),
         c(
             "DYN_TYPE_LAST",
             last as u64,
-            Shared,
-            "core/machines types.toml last",
+            "core/machines types.toml last (0: no DSP)",
         ),
         c(
             "DYN_TYPES",
             n,
-            Shared,
             "run-time machine types; core/dynreg reserves one machine row and core/dyndsp one voice row for each",
         ),
         c(
             "CONSOLE_UART_BASE",
             b.console_uart_base,
-            Shared,
             "[board] console_uart_base",
         ),
         c(
             "DDR_CACHED_BASE",
             b.ddr_cached_base,
-            Shared,
             "[board] ddr_cached_base",
         ),
-        c("DDR_BYTES", b.ddr_bytes, Shared, "[board] ddr_bytes"),
+        c("DDR_BYTES", b.ddr_bytes, "[board] ddr_bytes"),
         c(
             "DDR_UNCACHED_ALIAS",
             b.ddr_uncached_alias,
-            Shared,
             "[board] ddr_uncached_alias",
         ),
-        c("ESDHC_BASE", b.esdhc_base, Shared, "[board] esdhc_base"),
+        c("ESDHC_BASE", b.esdhc_base, "[board] esdhc_base (0: none)"),
         c(
             "SAFE_KEY_CODE",
             k.safe_key,
-            Shared,
-            "[digikit] safe_key (a panel control code)",
+            "[digikit] safe_key (a firmware key index; 0: none)",
         ),
         c(
             "DSP_BLOCK_CYCLES",
-            (b.dsp_clock_hz + b.dsp_blocks_per_second / 2) / b.dsp_blocks_per_second,
-            Shared,
-            "[board] dsp_clock_hz / dsp_blocks_per_second, rounded (the clock is open, finding 41)",
+            block_cycles(b.dsp_clock_hz, b.dsp_blocks_per_second).unwrap_or(0),
+            "[board] dsp_clock_hz / dsp_blocks_per_second, rounded (the clock is open, finding 41; 0: no DSP)",
+        ),
+        c(
+            "DKDV_CAPS",
+            e.caps,
+            "DEV_HAS_* bits (core/runtime/abi.toml), derived from [capabilities] and the tables present",
         ),
         c(
             "DSP_HEADROOM",
             e.dsp_headroom,
-            PerDevice,
             "DSP instructions per block left for modules: the block at 85 percent (projected with the high cycle factor) less the stock firmware's load (devices/cycle-factors.json, dkprof::budget)",
         ),
         c(
             "DSP_VOICES",
             e.adapter.as_ref().map_or(0, |a| a.voices),
-            PerDevice,
             "[adapter.machine] voices: the voices a machine's per-voice DSP cost counts for",
         ),
         c(
             "DL_AREA_BYTES",
             k.dsp_area_bytes,
-            PerDevice,
             "[digikit] dsp_area_bytes",
         ),
         c(
             "DL_AREA_WORDS",
             k.dsp_area_bytes / 4,
-            PerDevice,
             "[digikit] dsp_area_bytes / 4",
         ),
         c(
             "DL_SLOT_BYTES",
             4 * crate::sdkgen::dsp_slot_words() as u64,
-            Shared,
             "[dsp.slots] words * 4 of sdk/sdk.toml: the slot block at the start of window 0 (DK_SLOT_BYTES of dk_stub.inc)",
         ),
-        c(
-            "DL_TAIL_OFF",
-            k.dsp_tail_off,
-            PerDevice,
-            "[digikit] dsp_tail_off",
-        ),
+        c("DL_TAIL_OFF", k.dsp_tail_off, "[digikit] dsp_tail_off"),
         c(
             "DL_TAIL_WORDS",
             k.dsp_tail_words,
-            PerDevice,
             "[digikit] dsp_tail_words",
         ),
         c(
             "KEEP_BASE",
             k.keep_base,
-            Shared,
             "[digikit] keep_base (RAM a soft reset is assumed to keep: the crash record)",
         ),
-        c("KEEP_BYTES", k.keep_bytes, Shared, "[digikit] keep_bytes"),
+        c("KEEP_BYTES", k.keep_bytes, "[digikit] keep_bytes"),
         c(
             "LIMIT_MODULES",
             e.limits.modules,
-            Shared,
             "[limits] modules (module records)",
         ),
         c(
             "LIMIT_MACHINE_ROWS",
             e.limits.machine_rows,
-            Shared,
             "[limits] machine_rows (run-time machine and voice rows)",
         ),
         c(
             "LIMIT_ARENA_BYTES",
             e.limits.arena_bytes,
-            Shared,
             "[limits] arena_bytes (the module arena)",
         ),
         c(
             "LIMIT_FX_SLOTS",
             e.limits.fx_slots,
-            PerDevice,
             "[limits] fx_slots (effects in the chain: CAPACITY's limit and the free effect rows of core/dynfx)",
         ),
         c(
             "LIMIT_STAGE_BYTES",
             e.limits.stage_bytes,
-            Shared,
             "[limits] stage_bytes (the staging buffer of a .dkm file)",
         ),
         c(
             "PEEK_N",
             k.peek.len() as u64,
-            PerDevice,
             "[digikit] peek: number of ranges",
         ),
         c(
             "SPAN_CLOCK",
             k.span_clock,
-            PerDevice,
             "[digikit] span_clock (address of the profiling clock; 0 none)",
         ),
         c(
             "SPAN_CLOCK_HZ",
             k.span_clock_hz,
-            PerDevice,
             "[digikit] span_clock_hz (its frequency)",
         ),
     ];
@@ -1298,31 +1335,22 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     v.push(c(
         "INPUT_BACKEND",
         inp.backend,
-        PerDevice,
         "[input] backend (1 panel-uart; 0 none)",
     ));
     v.push(c(
         "PANEL_LINEAR",
         inp.linear_channels,
-        PerDevice,
         "[panel] linear_channels (code = channel * 8 + bit + 1)",
     ));
     v.push(c(
         "PANEL_BUTTON_CHANNELS",
         inp.button_channels,
-        PerDevice,
         "[panel] button_channels (the button decoder's tables: a key channel is below it)",
     ));
-    v.push(c(
-        "PANEL_ENCODERS",
-        inp.encoders,
-        PerDevice,
-        "[panel] encoders",
-    ));
+    v.push(c("PANEL_ENCODERS", inp.encoders, "[panel] encoders"));
     v.push(c(
         "PANEL_EXC_N",
         inp.exceptions.len() as u64,
-        PerDevice,
         "[panel.exceptions]: number of codes",
     ));
     for k in 0..PANEL_EXC_MAX {
@@ -1330,19 +1358,16 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         v.push(C {
             name: PANEL_EXC_CODE[k],
             value: code as i64,
-            scope: PerDevice,
             note: "[panel.exceptions] code",
         });
         v.push(C {
             name: PANEL_EXC_CH[k],
             value: ch as i64,
-            scope: PerDevice,
             note: "[panel.exceptions] channel of the code",
         });
         v.push(C {
             name: PANEL_EXC_BIT[k],
             value: bit as i64,
-            scope: PerDevice,
             note: "[panel.exceptions] bit of the code",
         });
     }
@@ -1433,13 +1458,12 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "[limits] send_slots (effects on a send bus: the cells of the send page; 0 on a device without one)",
         ),
     ] {
-        v.push(c(name, value, PerDevice, note));
+        v.push(c(name, value, note));
     }
     for (i, name) in FX_VALUE.iter().enumerate() {
         v.push(c(
             name,
             fx.value_indices.get(i).copied().unwrap_or(0),
-            PerDevice,
             "[fx] value_indices (an effect value index that no stock parameter uses)",
         ));
     }
@@ -1447,7 +1471,6 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         v.push(c(
             name,
             fx.send_indices.get(i).copied().unwrap_or(0),
-            PerDevice,
             "[fx] send_indices (a Sound array index the send page's knob uses)",
         ));
     }
@@ -1486,13 +1509,12 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "[adapter.machine] param_slots, the count",
         ),
     ] {
-        v.push(c(name, value, PerDevice, note));
+        v.push(c(name, value, note));
     }
     for (i, name) in PROFILE_SLOT.iter().enumerate() {
         v.push(c(
             name,
             pf.slots.get(i).copied().unwrap_or(0),
-            PerDevice,
             "[adapter.machine] param_slots (knob position of the machine's word i)",
         ));
     }
@@ -1500,7 +1522,6 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         v.push(c(
             name,
             value,
-            PerDevice,
             "[modules.templates] (stock parameter row of a glyph)",
         ));
     }
@@ -1509,13 +1530,11 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         v.push(C {
             name: PEEK_LO[i],
             value: r[0] as i64,
-            scope: PerDevice,
             note: "[digikit] peek range start (RAM the PEEK command may read)",
         });
         v.push(C {
             name: PEEK_HI[i],
             value: r[1] as i64,
-            scope: PerDevice,
             note: "[digikit] peek range end (exclusive)",
         });
     }
@@ -1608,6 +1627,114 @@ const PROFILE_TPL: [&str; 6] = [
 const PEEK_LO: [&str; PEEK_MAX] = ["PEEK_LO_0", "PEEK_LO_1", "PEEK_LO_2", "PEEK_LO_3"];
 const PEEK_HI: [&str; PEEK_MAX] = ["PEEK_HI_0", "PEEK_HI_1", "PEEK_HI_2", "PEEK_HI_3"];
 
+/// `DEV_HAS_*` of `core/runtime/abi.toml`.
+const DEV_HAS_DSP: u64 = 1;
+const DEV_HAS_STORE: u64 = 2;
+const DEV_HAS_SDHC: u64 = 4;
+const DEV_HAS_SAFE_KEY: u64 = 8;
+
+/// DSP cycles in one block: `None` when a number is missing.
+fn block_cycles(clock_hz: u64, blocks_per_second: u64) -> Option<u64> {
+    (blocks_per_second != 0).then(|| (clock_hz + blocks_per_second / 2) / blocks_per_second)
+}
+
+/// The runtime's ABI file: the constants and the `DkrtDevice` struct that this generator writes the device object from.
+const ABI_TEXT: &str = include_str!("../../../modules/core/runtime/abi.toml");
+
+/// The integer constants of `core/runtime/abi.toml` by name.
+fn abi_consts() -> Result<BTreeMap<String, u64>> {
+    let t: toml::Table = toml::from_str(ABI_TEXT)?;
+    let mut out = BTreeMap::new();
+    for c in t["const"].as_array().into_iter().flatten() {
+        if let (Some(n), Some(v)) = (c["name"].as_str(), c["value"].as_integer()) {
+            out.insert(n.to_string(), v as u64);
+        }
+    }
+    Ok(out)
+}
+
+/// `DkrtDevice`: its field names in order (every field is a u32), from `core/runtime/abi.toml`.
+fn dkdv_fields() -> Result<Vec<String>> {
+    let t: toml::Table = toml::from_str(ABI_TEXT)?;
+    let st = t["struct"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|s| s["name"].as_str() == Some("DkrtDevice"))
+        .ok_or_else(|| err!("core/runtime/abi.toml has no struct DkrtDevice"))?;
+    let mut out = vec![];
+    for f in st["fields"].as_array().into_iter().flatten() {
+        let decl = f.as_str().unwrap_or("").split(" // ").next().unwrap_or("");
+        let mut w = decl.split_whitespace();
+        if w.next() != Some("u32") {
+            return Err(err!("DkrtDevice: every field must be a u32: {decl:?}"));
+        }
+        out.push(w.next().unwrap_or("").to_string());
+    }
+    Ok(out)
+}
+
+/// The constant that fills a `DkrtDevice` field (the four header words are not in this table).
+const DKDV_VALUE: [(&str, &str); 11] = [
+    ("console_uart_base", "CONSOLE_UART_BASE"),
+    ("ddr_uncached_alias", "DDR_UNCACHED_ALIAS"),
+    ("ddr_cached_base", "DDR_CACHED_BASE"),
+    ("ddr_bytes", "DDR_BYTES"),
+    ("esdhc_base", "ESDHC_BASE"),
+    ("safe_key", "SAFE_KEY_CODE"),
+    ("keep_base", "KEEP_BASE"),
+    ("keep_bytes", "KEEP_BYTES"),
+    ("dsp_block_cycles", "DSP_BLOCK_CYCLES"),
+    ("dyn_type_first", "DYN_TYPE_FIRST"),
+    ("dyn_types", "DYN_TYPES"),
+];
+
+/// The device object of one device (`gas-dkdv`): `dkrt_dev`, the struct `DkrtDevice` as `.long` words.
+fn gas_dkdv(module: &str, dev: &str, cs: &[C]) -> Result<String> {
+    let abi = abi_consts()?;
+    let fields = dkdv_fields()?;
+    let value = |name: &str| {
+        cs.iter()
+            .find(|k| k.name == name)
+            .map(|k| k.value)
+            .ok_or_else(|| err!("{module}: no device constant {name}"))
+    };
+    let mut s = format!(
+        "/* {module} on {dev}: {NOTE}. The struct DkrtDevice of core/runtime/abi.toml. */\n"
+    );
+    s.push_str("    .balign 4\n    .globl dkrt_dev\ndkrt_dev:\n");
+    for f in &fields {
+        let (v, note) = match f.as_str() {
+            "magic" => (abi["DEV_MAGIC"] as i64, "DEV_MAGIC".to_string()),
+            "version" => (abi["DEV_VERSION"] as i64, "DEV_VERSION".to_string()),
+            "size" => (
+                (fields.len() * 4) as i64,
+                "the bytes of the struct".to_string(),
+            ),
+            "caps" => (value("DKDV_CAPS")?, "DEV_HAS_* bits".to_string()),
+            f => {
+                let (_, c) = DKDV_VALUE.iter().find(|(n, _)| *n == f).ok_or_else(|| {
+                    err!("{module}: DkrtDevice.{f} has no source in devgen DKDV_VALUE")
+                })?;
+                (value(c)?, (*c).to_string())
+            }
+        };
+        let _ = writeln!(s, "    .long {}    /* {f}: {note} */", hex(v));
+    }
+    Ok(s)
+}
+
+/// The field offsets of `DkrtDevice` as `.equ DKDV_<FIELD>, n` (`gas-dkdv-offsets`), for assembly that reads `dkrt_dev`.
+fn gas_dkdv_offsets(module: &str) -> String {
+    let mut s = format!(
+        "/* {module}: {NOTE}. Byte offsets of the fields of struct DkrtDevice (core/runtime/abi.toml). */\n"
+    );
+    for (i, f) in dkdv_fields().unwrap_or_default().iter().enumerate() {
+        let _ = writeln!(s, "    .equ DKDV_{}, {}", f.to_uppercase(), i * 4);
+    }
+    s
+}
+
 fn hex(v: i64) -> String {
     format!("{v:#x}")
 }
@@ -1615,68 +1742,48 @@ fn hex(v: i64) -> String {
 const NOTE: &str =
     "generated by `patchkit gen` from the device files and core/machines types.toml; do not edit";
 
-/// The shared constants, checked to be equal on every device.
-fn shared<'a>(module: &str, per_dev: &'a [(String, Vec<C>)]) -> Result<Vec<&'a C>> {
-    let (first_dev, first) = &per_dev[0];
-    let mut out = vec![];
-    for (i, k) in first.iter().enumerate() {
-        if k.scope != Scope::Shared {
-            continue;
-        }
-        for (dev, other) in &per_dev[1..] {
-            if other[i].value != k.value {
-                return Err(err!(
-                    "{module}: {} is {} on {first_dev} but {} on {dev}; the runtime is one image for all devices, so the fact must become a per-device value that it reads from its device object",
-                    k.name,
-                    hex(k.value),
-                    hex(other[i].value)
-                ));
-            }
-        }
-        out.push(k);
-    }
-    Ok(out)
-}
-
-fn rust(module: &str, per_dev: &[(String, Vec<C>)], emit: &[&str]) -> Result<String> {
-    let mut s = format!(
-        "// {module}: {NOTE}.\n// Only constants that every device file agrees on; the runtime is one image for all devices.\n\n"
-    );
-    for k in shared(module, per_dev)?
-        .into_iter()
-        .filter(|k| emit.contains(&k.name))
-    {
-        let _ = writeln!(s, "/// {}", k.note);
-        let _ = writeln!(s, "pub const {}: u32 = {};", k.name, hex(k.value));
-    }
-    Ok(s)
-}
-
 /// `DeviceProfile` constants of every device (the type is `dkrt_abi::platform::DeviceProfile`): what the real platform reads from the device object
-/// (`device.s`) and what the host tests' `FakePlatform` is built from, so the two cannot differ.
-fn rust_profiles(module: &str, docs: &BTreeMap<String, Entry>) -> String {
+/// (`device.s`, `dkrt_dev`) and what the host tests' `FakePlatform` and a service (through the device id) take their facts from, so they cannot differ.
+fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) -> Result<String> {
     let mut s = format!(
         "// {module}: {NOTE}.\n// One DeviceProfile for each device file, from the same facts as the device objects' words.\n\nuse crate::platform::DeviceProfile;\n"
     );
     let mut names = vec![];
     for (dev, e) in docs {
+        let cs = constants(lib, dev, e)?;
+        let v = |name: &str| -> Result<u64> {
+            cs.iter()
+                .find(|k| k.name == name)
+                .map(|k| k.value as u64)
+                .ok_or_else(|| err!("{module}: no device constant {name}"))
+        };
         let k = &e.digikit;
-        let name_word = k
-            .name
-            .bytes()
-            .chain(std::iter::repeat(0))
-            .take(4)
-            .fold(0u64, |a, x| (a << 8) | x as u64);
         let up = dev.to_uppercase();
+        let safe_key = if e.caps & DEV_HAS_SAFE_KEY != 0 {
+            format!("Some({})", k.safe_key)
+        } else {
+            "None".to_string()
+        };
         let _ = writeln!(
             s,
-            "\n/// `{dev}`: [digikit] id, name, sample_path_max, [capabilities] card, and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n}};",
-            k.id,
-            hex(name_word as i64),
-            k.samples_in_store,
-            k.sample_path_max,
-            e.dsp_headroom,
-            e.adapter.as_ref().map_or(0, |a| a.voices)
+            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    dyn_type_first: {},\n    dyn_types: {},\n}};",
+            v("DEVICE_ID")?,
+            hex(v("DEVICE_NAME_WORD")? as i64),
+            e.digikit.samples_in_store,
+            v("SAMPLE_PATH_MAX")?,
+            v("DSP_HEADROOM")?,
+            v("DSP_VOICES")?,
+            e.caps & DEV_HAS_DSP != 0,
+            e.caps & DEV_HAS_STORE != 0,
+            e.caps & DEV_HAS_SDHC != 0,
+            hex(v("DDR_CACHED_BASE")? as i64),
+            hex(v("DDR_BYTES")? as i64),
+            hex(v("KEEP_BASE")? as i64),
+            hex(v("KEEP_BYTES")? as i64),
+            hex(v("ESDHC_BASE")? as i64),
+            v("DSP_BLOCK_CYCLES")?,
+            v("DYN_TYPE_FIRST")?,
+            v("DYN_TYPES")?,
         );
         names.push(up);
     }
@@ -1686,7 +1793,7 @@ fn rust_profiles(module: &str, docs: &BTreeMap<String, Entry>) -> String {
         names.len(),
         names.join(", ")
     );
-    s
+    Ok(s)
 }
 
 /// A C header of the contract maxima of `sdk/sdk.toml` `[limits.max]` that a ColdFire object shared by all devices checks against: the
@@ -1702,23 +1809,6 @@ fn c_shared(module: &str) -> String {
         max.dsp_area_bytes / 4,
         crate::sdkgen::dsp_slot_words()
     )
-}
-
-fn gas_shared(module: &str, per_dev: &[(String, Vec<C>)], emit: &[&str]) -> Result<String> {
-    let mut s = format!("/* {module}: {NOTE}. Constants that every device file agrees on. */\n");
-    for k in shared(module, per_dev)?
-        .into_iter()
-        .filter(|k| emit.contains(&k.name))
-    {
-        let _ = writeln!(
-            s,
-            "    .equ {}, {}    /* {} */",
-            k.name,
-            hex(k.value),
-            k.note
-        );
-    }
-    Ok(s)
 }
 
 fn gas(module: &str, dev: &str, cs: &[C], emit: Option<&[&str]>) -> String {
@@ -1761,7 +1851,7 @@ fn uses_match(pattern: &str, name: &str) -> bool {
     }
 }
 
-/// The constant names a `rust`, `gas-shared`, `gas` or `sharc` entry writes: those that its `uses` list names, in the order of `constants()`.
+/// The constant names a `gas` or `sharc` entry writes: those that its `uses` list names, in the order of `constants()`.
 fn emitted_names(
     module: &str,
     g: &crate::module::GenDef,
@@ -1774,7 +1864,6 @@ fn emitted_names(
             g.kind
         ));
     }
-    let shared_only = matches!(g.kind.as_str(), "rust" | "gas-shared");
     let all = &per_dev[0].1;
     for p in &g.uses {
         let stars = p.matches('*').count();
@@ -1783,20 +1872,12 @@ fn emitted_names(
                 "{at}: `uses` pattern {p:?} must be a name, or a prefix and one trailing `*`"
             ));
         }
-        let hits: Vec<&C> = all.iter().filter(|k| uses_match(p, k.name)).collect();
-        if hits.is_empty() {
+        if !all.iter().any(|k| uses_match(p, k.name)) {
             return Err(err!("{at}: `uses` {p:?} matches no device constant"));
-        }
-        if shared_only && hits.iter().all(|k| k.scope == Scope::PerDevice) {
-            return Err(err!(
-                "{at}: `uses` {p:?} is per-device, and a `{}` gen takes only shared constants",
-                g.kind
-            ));
         }
     }
     Ok(all
         .iter()
-        .filter(|k| !shared_only || k.scope == Scope::Shared)
         .filter(|k| g.uses.iter().any(|p| uses_match(p, k.name)))
         .map(|k| k.name)
         .collect())
@@ -1857,6 +1938,20 @@ fn check_sources(
     ))
 }
 
+/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-`; a module that lists neither is for every device.
+fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
+    let prefix = format!("{short}-");
+    let listed = m.module.ports.iter().chain(m.targets.keys());
+    let mut any = false;
+    for t in listed {
+        any = true;
+        if t.starts_with(&prefix) {
+            return true;
+        }
+    }
+    !any
+}
+
 /// The files a module asks for with `[[gen]]` (empty: it asks for none).
 pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFile>> {
     let m = lib
@@ -1870,24 +1965,31 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
             "{module}: [[gen]] needs device files with [board], [digikit] and [card.store]"
         ));
     }
+    // a module gets files for the devices it is built for (`[targets]`, `ports`); a module that names none is for all of them
+    let devs: Vec<&String> = facts
+        .docs
+        .keys()
+        .filter(|d| targets_device(&m.manifest, d))
+        .collect();
+    if devs.is_empty() {
+        return Ok(vec![]);
+    }
     let mut per_dev: Vec<(String, Vec<C>)> = vec![];
-    for (dev, e) in &facts.docs {
-        per_dev.push((dev.clone(), constants(lib, dev, e)?));
+    for dev in &devs {
+        per_dev.push(((*dev).clone(), constants(lib, dev, &facts.docs[*dev])?));
     }
     let outputs: Vec<std::path::PathBuf> = m
         .manifest
         .gens
         .iter()
         .flat_map(|g| {
-            facts
-                .docs
-                .keys()
+            devs.iter()
                 .map(|dev| m.dir.join(g.path.replace("{dev}", dev)))
         })
         .collect();
     let mut out = vec![];
     for g in &m.manifest.gens {
-        let picks = matches!(g.kind.as_str(), "rust" | "gas-shared" | "gas" | "sharc");
+        let picks = matches!(g.kind.as_str(), "gas" | "sharc");
         if !picks && !g.uses.is_empty() {
             return Err(err!(
                 "{module}: a `{}` gen ({}) takes no `uses`",
@@ -1897,22 +1999,36 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
         }
         let emit = if picks {
             let names = emitted_names(module, g, &per_dev)?;
-            let exts: &[&str] = if g.kind == "rust" {
-                &["rs"]
-            } else {
-                &["s", "S", "inc", "c", "h"]
-            };
-            check_sources(module, g, &m.dir, &outputs, exts, &names)?;
+            check_sources(
+                module,
+                g,
+                &m.dir,
+                &outputs,
+                &["s", "S", "inc", "c", "h"],
+                &names,
+            )?;
             names
         } else {
             vec![]
         };
         match g.kind.as_str() {
-            "rust" => {
-                if g.path.contains("{dev}") {
-                    return Err(err!("{module}: a `rust` gen is one file for all devices"));
+            "gas-dkdv" => {
+                if !g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `gas-dkdv` gen is one file per device: put {{dev}} in the path"
+                    ));
                 }
-                out.push((g.path.clone(), rust(module, &per_dev, &emit)?));
+                for (dev, cs) in &per_dev {
+                    out.push((g.path.replace("{dev}", dev), gas_dkdv(module, dev, cs)?));
+                }
+            }
+            "gas-dkdv-offsets" => {
+                if g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `gas-dkdv-offsets` gen is one file for all devices"
+                    ));
+                }
+                out.push((g.path.clone(), gas_dkdv_offsets(module)));
             }
             "rust-profiles" => {
                 if g.path.contains("{dev}") {
@@ -1920,7 +2036,7 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         "{module}: a `rust-profiles` gen is one file for all devices"
                     ));
                 }
-                out.push((g.path.clone(), rust_profiles(module, &facts.docs)));
+                out.push((g.path.clone(), rust_profiles(module, lib, &facts.docs)?));
             }
             "c-shared" => {
                 if g.path.contains("{dev}") {
@@ -1929,14 +2045,6 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
                 out.push((g.path.clone(), c_shared(module)));
-            }
-            "gas-shared" => {
-                if g.path.contains("{dev}") {
-                    return Err(err!(
-                        "{module}: a `gas-shared` gen is one file for all devices"
-                    ));
-                }
-                out.push((g.path.clone(), gas_shared(module, &per_dev, &emit)?));
             }
             "gas" | "sharc" => {
                 if !g.path.contains("{dev}") {
@@ -1960,7 +2068,8 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         "{module}: a `sharc-adapter` gen is one file per device: put {{dev}} in the path"
                     ));
                 }
-                for (dev, e) in &facts.docs {
+                for dev in &devs {
+                    let e = &facts.docs[*dev];
                     let a = e
                         .adapter
                         .as_ref()
@@ -1970,7 +2079,6 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         constants.push(c(
                             "ADM_RING_R_BASE",
                             p.ring_r_base,
-                            Scope::PerDevice,
                             "[adapter.sample_pool] ring_r_base (byte address of the 16 R rings of 32 KiB, one per slot)",
                         ));
                     }
@@ -1986,7 +2094,8 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         "{module}: a `gas-sample-pool` gen is one file per device: put {{dev}} in the path"
                     ));
                 }
-                for (dev, e) in &facts.docs {
+                for dev in &devs {
+                    let e = &facts.docs[*dev];
                     let p = e
                         .sample_pool
                         .as_ref()
@@ -2003,7 +2112,8 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         "{module}: a `sharc-sample-pool` gen is one file per device: put {{dev}} in the path"
                     ));
                 }
-                for (dev, e) in &facts.docs {
+                for dev in &devs {
+                    let e = &facts.docs[*dev];
                     // a device that borrows the stock pool has no range and no DSP receiver
                     let Some(p) = e.sample_pool.as_ref().filter(|p| p.ddr_bytes != 0) else {
                         continue;

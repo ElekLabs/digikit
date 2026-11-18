@@ -5,6 +5,7 @@ import type { ReloadReport } from '@digi/workbench-core/runtime/reload.ts';
 import type { ControllerJob } from '@digi/workbench-core/jobs/jobs-core.ts';
 import type {
   EmulatorRuntime,
+  FirmwareInfo,
   NativeAudioStatus,
   RuntimeDiagnostics,
   RuntimeHealth,
@@ -209,19 +210,40 @@ export async function createNativeRuntime(
     load: (bytes, name, options) =>
       newSession(async (token) => {
         const syx = await host.emu.stageSyx(bytes, name);
-        await call('firmware.load', { syx, replace: true, runtime: !!options?.runtime }, token);
+        await call(
+          'firmware.load',
+          {
+            syx,
+            replace: true,
+            runtime: !!options?.runtime,
+            ...(options?.dsp === undefined ? {} : { dsp: options.dsp }),
+          },
+          token,
+        );
       }),
     loadPath: (syx, options) =>
       newSession(async (token) => {
         await call(
           'firmware.load',
-          { syx, replace: true, runtime: !!options?.runtime, ...(options?.card ? { card: options.card } : {}) },
+          {
+            syx,
+            replace: true,
+            runtime: !!options?.runtime,
+            ...(options?.card ? { card: options.card } : {}),
+            ...(options?.dsp === undefined ? {} : { dsp: options.dsp }),
+          },
           token,
         );
       }),
     async firmwareInfo() {
-      const status = await call<{ firmware: { runtime?: RuntimePatch | null } | null }>('status');
-      return { runtime: status.firmware?.runtime ?? null };
+      const status = await call<{
+        firmware: { runtime?: RuntimePatch | null } | null;
+        dsp_enabled?: boolean;
+        dsp_flag?: boolean | null;
+      }>('status');
+      const info: FirmwareInfo = { runtime: status.firmware?.runtime ?? null };
+      if (status.dsp_enabled !== undefined) info.dsp = { enabled: status.dsp_enabled, flag: status.dsp_flag ?? null };
+      return info;
     },
     async controllerStatus() {
       const status = await call<{ heartbeat?: RuntimeHealth; job?: ControllerJob | null }>('status');

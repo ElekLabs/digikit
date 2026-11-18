@@ -140,7 +140,10 @@ pub(crate) unsafe fn check_types<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         // the voice names its machine by key (or by a pinned number): `assign` has the type
         let t = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
         let entry = rd32(e.add(VOICE_ENTRY as usize));
-        if !(TYPE_FIRST..=TYPE_LAST).contains(&t) || entry >= image_size || entry & 1 != 0 {
+        if !crate::profile(core).is_some_and(|p| p.is_dyn_type(t))
+            || entry >= image_size
+            || entry & 1 != 0
+        {
             return E_DSP_TYPE;
         }
         let mut k = 0;

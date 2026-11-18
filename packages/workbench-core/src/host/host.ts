@@ -31,6 +31,8 @@ export interface EmuSource {
   name: string;
   bytes: number;
   modified_ms: number;
+  /** The device short id by the file's content (`setSource` only; null: not a known image). */
+  device?: string | null;
 }
 
 /** What `emu_launch` says about the launch of the app. */

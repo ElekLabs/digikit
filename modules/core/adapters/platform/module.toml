@@ -10,7 +10,7 @@ status = "experimental"
 summary = "The firmware hooks of the digikit runtime (UI loop, main-OS task entry, MIDI receive) and the exception hook install: the L1 adapter under the runtime's Platform interface"
 requires = ["core/expansion"]
 conflicts = []
-ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12"]
+ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
 
 [targets]
 "dt2-1.17" = "experimental"
@@ -21,10 +21,10 @@ ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12"]
 # (`dkrt_tick`, `dkrt_boot`, `dkrt_midi_rx`, `dkrt_exc`), and the runtime calls `dkplat_exc_install`. `requires` has no cycle because only the
 # runtime names the other: a selection that has the runtime has this adapter.
 
+# The field offsets of the runtime's device object `dkrt_dev` (struct DkrtDevice of core/runtime/abi.toml): the exception hook install reads the DDR window from it.
 [[gen]]
-kind = "gas-shared"
-path = "build/gen/device.inc"
-uses = ["DDR_CACHED_BASE", "DDR_BYTES"]
+kind = "gas-dkdv-offsets"
+path = "build/gen/dkdv-offsets.inc"
 
 [[object]]
 path = "build/platform.dko.json"

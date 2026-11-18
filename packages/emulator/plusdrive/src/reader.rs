@@ -601,11 +601,11 @@ pub fn read_mmcfs(
     }
     out.present = true;
     let table = read_vec(img, layout.table_sector * SECTOR as u64, SECTOR);
-    for pool in Pool::ALL {
-        let (offset, length) = (
-            layout.pool(pool).bitmap_offset,
-            layout.pool(pool).bitmap_bytes,
-        );
+    for pool in layout.present_pools() {
+        let Some(slots) = layout.pool(pool) else {
+            continue;
+        };
+        let (offset, length) = (slots.bitmap_offset, slots.bitmap_bytes);
         let bits = &table[offset..offset + length];
         for slot in 0..layout.slot_count(pool) {
             // First sector of a slot (FUN_4012eef2, FUN_4012f596, FUN_401324cc).

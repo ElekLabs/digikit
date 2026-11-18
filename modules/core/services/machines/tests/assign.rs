@@ -15,7 +15,14 @@ static LOCK: Mutex<()> = Mutex::new(());
 
 const A: u32 = 0x00aa_00;
 const B: u32 = 0x00bb_00;
-const FIRST: u32 = dkrt_sdk::device::DYN_TYPE_FIRST;
+const FIRST: u32 = dkrt_abi::profiles::DT2.dyn_type_first;
+
+/// A core of the DT2 (the run-time machine types come from the device's profile).
+fn dt2_core() -> FakeCore {
+    let mut c = FakeCore::new();
+    c.device = dkrt_abi::profiles::DT2.id;
+    c
+}
 
 /// A selection of modules, each with its machine keys.
 fn selection(modules: &[&[u32]]) -> SettleCtx {
@@ -65,7 +72,7 @@ fn settle(core: &FakeCore, sel: &SettleCtx) {
 #[test]
 fn a_boot_without_a_map_gives_the_lowest_numbers_in_load_order_and_saves_the_map() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let core = FakeCore::new();
+    let core = dt2_core();
     settle(&core, &selection(&[&[A, B]]));
     core.boot_index.set(0);
     unsafe {
@@ -81,7 +88,7 @@ fn a_boot_without_a_map_gives_the_lowest_numbers_in_load_order_and_saves_the_map
 #[test]
 fn a_stored_map_keeps_a_machine_on_its_number_and_a_boot_that_changes_nothing_saves_nothing() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let core = FakeCore::new();
+    let core = dt2_core();
     let mut map = [0u32; MAP_N];
     map[0] = B | (FIRST + 5);
     stored(&core, map);
@@ -99,7 +106,7 @@ fn a_stored_map_keeps_a_machine_on_its_number_and_a_boot_that_changes_nothing_sa
         "nothing changed, nothing is written"
     );
     // a new machine takes the lowest number no entry references
-    let core = FakeCore::new();
+    let core = dt2_core();
     stored(&core, map);
     settle(&core, &selection(&[&[B, A]]));
     core.boot_index.set(0);
@@ -112,7 +119,7 @@ fn a_stored_map_keeps_a_machine_on_its_number_and_a_boot_that_changes_nothing_sa
 #[test]
 fn the_map_of_the_selection_record_is_read_once_and_moved_to_the_settings_key() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let core = FakeCore::new();
+    let core = dt2_core();
     let mut old = [0u32; MAP_N];
     old[0] = A | (FIRST + 2);
     set_legacy(&core, old);
@@ -127,7 +134,7 @@ fn the_map_of_the_selection_record_is_read_once_and_moved_to_the_settings_key() 
         "saved to the new key although the boot changed nothing"
     );
     // nothing to migrate: nothing is saved for a boot without machines
-    let core = FakeCore::new();
+    let core = dt2_core();
     settle(&core, &selection(&[&[]]));
     assert!(saved(&core).is_empty());
 }
@@ -135,7 +142,7 @@ fn the_map_of_the_selection_record_is_read_once_and_moved_to_the_settings_key() 
 #[test]
 fn a_key_is_resolved_for_the_module_being_loaded_only_and_a_pinned_number_is_itself() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let core = FakeCore::new();
+    let core = dt2_core();
     // two modules with the same machine key: the second gets a fresh number
     settle(&core, &selection(&[&[A], &[A]]));
     unsafe {
@@ -155,7 +162,7 @@ fn a_key_is_resolved_for_the_module_being_loaded_only_and_a_pinned_number_is_its
 #[test]
 fn a_refused_write_is_tried_again_at_the_next_boot_with_the_same_numbers_and_the_old_bytes_stay() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let core = FakeCore::new();
+    let core = dt2_core();
     let mut old = [0u32; MAP_N];
     old[0] = A | (FIRST + 2);
     set_legacy(&core, old);
@@ -190,7 +197,7 @@ fn a_refused_write_is_tried_again_at_the_next_boot_with_the_same_numbers_and_the
 #[test]
 fn after_the_migration_an_erased_key_does_not_bring_back_the_old_map() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let core = FakeCore::new();
+    let core = dt2_core();
     let mut old = [0u32; MAP_N];
     old[0] = A | (FIRST + 2);
     set_legacy(&core, old);

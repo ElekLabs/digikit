@@ -6,8 +6,8 @@ import type { TransferApp } from '../transfer/app';
 import type { DefaultModulesApp } from './default-modules-state';
 import type { FirmwareEnv } from './env';
 import {
-  DEVICE_NAMES,
   IDLE,
+  deviceNameOf,
   imageFileName,
   isDeviceId,
   modelOfPort,
@@ -125,7 +125,7 @@ export function createFirmwareState({
     try {
       const a = await asked(() => askDevice());
       if (running(run()) || target().kind !== 'midi') return;
-      const model = isDeviceId(a.model ?? '') ? (a.model as DeviceFacts['model']) : modelOfPort(a.port);
+      const model = isDeviceId(a.model ?? '') ? a.model : modelOfPort(a.port);
       const facts: DeviceFacts = {
         port: a.port,
         model,
@@ -138,7 +138,7 @@ export function createFirmwareState({
         type: 'answered',
         device: {
           id: model ?? '',
-          name: model ? DEVICE_NAMES[model] : 'MIDI device',
+          name: model ? deviceNameOf(model) : 'MIDI device',
           ...(a.os ? { os: a.os } : {}),
           ...(a.runtime ? { runtime: a.runtime } : {}),
         },

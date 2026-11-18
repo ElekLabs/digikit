@@ -10,6 +10,7 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 from tools.emulator import digi_env  # noqa: E402
+from tools.firmware import device as device_data  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +23,13 @@ def pinned_rustc(monkeypatch):
 def fresh_gen(monkeypatch):
     """The fake gen dirs here carry no CORE_FINGERPRINT."""
     monkeypatch.setenv("DIGI_ALLOW_STALE_GEN", "1")
+
+
+@pytest.fixture(autouse=True)
+def known_device(monkeypatch):
+    """The fake firmware files of these tests belong to a device with a DSP; a test of another device sets its own."""
+    short = [d.short for d in device_data.load_all() if d.has_dsp()][-1]
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda _path: short)
 
 
 @pytest.fixture(autouse=True)
@@ -297,3 +305,57 @@ def test_card_cache_key_follows_every_file(monkeypatch, tmp_path):
     assert card(folder, syx, {}, "dn2").name == "dn2.img"
     with pytest.raises(SystemExit):
         card(tmp_path / "missing", syx, {}, "dt2")
+
+
+# --- a device without DSP, runtime or card ---------------------------------------------------------------------------------
+
+
+def _no_dsp_device(monkeypatch, tmp_path):
+    """The short id of an identity-only device file (no DSP, no `[digikit]`, no card), in a devices folder of its own."""
+    folder = tmp_path / "devices"
+    folder.mkdir()
+    (folder / "identity-only.toml").write_text(
+        '[device]\nname = "Identity Only"\nshort = "idonly"\n\n[capabilities]\ndsp = "none"\ncard = "none"\n'
+    )
+    monkeypatch.setenv("DT2_DEVICES", str(folder))
+    device = device_data.by_short("idonly")
+    assert not device.has_dsp() and not device.runtime_target and not device.has_card()
+    return device.short
+
+
+def _launch_setup(monkeypatch, tmp_path, device):
+    """main() with the device lookup stubbed and no card ever built; returns the launcher, the commands it ran and a firmware file."""
+    scope, calls = _build_run_setup(monkeypatch)
+    syx = tmp_path / "known.syx"
+    syx.write_bytes(b"x")
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda path: device)
+    monkeypatch.setattr(digi_env, "patch_base", lambda path: None)
+    monkeypatch.setitem(
+        scope["main"].__globals__,
+        "plusdrive_card",
+        lambda *a, **k: pytest.fail("no card is built for this device"),
+    )
+    return scope, calls, syx
+
+
+def test_a_device_without_a_card_refuses_a_card_folder(monkeypatch, tmp_path):
+    scope, calls, syx = _launch_setup(
+        monkeypatch, tmp_path, _no_dsp_device(monkeypatch, tmp_path)
+    )
+    with pytest.raises(SystemExit, match="no card"):
+        scope["main"]([str(syx), "--plus-drive", str(tmp_path)])
+
+
+def test_a_device_that_is_not_a_runtime_target_refuses_runtime(monkeypatch, tmp_path):
+    scope, calls, syx = _launch_setup(
+        monkeypatch, tmp_path, _no_dsp_device(monkeypatch, tmp_path)
+    )
+    with pytest.raises(SystemExit, match="not a digikit runtime target"):
+        scope["main"]([str(syx), "--runtime"])
+
+
+def test_an_unknown_firmware_is_an_error_not_a_default_device(monkeypatch, tmp_path):
+    scope, calls, syx = _launch_setup(monkeypatch, tmp_path, None)
+    with pytest.raises(SystemExit, match="cannot tell which device"):
+        scope["main"]([str(syx)])
+    assert calls == []

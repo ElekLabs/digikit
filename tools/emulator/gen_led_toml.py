@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Write devices/digitakt-ii-leds.toml and devices/digitone-ii-leds.toml (panel key -> LED index map).
+"""Write devices/digitakt-ii-leds.toml, devices/digitone-ii-leds.toml and devices/syntakt-leds.toml (panel key -> LED index map).
 
     uv run python -m tools.emulator.gen_led_toml
 
 The tables below are the result of the 2026-10-13 sweep (DT2 OS 1.16, DN2 OS 1.11): scenarios `dt2-led-sweep` /
 `dn2-led-sweep`, `DIGI_PANEL_TX_LOG`, `tools/emulator/led_map.py`; LED names are the firmware's LED-name table read at
-logical n = idx + 1 (docs/findings/19-sequencer-and-leds.md). Edit the tables, not the output.
+logical n = idx + 1 (docs/findings/19-sequencer-and-leds.md). The Syntakt tables are the result of the 2026-11-13 sweep of OS 1.42
+(docs/findings/70-syntakt-1-42.md "Panel sweep"): its LEDs are set by other records than the Digitakt and Digitone ones. Edit the
+tables, not the output.
 """
 
 import pathlib
@@ -80,6 +82,56 @@ LED_NAMES = {
     **{41 + n: f"PAGE{n + 1}" for n in range(8)},
 }
 
+
+# Syntakt OS 1.42. The panel has 44 LEDs, index 0-43. The firmware sets one per record group: a colour palette (`b5 n r g b`), four state
+# colours per LED (`b0..b3 led palette`), and `0x20 + led // 4`, one byte per four LEDs with two bits each: the state number of the LED
+# (3 = idle). The index of an LED is its place in that stream. The sweep pressed every code from the main screen and read which LED left
+# state 3. Only LEDs seen to follow a key are listed; the page keys' LEDs did not change in the sweep, and the transport, FUNC, TRK, PTN,
+# BANK and arrow keys' LEDs are not known (finding 70, open).
+SYNTAKT_KEYS = {
+    **{n: (f"TRIG {n}", f"TRIG{n:02d}", "own", None) for n in range(1, 17)},
+    17: ("FUNC", None, "none", None),
+    18: ("TRK", None, "none", None),
+    19: ("TRIG", "TRIGPAGE", "radio", None),
+    20: ("SYN", "SYNPAGE", "radio", None),
+    22: ("FLTR", "FLTRPAGE", "radio", None),
+    23: ("AMP", "AMPPAGE", "radio", None),
+    24: ("LFO", "LFOPAGE", "radio", None),
+    25: ("SETTINGS", None, "none", None),
+    26: ("FX", None, "none", None),
+    27: ("TEMPO", None, "none", None),
+    28: ("NO", None, "none", None),
+    29: ("LEFT", None, "none", None),
+    30: ("DOWN", None, "none", None),
+    31: ("RIGHT", None, "none", None),
+    32: ("PAGE", None, "none", None),
+    33: ("BANK", None, "none", None),
+    34: ("PTN", None, "none", None),
+    35: ("SOUND", None, "none", None),
+    36: ("RECORD", "RECORD", "own", None),
+    37: ("PLAY", "PLAY", "own", None),
+    38: ("STOP", None, "none", None),
+    39: ("YES", None, "none", None),
+    40: ("UP", None, "none", None),
+    **{
+        code: (f"ENCODER {name} push", None, "none", None)
+        for code, name in zip(range(41, 49), "GFEBADCH", strict=True)
+    },
+    49: ("LEVEL push", None, "none", None),
+}
+SYNTAKT_LEDS = {
+    **{n: f"TRIG{n + 1:02d}" for n in range(16)},
+    # Page keys (a radio group: the lit one goes out when another is pressed), RECORD and PLAY: from the decoded packed-states stream.
+    18: "TRIGPAGE",
+    19: "SYNPAGE",
+    20: "FLTRPAGE",
+    21: "AMPPAGE",
+    22: "LFOPAGE",
+    36: "RECORD",
+    37: "PLAY",
+    **{40 + n: f"PAGE{n + 1}" for n in range(4)},
+}
+
 DEVICES = {
     "digitakt-ii": dict(
         short="dt2",
@@ -88,6 +140,7 @@ DEVICES = {
         extra={50: ("SAMPLING", "SAMPLE", "own", 0x71)},
         names={},
         extra_leds={},
+        indicators=range(41, 49),
     ),
     "digitone-ii": dict(
         short="dn2",
@@ -102,6 +155,16 @@ DEVICES = {
         },
         names={7: "VOICE"},
         extra_leds={49: "ARP", 50: "PLUS", 51: "STACK", 52: "MINUS"},
+        indicators=range(41, 49),
+    ),
+    "syntakt": dict(
+        short="st",
+        firmware="Syntakt OS 1.42",
+        sweep="the panel sweep",
+        keys=SYNTAKT_KEYS,
+        leds=SYNTAKT_LEDS,
+        indicators=range(40, 44),
+        header="syntakt",
     ),
 }
 
@@ -143,11 +206,44 @@ other = 0x80
 """
 
 
+SYNTAKT_HEADER = """\
+# {firmware}: panel key code -> LED index. Codes are wire positions (code = channel * 8 + bit + 1, devices/{name}.toml [panel]).
+#
+# Source: {sweep} on the emulated {firmware}, 2026-11-13: every key code pressed from the main screen with the front-panel stream
+# (DIGI_PANEL_TX_LOG) read. Regenerate with tools/emulator/gen_led_toml.py. Analysis and caveats: docs/findings/70-syntakt-1-42.md.
+#
+# The panel has 44 LEDs. The firmware sets one palette entry per LED state (`b5` records) and one state per LED (`0x20..0x2a` records,
+# two bits per LED, 3 = idle), so `led` is the LED's place in that stream, and a lit LED is a state other than 3. This is not the
+# `b9 idx val` scheme of the other devices: `seen` has the same meaning as there, without an `on` value. A key without `led` has no
+# LED that the sweep tied to it (open).
+#
+# Second pass, 2026-11-13, with the decoder of packed-states (packages/emulator/boot panel_leds.rs: the LED state changes of one key
+# press, from the ready state): the five page keys (radio group, SYN is lit on the main screen), RECORD (red) and PLAY (green). The
+# other keys' LED changes are several LEDs at once (a view or a mode) or none: open.
+"""
+
+
+def led_index(dev: dict, code: int, led_name: str) -> int:
+    if "keys" in dev:
+        return next(i for i, n in dev["leds"].items() if n == led_name)
+    if 25 <= code <= 40:
+        return code
+    leds = {**LED_NAMES, **dev["names"], **dev["extra_leds"]}
+    return next(i for i, n in leds.items() if n == led_name)
+
+
 def main() -> None:
     for name, dev in DEVICES.items():
-        out = [HEADER.format(**dev)]
-        keys = dict(COMMON)
-        keys.update(dev["extra"])
+        dev = {**dev, "name": name}
+        if "keys" in dev:
+            out = [SYNTAKT_HEADER.format(**dev)]
+            keys = dev["keys"]
+            leds = dev["leds"]
+        else:
+            out = [HEADER.format(**dev)]
+            keys = dict(COMMON)
+            keys.update(dev["extra"])
+            leds = {**LED_NAMES, **dev["names"], **dev["extra_leds"]}
         for code in sorted(keys):
             label, led_name, seen, on = keys[code]
             out.append("[[key]]")
@@ -156,36 +252,21 @@ def main() -> None:
             if led_name is None:
                 out.append('seen = "none"')
             else:
-                idx = (
-                    code
-                    if 25 <= code <= 40
-                    else next(
-                        i
-                        for i, n in {
-                            **LED_NAMES,
-                            **dev["names"],
-                            **dev["extra_leds"],
-                        }.items()
-                        if n == led_name
-                    )
-                )
-                out.append(f"led = {idx}")
+                out.append(f"led = {led_index(dev, code, led_name)}")
                 out.append(f'led_name = "{led_name}"')
                 out.append(f'seen = "{seen}"')
                 if on is not None:
                     out.append(f"on = 0x{on:02x}")
             out.append("")
-        leds = {**LED_NAMES, **dev["names"], **dev["extra_leds"]}
         out.append(
             "# LEDs that no key drives: the step playhead is a trig key's own LED, the page indicators below"
         )
         out.append("# are the pattern-page LEDs.")
-        for idx in sorted(leds):
-            if 41 <= idx <= 48:
-                out.append("[[indicator]]")
-                out.append(f"led = {idx}")
-                out.append(f'name = "{leds[idx]}"')
-                out.append("")
+        for idx in dev["indicators"]:
+            out.append("[[indicator]]")
+            out.append(f"led = {idx}")
+            out.append(f'name = "{leds[idx]}"')
+            out.append("")
         (ROOT / "devices" / f"{name}-leds.toml").write_text("\n".join(out))
 
 

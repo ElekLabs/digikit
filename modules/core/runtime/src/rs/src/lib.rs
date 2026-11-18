@@ -17,6 +17,7 @@ use dkrt_sdk::*;
 
 mod api;
 mod arena;
+mod dev;
 pub mod core_api;
 pub mod collect;
 mod handlers;

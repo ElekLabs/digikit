@@ -79,8 +79,8 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 pub struct Machines;
 
 impl<C: CoreApi> Service<C> for Machines {
-    unsafe fn owned_ids(_core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
-        types_of(owner, out) as u32
+    unsafe fn owned_ids(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
+        types_of(core, owner, out) as u32
     }
 
     unsafe fn declare(d: &mut Declare) {
@@ -936,9 +936,12 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
 }
 
 /// The machine type numbers of the machine rows `owner` filled (at most 8), in type order; returns how many.
-pub fn types_of(owner: u8, out: &mut [u8; MAX_MACH]) -> usize {
+pub fn types_of<C: CoreApi>(core: &C, owner: u8, out: &mut [u8; MAX_MACH]) -> usize {
     let s = rstate();
-    let first = dkrt_sdk::device::DYN_TYPE_FIRST;
+    // A device without a profile has no run-time types (as check_types refuses them): none, not the stock types from 0.
+    let Some(first) = crate::profile(core).map(|p| p.dyn_type_first) else {
+        return 0;
+    };
     let mut n = 0;
     let mut k = 0;
     while k < MAX_MACH {
@@ -1017,7 +1020,9 @@ mod tests {
     }
 
     fn check_core_with(f: unsafe fn(&FakeCore, &Ctx) -> i32, recs: &[Rec], inf: Vec<u32>) -> i32 {
-        let (s, core) = (section(recs), FakeCore::new());
+        let mut core = FakeCore::new();
+        core.device = dkrt_abi::profiles::DT2.id; // the run-time machine types are the device profile's
+        let s = section(recs);
         unsafe {
             f(
                 &core,

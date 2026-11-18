@@ -367,9 +367,13 @@ class Emu:
         dsp_patch: str | os.PathLike[str] | None = None,
         runtime: bool = False,
         patch_set: str | None = None,
+        replace: bool = False,
+        dsp: bool | None = None,
     ) -> dict[str, Any]:
         """`firmware.load`: the report says how the firmware was brought in. `runtime=True`: the controller patches the stock
-        image with the device's patch set (`patch_set`, default `emulator`) and loads that; its report is `report["runtime"]`."""
+        image with the device's patch set (`patch_set`, default `emulator`) and loads that; its report is `report["runtime"]`.
+        `replace=True` starts the firmware over (what the webview's Open and Reload do); `dsp` (with `replace`) chooses a DSP session (True)
+        or ColdFire only, with the mailbox responder for a peer CPU (False); default: the controller's choice (`--no-dsp`)."""
         params: dict[str, Any] = {
             "syx": str(pathlib.Path(syx).resolve()),
             "start": start,
@@ -386,6 +390,10 @@ class Emu:
                 params["patch_set"] = patch_set
         elif patch_set:
             raise ValueError("patch_set needs runtime=True")
+        if replace:
+            params["replace"] = True
+        if dsp is not None:
+            params["dsp"] = dsp
         return self.call("firmware.load", **params)
 
     inject = load
@@ -602,6 +610,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--patch-set", help="with --runtime: the patch set (default emulator)"
     )
+    p.add_argument(
+        "--dsp",
+        choices=["on", "off"],
+        help="start the firmware over with the DSP on or off (ColdFire only; a peer CPU is replaced by the mailbox responder)",
+    )
     p = sub.add_parser(
         "inject",
         help="load a patched .syx into the running emulator (hot DSP inject when only the DSP changed)",
@@ -649,6 +662,11 @@ def main(argv: list[str] | None = None) -> int:
                 dsp_patch=args.dsp_patch,
                 runtime=args.runtime,
                 patch_set=args.patch_set,
+                **(
+                    {"replace": True, "dsp": args.dsp == "on"}
+                    if getattr(args, "dsp", None)
+                    else {}
+                ),
             )
             print(describe_load(report))
         elif args.cmd == "frame":

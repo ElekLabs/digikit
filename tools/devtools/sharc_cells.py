@@ -17,6 +17,10 @@ This tool does not take the bench lock. Host instruction counts
 may run in parallel (--jobs, under `nice -n 10`). They say nothing about time: do the final
 timing A/B with tools/devtools/coupled_ab.py, which holds the lock.
 
+`cf G` is the ColdFire thread's host instructions per audio second (report field
+`cpu.cf_thread_insns_per_audio_s`) and `B/A cf` its ratio to the first label: the check that a change on
+the ColdFire path (for example a run-time toggle) costs no instructions when off. Both show `-` for a binary without the field.
+
 The ColdFire state is `state_sha256` of the report (`Emulator::cf_state_digest`: the `save_state` bytes
 without the three instruction-path counters, plus flash, MIDI/USB port and guest-call state; not
 instrumentation), taken at the end of the run. A report without it, or with `state_digest_error`, fails
@@ -240,6 +244,12 @@ def run_cell(
         "audio_s": audio,
         "insns": cpu["dsp_thread_insns_per_audio_s"] * audio,
         "cycles": cpu["dsp_thread_cycles_per_audio_s"] * audio,
+        # ColdFire-thread host instructions (a report of a binary that has the field)
+        "cf_insns": (
+            cpu["cf_thread_insns_per_audio_s"] * audio
+            if "cf_thread_insns_per_audio_s" in cpu
+            else None
+        ),
         **{col: tiers.get(key, 0) for col, key in COUNTERS},
         "rtf": sc.get("real_time_factor"),
         "pcm": sc["pcm"]["sha256"],
@@ -255,6 +265,8 @@ def steady(short: dict, long: dict) -> dict:
     for k in ("insns", "cycles", *(c for c, _ in COUNTERS)):
         scale = 1e9 if k in ("insns", "cycles") else 1e6
         out[k] = (long[k] - short[k]) / d / scale
+    if short["cf_insns"] is not None and long["cf_insns"] is not None:
+        out["cf"] = (long["cf_insns"] - short["cf_insns"]) / d / 1e9
     return out
 
 
@@ -270,14 +282,21 @@ def state_table(
     lines = [
         f"== {state['name']} ({state['device']}, {scenario}), lengths {lengths} s, "
         "steady state per audio s ==",
-        head + "   B/A insns   rtf per length   parity (pcm/dsp/cf per length)",
+        head
+        + "   B/A insns    cf G   B/A cf    rtf per length   parity (pcm/dsp/cf per length)",
     ]
     data = {}
-    base = None
+    base = cf_base = None
     for label in labels:
         rs = [runs[(label, n)] for n in lengths]
         s = steady(rs[0], rs[-1])
         base = s["insns"] if base is None else base
+        cf_base = s.get("cf") if cf_base is None else cf_base
+        cf_text = (
+            "%6.3f   %-7.4f" % (s["cf"], s["cf"] / cf_base)
+            if "cf" in s and cf_base
+            else "%6s   %-7s" % ("-", "-")
+        )
         par = []
         for n, r in zip(lengths, rs, strict=True):
             a = runs[(ref, n)]
@@ -285,10 +304,10 @@ def state_table(
             ok &= all(same)
             par.append(f"{n:g}s:" + "/".join("=" if x else "DIFF" for x in same))
         lines.append(
-            "%-6s %8.3f %8.3f %7.1f %7.1f %7.2f %7.1f %7.2f %8.2f   %-9.4f  %-15s  %s"
+            "%-6s %8.3f %8.3f %7.1f %7.1f %7.2f %7.1f %7.2f %8.2f   %-9.4f  %s   %-15s  %s"
             % (
                 label, s["insns"], s["cycles"], s["aot"], s["fast"], s["interp"],
-                s["idle"], s["blk_entries"], s["fast_calls"], s["insns"] / base,
+                s["idle"], s["blk_entries"], s["fast_calls"], s["insns"] / base, cf_text,
                 "/".join("%.2f" % (r["rtf"] or 0) for r in rs), " ".join(par),
             )
         )  # fmt: skip

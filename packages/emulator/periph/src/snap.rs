@@ -89,6 +89,14 @@ impl<'a> Reader<'a> {
         }
         Ok(())
     }
+    /// Consumes `tag` when it is next; false (and nothing consumed) otherwise.
+    pub fn tag_if(&mut self, tag: &str) -> bool {
+        let found = self.data.get(self.pos..self.pos + 4) == Some(tag.as_bytes());
+        if found {
+            self.pos += 4;
+        }
+        found
+    }
     pub fn u8(&mut self) -> Result<u8> {
         Ok(self.take(1)?[0])
     }

@@ -7,6 +7,7 @@ import type { DkTransport } from '@digi/dk-session';
 import type { KeyValue } from '@digi/workbench-core/storage.ts';
 import { indexedDbBlobStore, type BlobStore } from '@digi/workbench-core/blob-store.ts';
 import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
+import { deviceNameOf, deviceOfPort, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
 import { createTransferApp, type TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import type { TransferEnv } from '@digi/workbench-core/transfer/env.ts';
 import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts';
@@ -33,11 +34,10 @@ const fetchOk = async (url: string): Promise<Response> => {
   return r;
 };
 
-const DEVICE_NAMES: Record<string, string> = { dt2: 'Digitakt II', dn2: 'Digitone II' };
-export const deviceNameOf = (id: string): string => DEVICE_NAMES[id] ?? id;
+export { deviceNameOf };
 
 /** A port that has a device of ours on it. */
-export const isElektronPort = (name: string): boolean => /digitakt|digitone/i.test(name);
+export const isElektronPort = (name: string): boolean => deviceOfPort(name) !== undefined;
 
 /** The names of the ports that have both an input and an output (a device is talked to both ways). */
 export function usablePorts(access: MidiAccessLike): string[] {
@@ -84,7 +84,7 @@ export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usable
     // the firmware-free bundle the binder reads beside patchkit.wasm: the ports and the firmware declarations (gen-modules.mjs)
     bindBundle: async () => new Uint8Array(await (await fetchOk(`${BASE}modules/bind.json`)).arrayBuffer()),
     deviceName: async (device) => deviceNameOf(device),
-    libraryDevices: ['dt2', 'dn2'],
+    libraryDevices: [...runtimeDeviceIds],
     // only where the browser has WebUSB; devices the user already allowed are used, `requestAccess` (from a click) asks for another
     ...(webUsbAvailable() ? { bulk: { ...webUsbOpener(), requestAccess: () => WebUsbBulkLink.requestAccess() } } : {}),
     targets: {

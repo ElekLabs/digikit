@@ -35,6 +35,7 @@ import sys
 from tools import python_env
 from tools.coldfire import arena_safety, panel_script
 from tools.device.dkproto import SETTINGS_SECTORS
+from tools.firmware import device as device_files
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 GOLDEN = ROOT / "tests" / "golden" / "digikit_menu_frames.json"
@@ -58,6 +59,11 @@ REGRESS_SCRIPTS = [
     "save_project", "save_quick", "load_project", "new_project", "manage_delete", "manage_rename", "format_pool",
     "os_update", "check_filesystem", "pattern_temp",
 ]  # fmt: skip
+
+
+def _has_path_fs(image: str) -> bool:
+    """True when the device of `image` has a folder filesystem on its card (the stock `check_filesystem` script runs there)."""
+    return device_files.by_image(image).capabilities.get("card") == "path-fs"
 
 
 def sh(cmd: list[str], **kw) -> subprocess.CompletedProcess:
@@ -708,9 +714,7 @@ def main(argv=None) -> int:
     if a.stack_stock:
         env = stack_env(image)
         names = [
-            n
-            for n in REGRESS_SCRIPTS
-            if n != "check_filesystem" or image.startswith("dt2")
+            n for n in REGRESS_SCRIPTS if n != "check_filesystem" or _has_path_fs(image)
         ]
         with ThreadPoolExecutor(max_workers=a.jobs) as pool:
             runs = list(
@@ -736,9 +740,7 @@ def main(argv=None) -> int:
         # the stock SETTINGS scripts of finding 25 (project, system and format menus, saves): the same card, stock image
         # against patched image; every dumped frame and the card sectors the firmware wrote must be equal
         names = [
-            n
-            for n in REGRESS_SCRIPTS
-            if n != "check_filesystem" or image.startswith("dt2")
+            n for n in REGRESS_SCRIPTS if n != "check_filesystem" or _has_path_fs(image)
         ]
         stock = arena_safety.suite(
             image, names, OUT / image / "regress-stock", card, a.jobs, False

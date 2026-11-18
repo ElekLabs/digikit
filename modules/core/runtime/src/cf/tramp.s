@@ -1,11 +1,11 @@
-/* core/runtime: cache maintenance, interrupt mask, soft reset and the machine page hooks (docs/design/digikit-runtime.md).
+/* core/runtime: cache maintenance, interrupt mask, soft reset (docs/design/digikit-runtime.md).
  *
  * The hooks of the UI loop, the main-OS task entry and the MIDI receive, and the exception hook, are in core/platform (R3b).
  *
- * Board facts (which UART is the console, where DDR is) come from the device files through build/gen/device.inc; the register
- * offsets of the MCF5441x itself are named here.
+ * Board facts (which UART is the console, where DDR is) are read from the device object `dkrt_dev` (struct DkrtDevice of abi.toml;
+ * field offsets in build/gen/dkdv-offsets.inc); the register offsets of the MCF5441x itself are named here.
  */
-    .include "device.inc"
+    .include "dkdv-offsets.inc"
     .equ MCF5441X_UART_USR_OFF, 4       /* UART status register, offset from the UART base; bit 3 is TXEMP (transmitter empty) */
     .equ MCF5441X_RCM_RCR, 0xEC090000   /* reset controller: reset control register; 0x80 = software reset */
 
@@ -52,13 +52,16 @@ dkrt_irq_restore:
     .globl dkrt_soft_reset
 dkrt_soft_reset:
     move.w  #0x2700,%sr
+    lea     dkrt_dev,%a0
+    movea.l DKDV_CONSOLE_UART_BASE(%a0),%a1
     move.l  #200000,%d1
-1:  move.b  CONSOLE_UART_BASE + MCF5441X_UART_USR_OFF,%d0
+1:  move.b  MCF5441X_UART_USR_OFF(%a1),%d0
     btst    #3,%d0
     bne.s   2f
     subq.l  #1,%d1
     bne.s   1b
-2:  clr.l   DDR_UNCACHED_ALIAS
+2:  movea.l DKDV_DDR_UNCACHED_ALIAS(%a0),%a1
+    clr.l   (%a1)
     .rept 25
     nop
     .endr

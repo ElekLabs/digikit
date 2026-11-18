@@ -10,7 +10,7 @@ status = "experimental"
 summary = "The UI adapter behind <dk/platform/ui.h>: menus, text pages, lists with a side panel, rows, confirm and choice dialogs and toasts, on the firmware's own views"
 requires = ["core/runtime"]
 conflicts = []
-ports = ["dt2-1.17", "dn2-1.12"]
+ports = ["dt2-1.17", "dn2-1.12", "st-1.42"]
 
 [targets]
 "dt2-1.17" = "experimental"

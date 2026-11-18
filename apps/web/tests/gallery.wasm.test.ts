@@ -9,6 +9,7 @@ import { parse } from 'smol-toml';
 import { test } from 'vitest';
 import { buildModuleData, shipModules } from '../scripts/gen-modules.mjs';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
+import { loadDevices } from '@digi/devices/node';
 import { PatchKit } from '@digi/workbench-core/patch/patchkit-core.ts';
 import {
   firmwareDir,
@@ -68,7 +69,9 @@ test('the shipped modules: the index describes them, the sources hold no build o
     .flatMap((r) => manifestFiles(join(root, 'modules', r)))
     .map((file) => ({ file, d: parse(readFileSync(file, 'utf8')) as { module: { id: string } } }))
     .filter(
-      ({ file, d }) => isShipped(d, relative(root, dirname(file)).split(sep).join('/')) && shippedDevices(d).length,
+      ({ file, d }) =>
+        isShipped(d, relative(root, dirname(file)).split(sep).join('/')) &&
+        shippedDevices(d, loadDevices().runtimeIds).length,
     )
     .map(({ d }) => d.module.id)
     .sort();

@@ -561,7 +561,7 @@ pub unsafe fn apply<C: CoreApi>(core: &C, owner: u8, b: *const u8) -> i32 {
     }
     s.nknob[k] = n as u8;
     publish_row(inf, k, rd32(b.add(12)));
-    let live = kit(inf);
+    let live = kit(core, inf);
     if live != 0 {
         // a kit object is live already and holds nothing of this effect (the init hook ran before the effect was here): its defaults now
         seed_row(inf, k, live + iw(inf, w::ARRAY_OFF));
@@ -678,13 +678,17 @@ unsafe fn seed_row(inf: *const u32, k: usize, arr: u32) {
     }
 }
 
+/// Is `a` in the cached DDR window of the device the runtime runs on? The window is a device fact: the profile of the device id (the generated table). A device
+/// without a profile has no window.
+fn in_ddr<C: CoreApi>(core: &C, a: u32) -> bool {
+    dkrt_abi::platform::DeviceProfile::by_id(core.device_id()).is_some_and(|p| p.ddr_contains(a))
+}
+
 /// The live kit object (0 while the firmware has none); a pointer in a DDR cell, checked to lie in DDR. Any alignment: the Digitone II's kit objects are allocated at odd
 /// addresses (its sound arrays have an odd stride), so the array's halfwords are read and written a byte at a time.
-pub(crate) unsafe fn kit(inf: *const u32) -> u32 {
+pub(crate) unsafe fn kit<C: CoreApi>(core: &C, inf: *const u32) -> u32 {
     let k = rd(iw(inf, w::KIT_PTR));
-    let ddr = dkrt_sdk::device::DDR_CACHED_BASE
-        ..dkrt_sdk::device::DDR_CACHED_BASE + dkrt_sdk::device::DDR_BYTES;
-    if !ddr.contains(&k) {
+    if !in_ddr(core, k) {
         return 0;
     }
     k
@@ -721,7 +725,7 @@ pub unsafe fn tick<C: CoreApi>(core: &C) {
 unsafe fn values<C: CoreApi>(core: &C, inf: *const u32) {
     let s = fs();
     let mut k;
-    let kit = kit(inf);
+    let kit = kit(core, inf);
     if kit == 0 {
         return;
     }

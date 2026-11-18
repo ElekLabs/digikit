@@ -21,6 +21,7 @@ shared = [
   "dkrt::core_api",
   "dkrt::entry",       # the `dk_*` SDK entry points that modules call
   "dkrt::platform",
+  "dkrt::dev",         # the device object `dkrt_dev`: the reader behind RealPlatform
   "dkrt::mailbox",
   "dkrt::handlers",
   "dkrt::gen_services",

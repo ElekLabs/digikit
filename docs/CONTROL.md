@@ -40,7 +40,7 @@ flags. `--scenario` needs a sharc build.
 | Subcommand | Does |
 |---|---|
 | `status` | Print the `status` result |
-| `load SYX` / `inject SYX` | `firmware.load`; options `--base-sha256`, `--start auto\|snapshot\|cold`, `--dsp-patch`, `--runtime [--patch-set NAME]` (`load` also `--card`) |
+| `load SYX` / `inject SYX` | `firmware.load`; options `--base-sha256`, `--start auto\|snapshot\|cold`, `--dsp-patch`, `--runtime [--patch-set NAME]`, `--dsp on\|off` (starts over; see below) (`load` also `--card`) |
 | `restart` | Back to the ready state of the running firmware |
 | `step N` | Run N guest instructions |
 | `tap CODE [--hold N] [--at-instr N]` | Press and release a key (default hold 40000000 instructions) |
@@ -91,7 +91,7 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `state.digest {arch?}` | `state_digest` | `call` |
 | `state.save {path}`, `state.load {path}` | `state_save`, `state_load` | `call` |
 | `pcm.tap` (`start`, `report`, `capture`, `capture_stop`) | `pcm_start`, `pcm_report` | `call` |
-| `cf.profile` | | `call`; only with the `cf-profile` feature |
+| `cf.profile {enable?}` | | `call`; only with the `cf-profile` feature (the workbench daemons have it) |
 | `sharc.profile {enable?}` | | `call`; only with the `sharc-profile` feature |
 | `dsp.peek` | `dsp_peek` | `call` |
 | `dsp.patch` | `patch` | `call` |
@@ -100,13 +100,20 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `events.subscribe` | `events`, `subscribe`, `drain_events` | `events` |
 | `quit` | `quit` | `quit` |
 
-`sharc.profile`: DSP execution counts as raw counters of the profile artifact `dk.profile/1` ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)). `{enable: true}` starts counting and clears the counts; `{enable: false}` stops and clears; without `enable` the call reads the counts since the start (an error says so when the counting is off). The answer: `clock` (`emu.sharc.insn`, unit `insn`, the sampling text), `blocks` (DSP blocks since the start), `icount` and `idle_skipped` (instructions executed and replayed by the idle skip since the start), `counted` (`fast`, `block`, `interpreted`: instructions each source counted) and `raw`, a list of `{cpu: "sharc", addr, count, series: "pc"}` sorted by software PC. Two sources are added by PC: the dispatch profile of the fast and block tiers (a dispatch is credited whole to its entry PC, so a count at an entry PC covers the region that starts there) and the interpreter's per-PC counts (each instruction at its own PC). [O] `icount` and `idle_skipped` are engine totals; in the first DN2 run they did not reconcile with the sum of `counted` (a dispatch may be counted in two sources, and a chained dispatch is not counted), so read the per-PC counts as a ranking and per-block estimate, not as an exact total. It reads no EMUCLK or TCOUNT. A daemon built without the feature answers "built without sharc-profile"; it implies the features `sharc` and `play` (a DSP and its audio output): `cargo build --release -p digi-control --bin digi-emud --features sharc-profile`.
+`cf.profile`: host time and PC samples of the ColdFire execution paths. The recording is off until asked: `{enable: true}` starts it and clears the counters, `{enable: false}` stops and clears, without `enable` the call reads the counters since the start (all zero while it was never started). While off, the emulator does no timing and no sampling. The read has `restarts`: how many times a new runtime (firmware load, restart) re-armed this profile since the last `enable` call of `cf.profile`. The count is per profile. The new runtime counts from zero, so a count above 0 means the counters cover only the time since the last reload. A daemon built without the feature answers "built without cf-profile".
+
+`sharc.profile`: DSP execution counts as raw counters of the profile artifact `dk.profile/1` ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)). `{enable: true}` starts counting and clears the counts; `{enable: false}` stops and clears; without `enable` the call reads the counts since the start (an error says so when the counting is off). The answer: `clock` (`emu.sharc.insn`, unit `insn`, the sampling text), `blocks` (DSP blocks since the start), `icount` and `idle_skipped` (instructions executed and replayed by the idle skip since the start), `counted` (`fast`, `block`, `interpreted`: instructions each source counted) and `raw`, a list of `{cpu: "sharc", addr, count, series: "pc"}` sorted by software PC. Two sources are added by PC: the dispatch profile of the fast and block tiers (a dispatch is credited whole to its entry PC, so a count at an entry PC covers the region that starts there) and the interpreter's per-PC counts (each instruction at its own PC). [O] `icount` and `idle_skipped` are engine totals; in the first DN2 run they did not reconcile with the sum of `counted` (a dispatch may be counted in two sources, and a chained dispatch is not counted), so read the per-PC counts as a ranking and per-block estimate, not as an exact total. It reads no EMUCLK or TCOUNT. The read has its own `restarts`: how many times a new runtime with a DSP session re-armed this profile after a firmware reload since the last `enable` call of `sharc.profile`. A daemon built without the feature answers "built without sharc-profile"; it implies the features `sharc` and `play` (a DSP and its audio output): `cargo build --release -p digi-control --bin digi-emud --features sharc-profile`.
 
 `job.cancel`: cancel the long job that runs: a cold boot (`firmware.load`, `restart`, a soft-reset boot), a card load, or `step`/`run_until`.
 Answers `{cancelled: kind|null}`; the cancelled call answers error 10 `cancelled`. After a cancelled `firmware.load {replace: true}` no firmware is loaded.
 
 `status.job` is `null` or `{kind: "boot"|"card"|"step"|"run_until"|"firmware.load", wall_seconds, phase?, progress?, icount?}`.
 `progress` (0..1) is an estimate. A cold boot has `phase` "starting the DSP" with `progress: null` (a changed DSP section runs its cold start first), then "booting" with an estimated `progress`. `icount` restarts at 0 when a soft reset reboots the job. `status.boot` is gone.
+
+`firmware.load {replace: true, dsp?}` chooses the DSP of the session it starts (the workbench's "DSP" tick): `dsp: false` boots ColdFire
+only (no DSP audio session; a device with a second CPU that runs a program gets the mailbox responder instead, so there is no peer audio and
+the UI is fast), `dsp: true` the DSP session when its inputs are set and the peer program. The choice is kept for the loads after it
+(`status.dsp_enabled`); `--no-dsp` on `digi-emud` and the app is the choice before the first load (`status.dsp_flag` tells a webview).
 
 `firmware.load {syx, runtime?, patch_set?, ...}`: with `runtime: true` the controller patches the stock image in-process with the
 device's patch set (`patch_set`, default `emulator`; the roots are in `devices/*.toml` `[patch_sets]`, the modules they require are added)
@@ -200,8 +207,9 @@ the same digest. It is the oracle for a change to those paths: boot paused to a 
 compare the digests of a daemon built before the change with one built after.
 
 `--dsp zero --cf-snapshot FILE` (on `digi-emud` and the app) starts without a DSP: SSI paced, the DSPI2 peer
-answers zeros, the ColdFire state restored from the snapshot (about 2.2x real time). `status.dsp` is `"zero"`,
-`"sharc"` or `"none"`. `run_until {frames|audio_s}` is refused (no DSP session); `elapsed`, `icount` and `step`
+answers zeros, the ColdFire state restored from the snapshot (about 2.2x real time). `status.dsp` names the device's second
+processor as it runs: `"sharc"`, `"peer"` (a peer CPU runs its program), `"responder"` (the mailbox stand-in for a peer CPU),
+`"zero"` or `"none"`. `run_until {frames|audio_s}` is refused (no DSP session); `elapsed`, `icount` and `step`
 work. No PCM is produced.
 
 `pc.probe.set {task_ptr?, keep?, probes: [{pc, label?, words?, stack?, frame?}]}` (or `{file, name?}`: the spec is a JSON file on the daemon's host, or its member `name`) sets the ColdFire PC probe; `pc.probe.report` returns the counts per (task, IPL) and the first hits per PC; `pc.probe.clear` forgets the hits. The spec is kept and armed in every runtime installed later, so set it before `firmware.load` or `restart`. A runtime that a cold boot worker builds and snapshots never sees it. Spec, report and the R12 checks: [INSTRUMENTATION.md](INSTRUMENTATION.md#pc-probe-coldfire).
@@ -275,7 +283,7 @@ restored or replaced runtime resets it). On the device in the emulator, the runt
 (its EMUCLK ticks once per instruction), so compare it with `model_pct`, not `real_pct`. The real values are estimates from the public manuals' cycle tables and our instruction counts, not measurements. The
 factors are one file, `devices/cycle-factors.json` (cited findings inside; `tools/patchkit/pk_dsp_budget.py` reads the
 same numbers). Each closed window is blended 50/50 into the shown value; a restored or replaced runtime clears it.
-`dsp` is `null` without a DSP session (`status.dsp` is `"zero"` or `"none"`). The desktop panel gets the same object as
+`dsp` is `null` without a DSP session (`status.dsp` is not `"sharc"`). The desktop panel gets the same object as
 `load` in its audio status. The browser (wasm) build has no controller and shows no meter.
 
 ## Events

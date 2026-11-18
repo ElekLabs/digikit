@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-/// The library folder, relative to the repository root (one subfolder per device: `dt2`, `dn2`).
+/// The library folder, relative to the repository root (one subfolder per device short name).
 const LIBRARY_DIR: &str = "out/modules";
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -370,7 +370,7 @@ pub async fn lib_build(device: String) -> Result<LibBuildReport, String> {
         .map_err(|e| e.to_string())?
 }
 
-/// The built modules of a device (`dt2`, `dn2`): path and size of each.
+/// The built modules of a device (its short name): path and size of each.
 #[tauri::command]
 pub async fn lib_scan(device: String) -> Result<Vec<LibFile>, String> {
     tauri::async_runtime::spawn_blocking(move || scan(&root()?, &device))
@@ -463,7 +463,7 @@ pub struct DeviceStorage {
     pub samples: String,
 }
 
-/// The `[storage]` of a device (`dt2`, `dn2`) from `devices/*.toml`.
+/// The `[storage]` of a device (its short name) from `devices/*.toml`.
 pub fn storage_of(device: &str) -> Result<DeviceStorage, String> {
     let registry = device_profile::Registry::load().map_err(|e| e.to_string())?;
     let profile = registry
@@ -493,11 +493,18 @@ pub async fn device_storage(device: String) -> Result<DeviceStorage, String> {
 mod tests {
     use super::*;
 
+    /// The short names of the first two devices of the registry (a device with a library, and one without).
+    fn two_devices() -> (String, String) {
+        let registry = device_profile::Registry::load().unwrap();
+        let mut shorts = registry.devices().iter().map(|d| d.short.clone());
+        (shorts.next().unwrap(), shorts.next().unwrap())
+    }
+
     fn library(name: &str) -> PathBuf {
         let root =
             std::env::temp_dir().join(format!("digi-library-test-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        let dir = root.join(LIBRARY_DIR).join("dt2");
+        let dir = root.join(LIBRARY_DIR).join(two_devices().0);
         std::fs::create_dir_all(dir.join("acme")).unwrap();
         std::fs::create_dir_all(dir.join("test")).unwrap();
         std::fs::write(dir.join("acme/synth.dkm"), b"SYNTH").unwrap();
@@ -509,10 +516,11 @@ mod tests {
     #[test]
     fn the_scan_lists_dkm_and_dks_files_by_path_and_a_missing_folder_is_empty() {
         let root = library("scan");
-        let dir = root.join(LIBRARY_DIR).join("dt2");
+        let (full, empty) = two_devices();
+        let dir = root.join(LIBRARY_DIR).join(&full);
         std::fs::write(dir.join("fx.dks"), b"FXSV").unwrap();
         assert_eq!(
-            scan(&root, "dt2").unwrap(),
+            scan(&root, &full).unwrap(),
             vec![
                 LibFile {
                     path: "acme/synth.dkm".into(),
@@ -528,16 +536,17 @@ mod tests {
                 }
             ]
         );
-        assert_eq!(scan(&root, "dn2").unwrap(), vec![]);
+        assert_eq!(scan(&root, &empty).unwrap(), vec![]);
         assert!(scan(&root, "../x").is_err());
-        assert_eq!(read(&root, "dt2", "acme/synth.dkm").unwrap(), b"SYNTH");
+        assert_eq!(read(&root, &full, "acme/synth.dkm").unwrap(), b"SYNTH");
         let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn the_maps_are_the_files_beside_the_built_modules_and_the_kept_ship_maps() {
         let root = library("maps");
-        let dir = root.join(LIBRARY_DIR).join("dt2");
+        let (full, empty) = two_devices();
+        let dir = root.join(LIBRARY_DIR).join(&full);
         std::fs::write(
             dir.join("acme/synth.addrmap.json"),
             b"{\"kind\":\"module\"}",
@@ -548,10 +557,10 @@ mod tests {
             ship: "{\"kind\":\"ship\"}".into(),
             symbols: [("DKRT_STATE".to_string(), 0x4010_0000)].into(),
         };
-        store_ship(&root, "dt2", &ship).unwrap();
-        store_ship(&root, "dt2", &ship).unwrap(); // unchanged: not written again
+        store_ship(&root, &full, &ship).unwrap();
+        store_ship(&root, &full, &ship).unwrap(); // unchanged: not written again
         // sine has no map file (built before maps were written): left out
-        let maps = read_maps(&root, "dt2").unwrap();
+        let maps = read_maps(&root, &full).unwrap();
         assert_eq!(
             maps.modules,
             vec![LibMap {
@@ -561,13 +570,13 @@ mod tests {
         );
         assert_eq!(maps.ships, vec![ship.clone()]);
         // another device has neither
-        let none = read_maps(&root, "dn2").unwrap();
+        let none = read_maps(&root, &empty).unwrap();
         assert!(none.modules.is_empty() && none.ships.is_empty());
         assert!(read_maps(&root, "../x").is_err());
         assert!(
             store_ship(
                 &root,
-                "dt2",
+                &full,
                 &ShipRecord {
                     image_id: "../x".into(),
                     ..ship
@@ -581,13 +590,14 @@ mod tests {
     #[test]
     fn the_services_of_dist_are_copied_into_the_library_when_changed() {
         let root = library("services");
-        let dir = root.join(LIBRARY_DIR).join("dt2");
-        let dist = root.join(SERVICES_DIST_DIR).join("dt2");
+        let (full, empty) = two_devices();
+        let dir = root.join(LIBRARY_DIR).join(&full);
+        let dist = root.join(SERVICES_DIST_DIR).join(&full);
         std::fs::create_dir_all(&dist).unwrap();
         std::fs::write(dist.join("fx.dks"), b"FXSV").unwrap();
         std::fs::write(dist.join("notes.txt"), b"not a service").unwrap();
         let mut report = LibBuildReport::default();
-        copy_services(&root, "dt2", &dir, &mut report);
+        copy_services(&root, &full, &dir, &mut report);
         assert_eq!(std::fs::read(dir.join("fx.dks")).unwrap(), b"FXSV");
         // only `.dks` files are copied: the library's own notes.txt is untouched
         assert_eq!(
@@ -596,14 +606,14 @@ mod tests {
         );
         // a changed file is written again, the .dkm files stay as they are
         std::fs::write(dist.join("fx.dks"), b"FXS2").unwrap();
-        copy_services(&root, "dt2", &dir, &mut report);
+        copy_services(&root, &full, &dir, &mut report);
         assert_eq!(std::fs::read(dir.join("fx.dks")).unwrap(), b"FXS2");
         assert_eq!(std::fs::read(dir.join("acme/synth.dkm")).unwrap(), b"SYNTH");
         // no source folder for another device: nothing copied, nothing failed
         copy_services(
             &root,
-            "dn2",
-            &root.join(LIBRARY_DIR).join("dn2"),
+            &empty,
+            &root.join(LIBRARY_DIR).join(&empty),
             &mut report,
         );
         assert!(report.failed.is_empty());
@@ -619,33 +629,37 @@ mod tests {
 
     #[test]
     fn the_storage_comes_from_the_profile() {
-        let dt2 = storage_of("dt2").unwrap();
-        assert_eq!(
-            (dt2.name.as_str(), dt2.samples.as_str()),
-            ("Digitakt II", "stock-rpc")
-        );
-        let dn2 = storage_of("dn2").unwrap();
-        assert_eq!(
-            (dn2.name.as_str(), dn2.samples.as_str()),
-            ("Digitone II", "digikit")
-        );
+        let registry = device_profile::Registry::load().unwrap();
+        let mut found = 0;
+        for profile in registry.devices().iter().filter(|d| d.storage.is_some()) {
+            let storage = storage_of(&profile.short).unwrap();
+            assert_eq!(storage.name, profile.name);
+            assert_eq!(
+                Some(&storage.samples),
+                profile.storage.as_ref().map(|s| &s.samples)
+            );
+            found += 1;
+        }
+        assert!(found > 0);
         assert!(storage_of("nothing").is_err());
     }
 
     #[test]
     fn a_read_stays_inside_the_device_folder() {
         let root = library("read");
+        let (full, empty) = two_devices();
+        let outside = format!("../{empty}/x.dkm");
         for bad in [
-            "../dn2/x.dkm",
+            outside.as_str(),
             "digikit/../../x.dkm",
             "/etc/passwd",
             "notes.txt",
             "",
             "a//b.dkm",
         ] {
-            assert!(read(&root, "dt2", bad).is_err(), "{bad}");
+            assert!(read(&root, &full, bad).is_err(), "{bad}");
         }
-        assert!(read(&root, "dt2", "nothing.dkm").is_err());
+        assert!(read(&root, &full, "nothing.dkm").is_err());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

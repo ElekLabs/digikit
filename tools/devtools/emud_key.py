@@ -31,6 +31,8 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from tools.firmware import device as device_files
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 # git pathspecs (glob magic) of the repository files cargo reads for digi-emud with sharc,play.
@@ -57,6 +59,7 @@ SOURCE_GLOBS = (
     "devices/**",
     "tests/scenarios/dn2.json",
     "sdk/sdk.toml",
+    "modules/core/runtime/abi.toml",
     "tools/patchkit/toolchain/**",
     "tools/sharc_dev/sharc_core/seed_tables.py",
 )
@@ -441,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("key", "test-key", "audit"):
         sp = sub.add_parser(name)
-        sp.add_argument("--device", required=True, choices=("dt2", "dn2"))
+        sp.add_argument("--device", required=True, choices=device_files.shorts())
     sub.choices["test-key"].add_argument(
         "--entry",
         type=Path,

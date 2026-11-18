@@ -106,6 +106,7 @@ cpu = "cf"
 sig = "void ()"
 rule.dt2 = { kind = "cf_func", hash = "ce2fecf00cf4757d0252acc24f11436c", offset = 0x0, len = 2 }
 rule.dn2 = { kind = "cf_func", hash = "f2ab3c0214b6212848a6300a70dd6129", offset = 0x0, len = 2 }
+rule.st = { kind = "cf_func", hash = "38c3cd498f3274f7dbde60e417036fbd", offset = 0x0, len = 2, mark = "O" }
 mark = "D"
 users = ["core/runtime"]
 doc = "The firmware's normal writer of the boot record (finding 36 section 2; DT2 1.16 FUN_400f044a, 1.17 0x400f05ae; DN2 1.11 FUN_400f1e26, 1.12 FUN_400f1f8a): writes the arena to the next of the two record slots, invalidates the other, one shot per boot."

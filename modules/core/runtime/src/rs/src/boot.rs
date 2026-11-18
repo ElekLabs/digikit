@@ -87,6 +87,9 @@ pub fn info() -> &'static mut DkrtBootInfo {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_boot() {
     crate::init_once();
+    if !crate::dev::valid() {
+        return; // a device object this runtime cannot read (a patch bug): load nothing, leave the firmware alone
+    }
     let b = info();
     if b.magic == INFO_MAGIC {
         return; // the constructor ran once already: a second call is a bug, not a second boot

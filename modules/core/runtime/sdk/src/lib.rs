@@ -14,13 +14,6 @@
 /// 0.1.0 = semantic version (a module needs the same major and minor and at most this patch); LOGCFG, log levels and sources, `dk_log` with a level.
 pub use gen_sdk::RUNTIME_VERSION;
 
-/// Facts from the device files (`devices/*.toml`) and `core/machines` types.toml that every device agrees on, written by
-/// `patchkit gen` (the `[[gen]]` of core/runtime's module.toml; docs/design/device-data.md). `dk_module_ctx_device` gives the device's
-/// `[digikit] id`, read from the runtime's device object, not a constant here.
-pub mod device {
-    include!("device.rs");
-}
-
 /// The structs, constants and function types of the runtime's C ABI, written by `patchkit gen` from `core/runtime/abi.toml` (also the C header
 /// `core/runtime/include/dkrt.h`): `OK`, `LOADING`, `Dkrt*`, `HEALTH_*`, `SAFE_*`, `CARD_*`, `SCAN_*`, `sig`.
 #[rustfmt::skip]
@@ -40,10 +33,6 @@ pub use gen_sdk::sample_pool;
 
 // `DkrtStatus`, `DkrtCap`, `DkrtHealth`, `DkrtStoreEntry`, `DkrtModule`, `DkrtFx`, `DkrtSelection`, `DkrtBootInfo`, `DkrtDiag` and the scan and fit
 // structs, with `STATE_*`, `MOD_*`, `CAP_MAX`, `HEALTH_*`, `SEL_PATH`, `SAFE_*`, `CARD_*` and `DIAG_MAGIC`, are in `gen_abi`.
-
-/// Cycles in one DSP block (32 samples at 48 kHz, 1500 blocks per second) at the 1 GHz core clock of the emulator's model
-/// (`[board]` of the device files). The real clock of the device is not known **[O]** (finding 41): the DSP percentages scale with it.
-pub const DSP_BLOCK_CYCLES: u32 = device::DSP_BLOCK_CYCLES;
 
 /// Text for a result code, for a menu line (upper case, at most 14 characters). A table, not a `match`: the compiler turns a
 /// dense `match` into a PC-relative jump table that is not ColdFire code.
@@ -114,9 +103,6 @@ pub const CMD_SETTINGS_FLUSH: u32 = 12;
 
 // The selection (what the next boot loads): `SEL_MAX` (`[limits.max] modules` of sdk/sdk.toml, the record's format), `SEL_PATH` and `DkrtSelection` are in
 // `gen_abi`, as are `SAFE_*`, `SAFE_AFTER`, `STABLE_BLOCKS` and `DkrtBootInfo`.
-/// The key held at power-on for safe mode (`[digikit] safe_key` of the device files; RECORD, panel button 19).
-pub const SAFE_KEY_CODE: u32 = device::SAFE_KEY_CODE;
-
 /// The selection record (docs/design/digikit-store.md): one sector, big endian, in two copies at the end of the store range.
 pub mod sel {
     use super::*;

@@ -31,6 +31,45 @@ pub struct DeviceProfile {
     pub dsp_headroom: u32,
     /// `[adapter.machine] voices`: the voices a machine's per-voice DSP cost counts for (`DSP_VOICES`).
     pub dsp_voices: u32,
+    /// `[capabilities] dsp = "sharc"`: the device has the DSP that the digikit link drives. False: no DSP area, no machine rows, no DSP figures, no block counter.
+    pub has_dsp: bool,
+    /// The device file has `[card.store]`. False: every store call answers not found and the card is never written.
+    pub has_store: bool,
+    /// `[board] esdhc_base` is set: the card is on an eSDHC controller whose present-state register the runtime may read. False: the card is never busy.
+    pub has_sdhc: bool,
+    /// `[digikit] safe_key`: the firmware key index held at power-on for safe mode; `None`: no key starts safe mode.
+    pub safe_key: Option<u32>,
+    /// `[board] ddr_cached_base` and `ddr_bytes`: the cached DDR window.
+    pub ddr_base: u32,
+    pub ddr_bytes: u32,
+    /// `[digikit] keep_base` and `keep_bytes`: the RAM a soft reset is assumed to keep (the crash record).
+    pub keep_base: u32,
+    pub keep_bytes: u32,
+    /// `[board] esdhc_base` (0 without `has_sdhc`).
+    pub esdhc_base: u32,
+    /// `[board] dsp_clock_hz / dsp_blocks_per_second`, rounded (0 without a DSP): the DSP cycles of one block.
+    pub dsp_block_cycles: u32,
+    /// The first run-time machine type (`dynamic_first` of core/machines `types.toml`) and how many there are (0 without a DSP). The tables have
+    /// `MACHINE_ROWS` rows: a device has that many types or none.
+    pub dyn_type_first: u32,
+    pub dyn_types: u32,
+}
+
+impl DeviceProfile {
+    /// Is `a` an address of the cached DDR window?
+    pub fn ddr_contains(&self, a: u32) -> bool {
+        a >= self.ddr_base && a - self.ddr_base < self.ddr_bytes
+    }
+
+    /// Is `t` one of the run-time machine types?
+    pub fn is_dyn_type(&self, t: u32) -> bool {
+        t >= self.dyn_type_first && t - self.dyn_type_first < self.dyn_types
+    }
+
+    /// The profile of the device with `[digikit] id` `id`: what a service reads its device facts from (it knows the id through `CoreApi::device_id`).
+    pub fn by_id(id: u32) -> Option<DeviceProfile> {
+        crate::profiles::ALL.iter().copied().find(|p| p.id == id)
+    }
 }
 
 /// The firmware's task kernel and its heap.
@@ -157,6 +196,31 @@ pub trait Platform: Tasking + SamplePool + StagedWriter + crate::storage::Storag
     }
     fn dsp_voices(&self) -> u32 {
         self.profile().dsp_voices
+    }
+    fn has_dsp(&self) -> bool {
+        self.profile().has_dsp
+    }
+    fn has_store(&self) -> bool {
+        self.profile().has_store
+    }
+    fn has_sdhc(&self) -> bool {
+        self.profile().has_sdhc
+    }
+    fn safe_key(&self) -> Option<u32> {
+        self.profile().safe_key
+    }
+    fn ddr_contains(&self, a: u32) -> bool {
+        self.profile().ddr_contains(a)
+    }
+    /// The RAM a soft reset is assumed to keep (the crash record): its base and size.
+    fn keep_base(&self) -> u32 {
+        self.profile().keep_base
+    }
+    fn keep_bytes(&self) -> u32 {
+        self.profile().keep_bytes
+    }
+    fn dsp_block_cycles(&self) -> u32 {
+        self.profile().dsp_block_cycles
     }
 }
 

@@ -57,6 +57,9 @@ pub struct Plan {
     /// P4: hooks
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hooks: Vec<prim::PlanHook>,
+    /// `<owner>:<name>` of every optional anchor or hook (`optional_anchors` of a manifest) that the port lacks: what the module does without
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub disabled: Vec<String>,
     pub record: Record,
     pub output: Option<PlanOutput>,
 }
@@ -122,7 +125,8 @@ fn anchor_value(a: &Anchor) -> u64 {
 
 /// Memory of both CPUs as the firmware loads it.
 struct Mem {
-    stream: Stream,
+    /// The DSP boot stream; `None` on a device without a DSP.
+    stream: Option<Stream>,
     main: Vec<u8>,
     main_base: u64,
     stream_dirty: bool,
@@ -133,6 +137,8 @@ impl Mem {
     fn read(&self, cpu: &str, addr: u64, len: u64) -> Result<Vec<u8>> {
         if cpu == SHARC {
             self.stream
+                .as_ref()
+                .ok_or_else(|| err!("DSP {addr:#x}+{len}: the device has no DSP"))?
                 .read(addr as u32, len as usize)
                 .ok_or_else(|| err!("DSP {addr:#x}+{len}: not loaded by the boot stream"))
         } else {
@@ -148,7 +154,10 @@ impl Mem {
     fn write(&mut self, cpu: &str, addr: u64, data: &[u8]) -> Result<()> {
         if cpu == SHARC {
             self.stream_dirty = true;
-            self.stream.write(addr as u32, data)
+            self.stream
+                .as_mut()
+                .ok_or_else(|| err!("DSP {addr:#x}: the device has no DSP"))?
+                .write(addr as u32, data)
         } else {
             self.read(cpu, addr, data.len() as u64)?;
             let o = (addr - self.main_base) as usize;
@@ -258,15 +267,27 @@ pub fn compatible(m: &Module, port: &Port) -> Result<()> {
         }
         for sy in dko.symbols.iter().filter(|s| s.section.is_none()) {
             let name = o.externs.get(&sy.name).unwrap_or(&sy.name);
-            // an export of another object cannot be seen here; only names that look like anchors are checked
-            if (name.starts_with("dsp.") || name.starts_with("cf.")) && port.anchor(name).is_none()
+            // an export of another object cannot be seen here; only names that look like anchors are checked; an optional anchor may be missing
+            if (name.starts_with("dsp.") || name.starts_with("cf."))
+                && port.anchor(name).is_none()
+                && !disabled_anchors(m, port).contains(name)
             {
                 missing.push(format!("anchor {name}"));
             }
         }
     }
+    let off = disabled_anchors(m, port);
     for op in &m.manifest.op {
         if !on(&op.devices, dev) {
+            continue;
+        }
+        // an optional hook or anchor the port lacks switches the op off instead of refusing the module
+        let name = op
+            .hook
+            .as_deref()
+            .filter(|_| op.op == "hook")
+            .unwrap_or(&op.anchor);
+        if off.iter().any(|n| n == name) {
             continue;
         }
         let op = &match expand_op(m, port, op) {
@@ -383,14 +404,43 @@ fn expand_op(m: &Module, port: &Port, op: &Op) -> Result<Op> {
     Ok(x)
 }
 
-/// The ops of a module that are active on the port's device, hook ops expanded.
+/// The names in the module's `optional_anchors` that the port has neither as an anchor nor as a hook: what the module does without on this firmware.
+pub fn disabled_anchors(m: &Module, port: &Port) -> Vec<String> {
+    m.manifest
+        .module
+        .optional_anchors
+        .iter()
+        .filter(|n| port.anchor(n).is_none() && port.hook(n).is_none())
+        .cloned()
+        .collect()
+}
+
+/// The ops of a module that are active on the port's device, hook ops expanded. An op whose hook or anchor is optional and missing is left out.
 fn device_ops(m: &Module, port: &Port) -> Result<Vec<Op>> {
+    let off = disabled_anchors(m, port);
     m.manifest
         .op
         .iter()
         .filter(|o| on(&o.devices, &port.port.device))
+        .filter(|o| match o.hook.as_deref().filter(|_| o.op == "hook") {
+            Some(h) => !off.iter().any(|n| n == h),
+            None => !off.contains(&o.anchor),
+        })
         .map(|o| expand_op(m, port, o))
         .collect()
+}
+
+/// Is `name`, an undefined symbol's anchor name, one that an optional anchor switched off: the optional anchor itself, or a tail
+/// (`hook.<site>.tail`, `hook.<site>.return`) of a hook whose site is one?
+fn switched_off(name: &str, off: &[String]) -> bool {
+    if off.iter().any(|n| n == name) {
+        return true;
+    }
+    let site = name.strip_prefix("hook.").and_then(|r| {
+        r.strip_suffix(".tail")
+            .or_else(|| r.strip_suffix(".return"))
+    });
+    site.is_some_and(|s| off.iter().any(|n| n == s))
 }
 
 /// Region of the slot words of a `[[slot]]`.
@@ -989,21 +1039,26 @@ pub fn apply_with(
     })?;
     let dev = port.port.device.clone();
     let main_sec = fw
-        .section(3)
+        .main()
         .ok_or_else(|| err!("image has no MAIN OS section"))?;
-    let dsp_sec = fw
-        .section(7)
-        .ok_or_else(|| err!("image has no DSP section"))?;
-    if sha256_hex(&main_sec.data) != port.port.main_sha256
-        || sha256_hex(&dsp_sec.data) != port.port.dsp_sha256
-    {
+    // the DSP section is the device's `[container] dsp`; a device without a DSP has none and its port no `dsp_sha256`
+    let dsp_sec = match fw.device.dsp_section() {
+        Some(_) => Some(fw.dsp().ok_or_else(|| err!("image has no DSP section"))?),
+        None => None,
+    };
+    let dsp_ok = match (dsp_sec, &port.port.dsp_sha256) {
+        (Some(d), Some(h)) => sha256_hex(&d.data) == *h,
+        (None, None) => true,
+        _ => false,
+    };
+    if sha256_hex(&main_sec.data) != port.port.main_sha256 || !dsp_ok {
         return Err(err!(
             "port {} does not match the sections of this image",
             port.id()
         ));
     }
     let mut mem = Mem {
-        stream: Stream::parse(dsp_sec.data.clone())?,
+        stream: dsp_sec.map(|d| Stream::parse(d.data.clone())).transpose()?,
         main: main_sec.data.clone(),
         main_base: main_sec.dest as u64,
         stream_dirty: false,
@@ -1278,6 +1333,8 @@ pub fn apply_with(
         dko: &'a Dko,
         externs: &'a BTreeMap<String, String>,
         optional: &'a [String],
+        /// the anchors and hooks the module's port lacks and the module can do without (`disabled_anchors`)
+        off: Vec<String>,
         place: String,
         base: u64,
         cpu: &'static str,
@@ -1306,6 +1363,7 @@ pub fn apply_with(
                     dko,
                     externs: &no_externs,
                     optional: &no_optional,
+                    off: vec![],
                     place: (*region).into(),
                     base,
                     cpu: if dko.arch == "sharc" { SHARC } else { CF },
@@ -1341,6 +1399,7 @@ pub fn apply_with(
                 dko,
                 externs: &o.externs,
                 optional: &o.optional,
+                off: disabled_anchors(m, port),
                 place: o.place.clone(),
                 base,
                 cpu,
@@ -1514,6 +1573,9 @@ pub fn apply_with(
                 ext.insert(sy.name.clone(), anchor_value(a));
             } else if !ext.contains_key(&sy.name) && p.optional.contains(&sy.name) {
                 // an optional link to a module that is not selected
+                ext.insert(sy.name.clone(), 0);
+            } else if switched_off(&aname, &p.off) {
+                // an optional anchor the port lacks: the link is 0 and the module's code checks for it
                 ext.insert(sy.name.clone(), 0);
             }
         }
@@ -1971,7 +2033,7 @@ pub fn apply_with(
             .get_mut("dsp.l2")
             .ok_or_else(|| {
                 err!(
-                    "port {} has no dsp.l2 region for the patch record",
+                    "port {} has no dsp.l2 region for the patch record (no module uses cf.expansion)",
                     port.id()
                 )
             })?
@@ -2037,7 +2099,10 @@ pub fn apply_with(
     for c in &chunks {
         match (c.cpu, c.region.as_str()) {
             (SHARC, _) => {
-                mem.stream.append_block(c.addr as u32, &c.image)?;
+                mem.stream
+                    .as_mut()
+                    .ok_or_else(|| err!("{}: the device has no DSP", c.addr))?
+                    .append_block(c.addr as u32, &c.image)?;
                 mem.stream_dirty = true;
             }
             (_, "cf.flash_cave") => {
@@ -2073,7 +2138,10 @@ pub fn apply_with(
     }
     if opts.record {
         if rec_region == "dsp.l2" {
-            mem.stream.append_block(rec_addr as u32, &rec_bytes)?;
+            mem.stream
+                .as_mut()
+                .ok_or_else(|| err!("the device has no DSP"))?
+                .append_block(rec_addr as u32, &rec_bytes)?;
             mem.stream_dirty = true;
         }
         writes.push(PlanWrite {
@@ -2127,7 +2195,11 @@ pub fn apply_with(
             if crate::imageid::locate(&mem.main)? != Some(at) {
                 return Err(err!("the image id marker is not unique in MAIN OS"));
             }
-            let id = crate::imageid::compute(&unhex(&fw.syx_sha256)?, &mem.main, &mem.stream.blob);
+            let id = crate::imageid::compute(
+                &unhex(&fw.syx_sha256)?,
+                &mem.main,
+                mem.stream.as_ref().map_or(&[][..], |s| &s.blob),
+            );
             mem.main[at..at + 8].copy_from_slice(&id);
             image_id = Some(id);
         }
@@ -2136,15 +2208,18 @@ pub fn apply_with(
     // Limits, repack, build.
     let lim = &port.limits;
     if mem.stream_dirty {
-        if mem.stream.blob.len() as u64 > lim.dsp_depacked_max {
+        let (Some(stream), Some(dsp_id)) = (&mem.stream, fw.device.dsp_section()) else {
+            return Err(err!("a DSP patch on a device without a DSP"));
+        };
+        if stream.blob.len() as u64 > lim.dsp_depacked_max {
             return Err(err!(
                 "DSP stream is {} bytes, over the {} the ColdFire boot routine sends",
-                mem.stream.blob.len(),
+                stream.blob.len(),
                 lim.dsp_depacked_max
             ));
         }
-        fw.replace(7, mem.stream.blob.clone())?;
-        let stored = fw.section(7).unwrap().stored.len() as u64;
+        fw.replace(dsp_id, stream.blob.clone())?;
+        let stored = fw.section(dsp_id).unwrap().stored.len() as u64;
         if stored > lim.dsp_stored_max {
             return Err(err!(
                 "packed DSP section is {stored} bytes, over the {} limit",
@@ -2160,7 +2235,7 @@ pub fn apply_with(
                 lim.main_staged_max
             ));
         }
-        fw.replace(3, mem.main.clone())?;
+        fw.replace(fw.device.main_section(), mem.main.clone())?;
     }
     let syx = fw.build(Some(lim.container_max as usize))?;
     let regions = allocs
@@ -2182,6 +2257,15 @@ pub fn apply_with(
         sections: plan_secs,
         info: info_plan,
         hooks: plan_hooks,
+        disabled: order
+            .iter()
+            .flat_map(|i| {
+                let m = lib.get(i).unwrap();
+                disabled_anchors(m, port)
+                    .into_iter()
+                    .map(|n| format!("{}:{n}", m.tag()))
+            })
+            .collect(),
         record: rec,
         output: None,
     };

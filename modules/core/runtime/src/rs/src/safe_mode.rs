@@ -26,7 +26,10 @@ const DEAD_CLOCK_PASSES: u32 = 1800;
 /// Is the safe-mode key down? Reads the stock key state byte. REC is key 0x13, panel channel 2 bit 2. Returns 0 before the first
 /// channel-2 report. Hardware timing not yet proved **[O]**.
 pub(crate) unsafe fn key_held() -> bool {
-    crate::PLATFORM.key_down(SAFE_KEY_CODE)
+    match crate::PLATFORM.safe_key() {
+        Some(k) => crate::PLATFORM.key_down(k),
+        None => false, // the device has no key that starts safe mode
+    }
 }
 
 /// Every pass of the UI loop (`dkrt_tick`). The first pass notes the block count; the boot counter goes back to 0 when the session has run

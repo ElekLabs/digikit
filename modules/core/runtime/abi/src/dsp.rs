@@ -7,7 +7,7 @@ use dkrt_sdk::*;
 pub const INFO_MAGIC: u32 = 0x4444_5350; // "DDSP"
 pub const STATE_MAGIC: u32 = 0x444b_4453; // "DKDS"
 /// Free voice rows core/dyndsp reserves: one per run-time machine type (a module's voice takes a row).
-pub const MAX_ROWS: usize = DYN_TYPES as usize;
+pub const MAX_ROWS: usize = MACHINE_ROWS;
 pub const MAX_VOICES: usize = MAX_ROWS;
 pub const MAX_RELOCS: u32 = dkneeds::MAX_RELOCS;
 pub const MAX_IMPORTS: u32 = dkneeds::MAX_IMPORTS;
@@ -68,12 +68,8 @@ pub const WIN_FX: u32 = 2;
 pub const FX_INFO_MAGIC: u32 = 0x4446_5849; // "DFXI"
 pub const L2_BYTE_BASE: u32 = 0x2000_0000;
 pub const L2_SW_BASE: u32 = 0x00B8_0000;
-/// The run-time machine types (`dynamic_first ..= last` of modules/core/adapters/machines/types.toml, through `patchkit gen`).
-pub const TYPE_FIRST: u32 = device::DYN_TYPE_FIRST;
-pub const TYPE_LAST: u32 = device::DYN_TYPE_LAST;
-pub const DYN_TYPES: u32 = device::DYN_TYPES;
-// the row count of the runtime's tables (`[limits] machine_rows`) is the count of run-time machine types that the firmware tables reserve
-const _: () = assert!(device::LIMIT_MACHINE_ROWS == device::DYN_TYPES);
+// The run-time machine types (`dynamic_first ..= last` of modules/core/adapters/machines/types.toml) are the device profile's (`dyn_type_first`,
+// `dyn_types`); the tables have `MACHINE_ROWS` rows, and the device's count is that many or 0 (no DSP, no row is used).
 /// A free voice row's type: no machine type equals it.
 pub const FREE_TYPE: u32 = 0xffff_ffff;
 /// UI-loop passes a phase may last before the load is given up.

@@ -7,6 +7,7 @@ was = ["cf.menu.fn.popup_make"]
 cpu = "cf"
 rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x32, len = 4 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/digikit-menu"]
 doc = "The firmware's `make_shared<PopupWindow>(const char *const &)`: `out` in a0, a reference to the message pointer on the stack. core/digikit-menu calls it through its dk_popup_make shim."
 
@@ -22,7 +23,9 @@ doc = "`ConfirmWindow(this, title, text, cb, flag)`: `title` and `text` point at
 [[site]]
 name = "cf.window.site.confirm_cb_vptr_lit"
 cpu = "cf"
-rule = { kind = "cf_ptr", hash = "15fe03a811fbded8c0bb04292059c0e4", offset = 0x4a, len = 4 }
+rule.dt2 = { kind = "cf_ptr", hash = "15fe03a811fbded8c0bb04292059c0e4", offset = 0x4a, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "15fe03a811fbded8c0bb04292059c0e4", offset = 0x4a, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "47fe8c26b6ae51245c4492dc0b822758", offset = 0x4a, len = 4, mark = "D" }
 mark = "D"
 users = ["core/ui"]
 doc = "The 4-byte vtable literal of the `_Sp_counted_ptr_inplace<ConfirmWindow>` control block (the immediate of `move.l #vptr,(a2)` in the stock call site 0x40084d02, \"CLEAR SONG?\"); the anchor is that vtable. A module that builds a ConfirmWindow stores this value in word 0 of its 0x10-byte control block (use count and weak count 1 at +4, +8, object pointer at +0xc)."
@@ -39,7 +42,9 @@ doc = "`MultiChoiceWindow(this, items, title, cb, vertical)`: `items` points at 
 [[site]]
 name = "cf.window.site.multichoice_cb_vptr_lit"
 cpu = "cf"
-rule = { kind = "cf_ptr", hash = "1c0abc995058d98e0883295990696adc", offset = 0xfa, len = 4 }
+rule.dt2 = { kind = "cf_ptr", hash = "1c0abc995058d98e0883295990696adc", offset = 0xfa, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "1c0abc995058d98e0883295990696adc", offset = 0xfa, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "53fbfced0373247f72193989da2805cf", offset = 0xfa, len = 4, mark = "O" }
 mark = "D"
 users = ["core/ui"]
 doc = "The 4-byte vtable literal of the `_Sp_counted_ptr_inplace<MultiChoiceWindow>` control block (the immediate of `move.l #vptr,(a2)` at 0x400aa04c in the stock call site 0x400a9f54, SELECT INTERFACE); the anchor is that vtable. This vtable differs from the ConfirmWindow one: each make_shared type has its own."
@@ -66,7 +71,9 @@ doc = "As `cf.window.fn.toast` for a ready `std::string` (pointer to the one-wor
 name = "cf.window.fn.ui_states"
 cpu = "cf"
 sig = "u8 *()"
-rule = { kind = "cf_func", hash = "eae813a5ca189660d787e01b9a909c62", offset = 0x0, len = 4 }
+rule.dt2 = { kind = "cf_func", hash = "eae813a5ca189660d787e01b9a909c62", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "eae813a5ca189660d787e01b9a909c62", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "2eb0f9476c77c0210505ac8d2447eedd", offset = 0x0, len = 4, mark = "D" }
 mark = "D"
 users = ["core/ui"]
 doc = "Returns the UIStates singleton (0x2f8 bytes, created on first use), the first argument of the toast functions. Read in the stock `shared_ptr<UIStates>` accessor."

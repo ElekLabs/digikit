@@ -31,7 +31,7 @@ pub mod service;
 pub mod state;
 pub mod storage;
 
-/// Module records of the runtime (`[limits] modules` of the device files).
-pub const MAX_MODULES: usize = dkrt_sdk::device::LIMIT_MODULES as usize;
+/// Module records of the runtime: the selection record's size (`SEL_MAX`, `[limits.max] modules` of sdk/sdk.toml); the device files' `[limits] modules` may not exceed it.
+pub const MAX_MODULES: usize = dkrt_sdk::SEL_MAX;
 /// Module records and the records of the provider files (`dkrt_sdk::PROVIDER_MAX`): what the loader keeps per loaded file.
 pub const REC_MAX: usize = MAX_MODULES + dkrt_sdk::PROVIDER_MAX;

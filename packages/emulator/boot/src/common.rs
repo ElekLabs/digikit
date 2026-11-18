@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use coldfire::{Bus, BusError, Cpu, InterruptPolicy};
 use machine::{Board, SemaphoreAddresses, Time};
+use periph::peer::PeerIrq;
 use serde::Serialize;
 
 use crate::guard::WriteGuards;
@@ -20,6 +21,7 @@ pub(crate) const UART8_UDR: u32 = 0xec07_000c;
 pub(crate) const TX35_VECTOR: u8 = 155;
 pub(crate) const INTC1_BASE: u32 = 0xfc04_c000;
 pub(crate) const DSPI0_SR: u32 = 0xfc05_c02c;
+pub(crate) const DSPI1_SR: u32 = 0xfc03_c02c;
 pub(crate) const DSPI2_SR: u32 = 0xec03_802c;
 pub(crate) const ESDHC_CMDARG: u32 = 0xfc0c_c008;
 pub(crate) const ESDHC_XFERTYP: u32 = 0xfc0c_c00c;
@@ -102,20 +104,36 @@ pub(crate) fn hex(bytes: &str) -> Vec<u8> {
 
 pub(crate) fn data_mask(sig: &[u8], wild: Option<usize>) -> Vec<bool> {
     let mut mask = vec![false; sig.len()];
-    let mut at = 0;
-    while at + 4 <= sig.len() {
+    for at in 0..sig.len().saturating_sub(3) {
         let value = u32::from_be_bytes(sig[at..at + 4].try_into().unwrap());
         if (MAIN_LOAD..0x4800_0000).contains(&value) {
             mask[at..at + 4].fill(true);
-            at += 4;
-        } else {
-            at += 1;
         }
     }
     if let Some(i) = wild {
         mask[i] = true;
     }
     mask
+}
+
+/// `task_create`: loads its stack-passed arguments first. Unique on every MAIN image of the registry.
+const TASK_CREATE_SIG: &[u8] = &[0x20, 0x2f, 0x00, 0x0c, 0x72, 0xfc, 0xc2, 0xaf];
+/// The UART8 initializer: saves d2, sets d2 = 15, then addresses the UART and GPIO blocks.
+const UART_INIT_SIG: &[u8] = &[
+    0x2f, 0x02, 0x74, 0x0f, 0x41, 0xf9, 0xec, 0x09, 0x40, 0x4b, 0x12, 0x10, 0x20, 0x2f, 0x00, 0x08,
+    0x43, 0xf9, 0xec, 0x07, 0x00, 0x00, 0x42, 0xb9,
+];
+
+/// Address of `task_create` in a MAIN image.
+pub(crate) fn resolve_task_create(image: &[u8]) -> Result<u32, String> {
+    unique(image, TASK_CREATE_SIG, &data_mask(TASK_CREATE_SIG, None))
+        .map_err(|e| format!("task_create: {e}"))
+}
+
+/// Address of the UART8 initializer in a MAIN image.
+pub(crate) fn resolve_uart_init(image: &[u8]) -> Result<u32, String> {
+    unique(image, UART_INIT_SIG, &data_mask(UART_INIT_SIG, None))
+        .map_err(|e| format!("uart8_init: {e}"))
 }
 
 pub(crate) fn resolve_sd_semaphores(image: &[u8]) -> Result<(u32, SemaphoreAddresses), String> {
@@ -216,20 +234,7 @@ pub(crate) fn unique_signature_data(
     signature: &[u8],
     wildcard: Option<usize>,
 ) -> Option<u32> {
-    let mut masked = vec![false; signature.len()];
-    let mut at = 0;
-    while at + 4 <= signature.len() {
-        let value = u32::from_be_bytes(signature[at..at + 4].try_into().expect("abs32"));
-        if (MAIN_LOAD..0x4800_0000).contains(&value) {
-            masked[at..at + 4].fill(true);
-            at += 4;
-        } else {
-            at += 1;
-        }
-    }
-    if let Some(index) = wildcard {
-        masked[index] = true;
-    }
+    let masked = data_mask(signature, wildcard);
     let matches: Vec<_> = image
         .windows(signature.len())
         .enumerate()
@@ -1041,6 +1046,100 @@ pub(crate) fn service_timers<const TRACE: bool>(
         delivery_counts,
         delivery_dropped,
     ))
+}
+
+/// EPORT interrupt enable register (EPIER); IRQ4 is bit 4.
+const EPORT_EPIER: u32 = 0xfc09_0003;
+const PEER_IRQ4_VECTOR: u16 = 68;
+const PEER_EDMA29_VECTOR: u16 = 149;
+
+/// The mailbox peer's due interrupt (`periph::peer`), delivered like a hardware source: ICR level above the CPU IPL, source unmasked in
+/// IMR, IRQ4 enabled in EPIER, handler installed. The hello block goes into the window just before. -> whether it was delivered; when
+/// it is not deliverable yet it stays queued.
+pub(crate) fn service_peer<const TRACE: bool>(
+    bus: &mut LoggingBus<TRACE>,
+    cpu: &mut Cpu,
+    now: u64,
+) -> Result<bool, String> {
+    let due: Vec<PeerIrq> = bus
+        .board
+        .peer()
+        .map(|peer| peer.due_list(now).collect())
+        .unwrap_or_default();
+    for irq in due {
+        if offer_peer_irq(bus, cpu, irq)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn offer_peer_irq<const TRACE: bool>(
+    bus: &mut LoggingBus<TRACE>,
+    cpu: &mut Cpu,
+    irq: PeerIrq,
+) -> Result<bool, String> {
+    let vector = match irq {
+        PeerIrq::Eport4 => PEER_IRQ4_VECTOR,
+        PeerIrq::Edma29 => PEER_EDMA29_VECTOR,
+        PeerIrq::Frame => bus.board.peer().map_or(174, |peer| peer.frame_vector),
+    };
+    let Some(level) = bus
+        .board
+        .time()
+        .and_then(|time| time.interrupt_level(vector))
+    else {
+        return Ok(false);
+    };
+    if ((cpu.sr >> 8) & 7) >= u16::from(level) {
+        return Ok(false);
+    }
+    if irq == PeerIrq::Eport4
+        && bus
+            .board
+            .read8(EPORT_EPIER)
+            .map_err(|_| "PeerEportUnavailable".to_string())?
+            & 0x10
+            == 0
+    {
+        return Ok(false);
+    }
+    let handler = bus
+        .board
+        .read32(cpu.ctrl.vbr.wrapping_add(4 * u32::from(vector)))
+        .map_err(|_| "PeerVectorUnavailable".to_string())?;
+    if handler == 0 || handler >= 0x4800_0000 {
+        return Ok(false);
+    }
+    let stack = if cpu.sr & 0x2000 == 0 && cpu.ctrl.cacr & 0x20 != 0 {
+        cpu.other_a7
+    } else {
+        cpu.a[7]
+    };
+    let frame = (stack & !3).wrapping_sub(8);
+    if !bus.board.can_write_ram_range(frame, 4)
+        || !bus.board.can_write_ram_range(frame.wrapping_add(4), 4)
+    {
+        return Err(format!("PeerInterruptFrameUnavailable({frame:#010x})"));
+    }
+    if let Some(hello) = bus.board.peer().and_then(|peer| peer.window_before(irq)) {
+        bus.board.peer_window_store(0, &hello);
+    }
+    match cpu.take_interrupt(
+        &mut bus.board,
+        vector as u8,
+        Some(level),
+        InterruptPolicy::Oracle,
+    ) {
+        Ok(true) => {
+            if let Some(peer) = bus.board.peer_mut() {
+                peer.delivered(irq);
+            }
+            Ok(true)
+        }
+        Ok(false) => Ok(false),
+        Err(stop) => Err(format!("PeerDeliveryPoisoned({stop:?})")),
+    }
 }
 
 // Exact Python unicorn-reference-final:emu/edma.py completion boundary: channel 35 is offered only

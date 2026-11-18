@@ -450,7 +450,7 @@ pub unsafe fn tick<C: CoreApi>(core: &C) {
 /// The 16 Sound arrays: the stored amounts back into those that need them, a turn of the knob in the others.
 unsafe fn tracks<C: CoreApi>(core: &C, inf: *const u32) {
     let s = ss();
-    let kit = fxpage::kit(inf);
+    let kit = fxpage::kit(core, inf);
     if kit == 0 {
         return;
     }

@@ -121,7 +121,9 @@ DEFAULT_GENERATED = digi_env.DEFAULT_GENERATED
 READY = digi_env.READY
 TOOLCHAIN = digi_env.TOOLCHAIN
 TRIPLE = digi_env.TRIPLE
-FEATURES = "sharc,play"
+# The features of the PGO use build (tools/emulator/native_emu.py: COUPLED_FEATURES + cf-profile). Training builds the same set
+# (the run-time ColdFire profile compiled in, switched off), so the trained profile matches the binary that uses it.
+FEATURES = "sharc,play,cf-profile"
 BOTH = "both"
 BOTH_WORKLOAD_NAME = "both-v1"
 TEST_NAME = "desktop_runtime::coupled::tests::coupled_ready_exactness"
@@ -1571,7 +1573,7 @@ def build_coupled(
     command = [
         "rustup", "run", TOOLCHAIN, "cargo", "build", "--release", "--locked",
         "--manifest-path", COUPLED_MANIFEST,
-        "--features", coupled_module().FEATURES,
+        "--features", f"{coupled_module().FEATURES},cf-profile",
         "--bin", coupled_module().BINARY_NAME,
         *(["--target", TRIPLE] if rustflags else []),
         "--target-dir", str(target_dir),

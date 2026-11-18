@@ -18,7 +18,7 @@ import { DefaultModuleError } from '@digi/workbench-core/firmware/default-module
 import { createFirmwareApp } from '@digi/workbench-core/firmware/app.ts';
 import AppProvider from '@digi/workbench-core/ui/transfer/AppProvider.tsx';
 import LivePanel from '@digi/workbench-core/ui/components/LivePanel.tsx';
-import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import { defaultFaceplate, faceplateIds, panels } from '@digi/workbench-core/data/faceplates.ts';
 import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
 import RemotePage from '../src/RemotePage';
 import SidePanels from '../src/SidePanels';
@@ -28,7 +28,7 @@ import TransferPage from '@digi/workbench-core/ui/transfer/TransferPage.tsx';
 import FilesPage from '@digi/workbench-core/ui/files/FilesPage.tsx';
 import { demoStore } from '@digi/workbench-core/target-ops/fake-store.ts';
 import { demoLibrary } from './files-mock';
-import { deviceFromName, bootingStatus, booting as startBoot, loadFailure } from '../src/boot-core';
+import { bootingStatus, booting as startBoot, loadFailure } from '../src/boot-core';
 import { cardDevice, reloadCard } from './card-mock';
 import CardPanel from '../src/CardPanel';
 import { installRemoteMock, testPattern } from './remote-mock';
@@ -48,9 +48,10 @@ bindSimApp(apps.app);
 const page = new URLSearchParams(location.search).get('page') ?? 'transfer';
 if (page === 'remote') installRemoteMock();
 // ?boot=loading | failed: the Emulator page while a firmware starts (the old device information is gone), or after a failed load
-// (the name of the file is `bootfile`, default Digitakt_II_OS1.17.syx). The texts are the app's (../src/boot-core.ts).
+// (the name of the file is `bootfile`, default Digitakt_II_OS1.17.syx; its device is `bootdevice`). The texts are the app's (../src/boot-core.ts).
 const bootState = new URLSearchParams(location.search).get('boot');
 const bootFile = new URLSearchParams(location.search).get('bootfile') ?? 'Digitakt_II_OS1.17.syx';
+const bootDevice = new URLSearchParams(location.search).get('bootdevice') ?? faceplateIds[0] ?? defaultFaceplate;
 const bootError = 'the emulator did not answer within 120 s';
 const emulatorFaceplate = () =>
   bootState ? (
@@ -58,7 +59,7 @@ const emulatorFaceplate = () =>
       <main class="stage" aria-label="front panel">
         <div class="surface">
           <LivePanel
-            panel={panels[deviceFromName(bootFile) ?? 'dn2']}
+            panel={panels[bootDevice] ?? panels[defaultFaceplate]}
             runtime={() => undefined}
             onError={() => {}}
             ref={() => {}}
@@ -327,7 +328,7 @@ render(
             <footer class="statusbar">
               <span>
                 <i class="dot paused" />
-                {bootState === 'loading' ? bootingStatus(startBoot(bootFile)) : 'no firmware'}
+                {bootState === 'loading' ? bootingStatus(startBoot(bootFile, bootDevice)) : 'no firmware'}
               </span>
               <span class="sp" />
               {bootState === 'failed' ? <span class="muted">{loadFailure(bootFile, bootError)}</span> : null}

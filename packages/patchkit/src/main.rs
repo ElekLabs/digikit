@@ -268,7 +268,7 @@ fn run(a: Args) -> Result<()> {
                 Some(p) => println!("port      {} (stock image)", p.id()),
                 None => println!("port      none for this sha256"),
             }
-            let rep = verify::verify(&raw, Some(&reg), None)?;
+            let rep = verify::inspect(&raw, Some(&reg))?;
             match rep.record {
                 Some(r) => println!(
                     "record    patched from {} with {}",
@@ -639,8 +639,8 @@ plan.json {}",
             let path = need(rest)?;
             let fw = Firmware::parse(&read(path)?)?;
             let dsp = fw
-                .section(7)
-                .ok_or_else(|| Error("the image has no DSP section (7)".into()))?;
+                .dsp()
+                .ok_or_else(|| Error("the device has no DSP section".into()))?;
             if rest.iter().any(|a| a == "--list") {
                 // every scanned instruction (comparison aid)
                 for l in patchkit::dspscan::list(&dsp.data)? {

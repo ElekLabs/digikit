@@ -28,6 +28,7 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+from tools.firmware import device as device_files  # noqa: E402
 from tools.sharc_dev import aot_fxprof  # noqa: E402
 
 # The DN2 scenarios of the fxprof profile (out/native/dn2-audio/PROVENANCE.txt).
@@ -60,11 +61,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("names", nargs="*", metavar="FILE:SCENARIO")
     p.add_argument("--base", type=pathlib.Path, required=True)
     p.add_argument("--out", type=pathlib.Path, required=True)
-    p.add_argument("--device", default="dn2", choices=["dn2", "dt2"])
+    dsp_devices = device_files.dsp_shorts()
+    p.add_argument("--device", default=dsp_devices[0], choices=dsp_devices)
     p.add_argument("--min-count", type=int, default=1000)
     a = p.parse_args(argv)
-    names = a.names or (DT2_SCENARIOS if a.device == "dt2" else SCENARIOS)
-    dt2 = ["--device", "dt2", "--dt2-card"] if a.device == "dt2" else []
+    # a device with a path filesystem card runs on the one-sample card (tools/emulator/dt2_sample_check.py)
+    card = device_files.by_short(a.device).capabilities.get("card") == "path-fs"
+    names = a.names or (DT2_SCENARIOS if card else SCENARIOS)
+    dt2 = ["--device", a.device, "--dt2-card"] if card else []
     status = aot_fxprof.main(
         [
             "--out", str(a.out), *dt2,

@@ -10,7 +10,7 @@ status = "experimental"
 summary = "Optional: replaces the Elektron intro with black until a boot screen module takes over, and ends it early when none does"
 requires = ["core/runtime"]
 conflicts = []
-ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12"]
+ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
 
 [targets]
 "dt2-1.17" = "experimental"

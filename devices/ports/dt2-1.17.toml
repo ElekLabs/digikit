@@ -805,6 +805,16 @@ mark = "D"
 rule = "fw/menu:cf_func"
 
 [[anchor]]
+name = "cf.menu.site.vertical_menu_view_ctor.font_ref"
+cpu = "cf"
+kind = "code"
+addr = 0x4011a022
+len = 6
+sha256 = "845037e614b3468eb033e5d0bfcda944ea5bd11a5a043216d3ab3a679d70240d"
+mark = "D"
+rule = "fw/menu:cf_func"
+
+[[anchor]]
 name = "cf.midi.fn.send"
 cpu = "cf"
 kind = "code"

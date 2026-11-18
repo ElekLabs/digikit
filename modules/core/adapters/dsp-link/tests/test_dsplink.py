@@ -86,7 +86,7 @@ def test_constants_agree_between_the_two_sides():
     ):
         assert define(c, name) == want == define(s, name)
     # the area of each device: the DL_AREA_BYTES define, the .PKBSS literal and the word count agree, and the 17-bit offset reaches it
-    for dev in pk_device.digikit_devices():
+    for dev in pk_device.dsp_devices():
         d = gen_inc(dev)
         area = pk_device.load(dev)["digikit"]["dsp_area_bytes"]
         assert define(d, "DL_AREA_BYTES") == area

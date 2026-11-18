@@ -49,8 +49,7 @@ import {
   type TransferRow,
 } from '../../src/transfer/transfer-core';
 import './target-select.css';
-
-const BROWSE_NAMES: Record<string, string> = { dt2: 'Digitakt II', dn2: 'Digitone II' };
+import { deviceNameOf, deviceNamesText } from '../../src/data/device-profiles';
 
 /** `onFlash`: starts the one-click Flash flow (the host page gives it; without it the refusal box has no Flash button). */
 export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void }): JSX.Element {
@@ -227,7 +226,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
   };
 
   const browseOptions = (): SegmentedOption<string>[] =>
-    (env.libraryDevices ?? []).map((d) => ({ id: d, label: BROWSE_NAMES[d] ?? d }));
+    (env.libraryDevices ?? []).map((d) => ({ id: d, label: deviceNameOf(d) }));
 
   const lists = (
     <SplitPane id="transfer">
@@ -252,7 +251,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
                 value={browseDevice()}
                 disabled={!!busy()}
                 onChange={(d) => {
-                  setBrowseDevice(d === 'dn2' ? 'dn2' : 'dt2');
+                  setBrowseDevice(d);
                   void run('Reading', async () => {});
                 }}
               />
@@ -300,7 +299,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
               disabled={!!busy() || ticked() === 0 || browsing()}
               title={
                 browsing()
-                  ? 'Connect a Digitakt II or Digitone II running the digikit runtime to install'
+                  ? `Connect a ${deviceNamesText('or')} running the digikit runtime to install`
                   : ticked()
                     ? 'Build, upload and verify the ticked modules on the device; select them in MODULES on the device'
                     : 'Tick a module to install'
@@ -454,7 +453,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
               fallback={
                 <p class="empty">
                   {browsing()
-                    ? 'Connect a Digitakt II or Digitone II to see what is on it.'
+                    ? `Connect a ${deviceNamesText('or')} to see what is on it.`
                     : 'The device holds no modules.'}
                 </p>
               }
