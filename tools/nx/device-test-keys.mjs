@@ -8,6 +8,7 @@
 // runs a new Python tool must list it there.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { nonCellGlobs } from './device-files.mjs';
 import { SHARED_SDK_INPUTS } from './module-build.mjs';
 
 export const PACK_NEEDS = '{workspaceRoot}/tests/regression/runtime/pack-needs.ts';
@@ -41,11 +42,17 @@ export const TEST_READS = [
 ];
 // Full keys list every shared file. A merge key lists a file only when the test (its import closure) reads it, or runs patchkit
 // live: the other effects of the file are in the bytes the key hashes.
-const sharedReads = (imports = null, patchkitLive = false) =>
-  SHARED_READS.filter(
+const NON_CELL = nonCellGlobs();
+const NODE_REGISTRY = workspaceFile('packages/devices/src/node.ts');
+const sharedReads = (imports = null, patchkitLive = false) => {
+  const files = SHARED_READS.filter(
     ({ readers }) =>
       !imports || !readers || patchkitLive || readers.some((reader) => imports.includes(workspaceFile(reader))),
   ).map(({ file }) => workspaceFile(file));
+  // devices without a cell are no input, unless the test loads the whole registry (packages/devices node.ts reads every file)
+  const registry = imports?.includes(NODE_REGISTRY);
+  return registry ? files : [...files, ...NON_CELL.map((glob) => `!{workspaceRoot}/${glob}`)];
+};
 export const READ_BY_TESTS = [...sharedReads(), ...TEST_READS];
 
 // Core-change policy. A change runs all device tests of the projects it edits. A device test that a change reaches
@@ -242,6 +249,7 @@ export const deviceInputs = (
 
 // Files that every device test's key holds (the shared reads, the test reads, the SDK and the toolchain), as repository globs.
 // `test:subset --base` cannot select by path for a change in them (tools/nx/test-subset.mjs).
+export const NON_CELL_GLOBS = NON_CELL;
 export const SHARED_INPUT_GLOBS = [...SHARED_READS.map(({ file }) => file), ...TEST_READS, ...COMPILE_INPUTS].map(
   (glob) => glob.replace('{workspaceRoot}/', ''),
 );

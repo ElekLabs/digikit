@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -272,6 +273,25 @@ def cargo_closure(root: Path = ROOT) -> str:
     return "\n".join(sorted(lines))
 
 
+def non_cell_device_prefixes(root: Path = ROOT) -> tuple[str, ...]:
+    """Repository file prefixes of the device files of devices without an acceptance cell (no `[acceptance] ready_dir`): the daemon embeds them
+    (device-profile build.rs) but no test of a device with a cell observes them. Same rule as tools/nx/device-files.mjs."""
+    out: list[str] = []
+    for path in sorted((root / "devices").glob("*.toml")):
+        t = tomllib.loads(path.read_text())
+        if not t.get("device", {}).get("short") or t.get("acceptance", {}).get(
+            "ready_dir"
+        ):
+            continue
+        stem = path.stem
+        out += [
+            f"devices/{stem}",
+            f"devices/cf-native/{stem}-",
+            f"devices/ports/{t['device']['short']}-",
+        ]
+    return tuple(out)
+
+
 def test_key_of(
     inputs: EmudInputs,
     names: Sequence[str],
@@ -289,7 +309,9 @@ def test_key_of(
         "files": sorted(
             (name, sha256_file(root / name))
             for name in names
-            if not name.startswith((*TEST_KEY_EXCLUDED, *patchkit_only))
+            if not name.startswith(
+                (*TEST_KEY_EXCLUDED, *patchkit_only, *non_cell_device_prefixes(root))
+            )
             and not TEST_ONLY_RUST.search(name)
         ),
         "closure": closure,

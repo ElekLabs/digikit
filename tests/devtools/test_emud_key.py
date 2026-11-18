@@ -52,6 +52,27 @@ def test_key_changes_with_each_input(tmp_path: Path) -> None:
     assert emud_key.key_of(make(tmp_path, profdata=None)) != base
 
 
+def test_test_key_ignores_files_of_a_device_without_a_cell(tmp_path: Path) -> None:
+    devices = tmp_path / "devices"
+    devices.mkdir()
+    (devices / "cell.toml").write_text(
+        '[device]\nshort = "c1"\n[acceptance]\nready_dir = "x"\n'
+    )
+    (devices / "nocell.toml").write_text('[device]\nshort = "n1"\n')
+    names = ["devices/cell.toml", "devices/nocell.toml"]
+
+    def key() -> str:
+        return emud_key.test_key_of(make(tmp_path), names, "", tmp_path)
+
+    base = key()
+    (devices / "nocell.toml").write_text('[device]\nshort = "n1"\n# edit\n')
+    assert key() == base
+    (devices / "cell.toml").write_text(
+        '[device]\nshort = "c1"\n[acceptance]\nready_dir = "y"\n'
+    )
+    assert key() != base
+
+
 def test_key_ignores_file_order(tmp_path: Path) -> None:
     one = make(tmp_path)
     two = make(tmp_path, files=dict(reversed(list(one.files.items()))))

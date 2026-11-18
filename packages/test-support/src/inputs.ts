@@ -16,7 +16,7 @@ export type Device = 'dt2' | 'dn2';
 // like FIRMWARE in tools/patchkit/pk_harness.py.
 // Override the ready dir with DIGI_PK_READY_<DEV>_<VER> (version without the dot).
 function firmwareTable(): Record<string, { syx: string; ready: string }> {
-  // `[acceptance] ready_dir` of each device file (not through @digi/devices: the dsp-mode check of tools/nx/dsp-mode.mjs reads the sources a test imports)
+  // `[acceptance] ready_dir` of each device file
   const dir = path.join(repoRoot(), 'devices');
   const readyDirs = new Map<string, string>();
   for (const name of fs.readdirSync(dir).filter((n) => n.endsWith('.toml'))) {

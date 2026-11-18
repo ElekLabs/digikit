@@ -4,6 +4,8 @@ import { join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CELLS, firmwareDir, overrideInputs, syxPath } from '../device-inputs.mjs';
 import { releaseProfileEnv } from '../cargo-profile-env.mjs';
+import { deviceInputs } from '../device-test-keys.mjs';
+import { nonCellGlobs } from '../device-files.mjs';
 
 const scratch = mkdtempSync(join(tmpdir(), 'digikit-nx-runtime-inputs-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -83,6 +85,28 @@ describe('device override cache inputs', () => {
       expect(await overrideInputs({ [key]: '0' })).not.toEqual(before);
     },
   );
+});
+
+describe('device files in a device test key', () => {
+  const merge = (imports: string[]) =>
+    deviceInputs(
+      'p',
+      ['a.device.test.ts'],
+      [],
+      null,
+      () => imports,
+      () => [],
+      false,
+      { merge: true },
+    ).inputs;
+
+  it('leaves out a device without a cell, unless the test loads the whole registry', () => {
+    const nonCell = nonCellGlobs().find((g) => /^devices\/[^*/]+\.toml$/.test(g));
+    if (!nonCell) throw new Error('no device without an acceptance cell in devices/*.toml');
+    const excluded = `!{workspaceRoot}/${nonCell}`;
+    expect(merge([])).toContain(excluded);
+    expect(merge(['{workspaceRoot}/packages/devices/src/node.ts'])).not.toContain(excluded);
+  });
 });
 
 describe('Cargo release profile cache input', () => {

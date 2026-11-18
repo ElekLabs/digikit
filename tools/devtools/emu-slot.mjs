@@ -7,7 +7,7 @@
 // (`<git common dir>/emu-slots/slot-<i>`), runs the command with inherited stdio, releases the slot and
 // exits with the command's status (a signal n becomes 128+n). It waits without a time limit.
 // N is the ceiling of tools/nx/resources.mjs (cores and RAM). A task has cores by DSP mode (DIGI_EMU_DSP, set by the Nx
-// target from the runtimeAcceptance record: zero 1 core, sharc 3, tools/nx/dsp-mode.mjs). A slot is taken only when
+// target from the runtimeAcceptance record: zero 1 core, sharc 3, device-tests.mjs taskMode). A slot is taken only when
 // the cores of the running tasks plus this one fit the core budget (the performance cores, DIGI_BUDGET) and the machine has
 // that many idle cores beside the reserve. Waiters are served by priority: the longest expected run first (its last
 // duration, kept clone-wide beside the slots, else coupled before zero-DSP), so long coupled tasks start first and do not end the gate alone.

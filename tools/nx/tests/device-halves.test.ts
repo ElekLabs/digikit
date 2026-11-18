@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { deviceTargets, fileDevices } from '../device-tests.mjs';
+import { deviceTargets, fileDevices, taskMode } from '../device-tests.mjs';
 
 const none = () => [];
 const halves = (tests: string[], recs: object[], opts: object = {}) =>
@@ -63,6 +63,12 @@ it('takes the devices of a single-device project for files that no record pins',
 it('rejects a devices list with an unknown device or none', () => {
   expect(() => fileDevices('a', [{ files: ['a'], devices: ['dt3'] }])).toThrow(/dt2 and dn2/);
   expect(() => fileDevices('a', [{ files: ['a'], devices: [] }])).toThrow(/dt2 and dn2/);
+});
+
+it('takes the DSP mode of a task from the records that list its files', () => {
+  expect(taskMode(['a.ts'], [{ files: ['a.ts', 'b.ts'], dsp: 'sharc' }])).toBe('sharc');
+  expect(taskMode(['a.ts'], [{ files: ['a.ts'] }, { files: ['b.ts'], dsp: 'sharc' }])).toBe('zero');
+  expect(() => taskMode(['a.ts'], [{ files: ['a.ts'], dsp: 'warm' }])).toThrow(/not zero or sharc/);
 });
 
 // The declared devices must agree with what the test source pins: a file that the source pins to one device and the record leaves

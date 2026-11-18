@@ -250,5 +250,5 @@ export const testImportInputs = (workspaceRoot) => {
 };
 
 // The import closure of one file as repository-relative paths (the file included), from the function `testImportInputs` returns.
-// The one walker: the device-test cache keys and the DSP mode (dsp-mode.mjs) and `test:subset --base` read the same closure.
+// The one walker: device-test cache keys and `test:subset --base` read the same closure.
 export const closureFiles = (importInputs, file) => importInputs([file]).map((p) => p.replace('{workspaceRoot}/', ''));

@@ -526,7 +526,7 @@ The sources, SDK headers and `source_sha256` of the image are not inputs: a comm
 bytes changes no key. The key also holds the pack outputs (`dist/modules/*/*.dkm`), the `plusdrive` and `dksample.wasm` outputs, the
 module's own production files without its object sources (`src`, `include`, `fit`, `sdk`; they reach the run through the packs and the
 object hashes), the files in `READ_BY_TESTS` (`tools/nx/device-test-keys.mjs`: `devices/**/*.toml`, `modules/core/**/module.toml`,
-`sdk/sdk.toml`, `types.toml`, fixture files, the Vitest and TypeScript config; tests read these without importing them),
+`sdk/sdk.toml`, `types.toml`, fixture files, the Vitest and TypeScript config; tests read these without importing them; the files of a device without an acceptance cell (`devices/syntakt*.toml`, its ports and peer file) are excluded, see "Three keys exist"),
 each record's `sources`. A record that runs `patchkit build` or `pack` at run time, or patches with explicit fixture modules (`patchModules`),
 also keeps the SDK and the toolchain as inputs (record flag `compiles`; a record that patches fixture modules or packs at run time sets it),
 the toolchain, the emulator env switches,
@@ -934,7 +934,7 @@ B = the performance core count on Apple Silicon, otherwise cores - 2, with a min
 
 The values assume at least 2 GB of RAM per emulator. On Apple Silicon B is the performance core count, so a 12P+4E machine has B 12.
 B is also the core budget of the emulators. A task has the cores of its DSP mode: a zero-DSP run (ColdFire only) uses about 1 core, a coupled run (`dsp: 'sharc'`) about 3 (measured on a 16-core M3 Max). The slot ceiling counts zero-DSP runs (12 slots at B 12); the core budget stops coupled runs from filling them: at most 4 coupled emulators, or 12 zero-DSP ones, or a mix with cores 3 x coupled + zero at most 12. (Counting 12 slots of mostly coupled tests put the load at 60 and made each emulator about 3 times slower.)
-The mode comes from the `metadata.runtimeAcceptance` record: `"dsp": "sharc"`, no field means zero. The Nx target passes it as `DIGI_EMU_DSP` (a conformance target takes it from the module: a dynamic non-service module is coupled). `tools/nx/dsp-mode.mjs` derives the mode from the test source (`dsp: 'sharc'` in the file, or in an exported helper it calls, such as `withRouteFxSession`; an option such as `sharc: true` of `uploadTests`) and fails the Nx graph load when a record disagrees with a file it lists: set `dsp` to the derived mode, one record per mode.
+The mode comes from the `metadata.runtimeAcceptance` record: `"dsp": "sharc"`, no field means zero. The Nx target passes it as `DIGI_EMU_DSP` (a conformance target takes it from the module: a dynamic non-service module is coupled). A test that needs the DSP (PCM, DSP memory or a machine or effect DSP path) and runs in a record without `dsp: 'sharc'` fails at run time: `resolveDsp` (`packages/test-support/src/session.ts`) throws on `pcm.*`, `dsp.*` and `audio.*` calls without it. A record that says zero while a file starts coupled sessions is not detected; the run takes 3 cores while the slot counted 1 (slower, not wrong): set `dsp` when a file passes `dsp: 'sharc'`.
 `tools/nx/resources.mjs` holds this policy.
 
 Each launcher run has its own budget, so several lanes could start more emulators than the machine runs well.
@@ -1068,6 +1068,8 @@ Three keys exist:
 - Narrow key: the default for files not in `metadata.mergeTests`. It holds the production files of the project, the packs the test loads, and its imports.
 
 `mise run test` selects affected targets with merge keys. `mise run test:full` runs every file with full keys.
+
+Files of a device without an acceptance cell (`devices/syntakt*.toml`, its ports and peer file) are no input of a device test key, except of a test that loads the whole registry (its import closure holds `packages/devices/src/node.ts`); the daemon test key leaves them out too (`tools/nx/device-files.mjs`, `emud_key.non_cell_device_prefixes`). The patchkit binary in a live key still embeds them. Full keys keep them.
 
 Inputs computed from code:
 - The TypeScript import closure of the test file. A barrel (a file of only `export ... from`, for example `packages/dk-session/src/index.ts`) is followed per imported name: `import { A } from '@digi/dk-session'` reaches the file that exports A. A namespace, default, side-effect, dynamic or `require` import takes the whole file. A file that a test loads through a barrel without using one of its names is not an input.
