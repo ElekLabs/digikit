@@ -1,8 +1,8 @@
 import { expect, test } from 'vitest';
-import { bootInfoLoaded, CMD as MAILBOX, currentRecord, pokeWord, setSelection } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo, bootInfoLoaded, CMD as MAILBOX, currentRecord, pokeWord, setSelection } from '@digi/regression/runtime/card-kit.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { FULL_TIER } from '@digi/regression/runtime/devices.ts';
-import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { pollUntil } from '@digi/test-support';
 import { dynType, voiceRows } from '@digi/regression/runtime/project-kit.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 
@@ -20,8 +20,8 @@ const VOICES = { dt2: 1, dn2: 2 } as const;
 const FREE_TYPE = 0xffff_ffff;
 /** The stable period of the proof's records (DSP blocks): short, so the UI loop clears the boot counter within the settle time. */
 const STABLE_BLOCKS = 300;
-/** Emulated ms the first UI-loop passes run after a boot before the test looks (Python `SETTLE_MS`). */
-const SETTLE_MS = 1500;
+/** Failure bound, in emulated ms, of the wait for the new boot's first UI-loop pass (the wait ends when `ui_reached` is 1; the stable period of 300 DSP blocks is about 0.9 s). */
+const UI_WITHIN_MS = 10_000;
 
 cardRigs(
   'boot restart',
@@ -55,11 +55,17 @@ cardRigs(
         expect(recs[0]?.paths).toEqual(paths);
         expect(recs[0]?.seq).toBe(2);
 
-        /** `dkrt_restart` (mailbox command), then the emulator's soft reset; returns when the new boot has run its first UI-loop passes. */
+        /** `dkrt_restart` (mailbox command), then the emulator's soft reset; returns when the new boot has run its first UI-loop passes: it read the record's sequence number and raised `ui_reached`. */
         const restart = async () => {
+          const seq = currentRecord(await h.records())?.seq;
           await pokeWord(session, planSymbol(h.plan, 'DKRT_MAILBOX'), MAILBOX.RESTART);
           await h.waitReset();
-          await rt.ui.wait({ ms: SETTLE_MS, why: SETTLE });
+          await pollUntil(
+            rt.clock,
+            () => bootInfo(session, h.plan),
+            (info) => info.seq === seq && info.uiReached === 1,
+            { withinMs: UI_WITHIN_MS, message: `the new boot (record seq ${seq}) reaches the UI loop` },
+          );
           return bootInfoLoaded(session, h.plan);
         };
 

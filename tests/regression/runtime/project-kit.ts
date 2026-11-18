@@ -253,6 +253,7 @@ export async function savePanelProject(rt: Rt): Promise<void> {
   await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW }, held: 'FUNC' });
   await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // slot 001: opens the name editor
   await rt.ui.tap('YES', { until: { drained: true } }); // the name editor: save
+  // No state shows the end of the write: the card overlay of a repeated save may be byte-equal, and the firmware has no save-done word. Measure before shortening.
   await rt.ui.wait({ ms: 3500, why: SETTLE });
 }
 
@@ -262,6 +263,7 @@ export async function loadPanelProject(rt: Rt, { health = true } = {}): Promise<
   await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW } });
   for (let i = 0; i < 3; i++) await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } });
   await rt.ui.tap('YES', { until: { drained: true } });
+  // No firmware word or runtime event marks the end of `loadProjectFromMmc` (only the popup text); callers read the loaded state afterwards. Measure before shortening.
   await rt.ui.wait({ ms: 6000, why: SETTLE });
   if (health) await bounded(() => session.expectNoFault('project loaded'));
 }
