@@ -2,9 +2,9 @@ import { expect, test } from 'vitest';
 import { DkError, type DkSession } from '@digi/dk-session';
 import { reloadModules } from '../src/modules/dktransfer';
 
-type Answer = number | Error;
+type Answer = { result: number; unloaded: boolean } | Error;
 
-/** A session whose `reloadAndWait` answers, per path, a result (0 is ok) or an error the device gave when it queued the reload. */
+/** A session whose `reloadAndWait` answers, per path, the job's end or an error the device gave when it queued the reload. */
 const fakeSession = (answers: Record<string, Answer>) => {
   const asked: string[] = [];
   const s = {
@@ -19,23 +19,33 @@ const fakeSession = (answers: Record<string, Answer>) => {
   return { s, asked };
 };
 
-test('reloadModules: a module that reloads is reported, one that the runtime refuses or does not have is left to the restart', async () => {
+test('reloadModules: reloaded, refused before the unload (the old module runs) and failed after it (not loaded) are three lists with numeric results', async () => {
   const notLoaded = new DkError({ error: 'no such module', kind: 'device', status: 'E_NOT_FOUND' });
-  const { s, asked } = fakeSession({ 'm/a.dkm': 0, 'm/b.dkm': -83, 'm/c.dkm': notLoaded });
+  const { s, asked } = fakeSession({
+    'm/a.dkm': { result: 0, unloaded: true },
+    'm/b.dkm': { result: -83, unloaded: false },
+    'm/c.dkm': notLoaded,
+    'm/d.dkm': { result: -9, unloaded: true },
+  });
   const events: { event: string }[] = [];
-  const out = await reloadModules(s, ['m/a.dkm', 'm/b.dkm', 'm/c.dkm'], (e) => events.push(e as { event: string }));
-  expect(asked).toEqual(['m/a.dkm', 'm/b.dkm', 'm/c.dkm']);
+  const out = await reloadModules(s, ['m/a.dkm', 'm/b.dkm', 'm/c.dkm', 'm/d.dkm'], (e) =>
+    events.push(e as { event: string }),
+  );
+  expect(asked).toEqual(['m/a.dkm', 'm/b.dkm', 'm/c.dkm', 'm/d.dkm']);
   expect(out.reloaded).toEqual(['m/a.dkm']);
-  expect(out.fell_back).toEqual([
+  expect(out.refused).toEqual([
     { path: 'm/b.dkm', result: -83 },
-    { path: 'm/c.dkm', result: 'E_NOT_FOUND' },
+    { path: 'm/c.dkm', result: -1 },
   ]);
+  expect(out.failed).toEqual([{ path: 'm/d.dkm', result: -9 }]);
   expect(events.map((e) => e.event)).toEqual([
     'reload',
     'reload',
     'reload-refused',
     'reload',
     'reload-refused',
+    'reload',
+    'reload-failed',
     'done',
   ]);
 });

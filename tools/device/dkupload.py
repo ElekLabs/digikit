@@ -580,24 +580,26 @@ class Uploader:
         self._ok(dkproto.CMD["RELOAD"], "reload", path.encode() + b"\0")
 
     def reload_state(self) -> dict[str, int]:
-        """RELOAD_STATE: `phase` (0 none yet, 1 queued or running, 2 finished), `result` (the load status of the new file, or the refusal; 0 is ok) and `step`."""
+        """RELOAD_STATE: `phase` (0 none yet, 1 queued or running, 2 finished), `result` (0 is ok; else the refusal before anything changed, or the failure after the old module
+        was torn down), `step`, and `unloaded` (1: the old module was torn down, so it is not loaded unless the result is 0; 0: it still runs)."""
         b = self._ok(dkproto.CMD["RELOAD_STATE"], "reload state")
         return {
             "phase": b[0],
             "result": struct.unpack_from(">i", b, 1)[0],
             "step": b[5],
+            "unloaded": b[6],
         }
 
     def reload_and_wait(
         self, path: str, step: Callable[[], None], limit: int = 2000
-    ) -> int:
-        """`reload`, then ask `reload_state` until the job ends, calling `step()` between the asks (an emulator is stepped there); the result (0 is ok).
-        A job that does not end within `limit` asks raises `TimeoutError`."""
+    ) -> tuple[int, bool]:
+        """`reload`, then ask `reload_state` until the job ends, calling `step()` between the asks (an emulator is stepped there): `(result, unloaded)` as in `reload_state`
+        (result 0 is ok). A job that does not end within `limit` asks raises `TimeoutError`."""
         self.reload(path)
         for _ in range(limit):
             s = self.reload_state()
             if s["phase"] == 2:
-                return s["result"]
+                return s["result"], bool(s["unloaded"])
             step()
         raise TimeoutError(f"the reload of {path} did not end")
 

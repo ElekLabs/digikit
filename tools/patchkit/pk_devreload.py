@@ -439,14 +439,19 @@ def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
             and info.get("caps", 0) >> dkproto.CAP["RELOAD"] & 1
         ):
             print("preview: upload verified; reloading module", flush=True)
-            result = up.reload_and_wait(
+            result, unloaded = up.reload_and_wait(
                 path, lambda: emu.step(int(0.05 * dkrun.EMU_IPS))
             )
             if result == 0:
                 print(f"preview: module reloaded ({header['name']})", flush=True)
                 return
-            # a refusal (the transport plays, a key was dropped, a menu was built) or a failed load: the boot below takes the file as it is
-            print(f"preview: reload answered {result}; restarting instead", flush=True)
+            # refused before anything changed (the old module still runs), or failed after the old one was removed (the module is not loaded): the boot below takes the file as it is
+            what = (
+                "failed, the module is not loaded"
+                if unloaded
+                else "refused, the old module ran"
+            )
+            print(f"preview: reload {what} ({result}); restarting instead", flush=True)
         # A preview selects one module explicitly; all other card contents stay.
         print("preview: upload verified; selecting module", flush=True)
         up.select(prepared["selected"])

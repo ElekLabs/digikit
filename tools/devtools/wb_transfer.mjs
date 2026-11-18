@@ -67,8 +67,14 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
   if (sub === 'reload') {
     // the new files are on the card already (wb transfer install): reload the loaded modules without a boot
     if (rest.length === 0) fail('transfer reload needs card paths');
-    const { fell_back: fellBack } = await reloadModules(session, rest, emit);
-    return fellBack.length ? 1 : 0;
+    const { refused, failed } = await reloadModules(session, rest, emit);
+    for (const r of refused)
+      console.error(`wb: ${r.path} was not reloaded (status ${r.result}); the old module still runs`);
+    for (const r of failed)
+      console.error(
+        `wb: the reload of ${r.path} failed after the old module was removed (status ${r.result}); the module is not loaded`,
+      );
+    return refused.length + failed.length ? 1 : 0;
   }
   if (sub !== 'install' || rest.length === 0)
     fail(
@@ -105,9 +111,10 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
   await session.select(chosenPaths);
   let toBoot = chosen;
   if (opts.reload) {
-    // a module that is loaded and can be reloaded is swapped without a boot; the others (not loaded, or refused: the transport plays, a key was dropped) go through the restart below
-    const { fell_back: fellBack } = await reloadModules(session, chosenPaths, emit);
-    const back = new Set(fellBack.map((f) => f.path));
+    // a module that is loaded and can be reloaded is swapped without a boot. The others go through the restart below, which loads the selection: a module that was refused
+    // (not loaded, the transport plays, a key was dropped; the old one still ran) and one whose reload failed after the old one was removed (it is not loaded now); the events say which
+    const { refused, failed } = await reloadModules(session, chosenPaths, emit);
+    const back = new Set([...refused, ...failed].map((f) => f.path));
     toBoot = chosen.filter((id) => back.has(modules.find((m) => m.id === id).path));
     if (toBoot.length === 0) return 0;
   }

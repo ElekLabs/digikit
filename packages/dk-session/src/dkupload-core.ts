@@ -1332,16 +1332,24 @@ export class DkSession {
   async reload(path: string): Promise<void> {
     await this.ok(GCMD.RELOAD, 'reload', concat(text.encode(path), Uint8Array.of(0)));
   }
-  /** RELOAD_STATE: `phase` 0 (no reload yet), 1 (queued or running) or 2 (finished), the `result` (0 is ok; else the load status of the new file or the refusal) and the job's `step`. */
-  async reloadState(): Promise<{ phase: number; result: number; step: number }> {
+  /**
+   * RELOAD_STATE: `phase` 0 (no reload yet), 1 (queued or running) or 2 (finished), the `result` (0 is ok; else the refusal before anything changed, or the failure after the old module
+   * was torn down), the job's `step`, and `unloaded`: true when the old module was torn down, so it is not loaded unless the result is 0; false when it still runs.
+   */
+  async reloadState(): Promise<{ phase: number; result: number; step: number; unloaded: boolean }> {
     const b = await this.ok(GCMD.RELOAD_STATE, 'reload state');
-    return { phase: b[0]!, result: new DataView(b.buffer, b.byteOffset, b.byteLength).getInt32(1), step: b[5]! };
+    return {
+      phase: b[0]!,
+      result: new DataView(b.buffer, b.byteOffset, b.byteLength).getInt32(1),
+      step: b[5]!,
+      unloaded: b[6] === 1,
+    };
   }
-  /** `reload`, then `reloadState` on the session clock until the job ends; the result (0 is ok). A job that does not end within `withinMs` rejects. */
+  /** `reload`, then `reloadState` on the session clock until the job ends: `{ result, unloaded }` (see `reloadState`). A job that does not end within `withinMs` rejects. */
   async reloadAndWait(
     path: string,
     opts: { withinMs?: number; pollMs?: number; hangMs?: number } = {},
-  ): Promise<number> {
+  ): Promise<{ result: number; unloaded: boolean }> {
     await this.reload(path);
     const s = await poll(
       this.sessionClock,
@@ -1354,7 +1362,7 @@ export class DkSession {
         hangMs: opts.hangMs,
       },
     );
-    return s.result;
+    return { result: s.result, unloaded: s.unloaded };
   }
   /** LOG (the debug module `digikit/debug`): events from `from` on (the log of this boot), `[oldest, newest, events]`. */
   async logPage(from: number, quick: Quick = false): Promise<[number, number, DkLogEvent[]]> {
