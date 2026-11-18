@@ -32,8 +32,9 @@ All claims are **[D]** (read once, static) unless marked **[O]** (open). The sto
   - cached 0x45570000..0x45600000 and 0x45600000..0x45609000: nine 64 KiB and eight 4 KiB slots (`FUN_4009748c`, bases 0x4d570000 and 0x4d600000);
   - cached 0x45608000..0x4564f0a0: operands 0x4d608000..0x4d64f088 (boot thread and self-test code);
   - cached 0x4582f080..0x4583f280: the eMMC bounce buffers; EXT_CSD at 0x4d83f080 (SEC_COUNT is read at 0x4d83f154, `FUN_4010ebea` 0x4010f0fe);
-  - cached 0x4584f2c0: the stage buffer of the peer image (finding 70 "Peer link"); cached 0x4784f2c1..0x478af2cb: the section 7 transmit
-    buffer (`0x4f84f2c1`, loop end `0x4f8af2c9`, last store `0x4f8af2ca`, at 0x40082d20..0x40082d48).
+  - cached 0x4584f2c0: the boot sample upload buffer (`FUN_40082334`, getter `FUN_40082a48`; finding 142), live until the sample transfer after the
+    handshake; cached 0x4784f2c1..0x478af2cb: the section 7 transmit buffer (`0x4f84f2c1`, loop end `0x4f8af2c9`, last store `0x4f8af2ca`, at
+    0x40082d20..0x40082d48). The peer image has no stage buffer: the NOR bytes go straight into the transmit buffer ([finding 150](150-syntakt-section7-pack.md)).
 - **The delay ring.** `FUN_400966e0` (called from `FUN_400a2e90` through `FUN_40097722`) clears 0x400000 bytes at **0x4fc00000** with
   `memset`. `FUN_4009687a` and `FUN_4009748c` index it as `0x4fc00000 + 8 * (i & 0x7ffff)`, advance `i` by 0x20 per frame and give the
   address to eDMA TCDs (0xFC045540.., 0xFC0453C0..). So the cached range **0x47c00000..0x48000000** (the top 4 MiB of DDR, including the

@@ -77,7 +77,9 @@ mise run patch:mem -- core/machines core/params --device dt2 --firmware 1.17    
   placement's message when the set does not fit. Without modules it lists the port's free regions and needs no firmware.
   `pk_harness run` writes the same readout as `memory` into `out/runs/patchkit/dsp/CELL.json`.
 - `verify` re-decodes the image and checks the container (packet checksums, content checksum, HMAC trailer), the size
-  limits and the patch record. With `--base` it also checks that sections 2, 4 and 8 equal the stock image.
+  limits and the patch record. With `--base` it also checks that the read-only sections (the device file's `[container] readonly`:
+  2, 4 and 8 on the Digitakt II and Digitone II) equal the stock image. A section that a module stored packed
+  ([Repacking](#repacking-a-read-only-section)) passes when it decodes to the stock bytes.
 - `explain` lists the allocation map (what went where, per region), each patched site with the bytes before and
   after, and the SHARC+ listing of DSP sites. Its output contains disassembly of firmware code: keep it out of
   commits.
@@ -540,13 +542,42 @@ patchkit stores a `DKPR` record in the image: format version, the SHA-256 of the
 `id@version`. It lives in `cf.expansion` when the patch uses it, otherwise in an appended DSP block. `inspect` and
 `verify` read it, and a patched image is never patched again. Nothing on the device reads it.
 
+### Repacking a read-only section
+
+A section of `[container] readonly` is never changed. A device file may also list roles in `[container] repack` (the Syntakt: `repack = ["cf2"]`, the second
+CPU's program, section 7). Such a section keeps its decoded bytes but may be stored packed, to make the image smaller. This is allowed only when the firmware
+unpacks it before it uses it, so a module has to do that: it declares the section in its manifest and patches the reader.
+
+```toml
+[[repack]]
+role = "cf2"
+dest = 0x4f84f2c6        # where the module unpacks the section to
+stage_end = 0x4f8af2c1   # the packed stream is read to end here (stage_end - length), then unpacked forward over it
+len = 383760             # the stock section: decoded length and SHA-256
+sha256 = "daf6451c..."
+```
+
+patchkit stores the section packed (`pack_section`) only when a module of the set declares it. The build is refused when:
+
+- the role is not in the device's `repack` list (`main` never is), or two modules claim the same role;
+- the stock section is not the one with the declared `len` and `sha256` (the module checks the same values at boot, so it would fail at every boot);
+- the packed stream is longer than `stage_end - dest`;
+- the in-place margin is 0 or less. `aplib::inplace_margin` unpacks the stream's tokens without output and returns the smallest, over the tokens, of (stream bytes read) -
+  (output bytes written at or past the stream's start). A margin of 0 or less means that the output would overwrite stream bytes that are not read yet.
+  `tools.firmware.aplibpack.inplace_margin` is the reference. For the Syntakt section 7 it is 9,444 bytes.
+
+`verify --base` and the `image_report` tool accept the repacked section when it decodes to the stock bytes. The first user is `core/peer-image`
+([README](../modules/core/adapters/peer-image/README.md), [finding 150](findings/150-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
+32,672 bytes over `container_max`; with it the container is 2,011,488 bytes.
+
 ### Codec and safety rules
 
 - The codec reproduces all four stock images byte for byte (framing, 8-in-7 coding, packet checksums, content
   checksum, HMAC trailer). Sections that a patch does not change keep their stored bytes. Changed sections are packed
   with an aPLib packer that produces the same bytes as `tools/firmware/aplibpack.py` and runs about 25 times faster.
 - **Sections 2 (bootstrap), 4 (updater) and 8 never change.** patchkit has no override. The bootstrap is what lets you
-  recover from a bad MAIN OS.
+  recover from a bad MAIN OS. The Syntakt's FPGA bitstream (1) and the second CPU's sections (6, 7) are read-only too; section 7 may be
+  stored packed, but only with its decoded bytes unchanged ([Repacking](#repacking-a-read-only-section)).
 - An image for flashing has a container of at most `container_max` (`0x1FFE00` bytes, a port limit): the OS-upgrade
   receiver copies the image into a 2 MiB RAM stage without a size check ([finding 146](findings/146-syntakt-os-upgrade-receiver.md)).
   The limit applies to images built for flashing: the Firmware page, `patchkit apply` without `--no-flash-cap`, and the

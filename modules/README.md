@@ -234,6 +234,19 @@ What registers are free at a hook site is the module's business: document it in 
 | `resource` | name of the resource, for example `dsp.fx.hook` or `cf.rtos.fn.reset.init_calls` |
 | `devices` | optional device filter |
 
+### `[[repack]]`
+
+A module that unpacks a container section of a read-only role before the firmware uses it lets patchkit store that section packed. The device file must allow it
+(`[container] repack`, a list of roles), and the decoded section stays the stock one. Used by `core/peer-image` ([PATCHING.md](../docs/PATCHING.md) "Repacking a read-only section").
+
+| Key | Meaning |
+|---|---|
+| `role` | the section's role in the device file: `cf2`, `fpga` or `dsp` (`main` is never repacked) |
+| `dest` | the address the module unpacks the section to |
+| `stage_end` | the end of the buffer the packed stream is read into: the stream is read to `stage_end - length` and unpacked forward from `dest` |
+| `len`, `sha256` | the decoded length and SHA-256 of the stock section: patchkit refuses an image whose section differs (the module would refuse it at every boot) |
+| `devices` | optional device filter |
+
 ### Anchor rules (`devices/fw/`)
 
 A module manifest has no rules. Rules are declared in `devices/fw/*.toml` ([design](../docs/design/firmware-decls.md)).

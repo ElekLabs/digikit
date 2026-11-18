@@ -11216,6 +11216,157 @@
     },
     {
       "at": {
+        "st-1.42": [
+          {
+            "addr": "0x401181ec",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_peer_depack",
+        "rust": "dkfw::peer::depack"
+      },
+      "cpu": "cf",
+      "doc": "st-1.42 0x401181ec: the container section depacker. It skips the 8-byte stream header, has no output bound and returns the output length in D0.",
+      "file": "devices/fw/peer.toml",
+      "kind": "fn",
+      "mark": "O",
+      "name": "cf.peer.fn.depack",
+      "rule": {
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 (const u8 *src, u8 *dst)",
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40116d7a",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_peer_nor_read",
+        "rust": "dkfw::peer::nor_read"
+      },
+      "cpu": "cf",
+      "doc": "st-1.42 0x40116d7a: the NOR flash read `void f(u32 src, u32 len, u8 *dst)` (byte loop on the SPI controller, takes the NOR mutex). The peer thread calls it for the section 6 and section 7 payloads; core/peer-image forwards the section 6 call to it.",
+      "file": "devices/fw/peer.toml",
+      "kind": "fn",
+      "mark": "O",
+      "name": "cf.peer.fn.nor_read",
+      "rule": {
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "void (u32 src, u32 len, u8 *dst)",
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40082c24"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The `lea <NOR read>,A2` of the peer thread; the hook loads A2 with the wrapper that has the same stack signature and continues after the site.",
+      "file": "devices/fw/peer.toml",
+      "kind": "hook",
+      "mark": "O",
+      "mode": "replace",
+      "name": "cf.peer.hook.nor_read_lea",
+      "regs": {
+        "clobbers": [
+          "a2",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.peer.site.nor_read_lea",
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40082c24",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "st-1.42 0x40082c24: the 6-byte `lea <NOR read>.l,A2` in the peer thread (entry 0x40082c04, no function of the database). A2 is used only by the two `jsr (a2)` calls that read the section 6 and section 7 payloads. Found by the words of the thread's first 40 bytes.",
+      "file": "devices/fw/peer.toml",
+      "kind": "site",
+      "mark": "O",
+      "name": "cf.peer.site.nor_read_lea",
+      "rule": {
+        "st": {
+          "kind": "cf_words",
+          "len": 6,
+          "offset": 32
+        }
+      },
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40082e84",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "st-1.42 0x40082e84: the code the peer thread takes when the section 7 directory entry is missing: it stores status 1 (DSP BOOT FAILURE) and waits. The DMA is not armed then, so the second CPU gets no bytes.",
+      "file": "devices/fw/peer.toml",
+      "kind": "site",
+      "mark": "O",
+      "name": "cf.peer.site.status_fail",
+      "rule": {
+        "st": {
+          "kind": "cf_words",
+          "len": 2,
+          "offset": 640
+        }
+      },
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x4003e41a",
@@ -22945,6 +23096,13 @@
     },
     {
       "count": 6,
+      "cpu": "cf",
+      "file": "devices/fw/peer.toml",
+      "meaning": "the second ColdFire CPU of a device that has one: the thread that reads its image from the NOR flash and streams it, and the container section depacker",
+      "name": "peer"
+    },
+    {
+      "count": 5,
       "cpu": "cf",
       "file": "devices/fw/project.toml",
       "meaning": "the project object, kits, tracks, serialisation",

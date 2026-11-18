@@ -170,10 +170,10 @@ param_rows = 0
 page_rows = 0
 
 # Module sets patched in by name (the Digitone II file explains them). `emulator`: the runtime (with core/expansion, which it requires) and the core
-# modules that have a Syntakt port: core/ui, core/digikit-menu (the SETTINGS > DIGIKIT menu), core/health and core/input. The DSP, run-time machine and
+# modules that have a Syntakt port: core/ui, core/digikit-menu (the SETTINGS > DIGIKIT menu), core/health, core/input and core/peer-image (stores the peer CPU's section 7 packed and unpacks it in MAIN: the image is over the container limit without it). The DSP, run-time machine and
 # effect modules have none (no DSP). There is no `device` set: nothing is flashed to a Syntakt until the emulator proof is complete.
 [patch_sets]
-emulator = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input"]
+emulator = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
 
 # Where the card keeps things (finding 138 "Storage"; sectors are 512 bytes). Read by packages/emulator/device-profile and used by the +Drive builder,
 # reader and exporter (packages/emulator/plusdrive). The MmcFs of OS 1.42 has no kit pool and no kit bitmap, and no path filesystem.

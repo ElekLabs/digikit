@@ -510,6 +510,46 @@ mark = "O"
 rule = "fw/param:cf_func"
 
 [[anchor]]
+name = "cf.peer.fn.depack"
+cpu = "cf"
+kind = "code"
+addr = 0x401181ec
+len = 4
+sha256 = "23201b350b902ad73d89ce6a89eee29dfa14dd42612057eede16e4b546dc6759"
+mark = "O"
+rule = "fw/peer:cf_func"
+
+[[anchor]]
+name = "cf.peer.fn.nor_read"
+cpu = "cf"
+kind = "code"
+addr = 0x40116d7a
+len = 4
+sha256 = "e59cdca0d536f67a27bdb308b1683f2c5d97565cb4d2dfe566afb0c8f6dae402"
+mark = "O"
+rule = "fw/peer:cf_func"
+
+[[anchor]]
+name = "cf.peer.site.nor_read_lea"
+cpu = "cf"
+kind = "code"
+addr = 0x40082c24
+len = 6
+sha256 = "06154f028fdd2b33a097eae5c0b854984b5c9d5dd103969e9618f12984af7a36"
+mark = "O"
+rule = "fw/peer:cf_words"
+
+[[anchor]]
+name = "cf.peer.site.status_fail"
+cpu = "cf"
+kind = "code"
+addr = 0x40082e84
+len = 2
+sha256 = "1f2e6d00279b4659b6d6f1ad57e12568e4a50f80908af50d1e861001b2be2a3b"
+mark = "O"
+rule = "fw/peer:cf_words"
+
+[[anchor]]
 name = "cf.project.fn.active_kit"
 cpu = "cf"
 kind = "code"
@@ -1144,6 +1184,12 @@ name = "cf.midi.hook.rx"
 site = "cf.midi.site.rx"
 mode = "before"
 clobbers = ["ccr"]
+
+[[hook]]
+name = "cf.peer.hook.nor_read_lea"
+site = "cf.peer.site.nor_read_lea"
+mode = "replace"
+clobbers = ["a2", "ccr"]
 
 [[hook]]
 name = "cf.rtos.hook.idle"

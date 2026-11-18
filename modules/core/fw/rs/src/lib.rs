@@ -532,6 +532,20 @@ pub mod param {
     }
 }
 
+pub mod peer {
+    unsafe extern "C" {
+        /// st-1.42 0x401181ec: the container section depacker. It skips the 8-byte stream header, has no output bound and returns the output length in D0.
+        #[link_name = "cf.peer.fn.depack"]
+        pub fn depack(src: *const u8, dst: *mut u8) -> u32;
+    }
+
+    unsafe extern "C" {
+        /// st-1.42 0x40116d7a: the NOR flash read `void f(u32 src, u32 len, u8 *dst)` (byte loop on the SPI controller, takes the NOR mutex). The peer thread calls it for the section 6 and section 7 payloads; core/peer-image forwards the section 6 call to it.
+        #[link_name = "cf.peer.fn.nor_read"]
+        pub fn nor_read(src: u32, len: u32, dst: *mut u8);
+    }
+}
+
 pub mod project {
     unsafe extern "C" {
         /// `Kit *f(Project *)`: the active kit of a project. core/runtime uses it with the project singleton and track_type to watch each track's machine type.
