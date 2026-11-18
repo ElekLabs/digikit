@@ -541,7 +541,7 @@ patchkit stores a `DKPR` record in the image: format version, the SHA-256 of the
   flash checks (`patchkit flash`, `patchkit preflight`; `patchkit verify` alone does not check it). An image that only the emulator boots (the runtime patch of the
   workbench, `patchkit apply --no-flash-cap`) has no container limit. The OS container is written to flash at `0x80000`;
   the record sectors (tagged fields, serial number) start at `0x380000`. Stock images are about 1.5 MB.
-- patchkit re-decodes and verifies every output before it reports success: checksums, HMAC, size limits, the patch
+- patchkit re-decodes and verifies every output before it reports success: checksums, HMAC, size limits (the container limit only for an image built to flash), the patch
   record, and (with a base) that sections 2, 4 and 8 equal the stock image.
 - Never flash the output of `tools.firmware.build.rebuild`: it stores sections without compression and exceeds the cap
   ([finding 01](findings/01-container-and-patching.md)).
