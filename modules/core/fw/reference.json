@@ -11341,7 +11341,7 @@
         "rust": "dkfw::project::transport_state"
       },
       "cpu": "cf",
-      "doc": "Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. DT2 1.17 0x400d688a, DN2 1.12 0x400d86c0; findings 147.",
+      "doc": "Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. Finding 147.",
       "file": "devices/fw/project.toml",
       "kind": "fn",
       "mark": "D",

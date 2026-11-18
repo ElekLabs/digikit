@@ -69,4 +69,4 @@ sig = "u32 ()"
 rule = { kind = "cf_func", hash = "abf06de823684dac9b8ac6a8a12a81eb", offset = 0x0, len = 4 }
 mark = "D"
 users = ["core/runtime"]
-doc = "Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. DT2 1.17 0x400d688a, DN2 1.12 0x400d86c0; findings 147."
+doc = "Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. Finding 147."

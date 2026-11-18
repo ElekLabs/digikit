@@ -535,7 +535,7 @@ pub mod project {
     }
 
     unsafe extern "C" {
-        /// Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. DT2 1.17 0x400d688a, DN2 1.12 0x400d86c0; findings 147.
+        /// Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. Finding 147.
         #[link_name = "cf.project.fn.transport_state"]
         pub fn transport_state() -> u32;
     }
