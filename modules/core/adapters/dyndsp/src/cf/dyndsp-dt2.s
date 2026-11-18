@@ -20,9 +20,6 @@
     .long   \sym
     .endm
 
-| DK_SLOT_BYTES of sdk/dsp/contract/dk_stub.inc: the slot block at the start of window 0.
-    .equ    DL_SLOT_BYTES, 64
-
     .section .rodata
     .balign 4
     .globl dyndsp_info

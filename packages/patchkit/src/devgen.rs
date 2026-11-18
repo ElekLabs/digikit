@@ -1221,6 +1221,12 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "[digikit] dsp_area_bytes / 4",
         ),
         c(
+            "DL_SLOT_BYTES",
+            4 * crate::sdkgen::dsp_slot_words() as u64,
+            Shared,
+            "[dsp.slots] words * 4 of sdk/sdk.toml: the slot block at the start of window 0 (DK_SLOT_BYTES of dk_stub.inc)",
+        ),
+        c(
             "DL_TAIL_OFF",
             k.dsp_tail_off,
             PerDevice,
@@ -1690,9 +1696,11 @@ fn c_shared(module: &str) -> String {
     format!(
         "/* {module}: {NOTE}. Contract maxima of sdk/sdk.toml [limits.max]. */\n\
          #define DL_AREA_MAX_BYTES {:#x}u /* [limits.max] dsp_area_bytes: the largest area the 17-bit word offset of a chunk reaches */\n\
-         #define DL_AREA_MAX_WORDS {:#x}u /* the same in words */\n",
+         #define DL_AREA_MAX_WORDS {:#x}u /* the same in words */\n\
+         #define DL_SLOT_WORDS {}u /* [dsp.slots] words: the slot block at the start of window 0 (DK_SLOTS of dk_stub.inc) */\n",
         max.dsp_area_bytes,
-        max.dsp_area_bytes / 4
+        max.dsp_area_bytes / 4,
+        crate::sdkgen::dsp_slot_words()
     )
 }
 

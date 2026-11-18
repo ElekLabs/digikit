@@ -226,7 +226,7 @@ impl Backend for Installer {
 }
 
 /// The words of core/dsp-link's slot block (window 0 words 0 to 15; `[dsp.slots]` of sdk/sdk.toml): a hook stub of the image reads one, zero takes the stock path.
-pub const DSP_SLOT_WORDS: u32 = 16;
+pub const DSP_SLOT_WORDS: u32 = dkneeds::DSP_SLOT_WORDS;
 /// Bytes of the slot block: it lies directly below the area in the byte addresses of window 0 (`dl_send` takes them).
 const DSP_SLOT_BYTES: u32 = 4 * DSP_SLOT_WORDS;
 

@@ -48,8 +48,7 @@ typedef unsigned char u8;
 #define DL_DG_WORDS 32u
 /* The largest area the 17-bit offset reaches (generated, sdk.toml); the DSP knows the real size (status 3). */
 #define DL_AREA_BYTES DL_AREA_MAX_BYTES
-#define DL_SLOT_WORDS                                                                              \
-    16u /* DK_SLOTS of sdk/dsp/contract/dk_stub.inc: window 0 words 0 to 15 are the slot block, word 16 is the first word of the area */
+/* DL_SLOT_WORDS (generated, sdk.toml [dsp.slots]): window 0 words 0 to DL_SLOT_WORDS - 1 are the slot block, the next word is the first word of the area. */
 #define DL_WINDOW 12u
 #define DL_STALL_FRAMES 900u /* 0.6 s without progress */
 #define DL_END_FRAMES 6u

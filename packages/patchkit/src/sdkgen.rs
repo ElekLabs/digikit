@@ -439,6 +439,7 @@ fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
         ("INSTALL_SITES", f.install_sites),
         ("SLOTS_MAX", f.slots_max),
         ("INFO_MAX", f.info_max),
+        ("DSP_SLOT_WORDS", sdk.dsp.slots.words),
         ("MAX_VOICES", sdk.limits.max.machine_rows as u32),
         ("MAX_FX", sdk.limits.max.fx_slots as u32),
     ]
@@ -751,6 +752,15 @@ pub fn dsp_slot_names() -> Vec<String> {
         .dsp
         .slots
         .names
+}
+
+/// The words of the slot block of core/dsp-link (`[dsp.slots] words` of the `sdk/sdk.toml` this crate was built with).
+pub fn dsp_slot_words() -> u32 {
+    parse(include_str!("../../../sdk/sdk.toml"))
+        .expect("sdk/sdk.toml parses")
+        .dsp
+        .slots
+        .words
 }
 
 /// `[limits.max]` of a `sdk/sdk.toml` text (for the tests).

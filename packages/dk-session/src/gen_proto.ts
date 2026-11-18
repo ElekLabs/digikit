@@ -27,6 +27,7 @@ export const BIND_MAX = 24;
 export const INSTALL_SITES = 48;
 export const SLOTS_MAX = 16;
 export const INFO_MAX = 64;
+export const DSP_SLOT_WORDS = 16;
 export const MAX_VOICES = 8;
 export const MAX_FX = 4;
 export const H_ROLE = 56;

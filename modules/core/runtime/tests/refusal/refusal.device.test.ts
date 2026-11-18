@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { moduleStateText, type ModuleState } from '@digi/dk-session';
-import { CAPACITY_KINDS, RECORD_KIND, RESOURCE } from '@digi/dk-session/gen_proto';
+import { CAPACITY_KINDS, RECORD_KIND } from '@digi/dk-session/gen_proto';
 import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { derivedModule } from '@digi/regression/runtime/service-files.ts';
