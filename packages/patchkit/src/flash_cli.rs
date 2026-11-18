@@ -582,7 +582,14 @@ fn ping_name(
             && s == seq
             && ty == RPC_PING
         {
-            return Ok(patchkit::flash_rpc::parse_ping(&payload));
+            return patchkit::flash_rpc::parse_ping(&payload)
+                .map(Some)
+                .ok_or_else(|| {
+                    format!(
+                        "the Ping reply has no model name: {}",
+                        patchkit::error::hex(&payload)
+                    )
+                });
         }
     }
     Ok(None)
@@ -1045,6 +1052,33 @@ mod tests {
             m.push(0xf7);
             Ok(Some(m))
         }
+    }
+
+    /// The exact reply a booted Syntakt gave the emulator's Ping (the name sits behind an extra length byte); a ping that got a reply with no name is an error,
+    /// not silence.
+    struct Raw(Option<Vec<u8>>);
+    impl Transport for Raw {
+        fn send(&mut self, _m: &[u8]) -> std::result::Result<(), String> {
+            Ok(())
+        }
+        fn recv(&mut self, _t: Duration) -> std::result::Result<Option<Vec<u8>>, String> {
+            Ok(self.0.take())
+        }
+    }
+
+    #[test]
+    fn a_real_syntakt_ping_reply_gives_the_name_and_a_nameless_one_is_an_error() {
+        let real = patchkit::error::unhex("f000203c10000400290001011e1600010203040607090050525153545556005758595a5b5c5d005e53796e74616b007400f7").unwrap();
+        let name = ping_name(&mut Raw(Some(real)), Duration::from_secs(1)).unwrap();
+        assert_eq!(name.as_deref(), Some("Syntakt"));
+        // a reply with seq 1 whose payload holds no name
+        let mut body = vec![0, 2, 0, 1, patchkit::flash_rpc::RPC_PING | 0x80];
+        body.extend([1, 7]);
+        let mut m = patchkit::flash_rpc::ENVELOPE.to_vec();
+        m.extend(patchkit::syx::encode_8in7(&body));
+        m.push(0xf7);
+        let e = ping_name(&mut Raw(Some(m)), Duration::from_secs(1)).unwrap_err();
+        assert!(e.contains("no model name"), "{e}");
     }
 
     #[test]

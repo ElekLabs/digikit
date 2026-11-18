@@ -10,15 +10,21 @@ export const RPC_SOFTWARE_VERSION = 0x02;
 
 /**
  * The model name in the reply of Ping. The payload is `u8 blobLen`, the blob of request types the device answers, then NUL-ended strings; the first
- * string is the name. The blob and what follows the name are not read. Undefined when the reply is empty, cut short or has an empty name.
+ * string is the name. A real Syntakt 1.42 reply has one more byte in front (`1e 16 <22 types> "Syntakt" 00`), so the name is looked for at both
+ * offsets, and only a printable ASCII string counts. The blob and what follows the name are not read. Undefined when the reply is empty, cut short or
+ * has no such name.
  */
 export function parsePing(payload: Uint8Array): string | undefined {
-  const first = payload[0];
-  if (first === undefined) return undefined;
-  const start = 1 + first;
-  const end = payload.indexOf(0, start);
-  if (start >= payload.length || end < 0 || end === start) return undefined;
-  return new TextDecoder('latin1').decode(payload.subarray(start, end));
+  for (const skip of [0, 1]) {
+    const first = payload[skip];
+    if (first === undefined) return undefined;
+    const start = skip + 1 + first;
+    const end = payload.indexOf(0, start);
+    if (start >= payload.length || end < 0 || end === start) continue;
+    const name = payload.subarray(start, end);
+    if (name.every((b) => b >= 0x20 && b < 0x7f)) return new TextDecoder('latin1').decode(name);
+  }
+  return undefined;
 }
 
 /** The OS version in the reply of SoftwareVersion (`"00"`, `"79"`, `"1.17"`: the string that looks like a version), or undefined. */

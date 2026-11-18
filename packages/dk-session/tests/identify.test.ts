@@ -16,10 +16,19 @@ test('parsePing with an empty blob reads the name at byte 1', () => {
   assert.equal(parsePing(reply([], 'Name')), 'Name');
 });
 
+test('parsePing finds the name behind the extra length byte of a real Syntakt reply', () => {
+  // `1e 16 <22 request types> "Syntakt" 00`, as the emulated Syntakt 1.42 answered Ping
+  const types = [
+    1, 2, 3, 4, 6, 7, 9, 0x50, 0x52, 0x51, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e,
+  ];
+  assert.equal(types.length, 22);
+  assert.equal(parsePing(Uint8Array.from([0x1e, 22, ...types, ...Buffer.from('Syntakt\0')])), 'Syntakt');
+});
+
 test('parsePing gives undefined for an empty, cut or nameless reply', () => {
   assert.equal(parsePing(new Uint8Array()), undefined);
   assert.equal(parsePing(Uint8Array.from([5, 1, 2])), undefined); // the blob is cut
   assert.equal(parsePing(Uint8Array.from([2, 1, 2])), undefined); // no name after the blob
   assert.equal(parsePing(Uint8Array.from([0, ...Buffer.from('Name')])), undefined); // no NUL
-  assert.equal(parsePing(Uint8Array.from([0, 0, ...Buffer.from('x\0')])), undefined); // empty name
+  assert.equal(parsePing(Uint8Array.from([0, 0, 0])), undefined); // empty name
 });

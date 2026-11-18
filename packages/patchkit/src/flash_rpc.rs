@@ -80,13 +80,19 @@ pub fn parse_reply(msg: &[u8]) -> Option<(u16, u8, Vec<u8>)> {
     ))
 }
 
-/// The model name in the payload of a Ping reply: `u8 blob length`, the blob, then NUL-ended strings; the first string is the name (`parsePing` of
-/// `packages/dk-session/src/identify.ts` is the same rule). `None` when the payload is empty, cut short or the name is empty.
+/// The model name in the payload of a Ping reply. The reply is `u8 blobLen`, the blob of advertised request types, then NUL-ended strings; the first
+/// string is the name. A real Syntakt 1.42 reply has one more byte in front (`1e 16 <22 types> "Syntakt" 00`: the byte is the length of what follows
+/// `blobLen`), so the name is looked for at both offsets, and only a printable ASCII string counts. `parsePing` of
+/// `packages/dk-session/src/identify.ts` is the same rule. `None` when the payload is empty, cut short or has no such name.
 pub fn parse_ping(payload: &[u8]) -> Option<String> {
-    let start = 1 + *payload.first()? as usize;
-    let rest = payload.get(start..)?;
-    let end = rest.iter().position(|&b| b == 0)?;
-    (end > 0).then(|| rest[..end].iter().map(|&b| b as char).collect())
+    (0..2).find_map(|skip| {
+        let start = skip + 1 + *payload.get(skip)? as usize;
+        let rest = payload.get(start..)?;
+        let end = rest.iter().position(|&b| b == 0)?;
+        let name = &rest[..end];
+        (end > 0 && name.iter().all(|b| (0x20..0x7f).contains(b)))
+            .then(|| name.iter().map(|&b| b as char).collect())
+    })
 }
 
 /// Why a run ended without a flash.
@@ -545,6 +551,18 @@ fn text_of(b: &[u8]) -> String {
 #[cfg(test)]
 mod ping_tests {
     use super::*;
+    use crate::error::unhex;
+
+    /// The reply of a booted Syntakt to `Ping` (seq 1), as the emulator's `midi.usb.out` returned it.
+    const SYNTAKT_PING_REPLY: &str = "f000203c10000400290001011e1600010203040607090050525153545556005758595a5b5c5d005e53796e74616b007400f7";
+
+    #[test]
+    fn a_real_ping_reply_gives_its_seq_and_the_model_name() {
+        let msg = unhex(SYNTAKT_PING_REPLY).unwrap();
+        let (seq, ty, payload) = parse_reply(&msg).expect("the reply parses");
+        assert_eq!((seq, ty), (1, RPC_PING));
+        assert_eq!(parse_ping(&payload).as_deref(), Some("Syntakt"));
+    }
 
     #[test]
     fn the_ping_reply_names_the_model_after_the_request_type_blob() {
@@ -557,6 +575,10 @@ mod ping_tests {
         assert_eq!(parse_ping(&[3, 1, 2, 80]), None);
         assert_eq!(parse_ping(&[0, 0]), None, "an empty name");
         assert_eq!(parse_ping(&[0, b'a']), None, "no terminator");
+        // the Syntakt's reply has a length byte in front of blobLen
+        let mut st = vec![0x1e, 2, 7, 8];
+        st.extend(b"Syntakt\0");
+        assert_eq!(parse_ping(&st).as_deref(), Some("Syntakt"));
     }
 }
 

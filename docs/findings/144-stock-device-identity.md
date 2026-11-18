@@ -20,7 +20,7 @@ The name literal has no other use in the Ping branch. The same dispatcher also b
 Payload after the type byte 0x81: `u8 blobLen`, the blob of advertised request types (DT2 1.16: 44 commands, finding 25 and MIDI-SYSEX-RPC.md section "Device-advertised command set" **[V]**), then NUL-terminated strings. The first string after the blob is the model name. The DT2 1.16 emulator reply is 66 payload bytes and DN2 1.11 is 41 (finding 25). **[D]**
 The branch builds a second string after the name: DT2 from the object at 0x4099d5a4 (`FUN_400c1160`), DN2 at 0x405ce878 (`FUN_400bb790`), Syntakt at 0x40653420 (`FUN_4006f264`). Its content is not read (hardware revision or serial?). The byte 0x2a, 0x2b or 0x1e that follows is not decoded. **[O]**
 The blob sizes 44, 22 and 22 fit the advertised sets: the DN2 has no StorageSpace handler (finding 25) and the Syntakt has no FsSample handlers (finding 142). Not checked against a DN2 1.12 or Syntakt reply **[O]**: the emulator has no recorded Ping reply for those two.
-A client must not depend on the blob or the trailing bytes: read `blobLen`, skip the blob, take the first NUL-terminated string.
+A client must not depend on the blob or the trailing bytes: read `blobLen`, skip the blob, take the first NUL-terminated string. **[C]** A real Syntakt 1.42 reply (emulator, 2026-11-19) has one more byte in front of `blobLen`: the payload is `1e 16 <22 request types> "Syntakt" 00`, 32 bytes, and `1e` is the length of what follows `blobLen`'s byte. Readers therefore look for the name at offset 0 and at offset 1 and accept a printable ASCII string (`parsePing`, `flash_rpc::parse_ping`). The layout of the DT2 and DN2 replies is not rechecked **[O]**.
 
 ## SoftwareVersion
 
