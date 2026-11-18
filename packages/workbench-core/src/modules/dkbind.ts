@@ -71,13 +71,21 @@ export interface StockBytes {
  * The `ServiceBinder` over a binder instance made on first use (a failed load is tried again at the next use) and the stock firmware of the
  * user. `firmwareHash` is the key of the bound file's cache: the same stock image and the same unbound file always bind to the same bytes.
  */
+/** The binder instance or its data (the bind bundle) could not be loaded: not a matter of the user's stock image. */
+export class BindUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super(`the bind data cannot be loaded (${cause instanceof Error ? cause.message : String(cause)})`);
+    this.name = 'BindUnavailableError';
+  }
+}
+
 export function createServiceBinder(make: () => Promise<DkBind>, stock: StockBytes): ServiceBinder {
   let binder: Promise<DkBind> | undefined;
   return {
     async bind(dks, firmwareHash) {
       const loading = (binder ??= make().catch((e) => {
         binder = undefined;
-        throw e;
+        throw new BindUnavailableError(e);
       }));
       // a service that hooks no firmware site binds without the image (patchkit returns it as built), so a missing image is only an error when the bind fails
       const fw = await stock.bytesOf(firmwareHash);

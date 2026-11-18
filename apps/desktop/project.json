@@ -25,6 +25,10 @@
         {
           "projects": ["@digi/web"],
           "target": "patchkit-wasm"
+        },
+        {
+          "projects": ["@digi/web"],
+          "target": "bind-bundle"
         }
       ]
     },

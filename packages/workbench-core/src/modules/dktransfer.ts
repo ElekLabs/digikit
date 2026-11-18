@@ -18,6 +18,7 @@ import {
   type ModuleState,
   type ModuleStateName,
 } from '@digi/dk-session';
+import { BindUnavailableError } from './dkbind.ts';
 import { fitsNow, type Caps, type Needs } from './fit.ts';
 import {
   planDelete,
@@ -485,26 +486,48 @@ async function bindService(deps: InstallDeps, f: ServiceFile): Promise<Uint8Arra
   return bound;
 }
 
-/** The bound file, or null when the binder cannot make it (no kept stock image, or one patchkit cannot bind to). */
+/** The bound file, or null when the binder cannot make it. */
 async function tryBind(deps: InstallDeps, f: ServiceFile): Promise<Uint8Array | null> {
+  return bindService(deps, f).catch(() => null);
+}
+
+/** The error of a bind, or null when the binder makes the file. */
+async function bindError(deps: InstallDeps, f: ServiceFile): Promise<unknown> {
   try {
-    return await bindService(deps, f);
-  } catch {
+    await bindService(deps, f);
     return null;
+  } catch (e) {
+    return e ?? new Error('bind failed');
   }
 }
 
-/** Each module whose services cannot all be bound is refused (`no-stock`) and adds no service; the other modules go on. */
+/**
+ * Each module whose services cannot all be bound is refused and adds no service; the other modules go on. The kind is `no-stock` when no stock image is
+ * kept (`firmwareHash` null), else `bind-failed` with the error of the binder (also when the bind data cannot be loaded).
+ */
 async function refuseUnbound(deps: InstallDeps, plan: ResolvedServices): Promise<ResolvedServices> {
-  const failed = new Set<ServiceFile>();
-  for (const f of plan.order) if ((await tryBind(deps, f)) === null) failed.add(f);
+  const failed = new Map<ServiceFile, unknown>();
+  for (const f of plan.order) {
+    const e = await bindError(deps, f);
+    if (e !== null) failed.set(f, e);
+  }
   if (failed.size === 0) return plan;
   const refused = [...plan.refused];
   const byModule = new Map<string, ServiceFile[]>();
   for (const [module, files] of plan.byModule) {
     const bad = files.find((f) => failed.has(f));
-    if (bad) refused.push({ module, service: bad.stem, kind: 'no-stock' });
-    else byModule.set(module, files);
+    if (bad) {
+      const e = failed.get(bad);
+      if (deps.firmwareHash === null && !(e instanceof BindUnavailableError))
+        refused.push({ module, service: bad.stem, kind: 'no-stock' });
+      else
+        refused.push({
+          module,
+          service: bad.stem,
+          kind: 'bind-failed',
+          error: e instanceof Error ? e.message : String(e),
+        });
+    } else byModule.set(module, files);
   }
   const kept = new Set([...byModule.values()].flat());
   return { byModule, order: plan.order.filter((f) => kept.has(f)), refused };

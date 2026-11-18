@@ -35,6 +35,8 @@ import {
 import { setFitReader } from '@digi/workbench-core/modules/fit.ts';
 import { nameHash, readProvides, serviceFileOf, type ServiceFile } from '@digi/workbench-core/modules/services.ts';
 import { fileHashHex } from '@digi/dk-session';
+import { installOutcome, serviceRefusalText, DONE_ON_CARD } from '@digi/workbench-core/transfer/transfer-core.ts';
+import { BindUnavailableError, createServiceBinder } from '@digi/workbench-core/modules/dkbind.ts';
 import { parseSoftwareVersion } from '@digi/workbench-core/transfer/connection-core.ts';
 import { FakeDevice, concat, hex, sha } from '@digi/test-support/fakedevice';
 import { dkm, everythingFits, needsOf } from './support/dkm.ts';
@@ -583,9 +585,50 @@ test('buildView with services: a binder that fails shows the unbound rows and re
   const v = await buildView(session(dev), [pluck], depsOf([fx], { binder: failing }));
   assert.deepEqual(
     v.refusals?.map((r) => [r.module, r.kind]),
-    [['someone/pluck', 'no-stock']],
+    [['someone/pluck', 'bind-failed']],
   );
+  assert.equal(v.refusals?.[0]?.error, 'no port for this firmware');
   assert.equal(v.modules[0]!.services?.[0]?.state, 'not on device');
+});
+
+test('install with services: a binder that fails with a stock image kept is bind-failed with the error text, not no-stock', async () => {
+  const fx = service('fx');
+  const dev = new FakeDevice();
+  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
+  const failing = { bind: async () => Promise.reject(new Error('no port for this firmware')) };
+  const out = await install(session(dev), ['someone/pluck'], [pluck], () => {}, depsOf([fx], { binder: failing }));
+  assert.deepEqual(out.uploaded, []);
+  assert.equal(out.refused?.[0]?.kind, 'bind-failed');
+  assert.match(serviceRefusalText(out.refused![0]!), /fx service could not be prepared: no port for this firmware/);
+});
+
+test('install with services: a missing bind bundle is bind-failed even without a stock image, and the text names the command', async () => {
+  const fx = service('fx');
+  const dev = new FakeDevice();
+  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
+  const binder = createServiceBinder(() => Promise.reject(new Error('bind.json: not found')), {
+    bytesOf: async () => undefined,
+  });
+  const out = await install(
+    session(dev),
+    ['someone/pluck'],
+    [pluck],
+    () => {},
+    depsOf([fx], { binder, firmwareHash: null }),
+  );
+  assert.equal(out.refused?.[0]?.kind, 'bind-failed');
+  assert.match(out.refused![0]!.error!, /bind data cannot be loaded \(bind.json: not found\)/);
+  assert.match(serviceRefusalText(out.refused![0]!), /@digi\/web:bind-bundle/);
+  assert.ok(new BindUnavailableError(new Error('x')) instanceof Error);
+});
+
+test('installOutcome: all refused is an error with the refusal lines, some refused names them, none is done', () => {
+  const r = (module: string) => ({ module, service: 'fx', kind: 'no-stock' as const });
+  const all = installOutcome({ uploaded: [], refused: [r('a/one'), r('a/two')] }, DONE_ON_CARD);
+  assert.ok('error' in all && all.error.split('\n').length === 2 && all.error.startsWith('a/one not installed'));
+  const some = installOutcome({ uploaded: ['a/plain'], refused: [r('a/one')] }, DONE_ON_CARD);
+  assert.deepEqual(some, { message: `${DONE_ON_CARD} Not installed: a/one.` });
+  assert.deepEqual(installOutcome({ uploaded: [], refused: [] }, DONE_ON_CARD), { message: DONE_ON_CARD });
 });
 
 test('install with services: the bound file is made once per firmware and unbound hash', async () => {

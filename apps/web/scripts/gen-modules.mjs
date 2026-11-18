@@ -20,6 +20,7 @@ import { parse } from 'smol-toml';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
 import { loadDevices } from '@digi/devices/node';
 import { buildBindBundle } from '../../../packages/workbench-core/src/node/bind-bundle.ts';
+import { writeBindBundle } from './gen-bind.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const deviceIds = loadDevices().runtimeIds;
@@ -317,7 +318,7 @@ if (
   const { bundle } = buildModuleData();
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
-  writeFileSync(join(out, 'bind.json'), JSON.stringify(buildBindBundle(repoRoot)));
+  writeBindBundle(out);
   const index = shipModules(out);
   console.log(`shipped: ${index.modules.map((m) => `${m.id} (${Object.keys(m.devices).join(',')})`).join(', ')}`);
   console.log(

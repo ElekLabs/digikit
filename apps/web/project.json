@@ -23,6 +23,20 @@
       ],
       "inputs": []
     },
+    "bind-bundle": {
+      "executor": "nx:run-commands",
+      "description": "Writes public/modules/bind.json (the ports and firmware declarations the service binder reads); the desktop workbench needs it, the site build writes it with gen-modules.",
+      "options": { "command": "node scripts/gen-bind.mjs", "cwd": "{projectRoot}" },
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/devices/fw/**/*",
+        "{workspaceRoot}/devices/ports/*.toml",
+        "{workspaceRoot}/packages/workbench-core/src/node/bind-bundle.ts",
+        "{projectRoot}/scripts/gen-bind.mjs",
+        "jsToolchain"
+      ],
+      "outputs": ["{projectRoot}/public/modules/bind.json"]
+    },
     "check": {
       "cache": true,
       "inputs": [

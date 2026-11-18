@@ -21,7 +21,7 @@ description = "Build once and open the desktop app with nothing loaded (DN2 and 
 ["workbench:inputs"]
 hide = true
 run = "pnpm nx:pilot run @digi/desktop:workbench-inputs --output-style=stream"
-description = "Build what the workbench app reads, from the Nx cache when unchanged: the desktop UI (apps/desktop/ui/dist) and apps/web/public/{patchkit,dkupload,dksample}.wasm"
+description = "Build what the workbench app reads, from the Nx cache when unchanged: the desktop UI (apps/desktop/ui/dist), apps/web/public/{patchkit,dkupload,dksample}.wasm and apps/web/public/modules/bind.json (the service binder's data, Nx target @digi/web:bind-bundle)"
 
 ["emu:serve"]
 run = "uv run python -m tools.emulator.native_emu --daemon"
