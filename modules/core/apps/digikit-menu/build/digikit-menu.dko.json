@@ -6365,7 +6365,7 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss.g_boot",
-   "size": 248
+   "size": 256
   },
   {
    "align": 2,
@@ -6606,7 +6606,7 @@
    "size": 4
   }
  ],
- "source_sha256": "b4204f98ea7b5683facc0305f5f1b99cd5afe289c9a31bd990400880e83b65d2",
+ "source_sha256": "bf1af24fcac723571d765d27761acdc0ef8e62e233fbc6134064567c94af1738",
  "symbols": [
   {
    "global": false,
@@ -8660,7 +8660,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "3437",
-  "isa_check": "54b8192fd23ccec6a2e0f79a2a5093dfc5e797c6d91f34cd60e6b92709d49500",
+  "isa_check": "07b04b2381edacd5c3b0da800ffc6c27cd998d5a516ad68a8994b55e05952984",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

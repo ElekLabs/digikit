@@ -1081,6 +1081,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         records::set_menu(rec, 0);
         crate::entry::unbind(rec);
         self.torn[rec] = 0;
+        if module {
+            let b = crate::boot::info();
+            b.unloads = b.unloads.wrapping_add(1);
+        }
         OK
     }
 

@@ -180,6 +180,13 @@ impl<C: CoreApi> Service<C> for Machines {
         apply_record(core, kind, body, c)
     }
 
+    unsafe fn on_loaded(core: &C, _rec: usize) {
+        // a reload published machine rows after the firmware built the machine selection view's list (the view caches it): build it again
+        if core.reload_phase() != 0 {
+            refresh_view(core);
+        }
+    }
+
     unsafe fn remove(core: &C, owner: u8) {
         crate::build::end();
         remove(core, owner)
@@ -835,6 +842,24 @@ unsafe fn apply_record<C: CoreApi>(core: &C, kind: u32, b: *const u8, c: &ApplyC
     }
     st.ni += 1;
     rc
+}
+
+/// The firmware builds the machine selection view's item list once, from the list getter, and keeps it. After the rows changed, build it again (the builder clears
+/// its items first); nothing to do while the view does not exist yet, or on an image without the hook that remembers it (the variable and the builder are words 48 and 49
+/// of `dynreg_info`).
+unsafe fn refresh_view<C: CoreApi>(core: &C) {
+    let inf = dkrt_svc_params::dynreg(core);
+    if inf.is_null() {
+        return;
+    }
+    let (var, build) = (iw(inf, w::VIEW_VAR), iw(inf, w::VIEW_BUILD));
+    if var == 0 || build == 0 {
+        return;
+    }
+    let view = core.rd(var);
+    if view != 0 {
+        core.call(build, &[view as usize]);
+    }
 }
 
 /// The long and short names of the MISSING placeholder of a machine type whose module is not there.

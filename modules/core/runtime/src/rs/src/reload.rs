@@ -14,6 +14,28 @@ pub fn drained<P: Platform>(p: &P, start: Option<u32>) -> bool {
     blocks_since(p, start).is_none_or(|n| n >= DRAIN_BLOCKS)
 }
 
+/// 1 while a reload runs: from the check of the new file until its DSP rows are in place (`CoreApi::reload_phase`). The reload job sets and clears it; a service
+/// reads it in `on_loaded`.
+static mut PHASE: u32 = 0;
+
+/// The reload phase now.
+pub fn phase() -> u32 {
+    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(PHASE)) }
+}
+
+/// Start (`on`) or end the reload phase. Only the reload job calls it.
+#[allow(dead_code)] // the reload job calls it (E5 commit 8)
+pub(crate) fn set_phase(on: bool) {
+    unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(PHASE), on as u32) }
+}
+
+/// A reload finished: the counter that tells a host and the menus their lists of modules and machines are out of date (`DkrtBootInfo.reloads`).
+#[allow(dead_code)] // the reload job calls it (E5 commit 8)
+pub(crate) unsafe fn note_reloaded() {
+    let b = crate::boot::info();
+    b.reloads = b.reloads.wrapping_add(1);
+}
+
 /// What the caller knows about the system when a reload is asked for. Each field is read where it lives (the loader, the card, the module's
 /// records); `refusal` only puts the answers in order.
 #[derive(Clone, Copy, Default)]

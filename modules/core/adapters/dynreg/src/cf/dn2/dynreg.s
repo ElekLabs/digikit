@@ -55,6 +55,27 @@ dynreg_list_hook:
     move.l  %d0,4(%a2)
     jmp     _dr_t_copy + 6
 
+    .include "dk_fw_machine.inc"
+
+| dynreg_view_hook: the entry of the function that builds the machine selection view's item list from the list getter
+| (`cf.machine.fn.view.build(view)`, called once by the view's constructor at boot). The list is cached in the view, so the
+| runtime's reload rebuilds it after it changed the rows (the machines service, `on_loaded`): the hook only remembers the view.
+| The macro keeps every register; the displaced instructions run in the tail.
+    .globl dynreg_view_hook
+dynreg_view_hook:
+    dk_fw_machine_view_build_hook dynreg_view_store, dynreg_view_next
+
+| C: void dynreg_view_store(u32 view).
+dynreg_view_store:
+    move.l  4(%sp),%d0
+    move.l  %d0,dynreg_view
+    rts
+
+    .bss
+    .balign 16                          | a cache line of its own: no code shares the line of a variable the CPU writes
+    .globl dynreg_view
+dynreg_view: .space 16
+
     .section .rodata
     .balign 4
     .globl dynreg_empty
@@ -101,8 +122,8 @@ dynreg_info:
     .long   8                           | 180 knobs per page
     .long   25                          | 184 sound-array slot of knob 0
     .long   0xd5                        | 188 the template of a free reserved parameter row (A Env Decay)
-    .long   0                           | 192 (was the machine-view variable: archived with hot reload, docs/plans/digikit-hot-reload.md)
-    .long   0                           | 196 (was the view builder)
+    .long   dynreg_view                 | 192 address of the variable that holds the machine selection view (0 until it exists)
+    .long   _dr_f_build                 | 196 the function that builds that view's items: build(view)
     .long   _dr_pg_rows                 | 200 page rows (pages.rows)
     .long   _dr_pg_row_size             | 204 page row size
     .long   _dr_pg_first                | 208 pages.first

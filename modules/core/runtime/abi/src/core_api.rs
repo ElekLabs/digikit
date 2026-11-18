@@ -38,6 +38,10 @@ pub trait CoreApi: crate::mem::FwMem {
     unsafe fn guard_faults(&self, ty: u32) -> u32;
     unsafe fn guard_disabled(&self, ty: u32) -> bool;
 
+    /// Whether a reload of a module is running (`reload::phase`): 0 no, 1 yes, from the check of the new file until its DSP rows are in place. A service that
+    /// publishes something of a module at its load (the machine list) waits for its `on_loaded` in a reload, and refreshes what caches it.
+    fn reload_phase(&self) -> u32;
+
     // ---- the device ------------------------------------------------------------------------------------------------------
     /// The device id of the profile the runtime was built for (`Platform::device_id`), to compare with what an adapter table records.
     fn device_id(&self) -> u32;

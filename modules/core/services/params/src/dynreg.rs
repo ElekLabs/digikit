@@ -43,6 +43,8 @@ pub mod w {
     pub const KNOBS: usize = 45;
     pub const SLOT_BASE: usize = 46;
     pub const RESERVE_TEMPLATE: usize = 47;
+    pub const VIEW_VAR: usize = 48; // the address of the variable that holds the machine selection view (0 until it exists)
+    pub const VIEW_BUILD: usize = 49; // the function that builds that view's items: build(view)
     pub const PG_ROWS: usize = 50; // 0: the device keeps its knobs in the machine row
     pub const PG_ROW_SIZE: usize = 51;
     pub const PG_FIRST: usize = 52;

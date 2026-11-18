@@ -162,6 +162,17 @@ mark = "D"
 users = ["core/machines"]
 doc = "Entry of the group helper that maps a machine type to a group (DN2: types 0..3 group 1, 4 group 2, other 0)."
 
+[[fn]]
+name = "cf.machine.fn.view.build"
+was = ["cf.dynreg.msv_build"]
+cpu = "cf"
+sig = "void (u32 view)"
+rule = { kind = "cf_func", hash = "aba88709b609b69b6441121c296634f8", offset = 0x0, len = 8 }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/dynreg"]
+doc = "`void f(MachineSelectionView *)`: fills the items of the machine selection view from the list getter (it clears its items first); the view's constructor calls it once at boot. The list is cached in the view, so a reload calls it again on the stored view (the hook `cf.machine.hook.view.build` remembers the view)."
+
 [[site]]
 name = "cf.machine.site.list.alloc"
 was = ["cf.machine.site.list_alloc", "cf.machines.list_alloc"]
@@ -485,6 +496,18 @@ devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/machines"]
 doc = "Entry of the machine descriptor lookup (type at 4(sp), d0 and d1 free); the hook answers added types from the registry."
+
+[[hook]]
+name = "cf.machine.hook.view.build"
+site = "cf.machine.fn.view.build"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = [] }
+handler = { sig = "void (u32 view)", args = ["sp+4"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/dynreg"]
+doc = "Entry of the machine selection view's item builder (view at 4(sp)); the hook remembers the view for a reload's list rebuild."
 
 [[hook]]
 name = "cf.machine.hook.list.entry"

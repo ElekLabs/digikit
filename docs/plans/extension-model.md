@@ -651,11 +651,15 @@ What:
 8. Numbering: re-run `settle` over the live set plus the candidate, after the old module is torn down and the new file's header table is kept in its slot
    (`Loader::reload_load`; the keys of every loaded module and of the new file, in selection order). Live modules keep their numbers (rule 1) and new keys
    take free numbers; `dkrt_sdk::sticky` does not change. A service `settle` must be idempotent: contract case 9 (`settle_over_the_live_set_changes_nothing`).
-9. Machine list rebuild after every reload, unconditional (the archive's behaviour, proven on the emulator only): port `refresh_view`
-   (archive `registry.rs:479`) into the machines service, fill the `dynreg_info` words 48 and 49 (view variable and builder), declare both in
-   `devices/fw`. The archived list-rebuild anchors (`cf.dynreg.msv_build`, deleted from `devices/ports` in a12048c46) come back under `devices/fw/machine.toml`, near the list builder entry. `on_loaded` already exists in the service ABI (`modules/core/runtime/abi/src/service.rs`, near line 562; called at `loader/mod.rs`, near line 754); only the machines implementation and `CoreApi::reload_phase` are new. In a reload the machines service writes the real rows in `on_loaded`, not in `apply_record`, so
-   the placeholder window ends when the DSP rows exist; the window lasts about 200 ms past commit. A module with no DSP calls `on_loaded`
-   itself at the end of the reload. Listing counters (`unloads`, `reloads` at the end of `DkrtBootInfo`) make open lists re-read.
+9. Machine list rebuild after every reload, unconditional (the archive's behaviour, proven on the emulator only). The firmware builds the machine selection
+   view's item list once and keeps it. `core/dynreg` has the view hook again (`dynreg_view_hook`, hook `cf.machine.hook.view.build` on the function
+   `cf.machine.fn.view.build`, declared in `devices/fw/machine.toml` with the archived hash on DT2 1.17 and DN2 1.12): it stores the view in `dynreg_view`, and
+   words 48 and 49 of `dynreg_info` (`dynreg::w::VIEW_VAR`, `VIEW_BUILD`) hold that variable and the builder. The machines service implements
+   `Service::on_loaded`: when `CoreApi::reload_phase()` is not 0 (new; the reload job sets it from the check of the new file until the DSP rows are in place) it calls
+   the builder with the stored view (`refresh_view`; nothing while the view does not exist). A module with no DSP calls `on_loaded` itself at the end of the reload.
+   The machines service keeps writing the machine rows in `apply_record` and not in `on_loaded`: the placeholder voice row of item 7 keeps the type silent until the
+   module's row is published, so the window needs no later row write (the plan said `on_loaded`; this is simpler and the silence does not depend on it). Counters
+   `unloads` and `reloads` at the end of `DkrtBootInfo` make open lists re-read (`unloads` counts every module teardown; `reloads` is counted by the job).
 10. `dk:dev` and the workbench use `CMD_RELOAD` for any content module; the emulator byte swap remains only for the runtime image and the UI
     layer (`core/ui`, `core/digikit-menu`). Document the command and its refusals in `docs/TESTING.md` "Fast iteration".
 
@@ -934,7 +938,7 @@ runtime-and-services.md.
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | done: PR #609 (device: runtime-refusal-tests on DT2 and DN2) |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
-| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-6 done |
+| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-7 done |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |

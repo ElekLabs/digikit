@@ -47,6 +47,10 @@ pub mod shims {
         REAL_CORE.guard_disabled(ty)
     }
     #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_reload_phase() -> u32 {
+        REAL_CORE.reload_phase()
+    }
+    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_device_id() -> u32 {
         REAL_CORE.device_id()
     }

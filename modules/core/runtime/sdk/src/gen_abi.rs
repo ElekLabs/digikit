@@ -446,8 +446,12 @@ pub struct DkrtBootInfo {
     pub states: [u8; SEL_MAX],
     /// per selected module with state STATE_REFUSED: what the plan refused on (E_PLAN_KIND the kind; E_MISSING the name hash of the service whose provider is missing or did not load; E_PLAN_OWNER the kind, slot or hook site; E_PLAN_KEY the kind and the key; E_PLAN_FIT the CAPK_* kind); zeros otherwise
     pub detail: [[u32; 2]; SEL_MAX],
+    /// modules taken down since the boot (a failed load, a failed DSP part, a reload); a list of modules that a host read before is out of date when it changes
+    pub unloads: u32,
+    /// reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes
+    pub reloads: u32,
 }
-const _: () = assert!(size_of::<DkrtBootInfo>() == 248, "DkrtBootInfo size");
+const _: () = assert!(size_of::<DkrtBootInfo>() == 256, "DkrtBootInfo size");
 const _: () = assert!(offset_of!(DkrtBootInfo, magic) == 0, "DkrtBootInfo.magic");
 const _: () = assert!(offset_of!(DkrtBootInfo, version) == 4, "DkrtBootInfo.version");
 const _: () = assert!(offset_of!(DkrtBootInfo, safe) == 8, "DkrtBootInfo.safe");
@@ -464,6 +468,8 @@ const _: () = assert!(offset_of!(DkrtBootInfo, stable) == 76, "DkrtBootInfo.stab
 const _: () = assert!(offset_of!(DkrtBootInfo, needs) == 80, "DkrtBootInfo.needs");
 const _: () = assert!(offset_of!(DkrtBootInfo, states) == 176, "DkrtBootInfo.states");
 const _: () = assert!(offset_of!(DkrtBootInfo, detail) == 184, "DkrtBootInfo.detail");
+const _: () = assert!(offset_of!(DkrtBootInfo, unloads) == 248, "DkrtBootInfo.unloads");
+const _: () = assert!(offset_of!(DkrtBootInfo, reloads) == 252, "DkrtBootInfo.reloads");
 
 /// dkrt_diag result (finding 46): what the debug log and the card check found. The caller owns the memory; the layout only grows at the end.
 #[repr(C)]

@@ -433,6 +433,16 @@ mark = "D"
 rule = "fw/machine:cf_func"
 
 [[anchor]]
+name = "cf.machine.fn.view.build"
+cpu = "cf"
+kind = "code"
+addr = 0x40060f50
+len = 8
+sha256 = "d38e64037d171546ea46d9f5ff950af69f4742dd92f87e4f56faf9fe101bb64e"
+mark = "D"
+rule = "fw/machine:cf_func"
+
+[[anchor]]
 name = "cf.machine.site.clone.5"
 cpu = "cf"
 kind = "code"
@@ -3963,6 +3973,11 @@ name = "cf.machine.hook.srcpage"
 site = "cf.machine.site.srcpage"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+
+[[hook]]
+name = "cf.machine.hook.view.build"
+site = "cf.machine.fn.view.build"
+mode = "before"
 
 [[hook]]
 name = "cf.menu.hook.settings_list.tail"

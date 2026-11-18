@@ -352,6 +352,8 @@ typedef struct DkrtBootInfo {
     uint8_t needs[DKRT_SEL_MAX][DKRT_NEEDS_LEN]; /* per selected module with result E_IMPORT: the first module its imports need that is not in the image, without the `core/` prefix (usb-bulk); empty otherwise */
     uint8_t states[DKRT_SEL_MAX];                /* per selected module: its STATE_* ([load.state] of sdk/sdk.toml); a selection index at or above count is STATE_SELECTED */
     uint32_t detail[DKRT_SEL_MAX][2];            /* per selected module with state STATE_REFUSED: what the plan refused on (E_PLAN_KIND the kind; E_MISSING the name hash of the service whose provider is missing or did not load; E_PLAN_OWNER the kind, slot or hook site; E_PLAN_KEY the kind and the key; E_PLAN_FIT the CAPK_* kind); zeros otherwise */
+    uint32_t unloads;                            /* modules taken down since the boot (a failed load, a failed DSP part, a reload); a list of modules that a host read before is out of date when it changes */
+    uint32_t reloads;                            /* reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes */
 } DkrtBootInfo;
 
 /* dkrt_diag result (finding 46): what the debug log and the card check found. The caller owns the memory; the layout only grows at the end. */
@@ -517,7 +519,7 @@ _Static_assert(sizeof(DkrtSelection) == 456, "DkrtSelection size");
 _Static_assert(offsetof(DkrtSelection, count) == 0, "DkrtSelection.count");
 _Static_assert(offsetof(DkrtSelection, flags) == 4, "DkrtSelection.flags");
 _Static_assert(offsetof(DkrtSelection, paths) == 8, "DkrtSelection.paths");
-_Static_assert(sizeof(DkrtBootInfo) == 248, "DkrtBootInfo size");
+_Static_assert(sizeof(DkrtBootInfo) == 256, "DkrtBootInfo size");
 _Static_assert(offsetof(DkrtBootInfo, magic) == 0, "DkrtBootInfo.magic");
 _Static_assert(offsetof(DkrtBootInfo, version) == 4, "DkrtBootInfo.version");
 _Static_assert(offsetof(DkrtBootInfo, safe) == 8, "DkrtBootInfo.safe");
@@ -534,6 +536,8 @@ _Static_assert(offsetof(DkrtBootInfo, stable) == 76, "DkrtBootInfo.stable");
 _Static_assert(offsetof(DkrtBootInfo, needs) == 80, "DkrtBootInfo.needs");
 _Static_assert(offsetof(DkrtBootInfo, states) == 176, "DkrtBootInfo.states");
 _Static_assert(offsetof(DkrtBootInfo, detail) == 184, "DkrtBootInfo.detail");
+_Static_assert(offsetof(DkrtBootInfo, unloads) == 248, "DkrtBootInfo.unloads");
+_Static_assert(offsetof(DkrtBootInfo, reloads) == 252, "DkrtBootInfo.reloads");
 _Static_assert(sizeof(DkrtDiag) == 172, "DkrtDiag size");
 _Static_assert(offsetof(DkrtDiag, magic) == 0, "DkrtDiag.magic");
 _Static_assert(offsetof(DkrtDiag, version) == 4, "DkrtDiag.version");

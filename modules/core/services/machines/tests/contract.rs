@@ -518,3 +518,53 @@ fn an_unloaded_machine_row_shows_missing_and_plays_no_stock_sound() {
         1
     );
 }
+
+/// The machine selection view caches the machine list: a reload rebuilds it through `dynreg_info` words 48 (the variable that holds the view) and 49 (the builder), once
+/// the module's rows are in the DSP (`on_loaded`), and a load outside a reload does not.
+#[test]
+fn the_machine_list_is_rebuilt_after_a_reload_and_not_after_a_boot_load() {
+    use dkrt_abi::service::Service;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    const VAR: u32 = 0x7000_0000;
+    const BUILD: u32 = 0x4006_0f50;
+    let calls: Rc<RefCell<Vec<(u32, Vec<usize>)>>> = Rc::default();
+    let table = |var: u32, build: u32| {
+        let mut t = vec![0u32; 64];
+        t[w::VIEW_VAR] = var;
+        t[w::VIEW_BUILD] = build;
+        t
+    };
+    let run = |words: Vec<u32>, view: u32, phase: u32| {
+        let mut core = FakeCore::new();
+        core.set_dynreg(words);
+        core.mem.borrow_mut().insert(VAR, view);
+        core.reload_phase.set(phase);
+        let log = calls.clone();
+        *core.on_call.borrow_mut() = Some(Box::new(move |a, args| {
+            log.borrow_mut().push((a, args.to_vec()));
+            0
+        }));
+        unsafe { <Machines as Service<FakeCore>>::on_loaded(&core, 0) };
+        let got = calls.borrow().clone();
+        calls.borrow_mut().clear();
+        got
+    };
+    assert_eq!(
+        run(table(VAR, BUILD), 0x1234_5678, 1),
+        vec![(BUILD, vec![0x1234_5678])],
+        "a reload: the builder gets the stored view"
+    );
+    assert!(
+        run(table(VAR, BUILD), 0x1234_5678, 0).is_empty(),
+        "a boot load: nothing to rebuild"
+    );
+    assert!(
+        run(table(VAR, BUILD), 0, 1).is_empty(),
+        "the view does not exist yet"
+    );
+    assert!(
+        run(table(0, 0), 0x1234_5678, 1).is_empty(),
+        "an image without the hook has no view variable or builder"
+    );
+}

@@ -1446,6 +1446,13 @@
   },
   {
    "addend": 0,
+   "offset": 2,
+   "section": ".text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_reload_phase",
+   "symbol": ".sec..rodata._RNvNtCs7sxP7D8NSdT_4dkrt6reload5PHASE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 10,
    "section": ".text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims18dkc_guard_disabled",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt5watch9GUARD_OFF",
@@ -6646,22 +6653,36 @@
    "type": "cf.32"
   },
   {
+   "addend": 248,
+   "offset": 246,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4boot9boot_info",
+   "symbol": ".sec..data.DKRT_BOOT",
+   "type": "cf.32"
+  },
+  {
+   "addend": 252,
+   "offset": 256,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4boot9boot_info",
+   "symbol": ".sec..data.DKRT_BOOT",
+   "type": "cf.32"
+  },
+  {
    "addend": 0,
-   "offset": 280,
+   "offset": 300,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4boot9boot_info",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 308,
+   "offset": 328,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4boot9boot_info",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 422,
+   "offset": 458,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4boot9boot_info",
    "symbol": "memcpy",
    "type": "cf.32"
@@ -22431,7 +22452,7 @@
    "type": "cf.32"
   },
   {
-   "addend": 264,
+   "addend": 272,
    "offset": 4142,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE10load_innerB7_",
    "symbol": ".sec..rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
@@ -23601,597 +23622,597 @@
   },
   {
    "addend": 0,
-   "offset": 122,
+   "offset": 128,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": "dkrt_irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 140,
+   "offset": 144,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt6loader10retire_sdk",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 158,
+   "offset": 160,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5intro7discard",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 168,
+   "offset": 170,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt6loader7records6module",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 206,
+   "offset": 208,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss.DKRT_TICKS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 244,
+   "offset": 246,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt6worker13FLIGHT_CANCEL",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 292,
+   "offset": 294,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..rodata.global.1A",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 300,
+   "offset": 302,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..rodata.global.1A",
    "type": "cf.32"
   },
   {
    "addend": 8,
-   "offset": 308,
+   "offset": 310,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..rodata.global.1A",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 344,
+   "offset": 340,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog10SPAN_CLOCK",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 360,
+   "offset": 356,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4SINK",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 376,
+   "offset": 372,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4TICK",
    "type": "cf.32"
   },
   {
    "addend": 6,
-   "offset": 392,
+   "offset": 388,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
    "type": "cf.32"
   },
   {
    "addend": 10,
-   "offset": 400,
+   "offset": 396,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 406,
+   "offset": 402,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog10SPAN_CLOCK",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 458,
+   "offset": 454,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..data.DKRT_POLL_OWNER",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 524,
+   "offset": 520,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 538,
+   "offset": 534,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5arena4free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 552,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 566,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 582,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5entry8ctx_addr",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 602,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog12enter_module",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 618,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog12leave_module",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 628,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog13release_sinks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 642,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 656,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 684,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvMs0_NtNtCs7sxP7D8NSdT_4dkrt6loader4roleINtB5_9RoleStepsNtNtB9_8platform12RealPlatformNtNtB7_5seams10RealImagesNtB1q_12RealRegistryE2ofB9_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 724,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt12gen_services4ROWS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 730,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt8svc_rows4LIVE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 736,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvMNtCs7sxP7D8NSdT_4dkrt8svc_rowsNtB2_4Rows6remove",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 754,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt8registry6remove",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 772,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt7collect6BLOCKS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 792,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 806,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5arena4free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 816,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss.DKRT_MENUS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 834,
+   "offset": 548,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5entry6unbind",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 846,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt10invariants5check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 866,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5arena4free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 894,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvMs_NtNtCs7sxP7D8NSdT_4dkrt6loader8discoverNtB4_5Found5table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 908,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 954,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5words",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 984,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt6loader7records6module",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1096,
+   "offset": 562,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1110,
+   "offset": 576,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1128,
+   "offset": 592,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt6loader7records6module",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5entry8ctx_addr",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1142,
+   "offset": 612,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9uninstallB7_",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog12enter_module",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1162,
+   "offset": 628,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3dsp7quiesce",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog12leave_module",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1216,
+   "offset": 638,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog13release_sinks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1232,
+   "offset": 652,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": "dkrt_irq_mask",
+   "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1238,
+   "offset": 666,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1254,
+   "offset": 694,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
+   "symbol": ".sec..text._RNvMs0_NtNtCs7sxP7D8NSdT_4dkrt6loader4roleINtB5_9RoleStepsNtNtB9_8platform12RealPlatformNtNtB7_5seams10RealImagesNtB1q_12RealRegistryE2ofB9_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 734,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt12gen_services4ROWS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 740,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt8svc_rows4LIVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 746,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..text._RNvMNtCs7sxP7D8NSdT_4dkrt8svc_rowsNtB2_4Rows6remove",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 764,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt8registry6remove",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 782,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt7collect6BLOCKS",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 1262,
+   "offset": 802,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
-   "type": "cf.32"
-  },
-  {
-   "addend": 6,
-   "offset": 1268,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
+   "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1280,
+   "offset": 814,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog10SPAN_CLOCK",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5arena4free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1292,
+   "offset": 830,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4SINK",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3dsp9unreserve",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1304,
+   "offset": 840,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4TICK",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5arena4free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1318,
+   "offset": 860,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": "dkrt_irq_restore",
+   "symbol": ".sec..bss.DKRT_MENUS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1336,
+   "offset": 876,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt11module_cmds12release_cmds",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5entry6unbind",
+   "type": "cf.32"
+  },
+  {
+   "addend": 248,
+   "offset": 884,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1350,
+   "offset": 894,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": "dl_tick_cb_drop",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt10invariants5check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1388,
+   "offset": 914,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..bss.DKRT_POLLS",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5arena4free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1430,
+   "offset": 942,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..text._RNvMs_NtNtCs7sxP7D8NSdT_4dkrt6loader8discoverNtB4_5Found5table",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1446,
+   "offset": 956,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1486,
+   "offset": 1002,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5words",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1032,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt6loader7records6module",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1144,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1158,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1176,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt6loader7records6module",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1190,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9uninstallB7_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1210,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3dsp7quiesce",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1264,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog13release_sinks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1280,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": "dkrt_irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1286,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1302,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 1310,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 6,
+   "offset": 1316,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1328,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog10SPAN_CLOCK",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1340,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4SINK",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1352,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4TICK",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1366,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": "dkrt_irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1384,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt11module_cmds12release_cmds",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1398,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": "dl_tick_cb_drop",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1436,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..bss.DKRT_POLLS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1478,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": ".sec..text._RNvMs_NtNtCs7sxP7D8NSdT_4dkrt6loader8discoverNtB4_5Found5table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1494,
+   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
+   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1534,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5words",
    "type": "cf.32"
   },
   {
    "addend": 1096,
-   "offset": 1538,
+   "offset": 1586,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 592,
-   "offset": 1552,
+   "offset": 1600,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1592,
+   "offset": 1640,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1606,
+   "offset": 1654,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 1096,
-   "offset": 1626,
+   "offset": 1674,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 592,
-   "offset": 1646,
+   "offset": 1694,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1652,
+   "offset": 1700,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 1096,
-   "offset": 1774,
+   "offset": 1822,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1836,
+   "offset": 1884,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5arena4free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1848,
+   "offset": 1896,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1862,
+   "offset": 1910,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1908,
+   "offset": 1956,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "type": "cf.32"
   },
   {
    "addend": 176,
-   "offset": 1920,
+   "offset": 1968,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
   },
   {
    "addend": 184,
-   "offset": 1934,
+   "offset": 1982,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1950,
+   "offset": 1998,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
    "symbol": "_RNvMNtCsaGmOzcP47sg_8dkrt_abi5stateNtB2_10BootStates10taken_down",
    "type": "cf.32"
   },
   {
    "addend": 40,
-   "offset": 1970,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..data.DKRT_BOOT",
-   "type": "cf.32"
-  },
-  {
-   "addend": 32,
-   "offset": 1984,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..data.DKRT_BOOT",
-   "type": "cf.32"
-  },
-  {
-   "addend": 32,
-   "offset": 1996,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..data.DKRT_BOOT",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2008,
-   "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3dsp9unreserve",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 2018,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5arena4free",
+   "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 2034,
+   "addend": 32,
+   "offset": 2032,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3dsp9unreserve",
+   "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 32,
    "offset": 2044,
    "section": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt5arena4free",
+   "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
   },
   {
@@ -32549,187 +32570,194 @@
    "addend": 0,
    "offset": 52,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims13dkc_device_id",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_reload_phase",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 60,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_module_name",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims13dkc_device_id",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 68,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims13dkc_module_of",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_module_name",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 76,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_storage_stat",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims13dkc_module_of",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 84,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims21dkc_storage_stat_head",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_storage_stat",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 92,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_irq_mask",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims21dkc_storage_stat_head",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 100,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_irq_restore",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_irq_mask",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 108,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_settings_get",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 116,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_settings_put",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_settings_get",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 124,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims7dkc_log",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_settings_put",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 132,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims18dkc_current_source",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims7dkc_log",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 140,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_job_post",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims18dkc_current_source",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 148,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims14dkc_job_cancel",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_job_post",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 156,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims7dkc_dsp",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims14dkc_job_cancel",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 164,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_dsp_info",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims7dkc_dsp",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 172,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims11dkc_fx_info",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_dsp_info",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 180,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims8dkc_info",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims11dkc_fx_info",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 188,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_link_set",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims8dkc_info",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 196,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims18dkc_link_confirmed",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_link_set",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 204,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_link_errors",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims18dkc_link_confirmed",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 212,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_link_forget",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_link_errors",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 220,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_link_submit",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_link_forget",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 228,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_link_result",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_link_submit",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 236,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims14dkc_link_drain",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims15dkc_link_result",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 244,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_link_run",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims14dkc_link_drain",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 252,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt7collect22dk_service_declare_row",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims12dkc_link_run",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 260,
+   "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt7collect22dk_service_declare_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 268,
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
    "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims9dkc_panic",
    "type": "cf.32"
@@ -38688,6 +38716,13 @@
   },
   {
    "align": 2,
+   "hex": "2039000000004e75",
+   "kind": "text",
+   "name": ".text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_reload_phase",
+   "size": 8
+  },
+  {
+   "align": 2,
    "hex": "701fb0af00046514203900000000721fc2af0004e2a87201c0814e75420060fa",
    "kind": "text",
    "name": ".text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims18dkc_guard_disabled",
@@ -39710,10 +39745,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56fe0848d7003c2039000000002d40fe182039000000002d40fe1c2039000000002d40fe202039000000002d40fe242039000000002d40fe282039000000002d40fe2c2039000000002d40fe302039000000002d40fe342039000000002d40fe382039000000002d40fe3c41eeff4020f90000000020f90000000020f90000000020f90000000020f90000000020f90000000020f90000000020b9000000002039000000002d40fe402039000000002d40fe44260e0683ffffff60487800604879000000002f034eb9000000002839000000002a3900000000240e0682ffffffc0487800404879000000002f024eb90000000043eeff4041eefe7020d920d920d920d920d920d920d92091487800602f03486efe984eb9000000002d44fef82d45fefc4fef0024487800402f02486eff004eb900000000202efe182d40fe48202efe1c2d40fe4c202efe202d40fe50202efe242d40fe54202efe282d40fe58202efe2c2d40fe5c202efe302d40fe60202efe342d40fe64202efe382d40fe68202efe3c2d40fe6c202efe402d40fe90202efe442d40fe94487800f8486efe482f2e00084eb9000000004fef00184cee003cfe084e5e4e75",
+   "hex": "4e56fdf848d7003c2039000000002d40fe082039000000002d40fe0c2039000000002d40fe102039000000002d40fe142039000000002d40fe182039000000002d40fe1c2039000000002d40fe202039000000002d40fe242039000000002d40fe282039000000002d40fe2c41eeff4020f90000000020f90000000020f90000000020f90000000020f90000000020f90000000020f90000000020b9000000002039000000002d40fe302039000000002d40fe34260e0683ffffff60487800604879000000002f034eb9000000002839000000002a3900000000240e0682ffffffc0487800404879000000002f024eb9000000002039000000002d40fe382039000000002d40fe3c43eeff4041eefe6820d920d920d920d920d920d920d92091487800602f03486efe904eb9000000002d44fef02d45fef44fef0024487800402f02486efef84eb900000000202efe082d40fe40202efe0c2d40fe44202efe102d40fe48202efe142d40fe4c202efe182d40fe50202efe1c2d40fe54202efe202d40fe58202efe242d40fe5c202efe282d40fe60202efe2c2d40fe64202efe302d40fe88202efe342d40fe8c202efe382d40ff38202efe3c2d40ff3c48780100486efe402f2e00084eb9000000004fef00184cee003cfdf84e5e4e75",
    "kind": "text",
    "name": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4boot9boot_info",
-   "size": 440
+   "size": 476
   },
   {
    "align": 2,
@@ -39724,7 +39759,7 @@
   },
   {
    "align": 2,
-   "hex": "4e56fd8c48d71c0c286e000c486c003c4eb900000000588f4a8067080c80949e025b667a286e000c486c009045f9000000004e922400486c00944e922600486c00084e9222004fef000cb08265449282b283653e2f032f022f2e000c41eefda44eb900000000222efda4202efda84fef000c4a81671e2d41fdac2d40fdb0486efdac4eb900000000588f71c07202b280671470fb4cee1c0cfd8c4e5e4e7570af60f2428060ee48780009486efdac4eb900000000508f7201b28066d6486efdac4eb900000000588f7218b28065c448780007486efdac4eb900000000508f7240b28065ae206e000841e844d92d48fda0486efdac2f0841eefffa4eb900000000508f4a6efffa6706202efffc6086200e0680fffffdb4220e0681fffffff4263c00000000243c0000000047f90000000045f90000000043f9000000002040284320d4284220d420d349f90000000020d420d22091068000000018b28066de486efdb4486efdac4eb900000000508f7218b280653a206e00102f28000842a72f00486efdb42f2efda0206e000848681e6a41eefff44eb9000000004fef00184a6efff46700fefe202efff66000fee8487900000000487800182f0042a74eb900000000",
+   "hex": "4e56fd8c48d71c0c286e000c486c003c4eb900000000588f4a8067080c8055339d52667a286e000c486c009045f9000000004e922400486c00944e922600486c00084e9222004fef000cb08265449282b283653e2f032f022f2e000c41eefda44eb900000000222efda4202efda84fef000c4a81671e2d41fdac2d40fdb0486efdac4eb900000000588f71c07202b280671470fb4cee1c0cfd8c4e5e4e7570af60f2428060ee48780009486efdac4eb900000000508f7201b28066d6486efdac4eb900000000588f7218b28065c448780007486efdac4eb900000000508f7240b28065ae206e000841e844d92d48fda0486efdac2f0841eefffa4eb900000000508f4a6efffa6706202efffc6086200e0680fffffdb4220e0681fffffff4263c00000000243c0000000047f90000000045f90000000043f9000000002040284320d4284220d420d349f90000000020d420d22091068000000018b28066de486efdb4486efdac4eb900000000508f7218b280653a206e00102f28000842a72f00486efdb42f2efda0206e000848681e6a41eefff44eb9000000004fef00184a6efff46700fefe202efff66000fee8487900000000487800182f0042a74eb900000000",
    "kind": "text",
    "name": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role13service_checkNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1m_12RealRegistryEB6_",
    "size": 450
@@ -40893,7 +40928,7 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffd02f0a2f022f2e000c41eeffde4eb900000000588f71aefffe7202b280660001724282420013c000000000720113c100000000700913c000000000420113c1000000002f39000000004879000000004eb9000000002f024879000000004eb9000000002f3c000080004879000000004eb9000000002439000000002d42ffd04fef00184a390000000056c244824eb90000000045f9000000004a9256c14481e789d48282827401c4aeffd082824ab90000000056c24482e98a82827401b580e588828013c10000000042a74879000000004eb90000000042a74879000000004eb900000000487809004879000000004eb90000000020124fef00184a806702700700800001fff82f004879000000004eb900000000508f41eeffd6200e0680ffffffde4218b08866fa41f9000000002d48ffd041eeffd6200e0680ffffffde2248246effd052aeffd012dab08966f243f90000000012d8b08866fa2f3c949e025b4879000000004eb9000000004878002d42a72f2e0008487800014eb9000000004fef0018242effc8246effcc4e5e4e75486effde4eb9000000002400588f6000fe82",
+   "hex": "4e56ffd02f0a2f022f2e000c41eeffde4eb900000000588f71aefffe7202b280660001724282420013c000000000720113c100000000700913c000000000420113c1000000002f39000000004879000000004eb9000000002f024879000000004eb9000000002f3c000080004879000000004eb9000000002439000000002d42ffd04fef00184a390000000056c244824eb90000000045f9000000004a9256c14481e789d48282827401c4aeffd082824ab90000000056c24482e98a82827401b580e588828013c10000000042a74879000000004eb90000000042a74879000000004eb900000000487809004879000000004eb90000000020124fef00184a806702700700800001fff82f004879000000004eb900000000508f41eeffd6200e0680ffffffde4218b08866fa41f9000000002d48ffd041eeffd6200e0680ffffffde2248246effd052aeffd012dab08966f243f90000000012d8b08866fa2f3c55339d524879000000004eb9000000004878002d42a72f2e0008487800014eb9000000004fef0018242effc8246effcc4e5e4e75486effde4eb9000000002400588f6000fe82",
    "kind": "text",
    "name": ".text._RNvNtCs7sxP7D8NSdT_4dkrt10admin_cmds6h_info",
    "size": 422
@@ -41026,10 +41061,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff3048d73cfc246e00087007b0ae000c65000356286e000c2d4cff8c486eff8c4eb900000000588f4a0067000116260c52834eb9000000002d40ff6441f900000000223c00000000420677832e3c0000000049f90000000047f9000000002a6e000c2d4dff70600000a0206eff702d48000c2f2eff644eb900000000588f4a06660000c02f2e000c4eb900000000588f4a00670000ae2f2e000c4eb9000000002f2e000c4eb9000000002640206e000c41e844aad1ca1010508f08000000660003c2202e000ce5882840d9fc0000000043f20800235444b8429410107201808110806000039e7001114000161140001743f90000000022bc000000017c0141e80018b2886700ff6422481028001567ee75a80014b48366e671807402b48067c64bf90000000022d54bf90000000022d54bf90000000022d52a4722d522d4229360bc76f460000204b282650003bcb283640003b642b900000000600003acb283640003b242b900000000600003a8b283640003ae42b900000000600003a4b2836400037a42b900000000420113c10000000042b9000000006000036252887604b688673020194a8067f22e00428620062207262eff5c92aeff6091839285918464da42a9fffc49f90000000050c01980880060c82d4d000c720db28d650000a0286e000c49ec44aad9ca101444c0660000a27207b2ae000c640000fed5ee000c420215421b2c7604b6b900000000660005da2f2b00284eb9000000004293588f600001184879000000004878000e2f2e000c4eb9000000007402808210802f2e000c4eb9000000002600286b0030487800032f2e000c4eb90000000034002f034e943f0242674eb9000000002f2e000c4eb9000000004fef00186000023c4879000000004878000e2f2e000c4eb900000000760480831880206e000cd1ca71a82dd42f0041eeff7c4eb9000000002f2e000c2f0a206eff884e904fef000c7007b0ae000c64242f2e000c42a7487800064879000000004879000000004eb9000000004fef00146000ff0a75822f024eb900000000588f60ce202e000ce7882040d1fc000000002010429042a800044a80664a7404b4b900000000660004b42f2b00284eb900000000588f429341f9000000002a6e000c42b0dc002f2e000c4eb9000000004214588f42834eb90000000020034cee3cfcff304e5e4e752f004eb900000000588f60aa49ea00bc2d4cff642a6e000c486dfff82f0c4eb9000000002f012f0041eeff744eb900000000202eff74222eff784fef00104a80670000c22d40ff942d41ff9842a748780009486eff9441eeff9c4eb9000000004fef000c4a6eff9c6700009a2c2eff9e4a8667000090428249f9000000004bea44a22d4dff702a6e000c2d4dff5860085282700eb0826764b4aeff5867f22f024e94588f20404a9067e67007b0826500017c2a6eff701035280073807607b68165ce200141f20c00222841f64a8167c0263c000002804c030800068000002df6d08ab68164000158487900000000487802802f0142a74eb900000000286eff582d4c000c2f2e000c4eb90000000026402f2e000c2f0a4eb9000000004fef000c4a006700fcc22f2e000c4eb900000000588f4a006700fcb04aab0030671e740db4ae000c6500fd82206e000c41e844aad1ca1010080000016700fd822f2e000c4eb900000000242b00282602d6ab002c4eb900000000223900000000588fb2826512b283640e42b900000000420113c100000000223900000000b2826400fc842239000000004a816600fc42223900000000b2826400fc4c223900000000b2826400fc502f004eb900000000242e000c5282260277832f034eb900000000226b0028286b002c41f9000000002d48ff90200e0680ffffff90206eff90508f4a88670a4871c8002f094e90508f43f90000000091c82d6b0028ff6042aeff5c2a2b002c42842a6e000c6000fc1e20424868fff82f2eff644eb900000000508f2f012f0041eeff744eb900000000202eff74222eff78508f4a806700fe362d40ffaa2d41ffae42832e0e0687ffffffaa47f900000000600252832f03487800012f0741eeffb24e934fef000c4a6effb26700fe00bcaeffb466de7001c0aeffbc4a8067d42039000000004a80670000e8538041f9000000004283600c528341e80024720eb2836712b4906722b68066ec600000c426006000fd1e4879000000004878000e4878000e4eb900000000202800204a80660000d620035280223900000000b2806300008872244c0138002043d1fc0000000047f900000000720eb280670000b82d680024ffc02d680028ffc42d68002cffc82d680030ffcc2d680034ffd02d680038ffd42d68003cffd82d680040ffdc2d680044ffe0224822eeffc022eeffc422eeffc822eeffcc22eeffd022eeffd422eeffd822eeffdc22aeffe05280222b044841e80024b081658e538123c1000000004878ffb72f022f0a4ebaf9044fef000c4a806600ff2a7007b0826500fce041ea44a21630280073830c81000000ff662852826000fcd02f004eb900000000588f6000ff204879000000004878000e4878000e4eb9000000002601b081642e2d43ffec72b72d41fff042aefff442aefff842aefffc486effec48780001487800064eb9000000004fef000c60a441f9000000001e3018002d48ffe441f9000000002d48ffe82f01486effe44eb900000000508f4a0067a87f877005b087670e41f90000000072b721813c0060922039000000004a8067e8538023c00000000060de2f2e000c4eb9000000002f2b00284eb900000000508f6000fb422f2e000c4eb9000000002f2b00284eb9000000004293508f6000fb36",
+   "hex": "4e56ff3048d73cfc246e00087007b0ae000c65000386286e000c2d4cff8c486eff8c4eb900000000588f4a00673e262e000c52834eb9000000002d40ff6441f900000000223c00000000420677832e3c0000000049f90000000047f9000000002a6e000c2d4dff70600000a276f46000030c206eff702d48000c2f2eff644eb900000000588f4a0666e22f2e000c4eb900000000588f4a0067d22f2e000c4eb9000000002f2e000c4eb9000000002640206e000c41e844aad1ca1010508f08000000660003f0202e000ce5882840d9fc0000000043f20800235444b842941010720180811080600003cc7001114000161140001743f90000000022bc000000017c0141e80018b2886700ff6822481028001567ee75a80014b48366e671807402b48067c64bf90000000022d54bf90000000022d54bf90000000022d52a4722d522d4229360bcb282650003f0b283640003ea42b900000000600003e0b283640003e642b900000000600003dcb283640003e242b900000000600003d8b283640003ae42b900000000420113c10000000042b9000000006000039652887604b688673020194a8067f22e00428620062207262eff5c92aeff6091839285918464da42a9fffc49f90000000050c01980880060c82d4d000c720db28d650000ae286e000c49ec44aad9ca101444c0660000b07207b2ae000c6400010cd5ee000c420215421b2c7604b6b9000000006600012a2f2b00284eb9000000004293588f2f2e000c4eb9000000004214588f6000014c4879000000004878000e2f2e000c4eb9000000007402808210802f2e000c4eb9000000002600286b0030487800032f2e000c4eb90000000034002f034e943f0242674eb9000000002f2e000c4eb9000000004fef0018600002624879000000004878000e2f2e000c4eb900000000760480831880206e000cd1ca71a82dd42f0041eeff7c4eb9000000002f2e000c2f0a206eff884e904fef000c7007b0ae000c64242f2e000c42a7487800064879000000004879000000004eb9000000004fef00146000fefc75822f024eb900000000588f60ce202e000ce7882040d1fc000000002010429042a800044a8066707404b4b90000000066102f2b00284eb9000000004293588f60222f2e000c4eb9000000002f2b00284eb9000000004293508f7007b0ae000c6500fec641f900000000242e000c42b02c002f024eb900000000421452b900000000588f42834eb90000000020034cee3cfcff304e5e4e752f004eb900000000588f608449ea00bc2d4cff642a6e000c486dfff82f0c4eb9000000002f012f0041eeff744eb900000000202eff74222eff784fef00104a80670000c22d40ff942d41ff9842a748780009486eff9441eeff9c4eb9000000004fef000c4a6eff9c6700009a2c2eff9e4a8667000090428249f9000000004bea44a22d4dff702a6e000c2d4dff5860085282700eb0826764b4aeff5867f22f024e94588f20404a9067e67007b0826500017c2a6eff701035280073807607b68165ce200141f20c00222841f64a8167c0263c000002804c030800068000002df6d08ab68164000158487900000000487802802f0142a74eb900000000286eff582d4c000c2f2e000c4eb90000000026402f2e000c2f0a4eb9000000004fef000c4a006700fbba2f2e000c4eb900000000588f4a006700fba84aab0030671e740db4ae000c6500fd5c206e000c41e844aad1ca1010080000016700fd5c2f2e000c4eb900000000242b00282602d6ab002c4eb900000000223900000000588fb2826512b283640e42b900000000420113c100000000223900000000b2826400fc502239000000004a816600fc0e223900000000b2826400fc18223900000000b2826400fc1c2f004eb900000000242e000c5282260277832f034eb900000000226b0028286b002c41f9000000002d48ff90200e0680ffffff90206eff90508f4a88670a4871c8002f094e90508f43f90000000091c82d6b0028ff6042aeff5c2a2b002c42842a6e000c6000fbea20424868fff82f2eff644eb900000000508f2f012f0041eeff744eb900000000202eff74222eff78508f4a806700fe362d40ffaa2d41ffae42832e0e0687ffffffaa47f900000000600252832f03487800012f0741eeffb24e934fef000c4a6effb26700fe00bcaeffb466de7001c0aeffbc4a8067d42039000000004a80670000e8538041f9000000004283600c528341e80024720eb2836712b4906722b68066ec600000c426006000fd1e4879000000004878000e4878000e4eb900000000202800204a80660000d620035280223900000000b2806300008872244c0138002043d1fc0000000047f900000000720eb280670000b82d680024ffc02d680028ffc42d68002cffc82d680030ffcc2d680034ffd02d680038ffd42d68003cffd82d680040ffdc2d680044ffe0224822eeffc022eeffc422eeffc822eeffcc22eeffd022eeffd422eeffd822eeffdc22aeffe05280222b044841e80024b081658e538123c1000000004878ffb72f022f0a4ebaf8d44fef000c4a806600ff2a7007b0826500fce041ea44a21630280073830c81000000ff662852826000fcd02f004eb900000000588f6000ff204879000000004878000e4878000e4eb9000000002601b081642e2d43ffec72b72d41fff042aefff442aefff842aefffc486effec48780001487800064eb9000000004fef000c60a441f9000000001e3018002d48ffe441f9000000002d48ffe82f01486effe44eb900000000508f4a0067a87f877005b087670e41f90000000072b721813c0060922039000000004a8067e8538023c00000000060de",
    "kind": "text",
    "name": ".text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9take_downB7_",
-   "size": 2056
+   "size": 2050
   },
   {
    "align": 2,
@@ -42384,6 +42419,13 @@
   },
   {
    "align": 2,
+   "hex": "00000000",
+   "kind": "data",
+   "name": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt6reload5PHASE",
+   "size": 4
+  },
+  {
+   "align": 2,
    "hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffffffffffffffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
@@ -42748,10 +42790,10 @@
   },
   {
    "align": 2,
-   "hex": "2bbff339000000002c54731e00000000dedfd68f00000000b757821d00000000f020e879000000008e5fd7bc000000008d3470bc00000000e146d41000000000be2c7f9e00000000e47977e20000000002455d7d00000000ef985b7100000000a12163b90000000042afe0ac000000008e5b5421000000002dd7b3000000000034b8cf2900000000eef68f3800000000667d82cc00000000b379581100000000fe71a65200000000e46351a900000000714311b2000000002bc994dd0000000070fdef580000000041354dec000000004387f73e000000000077818f000000005711297e00000000a26ca6af000000007c339300000000000c64617e00000000ebb01b3900000000",
+   "hex": "2bbff339000000002c54731e00000000dedfd68f00000000b757821d00000000f020e879000000008e5fd7bc0000000068a52e27000000008d3470bc00000000e146d41000000000be2c7f9e00000000e47977e20000000002455d7d00000000ef985b7100000000a12163b90000000042afe0ac000000008e5b5421000000002dd7b3000000000034b8cf2900000000eef68f3800000000667d82cc00000000b379581100000000fe71a65200000000e46351a900000000714311b2000000002bc994dd0000000070fdef580000000041354dec000000004387f73e000000000077818f000000005711297e00000000a26ca6af000000007c339300000000000c64617e00000000ebb01b3900000000",
    "kind": "data",
    "name": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
-   "size": 264
+   "size": 272
   },
   {
    "align": 1,
@@ -43084,10 +43126,10 @@
   },
   {
    "align": 2,
-   "hex": "0000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "00000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".data.DKRT_BOOT",
-   "size": 248
+   "size": 256
   },
   {
    "align": 16,
@@ -44973,7 +45015,7 @@
    "size": 24
   }
  ],
- "source_sha256": "ab5c11b0b77d1c6d983a24eb855b4d7aaea952d41805f65a9745327078da987a",
+ "source_sha256": "1584c1bab2380ac90f95eef487c8a8fda8650d280e8174430e203a13adcf9f5f",
  "symbols": [
   {
    "global": false,
@@ -45867,6 +45909,12 @@
    "global": false,
    "name": ".sec..rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
    "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt11svc_imports11SVC_IMPORTS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata._RNvNtCs7sxP7D8NSdT_4dkrt6reload5PHASE",
+   "section": ".rodata._RNvNtCs7sxP7D8NSdT_4dkrt6reload5PHASE",
    "value": 0
   },
   {
@@ -49159,6 +49207,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_reload_phase",
+   "section": ".text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_reload_phase",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_settings_get",
    "section": ".text._RNvNtNtCs7sxP7D8NSdT_4dkrt11svc_imports5shims16dkc_settings_get",
    "value": 0
@@ -51950,8 +52004,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_load dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
-  "instructions_redecoded": "56632",
-  "isa_check": "fb88fd04dd3b944e3e56e2018c2426206d92388102010eb2321da5cdbb95a97e",
+  "instructions_redecoded": "56644",
+  "isa_check": "83dfc58de1ad7ed817548a185746ce516147115bddf72d82e89b729667091d83",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
