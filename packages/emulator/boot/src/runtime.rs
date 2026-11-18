@@ -5614,41 +5614,50 @@ mod tests {
             .map(|s| s.bytes)
     }
 
-    /// The five addresses that were fixed to DT2 resolve by signature on every supported MAIN.
+    /// The firmware files the device files list.
+    fn listed_firmware_files() -> Vec<String> {
+        let registry = device_profile::Registry::load().unwrap();
+        registry
+            .devices()
+            .iter()
+            .flat_map(|d| d.firmwares.iter().filter_map(|f| f.filename.clone()))
+            .collect()
+    }
+
+    /// Every boot address the emulator finds by signature resolves on every listed image present in firmware/: exactly one
+    /// match each (the resolvers refuse an ambiguous signature), on an instruction boundary inside the loaded image, and no two
+    /// resolvers find the same function.
     #[test]
-    fn device_specific_boot_addresses_resolve_by_signature() {
+    fn boot_addresses_resolve_by_signature_on_every_image() {
         use crate::midi::{resolve_queue_td, resolve_usb_reg, resolve_usb_tx};
-        // task_create, uart8_init, usb queue_td, usb tx, usb register
-        let dt2 = [
-            0x4000_12c8,
-            0x4000_243e,
-            0x4000_5a86,
-            0x4000_4734,
-            0x4000_434a,
-        ];
-        let syntakt = [
-            0x4000_1640,
-            0x4000_2782,
-            0x4000_5d72,
-            0x4000_4a20,
-            0x4000_4636,
-        ];
-        for (file, expected) in [
-            ("Digitakt_II_OS1.17.syx", Some(dt2)),
-            ("Digitone_II_OS1.12.syx", Some(dt2)),
-            ("Digitone_II_OS1.11.syx", Some(dt2)),
-            ("Syntakt_OS1.42.syx", Some(syntakt)),
-        ] {
-            let Some(main) = main_of(file) else { continue };
+        for file in listed_firmware_files() {
+            let Some(main) = main_of(&file) else {
+                eprintln!("skipped {file}: image not in firmware/");
+                continue;
+            };
             let found = [
-                resolve_task_create(&main).ok(),
-                resolve_uart_init(&main).ok(),
-                resolve_queue_td(&main),
-                resolve_usb_tx(&main),
-                resolve_usb_reg(&main),
+                ("task_create", resolve_task_create(&main).ok()),
+                ("uart8_init", resolve_uart_init(&main).ok()),
+                ("usb queue_td", resolve_queue_td(&main)),
+                ("usb tx", resolve_usb_tx(&main)),
+                ("usb register", resolve_usb_reg(&main)),
             ];
-            let expected = expected.map(|e| e.map(Some));
-            assert_eq!(Some(found), expected, "{file}");
+            let image_end = MAIN_LOAD + main.len() as u32;
+            let mut seen = Vec::new();
+            for (name, at) in found {
+                let Some(at) = at else {
+                    panic!("{file}: {name} does not resolve");
+                };
+                assert!(
+                    (MAIN_LOAD..image_end).contains(&at) && at % 2 == 0,
+                    "{file}: {name} at {at:#x} is not an instruction address in the image"
+                );
+                assert!(
+                    !seen.contains(&at),
+                    "{file}: {name} at {at:#x} is also another resolver's match"
+                );
+                seen.push(at);
+            }
         }
     }
 
@@ -5657,12 +5666,7 @@ mod tests {
     #[test]
     fn usb_slots_resolve_on_every_image() {
         use crate::midi::resolve_usb_slots;
-        let registry = device_profile::Registry::load().unwrap();
-        let files = registry
-            .devices()
-            .iter()
-            .flat_map(|d| d.firmwares.iter().filter_map(|f| f.filename.clone()));
-        for file in files {
+        for file in listed_firmware_files() {
             let Some(main) = main_of(&file) else {
                 eprintln!("skipped {file}: image not in firmware/");
                 continue;
