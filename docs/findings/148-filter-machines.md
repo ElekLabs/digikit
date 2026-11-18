@@ -106,11 +106,20 @@ which runs the setter FUN_40051886) and compare the SHARC execution profile per 
 stage is dispatched on S3 and a stub at the dispatch takes new types. Otherwise the filter is inline, and the service needs a stub at
 0x1c26e2 (replace the S3 load) plus a slot.
 
-A first attempt (2026-11-18, DT2 1.17, coupled session with the generated native DSP core) did not settle it:
+The first attempt (2026-11-18, DT2 1.17, coupled session) did not settle it:
 - A raw write of sound+0xa3 at the address the getter's probe gave (0x44fb9da0 + 0xa3) read back correctly but never reached the staged
   row (0x80003cd0 + 1) or DM 0x255990. That address is probably not the live sound record. **[D]**
-- `sharc.profile` counted nothing under the native core (`counted` all zero, no per-PC counts), and the session ended with a DSP trap
-  (`native-trap: no decoded instruction at 0xb86372`) after profile enable and disable. **[D]**
+- The daemon of that run had no generated DSP core. It was built with a plain `cargo build` without `SHARC_GEN_DIR`, so the DSP stub traps on
+  every instruction: the session ended with `native-trap: no decoded instruction at 0xb86372` when the DSP first left idle, and `counted`
+  stayed zero because no instruction ran in a counted tier. `sharc.profile` does count the native tier (fast, generated block and interpreter
+  dispatches). **[D]** (read in the source; the binary of that run was not checked)
 
-Before the next attempt: make `sharc.profile` count under the coupled native core (or run the DSP on a counted tier), check the trap, and
-drive the filter change through the UI chooser.
+The retry needs:
+- A daemon built with the generated core and the profile feature:
+  `SHARC_GEN_DIR=out/native/dt2-audio/gen node tools/nx/rust-env.mjs --gen --variant sharc-profile -- cargo build --release -p digi-control --bin digi-emud --features sharc-profile`
+  (run `cargo check` first; the build takes the benchlock through the launcher).
+- A check that the core is present before the run (the daemon file is hundreds of MB, not 26 KB, and `strings` finds the generated symbols).
+- A proof that the profile counts: `counted` is non-zero on a busy routine before the filter comparison starts.
+- `SHARC_AOT=0` for exact per-PC counts. A dispatch is credited to its entry PC, so two filter types that differ inline inside one region show
+  equal counts at that entry.
+- The filter type changed through the UI chooser (the setter FUN_40051886), not by a raw byte write.

@@ -307,21 +307,21 @@ Order:
    for the candidate against the live set minus the old module.
 2. **Keys check**: the new file's `KEYS` must contain every key of the old file that kit data can name. If not, refuse (this replaces an
    `in_use` scan for reload; a key the new file drops needs unload, which waits for O5).
-3. **Refuse** while the transport plays or records, during card operations, in safe mode, or while one of the module's views is open
-   (until `core/ui` can tear down a module's menus).
+3. **Refuse** while the transport plays or records, during card operations, in safe mode, when the module built its own menus (until
+   `core/ui` can tear down a module's menus, E5b), and for an fx module while the effect is on a route (E5b).
 4. **Unload the old module**: stop its voices, wait for in-flight SysEx commands and the span clock, run `unload_rec`. `unload_rec` resumes
    after `E_BUSY` from the step that returned it. DSP code is freed after two confirmed blocks.
-5. **Placeholder window**: from unload to the new module's commit, a key the kit names resolves to the MISSING placeholder row, so no
+5. **Placeholder window**: from unload to the new module's commit, a type number the kit names resolves to the MISSING placeholder row, so no
    firmware path dispatches into an empty row. A DSP load spans UI passes (`loader/mod.rs:693-717`), so the window is real.
-6. **Load the new module** with run-time numbering: the sticky allocator gives kept keys their old numbers and new keys free numbers outside
-   the boot's `settle`.
+6. **Load the new module** into the old record with run-time numbering: `settle` runs again over the live set plus the candidate, which gives
+   kept keys their old numbers and new keys free numbers.
 7. **Rebuild the selection views** and bump the listing generation counters, so open lists re-read.
 8. **On a failed load**: the placeholder stays, the old file is not restored (the replaced design of hot reload decision 3, load beside and
    roll back, is out of scope: it needs twice the memory). The workbench reports the failure; reloading a good file recovers.
 9. `invariants::check` after unload and after load (exists).
 
 The planner check of step 1 is the only duplicate check on a run-time load, so E3 must not delete the per-service checks until E5 runs the
-planner against the live set (E3 and E5 land in that order, the per-service checks go in E5).
+planner against the live set (E3, E5 and E5b land in that order, the per-service checks go in E5b).
 
 ## 4. Code structure
 
@@ -403,10 +403,13 @@ E0a Filter DSP experiment (emulator, one run, about 10 minutes; needs Em's go be
 - On DT2 1.17: dump DM `0x2567a0..0x2567df` after boot. Then one track, steady noise input, the existing DSP PC histogram; write sound+0xa3 to
   0..7, one segment each. Record which SHARC routines change with the filter type and what the table result selects.
 - Answer: whether the filter stage is a per-voice dispatch (a stub plus a slot as in R12-8) or inline stock code, and the site to hook.
-- Parked after a first attempt (finding 148 "The decisive check still open"): the run read the DSP table (types 0-5 map to S3 1, 3, 2, 4, 5,
-  6), but a raw byte write did not reach the DSP and `sharc.profile` counted nothing under the coupled native core (the session ended with a
-  DSP trap). Before E7: make the SHARC profile count in a coupled session, check the trap, and change the filter type through the UI chooser
-  (the setter). `tools/devtools/param_sweep.py` stays out of the repo until it has run once end to end.
+- Parked after a first attempt (finding 142 "The decisive check still open"): the run read the DSP table (types 0-5 map to S3 1, 3, 2, 4, 5,
+  6), but a raw byte write did not reach the DSP, and the profile counted nothing because the daemon was built without a generated DSP core
+  (a plain `cargo build` without `SHARC_GEN_DIR`: the stub traps on every instruction, `native-trap: no decoded instruction`).
+  `sharc.profile` counts the native tier. The retry needs: the daemon built with
+  `SHARC_GEN_DIR=out/native/dt2-audio/gen node tools/nx/rust-env.mjs --gen --variant sharc-profile -- cargo build --release -p digi-control --bin digi-emud --features sharc-profile`;
+  a check that the core is present; a proof that `counted` is non-zero on a busy routine; `SHARC_AOT=0` for exact per-PC counts; and the
+  filter type changed through the UI chooser. `tools/devtools/param_sweep.py` stays out of the repo until it has run once end to end.
 
 E0b Static, read-only (firmware-query), in parallel. Done: results in the findings named in section 2; checked by a second agent (18 of 22
 claims confirmed, one refuted and corrected, the rest open and marked).
@@ -430,6 +433,14 @@ Output: one finding file per topic in `docs/findings/`, indexed from `docs/FINDI
 stored-number readers). Anchors go into `devices/fw/*.toml` with `tools.firmware.catalog declare ... --write`, then `mise run patch:port`.
 
 Estimate: E0a 1-2 h including the report; E0b 1 day. Depends on: nothing.
+
+E0c Daemon hardening (host only, no generated core needed; about 1 hour). The E0a failure cost a session because nothing said that the daemon had no
+DSP core.
+1. Refuse to start a DSP session when the daemon has no generated core: check `gen_image_name()` (`packages/emulator/coupled/src/dsp_core.rs`)
+   when the session opens, and fail the RPC with "built without a generated core" instead of a trap at the first instruction.
+2. Return per-tier counts in the `sharc.profile` answer (`rpc_sharc_profile` in `packages/emulator/control/src/controller.rs`: fast
+   instructions, block instructions, interpreted), so a zero can be explained.
+Depends on: nothing. Do it before the E0a retry.
 
 ### E1 Proof adapters: coverage check
 
@@ -500,7 +511,7 @@ for LFO shapes; for MACHINE and EFFECT it checks only that the kind has an owner
 
 What, as separate commits:
 1. `dkneeds` `Keys::first_shared_key(&self, other) -> Option<(kind, key)>` and `Keys::first_repeat(&self) -> Option<(kind, key)>` next to
-   `has_key` (`keys.rs:534`), with host tests. The planner and E5's live-set check use them. (The workbench fit check calls `pk_fit` for capacity only; the key check there is E5 item 2b.)
+   `has_key` (`keys.rs:534`), with host tests. The planner and E5's live-set check use them. (The workbench fit check calls `pk_fit` for capacity only; the key check there is E5b item 4.)
 2. `plan.rs`: `keys_clash` keeps the owner check and uses the two functions for every kind (the `is_generic` condition goes; `is_generic`
    is deleted if nothing else uses it). `settle` hands the services the keys of the modules the plan accepted only (`settle_ctx`), so a module refused with `E_PLAN_KEY` takes no number. Expose `key_refusal(t, others) -> Option<Reason>` for E5. Plan tests: duplicate machine key, duplicate
    effect id, the same module twice, the same local id in two modules (accepted), a forced hash collision, a key repeated inside one table.
@@ -511,7 +522,7 @@ What, as separate commits:
 4. `role_ok` (`role.rs:256-271`): role 0 also refuses KINDS and SLOTS; unit cases next to the existing ones.
 5. LFO shape keys: `[[record]]` takes a local `id` string; patchkit puts `hash24(<module id>:<id>) << 8` (low byte 0) into KEYS and generates
    a per-module constant `DK_KEY_<ID>` (as `module_ids.h` gives machine ids) that `module.c` writes into the record body, so the key has one
-   source. The lfo service keeps `id != 0` and `E_TYPE_USED` until E5. The fixture `lfo-shape-dup` is deleted (it only repeated shape id 7); the lfo
+   source. The lfo service keeps `id != 0` and `E_TYPE_USED` until E5b. The fixture `lfo-shape-dup` is deleted (it only repeated shape id 7); the lfo
    and refusal device tests make the second owner of a key by renaming a copy of the `lfo-shape` file.
 6. Trait (4.3), last and on its own: `fx_entry`, `guard_state`, `owned_ids` leave `Service`, `ServiceRow` and the thunks. Each service
    declares an export (`dk_fx_routes_entry`, `dk_machines_guard_state`, `dk_machines_owned_ids`, in `dks/src/rt.rs`): a plain `extern "C"` function with no core
@@ -520,7 +531,7 @@ What, as separate commits:
    (`E_NOT_FOUND`, 0, none). `SVC_ABI` changes once; every `.dks` and the runtime object rebuild (`objects-check`).
 7. One assembly case: two packed fixtures with the same machine key refused by the boot plan. Doc updates (service.rs and handlers.rs doc
    comments that name the three methods).
-8. The per-service duplicate checks (`E_FX_ID_DUP`, the lfo `E_TYPE_USED` path) stay until E5; E5 deletes them with their refusal-table rows. At boot the plan now
+8. The per-service duplicate checks (`E_FX_ID_DUP`, the lfo `E_TYPE_USED` path) stay until E5b; E5b deletes them with their refusal-table rows. At boot the plan now
    refuses the repeated key first (`E_PLAN_KEY`), so the commit test of a repeated effect id expects `E_PLAN_KEY` and the `E_FX_ID_DUP` row of the refusal table is a host
    row (the fx unit test of `check_commit`).
 
@@ -569,49 +580,113 @@ machines writers on the device path; the device subset of E3 or E5 covers it). D
 ### E5 Reload of content modules
 
 This is hot reload S1 (code-only modules) and S4 (machine and fx modules) of [digikit-hot-reload.md](digikit-hot-reload.md), for reload
-(3.6). It starts after R12-8 merges: R12-8 builds the shared unload lifecycle and late teardown in the same `Loader` code (r12-8 sections 2.6,
-2.7) and moves DSP row state into the services (step 7). The two-block DSP wait for modules is S4's own work, done here.
+(3.6), scoped to day-to-day machine work: the module's code, DSP and keys change; its menus and its own effect routes do not. It starts
+after R12-8 merges: R12-8 builds the shared unload lifecycle and late teardown in the same `Loader` code (r12-8 sections 2.6, 2.7) and moves
+DSP row state into the services (step 7). The two-block DSP wait is new work, done here. Menus, fx reload, the workbench key check and the
+cleanup of the old duplicate checks wait in E5b.
+
+Before E5 starts (about 2 hours, no code): map which code of the archive tag `digikit-hot-reload-v1` carries over to the R12-8 layout
+(`loader::unload`, `registry::in_use`, `refresh_view`, `CMD_UNLOAD`; findings 32 and 33 proved machine unload on the emulator), and try
+`clone_of >= 6` for the DT2 placeholder on the SHARC rig.
 
 What:
-1. Runtime: `dkrt_reload(rec, path)` and `CMD_RELOAD` in `module_cmds.rs`, in the order of 3.6. One refusal function: the firmware's
-   transport function returns non-zero (playing or paused; declared in `devices/fw` as `cf.project.fn.transport_state`, found by hash on
-   both images), card operations, safe mode, an open module view or the machine selection view.
-2. Validation before unload: the planner over the live set (E3 rule as a function), keys check of 3.6 step 2.
-2b. Workbench fit check: `pk_fit` in `patchkit.wasm` checks capacity only. Add a key check beside it that calls `Keys::first_shared_key` and `first_repeat` (through a `pk_` export) for a ticked set and for a module against the live set, with one test, so the workbench refuses a repeated machine key or effect id before the upload.
-3. Run-time numbering: `sticky` assigns for a load outside `settle` (kept keys keep numbers; new keys take free ones); `resolve` answers from
-   the live table, not only the boot table.
-4. In-flight counter for module SysEx commands; clear the span clock pointer under a mask; `unload_rec` resumes after `E_BUSY`; retry
-   `worker::retire` when it returns `E_BUSY`.
-5. DSP: stop the owner's voices, two-block wait before `dsp::release_range`; DSP instruction-cache invalidate on range reuse (hardware-only:
-   close statically first, as R12-8 lists it open).
-6. MISSING placeholder row, written by machines (and filters after E7) for a key whose module is absent. A gap row plays type 0's sound
-   today, so the placeholder must be made silent: DN2 sets `own_dsp = 1` (finding 33 saw silence without fault); DT2 needs a silent routine
-   registered in `dsp-voice` for the placeholder type, or a selector word of 6 or more if the rig shows it gives a zero block (try on the
-   rig first). The row keeps an empty list name, so the selection list leaves it out, and shows "MISSING" / "MISS" as its name.
-7. Selection views: port `refresh_view` (archive `registry.rs:479`) into the machines service. Declare the list builder hook and the view
-   word in `devices/fw` and fill the `dynreg_info` words (view word, builder, project singleton, active kit, track type, track count 16);
-   E0b re-resolved all of them on 1.17 and 1.12. One builder call on the stored view rebuilds the list. Listing generation counters for the
-   runtime menu's own lists.
-8. Event tables published by pointer swap (`svc_rows.rs:73` shifts the table today), so a reader never sees a half-moved table.
-9. `core/ui`: refuse reload while one of the module's views or menus is open (ARCHITECTURE.md:198); menu teardown is later work.
-10. Delete the per-service duplicate checks (`E_FX_ID_DUP`, lfo `E_TYPE_USED` path) and their refusal-table rows; the planner covers them.
-11. `dk:dev` and the workbench use `CMD_RELOAD` for any content module; the emulator byte swap remains only for the runtime image and the UI
-    layer (`core/ui`, `core/digikit-menu`). Document the command in `docs/TESTING.md` "Fast iteration".
+1. Async job. A SysEx command runs on the MIDI task, but the loader, registry, DSP state and services are UI-task state. `CMD_RELOAD`
+   only queues a job; `reload_poll()` in `dkrt_tick` runs it, one step per pass when it must wait; `CMD_RELOAD_STATE` polls the result. This
+   is the RESTART pattern (`admin_cmds.rs`). One job at a time; a second `CMD_RELOAD` while one is queued answers `E_BUSY`.
+2. Validation before unload: the new file is staged and checked (role, ABI, firmware identity, DSP checks; split out of `load_inner` as
+   `check_file`), then the planner runs over the live set with the candidate in the old module's slot (`key_refusal`, E3). Keys check:
+   `Keys::first_missing_key(old, new)` (`packages/dkneeds/src/keys.rs`) refuses a new file that lacks a key of the old file. Nothing is
+   unloaded before both pass.
+3. Transport and state refusal: one function, in this order: safe mode; the firmware transport function returns non-zero (declared in
+   `devices/fw` as `cf.project.fn.transport_state`, found by hash on both images; `Platform::play_state`; an unresolved import refuses);
+   card operations; the module built its own menus; for an fx module, the effect is on a route. Refusing while the machine selection view
+   is open is not needed: the list rebuild (item 9) is unconditional.
+4. Fixed record index. A reload loads into the old record (`Slot::Module(rec)`), so owner ids (`rec + 1` in machine rows, DSP rows, menus,
+   `sel_of_rec`) do not move.
+5. Progress mask in `unload_rec` (`torn` per record: fini done, undo done), so a second call after `E_BUSY` does not run `fini` or the
+   service `undo` twice. The steps before `fini` already repeat safely. On a timeout the old tick is restored and the old module stays live.
+6. DSP wait: the in-flight counter for module SysEx commands, the span clock cleared under a mask, and a two-block wait. R12-8 gives no
+   voice stop and no block wait; unloading clears the voice rows, which cuts the voices, and the wait is new. `Platform::blocks` returns the
+   block count; the wait reports `E_BUSY` until two blocks passed (no spin); with no DSP clock (host tests) it is skipped. DSP instruction
+   cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
+7. MISSING placeholder, written by `remove` in every unload path (reload, boot failure, take-down), for the numbers the module held. A kit
+   names a type number, not a key. A gap row plays type 0's sound today, so the placeholder must be silent: DN2 sets `own_dsp = 1` (finding 33
+   saw silence without fault); DT2: try `clone_of >= 6` on the rig first (the stock voice stage is skipped, finding 135 Q6); only if the block
+   is stale, add a silent routine in `dsp-voice`. The row keeps an empty list name, so the selection list leaves it out, and shows
+   "MISSING" / "MISS". The E4 contract suite lists the placeholder values in `kept`.
+8. Numbering: re-run `settle` over the live set plus the candidate. Live modules keep their numbers (rule 1) and new keys take free numbers;
+   `dkrt_sdk::sticky` does not change. A service `settle` must be idempotent (one contract case).
+9. Machine list rebuild after every reload, unconditional (the archive's behaviour, proven on the emulator only): port `refresh_view`
+   (archive `registry.rs:479`) into the machines service, fill the `dynreg_info` words 48 and 49 (view variable and builder), declare both in
+   `devices/fw`. In a reload the machines service writes the real rows in `on_loaded`, not in `apply_record` (`CoreApi::reload_phase`), so
+   the placeholder window ends when the DSP rows exist; the window lasts about 200 ms past commit. A module with no DSP calls `on_loaded`
+   itself at the end of the reload. Listing counters (`unloads`, `reloads` at the end of `DkrtBootInfo`) make open lists re-read.
+10. `dk:dev` and the workbench use `CMD_RELOAD` for any content module; the emulator byte swap remains only for the runtime image and the UI
+    layer (`core/ui`, `core/digikit-menu`). Document the command and its refusals in `docs/TESTING.md` "Fast iteration".
+
+Plan corrections the E5 design found (the text above already reflects them):
+- SysEx runs on the MIDI task, hence the job.
+- R12-8 gives no voice stop and no block wait. Unloading clears the voice rows; the wait is new.
+- Event tables by pointer swap (`svc_rows`) is hot reload S3 (service files), not E5.
+- Kit data names type numbers, not keys; the placeholder is a row for the numbers a module held.
+- Menus keep pointers into module code (`desc`, `fill`, `arg`) even when closed, so refusing "while a view is open" is not enough.
+- No firmware predicate says which view is on top. The rebuild is unconditional until E5b answers it.
+- The DSP placeholder window lasts about 200 ms past commit, because machines publish rows at commit and the voice rows follow; machines writes the real rows in `on_loaded` during a reload.
+- E3/E4 and R12-8 both rewrite five files (`loader/mod.rs`, `abi/src/service.rs`, `handlers.rs`, `svc-rt`, machines `records.rs` and `assign.rs`). The second to merge pays one rebase and an object rebuild.
+- E5 changes the image (dynreg words) and `SVC_ABI` (`reload_phase`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices.
+
+Commit split (host checks per commit; device runs only at the end, one gate):
+
+| # | Commit | Size |
+| --- | --- | --- |
+| 0 | Spikes: archive map, `clone_of >= 6` on the rig | 2 h |
+| 1 | `Keys::first_missing_key`, tests | 2 h |
+| 2 | Transport predicate (`devices/fw`, `Platform::play_state`, fakes) and `reload::refusal` | 4 h |
+| 3 | Loader: `Slot`, `Phase::Reload`, progress mask, `check_file`, plan over the live set, keys check | 8 h |
+| 4 | In-flight counter, masked span clock, two-block DSP wait | 4 h |
+| 5 | Run-time numbering over the live set | 3 h |
+| 6 | MISSING placeholder, contract `kept` update | 5 h |
+| 7 | Machine list rebuild: dynreg words, `devices/fw`, `refresh_view`, `on_loaded` rows, `reload_phase`, counters | 6 h |
+| 8 | Protocol: `CMD_RELOAD`, `CMD_RELOAD_STATE`, `reload_poll`, client | 4 h |
+| 9 | `dk:dev`, `wb transfer`, docs, device test file, soak | 6 h |
 
 Tests:
-- Unit: runtime host tests on `FakePlatform` for the refusal order, validation before unload, the in-flight counter, resume after `E_BUSY`,
-  run-time numbering, unload then load leaving `invariants` clean.
-- Assembly: one case, a real packed fixture loaded, reloaded and reloaded again through the plan.
-- Device (both devices, one file in `core/runtime-tests`): (a) a code-only fixture reloaded; (b) a machine fixture with DSP reloaded with a
-  key held, and reloaded during voice release: silence in the window, the same PCM pin after reload; (c) an fx fixture reloaded; (d) reload
-  refused while the transport plays; (e) project round trip: save a project that uses the module, reload, load the project, same sound.
-- Soak: 20 reload cycles with `DIGI_FLUSH_CHECK=1` on the emulator, `invariants` clean, no memory growth.
+- Unit: runtime host tests on `FakePlatform` for the refusal order, validation before unload (a refused candidate leaves the old module live),
+  the in-flight counter, resume after `E_BUSY`, run-time numbering, placeholder words, unload then load leaving `invariants` clean, the job
+  state machine.
+- Assembly: one case, a real packed fixture loaded, reloaded and reloaded again through the plan, plus a refusal (dropped key).
+- Device (both devices, one file in `core/runtime-tests`), one test per kind: (a) a code-only fixture reloaded; (b) a machine fixture with
+  DSP reloaded with a key held: silence in the window, new pitch after reload; (c) reload refused while the transport plays. An fx reload
+  test comes with E5b.
+- Soak: the existing `test/sine`, built twice from the same source with a define that changes its pitch (same module id and keys, no new
+  fixture identity). The soak reloads between the two builds with a note held and checks each cycle that the pitch switches, `invariants`
+  stay clean, memory and DSP rows do not grow, and no fault is logged. About 5 cycles in the gate and 20 cycles in the full tier, with
+  `DIGI_FLUSH_CHECK=1`, bounded with `--seconds`.
 
-Done when: `dk:dev` reloads a machine or effect module with no boot, on both devices, and the soak passes.
+Done when: `dk:dev` reloads a machine module with no boot, on both devices, and the soak passes.
 
-Estimate: 6-7 days (the hot reload plan's S1 plus S4). Payoff: removes the 5-10 s boot from every machine and effect iteration, and makes
-module updates live for users. Confidence: medium-high; the archive proved the machine path on the emulator (findings 32, 33).
+Estimate: 2-3 days at the measured agent pace (about 45 agent hours of edits and host checks in 10 commits, with reviews and one E3/E4 plus
+R12-8 rebase); device wall time about 40 minutes for the named subset on both devices plus the soak. Payoff: removes the 5-10 s boot from every machine
+iteration. Confidence: medium-high; the archive proved the machine path on the emulator (findings 32, 33); the list rebuild call on a
+stored view pointer is the main risk (emulator proof only).
 Depends on: E3, E4, R12-8 merged. (E0b is done.)
+
+### E5b Reload follow-ups (deferred from E5)
+
+What:
+1. `core/ui` menu owner count: record the owner of each menu at `dk_ui_menu_new`, export `dk_ui_owner_menus(owner)`; then allow reload of
+   modules that built menus (the refusal of E5 item 3 goes). Menu teardown stays later work.
+2. Open-view predicate spike: find the function that says which view is on top (neighbours of `cf.view.fn.view_controller_push` in
+   `devices/fw/view.toml`). Then skip the unconditional list rebuild when the selection view is not open.
+3. Fx placeholder for an absent effect id: what the FX page shows for a track that names an effect id with no row (one static read), then
+   allow fx reload while the effect is on a route, and add the fx reload device test.
+4. Workbench key check: a `pk_keys_check` wasm export next to `pk_fit` (`Keys::first_shared_key`, `first_repeat`, `first_missing_key`), called by
+   `fit.ts`, shown by `transfer-backend.ts` before the upload; one wasm test and one Vitest case.
+5. Delete `E_FX_ID_DUP` and the lfo `E_TYPE_USED` path with their refusal-table rows, after the reload planner case of E5 is green.
+6. The 20-cycle soak and the full project round trip (save a project that uses the module, reload, load the project, same sound), if E5 did
+   not carry them.
+
+Estimate: 1-2 days. Depends on: E5.
 
 ### E6 LFO shapes
 
@@ -629,8 +704,30 @@ What:
      context. No caller scales a value onto 0..max (finding 143, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
      a CC value above 6 selects a shape number up to the highest one instead of clamping to RAND. Gaps: the maximum follows the highest loaded number, so a number below it
      whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (`bind_max` 24 per file;
-     installed sites DT2 18, DN2 22 of 48). **No graph hook**: the LFO page draws a waveform as a path object from a RAM table of seven vectors
-     indexed by the clamped wave, not with per-wave code, so a wave of 7 to 14 draws the RAND path until a shape path is built (open item O7).
+     installed sites DT2 18, DN2 22 of 48 before the graph site below).
+   - Graph (decided, O7): see item 1b.
+1b. Graph (option A of the static design; finding 143 "Graph"). The 28-byte elements of the seven RAM vectors are `Bitmap` objects (1-bit,
+   column-major tiles of 28 x 15 pixels), and the cell blits them. A shape graph is a vector of four tiles.
+   - One UI-task hook site per device, the `addi.l #BASE,D6` before the vector accessor call: DT2 0x4010c83c, DN2 0x4010e1b0 (bytes
+     `0686 <BASE> 2f06`, BASE a wildcard for other port versions; `devices/fw/lfo.toml` `cf.lfo.site.graph_vec`, hook `cf.lfo.hook.graph_vec`,
+     routine in `hooks-ui.s`). The hook runs the displaced `addi`, reads the unclamped wave at `0x14(A6)`, and for a wave 7..14 with a loaded
+     shape sets D6 to the service's vector and writes the repeat flag byte at `(-0x11,A6)` from the shape's unipolar mark. Every other case
+     leaves D6 as the stock code made it.
+   - The hook saves and restores every register it uses. It does not rely on the gcc call model for D0, D1, A0 and A1 (strict liveness calls
+     them live because of the `jsr` that follows).
+   - The service builds, at `apply_record`, one vector header (12 bytes) and four Bitmaps (28 bytes: vtable copied at run time from element 0
+     of stock vector 0, width 28, height 15, one word per column, pixel pointer, mask pointer, owner byte 0) per shape, from the 32 samples:
+     per column linear interpolation, `row = 7 - round(7 * v)`, rows between neighbouring columns filled as the stock sine does. Two pixel
+     tiles (normal and mirrored; elements 1 and 2 normal, 0 and 3 mirrored) and a shared mask of 28 words of 0xfffe0000. About 460 bytes
+     per shape, 3.7 KB for the 8 slots (waves 7..14).
+   - Publish by a valid word: the hook reads the slot's valid word first, and the service sets it after the header and tiles are complete.
+     A replaced shape alternates between two buffer sets. On unload the service clears the valid word first, then frees the memory when the
+     UI task cannot be inside the cell (E5: one draw pass or the quiesce of the other UI hooks).
+   - Budget: one more site per device (DT2 three binds, DN2 four; installed sites DT2 19, DN2 23 of 48). Cost: one compare per cell draw; the
+     tile build is a few hundred instructions once.
+   - Open before building: the DN2 tile size (28 x 15 not read from DN2 data; read the first Bitmap constructor call of the DN2 initialiser),
+     the tile pairing for waves other than TRI and SINE (check once with a `dk:dev` screenshot of a fresh LFO), and how a unipolar tile is
+     drawn (until read, shapes are bipolar). Estimate: half a day. Payoff: the picture only.
 2. The slot code: for an extended wave value, compute signed Q31 from the 32-bit phase with the module's 32-sample table and integer linear
    interpolation (the service keeps a delta table of 32 cells `{ v = s[i] << 16, d = s[i+1] - s[i] }`, built when the shape loads, so the tick makes
    `v + ((d * f) << 1)`); mark unipolar shapes in the service's own table. Cost budget, from the CPU and the tick period: the core runs at 264 MHz
@@ -644,7 +741,8 @@ What:
    second), 576 to 1,536 over stock, which is 0.5% to 2.6% of the period at 1.5 to 3 cycles per instruction: inside the budget, but a step frame
    that already reaches 100% has no room for it, so the all-48 case is not a goal. One extended LFO is 0.05% to 0.09% of the period. These are
    static counts: the final check is one paired A/B with `tools/devtools/coupled_ab.py` (stock against the lfo service with shape LFOs) at E6's
-   device check; stop if the A/B shows more than the budget. The stack of the extended path is 28 bytes at most (24 on the DN2 tick).
+   device check; stop if the A/B shows more than the budget. The paired A/B must include step frames on a busy pattern, because they already
+   run at 91-100% of a frame (finding 04, DN2 1.11). Hardware headroom is confirmed with roadmap row P9 (device calibration) when it exists. The stack of the extended path is 28 bytes at most (24 on the DN2 tick).
 3. `SHAPES` writes happen under the interrupt mask (lfo `records.rs:153-161`), so the tick never reads a half-written shape.
 4. Stored value (rule 7): the extended wave value goes into the sound. Every stock reader clamps it, so without the module it shows "ERR" and
    behaves like RAND, with no fault, and it survives save and load.
@@ -658,9 +756,9 @@ What:
 8b. The lfo service checks a record's body key against the module's KEYS entry. Today nothing ties them: a literal body id bypasses the planner's key rule, so the check refuses a record whose key is not in the module's table. The service reads the keys with the kind-free `CoreApi::keys_of(at, kind, out)` (the keys of record kind `kind` in the header table of the accepted module at selection index `at`); the `Service` ABI names no LFO field (rule 12).
 9. Template `sdk/templates/lfo/` and a fixture `tests/fixtures/modules/test/lfo-shape`.
 
-Tests: unit (lfo service: lookup, interpolation, the delta table against the plain formula, fallback, contract suite); assembly (one case, the lfo fixture binds its hooks and the image
+Tests: unit (lfo service: lookup, interpolation, the delta table against the plain formula, the tile builder against the plain formula, fallback, contract suite); assembly (one case, the lfo fixture binds its hooks and the image
 stub slot is filled); device (one test per device: choose the new wave, read the firmware's LFO output in the parameter value array, not the
-screen; and one stock-firmware or safe-mode check that the saved project loads without a fault).
+screen; and one stock-firmware or safe-mode check that the saved project loads without a fault); a `dk:dev` screenshot of the MOD page with a loaded shape (DN2 first, DT2 at the end).
 
 `sdk/sdk.toml` is a shared input of every device test (the `[runtime]` table and version feed the runtime and patchkit), so the E6 PR does not run
 the whole device set: it names a targeted subset (`mise run test:subset -- ...` with the lfo and loading tags, gate-smoke and gate-pins, on DT2
@@ -737,17 +835,19 @@ runtime-and-services.md.
 
 | # | Item | Depends on | Device runs | Status |
 | --- | --- | --- | --- | --- |
-| 1 | E0b static spikes (extended) | - | none | done: findings 147, 148, 149; 135, 02, 06, 53 corrected (branch e0b/findings) |
-| 1 | E0a filter DSP experiment | profile under the native core; UI chooser | one, about 10 min | parked: first attempt did not settle it (finding 148); retry before E7 |
+| 1 | E0b static spikes (extended) | - | none | done: findings 141, 142, 143; 135, 02, 06, 53 corrected (branch e0b/findings) |
+| 1 | E0a filter DSP experiment | daemon with a generated core and `sharc-profile`; UI chooser | one, about 10 min | parked: the first attempt ran on a daemon without a generated core (finding 142); retry before E7 |
+| 1 | E0c daemon hardening | - | none | todo (about 1 h, before the E0a retry) |
 | 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
 | 2 | E2 boilerplate codegen | - | none; objdiff | done: PR #608 (objects byte-identical by objdiff) |
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | done: PR #609 (device: runtime-refusal-tests on DT2 and DN2) |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
-| 6 | E5 reload of content modules | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |
-| 7 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | built (branch e6/lfo-shapes); shape graph open (O7) |
-| 8 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8 | filter test plus subset | todo |
-| 9 | E8 regroup and names | E1, open branches merged | full run of its batch | todo |
+| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |
+| 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
+| 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | active (branch e6/lfo-shapes): compute, names, panel range built and reviewed; graph next; device check pending |
+| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8 | filter test plus subset | todo |
+| 10 | E8 regroup and names | E1, open branches merged | full run of its batch | todo |
 
 E1, E2, E3 share one subset gate. E0 runs in parallel with E1-E3. When an item starts, its status becomes `active` with the branch; when it lands, `done` with the PR, set in that PR.
 
@@ -760,7 +860,7 @@ E1, E2, E3 share one subset gate. E0 runs in parallel with E1-E3. When an item s
 | Assembly | one case per new seam: key clash in the boot plan; load-reload-reload of a packed fixture; lfo hooks and image slot bind; filter fixture loads | `core/runtime:test-assembly` |
 | Rig | filter DSP conformance | `@digi/sharc-rig-kit:test-conformance-rig` |
 | Device | reload (code-only, machine with DSP, fx, during voice release, refused during transport, project round trip); LFO shape output and safe load without the module; filter select and render | `core/runtime-tests:test-device--<file>`, `<module>:test-device` |
-| Soak | 20 reloads with `DIGI_FLUSH_CHECK=1` | emulator, once per E5 PR |
+| Soak | about 5 reload cycles in the gate, 20 in the full tier, with `DIGI_FLUSH_CHECK=1` | emulator, once per E5 PR |
 
 Rules kept: each assertion at the lowest layer that can see it; fixtures from `tests/fixtures/modules`; device tests read firmware output,
 not the screen; PCM pins set from a numeric report. Before a device run, list the tests and the time and get Em's go.
@@ -772,7 +872,7 @@ not the screen; PCM pins set from a numeric report. Before a device run, list th
 | A stock reader of the LFO wave that E0b missed does not clamp | a fault on stock code with a saved extended wave | E6 device test loads a saved project without the module and in safe mode |
 | E0a finds the filter stage inline in stock code with no per-type dispatch | E7 needs a new DSP hook design | stop E7 after E0a and report payoff and cost; E1-E6 are unaffected |
 | A filter-type reader E0b missed indexes a table by the raw value | wrong data for 16..31 | E7 device test walks every filter page and the chooser with a custom filter selected |
-| A gap row plays type 0's sound (DT2 sample renderer, DN2 FM TONE) | sound in the reload window | the MISSING placeholder is made silent (E5 item 6); on DT2 the silent routine is checked on the rig first |
+| A gap row plays type 0's sound (DT2 sample renderer, DN2 FM TONE) | sound in the reload window | the MISSING placeholder is made silent (E5 item 7); on DT2 the silent routine is checked on the rig first |
 | The contract suite finds residue in many tables | E4 grows | fix in the owning service; each fix is a unit test |
 | Routing machines row writers through `FwMem` changes timing or code size | device behaviour changes | E3/E5 device subset covers the machines path; size limit of runtime-and-services.md applies |
 | LFO slot cost in the interrupt | audio or UI timing | state the ceiling first; integer interpolation; stop if above the ceiling |
@@ -794,9 +894,10 @@ Open:
 - O4 (decided in E6): the LFO_SHAPE record stays a generic `dk_record_add`. Writing the fixture and the template showed only byte packing as the awkward part (key, name and 32 samples as big-endian bytes, 80 bytes); the service check now refuses a body key that the module's KEYS entry does not list, so a literal key is caught. A typed `dk_lfo_add_shape` would add an import, a `since` and collector plumbing for no new capability; if packing proves error-prone for authors, add a header helper that fills the body in `sdk/include/dk`, with no runtime change.
 - O6: E7 stored filter choice: digikit's store with a stock fallback in the sound (recommended, rule 7), or patch the stock loader bound
   (7 to 32) so the extended type survives in kit files; with the patch, a kit opened on stock firmware falls back to filter 0.
-- O7: E6 shape graph. The MOD page draws the RAND path for a shape (the stock clamp). A shape graph needs a path object in the format of the 28-byte
-  elements of the seven vectors at RAM 0x44d2e37c (finding 143, "The panel hooks"): read that format and the DN2 function, then hook the vector
-  lookup (`wave * 12 + 0x44d2e37c`) for the waves 7 to 14. Not needed for the sound; payoff is the picture only.
+- O7 (decided in E6): the shape graph is option A of item 1b: one hook at the vector pick, four 28 x 15 tiles per shape built by the service. Replacing
+  the accessor (wider, generic) and writing into the firmware's RAM table (needs a second site and the firmware would free our memory) are rejected.
+- O8: MIDI behaviour with a shape loaded. A CC value of 7 or more, or an NRPN of 0x380 or more, reaches shape numbers instead of clamping to RAND; stock waves 0-6
+  are unchanged (finding 143 "Callers of the T1 range accessor"). Decision for Em: accept this. The T1 maximum is shared by the panel, CC and NRPN, so no route is known that raises it for the panel only.
 
 ## 10. Changes to other documents when items land
 
