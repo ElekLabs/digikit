@@ -183,6 +183,19 @@ impl<C: CoreApi> Service<C> for Machines {
     unsafe fn reload_done(core: &C) {
         // the placeholder rows the new version did not take over (a type it no longer has, or a load that failed)
         dsp::free_placeholders(core);
+        // the machine rows of a module that did not come back: gap rows, as after a plain unload
+        let inf = dkrt_svc_params::dynreg(core);
+        if !inf.is_null() {
+            let s = rstate();
+            let mut k = 0;
+            while k < MAX_MACH {
+                if MISSING_ROWS & (1 << k) != 0 && s.mach_owner[k] == 0 {
+                    reset_machine_row(core, inf, k, false);
+                }
+                k += 1;
+            }
+        }
+        MISSING_ROWS = 0;
         // the machine selection view caches the list: build it again, after a failed load too (the cached list would keep an entry the rows no longer have)
         refresh_view(core);
     }
@@ -771,6 +784,7 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &AppCtx) -> i32 {
         }
         // publish: the name pointer marks the row as used (one aligned store)
         s.mach_owner[k] = owner;
+        MISSING_ROWS &= !(1 << k);
         core.wr(row + iw(inf, w::O_NAME), s.s.mach_name[k].as_ptr() as u32);
     });
     // what the native pages need when the walker reaches them in file order
@@ -862,11 +876,78 @@ unsafe fn refresh_view<C: CoreApi>(core: &C) {
     }
 }
 
+/// The machine rows (bit k) that a reload left as a MISSING placeholder: the new version's rows clear the bit, and the end of the reload writes a gap row for the rest, so a
+/// type whose module did not come back reads as after a plain unload (a MISSING row with no voice row would play the first stock machine's sound).
+static mut MISSING_ROWS: u32 = 0;
+
 /// The long and short names of the MISSING placeholder of a machine type whose module is not there.
 const MISSING_LONG: [u8; MACH_TEXT] = *b"MISSING\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 const MISSING_SHORT: [u8; MACH_TEXT] = *b"MISS\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 
 /// Give back the machine rows `owner` filled (hidden, then reset to a gap row, or to the MISSING placeholder during a reload), then its pages, then its parameters.
+/// Machine row `k` of module-owned rows, hidden and reset: a MISSING placeholder during a reload (`missing`), else a gap row as a plain unload leaves it.
+unsafe fn reset_machine_row<C: CoreApi>(core: &C, inf: *const u32, k: usize, missing: bool) {
+    let s = rstate();
+    let empty = iw(inf, w::EMPTY);
+    let knobs = iw(inf, w::KNOBS) as usize;
+    let first = iw(inf, w::M_FIRST);
+    let t = iw(inf, w::M_DYN0) + k as u32;
+    let row = iw(inf, w::M_ROWS) + (t - first) * iw(inf, w::M_ROW_SIZE);
+    core.wr(row + iw(inf, w::O_NAME), empty); // hide first
+                                              // During a reload the row stays hidden (an empty list name) and shows MISSING / MISS where the page or the track label names the type, and the DSP gets its
+                                              // own number, which no engine has (the voice row of the module, parked as a placeholder, makes it silent: `dsp::clear_rows`). The strings are the row's
+                                              // own buffers, which the module's next load overwrites. Otherwise the row is a gap row, as it was before the reload existed.
+    let (long, short) = if missing {
+        machine_text(k, MISSING_LONG.as_ptr(), MISSING_SHORT.as_ptr(), false)
+    } else {
+        s.empty_rep = [0, 0, 0xffff_ffff, 0];
+        let rep = addr_of!(rstate().empty_rep) as u32 + 12;
+        (rep, rep)
+    };
+    core.wr(row + iw(inf, w::O_LONG), long);
+    core.wr(row + iw(inf, w::O_SHORT), short);
+    core.wr(
+        row + iw(inf, w::O_SNAME),
+        if missing {
+            s.s.mach_short[k].as_ptr() as u32
+        } else {
+            empty
+        },
+    );
+    let f0 = row + iw(inf, w::O_F0);
+    let mut j = 0;
+    while j < knobs {
+        core.wr(f0 + 4 * j as u32, 0);
+        j += 1;
+    }
+    core.wr(f0 + 4 * knobs as u32, 10);
+    core.wr(row + iw(inf, w::O_CLONE), 0);
+    core.wr(row + iw(inf, w::O_OWN), missing as u32);
+    let nrow = iw(inf, w::NAMES) + 12 * t;
+    core.wr(
+        nrow,
+        if missing {
+            s.s.mach_name[k].as_ptr() as u32
+        } else {
+            empty
+        },
+    );
+    core.wr(
+        nrow + 4,
+        if missing {
+            s.s.mach_short[k].as_ptr() as u32
+        } else {
+            empty
+        },
+    );
+    core.wr(nrow + 8, core.rd(iw(inf, w::NAMES) + 8));
+    core.wr(iw(inf, w::PERMIT) + 4 * t, core.rd(iw(inf, w::PERMIT)));
+    let pt = iw(inf, w::PERTYPE);
+    if pt != 0 {
+        core.wr8(pt + t, core.rd8(pt));
+    }
+}
+
 unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     let inf = dkrt_svc_params::dynreg(core);
     if inf.is_null() {
@@ -881,60 +962,10 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
         if s.mach_owner[k] == owner {
             let t = iw(inf, w::M_DYN0) + k as u32;
             nativepage::remove(core, t); // callbacks must go before code/strings can be released
-            let row = iw(inf, w::M_ROWS) + (t - first) * iw(inf, w::M_ROW_SIZE);
-            core.wr(row + iw(inf, w::O_NAME), empty); // hide first
-                                                      // During a reload the row stays hidden (an empty list name) and shows MISSING / MISS where the page or the track label names the type, and the DSP gets its
-                                                      // own number, which no engine has (the voice row of the module, parked as a placeholder, makes it silent: `dsp::clear_rows`). The strings are the row's
-                                                      // own buffers, which the module's next load overwrites. Otherwise the row is a gap row, as it was before the reload existed.
             let missing = core.reload_phase() != 0;
-            let (long, short) = if missing {
-                machine_text(k, MISSING_LONG.as_ptr(), MISSING_SHORT.as_ptr(), false)
-            } else {
-                s.empty_rep = [0, 0, 0xffff_ffff, 0];
-                let rep = addr_of!(rstate().empty_rep) as u32 + 12;
-                (rep, rep)
-            };
-            core.wr(row + iw(inf, w::O_LONG), long);
-            core.wr(row + iw(inf, w::O_SHORT), short);
-            core.wr(
-                row + iw(inf, w::O_SNAME),
-                if missing {
-                    s.s.mach_short[k].as_ptr() as u32
-                } else {
-                    empty
-                },
-            );
-            let f0 = row + iw(inf, w::O_F0);
-            let mut j = 0;
-            while j < knobs {
-                core.wr(f0 + 4 * j as u32, 0);
-                j += 1;
-            }
-            core.wr(f0 + 4 * knobs as u32, 10);
-            core.wr(row + iw(inf, w::O_CLONE), 0);
-            core.wr(row + iw(inf, w::O_OWN), missing as u32);
-            let nrow = iw(inf, w::NAMES) + 12 * t;
-            core.wr(
-                nrow,
-                if missing {
-                    s.s.mach_name[k].as_ptr() as u32
-                } else {
-                    empty
-                },
-            );
-            core.wr(
-                nrow + 4,
-                if missing {
-                    s.s.mach_short[k].as_ptr() as u32
-                } else {
-                    empty
-                },
-            );
-            core.wr(nrow + 8, core.rd(iw(inf, w::NAMES) + 8));
-            core.wr(iw(inf, w::PERMIT) + 4 * t, core.rd(iw(inf, w::PERMIT)));
-            let pt = iw(inf, w::PERTYPE);
-            if pt != 0 {
-                core.wr8(pt + t, core.rd8(pt));
+            reset_machine_row(core, inf, k, missing);
+            if missing {
+                MISSING_ROWS |= 1 << k;
             }
             s.mach_owner[k] = 0;
         }

@@ -161,7 +161,7 @@ pub unsafe fn restart_poll() {
 
 /// RELOAD (runtime 4): queue the reload of the module that was loaded from the store path in the body (NUL terminated; the new file is already there). The job runs
 /// from the UI task's passes (`reload::poll`); `RELOAD_STATE` says where it is and how it ended. Status: 0, `E_MSG` (no path), `E_BUSY` (a reload is queued or running),
-/// `E_STATE` (an upload is open or a store write is in flight).
+/// `E_STATE` (an upload is open or a store write is in flight), `E_NOT_FOUND` (no loaded content module came from that path), `E_FORMAT` (the path is the file of a service).
 pub(crate) unsafe fn cmd_reload(seq: u32, body: *const u8, blen: usize) -> i32 {
     if blen < 2 || *body.add(blen - 1) != 0 {
         return reply(CMD_RELOAD, seq, E_MSG, 0);
@@ -173,14 +173,16 @@ pub(crate) unsafe fn cmd_reload(seq: u32, body: *const u8, blen: usize) -> i32 {
     reply(CMD_RELOAD, seq, r, 0)
 }
 
-/// RELOAD_STATE: `u8 phase` (0 none yet, 1 queued or running, 2 finished), `i32 result`, `u8 step`. No body.
+/// RELOAD_STATE: `u8 phase` (0 none yet, 1 queued or running, 2 finished), `i32 result`, `u8 step`, `u8 unloaded` (1: the old module was torn down, so it is not loaded
+/// unless the result is 0; 0: a refusal or an abort left it running). No body.
 pub(crate) unsafe fn cmd_reload_state(seq: u32) -> i32 {
-    let (phase, result, step) = crate::reload::state();
+    let (phase, result, step, torn) = crate::reload::state();
     let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
     *rb = phase;
     wr32(rb.add(1), result as u32);
     *rb.add(5) = step;
-    reply(CMD_RELOAD_STATE, seq, OK, 6)
+    *rb.add(6) = torn as u8;
+    reply(CMD_RELOAD_STATE, seq, OK, 7)
 }
 
 pub(crate) unsafe fn h_reload(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {

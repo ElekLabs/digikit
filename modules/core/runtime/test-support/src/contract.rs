@@ -1233,6 +1233,19 @@ fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
         f.name,
         profile(f)
     );
+    // the module is not loaded, as after a plain unload: the firmware words are those a plain unload leaves (a machine row is the gap row, not MISSING)
+    let failed = l.snapshot();
+    let plain = Lifecycle::<S>::new(f);
+    assert_eq!(plain.load(0, &f.a), OK);
+    plain.unload(0);
+    let plain = plain.snapshot();
+    assert!(
+        plain.mem == failed.mem,
+        "{} ({}): the memory after a failed reload differs from a plain unload\n{}",
+        f.name,
+        profile(f),
+        plain.diff(&failed)
+    );
 }
 
 /// Whether the DSP state bytes of `end` are those of `start`, but for the bytes the fixture's `kept_dsp` names.

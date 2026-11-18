@@ -227,6 +227,24 @@ pub unsafe fn rec_of_path(path: *const u8) -> Option<(usize, usize)> {
     None
 }
 
+/// Give up the DSP part of module record `rec` (`Loader::cancel_dsp`).
+pub unsafe fn cancel_dsp(rec: usize, code: i32) -> bool {
+    loader().cancel_dsp(rec, code)
+}
+
+/// Is `path` the store path of a loaded provider (a service file)?
+pub unsafe fn is_provider_path(path: *const u8) -> bool {
+    let mut j = 0;
+    while j < PROVIDER_MAX {
+        let rec = MAX_MODULES + j;
+        if records::module(rec).used != 0 && cstr_eq(records::path(rec).as_ptr(), path) {
+            return true;
+        }
+        j += 1;
+    }
+    false
+}
+
 /// A reload that cannot finish before the old code is gone: give the old module its tick back (`Loader::reload_abort`).
 #[allow(dead_code)] // the reload job calls it (E5 commit 8)
 pub unsafe fn reload_abort(rec: usize) -> bool {
@@ -942,6 +960,27 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 crate::boot::report_dsp(idx, OK);
                 dsp::loaded_done();
             }
+        }
+    }
+
+    /// Give up the DSP part of module record `rec`: the transfer in flight is taken down and the queue goes on, or the queued load is removed, exactly as when the
+    /// DSP loader itself fails (`take_down`, the boot record's `report_dsp`, `dsp::fail_done`). `false` when `rec` has neither a load in flight nor one queued (its
+    /// DSP part has ended: the caller reads the result).
+    pub unsafe fn cancel_dsp(&mut self, rec: usize, code: i32) -> bool {
+        let d = dsp::ds();
+        if d.phase != dsp::PH_IDLE && d.pending.rec as usize == rec {
+            let idx = d.pending.boot_idx;
+            let reclaimed = self.take_down(rec, code) == OK;
+            crate::boot::report_dsp(idx, code);
+            dsp::fail_done(reclaimed, code);
+            true
+        } else if dsp::dequeue(rec) {
+            let idx = self.sel_of_rec[rec] as u32;
+            self.take_down(rec, code);
+            crate::boot::report_dsp(idx, code);
+            true
+        } else {
+            false
         }
     }
 

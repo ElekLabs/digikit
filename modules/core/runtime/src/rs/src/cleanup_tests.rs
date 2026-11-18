@@ -454,6 +454,24 @@ fn acknowledged_voice_cleanup_reclaims_and_advances_queue() {
         assert_eq!(LINK.accepted, 1);
     }
 }
+/// A reload gives up a DSP part that does not end (`loader::cancel_dsp`): the transfer in flight is taken down as a failed one is, the record is free, no tick runs, the
+/// queue goes on, and the boot record says the module failed with the code.
+#[test]
+fn a_cancelled_dsp_part_ends_like_a_failed_one() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        seed(Completion::Ack, false, true, true);
+        assert!(crate::loader::cancel_dsp(0, E_DSP_XFER));
+        assert_eq!(st().modules[0].used, 0, "the record is free");
+        assert!(!entry::has_tick(0));
+        assert_eq!(dsp::ds().mod_len[0], 0);
+        assert_eq!(dsp::ds().pending.rec, 1, "the queued load of the next module started");
+        assert!(!dsp::retained());
+        assert_eq!(boot::info().results[0], E_DSP_XFER);
+        // nothing is left to cancel: the DSP part of record 0 has ended
+        assert!(!crate::loader::cancel_dsp(0, E_DSP_XFER));
+    }
+}
 #[test]
 fn acknowledged_fx_cleanup_reclaims_after_all_words() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
