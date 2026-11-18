@@ -6,14 +6,14 @@
       {
         "files": ["tests/roundtrip.device.test.ts"],
         "dsp": "sharc",
-        "tags": ["A:core/dynreg", "C:state"],
+        "tags": ["A:core/dynreg", "C:state", "C:types"],
         "modules": ["test/dyn-dn2", "test/sine", "core/services/machines"],
         "plusdrive": true
       },
       {
         "files": ["tests/equiv.device.test.ts"],
         "dsp": "sharc",
-        "tags": ["A:core/dynreg", "C:dsp", "S:machines"],
+        "tags": ["A:core/dynreg", "C:dsp", "C:types", "S:machines"],
         "modules": ["test/dyn-dn2", "test/sine", "core/services/machines"],
         "plusdrive": true
       }

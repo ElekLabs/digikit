@@ -3,7 +3,16 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { baseProblem, changedFiles, invocations, resolveSubset, selectionPairs, sharedInput } from '../test-subset.mjs';
+import { tagProblem } from '../acceptance-tags.mjs';
+import {
+  baseProblem,
+  changedFiles,
+  invocations,
+  resolveSubset,
+  selectionPairs,
+  sharedInput,
+  whyText,
+} from '../test-subset.mjs';
 
 const project = (name: string, targets: string[], runtimeAcceptance: object[]) => ({
   name,
@@ -153,4 +162,36 @@ it('counts an untracked file as changed', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+it('knows the mechanism tags and refuses a misspelt one', () => {
+  const none = new Map();
+  for (const tag of ['C:device-facts', 'C:fault', 'C:types']) expect(tagProblem(tag, none)).toBe('');
+  expect(tagProblem('C:fualt', none)).toMatch(/names no area/);
+});
+
+it('says per selected file which given tags and which changed files selected it', () => {
+  const mech = [
+    {
+      ...project('core/m', projects[1]!.targets, [
+        { files: ['tests/f.device.test.ts'], tags: ['C:fault', 'C:diagnostics'] },
+        { files: ['tests/t.device.test.ts'], tags: ['C:types'] },
+      ]),
+      root: 'modules/m',
+    },
+  ];
+  // only the given tags of a file are named, not all its tags
+  const byTag = resolveSubset(['C:fault', 'C:types'], mech).tests;
+  expect(byTag.map((t) => [t.file, whyText(t)])).toEqual([
+    ['tests/f.device.test.ts', 'C:fault'],
+    ['tests/t.device.test.ts', 'C:types'],
+  ]);
+  // a tag and a changed source file of the same record both show; a record selected by the change alone names the file
+  const both = resolveSubset(['C:types'], mech, { changed: ['modules/m/src/a.c'] }).tests;
+  expect(both.map((t) => [t.file, whyText(t)])).toEqual([
+    ['tests/f.device.test.ts', 'changed modules/m/src/a.c'],
+    ['tests/t.device.test.ts', 'C:types, changed modules/m/src/a.c'],
+  ]);
+  const long = whyText({ tags: [], changed: ['a', 'b', 'c', 'd', 'e'] });
+  expect(long).toBe('changed a, changed b, changed c, 2 more changed');
 });
