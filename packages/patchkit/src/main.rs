@@ -1584,7 +1584,7 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                 all || (Some(&p.port.device) == dev.as_ref()
                     && Some(&p.port.version) == ver.as_ref())
             }) {
-                // with --all, a port of a device that no service targets (Syntakt today) gets no port file
+                // with --all, a port of a device that no service targets gets no port file
                 if all && !portfile::targeted(p, &decls)? {
                     eprintln!("{}: no service targets this device: no port file", p.id());
                     continue;

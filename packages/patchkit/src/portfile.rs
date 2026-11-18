@@ -218,7 +218,7 @@ fn elsewhere(reg: &Registry, device: &str, name: &str, hook: bool) -> bool {
         })
 }
 
-/// Does the port have a hook that a service uses? A port of a device that no service targets (Syntakt today) has no site to list and gets no port file.
+/// Does the port have a hook that a service uses? A port of a device that no service targets has no site to list and gets no port file.
 pub fn targeted(port: &Port, decls: &[&str]) -> Result<bool> {
     let (_, hooks) = service_decls(decls)?;
     Ok(hooks.iter().any(|h| port.hook(&h.name).is_some()))
@@ -978,29 +978,39 @@ mod tests {
     fn the_committed_ports_build_a_port_file_without_firmware() {
         let (reg, texts) = committed();
         let decls: Vec<&str> = texts.iter().map(String::as_str).collect();
-        let by = |id: &str| build_data(&reg, reg.by_id(id).unwrap(), &decls).unwrap();
-        let (dt2, dn2) = (by("dt2-1.17"), by("dn2-1.12"));
-        for d in [&dt2, &dn2] {
+        let built: Vec<(&Port, PortData)> = reg
+            .ports
+            .iter()
+            .map(|p| (p, build_data(&reg, p, &decls).unwrap()))
+            .collect();
+        for (_, d) in &built {
             assert_eq!(parse(&pack(d).unwrap()).unwrap(), *d);
         }
-        // a hook that only the Digitone II has is listed and absent on the Digitakt II
+        // a hook that only some devices have is listed and absent on the others: one port of each kind
         let h = name_hash("cf.lfo.hook.wave_name3");
-        assert!(dt2.site(h).unwrap().absent && dt2.site(h).unwrap().addr == 0);
-        assert!(!dn2.site(h).unwrap().absent && dn2.site(h).unwrap().addr != 0);
+        let site_present = |d: &PortData, h: u32| d.site(h).is_some_and(|s| !s.absent);
+        let graph_vec = name_hash("cf.lfo.hook.graph_vec");
+        let (pa, a) = built
+            .iter()
+            .find(|(_, d)| site_present(d, graph_vec) && d.site(h).is_some_and(|s| s.absent))
+            .expect("a port that lacks wave_name3");
+        let (_, b) = built
+            .iter()
+            .find(|(_, d)| site_present(d, h))
+            .expect("a port that has wave_name3");
+        assert!(a.site(h).unwrap().addr == 0);
+        assert!(b.site(h).unwrap().addr != 0);
         // the declared kinds: a tail hook and a stock hook copy their displaced bytes, a raw hook does not
         let kind = |d: &PortData, n: &str| d.site(name_hash(n)).unwrap().kind;
-        assert_eq!(kind(&dt2, "cf.lfo.hook.graph_vec"), SiteKind::Tail);
-        assert_eq!(kind(&dt2, "cf.lfo.hook.t1_range"), SiteKind::Stock);
-        assert_eq!(kind(&dt2, "cf.page.hook.page_desc"), SiteKind::Stock);
-        assert!(!kind(&dt2, "cf.lfo.hook.read_call").copies());
+        assert_eq!(kind(a, "cf.lfo.hook.graph_vec"), SiteKind::Tail);
+        assert_eq!(kind(a, "cf.lfo.hook.t1_range"), SiteKind::Stock);
+        assert_eq!(kind(a, "cf.page.hook.page_desc"), SiteKind::Stock);
+        assert!(!kind(a, "cf.lfo.hook.read_call").copies());
         // exit 0 is the end of the site
-        let s = dt2.site(name_hash("cf.lfo.hook.graph_vec")).unwrap();
-        let e = dt2.exit(name_hash("cf.lfo.hook.graph_vec"), 0).unwrap();
+        let s = a.site(graph_vec).unwrap();
+        let e = a.exit(graph_vec, 0).unwrap();
         assert_eq!(e.addr, s.addr + u32::from(s.len));
-        assert_eq!(
-            dt2.fw_id.to_vec(),
-            unhex(&reg.by_id("dt2-1.17").unwrap().port.syx_sha256).unwrap()[..8]
-        );
+        assert_eq!(a.fw_id.to_vec(), unhex(&pa.port.syx_sha256).unwrap()[..8]);
     }
 
     #[test]
@@ -1016,9 +1026,7 @@ doc = "x"
 users = ["core/services/lfo"]
 "#;
         decls.push(extra);
-        let e = build_data(&reg, reg.by_id("dt2-1.17").unwrap(), &decls)
-            .unwrap_err()
-            .0;
+        let e = build_data(&reg, &reg.ports[0], &decls).unwrap_err().0;
         assert!(
             e.contains("cf.nowhere.fn.x") && e.contains("no committed port"),
             "{e}"
@@ -1027,7 +1035,7 @@ users = ["core/services/lfo"]
         let only = extra.replace("users =", "devices = [\"zz\"]\nusers =");
         let mut decls: Vec<&str> = texts.iter().map(String::as_str).collect();
         decls.push(&only);
-        assert!(build_data(&reg, reg.by_id("dt2-1.17").unwrap(), &decls).is_ok());
+        assert!(build_data(&reg, &reg.ports[0], &decls).is_ok());
     }
 
     #[test]
