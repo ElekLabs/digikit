@@ -165,6 +165,8 @@ Order: starts on top of B1 and RS-C. It merges after the shared B1, RS-S and RS-
 
 **DSP imports against `MAX_IMPORTS` (32).** machines DT2 29, machines DN2 31, fx DT2 22, fx DN2 27. No section needs the data-block fallback. The import table of `core/dyndsp` is shared by all services: 55 entries on DT2 and 61 on DN2. `core/dyndsp` requires `core/fx` for the effect anchors, and `core/fx` requires `core/dsp-link`.
 
+**Dependencies (intended).** `core/dyndsp` carries one import table that all services share, so the machines and fx services see the same names. `machines` requires the fx adapter (`core/fx`) because the table holds the effect anchors; this is intended and not a layering error.
+
 **Rig numbers.** DN2 render stub on voice 0 with a zero slot: 50 instructions (the heartbeat, the twelve context words, `_gs_block` and the slot test). fx stub with a zero slot: 6 instructions per hook. Empty fx chain with the service installed: 27 instructions (the old bound was 24); one off row costs 206 (old bound 200). The machine and effect conformance suites and the stereo proof pass with their old bounds.
 
 **Smoke budgets that change (device step, not run).** Every cell that runs a machine or an effect module changes its `dsp_cost`: each stubbed hook call now runs the stub and the dispatch entry (the slice measured about +10 instructions per voice on DT2; 6 instructions per fx hook with a zero slot); cells with no service file take the stock path. The cells to update with `smoke --update`: the machine cells of `modules/machines/*`, the fx cells (`fx`, `fxpages`, `dynfx`) and the stereo cells of `dsp-voice`, on DT2 and DN2.
