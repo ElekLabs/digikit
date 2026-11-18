@@ -91,6 +91,10 @@ struct Hook {
     /// `patchkit bind` then generates that code from the user's firmware and resolves the `dk_tail_<hash>` references of the service to it.
     #[serde(default)]
     tail: bool,
+    /// A raw hook whose service calls the stock path (`dk_stock_<hash>`, `jsr`) and takes no `tail`: `stock = true`. The port file marks the site as kind `stock`
+    /// (the displaced instructions are copied from flash after the hash check). `patchkit bind` infers it from the references of the file.
+    #[serde(default)]
+    stock: bool,
     /// The places a raw hook may leave the site besides its end (`dk_exit_<hook>_<n>` of a service, `n` from 1): each is an expression like the ones of a module manifest,
     /// an anchor name with an optional offset (`"cf.machine.site.clone.5 + 12"`), evaluated on the port of the firmware that is bound.
     #[serde(default)]
@@ -244,6 +248,69 @@ pub fn hook_has_handler(decls: &[&str], device_short: &str, hook: &str) -> Resul
 /// Does the raw hook `hook` declare the exit `tail = true` (run the displaced instructions of the site, then continue at site + len)?
 pub fn hook_has_tail(decls: &[&str], device_short: &str, hook: &str) -> Result<bool> {
     declared_hook(decls, device_short, hook, |h| h.tail)
+}
+
+/// Does the raw hook `hook` declare `stock = true` (a service calls the displaced stock instructions as a routine)?
+pub fn hook_has_stock(decls: &[&str], device_short: &str, hook: &str) -> Result<bool> {
+    declared_hook(decls, device_short, hook, |h| h.stock)
+}
+
+/// A declared firmware name (anchor of the tables fn, site, data, value or sites) that a service uses.
+#[derive(Clone, Debug)]
+pub struct NameDecl {
+    pub name: String,
+    /// The `devices` filter as written; empty: every device.
+    pub devices: Vec<String>,
+}
+
+/// A declared ColdFire hook that a service uses.
+#[derive(Clone, Debug)]
+pub struct HookDecl {
+    pub name: String,
+    pub devices: Vec<String>,
+    pub tail: bool,
+    pub stock: bool,
+    pub exits: Vec<String>,
+}
+
+/// The prefix of a `users` entry that is a service module id.
+pub const SERVICE_USER_PREFIX: &str = "core/services/";
+
+/// The ColdFire names and hooks of `devices/fw/` whose `users` list names a service (`core/services/*`): the set a port file lists. A hook may appear once per
+/// device (the same name, `devices` apart).
+pub fn service_decls(decls: &[&str]) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
+    let is_service = |u: &[String]| u.iter().any(|x| x.starts_with(SERVICE_USER_PREFIX));
+    let (mut names, mut hooks) = (vec![], vec![]);
+    for text in decls.iter().copied() {
+        let f: Files = toml::from_str(text).map_err(|e| err!("devices/fw: {e}"))?;
+        for e in [&f.r#fn, &f.site, &f.data, &f.value, &f.sites]
+            .into_iter()
+            .flatten()
+        {
+            if e.cpu == "cf" && is_service(&e.users) {
+                names.push(NameDecl {
+                    name: e.name.clone(),
+                    devices: e.devices.clone(),
+                });
+            }
+        }
+        for h in &f.hook {
+            let cf = h
+                .cpu
+                .as_deref()
+                .map_or(h.name.starts_with("cf."), |c| c == "cf");
+            if cf && is_service(&h.users) {
+                hooks.push(HookDecl {
+                    name: h.name.clone(),
+                    devices: h.devices.clone(),
+                    tail: h.tail,
+                    stock: h.stock,
+                    exits: h.exits.clone(),
+                });
+            }
+        }
+    }
+    Ok((names, hooks))
 }
 
 /// The `exits` of the raw hook `hook` on `device_short`, as written (expressions; the first is exit 1 of `dk_exit_<hook>_<n>`).
@@ -1079,6 +1146,11 @@ fn check_hook(
     if h.tail && (h.handler.is_some() || !cf || h.mode != "replace") {
         return Err(err!(
             "{name}: `tail = true` is only for a cf hook with mode \"replace\" and no handler (a raw hook)"
+        ));
+    }
+    if h.stock && (h.handler.is_some() || !cf || h.mode != "replace" || h.tail) {
+        return Err(err!(
+            "{name}: `stock = true` is only for a cf hook with mode \"replace\", no handler and no `tail` (a raw hook)"
         ));
     }
     if !h.exits.is_empty() && (h.handler.is_some() || !cf || h.mode != "replace") {
