@@ -184,7 +184,10 @@ fn an_anchor_hash_mismatch_is_refused() {
         }
     }
     let lib = library(vec![]);
-    expect_err(run_with(&reg, &lib, &["core/fx"]), "bytes hash");
+    expect_err(
+        run_with(&reg, &lib, &["core/dsp-link", "core/fx"]),
+        "bytes hash",
+    );
 }
 
 #[test]
@@ -208,7 +211,10 @@ fn the_container_cap_is_enforced() {
         p.limits.container_max = 1_000_000;
     }
     let lib = library(vec![]);
-    expect_err(run_with(&reg, &lib, &["core/fx"]), "over the");
+    expect_err(
+        run_with(&reg, &lib, &["core/dsp-link", "core/fx"]),
+        "over the",
+    );
 }
 
 #[test]
@@ -225,9 +231,14 @@ fn sections_2_4_and_8_can_never_change() {
 fn a_patched_image_has_no_port() {
     need_image!();
     need_toolchain!();
-    let out = run(&library(vec![]), &["core/fx"]).unwrap();
+    let out = run(&library(vec![]), &["core/dsp-link", "core/fx"]).unwrap();
     let lib = library(vec![]);
-    let again = apply::apply(&out.syx, &registry(), &lib, &["core/fx".to_string()]);
+    let again = apply::apply(
+        &out.syx,
+        &registry(),
+        &lib,
+        &["core/dsp-link".to_string(), "core/fx".to_string()],
+    );
     expect_err(again, "no port for firmware");
 }
 

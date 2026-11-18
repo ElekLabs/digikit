@@ -79,7 +79,10 @@ impl KeysCopy {
         ] {
             let mut i = 0;
             while let Some(w) = keys.words(tg, i) {
-                k.decl.add(tg, w.0, w.1, w.2);
+                // a DSP slot fill is dispatch code of the file's DSP section, not a function `init` declares: the packer wrote it from `[[fill]] space = "dsp"`
+                if !(tg == dkneeds::keys::tag::SLOTS && w.1 & dkneeds::keys::SLOT_DSP != 0) {
+                    k.decl.add(tg, w.0, w.1, w.2);
+                }
                 i += 1;
             }
         }

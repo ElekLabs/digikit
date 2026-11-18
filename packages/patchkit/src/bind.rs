@@ -1364,6 +1364,7 @@ mod tests {
                 exports: vec![],
                 hooks: vec![],
                 fills: vec![],
+                dsp_fills: vec![],
             }),
         };
         pack_keys(None, &table, &[], &o).unwrap()

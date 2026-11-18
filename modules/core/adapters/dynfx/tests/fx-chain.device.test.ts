@@ -22,6 +22,9 @@ import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { readSmallRing } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 
+/** DSP frames added to the shared trigger frame: the hooked setup takes up to the shared frame (frames 6988 to 7005 of 7000 seen). */
+const SETUP_SLACK = 300;
+
 for (const device of DEVICES) {
   // These nested suites are ordered: the plain owned process closes before the hooked image starts.
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} BASIC FX chain`, () => {
@@ -38,7 +41,7 @@ for (const device of DEVICES) {
       // DT2 checks the assigned sine type and selected-track readback; DN2 retains its hint-only choice.
       await selectSine(withWaitApi(runtime), context.profile);
       const current = await frames(session);
-      const trigger = triggerFrame(device);
+      const trigger = triggerFrame(device) + SETUP_SLACK;
       record(context.artifacts, `${tag}-timing`, { currentFrame: current, triggerFrame: trigger });
       const file = path.join(context.artifacts, `${tag}.wav`);
       // Rig.note: same instruction offset after the DSP boundary, held for the whole 1500-frame capture.

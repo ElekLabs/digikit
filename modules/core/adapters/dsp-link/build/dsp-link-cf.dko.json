@@ -95,86 +95,93 @@
   },
   {
    "addend": 0,
-   "offset": 2,
+   "offset": 6,
    "section": ".text.dl_send",
    "symbol": ".sec..bss.dl_link",
    "type": "cf.32"
   },
   {
    "addend": 60,
-   "offset": 40,
+   "offset": 44,
    "section": ".text.dl_send",
    "symbol": ".sec..bss.dl_link",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 68,
+   "offset": 72,
    "section": ".text.dl_send",
    "symbol": "_dl_area",
    "type": "cf.32"
   },
   {
-   "addend": 524288,
-   "offset": 90,
+   "addend": -64,
+   "offset": 78,
    "section": ".text.dl_send",
    "symbol": "_dl_area",
    "type": "cf.32"
   },
   {
    "addend": 68,
-   "offset": 110,
-   "section": ".text.dl_send",
-   "symbol": ".sec..bss.dl_link",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 116,
-   "section": ".text.dl_send",
-   "symbol": ".sec..bss.dl_link",
-   "type": "cf.32"
-  },
-  {
-   "addend": 16,
-   "offset": 122,
-   "section": ".text.dl_send",
-   "symbol": ".sec..bss.dl_link",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 130,
+   "offset": 114,
    "section": ".text.dl_send",
    "symbol": ".sec..bss.dl_link",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 136,
+   "offset": 120,
+   "section": ".text.dl_send",
+   "symbol": ".sec..bss.dl_link",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 128,
+   "section": ".text.dl_send",
+   "symbol": ".sec..bss.dl_link",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 134,
+   "section": ".text.dl_send",
+   "symbol": ".sec..bss.dl_link",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 140,
    "section": ".text.dl_send",
    "symbol": ".sec..bss.dl_link",
    "type": "cf.32"
   },
   {
    "addend": 4,
-   "offset": 142,
+   "offset": 146,
    "section": ".text.dl_send",
    "symbol": ".sec..bss.dl_link",
    "type": "cf.32"
   },
   {
    "addend": 32,
-   "offset": 148,
+   "offset": 152,
    "section": ".text.dl_send",
    "symbol": ".sec..bss.dl_link",
    "type": "cf.32"
   },
   {
    "addend": 56,
-   "offset": 154,
+   "offset": 158,
    "section": ".text.dl_send",
    "symbol": ".sec..bss.dl_link",
+   "type": "cf.32"
+  },
+  {
+   "addend": 524224,
+   "offset": 182,
+   "section": ".text.dl_send",
+   "symbol": "_dl_area",
    "type": "cf.32"
   },
   {
@@ -748,10 +755,10 @@
   },
   {
    "align": 2,
-   "hex": "2239000000002f027401206f0008226f000c202f0010b481660670ff241f4e7559814a8167f44ab90000000066ec220874038280c2824a81670470fe60de4a8067f8243c00000000b1c265ee220892820c810008000064e2243c000000009488b08262d64a8967d2e488e48942b90000000023c90000000023c000000000700423c00000000023c10000000042b90000000042b90000000042b90000000042806000ff7a",
+   "hex": "598f2f032079000000002f027401202f0010222f0018b488660a70ff241f261f588f4e757604b68867f04ab90000000066e8240076038481c4834a82670470fe60da4a8167f841f90000000043f900000000b08965e84aaf001467e2b088644891c0b28862d89089e488e489262f001442b90000000023c000000000700423c00000000023c30000000023c10000000042b90000000042b90000000042b90000000042806000ff76240094880c820007ffbf628a41f90000000060a4",
    "kind": "text",
    "name": ".text.dl_send",
-   "size": 164
+   "size": 188
   },
   {
    "align": 2,
@@ -817,7 +824,7 @@
    "size": 80
   }
  ],
- "source_sha256": "e2264c45aef1d6d42b90972ea73691b2c2f9201beff4fa80a370c6bd25bf8c30",
+ "source_sha256": "f720342d50f406d13d489b53d7404213472e2249071301a22f5427817c576581",
  "symbols": [
   {
    "global": false,
@@ -962,8 +969,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "523",
-  "isa_check": "9ff2fb7849d9ca596a9c449f40284c15dddfeb888a0aa9e6d2cb22b06324207f",
+  "instructions_redecoded": "532",
+  "isa_check": "5fd2e4110c6d659c7469ac5ba8474a9ab819090aef3a34fae312167092c55201",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

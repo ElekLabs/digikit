@@ -10,6 +10,7 @@ import { DEBUG_MODULE, installModules, moduleArtifact } from '@digi/regression/r
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { DSP_SLOT_BYTES } from '@digi/regression/runtime/synth.ts';
 
 /** MODULES (protocol command 3): after a boot with two modules with DSP code (dyn-dn2 and sine, then the debug module) the reply lists them with ranges
  * inside the arena and the DSP area, the contract bytes and version of the file and the assigned machine types; it pages by start index and is not
@@ -23,7 +24,7 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
   await installModules(
     dk,
     ids.map((id) => ({ id, artifact: moduleArtifact(device, id) })),
-    { device, session }, // the machines need machines.dks on the card
+    { device, session }, // the machines need machines.dks on the card, whose DSP part needs the SHARC
   );
   const info = await dk.info();
   expect(hasCap(info, 'MODULES') && hasCap(info, 'CAPACITY'), 'INFO sets the MODULES and CAPACITY capabilities').toBe(
@@ -76,7 +77,7 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
     MODULES: file.limits.modules,
     ARENA: arenaHi - arenaLo,
     STAGE: file.limits.stage_bytes,
-    DSP_AREA: file.digikit.dsp_area_bytes,
+    DSP_AREA: file.digikit.dsp_area_bytes - DSP_SLOT_BYTES, // window 0 starts with the slot block of core/dsp-link
     MACHINE_ROWS: file.limits.machine_rows,
     VOICE_ROWS: file.limits.machine_rows,
     PARAM_ROWS: file.limits.param_rows,
@@ -106,4 +107,5 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
 
 runtimeTests('MODULES and CAPACITY list the loaded modules, ranges, types and limits', expectModulesReply, {
   devices: ['dt2'],
+  dsp: 'sharc',
 });

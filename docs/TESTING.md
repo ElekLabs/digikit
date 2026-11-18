@@ -356,8 +356,8 @@ A module keeps its tests in its own folder, `modules/<kind>/<name>/tests/`. No l
   `mise run module:check core/runtime` discovers and runs all owners serially.
   `pnpm nx:pilot run <module-id>:test-device` runs one module's files; `pnpm nx:pilot run <module-id>:test-conformance`
   loads the module through the shared conformance suite. Uploadable modules without a DSP image run
-  with the zero SSI peer and no SHARC audio session; modules with DSP images retain coupled execution
-  and the DSP registration wait. Both paths retain upload/restart, persisted bytes/hash, SDK contract,
+  with the zero SSI peer and no SHARC audio session; modules and services with a DSP part (a `.dks` with a DSP section, such as the DT2 `machines.dks`) retain coupled execution
+  (`dsp: 'sharc'`) and the DSP registration wait; the zero peer never acknowledges a DSP transfer, so the card rig and `installModules` refuse a service with a DSP part in a session that is not coupled (`requireCoupledForServices`). Both paths retain upload/restart, persisted bytes/hash, SDK contract,
   registration, UI and fault acceptance, including the same forbidden runtime log kinds. Task and
   cache ownership remain per module.
 - `scenarios/*.toml`: digikit scenarios. `pk_digikit_scen list|run NAME` and the tiers find them in `tests/digikit/scenarios/` and `modules/*/*/tests/scenarios/`.
@@ -1253,6 +1253,8 @@ the sound within tolerance passes without a re-pin.
 **Device pins**: `modules/core/adapters/dynreg/tests/pins/<case>.pcm.json` (`pcmPinFile`), checked by `defineEquiv` over 12000 stereo frames
 from the onset (`checkCapture`). Cases of a plain sine (`sine: { note }`) also assert properties that hold whatever the pin says:
 pitch within 5 cents of the note, crest factor of the second half of the window within 1 % of sqrt(2) (`crest_settled`: the amplitude of the DT2 sine starts 1.7 % high and settles within about 0.15 s, which the whole-window crest includes), harmonics under -60 dB, level steady within 0.5 dB.
+
+**Equiv pins are onset-aligned.** A device pin of `defineEquiv` compares the signal from the onset on (12000 frames, fixed length), so an exact pin's SHA-256 is taken over the onset-aligned signal. The onset stays in the fingerprint and the report, and it may move by whole DSP blocks, at most 2 (`block` of `checkCapture`: `deviceBlockFrames(device)`, the sample rate over `dsp_blocks_per_second` of the device profile, 32 frames on DT2 and DN2). A shift of another size, or of more than 2 blocks, fails. Reason: a change that makes each block cheaper (the fx stubs of R12-8) moves the block in which the key press lands, so the note starts a block earlier or later; the signal from the onset on is unchanged (findings 45, 57). A pin written after such a shift records the new onset.
 
 **Failure and report**: a failed or missing pin prints the differences and the full report, expected beside measured (format, onset, peak,
 stereo, level range, loudest bands, pitch, crest factor, harmonics), and writes `<case>.plot.png` (the window and the pin's band curve) and

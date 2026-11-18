@@ -15,6 +15,8 @@
 import {
   CONTEXT_REGS,
   RETURN_SW,
+  SLOTS,
+  SLOT_WORDS,
   STACK,
   STOCK_BP,
   TABLE,
@@ -60,6 +62,8 @@ export const AMT0 = 19;
 const ROUTE_MASTER = 0;
 export const ROUTE_SEND = 1;
 const ONE = 0x3f800000; // 1.0f: the default mix of a row
+export const FX_ENTRY_SLOT = 2; // words of core/dsp-link's slot block (DK_SLOT_FX_ENTRY / 4, sdk/dsp/contract/dk_stub.inc)
+export const FX_SEND_SLOT = 3;
 
 /** Registers the stock function expects back (callee-saved, its arguments) and the markers they carry into the hook. */
 const MARKS: Record<string, number> = {};
@@ -194,6 +198,10 @@ export class FxRig {
       for (let k = 0; k < Math.floor(init.bytes.length / 4); k++)
         q.poke(nw(init.address) + k, init.bss ? POISON : view.getUint32(4 * k, true));
     }
+    // what the fx service installs (R12-8): the stubs of core/fx jump to the dispatch entries through these slots (DK_SLOT_FX_ENTRY, DK_SLOT_FX_SEND)
+    for (let k = 0; k < SLOT_WORDS; k++) q.poke(nw(SLOTS) + k, 0);
+    q.poke(nw(SLOTS) + FX_ENTRY_SLOT, b.symbols._fx_dispatch ?? 0);
+    q.poke(nw(SLOTS) + FX_SEND_SLOT, b.symbols._fxs_dispatch ?? 0);
     this.rows.forEach((r, i) => {
       const base = nw(TABLE) + i * ROW_WORDS;
       if (!r.pc) {
@@ -240,6 +248,11 @@ export class FxRig {
 
   setEnabled(i: number, on: boolean): void {
     this.setRowWord(i, ENABLED, on ? 1 : 0);
+  }
+
+  /** Word `index` of core/dsp-link's slot block for the following calls (0: the stub takes the stock path). */
+  setHookSlot(index: number, pc: number): void {
+    this.q.poke(nw(SLOTS) + index, pc);
   }
 
   /** The 64 floats (32 left, 32 right) of track bus T, as the sends driver leaves them before the master function. */

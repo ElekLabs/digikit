@@ -183,9 +183,9 @@ fn adapter_of(import: &str) -> Option<String> {
     row.get("requires").map(|r| r.as_str().unwrap().to_string())
 }
 
-/// The info table of a patched image (`set-<set>.info`): name, hash, kind (0 data, 1 slot), address and the words of a data entry.
+/// The info table of a patched image (`set-<set>.info`): name, hash, kind (0 data, 1 slot, 2 DSP slot), address (the index in the slot block for a DSP slot) and the words of a data entry.
 struct Image {
-    entries: Vec<(String, u32, u32, Vec<u32>)>,
+    entries: Vec<(String, u32, u32, u32, Vec<u32>)>,
     /// The modules of the set (`[patch_sets]` of the device file and what they require): the adapters the image has.
     modules: Vec<String>,
 }
@@ -199,7 +199,7 @@ impl Image {
             .lines()
             .map(|l| {
                 let w: Vec<&str> = l.split(' ').collect();
-                (w[0].to_string(), hex(w[1]), w[2].parse().unwrap(), w[4..].iter().map(|x| hex(x)).collect())
+                (w[0].to_string(), hex(w[1]), w[2].parse().unwrap(), hex(w[3]), w[4..].iter().map(|x| hex(x)).collect())
             })
             .collect();
         Image { entries, modules: set_modules(dev, set) }
@@ -208,7 +208,7 @@ impl Image {
     /// The platform of the device with this image's table. `limits`: replacement values of the `cap_<kind>` words.
     fn platform(&self, dev: Dev, limits: &[(u8, u32)]) -> FakePlatform {
         let p = FakePlatform::new(dev.profile);
-        for (_, hash, kind, words) in &self.entries {
+        for (_, hash, kind, at, words) in &self.entries {
             let mut words = if words.is_empty() { std::vec![0] } else { words.clone() };
             if let Some((_, v)) = limits.iter().find(|(k, _)| *hash == cap_hash(*k)) {
                 words[0] = *v;
@@ -217,12 +217,15 @@ impl Image {
             if *kind == 0 {
                 p.info_data.borrow_mut().push(*hash);
             }
+            if *kind == 2 {
+                p.info_dsp.borrow_mut().push((*hash, *at));
+            }
         }
         p
     }
 
     fn has(&self, hash: u32) -> bool {
-        self.entries.iter().any(|e| e.1 == hash && !e.3.is_empty())
+        self.entries.iter().any(|e| e.1 == hash && !e.4.is_empty())
     }
 }
 
@@ -521,6 +524,58 @@ unsafe fn imports_resolve(l: &mut Boot, image: &Image, file: &[u8], what: &str) 
     adapter_imports
 }
 
+/// The `dyndsp_info` table of the host tests for the providers of `plan` that have a DSP part: the device word of their DSP header, a wide area and one import per
+/// `DSP_IMPORT` line of the dyndsp source of the device. `None` when no provider has a DSP part.
+fn dsp_info_of(dev: Dev, l: &Boot, plan: &Plan) -> Option<Vec<u32>> {
+    let mut device = None;
+    for j in 0..plan.np {
+        let path = l.found.path(j);
+        let (_, file) = l.m.files.iter().find(|(n, _)| *n == path).unwrap();
+        if be(file, dkneeds::H_DSP_SIZE) != 0 {
+            device = Some(be(file, be(file, dkneeds::H_DSP_OFF) + dkneeds::DSP_H_DEVICE));
+        }
+    }
+    let device = device?;
+    let src = std::fs::read_to_string(repo().join(std::format!("modules/core/adapters/dyndsp/src/cf/dyndsp-{}.s", dev.name))).unwrap();
+    let names: Vec<&str> = src.lines().filter_map(|t| t.trim().strip_prefix("DSP_IMPORT ")).map(str::trim).collect();
+    let mut t = vec![0u32; dkrt_abi::dsp::I_IMPORTS];
+    t[dkrt_abi::dsp::I_MAGIC] = dkrt_abi::dsp::INFO_MAGIC;
+    t[dkrt_abi::dsp::I_DEVICE] = device;
+    t[dkrt_abi::dsp::I_AREA] = 0x2000_0000;
+    t[dkrt_abi::dsp::I_AREA_BYTES] = 1 << 20;
+    t[dkrt_abi::dsp::I_VFIRST] = 4;
+    t[dkrt_abi::dsp::I_VFREE] = 8;
+    t[dkrt_abi::dsp::I_NIMPORT] = names.len() as u32;
+    for (i, n) in names.iter().enumerate() {
+        // an entry is a NUL padded name and, at `DSP_IMPORT_ADDR`, the address as a host word (the runtime reads the table in place)
+        let mut e = [0u8; dkneeds::DSP_IMPORT_LEN as usize];
+        e[..n.len()].copy_from_slice(n.as_bytes());
+        let mut words: Vec<u32> = e.chunks(4).map(|c| u32::from_ne_bytes(c.try_into().unwrap())).collect();
+        words[dkneeds::DSP_IMPORT_ADDR as usize / 4] = 0x1000 + 4 * i as u32;
+        t.extend_from_slice(&words);
+    }
+    Some(t)
+}
+
+/// The DSP of a provider's load for a host test (see `dsp_info_of`): the table is in place and the link acknowledges while this lives.
+struct DspEnv {
+    _info: Vec<u32>,
+    _guard: crate::cleanup_tests::VoiceInfoGuard,
+}
+
+impl Drop for DspEnv {
+    fn drop(&mut self) {
+        unsafe { crate::cleanup_tests::script_end() }
+    }
+}
+
+unsafe fn dsp_env(dev: Dev, l: &Boot, plan: &Plan) -> Option<DspEnv> {
+    let info = dsp_info_of(dev, l, plan)?;
+    let guard = crate::cleanup_tests::VoiceInfoGuard::set(info.as_ptr());
+    crate::cleanup_tests::script_link(true);
+    Some(DspEnv { _info: info, _guard: guard })
+}
+
 /// The seam of a fixture with its provider: the plan accepts the module and finds `want` on the card, the providers load (the ABI word, the stock bytes of every
 /// hook site), their hooks and slots are installed as their bind records say, and a module without a DSP section loads.
 unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
@@ -537,6 +592,9 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
     for j in 0..plan.np {
         assert_eq!(plan.provider_verdicts[j], Verdict::Accepted, "{what}: provider {j}");
     }
+    // a provider with a DSP part (the machines service) reaches the DSP loader from its load: the host gives it the import table of `core/dyndsp` (every name of its
+    // sources, an address that is not 0) and a link that acknowledges, and stops there (the DSP code and the slots follow in the UI loop, `dsp_provider_tests`)
+    let _dsp = dsp_env(dev, &l, &plan);
     l.load_providers(&plan);
     for j in 0..plan.np {
         assert!(l.loaded[j], "{what}: provider {} did not load", String::from_utf8_lossy(l.found.path(j)));
@@ -801,6 +859,7 @@ fn the_builder_calls_of_a_module_resolve_to_the_exports_of_the_service_that_owns
             let image = Image::read(*dev, "emulator");
             unsafe {
                 let (mut l, plan) = planned(*dev, &image, &[], &[module], &SERVICES);
+                let _dsp = dsp_env(*dev, &l, &plan);
                 l.load_providers(&plan);
                 let file = packed(*dev, module.leaf, "dkm", module.nx);
                 let used: Vec<String> = import_names(&file).into_iter().filter(|n| builders.contains(&n.as_str())).collect();
@@ -876,12 +935,12 @@ fn a_bound_file_carries_the_identity_of_its_image_and_a_file_for_another_firmwar
             .find(|e| e.1 == name_hash("fw_id"))
             .unwrap_or_else(|| panic!("{}: the image has no fw_id entry", dev.name));
         assert_eq!(
-            (id.2, id.3.len() >= 2),
+            (id.2, id.4.len() >= 2),
             (0, true),
             "{}: fw_id is a data entry of at least two words",
             dev.name
         );
-        let words = [id.3[0], id.3[1]];
+        let words = [id.4[0], id.4[1]];
         unsafe {
             let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
             let j = (0..plan.np)

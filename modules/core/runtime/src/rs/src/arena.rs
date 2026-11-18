@@ -23,6 +23,11 @@ pub unsafe fn init() {
 
 /// A block of at least `n` bytes, 16-byte aligned; null when none fits.
 pub unsafe fn alloc(n: u32) -> *mut u8 {
+    // the host tests of a service file's DSP part: the arena's addresses are 32 bits, a host pointer is not (`cleanup_tests::script_link`)
+    #[cfg(test)]
+    if crate::cleanup_tests::host_arena() {
+        return crate::cleanup_tests::host_alloc(n);
+    }
     // dk_alloc runs in any task: the free list walk is one critical section (the mask nests).
     let sr = crate::irq_mask();
     let p = alloc_walk(n);

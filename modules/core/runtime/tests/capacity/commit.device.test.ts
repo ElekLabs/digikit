@@ -110,6 +110,8 @@ interface GoodArena {
   used: number;
   providers: number;
 }
+/** The result of a provider whose DSP part follows (fx.dks, machines.dks): live on the ColdFire, its blocks are in the arena. */
+const LOADING = 1;
 const goodArena = new Map<string, GoodArena>();
 
 /**
@@ -145,7 +147,7 @@ async function expectNothing(
 ) {
   const { mods, cap, rt } = got;
   const providersLoaded = (await ringEvents(rt.session, rig.plan, 'MOD_LOAD')).filter(
-    (e) => e.args[0] === PROVIDER_IDX && e.args[1] === 0,
+    (e) => e.args[0] === PROVIDER_IDX && (e.args[1] === 0 || e.args[1] === LOADING),
   ).length;
   const providers = providersLoaded ? good.providers : 0;
   expect(

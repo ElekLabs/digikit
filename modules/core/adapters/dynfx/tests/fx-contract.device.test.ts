@@ -28,6 +28,9 @@ import { readSmallRing } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { bindBootClock, emulatorDk, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
 
+/** DSP frames added to the shared trigger frame: the hooked setup takes up to the shared frame (frames 6988 to 7005 of 7000 seen). */
+const SETUP_SLACK = 300;
+
 // The FX contract suite of core/dynfx on test/dyn-fx-gain, one case per concern on one image per device (docs/plans/test-architecture.md T2):
 //   1. plain image: the unhooked sine is the audible reference;
 //   2. hooked image, dry card: free rows are transparent;
@@ -52,7 +55,7 @@ for (const device of DEVICES) {
       // DT2 checks the assigned sine type and selected-track readback; DN2 retains its hint-only choice.
       await selectSine(runtime, context.profile);
       const current = await frames(session);
-      const trigger = triggerFrame(device);
+      const trigger = triggerFrame(device) + SETUP_SLACK;
       record(context.artifacts, `${tag}-timing`, { currentFrame: current, triggerFrame: trigger });
       const file = path.join(context.artifacts, `${tag}.wav`);
       // Same instruction offset after the DSP boundary, held for the whole 1500-frame capture.

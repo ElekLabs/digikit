@@ -1,6 +1,6 @@
 //! The DSP side's shared types and constants: the words of the info tables, the row table state (`DspState`), the loader's pending load, the checked
 //! section (`Job`, `DspSec`). The core owns the object `DKRT_DSP` (a host tool reads its layout); a service reaches it through `CoreApi::dsp`.
-use crate::MAX_MODULES;
+use crate::{MAX_MODULES, REC_MAX};
 use dkneeds;
 use dkrt_sdk::*;
 
@@ -145,9 +145,9 @@ pub struct DspState {
     pub failures: u32,
     pub last_dl_err: u32,
     /// Per module record: byte offset into the area and length of its range (len 0: none), and the rows it owns (bit mask).
-    pub mod_off: [u32; MAX_MODULES],
-    pub mod_len: [u32; MAX_MODULES],
-    pub mod_rows: [u32; MAX_MODULES],
+    pub mod_off: [u32; REC_MAX],
+    pub mod_len: [u32; REC_MAX],
+    pub mod_rows: [u32; REC_MAX],
     /// Per voice row: the type claimed for it (`FREE_TYPE` when free), its owner (module record + 1), whether its type word was
     /// written to the DSP (so it needs clearing), and the pc to publish.
     pub row_type: [u32; MAX_ROWS],
@@ -158,7 +158,7 @@ pub struct DspState {
     pub row_pub: [u8; MAX_ROWS],
     /// The load being sent, and the loads behind it (the boot hook publishes the CF side of every module at once).
     pub pending: Pending,
-    pub waiting: [Pending; MAX_MODULES],
+    pub waiting: [Pending; REC_MAX],
     pub nwait: u32,
     /// Per voice row: the note_on pc (0: none), the byte address of voice 0's state, the bytes between states, the bytes cleared at note-on.
     pub row_note_on: [u32; MAX_ROWS],
@@ -182,7 +182,9 @@ pub struct DspState {
     /// Per effect row: the flags word of its record (`FXF_*`: the routes the effect may run on and its default route; 0 = master only).
     pub fx_flags: [u32; MAX_FX],
     /// Per module record: the effect rows it owns (bit mask).
-    pub mod_fx: [u32; MAX_MODULES],
+    pub mod_fx: [u32; REC_MAX],
+    /// The slot writes of a provider file's DSP part sent so far (0: not started, 1: the sequence of its slots is in flight or done).
+    pub slot_run: u32,
 }
 
 /// What `check` found in a DSP section; pointers are into the staged file.

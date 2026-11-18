@@ -487,6 +487,78 @@ fn the_service_crates_of_the_repository_pass() {
     }
 }
 
+/// A DSP fill: the manifest side (`[[fill]] space = "dsp"`, an `[[object]]` with place `dsp.l2`, `dks/dsp/*.s`) and a dyndsp table next to the service folder.
+fn with_dsp_fill(test: &str, asm_name: &str, asm: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let (dir, sdk, adapters) = adapters_with(test, "devices = [\"dn2\"]");
+    // the adapter that declares the DSP slot
+    fs::write(
+        adapters.join("machines/module.toml"),
+        "[[slot]]\nname = \"voice_render\"\nspace = \"dsp\"\ndevices = [\"dt2\"]\n",
+    )
+    .unwrap();
+    let table = dir
+        .parent()
+        .unwrap()
+        .join("modules/core/adapters/dyndsp/src/cf");
+    fs::create_dir_all(&table).unwrap();
+    fs::write(
+        table.join("dyndsp-dt2.s"),
+        "dyndsp_info:\n    DSP_IMPORT _dv_diag\n    DSP_IMPORT _fw_frame\n",
+    )
+    .unwrap();
+    fs::create_dir_all(dir.join("dks/dsp")).unwrap();
+    fs::write(dir.join("dks/dsp").join(asm_name), asm).unwrap();
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[fill]]\nslot = \"voice_render\"\nentry = \"_run\"\nspace = \"dsp\"\ndevices = [\"dt2\"]\n\n[[object]]\npath = \"build/x.dko.json\"\nsources = [\"dsp/dispatch-dt2.s\"]\nplace = \"dsp.l2\"\ndevices = [\"dt2\"]\n",
+    );
+    (dir, sdk, adapters)
+}
+
+#[test]
+fn a_dsp_fill_needs_dispatch_code_and_imports_that_the_dyndsp_table_has() {
+    // a DSP fill is not a Rust function: the service! call does not list it, and the check wants the dispatch code and a DSP object
+    let found_in =
+        |d: &Path, s: &Path, a: &Path| patchkit::svccheck::check_with_adapters(d, s, a).unwrap();
+    let asm = ".EXTERN _dv_diag;\n.EXTERN _fw_frame;\n";
+    let (dir, sdk, ad) = with_dsp_fill("dsp-ok", "dispatch-dt2.s", asm);
+    assert_eq!(found_in(&dir, &sdk, &ad), Vec::<String>::new());
+
+    let (dir, sdk, ad) = with_dsp_fill(
+        "dsp-bad-import",
+        "dispatch-dt2.s",
+        ".EXTERN _dv_diag;\n.EXTERN _dv_nowhere;\n",
+    );
+    let found = found_in(&dir, &sdk, &ad);
+    assert!(
+        mentions(
+            &found,
+            "`.EXTERN _dv_nowhere` is not a DSP_IMPORT of core/dyndsp"
+        ),
+        "{found:?}"
+    );
+    assert!(!mentions(&found, "_dv_diag"), "{found:?}");
+
+    let (dir, sdk, ad) = with_dsp_fill("dsp-no-asm", "notes.txt", "");
+    assert!(mentions(&found_in(&dir, &sdk, &ad), "holds no .s file"));
+
+    let (dir, sdk, ad) = with_dsp_fill("dsp-no-device", "dispatch.s", asm);
+    assert!(mentions(
+        &found_in(&dir, &sdk, &ad),
+        "must end in -<device>"
+    ));
+
+    // an unknown slot name
+    let (dir, sdk, ad) = with_dsp_fill("dsp-bad-slot", "dispatch-dt2.s", asm);
+    let m = fs::read_to_string(dir.join("dks/module.toml")).unwrap();
+    fs::write(
+        dir.join("dks/module.toml"),
+        m.replace("voice_render", "no_such_slot"),
+    )
+    .unwrap();
+    assert!(mentions(&found_in(&dir, &sdk, &ad), "has no such slot"));
+}
+
 #[test]
 fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
     use patchkit::svccheck::check_with_adapters;

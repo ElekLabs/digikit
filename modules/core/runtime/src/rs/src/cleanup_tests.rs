@@ -100,8 +100,58 @@ pub unsafe fn send_word(win: u32, at: u32, buf: *const u32, len: u32) -> i32 {
     LINK.events.push(Event::Word(win, at, *buf));
     0
 }
-pub unsafe fn send_image(_: u32, _: *const u8, _: u32) -> i32 {
+pub unsafe fn send_image(dst: u32, buf: *const u8, len: u32) -> i32 {
+    if IMAGE_OK {
+        // the host tests of a service file's DSP part: an area send (the image) or a slot word (window 0) is accepted and logged as (destination, first word)
+        LINK.tries += 1;
+        LINK.accepted += 1;
+        // an image buffer is an arena address of the device (32 bits, not a host pointer): only a slot word (4 bytes, the link's own buffer) is read
+        IMAGE_SENDS.push((dst, if len == 4 { core::ptr::read_unaligned(buf as *const u32) } else { 0 }));
+        return 0;
+    }
     panic!("retained loader must not send another image")
+}
+
+static mut IMAGE_OK: bool = false;
+
+/// With the script: `arena::alloc` gives host memory (leaked: a test is short).
+pub(crate) fn host_arena() -> bool {
+    unsafe { IMAGE_OK }
+}
+pub(crate) unsafe fn host_alloc(n: u32) -> *mut u8 {
+    let v: Vec<u128> = std::vec![0u128; (n as usize + 15) / 16];
+    let p = v.as_ptr() as *mut u8;
+    core::mem::forget(v);
+    p
+}
+static mut IMAGE_SENDS: Vec<(u32, u32)> = Vec::new();
+
+/// Script the link for a host test of a service file's DSP part: area and slot sends are accepted, and the transfer is taken (`ack`) or fails (a link error after the first
+/// accepted send, the image). Hold the test lock; `script_end` undoes it.
+pub(crate) unsafe fn script_link(ack: bool) {
+    *crate::link::lk() = crate::link::Link::new(crate::link::DspTransport);
+    crate::link::lk().spin = 20_000;
+    LINK = Link {
+        completion: if ack { Completion::Ack } else { Completion::ErrorAt(1) },
+        original_failure: false,
+        tries: 0,
+        accepted: 0,
+        polls: 0,
+        no_fx_info: false,
+        strict_tick_drop: false,
+        events: Vec::new(),
+    };
+    IMAGE_SENDS = Vec::new();
+    IMAGE_OK = true;
+}
+
+pub(crate) unsafe fn script_end() {
+    IMAGE_OK = false;
+}
+
+/// The area and slot sends of the script so far: (destination byte address, first word).
+pub(crate) unsafe fn image_sends() -> Vec<(u32, u32)> {
+    IMAGE_SENDS.clone()
 }
 pub unsafe fn poll_state() -> (u32, u32) {
     LINK.polls += 1;

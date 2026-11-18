@@ -6,6 +6,7 @@
 //! INIT     -> ACTIVE                          loaded, no DSP part
 //! INIT     -> DSP_LOADING -> ACTIVE           the ColdFire part is live, the DSP part follows
 //! INIT or DSP_LOADING -> FAILED(reason)       the load or the DSP part failed
+//! ACTIVE or DSP_LOADING -> FAILED(E_MISSING)  a service it needs was taken down after the boot hook (its DSP part failed)
 //! SELECTED -> SKIPPED                         safe mode loads nothing
 //! ```
 //!
@@ -97,6 +98,12 @@ impl BootStates<'_> {
             STATE_FAILED
         };
         self.step(k, STATE_DSP_LOADING, to)
+    }
+
+    /// Module `k` was taken down after its load (a service it needs failed after the boot hook, or its own DSP part): FAILED. True when it was ACTIVE or DSP_LOADING
+    /// (the caller then also fixes the count of loaded modules, which counted it only when it was ACTIVE).
+    pub fn taken_down(&mut self, k: usize) -> bool {
+        self.step(k, STATE_ACTIVE, STATE_FAILED) || self.step(k, STATE_DSP_LOADING, STATE_FAILED)
     }
 
     /// Safe mode: the first `count` modules are SKIPPED.

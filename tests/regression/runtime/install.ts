@@ -6,7 +6,7 @@ import { emulatorClock, repoRoot, type Device, type Session } from '@digi/test-s
 import { expect } from 'vitest';
 import { type PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
-import { boundService, neededServices, servicePath } from './service-files.ts';
+import { boundService, neededServices, requireCoupledForServices, servicePath } from './service-files.ts';
 import { bootClockOf, pollEmulated, waitForBootEmulated } from './waits.ts';
 
 /** Emulated milliseconds the boot-time loads of the installed modules may take after the boot is seen. */
@@ -50,7 +50,13 @@ export async function installModules(
       if (device) {
         for (const needed of neededServices(modules.map((m) => m.artifact))) {
           const name = needed.service;
-          const bound = fs.readFileSync(await boundService(device, needed, moduleArtifact(device, needed.moduleId)));
+          const boundFile = await boundService(device, needed, moduleArtifact(device, needed.moduleId));
+          // the rule holds whenever a service goes on the card: a call without a session cannot show the mode, so it is refused for a service with a DSP part
+          requireCoupledForServices(
+            [{ name: servicePath(name), file: boundFile }],
+            session ? (await session.status()).dsp : undefined,
+          );
+          const bound = fs.readFileSync(boundFile);
           await timePhase('service.upload', () => dk.put(servicePath(name), bound));
           expect(
             await dk.verifyFile(servicePath(name), bound),

@@ -8,6 +8,7 @@
       {
         "files": ["modules-capacity.device.test.ts"],
         "devices": ["dt2"],
+        "dsp": "sharc",
         "tags": ["C:loading"],
         "modules": ["digikit/debug", "digikit/probe", "digikit/remote", "test/dyn-dn2", "core/services/machines"]
       },

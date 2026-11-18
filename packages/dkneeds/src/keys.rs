@@ -147,7 +147,11 @@ pub struct Pair {
     pub b: u32,
 }
 
-/// One `SLOTS` item: the slot id, its flags and (version 2 only) the entry (image offset; 0 in a version 1 table).
+/// Flag of a `SLOTS` item: the slot is a DSP slot (a word of the slot block of core/dsp-link, `[[slot]] space = "dsp"` of an image adapter) and the entry is an offset in the
+/// file's DSP section (the byte offset of a text symbol in the DSP image), not in the ColdFire image.
+pub const SLOT_DSP: u32 = 0x100;
+
+/// One `SLOTS` item: the slot id, its flags ([`SLOT_DSP`]) and (version 2 only) the entry (image offset; 0 in a version 1 table).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Slot {
     pub id: u32,
