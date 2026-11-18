@@ -18,6 +18,7 @@ import {
   RuntimeEvents,
   emulatedClock,
   emulatedProbe,
+  poll,
   type EmuStatus,
 } from '../../packages/dk-session/src/index.ts';
 import { LOG_KIND } from '../../packages/dk-session/src/gen_proto.ts';
@@ -92,14 +93,16 @@ try {
     emulatedProbe: emulatedProbe(clock),
   });
   // the first boot: the runtime answers INFO once its protocol is up
-  for (const end = Date.now() + 120_000; ; await new Promise((r) => setTimeout(r, 500))) {
-    try {
-      await dk.info();
-      break;
-    } catch (e) {
-      if (Date.now() > end) throw e;
-    }
-  }
+  await poll(
+    clock,
+    () => dk.probe((q) => dk.info(q)),
+    () => true,
+    {
+      withinMs: 120_000,
+      message: 'runtime answers INFO',
+      retry: true,
+    },
+  );
   const paths: string[] = [];
   for (const file of [debugDkm, values.dkm]) {
     const store = `modules/${path.basename(file)}`;

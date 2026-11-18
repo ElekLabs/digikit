@@ -281,8 +281,12 @@ async function connectReady(waitMs = 8000) {
       return e?.kind !== 'timeout';
     }
   };
+  // under --emu the wait counts emulated time, on the clock of the session that connectEmu built for the current try
+  const clock = opts.emu
+    ? { now: () => link.session.clock.now(), pause: (ms) => link.session.clock.pause(ms) }
+    : wallClock;
   try {
-    await poll(wallClock, answered, Boolean, { withinMs: waitMs, intervalMs: 500, message: 'device answers' });
+    await poll(clock, answered, Boolean, { withinMs: waitMs, intervalMs: 500, message: 'device answers' });
   } catch (e) {
     if (e?.kind === 'cancelled') throw e;
     // after the time the last link is returned anyway and the first real request reports the error

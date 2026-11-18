@@ -766,6 +766,11 @@ const WINDOW_CHUNKS = 8;
 /** The wait for the replies still in flight once a DATA request has failed. */
 const SETTLE_MS = 2000;
 /**
+ * FW_READY is logged on the first UI-loop pass, right after UI_FIRST (cb139ddec). Runtimes built before that commit log only UI_FIRST and carry the
+ * same version (0.8.3), so the fallback is a time window, not a version check. 2 s of clock time is 20 emulated poll rounds.
+ */
+export const FW_READY_GRACE_MS = 2000;
+/**
  * A reply of E_BUSY means the device's store was in use (an SDK file write or commit on its I/O task) and the command did nothing: the same request
  * is sent again after this wait, at most this many times (2 s in all) before the E_BUSY reaches the caller.
  */
@@ -1202,11 +1207,11 @@ export class DkSession {
   }
 
   /** The loaded modules with their ranges, needed runtime versions and faults (MODULES, runtime 0.2.0, capability MODULES), every page. */
-  async modules(): Promise<DkModule[]> {
+  async modules(quick: Quick = false): Promise<DkModule[]> {
     const out: DkModule[] = [];
     let start = 0;
     for (;;) {
-      const b = await this.ok(GCMD.MODULES, 'modules', Uint8Array.of(start));
+      const b = await this.ok(GCMD.MODULES, 'modules', Uint8Array.of(start), quick);
       const total = b[16]!;
       const n = b[17]!;
       let at = 18;
@@ -1682,8 +1687,8 @@ export class DkSession {
   /**
    * After `restart()`: wait until the device has booted again and its UI loop runs. With the debug module loaded a reboot is seen in the log: the old
    * boot's log holds the RESTART request (an UPLOAD event whose first argument is the command), the new boot's log starts with BOOT_START and never saw
-   * it; then FW_READY (first UI-loop pass, the stock MidiRpc service answers). A runtime older than FW_READY logs only UI_FIRST: a round after UI_FIRST
-   * without FW_READY ends the wait. `opts.until: 'boot'` ends the wait at BOOT_START instead (a test of a crash, a fault or the boot itself). Without the
+   * it; then FW_READY (first UI-loop pass, the stock MidiRpc service answers). A runtime older than FW_READY logs only UI_FIRST: FW_READY_GRACE_MS of
+   * clock time after UI_FIRST without FW_READY ends the wait. `opts.until: 'boot'` ends the wait at BOOT_START instead (a test of a crash, a fault or the boot itself). Without the
    * log (INFO has no LOG capability) the device is taken as booted when it answers again after a failed read (the port is silent while it resets). Every
    * request goes through `probe` (2 s emulated on the emulator, 1 s on hardware), so a request lost while the device resets costs one probe, not
    * `timeoutMs` of the session. Time is the session clock (`timeoutMs` in its ms; default `wallClock`).
@@ -1702,7 +1707,8 @@ export class DkSession {
       this.sessionClock,
       async () => {
         if (opts.signal?.aborted) throw cancelledError();
-        return this.modules();
+        // one probe, like INFO and LOG: a lost reply costs the probe bound, and `poll` asks again
+        return this.probe((q) => this.modules(q), opts.probeTimeoutMs ?? true);
       },
       () => true,
       {
@@ -1721,7 +1727,9 @@ export class DkSession {
     const untilBoot = opts.until === 'boot';
     const quick: Quick = opts.probeTimeoutMs ?? true;
     const stuck = stuckGuard('boot wait', opts.hangMs ?? DEFAULT_HANG_MS, clock);
-    let end = (await clock.now()) + timeoutMs;
+    // The budget counts forward clock time only (as `poll` does): a clock that drops (a daemon restore) adds nothing and does not restart it.
+    let elapsed = 0;
+    let lastNow: number | undefined;
     let last = 'no answer';
     let silent = false;
     // The log is read once from the start of the boot, then from the cursor; the flags describe the current boot's events read so far.
@@ -1729,15 +1737,15 @@ export class DkSession {
     let asked = false;
     let started = false;
     let ready = false;
-    let round = 0;
-    let uiFirstRound = 0; // 0: no UI_FIRST yet
+    let uiFirstAt: number | undefined; // elapsed clock time when UI_FIRST of this boot was first seen
     for (;;) {
       if (opts.signal?.aborted) throw cancelledError();
       const now = await clock.now();
       await stuck(now);
-      if (opts.stillBooting?.()) end = Math.max(end, now + timeoutMs);
-      if (now >= end) break;
-      round++;
+      if (lastNow !== undefined) elapsed += Math.max(0, now - lastNow);
+      lastNow = now;
+      if (opts.stillBooting?.()) elapsed = 0;
+      if (elapsed >= timeoutMs) break;
       try {
         const info = await this.probe((q) => this.info(q), quick);
         if (hasCap(info, 'LOG')) {
@@ -1753,7 +1761,7 @@ export class DkSession {
             asked = false;
             started = false;
             ready = false;
-            uiFirstRound = 0;
+            uiFirstAt = undefined;
           }
           for (const e of read.events) {
             if (e.kind === LOG_KIND.UPLOAD && e.args[0] === GCMD.RESTART) {
@@ -1764,11 +1772,11 @@ export class DkSession {
                 });
               asked = true;
             } else if (e.kind === LOG_KIND.BOOT_START) started = true;
-            else if (e.kind === LOG_KIND.UI_FIRST) uiFirstRound ||= round;
+            else if (e.kind === LOG_KIND.UI_FIRST) uiFirstAt ??= elapsed;
             else if (e.kind === LOG_KIND.FW_READY) ready = true;
           }
           if (started && !asked) {
-            if (untilBoot || ready || (uiFirstRound !== 0 && round > uiFirstRound)) return;
+            if (untilBoot || ready || (uiFirstAt !== undefined && elapsed - uiFirstAt >= FW_READY_GRACE_MS)) return;
             last = 'the new boot has not reached its UI loop';
           } else last = 'the old boot still runs';
         } else if (silent) return;

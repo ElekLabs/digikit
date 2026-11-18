@@ -52,7 +52,7 @@ export function pollUntil<T>(
   done: (v: T) => boolean,
   opts: PollOptions,
 ): Promise<T> {
-  return poll(clock, read, done, { hangMs: stuckMs(), ...opts });
+  return poll(clock, read, done, { ...opts, hangMs: opts.hangMs ?? stuckMs() });
 }
 
 /** `waitClock` of dk-session with the stuck limit of `DIGI_CLOCK_STUCK_MS`. */

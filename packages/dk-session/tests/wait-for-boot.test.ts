@@ -2,7 +2,7 @@
 // capability and the device answering again after a silent spell does. The time is the session clock: a fake clock moves only when the wait pauses.
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import { DkError, DkSession, decode8in7, emulatedProbe, encode8in7 } from '@digi/dk-session';
+import { DkError, DkSession, FW_READY_GRACE_MS, decode8in7, emulatedProbe, encode8in7 } from '@digi/dk-session';
 import { CAP, CMD as GCMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 const concat = (...p: Uint8Array[]) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
@@ -126,7 +126,7 @@ test('after the first round the log is read from the cursor, not from the start'
   assert.equal(froms[froms.length - 1], 0, 'a new boot is read from its start');
 });
 
-test('FW_READY ends the wait; a boot that only logged UI_FIRST keeps waiting one round, then an older runtime is accepted', async () => {
+test('FW_READY ends the wait; a boot that only logged UI_FIRST is accepted after the grace window; a stuck boot times out', async () => {
   // a new boot with BOOT_START, UI_FIRST and FW_READY: returns in the round that read them
   const full = new Device();
   full.debug = true;
@@ -134,14 +134,24 @@ test('FW_READY ends the wait; a boot that only logged UI_FIRST keeps waiting one
   const fullClock = fakeClock();
   await new DkSession(full, { timeoutMs: 200, retries: 0, clock: fullClock }).waitForBoot(5000);
   assert.equal(fullClock.pauses, 0);
-  // an older runtime logs no FW_READY: returns one round after UI_FIRST was read
+  // FW_READY appears 5 rounds after UI_FIRST, inside the grace window: the wait ends with it, not at the round after UI_FIRST
+  const late = new Device();
+  late.debug = true;
+  late.rebooted = true;
+  late.bootLog = [{ kind: LOG_KIND.BOOT_START }, { kind: LOG_KIND.UI_FIRST }];
+  const lateClock = fakeClock((n) => {
+    if (n === 5) late.bootLog.push({ kind: LOG_KIND.FW_READY });
+  });
+  await new DkSession(late, { timeoutMs: 200, retries: 0, clock: lateClock }).waitForBoot(5000, { pollMs: 100 });
+  assert.equal(lateClock.pauses, 5);
+  // an older runtime logs no FW_READY: the wait ends after the grace window, not before
   const old = new Device();
   old.debug = true;
   old.rebooted = true;
   old.bootLog = [{ kind: LOG_KIND.BOOT_START }, { kind: LOG_KIND.UI_FIRST }];
   const oldClock = fakeClock();
-  await new DkSession(old, { timeoutMs: 200, retries: 0, clock: oldClock }).waitForBoot(5000);
-  assert.equal(oldClock.pauses, 1);
+  await new DkSession(old, { timeoutMs: 200, retries: 0, clock: oldClock }).waitForBoot(5000, { pollMs: 100 });
+  assert.equal(oldClock.pauses, FW_READY_GRACE_MS / 100);
   // a boot that never reaches its UI loop
   const stuck = new Device();
   stuck.debug = true;
@@ -354,6 +364,33 @@ test('waitForRestart returns MODULES once the boot is ready, and retries a faili
     never.waitForRestart({ loadedTimeoutMs: 500 }),
     /MODULES after the restart: not seen within 500 ms/,
   );
+});
+
+test('waitForRestart: a lost MODULES reply costs the probe bound plus one retry, not the session timeout', async () => {
+  class DropModulesDevice extends Device {
+    drop = true;
+    send(msg: Uint8Array) {
+      if (msg[5] === GCMD.MODULES) {
+        if (this.drop) return void (this.drop = false);
+        return void this.queue.push(reply(msg[5]!, msg[6]!, 0, new Array(18).fill(0)));
+      }
+      return super.send(msg);
+    }
+    async recv(waitMs?: number) {
+      if (this.queue.length > 0) return this.queue.shift()!;
+      await new Promise((r) => setTimeout(r, waitMs ?? 1000));
+      return this.queue.shift() ?? null;
+    }
+  }
+  const dev = new DropModulesDevice();
+  dev.debug = true;
+  dev.rebooted = true;
+  const s = new DkSession(dev, { timeoutMs: 60_000, retries: 2, clock: fakeClock() });
+  const started = Date.now();
+  const modules = await s.waitForRestart({ probeTimeoutMs: 300 });
+  assert.deepEqual(modules, []);
+  assert.ok(dev.drop === false);
+  assert.ok(Date.now() - started < 5000, 'the lost reply cost one probe of 300 ms, not 60 s');
 });
 
 test('waitForRestart does not retry a cancelled MODULES', async () => {
