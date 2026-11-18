@@ -38,7 +38,6 @@ export const TEST_READS = [
   // read at run time by runtime-plan.ts and pack-needs.ts
   '{workspaceRoot}/tests/regression/runtime/image-roots.json',
   '{workspaceRoot}/tests/regression/runtime/needs-packs.json',
-  '{workspaceRoot}/tools/emulator/ready_inputs.json',
 ];
 // Full keys list every shared file. A merge key lists a file only when the test (its import closure) reads it, or runs patchkit
 // live: the other effects of the file are in the bytes the key hashes.

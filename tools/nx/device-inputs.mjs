@@ -3,14 +3,14 @@
 // Mirrors packages/test-support/src/inputs.ts (FIRMWARE table, DIGI_FIRMWARE_DIR, ready files,
 // DIGI_PK_READY_<DEV>_<VER> override) and tests/regression/runtime/devices.ts (DT2 card dir
 // out/runs/patchkit/samples); a change there must change this file.
-// The ready dirs come from tools/emulator/ready_inputs.json, as there.
+// The ready dirs come from `[acceptance] ready_dir` of the device files (ready-dirs.mjs), as there.
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readyDirs } from './ready-dirs.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const readyJson = JSON.parse(readFileSync(join(root, 'tools/emulator/ready_inputs.json'), 'utf8'));
 
 // The stock images: $DIGI_FIRMWARE_DIR (relative to the repository root), else firmware/. The same rule as
 // tools/firmware/config.py FIRMWARE_DIR and the control daemon.
@@ -18,8 +18,8 @@ export const firmwareDir = (env = process.env) =>
   env.DIGI_FIRMWARE_DIR ? resolve(root, env.DIGI_FIRMWARE_DIR) : join(root, 'firmware');
 
 export const CELLS = [
-  { dev: 'dt2', ver: '1.17', syx: 'Digitakt_II_OS1.17.syx', ready: readyJson.ready_dirs.dt2, samples: true },
-  { dev: 'dn2', ver: '1.12', syx: 'Digitone_II_OS1.12.syx', ready: readyJson.ready_dir, samples: false },
+  { dev: 'dt2', ver: '1.17', syx: 'Digitakt_II_OS1.17.syx', ready: readyDirs.dt2, samples: true },
+  { dev: 'dn2', ver: '1.12', syx: 'Digitone_II_OS1.12.syx', ready: readyDirs.dn2, samples: false },
 ];
 /** The stock image of a cell. */
 export const syxPath = (cell, env = process.env) => join(firmwareDir(env), cell.syx);

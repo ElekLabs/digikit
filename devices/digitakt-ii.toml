@@ -90,6 +90,8 @@ readonly = [2, 4, 8]
 
 # The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
 # part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
+# ready_dir (private, firmware-derived, never committed; the one source of the ready directory): rebuilt from the .syx alone with
+# `mise run emu:ready -- dt2` (tools/emulator/ready.py). Files: digi-audio-dn2-image.bin, digi-audio-m5.snap, digi-audio-m5.snap.dsp.
 [acceptance]
 firmware = "1.17"
 ready_dir = "out/snapshots/dt2-audio-ready-cold-2026-10-20"

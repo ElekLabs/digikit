@@ -15,6 +15,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
+import { readyDirs } from '../nx/ready-dirs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
@@ -57,8 +58,7 @@ for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].slice(2)] 
 const env = process.env;
 const ready = path.resolve(
   root,
-  env.DIGI_EMU_READY_DIR ??
-    JSON.parse(fs.readFileSync(path.join(root, 'tools/emulator/ready_inputs.json'), 'utf8')).ready_dir,
+  env.DIGI_EMU_READY_DIR ?? readyDirs.dn2,
 );
 const read = (p) => new Uint8Array(fs.readFileSync(p));
 const wasm = read(args.core);

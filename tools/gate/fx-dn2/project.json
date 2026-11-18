@@ -9,7 +9,6 @@
       "{workspaceRoot}/tools/emulator/digi_env.py",
       "{workspaceRoot}/tools/emulator/native_target.py",
       "{workspaceRoot}/config/emulator.json",
-      "{workspaceRoot}/tools/emulator/ready_inputs.json",
       "{workspaceRoot}/tools/firmware/config.py",
       "{workspaceRoot}/tools/firmware/device.py",
       "{workspaceRoot}/tools/devtools/render_cache.py",

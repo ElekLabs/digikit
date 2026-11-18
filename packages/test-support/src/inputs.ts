@@ -7,25 +7,19 @@ import {
   STOCK_SYX,
   stockImage as stockImageOf,
 } from '@digi/workbench-core/node/stock-image.ts';
+import { registry } from '@digi/devices/node';
 import { resolveTiers } from './emulator-config.ts';
 
 export type Device = 'dt2' | 'dn2';
 
-interface ReadyJson {
-  ready_dir: string;
-  ready_dirs: { dt2: string };
-}
-
-// (device, version) -> base .syx and ready dir. The ready dirs come from tools/emulator/ready_inputs.json,
+// (device, version) -> base .syx and ready dir. The ready dirs are `[acceptance] ready_dir` of the device files,
 // like FIRMWARE in tools/patchkit/pk_harness.py.
 // Override the ready dir with DIGI_PK_READY_<DEV>_<VER> (version without the dot).
 function firmwareTable(): Record<string, { syx: string; ready: string }> {
-  const json = JSON.parse(
-    fs.readFileSync(path.join(repoRoot(), 'tools/emulator/ready_inputs.json'), 'utf8'),
-  ) as ReadyJson;
+  const ready = (device: Device) => registry().get(device).acceptance!.readyDir;
   return {
-    'dt2 1.17': { syx: STOCK_SYX.dt2, ready: json.ready_dirs.dt2 },
-    'dn2 1.12': { syx: STOCK_SYX.dn2, ready: json.ready_dir },
+    'dt2 1.17': { syx: STOCK_SYX.dt2, ready: ready('dt2') },
+    'dn2 1.12': { syx: STOCK_SYX.dn2, ready: ready('dn2') },
   };
 }
 

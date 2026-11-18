@@ -91,6 +91,10 @@ readonly = [2, 4, 8]
 
 # The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
 # part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
+# ready_dir (private, firmware-derived, never committed; the one source of the ready directory, formerly tools/emulator/ready_inputs.json): rebuilt
+# from the .syx alone with `mise run emu:ready -- dn2` (tools/emulator/ready.py): a ColdFire cold boot plus a DSP cold-start state attached at idle
+# (SLC-configured TX2932 card, docs/findings/14). Files: digi-audio-dn2-image.bin, digi-audio-m5.snap, digi-audio-m5.snap.dsp. Earlier directories
+# (out/snapshots/dn2-audio-ready-2026-10-06 and -10-03) hold a DSP state with a corrupted DC-blocker coefficient (the pre-ed02999 SIMD Type 17 bug).
 [acceptance]
 firmware = "1.12"
 ready_dir = "out/snapshots/dn2-audio-ready-cold-2026-10-20"

@@ -135,12 +135,12 @@ mod tests {
     fn ws() -> Vec<Window<'static>> {
         vec![
             Window {
-                device: "st",
+                device: "dev",
                 lo: 0,
                 hi: 0x2_0000,
             },
             Window {
-                device: "st",
+                device: "dev",
                 lo: 0xFC05_C000,
                 hi: 0xFC05_D000,
             },
@@ -192,7 +192,7 @@ mod tests {
         // or.b d0,d6 (0x8c00) then move.l d7,-(sp) (0x2f07): not an operand
         let o = obj(&[0x4e, 0x71, 0x8c, 0x00, 0x2f, 0x07, 0x4e, 0x75]);
         let w = vec![Window {
-            device: "st",
+            device: "dev",
             lo: 0x8c00_0000,
             hi: 0x8c01_0000,
         }];

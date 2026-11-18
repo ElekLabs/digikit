@@ -1,5 +1,0 @@
-{
-  "_comment": "Private DN2 audio inputs (firmware-derived, never committed). Rebuilt from the .syx alone with `mise run emu:ready -- dn2` (tools/emulator/ready.py): CF cold boot plus a DSP cold-start state attached at idle (SLC-configured TX2932 card, docs/findings/14). The earlier out/snapshots/dn2-audio-ready-2026-10-06 (and -10-03, which needs DIGI_CARD_IDENTITY=mlc4g) hold a DSP state whose DC-blocker coefficient was corrupted by the pre-ed02999 SIMD Type 17 bug. Files: digi-audio-dn2-image.bin, digi-audio-m5.snap, digi-audio-m5.snap.dsp.",
-  "ready_dir": "out/snapshots/dn2-audio-ready-cold-2026-10-20",
-  "ready_dirs": { "dt2": "out/snapshots/dt2-audio-ready-cold-2026-10-20" }
-}
