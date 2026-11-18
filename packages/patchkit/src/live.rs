@@ -189,19 +189,26 @@ struct Parts {
 fn parts(syx: &[u8]) -> Result<Parts> {
     let fw = Firmware::parse(syx)?;
     let main = fw
-        .section(3)
+        .main()
         .ok_or_else(|| err!("the image has no MAIN section"))?;
-    let dsp = fw
-        .section(7)
-        .ok_or_else(|| err!("the image has no DSP section"))?;
+    // empty on a device without a DSP
+    let dsp = match fw.device.dsp_section() {
+        Some(_) => fw
+            .dsp()
+            .ok_or_else(|| err!("the image has no DSP section"))?
+            .data
+            .clone(),
+        None => vec![],
+    };
+    let (main_id, dsp_id) = (fw.device.main_section(), fw.device.dsp_section());
     Ok(Parts {
         main: main.data.clone(),
         base: u64::from(main.dest),
-        dsp: dsp.data.clone(),
+        dsp,
         others: fw
             .sections
             .iter()
-            .filter(|s| s.id != 3 && s.id != 7)
+            .filter(|s| s.id != main_id && Some(s.id) != dsp_id)
             .map(|s| (s.id, s.data.clone()))
             .collect(),
     })

@@ -45,6 +45,10 @@
    "owner": "rust:packages/emulator",
    "purpose": "Output directory: a cf-mix build of coupled-run writes one executed-instruction JSON per scenario"
   },
+  "DIGI_CF_NATIVE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Native ColdFire kernels in a build with CF_NATIVE_DIR: 0 turns them off, check compares each kernel run with the interpreter (a difference stops the CPU), anything else runs them (default)"
+  },
   "DIGI_CF_STATES": {
    "owner": "python:tools/patchkit",
    "purpose": "0 disables the cached ColdFire boot-state snapshots in the patchkit boot harness (flag)"
@@ -180,6 +184,10 @@
   "DIGI_EMU_DSP_STATE": {
    "owner": "python:tools/devtools",
    "purpose": "Path of the DSP ready state (default READY/digi-audio-m5.snap.dsp)"
+  },
+  "DIGI_EMU_PEER_AUDIO": {
+   "owner": "rust:packages/emulator",
+   "purpose": "1 plays the audio a device's MAIN mixes from its peer CPU ([emulator.peer_audio] in devices/*.toml); 0 or unset leaves it off. The workbench launcher sets 1 unless --cf-only."
   },
   "DIGI_DEVICE": {
    "owner": "ts:tests/regression",
@@ -329,6 +337,10 @@
    "owner": "rust:packages/emulator",
    "purpose": "File path; the emulator appends one line per front-panel UART8 drain and per injected panel button."
   },
+  "DIGI_PEER_PROFILE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Set to 1 to add a profile of the peer CPU's frame handler to the panel_drive peer report."
+  },
   "DIGI_PATCHED_CACHE_MAX_GB": {
    "owner": "python:tools/patchkit",
    "purpose": "Size cap in GB of the patched boot-pair cache; the patchkit harness removes the oldest entries above it (default 30)."
@@ -452,6 +464,14 @@
   "DIGI_STORAGE_FAULT_ISR_SYX": {
    "owner": "rust:packages/patchkit",
    "purpose": "Path to the stock DT2 image for the storage fault ISR patchkit Rust test."
+  },
+  "DIGI_USB_TRACE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Any non-empty value except 0: log every USB MIDI hand-over to the guest callback and every call of its transmit function (instruction count, length, payload hash, caller) to stderr"
+  },
+  "DIGI_USB_TRACE_PCS": {
+   "owner": "rust:packages/emulator",
+   "purpose": "With DIGI_USB_TRACE: comma-separated hex addresses whose execution the trace also logs (instruction count, SP, stack top, d0, a0)"
   },
   "DIGI_WRITE_WATCH": {
    "owner": "rust:packages/emulator",
@@ -854,6 +874,7 @@
  "not_env": {
   "DIGI_X": "Placeholder name in tests/devtools/test_render_cache.py.",
   "SHARC_DIR": "Not an environment variable: Python constant for out/sharcdb in tools/coldfire/fw.py:42, patched in tests.",
-  "SHARC_VISA": "unclear: see tests/coldfire/test_ghidraq.py:226 (a Ghidra address space name, not an environment variable)"
+  "SHARC_VISA": "unclear: see tests/coldfire/test_ghidraq.py:226 (a Ghidra address space name, not an environment variable)",
+  "DIGI_SHARC_CORE_DN2": "Placeholder key of a pinned daemons.json in tests/devtools/test_core_store.py."
  }
 }

@@ -7,6 +7,7 @@ was = ["health.fw.create_main"]
 cpu = "cf"
 rule.dt2 = { kind = "cf_ptr", hash = "fc798b27d0ff965379f46717b367f05b", offset = 0x484, len = 4 }
 rule.dn2 = { kind = "cf_ptr", hash = "ca0006cf073207083d26359db1321886", offset = 0x454, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "3cb033ce6a96bf96ee98446f468ba993", offset = 0x320, len = 4, mark = "D" }
 mark = "D"
 users = ["core/health"]
 doc = "The function that creates the main-OS task, the target of the boot thread's last `jsr`; core/health calls it from its idle hook before it starts counting."
@@ -105,6 +106,7 @@ was = ["health.hook.idle"]
 cpu = "cf"
 rule.dt2 = { kind = "cf_func", hash = "fc798b27d0ff965379f46717b367f05b", offset = 0x482, len = 6 }
 rule.dn2 = { kind = "cf_func", hash = "ca0006cf073207083d26359db1321886", offset = 0x452, len = 6 }
+rule.st = { kind = "cf_func", hash = "3cb033ce6a96bf96ee98446f468ba993", offset = 0x31e, len = 6, mark = "D" }
 mark = "D"
 users = ["core/health"]
 doc = "The boot thread's last call, a 6-byte `jsr <create the main-OS task>`, after which the thread idles; core/health replaces it."
@@ -115,6 +117,7 @@ was = ["cf.rtos.site.boot", "dkrt.hook.boot"]
 cpu = "cf"
 rule.dt2 = { kind = "cf_words", as = "code", words = ["*", 0xff5848d7, 0x3cfc49f9, "*", "*", "*", "*", 0x4e944e93, 0x2d40ff80, 0x4eb9400d], offset = 0x2, len = 8 }
 rule.dn2 = { kind = "cf_words", as = "code", words = [0x4e56ff58, 0x48d73cfc, 0x45f94018, "*", "*", 0x4e924e93, 0x2d40ff80, 0x4eb9400d], offset = 0x0, len = 8 }
+rule.st = { kind = "cf_func", hash = "79e8b624e678d28f4d2a312510ee44f1", offset = 0x0, len = 8, mark = "D" }
 mark = "D"
 users = ["core/platform"]
 doc = "The entry of the main-OS task (`link a6,#-0xa8; movem.l ...; ...; jsr (a4); jsr (a3); move.l d0,-0x80(a6); jsr <next singleton>`), found by the words of its first 28 bytes: Digitakt II (the entry is 2 mod 4: the first word of the row is half of the previous function) and Digitone II (4-aligned)."
@@ -152,7 +155,6 @@ cpu = "cf"
 mode = "before"
 regs = { in = [], clobbers = ["ccr"] }
 handler = { sig = "void ()", args = [] }
-devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/platform"]
 doc = "Entry of the main-OS task, before the task builds its singletons; the hook point for boot-time module loading."
@@ -163,7 +165,7 @@ site = "cf.rtos.site.idle"
 cpu = "cf"
 mode = "replace"
 regs = { in = [], clobbers = [] }   # never continues into firmware code
-devices = ["dt2", "dn2"]
+devices = ["dt2", "dn2", "st"]
 mark = "D"
 users = ["core/health"]
 doc = "The boot thread's last call (create the main-OS task), after which the thread idles; the hook makes that call itself and then counts idle iterations forever."
@@ -193,7 +195,7 @@ site = "cf.rtos.site.intro_setup.table_arg"
 cpu = "cf"
 mode = "before"
 regs = { in = [], clobbers = ["d0", "a0", "ccr"] }   # the argument is at (0x24,sp); the displaced `move.l (0x24,sp),d0; movea.l d0,a0` load d0 and a0 next
-devices = ["dt2", "dn2"]
+devices = ["dt2", "dn2", "st"]
 mark = "D"
 users = ["core/introblank"]
 doc = "The intro setup function, before it reads its scene table argument from (0x24,sp); a hook that writes another table pointer there changes the whole intro."

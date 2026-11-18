@@ -5,7 +5,6 @@
 //! assigned here.
 //!
 //! ColdFire rules (as in `store.rs`): no `match` on integers, no `core::fmt`.
-use crate::device::{DYN_TYPE_FIRST, DYN_TYPE_LAST};
 use crate::logk;
 use crate::sel::MAP_N;
 use crate::SEL_MAX;
@@ -23,21 +22,30 @@ pub struct Event {
     pub args: [u32; 5],
 }
 
-pub fn in_range(t: u32) -> bool {
-    t >= DYN_TYPE_FIRST && t <= DYN_TYPE_LAST
+/// The run-time machine types of a device: `count` numbers from `first` (the device object's `dyn_type_first` and `dyn_types`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Types {
+    pub first: u32,
+    pub count: u32,
 }
 
-fn bit(t: u32) -> u32 {
-    1 << (t - DYN_TYPE_FIRST)
+impl Types {
+    pub fn contains(self, t: u32) -> bool {
+        t >= self.first && t - self.first < self.count
+    }
+
+    fn bit(self, t: u32) -> u32 {
+        1 << (t - self.first)
+    }
 }
 
 /// Type numbers referenced by the map, leaving out the entry of hash `except` (0: none left out).
-pub fn referenced_but(map: &[u32; MAP_N], except: u32) -> u32 {
+pub fn referenced_but(tys: Types, map: &[u32; MAP_N], except: u32) -> u32 {
     let mut m = 0;
     let mut i = 0;
     while i < MAP_N {
         if map[i] != 0 && map[i] >> 8 != except {
-            m |= bit(map[i] & 0xff);
+            m |= tys.bit(map[i] & 0xff);
         }
         i += 1;
     }
@@ -45,25 +53,26 @@ pub fn referenced_but(map: &[u32; MAP_N], except: u32) -> u32 {
 }
 
 /// Type numbers referenced by the map.
-pub fn referenced(map: &[u32; MAP_N]) -> u32 {
-    referenced_but(map, 0)
+pub fn referenced(tys: Types, map: &[u32; MAP_N]) -> u32 {
+    referenced_but(tys, map, 0)
 }
 
 /// The lowest number of the run-time range whose bit is not in `taken` (0: none).
-pub fn lowest_free(taken: u32) -> u32 {
-    let mut t = DYN_TYPE_FIRST;
-    while t <= DYN_TYPE_LAST {
-        if taken & bit(t) == 0 {
+pub fn lowest_free(tys: Types, taken: u32) -> u32 {
+    let mut i = 0;
+    while i < tys.count {
+        let t = tys.first + i;
+        if taken & tys.bit(t) == 0 {
             return t;
         }
-        t += 1;
+        i += 1;
     }
     0
 }
 
 /// The map as read from the record without entries that cannot be right: a type outside the range, no hash, a number or a hash that an earlier
 /// entry has.
-pub fn clean(map: &[u32; MAP_N]) -> [u32; MAP_N] {
+pub fn clean(tys: Types, map: &[u32; MAP_N]) -> [u32; MAP_N] {
     let mut out = [0u32; MAP_N];
     let mut seen = 0u32;
     let mut i = 0;
@@ -75,9 +84,9 @@ pub fn clean(map: &[u32; MAP_N]) -> [u32; MAP_N] {
             dup_hash |= out[j] != 0 && out[j] >> 8 == h;
             j += 1;
         }
-        if h != 0 && in_range(t) && seen & bit(t) == 0 && !dup_hash {
+        if h != 0 && tys.contains(t) && seen & tys.bit(t) == 0 && !dup_hash {
             out[i] = map[i];
-            seen |= bit(t);
+            seen |= tys.bit(t);
         }
         i += 1;
     }
@@ -123,6 +132,7 @@ pub fn wanted(key: &[u32], n: usize, h: u32) -> bool {
 /// map the boot started from; `map` is the cleaned map on entry and the map to keep on return. `log` gets every assignment and eviction in
 /// order. Returns `dirty`: 1 when `map` differs from `rec_map`.
 pub fn assign<F: FnMut(&Event)>(
+    tys: Types,
     rec_map: &[u32; MAP_N],
     map: &mut [u32; MAP_N],
     key: &[u32],
@@ -157,14 +167,14 @@ pub fn assign<F: FnMut(&Event)>(
             let at = find_hash(map, h);
             if let Some(i) = at {
                 let old = map[i] & 0xff;
-                if used & bit(old) == 0 {
+                if used & tys.bit(old) == 0 {
                     t = old;
                     sticky = 1;
                     rule = 1;
                 }
             }
             if t == 0 {
-                t = lowest_free(used | referenced(map));
+                t = lowest_free(tys, used | referenced(tys, map));
                 if t == 0 {
                     // no number is unreferenced: drop the lowest entry of a machine that is not in this boot
                     let mut victim = NONE;
@@ -198,13 +208,13 @@ pub fn assign<F: FnMut(&Event)>(
                 }
             }
         } else {
-            t = lowest_free(used | referenced(map));
+            t = lowest_free(tys, used | referenced(tys, map));
             if t == 0 {
-                t = lowest_free(used);
+                t = lowest_free(tys, used);
             }
         }
         if t != 0 {
-            used |= bit(t);
+            used |= tys.bit(t);
         }
         ty[e] = t;
         log(&Event {

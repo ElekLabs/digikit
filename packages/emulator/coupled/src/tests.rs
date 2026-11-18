@@ -81,6 +81,8 @@ fn kind_names_are_the_report_strings() {
     assert_eq!(Kind::Sharc.as_str(), "sharc");
     assert_eq!(Kind::Zero.as_str(), "zero");
     assert_eq!(Kind::None.as_str(), "none");
+    assert_eq!(Kind::Peer.as_str(), "peer");
+    assert_eq!(Kind::Responder.as_str(), "responder");
     assert_eq!(NoCompanion.kind(), Kind::None);
     assert_eq!(ZeroCompanion.kind(), Kind::Zero);
     assert!(Kind::Sharc.makes_audio() && !Kind::Zero.makes_audio() && !Kind::None.makes_audio());
@@ -179,4 +181,70 @@ fn the_audio_report_merges_the_companion_part_with_the_output_part() {
     assert_eq!(diagnostics["sharc_execution_connected"], true);
     assert_eq!(diagnostics["native_audio"]["fake"], true);
     assert_eq!(runtime.audio_status().unwrap()["fake"], true);
+}
+
+#[test]
+fn a_device_without_a_second_cpu_gets_no_peer_companion() {
+    let Some(emulator) = emulator() else {
+        return;
+    };
+    assert!(peer_companion::for_emulator(&emulator, true).is_none());
+    // the swap to the responder is for devices that have a peer CPU
+    let mut runtime = CoupledRuntime::with_emulator(emulator);
+    assert!(!runtime.has_peer_cpu());
+    runtime.use_peer_responder();
+    assert_eq!(runtime.companion_kind(), Kind::None);
+}
+
+#[test]
+fn a_peer_companion_collects_nothing_without_pcm_and_reports_its_own_fields() {
+    let Some(mut emulator) = emulator() else {
+        return;
+    };
+    let mut out = AudioOut::new(false, pace_seconds(0.0), || unreachable!(), || None);
+    let mut peer = PeerCompanion::new(true);
+    peer.sync();
+    peer.poll(&mut emulator, &mut out);
+    assert_eq!(out.samples(), 0);
+    assert!(peer.halted().is_none());
+    assert!(peer.export_state(&mut emulator).is_err());
+    let report = peer.report(&emulator);
+    assert_eq!(report["peer"], "coldfire");
+    assert_eq!(report["frames"], 0);
+    assert!(
+        report["halted"].is_null() && report["dsp_tiers"].is_null() && report["dsp_core"].is_null()
+    );
+}
+
+#[test]
+fn a_peer_has_audio_only_when_the_device_mixes_its_voices() {
+    for (audio, kind) in [(true, Kind::Peer), (false, Kind::Peer)] {
+        let Some(emulator) = emulator() else {
+            return;
+        };
+        let runtime = CoupledRuntime::with_companion(
+            emulator,
+            Box::new(PeerCompanion::new(audio)),
+            AudioOut::new(false, pace_seconds(0.0), || unreachable!(), || None),
+        );
+        assert_eq!(runtime.companion_kind(), kind);
+        assert_eq!(runtime.has_audio(), audio);
+        assert_eq!(runtime.audio_report().is_some(), audio);
+    }
+}
+
+#[test]
+fn a_peer_with_audio_is_not_a_sharc_session_in_the_diagnostics() {
+    let Some(emulator) = emulator() else {
+        return;
+    };
+    let mut runtime = CoupledRuntime::with_companion(
+        emulator,
+        Box::new(PeerCompanion::new(true)),
+        AudioOut::new(false, pace_seconds(0.0), || unreachable!(), || None),
+    );
+    let diagnostics = runtime.diagnostics();
+    assert_eq!(diagnostics["sharc_execution_connected"], false);
+    assert_eq!(diagnostics["pcm_output_connected"], false);
+    assert_eq!(diagnostics["native_audio"]["peer"], "coldfire");
 }

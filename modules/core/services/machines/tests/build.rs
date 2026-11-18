@@ -856,7 +856,9 @@ fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_l
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut core = FakeCore::new();
     core.set_dynreg(dynreg(&DN2));
-    // the module's DSP part claimed a voice row for the pinned machine type 0x12, which has a note_on routine
+    // a pinned number is a run-time type of the device's profile
+    core.device = dkrt_abi::profiles::DN2.id;
+    // the module DSP part claimed a voice row for the pinned machine type 0x12, which has a note_on routine
     const PINNED: u32 = 0x12;
     {
         let d = core.dsp();

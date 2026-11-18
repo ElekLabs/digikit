@@ -160,6 +160,8 @@ export interface CoupledStats {
 /** Native desktop only: `runtime` patches the digikit runtime into a stock image (the controller's `firmware.load {runtime}`). */
 export interface LoadOptions {
   runtime?: boolean;
+  /** Native desktop only: false boots without the DSP (ColdFire only; a peer CPU is replaced by the mailbox responder). Default: the controller's choice. */
+  dsp?: boolean;
   /** Native desktop only: the card image of this load (`--card-image`). */
   card?: string;
 }
@@ -175,6 +177,8 @@ export interface RuntimePatch {
 }
 export interface FirmwareInfo {
   runtime: RuntimePatch | null;
+  /** The DSP choice of the running image (`status.dsp_enabled`) and the launcher's flag (`status.dsp_flag`), when it gave one. */
+  dsp?: { enabled: boolean; flag: boolean | null };
 }
 /** The controller's heartbeat (`status.heartbeat`): whether the guest's main loop has stopped, and the stall threshold in emulated ms. */
 export interface RuntimeHealth {

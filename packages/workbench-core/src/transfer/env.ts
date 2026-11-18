@@ -17,7 +17,7 @@ export interface LibraryFile {
   size: number;
 }
 
-/** The modules the app can offer for install, per device id (`dt2`, `dn2`). */
+/** The modules the app can offer for install, per device id. */
 export interface TransferLibrary {
   /**
    * The .dkm files of the device, and its unbound .dks service files (the backend splits them by extension: no separate service source);
@@ -121,7 +121,7 @@ export interface TransferEnv {
    * service file. Without it the app installs no services.
    */
   bindBundle?(): Promise<Uint8Array>;
-  /** The name of the device with this id (`dt2`: "Digitakt II"). */
+  /** The name of the device with this id (`[device] name`). */
   deviceName(device: string): Promise<string>;
   targets: TransferTargets;
   /** The bulk link, where the app can open one. */

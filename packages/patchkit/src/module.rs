@@ -364,10 +364,10 @@ pub struct Uses {
     pub dsp_cost_fx: u32,
 }
 
-/// One generated file of device data: `kind` is `rust` (constants every device agrees on, one file), `gas-shared` (the same as `.equ` lines), `gas` (a ColdFire assembler
+/// One generated file of device data: `kind` is `gas-dkdv` (the runtime's device object `dkrt_dev`, one file per device) or `gas-dkdv-offsets` (its field offsets, one file), `gas` (a ColdFire assembler
 /// include, `.equ` lines, one file per device), `sharc` (a SHARC+ include, `#define` lines, one file per device) `sharc-adapter` (the `ADM_*` defines of `[adapter.machine]`, one file per device), `gas-sample-pool` or `sharc-sample-pool` (the `SP_*` numbers of `[adapter.sample_pool]` for ColdFire and SHARC+ assembly, one file per device). `path` is relative
 /// to the module; `{dev}` stands for the device's short name in a per-device path. `uses` lists the constant names the module reads; a trailing `*` matches a numbered
-/// family (`FX_VALUE_*`). It is required for `rust`, `gas-shared`, `gas` and `sharc`, and refused for the other kinds.
+/// family (`FX_VALUE_*`). It is required for `gas` and `sharc`, and refused for the other kinds.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GenDef {
@@ -628,6 +628,11 @@ pub struct ModuleInfo {
     /// Restrict to these ports (`dt2-1.17`); empty = any firmware whose anchors resolve.
     #[serde(default)]
     pub ports: Vec<String>,
+    /// Names of anchors and hooks that the module can do without. A firmware whose port lacks one still takes the module: the
+    /// object's link to the anchor is 0, a hook op of that name is skipped (and the tail symbols of its site, `hook.<site>.tail`, are 0),
+    /// and the plan lists `<owner>:<name>` under `disabled`. The module's code checks the link for 0 before it uses it.
+    #[serde(default)]
+    pub optional_anchors: Vec<String>,
     /// A module that is loaded at run time (`patchkit pack`, a `.dkm`), never patched into an image. Its typed sections
     /// are not lowered into registry rows; the packer lowers them into the `.dkm` `register` records.
     #[serde(default)]

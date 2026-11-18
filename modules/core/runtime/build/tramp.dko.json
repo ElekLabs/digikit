@@ -1,18 +1,32 @@
 {
  "arch": "cf",
  "format": 1,
- "relocs": [],
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text",
+   "symbol": "dkrt_dev",
+   "type": "cf.32"
+  }
+ ],
  "sections": [
   {
    "align": 4,
-   "hex": "206f0004222f0008200802800000000fd28020080280fffffff0204006810000000fe889670af4e841e80010538166f64e75428040c046fc27004e75202f000446c04e7546fc2700223c00030d401039ec070004080000036604538166f042b9480000004e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e71708013c0ec09000060fe",
+   "hex": "206f0004222f0008200802800000000fd28020080280fffffff0204006810000000fe889670af4e841e80010538166f64e75428040c046fc27004e75202f000446c04e7546fc270041f90000000022680010223c00030d4010290004080000036604538166f22268001442914e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e714e71708013c0ec09000060fe",
    "kind": "text",
    "name": ".text",
-   "size": 160
+   "size": 168
   }
  ],
- "source_sha256": "106fb5758392b72294657fba34f466260ddc3933e05b723b3501b09061bcf6c8",
+ "source_sha256": "ce66f9931db065764744195b65e0f510df2804a1b21639e58ee247fb1bfd699a",
  "symbols": [
+  {
+   "global": true,
+   "name": "dkrt_dev",
+   "section": null,
+   "value": 0
+  },
   {
    "global": true,
    "name": "dkrt_flush",
@@ -42,8 +56,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "59",
-  "isa_check": "c084037f46ec553c70c9fc7a82df89dbe50f328e5e14a30dab5b7fc58c24c049",
+  "instructions_redecoded": "62",
+  "isa_check": "98b1a4aa383743ae10bc635668d620e26bf996e2e1d8b5e88243033ece9112ff",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

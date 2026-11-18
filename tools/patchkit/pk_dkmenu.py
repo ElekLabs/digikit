@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 from tools.control.digi_client import EmuError, oled_png
+from tools.firmware import device as device_files
 from tools.patchkit import pk_devreload as DEV
 from tools.patchkit import pk_harness as H
 from tools.patchkit import pk_uidemo as UI
@@ -239,7 +240,7 @@ class Menu:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("cmd", choices=["shots", "leak"])
-    ap.add_argument("--device", choices=["dt2", "dn2"], required=True)
+    ap.add_argument("--device", choices=device_files.shorts(), required=True)
     ap.add_argument("--out", type=Path)
     ap.add_argument("--cycles", type=int, default=50)
     a = ap.parse_args(argv)

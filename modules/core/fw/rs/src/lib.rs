@@ -397,6 +397,12 @@ pub mod menu {
         pub static SETTINGS_LIST_SYSTEM_ICON_REF: u8;
     }
 
+    unsafe extern "C" {
+        /// The `move.l #font,d0` instruction (6 bytes of code) in the VerticalMenuView constructor: its operand is the address of the font object that the constructor stores twice in the view. The field offset is not the same in every firmware, so a module reads the font from this literal, not from a fixed offset.
+        #[link_name = "cf.menu.site.vertical_menu_view_ctor.font_ref"]
+        pub static VERTICAL_MENU_VIEW_CTOR_FONT_REF: u8;
+    }
+
     /// Last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding an item.
     pub type SettingsListTailHook = unsafe extern "C" fn(menu: *mut u8);
 }

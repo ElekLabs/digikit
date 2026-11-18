@@ -9,6 +9,11 @@ use std::vec::Vec;
 const NAN: u32 = 0x00aa_0001;
 const SINE: u32 = 0x00bb_0002;
 const PARAMS: u32 = 0x00cc_0003;
+/// The run-time machine types of the devices that have a DSP: 16 to 23.
+const T: Types = Types {
+    first: 16,
+    count: 8,
+};
 
 fn key(h: u32) -> u32 {
     h << 8
@@ -31,9 +36,10 @@ fn boot(card_map: [u32; MAP_N], hashes: &[u32]) -> Boot {
         keys[i] = key(*h);
     }
     let mut ty = [0u32; MAX_KEYS];
-    let mut map = clean(&card_map);
+    let mut map = clean(T, &card_map);
     let mut events = Vec::new();
     let dirty = assign(
+        T,
         &card_map,
         &mut map,
         &keys,
@@ -226,7 +232,7 @@ fn a_pinned_key_is_left_alone_and_takes_no_number() {
     let mut ty = [9u32; MAX_KEYS];
     let mut map = [0; MAP_N];
     let mut n_events = 0;
-    let dirty = assign(&[0; MAP_N], &mut map, &keys, &mut ty, 2, &mut |_| {
+    let dirty = assign(T, &[0; MAP_N], &mut map, &keys, &mut ty, 2, &mut |_| {
         n_events += 1
     });
     assert_eq!((ty[0], ty[1], dirty, n_events), (0, 16, 1, 1));
@@ -250,14 +256,14 @@ fn clean_drops_entries_that_cannot_be_right() {
         entry(0x77, 23),
     ]);
     assert_eq!(
-        clean(&m),
+        clean(T, &m),
         map_of(&[entry(NAN, 16), 0, 0, 0, 0, entry(0x77, 23)])
     );
 }
 
 #[test]
 fn lowest_free_skips_taken_numbers_and_gives_0_when_none_is_left() {
-    assert_eq!(lowest_free(0), 16);
-    assert_eq!(lowest_free(0b0000_0111), 19);
-    assert_eq!(lowest_free(0xff), 0);
+    assert_eq!(lowest_free(T, 0), 16);
+    assert_eq!(lowest_free(T, 0b0000_0111), 19);
+    assert_eq!(lowest_free(T, 0xff), 0);
 }

@@ -1,6 +1,7 @@
 // The Transfer page's state (Modules mode and the mode), kept for the life of the app: closing the page and opening it again shows the last list at once
 // (it is refreshed behind it), and an install's verify results stay until the next restart. One `TransferState` per app (createTransferApp).
 import { createSignal } from 'solid-js';
+import { isDeviceId, runtimeDeviceIds } from '../data/device-profiles';
 import type { JobsApp } from '../jobs/jobs';
 import { addJob, removeJob, updateJob } from '../jobs/jobs-core';
 import { remembered, type KeyValue } from '../storage';
@@ -51,8 +52,8 @@ export function createTransferState({
   const [sampleLink, setSampleLink] = createSignal<LinkState>();
 
   /** The device whose library the list shows while no device answers (the site). */
-  const [browseDevice, setBrowseDevice] = remembered<'dt2' | 'dn2'>(storage, 'digikit.transferBrowseDevice', (v) =>
-    v === 'dn2' ? 'dn2' : 'dt2',
+  const [browseDevice, setBrowseDevice] = remembered<string>(storage, 'digikit.transferBrowseDevice', (v) =>
+    v !== null && isDeviceId(v) ? v : (runtimeDeviceIds[0] ?? ''),
   );
   /** The list shows the library alone, with no device behind it. */
   const [browsing, setBrowsing] = createSignal(false);

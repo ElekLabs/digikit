@@ -717,64 +717,71 @@
    "type": "cf.32"
   },
   {
+   "addend": 0,
+   "offset": 534,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "cf.menu.site.vertical_menu_view_ctor.font_ref",
+   "type": "cf.32"
+  },
+  {
    "addend": 8,
-   "offset": 554,
+   "offset": 562,
    "section": ".text.dk_ui_menu_new",
    "symbol": ".sec..bss.g_text_vt",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 564,
+   "offset": 572,
    "section": ".text.dk_ui_menu_new",
    "symbol": ".sec..bss.g_text_stock_paint",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 590,
+   "offset": 598,
    "section": ".text.dk_ui_menu_new",
    "symbol": ".sec..bss.g_text_vt",
    "type": "cf.32"
   },
   {
    "addend": 24,
-   "offset": 606,
+   "offset": 614,
    "section": ".text.dk_ui_menu_new",
    "symbol": ".sec..bss.g_text_vt",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 612,
+   "offset": 620,
    "section": ".text.dk_ui_menu_new",
    "symbol": ".sec..bss.g_text_stock_paint",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 618,
+   "offset": 626,
    "section": ".text.dk_ui_menu_new",
    "symbol": ".sec..text.text_paint",
    "type": "cf.32"
   },
   {
    "addend": 24,
-   "offset": 624,
+   "offset": 632,
    "section": ".text.dk_ui_menu_new",
    "symbol": ".sec..bss.g_text_vt",
    "type": "cf.32"
   },
   {
    "addend": 8,
-   "offset": 634,
+   "offset": 642,
    "section": ".text.dk_ui_menu_new",
    "symbol": ".sec..bss.g_text_vt",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 650,
+   "offset": 658,
    "section": ".text.dk_ui_menu_new",
    "symbol": "cf.string.fn.std_string.dtor",
    "type": "cf.32"
@@ -1476,10 +1483,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffe048d73c04286e000c4a8c6700028047f9000000004ab9000000006712487800264e93588f24404a806620200a6012487800a04e93588f23c0000000004a8066dc4cee3c04ffe04e5e4e75202c00087206248cc2804a81660001827201c0811540001042001d40fffb202c00044a806606203c00000000486efffb2f00240e59822f024eb9000000004fef000c71aa001055804a806600014a487805504e93588f2d40fff44a80670001da487800014878000142a7487800402f142f004eb9000000002f022f2efff44eb900000000286efff4206efff44fef002049ec0094254c000c214a05482548000420680038b1fc00000000677e4ab90000000066682268001071d10c80000070c8660001762268000871d10c80000070c86600016643e8fff8203c0000000041e800442a402ad9200db3c866f641f9000000004bf90000000023d00000000043f90000000023d500000000203c0000000023c90000000023c00000000043f900000000206efff421490038487800264e93588f20404a80670001007003226efff4214c000c214a001243e903802149000411400010254800162f024eb900000000487800084e93508f254000084a806700fe86206efff4486800382f39000000002f004eb9000000004fef000c6000fe5270026000fe80487801ac4e93588f2d40fff44a806700009242a72f02487800082f142f004eb9000000004fef00142a6efff471aa0010254d0004256d00a8000c53804a806682206d0038b1fc000000006700ff764ab900000000663a2268001071d10c80000070c8663e43e8fff849f90000000041e8004428d9b3c866fa41f90000000023d00000000043f90000000023c9000000002a6efff4203c000000002b4000386000ff222f024eb900000000588f42806000fdb0",
+   "hex": "4e56ffe048d73c04286e000c4a8c6700028847f9000000004ab9000000006712487800264e93588f24404a806620200a6012487800a04e93588f23c0000000004a8066dc4cee3c04ffe04e5e4e75202c00087206248cc2804a81660001827201c0811540001042001d40fffb202c00044a806606203c00000000486efffb2f00240e59822f024eb9000000004fef000c71aa001055804a806600014a487805504e93588f2d40fff44a80670001e2487800014878000142a7487800402f142f004eb9000000002f022f2efff44eb900000000286efff4206efff44fef002049ec0094254c000c214a05482548000420680038b1fc00000000677e4ab90000000066682268001071d10c80000070c86600017e2268000871d10c80000070c86600016e43e8fff8203c0000000041e800442a402ad9200db1c966f641f9000000004bf90000000023d00000000043f90000000023d500000000203c0000000023c90000000023c00000000043f900000000206efff421490038487800264e93588f20404a80670001087003226efff4214c000c214a001243e903802149000411400010254800162f024eb900000000487800084e93508f254000084a806700fe86206efff4486800382f39000000002f004eb9000000004fef000c6000fe5270026000fe80487801ac4e93588f2d40fff44a806700009a42a72f02487800082f142f004eb9000000004fef001471aa00102a6efff441f900000000254d000425680002000c53804a806600ff7c206d0038b1fc000000006700ff6e4ab900000000663a2268001071d10c80000070c8663e43e8fff849f90000000041e8004428d9b1c966fa41f90000000023d00000000043f90000000023c9000000002a6efff4203c000000002b4000386000ff1a2f024eb900000000588f42806000fda8",
    "kind": "text",
    "name": ".text.dk_ui_menu_new",
-   "size": 662
+   "size": 670
   },
   {
    "align": 2,
@@ -1699,7 +1706,7 @@
    "size": 4
   }
  ],
- "source_sha256": "3e3f8fce4c6122fe4e94793975441dcf31b182d569e212605c3350318b8855c2",
+ "source_sha256": "efb995c2988c5a2e44d58b92d58c46801e797c36c5fa3d4dedaada9e1421a2c2",
  "symbols": [
   {
    "global": false,
@@ -2040,6 +2047,12 @@
   {
    "global": true,
    "name": "cf.menu.site.settings_list.system_icon_ref",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.site.vertical_menu_view_ctor.font_ref",
    "section": null,
    "value": 0
   },
@@ -2510,8 +2523,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "1862",
-  "isa_check": "d5144ab21b4e0d18e20b90be765ba67a16c849504f6e613719c99e53757e4328",
+  "instructions_redecoded": "1863",
+  "isa_check": "6c415a9a4736c0f939ca194a6aac0c52f98697bf4936c59d5ff6fd09572e15c1",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

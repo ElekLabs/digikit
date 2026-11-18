@@ -99,8 +99,8 @@ use digi_coupled::{
     AudioMode, AudioOptions, CoupledRuntime, ExecutionProfile, STEP_CHUNK, TierCounters,
     WorkerReport, cold, common,
     scenario::{
-        DEFAULT_SCENARIOS, Event, FRAMES_PER_SECOND, Scenario, When, cf_instructions_per_second,
-        find_scenario, fire, parse_scenario, parse_scenarios,
+        DEFAULT_SCENARIOS, Event, FRAMES_PER_SECOND, Scenario, When, find_scenario, fire,
+        parse_scenario, parse_scenarios,
     },
     span_gate::{self, Limits},
 };
@@ -287,11 +287,8 @@ fn do_calls(rt: &mut CoupledRuntime, calls: &[(u32, Vec<CallArg>)]) -> Result<Va
 
 /// `NAME=ENTRY:EXIT`: two ColdFire PCs.
 /// One DIN byte on the wire in instructions (320 us at `DIGI_CF_IPS`).
-fn wire_period() -> u64 {
-    elektron_native_boot::clock::scale_instr(
-        elektron_native_boot::midi::WIRE_PERIOD,
-        elektron_native_boot::clock::cf_ips(),
-    )
+fn wire_period(ips: u64) -> u64 {
+    elektron_native_boot::clock::scale_instr(elektron_native_boot::midi::WIRE_PERIOD, ips)
 }
 
 /// Most channel messages `out_events` lists.
@@ -1030,6 +1027,8 @@ fn region_profile_delta(after: &WorkerReport, before: &WorkerReport) -> Result<V
 struct Probe {
     wall: Instant,
     cf_cpu_ns: u64,
+    /// Retired host instructions of the ColdFire thread (0 where the OS gives no counter).
+    cf_insns: u64,
     worker: WorkerReport,
     status: Value,
     link: Value,
@@ -1051,6 +1050,7 @@ fn probe(rt: &mut CoupledRuntime) -> Result<Probe, String> {
     Ok(Probe {
         wall: Instant::now(),
         cf_cpu_ns: thread_cpu_ns(),
+        cf_insns: elektron_native_boot::cputime::thread_counters().1,
         worker,
         status: serde_json::to_value(&snap.status).map_err(|e| e.to_string())?,
         link: report["link_timing"].clone(),
@@ -1215,6 +1215,10 @@ fn run_scenario(
         rt.observe_pcm(false);
     }
     let setup_s = setup.elapsed().as_secs_f64();
+    // This runtime's rate: the scenario's instruction counts are authored at the base rate.
+    let ips = rt.cf_ips();
+    let scaled = sc.clone().at_rate(ips);
+    let sc = &scaled;
     let initial = rt.snapshot().status;
     if !initial.ready {
         return Err("the restored snapshot is not at ready".into());
@@ -1235,7 +1239,7 @@ fn run_scenario(
     let until_instr = if args.zero {
         // No DSP frame clock: seconds count ColdFire instructions.
         match seconds {
-            Some(s) => Some((s * cf_instructions_per_second()).round() as u64),
+            Some(s) => Some((s * ips as f64).round() as u64),
             None => sc.instructions,
         }
     } else if args.seconds.is_some() {
@@ -1251,7 +1255,7 @@ fn run_scenario(
         rt.add_span(name, *entry, *exit);
     }
     if args.late_send.is_some() || !args.drop_sends.is_empty() {
-        let instr = |ms: f64| (ms / 1000.0 * cf_instructions_per_second()).round() as u64;
+        let instr = |ms: f64| (ms / 1000.0 * ips as f64).round() as u64;
         // No window: an empty one (LO > HI) flags nothing, and only the chosen sends drop.
         let (lo, hi) = args
             .late_send
@@ -1273,7 +1277,7 @@ fn run_scenario(
     if args.zero {
         for e in &mut events {
             if let Some(s) = e.at_s {
-                e.when = When::Instr((s * cf_instructions_per_second()).round() as u64);
+                e.when = When::Instr((s * ips as f64).round() as u64);
             }
         }
     }
@@ -1380,7 +1384,7 @@ fn run_scenario(
         );
         mix["softfloat_hle_calls"] =
             json!(st(&end, "softfloat_hle_calls") - st(&start, "softfloat_hle_calls"));
-        mix["cf_ips"] = json!(elektron_native_boot::clock::cf_ips());
+        mix["cf_ips"] = json!(ips);
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let path = Path::new(&dir).join(format!("{}.json", sc.name.replace('/', "_")));
         std::fs::write(&path, serde_json::to_vec(&mix).map_err(|e| e.to_string())?)
@@ -1401,12 +1405,12 @@ fn run_scenario(
             "in_bytes": status.rx_bytes, "in_irqs": status.rx_irqs, "in_queued": status.queued,
             "out_bytes": midi_out.len(), "out_transfers": status.tx_dma, "out_irqs": status.tx_irqs,
             "out_head": midi_out.iter().take(48).map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "),
-            "out_events": midi_out_events(&midi_out_log, wire_period()),
+            "out_events": midi_out_events(&midi_out_log, wire_period(ips)),
         })
     };
     let dsp_peek = do_dsp_peeks(&mut rt, &args.dsp_peeks);
     let spans = rt.spans_report(
-        (cf_instructions_per_second() / FRAMES_PER_SECOND).round() as u64,
+        (ips as f64 / FRAMES_PER_SECOND).round() as u64,
         args.unit_scale,
     );
     if let Some(base) = &args.span_log {
@@ -1452,6 +1456,7 @@ fn run_scenario(
     };
     let wall = end.wall.duration_since(start.wall).as_secs_f64();
     let cf_cpu = (end.cf_cpu_ns - start.cf_cpu_ns) as f64 / 1e9;
+    let cf_insns = end.cf_insns.saturating_sub(start.cf_insns);
     let dsp_cpu = (end.worker.cpu_ns - start.worker.cpu_ns) as f64 / 1e9;
     let dsp_cycles = end.worker.cycles.saturating_sub(start.worker.cycles);
     let dsp_insns = end.worker.insns.saturating_sub(start.worker.insns);
@@ -1529,13 +1534,14 @@ fn run_scenario(
         "audio_health_end": { "elapsed_wall_seconds": wall, "source_pcm_frames": health["source_pcm_frames"], "health": health },
         "playback_observations": playback_observations,
         "guest_instructions": cf_total, "frames": end.frames - start.frames,
-        "cf_ips": elektron_native_boot::clock::cf_ips(),
+        "cf_ips": ips,
         "softfloat_hle_calls": st(&end, "softfloat_hle_calls") - st(&start, "softfloat_hle_calls"),
         "cpu": {
             "dsp_thread_s": dsp_cpu, "cf_thread_s": cf_cpu,
             "dsp_thread_per_audio_s": per(dsp_cpu), "cf_thread_per_audio_s": per(cf_cpu),
             "dsp_thread_cycles_per_audio_s": per(dsp_cycles as f64),
             "dsp_thread_insns_per_audio_s": per(dsp_insns as f64),
+            "cf_thread_insns_per_audio_s": per(cf_insns as f64),
             "dsp_thread_busy_of_wall": dsp_cpu / wall.max(1e-9),
             "cf_thread_busy_of_wall": cf_cpu / wall.max(1e-9),
             "clock": "CLOCK_THREAD_CPUTIME_ID",

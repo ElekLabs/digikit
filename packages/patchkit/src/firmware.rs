@@ -76,11 +76,24 @@ impl Firmware {
         self.sections.iter().find(|s| s.id == id)
     }
 
-    /// Replace the decoded bytes of a section; its stored form is repacked.
+    /// The MAIN OS section (`[container] main` of the device).
+    pub fn main(&self) -> Option<&Sec> {
+        self.section(self.device.main_section())
+    }
+
+    /// The SHARC+ boot stream section (`[container] dsp`); `None` on a device without a DSP, whatever its other sections hold.
+    pub fn dsp(&self) -> Option<&Sec> {
+        self.section(self.device.dsp_section()?)
+    }
+
+    /// Replace the decoded bytes of a section; its stored form is repacked. A section of `[container] readonly` (bootstrap,
+    /// updater, boot data, FPGA bitstream, the second CPU's image) is refused: this is the one place a section is changed.
     pub fn replace(&mut self, id: u32, data: Vec<u8>) -> Result<()> {
-        if matches!(id, 2 | 4 | 8) {
+        if self.device.is_readonly(id) {
             return Err(err!(
-                "section {id} (bootstrap, updater, boot data) is never changed"
+                "section {id} is read-only on {} ([container] readonly {:?}) and is never changed",
+                self.device.short(),
+                self.device.readonly_sections()
             ));
         }
         let stored = syx::store_for_section(id, &data)?;
@@ -102,7 +115,7 @@ impl Firmware {
             .iter()
             .map(|s| (s.id, s.dest, s.stored.as_slice()))
             .collect();
-        let c = syx::build_container(&self.header, &entries, self.first_offset)?;
+        let c = syx::build_container(&self.header, &entries, self.first_offset, self.device)?;
         let c = syx::seal(c, self.device);
         if let Some(max) = max_container
             && c.len() > max

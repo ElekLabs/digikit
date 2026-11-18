@@ -1,8 +1,10 @@
-/* core/runtime: the device object. The id, the name, the store area and the PEEK ranges are the device file's (digitakt-ii.toml [digikit] id, name and peek) through
+/* core/runtime: the device object. The data object `dkrt_dev`, the id, the name, the store area and the PEEK ranges are the device file's (digitakt-ii.toml [digikit] id, name and peek) through
  * build/gen/device-dt2.inc, which `patchkit gen` writes. */
     .include "device-dt2.inc"
     .section .rodata
     .even
+    /* the per-device data object (struct DkrtDevice of abi.toml) */
+    .include "dkdv-dt2.inc"
     .globl dkrt_device_id
 dkrt_device_id:
     .long DEVICE_ID

@@ -44,6 +44,7 @@ import numpy as np
 
 from tools.coldfire import paramtable
 from tools.emulator import audiocheck as ac
+from tools.firmware import device as device_files
 
 F0 = 261.6  # Trig 1 audition pitch, Hz
 WIN = (0.1, 0.3)  # analysis window after the note onset, s
@@ -1024,7 +1025,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--ref", default=None, help="dry reference scenario (default by name)"
     )
-    ap.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    ap.add_argument("--device", choices=device_files.shorts(), default="dn2")
     ap.add_argument("--image", type=pathlib.Path, default=None)
     ap.add_argument("--no-plots", action="store_true")
     a = ap.parse_args(argv)

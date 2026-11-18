@@ -7,6 +7,7 @@
 //! (profile of the first device file, no block clock, no MIDI counter). The tests that drive platform behaviour use `FakePlatform` (`fake_platform.rs`)
 //! through the generic functions.
 
+use crate::dev;
 use crate::state::{State, DKRT_STATE};
 use core::ffi::c_void;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
@@ -72,16 +73,24 @@ pub struct RealPlatform;
 /// The platform of this image. The core calls it through the free functions below, or takes a `P: Platform` where a host test drives the path.
 pub const PLATFORM: RealPlatform = RealPlatform;
 
+#[cfg(test)]
+thread_local! {
+    /// The profile a host test runs with (`with_profile`); `None`: the first device file's.
+    static TEST_PROFILE: core::cell::Cell<Option<DeviceProfile>> = const { core::cell::Cell::new(None) };
+}
+
+/// Run `f` as the device `profile` describes (host tests of the paths that a missing capability takes: no DSP, no store, no eSDHC, no safe key).
+#[cfg(test)]
+pub fn with_profile<R>(profile: DeviceProfile, f: impl FnOnce() -> R) -> R {
+    TEST_PROFILE.with(|p| p.set(Some(profile)));
+    let r = f();
+    TEST_PROFILE.with(|p| p.set(None));
+    r
+}
+
 /// 0 not checked, 1 usable, 2 absent or another version.
 static mut POOL_STATE: u8 = 0;
 static mut PD_STATE: u8 = 0;
-
-// Host tests: the profile of `PLATFORM` for this thread (DT2 unless a `ProfileGuard` says another), so the tests of the store and the writer can run
-// the routes of both devices over the one real platform.
-#[cfg(test)]
-thread_local! {
-    static TEST_PROFILE: core::cell::Cell<DeviceProfile> = const { core::cell::Cell::new(dkrt_abi::profiles::DT2) };
-}
 
 /// `PLATFORM` answers as `profile` while this lives.
 #[cfg(test)]
@@ -90,7 +99,7 @@ pub(crate) struct ProfileGuard;
 #[cfg(test)]
 impl ProfileGuard {
     pub(crate) fn set(profile: DeviceProfile) -> ProfileGuard {
-        TEST_PROFILE.with(|c| c.set(profile));
+        TEST_PROFILE.with(|p| p.set(Some(profile)));
         ProfileGuard
     }
 }
@@ -98,7 +107,7 @@ impl ProfileGuard {
 #[cfg(test)]
 impl Drop for ProfileGuard {
     fn drop(&mut self) {
-        TEST_PROFILE.with(|c| c.set(dkrt_abi::profiles::DT2));
+        TEST_PROFILE.with(|p| p.set(None));
     }
 }
 
@@ -116,7 +125,7 @@ unsafe fn word_at_literal(lit: *const u32) -> Option<u32> {
         return None;
     }
     let a = read_volatile(l as *const u32);
-    if !(dkrt_sdk::device::DDR_CACHED_BASE..dkrt_sdk::device::DDR_CACHED_BASE + dkrt_sdk::device::DDR_BYTES).contains(&a) || a & 3 != 0 {
+    if !PLATFORM.ddr_contains(a) || a & 3 != 0 {
         return None;
     }
     Some(read_volatile(a as *const u32))
@@ -133,15 +142,28 @@ impl Platform for RealPlatform {
                 sample_path_max: read_volatile(addr_of!(dkrt_sample_path_max)),
                 dsp_headroom: read_volatile(addr_of!(dkrt_dsp_headroom)),
                 dsp_voices: read_volatile(addr_of!(dkrt_dsp_voices)),
+                has_dsp: dev::has_dsp(),
+                has_store: dev::has_store(),
+                has_sdhc: dev::has_sdhc(),
+                safe_key: dev::safe_key(),
+                ddr_base: dev::ddr_base(),
+                ddr_bytes: dev::ddr_bytes(),
+                keep_base: dev::keep_base(),
+                keep_bytes: dev::keep_bytes(),
+                esdhc_base: dev::esdhc_base(),
+                dsp_block_cycles: dev::dsp_block_cycles(),
+                dyn_type_first: dev::dyn_type_first(),
+                dyn_types: dev::dyn_types(),
             }
         }
     }
+    /// A host test runs as the first device file's device, or as the profile `with_profile` sets.
     #[cfg(test)]
     fn profile(&self) -> DeviceProfile {
-        TEST_PROFILE.with(|c| c.get())
+        TEST_PROFILE.with(|p| p.get()).unwrap_or(dkrt_abi::profiles::DT2)
     }
 
-    // The facts one word each: a caller that needs one fact does not read the other three (the reads are volatile and stay).
+    // The facts one word each: a caller that needs one fact does not read the others (the reads are volatile and stay).
     #[cfg(not(test))]
     fn device_id(&self) -> u32 {
         unsafe { read_volatile(addr_of!(dkrt_device_id)) }
@@ -166,6 +188,38 @@ impl Platform for RealPlatform {
     fn dsp_voices(&self) -> u32 {
         unsafe { read_volatile(addr_of!(dkrt_dsp_voices)) }
     }
+    #[cfg(not(test))]
+    fn has_dsp(&self) -> bool {
+        dev::has_dsp()
+    }
+    #[cfg(not(test))]
+    fn has_store(&self) -> bool {
+        dev::has_store()
+    }
+    #[cfg(not(test))]
+    fn has_sdhc(&self) -> bool {
+        dev::has_sdhc()
+    }
+    #[cfg(not(test))]
+    fn safe_key(&self) -> Option<u32> {
+        dev::safe_key()
+    }
+    #[cfg(not(test))]
+    fn ddr_contains(&self, a: u32) -> bool {
+        dev::ddr_contains(a)
+    }
+    #[cfg(not(test))]
+    fn dsp_block_cycles(&self) -> u32 {
+        dev::dsp_block_cycles()
+    }
+    #[cfg(not(test))]
+    fn keep_base(&self) -> u32 {
+        dev::keep_base()
+    }
+    #[cfg(not(test))]
+    fn keep_bytes(&self) -> u32 {
+        dev::keep_bytes()
+    }
 
     #[cfg(not(test))]
     fn image_id(&self) -> [u8; 8] {
@@ -183,10 +237,13 @@ impl Platform for RealPlatform {
         [0; 8]
     }
 
-    /// The firmware's DSP block counter (1500 per second, from boot; wraps), `None` when the anchor does not point at a DDR word.
+    /// The firmware's DSP block counter (1500 per second, from boot; wraps), `None` on a device without a DSP and when the anchor does not point at a DDR word.
     /// `BLOCK_ISR_COUNTER_LIT` is the 4-byte address literal in the firmware's code, whose value is the address of the word.
     #[cfg(not(test))]
     fn blocks(&self) -> Option<u32> {
+        if !dev::has_dsp() {
+            return None; // the counter is the DSP block interrupt's: a device without a DSP has none
+        }
         unsafe { word_at_literal(addr_of!(dkfw::link::BLOCK_ISR_COUNTER_LIT) as *const u32) }
     }
     #[cfg(test)]
@@ -355,6 +412,10 @@ impl SamplePool for RealPlatform {
         }
     }
     unsafe fn worker(&self) -> u32 {
+        // the stock sample worker may be absent on a firmware (its anchors are optional, linked to 0 there): nothing is queued
+        if core::hint::black_box(dkfw::samples::worker_get as usize) == 0 || core::hint::black_box(dkfw::samples::worker_queue as usize) == 0 {
+            return 0;
+        }
         dkfw::samples::worker_get()
     }
     unsafe fn worker_queue(&self, worker: u32, name: *const u8, job: *mut c_void, done: *mut c_void) {
@@ -477,6 +538,16 @@ pub fn device() -> u32 {
 /// The device's short name as the INFO reply gives it: 3 characters and a NUL.
 pub fn device_name() -> u32 {
     PLATFORM.device_name()
+}
+
+/// The device has the DSP the digikit link drives (`DeviceProfile::has_dsp`).
+pub fn has_dsp() -> bool {
+    PLATFORM.has_dsp()
+}
+
+/// The device has a module store (`DeviceProfile::has_store`).
+pub fn has_store() -> bool {
+    PLATFORM.has_store()
 }
 
 /// The 8-byte id of this image, as patchkit stamped it (zeros when the object was not patched in by it).

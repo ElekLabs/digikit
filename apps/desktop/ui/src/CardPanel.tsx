@@ -18,7 +18,7 @@ import './card-panel.css';
 const POLL_MS = 2000;
 /** The device's name as the faceplate gives it. */
 const deviceName = (id: string | undefined) =>
-  id && id in panels ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
+  id && Object.hasOwn(panels, id) ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
 
 /** `reload`: start the loaded firmware again (the Restart button's path), which builds the card from the folder in use. */
 export default function CardPanel(props: { host: Host; reload?: () => Promise<void> }): JSX.Element {

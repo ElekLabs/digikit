@@ -16,6 +16,7 @@ import tomllib
 from pathlib import Path
 
 from tools import python_env
+from tools.firmware import device as device_files
 from tools.patchkit import pk_devreload as dev
 from tools.patchkit import pk_dkrt
 
@@ -237,7 +238,7 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("preview", choices=[*PREVIEWS, "module"])
     parser.add_argument("module", nargs="?")
-    parser.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    parser.add_argument("--device", choices=device_files.shorts(), default="dn2")
     parser.add_argument("--stop", action="store_true")
     args = parser.parse_args(argv)
     if args.preview != "module" and (args.module or args.stop or args.device != "dn2"):

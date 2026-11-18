@@ -30,7 +30,7 @@ class Device {
       const caps = (1 << CAP.SERVICE_CMDS) | (this.debug ? 1 << CAP.LOG : 0);
       const body = [0, 1, 0, 5, ...Buffer.from('dt2\0'), ...be32(1000), ...be32(32768), 0, ...be32(0), ...be32(0)];
       body.push(...be32(0x000500), ...be32(caps), 0, 0, 0, 0, 0, 0, 0, 0);
-      return void this.queue.push(reply(cmd, seq, 0, body.slice(1)));
+      return void this.queue.push(reply(cmd, seq, 0, body));
     }
     if (cmd === GCMD.RESTART) return void this.queue.push(reply(cmd, seq, 0));
     if (cmd === SERVICE_CMD.LOG) {

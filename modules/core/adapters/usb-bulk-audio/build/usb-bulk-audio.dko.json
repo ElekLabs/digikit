@@ -73,10 +73,10 @@
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 24,
    "offset": 96,
    "section": ".text.ua_prepare",
-   "symbol": "usb_ddr_base",
+   "symbol": "dkrt_dev",
    "type": "cf.32"
   },
   {
@@ -87,10 +87,10 @@
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 28,
    "offset": 110,
    "section": ".text.ua_prepare",
-   "symbol": "usb_ddr_bytes",
+   "symbol": "dkrt_dev",
    "type": "cf.32"
   },
   {
@@ -115,92 +115,99 @@
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 20,
    "offset": 160,
    "section": ".text.ua_prepare",
-   "symbol": "usb_alias_delta",
+   "symbol": "dkrt_dev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 166,
+   "section": ".text.ua_prepare",
+   "symbol": "dkrt_dev",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 166,
+   "offset": 172,
    "section": ".text.ua_prepare",
    "symbol": ".sec..bss.ua_desc",
    "type": "cf.32"
   },
   {
    "addend": 200,
-   "offset": 236,
-   "section": ".text.ua_prepare",
-   "symbol": "usb_port_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 204,
    "offset": 242,
    "section": ".text.ua_prepare",
    "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 262,
+   "addend": 204,
+   "offset": 248,
    "section": ".text.ua_prepare",
-   "symbol": ".sec..text.ua_connect",
+   "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 268,
    "section": ".text.ua_prepare",
-   "symbol": ".sec..bss.ua_stock_connect",
+   "symbol": ".sec..text.ua_connect",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 274,
    "section": ".text.ua_prepare",
+   "symbol": ".sec..bss.ua_stock_connect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 280,
+   "section": ".text.ua_prepare",
    "symbol": ".sec..bss.ua_stock_disconnect",
    "type": "cf.32"
   },
   {
    "addend": 212,
-   "offset": 280,
+   "offset": 286,
    "section": ".text.ua_prepare",
    "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 286,
+   "offset": 292,
    "section": ".text.ua_prepare",
    "symbol": ".sec..text.ua_disconnect",
    "type": "cf.32"
   },
   {
    "addend": 216,
-   "offset": 292,
-   "section": ".text.ua_prepare",
-   "symbol": "usb_port_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 200,
    "offset": 298,
    "section": ".text.ua_prepare",
    "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
-   "addend": 204,
+   "addend": 200,
    "offset": 304,
    "section": ".text.ua_prepare",
    "symbol": "usb_port_table",
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 204,
    "offset": 310,
+   "section": ".text.ua_prepare",
+   "symbol": "usb_port_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 316,
    "section": ".text.ua_prepare",
    "symbol": "usb_bulk_port5_attach",
    "type": "cf.32"
@@ -230,10 +237,10 @@
   },
   {
    "align": 2,
-   "hex": "4feffff448d7040c4ab900000000661240c246fc27002279000000004a89670c46c24cd7040c4fef000c4e75203c00000148b0b9000000006640203900000000204073907609b681663073a8000155814a81662673a800045b814a81661c2239000000000c8100000000620ed2b9000000000c8100000000640a700223c000000000609c42812041d1fc00000000f4e80681000000100c810000016066e8207900000000d1fc0000000045f10800119298005289b3fc0000014866ee203c09040500263c01ff000021400148227c000705022143014c247c02000200303c5801760621490150214a015443f90000000045f9000000003140000211430004203c00000158263c0000000023d10000000023d20000000023c80000000041f90000000023c00000000023c30000000023c8000000004eb90000000070016000ff3e",
+   "hex": "4feffff448d7040c4ab900000000661240c246fc27002279000000004a89670c46c24cd7040c4fef000c4e75203c00000148b0b9000000006640203900000000204073907609b681663073a8000155814a81662673a800045b814a81661c2239000000000c8100000000620ed2b9000000000c8100000000640a700223c000000000609c42812041d1fc00000000f4e80681000000100c810000016066e820790000000091f900000000d1fc0000000045f10800119298005289b3fc0000014866ee203c09040500263c01ff000021400148227c000705022143014c247c02000200303c5801760621490150214a015443f90000000045f9000000003140000211430004203c00000158263c0000000023d10000000023d20000000023c80000000041f90000000023c00000000023c30000000023c8000000004eb90000000070016000ff38",
    "kind": "text",
    "name": ".text.ua_prepare",
-   "size": 320
+   "size": 326
   },
   {
    "align": 2,
@@ -264,7 +271,7 @@
    "size": 4
   }
  ],
- "source_sha256": "e3fb9ac1f565c7b6d8e9f28bd73cd63140538d3062490e85517d8b71be8838e0",
+ "source_sha256": "a00d9b7a18f4493ca819890b9732832fdc5bccb1d0d73e047a93aa73e36fb995",
  "symbols": [
   {
    "global": false,
@@ -300,6 +307,12 @@
    "global": false,
    "name": ".sec..text.ua_disconnect",
    "section": ".text.ua_disconnect",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_dev",
+   "section": null,
    "value": 0
   },
   {
@@ -352,12 +365,6 @@
   },
   {
    "global": true,
-   "name": "usb_alias_delta",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
    "name": "usb_bulk_audio_state",
    "section": ".bss.usb_bulk_audio_state",
    "value": 0
@@ -382,18 +389,6 @@
   },
   {
    "global": true,
-   "name": "usb_ddr_base",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "usb_ddr_bytes",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
    "name": "usb_port_table",
    "section": null,
    "value": 0
@@ -403,8 +398,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "104",
-  "isa_check": "c62b978d206ce7d2cf0a99bc92194b0d2b994bc1ecb94097ee34acd59e0b92a1",
+  "instructions_redecoded": "105",
+  "isa_check": "23658f6643d76c587485a2ccb792a796a693c2ac01f90f913437d874f2dbe537",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

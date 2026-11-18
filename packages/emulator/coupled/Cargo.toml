@@ -18,6 +18,8 @@ sharc = ["sharc-peer/host", "dep:sharc-native"]
 play = ["elektron-native-boot/play"]
 # Enable this with `sharc`; it forwards to the optional native cores.
 region-profile = ["sharc-native?/region-profile"]
+# Run-time switchable ColdFire profile (off until `set_cf_profile(true)`); compiled in to measure the cost of the disabled branches.
+cf-profile = ["elektron-native-boot/cf-profile"]
 # Exact ColdFire instruction mix per PC (boot/src/cfmix.rs); DIGI_CF_MIX_OUT=DIR makes coupled-run write it.
 cf-mix = ["elektron-native-boot/cf-mix"]
 # SHARC_FAST_DUMP kernel and call capture (--diag dump); the hooks are absent otherwise.

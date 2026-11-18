@@ -18,9 +18,11 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
+import { loadDevices } from '@digi/devices/node';
 import { buildBindBundle } from '../../../packages/workbench-core/src/node/bind-bundle.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const deviceIds = loadDevices().runtimeIds;
 export const repoRoot = resolve(here, '../../..');
 
 const walk = (dir, name, out = []) => {
@@ -190,7 +192,7 @@ function packAll(root, ids, device, to) {
 /** Write the shipped modules under `out`: <dev>/<leaf>.dkm, index.json and src/<id>/**. Returns the index. */
 export function shipModules(out, root = repoRoot) {
   const scratch = join(root, 'out', 'cache', 'site-pack');
-  for (const sub of ['dt2', 'dn2', 'src']) rmSync(join(out, sub), { recursive: true, force: true });
+  for (const sub of [...deviceIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
   const modules = [];
   const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
     walk(join(root, 'modules', r), 'module.toml').sort(byParts),
@@ -202,7 +204,7 @@ export function shipModules(out, root = repoRoot) {
     const d = parse(readFileSync(file, 'utf8'));
     if (!isShipped(d, relative(root, dir).split(sep).join('/'))) continue;
     shipped.push({ dir, d });
-    for (const dev of shippedDevices(d)) (idsByDevice[dev] ??= []).push(d.module.id);
+    for (const dev of shippedDevices(d, deviceIds)) (idsByDevice[dev] ??= []).push(d.module.id);
   }
   const packed = {};
   for (const [dev, ids] of Object.entries(idsByDevice)) packed[dev] = packAll(root, ids, dev, join(scratch, dev));
@@ -210,7 +212,7 @@ export function shipModules(out, root = repoRoot) {
     const m = d.module;
     const leaf = m.id.split('/').pop();
     const devices = {};
-    for (const dev of shippedDevices(d)) {
+    for (const dev of shippedDevices(d, deviceIds)) {
       const bytes = packed[dev][m.id];
       if (!bytes) continue; // skipped by the packer (patch-only)
       mkdirSync(join(out, dev), { recursive: true });

@@ -1,0 +1,317 @@
+# Syntakt OS 1.42: panel key code -> LED index. Codes are wire positions (code = channel * 8 + bit + 1, devices/syntakt.toml [panel]).
+#
+# Source: the panel sweep on the emulated Syntakt OS 1.42, 2026-11-13: every key code pressed from the main screen with the front-panel stream
+# (DIGI_PANEL_TX_LOG) read. Regenerate with tools/emulator/gen_led_toml.py. Analysis and caveats: docs/findings/70-syntakt-1-42.md.
+#
+# The panel has 44 LEDs. The firmware sets one palette entry per LED state (`b5` records) and one state per LED (`0x20..0x2a` records,
+# two bits per LED, 3 = idle), so `led` is the LED's place in that stream, and a lit LED is a state other than 3. This is not the
+# `b9 idx val` scheme of the other devices: `seen` has the same meaning as there, without an `on` value. A key without `led` has no
+# LED that the sweep tied to it (open).
+#
+# Second pass, 2026-11-13, with the decoder of packed-states (packages/emulator/boot panel_leds.rs: the LED state changes of one key
+# press, from the ready state): the five page keys (radio group, SYN is lit on the main screen), RECORD (red) and PLAY (green). The
+# other keys' LED changes are several LEDs at once (a view or a mode) or none: open.
+
+[[key]]
+code = 1
+label = "TRIG 1"
+led = 0
+led_name = "TRIG01"
+seen = "own"
+
+[[key]]
+code = 2
+label = "TRIG 2"
+led = 1
+led_name = "TRIG02"
+seen = "own"
+
+[[key]]
+code = 3
+label = "TRIG 3"
+led = 2
+led_name = "TRIG03"
+seen = "own"
+
+[[key]]
+code = 4
+label = "TRIG 4"
+led = 3
+led_name = "TRIG04"
+seen = "own"
+
+[[key]]
+code = 5
+label = "TRIG 5"
+led = 4
+led_name = "TRIG05"
+seen = "own"
+
+[[key]]
+code = 6
+label = "TRIG 6"
+led = 5
+led_name = "TRIG06"
+seen = "own"
+
+[[key]]
+code = 7
+label = "TRIG 7"
+led = 6
+led_name = "TRIG07"
+seen = "own"
+
+[[key]]
+code = 8
+label = "TRIG 8"
+led = 7
+led_name = "TRIG08"
+seen = "own"
+
+[[key]]
+code = 9
+label = "TRIG 9"
+led = 8
+led_name = "TRIG09"
+seen = "own"
+
+[[key]]
+code = 10
+label = "TRIG 10"
+led = 9
+led_name = "TRIG10"
+seen = "own"
+
+[[key]]
+code = 11
+label = "TRIG 11"
+led = 10
+led_name = "TRIG11"
+seen = "own"
+
+[[key]]
+code = 12
+label = "TRIG 12"
+led = 11
+led_name = "TRIG12"
+seen = "own"
+
+[[key]]
+code = 13
+label = "TRIG 13"
+led = 12
+led_name = "TRIG13"
+seen = "own"
+
+[[key]]
+code = 14
+label = "TRIG 14"
+led = 13
+led_name = "TRIG14"
+seen = "own"
+
+[[key]]
+code = 15
+label = "TRIG 15"
+led = 14
+led_name = "TRIG15"
+seen = "own"
+
+[[key]]
+code = 16
+label = "TRIG 16"
+led = 15
+led_name = "TRIG16"
+seen = "own"
+
+[[key]]
+code = 17
+label = "FUNC"
+seen = "none"
+
+[[key]]
+code = 18
+label = "TRK"
+seen = "none"
+
+[[key]]
+code = 19
+label = "TRIG"
+led = 18
+led_name = "TRIGPAGE"
+seen = "radio"
+
+[[key]]
+code = 20
+label = "SYN"
+led = 19
+led_name = "SYNPAGE"
+seen = "radio"
+
+[[key]]
+code = 22
+label = "FLTR"
+led = 20
+led_name = "FLTRPAGE"
+seen = "radio"
+
+[[key]]
+code = 23
+label = "AMP"
+led = 21
+led_name = "AMPPAGE"
+seen = "radio"
+
+[[key]]
+code = 24
+label = "LFO"
+led = 22
+led_name = "LFOPAGE"
+seen = "radio"
+
+[[key]]
+code = 25
+label = "SETTINGS"
+seen = "none"
+
+[[key]]
+code = 26
+label = "FX"
+seen = "none"
+
+[[key]]
+code = 27
+label = "TEMPO"
+seen = "none"
+
+[[key]]
+code = 28
+label = "NO"
+seen = "none"
+
+[[key]]
+code = 29
+label = "LEFT"
+seen = "none"
+
+[[key]]
+code = 30
+label = "DOWN"
+seen = "none"
+
+[[key]]
+code = 31
+label = "RIGHT"
+seen = "none"
+
+[[key]]
+code = 32
+label = "PAGE"
+seen = "none"
+
+[[key]]
+code = 33
+label = "BANK"
+seen = "none"
+
+[[key]]
+code = 34
+label = "PTN"
+seen = "none"
+
+[[key]]
+code = 35
+label = "SOUND"
+seen = "none"
+
+[[key]]
+code = 36
+label = "RECORD"
+led = 36
+led_name = "RECORD"
+seen = "own"
+
+[[key]]
+code = 37
+label = "PLAY"
+led = 37
+led_name = "PLAY"
+seen = "own"
+
+[[key]]
+code = 38
+label = "STOP"
+seen = "none"
+
+[[key]]
+code = 39
+label = "YES"
+seen = "none"
+
+[[key]]
+code = 40
+label = "UP"
+seen = "none"
+
+[[key]]
+code = 41
+label = "ENCODER G push"
+seen = "none"
+
+[[key]]
+code = 42
+label = "ENCODER F push"
+seen = "none"
+
+[[key]]
+code = 43
+label = "ENCODER E push"
+seen = "none"
+
+[[key]]
+code = 44
+label = "ENCODER B push"
+seen = "none"
+
+[[key]]
+code = 45
+label = "ENCODER A push"
+seen = "none"
+
+[[key]]
+code = 46
+label = "ENCODER D push"
+seen = "none"
+
+[[key]]
+code = 47
+label = "ENCODER C push"
+seen = "none"
+
+[[key]]
+code = 48
+label = "ENCODER H push"
+seen = "none"
+
+[[key]]
+code = 49
+label = "LEVEL push"
+seen = "none"
+
+# LEDs that no key drives: the step playhead is a trig key's own LED, the page indicators below
+# are the pattern-page LEDs.
+[[indicator]]
+led = 40
+name = "PAGE1"
+
+[[indicator]]
+led = 41
+name = "PAGE2"
+
+[[indicator]]
+led = 42
+name = "PAGE3"
+
+[[indicator]]
+led = 43
+name = "PAGE4"

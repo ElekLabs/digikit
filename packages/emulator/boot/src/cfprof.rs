@@ -1,4 +1,5 @@
-//! ColdFire host-time and PC profile (feature `cf-profile`, off by default):
+//! ColdFire host-time and PC profile (feature `cf-profile`; recording starts
+//! at run time with `Emulator::set_cf_profile(true)`):
 //! which execution path (RAM-clear batch, `run_fast` including fused loops,
 //! `step_once`, the analytic idle skip) the instructions and the host time go
 //! to, and a PC histogram (sampled every 64 instructions in `run_fast`, every

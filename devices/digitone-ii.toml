@@ -15,6 +15,8 @@ name = "Digitone II"
 short = "dn2"
 # The device byte of the firmware SysEx framing (docs/findings/01).
 syx_id = 0x15
+# Glob of the user manual's extracted pages under out/refs/ (tools/coldfire/atlas.py); optional.
+manual = "Digitone-2-User-Manual*"
 
 # Identity is the hash. The filename is a hint for error messages only:
 # people rename firmware files, and tools/firmware/config.py resolving one BY NAME is
@@ -68,19 +70,40 @@ port = true
 dsp = { image = "dn2-1.12", idle_start = 0xb88a49, idle_end = 0xb88abb, idle_head = 0xb88aab, sample_link = "lp0" }
 
 
-# What this device can do (the names and values of the device-registry schema). dsp: "sharc" | "none"; seal: the container seal;
-# sample_pool: how run-time samples get memory ("stock" borrows the stock sample slots, "ddr" reserves a DDR range, "none"); card:
-# "path-fs" (a folder filesystem on the card: the samples are the firmware's +Drive files) or "slots" (card slots only: the samples
-# are files of the digikit store), "none", "unknown". `patchkit gen` reads `card` (SAMPLES_IN_STORE of the runtime's device object).
+# What this device can do. Every device file has this table; a table that is present must agree with it
+# (`devdata.rs` `validate`, docs/design/device-data.md "Device levels"). dsp: "sharc" | "none"; seal: the container seal
+# ("hmac", key in `SEALS` of packages/patchkit/src/syx.rs); sample_pool: how run-time samples get memory ("stock" borrows the
+# stock sample slots, "ddr" reserves a DDR range, "none"); card: "path-fs" (a folder filesystem on the card: the samples are the
+# firmware's +Drive files), "slots" (card slots only: the samples are files of the digikit store), "none", "unknown".
+# `patchkit gen` reads `card` (samples_in_store of the device profile).
 [capabilities]
 dsp = "sharc"
 seal = "hmac"
 sample_pool = "ddr"
 card = "slots"
 
+# Container section roles (packages/patchkit/src/firmware.rs, syx.rs `store_for_section`). `readonly` sections are never
+# changed (bootstrap, updater, boot data). The transport id of the framing is `[device] syx_id`.
+[container]
+main = 3
+dsp = 7
+readonly = [2, 4, 8]
+
+# The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
+# part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
+[acceptance]
+firmware = "1.12"
+ready_dir = "out/snapshots/dn2-audio-ready-cold-2026-10-20"
+sample_card = false
+
+# Board facts that only the emulator uses (docs/design/device-data.md). free_running_dtcn: the DMA timer counter channels (DTCN0..3) that run at
+# the bus clock in the emulator. Channel 0 here: the pinned PCM holds with it (finding 07).
+[emulator]
+free_running_dtcn = [0]
+
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
-# constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: a fact it uses as a
-# constant must be the same in every device file, and `patchkit gen` refuses a difference. Register offsets inside a peripheral
+# constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: it reads these facts at
+# run time from the device object `dkrt_dev` (DkrtDevice in modules/core/runtime/abi.toml). Register offsets inside a peripheral
 # are CPU facts (MCF5441x) and stay in the code, named as such.
 [board]
 # The console UART (UART8): the firmware drains it before its own soft reset (finding 36 section 3). The status register is at +4.
@@ -128,7 +151,7 @@ peek = [[0x40000000, 0x466c0000], [0x46712000, 0x47fe1000]]
 span_clock = 0xfc07000c
 span_clock_hz = 132000000
 
-# The runtime's per-type limits (docs/design/module-sdk.md 11.5 D8); generated into the runtime's device.rs.
+# The runtime's per-type limits (docs/design/module-sdk.md 11.5 D8); generated into the runtime constants by `patchkit gen`.
 [limits]
 modules = 8
 machine_rows = 8

@@ -286,7 +286,7 @@ export default function ProfilePanel(props: {
                       ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz)
                       : ''}
                     {' · clock '}
-                    {fmtMhz(r().snap.hz)} {emu() ? '(emulated time)' : '(DTIM0)'}
+                    {fmtMhz(r().snap.hz)} {emu() ? '(emulated time)' : '(device clock)'}
                   </span>
                   <span class="elapsed">{r().snap.running ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz) : ''}</span>
                 </div>
@@ -428,7 +428,7 @@ export default function ProfilePanel(props: {
               <Show when={emu()}>
                 <div class="prof-sec ruled">
                   <div class="sec-head">
-                    <span class="title">DSP per block (emulator)</span>
+                    <span class="title">{r().noDsp ? 'ColdFire profile (emulator)' : 'DSP per block (emulator)'}</span>
                     <Show when={dsp()}>{(v) => <span class="num">{dspText(v())}</span>}</Show>
                   </div>
                   <Show
@@ -436,9 +436,11 @@ export default function ProfilePanel(props: {
                     fallback={
                       <span class="hint">
                         {r().note ??
-                          (r().snap.running
-                            ? 'Waiting for the DSP counts…'
-                            : 'Start records the DSP counts of the emulator with the spans.')}
+                          (r().noDsp
+                            ? 'No DSP on this device.'
+                            : r().snap.running
+                              ? 'Waiting for the DSP counts…'
+                              : 'Start records the DSP counts of the emulator with the spans.')}
                       </span>
                     }
                   >

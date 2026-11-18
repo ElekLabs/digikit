@@ -32,7 +32,9 @@
 
 #define UB_TRACE 0 /* 1 for hardware debug builds: log calls */
 
+#include <stddef.h>
 #include <stdint.h>
+#include "dkrt.h" /* the runtime: dkrt_io_wake, dkrt_poll_add (the UI loop calls f once a pass), dkrt_blocks, struct DkrtDevice */
 
 #include "../../include/usb_bulk_port5.h"
 
@@ -148,14 +150,15 @@ extern u8
 extern u8 *usb_fw_mem_new(
     u32 size); /* the firmware's operator new (the 32 MiB buddy allocator) and its free */
 extern void usb_fw_mem_free(u8 *p);
-/* the board: the uncached alias of DDR is this far above the cached window (device.s) */
-extern const u32 usb_alias_delta;
-extern const u32 usb_ddr_base; /* the cached DDR window: base and size */
-extern const u32 usb_ddr_bytes;
-/* the runtime (dkrt.h) */
-extern void dkrt_io_wake(i32 id);
-extern i32 dkrt_poll_add(u32 f); /* the UI loop calls f once a pass */
-extern u32 dkrt_blocks(void);    /* DSP blocks since boot (1500 a second); 0 without core/health */
+/* the board, from the runtime's device object (struct DkrtDevice of dkrt.h, generated from core/runtime/abi.toml, which only grows at its end).
+ * The uncached alias of DDR is this far above the cached window; the cached DDR window is a base and a size. */
+_Static_assert(offsetof(DkrtDevice, ddr_bytes) == 28,
+               "the DDR window words this file reads are where abi.toml puts them");
+extern const DkrtDevice dkrt_dev;
+#define usb_alias_delta (dkrt_dev.ddr_uncached_alias - dkrt_dev.ddr_cached_base)
+#define usb_ddr_base (dkrt_dev.ddr_cached_base)
+#define usb_ddr_bytes (dkrt_dev.ddr_bytes)
+/* the runtime (dkrt.h): dkrt_io_wake, dkrt_poll_add, dkrt_blocks */
 
 #if UB_TRACE
 extern void dk_log_event(u32 kind, u32 flags, const u32 *a);

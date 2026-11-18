@@ -133,7 +133,7 @@ async fn emu_launch(host: State<'_, Host>) -> Result<Launch, String> {
     Ok(host.launch.clone())
 }
 
-/// Make PATH the console's firmware file (null: none); returns its info as `emu_source_info` does.
+/// Make PATH the console's firmware file (null: none); returns its info as `emu_source_info` does, plus `device`.
 #[tauri::command]
 async fn emu_set_source(
     host: State<'_, Host>,
@@ -146,9 +146,33 @@ async fn emu_set_source(
     let Some(path) = path else {
         return Ok(None);
     };
-    tauri::async_runtime::spawn_blocking(move || source_info(&path))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut info = source_info(&path)?;
+        // The device comes from the file's content; `emu_source_info` (polled every second) does not hash the file.
+        if let Some(Value::Object(map)) = info.as_mut() {
+            map.insert("device".into(), serde_json::json!(device_of_file(&path)));
+        }
+        Ok(info)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The device short id of a firmware file, by content (never by name): a stock image by its SHA-256 against the device files'
+/// firmware rows, a patched image by the device byte of its SysEx framing. None for anything else, or when the file cannot be read.
+fn device_of_file(path: &std::path::Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    let sha = digi_control::firmware::sha256_hex(&bytes);
+    let registry = device_profile::Registry::load().ok()?;
+    if let Ok((device, _)) = registry.identify(&sha) {
+        return Some(device.short.clone());
+    }
+    match bytes.get(..5)? {
+        [0xf0, 0x00, 0x20, 0x3c, id] => {
+            patchkit::devdata::by_syx_id(*id).map(|d| d.short.to_string())
+        }
+        _ => None,
+    }
 }
 
 /// The native file picker for a firmware file (.syx), opened in the folder of START when it exists; the path, or null when
@@ -573,6 +597,7 @@ fn main() {
     config.remember_card = startup.scenario.is_none();
     // A ColdFire-only runtime (a DT2 opened in a DN2-audio session) runs at the wall clock, not at the CPU's speed.
     config.pace_free = true;
+    config.dsp = startup.dsp;
     let run_dir_for_staging = run_dir.clone();
     config.on_quit = Some(Box::new(|| {
         // Let the socket thread write the reply first.

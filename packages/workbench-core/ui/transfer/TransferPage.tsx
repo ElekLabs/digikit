@@ -9,6 +9,7 @@ import { Match, Show, Switch, batch, createEffect, createMemo, createSignal, on,
 import { Dynamic } from 'solid-js/web';
 import Segmented from '../components/Segmented';
 import { isCancelled, isNoRuntime, isTimeout } from '../../src/modules/backend';
+import { isDeviceId, runtimeDeviceIds } from '../../src/data/device-profiles';
 import { noteActivity } from '../../src/transfer/activity';
 import AutoRefresh from './AutoRefresh';
 import ConnectionBadge from './ConnectionBadge';
@@ -62,7 +63,7 @@ async function read(app: TransferApp): Promise<void> {
   }
   if (!current()) return;
   setBrowsing(false);
-  setBrowseDevice(v.device === 'dn2' ? 'dn2' : 'dt2');
+  setBrowseDevice(isDeviceId(v.device) ? v.device : (runtimeDeviceIds[0] ?? ''));
   setLastView(v);
   applyPendingAdd(app, v);
   const name = await env.deviceName(v.device);

@@ -1,5 +1,5 @@
 //! Re-decode and check an output image: packet checksums, framing counts, content checksum, HMAC, section
-//! streams, limits, the patch record, and (given the stock image) that sections 2, 4 and 8 are untouched.
+//! streams, limits, the patch record, and (given the stock image) that the read-only sections are untouched.
 
 use crate::dsp::Stream;
 use crate::error::*;
@@ -72,7 +72,7 @@ pub fn read_segments(main: &[u8], base: u64) -> Result<Vec<(u64, Vec<u8>, u64)>>
 /// stream (which wins when both exist).
 fn find_record(fw: &Firmware) -> Result<Option<Record>> {
     let mut record = None;
-    if let Some(main) = fw.section(3) {
+    if let Some(main) = fw.main() {
         let segs = read_segments(&main.data, main.dest as u64)?;
         if let Some((_, payload, _)) = segs.first()
             && payload.starts_with(record::MAGIC)
@@ -80,7 +80,7 @@ fn find_record(fw: &Firmware) -> Result<Option<Record>> {
             record = Some(Record::decode(payload)?);
         }
     }
-    if let Some(dsp) = fw.section(7) {
+    if let Some(dsp) = fw.dsp() {
         let stream = Stream::parse(dsp.data.clone())?;
         for b in &stream.blocks {
             if !b.fill()
@@ -102,7 +102,25 @@ pub fn patch_record(syx_bytes: &[u8]) -> Result<Option<Record>> {
     find_record(&Firmware::parse(syx_bytes)?)
 }
 
+/// Verifies an image. A device with read-only sections (`[container] readonly`: bootstrap, FPGA or peer programs) needs `base`, the stock
+/// image, to prove those sections unchanged; without it the call fails, so a damaged read-only section can never pass. The one exception
+/// is an image whose SHA-256 is a known stock image (a port in `reg`): it is the stock image, so its read-only sections are stock.
 pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> Result<Report> {
+    check(syx_bytes, reg, base, true)
+}
+
+/// Decodes and checks an image like `verify` but does not require the stock base: for identifying a file (what device, which record),
+/// never as a proof that the image is safe to flash.
+pub fn inspect(syx_bytes: &[u8], reg: Option<&Registry>) -> Result<Report> {
+    check(syx_bytes, reg, None, false)
+}
+
+fn check(
+    syx_bytes: &[u8],
+    reg: Option<&Registry>,
+    base: Option<&[u8]>,
+    need_base: bool,
+) -> Result<Report> {
     let mut checks = vec![];
     let msgs = syx::messages(syx_bytes)?;
     if msgs.len() < 3 || msgs[0].len() != 16 || msgs[msgs.len() - 1].len() != 16 {
@@ -147,10 +165,14 @@ pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> 
     if !total.is_multiple_of(16) || syx::content_checksum(container) != stored_sum {
         return Err(err!("content checksum does not match the container"));
     }
-    if syx::trailer(container, fw.device)[..] != container[total - 32..] {
+    if !syx::trailer_matches(container, fw.device) {
         return Err(err!("HMAC trailer does not match"));
     }
-    checks.push("content checksum and HMAC trailer".into());
+    checks.push(if fw.device.sealed() {
+        "content checksum and HMAC trailer".into()
+    } else {
+        "content checksum (the device has no seal)".into()
+    });
 
     // Sections decoded by the firmware's own rules (the loader checks stream length, byte sum, end marker).
     let parsed = loader::parse(syx_bytes)?;
@@ -162,12 +184,19 @@ pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> 
     checks.push(format!("{} sections decode", parsed.sections.len()));
 
     let port = reg.and_then(|r| r.find(&fw.syx_sha256).or(None));
-    let dsp = fw.section(7).ok_or_else(|| err!("no DSP section"))?;
-    let stream = Stream::parse(dsp.data.clone())?;
-    crate::bootrom::require(&stream.blob)?;
+    // a device without a DSP has no boot stream to parse and no stored/depacked limits to check
+    let dsp = match fw.device.dsp_section() {
+        Some(_) => {
+            let dsp = fw.dsp().ok_or_else(|| err!("no DSP section"))?;
+            let stream = Stream::parse(dsp.data.clone())?;
+            crate::bootrom::require(&stream.blob)?;
+            Some(dsp)
+        }
+        None => None,
+    };
     let record = find_record(&fw)?;
     let mut segments: Vec<(u64, u64, u64)> = vec![];
-    if let Some(main) = fw.section(3) {
+    if let Some(main) = fw.main() {
         let segs = read_segments(&main.data, main.dest as u64)?;
         for (dest, payload, bss) in &segs {
             segments.push((*dest, payload.len() as u64, *bss));
@@ -210,14 +239,16 @@ pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> 
             "container is {total} bytes, over the {container_max} limit"
         ));
     }
-    if dsp.stored.len() > stored_max || dsp.data.len() > depacked_max {
+    if let Some(dsp) = dsp
+        && (dsp.stored.len() > stored_max || dsp.data.len() > depacked_max)
+    {
         return Err(err!(
             "DSP section stored {} / depacked {} exceeds {stored_max} / {depacked_max}",
             dsp.stored.len(),
             dsp.data.len()
         ));
     }
-    if let Some(m) = fw.section(3)
+    if let Some(m) = fw.main()
         && m.data.len() > main_max
     {
         return Err(err!(
@@ -227,9 +258,24 @@ pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> 
     }
     checks.push("size limits".into());
 
+    if base.is_none() && need_base && port.is_none() && !fw.device.readonly_sections().is_empty() {
+        let ids: Vec<String> = fw
+            .device
+            .readonly_sections()
+            .iter()
+            .map(|i| i.to_string())
+            .collect();
+        return Err(err!(
+            "the stock base image is required to verify a {} image: its read-only sections ({}) can only be checked against it \
+             (this file's sha256 {} is not a known stock image)",
+            fw.device.short(),
+            ids.join(", "),
+            fw.syx_sha256
+        ));
+    }
     if let Some(base_bytes) = base {
         let b = Firmware::parse(base_bytes)?;
-        for id in [2u32, 4, 8] {
+        for &id in fw.device.readonly_sections() {
             match (b.section(id), fw.section(id)) {
                 (Some(x), Some(y)) if x.stored == y.stored && x.dest == y.dest => {}
                 (None, None) => {}
@@ -249,7 +295,16 @@ pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> 
                 b.syx_sha256
             ));
         }
-        checks.push("sections 2, 4 and 8 identical to the stock image".into());
+        let ids: Vec<String> = fw
+            .device
+            .readonly_sections()
+            .iter()
+            .map(|i| i.to_string())
+            .collect();
+        checks.push(format!(
+            "read-only sections {} identical to the stock image",
+            ids.join(", ")
+        ));
     }
     if let Some(pid) = &port_id
         && let Some(p) = reg.and_then(|r| r.by_id(pid))

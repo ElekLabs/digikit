@@ -8,7 +8,7 @@
  * has just pushed the argument, and the result comes back in d0). d2-d7/a2-a6 are preserved by the C function.
  * fw_queue_pop is the stock function (anchor cf.rtos.fn.queue_pop).
  */
-    .include "device.inc"
+    .include "dkdv-offsets.inc"
     .include "dk_fw_view.inc"
     .include "dk_fw_rtos.inc"
 
@@ -70,9 +70,10 @@ dkplat_exc_install:
     beq.s   1f                      /* no anchor */
     move.l  %d0,%a0
     move.l  (%a0),%a0               /* the address of the hook word */
+    lea     dkrt_dev,%a1            /* the device object of the runtime: the DDR window */
     move.l  %a0,%d0
-    sub.l   #DDR_CACHED_BASE,%d0
-    cmp.l   #DDR_BYTES,%d0
+    sub.l   DKDV_DDR_CACHED_BASE(%a1),%d0
+    cmp.l   DKDV_DDR_BYTES(%a1),%d0
     bhs.s   1f                      /* not in DDR (unsigned) */
     move.l  %a0,%d1
     and.l   #3,%d1

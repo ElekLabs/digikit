@@ -20,7 +20,7 @@ use core::ptr::addr_of_mut;
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_abi::service::SettleCtx;
 use dkrt_sdk::sel::MAP_N;
-use dkrt_sdk::sticky::{assign, clean, in_range, Event, MAX_KEYS};
+use dkrt_sdk::sticky::{assign, clean, Event, Types, MAX_KEYS};
 use dkrt_sdk::*;
 
 /// The settings key of the map: `MAP_N` words, big endian.
@@ -53,6 +53,17 @@ pub static mut DKRT_ASSIGN: State = State {
 
 fn st() -> &'static mut State {
     unsafe { &mut *addr_of_mut!(DKRT_ASSIGN) }
+}
+
+/// The run-time machine types of the device (its profile's); a device without a profile has none.
+fn types<C: CoreApi>(core: &C) -> Types {
+    match crate::profile(core) {
+        Some(p) => Types {
+            first: p.dyn_type_first,
+            count: p.dyn_types,
+        },
+        None => Types { first: 0, count: 0 },
+    }
 }
 
 /// Entries of the sticky map in use now (for CAPACITY).
@@ -104,7 +115,8 @@ pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
     a.magic = 0x444b_4153; // "DKAS"
     a.n = 0;
     let (from, legacy) = stored(core);
-    a.map = clean(&from);
+    let tys = types(core);
+    a.map = clean(tys, &from);
     // the machines of the selection, in load order
     let mut k = 0;
     while k < sel.count {
@@ -120,6 +132,7 @@ pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
     }
     let n = a.n;
     a.dirty = assign(
+        tys,
         &from,
         &mut a.map,
         &a.key,
@@ -150,7 +163,7 @@ pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
 /// (when it is in the run-time range), 0 when there is none.
 pub unsafe fn resolve<C: CoreApi>(core: &C, key: u32) -> u32 {
     if key >> 8 == 0 {
-        return if in_range(key) { key } else { 0 }; // a pinned number (0: none)
+        return if types(core).contains(key) { key } else { 0 }; // a pinned number (0: none)
     }
     let a = st();
     let at = core.boot_index();
@@ -171,6 +184,6 @@ pub unsafe fn seed_for_test(keys: &[u32], at: u32) {
     for (i, k) in keys.iter().enumerate() {
         a.idx[i] = at;
         a.key[i] = *k;
-        a.ty[i] = dkrt_abi::dsp::TYPE_FIRST + i as u32;
+        a.ty[i] = dkrt_abi::profiles::DT2.dyn_type_first + i as u32;
     }
 }

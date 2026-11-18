@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.device import dkprobe_seq as seq
+from tools.firmware import device as device_files
 
 CMD_STATUS = 0x32
 CMD_READ = 0x33
@@ -445,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
     where.add_argument("--port", help="a MIDI port name substring (a real device)")
     where.add_argument(
         "--spawn",
-        choices=("dt2", "dn2"),
+        choices=device_files.shorts(),
         help="start a private emulator daemon of this device (stock firmware with the digikit runtime) and stop it at the end",
     )
     r.add_argument(

@@ -430,6 +430,20 @@
    "type": "cf.32"
   },
   {
+   "addend": 6,
+   "offset": 12,
+   "section": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracks14files_in_storeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..rodata.global.1i",
+   "type": "cf.32"
+  },
+  {
+   "addend": 192,
+   "offset": 18,
+   "section": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracks14files_in_storeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..rodata.global.1i",
+   "type": "cf.32"
+  },
+  {
    "addend": 0,
    "offset": 12,
    "section": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracks4pumpNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
@@ -4647,10 +4661,10 @@
   },
   {
    "align": 2,
-   "hex": "2f2f00044eb900000000588f7202b28057c044807201c0814e75",
+   "hex": "2f2f00044eb90000000041f900000000223c00000000588f600441e8003eb288670eb09066f44a28003467ee7001600242004e75",
    "kind": "text",
    "name": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracks14files_in_storeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "size": 26
+   "size": 52
   },
   {
    "align": 2,
@@ -5150,6 +5164,13 @@
    "size": 36
   },
   {
+   "align": 2,
+   "hex": "00010000001300000002646e32000000009700016a7c00000010400000000800000047fe000000001000fc0cc000000a2c2b0000001000000008010101010001000000130000000164743200000000fe0002f6c400000010400000000800000047fe000000001000fc0cc000000a2c2b0000001000000008000101010001000000270000000373740000000000970000000000000000400000000800000047bf000000001000fc0cc00000000000000000000000000001000101",
+   "kind": "data",
+   "name": ".rodata.global.1i",
+   "size": 186
+  },
+  {
    "align": 1,
    "hex": "73616d706c655f706f6f6c5f696e666f",
    "kind": "data",
@@ -5193,7 +5214,7 @@
   },
   {
    "align": 2,
-   "hex": "ec04b814",
+   "hex": "d92aa5f9",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -5962,7 +5983,7 @@
    "size": 28
   }
  ],
- "source_sha256": "92045a2487ea24eecef154b15c90e3f061ddf5bab52f0c839b4ecec3fcc96188",
+ "source_sha256": "dbe4d10f6a2336905f8e987c83ac2ba0ce7faf63143a5fd018d7202a5a422a44",
  "symbols": [
   {
    "global": false,
@@ -6070,6 +6091,12 @@
    "global": false,
    "name": ".sec..rodata.global.1h",
    "section": ".rodata.global.1h",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.global.1i",
+   "section": ".rodata.global.1i",
    "value": 0
   },
   {
@@ -7563,8 +7590,8 @@
  ],
  "toolchain": {
   "exports": "dk_module dk_sample_pool_add dk_sample_pool_clear dk_sample_pool_info dk_sample_pool_open dk_sample_pool_path dk_sample_pool_peaks dk_sample_pool_peaks_window dk_sample_pool_set dk_sample_pool_status dk_svc_abi pool_done_fill pool_lost_fill",
-  "instructions_redecoded": "7122",
-  "isa_check": "001eb5dcf07161fec02fc8b1126b5103bbb458e938593449810757555fd951d3",
+  "instructions_redecoded": "7129",
+  "isa_check": "5accec00d40159179171b6332770c85b7f64a2ac35fa5769030a9e702fe09fdf",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

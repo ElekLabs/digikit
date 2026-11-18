@@ -536,6 +536,30 @@ pub extern "C" fn dkpw_staging() -> *const u8 {
 // No firmware file systems or DSP tick callback are installed in this host fixture.
 #[no_mangle]
 pub static dkrt_device_id: u32 = 0;
+/// core/health is not in the host fixture: the runtime's links to it answer nothing (the magic stays 0).
+#[no_mangle]
+pub extern "C" fn health_read() {}
+#[no_mangle]
+pub extern "C" fn health_heap() {}
+/// The device object of a device with a DSP, a store and an eSDHC (the host fixture's board).
+#[no_mangle]
+pub static dkrt_dev: dkrt_sdk::DkrtDevice = dkrt_sdk::DkrtDevice {
+    magic: dkrt_sdk::DEV_MAGIC,
+    version: dkrt_sdk::DEV_VERSION,
+    size: core::mem::size_of::<dkrt_sdk::DkrtDevice>() as u32,
+    caps: dkrt_sdk::DEV_HAS_DSP | dkrt_sdk::DEV_HAS_STORE | dkrt_sdk::DEV_HAS_SDHC | dkrt_sdk::DEV_HAS_SAFE_KEY,
+    console_uart_base: 0xec07_0000,
+    ddr_uncached_alias: 0x4800_0000,
+    ddr_cached_base: 0x4000_0000,
+    ddr_bytes: 0x0800_0000,
+    esdhc_base: 0xfc0c_c000,
+    safe_key: 19,
+    keep_base: 0x47fe_0000,
+    keep_bytes: 0x1000,
+    dsp_block_cycles: 0xa_2c2b,
+    dyn_type_first: 16,
+    dyn_types: 8,
+};
 #[no_mangle]
 pub static dkrt_sample_fs: [u32; 4] = [0; 4];
 #[no_mangle]

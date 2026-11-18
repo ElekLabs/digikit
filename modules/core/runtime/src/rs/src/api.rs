@@ -193,11 +193,10 @@ unsafe fn save_working_state() {
 
 /// MCF5441x eSDHC: offset of the present-state register (`PRSSTAT`); bits 0 to 2 are command inhibit, data inhibit and data line active.
 const MCF5441X_ESDHC_PRSSTAT: u32 = 0x24;
-/// The card's eSDHC controller (`[board] esdhc_base` of the device files) and its present-state register.
-const ESDHC_PRSSTAT: u32 = dkrt_sdk::device::ESDHC_BASE + MCF5441X_ESDHC_PRSSTAT;
-
-unsafe fn card_busy() -> bool {
-    read_volatile(ESDHC_PRSSTAT as *const u32) & 7 != 0
+/// Is a card transfer in flight? The card's eSDHC controller is the profile's (`[board] esdhc_base` of the device file); a device without one has no busy card.
+pub(crate) unsafe fn card_busy() -> bool {
+    let p = crate::profile();
+    p.has_sdhc && read_volatile((p.esdhc_base + MCF5441X_ESDHC_PRSSTAT) as *const u32) & 7 != 0
 }
 
 /// `dkrt_restart()`: write pending settings (`settings::flush_if_dirty`), save the working state (`save_working_state`), then the firmware's own soft reset: interrupts masked, console drained,

@@ -3,7 +3,8 @@
 // module can be patched from the command line and heard here a second later.
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
-import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import { defaultFaceplate, panels } from '@digi/workbench-core/data/faceplates.ts';
+import { deviceNameOf, registry, runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import {
   type EmulatorRuntime,
   type FirmwareInfo,
@@ -14,6 +15,7 @@ import {
 import { booting as startBoot, bootingScreen, bootingStatus, loadFailure, type Booting } from './boot-core';
 import { bumpCardRefresh, cardRefresh } from './card-state';
 import CardPanel from './CardPanel';
+import { pageFor, type Page } from './page-core';
 import {
   CHART,
   DOWN,
@@ -58,6 +60,7 @@ import RemotePage from './RemotePage';
 import { useFirmwareApp, useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { EMULATOR_NO_RUNTIME } from '@digi/workbench-core/transfer/target.ts';
 import { setReloadWithRuntime } from './emulator-actions';
+import { dspLine, dspPending, hasDspChoice, readDspChoice, startupDsp, writeDspChoice } from './dsp-core';
 import { running as flashRunning } from '@digi/workbench-core/firmware/firmware-core.ts';
 import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
 import DefaultModules from '@digi/workbench-core/ui/firmware/DefaultModules.tsx';
@@ -109,6 +112,9 @@ export default function Console(props: { host: Host }) {
   const writeDockPref = (px: number | undefined) => writePref(DOCK_KEY, px === undefined ? null : String(px));
   const readSidebarPref = () => readPref(SIDEBAR_KEY) !== 'closed';
   const writeSidebarPref = (open: boolean) => writePref(SIDEBAR_KEY, open ? 'open' : 'closed');
+  // "DSP": on unless the user turned it off; kept like the runtime tick (dsp-core.ts).
+  const readDspPref = () => readDspChoice(app.storage);
+  const writeDspPref = (on: boolean) => writeDspChoice(app.storage, on);
   const { emulatorRuntime, emulatorSession, lastMidiPort, lastMidiSession, setEmulatorRuntime, target } = app.target;
   const { noteConnection } = app.connection;
   const { busy, currentJob, jobs, runJob, syncControllerJob } = app.jobs;
@@ -124,8 +130,8 @@ export default function Console(props: { host: Host }) {
   const [source, setSource] = createSignal<Source>();
   /** A firmware is starting: the old device information is gone until its first status. */
   const [booting, setBooting] = createSignal<Booting>();
-  /** The last load failed: its file, so the faceplate is the file's device, or none when the name does not tell. */
-  /** The device that was showing: a file whose name does not tell its device keeps that faceplate. */
+  /** The last load failed: its file, so the faceplate is the image's device, or none when the image does not tell. */
+  /** The device that was showing: an image of no known device keeps that faceplate. */
   const [lastDevice, setLastDevice] = createSignal<string>();
   const [failed, setFailed] = createSignal<Booting>();
   const [watching, setWatching] = createSignal(true);
@@ -140,10 +146,11 @@ export default function Console(props: { host: Host }) {
   const [dockSaved, setDockSaved] = createSignal(readDockPref());
   const [windowPx, setWindowPx] = createSignal(window.innerHeight);
   const [dockDrag, setDockDrag] = createSignal(false);
-  const [page, setPage] = createSignal<'emulator' | 'transfer' | 'files' | 'remote' | 'firmware'>('emulator');
+  const [page, setPage] = createSignal<Page>('emulator');
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
   const [bootRuntime, setBootRuntime] = createSignal(readRuntimePref());
+  const [bootDsp, setBootDsp] = createSignal(readDspPref());
   const [loadOnStart, setLoadOnStart] = createSignal(readPref(LOAD_ON_START_KEY) === 'on');
   const [info, setInfo] = createSignal<FirmwareInfo>();
   let live: LivePanelApi | undefined;
@@ -157,11 +164,27 @@ export default function Console(props: { host: Host }) {
   // a memo: `status` is set once per display frame, and the panels must hear of a change of this value only
   const sidePanelsShown = createMemo(() => page() === 'emulator');
   const panelsActive = createMemo(() => !!status());
+  // While an image boots, only its own device counts: an unknown image has none (no stale device, no faceplate).
+  const knownDevice = () => status()?.device ?? (booting() ? booting()!.device : (failed()?.device ?? lastDevice()));
   const device = () => {
-    const d = status()?.device ?? booting()?.device ?? failed()?.device ?? lastDevice();
-    return d === 'dt2' || d === 'dn2' ? d : 'dn2';
+    const d = knownDevice();
+    return d !== undefined && Object.hasOwn(panels, d) ? d : defaultFaceplate;
   };
   const panel = () => panels[device()];
+  /** A device without `[digikit]` has no runtime, no modules and no remote: it starts stock, and those pages say so. */
+  const hasRuntime = (id: string | undefined) => id === undefined || runtimeDeviceIds.includes(id);
+  const runtimeHere = () => hasRuntime(knownDevice());
+  /** The device has a DSP or a second CPU with a stand-in: the "DSP" tick applies (unknown device: yes). */
+  const dspHere = () => {
+    const id = knownDevice();
+    return id === undefined || !registry.ids.includes(id) || hasDspChoice(registry.get(id));
+  };
+  /** The tick differs from the running image: it applies at the next Reload or Open. */
+  const dspIsPending = () => dspHere() && dspPending(bootDsp(), info()?.dsp);
+  const noRuntimeTitle = () => `${deviceNameOf(device())} has no digikit runtime: not available on this device`;
+  createEffect(() => {
+    setPage(pageFor(page(), target(), runtimeHere()));
+  });
 
   const update = (event: RuntimeUpdate) => {
     if (event.type === 'error') {
@@ -170,8 +193,10 @@ export default function Console(props: { host: Host }) {
     }
     live?.show(event.snapshot);
     setStatus(event.snapshot.status);
-    if (target().kind === 'emulator' && lastDevice() !== event.snapshot.status.device)
-      setBrowseDevice(event.snapshot.status.device === 'dn2' ? 'dn2' : 'dt2');
+    const running = event.snapshot.status.device;
+    // the module browser follows the emulator's device when it is one modules are built for
+    if (target().kind === 'emulator' && lastDevice() !== running && registry.runtimeIds.includes(running))
+      setBrowseDevice(running);
     setLastDevice(event.snapshot.status.device);
     setError(event.snapshot.status.error ?? '');
     watchHealth({ error: event.snapshot.status.error });
@@ -193,7 +218,7 @@ export default function Console(props: { host: Host }) {
    * runtime. Tick off: pending when this boot patched the runtime in (a file loaded as it is, with its own runtime, keeps it either way). */
   const runtimePending = () => {
     const i = info();
-    if (i === undefined) return false;
+    if (i === undefined || !runtimeHere()) return false;
     return bootRuntime() ? !i.runtime : !!i.runtime?.patched;
   };
   /** What the running image got from the runtime patch, for the header. */
@@ -261,6 +286,7 @@ export default function Console(props: { host: Host }) {
     start: (r: EmulatorRuntime) => Promise<RuntimeSnapshot>,
     name: string,
     withRuntime = bootRuntime(),
+    imageDevice?: DeviceId,
   ) => {
     const r = runtime();
     if (!r) return;
@@ -271,8 +297,8 @@ export default function Console(props: { host: Host }) {
     // a boot or reset of the emulator: the indicator asks again
     if (target().kind === 'emulator') noteConnection({ type: 'target' });
     setReloadNote('');
-    setBooting(startBoot(name));
-    logInput({ source: 'firmware', level: 'info', text: bootingScreen(startBoot(name)) });
+    setBooting(startBoot(name, imageDevice));
+    logInput({ source: 'firmware', level: 'info', text: bootingScreen(startBoot(name, imageDevice)) });
     setFailed(undefined);
     health = healthStart();
     const began = performance.now();
@@ -305,15 +331,18 @@ export default function Console(props: { host: Host }) {
         if (status()) await refreshInfo();
         return false;
       }
-      setError(message(e));
-      setFailed(startBoot(name));
-      setReloadNote(loadFailure(name, message(e)));
-      logInput(failureEntry('firmware', `loading ${name}`, message(e)));
+      failLoad(name, imageDevice, e);
       if (status()) await refreshInfo(); // A refused load can restore the previous live session.
       return false;
     } finally {
       setBooting(undefined);
     }
+  };
+  const failLoad = (name: string, imageDevice: DeviceId | undefined, e: unknown) => {
+    setError(message(e));
+    setFailed(startBoot(name, imageDevice));
+    setReloadNote(loadFailure(name, message(e)));
+    logInput(failureEntry('firmware', `loading ${name}`, message(e)));
   };
   /** Make `path` the console's firmware file and boot it; the controller reads it from its path. */
   const bootPath = async (path: string, why: string, options: { runtime?: boolean; card?: string } = {}) => {
@@ -330,10 +359,14 @@ export default function Console(props: { host: Host }) {
           const ok = await boot(
             (r) =>
               r.loadPath
-                ? r.loadPath(path, { runtime: withRuntime, card: options.card })
+                ? // The file at `path` may belong to another device than the running one: send the choices as they are; the
+                  // controller applies them by the loaded firmware's device data (runtime only on a runtime target, dsp only
+                  // where the device offers the choice).
+                  r.loadPath(path, { runtime: withRuntime, card: options.card, dsp: bootDsp() })
                 : Promise.reject(new Error('no reload')),
             file?.name ?? path,
             withRuntime,
+            file?.device ?? undefined,
           );
           if (ok) {
             writePref(LAST_FIRMWARE_KEY, path);
@@ -492,9 +525,14 @@ export default function Console(props: { host: Host }) {
         .catch(() => setBuildInfo(undefined));
       void (async () => {
         const launch = await props.host.emu.launch();
+        if (launch.loaded) await pollSource();
+        // The launcher's `--no-dsp` / `--dsp-on` wins over the saved choice for this session, also for the first load below; only a
+        // click on the tick saves a choice. The controller reports the flag before any firmware is loaded.
+        await refreshInfo();
+        const dsp = startupDsp(bootDsp(), info()?.dsp);
+        if (dsp !== bootDsp()) setBootDsp(dsp);
         if (launch.loaded) {
-          await pollSource();
-          await refreshInfo();
+          if (dspIsPending()) await reload(`Started with DSP ${dsp ? 'on' : 'off'} at`);
           return;
         }
         // The app opens empty; a command-line file, else the last opened file when "Load on start" is ticked, boots now.
@@ -663,6 +701,8 @@ export default function Console(props: { host: Host }) {
         <dd>{status() ? `${status()!.device} ${status()!.version} · ${phase()}` : '—'}</dd>
         <dt>Instructions</dt>
         <dd>{status()?.icount.toLocaleString() ?? '—'}</dd>
+        <dt>DSP</dt>
+        <dd>{dspLine(info()?.dsp)}</dd>
         <dt>Audio output</dt>
         <dd>{audio()?.output_device ?? (audio()?.setup_needed ? 'no audio for this firmware' : '—')}</dd>
         <dt>Speed</dt>
@@ -696,7 +736,11 @@ export default function Console(props: { host: Host }) {
       <Show when={card()}>
         <p class="note">{cardLine(card())}</p>
       </Show>
-      <Show when={device() === 'dt2' && runtime()?.cards}>
+      <Show
+        when={
+          registry.ids.includes(device()) && registry.get(device()).capabilities.card === 'path-fs' && runtime()?.cards
+        }
+      >
         <div class="acts">
           <input
             ref={(el) => {
@@ -780,7 +824,12 @@ export default function Console(props: { host: Host }) {
             class="side"
             classList={{ on: page() === 'transfer' }}
             aria-current={page() === 'transfer' ? 'page' : undefined}
-            title="Choose the modules that run on the target (the emulator or a device on a MIDI port) and install them"
+            disabled={(!status() && target().kind === 'emulator') || (target().kind === 'emulator' && !runtimeHere())}
+            title={
+              target().kind === 'emulator' && !runtimeHere()
+                ? noRuntimeTitle()
+                : 'Choose the modules that run on the target (the emulator or a device on a MIDI port) and install them'
+            }
             onClick={() => setPage('transfer')}
           >
             <Icon d={MODULES} />
@@ -802,7 +851,12 @@ export default function Console(props: { host: Host }) {
             class="side"
             classList={{ on: page() === 'remote' }}
             aria-current={page() === 'remote' ? 'page' : undefined}
-            title="Press the keys and turn the encoders of the target, and see its screen"
+            disabled={target().kind === 'emulator' && !runtimeHere()}
+            title={
+              target().kind === 'emulator' && !runtimeHere()
+                ? noRuntimeTitle()
+                : 'Press the keys and turn the encoders of the target, and see its screen'
+            }
             onClick={() => setPage('remote')}
           >
             <Icon d={REMOTE} />
@@ -874,11 +928,16 @@ export default function Console(props: { host: Host }) {
               </label>
               <label
                 class="tag opt"
-                title="Patch the digikit runtime into a stock firmware when it is opened or reloaded (the next Open or Reload)"
+                title={
+                  runtimeHere()
+                    ? 'Patch the digikit runtime into a stock firmware when it is opened or reloaded (the next Open or Reload)'
+                    : noRuntimeTitle()
+                }
               >
                 <input
                   type="checkbox"
-                  checked={bootRuntime()}
+                  checked={bootRuntime() && runtimeHere()}
+                  disabled={!runtimeHere()}
                   onChange={(e) => {
                     setBootRuntime(e.currentTarget.checked);
                     writeRuntimePref(e.currentTarget.checked);
@@ -908,6 +967,43 @@ export default function Console(props: { host: Host }) {
                           : i().runtime
                             ? 'patched image'
                             : 'stock'}
+                    </span>
+                  )}
+                </Show>
+              </label>
+              <label
+                class="tag opt"
+                title={
+                  dspHere()
+                    ? 'Run the DSP (and a second CPU that runs its program) at the next Open or Reload. Off: ColdFire only, no DSP audio, a faster UI'
+                    : `${deviceNameOf(device())} has no DSP and no second CPU`
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={bootDsp() && dspHere()}
+                  disabled={!dspHere()}
+                  onChange={(e) => {
+                    setBootDsp(e.currentTarget.checked);
+                    writeDspPref(e.currentTarget.checked);
+                  }}
+                />
+                <span class="long">DSP</span>
+                <span class="short">DSP</span>
+                <Show when={info()?.dsp}>
+                  {(d) => (
+                    <span
+                      class="rt"
+                      classList={{ on: d().enabled, pending: dspIsPending() }}
+                      title={
+                        dspIsPending()
+                          ? `The running image has the DSP ${d().enabled ? 'on' : 'off'}; the tick applies at the next Reload (${reloadKey}) or Open`
+                          : d().enabled
+                            ? 'The running image has the DSP'
+                            : 'The running image has no DSP'
+                      }
+                    >
+                      {dspIsPending() ? 'on next Reload' : d().enabled ? 'on' : 'off'}
                     </span>
                   )}
                 </Show>
@@ -980,7 +1076,11 @@ export default function Console(props: { host: Host }) {
               </span>
             </header>
             <div class="emu-row">
-              <main class="stage" aria-label={`${panel().name} front panel`}>
+              <main
+                class="stage"
+                aria-label={`${panel().name} front panel`}
+                style={{ visibility: booting() && !knownDevice() ? 'hidden' : undefined }}
+              >
                 <div class="surface">
                   <LivePanel
                     panel={panel()}

@@ -21,6 +21,7 @@ pub mod audio_out;
 pub mod companion;
 #[cfg(feature = "sharc")]
 pub mod gates;
+pub mod peer_companion;
 pub mod scenario;
 #[cfg(feature = "sharc")]
 pub mod sharc_companion;
@@ -34,7 +35,8 @@ const SINK_EVENTS_STATUS_TAIL: usize = 200;
 use audio_out::PcmCapture;
 use audio_out::pace_seconds;
 pub use audio_out::{AudioOut, PcmSink, PcmTap};
-pub use companion::{Companion, Kind, NoCompanion, ZeroCompanion};
+pub use companion::{Companion, Kind, NoCompanion, ResponderCompanion, ZeroCompanion};
+pub use peer_companion::PeerCompanion;
 #[cfg(feature = "sharc")]
 pub use sharc_companion::SharcCompanion;
 #[cfg(feature = "sharc")]
@@ -134,11 +136,7 @@ impl DerefMut for CoupledRuntime {
 }
 impl CoupledRuntime {
     fn with_emulator(emulator: Emulator) -> Self {
-        Self::with_parts(
-            emulator,
-            Box::new(NoCompanion),
-            AudioOut::new(false, pace_seconds(0.0), || unreachable!(), || None),
-        )
+        Self::with_parts(emulator, Box::new(NoCompanion), silent_out())
     }
     fn with_parts(emulator: Emulator, companion: Box<dyn Companion>, out: AudioOut) -> Self {
         Self {
@@ -162,6 +160,7 @@ impl CoupledRuntime {
         }
         let mut runtime = Self::with_emulator(Emulator::new(syx, card)?);
         runtime.attach(options)?;
+        runtime.attach_peer(true);
         runtime.input_base = runtime.emulator.icount();
         Ok(runtime)
     }
@@ -170,6 +169,7 @@ impl CoupledRuntime {
     /// ColdFire side boots cold from the patched MAIN.
     pub fn new_patched(syx: &[u8], card: Option<Card>, base_sha256: &str) -> Result<Self, String> {
         let mut runtime = Self::with_emulator(Emulator::new_patched(syx, card, base_sha256)?);
+        runtime.attach_peer(false);
         runtime.input_base = runtime.emulator.icount();
         Ok(runtime)
     }
@@ -185,6 +185,7 @@ impl CoupledRuntime {
         options: &AudioOptions,
     ) -> Result<Self, String> {
         let mut runtime = Self::with_emulator(Emulator::new_patched(syx, card, base_sha256)?);
+        runtime.attach_peer(false);
         runtime.attach(Some(options))?;
         runtime.input_base = runtime.emulator.icount();
         Ok(runtime)
@@ -226,9 +227,24 @@ impl CoupledRuntime {
     pub fn companion_kind(&self) -> Kind {
         self.companion.kind()
     }
-    /// Whether a DSP audio session is attached.
+    /// Whether the companion produces PCM (a SHARC+ session, or a peer CPU that mixes the device's voices).
     pub fn has_audio(&self) -> bool {
-        self.companion.kind().makes_audio()
+        self.companion.makes_audio()
+    }
+
+    /// Whether the device has a peer CPU that runs a program (see `Emulator::has_peer_cpu`).
+    pub fn has_peer_cpu(&self) -> bool {
+        self.emulator.has_peer_cpu()
+    }
+
+    /// Replaces the peer CPU by the mailbox responder: no peer audio. Call on a fresh runtime.
+    pub fn use_peer_responder(&mut self) {
+        if !self.emulator.has_peer_cpu() {
+            return;
+        }
+        self.emulator.use_peer_responder();
+        self.companion = Box::new(ResponderCompanion);
+        self.out = silent_out();
     }
 
     /// Whether this runtime is in zero-DSP mode (`AudioOptions::zero`).
@@ -266,6 +282,15 @@ impl CoupledRuntime {
             .as_any_mut()
             .downcast_mut()
             .ok_or_else(|| "no DSP audio session".to_string())
+    }
+    /// The companion of a device whose second processor is a ColdFire (`[emulator] peer`): the peer CPU, or the mailbox
+    /// responder when the device profile names it. Other devices keep the companion they have.
+    /// `audio` false (patched builds): the peer runs without audio output.
+    fn attach_peer(&mut self, audio: bool) {
+        if let Some((companion, out)) = peer_companion::for_emulator(&self.emulator, audio) {
+            self.companion = companion;
+            self.out = out;
+        }
     }
     /// Choose the companion for `options`: zero answers zeros, otherwise the SHARC+ the device profile names.
     fn attach(&mut self, options: Option<&AudioOptions>) -> Result<(), String> {
@@ -326,7 +351,9 @@ impl CoupledRuntime {
             serde_json::to_value(self.emulator.diagnostics()).expect("diagnostic serialization");
         report["recorded_scenario"] = self.recorded_scenario();
         if let Some(health) = self.audio_health() {
-            report["sharc_execution_connected"] = true.into();
+            if self.companion.kind() == Kind::Sharc {
+                report["sharc_execution_connected"] = true.into();
+            }
             report["pcm_output_connected"] = health["sink_connected"].clone();
             report["native_audio"] = health;
         }
@@ -379,12 +406,17 @@ impl CoupledRuntime {
     /// Queue bytes on the MIDI DIN input, one byte per wire time (31,250 baud), recording them for replay
     /// (a scenario's `midi` event). `Emulator::midi_in` takes its own period and records nothing.
     pub fn midi_in_at_wire_rate(&mut self, bytes: &[u8]) -> Result<(), String> {
-        let ips = elektron_native_boot::clock::cf_ips();
+        let ips = self.cf_ips();
         let period =
             elektron_native_boot::clock::scale_instr(elektron_native_boot::midi::WIRE_PERIOD, ips);
         self.emulator.midi_in(bytes, period)?;
         self.record_input(json!({"midi": bytes}));
         Ok(())
+    }
+
+    /// Guest instructions per emulated second of this runtime's emulator.
+    pub fn cf_ips(&self) -> u64 {
+        self.emulator.cf_ips()
     }
 
     /// ColdFire instructions since this runtime was ready (the clock
@@ -397,11 +429,9 @@ impl CoupledRuntime {
         if self.inputs.len() >= INPUT_LOG_LIMIT {
             return;
         }
-        event["at_instr"] = elektron_native_boot::clock::unscale_instr(
-            self.elapsed_instructions(),
-            elektron_native_boot::clock::cf_ips(),
-        )
-        .into();
+        event["at_instr"] =
+            elektron_native_boot::clock::unscale_instr(self.elapsed_instructions(), self.cf_ips())
+                .into();
         #[cfg(feature = "sharc")]
         if let Some(sharc) = self.sharc() {
             event["dsp_frame"] = sharc.handle.frames_sent().into();
@@ -417,13 +447,18 @@ impl CoupledRuntime {
             "description": "Inputs recorded from an interactive session",
             "instructions": elektron_native_boot::clock::unscale_instr(
                 self.elapsed_instructions(),
-                elektron_native_boot::clock::cf_ips(),
+                self.cf_ips(),
             )
             .max(1),
             "exact_events": true,
             "events": self.inputs,
         })
     }
+}
+
+/// The output of a runtime without PCM: no player, no capture.
+fn silent_out() -> AudioOut {
+    AudioOut::new(false, pace_seconds(0.0), || unreachable!(), || None)
 }
 
 /// The output for a session of `options`: the player (feature `play`), the pace target and the capture

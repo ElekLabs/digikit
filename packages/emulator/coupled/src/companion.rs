@@ -1,21 +1,25 @@
 //! The companion processor of a coupled run: whatever answers the ColdFire's DSPI2 link and, if it makes sound,
-//! hands the PCM to the runtime's [`AudioOut`]. Today that is the SHARC+ engine (`SharcCompanion`), the zero
-//! answerer (`ZeroCompanion`) or nothing (`NoCompanion`).
+//! hands the PCM to the runtime's [`AudioOut`]. That is the SHARC+ engine (`SharcCompanion`), a ColdFire peer
+//! CPU (`PeerCompanion`), the zero answerer (`ZeroCompanion`), the mailbox responder (`ResponderCompanion`)
+//! or nothing (`NoCompanion`).
 //!
 //! Scheduling stays outside the trait. The SHARC+ runs on a worker thread behind `periph::dspi::Peer` and
-//! `sync()` is its barrier; a peer that runs in lock step inside the board would make `sync()` do nothing.
+//! `sync()` is its barrier; the peer CPU runs in lock step inside the board, so its `sync()` does nothing.
 use crate::audio_out::AudioOut;
 use elektron_native_boot::Emulator;
 use serde_json::Value;
 use std::any::Any;
 
-/// Which companion a runtime has. `as_str` is the name the reports use. The enum is open: a ColdFire peer
-/// (`"peer"`) and a responder (`"responder"`) can join it.
+/// Which companion a runtime has. `as_str` is the name the reports use.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Kind {
     /// The SHARC+ engine on its worker thread.
     Sharc,
+    /// A second ColdFire that runs a program (`[emulator] peer = "coldfire"`), in lock step inside the board.
+    Peer,
+    /// The mailbox responder stands in for the second ColdFire: no program, no PCM.
+    Responder,
     /// The DSP side answers zeros; no engine, no PCM.
     Zero,
     /// No DSP side.
@@ -26,18 +30,25 @@ impl Kind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Sharc => "sharc",
+            Self::Peer => "peer",
+            Self::Responder => "responder",
             Self::Zero => "zero",
             Self::None => "none",
         }
     }
-    /// Whether this companion produces PCM.
+    /// Whether a companion of this kind can produce PCM. A peer CPU only does when the device mixes its voices
+    /// (`Companion::makes_audio` says).
     pub fn makes_audio(self) -> bool {
-        matches!(self, Self::Sharc)
+        matches!(self, Self::Sharc | Self::Peer)
     }
 }
 
 pub trait Companion {
     fn kind(&self) -> Kind;
+    /// Whether this companion produces PCM now (the runtime's `has_audio`).
+    fn makes_audio(&self) -> bool {
+        self.kind().makes_audio()
+    }
     /// Wait until the companion has finished every frame sent so far. The PCM this completes is pushed by the
     /// next [`poll`](Self::poll).
     fn sync(&mut self);
@@ -61,6 +72,9 @@ pub trait Companion {
 
 /// The default DSPI2 peer answers zeros (`AudioOptions::zero`): nothing to run or collect.
 pub struct ZeroCompanion;
+
+/// The mailbox responder in place of a peer CPU (`use_peer_responder`): nothing to run or collect.
+pub struct ResponderCompanion;
 
 /// No companion: a ColdFire-only run.
 pub struct NoCompanion;
@@ -92,4 +106,9 @@ macro_rules! inert {
     };
 }
 inert!(ZeroCompanion, Kind::Zero, "zero-DSP mode has no DSP state");
+inert!(
+    ResponderCompanion,
+    Kind::Responder,
+    "the mailbox responder has no state"
+);
 inert!(NoCompanion, Kind::None, "no DSP companion");
