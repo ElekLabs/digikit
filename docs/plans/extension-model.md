@@ -706,28 +706,28 @@ What:
      whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (`bind_max` 24 per file;
      installed sites DT2 18, DN2 22 of 48 before the graph site below).
    - Graph (decided, O7): see item 1b.
-1b. Graph (option A of the static design; finding 143 "Graph"). The 28-byte elements of the seven RAM vectors are `Bitmap` objects (1-bit,
-   column-major tiles of 28 x 15 pixels), and the cell blits them. A shape graph is a vector of four tiles.
-   - One UI-task hook site per device, the `addi.l #BASE,D6` before the vector accessor call: DT2 0x4010c83c, DN2 0x4010e1b0 (bytes
-     `0686 <BASE> 2f06`, BASE a wildcard for other port versions; `devices/fw/lfo.toml` `cf.lfo.site.graph_vec`, hook `cf.lfo.hook.graph_vec`,
-     routine in `hooks-ui.s`). The hook runs the displaced `addi`, reads the unclamped wave at `0x14(A6)`, and for a wave 7..14 with a loaded
-     shape sets D6 to the service's vector and writes the repeat flag byte at `(-0x11,A6)` from the shape's unipolar mark. Every other case
-     leaves D6 as the stock code made it.
-   - The hook saves and restores every register it uses. It does not rely on the gcc call model for D0, D1, A0 and A1 (strict liveness calls
-     them live because of the `jsr` that follows).
-   - The service builds, at `apply_record`, one vector header (12 bytes) and four Bitmaps (28 bytes: vtable copied at run time from element 0
-     of stock vector 0, width 28, height 15, one word per column, pixel pointer, mask pointer, owner byte 0) per shape, from the 32 samples:
-     per column linear interpolation, `row = 7 - round(7 * v)`, rows between neighbouring columns filled as the stock sine does. Two pixel
-     tiles (normal and mirrored; elements 1 and 2 normal, 0 and 3 mirrored) and a shared mask of 28 words of 0xfffe0000. About 460 bytes
-     per shape, 3.7 KB for the 8 slots (waves 7..14).
-   - Publish by a valid word: the hook reads the slot's valid word first, and the service sets it after the header and tiles are complete.
-     A replaced shape alternates between two buffer sets. On unload the service clears the valid word first, then frees the memory when the
-     UI task cannot be inside the cell (E5: one draw pass or the quiesce of the other UI hooks).
-   - Budget: one more site per device (DT2 three binds, DN2 four; installed sites DT2 19, DN2 23 of 48). Cost: one compare per cell draw; the
-     tile build is a few hundred instructions once.
-   - Open before building: the DN2 tile size (28 x 15 not read from DN2 data; read the first Bitmap constructor call of the DN2 initialiser),
-     the tile pairing for waves other than TRI and SINE (check once with a `dk:dev` screenshot of a fresh LFO), and how a unipolar tile is
-     drawn (until read, shapes are bipolar). Estimate: half a day. Payoff: the picture only.
+1b. Graph (option A of the static design; finding 143 "Graph"). Built. The 28-byte elements of the seven RAM vectors are `Bitmap` objects (1-bit,
+   column-major tiles of 28 x 15 pixels, both devices), and the cell blits them. A shape graph is a vector of four tiles.
+   - One UI-task hook site per device, the `addi.l #BASE,D6` before the vector accessor call: DT2 0x4010c83c, DN2 0x4010e1b0 (a `cf_func` rule in
+     `devices/fw/lfo.toml`: `cf.lfo.site.graph_vec`, offset 0x24e of the cell, the hash is the same on both images and on DN2 1.11 and DT2 1.16; hook
+     `cf.lfo.hook.graph_vec`, `tail = true`, routine `lfo_ui_graph` in `hooks-ui.s`). The hook reads the unclamped wave at 0x18(A6) (the Ghidra label
+     `Stack[0x14]` is 4 less than the displacement), and for a wave 7..14 calls `dk_lfo_graph(wave, vtable word of A2, &flag)`; a non-null vector becomes D6
+     and the unipolar byte goes to -0x11(A6). Every other case, and an interrupt context, runs the displaced `addi` from the bind tail. The
+     shape path clears the condition code register, which is what the stock `addi` leaves.
+   - The hook saves and restores D0, D1, A0 and A1 (strict liveness: only N, Z, V, C are dead after the site; the gcc model is not used).
+   - The service builds, at `apply_record`, one vector header and four Bitmaps (vtable word copied from the cell's surface Bitmap by the first lookup,
+     width 28, height 15, one word per column, pixel pointer, mask pointer, owner byte 0) per shape, from the 32 samples (`graph.rs`): per column the
+     shape at phase `c / 28` (linear interpolation of the samples), `row = 7 - round(7 v)`, vertical fill to the middle of a step, a full line at a jump.
+     Element 2 is `v(t)`, element 3 `v(-t)`, element 0 `-v(t)`, element 1 `-v(-t)` (the stock pairing; the cell chooses by the signs of the LFO speed and
+     depth), so a shape that is not odd gets four pictures. The mask is 28 words of 0xfffe0000, shared. 4 tiles of 112 bytes and the objects are about
+     570 bytes per shape in `.bss`, 4.5 KB for 8 slots.
+   - Publish: `valid` is the last word stored; the hook reads it first. One buffer set per slot: the fields the cell reads never change after the first
+     publish, only tile pixels do, so a draw that races a reload shows one torn picture. `remove` clears `valid` first; the memory stays (nothing frees it).
+   - Budget: one more site per device (DT2 three binds, DN2 four; installed sites DT2 19, DN2 23 of 48). Cost: a status register read, one load and one
+     compare per cell draw; the tile build is a few hundred instructions once.
+   - Known gaps: the picture ignores the start phase (the cell zeroes it for the clamped wave 6 before the site), and a wave number whose shape is not
+     loaded draws the RAND tiles. The element choice by speed and depth sign, and how a stock-like unipolar flag looks (three tiles drawn), are checked in the
+     `dk:dev` screenshot at the device check.
 2. The slot code: for an extended wave value, compute signed Q31 from the 32-bit phase with the module's 32-sample table and integer linear
    interpolation (the service keeps a delta table of 32 cells `{ v = s[i] << 16, d = s[i+1] - s[i] }`, built when the shape loads, so the tick makes
    `v + ((d * f) << 1)`); mark unipolar shapes in the service's own table. Cost budget, from the CPU and the tick period: the core runs at 264 MHz
@@ -756,7 +756,9 @@ What:
 8b. The lfo service checks a record's body key against the module's KEYS entry. Today nothing ties them: a literal body id bypasses the planner's key rule, so the check refuses a record whose key is not in the module's table. The service reads the keys with the kind-free `CoreApi::keys_of(at, kind, out)` (the keys of record kind `kind` in the header table of the accepted module at selection index `at`); the `Service` ABI names no LFO field (rule 12).
 9. Template `sdk/templates/lfo/` and a fixture `tests/fixtures/modules/test/lfo-shape`.
 
-Tests: unit (lfo service: lookup, interpolation, the delta table against the plain formula, the tile builder against the plain formula, fallback, contract suite); assembly (one case, the lfo fixture binds its hooks and the image
+Follow-ups after the device check: E6c (parameter range override), E6d (custom LFO graphics through the SDK) and E6e (clean-up), below.
+
+Tests: unit (lfo service: lookup, interpolation, the delta table against the plain formula, the tile builder against the stock TRI tiles, fallback, contract suite); assembly (one case, the lfo fixture binds its hooks and the image
 stub slot is filled); device (one test per device: choose the new wave, read the firmware's LFO output in the parameter value array, not the
 screen; and one stock-firmware or safe-mode check that the saved project loads without a fault); a `dk:dev` screenshot of the MOD page with a loaded shape (DN2 first, DT2 at the end).
 
@@ -769,6 +771,38 @@ loads safely without the module.
 
 Estimate: 2-3 days. Payoff: proves the "value of an existing knob" shape. Confidence: medium-high (all sites found on both devices; the
 interrupt cost is the open risk). Depends on: E3; E4. Open first: which field the tick clamp reads (finding [O]).
+
+### E6c Parameter range override
+
+What: the `t1_range` hook of E6 sits on the firmware's shared T1 range accessor and the lfo service owns it. Only one service may hook a site (planner
+owner rule), so a second user (E7's filter knob ranges, or any later service) would be refused. One owner hooks the accessor once and offers a
+registration call, code to maximum (or a full range override), per owner, removed on unload. lfo registers its codes 79, 89 and 99; machines register
+the filter codes later. For an unregistered code the accessor runs the stock code, and the hook keeps the interrupt guard (the status register mask check).
+
+Design step first: who owns the hook. Candidates: the shared params/rows layer, or the machines service. Settle it with the ownership rule of
+docs/plans/sdk.md section 10, then write the call (an interface C call on `CoreApi`, so the `Service` ABI names no LFO field, rule 12) and the removal on unload.
+
+Build it when E7 starts, so the second user shapes the API. Depends on: E6. Must land before E7.
+
+### E6d Custom LFO graphics through the SDK
+
+What: an optional module draw function on the shape, for example `static void draw(const dk_page_canvas_v1 *c, int mirrored)`. The lfo service calls
+it once in the UI task when the shape loads, with a canvas sized to the device's tile (28 x 15). The canvas writes into the service's tiles; the
+service keeps the pixels and no pointer into module code (rule 4). Without the function the tiles come from the samples (E6 item 1b). The firmware
+`Bitmap` layout stays out of the SDK (`sdk/include/dk/page/widgets.h` gives no firmware Bitmap access).
+
+This changes the SDK contract, so Em agrees the concrete API before it is built. Build it after E6's device check.
+
+### E6e Clean-up after E6's device check
+
+Refactors with no behaviour change, proven by objdiff of the built objects:
+1. Move the firmware `Bitmap`, vector header and tile helpers from the lfo service into a shared no_std library crate that follows the
+   `modules/core/services/params` pattern (a library crate used by more than one service, not a service). lfo is the first user and E7's filter graph
+   the second. Check the layercheck service-crates rule allows it as it allows params.
+2. Unify `hooks-dt2.s` and `hooks-dn2.s` into one routine source. The per-device facts are declared in `devices/fw/lfo.toml` (a `[[struct]]` for the offset of
+   the wave field of the LFO state, the base register, the scratch register of each site, the D1 save) and reach the routines through the generated
+   `dk_fw_lfo.inc` symbols and macros of `patchkit gen`, so a new firmware version is a TOML change plus `patch:port`. This reworks reviewed interrupt
+   code, so it gets a new review.
 
 ### E7 Filter machines
 
@@ -792,6 +826,7 @@ What:
 6. Hook budget: `machines.dks` declares 13 hooks; the six filter sites give 19, under `bind_max` 24 per service file and `install_sites` 48
    overall. Five hooks remain after E7; the next table family may need a second service file.
 7. Template `sdk/templates/filter/` and a fixture `tests/fixtures/modules/test/filter-gain`.
+8. The filter response graph reuses the Bitmap and tile helpers of the shared crate (E6e), and the filter knob ranges use the registration call of E6c.
 
 Tests: unit (machines service filter lowering, contract suite with a filter fixture); rig (filter DSP conformance in `@digi/sharc-rig-kit`);
 assembly (filter fixture loads); device (one test per device: select the filter, render, PCM report against the fixture's expected response).
@@ -845,8 +880,11 @@ runtime-and-services.md.
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
-| 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | active (branch e6/lfo-shapes): compute, names, panel range built and reviewed; graph next; device check pending |
-| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8 | filter test plus subset | todo |
+| 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | active (branch e6/lfo-shapes): compute, names, panel range and graph built; graph review and device check pending |
+| 8 | E6c parameter range override | E6 | none until E7 | todo (design step now, build when E7 starts; before E7) |
+| 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
+| 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
+| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, E6c, R12-8 | filter test plus subset | todo |
 | 10 | E8 regroup and names | E1, open branches merged | full run of its batch | todo |
 
 E1, E2, E3 share one subset gate. E0 runs in parallel with E1-E3. When an item starts, its status becomes `active` with the branch; when it lands, `done` with the PR, set in that PR.
