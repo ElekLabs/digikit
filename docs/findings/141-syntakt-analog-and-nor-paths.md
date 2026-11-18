@@ -1,6 +1,6 @@
 # Syntakt analog, FPGA and NOR paths in MAIN
 
-All claims are **[D]** (read once in the decompiled MAIN of 1.42 and the cfdb datarefs) unless marked **[O]** (open). Image: `st-1.42`.
+All claims are **[D]** (read once in the decompiled MAIN of 1.42 and the cfdb datarefs) unless marked **[V]** (checked against image bytes by a second agent) or **[O]** (open). Image: `st-1.42`.
 DT2 1.17 and DN2 1.12 are compared in the last section. Purpose: which windows a content module must never touch
 (pack-time guard, `[protect]` in `devices/*.toml`). Context: [70](70-syntakt-1-42.md), [136](136-syntakt-peer-cpu.md).
 
@@ -26,7 +26,7 @@ DT2 1.17 and DN2 1.12 are compared in the last section. Purpose: which windows a
   (sample chunk upload: `+2 = 2`, `+0xc` sequence, 2 KB copy to `+0x800`) and `vector_68_handler` (hello magic at `+0`, `+2`, `+4`, command `+2`, `+0xc`).
   That is the mailbox of [70](70-syntakt-1-42.md) "Peer link".
 - Per audio block `vector_191_handler` (0x400a38ce, and the three other copies) arms eDMA TCD `0xFC0455E0` twice: read `0x500` bytes from
-  `0x100001b0` to SRAM `0x80003d50` (lines 791-796, 1095-1100) and write the SRAM frame at `0x80002000` to `0x10000000` (lines 923-928);
+  `0x100001b0` to SRAM `0x80003d50` (lines 791-796, 1095-1100) and write the SRAM frame at `0x80002000` (`0x1b0` bytes, up to `0x800021af`; the parameter block at `0x800021b0` is not sent) to `0x10000000` (lines 923-928);
   `DAT_fc04401e = 0x2f` starts channel 47. So the window carries sample data, the frame to the peer and the peer's answer.
 - The analog voices are not behind this window. MAIN drives them through DSPI `0xFC03C000` (control frame, [143](143-syntakt-analog-frame.md)). What the bridge FPGA
   does with the window besides the peer link is not visible **[O]**.
@@ -45,11 +45,11 @@ DT2 1.17 and DN2 1.12 are compared in the last section. Purpose: which windows a
   `01 f8 76 ff 04 00`, later `00`. The listener is **[O]** ([143](143-syntakt-analog-frame.md)).
 - `FUN_4010223e` arms eDMA TCD `0xFC0451E0` (source `0x800051ec + n * 0x830`, destination PUSHR `0xFC03C034`; TCD built by `FUN_401020f4`) and starts channel 15
   (`MCF5441X_MMIO::EDMA_SERQ = 0xf`), eight call sites in the four `vector_191_handler` copies. The buffers are filled by `FUN_401021b4` from the analog control frame
-  `0x80003160` (502 PUSHR words, PCS0): [143](143-syntakt-analog-frame.md) gives the writer chain and the layout.
+  `0x80003160` (502 PUSHR words, PCS0): [143](143-syntakt-analog-frame.md) gives the writer chain and the layout. The chain to eDMA ch 15, TCD `0xFC0451E0`, DADDR `0xFC03C034`, CITER and BITER `0x206` is **[V]**.
 - `FUN_400bcb4e` is the boot-time FPGA load: DSPI MCR `0x80030c00`, INIT/DONE on GPIO `0xEC09401C/D`, bitstream halfwords pushed as `0x90000000 | w`
   (2-byte steps from `0x43be315c`). No caller is known (reached by a vector or as a thread entry); `FUN_400bcf7a` is its twin with the eMMC and NOR branch.
-- GPIO `0xEC094xxx` helpers set or clear single pins: `FUN_40114038` (port 6 bit 2, the peer pin), `FUN_401140a2` (port 6 bit 0), `FUN_4011407e` (port 7 bit 7),
-  `FUN_4011405c` (port 8 bit 1), `FUN_40114288` (port 6 bit 4: the NOR chip select, argument 1 selects, 0 releases). Roles of the pins: [143](143-syntakt-analog-frame.md) "GPIO" (transport pulses, no analog enable or mute found) **[O]**.
+- GPIO `0xEC094xxx` helpers set or clear single pins: `FUN_40114038` (port 6 bit 2, the peer-link doorbell pin), `FUN_401140a2` (port 6 bit 0), `FUN_4011407e` (port 7 bit 7),
+  `FUN_4011405c` (port 8 bit 1), `FUN_40114288` (port 6 bit 4: the NOR chip select, argument 1 selects, 0 releases). Roles of the other pins are **[O]**: [143](143-syntakt-analog-frame.md) "GPIO" labels them from their callers only (no analog enable or mute found).
 
 ## SPI NOR writes
 
