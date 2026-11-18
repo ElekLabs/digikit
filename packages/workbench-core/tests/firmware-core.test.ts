@@ -239,15 +239,14 @@ test('the RPC progress reads in megabytes, and says when the device checks and f
 
 test('only a patch with the runtime leaves a runtime to bind services to and to install default modules on', () => {
   assert.equal(leavesRuntime(prepared()), true);
-  // a patch without the runtime has no image id to report (the Syntakt's first flash: core/peer-image only)
+  // a patch without the runtime has no image id to report (the Syntakt's optional first flash: core/peer-image only)
   assert.equal(leavesRuntime(prepared({ imageId: null })), false);
   assert.equal(leavesRuntime(prepared({ restore: true, imageId: null, runtime: null })), false);
 });
 
-test('the page text for an image without a runtime says so and names the full set', () => {
+test('the page text for an image without a runtime says so', () => {
   const dev = { kind: 'connected', d: { model: 'dn2', os: '1.12' } } as never;
   const text = matchView(prepared({ imageId: null, runtime: null }), dev).os;
-  assert.match(text ?? '', /installs no runtime/);
-  assert.match(text ?? '', /--set device-full/);
+  assert.match(text ?? '', /installs no digikit runtime/);
   assert.match(matchView(prepared(), dev).os ?? '', /with digikit runtime 0\.5\.2\./);
 });

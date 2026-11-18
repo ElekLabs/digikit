@@ -122,7 +122,7 @@ export function matchView(p: PreparedFlash | undefined, dev: DeviceState): Match
     ? `The image installs OS ${p.os} (stock).`
     : leavesRuntime(p)
       ? `The image installs OS ${p.os} with digikit runtime ${p.runtime ?? ''}.`.replace(' .', '.')
-      : `This flash installs no runtime. The full set is flashed with \`patchkit flash STOCK.syx --port NAME --set device-full\`.`;
+      : 'This flash installs no digikit runtime.';
   return { state: 'match', text: 'matches the image', os: `${os}${installs}` };
 }
 

@@ -145,9 +145,11 @@ Not covered: a read of the NOR directory by a computed id. All four call sites p
   no bytes and MAIN shows its boot failure screen ("OOPS! SOMETHING WENT WRONG, SWITCH OFF/ON TO BOOT AGAIN." in the emulator). The SHA-256 is carried in the adapter (rolled, 16-word schedule, 1.2 KB of code and tables); the stock MAIN has none
   (finding 146) and the runtime's `sha256` is not reachable from an adapter under the layer rules.
 
-- **Hardware sets.** `devices/syntakt.toml` `[patch_sets]`: `device` = `core/peer-image` only (step A, container 1,882,784 bytes, no runtime: the adapter no longer
-  requires `core/runtime`) and `device-full` = the `emulator` modules (step B, 2,011,472 bytes). Both pass `patchkit preflight`. The workbench skips the service
-  refresh and the default modules after a flash whose image has no runtime. How to flash: [PATCHING.md](../PATCHING.md) "Flashing a Syntakt, in two steps".
+- **Hardware sets.** `devices/syntakt.toml` `[patch_sets]`: `device` = the `emulator` modules (the runtime and every core module with a Syntakt port, container
+  2,011,472 bytes; the workbench Firmware page flashes it, as on the other devices) and `device-peer` = `core/peer-image` alone (1,882,784 bytes, no runtime: the
+  adapter does not require `core/runtime`), an optional first flash from the command line. Both pass `patchkit preflight`. After a flash whose image has no runtime
+  the workbench and `patchkit flash` confirm the restart with the stock identity (Ping) and skip the service refresh and the default modules. How to flash:
+  [PATCHING.md](../PATCHING.md) "Flashing a Syntakt".
 
 ## 7. Emulator proof [D]
 

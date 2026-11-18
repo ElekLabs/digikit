@@ -347,8 +347,8 @@ fn the_step_a_set_carries_the_peer_image_and_its_claim_but_no_runtime() {
         .iter()
         .find(|d| d.short == "st")
         .unwrap();
-    // step A as the workbench flashes it: the peer image and what it needs to be loaded, no runtime, with its repack claim in the record
-    let (ids, _) = lib.with_requires(&dev.patch_sets["device"]).unwrap();
+    // the optional first flash (`device-peer`): the peer image and what it needs to be loaded, no runtime, with its repack claim in the record
+    let (ids, _) = lib.with_requires(&dev.patch_sets["device-peer"]).unwrap();
     let a = apply::apply(&raw, &reg, &lib, &ids).unwrap();
     let rec = patchkit::verify::verify(&a.syx, Some(&reg), Some(&raw))
         .unwrap()

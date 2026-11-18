@@ -1,5 +1,6 @@
 # Syntakt. Identity level (docs/design/device-data.md "Device levels") plus what the emulator needs: a panel and the free-running timers.
-# Hardware: [patch_sets] `device` (step A, core/peer-image only) and `device-full` (step B) are the two flashes of a first Syntakt; no [acceptance] yet.
+# Hardware: [patch_sets] `device` is the full set, as on the other devices (the workbench Firmware page flashes it); `device-peer` is an optional first
+# flash with core/peer-image alone. No [acceptance] yet.
 # Plan: docs/plans/syntakt.md; findings 70 and 136.
 #
 # The CPUs are ColdFire only. Sections 1 (FPGA bitstream), 6 and 7 (the peer CPU) are never written, and the FPGA is never modelled
@@ -171,17 +172,16 @@ send_slots = 0
 param_rows = 0
 page_rows = 0
 
-# Module sets patched in by name (the Digitone II file explains them). Hardware: the first flash of a Syntakt is in two steps, each a
-# `patchkit flash STOCK.syx --port NAME --set SET` (docs/PATCHING.md "Flashing a Syntakt").
-#   `device` (step A): core/peer-image only (core/expansion comes with it). It stores the peer CPU's section 7 packed and unpacks it in MAIN
-#     (the stock image is already 32 KB over the container limit with the runtime, and the image must stay under it); no runtime, no menu, no run-time
-#     modules. The workbench Firmware page flashes this set.
-#   `device-full` (step B): the runtime and every core module that has a Syntakt port (the same modules as `emulator`).
+# Module sets patched in by name (the Digitone II file explains them; docs/PATCHING.md "Flashing a Syntakt").
+#   `device`: the runtime and every core module that has a Syntakt port (the same modules as `emulator`), with core/peer-image: it stores the peer
+#     CPU's section 7 packed and unpacks it in MAIN (without it the image is 32 KB over the container limit). The workbench Firmware page flashes this set.
+#   `device-peer`: core/peer-image alone (core/expansion comes with it), no runtime: an optional first flash that proves the packed section 7 on its
+#     own, with `patchkit flash STOCK.syx --port NAME --set device-peer`.
 # `emulator`: what the emulator patches in itself. The DSP, run-time machine and effect modules have no Syntakt port (no DSP). There is no
 # `device-introblank`: the boot screen module has no Syntakt port.
 [patch_sets]
-device = ["core/peer-image"]
-device-full = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
+device = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
+device-peer = ["core/peer-image"]
 emulator = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
 
 # Where the card keeps things (finding 138 "Storage"; sectors are 512 bytes). Read by packages/emulator/device-profile and used by the +Drive builder,

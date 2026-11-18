@@ -617,33 +617,33 @@ itself for a 1.16 or 1.17 image (finding 01, spike 0.2). Patched images boot to 
 (DT2 1.17, DN2 1.12), the smoke matrix passes, and the module proofs measure the sound. None of this is a
 hardware result.
 
-### Flashing a Syntakt, in two steps
+### Flashing a Syntakt
 
 A Syntakt has two hardware sets in `devices/syntakt.toml` (`[patch_sets]`); the image of each is under the 2 MiB `container_max` only because
 `core/peer-image` stores section 7 packed ([finding 150](findings/150-syntakt-section7-pack.md)). Neither has run on a unit yet; the emulator proof is in the finding.
 
-| Step | Set | Modules | Container (OS 1.42) |
+| Set | Modules | Container (OS 1.42) | Flashed by |
 |---|---|---|---|
-| A | `device` | `core/peer-image` (and `core/expansion`, which it needs); no runtime, no menu | 1,882,784 bytes |
-| B | `device-full` | the runtime and every core module with a Syntakt port (the same modules as `emulator`) | 2,011,472 bytes |
+| `device` | the runtime and every core module with a Syntakt port (the same modules as `emulator`) | 2,011,472 bytes | the workbench Firmware page, as on the other devices |
+| `device-peer` | `core/peer-image` (and `core/expansion`, which it needs); no runtime, no menu | 1,882,784 bytes | the command line only: an optional first flash |
 
-Step A changes MAIN only at the peer thread's NOR read and the reset-path loader, and section 7 is stored packed: it shows whether the unit boots and the second CPU
-loads the unpacked program. Flash B after A works. Before either: **back up the +Drive card**, keep `Syntakt_OS1.42.syx`, and do not use Transfer to put samples or
+`device-peer` changes MAIN only at the peer thread's NOR read and the reset-path loader, and section 7 is stored packed: it shows on its own whether the unit boots and
+the second CPU loads the unpacked program. Before any flash: **back up the +Drive card**, keep `Syntakt_OS1.42.syx`, and do not use Transfer to put samples or
 sounds into the stock slots until the Data API guard exists (plan: docs/plans/syntakt.md). Recovery is the section above: hold FUNC at power-on, TRIG 4 (OS UPGRADE),
 the stock file over 5-pin MIDI DIN.
 
 ```sh
-# step A: the workbench Firmware page flashes the `device` set; or from the command line
+# the full set: the workbench Firmware page, or from the command line
 patchkit flash firmware/Syntakt_OS1.42.syx --port "Syntakt" --set device
-# step B: only the command line flashes `device-full`
-patchkit flash firmware/Syntakt_OS1.42.syx --port "Syntakt" --set device-full
+# optional first flash, the peer image alone
+patchkit flash firmware/Syntakt_OS1.42.syx --port "Syntakt" --set device-peer
 patchkit flash STOCK.syx --port NAME --set device --dry-run --save OUT.syx   # patch and check only; then `patchkit preflight OUT.syx`
 ```
 
-After a step-A flash the workbench and `patchkit flash` do not look for a runtime: a patch without the runtime has no image id, so INFO is not asked.
+After a flash of an image without the runtime (`device-peer`) the workbench and `patchkit flash` do not look for a runtime: a patch without the runtime has no image id, so INFO is not asked.
 The restart is confirmed by the stock identity instead (MidiRpc Ping names the model, [finding 144](findings/144-stock-device-identity.md)), the page reports the flash as done
 ("patched without a runtime"), and it skips binding services and installing the default modules (`leavesRuntime` in `firmware-core.ts`, `Prepared::leaves_runtime`).
-A device that still runs a runtime after such a flash is an error. After step B they follow as on the other devices.
+A device that still runs a runtime after such a flash is an error. After a `device` flash they follow as on the other devices.
 
 ### Recovery
 
