@@ -18,7 +18,7 @@ export type SegmentKind = 'machine' | 'effect' | 'tool' | 'other';
 export interface KnownModule {
   name: string;
   label: string;
-  group: 'Machines' | 'Effects' | 'Tools' | 'Services';
+  group: 'Machines' | 'Effects' | 'LFO shapes' | 'Tools' | 'Services';
   needs: Needs | null;
 }
 
@@ -76,6 +76,7 @@ export const SPECS: Spec[] = [
 const KINDS: Record<KnownModule['group'], SegmentKind> = {
   Machines: 'machine',
   Effects: 'effect',
+  'LFO shapes': 'tool',
   Tools: 'tool',
   Services: 'tool',
 };

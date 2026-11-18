@@ -316,6 +316,10 @@ description = "Check one module: module:check ID [--device dt2|dn2] [--trace]; a
 run = "sh tools/devtools/module_audit.sh"
 description = "ColdFire memory audit of one run-time module in the emulator: `module:audit NAME [--device dt2|dn2]`. Loads the module (and the run-time modules it requires) on a ColdFire-only rig, drives the UI for a bounded time (DIGIKIT menu, machine list, parameter turns, project save and load) and reports every store into the free regions outside the module blocks by code that is not a patch object (pc, address, size, the code it belongs to). Runs a Vitest device test (modules/core/runtime/tests/memaudit-module.device.test.ts) with DIGI_AUDIT_MODULE=NAME. About 1 to 2 minutes per device"
 
+["lfo:report"]
+run = "sh tools/devtools/lfo_report.sh"
+description = "Output report of an LFO shape module on the emulator: `mise run lfo:report -- <author/name> [--device dn2|dt2]` (default device dn2). Per shape: wave number, fit error against its own table, the closest other table, min and max of the output, swing against full scale and a verdict; a table on stdout, one SVG per shape and report.json in out/runs/lfo-shape-report/<device>/<module>/. About 5 minutes. A Vitest file that asserts nothing and joins no gate"
+
 ["module:pack"]
 run = "uv run python -m tools.patchkit.patchkit pack"
 description = "Build the stale objects and pack a run-time module as a .dkm in one command: mise run module:pack -- <author/name> --device dt2 [--trace] [-o FILE] (default out/patch/<name>-<device>.dkm; --trace defines DK_TRACE for the module's C and DSP sources and sets the trace bit)"

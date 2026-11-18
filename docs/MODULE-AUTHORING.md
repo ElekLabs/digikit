@@ -53,7 +53,7 @@ mise run module:new -- KIND AUTHOR/NAME [--dir DIR] [--title T] [--short S] [--n
 
 | Part | Meaning |
 | --- | --- |
-| `KIND` | `machine`, `fx` or `tool`. |
+| `KIND` | `machine`, `fx`, `tool` or `lfo-shape` (an LFO shape module; it goes to `modules/lfo/NAME`). |
 | `AUTHOR/NAME` | The module id. The author has lowercase letters, digits and dashes. The name is lower snake case. `core` and `framework` are refused. |
 | `--dir DIR` | Write `DIR/NAME` instead of the repository folder. |
 | `--title T` | Display name, 1 to 23 characters. Default: the name in Title Case. |
@@ -149,7 +149,7 @@ release. A tool has neither list.
 
 `[[record]]` lists a record of a generic kind that `init` emits with `dk_record_add` (a kind that a service owns and that has no builder, such as `lfo_shape`): `kind` is the kind's lower-case name from `sdk/sdk.toml` `[records.kinds]` and `id` a local name for the record (the shape of an `lfo_shape`). Its key is `hash24(<module id>:<id>) << 8`: `patchkit gen` writes it to `build/gen/module_ids.h` as `DK_KEY_<ID>`, and `init` writes that constant as the first word of the record body. The packer writes the keys into the header table, so the boot planner refuses a kind no service owns and a key that another module of the selection has before the module loads. Machines and effects are builder calls, not `[[record]]`.
 
-An `lfo_shape` record is an LFO waveform: the body is the key (`DK_KEY_<ID>`), a 4-character name (space to tilde; the Digitone II shows the first 3) and 32 samples of `int16` (Q15), 72 bytes after the 8-byte record header (80 bytes). The `lfo` service gives the shape a value of the LFO WAVE parameter from 7 up (kept across boots in the settings key `lfo.shapes`, never 0x80 or more), and the LFO tick reads the samples with linear interpolation, 32-bit phase to Q31. A shape with no negative sample is unipolar. The service refuses a record whose key the module's header table (`[[record]]`) does not list. A sound that holds the number shows ERR and runs like RAND without the service, and runs as the triangle when the module is not loaded. Start from `module:new -- lfo AUTHOR/NAME` (`sdk/templates/lfo`).
+An `lfo_shape` record is an LFO waveform: the body is the key (`DK_KEY_<ID>`), a 4-character name (space to tilde; the Digitone II shows the first 3) and 32 samples of `int16` (Q15), 72 bytes after the 8-byte record header (80 bytes). The `lfo` service gives the shape a value of the LFO WAVE parameter from 7 up (kept across boots in the settings key `lfo.shapes`, never 0x80 or more), and the LFO tick reads the samples with linear interpolation, 32-bit phase to Q31. A shape with no negative sample is unipolar. The service refuses a record whose key the module's header table (`[[record]]`) does not list. A sound that holds the number shows ERR and runs like RAND without the service, and runs as the triangle when the module is not loaded. Start from `module:new -- lfo-shape AUTHOR/NAME` (`sdk/templates/lfo-shape`, section 5.10).
 
 `[uses.dt2]` and `[uses.dn2]` hold the rows the module takes on each device: `machine_rows`, `param_rows`, `page_rows`, `record_bytes`, and the DSP cost
 (`dsp_cost_voice` for a machine, `dsp_cost_fx` for an effect: instructions per block). `module:check` runs `init` in the emulator and the conformance
@@ -447,6 +447,23 @@ in `init`, then call it.
 
 See `modules/tools/bootscreen`.
 
+
+### 5.10 An LFO shape module
+
+```sh
+mise run module:new -- lfo-shape alice/wobble     # modules/lfo/wobble
+mise run module:check -- alice/wobble
+```
+
+A module of kind `lfo-shape` adds LFO waveforms to the WAVE parameter of the three LFOs of every track. It declares one `[[record]]` with `kind = "lfo_shape"` for each shape; `src/module.c` holds a table `SHAPES` (a 4-character name and 32 literal `int16` samples, Q15, one period) and a table `KEYS` (the `DK_KEY_<ID>` of each record, same order), and `init` adds one record per shape with `dk_record_add`. The README of the module lists each shape's name, its 3-character form and the formula of its samples.
+
+Limits:
+
+- A module has 1 to 8 shapes (the service's table of keys per module). All modules together have 8 shapes loaded; a ninth is refused at load (`E_TABLE_FULL`).
+- A name has 4 characters, space to tilde, and is used once in the module. No two names of a module share their first 3 characters (the Digitone II shows 3).
+- A shape is not flat (all samples equal) and not all zero.
+
+`module:check` runs `init` in the emulator, reads the records the module committed and checks them with `validate_records` of the `lfo` service, the rule the service runs at load (`patchkit records --check`). It prints each problem and fails. The same command is `patchkit records --check FILE|-` for a block of records. The check needs the emulator, like the check of a machine or an effect.
 
 ## 6. Generated files
 

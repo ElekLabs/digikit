@@ -74,6 +74,7 @@ test('header table: versions 1 to TABLE_VERSION are read, a service is grouped a
   assert.equal(hasHeaderTable(dkm('x/m', { machine: 1, tableVersion: 2 })), true);
   assert.equal(groupOf(dkm('x/s', { role: 1, tableVersion: 2 })), 'Services');
   assert.equal(groupOf(dkm('x/s', { machine: 1, role: 1 })), 'Services');
+  assert.equal(groupOf(dkm('x/l', { lfo: 1 })), 'LFO shapes');
   assert.equal(groupOf(dkm('x/t')), 'Tools');
   for (const tableVersion of [0, TABLE_VERSION + 1]) {
     const f = dkm('x/o', { machine: 1, role: 1, tableVersion });

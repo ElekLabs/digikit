@@ -44,13 +44,24 @@ test.skipIf(!have)(
   },
 );
 
+test.skipIf(!haveWasmAndImages || !existsSync(join(root, 'dist', 'modules', 'dt2', 'samples.dks')))(
+  'samples.dks hooks no firmware site: bind returns it as built',
+  async () => {
+    const binder = await DkBind.create(readBytes(wasmPath), JSON.stringify(buildBindBundle(root)));
+    const samples = readBytes(join(root, 'dist', 'modules', 'dt2', 'samples.dks'));
+    const r = binder.bind(samples, new Uint8Array(readFileSync(images.dt2)));
+    assert.equal(fileHashHex(r.file), fileHashHex(samples));
+    assert.deepEqual(r.hooks, []);
+  },
+);
+
 test.skipIf(!haveWasmAndImages || !existsSync(join(root, 'dist', 'modules', 'dt2', 'lfo.dks')))(
-  'lfo.dks hooks no firmware site: bind returns it as built',
+  'lfo.dks hooks firmware sites: bind patches it and reports the hooks',
   async () => {
     const binder = await DkBind.create(readBytes(wasmPath), JSON.stringify(buildBindBundle(root)));
     const lfo = readBytes(join(root, 'dist', 'modules', 'dt2', 'lfo.dks'));
     const r = binder.bind(lfo, new Uint8Array(readFileSync(images.dt2)));
-    assert.equal(fileHashHex(r.file), fileHashHex(lfo));
-    assert.deepEqual(r.hooks, []);
+    assert.notEqual(fileHashHex(r.file), fileHashHex(lfo));
+    assert.ok(r.hooks.some((h) => h.hook === 'cf.lfo.hook.wave_name'));
   },
 );
