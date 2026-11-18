@@ -10,6 +10,8 @@ pub struct Samples;
 
 impl<C: CoreApi> Service<C> for Samples {
     dkrt_abi::accepts_records!();
+    // never refuses a reload: whether a pool entry of the module is in use is not cheap to know here (follow-up row: a module that plays a sample while it is reloaded)
+    dkrt_abi::accepts_reload!();
 
     unsafe fn on_loaded(_core: &C, rec: usize) {
         tracks::ready(rec);

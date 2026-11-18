@@ -305,6 +305,7 @@ mod tests {
     struct S;
     impl<C: CoreApi> Service<C> for S {
         dkrt_abi::accepts_records!();
+        dkrt_abi::accepts_reload!();
     }
     static ROWS: [ServiceRow; 1] = [ServiceRow::of::<S, crate::core_api::RealCore>("machines", &[])];
     static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);

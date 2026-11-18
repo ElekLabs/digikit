@@ -860,6 +860,7 @@ pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
     leaves_no_residue::<S>(f);
     a_refusal_during_apply_leaves_nothing::<S>(f);
     settle_over_the_live_set_changes_nothing::<S>(f);
+    reload_refusal_leaves_no_residue::<S>(f);
     // leave the statics empty for the next profile
     drop(Lifecycle::<S>::new(f));
 }
@@ -1140,6 +1141,32 @@ fn settle_over_the_live_set_changes_nothing<S: Service<FakeCore>>(f: &Fixture) {
     }
     l.unload(1);
     l.unload(0);
+}
+
+/// Case 10: `reload_refusal` of a module that is loaded is `OK` or `E_RELOAD_ROUTED` (a module's own state, never a refusal for another record), and once the
+/// module is unloaded it is `OK`: an unload leaves nothing that holds up the reload of the record's next module.
+fn reload_refusal_leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
+    let l = Lifecycle::<S>::new(f);
+    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
+    let r = unsafe { S::reload_refusal(&l.core, 1) };
+    assert!(
+        r == OK || r == dkrt_sdk::E_RELOAD_ROUTED,
+        "{}: reload_refusal answers {r} for a loaded module",
+        f.name
+    );
+    assert_eq!(
+        unsafe { S::reload_refusal(&l.core, 2) },
+        OK,
+        "{}: reload_refusal refuses record 1, which holds no module",
+        f.name
+    );
+    l.unload(0);
+    assert_eq!(
+        unsafe { S::reload_refusal(&l.core, 1) },
+        OK,
+        "{}: reload_refusal still refuses after the unload",
+        f.name
+    );
 }
 
 /// Case 6: case 3 ten times: no table grows and no sticky value drifts.

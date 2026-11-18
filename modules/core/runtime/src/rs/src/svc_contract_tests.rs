@@ -93,6 +93,7 @@ fn the_link_and_the_job_queue_answer_over_the_c_shape() {
 struct Nothing;
 impl<C: CoreApi> Service<C> for Nothing {
     dkrt_abi::accepts_records!();
+    dkrt_abi::accepts_reload!();
 }
 
 mod glue {

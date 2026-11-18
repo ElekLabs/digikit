@@ -26,6 +26,20 @@ impl<C: CoreApi> Service<C> for Fx {
         Fx::validate(kind, bodies, report)
     }
 
+    /// A reload swaps the effect's code: an effect that is on a route (master or send, `fx_route` not 0) is running in the DSP, so the module waits until it is off.
+    /// Effect reload comes with E5b (docs/plans/extension-model.md); until then it is refused here.
+    unsafe fn reload_refusal(core: &C, owner: u8) -> i32 {
+        let d = core.dsp();
+        let mut k = 0;
+        while k < MAX_FX {
+            if d.fx_owner[k] == owner && d.fx_route[k] != 0 {
+                return E_RELOAD_ROUTED;
+            }
+            k += 1;
+        }
+        OK
+    }
+
     unsafe fn declare(d: &mut Declare) {
         d.kind(fxpage::KIND_EFFECT, fxpage::LEN_EFFECT);
     }

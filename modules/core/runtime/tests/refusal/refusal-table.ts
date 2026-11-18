@@ -103,6 +103,6 @@ export const ROWS: Record<string, Row> = {
   E_SVC_ABI: { fail: { file: LFO_DEVICE, test: 'another ABI' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
   E_RELOAD_PLAYING: { kind: 'host', reason: 'a reload command, not a module file, causes it; a device test comes with the reload protocol (E5)', covered: [{ file: RELOAD_RS, test: 'playing_paused_mixed_or_unreadable' }] },
   E_RELOAD_MENUS: { kind: 'host', reason: 'a reload command, not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_refusals_come_in_the_documented_order' }] },
-  E_RELOAD_ROUTED: { kind: 'host', reason: 'a reload command, not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_refusals_come_in_the_documented_order' }] },
+  E_RELOAD_ROUTED: { kind: 'host', reason: 'a reload command, not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_services_refuse_after_the_generic_refusals' }, { file: 'modules/core/services/fx/tests/records.rs', test: 'a_reload_waits_while_an_effect_of_the_module_is_on_a_route' }] },
   E_RELOAD_KEYS: { kind: 'host', reason: 'a reload command, not a module file, causes it', covered: [{ file: 'packages/dkneeds/src/keys.rs', test: 'a_reload_may_add_keys_but_not_drop_one' }] },
 };

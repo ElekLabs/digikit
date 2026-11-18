@@ -291,6 +291,7 @@ mod cap_tests {
         struct Machines;
         impl<C: crate::core_api::CoreApi> Service<C> for Machines {
             dkrt_abi::accepts_records!();
+            dkrt_abi::accepts_reload!();
 
             unsafe fn cap(_: &C, kind: u8) -> Option<(u32, u32)> {
                 (kind == CAPK_MACHINE_ROWS).then_some((12, 2))

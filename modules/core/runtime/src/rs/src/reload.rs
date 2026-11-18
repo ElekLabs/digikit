@@ -24,12 +24,11 @@ pub struct Facts {
     pub card_busy: bool,
     /// The module built menus of its own (its header names a menu entry): they keep pointers into its code.
     pub menus: bool,
-    /// An effect of the module is on a route (an fx module only).
-    pub fx_routed: bool,
 }
 
 /// The refusal of a reload, or `None` when it may go on. One function, one order: safe mode, the firmware's transport (playing, paused, or not
-/// readable), card operations, menus of the module, an effect on a route. The first that holds names the status.
+/// readable), card operations, menus of the module. The first that holds names the status. The services' own refusals (`Service::reload_refusal`, for
+/// example an effect on a route) come after it: `refusal_with_services`.
 pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
     if f.safe_mode {
         return Some(E_SAFE_MODE);
@@ -44,8 +43,17 @@ pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
     if f.menus {
         return Some(E_RELOAD_MENUS);
     }
-    if f.fx_routed {
-        return Some(E_RELOAD_ROUTED);
+    None
+}
+
+/// `refusal`, then the refusals of the services about module record `owner - 1` (`Service::reload_refusal`, every service in table order). The reload job calls this.
+pub unsafe fn refusal_with_services<P: Platform>(p: &P, f: &Facts, services: &dkrt_abi::service::ServiceTable, owner: u8) -> Option<i32> {
+    if let Some(r) = refusal(p, f) {
+        return Some(r);
+    }
+    let r = services.reload_refusal(owner);
+    if r != OK {
+        return Some(r);
     }
     None
 }
@@ -63,7 +71,6 @@ mod tests {
             safe_mode: true,
             card_busy: true,
             menus: true,
-            fx_routed: true,
         }
     }
 
@@ -95,8 +102,42 @@ mod tests {
         f.card_busy = false;
         assert_eq!(code(&p, f), Some(E_RELOAD_MENUS));
         f.menus = false;
-        assert_eq!(code(&p, f), Some(E_RELOAD_ROUTED));
-        f.fx_routed = false;
         assert_eq!(code(&p, f), None);
+    }
+
+    use crate::core_api::{CoreApi, REAL_CORE};
+    use dkrt_abi::service::{RowPtrs, Service, ServiceRow, ServiceTable};
+
+    /// A service that refuses the reload of module owner 2 only.
+    struct Refuser;
+    impl<C: CoreApi> Service<C> for Refuser {
+        dkrt_abi::accepts_records!();
+        unsafe fn reload_refusal(_core: &C, owner: u8) -> i32 {
+            if owner == 2 {
+                E_RELOAD_ROUTED
+            } else {
+                OK
+            }
+        }
+    }
+    struct Quiet;
+    impl<C: CoreApi> Service<C> for Quiet {
+        dkrt_abi::accepts_records!();
+        dkrt_abi::accepts_reload!();
+    }
+    static ROWS: [ServiceRow; 2] = [ServiceRow::of::<Quiet, crate::core_api::RealCore>("quiet", &[]), ServiceRow::of::<Refuser, crate::core_api::RealCore>("refuser", &[])];
+    static ROWS_P: RowPtrs<2> = RowPtrs::of(&ROWS);
+
+    #[test]
+    fn the_services_refuse_after_the_generic_refusals_and_only_for_their_module() {
+        let p = FakePlatform::new(dkrt_abi::profiles::ALL[0]);
+        let table = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
+        let go = |f: Facts, owner: u8| unsafe { refusal_with_services(&p, &f, &table, owner) };
+        assert_eq!(go(Facts::default(), 1), None);
+        assert_eq!(go(Facts::default(), 2), Some(E_RELOAD_ROUTED));
+        // a generic refusal comes first
+        assert_eq!(go(Facts { menus: true, ..Facts::default() }, 2), Some(E_RELOAD_MENUS));
+        p.play.set(Some(1));
+        assert_eq!(go(Facts::default(), 2), Some(E_RELOAD_PLAYING));
     }
 }

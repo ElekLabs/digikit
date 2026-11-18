@@ -47,6 +47,7 @@ unsafe fn body(reg: *const u8, kind: u32, b: *const u8) -> Vec<u8> {
 
 impl<const N: u8, C: CoreApi> Service<C> for Fake<N> {
     dkrt_abi::accepts_records!();
+    dkrt_abi::accepts_reload!();
 
     /// Service 1 checks its records at the step of native pages, service 2 at the step of effects: the order of the old body.
     unsafe fn check(_: &C, step: u32, c: &CheckCtx) -> i32 {
@@ -268,6 +269,7 @@ fn a_tick_phase_reaches_every_service_in_list_order() {
 struct Good;
 impl<C: CoreApi> Service<C> for Good {
     dkrt_abi::accepts_records!();
+    dkrt_abi::accepts_reload!();
 
     unsafe fn declare(d: &mut Declare) {
         d.kind(70, 16);
@@ -276,6 +278,7 @@ impl<C: CoreApi> Service<C> for Good {
 struct WrongLen;
 impl<C: CoreApi> Service<C> for WrongLen {
     dkrt_abi::accepts_records!();
+    dkrt_abi::accepts_reload!();
 
     unsafe fn declare(d: &mut Declare) {
         d.kind(71, 20);
@@ -284,6 +287,7 @@ impl<C: CoreApi> Service<C> for WrongLen {
 struct Extra;
 impl<C: CoreApi> Service<C> for Extra {
     dkrt_abi::accepts_records!();
+    dkrt_abi::accepts_reload!();
 
     unsafe fn declare(d: &mut Declare) {
         d.kind(72, 8);
@@ -293,6 +297,7 @@ impl<C: CoreApi> Service<C> for Extra {
 struct Silent;
 impl<C: CoreApi> Service<C> for Silent {
     dkrt_abi::accepts_records!();
+    dkrt_abi::accepts_reload!();
 }
 
 static DECL_ROWS: [ServiceRow; 4] = [
@@ -328,10 +333,12 @@ mod table {
     struct A;
     impl<C: CoreApi> Service<C> for A {
         dkrt_abi::accepts_records!();
+        dkrt_abi::accepts_reload!();
     }
     struct B;
     impl<C: CoreApi> Service<C> for B {
         dkrt_abi::accepts_records!();
+        dkrt_abi::accepts_reload!();
 
         unsafe fn dsp_clear(_: &C, _: usize) -> bool {
             false

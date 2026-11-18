@@ -512,7 +512,17 @@ macro_rules! accepts_records {
     };
 }
 
-/// A service. Every method but `validate_records` has a default that declares nothing; a service implements the ones it owns.
+/// The `reload_refusal` of a service that has nothing a reload of a module must wait for: it never refuses. Write it in the `impl`: `dkrt_abi::accepts_reload!();`.
+#[macro_export]
+macro_rules! accepts_reload {
+    () => {
+        unsafe fn reload_refusal(_core: &C, _owner: u8) -> i32 {
+            0
+        }
+    };
+}
+
+/// A service. Every method but `validate_records` and `reload_refusal` has a default that declares nothing; a service implements the ones it owns.
 /// The core is passed by reference to every method that may touch it (`declare` reads nothing but its argument); a service
 /// that a host test drives is generic over `C: CoreApi` and the test passes a `FakeCore`.
 #[allow(unused_variables)]
@@ -532,6 +542,11 @@ pub trait Service<C: CoreApi> {
     /// }
     /// ```
     fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem));
+
+    /// Whether module record `owner - 1` may be reloaded now, as far as this service knows: `OK`, or the status that refuses (`E_RELOAD_ROUTED`: an effect of the
+    /// module is on a route). The reload job asks every service after the generic refusals (`reload::refusal`). A service with nothing to wait for writes
+    /// `dkrt_abi::accepts_reload!();`.
+    unsafe fn reload_refusal(core: &C, owner: u8) -> i32;
     /// The service's declarations (`Declare`): called once at the runtime's init; the runtime compares them with the service's table.
     unsafe fn declare(d: &mut Declare) {}
     /// One step of the validation (`check_step`) for this service's records. Writes nothing.
@@ -629,6 +644,7 @@ pub struct ServiceRow {
     attribute: unsafe extern "C" fn(*const c_void, u32, u32, *mut usize) -> bool,
     on_loaded: unsafe extern "C" fn(*const c_void, usize),
     settle: unsafe extern "C" fn(*const c_void, *const SettleCtx),
+    reload_refusal: unsafe extern "C" fn(*const c_void, u8) -> i32,
     module_begin: unsafe extern "C" fn(*const c_void, usize),
     module_commit: unsafe extern "C" fn(*const c_void, usize, *const ModuleCommitCtx) -> i32,
     tick: unsafe extern "C" fn(*const c_void, u32),
@@ -714,6 +730,9 @@ mod thunk {
         s: *const SettleCtx,
     ) {
         S::settle(&*(core as *const C), &*s)
+    }
+    pub unsafe extern "C" fn reload_refusal<C: CoreApi, S: Service<C>>(core: *const c_void, owner: u8) -> i32 {
+        S::reload_refusal(&*(core as *const C), owner)
     }
     pub unsafe extern "C" fn module_begin<C: CoreApi, S: Service<C>>(
         core: *const c_void,
@@ -810,6 +829,7 @@ impl ServiceRow {
             attribute: thunk::attribute::<C, S>,
             on_loaded: thunk::on_loaded::<C, S>,
             settle: thunk::settle::<C, S>,
+            reload_refusal: thunk::reload_refusal::<C, S>,
             module_begin: thunk::module_begin::<C, S>,
             module_commit: thunk::module_commit::<C, S>,
             tick: thunk::tick::<C, S>,
@@ -1050,6 +1070,19 @@ impl ServiceTable {
             (self.row(i).settle)(self.core, s);
             i += 1;
         }
+    }
+    /// `Service::reload_refusal` on every row, in table order: the first status that is not `OK`, else `OK`.
+    #[inline]
+    pub unsafe fn reload_refusal(&self, owner: u8) -> i32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.row(i).reload_refusal)(self.core, owner);
+            if r != OK {
+                return r;
+            }
+            i += 1;
+        }
+        OK
     }
     /// `Service::module_begin` on every row, in table order.
     #[inline]

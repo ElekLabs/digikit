@@ -105,6 +105,8 @@ impl<C: CoreApi> Service<C> for Machines {
         Machines::validate(kind, bodies, report)
     }
 
+    dkrt_abi::accepts_reload!();
+
     unsafe fn declare(d: &mut Declare) {
         d.kind(KIND_PARAM, LEN_PARAM);
         d.kind(KIND_MACHINE, LEN_MACHINE);
