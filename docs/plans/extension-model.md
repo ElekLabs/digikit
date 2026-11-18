@@ -103,8 +103,8 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
 
 **Firmware facts (E0b, DT2 1.17 and DN2 1.12)**
 
-The details, addresses and marks are in the findings [filter machines](../findings/142-filter-machines.md), [LFO waveforms](../findings/143-lfo-waveforms.md),
-[transport state](../findings/141-transport-state.md) and the corrected [finding 135](../findings/135-hot-reload-firmware-facts.md) Q6. A second agent
+The details, addresses and marks are in the findings [filter machines](../findings/148-filter-machines.md), [LFO waveforms](../findings/149-lfo-waveforms.md),
+[transport state](../findings/147-transport-state.md) and the corrected [finding 135](../findings/135-hot-reload-firmware-facts.md) Q6. A second agent
 checked the claims the plan depends on against the image bytes. What the items below rely on:
 
 Filter machines:
@@ -365,7 +365,7 @@ E0a Filter DSP experiment (emulator, one run, about 10 minutes; needs Em's go be
 - On DT2 1.17: dump DM `0x2567a0..0x2567df` after boot. Then one track, steady noise input, the existing DSP PC histogram; write sound+0xa3 to
   0..7, one segment each. Record which SHARC routines change with the filter type and what the table result selects.
 - Answer: whether the filter stage is a per-voice dispatch (a stub plus a slot as in R12-8) or inline stock code, and the site to hook.
-- Parked after a first attempt (finding 142 "The decisive check still open"): the run read the DSP table (types 0-5 map to S3 1, 3, 2, 4, 5,
+- Parked after a first attempt (finding 148 "The decisive check still open"): the run read the DSP table (types 0-5 map to S3 1, 3, 2, 4, 5,
   6), but a raw byte write did not reach the DSP and `sharc.profile` counted nothing under the coupled native core (the session ended with a
   DSP trap). Before E7: make the SHARC profile count in a coupled session, check the trap, and change the filter type through the UI chooser
   (the setter). `tools/devtools/param_sweep.py` stays out of the repo until it has run once end to end.
@@ -662,8 +662,8 @@ runtime-and-services.md.
 
 | # | Item | Depends on | Device runs | Status |
 | --- | --- | --- | --- | --- |
-| 1 | E0b static spikes (extended) | - | none | done: findings 141, 142, 143; 135, 02, 06, 53 corrected (branch e0b/findings) |
-| 1 | E0a filter DSP experiment | profile under the native core; UI chooser | one, about 10 min | parked: first attempt did not settle it (finding 142); retry before E7 |
+| 1 | E0b static spikes (extended) | - | none | done: findings 147, 148, 149; 135, 02, 06, 53 corrected (branch e0b/findings) |
+| 1 | E0a filter DSP experiment | profile under the native core; UI chooser | one, about 10 min | parked: first attempt did not settle it (finding 148); retry before E7 |
 | 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
 | 2 | E2 boilerplate codegen | - | none; objdiff | built and reviewed (branch e2/exports-codegen); PR after the gate merge |
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | todo |

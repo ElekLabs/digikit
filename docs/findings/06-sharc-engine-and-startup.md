@@ -1065,7 +1065,7 @@ payloads load (rest of `0x80xxxxxx` is FILL/zero scratch), LE float32:
   index 256 the block holds small index tables, among them a 7-entry table at
   `0x8055c874`, `{0,0,1,2,3,4,0}`, read at `0x1c6c16` (`I4 = 0x8055c874`,
   bound 7 at `0x1c6c10`) inside a large routine `~0x1c6156..0x1c71e7`. It is not
-  an exponential curve table ([finding 142](142-filter-machines.md)).
+  an exponential curve table ([finding 148](148-filter-machines.md)).
 - **Boot-time relocation hypothesis (INFERENCE):** if the tables are copied into
   internal SHARC memory at boot (`0x1c1686 -> 0x1c7442`), the real per-frame
   synthesis reads *internal* addresses and would never appear in an `0x80xxxxxx`

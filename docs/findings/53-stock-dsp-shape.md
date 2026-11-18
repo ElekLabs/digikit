@@ -69,7 +69,7 @@ is the post-voice chain and a few maths helpers. They are identical across devic
 | `1cb3d8` / `1cdb56` | 98 | saturator (overdrive) |
 | `1cbb57` / `b80345` | 104 | envelope generator (11-word record, rate table `0x26ad30`) |
 | `1cdd8b` / `b8251b` | 55 | block copy or fill, SIMD (n even); the voice hook of `core/dsp-voice` on DN2 |
-| `1cdbb2`, `1cd286`, `1cc79e`, `1cbf07`, `1ccd96` / `b82342`, `b81a16`, `b80f2e`, `b806f5`, `b81526` | 99-173 | five consecutive stages of `FUN_1c71ec` (`1cdbb2` is called from `FUN_1c642a`); `1cbf07` is a comb or delay (ring of 8192 words). Not five filter types ([finding 142](142-filter-machines.md)) |
+| `1cdbb2`, `1cd286`, `1cc79e`, `1cbf07`, `1ccd96` / `b82342`, `b81a16`, `b80f2e`, `b806f5`, `b81526` | 99-173 | five consecutive stages of `FUN_1c71ec` (`1cdbb2` is called from `FUN_1c642a`); `1cbf07` is a comb or delay (ring of 8192 words). Not five filter types ([finding 148](148-filter-machines.md)) |
 | `1c0d68` / `1c0c76` | 127 | powf (reads three tables, writes error words) |
 | `1c127c` / `1c1226` | 23 (+90) | reciprocal square root |
 | `1c06ba` | 47 | float divide |

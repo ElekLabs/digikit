@@ -53,7 +53,7 @@ DT2 OS 1.17 and DN2 OS 1.12. Static reading; no emulator run. Used by [the hot r
   2. The long and short names in the name table and the descriptor become "MISSING" and "MISS". Which accessor draws the SRC title and the track label is **[O]**.
   3. Silence. DN2: own_dsp = 1 with no page is silent. DT2 has no row-only way. Options: (a) a selector word of 6 or more (needs a DSP memory write; zero or stale block **[O]**; test on the sharc rig first); (b) register a one-line silent routine for the type in dsp-voice (at most 8 rows). Prefer (b) if the rig shows stale audio with (a).
   4. A kit's type byte is never changed, so a reload puts the real row back.
-- See also [finding 142](142-filter-machines.md) for the filter accessor, which falls back the same way.
+- See also [finding 148](148-filter-machines.md) for the filter accessor, which falls back the same way.
 
 ## Q7: readers of the machine name table
 
