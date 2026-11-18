@@ -614,8 +614,10 @@ What:
    is the RESTART pattern (`admin_cmds.rs`). One job at a time; a second `CMD_RELOAD` while one is queued answers `E_BUSY`.
 2. Validation before unload: the new file is staged and checked (role, ABI, DSP checks; split out of `load_inner` as
    `check_file`), then the planner runs over the live set with the candidate in the old module's slot (`key_refusal`, E3). Keys check:
-   `Keys::first_missing_key(old, new)` (`packages/dkneeds/src/keys.rs`) refuses a new file that lacks a key of the old file. Nothing is
-   unloaded before both pass.
+   `Keys::first_missing_key(old, new)` (`packages/dkneeds/src/keys.rs`) refuses a new file that lacks a key of the old file (`E_RELOAD_KEYS`). The new
+   file must have the old file's module name (`E_FORMAT` otherwise: another name is another module). The planner is `plan::plan_live`: the loaded providers
+   are not judged again (their rows are in the service table, which the boot's judgment refuses as a second owner) and the capacity counts that the live
+   modules own start at 0 (`live_caps`), because the plan counts every live module again. Nothing is unloaded before both pass.
 3. Transport and state refusal: one function, in this order: safe mode; the firmware transport function returns non-zero (`cf.project.fn.transport_state`, declared in `devices/fw/project.toml`; `Platform::play_state`; a platform that cannot read it refuses);
    card operations; the module built its own menus; for an fx module, the effect is on a route. Refusing while the machine selection view
    is open is not needed: the list rebuild (item 9) is unconditional.
@@ -922,7 +924,7 @@ runtime-and-services.md.
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | done: PR #609 (device: runtime-refusal-tests on DT2 and DN2) |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
-| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-2 done |
+| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-3 done |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |

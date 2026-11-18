@@ -57,6 +57,11 @@ pub unsafe fn stop_tick(rec: usize) {
     write_volatile(addr_of_mut!(DKRT_TICKS[rec]), 0);
 }
 
+/// The tick address of record `rec` (0: none).
+pub unsafe fn tick_of(rec: usize) -> u32 {
+    read_volatile(addr_of!(DKRT_TICKS[rec]))
+}
+
 /// Does record `rec` have a tick?
 pub fn has_tick(rec: usize) -> bool {
     rec < REC_MAX && unsafe { read_volatile(addr_of!(DKRT_TICKS[rec])) != 0 }

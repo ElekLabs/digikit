@@ -206,6 +206,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     *st() = core::mem::zeroed();
     *dsp::ds() = core::mem::zeroed();
     *boot::info() = core::mem::zeroed();
+    crate::loader::test_clear_torn();
     dsp_loading();
     dsp::init_once();
     LINK = Link {

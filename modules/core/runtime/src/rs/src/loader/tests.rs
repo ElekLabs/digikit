@@ -1428,3 +1428,173 @@ fn keys_of_gives_the_keys_of_a_kind_for_an_accepted_module_only() {
         assert_eq!(l.keys_of(SEL_MAX as u32, dkneeds::KIND_LFO_SHAPE, &mut out), 0);
     }
 }
+
+// ---- reload of a live module (docs/plans/extension-model.md E5) ------------------------------------------------------------------------------------
+
+const PATH_B: &[u8] = b"mods/b.dkm\0";
+
+/// A module file named `name` with a tick at image offset 8 and the machine keys `keys` in its header table.
+fn keyed_file(name: u8, keys: &[u32]) -> Vec<u8> {
+    use dkneeds::keys::{write_table, KeyGroup, Table};
+    let mut v = module_file();
+    v.truncate(v.len() - 8);
+    let t = Table { keys: &[KeyGroup { kind: dkneeds::KIND_MACHINE, keys }], ..Default::default() };
+    let at = v.len();
+    v.resize(at + dkneeds::keys::table_size(&t), 0);
+    write_table(&t, &mut v[at..]).unwrap();
+    let n = (v.len() - at) as u32;
+    put(&mut v, dkneeds::H_REG_SIZE, n);
+    put(&mut v, dkneeds::H_TICK, 8);
+    v[dkneeds::H_NAME as usize] = name;
+    seal(&mut v);
+    v
+}
+
+/// What a boot leaves: module `file` loaded at selection index `k`, its table kept and the plan's acceptance set.
+unsafe fn booted(l: &mut Fake, k: usize, path: &[u8]) {
+    l.phase = Phase::Boot;
+    crate::selection::BOOT_IDX = k as u32;
+    let staged = l.m.stage(path.as_ptr()).unwrap();
+    let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize).to_vec();
+    l.capture(k, &file);
+    l.accepted[k] = true;
+    assert_eq!(l.load(path.as_ptr()), OK);
+    crate::selection::BOOT_IDX = u32::MAX;
+}
+
+/// A loader with module `a` (keys 1, 2) live in record 0 at selection index 0 and the Boot phase over.
+unsafe fn live_a() -> Fake {
+    let mut l = loader_of(Init::Ok, keyed_file(b'a', &[1, 2]));
+    l.reset_plan();
+    booted(&mut l, 0, PATH);
+    l.phase = Phase::Closed;
+    l
+}
+
+fn wide() -> Vec<DkrtCap> {
+    let mut c = wide_caps();
+    live_caps(&mut c);
+    c
+}
+
+#[test]
+fn a_reload_check_accepts_a_file_that_keeps_the_keys_and_changes_nothing() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        let (live, allocs, base) = (l.m.live.len(), l.m.allocs, st().modules[0].base);
+        // the same keys and a new one
+        l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[2, 1, 7]));
+        assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
+        assert_eq!((l.m.live.len(), l.m.allocs, st().modules[0].used, st().modules[0].base), (live, allocs, 1, base));
+        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..))));
+        assert_eq!(l.table_len[0], dkneeds::keys::table_size(&dkneeds::keys::Table { keys: &[dkneeds::keys::KeyGroup { kind: dkneeds::KIND_MACHINE, keys: &[1, 2] }], ..Default::default() }), "the old table stays");
+    }
+}
+
+#[test]
+fn a_reload_check_refuses_a_missing_record_a_dropped_key_another_name_and_a_damaged_file() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        let key = |l: &mut Fake, f: Vec<u8>| {
+            l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), f);
+            l.reload_check(0, PATH.as_ptr(), &wide())
+        };
+        assert_eq!(l.reload_check(1, PATH.as_ptr(), &wide()), E_NOT_FOUND, "a record that is not live");
+        assert_eq!(l.reload_check(MAX_MODULES, PATH.as_ptr(), &wide()), E_NOT_FOUND, "a provider record is no module");
+        assert_eq!(key(&mut l, keyed_file(b'a', &[1])), E_RELOAD_KEYS);
+        assert_eq!(key(&mut l, keyed_file(b'z', &[1, 2])), E_FORMAT);
+        let mut bad = keyed_file(b'a', &[1, 2]);
+        bad[0] ^= 1;
+        assert_eq!(key(&mut l, bad), E_FORMAT);
+        l.m.files.remove(&PATH[..PATH.len() - 1].to_vec());
+        assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), E_NOT_FOUND, "the new file is not in the store");
+        // the old module is still there, whole
+        assert_eq!((st().modules[0].used, l.m.live.len()), (1, 1));
+    }
+}
+
+#[test]
+fn a_reload_check_runs_the_planner_over_the_live_set_with_the_file_in_the_old_slot() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        // a second live module `b` has key 9; a new `a` that also has key 9 clashes with it (the old `a` did not)
+        l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
+        booted(&mut l, 1, PATH_B);
+        l.phase = Phase::Closed;
+        l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 9]));
+        assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), E_PLAN_KEY);
+        // without the clash it passes, and the old key set of `a` itself is not a clash with its own old file
+        l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 10]));
+        assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
+        // a live set the capacity cannot hold with the new file is refused
+        let mut tight = wide();
+        let mods = tight.iter().position(|c| c.kind == dkrt_sdk::proto::CAPK_MODULES as u32).unwrap();
+        tight[mods].limit = 1;
+        assert_eq!(l.reload_check(0, PATH.as_ptr(), &tight), E_PLAN_FIT);
+    }
+}
+
+#[test]
+fn a_second_unload_after_busy_runs_fini_and_the_undo_once_and_an_aborted_reload_gives_the_tick_back() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        let base = st().modules[0].base;
+        assert_eq!(crate::entry::tick_of(0), base + 8);
+        // the DSP stays retained: the teardown stops at the quiesce, after the tick was stopped
+        dsp::ds().phase = dsp::PH_RETAINED;
+        assert_eq!(l.unload_rec(0), E_BUSY);
+        assert_eq!(crate::entry::tick_of(0), 0);
+        assert_eq!(st().modules[0].used, 1, "the old module is not released");
+        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..))));
+        // a reload that gives up before `fini` gives the tick back
+        assert!(l.reload_abort(0));
+        assert_eq!(crate::entry::tick_of(0), base + 8);
+        // and the teardown can be tried again: the DSP is free this time, `fini` and the undo run once
+        dsp::ds().phase = dsp::PH_IDLE;
+        assert_eq!(l.unload_rec(0), OK);
+        let n = |v: &Vec<Ev>, e: Ev| v.iter().filter(|x| **x == e).count();
+        assert_eq!((n(&l.m.log, Ev::Fini(0, base + 4)), n(&l.r.log, Ev::Remove(0))), (1, 1));
+        assert_eq!(l.torn[0], 0, "the mask is clear once the record is free");
+        // a teardown that was interrupted after `fini` ran does not run it again, and cannot give the tick back
+        let mut l = live_a();
+        l.torn[0] = TORN_TICK | TORN_FINI;
+        assert!(!l.reload_abort(0));
+        assert_eq!(l.unload_rec(0), OK);
+        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..))), "fini is not run twice");
+    }
+}
+
+#[test]
+fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
+        booted(&mut l, 1, PATH_B);
+        l.phase = Phase::Closed;
+        for round in 0..2u32 {
+            let keys: &[u32] = if round == 0 { &[1, 2, 5] } else { &[1, 2, 5, 6] };
+            l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', keys));
+            assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
+            assert_eq!(l.unload_rec(0), OK);
+            assert_eq!(st().modules[0].used, 0);
+            assert_eq!(l.reload_load(0, PATH.as_ptr()), OK, "round {round}");
+            // the same record, owner and selection index; the table is the new one; the phase is closed again
+            assert_eq!((st().modules[0].used, l.sel_of_rec[0], l.phase == Phase::Closed), (1, 0, true));
+            assert_eq!(crate::entry::tick_of(0), st().modules[0].base + 8);
+            let mut out = [0u32; 8];
+            assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut out), keys.len());
+            assert_eq!(out[..keys.len()], *keys);
+            assert_eq!(st().modules[1].used, 1, "the other module is untouched");
+        }
+        assert_eq!(l.m.live.len(), 2, "one block each: nothing leaked over two reloads");
+        // a reload is the only load after the boot: the same call in the closed phase through `load` is refused
+        assert_eq!(l.load(PATH.as_ptr()), E_BOOT_ONLY);
+        assert_eq!(l.unload_rec(0), OK);
+        assert_eq!(l.reload_load(MAX_MODULES, PATH.as_ptr()), E_NOT_FOUND, "a provider record is not reloaded");
+    }
+}

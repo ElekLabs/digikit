@@ -555,6 +555,16 @@ pub fn plan(env: &Env, mods: &[Option<Keys>]) -> Plan {
 /// Plan a selection with its providers: `provs[k]` is the header table of provider index `k` (at most `PROVIDER_MAX`). The providers are judged first, in
 /// dependency order, then the modules.
 pub fn plan_with(env: &Env, mods: &[Option<Keys>], provs: &[Option<Keys>]) -> Plan {
+    plan_core(env, mods, provs, false)
+}
+
+/// The plan of a run-time set (a reload): the `provs` are the providers that are loaded already, so they are not judged again (their rows are in the service table,
+/// which the boot's judgment of a provider refuses as a second owner) and take no capacity; the modules are judged against them as at the boot.
+pub fn plan_live(env: &Env, mods: &[Option<Keys>], provs: &[Option<Keys>]) -> Plan {
+    plan_core(env, mods, provs, true)
+}
+
+fn plan_core(env: &Env, mods: &[Option<Keys>], provs: &[Option<Keys>], live: bool) -> Plan {
     let n = mods.len().min(SEL_MAX);
     let mods = &mods[..n];
     let np = provs.len().min(PROVIDER_MAX);
@@ -579,7 +589,13 @@ pub fn plan_with(env: &Env, mods: &[Option<Keys>], provs: &[Option<Keys>]) -> Pl
     while pat < np {
         let j = porder[pat] as usize;
         p.provider_order[pat] = j as u8;
-        let v = if pcyclic[j] { Verdict::Refused(Reason::NeedMissing(0)) } else { judge_provider(env, provs, j, &pdone, &mut caps[..k]) };
+        let v = if live {
+            Verdict::Accepted
+        } else if pcyclic[j] {
+            Verdict::Refused(Reason::NeedMissing(0))
+        } else {
+            judge_provider(env, provs, j, &pdone, &mut caps[..k])
+        };
         p.provider_verdicts[j] = v;
         pdone[j] = v.is_accepted();
         pat += 1;
@@ -726,6 +742,26 @@ mod tests {
         let p = run_p(&[Some(bytes(&user))], &[Some(bytes(&x)), Some(bytes(&y))]);
         assert_eq!(p.provider_verdicts[..2], [Verdict::Refused(Reason::NeedMissing(0)); 2]);
         assert_eq!(p.verdicts[0], Verdict::Refused(Reason::NeedMissing(1)));
+    }
+
+    #[test]
+    fn a_live_plan_does_not_judge_a_loaded_provider_again_and_its_modules_still_find_it() {
+        // a provider whose kind the service table owns already (its own row, loaded): the boot's judgment refuses it as a second owner, a live plan keeps it
+        let svc = name_hash("lfo_bus");
+        let provider = bytes(&Table { provides: &[Pair { a: svc, b: 0x000100 }], kinds: &[KindDecl { kind: KIND_MACHINE, len: 0x6c, entry: 0 }], ..KEEP });
+        let consumer = bytes(&Table { needs: &[need(svc, 0x000100)], ..KEEP });
+        let c = caps();
+        let env = Env { services: ServiceTable::new(&ROWS_P.0, &REAL_CORE), runtime: 0x000800, caps: &c };
+        let (p, m) = (Keys::parse(&provider).unwrap(), Keys::parse(&consumer).unwrap());
+        let boot = plan_with(&env, &[Some(m)], &[Some(p)]);
+        assert_eq!(boot.provider_verdicts[0], Verdict::Refused(Reason::DuplicateOwner(KIND_MACHINE)));
+        assert_eq!(boot.verdicts[0], Verdict::Refused(Reason::NeedMissing(svc)));
+        let live = plan_live(&env, &[Some(m)], &[Some(p)]);
+        assert_eq!(live.provider_verdicts[0], Verdict::Accepted);
+        assert_eq!(live.verdicts[0], Verdict::Accepted);
+        // the modules are judged as at the boot: a need that no loaded provider meets is missing
+        let none = plan_live(&env, &[Some(m)], &[]);
+        assert_eq!(none.verdicts[0], Verdict::Refused(Reason::NeedMissing(svc)));
     }
 
     #[test]
