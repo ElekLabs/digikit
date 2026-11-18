@@ -372,7 +372,14 @@ test('waitForRestart: a lost MODULES reply costs the probe bound plus one retry,
     send(msg: Uint8Array) {
       if (msg[5] === GCMD.MODULES) {
         if (this.drop) return void (this.drop = false);
-        return void this.queue.push(reply(msg[5]!, msg[6]!, 0, Array.from({ length: 18 }, () => 0)));
+        return void this.queue.push(
+          reply(
+            msg[5]!,
+            msg[6]!,
+            0,
+            Array.from({ length: 18 }, () => 0),
+          ),
+        );
       }
       return super.send(msg);
     }
