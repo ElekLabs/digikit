@@ -919,6 +919,47 @@ export async function deleteFiles(
 }
 
 /**
+ * RELOAD of the modules loaded from `paths` (a content module whose new file is on the card already): no boot. A path that no loaded module has, a runtime that cannot
+ * reload (no RELOAD capability) or a reload the runtime refuses (the transport plays, a key was dropped, a menu was built) is reported in `fell_back` and left to the caller,
+ * who selects and restarts as before; a reload that was accepted and then failed rejects with the load status.
+ */
+export async function reloadModules(
+  s: DkSession,
+  paths: string[],
+  emit: Emit = () => {},
+  opts: { withinMs?: number } = {},
+): Promise<{ reloaded: string[]; fell_back: { path: string; result: number | string }[] }> {
+  const info = await s.info();
+  requireRuntime(info);
+  const reloaded: string[] = [];
+  const fellBack: { path: string; result: number | string }[] = [];
+  for (const path of paths) {
+    emit({ event: 'reload', path });
+    let result: number;
+    try {
+      result = await s.reloadAndWait(path, opts);
+    } catch (e) {
+      if (e instanceof DkError && e.status !== undefined && REFUSED_AT_QUEUE.has(e.status)) {
+        fellBack.push({ path, result: e.status });
+        emit({ event: 'reload-refused', path, result: e.status });
+        continue;
+      }
+      throw e;
+    }
+    if (result === 0) reloaded.push(path);
+    else {
+      fellBack.push({ path, result });
+      emit({ event: 'reload-refused', path, result });
+    }
+  }
+  emit({ event: 'done', reloaded, fell_back: fellBack });
+  return { reloaded, fell_back: fellBack };
+}
+
+/** The statuses of a RELOAD request that mean "not now or not this way": the caller falls back to select and restart. */
+const REFUSED_AT_QUEUE = new Set<string>(['E_NOT_FOUND', 'E_BUSY', 'E_STATE', 'E_PROTO']);
+
+/**
  * RESTART, wait for the boot (the log: BOOT_START, then FW_READY), then report what MODULES lists. The page expects no module: it only reports what loaded.
  * The waits run on the session's clock (`DkSession.waitForRestart`): no timer of its own.
  */

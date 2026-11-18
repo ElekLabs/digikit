@@ -574,6 +574,33 @@ class Uploader:
         """RESTART (runtime 4): the reply comes first, then the device soft-resets (as APPLY & RESTART)."""
         self._ok(CMD_RESTART, "restart")
 
+    def reload(self, path: str) -> None:
+        """RELOAD: queue the reload of the loaded module that came from the store path `path` (the new file is already there). Raises `UploadError` with
+        E_NOT_FOUND when no loaded module has that path, E_BUSY while a reload runs, E_STATE while an upload is open. See `reload_state`."""
+        self._ok(dkproto.CMD["RELOAD"], "reload", path.encode() + b"\0")
+
+    def reload_state(self) -> dict[str, int]:
+        """RELOAD_STATE: `phase` (0 none yet, 1 queued or running, 2 finished), `result` (the load status of the new file, or the refusal; 0 is ok) and `step`."""
+        b = self._ok(dkproto.CMD["RELOAD_STATE"], "reload state")
+        return {
+            "phase": b[0],
+            "result": struct.unpack_from(">i", b, 1)[0],
+            "step": b[5],
+        }
+
+    def reload_and_wait(
+        self, path: str, step: Callable[[], None], limit: int = 2000
+    ) -> int:
+        """`reload`, then ask `reload_state` until the job ends, calling `step()` between the asks (an emulator is stepped there); the result (0 is ok).
+        A job that does not end within `limit` asks raises `TimeoutError`."""
+        self.reload(path)
+        for _ in range(limit):
+            s = self.reload_state()
+            if s["phase"] == 2:
+                return s["result"]
+            step()
+        raise TimeoutError(f"the reload of {path} did not end")
+
     # -- digikit/remote (docs/plans/remote-control.md): the commands of a run-time service module, `dkproto.SERVICE_CMD`
     def remote_state(self) -> dict[str, int]:
         """REMOTE_STATE: `enabled` (1 while the module is loaded), the state `format` and the `turn_limit` of one TURN. When digikit/remote

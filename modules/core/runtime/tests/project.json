@@ -6,6 +6,16 @@
   "metadata": {
     "runtimeAcceptance": [
       {
+        "files": ["reload.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "C:dsp", "S:machines"],
+        "modules": ["digikit/debug", "test/lfo-shape", "test/sine", "core/services/machines", "core/services/lfo"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts"
+        ]
+      },
+      {
         "files": ["modules-capacity.device.test.ts"],
         "devices": ["dt2"],
         "dsp": "sharc",

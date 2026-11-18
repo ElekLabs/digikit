@@ -22,6 +22,7 @@ import {
   deleteFiles,
   install,
   libraryModule,
+  reloadModules,
   restartDevice,
 } from '../../packages/workbench-core/src/modules/dktransfer.ts';
 import { nameHash, serviceFileOf } from '../../packages/workbench-core/src/modules/services.ts';
@@ -63,9 +64,15 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
     emit({ event: 'loaded', loaded, missing: [] });
     return 0;
   }
+  if (sub === 'reload') {
+    // the new files are on the card already (wb transfer install): reload the loaded modules without a boot
+    if (rest.length === 0) fail('transfer reload needs card paths');
+    const { fell_back: fellBack } = await reloadModules(session, rest, emit);
+    return fellBack.length ? 1 : 0;
+  }
   if (sub !== 'install' || rest.length === 0)
     fail(
-      'usage: wb transfer install ID... [--stock STOCK.syx] [--restart] | wb transfer restart | wb transfer delete PATH...',
+      'usage: wb transfer install ID... [--stock STOCK.syx] [--restart] [--reload] | wb transfer reload PATH... | wb transfer restart | wb transfer delete PATH...',
     );
   const info = await session.info();
   const wasm = new Uint8Array(await host.firmware.patchkitWasm());
@@ -89,16 +96,26 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
   };
   const refusedAll = (r) => r.refused?.length && r.uploaded.length === 0 && rest.length === r.refused.length;
   const r = await install(session, rest, modules, emit, deps);
-  if (!opts.restart) return refusedAll(r) ? 1 : 0;
+  if (!opts.restart && !opts.reload) return refusedAll(r) ? 1 : 0;
   const refused = new Set((r.refused ?? []).map((x) => x.module));
   const chosen = rest.filter((id) => !refused.has(id));
   if (chosen.length === 0) return 1;
-  await session.select(chosen.map((id) => modules.find((m) => m.id === id).path));
+  const chosenPaths = chosen.map((id) => modules.find((m) => m.id === id).path);
+  // the selection is what the next boot loads: it names every chosen module whether it is reloaded now or restarted
+  await session.select(chosenPaths);
+  let toBoot = chosen;
+  if (opts.reload) {
+    // a module that is loaded and can be reloaded is swapped without a boot; the others (not loaded, or refused: the transport plays, a key was dropped) go through the restart below
+    const { fell_back: fellBack } = await reloadModules(session, chosenPaths, emit);
+    const back = new Set(fellBack.map((f) => f.path));
+    toBoot = chosen.filter((id) => back.has(modules.find((m) => m.id === id).path));
+    if (toBoot.length === 0) return 0;
+  }
   const { loaded } = await restartDevice(session, emit, {
     bootTimeoutMs,
     loadedTimeoutMs: bootTimeoutMs ? 120_000 : undefined,
   });
-  const missing = chosen.filter((id) => !loaded.includes(id));
+  const missing = toBoot.filter((id) => !loaded.includes(id));
   emit({ event: 'loaded', loaded, missing });
   return missing.length ? 1 : 0;
 }

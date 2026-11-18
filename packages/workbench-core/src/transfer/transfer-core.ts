@@ -164,12 +164,17 @@ export function eventText(e: TransferEvent): string {
       return e.why === 'unused-service' ? `Deleted ${e.path} (no module on the card needs it)` : `Deleting ${e.path}`;
     case 'verify':
       return e.ok ? `Verified ${e.path} on the card` : `Verify failed: ${e.path} differs on the card`;
+    case 'reload':
+      return `Reloading ${e.path} without a boot`;
+    case 'reload-refused':
+      return `${e.path}: not reloaded (${s(e.result)}), restarting for it`;
     case 'restart':
       return 'Restarting the device';
     case 'wait':
       return 'Waiting for the device to boot';
     case 'done':
       if (Array.isArray(e.deleted)) return `Deleted ${e.deleted.length} file${e.deleted.length === 1 ? '' : 's'}`;
+      if (Array.isArray(e.reloaded)) return `Reloaded ${s(e.reloaded) || 'nothing'}`;
       if (e.restarted === false) return DONE_ON_CARD;
       return Array.isArray(e.loaded) && e.loaded.length
         ? `Restarted. Loaded: ${s(e.loaded)}`

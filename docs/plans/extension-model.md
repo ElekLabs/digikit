@@ -732,6 +732,13 @@ What:
 6. The 20-cycle soak and the full project round trip (save a project that uses the module, reload, load the project, same sound), if E5 did
    not carry them.
 
+7. Reload that needs a service that is not loaded (the "Reusable reload" rule says the reload loads it first): E5 refuses with `E_MISSING` (`plan::plan_live`). Loading it
+   at run time is the boot's provider stage run again: `discover::find` for the new file's unmet hard needs, a plan over the loaded providers, a free provider record, the
+   installer's hook and slot writes (firmware code is patched while the system runs, under one mask) and the provider's DSP part after the boot, then `settle`. About 8 h of
+   edits and host tests, and its own device proof (a hook installed at run time on both devices); reload never replaces a service.
+8. The soak's pitch switch: two builds of `test/sine` that differ in one constant (same module id and keys), reloaded alternately with a note held, each cycle checking the pitch;
+   E5's soak reloads the same file (rows, records, bytes and faults) and a build helper with a changed constant is still to be written.
+
 Estimate: 1-2 days. Depends on: E5.
 
 ### E6 LFO shapes
@@ -941,7 +948,7 @@ runtime-and-services.md.
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | done: PR #609 (device: runtime-refusal-tests on DT2 and DN2) |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
-| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-8 done |
+| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-9 done (host and rig proof; the device proof waits for the go) |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |
