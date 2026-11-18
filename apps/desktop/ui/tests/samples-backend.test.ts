@@ -27,25 +27,6 @@ beforeEach(() => {
   setLocalKinds({});
 });
 
-test('the device storage is asked once per device, and again after a failure', async () => {
-  let fail = true;
-  const host = createFakeHost({
-    'library.deviceStorage': (device: string) => {
-      if (fail) {
-        fail = false;
-        throw new Error('no profile');
-      }
-      return { name: `Device ${device}`, samples: 'midirpc' };
-    },
-  });
-  const backend = createSamplesBackend(host, createFakeTransferApp());
-  await assert.rejects(backend.deviceStorage('dt2'), /no profile/);
-  assert.deepEqual(await backend.deviceStorage('dt2'), { name: 'Device dt2', samples: 'midirpc' });
-  await backend.deviceStorage('dt2');
-  await backend.deviceStorage('dn2');
-  assert.deepEqual(host.argsOf('library.deviceStorage'), [['dt2'], ['dt2'], ['dn2']]);
-});
-
 test('reading the folder lists the open level, then labels the files from their first 64 bytes', async () => {
   const host = createFakeHost({
     'fs.list': listing,

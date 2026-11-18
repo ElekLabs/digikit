@@ -1,15 +1,16 @@
 // The desktop Samples backend: the samples API of packages/workbench-core/src/modules over the selected target (target.ts), with the backend the device profile
-// names (`[storage] samples`, read by the native `device_storage`; the page names no device). The converter is `dksample.wasm`, loaded once through
+// names (`[storage] samples`, read from the device registry; the page names no device). The converter is `dksample.wasm`, loaded once through
 // the native `sample_wasm`. The local side is the native `local_*` commands (local.rs): pick a folder, list a level, read a file.
 // Nothing is started and nothing is built here.
 import { errorLine } from '@digi/workbench-core/modules/backend.ts';
 import { failureModule, fmtVersion, hasCap, type DkSession, type LoadFailure } from '@digi/dk-session';
-import { Sample, prepareUpload, sourceKind, type Prepared } from '@digi/dk-session/dksample';
-import { openSamples, type SamplesBackend } from '@digi/dk-session/samples';
+import { Sample, converterOf, sourceKind, type Prepared } from '@digi/dk-session/dksample';
+import { openSamples, samplesUseBulk, type SamplesBackend, type SlotsOptions } from '@digi/dk-session/samples';
 import { chooseBulk, type BulkChoice } from '@digi/dk-session/bulk-select';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import type { Host } from '@digi/workbench-core/host/host.ts';
-import { joinPath, type Prepare } from '@digi/workbench-core/transfer/sample-upload.ts';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
+import { joinPath } from '@digi/workbench-core/transfer/sample-upload.ts';
 import type { LocalEntry } from '@digi/workbench-core/transfer/samples-core.ts';
 import type { LinkState } from '@digi/workbench-core/transfer/link-core.ts';
 import { logEvent } from './log-state';
@@ -27,8 +28,9 @@ export interface OpenedSamples {
   name: string;
   runtime: string;
   samples: string;
+  /** When the device uses a changed sample: `restart` = at its next start. */
+  apply: 'live' | 'restart';
   backend: SamplesBackend;
-  prepare: Prepare;
   /** Where the file bytes go: the USB bulk link (usb-fast) or the SysEx / MidiRpc backend. */
   link: 'bulk' | 'sysex';
 }
@@ -59,23 +61,11 @@ export async function labelOf(read: () => Promise<Uint8Array>, size: number): Pr
   }
 }
 
-/** The desktop Samples backend over `host` and the app's target, connection and page state. Each backend keeps its own caches (the device's storage, the converter, the session's samples backend). */
+/** The desktop Samples backend over `host` and the app's target, connection and page state. Each backend keeps its own caches (the converter, the session's samples backend). */
 export function createSamplesBackend(host: Host, app: TransferApp) {
   const { asked, noteConnection } = app.connection;
   const { session: running, target } = app.target;
   const { setDeviceInfo, setSampleLink } = app.state;
-  /** What the device profile says about the device with this id (`dt2`): its name and the backend of its samples. */
-  const storages = new Map<string, Promise<{ name: string; samples: string }>>();
-  function deviceStorage(device: string): Promise<{ name: string; samples: string }> {
-    let p = storages.get(device);
-    if (!p) {
-      p = host.library.deviceStorage(device);
-      p.catch(() => storages.delete(device));
-      storages.set(device, p);
-    }
-    return p;
-  }
-
   let sample: Promise<Sample> | undefined;
   /** The converter, made once (a failed load is tried again at the next use). */
   function converter(): Promise<Sample> {
@@ -95,6 +85,8 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
         name: string;
         runtime: string;
         samples: string;
+        slots?: SlotsOptions;
+        apply: 'live' | 'restart';
         opened?: OpenedSamples;
         /** Why usb-fast did not load at the last boot, read once per session when there is no bulk link (`usbFast` unset: it did load, or it is not selected). */
         failure?: { usbFast?: LoadFailure };
@@ -130,12 +122,20 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
     }
     if (!last) {
       const info = await asked(() => s.info());
-      const storage = await deviceStorage(info.port);
+      const device = registry.get(info.port);
+      if (!device.storage) throw new Error(`the ${device.name} profile has no [storage]`);
       noteConnection({
         type: 'answered',
-        device: { id: info.port, name: storage.name, runtime: fmtVersion(info.runtime) },
+        device: { id: info.port, name: device.name, runtime: fmtVersion(info.runtime) },
       });
-      last = { s, name: storage.name, runtime: fmtVersion(info.runtime), samples: storage.samples };
+      last = {
+        s,
+        name: device.name,
+        runtime: fmtVersion(info.runtime),
+        samples: device.storage.samples,
+        slots: device.storage.slots,
+        apply: device.storage.slots?.apply ?? 'live',
+      };
     }
     const had = last.bulk;
     // A run chooses the link fresh: the device ends an idle bulk session 21 s after the last nonce or write, and a new nonce opens a new session
@@ -145,7 +145,7 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
       last.bulk = undefined;
     }
     if (!last.bulk && !last.failure) last.failure = { usbFast: await usbFastFailure(s) };
-    if (!last.bulk) {
+    if (!last.bulk && samplesUseBulk(last.samples)) {
       const env = app.env.bulk;
       let choiceNote: string | undefined;
       last.bulk =
@@ -173,9 +173,12 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
       name: last.name,
       runtime: last.runtime,
       samples: last.samples,
+      apply: last.apply,
       backend: openSamples(last.samples, {
         session: s,
         hashOf: (d) => conv.hash(d),
+        converter: converterOf(conv),
+        slots: last.slots,
         bulk: last.bulk?.session,
         note,
         onFallback: (reason) => {
@@ -183,7 +186,6 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
           setSampleLink({ state: 'fallback', reason });
         },
       }),
-      prepare: (name, bytes) => prepareUpload(conv, name, bytes),
       link: last.bulk ? 'bulk' : 'sysex',
     };
     setSampleLink(linkOf(last.opened.link));
@@ -201,7 +203,7 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
 
   /** Read the device's open folder, its free space and what the backend can do (the On device column of Samples mode). */
   async function readSamples(): Promise<void> {
-    const { name, runtime, samples, backend } = await openDeviceSamples();
+    const { name, runtime, samples, apply, backend } = await openDeviceSamples();
     const canMkdir = await backend.canMkdir();
     setSampleEntries(await backend.list(sampleFolder()));
     let free: number | undefined;
@@ -210,7 +212,7 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
     } catch {
       // the listing is what counts; the free space is a line
     }
-    setDeviceInfo({ name, runtime, samples, canMkdir, free });
+    setDeviceInfo({ name, runtime, samples, canMkdir, free, apply });
   }
 
   // ---- the local folder ---------------------------------------------------------------------------------------------------------------
@@ -278,7 +280,6 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
   }
 
   return {
-    deviceStorage,
     openDeviceSamples,
     readSamples,
     pickFolder,

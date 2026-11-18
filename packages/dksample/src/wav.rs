@@ -135,7 +135,7 @@ fn decode(fmt: &[u8], data: &[u8]) -> Result<(u32, Vec<Vec<f64>>), WavError> {
     }
     Ok((rate, out))
 }
-fn resample(input: &[f64], src: u32, limit: &WavLimits) -> Result<Vec<f64>, WavError> {
+pub(crate) fn resample(input: &[f64], src: u32, limit: &WavLimits) -> Result<Vec<f64>, WavError> {
     if src == 48_000 {
         return Ok(input.to_vec());
     }
@@ -187,7 +187,8 @@ fn resample(input: &[f64], src: u32, limit: &WavLimits) -> Result<Vec<f64>, WavE
     }
     Ok(out)
 }
-pub fn wav_to_native(bytes: &[u8], limits: WavLimits) -> Result<NativeSample, WavError> {
+/// Parse the RIFF chunks and decode the samples to one `f64` vector per channel at the source rate.
+pub(crate) fn read_wav(bytes: &[u8], limits: &WavLimits) -> Result<(u32, Vec<Vec<f64>>), WavError> {
     if bytes.len() > limits.max_source_bytes {
         return Err(WavError::TooLarge);
     }
@@ -214,10 +215,14 @@ pub fn wav_to_native(bytes: &[u8], limits: WavLimits) -> Result<NativeSample, Wa
             return Err(WavError::TruncatedChunk);
         }
     }
-    let (rate, channels) = decode(
+    decode(
         fmt.ok_or(WavError::MissingChunk)?,
         data.ok_or(WavError::MissingChunk)?,
-    )?;
+    )
+}
+
+pub fn wav_to_native(bytes: &[u8], limits: WavLimits) -> Result<NativeSample, WavError> {
+    let (rate, channels) = read_wav(bytes, &limits)?;
     let src_frames = channels[0].len();
     let converted = channels
         .iter()

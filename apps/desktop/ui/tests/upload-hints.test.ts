@@ -20,11 +20,15 @@ function backend(
   const b = {
     list: async () => (lists++, listing),
     sameOnDevice: () => false,
+    sizeOf: (p: Prepared) => p.stored.length,
     put: async (_f: string, p: Prepared, _cb: unknown, opts?: { signal?: AbortSignal; exists?: boolean }) =>
       onPut(p.name, opts),
     verify: async () => ({ ok: true, message: 'ok', compared: '' }),
   };
-  return { b: b as unknown as Pick<SamplesBackend, 'put' | 'verify' | 'list' | 'sameOnDevice'>, lists: () => lists };
+  return {
+    b: b as unknown as Pick<SamplesBackend, 'put' | 'verify' | 'list' | 'sameOnDevice' | 'sizeOf'>,
+    lists: () => lists,
+  };
 }
 
 test('the put gets the existence from the listing the run has, and the folder is listed once', async () => {

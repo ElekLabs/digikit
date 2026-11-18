@@ -83,15 +83,13 @@ export interface LibMaps {
   modules: LibMap[];
 }
 
-/** The library folder of built modules and the device profiles. */
+/** The library folder of built modules. */
 export interface LibraryHost {
   build(device: string): Promise<LibBuildReport>;
   scan(device: string): Promise<{ path: string; size: number }[]>;
   read(device: string, path: string): Promise<ArrayBuffer>;
   /** The address maps of the device: the ship maps of the images `firmware.prepare` made, and the maps of its built modules (`build` writes them; a module built before has none). */
   readMaps(device: string): Promise<LibMaps>;
-  /** What the device profile says about the device with this id (`dt2`): its name and the backend of its samples. */
-  deviceStorage(device: string): Promise<{ name: string; samples: string }>;
 }
 
 /** The MIDI port the app opens through its Rust side (midir). One port at a time. */

@@ -93,6 +93,12 @@ test('an upload run: prepare, put with progress, verify; a broken WAV fails alon
   ]);
 });
 
+test('the size of a prepared file in the run is the one its backend gives', async () => {
+  const b = { ...fakeBackend(), sizeOf: () => 7 };
+  const { events } = await runAll(b, [], [filled('d', 'one.wav', 10, 1)]);
+  assert.equal((events.find((e) => e.event === 'prepared') as { bytes: number }).bytes, 7);
+});
+
 test('a failed send stops the run: the files after it are marked not sent', async () => {
   const b = fakeBackend({ failPut: 'two' });
   const u = await run(b, ['one.wav', 'two.wav', 'three.wav']);
@@ -217,6 +223,7 @@ const folderBackend = (have: Record<string, string[]> = { '': [] }, failMkdir = 
   const base = fakeBackend();
   return {
     calls,
+    sizeOf: base.sizeOf,
     put: async (f: string, p: Prepared, o: (sent: number, total: number) => void) => {
       calls.push(`put ${f}/${p.name}`);
       return base.put(f, p, o);
@@ -582,6 +589,7 @@ test('after the link was lost the run lists the folder again: files the device c
 const slowBackend = (log: string[], onPut: (name: string) => void = () => {}) => {
   const base = fakeBackend();
   return {
+    sizeOf: base.sizeOf,
     put: async (f: string, p: Prepared, o: (sent: number, total: number) => void) => {
       log.push(`put ${p.name}`);
       onPut(p.name);

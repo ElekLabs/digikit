@@ -105,6 +105,46 @@ describe('parse', () => {
     ).toThrow(/go together/);
   });
 
+  test('[storage] is optional, checked against its words, and refuses unknown keys', () => {
+    expect(parse({ 'x.toml': identity('x') }).get('x').storage).toBeUndefined();
+    const ok = identity('x', '[storage]\nsamples = "digikit"\nmodules = "digikit"\n');
+    expect(parse({ 'x.toml': ok }).get('x').storage).toEqual({ samples: 'digikit', modules: 'digikit' });
+    expect(() => parse({ 'x.toml': ok.replace('samples = "digikit"', 'samples = "tape"') })).toThrow(
+      /\[storage\] samples/,
+    );
+    expect(() => parse({ 'x.toml': ok + 'extra = 1\n' })).toThrow(/\[storage\] has an unknown key extra/);
+    expect(() => parse({ 'x.toml': identity('x', '[storage]\nsamples = "digikit"\n') })).toThrow(/\[storage\] modules/);
+  });
+
+  test('[storage.slots] belongs to stock-slots, is checked, and refuses what the converter does not make', () => {
+    const slots = (extra = '') =>
+      `[storage]\nsamples = "stock-slots"\nmodules = "digikit"\n[storage.slots]\npath = "/samples"\ncount = 64\nbytes_max = 0x7ffc0\nrate = 48000\nchannels = 1\nbits = 16\nbyte_order = "big"\napply = "restart"\n${extra}`;
+    expect(parse({ 'x.toml': identity('x', slots()) }).get('x').storage?.slots).toEqual({
+      path: '/samples',
+      count: 64,
+      bytesMax: 0x7ffc0,
+      rate: 48000,
+      channels: 1,
+      bits: 16,
+      byteOrder: 'big',
+      apply: 'restart',
+    });
+    expect(() => parse({ 'x.toml': identity('x', slots().replace('bits = 16', 'bits = 24')) })).toThrow(/mono 16-bit/);
+    expect(() => parse({ 'x.toml': identity('x', slots().replace('bytes_max = 0x7ffc0', 'bytes_max = 7')) })).toThrow(
+      /even/,
+    );
+    expect(() => parse({ 'x.toml': identity('x', slots().replace('apply = "restart"', 'apply = "later"')) })).toThrow(
+      /apply must be one of/,
+    );
+    expect(() => parse({ 'x.toml': identity('x', slots('extra = 1\n')) })).toThrow(/unknown key extra/);
+    expect(() =>
+      parse({ 'x.toml': identity('x', '[storage]\nsamples = "stock-slots"\nmodules = "digikit"\n') }),
+    ).toThrow(/needed by samples/);
+    expect(() =>
+      parse({ 'x.toml': identity('x', slots().replace('samples = "stock-slots"', 'samples = "digikit"')) }),
+    ).toThrow(/needed by samples/);
+  });
+
   test('a TOML syntax error names the file', () => {
     expect(() => parse({ 'broken.toml': '[device\n' })).toThrow(/devices\/broken\.toml/);
   });
@@ -122,5 +162,10 @@ describe('the repository device files', () => {
     expect(r.get('dt2').acceptance).toBeDefined();
     expect(r.get('dn2').acceptance).toBeDefined();
     expect(r.get('dt2').capabilities.card).toBe('path-fs');
+  });
+
+  test('the slot device keeps its samples in numbered slots', () => {
+    const st = loadDevices().get('st').storage;
+    expect(st).toMatchObject({ samples: 'stock-slots', slots: { path: '/samples', count: 64, bytesMax: 0x7ffc0 } });
   });
 });

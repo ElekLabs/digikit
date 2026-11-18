@@ -6,14 +6,20 @@
 //! (`ds_info_ptr`/`ds_info_len`: `src_rate`, `channels`, `src_frames`, `frames`, `data_len`, `rpc_len`), or returns 1 and leaves `{"error": "..."}`
 //! in the info buffer. The native file ends with the 16-byte trailer the firmware adds when it closes a file; a host that sends the file over
 //! MidiRpc leaves the trailer off (`rpc_len`, the length without it). `ds_hash(data, len)` is the `hash | 1` of a file's record.
+//! `ds_slot(wav, len, name, name_len, rate, max_bytes, big_endian)` makes the sample slot image of a device with numbered slots (slot.rs): 0 and the image in the
+//! output buffer, the JSON in the info buffer (`src_rate`, `channels`, `src_frames`, `frames`, `data_len`, `name`), or 1 and `{"error": "..."}`.
 
 pub mod hash;
 pub mod native;
+pub mod slot;
 pub mod wav;
 
 pub use hash::{content_hash, file_hash, hashlittle};
 pub use native::{
     NATIVE_HEADER_SIZE, NATIVE_RATE, NATIVE_TRAILER_SIZE, NativeError, build_native_sample,
+};
+pub use slot::{
+    SLOT_HEADER_SIZE, SLOT_NAME_MAX, SlotError, SlotFormat, SlotSample, slot_name, wav_to_slot,
 };
 pub use wav::{NativeInfo, NativeSample, WavError, WavLimits, wav_to_native};
 
@@ -91,6 +97,48 @@ pub unsafe extern "C" fn ds_convert(wav: *const u8, len: usize) -> i32 {
     })
 }
 
+/// Convert `wav` to the slot image (`slot.rs`). `name` is the sample's name (UTF-8); the info JSON carries the name as written.
+///
+/// # Safety
+/// `wav..wav+len` and `name..name+name_len` must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ds_slot(
+    wav: *const u8,
+    len: usize,
+    name: *const u8,
+    name_len: usize,
+    rate: u32,
+    max_bytes: usize,
+    big_endian: u32,
+) -> i32 {
+    let name = String::from_utf8_lossy(unsafe { slice(name, name_len) }).into_owned();
+    let fmt = SlotFormat {
+        rate,
+        max_bytes,
+        big_endian: big_endian != 0,
+    };
+    let r = wav_to_slot(unsafe { slice(wav, len) }, &name, fmt);
+    ST.with(|s| {
+        let mut s = s.borrow_mut();
+        match r {
+            Ok(x) => {
+                s.info = format!(
+                    "{{\"src_rate\":{},\"channels\":{},\"src_frames\":{},\"frames\":{},\"data_len\":{},\"name\":{:?}}}",
+                    x.src_rate, x.channels, x.src_frames, x.frames, x.data_len, x.name
+                )
+                .into_bytes();
+                s.out = x.bytes;
+                0
+            }
+            Err(e) => {
+                s.out = Vec::new();
+                s.info = format!("{{\"error\":{:?}}}", e.text()).into_bytes();
+                1
+            }
+        }
+    })
+}
+
 /// The `hash | 1` of a file's record for the file `data..data+len`.
 ///
 /// # Safety
@@ -157,6 +205,41 @@ mod tests {
             content_hash(&file) | 1
         );
         assert_eq!(unsafe { ds_hash(std::ptr::null(), 0) }, 0x43fa_243b);
+    }
+
+    #[test]
+    fn the_c_abi_makes_a_slot_and_reports_a_refusal_as_json() {
+        let w = wav(4, 48000);
+        let name = b"kick";
+        assert_eq!(
+            unsafe {
+                ds_slot(
+                    w.as_ptr(),
+                    w.len(),
+                    name.as_ptr(),
+                    name.len(),
+                    48_000,
+                    0x7ffc0,
+                    1,
+                )
+            },
+            0
+        );
+        assert_eq!(ds_out_len(), 0x40 + 8);
+        let info = String::from_utf8(
+            unsafe { std::slice::from_raw_parts(ds_info_ptr(), ds_info_len()) }.to_vec(),
+        )
+        .unwrap();
+        assert!(
+            info.contains("\"name\":\"kick\"") && info.contains("\"frames\":4"),
+            "{info}"
+        );
+        // max_bytes 4 allows 2 samples: the 4-frame file is refused and the output is empty
+        assert_eq!(
+            unsafe { ds_slot(w.as_ptr(), w.len(), name.as_ptr(), name.len(), 48_000, 4, 1) },
+            1
+        );
+        assert_eq!(ds_out_len(), 0);
     }
 
     #[test]

@@ -106,6 +106,32 @@ test('the backend follows the profile value; an unknown value or a missing hash 
   assert.throws(() => openSamples('flash', { session: a.s, hashOf }), /unknown samples backend "flash"/);
 });
 
+test('prepare is the injected converter on both backends and through the bulk wrapper; without it the backend refuses', () => {
+  const seen: string[] = [];
+  const converter = {
+    upload: (name: string, data: Uint8Array): Prepared => {
+      seen.push(name);
+      return { name: `${name}!`, bytes: data, stored: data, kind: 'unchanged' };
+    },
+    slot: (): Prepared => {
+      throw new Error('no slot converter');
+    },
+  };
+  for (const kind of ['stock-rpc', 'digikit']) {
+    for (const bulk of [undefined, {} as never]) {
+      const dev = openSamples(kind, { session: session().s, hashOf, converter, bulk });
+      const p = dev.prepare('a', new Uint8Array(3));
+      assert.equal(p.name, 'a!');
+      assert.equal(dev.sizeOf(prepared('k', 10)), 26);
+    }
+  }
+  assert.equal(seen.length, 4);
+  assert.throws(
+    () => openSamples('digikit', { session: session().s }).prepare('a', new Uint8Array(1)),
+    /without a converter/,
+  );
+});
+
 for (const kind of ['stock-rpc', 'digikit']) {
   test(`${kind}: folder, upload with progress, list, space, verify (ok, other bytes, missing), delete`, async () => {
     const { s } = session();

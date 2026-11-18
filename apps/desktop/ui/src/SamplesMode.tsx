@@ -84,7 +84,8 @@ import {
 } from './samples-state';
 
 export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBackendApi }): JSX.Element {
-  const { askStop, deviceInfo, stopWasAsked } = useTransferApp().state;
+  const app = useTransferApp();
+  const { askStop, deviceInfo, stopWasAsked } = app.state;
   const { busy, run, setError } = props.ctx;
   const { openDeviceSamples, listLocalAt, pickFolder, readLocal, readLocalFile } = props.backend;
   const [note, setNote] = createSignal('');
@@ -94,6 +95,12 @@ export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBacke
   const confirm = createConfirm();
   /** The progress line of a folder delete (empty when none runs). */
   const [deleting, setDeleting] = createSignal('');
+  /** A device that reads its samples at start: restart it (the runtime's RESTART), then read the listing again. */
+  const restartDevice = () =>
+    run('Restarting', async (): Promise<void> => {
+      await app.backend.restart(() => {});
+      await props.backend.readSamples();
+    });
 
   // ---- On your computer ------------------------------------------------------------------------------------------------------------
   const lrows = () =>
@@ -169,7 +176,7 @@ export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBacke
       setUploadAverage(undefined);
       await uploadItems(
         o.backend,
-        o.prepare,
+        (name, bytes) => o.backend.prepare(name, bytes),
         mkdirs,
         items,
         (e) => {
@@ -495,6 +502,17 @@ export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBacke
         }
       >
         <WaitNotice active={!!busy()} cancel={busy() !== 'Uploading'} />
+        <Show when={deviceInfo()?.apply === 'restart'}>
+          <p class="empty note" role="status">
+            <span>
+              The device reads its samples when it starts. Added and deleted samples are used after a restart.
+            </span>{' '}
+            {/* The button needs the runtime. The page identifies the device through the runtime, so it is always there. */}
+            <button type="button" class="act small" disabled={!!busy()} onClick={() => void restartDevice()}>
+              Restart device
+            </button>
+          </p>
+        </Show>
         <Crumbs
           items={crumbs(sampleFolder())}
           current={sampleFolder()}
@@ -557,7 +575,7 @@ export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBacke
                         disabled: writing(busy()) || r().pending,
                         onChange: () => dsel.tick(r().path),
                       }}
-                      name={r().name}
+                      name={r().slot !== undefined ? `${r().slot}  ${r().name}` : r().name}
                       title={r().path}
                       folder={
                         r().kind === 'folder'

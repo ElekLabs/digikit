@@ -74,7 +74,6 @@ export function createFakeHost(replies: Record<string, Reply> = {}): FakeHost {
       scan: leaf('library.scan'),
       read: leaf('library.read'),
       readMaps: leaf('library.readMaps'),
-      deviceStorage: leaf('library.deviceStorage'),
     },
     ports: {
       midi: {

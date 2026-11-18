@@ -162,7 +162,7 @@ export function dropUploads(u: Uploads, paths: string[]): Uploads {
 
 // ---- an upload run ----------------------------------------------------------------------------------------------------------------
 
-/** What `prepareUpload` of dksample.ts is, with the wasm bound. */
+/** What the backend's `prepare` is: the callers bind it (`(name, bytes) => backend.prepare(name, bytes)`). */
 export type Prepare = (name: string, bytes: Uint8Array) => Prepared;
 
 /** One file to send: its device folder, its local name and size, and how to read it (read only when its turn comes). */
@@ -198,7 +198,7 @@ const under = (folder: string, parent: string) => folder === parent || folder.st
  * read) is asked again up to 3 times.
  */
 export async function uploadItems(
-  backend: Pick<SamplesBackend, 'put' | 'verify'> &
+  backend: Pick<SamplesBackend, 'put' | 'verify' | 'sizeOf'> &
     Partial<Pick<SamplesBackend, 'list' | 'mkdir' | 'sameOnDevice' | 'commit' | 'bulkState'>>,
   prepare: Prepare,
   mkdirs: readonly string[],
@@ -325,7 +325,7 @@ export async function uploadItems(
       name: p.name,
       source: it.name,
       kind: p.kind,
-      bytes: p.stored.length,
+      bytes: backend.sizeOf(p),
       queued: it.name,
     });
     // the cancel came while the file was read: nothing of it was sent

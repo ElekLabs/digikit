@@ -22,6 +22,27 @@ export interface Container {
   readonly: readonly number[];
 }
 
+/** `[storage.slots]`: how a device with numbered sample slots takes samples (`samples = "stock-slots"`). `bytesMax`: the most audio bytes of one sample.
+ * `apply`: when the device uses a change (`restart`: at its next start). */
+export interface SlotStorage {
+  path: string;
+  count: number;
+  bytesMax: number;
+  rate: number;
+  channels: number;
+  bits: number;
+  byteOrder: 'big' | 'little';
+  apply: 'live' | 'restart';
+}
+
+/** `[storage]`: the backend of each kind of content. `samples`: `stock-rpc` (the device's MidiRpc file commands), `digikit` (the digikit store) or `stock-slots`
+ * (the firmware's numbered slots, written through its Data API; `slots` says how). */
+export interface Storage {
+  samples: 'stock-rpc' | 'digikit' | 'stock-slots';
+  modules: 'digikit';
+  slots?: SlotStorage;
+}
+
 /** `[acceptance]`: the device's test cell. */
 export interface Acceptance {
   firmware: string;
@@ -51,6 +72,8 @@ export interface DeviceRecord {
   syxId?: number;
   capabilities: Capabilities;
   container: Container;
+  /** `[storage]`; absent when the file has none (the device has no content backend yet). */
+  storage?: Storage;
   acceptance?: Acceptance;
   firmware: readonly Firmware[];
   /** `[patch_sets]`: the module ids of each named set (`device`, `emulator`); empty when the file has none. */
@@ -77,6 +100,11 @@ const WORDS = {
   card: ['path-fs', 'slots', 'none', 'unknown'],
 } as const;
 
+const STORAGE_WORDS = {
+  samples: ['stock-rpc', 'digikit', 'stock-slots'],
+  modules: ['digikit'],
+} as const;
+
 type Table = Record<string, unknown>;
 
 const isTable = (v: unknown): v is Table => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -100,6 +128,66 @@ function capabilities(file: string, t: unknown): Capabilities {
   for (const key of Object.keys(c))
     if (!(key in WORDS)) throw new Error(`devices/${file}: [capabilities] has an unknown key ${key}`);
   return out as unknown as Capabilities;
+}
+
+const SLOT_KEYS = ['path', 'count', 'bytes_max', 'rate', 'channels', 'bits', 'byte_order', 'apply'] as const;
+
+function storageSlots(file: string, t: unknown): SlotStorage {
+  const s = need(file, '[storage.slots]', t, isTable);
+  for (const key of Object.keys(s))
+    if (!(SLOT_KEYS as readonly string[]).includes(key))
+      throw new Error(`devices/${file}: [storage.slots] has an unknown key ${key}`);
+  const whole = (key: string, max = 0x7fffffff): number => {
+    const v = s[key];
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > max)
+      throw new Error(`devices/${file}: [storage.slots] ${key} must be a whole number from 1 to ${max}`);
+    return v;
+  };
+  const word = <T extends string>(key: string, words: readonly T[]): T => {
+    const v = s[key];
+    if (typeof v !== 'string' || !(words as readonly string[]).includes(v))
+      throw new Error(`devices/${file}: [storage.slots] ${key} must be one of ${words.join(', ')}`);
+    return v as T;
+  };
+  const path = s.path;
+  if (typeof path !== 'string' || !/^\/[a-z][a-z0-9_-]*$/.test(path))
+    throw new Error(`devices/${file}: [storage.slots] path must be a route like "/samples"`);
+  const bytesMax = whole('bytes_max');
+  if (bytesMax % 2 !== 0) throw new Error(`devices/${file}: [storage.slots] bytes_max must be even (16-bit samples)`);
+  const channels = whole('channels');
+  const bits = whole('bits');
+  if (channels !== 1 || bits !== 16)
+    throw new Error(`devices/${file}: [storage.slots] only mono 16-bit is supported (channels = 1, bits = 16)`);
+  return {
+    path,
+    count: whole('count', 4096),
+    bytesMax,
+    rate: whole('rate'),
+    channels,
+    bits,
+    byteOrder: word('byte_order', ['big', 'little'] as const),
+    apply: word('apply', ['live', 'restart'] as const),
+  };
+}
+
+function storage(file: string, t: unknown): Storage | undefined {
+  if (t === undefined) return undefined;
+  const s = need(file, '[storage]', t, isTable);
+  const out: Table = {};
+  for (const key of Object.keys(STORAGE_WORDS) as (keyof typeof STORAGE_WORDS)[]) {
+    const v = s[key];
+    if (typeof v !== 'string' || !(STORAGE_WORDS[key] as readonly string[]).includes(v))
+      throw new Error(`devices/${file}: [storage] ${key} must be one of ${STORAGE_WORDS[key].join(', ')}`);
+    out[key] = v;
+  }
+  for (const key of Object.keys(s))
+    if (!(key in STORAGE_WORDS) && key !== 'slots')
+      throw new Error(`devices/${file}: [storage] has an unknown key ${key}`);
+  const slots = s.slots === undefined ? undefined : storageSlots(file, s.slots);
+  if ((out.samples === 'stock-slots') !== (slots !== undefined))
+    throw new Error(`devices/${file}: [storage.slots] is needed by samples = "stock-slots" and by nothing else`);
+  if (slots) out.slots = slots;
+  return out as unknown as Storage;
 }
 
 function container(file: string, t: unknown, caps: Capabilities): Container {
@@ -213,6 +301,8 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
     if (d.syx_id !== undefined) rec.syxId = need(file, '[device] syx_id', d.syx_id, isInt);
     const acc = acceptance(file, doc.acceptance, fw);
     if (acc) rec.acceptance = acc;
+    const st = storage(file, doc.storage);
+    if (st) rec.storage = st;
     if (doc.digikit !== undefined && doc.patch === undefined)
       throw new Error(`devices/${file}: [digikit] needs [patch]: a runtime target must be patchable`);
     if (doc.patch !== undefined && rec.syxId === undefined)

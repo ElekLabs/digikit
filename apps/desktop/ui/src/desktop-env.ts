@@ -3,7 +3,7 @@
 import { createComponent } from 'solid-js';
 import { EmuBulkLink } from '@digi/dk-session';
 import { listingChanged } from '@digi/workbench-core/transfer/refresh-core.ts';
-import { runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
+import { deviceNameOf, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import type { SamplesSlot, TransferEnv } from '@digi/workbench-core/transfer/env.ts';
 import { MODULE_FILES } from '@digi/workbench-core/transfer/module-files.generated.ts';
@@ -131,7 +131,7 @@ export function createDesktopEnv(host: Host, app: () => TransferApp): TransferEn
     moduleFiles: (id) => MODULE_FILES[id],
     wasm: hostWasmSource(host),
     bindBundle: async () => new Uint8Array(await host.firmware.bindBundle()),
-    deviceName: async (device) => (await samples().deviceStorage(device)).name,
+    deviceName: async (device) => deviceNameOf(device),
     // the Emulator target has its own bulk link (the daemon's usb.bulk.in/out), so the pill and the transfers there follow the same path as a device
     bulk: {
       candidates: () =>

@@ -244,6 +244,7 @@ export interface SampleRow {
   path: string;
   kind: 'file' | 'folder';
   size: number;
+  slot?: number;
   /** A file of an upload that is not in the listing (yet). */
   pending: boolean;
   status?: SampleStatus;
@@ -297,6 +298,7 @@ export function sampleRows(folder: string, entries: SampleEntry[], uploads: Uplo
       path,
       kind: e.kind,
       size: e.size,
+      slot: e.slot,
       pending: false,
       status: e.kind === 'file' ? uploadStatus(uploads[path]) : folderStatus(uploads, path),
     };
@@ -316,7 +318,15 @@ export function sampleRows(folder: string, entries: SampleEntry[], uploads: Uplo
       }
     }
   }
-  return rows.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'folder' ? -1 : 1));
+  return rows.sort((a, b) =>
+    a.kind !== b.kind
+      ? a.kind === 'folder'
+        ? -1
+        : 1
+      : a.slot !== undefined && b.slot !== undefined
+        ? a.slot - b.slot
+        : a.name.localeCompare(b.name),
+  );
 }
 
 /** The ticked rows of the folder, in list order (ticks of rows that are gone are dropped). Pending rows are not on the device. */

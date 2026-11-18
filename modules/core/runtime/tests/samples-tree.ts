@@ -85,6 +85,7 @@ export async function expectSkipOnUpload(
     list: (f?: string) => (calls.push(`list ${f ?? ''}`), dev.list(f)),
     mkdir: (f: string) => (calls.push(`mkdir ${f}`), dev.mkdir(f)),
     sameOnDevice: dev.sameOnDevice.bind(dev),
+    sizeOf: dev.sizeOf.bind(dev),
   };
   const run = async (wavOf: (name: string) => Uint8Array): Promise<Uploads> => {
     calls.length = 0;

@@ -713,7 +713,6 @@ fn main() {
             library::patchkit_wasm,
             library::bind_bundle,
             library::dkprof_wasm,
-            library::device_storage,
             local::local_pick_folder,
             local::local_list,
             local::local_read,
