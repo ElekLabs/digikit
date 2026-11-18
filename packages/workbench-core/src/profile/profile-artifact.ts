@@ -26,6 +26,8 @@ export interface SharcAnswer {
   icount: number;
   idle_skipped: number;
   counted: { fast: number; block: number; interpreted: number };
+  /** The engine's tier totals since the DSP worker started: explains a zero in `counted`. */
+  engine_tiers?: { fast: number; block: number; interpreted: number; idle_skipped: number; traps: number };
   raw: unknown[];
   /** New runtimes (firmware loads, restarts) the daemon started again since Start: the counts cover only the time since the last one. */
   restarts?: number;

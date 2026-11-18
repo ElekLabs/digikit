@@ -3531,6 +3531,15 @@ impl Actor {
                         .map(|(pc, e)| (pc, e.fast.instructions, e.aot.instructions))
                         .collect(),
                     hist: hist.clone(),
+                    engine: w.tiers.as_ref().map_or_else(Default::default, |t| {
+                        crate::sharc_profile::EngineTiers {
+                            fast: t.fast_insns,
+                            block: t.block_instructions.saturating_sub(t.fast_insns),
+                            interpreted: t.interpreted,
+                            idle_skipped: t.idle_skipped,
+                            traps: t.traps + t.block_traps,
+                        }
+                    }),
                 };
                 let mut v = crate::sharc_profile::profile_json(&counts);
                 v["restarts"] = restarts.into();

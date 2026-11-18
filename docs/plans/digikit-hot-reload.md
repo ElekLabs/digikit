@@ -16,8 +16,8 @@ Replace or remove a service or module while the device runs, with no restart. It
 
 | Mechanism | Hot reload as built | Needed |
 | --- | --- | --- |
-| ColdFire raw and handler hooks | Not possible. The site `jmp` goes into `.dks` memory; the tails are in the `.dks`; hooks call firmware that may yield, so a task can be paused with a return address in `.dks` code. | Gate with slot and entry/exit counter (decision 1). |
-| Restore of stock bytes | Safe. A new stock-to-`jmp` write while running is unsafe. | Write the `jmp` only through a gate built at boot. |
+| ColdFire raw and handler hooks | Not possible today. The site `jmp` goes into `.dks` memory; hooks call firmware that may yield, so a task can be paused with a return address in `.dks` code. | After step 3 of [port-file.md](port-file.md): the site jump goes to a port-file routine, and a counter macro around the callback gates the call (decision 1). Before step 3, not possible. |
+| Restore of stock bytes | Safe. A new stock-to-`jmp` write while running is unsafe. | Write the `jmp` only at boot, to the port-file routine (decision 1). |
 | Interrupt slots (DN2 frametype) | Safe now: clear the slot under the interrupt mask, then free. No task switch starts from an interrupt at IPL >= 2 (finding 132). | None. |
 | SHARC slots (R12-8) | Safe with rules: the stub reads the slot once per call; free after two confirmed blocks, not one; invalidate the DSP instruction cache before reuse **[O]**. | Rules in the R12-8 design. |
 | `ServiceRow` Registry add and remove | Unsafe with concurrent readers: remove shifts pointers. | Publish by one pointer swap, plus a per-record counter around thunk calls. |
@@ -33,18 +33,19 @@ Replace or remove a service or module while the device runs, with no restart. It
 
 ## Decisions
 
-1. Every ColdFire hook goes through a runtime-owned gate with a slot and an entry/exit counter. Cost: about 5 instructions on entry and 2 on exit per hook call. Unload clears the slots, then waits until the counters are 0, checked once per UI pass. On timeout the result is E_BUSY and the memory is kept. There is no opt-out switch: one path. Interrupt sites keep the plain slot stub without a counter. A per-hook counter skip is allowed only if a measured hot hook needs it (not built). S3 starts with a ceiling (hook calls per second from hook hit counts) and one instruction-ratio A/B.
+1. Every ColdFire hook call into a service passes an entry/exit counter. The counter is a macro around the callback call in the port-file adapter routines (decision 4), not a gate the runtime builds. Cost: about 5 instructions on entry and 2 on exit per hook call (to be measured). A service replace swaps the callback slot, then waits until the counter is 0, checked once per UI pass. On timeout the result is E_BUSY and the memory is kept. There is no opt-out switch: one path. Interrupt sites keep the plain slot stub without a counter. A per-hook counter skip is allowed only if a measured hot hook needs it (not built). S3 starts with a ceiling (hook calls per second from hook hit counts) and one instruction-ratio A/B.
 2. Hot reload is refused while the transport plays or records.
 3. A swap is refused when old and new do not fit in memory together. Replace loads the new part beside the old, switches the slots under one mask, then drains and frees the old. Rollback switches back.
-4. A service whose hook sites were not gated at boot installs on the next restart. The runtime builds the gates at boot from the BIND stock bytes, before tasks run. It never needs a reflash.
-5. Timing: S0 (exit convention) now, with the bind-time firmware addresses item right after the R12 merge. S1 to S5 after R12-8.
+4. After step 3 of [port-file.md](port-file.md), a hook site jump goes to a routine in the port file, never into a service. A service replace is a slot swap: the service fills the callback slot of the port file by name. The entry and exit counter is a macro around the callback call in the adapter source of the port file. The runtime builds no gates. Replacing the port file itself needs a restart. A service whose hooks were not installed at boot installs on the next restart. It never needs a reflash.
+5. Timing: S0 (exit convention) is built. Firmware addresses and site facts move to the port file (port-file.md PR1-PR3). S1, S2, S4 and S5 follow R12-8; S3 follows step 3 of the port file and is not possible before it.
 
 ## Where the code lives
 
 | Part | Place |
 | --- | --- |
-| Gate builder and exit stubs `dk_tail`, `dk_exit`, `dk_ret` | Runtime `Installer` (`loader/install.rs`). The Installer becomes a trait with a ColdFire and a DSP backend. |
-| Slot and counter words | Runtime memory. |
+| Exit stubs `dk_tail`, `dk_exit`, `dk_ret` | Today: made by `patchkit bind` for each service. After the port file stack: the runtime copies tails at load (port-file.md section 6). The runtime builds no gates. |
+| Hook installation | Runtime `Installer` (`loader/install.rs`), with site facts from the port file. It becomes a trait with a ColdFire and a DSP backend. |
+| Entry/exit counter macro and the callback slots | The adapter routines of the port file (step 3). |
 | Quiesce and unload protocol | `Loader`. Services and modules share one lifecycle: clear slots and row table, drain counters, `fini`, registry remove, release DSP, free. |
 | Pointer-swap tables | `Registry`. |
 | DSP backend: zero the slot, wait two blocks, free | With R12-8. |
@@ -72,7 +73,7 @@ Services and modules only declare hooks, slots and rows. Content modules do not 
 - Hook asm leaves only through the `dk_tail`, `dk_exit` and `dk_ret` imports: no raw `rts`, no `jmp` through table words. A hook that calls stock code and gets control back uses `dk_stock` (not an exit).
 - Keep the restore code.
 - No image or runtime word points into a `.dks`, except slots and the row table.
-- Bind-time addresses keep firmware addresses in the service's own data, and keep each site's stock bytes in BIND.
+- Firmware addresses and site facts stay out of services: they are in the port file (port-file.md), built from committed data. Until step 3 lands, a service keeps its device hook routines; the stock bytes of a site come from the live image through the port file (port-file.md section 6).
 - R12-8 follows the SHARC slot rules above.
 
 ## Stages
@@ -82,19 +83,21 @@ Services and modules only declare hooks, slots and rows. Content modules do not 
 | S0 | Exit convention, with the bind-time addresses item (B1, see below) | `objdiff` explained | PCM unchanged | a few hours (with B1) | Hooks can be gated later without edits | High |
 | S1 | Code-only modules: revert parts of a12048c46; MIDI-command counter; masked span clock; live-set fit | Loader fakes for order and E_BUSY | 20 load and unload cycles with `DIGI_FLUSH_CHECK=1` | 2 days | First live unload | High |
 | S2 | Interrupt-slot service and row-table counter | Registry swap tests | DN2 frametype | 2 days | Interrupt services reload | High |
-| S3 | Gates for all ColdFire hooks and service replace | `FakePlatform` gate and counter tests | fx swap during a key loop | 4 days | Services replace live | Medium (hook cost not yet measured) |
+| S3 | After port-file step 3: service replace as a slot swap, with the counter macro in the port-file routines (not possible before step 3 lands) | `FakePlatform` slot swap and counter tests | fx swap during a key loop | 4 days | Services replace live | Medium (hook cost not yet measured) |
 | S4 | Machine and fx modules: MISSING placeholder, whole-project scan, view rebuild, DSP grace wait | Fakes for scan and rebuild | Machine swap with a project open | 4 to 5 days | Content modules reload | Medium |
 | S5 | SHARC slots | Rig tests of the slot rules | DSP swap with a voice held | 2 days, after R12-8 | DSP code reloads | Medium |
 
 S5 slot ownership (found in the R12-8 review): the hot swap must hand a slot from the old owner to the new one without a gap that a second owner could hit. `DspInstaller` refuses a second owner of a slot, and `clear_sequence` zeroes the slots of a record unconditionally, so a naive reload (install the new service, then remove the old one) either fails with a second owner or clears the slots the new service just filled. The hand-off needs a compare-and-clear (the old record clears a slot only while it still holds the old pc) or one combined write (the swap chunk writes the new pcs and the old record's teardown skips its slots).
 
-S3 starts with the hook-call ceiling and the paired A/B (`tools/devtools/coupled_ab.py`); stop if the cost is weak against the payoff. Two facts from the B1 design for S3: an exit that keeps the condition codes costs about 8 instructions in a gate stub, not 2 (use 8 in the ceiling, or a declared flag per exit); and the stock bytes of five sites cannot be copied as they are, because their displaced instructions branch (clone.5, srcpage, group, type_reader.load, filter_graph_test), so S3 needs a position-independent stock path made by bind for them.
+S3 starts with the hook-call ceiling and the paired A/B (`tools/devtools/coupled_ab.py`); stop if the cost is weak against the payoff. Two facts from the B1 design for S3: an exit that keeps the condition codes costs about 8 instructions in a gate stub, not 2 (use 8 in the ceiling, or a declared flag per exit); and the stock bytes of five sites cannot be copied as they are, because their displaced instructions branch (clone.5, srcpage, group, type_reader.load, filter_graph_test), so those sites redo their instructions in the port-file routine (port-file.md section 5).
 
 ## B1 bind-time firmware addresses (design for S0)
 
-Services carry their own firmware addresses. `patchkit bind` resolves them from the names in `devices/fw/*.toml` and the anchors of the user's firmware in `devices/ports/`. Service source never holds a raw address: Rust names firmware symbols through the `dkfw` crate, assembler through `[object.externs]` aliases in the service `module.toml`; pack maps them to import names.
+This design is built. [port-file.md](port-file.md) replaces host binding with a port file: its PR3 deletes `patchkit bind` and the `FW` and `BIND` items of services.
 
-Imports bind resolves (each name carries the hook's name hash, so S3 knows the counter):
+This section describes the built state before the port file. Services carry their own firmware addresses. `patchkit bind` resolves them from the names in `devices/fw/*.toml` and the anchors of the user's firmware in `devices/ports/`. Service source never holds a raw address: Rust names firmware symbols through the `dkfw` crate, assembler through `[object.externs]` aliases in the service `module.toml`; pack maps them to import names.
+
+Imports bind resolves (each name carries the hook's name hash):
 
 | Import | Reached by | Meaning | Keeps |
 | --- | --- | --- | --- |
@@ -104,9 +107,9 @@ Imports bind resolves (each name carries the hook's name hash, so S3 knows the c
 | `dk_stock_<hook>` | `jsr` | call the stock path from inside the hook; control comes back; not an exit | - |
 | `dk_fw_<name>` | `jsr` or data word | a firmware address; never a hook exit | - |
 
-Rules: one exit per hook entry; exits use `jmp abs.l` only. `dk_fw_` and `dk_exit_` become absolute words with no relocation; the others are base-relative. A name for another device resolves to 0.
+Rules: one exit per hook entry; exits use `jmp abs.l` only. `dk_fw_` and `dk_exit_` become absolute words with no relocation; the others are base-relative. A name for another device resolves to 0 (with the port file: a name with the `absent` flag, port-file.md section 5).
 
-Firmware identity: bind writes a table item `FW` (the first 8 bytes of the stock firmware's SHA-256) when it resolved a firmware reference. patchkit apply adds the image info entry `fw_id`. The loader compares them in the service check, before the stock-bytes check and before `init`: a mismatch is `E_HOOK_STOCK` (the existing text), BIND items without `FW` are `E_FORMAT`. A service without firmware references (`lfo.dks`) stays byte-identical.
+Firmware identity: bind writes a table item `FW` (the first 8 bytes of the stock firmware's SHA-256) when it resolved a firmware reference. patchkit apply adds the image info entry `fw_id`. The loader compares them in the service check, before the stock-bytes check and before `init`: a mismatch is `E_HOOK_STOCK` (the existing text), BIND items without `FW` are `E_FORMAT`. A service without firmware references (`lfo.dks`) stays byte-identical. With the port file, `FW` moves into the port file and `fw_id` stays in the image; the runtime reads `fw_id`, and after port-file PR2 INFO reports it. Bind is deleted in port-file PR3.
 
 Image tables: `machines_info` and `fxpages_info` shrink to image-owned words (they cannot leave: the services still need values that exist only after patching). `machines_info` keeps the registry symbols, `mf_ensure`, the native page functions, the slot map and the page rows; `fxpages_info` keeps the params row indices and the send-slot limit (the target of `cap_send_slots`). All firmware function, site and data addresses leave both tables.
 
@@ -117,9 +120,9 @@ Steps (one stack; one device gate shared with RS-S and RS-C):
 | Bind resolver | pack extern mapping; `exits` in `devices/fw`; the resolver for the five import families; the `FW` item | done (branch `b1/bind-resolver`) |
 | Firmware identity check | `fw_id` info entry; the loader rules; host and assembly cases | done (branch `b1/bind-resolver`) |
 | Hook exits | about 30 machines and fx hook routines on both devices switch to the named exits, including the DN2 frametype interrupt routine | 1-2 h |
-| Firmware addresses into the services | function, site and data addresses of both tables become `dk_fw_` imports; the tables shrink | with the steps above |
+| Firmware addresses into the services | function, site and data addresses of both tables become `dk_fw_` imports; the tables shrink; the port file then supplies the addresses | with the steps above |
 
-Deferred: the fx device constants (struct offsets, value indices, stock parameter codes) stay in `fxpages_info` for now; they are profile numbers, not firmware addresses, and hot reload does not need them moved. Device proof: FX contract suite, fxpages tests, machine fixture suite, frametype slot (DN2), providers with a case for a file bound to another firmware, refusals, safe mode, gate-smoke, gate-pins; PCM pins unchanged. Risks: the import count of `machines.dks` (limit 64; count first) and the hand edits of the interrupt routine and of hooks whose exits keep live condition codes.
+Deferred: the fx device constants (struct offsets, value indices, stock parameter codes) stay in `fxpages_info` for now; they are profile numbers, not firmware addresses, and hot reload does not need them moved. Device proof: FX contract suite, fxpages tests, machine fixture suite, frametype slot (DN2), providers with a case for a file bound to another firmware, refusals, safe mode, gate-smoke, gate-pins; PCM pins unchanged. Risks: the import count of `machines.dks` (the limit is `MAX_CF_IMPORTS` 128, `loader/image.rs:94`; the unbound file has 59) and the hand edits of the interrupt routine and of hooks whose exits keep live condition codes.
 
 ## Fixtures
 
