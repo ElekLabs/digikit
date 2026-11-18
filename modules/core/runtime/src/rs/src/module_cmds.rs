@@ -232,8 +232,11 @@ pub(crate) unsafe fn begin_cmd(cmd: u8) -> Result<Option<(dkrt_sdk::HostCmdFn, u
 /// The handler returned: the command of `owner` is no longer in flight.
 pub(crate) unsafe fn end_cmd(owner: u8) {
     if owner != 255 && owner > 0 {
+        // masked like `begin_cmd`: the count is a read-modify-write, and the task that reads it can interrupt this one
+        let sr = crate::platform::irq_mask();
         let c = &mut (*addr_of_mut!(IN_FLIGHT))[owner as usize - 1];
         *c = c.saturating_sub(1);
+        crate::platform::irq_restore(sr);
     }
 }
 
