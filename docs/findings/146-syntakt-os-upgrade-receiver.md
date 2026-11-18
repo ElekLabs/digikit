@@ -80,15 +80,15 @@ NOR map used here (finding 01, 141; Syntakt flash map itself **[O]**): bootstrap
 - The stage data area is `0x403d10d0..0x405d10d0`, exactly **2 MiB** (`0x200000`): the next global symbol of the cfdb is `DAT_405d10d0`. DT2 1.17: stage
   `0x403a0ed0`, data `0x403a0ef0`, next symbol `0x405a0f64`: the same 2 MiB **[V]**.
 - Stock container is 2,029,486 bytes decoded; `out/syntakt/patched/Syntakt_OS1.42-expansion.syx` (the dry run of finding 137, core/runtime and core/expansion) decodes
-  to a content of 2,000,880 bytes (finding 137). A patched image of the full emulator set must stay below `0x200000` minus the 8 bytes of length and checksum words, and
-  below `0x280000` for the NOR. The tighter bound is the stage: **2,097,144 bytes**. Headroom today is about 96 KB.
+  to a content of 2,000,880 bytes (finding 137). A patched image of the full emulator set must fit the stage in whole messages of 101 bytes, and stay below `0x280000` for
+  the NOR. The tighter bound is the stage: 20763 messages = at most **2,097,055 bytes** (`0x1FFF90` rounded to 16), rounded down to a `0x200` page: `0x1FFE00`. Headroom today is about 96 KB.
 - **Nothing on the device compares the length word with the received bytes or with 2 MiB.** The writer erases `ceil(L / S)` sectors from `0x80000`: a length of
   `0x280001` or more reaches `0x300000` and erases the calibration record. The sum check reads `L / 4` words from RAM beyond the stage if `L` is larger than what was
   received, so only a forged image whose header, length and sum agree gets through; patchkit never makes one. The OS write path therefore cannot touch
   `0x300000..0x37ffff` for an honest image, and can for a forged length word **[V]**.
-- `container_max = 0x300000` in all three device files (and the port file `devices/ports/st-1.42.toml`) is above the 2 MiB stage on all three devices, and above the real limits. The Syntakt limit is `0x200000` less
-  8 (the stage); the NOR limit is `0x280000`. DT2 and DN2 have the same 2 MiB stage and the same unbounded writer, with their own NOR map. Patchkit should refuse a
-  container above the stage size for every device; the plan carries the change (a device-data edit, not a finding).
+- `container_max = 0x1FFE00` in all three device files and the port files: 20763 messages of 101 bytes fit the 2 MiB stage, so the container is at most 2,097,055 bytes
+  (hard bound `0x1FFF90` with the 16-byte rule), rounded down to a `0x200` page (below the NOR bound `0x280000`). DT2 1.17 and DN2 1.12 stage verified the same
+  (DT2 `0x403a0ef0`, DN2 `0x4038bee0`, next symbols 2 MiB on); they have the same unbounded writer, with their own NOR map.
 - Other NOR users of MAIN, each with its address arguments **[V]** (callers of the wrappers `FUN_40117a72` program, `FUN_40117aee` and `FUN_40117b58` erase):
 
 | Caller | Addresses | Purpose |
@@ -126,9 +126,10 @@ is called from `pack.rs:278` for content modules only ("not `core`: patched in, 
 - A content module is refused when it holds an address in the NOR controller window. That covers direct register access.
 - A `core/*` module is **not** checked. For the five modules above this rests on the review in the previous section, not on a gate.
 - A content module that holds the literal address of a firmware NOR wrapper (`0x40117a72` and so on) is **not** refused: code addresses are in no window. A content module
-  normally has no such address (it links the runtime table only), but the guard would be complete with a window over the NOR driver's code,
-  `[0x40116300, 0x40117c00)` (primitives `FUN_401163f4` to `FUN_40117bd6`), added to `[protect] windows` after the ranges are checked against function boundaries.
-  The calibration write `FUN_4006eb7e` at `0x4006eb7e` is a second small window. Proposal, not done.
+  normally has no such address (it links the runtime table only), so `[protect] windows` of `devices/syntakt.toml` also cover the firmware's NOR writer code, each a
+  whole-function range checked against the cfdb: the NOR driver `[0x401163f4, 0x40117be8)` (`FUN_401163f4` to `FUN_40117bd6`), the chip select `[0x40114288, 0x40114368)`,
+  the calibration writer `[0x4006eb7e, 0x4006ecb8)`, the OS writer `[0x4011aad4, 0x4011ac1c)`, the record and serial writers `[0x4007fcfc, 0x40080180)`, the arena
+  NOR erase `[0x400bd608, 0x400bd74e)` and the self-test and updater screen `[0x40080646, 0x400819f6)`. A literal address is refused; an address computed at run time is not.
 
 ## 5. The workbench route and what differs
 
@@ -143,7 +144,7 @@ Write `0x51 {u32 CRC, u32 length, u32 offset, data}`, End `0x52 {commit}`, in th
 | Stream byte | `0x11` in the start message, K = 0x11 in the checksum | `[patch] stream_id = 0x11` is set; the file's own bytes carry it |
 | Image check | sums only | `seal = "none"` is set |
 | Chunk size | 2048 (stock file); the largest accepted is not known; the Data API gather limit on 1.42 is **[O]** | none: default stays |
-| Size cap | stage 2 MiB | `container_max` must become `0x200000` less 8 |
+| Size cap | stage 2 MiB | `container_max = 0x1FFE00` (done) |
 | Hardware patch set | none: `[patch_sets]` has only `emulator` (the page says so, commit `ea0039933`) | a `device` set |
 
 No device name is in the flash code path; the differences are the data above. What is untested: the RPC route on a real Syntakt. A first test with the stock image (restore stock)
