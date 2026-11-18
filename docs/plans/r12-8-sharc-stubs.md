@@ -4,7 +4,7 @@ Date: 2026-11-17. Targets: DT2 OS 1.17, DN2 OS 1.12. Part of R12 ([runtime-and-s
 [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md). Basis: [finding 128](../findings/128-r4-hooks-in-services.md) (SHARC hook sites cannot move into a
 `.dks`), [finding 31](../findings/31-dsp-link.md) (dsp-link), [digikit-hot-reload.md](digikit-hot-reload.md) (S5), [runtime-slimming.md](runtime-slimming.md).
 
-Status: steps 1 to 4 and 6 built, slice-gated host checks green; step 5 (device slice gate) and step 7 open. Branch `r12-8/slice`. Results are in section 9.
+Status: steps 1 to 6 and 8 merged (PR 601): slice gate and final device gate green on DT2 and DN2, PCM unchanged (equiv pins onset-aligned). Step 7 open (section 9, "Open: step 7"). Results are in section 9.
 
 ## 1. Goal and scope
 
