@@ -243,3 +243,11 @@ test('only a patch with the runtime leaves a runtime to bind services to and to 
   assert.equal(leavesRuntime(prepared({ imageId: null })), false);
   assert.equal(leavesRuntime(prepared({ restore: true, imageId: null, runtime: null })), false);
 });
+
+test('the page text for an image without a runtime says so and names the full set', () => {
+  const dev = { kind: 'connected', d: { model: 'dn2', os: '1.12' } } as never;
+  const text = matchView(prepared({ imageId: null, runtime: null }), dev).os;
+  assert.match(text ?? '', /installs no runtime/);
+  assert.match(text ?? '', /--set device-full/);
+  assert.match(matchView(prepared(), dev).os ?? '', /with digikit runtime 0\.5\.2\./);
+});

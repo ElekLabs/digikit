@@ -432,10 +432,12 @@ fn check(
             }
             checks.push(format!(
                 "section {id} is stored packed and decodes to the stock bytes{}",
-                if lib.is_some() {
-                    " (the record's repack entry holds, and its module declares the same)"
+                if !recorded {
+                    " (the image has no patch record: not checked against one)"
+                } else if lib.is_some() {
+                    " (the record is consistent with it, and its module declares the same layout)"
                 } else {
-                    " (the record's repack entry holds)"
+                    " (the record is consistent with it; MAIN's hook constants are not read)"
                 }
             ));
         }

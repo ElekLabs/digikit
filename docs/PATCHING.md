@@ -574,7 +574,8 @@ patchkit stores the section packed (`pack_section`) only when a module of the se
 section and rechecks from it what the hook relies on: the stream header length and byte sum, that the decoded section is the stock one the entry names (length and
 SHA-256), that the stream fits `stage_end - dest`, and an in-place margin above 0. The entry's module must be a module of the record. This needs no module
 manifest, so `flash`, `preflight` and the wasm callers check it; with the library (the `verify` command, `apply`) the module's own `[[repack]]` must declare the same.
-A packed section without an entry is refused. The first user is `core/peer-image`
+A packed section without an entry is refused. This proves that the record is consistent with the image (the stored stream, its stock section and layout); it does not
+prove that the constants in MAIN's hook (the adapter's C code) match the record: `core/peer-image`'s host test and `tests/repack.rs` compare those with the manifest. The first user is `core/peer-image`
 ([README](../modules/core/adapters/peer-image/README.md), [finding 150](findings/150-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
 32,672 bytes over `container_max`; with it the container is 2,011,488 bytes.
 
@@ -639,8 +640,10 @@ patchkit flash firmware/Syntakt_OS1.42.syx --port "Syntakt" --set device-full
 patchkit flash STOCK.syx --port NAME --set device --dry-run --save OUT.syx   # patch and check only; then `patchkit preflight OUT.syx`
 ```
 
-After a step-A flash the workbench does not look for a runtime: a patch without the runtime has no image id, so it skips binding services and installing the
-default modules (`leavesRuntime` in `firmware-core.ts`). After step B they follow as on the other devices.
+After a step-A flash the workbench and `patchkit flash` do not look for a runtime: a patch without the runtime has no image id, so INFO is not asked.
+The restart is confirmed by the stock identity instead (MidiRpc Ping names the model, [finding 144](findings/144-stock-device-identity.md)), the page reports the flash as done
+("patched without a runtime"), and it skips binding services and installing the default modules (`leavesRuntime` in `firmware-core.ts`, `Prepared::leaves_runtime`).
+A device that still runs a runtime after such a flash is an error. After step B they follow as on the other devices.
 
 ### Recovery
 

@@ -278,6 +278,26 @@ fn verify_accepts_a_packed_section_only_when_a_module_of_the_record_claims_it() 
 }
 
 #[test]
+fn a_repack_declaration_the_record_cannot_hold_is_refused_when_the_manifest_is_read() {
+    let body = |extra: &str| {
+        format!(
+            "[module]\nid = \"t/r\"\nversion = \"1\"\nname = \"r\"\ncategory = \"test\"\ntype = \"raw\"\nauthor = \"d\"\nstatus = \"experimental\"\nsummary = \"s\"\n[[repack]]\nrole = \"cf2\"\ndest = 16\nstage_end = 32\nlen = 4\nsha256 = \"{}\"\n{extra}",
+            "ab".repeat(32)
+        )
+    };
+    let read = |_: &str| -> patchkit::Result<String> { unreachable!() };
+    assert!(Module::from_parts(&body(""), &read).is_ok());
+    for bad in [
+        body("").replace(&"ab".repeat(32), "zz"),
+        body("").replace("dest = 16", "dest = 4294967296"),
+        body("").replace("stage_end = 32", "stage_end = 8"),
+        body("").replace("role = \"cf2\"", "role = \"\""),
+    ] {
+        assert!(Module::from_parts(&bad, &read).is_err(), "{bad}");
+    }
+}
+
+#[test]
 fn verify_without_a_library_needs_the_repack_entry_of_the_patch_record() {
     let Some(raw) = image() else { return };
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
@@ -296,7 +316,7 @@ fn verify_without_a_library_needs_the_repack_entry_of_the_patch_record() {
         report
             .checks
             .iter()
-            .any(|c| c.contains("repack entry holds"))
+            .any(|c| c.contains("the record is consistent with it"))
     );
     let rec = report.record.unwrap();
     assert_eq!(rec.repacks.len(), 1);

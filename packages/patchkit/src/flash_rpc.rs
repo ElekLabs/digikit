@@ -18,6 +18,8 @@ use crate::syx;
 
 /// Every MidiRpc request starts with this envelope.
 pub const ENVELOPE: [u8; 6] = [0xf0, 0x00, 0x20, 0x3c, 0x10, 0x00];
+/// The stock MidiRpc Ping (no payload): the reply names the model (finding 144).
+pub const RPC_PING: u8 = 0x01;
 pub const RPC_OS_START: u8 = 0x50;
 pub const RPC_OS_WRITE: u8 = 0x51;
 pub const RPC_OS_END: u8 = 0x52;
@@ -76,6 +78,15 @@ pub fn parse_reply(msg: &[u8]) -> Option<(u16, u8, Vec<u8>)> {
         body[4] & 0x7f,
         body[5..].to_vec(),
     ))
+}
+
+/// The model name in the payload of a Ping reply: `u8 blob length`, the blob, then NUL-ended strings; the first string is the name (`parsePing` of
+/// `packages/dk-session/src/identify.ts` is the same rule). `None` when the payload is empty, cut short or the name is empty.
+pub fn parse_ping(payload: &[u8]) -> Option<String> {
+    let start = 1 + *payload.first()? as usize;
+    let rest = payload.get(start..)?;
+    let end = rest.iter().position(|&b| b == 0)?;
+    (end > 0).then(|| rest[..end].iter().map(|&b| b as char).collect())
 }
 
 /// Why a run ended without a flash.
@@ -529,6 +540,24 @@ fn text_of(b: &[u8]) -> String {
         .trim()
         .trim_end_matches(['.', '!'])
         .to_string()
+}
+
+#[cfg(test)]
+mod ping_tests {
+    use super::*;
+
+    #[test]
+    fn the_ping_reply_names_the_model_after_the_request_type_blob() {
+        // blob of 3 request types, then the name and another string
+        let p = [
+            3, 1, 2, 80, b'S', b'y', b'n', b't', b'a', b'k', b't', 0, b'x', 0,
+        ];
+        assert_eq!(parse_ping(&p).as_deref(), Some("Syntakt"));
+        assert_eq!(parse_ping(&[]), None);
+        assert_eq!(parse_ping(&[3, 1, 2, 80]), None);
+        assert_eq!(parse_ping(&[0, 0]), None, "an empty name");
+        assert_eq!(parse_ping(&[0, b'a']), None, "no terminator");
+    }
 }
 
 #[cfg(test)]

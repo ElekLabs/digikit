@@ -2219,7 +2219,7 @@ pub fn apply_with(
             })
             .collect(),
     };
-    let rec_bytes = rec.encode();
+    let rec_bytes = rec.encode()?;
     let (rec_region, rec_addr) = if !opts.record {
         ("", 0)
     } else if in_expansion {

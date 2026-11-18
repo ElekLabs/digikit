@@ -106,6 +106,26 @@ impl Manifest {
             ));
         }
         self.provided_service()?;
+        for r in &self.repack {
+            let who = &self.module.id;
+            if r.role.is_empty() || r.role.len() > 255 {
+                return Err(err!("{who}: [[repack]] role must be 1 to 255 bytes"));
+            }
+            if r.sha256.len() != 64 || !r.sha256.bytes().all(|c| c.is_ascii_hexdigit()) {
+                return Err(err!("{who}: [[repack]] sha256 must be 64 hex digits"));
+            }
+            if [r.dest, r.stage_end, r.len]
+                .iter()
+                .any(|n| *n > u32::MAX as u64)
+            {
+                return Err(err!(
+                    "{who}: [[repack]] dest, stage_end and len must fit 32 bits (the patch record stores them as words)"
+                ));
+            }
+            if r.stage_end < r.dest {
+                return Err(err!("{who}: [[repack]] stage_end is below dest"));
+            }
+        }
         for (table, ids) in [("machine", &self.machines), ("fx", &self.fxs)] {
             let mut seen = std::collections::BTreeSet::new();
             for r in ids {

@@ -39,33 +39,48 @@ pub struct Repack {
 const REPACK_MAGIC: &[u8; 4] = b"RPK1";
 
 impl Record {
-    pub fn encode(&self) -> Vec<u8> {
+    /// The record's bytes. Refuses what the format cannot hold: a name over 255 bytes, more than 65,535 entries, and a SHA-256 that is not 64 hex digits.
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        let name = |v: &mut Vec<u8>, s: &str| -> Result<()> {
+            v.push(u8::try_from(s.len()).map_err(|_| err!("DKPR name {s:?} is over 255 bytes"))?);
+            v.extend_from_slice(s.as_bytes());
+            Ok(())
+        };
+        let sha = |s: &str| -> Result<Vec<u8>> {
+            let b = unhex(s).map_err(|_| err!("DKPR sha256 {s:?} is not hex"))?;
+            if b.len() != 32 {
+                return Err(err!("DKPR sha256 {s:?} is not 32 bytes"));
+            }
+            Ok(b)
+        };
+        let count = |n: usize| -> Result<[u8; 2]> {
+            Ok(u16::try_from(n)
+                .map_err(|_| err!("DKPR holds at most 65535 entries"))?
+                .to_be_bytes())
+        };
         let mut v = Vec::new();
         v.extend_from_slice(MAGIC);
         v.extend_from_slice(&FORMAT.to_be_bytes());
-        v.extend_from_slice(&(self.modules.len() as u16).to_be_bytes());
-        v.extend_from_slice(&unhex(&self.base_sha256).expect("sha256 hex"));
+        v.extend_from_slice(&count(self.modules.len())?);
+        v.extend_from_slice(&sha(&self.base_sha256)?);
         for m in &self.modules {
-            v.push(m.len() as u8);
-            v.extend_from_slice(m.as_bytes());
+            name(&mut v, m)?;
         }
         v.resize(v.len().div_ceil(4) * 4, 0);
         if !self.repacks.is_empty() {
             v.extend_from_slice(REPACK_MAGIC);
-            v.extend_from_slice(&(self.repacks.len() as u16).to_be_bytes());
+            v.extend_from_slice(&count(self.repacks.len())?);
             for r in &self.repacks {
-                for s in [&r.role, &r.module] {
-                    v.push(s.len() as u8);
-                    v.extend_from_slice(s.as_bytes());
-                }
+                name(&mut v, &r.role)?;
+                name(&mut v, &r.module)?;
                 for n in [r.dest, r.stage_end, r.len] {
                     v.extend_from_slice(&n.to_be_bytes());
                 }
-                v.extend_from_slice(&unhex(&r.sha256).expect("sha256 hex"));
+                v.extend_from_slice(&sha(&r.sha256)?);
             }
             v.resize(v.len().div_ceil(4) * 4, 0);
         }
-        v
+        Ok(v)
     }
 
     /// Decode a record at the start of `b`.
@@ -117,8 +132,12 @@ impl Record {
                 let sha = b.get(at + 12..at + 44).ok_or_else(cut)?;
                 at += 44;
                 let module = strs.pop().unwrap();
+                let role = strs.pop().unwrap();
+                if repacks.iter().any(|r: &Repack| r.role == role) {
+                    return Err(err!("DKPR has two repack entries for the {role} section"));
+                }
                 repacks.push(Repack {
-                    role: strs.pop().unwrap(),
+                    role,
                     module,
                     dest,
                     stage_end,
@@ -146,7 +165,7 @@ mod tests {
             modules: vec!["core/fx@0.1.0".into(), "x/y@1".into()],
             repacks: vec![],
         };
-        let e = r.encode();
+        let e = r.encode().unwrap();
         assert_eq!(e.len() % 4, 0);
         assert_eq!(Record::decode(&e).unwrap(), r);
     }
@@ -165,7 +184,7 @@ mod tests {
                 sha256: "cd".repeat(32),
             }],
         };
-        let e = r.encode();
+        let e = r.encode().unwrap();
         assert_eq!(e.len() % 4, 0);
         assert_eq!(Record::decode(&e).unwrap(), r);
         // the same record without the block is what every earlier encoder wrote: it decodes with no entries, and the block is
@@ -174,7 +193,7 @@ mod tests {
             repacks: vec![],
             ..r.clone()
         };
-        let o = old.encode();
+        let o = old.encode().unwrap();
         assert!(e.starts_with(&o));
         assert_eq!(Record::decode(&o).unwrap().repacks, []);
         assert!(
