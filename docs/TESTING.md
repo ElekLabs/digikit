@@ -429,6 +429,7 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `svc-test` | The service fixture: a `.dks` of the test-only service `svc-test` with exports `dk_svctest_ping` and `dk_svctest_hits` and one hook | host, assembly, device |
 | `svc-test-user` | A module with a hard NEED on `svc-test` (the provider and NEED path of the loader) | host, assembly, device |
 | `lfo-shape` | A service-type module that emits one `lfo_shape` record (key from `DK_KEY_SHAPE`); a test makes a second file with the same key by renaming a copy | assembly, device |
+| `lfo-shape-b` | A second shape (name STEP) under another module id, so another shape key: two shapes in one boot (numbers 7 and 8), a gap below the highest number; wrapper of the code of `lfo-shape` | device |
 | `entry-demo` | The module entry point: `dk_module` with `init`, `tick`, `fini`, `menu`, settings, log, time, an absent optional service | host, device |
 | `dyn-demo` | A raw module loaded from the card store with a counter in its `tick`: load, unload, store format, names | host, assembly, device |
 | `dyn-demo-stray` | The ColdFire memory audit: `dyn-demo` that writes one word outside its block | device |
