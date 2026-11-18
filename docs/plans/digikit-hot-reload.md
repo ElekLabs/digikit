@@ -36,7 +36,7 @@ Replace or remove a service or module while the device runs, with no restart. It
 1. Every ColdFire hook goes through a runtime-owned gate with a slot and an entry/exit counter. Cost: about 5 instructions on entry and 2 on exit per hook call. Unload clears the slots, then waits until the counters are 0, checked once per UI pass. On timeout the result is E_BUSY and the memory is kept. There is no opt-out switch: one path. Interrupt sites keep the plain slot stub without a counter. A per-hook counter skip is allowed only if a measured hot hook needs it (not built). S3 starts with a ceiling (hook calls per second from hook hit counts) and one instruction-ratio A/B.
 2. Hot reload is refused while the transport plays or records.
 3. A swap is refused when old and new do not fit in memory together. Replace loads the new part beside the old, switches the slots under one mask, then drains and frees the old. Rollback switches back.
-4. A service whose hook sites were not gated at boot installs on the next restart. The runtime builds the gates at boot from the BIND stock bytes, before tasks run. It never needs a reflash.
+4. After step 3 of [port-file.md](port-file.md), a hook site jump goes to a routine in the port file, never into a service. A service replace is a slot swap: the service fills the callback slot of the port file by name. The entry and exit counter is a macro around the callback call in the adapter source of the port file. The runtime builds no gates. Replacing the port file itself needs a restart. A service whose hooks were not installed at boot installs on the next restart. It never needs a reflash.
 5. Timing: S0 (exit convention) now, with the bind-time firmware addresses item right after the R12 merge. S1 to S5 after R12-8.
 
 ## Where the code lives
@@ -72,7 +72,7 @@ Services and modules only declare hooks, slots and rows. Content modules do not 
 - Hook asm leaves only through the `dk_tail`, `dk_exit` and `dk_ret` imports: no raw `rts`, no `jmp` through table words. A hook that calls stock code and gets control back uses `dk_stock` (not an exit).
 - Keep the restore code.
 - No image or runtime word points into a `.dks`, except slots and the row table.
-- Bind-time addresses keep firmware addresses in the service's own data, and keep each site's stock bytes in BIND.
+- Firmware addresses and site facts stay out of services: they are in the port file (port-file.md), built from committed data. Until step 3 lands, a service keeps its device hook routines and takes the stock bytes of a site from its BIND items.
 - R12-8 follows the SHARC slot rules above.
 
 ## Stages
@@ -91,6 +91,8 @@ S5 slot ownership (found in the R12-8 review): the hot swap must hand a slot fro
 S3 starts with the hook-call ceiling and the paired A/B (`tools/devtools/coupled_ab.py`); stop if the cost is weak against the payoff. Two facts from the B1 design for S3: an exit that keeps the condition codes costs about 8 instructions in a gate stub, not 2 (use 8 in the ceiling, or a declared flag per exit); and the stock bytes of five sites cannot be copied as they are, because their displaced instructions branch (clone.5, srcpage, group, type_reader.load, filter_graph_test), so S3 needs a position-independent stock path made by bind for them.
 
 ## B1 bind-time firmware addresses (design for S0)
+
+This design is built. [port-file.md](port-file.md) replaces host binding with a port file: its PR3 deletes `patchkit bind` and the `FW` and `BIND` items of services.
 
 Services carry their own firmware addresses. `patchkit bind` resolves them from the names in `devices/fw/*.toml` and the anchors of the user's firmware in `devices/ports/`. Service source never holds a raw address: Rust names firmware symbols through the `dkfw` crate, assembler through `[object.externs]` aliases in the service `module.toml`; pack maps them to import names.
 
