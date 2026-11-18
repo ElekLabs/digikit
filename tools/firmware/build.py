@@ -251,7 +251,7 @@ def _source_framing(raw_syx):
 
 
 # Largest container the OS-upgrade RAM stage holds (2 MiB in 101-byte messages, rounded down to a 0x200 page;
-# docs/findings/146-syntakt-os-upgrade-receiver.md section 4)
+# finding 146 section 4)
 FLASH_CONTAINER_MAX = 0x1FFE00
 
 
