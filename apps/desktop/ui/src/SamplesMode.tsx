@@ -507,10 +507,15 @@ export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBacke
             <span>
               The device reads its samples when it starts. Added and deleted samples are used after a restart.
             </span>{' '}
-            {/* The button needs the runtime. The page identifies the device through the runtime, so it is always there. */}
-            <button type="button" class="act small" disabled={!!busy()} onClick={() => void restartDevice()}>
-              Restart device
-            </button>
+            {/* The button needs the runtime. A stock device gets a text: the user restarts it by hand. */}
+            <Show
+              when={deviceInfo()?.hasRuntime}
+              fallback={<span>Restart the {deviceInfo()?.name} to play new samples.</span>}
+            >
+              <button type="button" class="act small" disabled={!!busy()} onClick={() => void restartDevice()}>
+                Restart device
+              </button>
+            </Show>
           </p>
         </Show>
         <Crumbs

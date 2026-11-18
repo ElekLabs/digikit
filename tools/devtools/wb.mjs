@@ -27,7 +27,7 @@
 // `get` reads the card log files and writes each raw (.bin) and decoded (.txt) to DIR (default out/runs/cardlog/<YYYYmmdd-HHMMSS>/), the older boot first.
 // `store` works on the card's store by path (for example data/tools/bootscreen/x.dkbs); `store put` verifies the file after the upload.
 // --emu [--run-dir DIR]: any device command on the running emulator of DIR (default out/native/run) instead of a MIDI port (`mise run emu:serve`).
-// --device ID: the device when it has no runtime to answer INFO (a stock firmware); wb then does not ask INFO.
+// --device ID: names the device and skips the identification (wb asks the stock MidiRpc Ping otherwise); for a device that does not answer Ping.
 // --port: a part of the MIDI port name (default "Digitakt"). --bin: the dkmidi binary (default $DKMIDI_BIN, else the nogen target dir;
 // `mise run dkmidi:build` builds it). `samples put` needs apps/web/public/dksample.wasm (`mise run wasm:dksample`).
 // `samples put` sends the file bytes over the USB bulk link when the device offers its interface (usb-fast; the `dkbulk` bridge, `mise run dkbulk:build`,
@@ -53,6 +53,8 @@ import {
   ProcessBulkLink,
   chooseBulk,
   eventLine,
+  identifyDevice,
+  RPC_PING,
   runtimeEvent,
 } from '../../packages/dk-session/src/index.ts';
 import { ProcessTransport } from '../../packages/dk-session/src/process-transport.ts';
@@ -183,20 +185,24 @@ function storageOf(id) {
 /** The samples backend the device profile names (`[storage] samples`). */
 const kindOf = (id) => storageOf(id).samples;
 
-/** The device's INFO and the samples backend its profile names. A device that does not answer INFO (a stock firmware) is named by --device; without it the command stops. `info` is null then. */
+/**
+ * The device's INFO and the samples backend its profile names. The device is identified through the stock MidiRpc Ping (dk-session `identifyDevice`),
+ * with or without the runtime; `info` is null for a device without the runtime. --device ID skips the identification (for a device that does not
+ * answer Ping); `info` is null then.
+ */
 async function infoAndKind(session) {
   if (opts.device) return { info: null, kind: kindOf(opts.device), storage: storageOf(opts.device) };
-  let info;
+  let who;
   try {
-    info = await session.info();
+    who = await identifyDevice(session, devices);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     fail(
-      `cannot identify the device: INFO failed (${message}); a device without the digikit runtime needs --device ID (one of: ${devices.ids.join(', ')})`,
+      `cannot identify the device: ${message}; --device ID names it when it does not answer Ping (one of: ${devices.ids.join(', ')})`,
       1,
     );
   }
-  return { info, kind: kindOf(info.port), storage: storageOf(info.port) };
+  return { info: who.info, kind: kindOf(who.id), storage: storageOf(who.id) };
 }
 
 const SPANS = words[0] === 'profile' && words[1] === 'spans';
@@ -239,18 +245,27 @@ async function connectEmu() {
 }
 
 /**
- * `connect`, then one quick INFO; a device that does not reply is tried again for up to `waitMs` with a new bridge. The device may still re-enumerate after
- * the previous run: its MIDI port may be gone or not answer yet (the device re-enumerates after a USB mode change). After the time the last link is returned anyway (a stock device has no INFO) and
- * the first real request reports the error. An answer with an error status is no re-enumeration: no retry.
+ * `connect`, then one quick Ping; a device that does not reply is tried again for up to `waitMs` with a new bridge. The device may still re-enumerate after
+ * the previous run: its MIDI port may be gone or not answer yet (the device re-enumerates after a USB mode change). After the time the last link is returned anyway
+ * and the first real request reports the error. An answer with an error status is no re-enumeration: no retry.
+ * The device is ready when a quick INFO or a Ping answers (INFO first, then Ping, about 1 s each). A runtime answers INFO even while the stock service
+ * drops requests during the firmware intro (after a restart Ping can time out for seconds); a stock device does not answer INFO but answers Ping, so it
+ * is ready after one INFO timeout. An answer of either kind means the port is up again, which is what the loop waits for.
  */
 async function connectReady(waitMs = 8000) {
-  // a device named by --device has no runtime to answer INFO
+  // a device named by --device skips the identification, so no probe
   if (opts.device && !opts.emu) return connect();
   const deadline = Date.now() + waitMs;
   for (;;) {
     const link = opts.emu ? await connectEmu() : connect();
     try {
-      await link.session.info(true);
+      try {
+        await link.session.info(1000);
+      } catch (e) {
+        // an error reply of INFO is an answer: the runtime is up
+        if (e?.kind === 'timeout') await link.session.rpc(RPC_PING, undefined, 1000);
+        else if (e?.kind === 'cancelled') throw e;
+      }
       return link;
     } catch (e) {
       if (e?.kind !== 'timeout' || Date.now() > deadline) return link;

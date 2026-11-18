@@ -11,7 +11,10 @@ import { parseMode, type Mode, type Progress, type TransferView, type Verified }
 
 export interface DeviceInfo {
   name: string;
-  runtime: string;
+  /** The runtime version; null when the device has no runtime (the stock firmware). */
+  runtime: string | null;
+  /** Samples mode: the device runs the digikit runtime (the actions that need it are offered). */
+  hasRuntime?: boolean;
   free?: number;
   /** Modules mode: the storage line under the device line (storageLine); the free space is in it, not in the device line. */
   storage?: string;
