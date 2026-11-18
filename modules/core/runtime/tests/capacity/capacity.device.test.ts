@@ -57,7 +57,15 @@ function expectFull(
   g: Geometry,
   mods: DkModule[],
   cap: Record<string, { limit: number; used: number; largest: number }>,
+  machines = true,
+  dspLeft = 0,
 ) {
+  // the DSP area is used to its last whole granule, but for the other range the services' DSP code leaves (`dspLeft` bytes, none on a card without services)
+  const dspLargest = Math.max(dspLeft, DSP_GRANULE - 1);
+  if (!machines) {
+    expect(cap.DSP_AREA!.largest, 'the DSP area has no whole granule left').toBeLessThan(DSP_GRANULE);
+    return;
+  }
   const owned = mods.reduce((n, m) => n | m.rows, 0);
   expect(owned, 'every voice row has an owner').toBe(2 ** g.machineRows - 1);
   expect(
@@ -68,7 +76,7 @@ function expectFull(
     ['MACHINE_ROWS', 'VOICE_ROWS', 'PARAM_ROWS', 'PAGE_ROWS'].map((k) => cap[k]!.used),
     'CAPACITY counts every machine, voice, parameter and page row as used',
   ).toEqual([g.machineRows, g.machineRows, g.paramRows, g.pageRows]);
-  expect(cap.DSP_AREA!.largest, 'the DSP area has no whole granule left').toBeLessThan(DSP_GRANULE);
+  expect(cap.DSP_AREA!.largest, 'the DSP area is full but for the range the services leave').toBeLessThanOrEqual(dspLargest);
 }
 
 // Keep DSP transfers pending: zero mode advances SSI blocks and times out without a SHARC peer.
@@ -78,20 +86,24 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
     async () => {
       await rig.first();
       const g = geometryOf(rig.device, rig.plan);
-      // M declares machines, so machines.dks loads for it: F is sized by a boot of M, V and D (what the provider holds is in its `ARENA.largest`)
-      const set = await fullSetOnBoot(g, [], async (before) => {
-        const probe = await synthEntries(rig, 'full-probe', before);
-        return (await bootEntries(rig, 'full-probe', probe)).cap.ARENA!.largest;
-      });
+      // no machines or voices: they need machines.dks, whose DSP part this card never gets, so the cold card fills the DSP area and the arena;
+      // the machine, voice, parameter and page rows are the coupled test's. F is sized by a boot of D.
+      const set = await fullSetOnBoot(
+        g,
+        [],
+        async (before) => {
+          const probe = await synthEntries(rig, 'full-probe', before);
+          return (await bootEntries(rig, 'full-probe', probe)).cap.ARENA!.largest;
+        },
+        { machines: false },
+      );
       const entries = await synthEntries(rig, 'full', set);
       const got = await bootEntries(rig, 'full', entries);
       const mods = await expectBoot(rig, g, entries, got);
-      expectFull(g, mods, got.cap);
-      // M's hole (the freed `Collect` before its record block) holds V's and D's blocks and the arena copies of their DSP images (kept on a
-      // ColdFire-only rig); F leaves the `Collect` block of the load that follows
-      const hole = COLLECT_BLOCK - 2 * block(CODE) - 2 * block(DSP_GRANULE);
-      expect(got.cap.ARENA!.used, 'the arena is full but the hole of M and the block every load needs').toBe(
-        g.arenaFree - COLLECT_BLOCK - hole,
+      expectFull(g, mods, got.cap, false);
+      // V's and D's blocks and the arena copies of their DSP images (kept on a ColdFire-only rig) are in the arena; F leaves the `Collect` block of the load that follows
+      expect(got.cap.ARENA!.used, 'the arena is full but the block every load needs').toBe(
+        g.arenaFree - COLLECT_BLOCK,
       );
       expect(got.cap.ARENA!.largest, 'a free block is left for the next load').toBe(COLLECT_BLOCK - ARENA_HDR);
     },
@@ -168,15 +180,28 @@ cardRigs('capacity, coupled', { dsp: 'sharc', roots: COUPLED_ROOTS, hold: true, 
       const g = geometryOf(rig.device, rig.plan);
       const [refNeeds] = await needsOf([refFile]);
       const refEntry: Entry = { name: REFERENCE, file: refFile, want: LOADED };
-      // F is sized by a boot of the reference, M, V and D, so that the providers they need are loaded
-      const set = await fullSetOnBoot(g, [usageOf(refNeeds!)], async (before) => {
-        const probe = await synthEntries(rig, 'coupled-probe', before);
-        return (await bootEntries(rig, 'coupled-probe', [refEntry, ...probe])).cap.ARENA!.largest;
-      });
+      let dspLeft = 0; // the free DSP range that the services' code leaves besides the largest one: no single module here fills both
+      // the providers they need are loaded: D is sized by the free DSP area a boot of the reference, M and V leaves behind the services' DSP code, F by a boot of the reference, M, V and D
+      const set = await fullSetOnBoot(
+        g,
+        [usageOf(refNeeds!)],
+        async (before) => {
+          const probe = await synthEntries(rig, 'coupled-probe', before);
+          return (await bootEntries(rig, 'coupled-probe', [refEntry, ...probe])).cap.ARENA!.largest;
+        },
+        {
+          dspHolesAfter: async (before) => {
+            const probe = await synthEntries(rig, 'coupled-dsp-probe', before);
+            const { DSP_AREA } = (await bootEntries(rig, 'coupled-dsp-probe', [refEntry, ...probe])).cap;
+            dspLeft = DSP_AREA!.limit - DSP_AREA!.used - DSP_AREA!.largest;
+            return { largest: DSP_AREA!.largest, free: DSP_AREA!.limit - DSP_AREA!.used };
+          },
+        },
+      );
       const entries: Entry[] = [refEntry, ...(await synthEntries(rig, 'coupled-full', set))];
       const got = await bootEntries(rig, 'coupled-full', entries);
       const mods = await expectBoot(rig, g, entries, got);
-      expectFull(g, mods, got.cap);
+      expectFull(g, mods, got.cap, true, dspLeft);
       // the DSP part of every module is done: the arena holds the blocks of the modules only
       expect(got.cap.ARENA!.used, 'the copies of the DSP images in the arena are freed').toBeLessThan(g.arenaFree);
       const ref = mods[0]!;

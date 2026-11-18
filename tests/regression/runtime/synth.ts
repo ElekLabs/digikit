@@ -203,66 +203,111 @@ export function usageOf(n: Record<string, number>): Usage {
  * references, M, V and D leaves (the providers they load, the references' and V's and D's blocks and the arena copies of their DSP images are all in it: a
  * ColdFire-only rig keeps those until a transfer that never comes), less the `Collect` block of its own load. Then X (a raw module larger than the largest free block: E_NOMEM), Y (a voice: E_DSP_ROWS) and
  * Z (a DSP module: E_DSP_NOSPACE).
+ *
+ * `machines: false` leaves out M, V and Y: a module that declares machines or voices needs `machines.dks`, whose DSP part needs the SHARC, so a card that stays cold
+ * (no SHARC acknowledges a DSP part) fills the DSP area and the arena only. `dspHoles` are the free ranges of the DSP area that a boot of the set before D leaves, with
+ * the services that boot loads (their DSP code is in the area too, so the area is no longer one range): D takes the largest to its last whole granule and Z is larger than
+ * the other one (no module of one range fills two). Without `dspHoles` D takes what the area has before any service loads.
  */
-export function fullSet(g: Geometry, refs: Usage[], arenaLargest: number): { spec: SynthSpec; want: Want }[] {
+export interface FullSetOptions {
+  machines?: boolean;
+  dspHoles?: number[];
+}
+export function fullSet(
+  g: Geometry,
+  refs: Usage[],
+  arenaLargest: number,
+  { machines = true, dspHoles }: FullSetOptions = {},
+): { spec: SynthSpec; want: Want }[] {
   const sum = (key: keyof Usage) => refs.reduce((n, r) => n + r[key], 0);
   const typesLeft = g.machineRows - sum('machines');
   const rowsLeft = g.machineRows - sum('rows');
   const paramsLeft = g.paramRows - sum('params');
   const pagesLeft = g.pageRows - sum('pages');
-  if (refs.length + 7 > g.modules)
-    throw new Error(`the full set needs ${refs.length + 7} modules, the device has ${g.modules}`);
-  if (rowsLeft > MAX_VOICES || rowsLeft < 1 || typesLeft < 1)
-    throw new Error(`the references leave ${rowsLeft} rows and ${typesLeft} types`);
-  if (pagesLeft > typesLeft)
-    throw new Error(`${pagesLeft} page rows left, but only ${typesLeft} machines to put them on`);
+  if (machines) {
+    if (rowsLeft > MAX_VOICES || rowsLeft < 1 || typesLeft < 1)
+      throw new Error(`the references leave ${rowsLeft} rows and ${typesLeft} types`);
+    if (pagesLeft > typesLeft)
+      throw new Error(`${pagesLeft} page rows left, but only ${typesLeft} machines to put them on`);
+  }
   const firstPinned = g.typeFirst + sum('rows');
   // the DSP area: references, then V (one granule), then D takes every whole granule left (first fit from the area's start, each range at the
   // first address its alignment allows)
   let cursor = 0;
   for (const [length, align] of [
     ...refs.filter((r) => r.dspLen).map((r) => [r.dspLen, r.dspAlign] as const),
-    [DSP_GRANULE, 8] as const,
+    ...(machines ? [[DSP_GRANULE, 8] as const] : []),
   ]) {
     const start = Math.ceil((g.dspBase + cursor) / align) * align - g.dspBase;
     cursor = start + length;
   }
   const dStart = Math.ceil((g.dspBase + cursor) / 8) * 8 - g.dspBase;
-  const dLen = Math.floor((g.dspArea - dStart) / DSP_GRANULE) * DSP_GRANULE;
+  // behind the services a boot loads, their DSP code is in the area too: the free ranges are what the runtime reports after the boot (counted from the same offset)
+  const dLen =
+    dspHoles === undefined
+      ? Math.floor((g.dspArea - dStart) / DSP_GRANULE) * DSP_GRANULE
+      : Math.floor((dspHoles[0]! - g.dspFirst) / DSP_GRANULE) * DSP_GRANULE;
   if (dLen < DSP_GRANULE) throw new Error('the references leave no DSP area for D');
-  const m: SynthSpec = { name: 'cap/full-m', machines: typesLeft, params: paramsLeft, pages: pagesLeft };
+  // Z needs more than the other range holds, so that it is refused for want of space and does not load into it
+  const zLen = Math.max(DSP_GRANULE, Math.ceil(((dspHoles?.[1] ?? 0) + 1) / DSP_GRANULE) * DSP_GRANULE);
   const fTotal = arenaLargest - COLLECT_BLOCK; // the block of F is its payload (a multiple of 16, as the largest block's is) and the header
   if (fTotal < CODE) throw new Error('the references leave no arena for F');
+  const modules = refs.length + (machines ? 7 : 4);
+  if (modules > g.modules) throw new Error(`the full set needs ${modules} modules, the device has ${g.modules}`);
+  const machineSet: { spec: SynthSpec; want: Want }[] = machines
+    ? [
+        { spec: { name: 'cap/full-m', machines: typesLeft, params: paramsLeft, pages: pagesLeft }, want: LOADED },
+        {
+          spec: {
+            name: 'cap/full-v',
+            dsp: { image: 64, voices: pinned(Array.from({ length: rowsLeft }, (_, i) => firstPinned + i)) },
+          },
+          want: LOADED,
+        },
+      ]
+    : [];
   return [
-    { spec: m, want: LOADED },
-    {
-      spec: {
-        name: 'cap/full-v',
-        dsp: { image: 64, voices: pinned(Array.from({ length: rowsLeft }, (_, i) => firstPinned + i)) },
-      },
-      want: LOADED,
-    },
+    ...machineSet,
     { spec: { name: 'cap/full-d', dsp: { image: 64, bss: dLen - 64 } }, want: LOADED },
     { spec: { name: 'cap/full-f', bss: fTotal - CODE }, want: LOADED },
     // X: a raw module that needs more than the largest free block (the hole of M is smaller than the block the `Collect` takes)
     { spec: { name: 'cap/full-x', bss: 2 * COLLECT_BLOCK }, want: E_NOMEM },
-    { spec: { name: 'cap/full-y', dsp: { image: 64, voices: pinned([firstPinned]) } }, want: E_DSP_ROWS },
-    { spec: { name: 'cap/full-z', dsp: { image: 64 } }, want: E_DSP_NOSPACE },
+    ...(machines
+      ? [{ spec: { name: 'cap/full-y', dsp: { image: 64, voices: pinned([firstPinned]) } }, want: E_DSP_ROWS as Want }]
+      : []),
+    { spec: { name: 'cap/full-z', dsp: { image: 64, bss: zLen - 64 } }, want: E_DSP_NOSPACE },
   ];
 }
 
-/** The modules of `fullSet` that load before F: M, V and D. */
-const FULL_BEFORE_F = 3;
+/** The modules of `fullSet` that load before F: everything but F and the three refused ones. */
+const beforeF = (set: { spec: SynthSpec; want: Want }[]) => set.filter((m) => !/^cap\/full-[fxyz]$/.test(m.spec.name));
 
 /**
  * `fullSet` sized by a real boot: `largestAfter` boots the references and the modules of the set before F (M, V, D; the caller adds its own references)
  * and gives the `ARENA.largest` of that boot. The providers load only for the modules that need them, so only a boot tells what they hold.
+ * `dspHolesAfter` (a coupled card) boots the references and the modules before D (M, V) and gives the free ranges of the DSP area of that boot (CAPACITY
+ * `DSP_AREA`: `largest` is the largest range and `limit - used` the total, so the rest is what the other ranges hold): the services that boot loads keep DSP code
+ * in the area, so D is sized by what is left.
  */
 export async function fullSetOnBoot(
   g: Geometry,
   refs: Usage[],
   largestAfter: (before: { spec: SynthSpec; want: Want }[]) => Promise<number>,
+  options: {
+    machines?: boolean;
+    dspHolesAfter?: (before: { spec: SynthSpec; want: Want }[]) => Promise<{ largest: number; free: number }>;
+  } = {},
 ): Promise<{ spec: SynthSpec; want: Want }[]> {
-  const probe = fullSet(g, refs, COLLECT_BLOCK + CODE).slice(0, FULL_BEFORE_F);
-  return fullSet(g, refs, await largestAfter(probe));
+  const machines = options.machines ?? true;
+  let dspHoles: number[] | undefined;
+  if (options.dspHolesAfter) {
+    const first = beforeF(fullSet(g, refs, COLLECT_BLOCK + CODE, { machines })).filter(
+      (m) => !m.spec.name.startsWith('cap/full-d'),
+    );
+    const { largest, free } = await options.dspHolesAfter(first);
+    dspHoles = [largest, free - largest];
+  }
+  const opts = { machines, dspHoles };
+  const probe = beforeF(fullSet(g, refs, COLLECT_BLOCK + CODE, opts));
+  return fullSet(g, refs, await largestAfter(probe), opts);
 }
