@@ -250,10 +250,9 @@ def _source_framing(raw_syx):
     return messages[0], messages[-1]
 
 
-# Largest container the OS area of the NOR flash holds: the bootstrap writes it from
-# flash 0x80000 with no size check, and the record sectors start at 0x380000
-# (docs/findings/01-container-and-patching.md, "NOR flash map").
-FLASH_CONTAINER_MAX = 0x300000
+# Largest container the OS-upgrade RAM stage holds (2 MiB in 101-byte messages, rounded down to a 0x200 page;
+# finding 146 section 4)
+FLASH_CONTAINER_MAX = 0x1FFE00
 
 
 def rebuild(

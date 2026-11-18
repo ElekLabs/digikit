@@ -173,8 +173,8 @@ pub fn check(id: &str, obj: &Dko, ws: &[Window<'_>]) -> Result<()> {
     let high: Vec<&Window<'_>> = ws.iter().filter(|w| w.lo >= MIN_CHECKED).collect();
     let refuse = |what: String, v: u64, w: &Window<'_>| {
         Err(err!(
-            "{id}: {what} holds {v:#010x}, inside the protected window [{:#x}, {:#x}) of {} (the flash controller, the FPGA or the peer \
-             CPU bus; docs/findings/141-syntakt-analog-and-nor-paths.md). A content module never touches hardware: use the runtime's services. \
+            "{id}: {what} holds {v:#010x}, inside the protected window [{:#x}, {:#x}) of {} (hardware, or the firmware code that drives the \
+             NOR flash; findings 141 and 146). A content module never touches hardware: use the runtime's services. \
              If the word is a table entry that only looks like an address, change the layout of the table",
             w.lo,
             w.hi,
