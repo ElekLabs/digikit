@@ -10,3 +10,4 @@ export * from './bulk.ts';
 export { EmuBulkLink, EmuOutOnlyLink, type EmuBulkOptions } from './emu-bulk-link.ts';
 export { ProcessBulkLink } from './process-bulk.ts';
 export * from './bulk-select.ts';
+export * from './identify.ts';

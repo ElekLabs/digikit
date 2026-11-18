@@ -1,7 +1,9 @@
 // The desktop Samples backend over a FakeHost (apps/desktop/ui/src/samples-backend.ts): what it asks of the host and what it shows.
 import assert from 'node:assert/strict';
-import { beforeEach, test } from 'vitest';
-import { createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
+import { beforeEach, test, vi } from 'vitest';
+import { RPC_PING, RPC_SOFTWARE_VERSION } from '@digi/dk-session';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
+import { createFakeSessions, createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
 import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
 import { createSamplesBackend } from '../src/samples-backend.ts';
 import {
@@ -12,6 +14,13 @@ import {
   setLocalPath,
   setLocalKinds,
 } from '../src/samples-state.ts';
+
+// the converter is the wasm of dksample: not needed to open the backend
+vi.mock('@digi/dk-session/dksample', async (original) => ({
+  ...(await original<typeof import('@digi/dk-session/dksample')>()),
+  Sample: { create: async () => ({ hash: () => new Uint8Array(32) }) },
+  converterOf: () => undefined,
+}));
 
 const WAV = new TextEncoder().encode('RIFF\0\0\0\0WAVEfmt ');
 const listing = [
@@ -80,6 +89,40 @@ test('the light poll lists the open level and answers undefined when that fails'
   assert.deepEqual(host.argsOf('fs.list'), [['/samples', 'drums']]);
   ok = false;
   assert.equal(await backend.listLocalNow(), undefined);
+});
+
+test('a stock device is identified by Ping: no runtime, SysEx link, and no runtime request is made', async () => {
+  const device =
+    registry.devices.find((d) => d.storage?.samples === 'stock-rpc') ?? registry.devices.find((d) => d.storage)!;
+  const calls: string[] = [];
+  const text = (...parts: string[]) => Uint8Array.from(Buffer.from(parts.map((p) => `${p}\0`).join('')));
+  const session = {
+    rpc: async (type: number) => {
+      calls.push(`rpc:${type}`);
+      if (type === RPC_PING) return Uint8Array.from([2, 1, 2, ...text(device.name, 'rev')]);
+      if (type === RPC_SOFTWARE_VERSION) return text('00', '79', '9.9');
+      throw new Error(`unexpected rpc ${type}`);
+    },
+    // a stock device does not answer INFO
+    info: async () => {
+      calls.push('info');
+      throw Object.assign(new Error('no reply from the device'), { kind: 'timeout' });
+    },
+    loadFailures: async () => void calls.push('loadFailures'),
+    usbFastWrongMode: async () => void calls.push('usbFastWrongMode'),
+  };
+  const host = createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) });
+  const app = createFakeTransferApp({ sessions: createFakeSessions(() => session) });
+  const opened = await createSamplesBackend(host, app).openDeviceSamples();
+  assert.equal(opened.name, device.name);
+  assert.equal(opened.hasRuntime, false);
+  assert.equal(opened.runtime, null);
+  assert.equal(opened.link, 'sysex');
+  // the one INFO is the identification's probe; nothing else of the runtime is asked
+  assert.deepEqual(
+    calls.filter((c) => !c.startsWith('rpc:')),
+    ['info'],
+  );
 });
 
 test('the folder dialog starts at the given folder, or nowhere', async () => {

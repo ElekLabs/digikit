@@ -40,23 +40,33 @@ export class FakeDevice implements DkTransport {
   arenaLargest = 300; // the largest free block of each
   dspLargest = 50;
   os: string | null = null; // the OS version the stock MidiRpc SoftwareVersion answers (null: the request gets no answer)
+  pingName: string | null = null; // the model name the stock MidiRpc Ping answers (null: no answer)
+  noRuntime = false; // a stock device: the digikit commands get no answer, only the stock MidiRpc is answered
+  infoStatus: number | null = null; // INFO answers this error status (null: INFO is answered)
   pending = 0; // after a RESTART: requests that are still answered by the old boot before the reset
   reply(cmd: number, seq: number, status: number, body: Uint8Array = new Uint8Array()): Uint8Array {
     const packed = encode8in7(concat(Uint8Array.of(status & 255), body));
     return concat([0xf0, 0x7d, 0x64, 0x6b, 1, cmd | 0x40, seq], packed, [0xf7]);
   }
-  /** A stock MidiRpc request (`f0 00 20 3c 10 00`, 8-in-7 body `seq seq 00 00 type payload`): only SoftwareVersion (type 2) is answered. */
+  /** A stock MidiRpc request (`f0 00 20 3c 10 00`, 8-in-7 body `seq seq 00 00 type payload`): only Ping (type 1) and SoftwareVersion (type 2) are answered. */
   rpc(msg: Uint8Array): void {
     const body = decode8in7(msg.subarray(6, msg.length - 1));
-    if (body[4] !== 2 || this.os === null) return;
+    const type = body[4];
+    let payload: Uint8Array;
+    if (type === 1 && this.pingName !== null) {
+      // u8 blobLen, the blob of request types, the model name, a second string
+      payload = concat([3], [1, 2, 3], cs(this.pingName), cs('rev'));
+    } else if (type === 2 && this.os !== null) {
+      payload = concat(...['00', '79', this.os].map((t) => cs(t)));
+    } else return;
     const seq = body.subarray(0, 2);
-    const strings = concat(...['00', '79', this.os].map((t) => cs(t)));
     this.queue.push(
-      concat([0xf0, 0x00, 0x20, 0x3c, 0x10, 0x00], encode8in7(concat(seq, seq, [2 | 0x80], strings)), [0xf7]),
+      concat([0xf0, 0x00, 0x20, 0x3c, 0x10, 0x00], encode8in7(concat(seq, seq, [type | 0x80], payload)), [0xf7]),
     );
   }
   send(msg: Uint8Array): void {
     if (msg[1] === 0x00) return this.rpc(msg);
+    if (this.noRuntime) return;
     const cmd = msg[5];
     const seq = msg[6];
     if (cmd === undefined || seq === undefined) throw new Error('fake device: short request frame');
@@ -87,6 +97,7 @@ export class FakeDevice implements DkTransport {
     const err = (code: number, b?: Uint8Array) => this.reply(cmd, seq, code, b);
     switch (cmd) {
       case CMD.INFO: {
+        if (this.infoStatus !== null) return err(this.infoStatus);
         const flags = this.staged ? 2 : 0;
         return ok(
           concat(

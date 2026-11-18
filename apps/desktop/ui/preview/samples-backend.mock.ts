@@ -33,13 +33,9 @@ const setDeviceInfo = (i: DeviceInfo | undefined): void => void simApp.app!.stat
 
 const NAME = 'Digitakt II';
 
-export interface OpenedSamples {
-  name: string;
-  runtime: string;
-  samples: string;
-  apply: 'live' | 'restart';
-  backend: SamplesBackend;
-}
+// The real type: the mock returns what the desktop backend returns.
+import type { OpenedSamples } from '../src/samples-backend';
+export type { OpenedSamples };
 
 let puts = 0;
 let sent = 0;
@@ -190,17 +186,19 @@ export async function openDeviceSamples(_forRun = false): Promise<OpenedSamples>
   return {
     name: NAME,
     runtime: '0.9.4',
+    hasRuntime: true,
     samples: 'stock-rpc',
     apply: 'live',
     backend,
+    link: 'sysex',
   };
 }
 
 export async function readSamples(): Promise<void> {
   control.counts.deviceRead++;
-  const { name, runtime, samples } = await openDeviceSamples();
+  const { name, runtime, hasRuntime, samples } = await openDeviceSamples();
   setSampleEntries(await backend.list(sampleFolder()));
-  setDeviceInfo({ name, runtime, samples, canMkdir: sim.mkdir, free: (await backend.space()).free });
+  setDeviceInfo({ name, runtime, hasRuntime, samples, canMkdir: sim.mkdir, free: (await backend.space()).free });
 }
 
 // ---- the local folder -------------------------------------------------------------------------------------------------------------
