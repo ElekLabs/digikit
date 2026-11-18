@@ -11,7 +11,7 @@ Emulator only: nothing here has run yet. Facts and the address evidence: [findin
 - **Section 7** (`dst == 0x4f84f2c6`): read the packed stream to the end of the buffer (`0x4f8af2c1 - length`), check the header (length, byte sum), unpack it forward with the
   firmware's depacker (`cf.peer.fn.depack`), check the output length and its SHA-256 against the stock section, store the unpacked length big endian at 0x4f84f2c2.
 - **Failure.** Any failed check pops the return address and the three arguments and jumps to the thread's own path for a missing section (`cf.peer.site.status_fail`): status 1,
-  the DMA is never armed, the second CPU gets no bytes, MAIN shows "DSP BOOT FAILURE". A wrong image never reaches the second CPU, which loads its own FPGA bitstream from it.
+  the DMA is never armed, the second CPU gets no bytes, MAIN shows its boot failure screen ("OOPS! SOMETHING WENT WRONG"). A wrong image never reaches the second CPU, which loads its own FPGA bitstream from it.
 - **patchkit.** `[[repack]]` in `module.toml` names the buffer (`dest`, `stage_end`) and the stock section (`len`, `sha256`). patchkit stores the section packed only when this
   module is in the set, checks the stock section against `len` and `sha256`, and refuses a layout whose in-place margin is 0 or less (9,444 bytes now). The same constants
   are in `src/cf/peer.c`; `packages/patchkit/tests/repack.rs` checks that both name the same values.

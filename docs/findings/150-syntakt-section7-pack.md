@@ -1,7 +1,7 @@
 # Syntakt OS 1.42: section 7 stored packed, unpacked by MAIN (the peer thread, the hook site, the RAM)
 
 Date: 2026-11-19. Image: `st-1.42` MAIN (`out/sections/st-1.42/section_3_MAIN_OS.bin`, load 0x40000400) and its bootstrap (section 2, load 0x800003ec).
-Static read; the patch is built and verified on the host, the emulator proof is open. Context: [70](70-syntakt-1-42.md), [136](136-syntakt-peer-cpu.md),
+Static read, a host-verified patch and an emulator proof (section 7). Context: [70](70-syntakt-1-42.md), [136](136-syntakt-peer-cpu.md),
 [138](138-syntakt-runtime-facts.md), [142](142-syntakt-sample-storage.md), [146](146-syntakt-os-upgrade-receiver.md).
 
 Marks: **[V]** checked against image bytes by a second agent. **[D]** read once, static. **[O]** open.
@@ -142,8 +142,22 @@ Not covered: a read of the NOR directory by a computed id. All four call sites p
   (`dst != 0x4f84f2c6`) goes to the stock NOR read; id 7 is read to `0x4f8af2c1 - length`, checked (header length, byte sum), unpacked by the firmware's depacker,
   checked (output length 383,760, SHA-256 of the stock section) and the unpacked length is stored big endian at 0x4f84f2c2. Any failed check pops the return
   address and the three arguments (`lea 0x10(sp),sp`) and jumps to 0x40082e84, the path of a missing section: status 1, the DMA is never armed, the second CPU gets
-  no bytes and MAIN shows "DSP BOOT FAILURE". The SHA-256 is carried in the adapter (rolled, 16-word schedule, 1.2 KB of code and tables); the stock MAIN has none
+  no bytes and MAIN shows its boot failure screen ("OOPS! SOMETHING WENT WRONG, SWITCH OFF/ON TO BOOT AGAIN." in the emulator). The SHA-256 is carried in the adapter (rolled, 16-word schedule, 1.2 KB of code and tables); the stock MAIN has none
   (finding 146) and the runtime's `sha256` is not reachable from an adapter under the layer rules.
+
+## 7. Emulator proof [D]
+
+Three headless boots with `panel_drive` (`packages/emulator/boot/examples/panel_drive.rs`, the device's default second-CPU model `peer = "coldfire"`, which runs
+section 7 on a second core), each `--after 800M --max 1500M --steps peek:0x41bbf448:4,peek:0x41bb32b0:4,peer,frame:NAME`, release build, 5 to 19 s each:
+
+| Image | Main UI at | Status / state | Images the second CPU took | Second CPU | Screen |
+| --- | --- | --- | --- | --- | --- |
+| `emulator` set with `core/peer-image`, section 7 packed (container 2,011,488 bytes) | 867 M | 6 / 6 | 1,748 bytes (section 6 with byte 1 = 0x0f); 383,760 bytes, SHA-256 `daf6451c…ec783bc2` (stock section 7) | runs, 0 faults | main screen |
+| stock 1.42 (control) | 866 M | 6 / 6 | the same two images and hashes | runs, 0 faults | the same main screen |
+| the same patched image with section 7 replaced by a valid packed stream of section 7 with one byte changed (header length, byte sum and unpacked length correct; in-place margin +9,444) | 866 M | 1 / 0 | none (stream bytes 0, no doorbell edge, no IRQ4) | never started | "OOPS! SOMETHING WENT WRONG, SWITCH OFF/ON TO BOOT AGAIN." |
+
+So the hook runs in the peer thread before the stream (the cf.expansion code is installed by then), the second CPU gets exactly the stock bytes, and a wrong
+result is refused by the SHA-256 check with no byte sent: not even section 6 goes out, because the DMA is armed after the id-7 read.
 
 ## Open
 
@@ -152,12 +166,10 @@ Not covered: a read of the NOR directory by a computed id. All four call sites p
   result. A stream built by patchkit is safe: `patchkit` checks its header, byte sum and in-place margin at build time and in `verify`. The stock MAIN streams section 7
   to the second CPU with no integrity check at all, so the adapter is stricter than stock on the result, not on the read. No code change planned.
 
-- **[O]** The emulator proof: boot the patched image and read the peer status word 0x41bbf448 (6 = OK).
-- **[O]** The real time of the stock NOR read, the unpack and the SHA-256 on hardware or in the emulator (estimates in section 4).
+- **[O]** The real time of the stock NOR read, the unpack and the SHA-256 on hardware (estimates in section 4). The emulator run of section 7 shows no timeout.
 - **[O]** Syntakt PIT2 values were read from the code. The tick of 8.33 ms depends on the prescaler reading of finding 07.
 - **[O]** Whether the main task needs status 6 before another consumer runs: not read in full (consumers at 0x4000a81e, 0x4000af72, 0x4000b36a, 0x40081ef8).
-- **[O]** Whether cf.expansion code is installed before the peer thread runs: yes by the reset-path installer (finding 01 "loader hook", code is in DDR before the
-  caches are enabled), not yet seen on a Syntakt run.
+
 - **[O]** Whether stage 1 of the peer times out on a missing stream. The design never streams a corrupt one.
 - **[O]** Whether a Syntakt flashed with this image keeps its recovery: the OS-upgrade receiver and the bootstrap do not parse sections, so a packed section 7 changes
   nothing for them **[D]**, but no hardware run exists.

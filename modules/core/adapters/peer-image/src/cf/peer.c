@@ -9,7 +9,7 @@
  *   dst is not PEER_DEST (the section 6 read): the stock NOR read, unchanged.
  *   dst is PEER_DEST: read the packed stream to the end of the buffer (PEER_STAGE_END - len), check its header (length and byte sum), unpack it
  *     to PEER_DEST, check the output length and its SHA-256 against the stock section, and store the output length where the thread stored the
- *     packed length. Any failed check returns 1: peer_read then takes the stock path of a missing section 7 (status 1, "DSP BOOT FAILURE").
+ *     packed length. Any failed check returns 1: peer_read then takes the stock path of a missing section 7 (status 1, the boot failure screen).
  *     The DMA that streams the buffer is armed later, so a failed check streams nothing.
  * The addresses and the expected length and hash are the `[[repack]]` of module.toml: patchkit checks the stored stream's in-place margin against
  * them and the decoded section against the hash; packages/patchkit/tests/repack.rs checks that this file names the same values.

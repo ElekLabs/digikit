@@ -4,7 +4,7 @@
  * The thread calls `jsr (a2)` twice, with the stack [return][src][len][dst] and the caller popping the arguments. peer_read keeps that signature:
  * it copies the three arguments for the C function peer_load (the C code keeps D2-D7 and A2-A6, which the thread has live), and when peer_load
  * reports a failed check it takes the stock path of a missing section 7: it pops the return address and the three arguments and jumps to the
- * code that stores status 1 (peer_status_fail), where the thread waits and MAIN shows "DSP BOOT FAILURE". */
+ * code that stores status 1 (peer_status_fail), where the thread waits and MAIN shows its boot failure screen. */
     .text
     .even
     .globl peer_hook
