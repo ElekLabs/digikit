@@ -453,12 +453,13 @@ stored-number readers). Anchors go into `devices/fw/*.toml` with `tools.firmware
 
 Estimate: E0a 1-2 h including the report; E0b 1 day. Depends on: nothing.
 
-E0c Daemon hardening (host only, no generated core needed; about 1 hour). The E0a failure cost a session because nothing said that the daemon had no
+E0c Daemon hardening (host only, no generated core needed; done on branch e0c/daemon-hardening). The E0a failure cost a session because nothing said that the daemon had no
 DSP core.
-1. Refuse to start a DSP session when the daemon has no generated core: check `gen_image_name()` (`packages/emulator/coupled/src/dsp_core.rs`)
-   when the session opens, and fail the RPC with "built without a generated core" instead of a trap at the first instruction.
-2. Return per-tier counts in the `sharc.profile` answer (`rpc_sharc_profile` in `packages/emulator/control/src/controller.rs`: fast
-   instructions, block instructions, interpreted), so a zero can be explained.
+1. The host holds no core any more (a core library named by `DIGI_SHARC_CORE_LIB_<DEV>`): a missing variable already failed the session. A library
+   built without `SHARC_GEN_DIR` loaded and trapped at the first instruction; `core_for_device` (`packages/emulator/sharc-peer/src/dsp_core.rs`) now
+   refuses it with "built without a generated core".
+2. `sharc.profile` answers `engine_tiers` (fast, block, interpreted, idle skipped, traps since the DSP worker started), so a zero in `counted` is
+   explained (docs/CONTROL.md).
 Depends on: nothing. Do it before the E0a retry.
 
 ### E1 Proof adapters: coverage check
