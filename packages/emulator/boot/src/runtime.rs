@@ -5667,7 +5667,19 @@ mod tests {
                 continue;
             };
             let slots = resolve_usb_slots(&main, MAIN_LOAD);
-            assert!(slots.is_some(), "{file}: slots do not resolve");
+            let Some((slot0, slot1)) = slots else {
+                panic!("{file}: slots do not resolve");
+            };
+            // Two different words in the .bss above the loaded image (the slots are cleared at boot).
+            let image_end = MAIN_LOAD + main.len() as u32;
+            assert_ne!(slot0, slot1, "{file}: both slots are one word");
+            assert!(
+                slot0 >= image_end
+                    && slot1 >= image_end
+                    && slot0 < 0x4800_0000
+                    && slot1 < 0x4800_0000,
+                "{file}: slots {slot0:#x} {slot1:#x} are not in RAM above the image (ends at {image_end:#x})"
+            );
             if file.starts_with("Syntakt") {
                 continue;
             }
