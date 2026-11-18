@@ -1,18 +1,23 @@
-import { encoder as encoderCode } from '@digi/test-support';
+import { encoder as encoderCode, type Device } from '@digi/test-support';
 import { expect } from 'vitest';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
-import { bounded, REDRAW, SETTLE, word, type Rt } from '@digi/regression/runtime/fx-live.ts';
+import { REDRAW, SETTLE, word, type Rt } from '@digi/regression/runtime/fx-live.ts';
 import { halfword } from '@digi/regression/runtime/fx-track-ui.ts';
+import { crossings, swing, type Sample } from './lfo-fit.ts';
+
+export * from './lfo-fit.ts';
 
 /**
- * Helpers of the LFO shape device tests (plan E6): the LFO page of track 1 driven from the panel, the Sound words read from firmware memory, and a phase-free fit of the
- * LFO output against a shape.
+ * Helpers of the LFO shape device tests (plan E6): the LFO page of track 1 driven from the panel, the knob words read from the Sound object, the LFO output read from the
+ * array the tick writes it into, and a phase-free fit of the output against a shape.
  *
- * What the tests assume of the firmware (finding 143; each is checked on the way and fails with a message, so a wrong assumption shows at the first device run):
- * - the MOD key opens the page of LFO 1 with the knobs A to H = SPD, MULT, FADE, DEST, WAVE, SPH, MODE, DEPTH (the order of the parameter codes 75 to 83);
- * - the Sound words of LFO 1 are the halfwords 1 to 8 of the Sound array of track 1 in that order (WAVE is word 5, `locate` checks it on DT2);
- * - the LFO adds its output to the Sound word of its destination, so the destination word varies over time (`modulated` finds it by sampling, it is never named here);
- * - a speed of zero stops the LFO.
+ * What the tests assume of the firmware (finding 143, "Where the output lands" and "The knob words"; each is checked on the way and fails with a message, so a wrong
+ * assumption shows at the first device run):
+ * - the MOD key opens the page of LFO 1 with the knobs A to H = SPD, MULT, FADE, DEST, WAVE, SPH (SLEW for RAND), MODE, DEPTH (the order of the parameter codes 75 to 83);
+ * - the knob words of LFO 1 are the halfwords 1 to 8 of the Sound array of track 1 in that order (`locate` checks each against `KNOB_WORD` on both devices);
+ * - the LFO does not write the Sound object: the tick adds its output to the destination word of the smoothed mirror that the DSP frame is built from (`LIVE`), so the
+ *   output is read there (`live`), and the knob words are read from the Sound object (`word`);
+ * - SPD and DEPTH are bipolar around 0x4000: a speed of 0x4000 stops the LFO, and a depth of 0x4000 gives no output.
  */
 
 export type Knob = 'SPD' | 'DEST' | 'WAVE' | 'SPH' | 'MODE' | 'DEPTH';
@@ -24,113 +29,31 @@ const KNOB_ENCODER: Record<Knob, string> = {
   MODE: 'ENC G',
   DEPTH: 'ENC H',
 };
-/** The Sound word of each knob of LFO 1 on DT2 (finding 143, "The tick"); DN2 is found by `locate`. */
-const DT2_WORD: Record<Knob, number> = { SPD: 1, DEST: 4, WAVE: 5, SPH: 6, MODE: 7, DEPTH: 8 };
-
-/** The wave numbers of the stock waves (finding 143, "Waveform names"). */
-export const WAVE = { TRI: 0, SINE: 1, SQR: 2, SAW: 3, EXPO: 4, RAMP: 5, RAND: 6 } as const;
-/** The first wave number the lfo service gives a shape (`RANGE.lo` of the service). */
-export const FIRST_SHAPE = 7;
-
-/** The 32 samples of `tests/fixtures/modules/lfo-shape/src/module.c` (RAMP): a ramp from -1000 in steps of 100. */
-export const RAMP_SAMPLES = Array.from({ length: 32 }, (_, i) => -1000 + 100 * i);
-/** The samples of `tests/fixtures/modules/lfo-shape-b/src/module.c` (STEP). */
-export const STEP_SAMPLES = Array.from({ length: 32 }, (_, i) => (i < 16 ? -800 : 800));
-
-// ---- the waves as functions of a 32-bit phase, signed Q31 (finding 143, "Output scale") --------------------------------------------------
-
-/** The value of a 32-sample table at `phase`: the formula of the service's `records::interp` (the sample at the top 5 bits, linear with the next 15). */
-export function evalTable(s: readonly number[], phase: number): number {
-  const i = phase >>> 27;
-  const j = (i + 1) & 31;
-  const f = (phase >>> 12) & 0x7fff;
-  return ((s[i]! << 16) + (((s[j]! - s[i]!) * f) << 1)) | 0;
-}
-export const evalTri = (phase: number): number => {
-  const d = (phase + 0x40000000) >>> 0;
-  const mask = d >>> 31 ? 0xffffffff : 0;
-  return ((d << 1) ^ mask ^ 0x80000000) | 0;
-};
-export const evalSqr = (phase: number): number => (phase >>> 0 < 0x80000000 ? 0x7fffffff : -0x80000000);
-export const evalSaw = (phase: number): number => (phase ^ 0x7fffffff) | 0;
-export const evalRamp = (phase: number): number => (phase >>> 0 < 0x80000000 ? phase | 0 : 0);
-/** The stock sine is a polynomial; the fit tolerance covers its difference to the true sine. */
-export const evalSine = (phase: number): number => Math.round(Math.sin((phase / 2 ** 32) * 2 * Math.PI) * 0x7fffffff);
-export const STOCK_EVAL: Record<number, (phase: number) => number> = {
-  [WAVE.TRI]: evalTri,
-  [WAVE.SINE]: evalSine,
-  [WAVE.SQR]: evalSqr,
-  [WAVE.SAW]: evalSaw,
-  [WAVE.RAMP]: evalRamp,
-};
-
-// ---- a phase-free fit ----------------------------------------------------------------------------------------------------------------
-
-export interface Sample {
-  /** Emulated ms. */
-  t: number;
-  /** The Sound word. */
-  v: number;
-}
-
-export interface Fit {
-  /** Root mean square difference of the normalised samples to the normalised shape, 0 to about 0.5. */
-  err: number;
-  /** Cycles per emulated ms and the phase (0 to 1) at the first sample of the best fit. */
-  f: number;
-  phi: number;
-}
-
-const PHASES = 512;
-const FIT_CYCLES_PER_MS: [number, number] = [1 / 2000, 1 / 24];
-const FIT_RATES = 240;
-const FIT_OFFSETS = 128;
+/** The word of each knob of LFO 1 in the Sound array of track 1, the same on both devices (finding 143, "The knob words"); `locate` checks it. */
+const KNOB_WORD: Record<Knob, number> = { SPD: 1, DEST: 4, WAVE: 5, SPH: 6, MODE: 7, DEPTH: 8 };
 
 /**
- * Fit the samples to `shape`: the LFO output is `base + scale * shape(phase)` with a phase that grows at a constant rate, and none of base, scale, rate or start phase is known.
- * Both curves are normalised to 0..1 by their own minimum and maximum, then the rate (log steps) and the start phase are searched for the smallest root mean square
- * difference. A shape that is not the one that made the samples leaves an error of 0.1 or more at 8 to 16 samples per cycle over 2 or more cycles; the true shape leaves
- * the quantisation of the Sound words and the jitter of the sample times (0.05 or less).
+ * The array of track 1 that the LFO tick adds its output to (finding 143, "Where the output lands"): the smoothed mirror that the vector 191 handler builds from the
+ * Sound array. Word i of the Sound array is at `base + 2 * i` (track t at `base + stride * t`); `base` is the return value of the smoother plus 0x22 (DT2 0x80005b50,
+ * DN2 0x800068e4). The smoother rewrites the array on every handler run and the tick adds the output after it, so a word that an LFO targets reads
+ * smoothed base word + output, clamped to 0..0x7f00. `words` is the length of a row (the stride in halfwords).
  */
-export function fitShape(samples: readonly Sample[], shape: (phase: number) => number): Fit {
-  const vs = samples.map((s) => s.v);
-  const lo = Math.min(...vs);
-  const hi = Math.max(...vs);
-  if (hi === lo) return { err: 1, f: 0, phi: 0 };
-  const u = vs.map((v) => (v - lo) / (hi - lo));
-  const table = Array.from({ length: PHASES }, (_, k) => shape(Math.floor((k / PHASES) * 2 ** 32) >>> 0));
-  const tlo = Math.min(...table);
-  const thi = Math.max(...table);
-  const e = table.map((x) => (thi === tlo ? 0 : (x - tlo) / (thi - tlo)));
-  const t0 = samples[0]!.t;
-  let best: Fit = { err: Infinity, f: 0, phi: 0 };
-  for (let r = 0; r < FIT_RATES; r++) {
-    const f = FIT_CYCLES_PER_MS[0] * (FIT_CYCLES_PER_MS[1] / FIT_CYCLES_PER_MS[0]) ** (r / (FIT_RATES - 1));
-    for (let o = 0; o < FIT_OFFSETS; o++) {
-      const phi = o / FIT_OFFSETS;
-      let sum = 0;
-      for (let n = 0; n < samples.length; n++) {
-        const cycle = phi + f * (samples[n]!.t - t0);
-        const k = Math.floor((cycle - Math.floor(cycle)) * PHASES) % PHASES;
-        const d = u[n]! - e[k]!;
-        sum += d * d;
-      }
-      const err = Math.sqrt(sum / samples.length);
-      if (err < best.err) best = { err, f, phi };
-    }
-  }
-  return best;
-}
-
-/** Number of times the samples cross the middle of their range: 2 per cycle for every shape of the tests. */
-export function crossings(samples: readonly Sample[]): number {
-  const vs = samples.map((s) => s.v);
-  const mid = (Math.min(...vs) + Math.max(...vs)) / 2;
-  if (Math.max(...vs) === Math.min(...vs)) return 0;
-  let n = 0;
-  for (let i = 1; i < vs.length; i++) if (vs[i - 1]! < mid !== vs[i]! < mid) n++;
-  return n;
-}
+const LIVE: Record<Device, { base: number; stride: number; words: number }> = {
+  dt2: { base: 0x80005b72, stride: 0x8e, words: 71 },
+  dn2: { base: 0x80006906, stride: 0xca, words: 101 },
+};
+/** The phase accumulator (u32) of LFO 1 of track 1 in the tick's state (finding 143): it moves with every tick of a running LFO; used for the failure message only. */
+const LFO_PHASE: Record<Device, number> = { dt2: 0x44e66e78, dn2: 0x44640c18 };
+/**
+ * Array indices tried as destination, in order. Each has a mid-range stock default (0x4000, or 0x2000), so that the output does not clip at 0 or 0x7f00; none is a word
+ * of an LFO (1 to 24). The DEST word is `index << 8` (the tick reads its high byte as the array index, limit 0x46 on DT2 and 0x64 on DN2).
+ */
+const DEST_CANDIDATES = [34, 26, 35, 36, 38, 39];
+/** DEPTH is bipolar: the output amplitude is (depth - 0x4000) * 2 words times the shape. 0x5000 gives +-0x2000 around the base word. */
+const DEPTH_WANT = 0x5000;
+const DEPTH_ZERO = 0x4000;
+/** The smallest peak-to-peak swing of the destination word that counts as an LFO output (the full swing at DEPTH_WANT is 0x4000 times the fade level). */
+export const MIN_SWING = 0x400;
 
 // ---- the rig -------------------------------------------------------------------------------------------------------------------------
 
@@ -139,41 +62,53 @@ const GAP = 'the gap between encoder events (the stock encoder scales by event r
 
 /** Track 1, LFO 1, driven from the panel. Create it after the runtime is up; it reads the Sound words of track 1 from firmware memory. */
 export class LfoRig {
-  /** The Sound word of each knob, found by `locate`. */
+  /** The Sound word of each knob, found by `locate` (or given by `known`). */
   readonly index: Partial<Record<Knob, number>> = {};
   private soundBase: number | undefined;
 
   readonly rt: Rt;
 
-  constructor(rt: Rt) {
+  /** `known`: the knob words of another rig on the same device, so that no knob is turned to find them (a project that holds a wave must keep it). */
+  constructor(rt: Rt, known?: Partial<Record<Knob, number>>) {
     this.rt = rt;
+    Object.assign(this.index, known);
   }
 
   private get session() {
     return this.rt.session;
   }
-  private get device() {
+  private get device(): Device {
     return this.session.options.device;
   }
 
   private async base(): Promise<number> {
     if (this.soundBase === undefined) {
-      const { fx } = deviceProfile(this.device) as unknown as { fx: { kit_ptr: number; sound_off: number } };
+      const { fx } = deviceProfile(this.device);
       // the Sound array of track 1 starts 0x14 into its Sound object; the kit object holds the Sound objects from `sound_off` on
       this.soundBase = (await word(this.session, fx.kit_ptr)) + fx.sound_off + 0x14;
     }
     return this.soundBase;
   }
 
-  /** Sound word `index` of track 1. */
+  /** Sound word `index` of track 1: the stored knob value (the LFO does not write it). */
   async word(index: number): Promise<number> {
     return halfword(this.session, (await this.base()) + 2 * index);
   }
 
-  /** The whole Sound array of track 1. */
+  /** The Sound array of track 1. */
   async words(): Promise<number[]> {
-    const { fx } = deviceProfile(this.device) as unknown as { fx: { sound_words: number } };
+    const { fx } = deviceProfile(this.device);
     return Promise.all(Array.from({ length: fx.sound_words }, (_, i) => this.word(i)));
+  }
+
+  /** Word `index` of the array the tick writes into (smoothed base + LFO output, see `LIVE`). */
+  async live(index: number): Promise<number> {
+    return halfword(this.session, LIVE[this.device].base + 2 * index);
+  }
+
+  /** The whole live row of track 1. */
+  async liveWords(): Promise<number[]> {
+    return Promise.all(Array.from({ length: LIVE[this.device].words }, (_, i) => this.live(i)));
   }
 
   /** The MOD page, LFO 1. */
@@ -183,10 +118,7 @@ export class LfoRig {
 
   /** `count` events of `step` detents, then a settle for the firmware to store the last one. */
   async turn(knob: Knob, step: number, count = 1, gapMs = 40): Promise<void> {
-    for (let i = 0; i < count; i++) {
-      await bounded(() => this.session.client.inputTurn(encoderCode(KNOB_ENCODER[knob]), step));
-      await this.rt.ui.wait({ ms: gapMs, why: GAP });
-    }
+    for (let i = 0; i < count; i++) await this.rt.ui.turn(encoderCode(KNOB_ENCODER[knob]), step, { until: { ms: gapMs, why: GAP } });
     await this.rt.ui.wait({ ms: 100, why: SETTLE });
   }
 
@@ -199,7 +131,7 @@ export class LfoRig {
       const moved = after.flatMap((v, i) => (v === before[i] ? [] : [i]));
       if (moved.length === 0) continue;
       expect(moved, `the ${knob} knob (${KNOB_ENCODER[knob]}) moves one Sound word`).toHaveLength(1);
-      if (this.device === 'dt2') expect(moved[0], `${knob} is the Sound word the finding names`).toBe(DT2_WORD[knob]);
+      expect(moved[0], `${knob} is the Sound word the finding names`).toBe(KNOB_WORD[knob]);
       this.index[knob] = moved[0]!;
       return moved[0]!;
     }
@@ -228,47 +160,70 @@ export class LfoRig {
     await this.turnTo('WAVE', n << 8);
   }
 
-  /** The Sound words that vary while the LFO runs (the destination of the LFO), not counting the knob words. */
-  async modulated(): Promise<number[]> {
+  /** The words of the live row that vary over 6 reads 7 ms apart, not counting the knob words of this LFO. */
+  async moving(): Promise<number[]> {
     const knobWords = new Set(Object.values(this.index));
     const seen: number[][] = [];
     for (let n = 0; n < 6; n++) {
-      seen.push(await this.words());
+      seen.push(await this.liveWords());
       await this.rt.ui.wait({ ms: 7, why: SAMPLING });
     }
     return seen[0]!.flatMap((_, i) => (!knobWords.has(i) && seen.some((w) => w[i] !== seen[0]![i]) ? [i] : []));
   }
 
-  /** `count` reads of Sound word `index`, `gapMs` of emulated time apart, with the emulated time of each. */
+  /** True when the phase accumulator of LFO 1 of track 1 moves between two reads 20 ms apart: the tick runs and the LFO is not stopped. */
+  async phaseMoves(): Promise<boolean> {
+    const first = await word(this.session, LFO_PHASE[this.device]);
+    await this.rt.ui.wait({ ms: 20, why: SAMPLING });
+    return (await word(this.session, LFO_PHASE[this.device])) !== first;
+  }
+
+  /** `count` reads of live word `index`, `gapMs` of emulated time apart, with the emulated time of each. */
   async sample(index: number, count: number, gapMs: number): Promise<Sample[]> {
     const out: Sample[] = [];
     for (let n = 0; n < count; n++) {
-      out.push({ v: await this.word(index), t: await this.rt.clock.now() });
+      out.push({ v: await this.live(index), t: await this.rt.clock.now() });
       await this.rt.ui.wait({ ms: gapMs, why: SAMPLING });
     }
     return out;
   }
 
   /**
-   * Make the LFO run into one destination at a speed the fit can follow: locate the knobs (DEPTH last, so nothing is modulated while they are found), choose the
-   * first destination that makes a Sound word vary, raise the depth, and adjust the speed until a window of 40 reads at 12 ms holds 6 to 14 crossings of its middle.
-   * `known`: the knob words of another rig on the same device, so that no knob is turned to find them (a project that holds a wave must keep it). Returns the index of the
-   * destination word.
+   * Make the LFO run into one destination at a speed the fit can follow: locate the knobs (DEPTH last, so nothing is modulated while they are found), raise DEPTH above
+   * its centre, choose the first of `DEST_CANDIDATES` whose live word varies, and adjust the speed until a window of 40 reads at 12 ms holds 6 to 14 crossings of its
+   * middle. Prechecks, each with its own message: DEPTH went above its centre; the destination word moves ("no tick" when the tick's phase does not move, "wrong
+   * destination" when the tick runs and other words of the row move or none does); the swing is at least `MIN_SWING` and does not clip.
+   * Returns the index of the destination word.
    */
-  async run(known?: Partial<Record<Knob, number>>): Promise<number> {
+  async run(): Promise<number> {
     await this.open();
-    Object.assign(this.index, known);
     for (const knob of ['DEST', 'SPD', 'WAVE', 'SPH', 'MODE', 'DEPTH'] as const) if (this.index[knob] === undefined) await this.locate(knob);
-    await this.turnTo('DEPTH', 0x3f00, 0x1f00); // about half of the range: the sum with the destination's own word stays inside 0 to 0x7f00
+    await this.turnTo('DEPTH', DEPTH_WANT, 0x300);
+    const depth = await this.word(this.index.DEPTH!);
+    expect(depth, `DEPTH is above its centre ${DEPTH_ZERO.toString(16)} (the output is scaled by (depth - centre) * 2)`).toBeGreaterThan(DEPTH_ZERO + 0x800);
     let dest = -1;
-    for (let d = 1; d <= 6 && dest < 0; d++) {
+    const others: string[] = [];
+    for (const d of DEST_CANDIDATES) {
+      if (dest >= 0) break;
       await this.turnTo('DEST', d << 8);
-      const moving = await this.modulated();
-      if (moving.length === 1) dest = moving[0]!;
-      else if (moving.length > 1) throw new Error(`DEST ${d} moves several Sound words: ${moving.join(',')}`);
+      const moving = await this.moving();
+      if (moving.includes(d)) dest = d;
+      else others.push(`DEST ${d}: ${moving.length === 0 ? 'no live word moves' : `live words ${moving.join(',')} move, not ${d}`}`);
     }
-    if (dest < 0) throw new Error('no destination of DEST 1 to 6 makes a Sound word vary: the LFO output is not in the Sound array of track 1, or SPD 0 stops it');
+    if (dest < 0) {
+      const ticks = await this.phaseMoves();
+      throw new Error(
+        ticks
+          ? `wrong destination: the tick runs (the phase of LFO 1 moves) but no candidate destination word moves in the live row (${others.join('; ')}); the output is not where finding 143 says, or DEPTH/FADE give no swing`
+          : `no tick: the phase of LFO 1 does not move and no live word varies (${others.join('; ')}); vector 191 is not running without the DSP, or SPD is the stopped value`,
+      );
+    }
     await this.tuneSpeed(dest);
+    const swung = await this.sample(dest, 40, 12);
+    expect(swing(swung), `the destination word ${dest} swings by at least ${MIN_SWING.toString(16)} peak to peak (DEPTH ${depth.toString(16)})`).toBeGreaterThan(MIN_SWING);
+    const vs = swung.map((s) => s.v);
+    expect(Math.min(...vs), `the destination word ${dest} does not clip at 0 (its base is too low for the depth)`).toBeGreaterThan(0);
+    expect(Math.max(...vs), `the destination word ${dest} does not clip at 0x7f00 (its base is too high for the depth)`).toBeLessThan(0x7f00);
     return dest;
   }
 
@@ -282,7 +237,10 @@ export class LfoRig {
     throw new Error('the LFO speed could not be set to 3 to 7 cycles in 0.5 s of emulated time');
   }
 
-  /** Stop the LFO (a speed of 0): the speed knob is moved one detent at a time over the middle of its range until 4 reads of the destination 40 ms apart agree. */
+  /**
+   * Stop the LFO (a speed of 0, the word 0x4000: the tick scales the rate by (speed - 0x4000)): the speed knob is moved one detent at a time over the middle of its range
+   * until 4 reads of the destination 40 ms apart agree. Needs the destination of `run`, whose live word is static when the LFO stands still.
+   */
   async freeze(dest: number): Promise<void> {
     const speed = this.index.SPD!;
     const isStatic = async () => {

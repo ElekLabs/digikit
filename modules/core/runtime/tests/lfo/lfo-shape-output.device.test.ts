@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { bootWith, shapeWords, SHAPE_A } from './lfo-cards.ts';
 import {
+  BAD,
   evalSine,
   evalSqr,
   evalTable,
@@ -9,7 +10,10 @@ import {
   fitShape,
   FIRST_SHAPE,
   LfoRig,
+  OK,
+  PAIR_MARGIN,
   RAMP_SAMPLES,
+  SINE_OK,
   STOCK_EVAL,
   WAVE,
   type Fit,
@@ -19,7 +23,8 @@ import {
  * E6 on the device: what the LFO of track 1 outputs for a shape (docs/plans/extension-model.md, E6 "Tests"). The firmware's own output is read from the Sound array
  * in memory, not from the screen. The LFO runs into one destination word; its samples (read at fixed emulated intervals) are fitted to a shape with unknown rate and
  * start phase (`fitShape`), so a test needs no phase, speed or depth: the fit error is below `OK` for the shape that made the samples and above `BAD` for a shape that did not.
- * No SHARC: the LFO tick is a ColdFire interrupt and the zero SSI peer keeps its clock. The image is the emulator patch set (it holds `core/lfo`).
+ * No SHARC: the LFO tick is a ColdFire interrupt (vector 191) that the zero-DSP session paces itself (`enable_zero_dsp_timing`: the SSI0 request chain at 96 kHz forces the
+ * vector from the DMA 50 completion), so it runs at 1500 Hz. The image is the emulator patch set (it holds `core/lfo`).
  *
  * Four cases, one boot of the runtime each:
  * - stock: `core/lfo` is in the image and no lfo service runs: waves 0 to 5 are the stock shapes (item 7);
@@ -27,8 +32,6 @@ import {
  * - start phase: on a trigger the shape starts at the phase of SPH (item 4);
  * - number kept: a restart with the same module keeps the wave number in `lfo.shapes` and the output follows the table again (item 5).
  */
-const OK = 0.1;
-const BAD = 0.14;
 const READS = 100;
 const GAP_MS = 12;
 
@@ -57,12 +60,12 @@ cardRigs(
         );
         const own = fits[wave]!;
         const note = describeFit(`wave ${wave}`, Object.fromEntries(Object.entries(fits).map(([w, f]) => [`w${w}`, f])));
-        expect(own.err, `wave ${wave} follows its stock shape (${note})`).toBeLessThan(OK);
+        expect(own.err, `wave ${wave} follows its stock shape (${note})`).toBeLessThan(wave === WAVE.SINE ? SINE_OK : OK);
         for (const [w, f] of Object.entries(fits)) {
-          const pair = [wave, Number(w)];
-          // the polynomial sine and the triangle are 0.07 apart in this measure: their pair is not told apart
-          if (Number(w) === wave || (pair.includes(WAVE.TRI) && pair.includes(WAVE.SINE))) continue;
-          expect(f.err, `wave ${wave} is not wave ${w} (${note})`).toBeGreaterThan(own.err);
+          if (Number(w) === wave) continue;
+          // the true sine against the triangle is the closest pair (about 0.07 apart in this measure, finding of lfo-fit.test.ts): it needs the margin, the others only to be worse
+          const close = [wave, Number(w)].includes(WAVE.TRI) && [wave, Number(w)].includes(WAVE.SINE);
+          expect(f.err, `wave ${wave} is not wave ${w} (${note})`).toBeGreaterThan(own.err + (close ? PAIR_MARGIN : 0));
         }
       }
       await rt.session.expectNoFault('stock waves with core/lfo in the image');
@@ -82,7 +85,7 @@ cardRigs(
       const sqr = fitShape(samples, evalSqr);
       const sine = fitShape(samples, evalSine);
       const note = describeFit('fit error', { shape: shape, TRI: tri, SQR: sqr, SINE: sine });
-      expect(shape.err, `the output follows the RAMP table (${note}; tolerance ${OK}: Sound words are 7 bit values and the reads are 12 ms apart)`).toBeLessThan(OK);
+      expect(shape.err, `the output follows the RAMP table (${note}; tolerance ${OK}: the reads are 12 ms apart and jitter by the 0.67 ms tick)`).toBeLessThan(OK);
       expect(tri.err, `the output is not TRI (${note})`).toBeGreaterThan(BAD);
       expect(sqr.err, `the output is not SQR (${note})`).toBeGreaterThan(BAD);
       // RAND holds a value for a cycle: its samples do not fit the table
@@ -105,24 +108,26 @@ cardRigs(
       for (const sph of quarters) {
         await rig.turnTo('SPH', sph << 8);
         await rt.ui.tap('TRIG 1', { until: { ms: 200, why: 'the trigger starts the LFO at its start phase (no observable state)' } });
-        out.push(await rig.word(dest));
+        out.push(await rig.live(dest));
       }
-      // RAMP is linear over the cycle: the four outputs rise in equal steps; the second differences stay within the quantisation of the words (and within 0x200 where the sum clamps)
+      // RAMP is linear over the cycle: the four outputs move in equal steps, all in one direction (which one depends on how SPH maps to the start phase [O]); the second
+      // differences stay within the words' ripple (and within 0x200 where the sum clamps). A shape that ignored SPH would give four equal outputs.
       const steps = [out[1]! - out[0]!, out[2]! - out[1]!, out[3]! - out[2]!];
       const note = `outputs ${out.map((v) => v.toString(16)).join(' ')}`;
-      expect(steps.every((d) => d > 0), `the output rises with SPH (${note})`).toBe(true);
+      expect(steps.every((d) => d > 0) || steps.every((d) => d < 0), `the output moves one way with SPH (${note})`).toBe(true);
       const mean = steps.reduce((a, b) => a + b, 0) / 3;
-      for (const d of steps) expect(Math.abs(d - mean), `equal steps: the start phase follows SPH (${note})`).toBeLessThan(mean * 0.25 + 0x100);
-      // the same SPH values on TRI give 0, +max, 0, -max: not rising
+      expect(Math.abs(mean), `the steps are more than a ripple (${note})`).toBeGreaterThan(0x100);
+      for (const d of steps) expect(Math.abs(d - mean), `equal steps: the start phase follows SPH (${note})`).toBeLessThan(Math.abs(mean) * 0.25 + 0x100);
+      // the same SPH values on TRI give 0, +max, 0, -max: the first step and the last step have opposite signs
       await rig.setWave(WAVE.TRI);
       const tri: number[] = [];
       for (const sph of quarters) {
         await rig.turnTo('SPH', sph << 8);
         await rt.ui.tap('TRIG 1', { until: { ms: 200, why: 'the trigger starts the LFO at its start phase (no observable state)' } });
-        tri.push(await rig.word(dest));
+        tri.push(await rig.live(dest));
       }
-      expect(tri[1]! - tri[0]!, 'TRI rises to its peak at a quarter cycle').toBeGreaterThan(0);
-      expect(tri[3]! - tri[2]!, 'and falls after the half cycle: the shape test above is not TRI').toBeLessThan(0);
+      const triNote = `TRI outputs ${tri.map((v) => v.toString(16)).join(' ')}`;
+      expect((tri[1]! - tri[0]!) * (tri[3]! - tri[2]!), `TRI rises and falls over the same quarters: its first and last step differ in sign (${triNote})`).toBeLessThan(0);
       await rt.session.expectNoFault('shape start phase');
     }, 900_000);
 

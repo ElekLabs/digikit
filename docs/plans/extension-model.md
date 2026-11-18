@@ -740,9 +740,12 @@ What:
    (SINE) for the stock table wave, so +12 to +32 each. Worst case, 48 extended LFOs at 1,500 Hz: 2,592 instructions per tick (3.9 M per
    second), 576 to 1,536 over stock, which is 0.5% to 2.6% of the period at 1.5 to 3 cycles per instruction: inside the budget, but a step frame
    that already reaches 100% has no room for it, so the all-48 case is not a goal. One extended LFO is 0.05% to 0.09% of the period. These are
-   static counts: the final check is one paired A/B with `tools/devtools/coupled_ab.py` (stock against the lfo service with shape LFOs) at E6's
-   device check; stop if the A/B shows more than the budget. The paired A/B must include step frames on a busy pattern, because they already
-   run at 91-100% of a frame (finding 04, DN2 1.11). Hardware headroom is confirmed with roadmap row P9 (device calibration) when it exists. The stack of the extended path is 28 bytes at most (24 on the DN2 tick).
+   static counts. `coupled_ab.py --image` measures only the stub and routine cost with empty slots: it cannot put `lfo.dks` and a shape module on the card, so it does not
+   run the extended path. Use the ColdFire thread instruction counts (`tools/devtools/sharc_cells.py`, the ColdFire thread metric it produces), not `cpu.dsp_thread_insns_per_audio_s`, which counts the DSP thread. The 3% budget is not claimed until
+   the extended path is measured (item 2b). Stop if the measurement shows more than the budget. Step frames on a busy pattern already
+   run at 91-100% of a frame (finding 04, DN2 1.11), so the measurement must include them. Hardware headroom is confirmed with roadmap row P9 (device calibration) when it exists. The stack of the extended path is 28 bytes at most (24 on the DN2 tick).
+2b. Measure the extended path before the 3% budget is claimed: either a card-file option for `coupled_ab.py` (the two labels boot the same image with `lfo.dks` and a shape module on the card), or an
+   instruction-count run on a busy pattern with 48 shaped LFOs (the scenario `dn2-lfo-busy.ts`), compared with the stock wave on the same pattern, by the ColdFire thread counts.
 3. `SHAPES` writes happen under the interrupt mask (lfo `records.rs:153-161`), so the tick never reads a half-written shape.
 4. Stored value (rule 7): the extended wave value goes into the sound. Every stock reader clamps it, so without the module it shows "ERR" and
    behaves like RAND, with no fault, and it survives save and load.

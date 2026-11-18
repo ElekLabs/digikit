@@ -11,15 +11,18 @@ import { FIRST_SHAPE, LfoRig, WAVE } from './lfo-rig.ts';
  * RAND to the shape numbers and stops at the highest loaded number (the `t1_range` hook raises the maximum); the name and the graph of the MOD page show the shape.
  * The Sound word says where the encoder stopped (firmware state). The picture is the one thing only the screen shows: each page is captured (the PNG paths are printed) and its
  * frame hash is compared with `goldens.json`, which holds the hashes after the pictures were looked at (`UPDATE_GOLDENS=1` writes them; the first run of a device needs it once).
- * The pages must also differ from each other, which needs no golden: RAND (name RND), RAMP and STEP differ in name and graph. No SHARC.
+ * Every frame is taken with the LFO stopped. The pages must also differ from each other, which needs no golden: RAND (name RND), RAMP and STEP differ in name and graph. No SHARC.
  */
 cardRigs('lfo shapes: panel', { dsp: 'zero', symbols: CARD_SYMBOLS, initial: () => ({}), uploads: true, relaxFs: true }, (h) => {
   test('WAVE goes past RAND to the shape numbers, stops at the highest, and the page shows name and graph', async () => {
     const rt = await bootWith(h, 'panel', [SHAPE_A, SHAPE_B]);
     const device = rt.session.options.device;
     const rig = new LfoRig(rt);
+    // run() locates the knobs and starts an output; freeze() stops the LFO, whose graph marker would change every frame hash
+    const dest = await rig.run();
+    await rig.freeze(dest);
     await rig.open();
-    const waveIndex = await rig.locate('WAVE');
+    const waveIndex = rig.index.WAVE!;
     const page = async (name: string) => {
       const hash = await stableFrameHash(rt);
       console.info(`${device} ${name} screen: ${await captureRemoteOled(rt.session, `lfo-${name}`)}`);

@@ -6,14 +6,14 @@ import type { PatchedSession } from '@digi/regression/support.ts';
 import { DEBUG_MODULE, installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { boundService, neededServices } from '@digi/regression/runtime/service-files.ts';
 import { entry, nameHash, patched } from '../refusal/dkm-patch.ts';
 
 const A = 'test/lfo-shape';
 /** The same file under another module name: the same shape key, so a second owner of it. */
 const B = 'test/lfo-shape-copy';
-/** The lfo service is a file of the card, `services/lfo.dks` (R12-4): the runtime finds it by its name when a selected module needs the service. It has no
- * hooks, so there is nothing to `patchkit bind` against the firmware: the packed file goes on the card as it is. */
-const SERVICE = 'core/services/lfo';
+/** The lfo service is a file of the card, `services/lfo.dks` (R12-4): the runtime finds it by its name when a selected module needs the service. It has hooks, so the
+ * file on the card is the one bound to the stock firmware (`patchkit bind`, the Nx target `core/services/lfo:bind`); the two broken copies below are made from its bytes. */
 const SERVICE_PATH = 'services/lfo.dks';
 /** Header words of a `.dks` (packages/dkneeds/src/gen_limits.rs): the sha256 and the ABI fingerprint. */
 const H_SHA = 0x10;
@@ -46,9 +46,11 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   const before = { modules: await dk.modules(), cap: await dk.capacity() };
 
   // the service file goes on the card; the fixtures that emit lfo_shape need it
-  const service = fs.readFileSync(moduleArtifact(device, SERVICE));
+  const [needed] = neededServices([moduleArtifact(device, A)]);
+  expect(needed?.service, 'the fixture needs the lfo service').toBe('lfo');
+  const service = fs.readFileSync(await boundService(device, needed!, moduleArtifact(device, needed!.moduleId)));
   await dk.put(SERVICE_PATH, service);
-  expect(await dk.verifyFile(SERVICE_PATH, service), 'fresh card read matches the packed service file').toBe(true);
+  expect(await dk.verifyFile(SERVICE_PATH, service), 'fresh card read matches the bound service file').toBe(true);
 
   // one fixture: loaded, no machine type, a record block in the arena
   await installModule(dk, A, moduleArtifact(device, A), { device });
@@ -88,7 +90,7 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   // a service file built for another ABI: the loader refuses the provider with E_SVC_ABI, so the service is missing and the fixture that needs it is REFUSED.
   // A provider has no record in MODULES or LOADS (R12-3): its result is the log event MOD_LOAD with the provider marker, so the debug module is selected too.
   const abi = service.readUInt32BE(H_SVC_ABI);
-  expect(abi, 'the packed file carries the ABI word (0 would skip the check)').not.toBe(0);
+  expect(abi, 'the bound file carries the ABI word (0 would skip the check)').not.toBe(0);
   const leafA = stored(A).split('/').at(-1)!;
   const debug = `modules/${DEBUG_MODULE.split('/').at(-1)}.dkm`;
   await dk.put(debug, fs.readFileSync(moduleArtifact(device, DEBUG_MODULE)));

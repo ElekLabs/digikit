@@ -74,6 +74,25 @@ DT2 0x402227ec: 0x00000000, 0x4c6c8ea9, 0x63a9faba, 0x6cdaca2f, ... DN2 0x4020b8
   - EXPO 0x401391c6: exponential through helper 0x401362d8, minus 0x00080000; unipolar decay (constants **[O]**).
 - The result is scaled by depth (`mac.l A6,D0`; A6 is the depth clamped to 0..0x3fffffff, then doubled). The destination gets ((word at LFO block +8) - 0x4000) * 2 times D0, added to the destination's base word, and the sum is clamped to 0..0x7f00. DEST is at most 0x46 on DT2 and up to 100 on DN2. A table wave must return Q31 from a 32-bit phase; unipolar shapes return 0..0x7fffffff. **[D]**; the MAC fractional scale is **[O]**.
 
+## Where the output lands
+
+Read from the tick decompilation and the handler on DT2 1.17 and DN2 1.12; no emulator run. All **[D]**.
+
+- The tick argument is the return value of the smoother: DT2 `FUN_400d9406` returns 0x80005b50, DN2 `FUN_400db28e` returns 0x800068e4 (`movea.l D0,A2` at DT2 0x4002e8d4 and DN2 0x40027194; the tick call pushes A2: DT2 0x4002e91c, DN2 0x400272d4). The smoother (finding 04, "The smoother") writes the smoothed copy of the mirror rows (`0x80003340 + t*0x8e` on DT2) to this address on every handler run; the tick runs after it in the same handler and before the frame copy.
+- The tick array is `param_1 + 0x22` (header of 17 words), track t at `+ t * stride` (DT2 0x8e, DN2 0xca = the row of 71 and 101 words). So **word i of the Sound array of track 1 is at DT2 0x80005b72 + 2i and DN2 0x80006906 + 2i**. The LFO destination is `(signed byte at the DEST word) < 0x47` (DN2 `< 0x65`) and the tick does `array[dest] = clamp(array[dest] + out, 0, 0x7f00)` (DT2 `psVar1`, DN2 `psVar1`). The "base word" is therefore the smoothed copy of the Sound word, already in the array; the smoother rewrites it on the next run, so the output does not accumulate.
+- The Sound object that the panel edits (kit pointer + `sound_off` + 0x14 + 2i, stride 0x450 on DT2) and the mirror at `0x80003362 + t*0x8e` hold the unmodulated values. A test that reads the Sound object never sees the LFO. The device tests read `0x80005b72 + 2i` (DT2) and `0x80006906 + 2i` (DN2) for the output and the Sound object for the knobs.
+- DEST is a byte (the high byte of the word) and is the array index, so the loader's remap table (0x40213b64) maps file positions to array indices and writes `index << 8`. Index 1 to 24 are the LFO words themselves; the tests use indices with a mid-range default (34, 26, 35, 36, 38, 39).
+- The output scale is `(depth - 0x4000) * 2` times the shape times the fade level, about 16-bit word units: DEPTH 0x5000 swings the word by about +-0x2000. SPD is bipolar the same way (`(speed - 0x4000) * 2` scales the rate): 0x4000 stops the LFO. **[O]** the fade level at the default FADE word, and the sign of the start phase (`SPH * -0x40000000` in fractional MAC mode).
+- Tick state in RAM: DT2 LFO k of track t has its phase accumulator at 0x44e66e78 + 0x28 k + 0x78 t, DN2 at 0x44640c18 + 0x28 k + 0x78 t (DT2 `pcVar14 - 0x24` with `pcVar14` starting at 0x44e66eec for LFO 3 of track 1; DN2 `iVar13 + 0x50` starting at 0x44640c18 for LFO 3). The tests use it only to tell "no tick" from "wrong destination".
+
+## The knob words
+
+The T1 rows of the codes 75 to 83 (LFO 1; 85 to 93 and 95 to 103 for LFO 2 and 3) have these mirror indices on both devices (row +4): SPD 75 index 1 (0..0x7ffe, default 0x7000), MULT 76 index 2 (max 0x1700), FADE 77 index 3 (default 0x4000), DEST 78 index 4, WAVE 79 index 5 (max 0x600), SLEW 80 and SPH 81 both index 6, MODE 82 index 7 (max 0x400), DEPTH 83 index 8 (0..0x7ffe, default 0x4000). LFO 2 adds 8, LFO 3 adds 16. The tick reads the same words (LFO 3: SPD `-6`, MULT `-4`, FADE `-2`, DEST `0`, WAVE `+2`, SPH `+4`, MODE `+6`, DEPTH `+8` from the DEST byte). So on the MOD page, if the knobs A to H take codes 75, 76, 77, 78, 79, 80 or 81, 82, 83 in this order, A is SPD, D DEST, E WAVE, F SPH (SLEW for RAND), G MODE, H DEPTH. The page's own knob order is read from the page descriptor **[O]** (checked by `locate`, which fails when the moved word is not the expected one). **[D]**
+
+## Zero DSP and the tick
+
+The daemon's zero-DSP path enables the SSI0 request chain: `CoupledRuntime::attach` (`packages/emulator/coupled/src/lib.rs`, `options.zero`) and the control daemon's `new_patched` path (`packages/emulator/control/src/controller.rs`, `zero`) call `enable_zero_dsp_timing`, which calls `Emulator::enable_ssi_diagnostic(96_000)`. The firmware forces vector 191 by writing INTFRCH1 bit 31 (`ssi.rs` `on_intfrch1`, `vector191_owed`), and the runtime delivers it (`boot/src/runtime.rs` near line 3735). So the tick runs with `dsp: 'zero'`; the E6 device tests keep it. **[D]**
+
 ## DN2 site table
 
 | site | DN2 1.12 | DT2 1.17 |
