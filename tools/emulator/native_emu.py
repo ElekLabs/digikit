@@ -371,7 +371,8 @@ def pgo_plan(args: list[str]) -> object | None:
     Each single-core device has its own profile (`native_pgo.py train --device dt2`): a DN2
     profile gives a DT2 build only the shared-engine 3%, a DT2 profile 19%. A launch with a second engine (`--also-coupled`,
     the desktop default) has the profile of device `both` (`train --device both`), built in a target dir of its
-    own. The launcher never trains on its own. A stale or missing profile falls back
+    own; `mise run perf:pgo` does not train it (`perf:pgo:both` does), so a missing or stale `both` profile only prints
+    the notice and the launch builds without PGO. The launcher never trains on its own. A stale or missing profile falls back
     to the ordinary build (its own target dir, not the launcher's pgo-use). DIGI_EMU_PGO_TRAIN=1 trains a stale or missing
     profile here when the training inputs exist (`mise run perf:pgo` is the usual
     way); DIGI_EMU_PGO=0 skips PGO. Any failure falls back to the ordinary
@@ -390,7 +391,7 @@ def pgo_plan(args: list[str]) -> object | None:
     if status == "off":
         return None
     if status in ("stale", "missing"):
-        if environ.get("DIGI_EMU_PGO_TRAIN") == "1":
+        if environ.get("DIGI_EMU_PGO_TRAIN") == "1" and device != "both":
             blocker = native_pgo.training_blocker(environ, device)
             if blocker:
                 detail = f"{detail}; cannot train: {blocker}"

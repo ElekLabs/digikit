@@ -245,17 +245,16 @@ description = "Cold-boot the patched runtime of one device and save it as a repl
 ["perf:pgo:both"]
 depends = ["workbench:inputs"]
 run = "uv run python -m tools.emulator.native_pgo train --device both"
-description = "Retrain the two-core PGO profile (the desktop build with both generated cores). Needs the runtime fixtures of both devices (out/fixtures/runtime/<dev>/)."
+description = "Retrain the two-core PGO profile (the desktop build with both generated cores). Needs the runtime fixtures of both devices (out/fixtures/runtime/<dev>/). Until it runs, the two-core desktop/workbench build runs without PGO and prints the fallback notice."
 
 ["perf:pgo"]
 depends = ["workbench:inputs"]
 run = [
   "uv run python -m tools.emulator.native_pgo train --set-current-at-main",
   "uv run python -m tools.emulator.native_pgo train --device dt2 --set-current-at-main",
-  "uv run python -m tools.emulator.native_pgo train --device both --set-current-at-main",
   "uv run python -m tools.emulator.native_emu --build-only",
 ]
-description = "Retrain the DN2, DT2 and two-core PGO profiles, then rebuild the launcher with PGO. Run after core or engine changes, when `mise run workbench` reports a stale profile. In a lane the profiles become current for the launcher only when HEAD is origin/main's commit; otherwise they stay by-key and each training prints the `--set-current` command."
+description = "Retrain the DN2 and DT2 PGO profiles (a training whose profile key is current is skipped), then rebuild the launcher with PGO. The two-core profile of the desktop build is `perf:pgo:both`. For --force use perf:pgo:dn2 / perf:pgo:dt2 -- --force. Run after core or engine changes, when `mise run workbench` reports a stale profile. In a lane the profiles become current for the launcher only when HEAD is origin/main's commit; otherwise they stay by-key and each training prints the `--set-current` command."
 
 ["perf:aot"]
 run = "uv run python -m tools.sharc_dev.aot_gen"

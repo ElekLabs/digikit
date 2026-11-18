@@ -316,6 +316,65 @@ def test_decide_set_current(set_current, at_main, head, origin, expected):
     assert native_pgo.decide_set_current(set_current, at_main, head, origin) is expected
 
 
+def record_training(tmp_path, monkeypatch, desktop="d1", fixtures=None):
+    """A by-key manifest with its profile file, in a temp state dir."""
+    state = tmp_path / "pgo-state"
+    profile = state / "profiles" / "p.profdata"
+    profile.parent.mkdir(parents=True)
+    profile.write_bytes(b"profile")
+    manifest = {
+        "key": "k" * 64,
+        "desktop_sha256": desktop,
+        "profdata": {"path": str(profile)},
+        **({"fixtures": fixtures} if fixtures is not None else {}),
+    }
+    (state / "by-key").mkdir()
+    (state / "by-key" / f"{'k' * 64}.json").write_text(json.dumps(manifest))
+    monkeypatch.setattr(native_pgo, "device_state", lambda device="dn2": state)
+    saved = []
+    monkeypatch.setattr(native_pgo, "save_manifest", lambda *args: saved.append(args))
+    return profile, saved
+
+
+def test_a_training_with_a_current_profile_is_skipped(tmp_path, monkeypatch):
+    profile, saved = record_training(tmp_path, monkeypatch)
+    assert native_pgo.current_training("dn2", "k" * 64, False, True, "d1")
+    assert saved and saved[0][2] is True  # --set-current still applies
+    # --force, another key, another desktop digest, a missing profile file: train
+    assert not native_pgo.current_training("dn2", "k" * 64, True, False, "d1")
+    assert not native_pgo.current_training("dn2", "z" * 64, False, False, "d1")
+    assert not native_pgo.current_training("dn2", "k" * 64, False, False, "d2")
+    profile.unlink()
+    assert not native_pgo.current_training("dn2", "k" * 64, False, False, "d1")
+
+
+def test_fixture_content_that_changed_trains_again(tmp_path, monkeypatch):
+    record_training(tmp_path, monkeypatch, fixtures={"dn2": {"sha256": "a"}})
+    key = "k" * 64
+    assert native_pgo.current_training(
+        "both", key, False, False, fixtures={"dn2": {"sha256": "a"}}
+    )
+    assert not native_pgo.current_training(
+        "both", key, False, False, fixtures={"dn2": {"sha256": "b"}}
+    )
+
+
+def test_each_training_has_its_own_raw_dir_that_clean_collects(tmp_path):
+    run = native_pgo.fresh_run_dir(tmp_path)
+    assert run.parent == tmp_path and run.is_dir()
+    assert native_pgo.CLEAN_DIR_NAMES.match(run.name)
+    (run / "train-1-0.profraw").write_bytes(b"x")
+    again = native_pgo.fresh_run_dir(tmp_path)  # same pid: emptied, never mixed
+    assert again == run and list(again.iterdir()) == []
+
+
+def test_the_flag_dir_is_fixed_per_target_dir(tmp_path):
+    first = native_pgo.flag_raw_dir(tmp_path / "pgo-instrument")
+    (first / "stray.profraw").write_bytes(b"x")
+    assert native_pgo.flag_raw_dir(tmp_path / "pgo-instrument") == first
+    assert (first / "stray.profraw").exists()  # not cleared: nothing is written here
+
+
 def test_a_profile_covers_the_libraries_of_its_training_target():
     assert native_pgo.profile_devices("dn2") == ("dn2",)
     assert native_pgo.profile_devices("dt2") == ("dt2",)
