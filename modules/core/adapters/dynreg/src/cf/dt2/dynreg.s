@@ -114,8 +114,8 @@ dynreg_info:
     .long   8                           | 180 knobs per machine (descriptor fields f0 .. f7)
     .long   0                           | 184 slot of knob 0
     .long   0xd1                        | 188 the template of a free reserved parameter row
-    .long   dynreg_view                 | 192 address of the variable that holds the machine selection view (0 until it exists)
-    .long   _dr_f_build                 | 196 the function that builds that view's items: build(view)
+    .long   dynreg_view                 | 192 (word 48) address of the variable that holds the machine selection view (0 until it exists)
+    .long   _dr_f_build                 | 196 (word 49) the function that builds that view's items: build(view)
     .long   0                           | 200 page rows (pages.rows; 0: the device keeps its knobs in the machine row)
     .long   0                           | 204 page row size
     .long   0                           | 208 pages.first

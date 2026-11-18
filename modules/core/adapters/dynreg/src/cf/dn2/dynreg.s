@@ -122,8 +122,8 @@ dynreg_info:
     .long   8                           | 180 knobs per page
     .long   25                          | 184 sound-array slot of knob 0
     .long   0xd5                        | 188 the template of a free reserved parameter row (A Env Decay)
-    .long   dynreg_view                 | 192 address of the variable that holds the machine selection view (0 until it exists)
-    .long   _dr_f_build                 | 196 the function that builds that view's items: build(view)
+    .long   dynreg_view                 | 192 (word 48) address of the variable that holds the machine selection view (0 until it exists)
+    .long   _dr_f_build                 | 196 (word 49) the function that builds that view's items: build(view)
     .long   _dr_pg_rows                 | 200 page rows (pages.rows)
     .long   _dr_pg_row_size             | 204 page row size
     .long   _dr_pg_first                | 208 pages.first

@@ -633,18 +633,19 @@ What:
    or cleared before the wait ends, `reload_abort` (a timeout) gives the old module its tick and commands back and leaves its DSP rows as they were. Its channel sinks stay released after an abort and are not set again (the debug module loses its logging until the next boot); this
    is kept on purpose, because the module's `init` is the only place that sets them. The legacy single sink and tick of `dlog` stay set: they point into code that stays
    mapped until the free, and `sink_drop` clears them just before it. DSP instruction cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
-7. MISSING placeholder, written in every unload path (reload, boot failure, take-down), for the numbers the module held. A kit names a type number, not a key.
-   A gap row plays type 0's sound today, so the placeholder must be silent. The machines service does two things, on both devices (no capability
-   separates them; the dispatch of both devices reads word 10 of a voice row as "the disabled type", `dispatch-dt2.s` `_dv_gdis`, `dispatch-dn2.s`
-   `_dv_contract`):
+7. MISSING placeholder, written only while a reload runs (`CoreApi::reload_phase`): a plain unload and the boot's failure path keep their behaviour (a free voice
+   row, a gap machine row). A kit names a type number, not a key. A gap row plays type 0's sound today, so the placeholder must be silent. The machines
+   service does two things, on both devices (no capability separates them; the dispatch of both devices reads word 10 of a voice row as "the disabled
+   type", `dispatch-dt2.s` `_dv_gdis`, `dispatch-dn2.s` `_dv_contract`):
    - `remove` writes the machine row as a placeholder: the list name stays empty (the selection list leaves it out), the long and short names (descriptor and
      names table) are "MISSING" and "MISS" in the row's own text buffers, `own_dsp = 1` (DN2: finding 33 saw silence without fault).
    - `dsp_clear` (`dsp::clear_rows`) parks each published voice row instead of freeing it: word 10 takes the row's type, the pc becomes
      `PLACEHOLDER_PC`, the type word stays, and the row's owner becomes `dkrt_abi::dsp::PLACEHOLDER_OWNER` (0xfe, no record: the table check accepts it, and the
-     unload does not free it). A claim of a voice of the same type takes the placeholder row itself (`dsp::claim`), and the row publication clears word 10 and
-     writes the new words, so the window is silent from the unload to the publication; `check_rows` counts such a row as free for that voice and `check_types`
-     does not refuse its number. A placeholder that no module claims stays until the next boot and uses one of the 16 type rows. A module that comes back
-     without the DSP voice of a type keeps that type silent until the next boot.
+     unload does not free it). The new version's claim of a voice of the same type takes the placeholder row itself (`dsp::claim`, `row_pub` 2), and the row
+     publication clears word 10 and writes the new words; that step carries the mark and the undo (a failed publication disables the row again), so the window
+     is silent from the unload to the publication. `check_rows` counts such a row as free for that voice and `check_types` does not refuse its number. When the
+     reload ends, with the new version loaded or not, the job calls `Service::reload_done` (machines: `free_placeholders`) and every placeholder row nobody took
+     over is freed, so no row of owner 0xfe outlives its reload. A placeholder row uses one of the 16 type rows for the length of the reload.
    One rig case on each device proves it: a row with word 10 pre-set to its type renders silence from a routine that sounds, without a fault
    (`modules/core/adapters/dsp-voice/tests/dsp-guard.rig.test.ts` for the Digitakt II dispatch, `dsp-voice-dn2.rig.test.ts` for the Digitone II one). The machines
    contract lists the placeholder values in `kept`, `kept_dsp` and `kept_caps`, and the `disabled` words of the rows that count as off.
@@ -657,8 +658,10 @@ What:
    words 48 and 49 of `dynreg_info` (`dynreg::w::VIEW_VAR`, `VIEW_BUILD`) hold that variable and the builder. The machines service implements
    `Service::on_loaded`: when `CoreApi::reload_phase()` is not 0 (new; the reload job sets it from the check of the new file until the DSP rows are in place) it calls
    the builder with the stored view (`refresh_view`; nothing while the view does not exist). A module with no DSP calls `on_loaded` itself at the end of the reload.
-   The machines service keeps writing the machine rows in `apply_record` and not in `on_loaded`: the placeholder voice row of item 7 keeps the type silent until the
-   module's row is published, so the window needs no later row write (the plan said `on_loaded`; this is simpler and the silence does not depend on it). Counters
+   The machines service writes the machine rows in `apply_record`, as at the boot: the placeholder voice row of item 7 keeps the type silent until the module's row is
+   published, so the window needs no later row write. The job rebuilds the list at the end of every reload, success or failure (after a failed load the cached list
+   would keep a stale entry): `on_loaded` of a module with DSP, and the job itself for the rest and for a failed load. The stored view pointer is the risk of this step; the
+   device gate proves it (archive: emulator only). Counters
    `unloads` and `reloads` at the end of `DkrtBootInfo` make open lists re-read (`unloads` counts every module teardown; `reloads` is counted by the job).
 10. `dk:dev` and the workbench use `CMD_RELOAD` for any content module; the emulator byte swap remains only for the runtime image and the UI
     layer (`core/ui`, `core/digikit-menu`). Document the command and its refusals in `docs/TESTING.md` "Fast iteration".
@@ -672,10 +675,10 @@ Plan corrections the E5 design found (the text above already reflects them):
 - Kit data names type numbers, not keys; the placeholder is a row for the numbers a module held.
 - Menus keep pointers into module code (`desc`, `fill`, `arg`) even when closed, so refusing "while a view is open" is not enough.
 - No firmware predicate says which view is on top. The rebuild is unconditional until E5b answers it.
-- The DSP placeholder window lasts about 200 ms past commit, because machines publish rows at commit and the voice rows follow; machines writes the real rows in `on_loaded` during a reload.
+- The DSP placeholder window lasts about 200 ms past commit, because machines publish rows at commit and the voice rows follow; the placeholder voice row (item 7) keeps the type silent until the module's own row is published, so the machine rows are written at commit as at the boot.
 - E3/E4 and R12-8 both rewrite five files (`loader/mod.rs`, `abi/src/service.rs`, `handlers.rs`, `svc-rt`, machines `records.rs` and `assign.rs`). The second to merge pays one rebase and an object rebuild.
 - `PH_RETAINED` latches for the session after one failed `quiesce`, so a reload timeout must not call `release` (item 5).
-- `clear_rows` frees every row of the record, so the DT2 placeholder row is written after it (item 7).
+- `clear_rows` frees every row of the record on an unload; during a reload it parks each published row as a placeholder instead, and the reload's end frees the rows nobody took over (item 7).
 - E5 changes the image (dynreg words) and `SVC_ABI` (`reload_phase`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices. The port file stack ([port-file.md](port-file.md) PR2) changes `SVC_ABI` again and merges after E5. Each change makes the runtime refuse old service files with `E_SVC_ABI`, and Transfer replaces them.
 
 Commit split (host checks per commit; device runs only at the end, one gate):
@@ -979,6 +982,7 @@ not the screen; PCM pins set from a numeric report. Before a device run, list th
 | E0a finds the filter stage inline in stock code with no per-type dispatch | E7 needs a new DSP hook design | stop E7 after E0a and report payoff and cost; E1-E6 are unaffected |
 | A filter-type reader E0b missed indexes a table by the raw value | wrong data for 16..31 | E7 device test walks every filter page and the chooser with a custom filter selected |
 | A gap row plays type 0's sound (DT2 sample renderer, DN2 FM TONE) | sound in the reload window | the MISSING placeholder is made silent (E5 item 7); on DT2 the silent routine is checked on the rig first |
+| `machines.dks` is near the 65536-byte staging limit (the file was about 65.5 KB before E5 and is about 61 KB on DT2 after BUILD is zero-initialised) | E7's filter code may not fit | measure the file before E7 starts; move code out of the service or raise the staging limit (a runtime change) before the filter code lands; stop E7 if neither is possible |
 | The contract suite finds residue in many tables | E4 grows | fix in the owning service; each fix is a unit test |
 | Routing machines row writers through `FwMem` changes timing or code size | device behaviour changes | E3/E5 device subset covers the machines path; size limit of runtime-and-services.md applies |
 | LFO slot cost in the interrupt | audio or UI timing | state the ceiling first; integer interpolation; stop if above the ceiling |

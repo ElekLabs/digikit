@@ -29,7 +29,7 @@ ports = ["dt2-1.17", "dn2-1.12"]
 # (core/machines), the knobs are the page's columns. Eight page rows are reserved (their `machine` is a value no type has).
 #
 # The view hook (`dynreg_view_hook`, the anchor `cf.machine.fn.view.build`) remembers the machine selection view, which caches the machine list:
-# a reload (docs/plans/extension-model.md E5) rebuilds the view's list through words 192 and 196 of `dynreg_info`. At boot the rows are in place
+# a reload (docs/plans/extension-model.md E5) rebuilds the view's list through words 48 and 49 of `dynreg_info`. At boot the rows are in place
 # before the stock builder reads the list, so nothing rebuilds the view then. The in-use anchors of hot reload (`cf.dynreg.project`, `kit_of`,
 # `track_type`) stay archived (tag digikit-hot-reload-v1).
 #
