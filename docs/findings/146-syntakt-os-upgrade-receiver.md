@@ -9,7 +9,7 @@ Marks: **[D]** read once, static, in the decompiled MAIN of `st-1.42` (cfdb) and
 - MAIN 1.42 has the same OS-upgrade receiver as DT2 1.17: one state machine (`OsUpgradeState`, parser `FUN_4010cf4a`, DT2 `FUN_4012b83e`), fed by two doors, the
   MidiRpc `OsUpgradeStart/Write/End` (types `0x50/0x51/0x52`) and the raw SysEx stream of the OS UPGRADE menu. Same code shape, same framing, same checksum. **[D]**
 - It checks only checksums: the per-message checksum, the end counters and one sum over the whole image. **There is no signature and no HMAC.** An image
-  rebuilt by patchkit (container without trailer slot, finding 70) passes **[D]**.
+  rebuilt by patchkit (container without trailer slot, finding 70) passes **[V]**.
 - It writes NOR from `0x80000` upward and nowhere else. The length of that write comes from the image's own length word, and nothing on the device bounds it
   against the calibration record at `0x300000`. Two bounds exist only by construction: the RAM stage of 2 MiB and the host (patchkit). A rule is needed (below).
 - The same workbench code can flash the Syntakt with device data only. What differs is data, not code (section 5). The RPC route was never run against a real
@@ -45,15 +45,15 @@ sequence, data from `+0x20`.
 - Data message (byte 6 = `0x7e`): state must be 1; the sequence word must equal `+0x10`; the checksum of 0x77 bytes `sum((byte ^ (K + i)) )` with K the stream
   byte `0x11`, masked `& 0x7f`, must equal byte `0x7e` (finding 70: K = 0x11 verifies on all 20,094 data messages). Then 0x65 = 101 bytes are copied to
   `stage + 0x20 + taken * 0x65`. **The message count from the start message is not compared with the stage size**: a host that sends more than 20,763 messages
-  writes beyond `0x405d10d0` **[D]** (see section 4).
+  writes beyond `0x405d10d0` **[V]** (see section 4).
 - End message (byte 7 = 2): state must be 2, the stream byte, the total word and the message count must match the start message; then state 3 and status 0.
 - Whole-image check: `FUN_400a5c20(stage + 0x20)` (called when status 0): `FUN_401059ec` computes the sum over `length / 4` big-endian words, `sum((i ^ word_i))`
   with i counting from 1 (finding 01 "content checksum"), compared with the word at +4; then a flash-chip rule (next paragraph). Return 1 means "accepted" (the table
   of texts at `0x40242fb8` starts with "No error" at index 1; anything else shows "Validation failed" or a table text).
 - The flash-chip rule: read the JEDEC id (`FUN_40117360`); for manufacturer `0x9d` type `0x6017` and for manufacturer `0xc2` type `0x2017` the container's build number
   word (container offset 8, the ASCII "0097" of 1.42) must be greater than `0x30303430` ("0040"); any other chip is accepted. A rebuilt image keeps the header, so it
-  passes. **[D]**
-- There is no vendor signature, no HMAC and no version-greater rule on this path. DT2 1.17 has the same functions. **[D]**
+  passes. **[V]**
+- There is no vendor signature, no HMAC and no version-greater rule on this path. DT2 1.17 has the same functions. **[V]**
 
 ## 3. When the flash starts, and the switch-over
 
@@ -66,7 +66,7 @@ sequence, data from `+0x20`.
   [141](141-syntakt-analog-and-nor-paths.md) was the missing data reference). It shows "ERASING FLASH...", re-validates with `FUN_400a5c20`, then calls the writer.
 - Writer `FUN_4011aad4(stage + 0x20, log)`: with `L` the length word and `S`, `P` the NOR sector and page sizes (`FUN_40117bd6`, `FUN_40117bc2`, from the chip
   id): erase `ceil(L / S)` sectors from `0x80000` with the raw erase `FUN_4011719a`; program `ceil(L / P)` pages from stage `+0x28` to `0x80000` with `FUN_40117a72`;
-  print "Success, Rebooting", wait 3 s (`FUN_401162f8(3000000)`), drain the console, `clr.l 0x48000000`, write `0x80` to `RCM.RCR` (soft reset). **[D]**
+  print "Success, Rebooting", wait 3 s (`FUN_401162f8(3000000)`), drain the console, `clr.l 0x48000000`, write `0x80` to `RCM.RCR` (soft reset). **[V]**
 - The bootstrap (NOR `0x40000`, never written here) then loads MAIN from the container at `0x80000`. On DT2 the bootstrap checks only the container magic and the
   header word (`ELE3`, `0x2b`; DN2 `0x34`), no checksum or HMAC of MAIN (finding 01). The Syntakt bootstrap was not read for this check; the container header word
   is `0x4a` and the bootstrap's compare value is **[O]** (unchanged by patchkit, so it passes whatever it is). The bootstrap keeps its own version word (`0x0400` at
@@ -78,18 +78,18 @@ NOR map used here (finding 01, 141; Syntakt flash map itself **[O]**): bootstrap
 `0x340000`, records `0x380000` and `0x3c0000`.
 
 - The stage data area is `0x403d10d0..0x405d10d0`, exactly **2 MiB** (`0x200000`): the next global symbol of the cfdb is `DAT_405d10d0`. DT2 1.17: stage
-  `0x403a0ed0`, data `0x403a0ef0`, next symbol `0x405a0f64`: the same 2 MiB **[D]**.
+  `0x403a0ed0`, data `0x403a0ef0`, next symbol `0x405a0f64`: the same 2 MiB **[V]**.
 - Stock container is 2,029,486 bytes decoded; `out/syntakt/patched/Syntakt_OS1.42-expansion.syx` (the dry run of finding 137, core/runtime and core/expansion) decodes
   to a content of 2,000,880 bytes (finding 137). A patched image of the full emulator set must stay below `0x200000` minus the 8 bytes of length and checksum words, and
   below `0x280000` for the NOR. The tighter bound is the stage: **2,097,144 bytes**. Headroom today is about 96 KB.
 - **Nothing on the device compares the length word with the received bytes or with 2 MiB.** The writer erases `ceil(L / S)` sectors from `0x80000`: a length of
   `0x280001` or more reaches `0x300000` and erases the calibration record. The sum check reads `L / 4` words from RAM beyond the stage if `L` is larger than what was
   received, so only a forged image whose header, length and sum agree gets through; patchkit never makes one. The OS write path therefore cannot touch
-  `0x300000..0x37ffff` for an honest image, and can for a forged length word **[D]**.
-- `devices/syntakt.toml [patch] container_max = 0x300000` (and the port file `devices/ports/st-1.42.toml`) is above the real limits. The Syntakt value is `0x200000` less
+  `0x300000..0x37ffff` for an honest image, and can for a forged length word **[V]**.
+- `container_max = 0x300000` in all three device files (and the port file `devices/ports/st-1.42.toml`) is above the 2 MiB stage on all three devices, and above the real limits. The Syntakt limit is `0x200000` less
   8 (the stage); the NOR limit is `0x280000`. DT2 and DN2 have the same 2 MiB stage and the same unbounded writer, with their own NOR map. Patchkit should refuse a
   container above the stage size for every device; the plan carries the change (a device-data edit, not a finding).
-- Other NOR users of MAIN, each with its address arguments **[D]** (callers of the wrappers `FUN_40117a72` program, `FUN_40117aee` and `FUN_40117b58` erase):
+- Other NOR users of MAIN, each with its address arguments **[V]** (callers of the wrappers `FUN_40117a72` program, `FUN_40117aee` and `FUN_40117b58` erase):
 
 | Caller | Addresses | Purpose |
 | --- | --- | --- |
@@ -103,6 +103,7 @@ NOR map used here (finding 01, 141; Syntakt flash map itself **[O]**): bootstrap
   The raw primitives have no other callers: `FUN_40116ea2` (page program) only through `FUN_40117a72`, `FUN_4011719a` and `FUN_4011721c` (sector erase) only through the
   wrappers and `FUN_4011aad4`. The protection commands `FUN_40117672`, `FUN_40117794`, `FUN_4011794c` are called from the record writers and the self-test only.
   So `0x300000..0x37ffff` is written only by `FUN_4006eb7e` (the calibration menu path, [141](141-syntakt-analog-and-nor-paths.md)) and, with a forged length, by the OS write.
+  **[O]** Indirect or table calls to the NOR wrappers are not excluded (refscan not run).
 
 ### The patch set modules cannot reach the NOR
 

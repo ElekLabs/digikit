@@ -7,9 +7,9 @@ Marks: **[D]** read once, static, in the decompiled MAIN of OS 1.42 (`st-1.42`) 
 ## Result
 
 - Two separate writers can reach the digikit store range (sectors `0x800000..0x2e1a000`, `[card.store]`): our runtime, and the stock MidiRpc Data API.
-- **The runtime is bounded, on all three devices, by shared Rust code.** The Syntakt is covered by the same code **[D]**.
+- **The runtime is bounded, on all three devices, by shared Rust code.** The Syntakt is covered by the same code **[V]**.
 - **The stock Data API is not bounded.** The host controls the byte count of each write; the start offset comes from the path, not from the host. Nothing
-  limits the count to the target slot, and the eMMC driver checks only the card capacity **[D]**. This is the same on DT2 and DN2, and it is stock behaviour.
+  limits the count to the target slot, and the eMMC driver checks only the card capacity **[V]**. This is the same on DT2 and DN2, and it is stock behaviour.
 - The bound for the stock path belongs in a firmware hook on the eMMC write and erase entry, owned by `core/runtime`. It is not a Rust-only change.
   Until that exists, the bound is a host rule (below). Confidence: the facts high, the hook design medium.
 
