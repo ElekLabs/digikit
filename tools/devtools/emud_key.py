@@ -6,7 +6,7 @@
 
 `key` prints a sha256 over everything the daemon build reads: the source files (SOURCE_GLOBS, content
 hashes), the build recipe scripts (RECIPE_FILES), the PGO profile (content), the Rust toolchain pin, `rustc -vV` and the build flags.
-`test-key` is the key of a device test that does not run patchkit (see TEST_KEY_EXCLUDED); `verify_build daemons` writes it to dist/bytes/daemon-test.key.
+`test-key` is the key of a device test that does not run patchkit (see TEST_KEY_EXCLUDED), without the files of the other devices; `verify_build daemons` writes it to dist/bytes/daemon-test-<device>.key.
 The daemon holds no generated core (it loads the core library of each device, whose key is in the test key), so the
 generated core is not a key input. The profile is resolved with the same calls as tools/patchkit/pk_emud_pgo.py.
 
@@ -125,7 +125,7 @@ def key_of(inputs: EmudInputs) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-# The daemon part of the cache key of a device test that does not run patchkit itself (dist/bytes/daemon-test.key). It follows what
+# The daemon part of the cache key of a device test that does not run patchkit itself (dist/bytes/daemon-test-<device>.key). It follows what
 # the build read, not the source globs: the repository files in the cargo dependency file of the build (`files.txt` of the store
 # entry, written by verify_build from `repo_files_of_depfile`), the registry crates of the daemon's dependency closure (`cargo tree`,
 # not the whole Cargo.lock: an unrelated workspace member changes neither), the generated core, the profile, rustc and the flags. The
@@ -273,15 +273,22 @@ def cargo_closure(root: Path = ROOT) -> str:
     return "\n".join(sorted(lines))
 
 
-def non_cell_device_prefixes(root: Path = ROOT) -> tuple[str, ...]:
+def non_cell_device_prefixes(
+    root: Path = ROOT, keep: str | None = None
+) -> tuple[str, ...]:
     """Repository file prefixes of the device files of devices without an acceptance cell (no `[acceptance] ready_dir`): the daemon embeds them
-    (device-profile build.rs) but no test of a device with a cell observes them. Same rule as tools/nx/device-files.mjs."""
+    (device-profile build.rs) but no test of a device with a cell observes them. With KEEP (a device short id) the prefixes are those of
+    every device except KEEP: a test on KEEP observes no file of another device. Same rule as tools/nx/device-files.mjs."""
     out: list[str] = []
     for path in sorted((root / "devices").glob("*.toml")):
         t = tomllib.loads(path.read_text())
-        if not t.get("device", {}).get("short") or t.get("acceptance", {}).get(
-            "ready_dir"
-        ):
+        short = t.get("device", {}).get("short")
+        if not short:
+            continue
+        if keep is None:
+            if t.get("acceptance", {}).get("ready_dir"):
+                continue
+        elif short == keep:
             continue
         stem = path.stem
         out += [
@@ -298,8 +305,10 @@ def test_key_of(
     closure: str,
     root: Path = ROOT,
     patchkit_only: Sequence[str] = (),
+    keep: str | None = None,
 ) -> str:
-    """The test key: see the comment above. NAMES are repository files (relative to ROOT)."""
+    """The test key: see the comment above. NAMES are repository files (relative to ROOT). KEEP is the device the key is for: the files
+    of every other device are left out (see `non_cell_device_prefixes`); without it only the devices without a cell are."""
     if bad := test_only_problems(names, root):
         raise SystemExit(
             f"test-only Rust files that are not behind cfg(test): {', '.join(bad)}"
@@ -310,7 +319,11 @@ def test_key_of(
             (name, sha256_file(root / name))
             for name in names
             if not name.startswith(
-                (*TEST_KEY_EXCLUDED, *patchkit_only, *non_cell_device_prefixes(root))
+                (
+                    *TEST_KEY_EXCLUDED,
+                    *patchkit_only,
+                    *non_cell_device_prefixes(root, keep),
+                )
             )
             and not TEST_ONLY_RUST.search(name)
         ),
@@ -457,7 +470,11 @@ def test_key(device: str, entry: Path) -> str:
     """The test key of DEVICE from the store ENTRY (its `files.txt`)."""
     names = (entry / "files.txt").read_text().split()
     return test_key_of(
-        inputs(device), names, cargo_closure(), patchkit_only=patchkit_only_dirs()
+        inputs(device),
+        names,
+        cargo_closure(),
+        patchkit_only=patchkit_only_dirs(),
+        keep=device,
     )
 
 

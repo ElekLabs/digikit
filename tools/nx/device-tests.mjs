@@ -9,6 +9,7 @@ import {
   VITEST_SETUP,
   builtSourceExclusions,
   deviceInputs,
+  forDevice,
   serviceLeaves,
 } from './device-test-keys.mjs';
 
@@ -82,7 +83,7 @@ export const deviceTarget = (
     options: {
       command: `${EMU_SLOT} pnpm --filter @digi/regression test:runtime ${tests.map((t) => `../../${root}/${t}`).join(' ')}`,
       cwd: '.',
-      // the key holds the patchkit binary (a full key, or a live closure): runtime/patchkit-exec.ts runs patchkit only then
+      // a full key holds the patchkit binary, a live closure the patchkit key: runtime/patchkit-exec.ts runs patchkit only then
       env: {
         DIGI_PATCHKIT_LIVE: (!opts.narrow && !opts.merge) || patchkitLive ? '1' : '',
         // the DSP mode of the files (the records' `dsp`): emu-slot.mjs takes the cores of the task from it
@@ -128,11 +129,11 @@ export const deviceTargets = (
     }
     const devices = devicesOf(key);
     const halves = devices.map((device) => `${key}--${device}`);
-    split[key] = { executor: 'nx:noop', inputs: target.inputs, dependsOn: halves };
+    split[key] = { executor: 'nx:noop', inputs: forDevice(target.inputs, null), dependsOn: halves };
     devices.forEach((device, i) => {
       split[halves[i]] = {
         ...target,
-        inputs: [...target.inputs, { env: 'DIGI_DEVICE' }],
+        inputs: [...forDevice(target.inputs, device), { env: 'DIGI_DEVICE' }],
         options: { ...target.options, env: { ...target.options.env, DIGI_DEVICE: device } },
       };
     });

@@ -73,6 +73,28 @@ def test_test_key_ignores_files_of_a_device_without_a_cell(tmp_path: Path) -> No
     assert key() != base
 
 
+def test_test_key_of_a_device_ignores_files_of_every_other_device(
+    tmp_path: Path,
+) -> None:
+    devices = tmp_path / "devices"
+    devices.mkdir()
+    for stem, short in (("one", "c1"), ("two", "c2")):
+        (devices / f"{stem}.toml").write_text(
+            f'[device]\nshort = "{short}"\n[acceptance]\nready_dir = "x"\n'
+        )
+    names = ["devices/one.toml", "devices/two.toml"]
+
+    def key(keep: str) -> str:
+        return emud_key.test_key_of(make(tmp_path), names, "", tmp_path, keep=keep)
+
+    base = {short: key(short) for short in ("c1", "c2")}
+    (devices / "two.toml").write_text(
+        '[device]\nshort = "c2"\n[acceptance]\nready_dir = "y"\n'
+    )
+    assert key("c1") == base["c1"]
+    assert key("c2") != base["c2"]
+
+
 def test_key_ignores_file_order(tmp_path: Path) -> None:
     one = make(tmp_path)
     two = make(tmp_path, files=dict(reversed(list(one.files.items()))))
