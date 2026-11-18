@@ -67,7 +67,7 @@ The card layout of MAIN 1.42 (units are 512-byte sectors; the MmcFs object is th
 | 0 | MmcFs header, magic 0xBEEFBACE, version 1, 8 bytes read | `FUN_401128d0` sets `0xBEEFBACE` (`-0x41104532`); `FUN_40111704` reads 8 bytes at 0 |
 | 0x800 | table: 0x110 = 272 bytes (16 + 256: the write-protect bitmaps of projects and sounds; **no kit bitmap**) | `FUN_40111786`; the format zero-fills 0x10 and 0x100 bytes |
 | 0x1000..0x2000 | sound presets: 2048 slots of 2 sectors (`(slot + 0x800) * 2`, `FUN_40110c3a`); same as DN2 1.11 | `MmcFs::vfunc_14` returns 0x800 slots |
-| 0x2000..0x12000 | 64 sample slots of 0x400 sectors, magic `SAMP` 0x53414d50, `((slot + 8) & 0x1fff) << 10`; up to 0x7ffc0 bytes of data | `FUN_401132ec`, `FUN_401133ce` (slot < 0x40) |
+| 0x2000..0x12000 | 64 sample slots of 0x400 sectors, magic `SAMP` 0x53414d50, `((slot + 8) & 0x1fff) << 10`; up to 0x7ffc0 bytes of data | `FUN_401132ec`, `FUN_401133ce` (slot < 0x40); header, limits and host path: finding 142 |
 | 0x7a000 and 0x7c000 | two "COKi" copies of the persistent arena, 0x3e6714 bytes each, in 0x2000-sector slots; three more copies are read from offsets 0x400000, 0x800000 and 0xc00000 through `FUN_40116d7a` (NOR, as on the DT2) **[O]** | `FUN_400bd608`, `FUN_400bd74e`, table 0x401c1490 / 0x401c149c |
 | 0x7e000..0x80000 | project slot 0x80 (the working project), 4 MiB | `FUN_40110746` (`param == 0x80`: 0x7e000) |
 | 0x80000..0x180000 | 128 project slots of 0x2000 sectors (4 MiB), `(slot + 0x40) * 0x2000`; the whole pool is erased by the format | `FUN_40110746`, `FUN_401128d0` (erase of 0x100000 sectors) |
@@ -77,8 +77,10 @@ There is no path filesystem: the magic 0x656b4653 and the constants 0x5d8000 and
 (`0x17ffff < sector`). `[capabilities] card` is `slots` for this layout (as the DN2), not `unknown`.
 
 Other writers of the card: the COKi mirror (sectors 0x7a000 and 0x7c000 only); a self-test write at 0x40080646 (0x400806e0: sector 0, length 0)
-**[O]**; and a remote "Clear"/stream handler (`FUN_400b639a`, `FUN_400b60b6`, `FUN_400b8b8e`, `/soundbanks/...`) that takes a card offset
-from the request (a raw erase needs a permission flag, bit 3). Its offsets are not traced **[O]**.
+**[O]**; and the MidiRpc Data API (types `0x53..0x5e`: `FUN_4010bd9a`; stream handlers `FUN_400b639a` Clear, `FUN_400b60b6` writer, `FUN_400b8b8e`).
+Its offset does not come from the request: a path (`/projects`, `/soundbanks`, `/samples/N`) selects a route handler that builds the descriptor
+(card offset, size, permissions). The writers (`MmcStreamWriter`, `SafeMmcStreamWriter`) call the eMMC write directly and ignore the MmcFs limit above.
+For `/samples/N` the offset is `N * 0x80000 + 0x380000` and the size comes from the host's file header: finding 142.
 
 ### Store location
 
