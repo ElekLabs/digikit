@@ -1,6 +1,7 @@
 //! `machines` service, record handlers (interface B): the machine, parameter, page, click-action and native-page records of the
 //! `register` section, and the voice parts of the DSP section. The registry walker (`registry.rs`) calls them through
 //! `handlers::Service`; the rows and strings they fill are the registry's state (`DKRT_REG`, a static of this service).
+use crate::validate::{machine_fields, machine_texts, page_body, param_body};
 use crate::{dsp, nativepage, slots};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
@@ -9,7 +10,7 @@ use dkrt_abi::mem::{cstr_len, iw, rd32};
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
     check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, ModuleCommitCtx,
-    RowWrite, Service, SettleCtx,
+    Problem, RowWrite, Service, SettleCtx,
 };
 use dkrt_sdk::records::{
     KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
@@ -92,6 +93,10 @@ pub fn owned_ids<C: CoreApi>(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
 }
 
 impl<C: CoreApi> Service<C> for Machines {
+    fn validate_records<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R) {
+        crate::validate::records(kind, bodies, report)
+    }
+
     unsafe fn declare(d: &mut Declare) {
         d.kind(KIND_PARAM, LEN_PARAM);
         d.kind(KIND_MACHINE, LEN_MACHINE);
@@ -259,27 +264,6 @@ unsafe fn fits(inf: *const u32) -> bool {
     !(iw(inf, w::M_DYN_N) as usize > MAX_MACH
         || iw(inf, w::P_DYN_N) as usize > MAX_PARAM
         || iw(inf, w::PG_DYN_N) as usize > MAX_PAGE)
-}
-
-/// A NUL-terminated printable-ASCII text of exactly `field` bytes, 1 to `field - 1` characters.
-unsafe fn text_ok(p: *const u8, field: usize) -> bool {
-    let n = cstr_len(p, field);
-    if n == 0 || n == field {
-        return false;
-    }
-    let mut i = 0;
-    while i < field {
-        let c = *p.add(i);
-        if i < n {
-            if !(0x20..0x7f).contains(&c) {
-                return false;
-            }
-        } else if c != 0 {
-            return false;
-        }
-        i += 1;
-    }
-    true
 }
 
 unsafe fn copy_text(dst: *mut u8, src: *const u8, n: usize) {
@@ -469,14 +453,11 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
         if kind == KIND_PARAM {
             let index = rd32(b);
             let (template, slot) = (rd32(b.add(4)), rd32(b.add(8)));
-            let (min, max) = (rd32(b.add(12)) as i32, rd32(b.add(16)) as i32);
             if index != pi
                 || template >= p_first
                 || slot < slot_base
                 || slot >= slot_base + knobs
-                || min > max
-                || !text_ok(b.add(24), 32)
-                || !text_ok(b.add(56), 16)
+                || !param_body(b)
             {
                 bad = E_FORMAT;
             }
@@ -492,11 +473,7 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
                 }
                 j += 1;
             }
-            if rd32(b.add(36)) > 0xffff
-                || !text_ok(b.add(40), MACH_TEXT)
-                || !text_ok(b.add(40 + MACH_TEXT), MACH_TEXT)
-                || knobs as usize != KNOBS
-            {
+            if !page_body(b) || knobs as usize != KNOBS {
                 bad = E_FORMAT;
             }
         } else {
@@ -504,11 +481,7 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
             let t = crate::assign::resolve(core, rd32(b));
             let clone = rd32(b.add(4));
             let own = rd32(b.add(12));
-            if rd32(b.add(8)) != 255
-                || own > 1
-                || (own == 1 && !has_pages)
-                || rd32(b.add(16)) > 0xffff
-            {
+            if !machine_fields(b) || (own == 1 && !has_pages) {
                 bad = E_FORMAT;
                 return;
             }
@@ -548,7 +521,7 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
                 }
                 j += 1;
             }
-            if !text_ok(b.add(52), MACH_TEXT) || !text_ok(b.add(52 + MACH_TEXT), MACH_TEXT) {
+            if !machine_texts(b) {
                 bad = E_FORMAT;
             }
         }

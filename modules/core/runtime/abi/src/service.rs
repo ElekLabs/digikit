@@ -429,11 +429,107 @@ impl Declare {
     }
 }
 
-/// A service. Every method has a default that declares nothing; a service implements the ones it owns.
+/// One refusal of a set of records, from `Service::validate_records`. The same value serves the load path (`code` is what the loader returns) and a build-time
+/// check (`module:check` prints it): one rule, two callers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Problem {
+    /// The record kind of the records (`[records.kinds]` of sdk/sdk.toml).
+    pub kind: u32,
+    /// The position of the refused record among the records of `kind`, from 0; none for a fault of the whole set (its size).
+    pub index: Option<u32>,
+    /// The earlier record this one clashes with (same name, same key), if any.
+    pub with: Option<u32>,
+    /// The error code the load path returns (`E_FORMAT`, `E_TYPE_USED`, ...).
+    pub code: i32,
+    /// What is wrong, a short sentence fragment.
+    pub what: &'static str,
+}
+
+impl Problem {
+    /// A fault of record `index`.
+    pub const fn record(kind: u32, index: usize, code: i32, what: &'static str) -> Problem {
+        Problem {
+            kind,
+            index: Some(index as u32),
+            with: None,
+            code,
+            what,
+        }
+    }
+    /// A fault of record `index` that clashes with the earlier record `with`.
+    pub const fn clash(
+        kind: u32,
+        index: usize,
+        with: usize,
+        code: i32,
+        what: &'static str,
+    ) -> Problem {
+        Problem {
+            kind,
+            index: Some(index as u32),
+            with: Some(with as u32),
+            code,
+            what,
+        }
+    }
+    /// A fault of the whole set (too many or too few records).
+    pub const fn set(kind: u32, code: i32, what: &'static str) -> Problem {
+        Problem {
+            kind,
+            index: None,
+            with: None,
+            code,
+            what,
+        }
+    }
+}
+
+impl core::fmt::Display for Problem {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "record kind {}", self.kind)?;
+        if let Some(i) = self.index {
+            write!(f, ", record {i}")?;
+        }
+        write!(f, ": {}", self.what)?;
+        if let Some(w) = self.with {
+            write!(f, " (record {w})")?;
+        }
+        Ok(())
+    }
+}
+
+/// The `validate_records` of a service that owns no record kind, or whose records need no rule beyond the layout the registry walker checks: it accepts.
+/// Write it in the `impl`: `dkrt_abi::accepts_records!();`.
+#[macro_export]
+macro_rules! accepts_records {
+    () => {
+        fn validate_records<R: FnMut($crate::service::Problem)>(
+            _kind: u32,
+            _bodies: &[&[u8]],
+            _report: &mut R,
+        ) {
+        }
+    };
+}
+
+/// A service. Every method but `validate_records` has a default that declares nothing; a service implements the ones it owns.
 /// The core is passed by reference to every method that may touch it (`declare` reads nothing but its argument); a service
 /// that a host test drives is generic over `C: CoreApi` and the test passes a `FakeCore`.
 #[allow(unused_variables)]
 pub trait Service<C: CoreApi> {
+    /// The rule for the records of kind `kind` that this service owns, as a whole set: `bodies` are the bodies (after the 8-byte header) of one module's records of that
+    /// kind, in file order. Calls `report` for each problem, none when the set is good. It reads nothing but its arguments, so a host tool runs it on a built module
+    /// (`patchkit records --check`) and the service's own `check` runs the same code at load. A kind the service does not own: accept. A service without rules
+    /// writes `dkrt_abi::accepts_records!();`. Required: a service says what it checks, even if that is nothing.
+    ///
+    /// ```ignore
+    /// fn validate_records<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R) {
+    ///     if kind == KIND_X && bodies.len() > 8 {
+    ///         report(Problem::set(kind, E_FORMAT, "more than 8 records"));
+    ///     }
+    /// }
+    /// ```
+    fn validate_records<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R);
     /// The service's declarations (`Declare`): called once at the runtime's init; the runtime compares them with the service's table.
     unsafe fn declare(d: &mut Declare) {}
     /// One step of the validation (`check_step`) for this service's records. Writes nothing.

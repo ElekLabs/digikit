@@ -834,6 +834,7 @@ pub fn locked() -> MutexGuard<'static, ()> {
 pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
     let _g = locked();
     declares_its_kinds::<S>(f);
+    validates_its_fixtures_records::<S>(f);
     check_writes_nothing::<S>(f);
     reload_equivalence::<S>(f);
     another_module_is_untouched::<S>(f);
@@ -853,6 +854,39 @@ fn declares_its_kinds<S: Service<FakeCore>>(f: &Fixture) {
         "{}: declare gives other kinds than [records.kinds]",
         f.name
     );
+}
+
+/// Case 1b: `validate_records` accepts the records the fixture's modules produce. The section a module commits is split by record kind, and each kind the service
+/// owns goes through the validator as a set, as `patchkit records --check` does for a built module.
+fn validates_its_fixtures_records<S: Service<FakeCore>>(f: &Fixture) {
+    let l = Lifecycle::<S>::new(f);
+    for (what, m, rec) in [("A", &f.a, 0), ("B", &f.b, 1)] {
+        let sec = l
+            .load_staged(rec, m)
+            .unwrap_or_else(|e| panic!("{}: module {what} is refused with {e}", f.name));
+        for &(kind, _) in f.kinds {
+            let mut bodies: Vec<&[u8]> = Vec::new();
+            let mut at = RecordSink::HEADER;
+            while at + 8 <= sec.len() {
+                let word = |o: usize| u32::from_be_bytes(sec[o..o + 4].try_into().unwrap());
+                let len = word(at + 4) as usize;
+                if word(at) == kind {
+                    bodies.push(&sec[at + 8..at + len]);
+                }
+                at += len;
+            }
+            if bodies.is_empty() {
+                continue;
+            }
+            let mut problems = Vec::new();
+            S::validate_records(kind, &bodies, &mut |p| problems.push(p.to_string()));
+            assert!(
+                problems.is_empty(),
+                "{}: module {what}: validate_records refuses the records the module commits: {problems:?}",
+                f.name
+            );
+        }
+    }
 }
 
 /// Case 2: `check` writes nothing. The registry check inside the load of each module runs in the state the loader checks in (after the commit, before the apply);

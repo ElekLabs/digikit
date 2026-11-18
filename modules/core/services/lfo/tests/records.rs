@@ -52,10 +52,10 @@ fn body(key: u32, name: &[u8; NAME_LEN], from: i16) -> Vec<u8> {
 fn section(shapes: &[(u32, i16)]) -> Vec<u8> {
     let mut s = vec![0u8; 16];
     s[12..16].copy_from_slice(&(shapes.len() as u32).to_be_bytes());
-    for (key, from) in shapes {
+    for (i, (key, from)) in shapes.iter().enumerate() {
         s.extend_from_slice(&KIND_LFO_SHAPE.to_be_bytes());
         s.extend_from_slice(&LEN_LFO_SHAPE.to_be_bytes());
-        s.extend_from_slice(&body(*key, b"TEST", *from));
+        s.extend_from_slice(&body(*key, &[b'T', b'S', b'A' + i as u8, b'T'], *from));
     }
     s
 }

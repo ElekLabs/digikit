@@ -46,6 +46,8 @@ unsafe fn body(reg: *const u8, kind: u32, b: *const u8) -> Vec<u8> {
 }
 
 impl<const N: u8, C: CoreApi> Service<C> for Fake<N> {
+    dkrt_abi::accepts_records!();
+
     /// Service 1 checks its records at the step of native pages, service 2 at the step of effects: the order of the old body.
     unsafe fn check(_: &C, step: u32, c: &CheckCtx) -> i32 {
         let mine = if N == 1 { check_step::NATIVE } else { check_step::EFFECTS };
@@ -265,25 +267,33 @@ fn a_tick_phase_reaches_every_service_in_list_order() {
 /// A service that declares a kind its table does not carry, one that declares a wrong length, and one that matches.
 struct Good;
 impl<C: CoreApi> Service<C> for Good {
+    dkrt_abi::accepts_records!();
+
     unsafe fn declare(d: &mut Declare) {
         d.kind(70, 16);
     }
 }
 struct WrongLen;
 impl<C: CoreApi> Service<C> for WrongLen {
+    dkrt_abi::accepts_records!();
+
     unsafe fn declare(d: &mut Declare) {
         d.kind(71, 20);
     }
 }
 struct Extra;
 impl<C: CoreApi> Service<C> for Extra {
+    dkrt_abi::accepts_records!();
+
     unsafe fn declare(d: &mut Declare) {
         d.kind(72, 8);
         d.slot(1, 0, 0);
     }
 }
 struct Silent;
-impl<C: CoreApi> Service<C> for Silent {}
+impl<C: CoreApi> Service<C> for Silent {
+    dkrt_abi::accepts_records!();
+}
 
 static DECL_ROWS: [ServiceRow; 4] = [
     ServiceRow::of::<Good, crate::core_api::RealCore>("good", &[(70, 16)]),
@@ -316,9 +326,13 @@ mod table {
     use super::*;
 
     struct A;
-    impl<C: CoreApi> Service<C> for A {}
+    impl<C: CoreApi> Service<C> for A {
+        dkrt_abi::accepts_records!();
+    }
     struct B;
     impl<C: CoreApi> Service<C> for B {
+        dkrt_abi::accepts_records!();
+
         unsafe fn dsp_clear(_: &C, _: usize) -> bool {
             false
         }

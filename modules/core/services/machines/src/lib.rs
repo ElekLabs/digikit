@@ -25,3 +25,4 @@ pub mod nativepage;
 pub mod paramapi;
 pub mod records;
 pub mod slots;
+pub mod validate;

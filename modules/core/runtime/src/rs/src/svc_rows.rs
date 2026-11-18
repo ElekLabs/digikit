@@ -135,7 +135,9 @@ mod tests {
     use dkrt_abi::service::Service;
 
     struct Nothing;
-    impl<C: CoreApi> Service<C> for Nothing {}
+    impl<C: CoreApi> Service<C> for Nothing {
+        dkrt_abi::accepts_records!();
+    }
 
     macro_rules! row {
         ($name:literal) => {{
@@ -208,6 +210,8 @@ mod tests {
     struct Refuses;
     struct Last;
     impl<C: CoreApi> Service<C> for First {
+        dkrt_abi::accepts_records!();
+
         unsafe fn module_begin(_: &C, _: usize) {
             seen("first", "begin");
         }
@@ -217,6 +221,8 @@ mod tests {
         }
     }
     impl<C: CoreApi> Service<C> for Refuses {
+        dkrt_abi::accepts_records!();
+
         unsafe fn module_begin(_: &C, _: usize) {
             seen("refuses", "begin");
         }
@@ -226,6 +232,8 @@ mod tests {
         }
     }
     impl<C: CoreApi> Service<C> for Last {
+        dkrt_abi::accepts_records!();
+
         unsafe fn module_begin(_: &C, _: usize) {
             seen("last", "begin");
         }

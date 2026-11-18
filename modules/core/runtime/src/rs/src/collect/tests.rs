@@ -152,7 +152,9 @@ fn a_service_file_declares_one_row_in_init_and_only_there() {
 
 static ROW: dkrt_abi::service::ServiceRow = dkrt_abi::service::ServiceRow::of::<Nothing, crate::core_api::RealCore>("nothing", &[]);
 struct Nothing;
-impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for Nothing {}
+impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for Nothing {
+    dkrt_abi::accepts_records!();
+}
 
 #[test]
 fn the_generic_records_are_appended_to_the_block_the_services_write_in_the_order_they_were_added() {

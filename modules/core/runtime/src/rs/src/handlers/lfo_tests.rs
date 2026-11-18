@@ -19,7 +19,8 @@ use std::vec::Vec;
 /// The body of a shape record: the key, the name, then the 32 samples (a ramp from `from`), big-endian.
 fn body(id: u32, from: i16) -> Vec<u8> {
     let mut b = id.to_be_bytes().to_vec();
-    b.extend_from_slice(b"TEST");
+    // a name of its own: the service refuses two shapes of one module with names that look alike
+    b.extend_from_slice(&[b'T', b'S', b'A' + (id >> 8) as u8 % 26, b'X']);
     for s in 0..SAMPLES as i16 {
         b.extend_from_slice(&(from + 100 * s).to_be_bytes());
     }

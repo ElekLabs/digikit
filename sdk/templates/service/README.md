@@ -6,7 +6,7 @@ A service of the digikit runtime, made by `mise run module:new -- service __NAME
 modules/core/services/__NAME__/
   Cargo.toml        package dkrt-svc-__KEBAB__: the neutral crate, host-tested over FakeCore
   src/lib.rs        pub mod records, slots (and dsp when there is a src/dsp/ folder)
-  src/records.rs    the Service handlers (declare, check, apply, remove, tick ...)
+  src/records.rs    the Service handlers (declare, validate_records, check, apply, remove, tick ...)
   src/slots.rs      what the service fills in the firmware (rows, slots, hooks)
   src/dsp/          the service's parts of the DSP section (only when it has any)
   tests/            host tests over FakeCore
@@ -19,6 +19,9 @@ modules/core/services/__NAME__/
 The neutral crate exports only `dk_module` and `DKRT_*` state symbols, has no assembler and names no firmware (no `cf.` hook or anchor names, no `dkfw`). What the service
 needs from the image comes from the image adapter `modules/core/adapters/X`: reserved rows, hook stubs and `[[slot]]` words, and `[[info]]` data tables, found by name hash
 with `dkc_info` (`CoreApi::info`). The image half is the adapter's; the runtime names neither the service nor the adapter's table.
+
+Every service implements `validate_records` (no default): the rule for the records of a kind it owns, as a set, from the record bodies alone. `check` runs it at load and
+`patchkit records --check` runs it on a built module, so the load and `module:check` cannot differ. A service that owns no kind, or needs no rule, writes `dkrt_abi::accepts_records!();`.
 
 Make it a real service:
 

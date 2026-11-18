@@ -9,6 +9,8 @@ use dkrt_abi::service::{tick_phase, Claim, Service};
 pub struct Samples;
 
 impl<C: CoreApi> Service<C> for Samples {
+    dkrt_abi::accepts_records!();
+
     unsafe fn on_loaded(_core: &C, rec: usize) {
         tracks::ready(rec);
     }

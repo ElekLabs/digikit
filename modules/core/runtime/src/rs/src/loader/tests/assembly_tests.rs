@@ -263,7 +263,9 @@ unsafe fn capacity(p: &FakePlatform) -> Vec<DkrtCap> {
 // ---- the loader over a card ---------------------------------------------------------------------------------------------------
 
 struct Nothing;
-impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Nothing {}
+impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Nothing {
+    dkrt_abi::accepts_records!();
+}
 
 /// The store and the arena of a card: every import resolves against the runtime's own tables (`RealImages`); `init` of a service file replays what its header
 /// table declares (no ColdFire code runs on the host).

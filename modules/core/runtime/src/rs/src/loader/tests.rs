@@ -45,7 +45,9 @@ enum Init {
 }
 
 struct Nothing;
-impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for Nothing {}
+impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for Nothing {
+    dkrt_abi::accepts_records!();
+}
 /// The row a service file declares in these tests; `svc-test` is a `[[service]]` that no runtime row owns.
 static TEST_ROW: dkrt_abi::service::ServiceRow = dkrt_abi::service::ServiceRow::of::<Nothing, crate::core_api::RealCore>("svc-test", &[]);
 
