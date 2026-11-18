@@ -43,8 +43,13 @@
 | The displaced instructions are `move.l d2,-(sp); move.l 8(sp),d1` (6 bytes). The codes 79, 89 and 99 are the WAVE parameter of the three LFOs: the routine calls the stock accessor (`lfo_stock_range`: the
 | displaced instructions and the stock code from behind them, with the code pushed again for the extra return address), and with a shape loaded replaces the maximum (offset 4 of the buffer) by
 | `dk_lfo_range_max()`, the highest loaded wave number << 8. Any other code runs the stock code. The registers the stock accessor leaves (d1, a1) are saved around the Rust call.
+| The hook never runs in interrupt context: the status register is read first, and a non-zero interrupt mask (bits 8 to 10; an interrupt handler runs at its own level, the tasks at level 0,
+| and the runtime's critical sections at 7) sends the call to the stock code. d1 is dead here (the displaced `move.l 8(SP),D1` writes it) and the flags too.
     .globl lfo_ui_range
 lfo_ui_range:
+    move.w  %sr,%d1
+    andi.l  #0x700,%d1
+    bne.b   9f
     move.l  4(%sp),%d0
     cmpi.l  #79,%d0
     beq.b   1f

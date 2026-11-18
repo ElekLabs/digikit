@@ -623,9 +623,12 @@ What:
      before the table call.
    - UI-task sites, as `lfo.dks` hooks (B1 bind resolves the addresses; routines in `services/lfo/dks/src/hooks-ui.s`, sites in `devices/fw/lfo.toml`,
      finding 143 "The panel hooks"): the name formatter (`wave_name`: DT2 0x400e1b68 and DN2 0x400e3610, four characters; `wave_name3`: DN2
-     0x4000766c, the first three characters), and the T1 range accessor (`t1_range`: DT2 0x400da368, DN2 0x400dc154, 171 callers on DT2, among them the
-     live-set clamp the encoder reaches), which raises the maximum of the codes 79, 89 and 99 to the highest loaded wave number << 8 at run time and
-     leaves the T1 row untouched, so with the service absent the maximum stays 0x600. DT2 binds two sites, DN2 three (`bind_max` 24 per file;
+     0x4000766c, the first three characters), and the T1 range accessor (`t1_range`: DT2 0x400da368, DN2 0x400dc154, 172 callers on DT2 and 191 on DN2, among them
+     the live-set clamp the encoder reaches), which raises the maximum of the codes 79, 89 and 99 to the highest loaded wave number << 8 at run time and
+     leaves the T1 row untouched, so with the service absent the maximum stays 0x600. The hook reads the status register first and runs the stock code in interrupt
+     context. No caller scales a value onto 0..max (finding 143, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
+     a CC value above 6 selects a shape number up to the highest one instead of clamping to RAND. Gaps: the maximum follows the highest loaded number, so a number below it
+     whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (`bind_max` 24 per file;
      installed sites DT2 18, DN2 22 of 48). **No graph hook**: the LFO page draws a waveform as a path object from a RAM table of seven vectors
      indexed by the clamped wave, not with per-wave code, so a wave of 7 to 14 draws the RAND path until a shape path is built (open item O7).
 2. The slot code: for an extended wave value, compute signed Q31 from the 32-bit phase with the module's 32-sample table and integer linear

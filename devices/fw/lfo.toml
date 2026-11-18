@@ -260,7 +260,8 @@ doc = "The second reader, the compare of D3 with 6 that gives RAND a start phase
 
 # ---- The MOD page: the sites of the UI task hooks of the lfo service (docs/findings/143-lfo-waveforms.md, "The panel hooks"). They are `.dks` hooks (bound by `patchkit bind`), not interrupt stubs.
 # The three functions are outside the functions that the Ghidra database of the image keeps (`catalog declare` finds no containing function), so each site is a `cf_words` signature of the stock
-# words from the function entry. The word that holds the low half of the name table's address is a wildcard (DN2 1.11 has other table addresses), the high half of it stays: it tells the
+# words from the function entry. A wildcard `"*"` is a whole 32-bit word: the one after `pea table` covers the low half of the name table's address (DN2 1.11 has other table addresses) and the opcode
+# half `0x486e` of the next instruction (`pea -0x1c(A6)`), which the DT2 word 0x3ffc486e shows. The high half of the address stays in the word before it: it tells the
 # four-character formatter (0x401f....) from the three-character one (0x401d....). The other name formatters differ in the size of the frame and the length of their tables.
 
 [[site]]
@@ -287,7 +288,7 @@ rule.dt2 = { kind = "cf_words", as = "code", words = [0x2f02222f, 0x00080c81, 0x
 rule.dn2 = { kind = "cf_words", as = "code", words = [0x2f02222f, 0x00080c81, 0x00000141, 0x55c04878, 0x000c2408, 0x7100c280, 0x2001e588, 0xed899280], offset = 0, len = 6 }
 mark = "D"
 users = ["core/services/lfo"]
-doc = "DT2 0x400da368, DN2 0x400dc154: the entry of the T1 range accessor (A0 = a 12-byte buffer, 4(SP) = the parameter code): it copies {min, max, default} of the code's T1 row (row + 8) to the buffer and returns it in d0. `move.l D2,-(SP); move.l 8(SP),D1` (6 bytes). 171 callers on DT2 (the live-set clamp FUN_4003b570 among them)."
+doc = "DT2 0x400da368, DN2 0x400dc154: the entry of the T1 range accessor (A0 = a 12-byte buffer, 4(SP) = the parameter code): it copies {min, max, default} of the code's T1 row (row + 8) to the buffer and returns it in d0. `move.l D2,-(SP); move.l 8(SP),D1` (6 bytes). 172 callers on DT2 (171 in the Ghidra database, one more found by refscan at 0x400c81be), 191 on DN2; the live-set clamp FUN_4003b570 is one of them."
 
 [[hook]]
 name = "cf.lfo.hook.wave_name"
@@ -320,4 +321,4 @@ regs = { in = ["a0"], clobbers = ["d0", "d1", "ccr"] }   # a0 is the buffer the 
 devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/services/lfo"]
-doc = "The T1 range accessor (UI task and others; the stock code has 171 callers on DT2): for the codes 79, 89 and 99 with a loaded shape the hook calls the stock accessor (`dk_stock_`), then raises the maximum in the buffer to the highest loaded wave number << 8. Any other code runs the displaced `move.l D2,-(SP); move.l 8(SP),D1` and the stock code. Dead after the site (strict): D2 (written), D0 and D1 (written before use: only D0b is read before `mvs.b`), and the flags."
+doc = "The T1 range accessor (the stock code has 172 callers on DT2, 191 on DN2; the hook does not run in interrupt context: it reads the status register first and runs the stock code when the interrupt mask is not 0): for the codes 79, 89 and 99 with a loaded shape the hook calls the stock accessor (`dk_stock_`), then raises the maximum in the buffer to the highest loaded wave number << 8 (finding 143, section Callers of the T1 range accessor: no caller scales a value onto 0..max; the clamps that MIDI CC and NRPN reach see the new maximum, a loaded shape is the only case that differs). Any other code runs the displaced `move.l D2,-(SP); move.l 8(SP),D1` and the stock code. Dead after the site (strict): D2 (written), D0 and D1 (written before use: only D0b is read before `mvs.b`), and the flags."

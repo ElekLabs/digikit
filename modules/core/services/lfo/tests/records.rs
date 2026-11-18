@@ -284,12 +284,45 @@ fn the_name_formatters_get_the_name_of_a_loaded_shape_and_stock_behaviour_otherw
     }
     load(&core, 2, KEY_B, b"SAW2");
     assert_eq!(name(8 << 8, 4).0, 4);
+    // wave 7 is now a gap below the highest loaded number (8): it prints dashes, four or three, and the tick plays TRI for it
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
+    let (n, buf) = name(7 << 8, 4);
+    assert_eq!((n, &buf[..6]), (4, &b"----\0\xaa"[..]), "a gap: dashes");
+    let (n, buf) = name(7 << 8, 3);
+    assert_eq!(
+        (n, &buf[..5]),
+        (3, &b"---\0\xaa"[..]),
+        "a gap on the short formatter"
+    );
+    // above the highest loaded number and below the range: stock "ERR" (no name)
+    assert_eq!(name(9 << 8, 4).0, 0);
+    assert_eq!(name(6 << 8, 4).0, 0);
+    unsafe { <Lfo as Service<FakeCore>>::remove(&core, 2) };
     assert_eq!(
         name(7 << 8, 4).0,
         0,
-        "an unloaded shape prints as stock again"
+        "no shape loaded: stock formatter again"
     );
+    assert_eq!(name(8 << 8, 4).0, 0);
+}
+
+#[test]
+fn a_name_shorter_than_the_width_returns_its_length_up_to_the_first_nul() {
+    let (_g, core) = fresh();
+    settle(&core, &[&[KEY_A, KEY_B]]);
+    load(&core, 1, KEY_A, b"AB\0\0");
+    let (n, buf) = name(7 << 8, 4);
+    assert_eq!(
+        (n, &buf[..4]),
+        (2, &b"AB\0\xaa"[..]),
+        "two characters, then the NUL"
+    );
+    // a NUL inside the width ends the name on the short formatter too, and the width still caps a longer name
+    load(&core, 2, KEY_B, b"X\0YZ");
+    let (n, buf) = name(8 << 8, 3);
+    assert_eq!((n, &buf[..3]), (1, &b"X\0\xaa"[..]));
+    let (n, buf) = name(7 << 8, 1);
+    assert_eq!((n, &buf[..3]), (1, &b"A\0\xaa"[..]), "width 1");
 }
 
 #[test]

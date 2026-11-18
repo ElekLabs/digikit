@@ -143,6 +143,10 @@ pub fn name_of(number: u32) -> Option<[u8; NAME_LEN]> {
 }
 
 /// The highest wave number a loaded shape has (0 when none is loaded).
+///
+/// Not read under the interrupt mask, and no torn read is possible: `owner` is one byte, and the only writers (`apply_record`, `remove`) change a whole entry under the interrupt
+/// mask, so a reader at task level sees each entry before or after a change, never half of one. A change that lands during the loop gives a number that held at some point
+/// of the call; the callers (the WAVE maximum and the name formatter, both in the UI task) tolerate that.
 pub fn highest() -> u32 {
     let t = unsafe { &*addr_of!(SHAPES) };
     let mut hi = 0;
@@ -162,8 +166,10 @@ pub fn wave_max() -> u32 {
     highest() << 8
 }
 
-/// Writes the name of the shape that the WAVE parameter value `value` (`wave << 8`; the stock formatter ignores the low byte) names, `width` characters at most, then a NUL, and
-/// returns the number of characters (0 when no module keeps that wave number: nothing is written and the stock formatter prints its "ERR"). `out` has room for `width + 1` bytes.
+/// Writes the name of the shape that the WAVE parameter value `value` (`wave << 8`; the stock formatter ignores the low byte) names, `width` characters at most (a name stops at
+/// its first NUL), then a NUL, and returns the number of characters. A wave number that no module keeps but that is at or below [`highest`] (a gap the sticky allocator can
+/// leave) gets `width` dashes ("----", "---" on the three-character formatter): the tick plays TRI for it, so the page says the number is empty. 0 when the number is above
+/// the highest loaded one: nothing is written and the stock formatter prints its "ERR". `out` has room for `width + 1` bytes.
 ///
 /// # Safety
 /// `out` is valid for `width + 1` bytes.
@@ -171,13 +177,18 @@ pub unsafe fn name_into(value: i32, out: *mut u8, width: usize) -> usize {
     let wave = (value >> 8) as u32;
     let name = match name_of(wave) {
         Some(n) => n,
-        None => return 0,
+        None => {
+            if wave < RANGE.lo || wave > highest() {
+                return 0;
+            }
+            [b'-'; NAME_LEN]
+        }
     };
-    let n = if width < NAME_LEN { width } else { NAME_LEN };
-    let mut i = 0;
-    while i < n {
-        *out.add(i) = name[i];
-        i += 1;
+    let cap = if width < NAME_LEN { width } else { NAME_LEN };
+    let mut n = 0;
+    while n < cap && name[n] != 0 {
+        *out.add(n) = name[n];
+        n += 1;
     }
     *out.add(n) = 0;
     n
