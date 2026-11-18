@@ -33,8 +33,15 @@ Header (0x40 bytes, big-endian, read from the first sector of the slot):
 Sample data starts at byte +0x40 of the slot (`FUN_401133ce`: `(offset + 0x40) >> 9` sectors, remainder `& 0x1ff`).
 
 There is no sample rate, bit depth, channel count or checksum field that MAIN reads. The format is fixed by use: 16-bit, mono, 48 kHz
-(manual 6.2.4; the peer converter runs at 48 kHz, finding 136). The byte order of the 16-bit words is **[O]**: MAIN copies the words
-unchanged to the peer, and the peer code was not read. The DT2 native sample is big-endian, and the Syntakt header words are big-endian too.
+(manual 6.2.4; the peer converter runs at 48 kHz, finding 136). The 16-bit words are **big-endian, signed** (the ColdFire native order), end to end **[D]**:
+`FUN_401133ce` reads whole sectors (`FUN_4010f612`) and copies the slot bytes with the plain word copy `FUN_4011613c`;
+`FUN_40082334` copies them again with `FUN_4011613c` into the upload buffer. No byte swap on the MAIN side. The peer (image `st-1.42-peer`, section 7)
+indexes the buffer in `FUN_40000d06` (0x40000d06): per slot it assembles the 4-byte length word big-endian (`b0 << 24 | b1 << 16 | b2 << 8 | b3`)
+and stores the table entry (length at `0x4404f754 + 8 * slot`, data pointer `0x4004f754 + offset` at `0x4404f758 + 8 * slot`). The voice setup
+at 0x400097dc (not a Ghidra function; it reads that table at 0x40009972) hands the pointer to `FUN_40006764` (0x40006764), the sample reader:
+it loads each sample with `mvs.w (0x0,A2,D5*0x2),D5` and `mvs.w (0x0,A2,A5*0x2),D7` (word load from the slot data, sign-extended, no `byterev`,
+no `swap`, no byte loads), then interpolates linearly with a 12-bit fraction. Big-endian words in the slot are therefore played as written;
+a little-endian WAV needs a byte swap on the host. The DT2 native sample is big-endian too, and the Syntakt header words are big-endian.
 What Elektron Transfer writes into +0x04 and +0x1C..+0x3F is **[O]**. The firmware stores whatever the host sends there; a host tool should zero them.
 
 MAIN keeps a RAM table of the 64 slots in the `MmcFs` object: entry `s` at `this + 0x12e28 + s * 0x18` = 0x14 bytes of name (NUL ended) and
@@ -56,7 +63,7 @@ or finds a length above `0x7ffc0` leaves the entry empty. Callbacks registered o
   The buffer ends at `0x4f84f2c0`, where the peer's section 7 buffer (`0x4f84f2c1`) starts: the 32 MiB `0x4d84f2c0..0x4f84f2c0` hold at most
   `5 + 64 * (4 + 0x7ffc0)` bytes. The progress bar uses `FUN_400829f4`.
 - No decimation, no truncation, no conversion. The full length goes to the peer.
-- Whether the peer rejects or mishandles a slot is **[O]** (peer code not read here).
+- Whether the peer rejects or mishandles a bad slot is **[O]** (only its sample read path was read, see section 1).
 
 ## 3. Readers and writers
 
