@@ -625,10 +625,13 @@ What:
    `sel_of_rec`) do not move.
 5. Progress mask in `unload_rec` (`torn` per record: fini done, undo done), so a second call after `E_BUSY` does not run `fini` or the
    service `undo` twice. The steps before `fini` already repeat safely. On a timeout the old module stays live, so nothing is released: the reload restores the old tick and leaves the DSP rows as they were. `release_range` needs a confirmed quiesce (`modules/core/runtime/src/rs/src/dsp/mod.rs:536`), and `dsp::release` latches `PH_RETAINED` for the session when `quiesce` fails (`dsp/mod.rs:540-541`), after which every later load sees `retained()` and returns `E_BUSY`. The reload timeout path never calls `release`.
-6. DSP wait: the in-flight counter for module SysEx commands, the span clock cleared under a mask, and a two-block wait. R12-8 gives no
-   voice stop and no block wait; unloading clears the voice rows, which cuts the voices, and the wait is new. `Platform::blocks` returns the
-   block count; the wait reports `E_BUSY` until two blocks passed (no spin); with no DSP clock (host tests) it is skipped. DSP instruction
-   cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
+6. Drain wait, before any step that frees or clears something (`Loader::reload_quiesce`): the tick stops (address kept), the module's SysEx commands answer
+   `E_BUSY` (`module_cmds::set_draining`), its sinks and the span clock are cleared under the interrupt mask, and the block count is noted. The in-flight counter
+   (`module_cmds::begin_cmd` / `end_cmd`, counted in the same masked step as the handler lookup) is the number of its commands that run on the MIDI task.
+   The step returns `E_BUSY` until that counter is 0 and `reload::DRAIN_BLOCKS` (2) blocks passed (`Platform::blocks`, no spinning; a platform with no block
+   clock skips the wait). R12-8 gives no voice stop and no block wait; unloading then clears the voice rows, which cuts the voices. Because nothing is freed
+   or cleared before the wait ends, `reload_abort` (a timeout) gives the old module its tick and commands back and leaves its DSP rows as they were; only its
+   sinks stay released. DSP instruction cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
 7. MISSING placeholder, written by `remove` in every unload path (reload, boot failure, take-down), for the numbers the module held. A kit
    names a type number, not a key. A gap row plays type 0's sound today, so the placeholder must be silent. DN2 sets `own_dsp = 1` (finding 33
    saw silence without fault). DT2: the placeholder is a voice row `{type, pc nonzero, word 10 = type}`. The dispatch
@@ -924,7 +927,7 @@ runtime-and-services.md.
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | done: PR #609 (device: runtime-refusal-tests on DT2 and DN2) |
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
-| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-3 done |
+| 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | active (branch e5/reload): commits 1-4 done |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |

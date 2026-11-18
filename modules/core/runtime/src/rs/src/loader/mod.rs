@@ -137,12 +137,16 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     torn: [u8; records::REC_MAX],
     /// The tick address of a module whose tick the teardown stopped (valid while `TORN_TICK` is set): a reload that cannot finish gives it back.
     saved_tick: [u32; MAX_MODULES],
+    /// The block count when a reload closed the entries of each module (`TORN_DRAIN`); `None`: the platform has no block clock.
+    drain_at: [Option<u32>; MAX_MODULES],
 }
 
 /// Bits of `Loader::torn`.
 const TORN_TICK: u8 = 1;
 const TORN_FINI: u8 = 2;
 const TORN_UNDO: u8 = 4;
+/// The entries of the module are closed and the wait of a reload has started (`drain_at`).
+const TORN_DRAIN: u8 = 8;
 
 /// The loader of the device.
 type Real = Loader<RealPlatform, RealImages, RealRegistry>;
@@ -201,6 +205,12 @@ pub unsafe fn reload_check(rec: usize, path: *const u8) -> i32 {
     let k = crate::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
     live_caps(&mut caps[..k]);
     loader().reload_check(rec, path, &caps[..k])
+}
+
+/// The first step of a reload's teardown (`Loader::reload_quiesce`): `OK` when nothing is inside the module any more, `E_BUSY` while the caller must ask again.
+#[allow(dead_code)] // the reload job calls it (E5 commit 8)
+pub unsafe fn reload_quiesce(rec: usize) -> i32 {
+    loader().reload_quiesce(rec)
 }
 
 /// A reload that cannot finish before the old code is gone: give the old module its tick back (`Loader::reload_abort`).
@@ -357,6 +367,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             sel_of_rec: [u8::MAX; MAX_MODULES],
             torn: [0; records::REC_MAX],
             saved_tick: [0; MAX_MODULES],
+            drain_at: [None; MAX_MODULES],
         }
     }
 
@@ -991,6 +1002,15 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         r
     }
 
+    /// Stop the tick of module record `rec` once; the address is kept for a reload that gives up.
+    unsafe fn stop_tick_once(&mut self, rec: usize) {
+        if self.torn[rec] & TORN_TICK == 0 {
+            self.saved_tick[rec] = crate::entry::tick_of(rec);
+            crate::entry::stop_tick(rec);
+            self.torn[rec] |= TORN_TICK;
+        }
+    }
+
     /// The one lifecycle of a loaded record, for modules and services (docs/plans/digikit-hot-reload.md, "Quiesce and unload protocol"): stop what calls into it (the tick
     /// of a module; the hook sites and slots of a service), drain the DSP, `fini`, the role's undo, the registry, the DSP range, the memory.
     unsafe fn unload_rec_inner(&mut self, rec: usize) -> i32 {
@@ -1005,11 +1025,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let m: &mut Module = records::module(rec);
         if module {
             // 1. clear the tick (one aligned store) so no new call starts; the UI task, where it runs, is this task. The address is kept for a reload that gives up.
-            if self.torn[rec] & TORN_TICK == 0 {
-                self.saved_tick[rec] = crate::entry::tick_of(rec);
-                crate::entry::stop_tick(rec);
-                self.torn[rec] |= TORN_TICK;
-            }
+            self.stop_tick_once(rec);
         } else if !self.uninstall(rec) {
             // 1. a service: nothing may jump into it any more (hook sites back to stock, slots zero)
             return E_BUSY;
@@ -1124,6 +1140,28 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         OK
     }
 
+    /// The first step of a reload's teardown, called once per pass until it returns `OK`: close every way into the module's code, then wait until nothing is inside.
+    /// The tick stops; its SysEx commands answer `E_BUSY` from now on; its sinks, with the span clock, are cleared (under the interrupt mask); the block count is
+    /// noted. It returns `E_BUSY` until no command of the module is in flight and `DRAIN_BLOCKS` blocks have passed (no spinning: the next UI pass asks again).
+    /// Nothing is freed and no DSP row is touched, so `reload_abort` can still give the module back its tick and commands. `E_NOT_FOUND`: no such module.
+    pub unsafe fn reload_quiesce(&mut self, rec: usize) -> i32 {
+        if rec >= MAX_MODULES || records::module(rec).used == 0 {
+            return E_NOT_FOUND;
+        }
+        let owner = rec as u8 + 1;
+        if self.torn[rec] & TORN_DRAIN == 0 {
+            self.stop_tick_once(rec);
+            crate::module_cmds::set_draining(owner, true);
+            crate::dlog::release_sinks(rec);
+            self.drain_at[rec] = self.p.blocks();
+            self.torn[rec] |= TORN_DRAIN;
+        }
+        if crate::module_cmds::in_flight(owner) != 0 || !crate::reload::drained(&self.p, self.drain_at[rec]) {
+            return E_BUSY;
+        }
+        OK
+    }
+
     /// The teardown of a reload cannot go on (the DSP did not drain in time): if `fini` has not run, the old module gets its tick back and the reload ends with
     /// the old module live. `false` when the old code is gone (`fini` ran): the caller finishes the teardown.
     pub unsafe fn reload_abort(&mut self, rec: usize) -> bool {
@@ -1132,8 +1170,9 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         if self.torn[rec] & TORN_TICK != 0 {
             crate::entry::publish_tick(rec, self.saved_tick[rec]);
-            self.torn[rec] = 0;
         }
+        crate::module_cmds::set_draining(rec as u8 + 1, false);
+        self.torn[rec] = 0;
         true
     }
 

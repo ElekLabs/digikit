@@ -1398,7 +1398,7 @@ fn settle_hands_the_services_the_keys_of_accepted_modules_only() {
 fn keys_of_gives_the_keys_of_a_kind_for_an_accepted_module_only() {
     use dkneeds::keys::{write_table, KeyGroup, Table};
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let (shapes, machines) = ([0x300u32, 0x400, 0x500], [0x100u32]);
+    let (shapes, machines) = ([0x380u32, 0x400, 0x500], [0x100u32]);
     let t = Table {
         keys: &[
             KeyGroup { kind: dkneeds::KIND_MACHINE, keys: &machines },
@@ -1596,5 +1596,88 @@ fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
         assert_eq!(l.load(PATH.as_ptr()), E_BOOT_ONLY);
         assert_eq!(l.unload_rec(0), OK);
         assert_eq!(l.reload_load(MAX_MODULES, PATH.as_ptr()), E_NOT_FOUND, "a provider record is not reloaded");
+    }
+}
+
+#[test]
+fn a_reload_waits_for_commands_in_flight_and_two_blocks_after_it_closed_the_entries() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        let base = st().modules[0].base;
+        l.p.clock.set(Some(100));
+        crate::module_cmds::test_set_in_flight(1, 1);
+        // the first call closes the entries: the tick stops, the commands of the module are refused, and it waits
+        assert_eq!(l.reload_quiesce(0), E_BUSY);
+        assert_eq!(crate::entry::tick_of(0), 0);
+        // blocks pass, but a command of the module is still in flight
+        l.p.clock.set(Some(105));
+        assert_eq!(l.reload_quiesce(0), E_BUSY);
+        crate::module_cmds::test_set_in_flight(1, 0);
+        // the command returned: one block since the entries were closed is not enough, two are
+        l.p.clock.set(Some(101));
+        assert_eq!(l.reload_quiesce(0), E_BUSY);
+        l.p.clock.set(Some(102));
+        assert_eq!(l.reload_quiesce(0), OK);
+        // nothing was freed and no row touched: the old module is whole
+        assert_eq!((st().modules[0].used, l.m.live.len()), (1, 1));
+        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..)) || *e == Ev::Free(base)));
+        // the teardown that follows finishes the record and clears the mask
+        assert_eq!(l.unload_rec(0), OK);
+        assert_eq!(l.torn[0], 0);
+    }
+}
+
+#[test]
+fn the_block_wait_survives_a_counter_wrap_and_a_platform_without_a_clock_waits_for_nothing() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        l.p.clock.set(Some(u32::MAX));
+        assert_eq!(l.reload_quiesce(0), E_BUSY);
+        l.p.clock.set(Some(0));
+        assert_eq!(l.reload_quiesce(0), E_BUSY, "one block");
+        l.p.clock.set(Some(1));
+        assert_eq!(l.reload_quiesce(0), OK, "two blocks, over the wrap");
+        assert!(l.reload_abort(0));
+        // no block clock: the entries close and the wait is over at once
+        l.p.clock.set(None);
+        assert_eq!(l.reload_quiesce(0), OK);
+    }
+}
+
+unsafe extern "C" fn noop_cmd(_: u32, _: u32, _: *const u8, _: u32, _: *mut u8) -> i32 {
+    0
+}
+
+#[test]
+fn an_aborted_reload_gives_back_the_tick_and_the_commands_and_the_sinks_stay_released() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        let base = st().modules[0].base;
+        // module `a` (source 1) owns the span sink
+        crate::dlog::test_reset_sinks();
+        let prev = crate::dlog::enter_module(0, crate::dlog::PHASE_CALLBACK);
+        assert_eq!(crate::dlog::dk_sink_set(crate::dlog::SINK_SPAN, 0x1000 as *mut u8), OK);
+        crate::dlog::leave_module(prev);
+        assert!(crate::dlog::sink_on(crate::dlog::SINK_SPAN));
+        l.p.clock.set(Some(0));
+        assert_eq!(l.reload_quiesce(0), E_BUSY);
+        assert!(!crate::dlog::sink_on(crate::dlog::SINK_SPAN), "the sink is cleared under the mask when the entries close");
+        // a command of the module is refused while it drains, and runs again after the abort
+        let prev = crate::dlog::enter_module(0, crate::dlog::PHASE_CALLBACK);
+        assert_eq!(crate::module_cmds::host_register(0x38, 1, Some(noop_cmd)), OK);
+        crate::dlog::leave_module(prev);
+        assert!(crate::module_cmds::begin_cmd(0x38).is_err());
+        assert!(l.reload_abort(0));
+        assert_eq!(crate::entry::tick_of(0), base + 8);
+        let (h, owner) = crate::module_cmds::begin_cmd(0x38).unwrap().expect("registered");
+        let _ = h;
+        assert_eq!((owner, crate::module_cmds::in_flight(1)), (1, 1), "counted while it runs");
+        crate::module_cmds::end_cmd(owner);
+        assert_eq!(crate::module_cmds::in_flight(1), 0);
+        crate::module_cmds::release_cmds(1);
+        crate::dlog::test_reset_sinks();
     }
 }

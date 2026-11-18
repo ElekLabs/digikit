@@ -1,8 +1,18 @@
 //! Reload of a content module (docs/plans/extension-model.md E5): what the runtime holds once for every kind of module. This file has the refusal order;
 //! the job, the loader steps and the DSP wait follow in the other files of E5. Per-kind work sits behind the `Service` trait, never in here.
 
-use dkrt_abi::platform::Platform;
+use dkrt_abi::platform::{blocks_since, Platform};
 use dkrt_sdk::*;
+
+/// DSP blocks the reload waits after it closed every way into the module's code (its tick, its commands, its sinks): the tasks that were inside have
+/// returned and a DSP block that read its rows has ended. The block clock runs about 1500 times a second.
+pub const DRAIN_BLOCKS: u32 = 2;
+
+/// Have `DRAIN_BLOCKS` blocks passed since `start` (the block count when the entries were closed)? A platform with no block clock (a device without a DSP,
+/// the host tests) has nothing to wait for: always true.
+pub fn drained<P: Platform>(p: &P, start: Option<u32>) -> bool {
+    blocks_since(p, start).is_none_or(|n| n >= DRAIN_BLOCKS)
+}
 
 /// What the caller knows about the system when a reload is asked for. Each field is read where it lives (the loader, the card, the module's
 /// records); `refusal` only puts the answers in order.
