@@ -937,7 +937,7 @@ runtime-and-services.md.
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
 | 9 | E7 filter machines | E0a, E0b, E3, E4, E5, E6c, R12-8, port file | filter test plus subset | todo |
 | 10 | E8 regroup and names (class per module, `fixes/`, shared `dyndsp`, requires edges, patch-set lists; 6-8 h) | E1, open branches merged | full run of its batch | todo |
-| 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | todo |
+| 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | active: PR1 on branch pf/pr1-patchkit |
 | 11 | Port file step 3: adapter routines in the port file (lfo, then fx, then machines) | E8, port file stack | the device subset in port-file.md section 12 | todo |
 
 E1, E2, E3 share one subset gate. E0 runs in parallel with E1-E3. When an item starts, its status becomes `active` with the branch; when it lands, `done` with the PR, set in that PR.
