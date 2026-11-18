@@ -8,7 +8,7 @@ type = "framework"
 author = "digikit"
 status = "experimental"
 summary = "Unpacks the second ColdFire CPU's program in MAIN before it is streamed, so that the Syntakt image can store it packed and stay under the OS upgrade size limit"
-requires = ["core/runtime"]
+requires = []
 conflicts = []
 ports = ["st-1.42"]
 

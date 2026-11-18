@@ -10,6 +10,7 @@ import {
   groups,
   imageFileName,
   judge,
+  leavesRuntime,
   matchView,
   modelOfPort,
   progressView,
@@ -234,4 +235,11 @@ test('the RPC progress reads in megabytes, and says when the device checks and f
     progressView({ ...s, checking: true, flashing: true }).text,
     'the device checked the image ✓ · flashing, do not unplug',
   );
+});
+
+test('only a patch with the runtime leaves a runtime to bind services to and to install default modules on', () => {
+  assert.equal(leavesRuntime(prepared()), true);
+  // a patch without the runtime has no image id to report (the Syntakt's first flash: core/peer-image only)
+  assert.equal(leavesRuntime(prepared({ imageId: null })), false);
+  assert.equal(leavesRuntime(prepared({ restore: true, imageId: null, runtime: null })), false);
 });

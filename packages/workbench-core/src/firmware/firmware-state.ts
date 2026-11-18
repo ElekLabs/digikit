@@ -14,6 +14,7 @@ import {
   deviceNameOf,
   imageFileName,
   isDeviceId,
+  leavesRuntime,
   modelOfPort,
   progressView,
   refusalText,
@@ -239,8 +240,10 @@ export function createFirmwareState({
         detail: final.message,
       });
     else if (final.phase === 'failed') log({ level: 'error', text: `${what} failed: ${final.message}` });
+    // a patch without the runtime (`imageId` is null: the runtime's INFO has nothing to report) leaves no runtime to bind services to or to install modules on
+    const followUp = leavesRuntime(p);
     // the flash is done: the services and port files on the card are replaced for the new runtime and the unused ones go (the same code on the desktop and the site)
-    if (final.phase === 'done' && !p.restore) {
+    if (final.phase === 'done' && followUp) {
       try {
         const replaced = await transfer.backend.refreshServices(p.device, () => {});
         if (replaced.length) log({ level: 'info', text: `services replaced: ${replaced.join(', ')}` });
@@ -252,7 +255,7 @@ export function createFirmwareState({
       }
     }
     // the flash is done and the runtime answered: the default modules follow in the same run (the flash stays done when one fails)
-    if (final.phase === 'done' && !p.restore) await defaults.installAfterFlash(p.device);
+    if (final.phase === 'done' && followUp) await defaults.installAfterFlash(p.device);
   }
 
   function cancelFlash(): void {

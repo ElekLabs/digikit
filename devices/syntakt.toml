@@ -1,5 +1,5 @@
 # Syntakt. Identity level (docs/design/device-data.md "Device levels") plus what the emulator needs: a panel and the free-running timers.
-# [patch] is for the static dry run of P3 (a patched image is built and checked, never flashed or run). No [digikit] or [acceptance] yet.
+# Hardware: [patch_sets] `device` (step A, core/peer-image only) and `device-full` (step B) are the two flashes of a first Syntakt; no [acceptance] yet.
 # Plan: docs/plans/syntakt.md; findings 70 and 136.
 #
 # The CPUs are ColdFire only. Sections 1 (FPGA bitstream), 6 and 7 (the peer CPU) are never written, and the FPGA is never modelled
@@ -169,10 +169,17 @@ send_slots = 0
 param_rows = 0
 page_rows = 0
 
-# Module sets patched in by name (the Digitone II file explains them). `emulator`: the runtime (with core/expansion, which it requires) and the core
-# modules that have a Syntakt port: core/ui, core/digikit-menu (the SETTINGS > DIGIKIT menu), core/health, core/input and core/peer-image (stores the peer CPU's section 7 packed and unpacks it in MAIN: the image is over the container limit without it). The DSP, run-time machine and
-# effect modules have none (no DSP). There is no `device` set: nothing is flashed to a Syntakt until the emulator proof is complete.
+# Module sets patched in by name (the Digitone II file explains them). Hardware: the first flash of a Syntakt is in two steps, each a
+# `patchkit flash STOCK.syx --port NAME --set SET` (docs/PATCHING.md "Flashing a Syntakt").
+#   `device` (step A): core/peer-image only (core/expansion comes with it). It stores the peer CPU's section 7 packed and unpacks it in MAIN
+#     (the stock image is already 32 KB over the container limit with the runtime, and the image must stay under it); no runtime, no menu, no run-time
+#     modules. The workbench Firmware page flashes this set.
+#   `device-full` (step B): the runtime and every core module that has a Syntakt port (the same modules as `emulator`).
+# `emulator`: what the emulator patches in itself. The DSP, run-time machine and effect modules have no Syntakt port (no DSP). There is no
+# `device-introblank`: the boot screen module has no Syntakt port.
 [patch_sets]
+device = ["core/peer-image"]
+device-full = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
 emulator = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
 
 # Where the card keeps things (finding 138 "Storage"; sectors are 512 bytes). Read by packages/emulator/device-profile and used by the +Drive builder,

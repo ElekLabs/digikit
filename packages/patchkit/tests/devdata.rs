@@ -591,6 +591,11 @@ fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
         for (set, roots) in &dev.patch_sets {
             let (mut all, _) = lib.with_requires(roots).unwrap();
             all.sort();
+            // a Syntakt's first hardware step (`device`) is the peer image alone: no runtime, menu or panel module
+            if set == "device" {
+                assert_eq!(all, ["core/peer-image"], "{} set {set}", dev.short);
+                continue;
+            }
             assert_eq!(
                 all,
                 [

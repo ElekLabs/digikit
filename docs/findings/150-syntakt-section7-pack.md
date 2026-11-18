@@ -145,6 +145,10 @@ Not covered: a read of the NOR directory by a computed id. All four call sites p
   no bytes and MAIN shows its boot failure screen ("OOPS! SOMETHING WENT WRONG, SWITCH OFF/ON TO BOOT AGAIN." in the emulator). The SHA-256 is carried in the adapter (rolled, 16-word schedule, 1.2 KB of code and tables); the stock MAIN has none
   (finding 146) and the runtime's `sha256` is not reachable from an adapter under the layer rules.
 
+- **Hardware sets.** `devices/syntakt.toml` `[patch_sets]`: `device` = `core/peer-image` only (step A, container 1,882,784 bytes, no runtime: the adapter no longer
+  requires `core/runtime`) and `device-full` = the `emulator` modules (step B, 2,011,472 bytes). Both pass `patchkit preflight`. The workbench skips the service
+  refresh and the default modules after a flash whose image has no runtime. How to flash: [PATCHING.md](../PATCHING.md) "Flashing a Syntakt, in two steps".
+
 ## 7. Emulator proof [D]
 
 Three headless boots with `panel_drive` (`packages/emulator/boot/examples/panel_drive.rs`, the device's default second-CPU model `peer = "coldfire"`, which runs

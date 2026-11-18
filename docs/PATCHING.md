@@ -542,6 +542,10 @@ patchkit stores a `DKPR` record in the image: format version, the SHA-256 of the
 `id@version`. It lives in `cf.expansion` when the patch uses it, otherwise in an appended DSP block. `inspect` and
 `verify` read it, and a patched image is never patched again. Nothing on the device reads it.
 
+An optional `RPK1` block follows the padded module list (format version 1 stays): one entry per read-only section that a module stores packed
+([Repacking](#repacking-a-read-only-section)), with the role, the claiming module and its layout (`dest`, `stage_end`) and the stock section's length and
+SHA-256. A reader that stops after the module list does not see it, and a record without it decodes with no entries (`record.rs`).
+
 ### Repacking a read-only section
 
 A section of `[container] readonly` is never changed. A device file may also list roles in `[container] repack` (the Syntakt: `repack = ["cf2"]`, the second
@@ -566,10 +570,11 @@ patchkit stores the section packed (`pack_section`) only when a module of the se
   (output bytes written at or past the stream's start). A margin of 0 or less means that the output would overwrite stream bytes that are not read yet.
   `tools.firmware.aplibpack.inplace_margin` is the reference. For the Syntakt section 7 it is 9,444 bytes.
 
-`verify --base` and the `image_report` tool accept the repacked section when it decodes to the stock bytes. With the module library (the `verify` command, and `apply`
-for an image with a record) `verify` also needs a module of the patch record that claims the role, and rechecks what the hook relies on: the stream header length and
-byte sum, that the stream fits `stage_end - dest`, and an in-place margin above 0 against that module's layout. Without a library only the header and byte sum are checked
-and the check list says so. The first user is `core/peer-image`
+`verify --base` and the `image_report` tool accept the repacked section when it decodes to the stock bytes. `verify` needs the patch record's `RPK1` entry for every packed repackable
+section and rechecks from it what the hook relies on: the stream header length and byte sum, that the decoded section is the stock one the entry names (length and
+SHA-256), that the stream fits `stage_end - dest`, and an in-place margin above 0. The entry's module must be a module of the record. This needs no module
+manifest, so `flash`, `preflight` and the wasm callers check it; with the library (the `verify` command, `apply`) the module's own `[[repack]]` must declare the same.
+A packed section without an entry is refused. The first user is `core/peer-image`
 ([README](../modules/core/adapters/peer-image/README.md), [finding 150](findings/150-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
 32,672 bytes over `container_max`; with it the container is 2,011,488 bytes.
 
@@ -610,6 +615,32 @@ STARTUP menu over a MAIN OS that faults at reset, accepts patchkit images, rejec
 itself for a 1.16 or 1.17 image (finding 01, spike 0.2). Patched images boot to the main screen with DSP audio
 (DT2 1.17, DN2 1.12), the smoke matrix passes, and the module proofs measure the sound. None of this is a
 hardware result.
+
+### Flashing a Syntakt, in two steps
+
+A Syntakt has two hardware sets in `devices/syntakt.toml` (`[patch_sets]`); the image of each is under the 2 MiB `container_max` only because
+`core/peer-image` stores section 7 packed ([finding 150](findings/150-syntakt-section7-pack.md)). Neither has run on a unit yet; the emulator proof is in the finding.
+
+| Step | Set | Modules | Container (OS 1.42) |
+|---|---|---|---|
+| A | `device` | `core/peer-image` (and `core/expansion`, which it needs); no runtime, no menu | 1,882,784 bytes |
+| B | `device-full` | the runtime and every core module with a Syntakt port (the same modules as `emulator`) | 2,011,472 bytes |
+
+Step A changes MAIN only at the peer thread's NOR read and the reset-path loader, and section 7 is stored packed: it shows whether the unit boots and the second CPU
+loads the unpacked program. Flash B after A works. Before either: **back up the +Drive card**, keep `Syntakt_OS1.42.syx`, and do not use Transfer to put samples or
+sounds into the stock slots until the Data API guard exists (plan: docs/plans/syntakt.md). Recovery is the section above: hold FUNC at power-on, TRIG 4 (OS UPGRADE),
+the stock file over 5-pin MIDI DIN.
+
+```sh
+# step A: the workbench Firmware page flashes the `device` set; or from the command line
+patchkit flash firmware/Syntakt_OS1.42.syx --port "Syntakt" --set device
+# step B: only the command line flashes `device-full`
+patchkit flash firmware/Syntakt_OS1.42.syx --port "Syntakt" --set device-full
+patchkit flash STOCK.syx --port NAME --set device --dry-run --save OUT.syx   # patch and check only; then `patchkit preflight OUT.syx`
+```
+
+After a step-A flash the workbench does not look for a runtime: a patch without the runtime has no image id, so it skips binding services and installing the
+default modules (`leavesRuntime` in `firmware-core.ts`). After step B they follow as on the other devices.
 
 ### Recovery
 

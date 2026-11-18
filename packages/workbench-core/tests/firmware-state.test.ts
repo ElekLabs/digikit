@@ -2,23 +2,34 @@
 // refused before patchkit is asked.
 import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
-import { registry } from '../src/data/device-profiles.ts';
 import { createFirmwareState } from '../src/firmware/firmware-state.ts';
 import { memoryKeyValue } from '../src/storage.ts';
 import { createDefaultModules } from '../src/firmware/default-modules-state.ts';
 import type { FirmwareEnv } from '../src/firmware/env.ts';
 import type { TransferApp } from '../src/transfer/app.ts';
 
-const emulatorOnly = registry.devices.find((d) => !d.patchSets.device && d.firmware.length > 0);
-
-// the bytes are not a real image: the hash stands for the registry's firmware row of the device the test sets
-const hashed = vi.hoisted(() => ({ sha: undefined as string | undefined }));
-vi.mock('../src/runtime/local-inputs.ts', () => ({ sha256Hex: async () => hashed.sha ?? '' }));
-hashed.sha = emulatorOnly?.firmware[0]?.sha256;
+// a device that has no `device` patch set (the registry's own devices all have one now): the registry and the file identity answer for it
+const noHardware = vi.hoisted(() => ({
+  id: 'nohw',
+  record: { id: 'nohw', name: 'Nohardware', patchSets: {} as Record<string, string[]>, firmware: [] },
+}));
+vi.mock('../src/patch/identify.ts', () => ({ identify: () => ({ device: noHardware.id }) }));
+vi.mock('../src/data/device-profiles.ts', async (importOriginal) => {
+  const m = await importOriginal<typeof import('../src/data/device-profiles.ts')>();
+  const registry = new Proxy(m.registry, {
+    get(target, key) {
+      if (key === 'get') return (id: string) => (id === noHardware.id ? noHardware.record : target.get(id));
+      const v = Reflect.get(target, key) as unknown;
+      return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+    },
+  });
+  return { ...m, registry };
+});
+vi.mock('../src/runtime/local-inputs.ts', () => ({ sha256Hex: async () => '0'.repeat(64) }));
+const emulatorOnly = noHardware.record;
 
 test('a file of a device without a hardware image gives the error and patchkit is not asked', async () => {
-  assert.ok(emulatorOnly, 'the registry has a device without a device patch set');
-  const prepare = vi.fn();
+    const prepare = vi.fn();
   const env = { log: () => {}, prepare } as unknown as FirmwareEnv;
   const transfer = {
     target: { target: () => ({ kind: 'emulator' }) },

@@ -230,4 +230,13 @@ Order: runtime safety items first, then the Nx cache gap, speed, restructure, de
 ### Later
 
 - Syntakt machines need a peer-ColdFire module contract (not SHARC). Not planned.
-- Hardware flashing.
+- Hardware flashing beyond the two steps below.
+
+### Hardware flashing, prepared (2026-11-19)
+
+Two images, built and preflighted on the host, emulator-proved for section 7 ([finding 150](../findings/150-syntakt-section7-pack.md)); never flashed:
+
+- [ ] Step A: `patchkit flash firmware/Syntakt_OS1.42.syx --port NAME --set device` (or the workbench Firmware page): `core/peer-image` only, no runtime.
+- [ ] Step B: `patchkit flash ... --set device-full`: the runtime and the core modules of the `emulator` set.
+- Before: back up the +Drive card; do not use Transfer to put samples or sounds into the stock slots until the Data API write guard (above) lands.
+- Recovery: hold FUNC at power-on, TRIG 4 (OS UPGRADE), send the stock file over 5-pin MIDI DIN ([PATCHING.md](../PATCHING.md) "Flashing a Syntakt, in two steps").
