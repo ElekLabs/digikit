@@ -25,22 +25,20 @@ from collections.abc import Callable
 
 from tools.emulator import emulator_config
 from tools.firmware import config
+from tools.firmware import device as device_files
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-# The DN2 ready-inputs directory: ready_dir in tools/emulator/ready_inputs.json (shared
-# with the JS tools), overridden by DIGI_EMU_READY_DIR.
-_READY_JSON = json.loads(
-    (ROOT / "tools" / "emulator" / "ready_inputs.json").read_text()
-)
+# The ready-inputs directory of each device: `[acceptance] ready_dir` of its device file (the one source;
+# tools/patchkit/pk_harness.py, packages/test-support/src/inputs.ts and tools/nx/device-inputs.mjs read the
+# same key). The DN2 one is overridden by DIGI_EMU_READY_DIR.
 # The raw repo-relative ready directories, without env overrides.
-# tools/patchkit/pk_harness.py, packages/test-support/src/inputs.ts and
-# tools/nx/device-inputs.mjs use these same paths.
 READY_JSON_DIRS: dict[str, str] = {
-    "dn2": _READY_JSON["ready_dir"],
-    **_READY_JSON.get("ready_dirs", {}),
+    d.short: d.acceptance["ready_dir"]
+    for d in device_files.load_all()
+    if d.acceptance.get("ready_dir")
 }
 READY = ROOT / (os.environ.get("DIGI_EMU_READY_DIR") or READY_JSON_DIRS["dn2"])
-# The ready directory of the other devices (`ready_dirs` in the same file),
+# The ready directory of the other devices,
 # overridden per device by DIGI_EMU_READY_DIR_<DEVICE> (DIGI_EMU_READY_DIR_DT2).
 READY_DIRS = {
     "dn2": READY,

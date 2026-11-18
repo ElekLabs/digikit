@@ -371,6 +371,9 @@ importers:
       '@digi/workbench-core':
         specifier: workspace:*
         version: link:../workbench-core
+      smol-toml:
+        specifier: 1.9.0
+        version: 1.9.0
     devDependencies:
       '@types/node':
         specifier: 22.15.0

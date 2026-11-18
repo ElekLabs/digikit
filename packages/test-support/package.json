@@ -15,7 +15,8 @@
   "dependencies": {
     "@digi/control-client": "workspace:*",
     "@digi/dk-session": "workspace:*",
-    "@digi/workbench-core": "workspace:*"
+    "@digi/workbench-core": "workspace:*",
+    "smol-toml": "1.9.0"
   },
   "devDependencies": {
     "@types/node": "22.15.0",

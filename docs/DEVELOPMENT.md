@@ -59,7 +59,7 @@ mise run emu:ready -- dn2                     # Digitone II 1.12 (about 2 minute
 mise run emu:ready -- dt2 [--card-image IMG]  # Digitakt II 1.17, optionally with a +Drive image
 ```
 
-It needs the shared core (`mise run gen:core`). The files go to the directories in `tools/emulator/ready_inputs.json`
+It needs the shared core (`mise run gen:core`). The files go to the `[acceptance] ready_dir` directories of the device files (`devices/*.toml`)
 (`out/snapshots/<device>-audio-ready-cold-*`), where the patchkit harness and the device tests read them. Git ignores them.
 
 ## Desktop emulator

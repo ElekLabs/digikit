@@ -64,6 +64,22 @@ stream_id = 0x11
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`; the section's destination word, finding 70).
 main_dest = 0x40000400
 
+# Address windows that only the firmware and core/* drive: the packer refuses a content module that holds a 32-bit address in one of them
+# (docs/design/module-sdk.md "Modules never touch hardware"; packages/patchkit/src/protect.rs). Each window is [lo, hi), hi exclusive.
+# Evidence: docs/findings/141-syntakt-analog-and-nor-paths.md **[D]**: FlexBus CS0 at 0x10000000 (128 KiB, the peer link), FlexBus CS1 at 0
+# (128 KiB, PCB revision; a window at 0 is checked against absolute-symbol relocations only, not against literals), the FlexBus registers,
+# the SPI NOR flash controller (DSPI 0xFC05C000), DSPI 0xFC03C000 (frame bus and FPGA load), DSPI2 0xEC038000 (peer image stream) and the GPIO block 0xEC094000-0xEC0940FF.
+[protect]
+windows = [
+  [0x00000000, 0x00020000],
+  [0x10000000, 0x10020000],
+  [0xFC008000, 0xFC009000],
+  [0xFC05C000, 0xFC05D000],
+  [0xFC03C000, 0xFC03D000],
+  [0xEC038000, 0xEC039000],
+  [0xEC094000, 0xEC094100],
+]
+
 # Board and CPU facts the digikit runtime uses (docs/design/device-data.md; findings 137 and 138 give the evidence, all **[D]** static). The runtime reads
 # them from its device object `dkrt_dev`. There is no DSP, so no dsp_* facts and no run-time machines (no `[digikit] dsp_*`). The module store
 # is the Digitone II's (`[card.store]` below; finding 138 "Storage").

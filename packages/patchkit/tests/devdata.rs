@@ -579,10 +579,11 @@ const RT021_MODULES: [&str; 10] = [
 ];
 
 #[test]
-fn a_device_without_a_dsp_patches_the_runtime_and_what_it_stands_on_alone() {
+fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
+    // the runtime, what it stands on, the DIGIKIT menu (core/digikit-menu on core/ui) and the panel modules; no DSP, machine or effect module
     for dev in devdata::all()
         .iter()
         .filter(|d| !d.patch_sets.is_empty() && d.identity.capabilities.dsp == "none")
@@ -592,7 +593,15 @@ fn a_device_without_a_dsp_patches_the_runtime_and_what_it_stands_on_alone() {
             all.sort();
             assert_eq!(
                 all,
-                ["core/expansion", "core/platform", "core/runtime"],
+                [
+                    "core/digikit-menu",
+                    "core/expansion",
+                    "core/health",
+                    "core/input",
+                    "core/platform",
+                    "core/runtime",
+                    "core/ui"
+                ],
                 "{} set {set}",
                 dev.short
             );
@@ -605,8 +614,8 @@ fn the_patch_sets_are_the_rt021_flash_modules() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    // the sets of a device with a DSP are the DSP machine and effect modules below; a device without one (its set is the runtime alone) is
-    // checked by `a_device_without_a_dsp_patches_the_runtime_alone`
+    // the sets of a device with a DSP are the DSP machine and effect modules below; a device without one (the runtime, menu and panel modules) is
+    // checked by `a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only`
     for dev in devdata::all()
         .iter()
         .filter(|d| !d.patch_sets.is_empty() && d.identity.capabilities.dsp == "sharc")

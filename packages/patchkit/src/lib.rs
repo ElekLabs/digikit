@@ -51,6 +51,7 @@ pub mod pack;
 pub mod port;
 pub mod preflight;
 pub mod prim;
+pub mod protect;
 pub mod record;
 pub mod records_cli;
 pub mod register;

@@ -3,13 +3,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import solid from '@astrojs/solid-js';
+import { readyDirs } from '../../tools/nx/ready-dirs.mjs';
 import { SHOW_EMULATOR } from './site.config.mjs';
 
 // Dev-only (`apply: 'serve'`): these files are firmware-derived and are never part of a build.
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
-const readyDir =
-  process.env.DIGI_EMU_READY_DIR ||
-  JSON.parse(fs.readFileSync(path.join(repoRoot, 'tools', 'emulator', 'ready_inputs.json'), 'utf8')).ready_dir;
+const readyDir = process.env.DIGI_EMU_READY_DIR || readyDirs.dn2;
 const localDir = path.resolve(repoRoot, readyDir);
 const localFiles = {
   'dsp-image': process.env.DIGI_EMU_DSP_IMAGE || path.join(localDir, 'digi-audio-dn2-image.bin'),

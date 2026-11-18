@@ -219,7 +219,7 @@
   },
   "DIGI_EMU_READY_DIR": {
    "owner": "python:tools/devtools",
-   "purpose": "Directory of the DN2 ready inputs (overrides ready_dir in tools/emulator/ready_inputs.json)"
+   "purpose": "Directory of the DN2 ready inputs (overrides `[acceptance] ready_dir` of devices/digitone-ii.toml)"
   },
   "DIGI_EMU_SECOND_CORE": {
    "owner": "python:tests/emulator",

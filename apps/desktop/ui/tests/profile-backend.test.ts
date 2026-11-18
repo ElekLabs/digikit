@@ -8,7 +8,7 @@ import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import type { EmuRpc } from '@digi/workbench-core/host/host.ts';
 import { ownerName } from '@digi/workbench-core/profile/profile-core.ts';
 import type { LibraryModule } from '@digi/workbench-core/modules/dktransfer.ts';
-import { createRecorder, isDebugMissing, type ProfileSession } from '../src/profile-backend.ts';
+import { cfView, createRecorder, isDebugMissing, type ProfileSession } from '../src/profile-backend.ts';
 
 /** A device of the registry without a DSP (its profile has no sharc.profile). */
 const noDsp = registry.devices.find((d) => d.capabilities.dsp !== 'sharc')!;
@@ -297,6 +297,73 @@ describe('the emulator', () => {
     const r = await rec.read();
     assert.ok(!r.noDebug);
     if (!r.noDebug) assert.match(r.note ?? '', /cf\.profile and sharc\.profile not available/);
+  });
+
+  test('the ColdFire view gives shares per path and the heaviest PCs, named by the address lookup, else bare', async () => {
+    const st = state({ running: true, elapsed: 10n });
+    const asked: number[] = [];
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], {
+        'cf.profile': {
+          pc_samples: [
+            ['0x40101000', 30],
+            ['0x40200000', 10],
+            ['0x40300000', 60],
+          ],
+          paths: [
+            { path: 'run_fast', instructions: 900, calls: 5, host_ns: 600 },
+            { path: 'idle_skip', instructions: 100, calls: 2, host_ns: 200 },
+          ],
+        },
+        'sharc.profile': sharcAnswer,
+      }),
+      loadLibrary: library,
+      prof: async () =>
+        ({
+          addrLookup: (req: { addrs: { addr: number }[] }) => {
+            asked.push(...req.addrs.map((a) => a.addr));
+            return { unloaded: [], results: req.addrs.map((a) => ({ text: a.addr === 0x40101000 ? 'tick' : null })) };
+          },
+        }) as never,
+      names: { inputs: () => ({ maps: [], loads: { modules: [] } }), refresh: async () => {} },
+    });
+    await rec.start();
+    const r = await rec.read();
+    assert.ok(!r.noDebug);
+    if (r.noDebug) return;
+    const fast = r.cf?.paths.find((p) => p.path === 'run_fast');
+    assert.ok(Math.abs(fast!.timeShare - 0.75) < 1e-9 && Math.abs(fast!.insnShare - 0.9) < 1e-9);
+    assert.equal(r.cf?.paths.find((p) => p.path === 'ram_clear')?.timeShare, 0);
+    assert.deepEqual(
+      r.cf?.pcs.map((c) => [c.addr, c.name, c.share]),
+      [
+        [0x40300000, undefined, 0.6],
+        [0x40101000, 'tick', 0.3],
+        [0x40200000, undefined, 0.1],
+      ],
+    );
+    assert.deepEqual(asked, [0x40300000, 0x40101000, 0x40200000], 'one lookup, heaviest first');
+  });
+
+  test('the ColdFire view keeps only the top rows and has no shares when nothing was counted', () => {
+    const part = {
+      clock: { source: '', unit: '', sampling: '' },
+      metrics: [],
+      loss: [],
+      overhead: [],
+      raw: Array.from({ length: 30 }, (_, i) => ({ cpu: 'cf', addr: i, count: i + 1, series: 'pc' })).concat([
+        { cpu: 'cf', addr: 999, count: 5000, series: 'idle_pc' },
+      ]),
+    };
+    const v = cfView(part, undefined, 10);
+    assert.equal(v.pcs.length, 10);
+    assert.deepEqual(
+      v.pcs.map((c) => c.addr),
+      [29, 28, 27, 26, 25, 24, 23, 22, 21, 20],
+      'only the pc series, heaviest first',
+    );
+    assert.ok(v.paths.every((p) => p.timeShare === 0 && p.insnShare === 0));
   });
 
   test('a firmware reload during the recording is said in the note', async () => {

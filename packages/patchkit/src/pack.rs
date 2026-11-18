@@ -268,6 +268,15 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
         }
         _ => None,
     };
+    // a content module (not `core`: patched in, ours) never touches the protected windows of a device it is built for
+    if m.manifest.module.category != "core"
+        && let Some((dko, _)) = cf.first()
+    {
+        let devs = crate::devdata::all()
+            .iter()
+            .filter(|d| m.manifest.module.builds_for(&d.short));
+        crate::protect::check(id, dko, &crate::protect::windows_of(devs))?;
+    }
     let bytes = crate::dkm::pack_keys(
         service_obj.as_ref().or(cf.first().map(|c| c.0)),
         &reg,
@@ -382,5 +391,46 @@ mod tests {
         assert_eq!(packed.len(), 1);
         assert_eq!(packed[0].0, "test/nope");
         assert!(packed[0].1.is_err());
+    }
+
+    #[test]
+    fn a_content_module_with_a_protected_address_is_refused_and_a_core_module_is_not_checked() {
+        // move.l #0xFC05C034,A0 (the flash controller of every device file) as the only code
+        let code = [0x20u8, 0x7c, 0xfc, 0x05, 0xc0, 0x34];
+        let o = Dko {
+            format: FORMAT,
+            arch: "cf".into(),
+            source_sha256: "0".repeat(64),
+            toolchain: Default::default(),
+            sections: vec![crate::dko::DkoSection {
+                name: ".text".into(),
+                kind: "text".into(),
+                align: 4,
+                size: code.len() as u32,
+                hex: crate::error::hex(&code),
+            }],
+            symbols: vec![],
+            relocs: vec![],
+        };
+        let json = serde_json::to_string(&o).unwrap();
+        let build = |head: &str| {
+            let text =
+                format!("{head}[[object]]\npath = \"a.dko.json\"\nplace = \"cf.expansion\"\n");
+            Library {
+                modules: vec![Module::from_parts(&text, &|_| Ok(json.clone())).unwrap()],
+            }
+        };
+        let e = refused(&build(HEAD), None);
+        assert!(
+            e.contains("protected window") && e.contains("0xfc05c034"),
+            "{e}"
+        );
+        // category "core": not checked here, so the next refusal is the ISA record
+        let core = format!(
+            "{}role = \"runtime\"\n",
+            HEAD.replace("category = \"test\"", "category = \"core\"")
+        );
+        let e = refused(&build(&core), None);
+        assert!(!e.contains("protected window"), "{e}");
     }
 }

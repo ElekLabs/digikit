@@ -25,7 +25,6 @@
         "{workspaceRoot}/tools/emulator/native_pgo.py",
         "{workspaceRoot}/tools/emulator/native_emu.py",
         "{workspaceRoot}/config/emulator.json",
-        "{workspaceRoot}/tools/emulator/ready_inputs.json",
         "{workspaceRoot}/tools/firmware/config.py",
         "{workspaceRoot}/tools/firmware/device.py",
         "{workspaceRoot}/tools/device/dklog_kinds.py",

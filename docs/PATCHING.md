@@ -220,7 +220,7 @@ mise run emu:ctl status       # from another shell; `mise run emu:ctl quit` stop
 ```
 
 The ready inputs come from `mise run emu:ready -- dt2` (about 2 minutes). It writes them to the directory in
-`tools/emulator/ready_inputs.json`, where the test harness reads them; `DIGI_PK_READY_<DEV>_<VER>` (for example
+`[acceptance] ready_dir` of the device files, where the test harness reads them; `DIGI_PK_READY_<DEV>_<VER>` (for example
 `DIGI_PK_READY_DT2_117`) overrides the directory. The harness refuses ready
 inputs that are stale or belong to another `.syx`.
 

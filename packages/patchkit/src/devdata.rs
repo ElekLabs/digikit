@@ -43,6 +43,9 @@ pub struct DeviceInfo {
     pub dsp_blocks_per_second: Option<u64>,
     /// `[adapter.machine] voices`: voices of the machine adapter.
     pub machine_voices: Option<u64>,
+    /// `[protect] windows`: address windows `[lo, hi)` that only the firmware and `core/*` drive (flash, FPGA and peer buses, flash controller
+    /// registers). The packer refuses a content module that holds an address in one of them (`crate::protect`).
+    pub protect: Vec<[u64; 2]>,
 }
 
 /// What every device file states, whatever else it holds: who the device is and what it can do. A device file has levels that follow
@@ -139,6 +142,12 @@ struct File {
     limits: Option<LimitsDoc>,
     #[serde(default)]
     patch_sets: BTreeMap<String, Vec<String>>,
+    protect: Option<ProtectDoc>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProtectDoc {
+    windows: Vec<[u64; 2]>,
 }
 #[derive(Deserialize)]
 struct CardDoc {
@@ -298,6 +307,15 @@ fn validate(n: &str, f: &File, caps: &Capabilities, c: &Container, short: &str) 
     if f.digikit.is_some() && f.patch.is_none() {
         return bad("[digikit] needs [patch]: a runtime target must be patchable".into());
     }
+    if let Some(p) = &f.protect {
+        for [lo, hi] in &p.windows {
+            if lo >= hi || *hi > 1 << 32 {
+                return bad(format!(
+                    "[protect] window [{lo:#x}, {hi:#x}) needs lo < hi <= 0x100000000"
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -366,6 +384,7 @@ fn parse_all(files: &[(&str, &str)]) -> Result<(Vec<Identity>, Vec<DeviceInfo>)>
             dsp_clock_hz: f.board.as_ref().and_then(|b| b.dsp_clock_hz),
             dsp_blocks_per_second: f.board.as_ref().and_then(|b| b.dsp_blocks_per_second),
             machine_voices: f.adapter.and_then(|a| a.machine).and_then(|m| m.voices),
+            protect: f.protect.map(|p| p.windows).unwrap_or_default(),
         });
     }
     Ok((ids, out))

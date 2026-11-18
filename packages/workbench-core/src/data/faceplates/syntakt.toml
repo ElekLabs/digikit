@@ -1,4 +1,4 @@
-# Front-panel drawing for Syntakt, read by apps/web/src/data/faceplates.ts.
+# Front-panel drawing for Syntakt, read by packages/workbench-core/src/data/faceplates.ts.
 #
 # Positions are centres in millimetres from the panel's top-left corner,
 # measured from a top-view photo (screws as reference, about 0.5 mm accuracy).

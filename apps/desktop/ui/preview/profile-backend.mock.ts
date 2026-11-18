@@ -5,6 +5,8 @@
 // time, one reading a second. The numbers show layout, not measurements. The DSP figures go through the app's own `dspView`.
 import { dspView } from '@digi/workbench-core/profile/profile-core.ts';
 import type { ModuleRef, Snapshot, SpanIn } from '@digi/workbench-core/profile/profile-core.ts';
+import { cfView } from '../src/profile-backend';
+import type { Part } from '@digi/workbench-core/profile/profile-artifact.ts';
 import type { ProfileReading, Recorder } from '../src/profile-backend';
 
 export { isDebugMissing } from '../src/profile-backend';
@@ -14,6 +16,41 @@ const state = query.get('prof') ?? 'rec';
 const dev = query.get('card') === 'dt2' ? 'dt2' : 'dn2';
 const emulator = query.get('page') !== 'remote';
 const HZ = 132_000_000;
+/** A made-up `cf.profile` part: four paths and ten heavy PCs (the numbers show layout only). */
+const CF_PART: Part = {
+  clock: { source: 'emu.cf.insn', unit: 'insn', sampling: '' },
+  metrics: [
+    ['ram_clear', 0.4e9, 8.0e8, 1200],
+    ['run_fast', 6.1e9, 9.2e9, 48_000],
+    ['step_once', 0.9e9, 1.1e8, 90_000],
+    ['idle_skip', 0.2e9, 3.9e9, 31_000],
+  ].flatMap(([p, ns, ins, calls]) => [
+    { name: `path.${p}.host_ns`, value: ns as number, unit: 'ns' },
+    { name: `path.${p}.instructions`, value: ins as number, unit: 'insn' },
+    { name: `path.${p}.calls`, value: calls as number, unit: 'calls' },
+  ]),
+  raw: [
+    [0x40101000, 'usb_bulk_tick', 9100],
+    [0x4010a2c0, 'mixer_service', 7400],
+    [0x400f3e10, '', 5200],
+    [0x400c0044, 'sample_copy', 4100],
+    [0x40200010, 'sched_wait', 3300],
+    [0x400b8c9a, '', 2100],
+    [0x401020f0, 'usb_bulk_tick', 1800],
+    [0x400d5a00, 'fx_send', 1200],
+    [0x400d5a40, 'fx_send', 900],
+    [0x40000200, 'boot_wait', 400],
+  ].map(([addr, , count]) => ({ cpu: 'cf', addr, count, series: 'pc' })),
+  loss: [],
+  overhead: [],
+};
+const CF_NAMES = new Map<number, string>([
+  [0x40101000, 'usb_bulk_tick'],
+  [0x4010a2c0, 'mixer_service'],
+  [0x400c0044, 'sample_copy'],
+  [0x40200010, 'sched_wait'],
+  [0x400d5a00, 'fx_send'],
+]);
 const FX_AT = 19; // seconds after the start
 
 interface Model {
@@ -87,6 +124,7 @@ export function createRecorder(): Recorder {
       const modules = MODULES(t);
       const r: ProfileReading = { noDebug: false, port, emulator, snap: snap(), modules };
       if (emulator && elapsed > 0n) {
+        r.cf = cfView(CF_PART, (a) => CF_NAMES.get(a));
         r.dsp = dspView(
           {
             blocks: 1000,

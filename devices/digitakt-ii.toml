@@ -90,6 +90,8 @@ readonly = [2, 4, 8]
 
 # The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
 # part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
+# ready_dir (private, firmware-derived, never committed; the one source of the ready directory): rebuilt from the .syx alone with
+# `mise run emu:ready -- dt2` (tools/emulator/ready.py). Files: digi-audio-dn2-image.bin, digi-audio-m5.snap, digi-audio-m5.snap.dsp.
 [acceptance]
 firmware = "1.17"
 ready_dir = "out/snapshots/dt2-audio-ready-cold-2026-10-20"
@@ -99,6 +101,21 @@ sample_card = true
 # the bus clock in the emulator. Channel 0 here: it runs by default on this device.
 [emulator]
 free_running_dtcn = [0]
+
+# Address windows that only the firmware and core/* drive: the packer refuses a content module that holds a 32-bit address in one of them
+# (docs/design/module-sdk.md "Modules never touch hardware"; packages/patchkit/src/protect.rs). Each window is [lo, hi), hi exclusive.
+# Evidence: docs/findings/141-syntakt-analog-and-nor-paths.md, "DT2 1.17 and DN2 1.12" **[D]**: the SPI NOR flash controller (DSPI at 0xFC05C000),
+# the GPIO block 0xEC094000-0xEC0940FF (the NOR chip select helper and the other pins the firmware drives), DSPI2 0xEC038000 (SHARC program load
+# and frame link), DSPI1 0xFC03C000 (driven by four firmware functions, role open) and the FlexBus device bytes 0x8C000000-0x8C00000F (the
+# extent beyond them is open: the chip select is not set in MAIN).
+[protect]
+windows = [
+  [0xFC05C000, 0xFC05D000],
+  [0xFC03C000, 0xFC03D000],
+  [0xEC038000, 0xEC039000],
+  [0xEC094000, 0xEC094100],
+  [0x8C000000, 0x8C000010],
+]
 
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
 # constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: it reads these facts at

@@ -5531,18 +5531,23 @@ mod tests {
         assert_eq!(runtime.delivery_counts[timer_vector as usize], 1);
     }
 
-    /// Every signature-resolved anchor of the boot path resolves on the
-    /// current firmware of both products, relinked builds included.
+    /// Every signature-resolved anchor of the boot path resolves on every listed firmware image present in firmware/ that
+    /// the emulator runs, relinked builds included.
     #[test]
     fn boot_anchors_resolve_on_every_supported_firmware() {
-        for file in ["Digitakt_II_OS1.17.syx", "Digitone_II_OS1.12.syx"] {
+        for (_, file, release) in listed_images() {
+            if release.boot.is_none() {
+                continue;
+            }
             let Ok(syx) = std::fs::read(format!("../../../firmware/{file}")) else {
+                eprintln!("skipped {file}: image not in firmware/");
                 continue;
             };
             let emu = Emulator::new_with_policy(&syx, None, ExecutionPolicy::SoftfloatAbiV1)
                 .unwrap_or_else(|e| panic!("{file}: {e}"));
-            assert!(
-                emu.softfloat.enabled,
+            // the shortcuts are on exactly for the releases whose device file verifies them
+            assert_eq!(
+                emu.softfloat.enabled, release.softfloat_abi,
                 "{file}: softfloat {:?}",
                 emu.softfloat.reason
             );
@@ -5614,51 +5619,130 @@ mod tests {
             .map(|s| s.bytes)
     }
 
-    /// The five addresses that were fixed to DT2 resolve by signature on every supported MAIN.
+    /// The firmware files the device files list.
+    fn listed_firmware_files() -> Vec<String> {
+        listed_firmware()
+            .into_iter()
+            .map(|(_, file)| file)
+            .collect()
+    }
+
+    /// The firmware files the device files list, with the device that lists each.
+    fn listed_firmware() -> Vec<(device_profile::DeviceProfile, String)> {
+        listed_images()
+            .into_iter()
+            .map(|(device, file, _)| (device, file))
+            .collect()
+    }
+
+    /// Listed firmware files with their device and release; the emulator runs a release with a boot profile.
+    fn listed_images() -> Vec<(
+        device_profile::DeviceProfile,
+        String,
+        device_profile::FirmwareProfile,
+    )> {
+        let registry = device_profile::Registry::load().unwrap();
+        registry
+            .devices()
+            .iter()
+            .flat_map(|d| {
+                d.firmwares.iter().filter_map(|f| {
+                    let file = f.filename.clone()?;
+                    Some((d.clone(), file, f.clone()))
+                })
+            })
+            .collect()
+    }
+
+    /// The listed firmware files the emulator runs, of the devices with a SHARC DSP.
+    fn dsp_firmware_files() -> Vec<String> {
+        listed_images()
+            .into_iter()
+            .filter(|(d, _, f)| {
+                f.boot.is_some() && d.capabilities.as_ref().is_some_and(|c| c.dsp == "sharc")
+            })
+            .map(|(_, file, _)| file)
+            .collect()
+    }
+
+    /// Every boot address the emulator finds by signature resolves on every listed image present in firmware/: exactly one
+    /// match each (the resolvers refuse an ambiguous signature), on an instruction boundary inside the loaded image, and no two
+    /// resolvers find the same function.
     #[test]
-    fn device_specific_boot_addresses_resolve_by_signature() {
+    fn boot_addresses_resolve_by_signature_on_every_image() {
         use crate::midi::{resolve_queue_td, resolve_usb_reg, resolve_usb_tx};
-        // task_create, uart8_init, usb queue_td, usb tx, usb register
-        let dt2 = [
-            0x4000_12c8,
-            0x4000_243e,
-            0x4000_5a86,
-            0x4000_4734,
-            0x4000_434a,
-        ];
-        let syntakt = [
-            0x4000_1640,
-            0x4000_2782,
-            0x4000_5d72,
-            0x4000_4a20,
-            0x4000_4636,
-        ];
-        for (file, expected) in [
-            ("Digitakt_II_OS1.17.syx", Some(dt2)),
-            ("Digitone_II_OS1.12.syx", Some(dt2)),
-            ("Digitone_II_OS1.11.syx", Some(dt2)),
-            ("Syntakt_OS1.42.syx", Some(syntakt)),
-        ] {
-            let Some(main) = main_of(file) else { continue };
+        for file in listed_firmware_files() {
+            let Some(main) = main_of(&file) else {
+                eprintln!("skipped {file}: image not in firmware/");
+                continue;
+            };
             let found = [
-                resolve_task_create(&main).ok(),
-                resolve_uart_init(&main).ok(),
-                resolve_queue_td(&main),
-                resolve_usb_tx(&main),
-                resolve_usb_reg(&main),
+                ("task_create", resolve_task_create(&main).ok()),
+                ("uart8_init", resolve_uart_init(&main).ok()),
+                ("usb queue_td", resolve_queue_td(&main)),
+                ("usb tx", resolve_usb_tx(&main)),
+                ("usb register", resolve_usb_reg(&main)),
             ];
-            let expected = expected.map(|e| e.map(Some));
-            assert_eq!(Some(found), expected, "{file}");
+            let image_end = MAIN_LOAD + main.len() as u32;
+            let mut seen = Vec::new();
+            for (name, at) in found {
+                let Some(at) = at else {
+                    panic!("{file}: {name} does not resolve");
+                };
+                assert!(
+                    (MAIN_LOAD..image_end).contains(&at) && at % 2 == 0,
+                    "{file}: {name} at {at:#x} is not an instruction address in the image"
+                );
+                assert!(
+                    !seen.contains(&at),
+                    "{file}: {name} at {at:#x} is also another resolver's match"
+                );
+                seen.push(at);
+            }
         }
     }
 
-    /// Every boot signature resolves on the bytes of a MAIN without a profile; Syntakt has no
-    /// filesystem worker.
+    /// The USB registration slots resolve on every firmware image the device files list (those present in firmware/), and they are
+    /// two different words in the .bss above the loaded image (the boot clears them).
     #[test]
-    fn boot_signatures_resolve_on_syntakt_main() {
-        let Some(main) = main_of("Syntakt_OS1.42.syx") else {
-            return;
-        };
+    fn usb_slots_resolve_on_every_image() {
+        use crate::midi::resolve_usb_slots;
+        for file in listed_firmware_files() {
+            let Some(main) = main_of(&file) else {
+                eprintln!("skipped {file}: image not in firmware/");
+                continue;
+            };
+            let Some((slot0, slot1)) = resolve_usb_slots(&main, MAIN_LOAD) else {
+                panic!("{file}: slots do not resolve");
+            };
+            let image_end = MAIN_LOAD + main.len() as u32;
+            assert_ne!(slot0, slot1, "{file}: both slots are one word");
+            assert!(
+                slot0 >= image_end
+                    && slot1 >= image_end
+                    && slot0 < 0x4800_0000
+                    && slot1 < 0x4800_0000,
+                "{file}: slots {slot0:#x} {slot1:#x} are not in RAM above the image (ends at {image_end:#x})"
+            );
+        }
+    }
+
+    /// Every boot signature resolves on the bytes of every listed MAIN without a profile; only a device without a path
+    /// filesystem has no filesystem worker.
+    #[test]
+    fn boot_signatures_resolve_on_every_listed_main() {
+        for (device, file) in listed_firmware() {
+            let Some(main) = main_of(&file) else {
+                eprintln!("skipped {file}: image not in firmware/");
+                continue;
+            };
+            let has_path_fs = device.card.as_ref().is_some_and(|c| c.path_fs.is_some());
+            boot_signatures_resolve(&file, &main, has_path_fs);
+        }
+    }
+
+    fn boot_signatures_resolve(file: &str, main: &[u8], has_path_fs: bool) {
+        let main = main.to_vec();
         let mut failed: Vec<String> = Vec::new();
         let mut check = |name: &str, ok: bool| {
             if !ok {
@@ -5722,12 +5806,17 @@ mod tests {
             .is_ok(),
         );
         check("context_switch", resolve_context_switch(&main).is_ok());
-        assert_eq!(failed, vec!["fs_worker".to_owned()]);
+        let want: Vec<String> = if has_path_fs {
+            Vec::new()
+        } else {
+            vec!["fs_worker".to_owned()]
+        };
+        assert_eq!(failed, want, "{file}");
     }
 
     #[test]
     fn ram_clear_batches_match_interpreter_across_chunks_pages_and_final_flags() {
-        for file in ["Digitakt_II_OS1.17.syx", "Digitone_II_OS1.12.syx"] {
+        for file in dsp_firmware_files() {
             let Ok(syx) = std::fs::read(format!("../../../firmware/{file}")) else {
                 continue;
             };
@@ -6560,11 +6649,7 @@ mod tests {
 
     #[test]
     fn known_fixture_constructs_without_running_guest_code() {
-        for name in [
-            "Digitakt_II_OS1.17.syx",
-            "Digitone_II_OS1.12.syx",
-            "Digitone_II_OS1.11.syx",
-        ] {
+        for name in dsp_firmware_files() {
             let path = format!("../../../firmware/{name}");
             let Ok(syx) = std::fs::read(&path) else {
                 eprintln!("SKIP unavailable fixture {path}");
