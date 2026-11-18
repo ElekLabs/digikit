@@ -718,9 +718,9 @@ runtime-and-services.md.
 | 1 | E0b static spikes (extended) | - | none | done: findings 147, 148, 149; 135, 02, 06, 53 corrected (branch e0b/findings) |
 | 1 | E0a filter DSP experiment | profile under the native core; UI chooser | one, about 10 min | parked: first attempt did not settle it (finding 148); retry before E7 |
 | 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
-| 2 | E2 boilerplate codegen | - | none; objdiff | built and reviewed (branch e2/exports-codegen); PR after the gate merge |
-| 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | built and reviewed (branch e3/keys); PR after the gate merge |
-| 4 | E4 contract suite | E3, `nx/dks-tests` | none | built and reviewed (branch e4/contract-suite); PR after the gate merge |
+| 2 | E2 boilerplate codegen | - | none; objdiff | done: PR #608 (objects byte-identical by objdiff) |
+| 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | done: PR #609 (device: runtime-refusal-tests on DT2 and DN2) |
+| 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |
 | 7 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | todo |
