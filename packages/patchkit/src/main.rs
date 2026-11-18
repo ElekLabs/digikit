@@ -58,7 +58,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          unless under dist/ or out/
   port    facts --firmware FW.syx [--port FILE|-]   the site facts (len, kind, check) of the hooks that services use, as JSON; the port TOML on stdin or in FILE
                                          (`tools/patchkit/port_resolve.py` calls it and writes them into devices/ports/*.toml)
-  port    build (--device SHORT --version V | --all) --out DIR   the port file DIR/<device>-<version>.dks (role 2) of each committed port, from devices/ports and
+  port    build (--device SHORT --version V | --all) --out DIR   the port file DIR/<device>-<version>.dks (role 2) of each committed port (with --all, only of devices that a service targets), from devices/ports and
                                          devices/fw only (no firmware); one JSON line each {port, file, bytes, sha256, names, sites}
   port    check --firmware FW.syx [--names-only] SERVICE.dks...   one-time equivalence: the port file of this firmware says what `bind` does for each unbound
                                          service (site, return, check value, kind, tail bytes, exits, names); with --names-only (no firmware) only that each
@@ -1584,7 +1584,11 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                 all || (Some(&p.port.device) == dev.as_ref()
                     && Some(&p.port.version) == ver.as_ref())
             }) {
-                // a port of a device that no service targets has no site facts: it gets no port file
+                // with --all, a port of a device that no service targets (Syntakt today) gets no port file
+                if all && !portfile::targeted(p, &decls)? {
+                    eprintln!("{}: no service targets this device: no port file", p.id());
+                    continue;
+                }
                 let data = portfile::build_data(&reg, p, &decls)?;
                 let bytes = portfile::pack(&data)?;
                 let file = out.join(portfile::file_name(p));
@@ -1622,7 +1626,11 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
             }
             let mut bad = 0;
             if names_only {
-                for p in &reg.ports {
+                for p in reg
+                    .ports
+                    .iter()
+                    .filter(|p| portfile::targeted(p, &decls).unwrap_or(false))
+                {
                     let data = portfile::build_data(&reg, p, &decls)?;
                     for f in &files {
                         let d = patchkit::dkm::Dkm::parse(&read(f)?)?;

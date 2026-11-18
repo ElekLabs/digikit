@@ -21,7 +21,7 @@
 //!     [u8; 8]    the first 8 bytes of the sha256 of the displaced bytes
 //! ```
 
-use crate::bind::{FwRef, Place, bind_with_refs, eval_exit_with, parse_import};
+use crate::bind::{BoundHook, FwRef, Place, bind_with_refs, eval_exit_with, parse_import};
 use crate::dkm::{Dkm, EmitParts, ROLE_PORT, emit, max_file};
 use crate::error::*;
 use crate::fwgen::{HookDecl, service_decls};
@@ -217,6 +217,20 @@ fn elsewhere(reg: &Registry, device: &str, name: &str, hook: bool) -> bool {
         })
 }
 
+/// Does the port have a hook that a service uses? A port of a device that no service targets (Syntakt today) has no site to list and gets no port file.
+pub fn targeted(port: &Port, decls: &[&str]) -> Result<bool> {
+    let (_, hooks) = service_decls(decls)?;
+    Ok(hooks.iter().any(|h| port.hook(&h.name).is_some()))
+}
+
+/// May a declared name or hook of a service be missing on every committed port? Only when its `devices` filter names devices alone that have no committed port.
+fn unported_only(reg: &Registry, devices: &[String]) -> bool {
+    !devices.is_empty()
+        && devices
+            .iter()
+            .all(|d| !reg.ports.iter().any(|p| p.port.device == *d))
+}
+
 /// The data of the port file of `port`, from the committed ports `reg` and the declarations `decls`.
 pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortData> {
     let (names, hooks) = service_decls(decls)?;
@@ -235,8 +249,14 @@ pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortDat
         let found = anchors_of(port, &d.name);
         if found.is_empty() {
             if !elsewhere(reg, device, &d.name, false) {
-                // declared for a device that has no port here (or for none): nothing to list
-                continue;
+                if unported_only(reg, &d.devices) {
+                    // declared only for devices without a committed port: nothing to list yet
+                    continue;
+                }
+                return Err(err!(
+                    "{who}: the name {} is used by a service and exists on no committed port",
+                    d.name
+                ));
             }
             out.names.push(NameItem {
                 hash: name_hash(&d.name),
@@ -250,7 +270,9 @@ pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortDat
         for n in found {
             let a = port.anchor(n).unwrap();
             if a.cpu != "cf" {
-                continue;
+                return Err(err!(
+                    "{who}: the name {n} is used by a service but its anchor is not a ColdFire anchor"
+                ));
             }
             out.names.push(NameItem {
                 hash: name_hash(n),
@@ -275,7 +297,13 @@ pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortDat
         let hash = name_hash(&d.name);
         let Some(h) = port.hook(&d.name) else {
             if !elsewhere(reg, device, &d.name, true) {
-                continue;
+                if unported_only(reg, &d.devices) {
+                    continue;
+                }
+                return Err(err!(
+                    "{who}: the hook {} is used by a service and exists on no committed port",
+                    d.name
+                ));
             }
             // listed for another device only: the hook and its exits resolve to 0
             out.sites.push(SiteItem {
@@ -518,8 +546,12 @@ pub fn file_name(port: &Port) -> String {
 
 /// The firmware references of an unbound service that the port file does not list (any device's port): the names `patchkit service-check` refuses.
 pub fn outside_set(dks: &Dkm, data: &PortData) -> Vec<String> {
+    outside_imports(&dks.imports, data)
+}
+
+fn outside_imports(imports: &[String], data: &PortData) -> Vec<String> {
     let mut out = vec![];
-    for i in &dks.imports {
+    for i in imports {
         let Some(r) = parse_import(i) else { continue };
         let known = match r {
             FwRef::Name(h) => data.name(h).is_some(),
@@ -546,6 +578,47 @@ pub fn equals_bind(
     let dkm = Dkm::parse(dks)?;
     let (bound_file, bound, refs) = bind_with_refs(dks, fw, reg, decls)?;
     let bound_dkm = Dkm::parse(&bound_file)?;
+    let keys =
+        dkneeds::keys::Keys::parse(&dkm.register).map_err(|e| err!("header table: {e:?}"))?;
+    let hooks: Vec<u32> = keys.hooks().map(|p| p.a).collect();
+    Ok(compare(
+        &dkm.imports,
+        &hooks,
+        &bound,
+        &bound_dkm.image,
+        &refs,
+        data,
+    ))
+}
+
+/// The kind of a hook as `bind` made it: a `dk_tail_` reference makes a tail site (the file may also use `dk_stock_` of it: both resolve to the same tail,
+/// as `source_draw` of machines does), a `dk_stock_` reference alone a stock site, else raw.
+fn bind_kind(b: &BoundHook, imports: &[String], refs: &[(FwRef, Place)]) -> SiteKind {
+    let stock = refs
+        .iter()
+        .any(|(r, _)| matches!(r, FwRef::Stock(h) if *h == b.site_hash));
+    let tail = imports
+        .iter()
+        .any(|i| matches!(parse_import(i), Some(FwRef::Tail(h)) if h == b.site_hash));
+    if tail {
+        SiteKind::Tail
+    } else if stock {
+        SiteKind::Stock
+    } else {
+        SiteKind::Raw
+    }
+}
+
+/// The comparison of `equals_bind`, on what bind made: the imports and the declared hook hashes of the service, the bound hooks with the image of the bound
+/// file, and the resolved references.
+fn compare(
+    imports: &[String],
+    hooks: &[u32],
+    bound: &[BoundHook],
+    bound_image: &[u8],
+    refs: &[(FwRef, Place)],
+    data: &PortData,
+) -> (Vec<String>, usize) {
     let (mut diff, mut n) = (vec![], 0usize);
     let mut d = |what: String, ok: bool, diff: &mut Vec<String>| {
         n += 1;
@@ -553,10 +626,20 @@ pub fn equals_bind(
             diff.push(what);
         }
     };
-    for i in outside_set(&dkm, data) {
+    for i in outside_imports(imports, data) {
         d(format!("{i}: not in the port file"), false, &mut diff);
     }
-    for b in &bound {
+    // a hook that the service declares and the port file lists for this device must have been bound and compared
+    for h in hooks {
+        if data.site(*h).is_some_and(|s| !s.absent) && !bound.iter().any(|b| b.site_hash == *h) {
+            d(
+                format!("hook {h:#010x}: the port lists a site, bind bound none"),
+                false,
+                &mut diff,
+            );
+        }
+    }
+    for b in bound {
         let Some(s) = data.site(b.site_hash) else {
             d(format!("{}: no SITES item", b.hook), false, &mut diff);
             continue;
@@ -591,14 +674,13 @@ pub fn equals_bind(
             check_of(&b.stock) == s.check,
             &mut diff,
         );
+        let bk = bind_kind(b, imports, refs);
         d(
             format!(
-                "{}: bind makes a tail {}, the port says {:?}",
-                b.hook,
-                b.tail_off.is_some(),
-                s.kind
+                "{}: bind makes kind {bk:?}, the port says {:?}",
+                b.hook, s.kind
             ),
-            b.tail_off.is_some() == s.kind.copies(),
+            bk == s.kind,
             &mut diff,
         );
         if let Some(off) = b.tail_off {
@@ -611,12 +693,12 @@ pub fn equals_bind(
                     "{}: the tail bytes are not the displaced bytes and a jump",
                     b.hook
                 ),
-                bound_dkm.image.get(at..at + want.len()) == Some(&want[..]),
+                bound_image.get(at..at + want.len()) == Some(&want[..]),
                 &mut diff,
             );
         }
     }
-    for (r, p) in &refs {
+    for (r, p) in refs {
         match (r, p) {
             (FwRef::Name(h), Place::Abs(a)) => match data.name(*h) {
                 Some(x) => d(
@@ -663,7 +745,7 @@ pub fn equals_bind(
             _ => d(format!("{r:?} resolved to {p:?}"), false, &mut diff),
         }
     }
-    Ok((diff, n))
+    (diff, n)
 }
 
 #[cfg(test)]
@@ -718,9 +800,95 @@ mod tests {
             (ROLE_PORT, "port", 0)
         );
         // it provides the service `port`
-        let k = dkneeds::keys::Keys::parse(&dkm.register);
-        // the writer's own parser does not know the port tags yet: it refuses them as unknown (PR2 teaches it)
-        assert!(k.is_err());
+        let t = dkm.register.as_slice();
+        let provides = name_hash(PORT_SERVICE).to_be_bytes();
+        assert!(t.windows(4).any(|w| w == provides));
+        // the writer's own parser does not know the port tags 12 and 13 yet and refuses them as unknown: PR2 moves them into dkneeds and flips this
+        assert!(dkneeds::keys::Keys::parse(&dkm.register).is_err());
+    }
+
+    fn bound(hook: &str, len: u32, stock: &[u8], tail_off: Option<u32>) -> BoundHook {
+        BoundHook {
+            hook: hook.into(),
+            site_hash: 0x30,
+            site_addr: 0x4000_0200,
+            site_len: len,
+            stock: stock.to_vec(),
+            tramp_off: 0,
+            displaced: vec![],
+            ret: 0x4000_0200 + len,
+            tail_off,
+        }
+    }
+
+    /// The bound image with the tail of a bound hook at offset 0: the stock bytes, then `jmp.l ret`.
+    fn tail_image(b: &BoundHook) -> Vec<u8> {
+        let mut v = b.stock.clone();
+        v.extend_from_slice(&prim::CF_JMP_L.to_be_bytes());
+        v.extend_from_slice(&b.ret.to_be_bytes());
+        v
+    }
+
+    #[test]
+    fn equals_bind_reports_a_wrong_length_check_kind_or_missing_site() {
+        let stock = [0x4e, 0x71, 0x4e, 0x71, 0x4e, 0x71];
+        let mut d = data();
+        d.sites[0].check = check_of(&stock);
+        let b = bound("h", 6, &stock, Some(0));
+        let img = tail_image(&b);
+        let imports = vec!["dk_tail_00000030".to_string()];
+        let run = |d: &PortData, b: &BoundHook, hooks: &[u32], refs: &[(FwRef, Place)]| {
+            compare(&imports, hooks, std::slice::from_ref(b), &img, refs, d).0
+        };
+        // all equal
+        assert!(run(&d, &b, &[0x30], &[]).is_empty());
+        // a wrong length
+        let mut w = d.clone();
+        w.sites[0].len = 8;
+        assert!(
+            run(&w, &b, &[0x30], &[])
+                .iter()
+                .any(|x| x.contains("length"))
+        );
+        // a wrong check value
+        let mut w = d.clone();
+        w.sites[0].check = [0; 8];
+        assert!(
+            run(&w, &b, &[0x30], &[])
+                .iter()
+                .any(|x| x.contains("check value"))
+        );
+        // a wrong kind: the port says raw or stock where bind makes a tail
+        for k in [SiteKind::Raw, SiteKind::Stock] {
+            let mut w = d.clone();
+            w.sites[0].kind = k;
+            assert!(
+                run(&w, &b, &[0x30], &[]).iter().any(|x| x.contains("kind")),
+                "{k:?}"
+            );
+        }
+        // a stock reference (the same tail) is fine on a tail site and wrong on a raw site
+        let stock_ref = [(FwRef::Stock(0x30), Place::Rel(0x10))];
+        assert!(run(&d, &b, &[0x30], &stock_ref).is_empty());
+        let mut w = d.clone();
+        w.sites[0].kind = SiteKind::Raw;
+        let diff = run(&w, &b, &[0x30], &stock_ref);
+        assert!(diff.iter().any(|x| x.contains("stock 0x")), "{diff:?}");
+        // a site that the service declares for this device and bind did not bind
+        assert!(
+            compare(&[], &[0x30], &[], &[], &[], &d)
+                .0
+                .iter()
+                .any(|x| x.contains("bind bound none"))
+        );
+        // a hook with no SITES item at all
+        let mut w = d.clone();
+        w.sites.clear();
+        assert!(
+            run(&w, &b, &[0x30], &[])
+                .iter()
+                .any(|x| x.contains("no SITES item"))
+        );
     }
 
     #[test]
@@ -817,6 +985,33 @@ mod tests {
             dt2.fw_id.to_vec(),
             unhex(&reg.by_id("dt2-1.17").unwrap().port.syx_sha256).unwrap()[..8]
         );
+    }
+
+    #[test]
+    fn a_service_name_on_no_committed_port_fails_the_build() {
+        let (reg, texts) = committed();
+        let mut decls: Vec<&str> = texts.iter().map(String::as_str).collect();
+        let extra = r#"[[fn]]
+name = "cf.nowhere.fn.x"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "00", offset = 0x0, len = 6 }
+mark = "D"
+doc = "x"
+users = ["core/services/lfo"]
+"#;
+        decls.push(extra);
+        let e = build_data(&reg, reg.by_id("dt2-1.17").unwrap(), &decls)
+            .unwrap_err()
+            .0;
+        assert!(
+            e.contains("cf.nowhere.fn.x") && e.contains("no committed port"),
+            "{e}"
+        );
+        // declared for a device without a committed port only: nothing to list
+        let only = extra.replace("users =", "devices = [\"zz\"]\nusers =");
+        let mut decls: Vec<&str> = texts.iter().map(String::as_str).collect();
+        decls.push(&only);
+        assert!(build_data(&reg, reg.by_id("dt2-1.17").unwrap(), &decls).is_ok());
     }
 
     #[test]

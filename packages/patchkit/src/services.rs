@@ -34,6 +34,9 @@ pub fn service_modules(root: &Path) -> Result<BTreeMap<String, String>> {
 /// The service name hashes of the hard NEEDS of a packed file.
 pub fn needed_hashes(dkm: &[u8]) -> Result<Vec<u32>> {
     let d = Dkm::parse(dkm)?;
+    if d.role == crate::dkm::ROLE_PORT {
+        return Err(err!("{}: a port file is not a module or a service", d.name));
+    }
     let keys = Keys::parse(&d.register).map_err(|e| err!("header table: {e:?}"))?;
     Ok(keys.needs().filter(|n| n.hard).map(|n| n.service).collect())
 }

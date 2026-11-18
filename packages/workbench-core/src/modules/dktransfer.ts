@@ -187,10 +187,11 @@ export function hasHeaderTable(f: Uint8Array): boolean {
   );
 }
 
-/** The header fields of a .dkm (its first 0xa0 bytes, or the whole file for the group); null when the bytes are not one. */
+/** The header fields of a .dkm (its first 0xa0 bytes, or the whole file for the group); null when the bytes are not one. A port file (role 2) is not a module or a service: null. */
 export function headerInfo(h: Uint8Array): HeaderInfo | null {
   if (h.length < HEADER_BYTES || MAGIC.some((b, i) => h[i] !== b)) return null;
   const v = new DataView(h.buffer, h.byteOffset, h.length);
+  if (v.getUint32(H_ROLE) === 2) return null;
   return {
     name: new TextDecoder().decode(h.subarray(0x40, 0x60)).split('\0')[0]!,
     version: fmtVersion(v.getUint32(0x34)),

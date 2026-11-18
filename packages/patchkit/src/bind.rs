@@ -878,13 +878,16 @@ pub fn bind(
     Ok((file, bound))
 }
 
+/// The bound file, the bound hooks and the firmware references with the places they resolved to.
+pub type BoundWithRefs = (Vec<u8>, Vec<BoundHook>, Vec<(FwRef, Place)>);
+
 /// [`bind`] and also the places of the firmware references that were resolved (not the tails): the port file's one-time equivalence check compares them.
 pub fn bind_with_refs(
     dks: &[u8],
     fw: &[u8],
     reg: &Registry,
     decls: &[&str],
-) -> Result<(Vec<u8>, Vec<BoundHook>, Vec<(FwRef, Place)>)> {
+) -> Result<BoundWithRefs> {
     let mut resolved_refs: Vec<(FwRef, Place)> = vec![];
     let dkm = Dkm::parse(dks)?;
     if dkm.role != ROLE_SERVICE {
