@@ -12,7 +12,8 @@
  *     packed length. Any failed check returns 1: peer_read then takes the stock path of a missing section 7 (status 1, "DSP BOOT FAILURE").
  *     The DMA that streams the buffer is armed later, so a failed check streams nothing.
  * The addresses and the expected length and hash are the `[[repack]]` of module.toml: patchkit checks the stored stream's in-place margin against
- * them and the decoded section against the hash; tests/layout.test.ts checks that this file names the same values. */
+ * them and the decoded section against the hash; packages/patchkit/tests/repack.rs checks that this file names the same values.
+ * tests/peer-host.test.ts compiles this file for the host (PEER_HOST) and runs peer_sha256 and peer_load against stubs of the two firmware calls. */
 
 #include <stdint.h>
 #include "dk_fw_peer.h"
@@ -25,10 +26,19 @@ typedef uint8_t u8;
 #define PEER_DEST 0x4f84f2c6u
 #define PEER_STAGE_END 0x4f8af2c1u
 #define PEER_LEN_WORD 0x4f84f2c2u
+#ifndef PEER_LEN /* the host test uses a short section */
 #define PEER_LEN 383760u
+#endif
+
+/* Guest addresses to pointers and back. The host test defines PEER_HOST and maps them into an array. */
+#ifndef PEER_HOST
+#define PEER_CONST const
+#define PEER_AT(a) ((u8 *)(a))
+#define PEER_ADDR(p) ((u32)(p))
+#endif
 
 /* SHA-256 of the stock section 7 */
-static const u8 PEER_SHA256[32] = {
+static PEER_CONST u8 PEER_SHA256[32] = {
     0xda, 0xf6, 0x45, 0x1c, 0xf9, 0x58, 0x7c, 0x0b, 0x62, 0x8e, 0x90, 0x1b, 0x7b, 0xb6, 0xb2, 0x5f,
     0x4e, 0x26, 0x33, 0xd4, 0x48, 0xc5, 0x34, 0xc0, 0xc1, 0x81, 0xdd, 0x35, 0xec, 0x78, 0x3b, 0xc2,
 };
@@ -86,7 +96,7 @@ static void sha_block(u32 h[8], const u8 *p)
         h[j] += v[j];
 }
 
-/* SHA-256 of `len` bytes at `data`. Not static: the host check links it. */
+/* SHA-256 of `len` bytes at `data`. Not static: the host test calls it. */
 void peer_sha256(const u8 *data, u32 len, u8 out[32])
 {
     u32 h[8];
@@ -130,13 +140,13 @@ int peer_load(u32 src, u32 len, u8 *dst)
     u8 *p;
     u8 sha[32];
     u32 i, sum = 0, n;
-    if ((u32)dst != PEER_DEST) {
+    if (PEER_ADDR(dst) != PEER_DEST) {
         dk_fw_peer_nor_read(src, len, dst);
         return 0;
     }
     if (len < 8 || len > PEER_STAGE_END - PEER_DEST)
         return 1;
-    p = (u8 *)(PEER_STAGE_END - len);
+    p = PEER_AT(PEER_STAGE_END - len);
     dk_fw_peer_nor_read(src, len, p);
     if (be32(p) != len - 8)
         return 1;
@@ -151,9 +161,9 @@ int peer_load(u32 src, u32 len, u8 *dst)
     for (i = 0; i < 32; i++)
         if (sha[i] != PEER_SHA256[i])
             return 1;
-    *(u8 *)(PEER_LEN_WORD + 0) = (u8)(n >> 24);
-    *(u8 *)(PEER_LEN_WORD + 1) = (u8)(n >> 16);
-    *(u8 *)(PEER_LEN_WORD + 2) = (u8)(n >> 8);
-    *(u8 *)(PEER_LEN_WORD + 3) = (u8)n;
+    *PEER_AT(PEER_LEN_WORD + 0) = (u8)(n >> 24);
+    *PEER_AT(PEER_LEN_WORD + 1) = (u8)(n >> 16);
+    *PEER_AT(PEER_LEN_WORD + 2) = (u8)(n >> 8);
+    *PEER_AT(PEER_LEN_WORD + 3) = (u8)n;
     return 0;
 }

@@ -2438,7 +2438,12 @@ pub fn apply_with(
         plan,
         image_id,
     };
-    let report = crate::verify::verify(&applied.syx, Some(reg), Some(fw_bytes))?;
+    // an image made without a record (oracles, tests) names no module whose claim could be checked
+    let report = if opts.record {
+        crate::verify::verify_with_library(&applied.syx, Some(reg), Some(fw_bytes), lib)?
+    } else {
+        crate::verify::verify(&applied.syx, Some(reg), Some(fw_bytes))?
+    };
     applied.plan.output = Some(PlanOutput {
         syx_sha256: sha256_hex(&applied.syx),
         syx_bytes: applied.syx.len() as u64,

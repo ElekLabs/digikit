@@ -232,3 +232,46 @@ fn the_in_place_margin_of_the_real_section_7_stream_matches_the_python_reference
         Some(9_444)
     );
 }
+
+#[test]
+fn verify_accepts_a_packed_section_only_when_a_module_of_the_record_claims_it() {
+    let Some(raw) = image() else { return };
+    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let reg = registry();
+    let dev = patchkit::devdata::all()
+        .iter()
+        .find(|d| d.short == "st")
+        .unwrap();
+    let (ids, _) = lib.with_requires(&dev.patch_sets["emulator"]).unwrap();
+    let out = apply::apply(&raw, &reg, &lib, &ids).unwrap();
+    // the claiming module is in the record: the claim and the layout hold
+    let report =
+        patchkit::verify::verify_with_library(&out.syx, Some(&reg), Some(&raw), &lib).unwrap();
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|c| c.contains("a module of the record unpacks it"))
+    );
+    // the same image, with a library where no module claims the role: refused
+    for m in lib.modules.iter_mut() {
+        m.manifest.repack.clear();
+    }
+    let e = patchkit::verify::verify_with_library(&out.syx, Some(&reg), Some(&raw), &lib)
+        .unwrap_err()
+        .0;
+    assert!(e.contains("no module of the patch record unpacks"), "{e}");
+    // a layout that the stream does not fit is refused too
+    let mut tight = Library::scan_repo_or_skip(&root()).unwrap();
+    for m in tight.modules.iter_mut() {
+        for r in m.manifest.repack.iter_mut() {
+            r.stage_end = r.dest + 1000;
+        }
+    }
+    let e = patchkit::verify::verify_with_library(&out.syx, Some(&reg), Some(&raw), &tight)
+        .unwrap_err()
+        .0;
+    assert!(e.contains("does not fit"), "{e}");
+}

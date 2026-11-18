@@ -589,7 +589,9 @@ plan.json {}",
                 Some(b) => Some(read(&b)?),
                 None => None,
             };
-            let rep = verify::verify(&raw, Some(&reg), base.as_deref())?;
+            // manifests only (no object builds): the claim of a repacked section is read from them
+            let lib = library_with(&a.root, &library_source(rest), false, Some(&[]))?;
+            let rep = verify::verify_with_library(&raw, Some(&reg), base.as_deref(), &lib)?;
             for c in &rep.checks {
                 println!("ok  {c}");
             }

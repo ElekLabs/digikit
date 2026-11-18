@@ -147,6 +147,11 @@ Not covered: a read of the NOR directory by a computed id. All four call sites p
 
 ## Open
 
+- **Limit of the pre-unpack guard.** The wrapper checks the stream's header length and a 32-bit additive byte sum before it unpacks. A byte sum is kept by byte
+  reorderings, so a corrupt NOR read could pass it, and the depacker has no output bound: it could then write past the output buffer before the SHA-256 refuses the
+  result. A stream built by patchkit is safe: `patchkit` checks its header, byte sum and in-place margin at build time and in `verify`. The stock MAIN streams section 7
+  to the second CPU with no integrity check at all, so the adapter is stricter than stock on the result, not on the read. No code change planned.
+
 - **[O]** The emulator proof: boot the patched image and read the peer status word 0x41bbf448 (6 = OK).
 - **[O]** The real time of the stock NOR read, the unpack and the SHA-256 on hardware or in the emulator (estimates in section 4).
 - **[O]** Syntakt PIT2 values were read from the code. The tick of 8.33 ms depends on the prescaler reading of finding 07.

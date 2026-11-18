@@ -4,6 +4,7 @@
 use crate::dsp::Stream;
 use crate::error::*;
 use crate::firmware::Firmware;
+use crate::module::Library;
 use crate::port::Registry;
 use crate::record::{self, Record};
 use crate::syx;
@@ -105,17 +106,92 @@ pub fn patch_record(syx_bytes: &[u8]) -> Result<Option<Record>> {
     find_record(&Firmware::parse(syx_bytes)?)
 }
 
+/// What the hook of a module that unpacks section `id` relies on: the stream header (body length, byte sum), and with a library a module of the record
+/// that claims the section's role, the stream fitting its buffer and an in-place margin above 0.
+fn check_repacked(
+    fw: &Firmware,
+    id: u32,
+    record: Option<&Record>,
+    lib: Option<&Library>,
+) -> Result<()> {
+    let stored = &fw.section(id).unwrap().stored;
+    let be = |b: &[u8]| u32::from_be_bytes(b.try_into().unwrap());
+    if stored.len() < 8 || be(&stored[..4]) as usize + 8 != stored.len() {
+        return Err(err!(
+            "section {id}: the stored stream's header length does not match its size"
+        ));
+    }
+    let sum = stored[8..]
+        .iter()
+        .fold(0u32, |s, &b| s.wrapping_add(b as u32));
+    if sum != be(&stored[4..8]) {
+        return Err(err!("section {id}: the stored stream's byte sum is wrong"));
+    }
+    let Some(lib) = lib else { return Ok(()) };
+    let dev = fw.device.short();
+    let role = fw
+        .device
+        .repack_roles()
+        .iter()
+        .find(|r| fw.device.role_section(r) == Some(id))
+        .ok_or_else(|| err!("section {id} cannot be stored packed on {dev}"))?;
+    let claim = record
+        .into_iter()
+        .flat_map(|r| r.modules.iter())
+        .filter_map(|m| lib.get(m.split('@').next().unwrap_or(m)))
+        .flat_map(|m| {
+            m.manifest
+                .repack
+                .iter()
+                .map(move |r| (m.id().to_string(), r))
+        })
+        .find(|(_, r)| r.role == *role && crate::prim::on(&r.devices, dev));
+    let Some((owner, r)) = claim else {
+        return Err(err!(
+            "section {id} is stored packed but no module of the patch record unpacks the {role} section"
+        ));
+    };
+    let len = stored.len() as u64;
+    if r.stage_end < r.dest + len {
+        return Err(err!(
+            "section {id} ({len} bytes) does not fit the buffer {:#x}..{:#x} of {owner}",
+            r.dest,
+            r.stage_end
+        ));
+    }
+    let margin = crate::aplib::inplace_margin(stored, r.dest, r.stage_end - len)
+        .map_err(|e| err!("section {id}: {e}"))?;
+    if let Some(m) = margin.filter(|m| *m <= 0) {
+        return Err(err!(
+            "section {id}: the in-place unpack of {owner} has margin {m}: it would overwrite bytes that are not read yet"
+        ));
+    }
+    Ok(())
+}
+
 /// Verifies an image. A device with read-only sections (`[container] readonly`: bootstrap, FPGA or peer programs) needs `base`, the stock
 /// image, to prove those sections unchanged; without it the call fails, so a damaged read-only section can never pass. The one exception
 /// is an image whose SHA-256 is a known stock image (a port in `reg`): it is the stock image, so its read-only sections are stock.
 pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> Result<Report> {
-    check(syx_bytes, reg, base, true)
+    check(syx_bytes, reg, base, true, None)
+}
+
+/// `verify` with the module library: a read-only section stored packed (`[[repack]]`) is accepted only when a module of the patch record claims its role,
+/// and its stored stream is checked against that module's declared buffer layout. Without a library (`verify`) only the stream's own header and byte
+/// sum can be checked, and the check list says that the claim was not.
+pub fn verify_with_library(
+    syx_bytes: &[u8],
+    reg: Option<&Registry>,
+    base: Option<&[u8]>,
+    lib: &Library,
+) -> Result<Report> {
+    check(syx_bytes, reg, base, true, Some(lib))
 }
 
 /// Decodes and checks an image like `verify` but does not require the stock base: for identifying a file (what device, which record),
 /// never as a proof that the image is safe to flash.
 pub fn inspect(syx_bytes: &[u8], reg: Option<&Registry>) -> Result<Report> {
-    check(syx_bytes, reg, None, false)
+    check(syx_bytes, reg, None, false, None)
 }
 
 fn check(
@@ -123,6 +199,7 @@ fn check(
     reg: Option<&Registry>,
     base: Option<&[u8]>,
     need_base: bool,
+    lib: Option<&Library>,
 ) -> Result<Report> {
     let mut checks = vec![];
     let msgs = syx::messages(syx_bytes)?;
@@ -313,8 +390,14 @@ fn check(
             ids.join(", ")
         ));
         for id in repacked {
+            check_repacked(&fw, id, record.as_ref(), lib)?;
             checks.push(format!(
-                "section {id} is stored packed and decodes to the stock bytes"
+                "section {id} is stored packed and decodes to the stock bytes{}",
+                if lib.is_some() {
+                    " (a module of the record unpacks it; its layout holds)"
+                } else {
+                    " (no module library: the claim and the layout were not checked)"
+                }
             ));
         }
     }

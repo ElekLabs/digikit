@@ -566,7 +566,10 @@ patchkit stores the section packed (`pack_section`) only when a module of the se
   (output bytes written at or past the stream's start). A margin of 0 or less means that the output would overwrite stream bytes that are not read yet.
   `tools.firmware.aplibpack.inplace_margin` is the reference. For the Syntakt section 7 it is 9,444 bytes.
 
-`verify --base` and the `image_report` tool accept the repacked section when it decodes to the stock bytes. The first user is `core/peer-image`
+`verify --base` and the `image_report` tool accept the repacked section when it decodes to the stock bytes. With the module library (the `verify` command, and `apply`
+for an image with a record) `verify` also needs a module of the patch record that claims the role, and rechecks what the hook relies on: the stream header length and
+byte sum, that the stream fits `stage_end - dest`, and an in-place margin above 0 against that module's layout. Without a library only the header and byte sum are checked
+and the check list says so. The first user is `core/peer-image`
 ([README](../modules/core/adapters/peer-image/README.md), [finding 150](findings/150-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
 32,672 bytes over `container_max`; with it the container is 2,011,488 bytes.
 
