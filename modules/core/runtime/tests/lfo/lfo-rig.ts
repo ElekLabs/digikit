@@ -4,6 +4,7 @@ import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { REDRAW, SETTLE, word, type Rt } from '@digi/regression/runtime/fx-live.ts';
 import { halfword } from '@digi/regression/runtime/fx-track-ui.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
+import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
 import { crossings, swing, type Sample } from './lfo-fit.ts';
 
 export * from './lfo-fit.ts';
@@ -151,16 +152,25 @@ export class LfoRig {
     let got = await this.word(KNOB_WORD.WAVE);
     let bursts = 0;
     while (got !== want) {
-      if (bursts >= 20) throw new Error(`the WAVE encoder did not reach wave ${n} in ${bursts} bursts (Sound word ${KNOB_WORD.WAVE} is ${got.toString(16)}, wanted ${want.toString(16)})`);
+      if (bursts >= 20) {
+        const png = await captureRemoteOled(this.rt.session, 'lfo-turn-fail');
+        throw new Error(`the WAVE encoder did not reach wave ${n} in ${bursts} bursts (Sound word ${KNOB_WORD.WAVE} is ${got.toString(16)}, wanted ${want.toString(16)}; screen ${png})`);
+      }
       const before = got;
       await this.turnWave(got < want ? 8 : -8, 4, 30);
       bursts++;
-      got = await pollUntil(
-        this.rt.clock,
-        () => this.word(KNOB_WORD.WAVE),
-        (w) => w !== before,
-        { withinMs: 1000, intervalMs: 20, message: () => `the WAVE word stays at ${before.toString(16)} after burst ${bursts} toward wave ${n}` },
-      );
+      let png = '';
+      try {
+        got = await pollUntil(
+          this.rt.clock,
+          () => this.word(KNOB_WORD.WAVE),
+          (w) => w !== before,
+          { withinMs: 1000, intervalMs: 20, message: () => `the WAVE word stays at ${before.toString(16)} after burst ${bursts} toward wave ${n}` },
+        );
+      } catch (e) {
+        png = await captureRemoteOled(this.rt.session, 'lfo-turn-fail');
+        throw new Error(`${e instanceof Error ? e.message : String(e)} (screen ${png})`);
+      }
     }
     let smooth = -1;
     await pollUntil(
@@ -222,10 +232,11 @@ export class LfoRig {
   }
 
   /**
-   * Send a note (channel 1, note 60) and return the voice slot it took: the one slot whose phase accumulator changed. In MODE TRG the note retriggers the LFO of its slot (a device with voice rotation gives
-   * each note the next slot; a device with one voice per track keeps slot 0). Throws with all phases before and after when not exactly one slot changed.
+   * Send a note (channel 1, note 60) and return the voice slot it took: the slot whose phase accumulator now equals `expected` (see `startPhase`). In MODE TRG the note retriggers the LFO of its slot (a device
+   * with voice rotation gives each note the next slot; a device with one voice per track keeps slot 0). The other slots may belong to other tracks, whose LFOs run free, so their phases change too. Among the
+   * slots at `expected`, the ones that changed are preferred; exactly one must remain. Throws with all phases before and after and `expected` otherwise.
    */
-  async trigger(): Promise<number> {
+  async trigger(expected: number): Promise<number> {
     const { lfo_slots } = deviceProfile(this.device).fx;
     const phases = () => Promise.all(Array.from({ length: lfo_slots }, (_, s) => this.phase(s)));
     const before = await phases();
@@ -234,12 +245,16 @@ export class LfoRig {
     await sendNoteOff(this.rt, 1, 60);
     await this.rt.ui.wait({ ms: 50, why: TRIGGER });
     const after = await phases();
-    const changed = after.flatMap((p, s) => (p !== before[s] ? [s] : []));
-    if (changed.length !== 1) {
+    const atExpected = after.flatMap((p, s) => (p === expected ? [s] : []));
+    const changed = atExpected.filter((s) => after[s] !== before[s]);
+    const picked = changed.length > 0 ? changed : atExpected;
+    if (picked.length !== 1) {
       const hex = (ps: number[]) => ps.map((p) => p.toString(16)).join(' ');
-      throw new Error(`a note changed the phase of ${changed.length} voice slots, not 1 (before ${hex(before)}; after ${hex(after)})`);
+      throw new Error(
+        `a note left ${picked.length} voice slots at the phase ${expected.toString(16)}, not 1 (before ${hex(before)}; after ${hex(after)})`,
+      );
     }
-    return changed[0]!;
+    return picked[0]!;
   }
 
   /**

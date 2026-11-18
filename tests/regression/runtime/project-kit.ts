@@ -250,10 +250,9 @@ export async function buildPanelProject(
 
 /** Save the project to slot 001 through FUNC+SETTINGS. */
 export async function savePanelProject(rt: Rt): Promise<void> {
-  const { session } = rt;
   await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW }, held: 'FUNC' });
-  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // slot 001
-  if (session.options.device === 'dn2') await rt.ui.tap('YES', { until: { drained: true } }); // the name: save
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // slot 001: opens the name editor
+  await rt.ui.tap('YES', { until: { drained: true } }); // the name editor: save
   await rt.ui.wait({ ms: 3500, why: SETTLE });
 }
 

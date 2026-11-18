@@ -125,7 +125,7 @@ cardRigs(
         const outs: number[] = [];
         for (const sph of quarters) {
           await rig.set('SPH', sph);
-          const slot = await rig.trigger();
+          const slot = await rig.trigger(LfoRig.startPhase(sph));
           expect(await rig.phase(slot), `the start phase of voice slot ${slot} at SPH ${sph}`).toBe(LfoRig.startPhase(sph));
           outs.push(await rig.live(dest, slot));
         }
