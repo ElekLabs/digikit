@@ -9,7 +9,7 @@ dsp_sha256 = "336e340aa0cdcd34e314cfa44849f709a3134f6bd4cd57dfc7e15702c83115e2"
 resolved_by = "tools/patchkit/port_resolve.py 1"
 
 [limits]
-container_max = 0x1ffe00
+container_max = 0x1FFE00
 dsp_stored_max = 0x100000
 dsp_depacked_max = 0xfffff
 main_staged_max = 0x3ffc00
@@ -1020,16 +1020,6 @@ kind = "code"
 addr = 0x4009fe24
 len = 8
 sha256 = "49e7ab0d372e41be14161fa480629cdcfabc16a9f5e09a55e2efdc28f465e12a"
-mark = "D"
-rule = "fw/menu:cf_func"
-
-[[anchor]]
-name = "cf.menu.site.vertical_menu_view_ctor.font_ref"
-cpu = "cf"
-kind = "code"
-addr = 0x4011b6b6
-len = 6
-sha256 = "c9c9682aa3b8c199766ad475ae1e728946f3a1d519d61bfc63276bf1bd235401"
 mark = "D"
 rule = "fw/menu:cf_func"
 
@@ -3057,17 +3047,6 @@ len = 4
 sha256 = "46baa2225d9f997ccb54982a333f592e3560ca3f9790b2fe866787ba0dd6fd17"
 mark = "D"
 rule = "fw/view:cf_words"
-
-[[anchor]]
-name = "cf.view.value.brain"
-cpu = "cf"
-kind = "value"
-addr = 0x44647900
-src = 0x4018c8e6
-len = 4
-sha256 = "74c8f17989fe6bc85e9d0fa8aafc457c376aae46de6562cba75ece3d8d7277b6"
-mark = "D"
-rule = "fw/view:cf_literal"
 
 [[anchor]]
 name = "cf.window.fn.confirm_ctor"

@@ -8,7 +8,7 @@ main_sha256 = "1a9723b19fb54d0566c1f690379d2e6dfe43227f77e170ad731dd029430eb3e7"
 resolved_by = "tools/patchkit/port_resolve.py 1"
 
 [limits]
-container_max = 0x1ffe00
+container_max = 0x1FFE00
 main_staged_max = 0x3ffc00
 
 [[region]]
@@ -1137,13 +1137,11 @@ rule = "fw/window:cf_ptr"
 name = "cf.menu.hook.settings_list.tail"
 site = "cf.menu.site.settings_list.tail"
 mode = "before"
-clobbers = ["d0-d1", "a0-a1", "ccr"]
 
 [[hook]]
 name = "cf.midi.hook.rx"
 site = "cf.midi.site.rx"
 mode = "before"
-clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.rtos.hook.idle"
@@ -1154,40 +1152,33 @@ mode = "replace"
 name = "cf.rtos.hook.intro_setup.table_arg"
 site = "cf.rtos.site.intro_setup.table_arg"
 mode = "before"
-clobbers = ["d0", "a0", "ccr"]
 
 [[hook]]
 name = "cf.rtos.hook.main_os_task"
 site = "cf.rtos.site.main_os_task"
 mode = "before"
-clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.storage.hook.block_read.clamp_chunk"
 site = "cf.storage.site.block_read.clamp_chunk"
 mode = "replace"
-clobbers = ["d0", "d1", "d5", "ccr"]
 
 [[hook]]
 name = "cf.storage.hook.block_read.clamp_entry"
 site = "cf.storage.site.block_read.clamp_entry"
 mode = "replace"
-clobbers = ["d0", "d1", "ccr"]
 
 [[hook]]
 name = "cf.storage.hook.block_write.clamp_chunk"
 site = "cf.storage.site.block_write.clamp_chunk"
 mode = "replace"
-clobbers = ["d0", "d1", "d5", "ccr"]
 
 [[hook]]
 name = "cf.storage.hook.block_write.clamp_entry"
 site = "cf.storage.site.block_write.clamp_entry"
 mode = "replace"
-clobbers = ["d0", "d1", "ccr"]
 
 [[hook]]
 name = "cf.view.hook.ui_loop"
 site = "cf.view.site.ui_loop"
 mode = "retarget"
-clobbers = ["ccr"]

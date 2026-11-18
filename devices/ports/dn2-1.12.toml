@@ -9,7 +9,7 @@ dsp_sha256 = "336e340aa0cdcd34e314cfa44849f709a3134f6bd4cd57dfc7e15702c83115e2"
 resolved_by = "tools/patchkit/port_resolve.py 1"
 
 [limits]
-container_max = 0x1ffe00
+container_max = 0x1FFE00
 dsp_stored_max = 0x100000
 dsp_depacked_max = 0xfffff
 main_staged_max = 0x3ffc00
