@@ -247,8 +247,9 @@ render(
                       <Icon d={FOLDER} />
                       <span class="lbl">Open…</span>
                     </button>
+                    {/* ?emudev=<id> shows another device's toolbar (for example st). */}
                     <DefaultModules
-                      device="dn2"
+                      device={new URLSearchParams(location.search).get('emudev') ?? 'dn2'}
                       note="Uploaded and enabled in the emulator after the firmware loads."
                     />
                   </span>

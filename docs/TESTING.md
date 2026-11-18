@@ -1293,6 +1293,7 @@ Type checks do not show a misaligned row. `mise run ui:preview` serves the deskt
 `?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=MiB/s&mode=modules|samples`).
 `node tools/devtools/ui_shots.mjs --out DIR [--prefix before] [scene ...]` writes one PNG per scene at
 1440x900 and at 700 px wide (`--list` lists scenes). Look at the pictures before and after a UI change.
+`?emudev=<id>` shows another device's toolbar on the Emulator page (default `dn2`).
 
 `mise run readme:shots` regenerates the workbench screenshots in README.md: it runs the `readme-*` scenes at full size and as thumbnails, writes `docs/images/workbench-*.png` and rewrites the table between the `readme-shots` markers in README.md. The Emulator and Remote shots draw `apps/web/public/images/device-*.png` on the faceplate screen. `mise run readme:shots -- --device` first recaptures those device screens from a booted DT2 emulator (`mise run site:shots`, about 2.5 min); the site uses the same images.
 
