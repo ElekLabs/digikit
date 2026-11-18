@@ -56,10 +56,7 @@ if (!isMainThread) {
 const args = {};
 for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].slice(2)] = process.argv[i + 1];
 const env = process.env;
-const ready = path.resolve(
-  root,
-  env.DIGI_EMU_READY_DIR ?? readyDirs.dn2,
-);
+const ready = path.resolve(root, env.DIGI_EMU_READY_DIR ?? readyDirs.dn2);
 const read = (p) => new Uint8Array(fs.readFileSync(p));
 const wasm = read(args.core);
 const syx = read(args.syx ?? env.DIGI_EMU_SYX ?? path.join(root, 'firmware', 'Digitone_II_OS1.11.syx'));

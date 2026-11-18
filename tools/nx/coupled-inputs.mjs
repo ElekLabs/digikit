@@ -5,7 +5,7 @@
 // It also hashes the store key of each device's core library (the generated core is untracked and no Nx input sees it).
 // The DT2 FX card is built from a generated sine, so it has no input file; DIGI_DT2_CARD (a kept card image) is hashed.
 import { createHash } from 'node:crypto';
-import { createReadStream, readFileSync, statSync } from 'node:fs';
+import { createReadStream, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

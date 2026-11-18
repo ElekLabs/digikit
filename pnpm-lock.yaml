@@ -365,15 +365,15 @@ importers:
       '@digi/control-client':
         specifier: workspace:*
         version: link:../control-client
-      '@digi/devices':
-        specifier: workspace:*
-        version: link:../devices
       '@digi/dk-session':
         specifier: workspace:*
         version: link:../dk-session
       '@digi/workbench-core':
         specifier: workspace:*
         version: link:../workbench-core
+      smol-toml:
+        specifier: 1.9.0
+        version: 1.9.0
     devDependencies:
       '@types/node':
         specifier: 22.15.0

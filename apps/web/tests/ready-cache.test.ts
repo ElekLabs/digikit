@@ -14,10 +14,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 /** The DN2 ready state of the ready inputs, when they are there. */
 function readyInputsState(): ReadyState | undefined {
   try {
-    const ready = path.resolve(
-      root,
-      process.env.DIGI_EMU_READY_DIR ?? registry().get('dn2').acceptance!.readyDir,
-    );
+    const ready = path.resolve(root, process.env.DIGI_EMU_READY_DIR ?? registry().get('dn2').acceptance!.readyDir);
     if (!fs.existsSync(path.join(ready, 'digi-audio-m5.snap'))) return undefined;
     const read = (n: string) => new Uint8Array(fs.readFileSync(path.join(ready, n)));
     return {

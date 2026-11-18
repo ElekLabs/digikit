@@ -5,7 +5,7 @@
 // out/runs/patchkit/samples); a change there must change this file.
 // The ready dirs come from `[acceptance] ready_dir` of the device files (ready-dirs.mjs), as there.
 import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream, readFileSync, readdirSync, statSync } from 'node:fs';
+import { createReadStream, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readyDirs } from './ready-dirs.mjs';

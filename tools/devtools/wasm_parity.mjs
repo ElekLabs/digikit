@@ -48,10 +48,7 @@ const root = path.resolve(
     (fs.existsSync(path.join(here, '..', '..', 'packages', 'emulator')) ? path.join(here, '..', '..') : process.cwd()),
 );
 const env = process.env;
-const ready = path.resolve(
-  root,
-  env.DIGI_EMU_READY_DIR ?? readyDirs.dn2,
-);
+const ready = path.resolve(root, env.DIGI_EMU_READY_DIR ?? readyDirs.dn2);
 const paths = {
   core: args.core ?? path.join(root, 'apps/web/.local/emulator-core-sharc.wasm'),
   syx: args.syx ?? env.DIGI_EMU_SYX ?? env.DIGI_COUPLED_SYX ?? path.join(root, 'firmware', 'Digitone_II_OS1.11.syx'),
