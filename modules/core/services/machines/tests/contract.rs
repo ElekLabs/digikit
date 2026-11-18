@@ -336,6 +336,7 @@ fn fixture(device: u32) -> Fixture {
             same_but_ok: module(3, keys_late, native_page_ok, 1),
             beside_b: true,
         }),
+        rules: true,
     }
 }
 

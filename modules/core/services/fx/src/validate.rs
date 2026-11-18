@@ -19,7 +19,7 @@ pub mod what {
 }
 
 /// Checks the effect records `bodies` of one module, in order; a kind other than the effect record is accepted.
-pub fn effects<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R) {
+pub fn effects(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
     if kind != KIND_EFFECT {
         return;
     }

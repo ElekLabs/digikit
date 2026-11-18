@@ -20,8 +20,8 @@ The neutral crate exports only `dk_module` and `DKRT_*` state symbols, has no as
 needs from the image comes from the image adapter `modules/core/adapters/X`: reserved rows, hook stubs and `[[slot]]` words, and `[[info]]` data tables, found by name hash
 with `dkc_info` (`CoreApi::info`). The image half is the adapter's; the runtime names neither the service nor the adapter's table.
 
-Every service implements `validate_records` (no default): the rule for the records of a kind it owns, as a set, from the record bodies alone. `check` runs it at load and
-`patchkit records --check` runs it on a built module, so the load and `module:check` cannot differ. A service that owns no kind, or needs no rule, writes `dkrt_abi::accepts_records!();`.
+Every service implements `validate_records` (no default): the rule for the records of a kind it owns, as far as the record bodies alone decide it. `check` runs it at load and
+`patchkit records --check` runs it on a built module, so the load and `module:check` cannot differ on these rules. What needs the device, the module's image or another kind stays in `check`. A service that owns no kind, or needs no rule, writes `dkrt_abi::accepts_records!();`. A service with a rule also has an inherent `validate` that the trait method calls; patchkit calls it through the owner map in `packages/patchkit/src/record_rules.rs` (add one line there).
 
 Make it a real service:
 

@@ -279,6 +279,7 @@ fn fixture(device: u32) -> Fixture {
             // four DSP rows are all the image has: nothing fits beside B
             beside_b: false,
         }),
+        rules: true,
     }
 }
 

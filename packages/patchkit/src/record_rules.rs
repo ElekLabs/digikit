@@ -1,26 +1,21 @@
-//! The rule for the records of a built module: for each record kind, the `validate_records` of the service that owns the kind.
+//! The rule for the records of a built module: for each record kind, the validator of the service that owns the kind.
 //!
-//! `dkneeds::KINDS` names the owner of each kind (`[records.kinds]` of sdk/sdk.toml). The services are Rust crates, so the owner's name selects the crate here, one line each.
-//! The service's own `check` runs the same function when the runtime loads the module, so a module that passes here is not refused for its records' content at load.
-//! Not for wasm32: the services are host and ColdFire crates.
-use dkrt_abi::service::{Problem, Service};
-use dkrt_test_support::FakeCore;
+//! `dkneeds::KINDS` names the owner of each kind (`[records.kinds]` of sdk/sdk.toml). The services are Rust crates and the map from an owner's name to its crate is written by hand
+//! below, one line each (`owner_rule`); the test at the end fails for an owner without a line. Each line names the service's inherent `validate` (`Lfo::validate`), which is the function the
+//! service's `Service::validate_records` runs, so patchkit needs no core and no host fake to call it.
+//!
+//! What the validators cover is what the records' own bytes decide: each service's `validate` module names its checks. What needs the device, the module's image, another record kind or the registry
+//! state stays in the service's `check` at load, so a module that passes here can still be refused at load for those. Not for wasm32: the services are host and ColdFire crates.
+use dkrt_abi::service::Problem;
 
 type Rule = fn(u32, &[&[u8]], &mut dyn FnMut(Problem));
-
-fn rule_of<S: Service<FakeCore>>() -> Rule {
-    fn run<S: Service<FakeCore>>(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
-        S::validate_records(kind, bodies, &mut |p| report(p));
-    }
-    run::<S>
-}
 
 /// The services that own record kinds, by the name of `[[service]]` in sdk/sdk.toml. Add a line when a service gets a kind: the test below fails until then.
 fn owner_rule(owner: &str) -> Option<Rule> {
     match owner {
-        "lfo" => Some(rule_of::<dkrt_svc_lfo::records::Lfo>()),
-        "fx" => Some(rule_of::<dkrt_svc_fx::records::Fx>()),
-        "machines" => Some(rule_of::<dkrt_svc_machines::records::Machines>()),
+        "lfo" => Some(dkrt_svc_lfo::records::Lfo::validate),
+        "fx" => Some(dkrt_svc_fx::records::Fx::validate),
+        "machines" => Some(dkrt_svc_machines::records::Machines::validate),
         _ => None,
     }
 }

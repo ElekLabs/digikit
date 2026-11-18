@@ -209,20 +209,21 @@ fn a_bad_action_a_bad_parameter_or_a_page_without_page_rows_is_refused() {
         action(0, 8),
         action(0, 12),
     ]);
-    assert_eq!(run_check(&core, check_step::ACTIONS, &reg), E_FORMAT);
+    // the rule of the validator (`validate::Acc`), which the COUNTS step runs
+    assert_eq!(run_check(&core, check_step::COUNTS, &reg), E_FORMAT);
     // a callback outside the image
     let reg = section(&[param(0, SLOT_BASE, 0, 255, 0, "LEVEL"), action(0, 0x100)]);
     assert_eq!(run_check(&core, check_step::ACTIONS, &reg), E_FORMAT);
-    // a slot below the first knob slot, a range upside down, an index out of order
-    for bad in [
-        param(0, SLOT_BASE - 1, 0, 255, 0, "LEVEL"),
-        param(0, SLOT_BASE, 9, 1, 0, "LEVEL"),
-        param(2, SLOT_BASE, 0, 1, 0, "LEVEL"),
+    // a slot below the first knob slot (the device's), a range upside down and an index out of order (the validator's, run by COUNTS)
+    for (step, bad) in [
+        (
+            check_step::RECORDS,
+            param(0, SLOT_BASE - 1, 0, 255, 0, "LEVEL"),
+        ),
+        (check_step::COUNTS, param(0, SLOT_BASE, 9, 1, 0, "LEVEL")),
+        (check_step::COUNTS, param(2, SLOT_BASE, 0, 1, 0, "LEVEL")),
     ] {
-        assert_eq!(
-            run_check(&core, check_step::RECORDS, &section(&[bad])),
-            E_FORMAT
-        );
+        assert_eq!(run_check(&core, step, &section(&[bad])), E_FORMAT);
     }
     // pages need a device that has page rows (the table has none)
     let reg = section(&[(KIND_PAGE, std::vec![0u8; LEN_PAGE as usize - 8])]);

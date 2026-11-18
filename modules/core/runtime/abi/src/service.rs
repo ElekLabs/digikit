@@ -503,10 +503,10 @@ impl core::fmt::Display for Problem {
 #[macro_export]
 macro_rules! accepts_records {
     () => {
-        fn validate_records<R: FnMut($crate::service::Problem)>(
+        fn validate_records(
             _kind: u32,
             _bodies: &[&[u8]],
-            _report: &mut R,
+            _report: &mut dyn FnMut($crate::service::Problem),
         ) {
         }
     };
@@ -517,19 +517,21 @@ macro_rules! accepts_records {
 /// that a host test drives is generic over `C: CoreApi` and the test passes a `FakeCore`.
 #[allow(unused_variables)]
 pub trait Service<C: CoreApi> {
-    /// The rule for the records of kind `kind` that this service owns, as a whole set: `bodies` are the bodies (after the 8-byte header) of one module's records of that
-    /// kind, in file order. Calls `report` for each problem, none when the set is good. It reads nothing but its arguments, so a host tool runs it on a built module
-    /// (`patchkit records --check`) and the service's own `check` runs the same code at load. A kind the service does not own: accept. A service without rules
-    /// writes `dkrt_abi::accepts_records!();`. Required: a service says what it checks, even if that is nothing.
+    /// The rule for the records of kind `kind` that this service owns, as far as the bodies of one module's records of that kind decide it: `bodies` are the bodies (after the
+    /// 8-byte header) in file order. Calls `report` for each problem, none when the set is good. It reads nothing but its arguments, so a host tool runs it on a built module
+    /// (`patchkit records --check`), and the service's own `check` runs the same code at load (so a module that passes here is not refused at load for these rules). What
+    /// needs the device, the module's image, the section's other kinds or the registry state is not covered; it stays in `check`, and the service's own doc names it.
+    /// A kind the service does not own: accept. A service without rules writes `dkrt_abi::accepts_records!();`. Required: a service says what it checks, even if that is
+    /// nothing. The callback is `&mut dyn FnMut(Problem)` so the method has one shape for every service, also one built in another object.
     ///
     /// ```ignore
-    /// fn validate_records<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R) {
+    /// fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
     ///     if kind == KIND_X && bodies.len() > 8 {
     ///         report(Problem::set(kind, E_FORMAT, "more than 8 records"));
     ///     }
     /// }
     /// ```
-    fn validate_records<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R);
+    fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem));
     /// The service's declarations (`Declare`): called once at the runtime's init; the runtime compares them with the service's table.
     unsafe fn declare(d: &mut Declare) {}
     /// One step of the validation (`check_step`) for this service's records. Writes nothing.

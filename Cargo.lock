@@ -3283,7 +3283,6 @@ dependencies = [
  "dkrt-svc-fx",
  "dkrt-svc-lfo",
  "dkrt-svc-machines",
- "dkrt-test-support",
  "dksharc",
  "dkupload",
  "dt2-firmware-loader",

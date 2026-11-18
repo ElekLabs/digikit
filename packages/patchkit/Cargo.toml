@@ -53,9 +53,8 @@ plusdrive-format = { path = "../emulator/plusdrive" }
 emmc-card = { path = "../emulator/card" }
 # `patchkit budget` reads the rule of dkprof; dkprof has its own wasm, so patchkit.wasm leaves it out and stays small.
 dkprof = { path = "../dkprof" }
-# `patchkit records --check` runs `Service::validate_records` of the service that owns each record kind (src/record_rules.rs); FakeCore is the host core that names the trait's type.
+# `patchkit records --check` runs the inherent `validate` of the service that owns each record kind (src/record_rules.rs): no core, no host fake.
 dkrt-abi = { path = "../../modules/core/runtime/abi" }
-dkrt-test-support = { path = "../../modules/core/runtime/test-support" }
 dkrt-svc-lfo = { path = "../../modules/core/services/lfo" }
 dkrt-svc-fx = { path = "../../modules/core/services/fx" }
 dkrt-svc-machines = { path = "../../modules/core/services/machines" }

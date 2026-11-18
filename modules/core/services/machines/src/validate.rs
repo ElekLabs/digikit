@@ -1,6 +1,14 @@
-//! The rule for the records of the machines service, as far as a record's own bytes decide it: shared by the service's `check` (load) and `Machines::validate_records`
-//! (a host tool on a built module). What needs the device or another record stays in `check`: the device's slot base and knob count (`slot`, `template`), a knob that names
-//! a parameter of the file, a page's machine, the native pages (their code offsets depend on the module's image), and the free rows.
+//! The rule for the records of the machines service, as far as the bytes of the records of one kind decide it. One accumulator, [`Acc`], holds it: `Machines::validate_records`
+//! (a host tool on a built module) feeds it the bodies of one kind, and the service's `check` (load) feeds it every parameter, machine, page and action record of the section in
+//! file order, so the two cannot differ.
+//!
+//! The accumulator covers: the number of rows per kind (parameters, machines and pages as many as the registry has, at most 32 actions); the size of each body; a parameter's
+//! index equal to its position, minimum not above maximum, and printable names; a page's level and printable texts; a machine's fixed fields (position 255, `own_dsp` 0 or 1,
+//! level) and printable texts; a machine key at most once; an action naming a parameter number below 32, at most one action per parameter.
+//!
+//! What stays in `check`, because it needs the device, the module's image, another kind or the registry state: the device's slot base and knob count (`slot`, `template`), a
+//! knob or action that names a parameter of the file (`pi < np`), an action's code offset inside the image, a page's machine, `own_dsp` 1 on a device without page rows, two
+//! machine keys that resolve to one type number, a type number in use, the native pages and the free rows.
 use dkrt_abi::mem::cstr_len;
 use dkrt_abi::mem::rd32;
 use dkrt_abi::service::Problem;
@@ -70,17 +78,20 @@ pub unsafe fn machine_texts(b: *const u8) -> bool {
     text_ok(b.add(52), MACH_TEXT) && text_ok(b.add(52 + MACH_TEXT), MACH_TEXT)
 }
 
-fn body_len(kind: u32) -> usize {
-    (if kind == KIND_PARAM {
+/// The size of the body of record kind `kind`; `None` for a kind this rule does not cover (the native pages and every kind of another service).
+pub fn body_len(kind: u32) -> Option<usize> {
+    let whole = if kind == KIND_PARAM {
         LEN_PARAM
     } else if kind == KIND_MACHINE {
         LEN_MACHINE
     } else if kind == KIND_PAGE {
         LEN_PAGE
-    } else {
+    } else if kind == KIND_ACTION {
         LEN_ACTION
-    }) as usize
-        - 8
+    } else {
+        return None;
+    };
+    Some(whole as usize - 8)
 }
 
 fn rows(kind: u32) -> usize {
@@ -95,25 +106,58 @@ fn rows(kind: u32) -> usize {
     }
 }
 
-/// Checks the records `bodies` of `kind` (parameter, machine, page or action) of one module, in order. The native page kinds and a kind the service does not own are accepted.
-pub fn records<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R) {
-    if kind != KIND_PARAM && kind != KIND_MACHINE && kind != KIND_PAGE && kind != KIND_ACTION {
-        return;
+/// Where the counter of `kind` is in [`Acc::seen`].
+fn slot(kind: u32) -> usize {
+    if kind == KIND_PARAM {
+        0
+    } else if kind == KIND_MACHINE {
+        1
+    } else if kind == KIND_PAGE {
+        2
+    } else {
+        3
     }
-    if bodies.len() > rows(kind) {
-        report(Problem::set(kind, E_FORMAT, what::COUNT));
-    }
-    let mut acted = 0u32;
-    let mut index = 0;
-    while index < bodies.len() {
-        let b = bodies[index];
-        if b.len() != body_len(kind) {
-            report(Problem::record(kind, index, E_FORMAT, what::SIZE));
-            index += 1;
-            continue;
+}
+
+/// The rule, one record at a time: the records of a module, of any of the four kinds and in file order, go through [`Acc::record`]. It keeps what a later record needs to know about
+/// the earlier ones (how many of each kind, the machine keys, the parameters that have an action). It reads nothing but its arguments and has no panic path (the service runs it on the card).
+pub struct Acc {
+    /// Records seen so far of each kind: parameter, machine, page, action. The count is a record's index within its kind.
+    seen: [usize; 4],
+    /// The key of each machine record that had the right size, by its index.
+    keys: [Option<u32>; limits::MACHINE_ROWS],
+    /// The parameters that have an action.
+    acted: u32,
+}
+
+impl Acc {
+    pub const fn new() -> Acc {
+        Acc {
+            seen: [0; 4],
+            keys: [None; limits::MACHINE_ROWS],
+            acted: 0,
         }
-        let p = b.as_ptr();
-        // SAFETY: `b` has the body length of `kind`, which every read below stays inside
+    }
+
+    /// Checks the next record of `kind` (its body, after the 8-byte header) and reports each problem. A kind this rule does not cover is not looked at.
+    pub fn record(&mut self, kind: u32, body: &[u8], report: &mut dyn FnMut(Problem)) {
+        let Some(len) = body_len(kind) else {
+            return;
+        };
+        let at = slot(kind);
+        let index = self.seen.get(at).copied().unwrap_or(0);
+        if let Some(n) = self.seen.get_mut(at) {
+            *n += 1;
+        }
+        if index == rows(kind) {
+            report(Problem::set(kind, E_FORMAT, what::COUNT));
+        }
+        if body.len() != len {
+            report(Problem::record(kind, index, E_FORMAT, what::SIZE));
+            return;
+        }
+        let p = body.as_ptr();
+        // SAFETY: `body` has the body length of `kind`, which every read below stays inside
         unsafe {
             if kind == KIND_PARAM {
                 if rd32(p) != index as u32 {
@@ -130,9 +174,10 @@ pub fn records<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R) {
                 if !machine_fields(p) || !machine_texts(p) {
                     report(Problem::record(kind, index, E_FORMAT, what::MACHINE));
                 }
+                let key = rd32(p);
                 let mut with = 0;
-                while with < index {
-                    if bodies[with].len() == b.len() && rd32(bodies[with].as_ptr()) == rd32(p) {
+                while with < index && with < self.keys.len() {
+                    if self.keys.get(with).copied().flatten() == Some(key) {
                         report(Problem::clash(
                             kind,
                             index,
@@ -144,17 +189,27 @@ pub fn records<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R) {
                     }
                     with += 1;
                 }
+                if let Some(k) = self.keys.get_mut(index) {
+                    *k = Some(key);
+                }
             } else {
                 let pi = rd32(p);
                 if pi >= 32 {
                     report(Problem::record(kind, index, E_FORMAT, what::ACTION));
-                } else if acted & (1 << pi) != 0 {
+                } else if self.acted & (1 << pi) != 0 {
                     report(Problem::record(kind, index, E_FORMAT, what::ACTION_TWICE));
                 } else {
-                    acted |= 1 << pi;
+                    self.acted |= 1 << pi;
                 }
             }
         }
-        index += 1;
+    }
+}
+
+/// Checks the records `bodies` of `kind` (parameter, machine, page or action) of one module, in order. The native page kinds and a kind the service does not own are accepted.
+pub fn records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+    let mut acc = Acc::new();
+    for body in bodies {
+        acc.record(kind, body, report);
     }
 }

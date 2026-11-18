@@ -62,7 +62,7 @@ fn same(a: &[u8], b: &[u8], n: usize) -> bool {
 }
 
 /// Checks the bodies of one module's shape records, in order, and calls `report` for each problem.
-pub fn check_set<R: FnMut(Problem)>(bodies: &[&[u8]], report: &mut R) {
+pub fn check_set(bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
     const K: u32 = KIND_LFO_SHAPE;
     if bodies.is_empty() || bodies.len() > MAX_SHAPES {
         report(Problem::set(K, E_FORMAT, what::COUNT));

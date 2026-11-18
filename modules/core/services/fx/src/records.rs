@@ -13,9 +13,17 @@ use dkrt_sdk::*;
 /// The fx service; every method works over the core it is given.
 pub struct Fx;
 
-impl<C: CoreApi> Service<C> for Fx {
-    fn validate_records<R: FnMut(Problem)>(kind: u32, bodies: &[&[u8]], report: &mut R) {
+impl Fx {
+    /// The rule for the effect records of one module (`validate::effects`); a kind other than the effect record is accepted. `Service::validate_records` is this function,
+    /// and a host tool that has no core (`patchkit records --check`) calls it directly.
+    pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
         crate::validate::effects(kind, bodies, report)
+    }
+}
+
+impl<C: CoreApi> Service<C> for Fx {
+    fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+        Fx::validate(kind, bodies, report)
     }
 
     unsafe fn declare(d: &mut Declare) {
@@ -51,7 +59,7 @@ impl<C: CoreApi> Service<C> for Fx {
             if n == 0 {
                 return OK;
             }
-            if fxpage::check_record(core, bodies[0].as_ptr()) == E_NO_REGISTRY {
+            if fxpage::info(core).is_null() {
                 return E_NO_REGISTRY;
             }
             let mut first = OK;
