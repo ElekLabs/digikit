@@ -135,7 +135,11 @@ fn a_reload_waits_while_an_effect_of_the_module_is_on_a_route() {
     assert_eq!(ask(owner), OK, "the effect is published but on no route");
     core.dsp().fx_route[1] = 1;
     assert_eq!(ask(owner), dkrt_sdk::E_RELOAD_ROUTED);
-    assert_eq!(ask(owner + 1), OK, "another module's reload is not held up by it");
+    assert_eq!(
+        ask(owner + 1),
+        OK,
+        "another module's reload is not held up by it"
+    );
     core.dsp().fx_route[1] = 0;
     assert_eq!(ask(owner), OK);
 }

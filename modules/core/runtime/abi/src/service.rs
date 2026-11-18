@@ -731,7 +731,10 @@ mod thunk {
     ) {
         S::settle(&*(core as *const C), &*s)
     }
-    pub unsafe extern "C" fn reload_refusal<C: CoreApi, S: Service<C>>(core: *const c_void, owner: u8) -> i32 {
+    pub unsafe extern "C" fn reload_refusal<C: CoreApi, S: Service<C>>(
+        core: *const c_void,
+        owner: u8,
+    ) -> i32 {
         S::reload_refusal(&*(core as *const C), owner)
     }
     pub unsafe extern "C" fn module_begin<C: CoreApi, S: Service<C>>(
