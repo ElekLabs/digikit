@@ -7,7 +7,7 @@
  * A SHA-256 gates a pin only when it is `exact`. A pin is never set from a hash: it is written from the numeric report of a capture
  * (`pin-cli.ts`) after the report was approved.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parse } from 'smol-toml';
 import { FS, fft, hanning, peak, rms, wordsHash } from './analysis.ts';
@@ -291,15 +291,18 @@ export interface CompareOptions {
   onsetBlocks?: number;
 }
 
-/** Frames of one DSP block of a device (`dt2`, `dn2`): the sample rate over `dsp_blocks_per_second` of `devices/*.toml`. */
-export function deviceBlockFrames(device: 'dt2' | 'dn2', rate = FS): number {
-  const file = path.join(
-    import.meta.dirname,
-    '../../../devices',
-    device === 'dt2' ? 'digitakt-ii.toml' : 'digitone-ii.toml',
-  );
-  const board = (parse(readFileSync(file, 'utf8')) as { board: { dsp_blocks_per_second: number } }).board;
-  return Math.round(rate / board.dsp_blocks_per_second);
+/** Frames of one DSP block of a device (its `short` id): the sample rate over `dsp_blocks_per_second` of its `devices/*.toml`. */
+export function deviceBlockFrames(device: string, rate = FS): number {
+  const dir = path.join(import.meta.dirname, '../../../devices');
+  for (const name of readdirSync(dir).filter((n) => n.endsWith('.toml'))) {
+    const t = parse(readFileSync(path.join(dir, name), 'utf8')) as {
+      device?: { short?: string };
+      board?: { dsp_blocks_per_second?: number };
+    };
+    if (t.device?.short === device && t.board?.dsp_blocks_per_second)
+      return Math.round(rate / t.board.dsp_blocks_per_second);
+  }
+  throw new Error(`no device file with a DSP block rate for ${device}`);
 }
 
 /**

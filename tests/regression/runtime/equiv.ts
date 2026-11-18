@@ -1,7 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { button, MS, stepWithProgress, type Device, type Session } from '@digi/test-support';
-import { checkCapture, deviceBlockFrames, failureMessage, sineProblems, type SineLimits } from '@digi/sharc-rig-kit/pins';
+import {
+  checkCapture,
+  deviceBlockFrames,
+  failureMessage,
+  sineProblems,
+  type SineLimits,
+} from '@digi/sharc-rig-kit/pins';
 export { pcmPinFile } from '@digi/sharc-rig-kit/pins';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -136,7 +136,15 @@ describe('compare', () => {
   });
 
   it('reads the block of a device from its profile', () => {
-    expect([deviceBlockFrames('dt2'), deviceBlockFrames('dn2')]).toEqual([32, 32]);
+    const dir = path.join(import.meta.dirname, '../../../devices');
+    const shorts = readdirSync(dir)
+      .filter((n) => n.endsWith('.toml'))
+      .map((n) => readFileSync(path.join(dir, n), 'utf8'))
+      .filter((t) => /^dsp_blocks_per_second/m.test(t))
+      .map((t) => /^short = "(\w+)"/m.exec(t)![1]!);
+    expect(shorts.length).toBeGreaterThan(1);
+    for (const d of shorts) expect(deviceBlockFrames(d)).toBe(32);
+    expect(() => deviceBlockFrames('nope')).toThrow();
   });
 
   it('says that L = R is gone', () => {
