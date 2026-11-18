@@ -549,15 +549,26 @@ impl Default for Options {
     }
 }
 
-/// Store the read-only sections that a module of the set unpacks (`[[repack]]`) packed, and check each stored stream against the module's buffer layout.
-/// A claim on a section that the device does not list in `[container] repack`, two claims on one role, and a layout where the in-place unpack would
-/// write over stream bytes that are not read yet (margin of 0 or less) refuse the build.
-fn store_repacked(fw: &mut Firmware, lib: &Library, order: &[String], dev: &str) -> Result<()> {
+/// A `[[repack]]` of a module of the set, checked against the device: the section it names and the module that claims it.
+struct RepackClaim<'a> {
+    module: &'a Module,
+    def: &'a crate::module::RepackDef,
+    section: u32,
+}
+
+/// The `[[repack]]` claims of the set: refuses a claim on a section that the device does not list in `[container] repack`, and two claims on one role.
+fn repack_claims<'a>(
+    fw: &Firmware,
+    lib: &'a Library,
+    order: &[String],
+    dev: &str,
+) -> Result<Vec<RepackClaim<'a>>> {
     let mut claimed: BTreeMap<String, String> = BTreeMap::new();
+    let mut out = vec![];
     for id in order {
         let m = lib.get(id).unwrap();
         for r in m.manifest.repack.iter().filter(|r| on(&r.devices, dev)) {
-            let sec = fw
+            let section = fw
                 .device
                 .role_section(&r.role)
                 .filter(|s| fw.device.is_repackable(*s))
@@ -575,34 +586,48 @@ fn store_repacked(fw: &mut Firmware, lib: &Library, order: &[String], dev: &str)
                     r.role
                 ));
             }
-            let data = &fw.section(sec).unwrap().data;
-            if data.len() as u64 != r.len || sha256_hex(data) != r.sha256 {
-                return Err(err!(
-                    "{id}: section {sec} of this image is not the one the module unpacks and checks ({} bytes, sha256 {}; expected {} bytes, {})",
-                    data.len(),
-                    sha256_hex(data),
-                    r.len,
-                    r.sha256
-                ));
-            }
-            let stored = fw.repack(sec)?;
-            let stream = &fw.section(sec).unwrap().stored;
-            if r.stage_end < r.dest + stored as u64 {
-                return Err(err!(
-                    "{id}: the packed section {sec} ({stored} bytes) does not fit the buffer {:#x}..{:#x}",
-                    r.dest,
-                    r.stage_end
-                ));
-            }
-            let stage = r.stage_end - stored as u64;
-            let margin = crate::aplib::inplace_margin(stream, r.dest, stage)
-                .map_err(|e| err!("{id}: section {sec}: {e}"))?;
-            if let Some(m) = margin.filter(|m| *m <= 0) {
-                return Err(err!(
-                    "{id}: unpacking section {sec} in place from {:#x} over the stream staged at {stage:#x} has margin {m}: it would overwrite bytes that are not read yet",
-                    r.dest
-                ));
-            }
+            out.push(RepackClaim {
+                module: m,
+                def: r,
+                section,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// Store the sections of `claims` packed and check each stored stream against its module's buffer layout: the stock section is the one the module
+/// checks, the stream fits, and the in-place margin is above 0 (a margin of 0 or less would overwrite stream bytes that are not read yet).
+fn store_repacked(fw: &mut Firmware, claims: &[RepackClaim]) -> Result<()> {
+    for c in claims {
+        let (id, r, sec) = (c.module.id(), c.def, c.section);
+        let data = &fw.section(sec).unwrap().data;
+        if data.len() as u64 != r.len || sha256_hex(data) != r.sha256 {
+            return Err(err!(
+                "{id}: section {sec} of this image is not the one the module unpacks and checks ({} bytes, sha256 {}; expected {} bytes, {})",
+                data.len(),
+                sha256_hex(data),
+                r.len,
+                r.sha256
+            ));
+        }
+        let stored = fw.repack(sec)?;
+        let stream = &fw.section(sec).unwrap().stored;
+        if r.stage_end < r.dest + stored as u64 {
+            return Err(err!(
+                "{id}: the packed section {sec} ({stored} bytes) does not fit the buffer {:#x}..{:#x}",
+                r.dest,
+                r.stage_end
+            ));
+        }
+        let stage = r.stage_end - stored as u64;
+        let margin = crate::aplib::inplace_margin(stream, r.dest, stage)
+            .map_err(|e| err!("{id}: section {sec}: {e}"))?;
+        if let Some(m) = margin.filter(|m| *m <= 0) {
+            return Err(err!(
+                "{id}: unpacking section {sec} in place from {:#x} over the stream staged at {stage:#x} has margin {m}: it would overwrite bytes that are not read yet",
+                r.dest
+            ));
         }
     }
     Ok(())
@@ -2178,9 +2203,21 @@ pub fn apply_with(
     }
 
     // The patch record: first in the segment chain when the expansion region is in use, else a DSP block.
+    let repacks = repack_claims(&fw, lib, &order, &dev)?;
     let rec = Record {
         base_sha256: fw.syx_sha256.clone(),
         modules: order.iter().map(|i| lib.get(i).unwrap().tag()).collect(),
+        repacks: repacks
+            .iter()
+            .map(|c| crate::record::Repack {
+                role: c.def.role.clone(),
+                module: c.module.tag(),
+                dest: c.def.dest as u32,
+                stage_end: c.def.stage_end as u32,
+                len: c.def.len as u32,
+                sha256: c.def.sha256.clone(),
+            })
+            .collect(),
     };
     let rec_bytes = rec.encode();
     let (rec_region, rec_addr) = if !opts.record {
@@ -2400,7 +2437,7 @@ pub fn apply_with(
         }
         fw.replace(fw.device.main_section(), mem.main.clone())?;
     }
-    store_repacked(&mut fw, lib, &order, &dev)?;
+    store_repacked(&mut fw, &repacks)?;
     let syx = fw.build(opts.flash_cap.then_some(lim.container_max as usize))?;
     let regions = allocs
         .iter()
@@ -2442,7 +2479,7 @@ pub fn apply_with(
     let report = if opts.record {
         crate::verify::verify_with_library(&applied.syx, Some(reg), Some(fw_bytes), lib)?
     } else {
-        crate::verify::verify(&applied.syx, Some(reg), Some(fw_bytes))?
+        crate::verify::verify_unrecorded(&applied.syx, Some(reg), Some(fw_bytes))?
     };
     applied.plan.output = Some(PlanOutput {
         syx_sha256: sha256_hex(&applied.syx),

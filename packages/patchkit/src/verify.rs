@@ -106,15 +106,19 @@ pub fn patch_record(syx_bytes: &[u8]) -> Result<Option<Record>> {
     find_record(&Firmware::parse(syx_bytes)?)
 }
 
-/// What the hook of a module that unpacks section `id` relies on: the stream header (body length, byte sum), and with a library a module of the record
-/// that claims the section's role, the stream fitting its buffer and an in-place margin above 0.
+/// What the hook of a module that unpacks section `id` relies on, checked from the patch record's `repacks` entry for the section's role: the entry
+/// must name a module of the record, the stream header length and byte sum must hold, the decoded section must be the stock one the entry names
+/// (length and SHA-256), the stream must fit `stage_end - dest`, and the in-place margin must be above 0. With a library the module's own `[[repack]]`
+/// must also say the same (a record that was edited, or a module that changed, is refused).
 fn check_repacked(
     fw: &Firmware,
     id: u32,
     record: Option<&Record>,
     lib: Option<&Library>,
 ) -> Result<()> {
-    let stored = &fw.section(id).unwrap().stored;
+    let sec = fw.section(id).unwrap();
+    let stored = &sec.stored;
+    let dev = fw.device.short();
     let be = |b: &[u8]| u32::from_be_bytes(b.try_into().unwrap());
     if stored.len() < 8 || be(&stored[..4]) as usize + 8 != stored.len() {
         return Err(err!(
@@ -127,44 +131,68 @@ fn check_repacked(
     if sum != be(&stored[4..8]) {
         return Err(err!("section {id}: the stored stream's byte sum is wrong"));
     }
-    let Some(lib) = lib else { return Ok(()) };
-    let dev = fw.device.short();
     let role = fw
         .device
         .repack_roles()
         .iter()
         .find(|r| fw.device.role_section(r) == Some(id))
         .ok_or_else(|| err!("section {id} cannot be stored packed on {dev}"))?;
-    let claim = record
+    let entry = record
         .into_iter()
-        .flat_map(|r| r.modules.iter())
-        .filter_map(|m| lib.get(m.split('@').next().unwrap_or(m)))
-        .flat_map(|m| {
-            m.manifest
-                .repack
-                .iter()
-                .map(move |r| (m.id().to_string(), r))
-        })
-        .find(|(_, r)| r.role == *role && crate::prim::on(&r.devices, dev));
-    let Some((owner, r)) = claim else {
+        .flat_map(|r| r.repacks.iter().map(move |e| (r, e)))
+        .find(|(_, e)| e.role == *role);
+    let Some((rec, e)) = entry else {
         return Err(err!(
-            "section {id} is stored packed but no module of the patch record unpacks the {role} section"
+            "section {id} is stored packed but the patch record has no repack entry for the {role} section: no module is known to unpack it"
         ));
     };
-    let len = stored.len() as u64;
-    if r.stage_end < r.dest + len {
+    if !rec.modules.contains(&e.module) {
         return Err(err!(
-            "section {id} ({len} bytes) does not fit the buffer {:#x}..{:#x} of {owner}",
-            r.dest,
-            r.stage_end
+            "section {id}: the repack entry names {}, which is not a module of the patch record",
+            e.module
         ));
     }
-    let margin = crate::aplib::inplace_margin(stored, r.dest, r.stage_end - len)
-        .map_err(|e| err!("section {id}: {e}"))?;
+    if sec.data.len() as u64 != e.len as u64 || crate::error::sha256_hex(&sec.data) != e.sha256 {
+        return Err(err!(
+            "section {id} does not decode to the stock section that {} unpacks and checks",
+            e.module
+        ));
+    }
+    let len = stored.len() as u64;
+    let (dest, stage_end) = (e.dest as u64, e.stage_end as u64);
+    if stage_end < dest + len {
+        return Err(err!(
+            "section {id} ({len} bytes) does not fit the buffer {dest:#x}..{stage_end:#x} of {}",
+            e.module
+        ));
+    }
+    let margin = crate::aplib::inplace_margin(stored, dest, stage_end - len)
+        .map_err(|x| err!("section {id}: {x}"))?;
     if let Some(m) = margin.filter(|m| *m <= 0) {
         return Err(err!(
-            "section {id}: the in-place unpack of {owner} has margin {m}: it would overwrite bytes that are not read yet"
+            "section {id}: the in-place unpack of {} has margin {m}: it would overwrite bytes that are not read yet",
+            e.module
         ));
+    }
+    if let Some(lib) = lib {
+        let same = lib
+            .get(e.module.split('@').next().unwrap_or(&e.module))
+            .is_some_and(|m| {
+                m.manifest.repack.iter().any(|r| {
+                    r.role == e.role
+                        && r.dest == dest
+                        && r.stage_end == stage_end
+                        && r.len == e.len as u64
+                        && r.sha256 == e.sha256
+                        && crate::prim::on(&r.devices, dev)
+                })
+            });
+        if !same {
+            return Err(err!(
+                "section {id}: {} does not declare the repack the patch record names (dest, stage_end, length and hash must match)",
+                e.module
+            ));
+        }
     }
     Ok(())
 }
@@ -173,25 +201,33 @@ fn check_repacked(
 /// image, to prove those sections unchanged; without it the call fails, so a damaged read-only section can never pass. The one exception
 /// is an image whose SHA-256 is a known stock image (a port in `reg`): it is the stock image, so its read-only sections are stock.
 pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> Result<Report> {
-    check(syx_bytes, reg, base, true, None)
+    check(syx_bytes, reg, base, true, None, true)
 }
 
-/// `verify` with the module library: a read-only section stored packed (`[[repack]]`) is accepted only when a module of the patch record claims its role,
-/// and its stored stream is checked against that module's declared buffer layout. Without a library (`verify`) only the stream's own header and byte
-/// sum can be checked, and the check list says that the claim was not.
+/// `verify` for an image made without a patch record (oracles, tests): a packed section has no repack entry to check, so only its decoded bytes are.
+pub fn verify_unrecorded(
+    syx_bytes: &[u8],
+    reg: Option<&Registry>,
+    base: Option<&[u8]>,
+) -> Result<Report> {
+    check(syx_bytes, reg, base, true, None, false)
+}
+
+/// `verify` with the module library: besides the patch record's repack entry (which `verify` checks alone), the claiming module's manifest must declare
+/// the same layout and stock section.
 pub fn verify_with_library(
     syx_bytes: &[u8],
     reg: Option<&Registry>,
     base: Option<&[u8]>,
     lib: &Library,
 ) -> Result<Report> {
-    check(syx_bytes, reg, base, true, Some(lib))
+    check(syx_bytes, reg, base, true, Some(lib), true)
 }
 
 /// Decodes and checks an image like `verify` but does not require the stock base: for identifying a file (what device, which record),
 /// never as a proof that the image is safe to flash.
 pub fn inspect(syx_bytes: &[u8], reg: Option<&Registry>) -> Result<Report> {
-    check(syx_bytes, reg, None, false, None)
+    check(syx_bytes, reg, None, false, None, true)
 }
 
 fn check(
@@ -200,6 +236,7 @@ fn check(
     base: Option<&[u8]>,
     need_base: bool,
     lib: Option<&Library>,
+    recorded: bool,
 ) -> Result<Report> {
     let mut checks = vec![];
     let msgs = syx::messages(syx_bytes)?;
@@ -390,13 +427,15 @@ fn check(
             ids.join(", ")
         ));
         for id in repacked {
-            check_repacked(&fw, id, record.as_ref(), lib)?;
+            if recorded {
+                check_repacked(&fw, id, record.as_ref(), lib)?;
+            }
             checks.push(format!(
                 "section {id} is stored packed and decodes to the stock bytes{}",
                 if lib.is_some() {
-                    " (a module of the record unpacks it; its layout holds)"
+                    " (the record's repack entry holds, and its module declares the same)"
                 } else {
-                    " (no module library: the claim and the layout were not checked)"
+                    " (the record's repack entry holds)"
                 }
             ));
         }

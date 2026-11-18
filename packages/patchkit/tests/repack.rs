@@ -96,7 +96,8 @@ fn section_7_is_stored_packed_only_when_a_module_claims_it() {
         s.stored.len()
     );
     // verify proves it against the stock image, and says how
-    let report = patchkit::verify::verify(&out.syx, Some(&registry()), Some(&raw)).unwrap();
+    let report =
+        patchkit::verify::verify_unrecorded(&out.syx, Some(&registry()), Some(&raw)).unwrap();
     assert!(
         report
             .checks
@@ -253,7 +254,7 @@ fn verify_accepts_a_packed_section_only_when_a_module_of_the_record_claims_it() 
         report
             .checks
             .iter()
-            .any(|c| c.contains("a module of the record unpacks it"))
+            .any(|c| c.contains("its module declares the same"))
     );
     // the same image, with a library where no module claims the role: refused
     for m in lib.modules.iter_mut() {
@@ -262,8 +263,8 @@ fn verify_accepts_a_packed_section_only_when_a_module_of_the_record_claims_it() 
     let e = patchkit::verify::verify_with_library(&out.syx, Some(&reg), Some(&raw), &lib)
         .unwrap_err()
         .0;
-    assert!(e.contains("no module of the patch record unpacks"), "{e}");
-    // a layout that the stream does not fit is refused too
+    assert!(e.contains("does not declare the repack"), "{e}");
+    // a module whose declared layout is not the record's is refused too
     let mut tight = Library::scan_repo_or_skip(&root()).unwrap();
     for m in tight.modules.iter_mut() {
         for r in m.manifest.repack.iter_mut() {
@@ -273,5 +274,84 @@ fn verify_accepts_a_packed_section_only_when_a_module_of_the_record_claims_it() 
     let e = patchkit::verify::verify_with_library(&out.syx, Some(&reg), Some(&raw), &tight)
         .unwrap_err()
         .0;
-    assert!(e.contains("does not fit"), "{e}");
+    assert!(e.contains("does not declare the repack"), "{e}");
+}
+
+#[test]
+fn verify_without_a_library_needs_the_repack_entry_of_the_patch_record() {
+    let Some(raw) = image() else { return };
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let reg = registry();
+    let dev = patchkit::devdata::all()
+        .iter()
+        .find(|d| d.short == "st")
+        .unwrap();
+    let (ids, _) = lib.with_requires(&dev.patch_sets["emulator"]).unwrap();
+    let out = apply::apply(&raw, &reg, &lib, &ids).unwrap();
+    // flash, preflight and the wasm callers have no library: the record's entry is what they check
+    let report = patchkit::verify::verify(&out.syx, Some(&reg), Some(&raw)).unwrap();
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|c| c.contains("repack entry holds"))
+    );
+    let rec = report.record.unwrap();
+    assert_eq!(rec.repacks.len(), 1);
+    assert_eq!(rec.repacks[0].role, "cf2");
+    assert!(rec.modules.contains(&rec.repacks[0].module));
+
+    // the same image with the entry block of its record cut off (the magic changed): a packed section that no module is known to unpack
+    let mut fw = Firmware::parse(&out.syx).unwrap();
+    let mut main = fw.main().unwrap().data.clone();
+    let at = main.windows(4).position(|w| w == b"RPK1").expect("RPK1");
+    main[at + 3] = b'0';
+    fw.replace(fw.device.main_section(), main).unwrap();
+    let cut = fw.build(None).unwrap();
+    let e = patchkit::verify::verify(&cut, Some(&reg), Some(&raw))
+        .unwrap_err()
+        .0;
+    assert!(e.contains("no repack entry"), "{e}");
+}
+
+#[test]
+fn the_two_hardware_sets_are_the_peer_image_alone_and_the_full_set() {
+    let Some(raw) = image() else { return };
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let reg = registry();
+    let dev = patchkit::devdata::all()
+        .iter()
+        .find(|d| d.short == "st")
+        .unwrap();
+    // step B has the modules of the emulator set
+    let sorted = |s: &Vec<String>| {
+        let mut s = s.clone();
+        s.sort();
+        s
+    };
+    assert_eq!(
+        sorted(&dev.patch_sets["device-full"]),
+        sorted(&dev.patch_sets["emulator"])
+    );
+    // step A: the peer image and what it needs to be loaded, no runtime; both fit the flash container with the cap on
+    let (ids, _) = lib.with_requires(&dev.patch_sets["device"]).unwrap();
+    let a = apply::apply(&raw, &reg, &lib, &ids).unwrap();
+    let rec = patchkit::verify::verify(&a.syx, Some(&reg), Some(&raw))
+        .unwrap()
+        .record
+        .unwrap();
+    let names: Vec<&str> = rec
+        .modules
+        .iter()
+        .map(|m| m.split('@').next().unwrap())
+        .collect();
+    assert_eq!(names, ["core/expansion", "core/peer-image"]);
+    assert_eq!(rec.repacks.len(), 1);
+    let (ids, _) = lib.with_requires(&dev.patch_sets["device-full"]).unwrap();
+    let b = apply::apply(&raw, &reg, &lib, &ids).unwrap();
+    assert!(a.syx.len() < b.syx.len());
 }
