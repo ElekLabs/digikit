@@ -4,7 +4,7 @@
   "channels": 2,
   "frames": 12000,
   "window_frames": 12000,
-  "onset": 168,
+  "onset": 136,
   "peak_db": -29.06,
   "stereo": {
     "identical": true,
