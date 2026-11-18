@@ -1,0 +1,114 @@
+# Port file: device and firmware specifics in one file built from committed data
+
+Status: design, todo. Stack PR1-PR3 and PR4 start after PR D (lfo shapes) and E5 ([extension-model.md](extension-model.md)).
+
+## 1. Problem
+
+- A service `.dks` is packed without firmware and names firmware through imports `dk_fw_`, `dk_exit_`, `dk_tail_`, `dk_stock_` and `dk_ret_` (`packages/patchkit/src/bind.rs:58-84`). `patchkit bind` resolves the names for one stock firmware. It adds trampolines, `BIND` items with the displaced stock bytes, and an `FW` item. A bound file holds firmware bytes, so it is never committed or published.
+- The workbench binds at install time from the user's stock `.syx` (`packages/workbench-core/src/modules/dkbind.ts`, `dktransfer.ts` `bindService`, `tryBind`, `refuseUnbound`; refusal kind `no-stock`; `firmware/stock-store.ts`). Without the `.syx`, every module that needs a service is refused, also in the emulator.
+- Services hold device-specific hook routines (`hooks-dn2.s`, `hooks-dt2.s`, `hooks-ui.s`: registers, frame offsets, redone stock instructions, constants) and per-device hook lists. Device specifics leak above the runtime layer.
+
+## 2. Goal
+
+Beyond the runtime, modules and services hold no device or firmware specifics. A user ticks any module. Install uploads it and the services it needs. No firmware file is needed and no service error appears. A new ordinary hook or anchor needs no reflash.
+
+## 3. Rejected options
+
+- A bind table in the image written by `patchkit apply`: a new hook needs a reflash.
+- On-device bind with a general instruction decoder: not needed.
+- A separate `.dkp` format with its own loader: a parallel path.
+- Site data inside each `.dks`: every service becomes firmware-specific in data.
+- Stock bytes fetched from the device or emulator, to keep host bind: keeps bound files and all bind code.
+- A loader service for the new code: about 1 KiB does not justify a second unit.
+
+## 4. Decision
+
+One port file per device and firmware version. We build it from committed data only (`devices/ports` anchors and hashes, `devices/fw` sites) and our sources. It holds no firmware bytes and builds on CI without firmware.
+
+It uses the container of `.dkm` and `.dks`: a third role (2, "port") with the same header, sha256, upload, verify and store path. It provides a service `port`. `patchkit pack` writes a hard NEED for `port` into every service that has a firmware reference. The boot planner orders the port file first and refuses its dependents when it is missing. Transfer installs it through the existing needs resolver and picks the file by the device's firmware identity. Safe mode skips it like any provider, so all sites stay stock.
+
+Card path: `services/port.dks` (one device per card). The `FW` table item moves from services into the port file. The existing check against the image's `fw_id` stays (`modules/core/runtime/src/rs/src/loader/role.rs:106-126`). A port file for another firmware is refused with `E_HOOK_STOCK`.
+
+## 5. Port file contents
+
+1. FWNAMES: name hash to address, for every anchor, exit and hook site that services may use. About 65 entries today: 47 hook references, 13 anchor aliases and at least 3 `dkfw` names (lfo, machines, fx). Source: every entry in `devices/fw/*.toml` whose `users` names a `core/services/*` id. `patchkit service-check` fails a service that references a name outside this set.
+2. SITES: per hook site the address, the displaced length (whole instructions), a stock check value, the kind (raw, tail, stock) and an optional fixup list (reserved, empty today).
+3. Step 3 (section 9): the device-specific hook adapter routines, as code built from our sources.
+
+Stock check: before it copies or installs, the runtime compares the first 8 bytes of the sha256 of the live site bytes with the port value. Every port anchor already carries its sha256 (`devices/ports/dn2-1.12.toml`), and the runtime has `sha256.rs`.
+
+Displaced instructions: only 7 of 26 hooks per device need a stock copy (lfo `graph_vec` tail, lfo `t1_range` stock, fx `page_desc` stock, machines `source_key`, `source_turn`, `source_draw` and `source_code` tails). All 7 are plain copies by their declared text. The other 19, including the five branching sites, redo their instructions in the routine and exit through `dk_exit_` or `dk_ret_`. The first build has no fixup encoder. `patchkit` fails the port build when a site needs a form the runtime lacks. A form (`(d16,PC)` to abs.l, bra/bsr/bcc to 32-bit) is about 15 lines when first needed.
+
+## 6. Runtime work and size
+
+Port role steps; name lookup in the existing import seam (`loader/seams.rs:28-36`); tail copy from flash after the hash check; the installer takes site facts from SITES (`loader/install.rs` keeps the masked check, the `jmp.l` write, the flush and the restore); the commit step compares declared hooks with the HOOKS entries that have a port record. Size: +0.5 to +1 KiB text on about 216 KiB, under 1 KiB arena RAM. It stays in the runtime. Removed: BIND parsing in services (`fw_check`, `binds_of`). Service hooks stay raw-only.
+
+## 7. Refusals
+
+All use existing codes at MOD_LOAD.
+
+| Case | Code |
+| --- | --- |
+| Name missing in the port file | `E_IMPORT` (detail: name hash) |
+| Live site bytes differ | `E_HOOK_STOCK` |
+| Overlapping sites | `E_PLAN_OWNER` |
+| Full site table | `E_PLAN_FIT` |
+| Port file for another firmware | `E_HOOK_STOCK` |
+| Port file missing | the planner refuses the dependents |
+
+## 8. Format and ABI
+
+Table tags BIND (10) and FW (11) leave services. New port tags FWNAMES and SITES. `SVC_ABI` and the runtime minor version change once. The runtime refuses an old bound file with `E_SVC_ABI`, and Transfer replaces it.
+
+## 9. Step 3: adapter routines in the port file (after E8)
+
+- The code section of the port file holds the device-specific hook routines that are in the services today.
+- A service lists the hooks it takes in HOOKS without an entry. The planner one-owner rule and the install lifecycle stay as they are. The installer takes the entry from the port file by hook name. Image interrupt slots work the same way.
+- Each routine calls the service through a pointer slot in the data of the port file. The service fills the slot by name with a neutral C function. These functions exist for lfo: `dk_lfo_eval`, `dk_lfo_name`, `dk_lfo_range_max`, `dk_lfo_graph` (`modules/core/services/lfo/dks/src/hooks.rs:56-87`). They become a declared callback group in `sdk/sdk.toml` (name, signature, task or interrupt context). An empty slot takes the stock path that each routine already has.
+- One port file per device and firmware holds the routines of all services.
+- Hot reload: the site jump never points into a service, so a service replace is a slot swap. The entry and exit counter is a macro around the callback call in our adapter source. The runtime builds no gates. Replacing the port file needs a restart ([digikit-hot-reload.md](digikit-hot-reload.md)).
+- Order: lfo first (with E6e item 2), then fx, then machines. Decide fx and machines from the size and cost of the lfo slice.
+- Until the follow-up in section 14, machines and fx keep per-device SHARC dispatch, so those two services stay one file per device.
+
+## 10. Decisions
+
+- Ordinary hook sites and anchors need no reflash: a new port file and service go over USB, then the device restarts. New interrupt sites and SHARC stubs still need an image change ([runtime-and-services.md](runtime-and-services.md) 5.10).
+- SHARC dispatch stays in the machines and fx services now.
+- Step 3 as in section 9, with one port file per device and firmware for all services.
+- A truncated sha256 of each site in a published file, and retyped stock instructions in published adapter code (existing practice in unbound `.dks`), are acceptable under the firmware-bytes rule.
+
+## 11. Cost of a new port or device
+
+- New firmware version: `patch:port` writes the port TOML and the port file is built from it. After step 3, adapter sources change only where frames changed. Service files do not change.
+- New device: profile, ports, image adapters and a port file. Machines and fx need SHARC dispatch objects until the follow-up in section 14.
+
+## 12. PRs
+
+PR D (lfo shapes) lands first. PR1-PR3 are one stack with one device subset gate and merge together; there is no dual path. Build the stack after E5 merges, or in parallel and rebase: both touch the runtime loader (E5 unload and reload; the port file import lookup and installer).
+
+| PR | Content | Size | Confidence |
+| --- | --- | --- | --- |
+| 1 | patchkit and data: port fields (displaced length, kind, fixups) written by `port_resolve` from local firmware; `stock = true` declaration (bind infers `dk_stock_` today, `bind.rs:931-938`); role 2 with FWNAMES and SITES; `patchkit pack` for the port from committed data; a `--firmware` check that equals today's bind output once (site address, return, tail bytes, exits per service and device); Nx target | 6-8 h | high |
+| 2 | Runtime and pack: port role steps, import lookup, tail copy, installer on SITES, commit filter, NEED `port`, BIND out of services, ABI and minor bump; assembly cases in `core/runtime:test-assembly` (fits, other firmware, missing name, port absent) | 8-10 h | medium-high |
+| 3 | Workbench and deletion: Transfer picks the port file by firmware identity; delete binding in `bind.rs` (keep import naming), `pk_bind`, `dkbind.ts`, `refuseUnbound`, `no-stock`, stock store use for services, Nx `bindTarget` and `dist/svc-bound`; the test harness puts the port file on the card; docs | 6-8 h | medium-high |
+| 4 | One `.dks` for all devices for services with no DSP section (lfo) | 2-3 h | medium |
+| 5 | Step 3 after E8: lfo 6-8 h, fx 0.5-1 day, machines 1-2 days | | medium |
+
+Before PR2, the `displaced` lines of the `patchkit bind` report for the 7 sites on DT2 1.17 and DN2 1.12 must confirm "copy only".
+
+Device subset, on DT2 and DN2: `S:lfo`, `S:machines`, fx contract and fxpages, `C:loading` (providers, refusal, safe-mode, transfer-live), `gate-smoke`, `gate-pins`. PCM pins must not move.
+
+## 13. Risks
+
+| Risk | Close with |
+| --- | --- |
+| A current tail needs the abs.l form | the bind report for the 7 sites |
+| `PROVIDER_MAX` has no room for one more provider | read the constant in `sdk/sdk.toml` |
+| The workbench cannot learn the firmware identity without the `.syx` | check that INFO carries `fw_id` or the version; add it in PR2 if not |
+| Service and port file from different releases | `E_IMPORT` with the name hash; Transfer uploads both |
+| 64-import limit (`loader/image.rs:94`) | count the imports of the packed `machines.dks` |
+| A bad port file | safe mode after two bad boots; replace it over USB |
+
+## 14. Open follow-ups
+
+- SHARC section in the port file. Evaluate after the lfo step-3 slice. It would put the DSP dispatch per device and firmware in the port file, so machines and fx become one file for all devices and future devices need no service change (this also covers ports for SHARC DSP). Cost: DSP memory whenever a port file is loaded.
