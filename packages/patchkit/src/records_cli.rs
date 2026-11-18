@@ -15,7 +15,7 @@ fn f32_of(bits: u32) -> f64 {
 }
 
 /// The records of the block BYTES grouped by kind, each kind's bodies in file order. The block's layout is the register table's (header of 16 bytes, then kind, length, body).
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
 fn bodies_by_kind(bytes: &[u8]) -> Result<Vec<(u32, Vec<&[u8]>)>> {
     let word = |at: usize| -> Result<u32> {
         bytes
@@ -43,8 +43,8 @@ fn bodies_by_kind(bytes: &[u8]) -> Result<Vec<(u32, Vec<&[u8]>)>> {
     Ok(groups)
 }
 
-/// The problems the owning services find in the block BYTES, one sentence each (empty when the block is good). Not available for wasm32.
-#[cfg(not(target_arch = "wasm32"))]
+/// The problems the owning services find in the block BYTES, one sentence each (empty when the block is good). Needs the feature `record-rules` (not for wasm32).
+#[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
 pub fn block_problems(bytes: &[u8]) -> Result<Vec<String>> {
     let mut out = vec![];
     for (kind, bodies) in bodies_by_kind(bytes)? {
@@ -59,20 +59,20 @@ pub fn block_problems(bytes: &[u8]) -> Result<Vec<String>> {
     Ok(out)
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(not(all(feature = "record-rules", not(target_arch = "wasm32"))))]
 pub fn block_problems(_bytes: &[u8]) -> Result<Vec<String>> {
     Err(Error(
-        "records --check is not available on this target".into(),
+        "records --check is not available: patchkit is not built with record rules (feature record-rules; not for wasm32)".into(),
     ))
 }
 
-/// `problems` of `records --json`: the list, or `null` where the check is not available (wasm32), so that the decoded rows stay available there.
-#[cfg(not(target_arch = "wasm32"))]
+/// `problems` of `records --json`: the list, or `null` where the check is not available (no record rules built in), so that the decoded rows stay available there.
+#[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
 fn problems_json(bytes: &[u8]) -> Result<Value> {
     Ok(json!(block_problems(bytes)?))
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(not(all(feature = "record-rules", not(target_arch = "wasm32"))))]
 fn problems_json(_bytes: &[u8]) -> Result<Value> {
     Ok(Value::Null)
 }
@@ -196,6 +196,7 @@ mod tests {
         assert!(records_json(&[0u8; 8]).is_err());
     }
 
+    #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
     fn lfo_block(shapes: &[(u32, &[u8; 4], i16)]) -> Vec<u8> {
         let mut o = vec![];
         for v in [
@@ -218,6 +219,8 @@ mod tests {
         o
     }
 
+    #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
+    #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
     #[test]
     fn a_block_of_lfo_shapes_decodes_and_is_judged_by_the_lfo_service() {
         let ok = lfo_block(&[(0x100, b"RAMP", -31744)]);

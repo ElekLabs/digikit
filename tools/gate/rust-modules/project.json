@@ -19,7 +19,7 @@
         "{workspaceRoot}/tools/patchkit/toolchain/**/*"
       ],
       "options": {
-        "command": "node tools/nx/rust-env.mjs -- cargo nextest run -p patchkit -p elektron-native-boot --release --locked --offline",
+        "command": "node tools/nx/rust-env.mjs -- cargo nextest run -p patchkit --features record-rules -p elektron-native-boot --release --locked --offline",
         "cwd": "."
       }
     }

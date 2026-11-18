@@ -18,7 +18,7 @@ const KINDS = ['dependencies', 'dev-dependencies', 'build-dependencies'];
 // CLI builds into dist/ (gitignored). Copy then rename: a running process keeps the old file.
 const CLI = {
   patchkit: {
-    build: 'cargo build -p patchkit --release --offline --target-dir dist/cargo',
+    build: 'cargo build -p patchkit --features record-rules --release --offline --target-dir dist/cargo',
     bin: 'patchkit',
     dir: 'patchkit',
     key: 'node tools/nx/patchkit-key.mjs', // dist/bytes/patchkit-test-<device>.key, the key of live device tests
@@ -399,7 +399,7 @@ export const createNodesV2 = [
                 ...(FIXTURE_SOURCE[name] ?? []),
               ],
               options: {
-                command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
+                command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name}${name === 'patchkit' ? ' --features record-rules' : ''} --release --locked --offline`,
                 cwd: '.',
                 ...(name === 'patchkit' && { env: { DIGI_REQUIRE_TOOLCHAINS: '1' } }),
               },

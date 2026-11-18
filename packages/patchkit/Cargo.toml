@@ -54,10 +54,16 @@ emmc-card = { path = "../emulator/card" }
 # `patchkit budget` reads the rule of dkprof; dkprof has its own wasm, so patchkit.wasm leaves it out and stays small.
 dkprof = { path = "../dkprof" }
 # `patchkit records --check` runs the inherent `validate` of the service that owns each record kind (src/record_rules.rs): no core, no host fake.
-dkrt-abi = { path = "../../modules/core/runtime/abi" }
-dkrt-svc-lfo = { path = "../../modules/core/services/lfo" }
-dkrt-svc-fx = { path = "../../modules/core/services/fx" }
-dkrt-svc-machines = { path = "../../modules/core/services/machines" }
+# They are optional (feature `record-rules`): a library user (digi-control, the app) does not build them.
+dkrt-abi = { path = "../../modules/core/runtime/abi", optional = true }
+dkrt-svc-lfo = { path = "../../modules/core/services/lfo", optional = true }
+dkrt-svc-fx = { path = "../../modules/core/services/fx", optional = true }
+dkrt-svc-machines = { path = "../../modules/core/services/machines", optional = true }
+
+[features]
+# `patchkit records --check`: the validators of the services. Enabled for the patchkit binary build and the patchkit tests (tools/nx/cargo.mjs), not for
+# library users (the daemons), so the services' sources are no build input of a daemon. Not for wasm32.
+record-rules = ["dep:dkrt-abi", "dep:dkrt-svc-lfo", "dep:dkrt-svc-fx", "dep:dkrt-svc-machines"]
 
 [dev-dependencies]
 machine = { path = "../emulator/machine" }
