@@ -1,7 +1,7 @@
 # Syntakt sample storage and the host path
 
 Marks: **[V]** checked by a second agent in the decompiled MAIN of OS 1.42 (and in image bytes where stated), **[D]** read once, **[O]** open. Unmarked statements are **[D]**.
-Image: `st-1.42` (`out/cfdb/st-1.42-emac.sqlite`). No emulator run, no device run. Context: [136](136-syntakt-peer-cpu.md) (peer CPU),
+Image: `st-1.42` (`out/cfdb/st-1.42-emac.sqlite`). No emulator run. Claims marked "(observed on a real 1.42 unit)" were seen on a stock Syntakt. Context: [136](136-syntakt-peer-cpu.md) (peer CPU),
 [138](138-syntakt-runtime-facts.md) (card layout), [141](141-syntakt-analog-and-nor-paths.md) (NOR), `docs/MIDI-SYSEX-RPC.md` (MidiRpc framing).
 
 ## Result
@@ -33,7 +33,7 @@ Header (0x40 bytes, big-endian, read from the first sector of the slot):
 Sample data starts at byte +0x40 of the slot (`FUN_401133ce`: `(offset + 0x40) >> 9` sectors, remainder `& 0x1ff`).
 
 There is no sample rate, bit depth, channel count or checksum field that MAIN reads. The format is fixed by use: 16-bit, mono, 48 kHz
-(manual 6.2.4; the peer converter runs at 48 kHz, finding 136). The 16-bit words are **big-endian, signed** (the ColdFire native order), end to end **[D]**:
+(manual 6.2.4; the peer converter runs at 48 kHz, finding 136). The 16-bit words are **big-endian, signed** (the ColdFire native order), end to end **[D]** (observed on a real 1.42 unit: after a restart a 1 s 440 Hz mono tone, written as big-endian signed 16-bit, played correctly). The static reading:
 `FUN_401133ce` reads whole sectors (`FUN_4010f612`) and copies the slot bytes with the plain word copy `FUN_4011613c`;
 `FUN_40082334` copies them again with `FUN_4011613c` into the upload buffer. No byte swap on the MAIN side. The peer (image `st-1.42-peer`, section 7)
 indexes the buffer in `FUN_40000d06` (0x40000d06): per slot it assembles the 4-byte length word big-endian (`b0 << 24 | b1 << 16 | b2 << 8 | b3`)
@@ -124,7 +124,7 @@ still builds the FsSample and FsRaw classes (shared code), but nothing handles t
 needs exactly that, so the transport (`DkSession.rpc`: seq, 8-in-7 packing, reply match by seq) can be reused unchanged **[D]**. Three things differ in the client above it:
 the first reply byte is the same status (1 = OK), but an error carries a NUL ended text instead of nothing; the path is a plain C string without a leading-slash rule
 (`pathBytes` adds a `/` and a NUL: fine, the route needs `/samples/N`); and WriteOpen puts a u32 before the path. `rpcfiles.ts` `RpcFiles` itself is FsSample-only.
-That the Syntakt answers on the same device id and framing is **[O]** until one Ping is seen (one observation: a Ping on the emulated Syntakt).
+That the Syntakt answers on the same device id and framing is confirmed: a List request got a valid reply from a real 1.42 unit (observed on a real 1.42 unit).
 
 ### Request layouts (after the 5-byte header) **[V]**
 
@@ -154,7 +154,7 @@ WriteOpen closes any job that is open (`FUN_4010a2a6`; state `+0x00`..`+0x20` re
 
 | Reply | Payload |
 | --- | --- |
-| List (`0xd3`, ctor `0x401aefa8`) | u32 start index (echo of the request), u32 next index (last returned index + 1; the request's end index when nothing was returned), u32 entry count, then the entries. Entry: `str` name (empty for an empty slot), u8 0, u8 kind (2 = item), u32 slot number 1..64, u32 size in bytes (0 = empty; else `length * 2 + 0x40`, at least 4, at most 0x80000), u16 permission word (`0x007e`), u8 exists (1 = used), u8 0 |
+| List (`0xd3`, ctor `0x401aefa8`) | u32 start index (echo of the request), u32 next index (last returned index + 1; the request's end index when nothing was returned), u32 entry count, then the entries. Entry: `str` name (empty for an empty slot), u8 0, u8 kind (2 = item), u32 slot number 1..64, u32 size in bytes (0 = empty; else the audio bytes, `length * 2`, without the 0x40-byte header; observed on a real 1.42 unit: List returned all 64 slots, names and sizes matched the factory content), u16 permission word (`0x007e`), u8 exists (1 = used), u8 0 |
 | ReadOpen (`0xd4`, `0x401af206`) | u32 job id, u32 chunk size (after the clamp), u8 `compress` (echo). **No total size.** |
 | ReadPartial (`0xd5`, `0x401afa1e`) | u32 job id, u32 sequence, u32 progress (looks like permille; set only when the reader reports a total, else uninitialised: ignore), u8 complete (1 on the last chunk), u32 CRC of the data, u32 data length, data |
 | ReadClose (`0xd6`, `0x401af31a`) | u32 job id, then a u32 that is stack garbage in the handler (ignore). Valid only when the reader is complete ("Reader did not complete") |
@@ -188,7 +188,7 @@ CRC of the ASCII string `123456789` is `0xd202d277` (the common CRC-32 gives `0x
 
 The item descriptor built by `FUN_400b9dfe` is a 0x7c-byte record: `+0x00` type 8 (sample), `+0x04` storage 2 (card), `+0x08` u16 permission word `0x7e`, `+0x0c` card byte offset `N * 0x80000 + 0x380000`
 (= `0x400000 + (N - 1) * 0x80000`), `+0x10` size, `+0x14` id N, `+0x18` `0xffffffff`, `+0x4c` a callback that refills the slot table entry (`FUN_400b9c36` -> `FUN_4011149e`), `+0x6c` the file type check `FUN_400b9d7c`.
-The size is `length * 2 + 0x40` (clamped to `4..0x80000`) for a used slot and 0 for an empty one. Permission bits: bit 1 (`& 2`) read, bit 2 (`& 4`) write and rename, bit 3 (`& 8`) clear. **[V]**
+The size is `length * 2 + 0x40` (clamped to `4..0x80000`) for a used slot and 0 for an empty one (the List reply shows `length * 2`, section "Reply layouts"). Permission bits: bit 1 (`& 2`) read, bit 2 (`& 4`) write and rename, bit 3 (`& 8`) clear. **[V]**
 Reads use `MmcStreamReader`, writes use `SafeMmcStreamWriter` (offset and size from the descriptor, ring buffer 0x10000).
 
 The transferred bytes are a **backup file** (`BackupFileExportAdapter` 0x400b513a, `BackupFileImportAdapter` 0x400b50e6, import `vfunc_2` 0x400b535c). Layout, all big-endian:
@@ -222,13 +222,13 @@ LZ4 is optional: the flag at +0x1d (export: the `compress` byte of ReadOpen) sel
    (`SafeMmcStreamWriter::vfunc_2`). A slot is therefore empty (no `SAMP`) from the first write until the last body byte, and valid from that moment, **before the footer CRC is checked**. A last partial sector is read, merged and written back.
 4. The bytes in the slot are the image bytes as sent: the 0x40-byte header (`SAMP`, +4, length at +8, name at +0xc, +0x1c..0x3f) and the samples. **The firmware builds nothing in the slot**; it does not insert a name, a
    length or a magic. MAIN reads only `SAMP`, +8 and +0xc (section 1), so bytes +4 and +0x1c..0x3f are stored as sent and never read.
-5. Further chunks continue the adapter (`vfunc_2` 0x400b535c). It calls the body writer once per chunk and does not loop: bytes the body writer does not take go to the footer buffer (12 bytes, `+0x4c`, buffer `+0x40`), but bytes the writer takes are body, counted by the writer and hashed. When the footer buffer is full the handler (`FUN_4010b4de`, after every chunk) calls `FUN_400b5090` and then `FUN_400b58e6`, which compares the CRC (error "Content hash mismatch") and sets "footer processed" (`+0x26`). **The footer must start in a WritePartial that comes after the call that completes the body writer. A chunk that holds the end of the body and the footer together loses the footer** (rule below) **[D]**.
+5. Further chunks continue the adapter (`vfunc_2` 0x400b535c). It calls the body writer once per chunk and does not loop: bytes the body writer does not take go to the footer buffer (12 bytes, `+0x4c`, buffer `+0x40`), but bytes the writer takes are body, counted by the writer and hashed. When the footer buffer is full the handler (`FUN_4010b4de`, after every chunk) calls `FUN_400b5090` and then `FUN_400b58e6`, which compares the CRC (error "Content hash mismatch") and sets "footer processed" (`+0x26`). **The footer must start in a WritePartial that comes after the call that completes the body writer. A chunk that holds the end of the body and the footer together loses the footer** (rule below) **[D]** for the counter reading; the failure itself was observed on a real 1.42 unit (error "Footer was not processed", first sector left erased, slot read "NO SAMPLE" after a restart).
 6. WriteClose: needs header and footer processed and the writer complete ("Writer did not process all data"). It then calls the descriptor callback: `FUN_4011149e` reads the first sector of the slot from the card and
    refills the RAM table entry (name and length). The peer still gets samples only at boot (section 2).
 
 The firmware does not check that the u32 length at +8 of the sample header matches `size`; the boot reader uses the length at +8 only.
 
-### Why "Footer was not processed": the writer accepts more than `size` bytes **[D]** (static; one stock Syntakt 1.42 refusal matches it)
+### Why "Footer was not processed": the writer accepts more than `size` bytes **[D]** (static reading of the counters; the refusal was observed on a real 1.42 unit)
 
 Answers for the body/footer switch:
 
@@ -237,7 +237,7 @@ Answers for the body/footer switch:
 3. `MmcStreamWriter::vfunc_2` (0x400bbbe4, disasm at 0x400bbbf6: `move.l (0x28,A2),D1; cmp.l (0x2c,A2),D1; bls`) clamps one call to `min(length, max(+0x28, +0x2c))`. `+0x2c` is the bytes still to accept, `+0x28` the bytes still to write to the card, and `+0x28 >= +0x2c` always, so the clamp is `+0x28`: the writer accepts `+0x28 - +0x2c` bytes beyond the end, namely all bytes still in its ring buffer (full sectors are flushed after each call, so that is the size's sector remainder: 481 bytes here). Those extra bytes are the footer. `+0x2c` wraps below 0, so the loop never reaches its tail flush (`+0x2c == 0 && +0x28 < 0x200`), `MmcStreamWriter::vfunc_3` stays false, `+0x28` never reaches 0, and the first sector is never written. The adapter sees the body writer take the whole chunk, passes nothing to the footer buffer, `FUN_400b5090` reports "not full", no error is returned, and WriteClose (0x4010b8e6) tests `+0x26` first: "Footer was not processed". The footer CRC and the two other footer words are not involved (a CRC mismatch would give "Content hash mismatch" at the chunk).
 4. Our file (31 + 96064 + 12 = 96107 bytes, 2048-byte chunks): chunk 0 has 31 header and 2017 body bytes; chunks 1..45 are body; chunk 46 has 1899 bytes = 1887 body + 12 footer. Before chunk 46 the writer had accepted 93665 bytes after the first sector and flushed 93184 (481 in the ring); `max(2368, 1887)` allows all 1899. Result: the first sector was erased (`FUN_4010f52a` at the first write) and not rewritten (it stays in RAM and is dropped); slot bytes 0x200 .. 0x200 + 95232 were written (image bytes 512..95744); the last 320 image bytes and the 12 footer bytes stayed in the ring and were dropped. Slot 63 therefore has no `SAMP` and reads as empty; the table callback did not run.
 
-Client fix: end a WritePartial exactly at offset `31 + size` (the end of the slot image) and send the 12 footer bytes as their own WritePartial (or later). The header values stay as they are (+0x19 = 96064; file length 96107). A last body chunk that ends exactly at `size` is accepted whole (`+0x2c` = 0), the writer completes (tail sector read, merged and written, then the first sector), the next chunk of 12 bytes fills the footer buffer, the CRC matches and WriteClose passes. Splitting chunks only so that the footer starts in a new chunk is not enough if the body-end chunk also carries footer bytes. Chunks that are full body bytes before the end are safe. **[D]** (not run; the proof is one upload).
+Client fix: end a WritePartial exactly at offset `31 + size` (the end of the slot image) and send the 12 footer bytes as their own WritePartial (or later). The header values stay as they are (+0x19 = 96064; file length 96107). A last body chunk that ends exactly at `size` is accepted whole (`+0x2c` = 0), the writer completes (tail sector read, merged and written, then the first sector), the next chunk of 12 bytes fills the footer buffer, the CRC matches and WriteClose passes. Splitting chunks only so that the footer starts in a new chunk is not enough if the body-end chunk also carries footer bytes. Chunks that are full body bytes before the end are safe. **[D]** for the counters. Observed on a real 1.42 unit: the same file sent with the body ending on a chunk boundary and the footer as its own 12-byte chunk was accepted, a read-back matched the bytes sent, and the sample played correctly after a restart.
 
 ### The existing backend
 
@@ -245,7 +245,7 @@ Client fix: end a WritePartial exactly at offset `31 + size` (the end of the slo
 a path filesystem with folders, names and a native file with a 0x40-byte header (stereo flag, length at +4, rate at +8) and a 16-byte trailer.
 None of this fits the Syntakt: no handler (section 4), a different slot header (length at +8, name at +0xc, no rate) and no folders. `RpcFiles` is not reusable, but its `RpcPort` transport is
 (see "Frame and transport"). A Syntakt backend needs a Data API client on `RpcPort.rpc` (the layouts above), the slot model (64 numbered slots, a List per refresh), the backup file wrapper with the CRC above, and the
-converter output (mono 16-bit 48 kHz, at most 262,112 samples, header with name). The byte order of the 16-bit sample words and the content of header bytes +4 and +0x1c..0x3f that Transfer writes stay **[O]**.
+converter output (mono 16-bit 48 kHz, at most 262,112 samples, header with name). The content of header bytes +4 and +0x1c..0x3f that Transfer writes stays **[O]**.
 
 ## 5. How a track picks a sample
 
@@ -282,9 +282,8 @@ Rules for a client:
 
 ## 7. Open items
 
-- **[O]** Whether the Syntakt answers the Data API on device id `0x10` with the DT2 framing. One observation settles it, and the first one to take: a Ping, then `DataList /samples`, on the emulated Syntakt.
 - **[O]** Syntakt SysEx gather limit (largest safe WritePartial). One observation: WritePartial with 4096, 16384 and 32768 data bytes into a scratch slot.
-- **[O]** Header bytes +0x09, and what Elektron Transfer writes in the sample header at +4 and +0x1c..+0x3f; sample word byte order. One observation: ReadOpen of one sample and the bytes of the reply.
+- **[O]** Header bytes +0x09, and what Elektron Transfer writes in the sample header at +4 and +0x1c..+0x3f. One observation: ReadOpen of one sample and the bytes of the reply.
 - **[O]** The second u32 of the WriteClose reply, the third u32 of ReadPartial and the trailing u32 of ReadClose (stack values; a client ignores them).
 - **[O]** LZ4 framing (not needed with `compress` = 0).
 - **[O]** What the peer does with a slot whose length is 0 or large (peer code not read), the panel rename path, Move/Copy/Swap internals.
