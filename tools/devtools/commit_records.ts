@@ -86,7 +86,7 @@ try {
     runtime: { patchSet: 'emulator' },
   });
   const s = session;
-  // a runtime session runs freely: the daemon advances emulated time by itself, so the protocol waits in wall time
+  // a runtime session runs freely: the daemon advances emulated time by itself; the protocol waits count that emulated time
   const clock = emulatedClock(() => s.client.call<EmuStatus>('status'));
   const dk = new DkSession(new EmuUsbTransport((method, params) => s.client.call(method, params)), {
     clock,

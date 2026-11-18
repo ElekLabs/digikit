@@ -1744,7 +1744,10 @@ export class DkSession {
       await stuck(now);
       if (lastNow !== undefined) elapsed += Math.max(0, now - lastNow);
       lastNow = now;
-      if (opts.stillBooting?.()) elapsed = 0;
+      if (opts.stillBooting?.()) {
+        elapsed = 0; // the budget starts again; so does the FW_READY grace window
+        if (uiFirstAt !== undefined) uiFirstAt = 0;
+      }
       if (elapsed >= timeoutMs) break;
       try {
         const info = await this.probe((q) => this.info(q), quick);
