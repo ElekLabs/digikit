@@ -5652,6 +5652,33 @@ mod tests {
         }
     }
 
+    /// The USB registration slots resolve on every local image; on DT2 and DN2 they equal what the code at the shared fixed entry gives.
+    #[test]
+    fn usb_slots_resolve_on_every_image() {
+        use crate::midi::resolve_usb_slots;
+        for file in [
+            "Digitakt_II_OS1.17.syx",
+            "Digitone_II_OS1.12.syx",
+            "Digitone_II_OS1.11.syx",
+            "Syntakt_OS1.42.syx",
+        ] {
+            let Some(main) = main_of(file) else {
+                eprintln!("skipped {file}: image not in firmware/");
+                continue;
+            };
+            let slots = resolve_usb_slots(&main, MAIN_LOAD);
+            assert!(slots.is_some(), "{file}: slots do not resolve");
+            if file.starts_with("Syntakt") {
+                continue;
+            }
+            // The old code: entry fixed at 0x4000434a, slots read at +6 and +16.
+            let off = (0x4000_434a - MAIN_LOAD) as usize;
+            let word =
+                |o: usize| u32::from_be_bytes(main[off + o..off + o + 4].try_into().unwrap());
+            assert_eq!(slots, Some((word(6), word(16))), "{file}");
+        }
+    }
+
     /// Every boot signature resolves on the bytes of a MAIN without a profile; Syntakt has no
     /// filesystem worker.
     #[test]
