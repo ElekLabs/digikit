@@ -128,6 +128,8 @@ SHARC_GEN_DIR=out/native/dn2-audio/gen CARGO_BUILD_JOBS=4 nice -n 10 \
   node tools/nx/rust-env.mjs --gen -- cargo build --release --locked -p sharc-core-lib
 ```
 
+A library built without `SHARC_GEN_DIR` (or without `image.rs`) loads but holds no core: `core_for_device` refuses it with "built without a generated core" when the session opens.
+
 The load is refused, with the first differing field named, unless the library's header equals the host's: header version,
 SHA-256 of the `sharc-rt` sources (`sharc-rt/build.rs`), rustc version, target, the code generation flags and the size,
 alignment and selected field offsets of `St`, `Mem`, `Insn`, `V`, `Cfg` and `GenCore` (`sharc-rt/src/header.rs`). The
