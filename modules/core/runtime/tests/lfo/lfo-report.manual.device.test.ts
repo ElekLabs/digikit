@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot, type Device } from '@digi/test-support';
 import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 import { moduleManifests, resolveModule } from '@digi/regression/runtime/memaudit-kit.ts';
 import { bootWith, shapeWords } from './lfo-cards.ts';
 import {
@@ -19,14 +19,15 @@ import {
 
 /**
  * `mise run lfo:report -- [MODULE_ID] [--device dn2|dt2]` (tools/devtools/lfo_report.sh sets DIGI_LFO_MODULE and DIGI_LFO_DEVICE): the output report of an LFO shape module.
- * It is no test: it asserts nothing, is not registered in `runtimeAcceptance` and joins no gate (the `.manual.` name keeps it out of the Nx selection).
+ * It is no gate test: it is not registered in `runtimeAcceptance` and joins no gate (the `.manual.` name keeps it out of the Nx selection). Without DIGI_LFO_MODULE it is skipped.
+ * After it writes all outputs it fails when a shape has the verdict FAIL or SCALE (CLOSE is a warning).
  *
  * The module is loaded with the bound lfo service. For each of its shapes the report sets WAVE to the shape's number by MIDI CC, lets the LFO of track 1 run into one
  * destination word (`LfoRig.run`, the setup of lfo-shape-output.device.test.ts), reads the output over several periods in emulated time and fits it (`fitShape`, no phase or
  * rate needed) against the shape's own table, every other table of the module and the stock waves. The tables come from `SHAPES` in the module's `src/module.c`, the wave
  * numbers from the service's sticky map (`lfo.shapes`) matched with the keys of `build/gen/module_ids.h`. The report is a table on stdout (and in summary.txt), one SVG per shape and report.json.
  */
-const MODULE = process.env.DIGI_LFO_MODULE ?? 'digikit/lfo_shapes_1';
+const MODULE = process.env.DIGI_LFO_MODULE;
 const ONLY = process.env.DIGI_LFO_DEVICE as Device | undefined;
 const READS = 100;
 const GAP_MS = 12;
@@ -99,10 +100,17 @@ interface Row {
   samples: Sample[];
 }
 
-function verdict(own: number, others: [string, number][]): string {
+/** The measured swing may differ from the table swing by this fraction of the full swing (measured runs differ by at most 2 points from read spacing). */
+const SCALE_TOLERANCE = 0.05;
+
+/** The fit is shape-only (both curves are rescaled to 0..1); the scale check compares the swings. FAIL and CLOSE come before SCALE. */
+function verdict(own: number, others: [string, number][], swing: number, tableSwing: number): string {
   if (own >= OK) return `FAIL: output does not follow the table (error ${own.toFixed(3)} >= ${OK})`;
   const near = others.filter(([, e]) => e <= own + PAIR_MARGIN).map(([l]) => l);
-  return near.length === 0 ? 'OK' : `CLOSE to ${near.join(', ')}: tables too similar to tell apart (margin ${PAIR_MARGIN})`;
+  if (near.length > 0) return `CLOSE to ${near.join(', ')}: tables too similar to tell apart (margin ${PAIR_MARGIN})`;
+  if (Math.abs(swing - tableSwing) > SCALE_TOLERANCE)
+    return `SCALE: swing ${Math.round(swing * 100)}% differs from the table's ${Math.round(tableSwing * 100)}% by more than ${SCALE_TOLERANCE * 100} points`;
+  return 'OK';
 }
 
 /** Measured samples over the declared table, both normalised to 0..1 as the fit does, the samples at the phase of the best fit. */
@@ -130,14 +138,17 @@ function plot(row: Omit<Row, 'svg'>, table: number[], fit: Fit): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="sans-serif"><rect width="${W}" height="${H}" fill="#fff"/>${grid}<text x="${m.l}" y="18" font-size="12">${title.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text><path d="${path}" fill="none" stroke="#2e6f95" stroke-width="2"/>${dots}<text x="${m.l}" y="${H - 8}" font-size="11">phase 0 to 1 (line: declared table; dots: measured, ${row.samples.length} reads)</text></svg>`;
 }
 
-const manifests = moduleManifests();
-const id = resolveModule(MODULE, manifests);
+/** Candidate keys are `own:NAME` and `stock:NAME`; the printed name is `NAME` or `NAME (stock)`. */
+const show = (key: string): string => (key.startsWith('stock:') ? `${key.slice(6)} (stock)` : key.slice(4));
 
-cardRigs(
-  `lfo shape report: ${id}`,
+if (!MODULE) test.skip('set DIGI_LFO_MODULE=<module id> (mise run lfo:report)', () => {});
+else
+  cardRigs(
+  `lfo shape report: ${MODULE}`,
   { dsp: 'zero', symbols: CARD_SYMBOLS, initial: () => ({}), uploads: true, relaxFs: true, devices: ONLY ? [ONLY] : undefined },
   (h) => {
-    test(`report ${id}`, async () => {
+    test(`report ${MODULE}`, async () => {
+      const id = resolveModule(MODULE, moduleManifests());
       const shapes = readShapes(moduleDir(id));
       const rt = await bootWith(h, 'report', [id]);
       const words = await shapeWords(h, rt);
@@ -154,16 +165,19 @@ cardRigs(
         await rig.setWave(number);
         const samples = await rig.sample(dest, READS, GAP_MS);
         const candidates: Candidate[] = [
-          ...shapes.map((s) => ({ label: s.name, eval: (p: number) => evalTable(s.samples, p) })),
-          ...Object.entries(STOCK_EVAL).map(([w, fn]) => ({ label: STOCK_NAME[Number(w)]!, eval: fn })),
+          ...shapes.map((s) => ({ label: `own:${s.name}`, eval: (p: number) => evalTable(s.samples, p) })),
+          ...Object.entries(STOCK_EVAL).map(([w, fn]) => ({ label: `stock:${STOCK_NAME[Number(w)]!}`, eval: fn })),
         ];
         const fits: Record<string, Fit> = Object.fromEntries(candidates.map((c) => [c.label, fitShape(samples, c.eval)]));
-        const own = fits[shape.name]!;
+        const ownKey = `own:${shape.name}`;
+        const own = fits[ownKey]!;
         const others = Object.entries(fits)
-          .filter(([l]) => l !== shape.name)
-          .map(([l, f]) => [l, f.err] as [string, number])
+          .filter(([l]) => l !== ownKey)
+          .map(([l, f]) => [show(l), f.err] as [string, number])
           .sort((a, b) => a[1] - b[1]);
         const vs = samples.map((s) => s.v);
+        const swing = (Math.max(...vs) - Math.min(...vs)) / FULL_SWING;
+        const tableSwing = (Math.max(...shape.samples) - Math.min(...shape.samples)) / 65535;
         const partial = {
           name: shape.name,
           number,
@@ -172,9 +186,9 @@ cardRigs(
           fits: Object.fromEntries(Object.entries(fits).map(([l, f]) => [l, Number(f.err.toFixed(4))])),
           min: Math.min(...vs),
           max: Math.max(...vs),
-          swing: (Math.max(...vs) - Math.min(...vs)) / FULL_SWING,
-          tableSwing: (Math.max(...shape.samples) - Math.min(...shape.samples)) / 65535,
-          verdict: verdict(own.err, others),
+          swing,
+          tableSwing,
+          verdict: verdict(own.err, others, swing, tableSwing),
           samples,
         };
         rows.push({ ...partial, svg: plot(partial, shape.samples, own) });
@@ -182,7 +196,6 @@ cardRigs(
 
       const dir = path.join(repoRoot(), 'out/runs/lfo-shape-report', h.device, id.split('/').at(-1)!);
       fs.mkdirSync(dir, { recursive: true });
-      for (const r of rows) fs.writeFileSync(path.join(dir, `${r.number}-${r.name}.svg`), r.svg);
       fs.writeFileSync(
         path.join(dir, 'report.json'),
         JSON.stringify(
@@ -202,8 +215,11 @@ cardRigs(
         `plots and report.json: ${dir}`,
       ];
       fs.writeFileSync(path.join(dir, 'summary.txt'), `${lines.join('\n')}\n`);
+      for (const r of rows) fs.writeFileSync(path.join(dir, `${r.number}-${r.name.replace(/[^A-Za-z0-9_-]/g, '_')}.svg`), r.svg);
       console.info(`\n${lines.join('\n')}\n`);
       await rt.session.expectNoFault('lfo shape report');
+      const bad = rows.filter((r) => r.verdict.startsWith('FAIL') || r.verdict.startsWith('SCALE'));
+      expect(bad.map((r) => `${r.name}: ${r.verdict}`), 'shapes with verdict FAIL or SCALE').toEqual([]);
     }, 1_800_000);
   },
 );

@@ -12,6 +12,14 @@ while [ $# -gt 0 ]; do
     *) id=$1; shift ;;
   esac
 done
+case $device in
+  dn2|dt2) ;;
+  *) echo "usage: lfo_report.sh [MODULE_ID] [--device dt2|dn2]  (got device '$device')" >&2; exit 2 ;;
+esac
+case $id in
+  */*) ;;
+  *) echo "lfo_report.sh: the full module id AUTHOR/NAME is needed, got '$id'" >&2; exit 2 ;;
+esac
 cd "$(dirname "$0")/../.."
 # the patchkit CLI, plusdrive and the daemons, the module, the lfo service and its bound file, the patched images (cached when current)
 pnpm nx:pilot run-many -t cli,daemons -p patchkit,plusdrive-format,digi-control
