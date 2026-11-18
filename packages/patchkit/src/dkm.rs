@@ -71,6 +71,8 @@ pub const H_SVC_ABI: usize = dkneeds::H_SVC_ABI as usize;
 pub const ROLE_MODULE: u32 = 0;
 /// A service provider (a `.dks`): its table has `PROVIDES` and `EXPORTS`.
 pub const ROLE_SERVICE: u32 = 1;
+/// A port file (`patchkit port build`): device and firmware facts for the services, from committed data only (docs/plans/port-file.md). It provides the service `port`.
+pub const ROLE_PORT: u32 = 2;
 pub const H_NAME: usize = dkneeds::H_NAME as usize;
 pub const H_IMAGE_OFF: usize = dkneeds::H_IMAGE_OFF as usize;
 pub const H_IMAGE_SIZE: usize = dkneeds::H_IMAGE_SIZE as usize;
@@ -942,8 +944,10 @@ impl Dkm {
             ));
         }
         let role = get(f, H_ROLE);
-        if role != ROLE_MODULE && role != ROLE_SERVICE {
-            return Err(err!("role {role} is not supported (0 module, 1 service)"));
+        if role != ROLE_MODULE && role != ROLE_SERVICE && role != ROLE_PORT {
+            return Err(err!(
+                "role {role} is not supported (0 module, 1 service, 2 port)"
+            ));
         }
         let opt = |v: u32| (v != NONE).then_some(v);
         Ok(Dkm {
@@ -1754,7 +1758,7 @@ mod tests {
         };
         assert!(with(&|g| put(g, 4, 2)).contains("format 2 is not supported"));
         assert!(with(&|g| g[H_NAME] = b' ').contains("bad module name"));
-        assert!(with(&|g| put(g, H_ROLE, 2)).contains("role 2 is not supported"));
+        assert!(with(&|g| put(g, H_ROLE, 3)).contains("role 3 is not supported"));
         // the first relocation: past the image, an unknown kind, an import that is not in the import table
         let at = get(&f, H_RELOC_OFF) as usize;
         assert!(with(&|g| put(g, at + CF_RELOC_OFFSET, 0x1000)).contains("outside the image"));

@@ -506,12 +506,17 @@ impl crate::expr::Env for ExitEnv<'_> {
 
 /// The value of the exit expression `text` on this firmware: every anchor it names is checked against the image.
 fn eval_exit(text: &str, view: &AnchorView) -> Result<u32> {
+    eval_exit_with(text, &|n| view.addr(n))
+}
+
+/// The value of the exit expression `text` with `addr` giving the address of each anchor it names (the port file takes them from the committed port).
+pub(crate) fn eval_exit_with(text: &str, addr: &dyn Fn(&str) -> Result<u64>) -> Result<u32> {
     let expr = crate::expr::parse(text)?;
     let mut names = vec![];
     expr.names(&mut names);
     let mut known: Vec<(String, i64)> = vec![];
     for n in names {
-        known.push((n.clone(), view.addr(&n)? as i64));
+        known.push((n.clone(), addr(&n)? as i64));
     }
     let env = ExitEnv(known.iter().map(|(n, v)| (n.as_str(), *v)).collect());
     let v = expr.eval(&env)?;
@@ -869,6 +874,18 @@ pub fn bind(
     reg: &Registry,
     decls: &[&str],
 ) -> Result<(Vec<u8>, Vec<BoundHook>)> {
+    let (file, bound, _) = bind_with_refs(dks, fw, reg, decls)?;
+    Ok((file, bound))
+}
+
+/// [`bind`] and also the places of the firmware references that were resolved (not the tails): the port file's one-time equivalence check compares them.
+pub fn bind_with_refs(
+    dks: &[u8],
+    fw: &[u8],
+    reg: &Registry,
+    decls: &[&str],
+) -> Result<(Vec<u8>, Vec<BoundHook>, Vec<(FwRef, Place)>)> {
+    let mut resolved_refs: Vec<(FwRef, Place)> = vec![];
     let dkm = Dkm::parse(dks)?;
     if dkm.role != ROLE_SERVICE {
         return Err(err!("{}: not a service (role {})", dkm.name, dkm.role));
@@ -878,7 +895,7 @@ pub fn bind(
     let refs: Vec<FwRef> = dkm.imports.iter().filter_map(|n| parse_import(n)).collect();
     // a service that hooks no firmware site and refers to no firmware name (lfo) has nothing to bind: it is finished as built, and the firmware is not looked at
     if hooks.is_empty() && refs.is_empty() {
-        return Ok((dks.to_vec(), Vec::new()));
+        return Ok((dks.to_vec(), Vec::new(), resolved_refs));
     }
     if hooks.len() > BIND_MAX {
         return Err(err!(
@@ -1002,7 +1019,11 @@ pub fn bind(
             idle: &idle,
             ret_stub,
         };
-        resolve_fw_refs(&mut image, &mut relocs, &after_tails, &mut |r| ctx.place(r))?
+        resolve_fw_refs(&mut image, &mut relocs, &after_tails, &mut |r| {
+            let p = ctx.place(r)?;
+            resolved_refs.push((r, p));
+            Ok(p)
+        })?
     } else {
         after_tails
     };
@@ -1037,7 +1058,7 @@ pub fn bind(
         dsp: &dkm.dsp,
         max_file: max_file(),
     })?;
-    Ok((file, bound))
+    Ok((file, bound, resolved_refs))
 }
 
 /// The report of [`bind`] as JSON text: one object per hook.
