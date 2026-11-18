@@ -1,17 +1,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { snapshotCapBytes } from '@digi/test-support';
 
 /**
  * Persistent run dirs of the device fixtures. A dir is claimed with a pid lock file (`<dir>.lock`) while a daemon runs in it. What the
  * daemon cached for a card (`cards/`) stays for the next claim; everything else is per run and is removed at the claim.
- * The booted-state snapshots are not in the run dir: all run dirs of a daemon build and device share the store `<key>/snapshots/<device>`
- * (`DIGI_SNAPSHOT_DIR`). Its entries are named by their content key, so any daemon of the build may use any entry.
+ * The booted-state snapshots are not in the run dir: every run dir of a daemon build and device, in every worktree, shares the store
+ * `<git dir>/snap-cache/<daemon key>/<device>` (`DIGI_SNAPSHOT_DIR`, see `snapshotStore` in devices.ts). Its entries are named by their
+ * content key, so any daemon of the build may use any entry.
  */
 
 /** Names in a run dir that survive from one claim to the next. */
 const KEEP = new Set(['cards']);
-/** Size of the shared snapshot store of one daemon build and device; the oldest entries (by mtime) go first at a claim. */
-export const SNAPSHOTS_MAX_BYTES = 6 * 1024 ** 3;
+/** An entry of the snapshot store younger than this (by mtime; a hit touches it) is never pruned: a daemon may be reading it. */
+export const SNAPSHOT_MIN_AGE_MS = 2 * 3600_000;
+/** A staging or evicted entry (`.tmp-*`) older than this is a leftover of a killed process. */
+const SNAPSHOT_TMP_MAX_AGE_MS = 3600_000;
+/** The store is walked at most this often (marker file `.pruned` in the store root), so parallel workers do not each walk it. */
+const SNAPSHOT_PRUNE_EVERY_MS = 10 * 60_000;
 /** Failed run dirs kept per device. */
 export const FAILED_KEEP = 2;
 /** Daemon-key dirs kept under the session cache (the newest by mtime). */
@@ -123,25 +129,91 @@ export function newestFirst(dir: string): { full: string; mtime: number }[] {
     .sort((a, b) => b.mtime - a.mtime);
 }
 
-/** Delete the oldest entries (files or dirs; a hit touches its entry) of the snapshot store until it is at most SNAPSHOTS_MAX_BYTES. */
-export function pruneSnapshots(store: string, maxBytes = SNAPSHOTS_MAX_BYTES): void {
-  const size = (full: string): number => {
-    try {
-      const stat = fs.statSync(full);
-      return stat.isDirectory()
-        ? readNames(full).reduce((sum, name) => sum + size(path.join(full, name)), 0)
-        : stat.size;
-    } catch {
-      return 0; // removed meanwhile
+let evictSeq = 0;
+
+/**
+ * Remove a snapshot entry (file or dir): rename it aside first, then delete. A daemon that has already opened a file keeps it; one that
+ * has not gets "not found" and boots cold. Does nothing when the entry is gone.
+ */
+export function removeEntry(full: string): void {
+  const aside = path.join(path.dirname(full), `.tmp-evict-${process.pid}-${evictSeq++}-${Date.now()}`);
+  try {
+    fs.renameSync(full, aside);
+  } catch {
+    return; // removed meanwhile
+  }
+  fs.rmSync(aside, { recursive: true, force: true });
+}
+
+/** The size in bytes of a file, or of everything below a dir. */
+function dirBytes(full: string): number {
+  try {
+    const stat = fs.statSync(full);
+    return stat.isDirectory()
+      ? readNames(full).reduce((sum, name) => sum + dirBytes(path.join(full, name)), 0)
+      : stat.size;
+  } catch {
+    return 0; // removed meanwhile
+  }
+}
+
+/**
+ * Prune the snapshot store ROOT (`<key>/<device>/<entry>`, shared by all worktrees): delete the oldest entries (files or dirs; a hit touches
+ * its entry) until the total is at most MAX_BYTES. An entry younger than SNAPSHOT_MIN_AGE_MS stays even over the cap. Dot-named staging and
+ * evicted entries are not counted; those older than an hour are removed. A key dir with nothing left is removed.
+ */
+export function pruneSnapshotRoot(root: string, maxBytes: number, now = Date.now()): void {
+  const entries: { full: string; mtime: number; bytes: number }[] = [];
+  const keyDirs = readNames(root).filter((key) => !key.startsWith('.'));
+  for (const key of keyDirs)
+    for (const device of readNames(path.join(root, key))) {
+      const dir = path.join(root, key, device);
+      for (const name of readNames(dir).filter((n) => n.startsWith('.tmp-')))
+        try {
+          if (now - fs.statSync(path.join(dir, name)).mtimeMs > SNAPSHOT_TMP_MAX_AGE_MS)
+            removeEntry(path.join(dir, name));
+        } catch {
+          /* removed meanwhile */
+        }
+      for (const entry of newestFirst(dir)) entries.push({ ...entry, bytes: dirBytes(entry.full) });
     }
-  };
-  const entries = newestFirst(store).map((entry) => ({ ...entry, bytes: size(entry.full) }));
   let total = entries.reduce((sum, entry) => sum + entry.bytes, 0);
-  for (const entry of entries.reverse()) {
+  for (const entry of entries.sort((a, b) => a.mtime - b.mtime)) {
     if (total <= maxBytes) break;
-    fs.rmSync(entry.full, { recursive: true, force: true });
+    if (now - entry.mtime < SNAPSHOT_MIN_AGE_MS) continue;
+    removeEntry(entry.full);
     total -= entry.bytes;
   }
+  // An empty device dir goes only when it was unused for SNAPSHOT_MIN_AGE_MS: a fresh claim may be about to fill it.
+  for (const key of keyDirs) {
+    const dir = path.join(root, key);
+    for (const device of readNames(dir)) {
+      try {
+        if (now - fs.statSync(path.join(dir, device)).mtimeMs >= SNAPSHOT_MIN_AGE_MS)
+          fs.rmdirSync(path.join(dir, device));
+      } catch {
+        /* not empty, or gone */
+      }
+    }
+    try {
+      fs.rmdirSync(dir);
+    } catch {
+      /* not empty, or gone */
+    }
+  }
+}
+
+/** `pruneSnapshotRoot` for the root of STORE (`<root>/<key>/<device>`), at most once per SNAPSHOT_PRUNE_EVERY_MS. */
+function pruneSnapshotStore(store: string): void {
+  const root = path.dirname(path.dirname(store));
+  const marker = path.join(root, '.pruned');
+  try {
+    if (Date.now() - fs.statSync(marker).mtimeMs < SNAPSHOT_PRUNE_EVERY_MS) return;
+  } catch {
+    /* never pruned */
+  }
+  fs.writeFileSync(marker, String(process.pid));
+  pruneSnapshotRoot(root, snapshotCapBytes());
 }
 
 /** Delete the failed run dirs (`<device>-<n>.failed-<time>`) of DEVICE beyond the newest FAILED_KEEP. */
@@ -177,7 +249,7 @@ export function pruneKeyDirs(sessionCache: string): void {
 
 export interface RunDirClaim {
   readonly dir: string;
-  /** The shared snapshot store of this daemon build and device (a daemon gets it as `DIGI_SNAPSHOT_DIR`). */
+  /** The snapshot store of this daemon build and device, shared by all worktrees (a daemon gets it as `DIGI_SNAPSHOT_DIR`). */
   readonly snapshotDir: string;
   /** Give the dir back. A failed run's dir is renamed `<dir>.failed-<time>`: its snapshots are not reused and its files stay for diagnosis. Idempotent. */
   release(failed?: boolean): void;
@@ -187,8 +259,9 @@ export interface RunDirClaim {
  * Claim the first free `<device>-<n>` dir in BASE. `wipe` removes everything but the daemon's caches. A `.dirty` marker is written at the
  * claim and removed by a clean release only: a dir that still has it (the process was killed, timed out or exited with the file unfinished)
  * is renamed like a failed one, so its snapshots are not reused.
+ * `shared` is the snapshot store `<root>/<daemon key>/<device>`. Without it (a daemon with no build key) the store is private to BASE.
  */
-export function claimDir(base: string, device: string, wipe: boolean): RunDirClaim {
+export function claimDir(base: string, device: string, wipe: boolean, shared?: string): RunDirClaim {
   fs.mkdirSync(base, { recursive: true });
   const now = new Date();
   fs.utimesSync(base, now, now);
@@ -205,9 +278,9 @@ export function claimDir(base: string, device: string, wipe: boolean): RunDirCla
   if (wipe)
     for (const name of readNames(dir))
       if (!KEEP.has(name)) fs.rmSync(path.join(dir, name), { recursive: true, force: true });
-  const snapshotDir = path.join(base, 'snapshots', device);
+  const snapshotDir = shared ?? path.join(base, 'snap-cache', 'local', device);
   fs.mkdirSync(snapshotDir, { recursive: true });
-  pruneSnapshots(snapshotDir);
+  pruneSnapshotStore(snapshotDir);
   pruneFailed(base, device);
   fs.writeFileSync(dirty, String(process.pid));
   const unlock = () => {

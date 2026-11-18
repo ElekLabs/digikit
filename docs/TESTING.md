@@ -340,17 +340,24 @@ Device sessions run in a claimed `dist/session-cache/<key12>/<device>-<n>` (per 
 snapshots of an older one. A daemon from another place (a custom `DIGI_EMUD_<DEV>`) uses
 `dist/session-cache/<device>-<n>`, or for the card and fx fixtures a fresh temp dir. A vitest worker process
 claims the first free `<n>` with a pid lock file (`<device>-<n>.lock`) and keeps it until it exits; later
-processes reuse the dir. The boot snapshots are not in the run dir: all run dirs of a daemon build and device share
-`dist/session-cache/<key12>/snapshots/<device>` (the daemon's `DIGI_SNAPSHOT_DIR`). An entry is named by its content key (firmware,
-card identity, DSP state), so a card boots cold once per daemon build and any later file or run restores it (about 0.2 s). A claim prunes the store to
-6 GiB, oldest entries first (a hit touches its entry). A file that fails removes the entries that its own cold boots wrote. The card
+processes reuse the dir. The boot snapshots are not in the run dir: all run dirs of a daemon build and device, in all
+worktrees, share `<git dir>/snap-cache/<daemon key>/<device>` (the daemon's `DIGI_SNAPSHOT_DIR`; `DIGI_SNAP_STORE` replaces
+`<git dir>/snap-cache` for host tests). An entry is named by its content key (firmware, card identity, DSP state). The card identity
+is the card's content id (`card.key` next to `card.img`, written by `cachedCard`), its length and the sha256 of its `overlay.bin`: no path
+and no mtime, so the same card gives the same key in every worktree. A card without `card.key` falls back to path and mtime and can
+only miss. A card boots cold once per daemon build and any later file, run or worktree restores it (about 0.2 s). A coupled cold boot
+writes its pair into a `.tmp-*` dir of the store and publishes it with one directory rename; the first writer of a stem wins. A claim
+prunes the whole `snap-cache` to 20 GiB (`SNAPSHOT_CAP_GIB_DEFAULT` in `packages/test-support/src/emulator-config.ts`; env `DIGI_SNAP_CAP_GIB` overrides it), oldest entries
+first (a hit touches its entry), at most every 10 minutes. An entry used in the last 2 hours is never pruned. Entries are removed by
+renaming them aside first. A file that fails removes the entries that its own cold boots wrote. Migration: `rm -rf dist/session-cache/*/snapshots`
+frees the old per-worktree stores. The card
 and fx fixtures claim a dir when their daemon starts (not at collection), empty everything but `cards/`, and release it when the session closes. A file with a failed test or a failed post-close safety check
 renames its dir to `<dir>.failed-<time>` (the newest 2 per device stay), so the next claim boots cold: a snapshot
 of a boot that failed a check would otherwise pass the next run. A `.dirty` marker, written at the claim and removed by a clean release, does the same for a killed or timed-out run. Only the newest 2 `<key12>` dirs of each device stay.
 Cards that the fixtures build (`cardRig`, the fx presets) are content-named: `dist/session-cache/cards/<key>/`
 holds `card.img` and `overlay.bin`, read-only. The key is a hash of the spec, the bytes of every input file
 (`.dkm`, `.syx`, the settings tool), the plusdrive binary, `devices/*.toml` and a format version in
-`tests/regression/runtime/card-cache.ts`. Equal inputs give the same path, size and mtime, so the daemon's
+`tests/regression/runtime/card-cache.ts`. `card.key` holds this key. Equal inputs give the same content id, so the daemon's
 snapshot key matches and a baseline reload restores the snapshot (0.2 to 1.5 s) instead of a cold boot
 (14 s DT2, 38 s DN2). A card built on a `base` outside the cache (a card after the guest's writes) is built in a
 fresh dir and always boots cold. Eviction runs when a fixture claims its run dir: only the newest 32 card dirs
@@ -623,7 +630,7 @@ switches, `SHARC_BLOCKTRANS` and `UPDATE_GOLDENS`. The render cache (`out/cache/
 to share. The tier targets write reports under `out/runs/fx-tier/<step>`; nothing reads them back. Not covered:
 `SHARC_GEN_DIR` itself (the generated core enters through the store key of the core library in the identity file) and
 `out/sections/*` (derived from the firmware file).
-Not in the key on purpose: `dist/session-cache` (boot cache, cannot
+Not in the key on purpose: `dist/session-cache` and `<git dir>/snap-cache` (boot caches, cannot
 change a result) and directory scans such as `modules/README.md`. Failed tasks are not cached.
 
 ### Digikit boot scenarios
