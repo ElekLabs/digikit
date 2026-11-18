@@ -41,8 +41,6 @@ pub struct DeviceProfile {
     /// RAM the emulator keeps across a soft reset (`[digikit] keep_base`, `keep_bytes`): the digikit runtime's crash record. The real
     /// device may or may not keep it **[O]** (docs/findings/46-digikit-debug.md); this is the model.
     pub keep_ram: Option<(u32, u32)>,
-    /// Which backend takes samples and modules (`[storage]`), for the Transfer page.
-    pub storage: Option<StorageProfile>,
     /// `[capabilities]`: what the device can do. Checked against the tables by `patchkit` (`devdata.rs`), not here.
     pub capabilities: Option<Capabilities>,
     /// `[container]`: the section roles of the firmware container.
@@ -149,15 +147,6 @@ pub struct Acceptance {
     pub firmware: String,
     pub ready_dir: String,
     pub sample_card: bool,
-}
-
-/// `[storage]`: the backend of each kind of content. `samples`: "stock-rpc" (the device's MidiRpc file commands) or "digikit" (the digikit store).
-/// `modules`: "digikit".
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct StorageProfile {
-    pub samples: String,
-    pub modules: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,7 +285,6 @@ struct SourceDocument {
     panel: Option<SourcePanel>,
     card: Option<CardLayout>,
     digikit: Option<SourceDigikit>,
-    storage: Option<StorageProfile>,
     capabilities: Option<Capabilities>,
     container: Option<ContainerProfile>,
     acceptance: Option<Acceptance>,
@@ -492,7 +480,6 @@ impl Registry {
                 keep_ram: parsed
                     .digikit
                     .and_then(|k| Some((k.keep_base?, k.keep_bytes?))),
-                storage: parsed.storage,
                 capabilities: parsed.capabilities,
                 container: parsed.container,
                 acceptance: parsed.acceptance,
@@ -575,14 +562,6 @@ impl Registry {
             .iter()
             .find(|d| d.short == device)
             .and_then(|d| d.card.as_ref())
-    }
-
-    /// The `[storage]` backends of a device named by its short id.
-    pub fn storage(&self, device: &str) -> Option<&StorageProfile> {
-        self.devices
-            .iter()
-            .find(|d| d.short == device)
-            .and_then(|d| d.storage.as_ref())
     }
 
     /// The RAM range `(base, bytes)` a soft reset keeps in the emulator's model, for a device named by its short id.
@@ -1216,14 +1195,6 @@ mod tests {
                 "the store lies above the MmcFs write guard"
             );
         }
-        let registry = Registry::embedded().unwrap();
-        assert_eq!(registry.storage("dt2").unwrap().samples, "stock-rpc");
-        assert_eq!(registry.storage("dn2").unwrap().samples, "digikit");
-        assert!(
-            ["dt2", "dn2"]
-                .iter()
-                .all(|d| registry.storage(d).unwrap().modules == "digikit")
-        );
         assert_eq!(dt2.path_fs.as_ref().unwrap().superblock_sector, 0x5d8000);
         assert!(dn2.path_fs.is_none());
     }

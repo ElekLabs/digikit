@@ -18,6 +18,8 @@ export interface DeviceInfo {
   /** Samples mode only: the backend of the device's samples, and whether it makes folders. */
   samples?: string;
   canMkdir?: boolean;
+  /** Samples mode: when the device uses a changed sample (`restart`: at its next start); `live` or absent: at once. */
+  apply?: 'live' | 'restart';
 }
 
 /** The state of the Transfer page of one app. `jobs` is the app's (the busy action is a job of its store). */

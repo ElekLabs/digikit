@@ -165,11 +165,14 @@ export default function Console(props: { host: Host }) {
   const sidePanelsShown = createMemo(() => page() === 'emulator');
   const panelsActive = createMemo(() => !!status());
   // While an image boots, only its own device counts: an unknown image has none (no stale device, no faceplate).
-  const knownDevice = () => status()?.device ?? (booting() ? booting()!.device : (failed()?.device ?? lastDevice()));
-  const device = () => {
+  const knownDevice = createMemo(
+    () => status()?.device ?? (booting() ? booting()!.device : (failed()?.device ?? lastDevice())),
+  );
+  // a memo, so its readers re-run only when the id changes
+  const device = createMemo(() => {
     const d = knownDevice();
     return d !== undefined && Object.hasOwn(panels, d) ? d : defaultFaceplate;
-  };
+  });
   const panel = () => panels[device()];
   /** A device without `[digikit]` has no runtime, no modules and no remote: it starts stock, and those pages say so. */
   const hasRuntime = (id: string | undefined) => id === undefined || runtimeDeviceIds.includes(id);

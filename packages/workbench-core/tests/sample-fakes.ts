@@ -16,6 +16,7 @@ export const fakeBackend = ({ failPut = '', failVerify = '' } = {}) => {
   const calls: string[] = [];
   return {
     calls,
+    sizeOf: (p: Prepared) => p.stored.length,
     async put(folderName: string, p: Prepared, onProgress: (sent: number, total: number) => void) {
       calls.push(`put ${folderName}/${p.name}`);
       if (p.name === failPut) throw new Error('{"error":"E_FULL: no space","kind":"device"}');
@@ -56,6 +57,7 @@ export const deviceBackend = (
 
   return {
     calls,
+    sizeOf: base.sizeOf,
     put: async (f: string, p: Prepared, o: (sent: number, total: number) => void) => {
       calls.push(`put ${f}/${p.name}`);
       return base.put(f, p, o);
@@ -134,6 +136,7 @@ export const batchBackend = ({
     calls,
     list: base.list,
     sameOnDevice: base.sameOnDevice,
+    sizeOf: base.sizeOf,
     bulkState: 'bulk' as 'bulk' | 'fallback',
     async put(f: string, p: Prepared, o: (sent: number, total: number) => void, opts?: { defer?: boolean }) {
       calls.push(`put ${f}/${p.name}${opts?.defer ? ' defer' : ''}`);

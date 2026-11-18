@@ -69,9 +69,12 @@ const selected = (file: string, targets: string) => {
 };
 
 let workspace: ProjectGraph;
+// One cold project-graph build (about 3-5 s idle, 3x that on a loaded gate host), bounded by the 30 s
+// execFileSync timeout of nx(). The hook limit is a little longer, so a hung nx reports its own error;
+// Vitest's default 10 s hook limit is shorter than the work it bounds.
 beforeAll(() => {
   workspace = plan(['graph'], '--file').graph;
-});
+}, 35_000);
 
 // Let Vitest flush worker updates between synchronous Nx subprocesses.
 afterEach(async () => {

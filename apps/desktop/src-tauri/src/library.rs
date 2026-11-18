@@ -456,39 +456,6 @@ pub async fn dkprof_wasm() -> Result<tauri::ipc::Response, String> {
     .map_err(|e| e.to_string())?
 }
 
-/// What the device profile says about content (`[storage]`): the device's name and the backend of its samples.
-#[derive(Serialize, Debug, PartialEq)]
-pub struct DeviceStorage {
-    pub name: String,
-    pub samples: String,
-}
-
-/// The `[storage]` of a device (its short name) from `devices/*.toml`.
-pub fn storage_of(device: &str) -> Result<DeviceStorage, String> {
-    let registry = device_profile::Registry::load().map_err(|e| e.to_string())?;
-    let profile = registry
-        .devices()
-        .iter()
-        .find(|d| d.short == device)
-        .ok_or_else(|| format!("no device profile for {device:?}"))?;
-    let storage = profile
-        .storage
-        .as_ref()
-        .ok_or_else(|| format!("the {} profile has no [storage]", profile.name))?;
-    Ok(DeviceStorage {
-        name: profile.name.clone(),
-        samples: storage.samples.clone(),
-    })
-}
-
-/// Where the device keeps samples: read from its profile, so the page names no device.
-#[tauri::command]
-pub async fn device_storage(device: String) -> Result<DeviceStorage, String> {
-    tauri::async_runtime::spawn_blocking(move || storage_of(&device))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -625,23 +592,6 @@ mod tests {
         let root = library("build");
         assert!(build(&root, "DT2!").is_err());
         let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn the_storage_comes_from_the_profile() {
-        let registry = device_profile::Registry::load().unwrap();
-        let mut found = 0;
-        for profile in registry.devices().iter().filter(|d| d.storage.is_some()) {
-            let storage = storage_of(&profile.short).unwrap();
-            assert_eq!(storage.name, profile.name);
-            assert_eq!(
-                Some(&storage.samples),
-                profile.storage.as_ref().map(|s| &s.samples)
-            );
-            found += 1;
-        }
-        assert!(found > 0);
-        assert!(storage_of("nothing").is_err());
     }
 
     #[test]

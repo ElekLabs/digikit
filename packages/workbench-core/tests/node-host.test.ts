@@ -1,5 +1,5 @@
 // The NodeHost (src/node/node-host.ts) over temp folders, small stand-in bridge programs and a stand-in control socket: the file rules
-// of the Host (local.rs, library.rs), the profiles, the MIDI and bulk bridges and the emulator RPC.
+// of the Host (local.rs, library.rs), the MIDI and bulk bridges and the emulator RPC.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -30,13 +30,6 @@ beforeAll(() => {
   fs.mkdirSync(at('out/modules/dt2/acme'), { recursive: true });
   fs.writeFileSync(at('out/modules/dt2/acme/synth.dkm'), 'SYNTH');
   fs.writeFileSync(at('out/modules/dt2/notes.txt'), 'not a module');
-  fs.mkdirSync(at('devices'));
-  fs.writeFileSync(
-    at('devices/one.toml'),
-    '[device]\nname = "Box One"\nshort = "b1"\n[storage]\nsamples = "stock-rpc"\n',
-  );
-  fs.writeFileSync(at('devices/two.toml'), '[device]\nname = "Box Two"\nshort = "b2"\n');
-  fs.writeFileSync(at('devices/one-leds.toml'), '[leds]\nname = "none"\n');
   fs.mkdirSync(at('apps/web/public'), { recursive: true });
   fs.writeFileSync(at('apps/web/public/patchkit.wasm'), 'WASM');
 });
@@ -83,13 +76,6 @@ test('the library lists .dkm files by path, reads them and checks the names', as
   assert.equal(text(await lib.read('dt2', 'acme/synth.dkm')), 'SYNTH');
   await expect(lib.read('dt2', 'acme/../../x.dkm')).rejects.toThrow(/not a library file/);
   await expect(lib.read('dt2', 'notes.txt')).rejects.toThrow(/not a library file/);
-});
-
-test('the device storage comes from the profile files', async () => {
-  const lib = createNodeHost({ root: dir }).library;
-  expect(await lib.deviceStorage('b1')).toEqual({ name: 'Box One', samples: 'stock-rpc' });
-  await expect(lib.deviceStorage('b2')).rejects.toThrow(/no \[storage\]/);
-  await expect(lib.deviceStorage('zz')).rejects.toThrow(/no device profile/);
 });
 
 test('the wasm files come from the checkout, and a missing one names the build', async () => {

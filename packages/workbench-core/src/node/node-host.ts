@@ -5,14 +5,13 @@
 // workbench run the same code over the same interfaces.
 import { buildBindBundle } from './bind-bundle.ts';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { connect, type Client } from '@digi/control-client';
 import { ProcessBulkLink } from '@digi/dk-session';
 import { ProcessTransport } from '@digi/dk-session/process-transport';
-import { parse } from 'smol-toml';
 import type {
   BulkHost,
   BulkListed,
@@ -121,7 +120,7 @@ async function saveTo(outDir: string | undefined, command: string, bytes: Uint8A
   return file;
 }
 
-/** The module library `out/modules/<device>/` (`lib_scan`, `lib_read`) and the device profiles (`device_storage`). `build` needs the Rust packer: unsupported. */
+/** The module library `out/modules/<device>/` (`lib_scan`, `lib_read`). `build` needs the Rust packer: unsupported. */
 function nodeLibrary(root: string, libraryDir?: string): LibraryHost {
   const deviceDir = (device: string) => {
     if (!/^[a-z0-9]+$/.test(device)) throw new Error(`not a device id: ${JSON.stringify(device)}`);
@@ -156,20 +155,6 @@ function nodeLibrary(root: string, libraryDir?: string): LibraryHost {
         throw new Error(`not a library file: ${JSON.stringify(rel)}`);
       const base = rel.endsWith('.dks') ? path.join(root, 'dist/modules', device) : dir;
       return toBuffer(await readFile(path.join(base, rel)));
-    },
-    async deviceStorage(device) {
-      const dir = path.join(root, 'devices');
-      for (const file of readdirSync(dir).filter((f) => f.endsWith('.toml'))) {
-        const profile = parse(readFileSync(path.join(dir, file), 'utf8')) as {
-          device?: { name?: string; short?: string };
-          storage?: { samples?: string };
-        };
-        if (profile.device?.short !== device) continue;
-        const samples = profile.storage?.samples;
-        if (!samples) throw new Error(`the ${profile.device.name} profile has no [storage]`);
-        return { name: profile.device.name ?? device, samples };
-      }
-      throw new Error(`no device profile for ${JSON.stringify(device)}`);
     },
   };
 }

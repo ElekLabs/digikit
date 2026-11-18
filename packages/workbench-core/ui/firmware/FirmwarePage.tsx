@@ -116,6 +116,7 @@ export default function FirmwarePage(): JSX.Element {
     chooseFile,
     device,
     downloadImage,
+    fileDevice,
     forgetDevice,
     notice,
     prepared,
@@ -161,6 +162,11 @@ export default function FirmwarePage(): JSX.Element {
     void read();
   });
 
+  /** The chosen file's device has no boot screen image to add. */
+  const noBootImage = () => {
+    const d = fileDevice();
+    return d !== undefined && !d.patchSets['device-introblank'];
+  };
   const inputs = () => ({ prepare: prepared(), device: device(), ack: ack(), run: run(), route: route() });
   const marks = () => stepMarks(inputs());
   const flash = () => canFlash(inputs());
@@ -336,8 +342,9 @@ export default function FirmwarePage(): JSX.Element {
           <label class="tick">
             <input
               type="checkbox"
-              checked={customBootScreen()}
-              disabled={running(run()) || restore()}
+              checked={customBootScreen() && !noBootImage()}
+              disabled={running(run()) || restore() || noBootImage()}
+              title={noBootImage() ? 'This device has no boot screen image.' : undefined}
               onChange={(e) => setCustomBoot(e.currentTarget.checked)}
             />
             <span>

@@ -24,7 +24,6 @@ export function createTauriHost(): Host {
       scan: (device) => invoke('lib_scan', { device }),
       read: (device, path) => invoke('lib_read', { device, path }),
       readMaps: (device) => invoke('lib_maps', { device }),
-      deviceStorage: (device) => invoke('device_storage', { device }),
     },
     ports: {
       midi: {
