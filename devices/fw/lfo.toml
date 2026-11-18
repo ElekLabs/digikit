@@ -322,3 +322,27 @@ devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/services/lfo"]
 doc = "The T1 range accessor (the stock code has 172 callers on DT2, 191 on DN2; the hook does not run in interrupt context: it reads the status register first and runs the stock code when the interrupt mask is not 0): for the codes 79, 89 and 99 with a loaded shape the hook calls the stock accessor (`dk_stock_`), then raises the maximum in the buffer to the highest loaded wave number << 8 (finding 143, section Callers of the T1 range accessor: no caller scales a value onto 0..max; the clamps that MIDI CC and NRPN reach see the new maximum, a loaded shape is the only case that differs). Any other code runs the displaced `move.l D2,-(SP); move.l 8(SP),D1` and the stock code. Dead after the site (strict): D2 (written), D0 and D1 (written before use: only D0b is read before `mvs.b`), and the flags."
+
+# ---- The graph of the MOD page (docs/findings/143-lfo-waveforms.md, "Graph"): the cell FUN_4010c5ee (DT2) / FUN_4010df62 (DN2) of LfoPageView, one call site each. The function is in the
+# Ghidra database; both images hash alike (h_strict), and so do DT2 1.16 and DN2 1.11 and 1.10E.
+
+[[site]]
+name = "cf.lfo.site.graph_vec"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "200c6ac9ca95aed9ace6308aa35abfee", offset = 0x24e, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "200c6ac9ca95aed9ace6308aa35abfee", offset = 0x24e, len = 6 }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "DT2 0x4010c83c, DN2 0x4010e1b0: the vector pick of the LFO page's cell: `addi.l #TABLE,D6` (D6 = 12 * the clamped wave) before `move.l D6,-(SP); jsr (A5)`. TABLE is the RAM table of seven tile vectors (DT2 0x44d2e37c, DN2 0x44508b68)."
+
+[[hook]]
+name = "cf.lfo.hook.graph_vec"
+site = "cf.lfo.site.graph_vec"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = ["d5", "d6", "a6"], clobbers = ["d6", "ccr"] }   # the shape path sets D6 and clears the flags like the stock addi; every other path runs the displaced addi in the tail
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The cell of the LFO page (UI task): for a wave 7 to 14 with a published shape graph D6 becomes the service's vector of four tiles and the byte at -0x11(A6) the unipolar mark; otherwise the tail runs the displaced `addi.l #TABLE,D6`. The wave is 0x18(A6). The vtable word of the tiles is read from the stock vector (the tail's displaced `addi` gives TABLE; TABLE + D6 is the vector, its first word the first Bitmap's vtable). Strict liveness: only the flags are dead; D0, D1, A0 and A1 are saved."

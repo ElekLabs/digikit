@@ -129,6 +129,16 @@ mark = "D"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.lfo.site.graph_vec"
+cpu = "cf"
+kind = "code"
+addr = 0x4010e1b0
+len = 6
+sha256 = "9998677613c912ec697ec816e42073c55398d1b8ce7d29f529281287355078bc"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
 name = "cf.lfo.site.read_call"
 cpu = "cf"
 kind = "code"
@@ -3879,6 +3889,12 @@ len = 6
 sha256 = "f6353ecd25610b1605fe58097dae09f6182ee62fef7a0e305380a0f3e36ab25e"
 mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
+
+[[hook]]
+name = "cf.lfo.hook.graph_vec"
+site = "cf.lfo.site.graph_vec"
+mode = "replace"
+clobbers = ["d6", "ccr"]
 
 [[hook]]
 name = "cf.lfo.hook.read_call"

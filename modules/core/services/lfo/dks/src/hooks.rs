@@ -46,6 +46,7 @@ entries! {
     lfo_ui_name4,
     lfo_ui_name3,
     lfo_ui_range,
+    lfo_ui_graph,
 }
 
 #[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
@@ -72,4 +73,15 @@ pub unsafe extern "C" fn dk_lfo_name(value: i32, buf: *mut u8, width: u32) -> u3
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub extern "C" fn dk_lfo_range_max() -> u32 {
     dkrt_svc_lfo::records::wave_max()
+}
+
+/// The vector of tiles the MOD page draws for the LFO wave `wave` (the unclamped wave argument of its cell), 0 when no loaded shape has that number; stores the unipolar byte at `flag`.
+/// `vtable` is the vtable word of the stock tile vector's first `Bitmap`. What the graph hook (`hooks-ui.s`) calls. C calling convention.
+///
+/// # Safety
+/// `flag` is valid for one byte.
+#[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
+#[cfg_attr(target_arch = "m68k", no_mangle)]
+pub unsafe extern "C" fn dk_lfo_graph(wave: u32, vtable: u32, flag: *mut u8) -> *const u8 {
+    dkrt_svc_lfo::graph::lookup(wave, vtable, flag)
 }

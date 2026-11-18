@@ -3279,6 +3279,7 @@ dependencies = [
  "dkprof",
  "dkrt-fit",
  "dkrt-sdk",
+ "dkrt-svc-lfo",
  "dksharc",
  "dkupload",
  "dt2-firmware-loader",

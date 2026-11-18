@@ -472,6 +472,8 @@ impl<C: CoreApi> Service<C> for Lfo {
         let sr = core.irq_mask();
         t[i] = sh;
         core.irq_restore(sr);
+        // the page's picture (UI task): published last, after the table entry
+        crate::graph::publish(i, &samples, !neg);
         OK
     }
 
@@ -480,6 +482,8 @@ impl<C: CoreApi> Service<C> for Lfo {
         let mut i = 0;
         while i < MAX_SHAPES {
             if t[i].owner == owner {
+                // the hook gives the page the stock picture first
+                crate::graph::retract(i);
                 let sr = core.irq_mask();
                 t[i].owner = 0;
                 core.irq_restore(sr);

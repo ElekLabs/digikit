@@ -3,9 +3,14 @@
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::profiles::ALL;
 use dkrt_sdk::records::{KINDS_LFO, KIND_LFO_SHAPE, LEN_LFO_SHAPE};
+use dkrt_svc_lfo::graph;
 use dkrt_svc_lfo::records::{name_of, number_of, owner_of, shape, used, Lfo, SAMPLES};
 use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module};
 use dkrt_test_support::FakeCore;
+use std::sync::Mutex;
+
+/// The shape table and the graph slots are statics of the crate: the two profile tests (and the other test files, each its own process) run one at a time here.
+static LOCK: Mutex<()> = Mutex::new(());
 
 /// The keys that stand for `DK_KEY_SHAPE` of three modules (the key derives from the module id: `hash24 << 8`).
 const SHAPE_A: u32 = 0x00a1_0100;
@@ -51,6 +56,8 @@ fn state(_core: &FakeCore) -> Vec<u32> {
             s[0] as u16 as u32 | (s[SAMPLES - 1] as u16 as u32) << 16
         }));
     }
+    // the pictures the page draws for the shapes
+    v.push(graph::digest());
     v
 }
 
@@ -96,6 +103,7 @@ fn fixture(device: u32) -> Fixture {
 
 #[test]
 fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     for p in ALL.iter().filter(|p| p.dyn_types > 0) {
         contract::<Lfo>(&fixture(p.id));
     }

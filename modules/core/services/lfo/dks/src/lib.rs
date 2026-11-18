@@ -18,6 +18,7 @@ dkrt_svc_rt::service!(
         ("cf.lfo.hook.wave_name", hooks::lfo_ui_name4),
         ("cf.lfo.hook.wave_name3", hooks::lfo_ui_name3, dn2),
         ("cf.lfo.hook.t1_range", hooks::lfo_ui_range),
+        ("cf.lfo.hook.graph_vec", hooks::lfo_ui_graph),
     ],
     fills = [
         ("lfo_dt2_tick_call", hooks::lfo_dt2_tick_call, dt2),

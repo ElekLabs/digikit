@@ -5,6 +5,7 @@
 use dkrt_abi::service::{check_step, ApplyCtx, CheckCtx, Declare, Service, SettleCtx};
 use dkrt_sdk::records::{KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
+use dkrt_svc_lfo::graph;
 use dkrt_svc_lfo::records::{
     eval, highest, interp, name_into, name_of, number_of, owner_of, shape, tri, unipolar_of, used,
     wave_max, Lfo, MAX_SHAPES, NAME_LEN, RANGE, SAMPLES, SETTING,
@@ -118,10 +119,19 @@ fn a_shape_gets_a_number_goes_through_check_apply_and_remove() {
     assert_eq!((owner_of(7), used()), (1, 1));
     assert_eq!(name_of(7), Some(*b"RAMP"));
     assert!(!unipolar_of(7), "a shape with a negative sample is bipolar");
+    assert!(
+        graph::tiles_of(7).is_some(),
+        "the page's tiles are published with the shape"
+    );
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 2) };
     assert_eq!(used(), 1, "another module's removal keeps the shape");
+    assert!(graph::tiles_of(7).is_some());
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
     assert_eq!((shape(7), owner_of(7), used()), (None, 0, 0));
+    assert!(
+        graph::tiles_of(7).is_none(),
+        "the tiles are withdrawn with the shape"
+    );
 }
 
 #[test]

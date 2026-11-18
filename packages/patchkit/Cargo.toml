@@ -56,3 +56,5 @@ dkprof = { path = "../dkprof" }
 
 [dev-dependencies]
 machine = { path = "../emulator/machine" }
+# `tests/lfo_graph.rs`: the shape graph's tiles against the stock image
+dkrt-svc-lfo = { path = "../../modules/core/services/lfo" }
