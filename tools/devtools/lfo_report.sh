@@ -1,21 +1,25 @@
 #!/bin/sh
-# The output report of an LFO shape module: tools/devtools/lfo_report.sh [MODULE_ID] [--device dt2|dn2]  (mise run lfo:report)
+# The output report of an LFO shape module: tools/devtools/lfo_report.sh <author/name> [--device dn2|dt2]  (mise run lfo:report)
 # Runs modules/core/runtime/tests/lfo/lfo-report.manual.device.test.ts (sdk/templates/lfo-shape/README.md "Output report").
 set -eu
-id=digikit/lfo_shapes_1
+id=
 device=dn2
 while [ $# -gt 0 ]; do
   case $1 in
     --device) device=$2; shift 2 ;;
-    -h|--help) echo "usage: lfo_report.sh [MODULE_ID] [--device dt2|dn2]  (default digikit/lfo_shapes_1, dn2)"; exit 0 ;;
+    -h|--help) echo "usage: lfo_report.sh <author/name> [--device dn2|dt2]"; exit 0 ;;
     -*) echo "unknown option $1" >&2; exit 2 ;;
     *) id=$1; shift ;;
   esac
 done
 case $device in
   dn2|dt2) ;;
-  *) echo "usage: lfo_report.sh [MODULE_ID] [--device dt2|dn2]  (got device '$device')" >&2; exit 2 ;;
+  *) echo "usage: lfo_report.sh <author/name> [--device dn2|dt2]  (got device '$device')" >&2; exit 2 ;;
 esac
+if [ -z "$id" ]; then
+  echo "usage: lfo_report.sh <author/name> [--device dn2|dt2]" >&2
+  exit 2
+fi
 case $id in
   */*) ;;
   *) echo "lfo_report.sh: the full module id AUTHOR/NAME is needed, got '$id'" >&2; exit 2 ;;

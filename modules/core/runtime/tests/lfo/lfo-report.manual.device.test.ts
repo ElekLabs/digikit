@@ -18,7 +18,7 @@ import {
 } from './lfo-rig.ts';
 
 /**
- * `mise run lfo:report -- [MODULE_ID] [--device dn2|dt2]` (tools/devtools/lfo_report.sh sets DIGI_LFO_MODULE and DIGI_LFO_DEVICE): the output report of an LFO shape module.
+ * `mise run lfo:report -- <author/name> [--device dn2|dt2]` (tools/devtools/lfo_report.sh sets DIGI_LFO_MODULE and DIGI_LFO_DEVICE): the output report of an LFO shape module.
  * It is no gate test: it is not registered in `runtimeAcceptance` and joins no gate (the `.manual.` name keeps it out of the Nx selection). Without DIGI_LFO_MODULE it is skipped.
  * After it writes all outputs it fails when a shape has the verdict FAIL or SCALE (CLOSE is a warning).
  *

@@ -318,7 +318,7 @@ description = "ColdFire memory audit of one run-time module in the emulator: `mo
 
 ["lfo:report"]
 run = "sh tools/devtools/lfo_report.sh"
-description = "Output report of an LFO shape module on the emulator: `lfo:report [MODULE_ID] [--device dt2|dn2]` (default digikit/lfo_shapes_1, dn2). Per shape: wave number, fit error against its own table, the closest other table, min and max of the output, swing against full scale and a verdict; a table on stdout, one SVG per shape and report.json in out/runs/lfo-shape-report/<device>/<module>/. About 5 minutes. A Vitest file that asserts nothing and joins no gate"
+description = "Output report of an LFO shape module on the emulator: `mise run lfo:report -- <author/name> [--device dn2|dt2]` (default device dn2). Per shape: wave number, fit error against its own table, the closest other table, min and max of the output, swing against full scale and a verdict; a table on stdout, one SVG per shape and report.json in out/runs/lfo-shape-report/<device>/<module>/. About 5 minutes. A Vitest file that asserts nothing and joins no gate"
 
 ["module:pack"]
 run = "uv run python -m tools.patchkit.patchkit pack"

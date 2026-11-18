@@ -934,7 +934,7 @@
   "tools/devtools/fastcov.py": 4,
   "tools/devtools/firmware_shots.mjs": 67,
   "tools/devtools/fx_tier.py": 33,
-  "tools/devtools/lfo_report.sh": 10,
+  "tools/devtools/lfo_report.sh": 11,
   "tools/devtools/memory_live.mjs": 1,
   "tools/devtools/module_audit.sh": 4,
   "tools/devtools/pcdump_names.py": 3,
