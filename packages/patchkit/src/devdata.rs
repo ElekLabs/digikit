@@ -89,6 +89,23 @@ pub struct Container {
     /// Sections patchkit never changes.
     #[serde(default)]
     pub readonly: Vec<u32>,
+    /// Roles (`dsp`, `cf2`, `fpga`) of read-only sections that a module may store packed when it declares that it unpacks them (`[[repack]]` of a
+    /// `module.toml`). The decoded bytes stay the stock bytes; only the stored form shrinks.
+    #[serde(default)]
+    pub repack: Vec<String>,
+}
+
+impl Container {
+    /// The section of a role (`main`, `dsp`, `cf2`, `fpga`), if the device has one.
+    pub fn role_section(&self, role: &str) -> Option<u32> {
+        match role {
+            "main" => Some(self.main),
+            "dsp" => self.dsp,
+            "cf2" => self.cf2,
+            "fpga" => self.fpga,
+            _ => None,
+        }
+    }
 }
 
 /// `[acceptance]`: the device's test cell.
@@ -304,6 +321,25 @@ fn validate(n: &str, f: &File, caps: &Capabilities, c: &Container, short: &str) 
             ));
         }
     }
+    // a section that a module may store packed is a role section that is read-only in content
+    for role in &c.repack {
+        if role == "main" {
+            return bad("[container] repack: the main section is changed, not repacked".into());
+        }
+        match c.role_section(role) {
+            None => {
+                return bad(format!(
+                    "[container] repack: the device has no {role} section"
+                ));
+            }
+            Some(id) if !c.readonly.contains(&id) => {
+                return bad(format!(
+                    "[container] repack {role}: section {id} must be in readonly"
+                ));
+            }
+            Some(_) => {}
+        }
+    }
     if f.digikit.is_some() && f.patch.is_none() {
         return bad("[digikit] needs [patch]: a runtime target must be patchable".into());
     }
@@ -511,6 +547,19 @@ mod tests {
     }
 
     #[test]
+    fn repack_names_a_read_only_role_section() {
+        let text = "[device]\nname = \"S\"\nshort = \"st\"\n[capabilities]\ndsp = \"none\"\nseal = \"none\"\nsample_pool = \"none\"\ncard = \"unknown\"\n[container]\nmain = 3\ncf2 = 7\nfpga = 1\nreadonly = [1, 2, 4, 6, 7, 8]\n";
+        let ok = format!("{text}repack = [\"cf2\"]\n");
+        let (ids, _) = parse_all(&[("s.toml", ok.as_str())]).unwrap();
+        assert_eq!(ids[0].container.repack, ["cf2"]);
+        // the role's section must be read-only: the same file without 7 in readonly is already refused, so test the other roles
+        let no_role = text.replace("cf2 = 7\n", "") + "repack = [\"cf2\"]\n";
+        assert!(parse_all(&[("s.toml", no_role.as_str())]).is_err());
+        let unknown = format!("{text}repack = [\"cpu9\"]\n");
+        assert!(parse_all(&[("s.toml", unknown.as_str())]).is_err());
+    }
+
+    #[test]
     fn capabilities_that_disagree_with_the_tables_are_refused() {
         for (what, text) in [
             (
@@ -552,6 +601,22 @@ mod tests {
             (
                 "fpga section not read-only",
                 edit(DT2, "dsp = 7\n", "dsp = 7\nfpga = 9\n"),
+            ),
+            (
+                "repack of a role the device lacks",
+                edit(
+                    DT2,
+                    "readonly = [2, 4, 8]",
+                    "readonly = [2, 4, 8]\nrepack = [\"cf2\"]",
+                ),
+            ),
+            (
+                "repack of the main section",
+                edit(
+                    DT2,
+                    "readonly = [2, 4, 8]",
+                    "readonly = [2, 4, 8]\nrepack = [\"main\"]",
+                ),
             ),
             (
                 "one section, two roles",

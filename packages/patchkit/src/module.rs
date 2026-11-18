@@ -28,6 +28,10 @@ pub struct Manifest {
     pub info: Vec<InfoDef>,
     #[serde(default)]
     pub claim: Vec<Claim>,
+    /// `[[repack]]`: container sections of a read-only role that this module unpacks before they are used, so that patchkit may store them packed
+    /// (`[container] repack` of the device file allows it per device).
+    #[serde(default)]
+    pub repack: Vec<RepackDef>,
     /// P1: sections copied from the user's image (and extended) at apply time.
     #[serde(default)]
     pub section: Vec<SectionDef>,
@@ -817,6 +821,23 @@ pub struct OpReloc {
     pub symbol: String,
     #[serde(default)]
     pub addend: i64,
+}
+
+/// `[[repack]] role = "cf2", dest = 0x.., stage_end = 0x.., len = N, sha256 = "..."`: the module unpacks the section of `role` in place. The packed stream is read so that it ends at
+/// `stage_end` and is unpacked from `dest` upward; patchkit refuses the build when the unpacked output would reach stream bytes that are not read yet
+/// (`aplib::inplace_margin` is not above 0). The module's code uses the same two addresses.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepackDef {
+    pub role: String,
+    pub dest: u64,
+    pub stage_end: u64,
+    /// The length and SHA-256 (hex) of the section's decoded stock bytes, which the module checks after it unpacks them; patchkit refuses a stock
+    /// section that differs, because the module would refuse it at every boot.
+    pub len: u64,
+    pub sha256: String,
+    #[serde(default)]
+    pub devices: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

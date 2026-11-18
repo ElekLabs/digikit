@@ -274,9 +274,16 @@ fn check(
     }
     if let Some(base_bytes) = base {
         let b = Firmware::parse(base_bytes)?;
+        let mut repacked: Vec<u32> = vec![];
         for &id in fw.device.readonly_sections() {
             match (b.section(id), fw.section(id)) {
                 (Some(x), Some(y)) if x.stored == y.stored && x.dest == y.dest => {}
+                // a section that a module unpacks may be stored packed: what the image decodes to is still the stock bytes
+                (Some(x), Some(y))
+                    if fw.device.is_repackable(id) && x.data == y.data && x.dest == y.dest =>
+                {
+                    repacked.push(id)
+                }
                 (None, None) => {}
                 _ => {
                     return Err(err!(
@@ -298,12 +305,18 @@ fn check(
             .device
             .readonly_sections()
             .iter()
+            .filter(|i| !repacked.contains(i))
             .map(|i| i.to_string())
             .collect();
         checks.push(format!(
             "read-only sections {} identical to the stock image",
             ids.join(", ")
         ));
+        for id in repacked {
+            checks.push(format!(
+                "section {id} is stored packed and decodes to the stock bytes"
+            ));
+        }
     }
     if let Some(pid) = &port_id
         && let Some(p) = reg.and_then(|r| r.by_id(pid))

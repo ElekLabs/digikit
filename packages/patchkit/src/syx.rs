@@ -89,6 +89,19 @@ impl Device {
     pub fn readonly_sections(self) -> &'static [u32] {
         &self.0.identity.container.readonly
     }
+    /// Whether a module may store section `id` packed although its content never changes (`[container] repack`).
+    pub fn is_repackable(self, id: u32) -> bool {
+        let c = &self.0.identity.container;
+        c.repack.iter().any(|role| c.role_section(role) == Some(id))
+    }
+    /// The section of a role (`[container]`: `main`, `dsp`, `cf2`, `fpga`), if the device has one.
+    pub fn role_section(self, role: &str) -> Option<u32> {
+        self.0.identity.container.role_section(role)
+    }
+    /// The roles whose sections a module may store packed (`[container] repack`).
+    pub fn repack_roles(self) -> &'static [String] {
+        &self.0.identity.container.repack
+    }
     /// Limits of an image with no port: container, stored DSP, depacked DSP, staged MAIN (`[patch]` of the device file).
     pub fn limits(self) -> (usize, usize, usize, usize) {
         let d = self.0;

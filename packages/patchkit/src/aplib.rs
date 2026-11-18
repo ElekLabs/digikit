@@ -309,6 +309,104 @@ pub fn pack_section(data: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Reads the packed bit stream the way the firmware's depacker does (tag byte, 8 flags, MSB first).
+struct Reader<'a> {
+    d: &'a [u8],
+    p: usize,
+    end: usize,
+    tag: u32,
+}
+
+impl Reader<'_> {
+    fn byte(&mut self) -> Result<u8, String> {
+        if self.p >= self.end {
+            return Err("the packed stream ends before its end marker".into());
+        }
+        let v = self.d[self.p];
+        self.p += 1;
+        Ok(v)
+    }
+    fn bit(&mut self) -> Result<u32, String> {
+        self.tag = (self.tag << 1) & 0x1ff;
+        if self.tag & 0xff == 0 {
+            let b = self.byte()? as u32;
+            self.tag = (b << 1) | 1;
+            return Ok(b >> 7);
+        }
+        Ok(self.tag >> 8)
+    }
+    fn gamma(&mut self) -> Result<u64, String> {
+        let mut v: u64 = 1;
+        loop {
+            v = (v << 1) | self.bit()? as u64;
+            if self.bit()? == 1 {
+                return Ok(v);
+            }
+            if v > 0x0200_0000 {
+                return Err("gamma code overflow".into());
+            }
+        }
+    }
+}
+
+/// The slack, in bytes, of unpacking the section stream `stream` (with its 8-byte header) in place: the stream is staged at `stage`, the output
+/// starts at `dest` and grows upward over the stream. The result is the smallest, over the tokens, of (stream bytes consumed) - (output bytes written
+/// at or past `stage`). It is negative when a write would land on a stream byte that is not read yet, and `None` when the output never reaches
+/// `stage`. This is `tools.firmware.aplibpack.inplace_margin`, which stays the reference.
+pub fn inplace_margin(stream: &[u8], dest: u64, stage: u64) -> Result<Option<i64>, String> {
+    if stream.len() < 8 {
+        return Err("a section stream is shorter than its 8-byte header".into());
+    }
+    let length = u32::from_be_bytes(stream[0..4].try_into().unwrap()) as usize;
+    let end = 8usize
+        .checked_add(length)
+        .filter(|&e| e <= stream.len())
+        .ok_or("the stream header names more bytes than the stream holds")?;
+    let mut s = Reader {
+        d: stream,
+        p: 8,
+        end,
+        tag: 0,
+    };
+    let room = stage as i64 - dest as i64;
+    let (mut out, mut last): (i64, i64) = (0, 1);
+    let mut margin: Option<i64> = None;
+    loop {
+        if s.bit()? == 1 {
+            s.byte()?;
+            out += 1;
+        } else {
+            let g = s.gamma()?;
+            let off = if g == 2 {
+                last
+            } else {
+                let raw = ((g << 8) + s.byte()? as u64) & 0xffff_ffff;
+                if raw as i64 == BIAS {
+                    break;
+                }
+                let off = raw as i64 - BIAS;
+                last = off;
+                off
+            };
+            let short = 2 * s.bit()? + s.bit()?;
+            let mut ln = if short != 0 {
+                short as i64
+            } else {
+                s.gamma()? as i64 + 2
+            };
+            if off > FAR {
+                ln += 1;
+            }
+            out += ln + 1;
+        }
+        if out > room {
+            let slack = s.p as i64 - (out - room);
+            margin = Some(margin.map_or(slack, |m| m.min(slack)));
+        }
+    }
+    Ok(margin)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,5 +436,28 @@ mod tests {
             })
             .collect();
         roundtrip(&noisy);
+    }
+}
+
+#[cfg(test)]
+mod margin_tests {
+    use super::*;
+
+    #[test]
+    fn the_in_place_margin_counts_stream_bytes_read_ahead_of_the_output() {
+        // 64 distinct bytes pack to literals only: one tag byte per 8 bytes, then one byte per literal
+        let data: Vec<u8> = (0..64).collect();
+        let s = pack_section(&data);
+        // the output never reaches the stage: no overlap
+        assert_eq!(inplace_margin(&s, 0, 1000).unwrap(), None);
+        // stage at 16: the output passes it at literal 17 (tags read: 1 + 2, stream header 8): consumed 8 + 17 + 3, written past 1
+        assert_eq!(inplace_margin(&s, 0, 16).unwrap(), Some(27));
+        // the stream staged at the output's start: the first literal already lands on unread bytes
+        assert!(inplace_margin(&s, 0, 0).unwrap().unwrap() > 0);
+        // a stream whose output grows 2 bytes per consumed byte (zeros) overruns a stage 1 KB ahead of the output
+        let zeros = pack_section(&vec![0u8; 100_000]);
+        assert!(inplace_margin(&zeros, 0, 1024).unwrap().unwrap() < 0);
+        assert_eq!(inplace_margin(&zeros, 0, 100_000).unwrap(), None);
+        assert!(inplace_margin(&s[..10], 0, 16).is_err());
     }
 }

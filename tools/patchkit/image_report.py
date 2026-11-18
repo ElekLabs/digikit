@@ -118,6 +118,8 @@ def report(stock: Path, patched: Path, plan_path: Path) -> tuple[list[str], bool
     port = tomllib.loads((ROOT / "devices" / "ports" / f"{name}.toml").read_text())
     cont = prof["container"]
     readonly = set(cont.get("readonly", []))
+    # read-only sections that a module may store packed (`[container] repack`, roles): the decoded bytes must still be the stock bytes
+    repack = {cont[r] for r in cont.get("repack", []) if r in cont}
     out.append(f"image {name}: stock {sha(stock.read_bytes())}")
     out.append(f"       patched {sha(patched.read_bytes())}")
 
@@ -145,19 +147,30 @@ def report(stock: Path, patched: Path, plan_path: Path) -> tuple[list[str], bool
     for sid in sorted(b):
         role = next((k for k, v in cont.items() if v == sid), "-")
         same = a[sid] == b[sid] and dec_a[sid] == dec_b[sid]
-        verdict = "identical to stock" if same else "DIFFERS"
+        packed = sid in repack and not same and dec_a[sid] == dec_b[sid]
+        verdict = (
+            "identical to stock"
+            if same
+            else "stored packed, decodes to stock"
+            if packed
+            else "DIFFERS"
+        )
         allowed = sid not in readonly
         line(
-            same or allowed,
+            same or packed or allowed,
             f"{sid}        {role:<12} {sha(b[sid][0])[:16]}  {len(dec_b[sid]):>10}  {verdict}"
-            + ("" if same or allowed else " (read-only section)"),
+            + ("" if same or packed or allowed else " (read-only section)"),
         )
     changed = [s for s in b if a[s] != b[s]]
     main = cont["main"]
+    # a repacked section differs in storage only: its decoded bytes are compared above
+    repacked = [s for s in changed if s in repack and dec_a[s] == dec_b[s]]
+    changed = [s for s in changed if s not in repacked]
     line(changed == [main], f"only section {main} (MAIN OS) differs: {changed}")
     line(
         not (readonly & set(changed)),
-        f"read-only sections {sorted(readonly)} are byte-identical",
+        f"read-only sections {sorted(readonly)} are byte-identical"
+        + (f" (sections {sorted(repacked)} stored packed, decoded bytes identical)" if repacked else ""),
     )
 
     m0, m1 = dec_a[main], dec_b[main]

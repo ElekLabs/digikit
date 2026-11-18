@@ -131,3 +131,57 @@ fn a_sealed_device_with_a_dsp_changes_main_and_the_dsp_only() {
     fw.replace(7, vec![0; 16]).unwrap();
     fw.replace(3, vec![0; 16]).unwrap();
 }
+
+/// Section content that packs well and unpacks to itself.
+fn compressible() -> Vec<u8> {
+    (0..4000u32).map(|i| (i % 13) as u8).collect()
+}
+
+#[test]
+fn a_repackable_section_is_stored_packed_and_decodes_to_the_same_bytes() {
+    let dev = bare();
+    // the device file lists the second CPU's section: a role, read-only in content, that a module may store packed
+    assert!(dev.is_repackable(7));
+    assert!(
+        !dev.is_repackable(1),
+        "the FPGA bitstream is never repacked"
+    );
+    assert!(!dev.is_repackable(2));
+    let mut fw = image(dev, &[1, 3, 7]);
+    let data = compressible();
+    {
+        let s = fw.sections.iter_mut().find(|s| s.id == 7).unwrap();
+        // stock form: stored raw
+        s.data = data.clone();
+        s.stored = data.clone();
+    }
+    let stored = fw.repack(7).unwrap();
+    let s = fw.section(7).unwrap();
+    assert!(s.changed);
+    assert_eq!(s.data, data, "the decoded bytes do not change");
+    assert!(stored < data.len() && s.stored.len() == stored);
+    let back = dt2_firmware_loader::depack_section(&s.stored, 0, 1 << 20).unwrap();
+    assert_eq!(back, data, "the stored stream unpacks to the stock bytes");
+    // a section that is not listed, and the read-only rule itself, stay as they are
+    for id in [1u32, 2] {
+        let e = fw.repack(id).unwrap_err().to_string();
+        assert!(e.contains("cannot be stored packed"), "section {id}: {e}");
+        assert!(fw.section(id).is_none_or(|s| !s.changed));
+    }
+    assert!(
+        fw.replace(7, data)
+            .unwrap_err()
+            .to_string()
+            .contains("read-only")
+    );
+}
+
+#[test]
+fn a_device_without_repack_roles_stores_nothing_packed() {
+    let dev = sealed();
+    assert!(dev.repack_roles().is_empty());
+    let mut fw = image(dev, &[2, 3, 4, 7, 8]);
+    for id in [2u32, 4, 7, 8] {
+        assert!(fw.repack(id).is_err(), "section {id}");
+    }
+}

@@ -108,6 +108,26 @@ impl Firmware {
         Ok(())
     }
 
+    /// Store a read-only section packed. Its decoded bytes do not change, so the second CPU gets the stock bytes once the module that declared the
+    /// repack has unpacked them. Only a section of `[container] repack` is accepted. Returns the new stored length.
+    pub fn repack(&mut self, id: u32) -> Result<usize> {
+        if !self.device.is_repackable(id) {
+            return Err(err!(
+                "section {id} of {} cannot be stored packed ([container] repack {:?} names the sections that can)",
+                self.device.short(),
+                self.device.repack_roles()
+            ));
+        }
+        let s = self
+            .sections
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| err!("the image has no section {id}"))?;
+        s.stored = crate::aplib::pack_section(&s.data);
+        s.changed = true;
+        Ok(s.stored.len())
+    }
+
     /// The container (sealed) and the full `.syx`.
     pub fn build(&self, max_container: Option<usize>) -> Result<Vec<u8>> {
         let entries: Vec<(u32, u32, &[u8])> = self

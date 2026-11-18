@@ -30,7 +30,8 @@ What a device file contains decides what the tools do with the device:
 `[capabilities]` says what the device has: `dsp` (`sharc` | `none`), `seal` (`hmac` | `none`), `sample_pool` (`stock` |
 `ddr` | `none`) and `card` (`path-fs` | `slots` | `none` | `unknown`). Code branches on these values, not on device names.
 `[container]` names the role of each syx section (`main`, `dsp`, `cf2`, `fpga`) and lists the `readonly` sections that are never
-written; a section may have a role and be read-only, but `main` may not be read-only. `devdata.rs` `validate` checks that
+written; a section may have a role and be read-only, but `main` may not be read-only. `repack` lists roles of read-only sections that a module may store packed
+when it declares that it unpacks them (`[[repack]]` of its `module.toml`, [PATCHING.md](../PATCHING.md) "Repacking a read-only section"); each must be a role with a read-only section. `devdata.rs` `validate` checks that
 the capabilities agree with the other tables (for example `dsp = "none"` forbids a `[[firmware]].dsp` image and `container.dsp`).
 `[storage]` names the backend of each kind of content (`samples`: `stock-rpc`, `digikit` or `stock-slots`; `modules`: `digikit`); `@digi/devices` reads it, the samples code of the apps and `wb` branch on it, never on a device name. `[storage.slots]` (`stock-slots` only): `path`, `count`, `bytes_max` (audio bytes of one sample), `rate`, `channels`, `bits`, `byte_order`, `apply` (`restart`: the device reads the slots only at start).
 

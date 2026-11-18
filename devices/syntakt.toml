@@ -43,11 +43,14 @@ sample_pool = "none"
 card = "slots"
 
 # Container section roles. Section 1 holds the FPGA bitstream, 6 and 7 the peer CPU: none of them is ever written.
+# repack: section 7 is stored raw (383,760 bytes) and the image is 32 KB over the container limit without a change. A module that unpacks it in MAIN
+# before the peer thread streams it (core/peer-image, `[[repack]]` of its module.toml) may store it packed (264,194 bytes). Its decoded bytes stay stock.
 [container]
 main = 3
 cf2 = 7
 fpga = 1
 readonly = [1, 2, 4, 6, 7, 8]
+repack = ["cf2"]
 
 # Where the Transfer page puts content (docs/plans/storage.md). `modules` is the digikit store (emulator proof only). `samples = "stock-slots"`: the
 # firmware keeps samples in numbered slots that only its MidiRpc Data API writes (finding 142); `[storage.slots]` says how.
