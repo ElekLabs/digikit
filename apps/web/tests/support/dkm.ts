@@ -5,6 +5,8 @@ import type { Needs } from '@digi/workbench-core/modules/fit.ts';
 export interface DkmOptions {
   machine?: number;
   fx?: number;
+  /** The number of LFO shape keys (record kind 8). */
+  lfo?: number;
   size?: number;
   dsp?: number;
   version?: number;
@@ -21,6 +23,7 @@ export function dkm(
   {
     machine = 0,
     fx = 0,
+    lfo = 0,
     size = 700,
     dsp = 0,
     version = 0x000102,
@@ -42,6 +45,7 @@ export function dkm(
   const groups: [number, number][] = [];
   if (machine) groups.push([2, machine]);
   if (fx) groups.push([4, fx]);
+  if (lfo) groups.push([8, lfo]);
   const v = new DataView(b.buffer);
   let at = 0xa0;
   v.setUint32(at, 0x444b5442);

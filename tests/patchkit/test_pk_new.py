@@ -6,7 +6,12 @@ import pytest
 
 from tools.patchkit import pk_new
 
-EXPECTED_TYPE = {"machine": "machine", "fx": "fx", "tool": "service"}
+EXPECTED_TYPE = {
+    "machine": "machine",
+    "fx": "fx",
+    "tool": "service",
+    "lfo-shape": "service",
+}
 
 
 MODULE_KINDS = sorted(set(pk_new.KIND_DIRS) - {"service"})
@@ -21,7 +26,9 @@ def test_a_template_is_copied_with_every_token_replaced(kind, tmp_path):
     for path in written:
         assert not pk_new.TOKEN_RE.search(str(path.relative_to(base)))
         assert not pk_new.TOKEN_RE.search(path.read_text()), path
-    assert any("drone" in p.name for p in written if p.suffix in {".s", ".c"})
+    assert any("drone" in p.name for p in written if p.suffix in {".s", ".c"}) or (
+        "build/drone.dko.json" in (base / "module.toml").read_text()
+    )
     man = tomllib.loads((base / "module.toml").read_text())["module"]
     assert man["id"] == "alice/drone" and man["author"] == "alice"
     assert man["type"] == EXPECTED_TYPE[kind]
@@ -66,6 +73,7 @@ def test_a_service_template_is_the_crate_layout_with_every_token_replaced(tmp_pa
     assert files == [
         "Cargo.toml",
         "README.md",
+        "dks/.gitignore",
         "dks/Cargo.toml",
         "dks/module.toml",
         "dks/src/lib.rs",

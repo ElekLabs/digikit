@@ -10,7 +10,7 @@ import type { Group, TransferEvent, TransferRow, TransferView } from '../modules
 import { PROVIDER_MAX } from '../modules/services.ts';
 import type { ServiceRef, ServiceRefusal } from '../modules/services.ts';
 export type { Group, TransferEvent, TransferRow, TransferView };
-export const GROUPS: Group[] = ['Machines', 'Effects', 'Tools'];
+export const GROUPS: Group[] = ['Machines', 'Effects', 'LFO shapes', 'Tools'];
 
 // ---- the mode of the page ---------------------------------------------------------------------------------------------------------
 

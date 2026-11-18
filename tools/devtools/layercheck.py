@@ -10,7 +10,7 @@ Rules:
 
   roles     Every module under modules/core has `role` in [module], and the role fits the folder: adapters/ -> adapter,
             apps/ -> app, runtime/ -> runtime, expansion/ -> installer.
-  sources   Content modules (modules/machines, modules/fx, modules/tools, tests/fixtures/modules) and apps include only
+  sources   Content modules (modules/machines, modules/fx, modules/tools, modules/lfo, tests/fixtures/modules) and apps include only
             their own files and the SDK (sdk/include, sdk/dsp/contract); a fixture may also include the source of another fixture (a variant of its base). Apps may also include dkrt.h (runtime) and dk_ui_core.h
             (core/ui). Only the runtime's platform file, the installer and adapters include the firmware bindings (dk_fw_* headers, the dkfw crate).
             C, ColdFire and SHARC assembly (`#include`, `.include`) and Rust (`dkfw`, path dependencies) are read.
@@ -72,6 +72,7 @@ CONTENT_ROOTS = (
     "modules/machines",
     "modules/fx",
     "modules/tools",
+    "modules/lfo",
     "tests/fixtures/modules",
 )
 # The role that fits a folder under modules/core.
@@ -601,7 +602,12 @@ def check_imports(root: Path) -> list[Violation]:
     return out
 
 
-USER_MODULE_ROOTS = ("modules/machines/", "modules/fx/", "modules/tools/")
+USER_MODULE_ROOTS = (
+    "modules/machines/",
+    "modules/fx/",
+    "modules/tools/",
+    "modules/lfo/",
+)
 # Files that may name any module: documentation, agent notes and the fixtures.
 SC_ALLOWED_PREFIXES = (
     "docs/",

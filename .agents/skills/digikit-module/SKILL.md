@@ -16,12 +16,13 @@ The packer infers the kind from what the module declares: `[[machine]]` makes a 
 | `machine` | A SHARC+ voice: `render`, `note_on`, `desc` (guide 5.2, 7.1) | `sdk/templates/machine`; a real one: `modules/machines/pluck` |
 | `fx` | A SHARC+ master or send effect with its own page: `process`, `desc` (guide 5.4, 7.2) | `sdk/templates/fx`; a real one: `modules/fx/freqshift` |
 | `tool` | ColdFire C: the constant `dk_module` with `init`, `fini`, `tick`, `menu` and the named imports of `<dk/gen/imports.h>` (guide 5.5, 7.3) | `sdk/templates/tool` |
+| `lfo-shape` | 1 to 8 LFO waveforms: one `[[record]] kind = "lfo_shape"` each, 32 literal samples in `SHAPES`; `module:check` validates them with the `lfo` service's rule (guide 5.10) | `sdk/templates/lfo-shape`; modules go to `modules/lfo/NAME` |
 
 The `core/*` modules are patched into the image. Changes to `core/*` are firmware work and need Em.
 
 ## Workflow
 
-1. Create: `mise run module:new -- KIND AUTHOR/NAME [--dir DIR] [--title T] [--short S] [--no-build]` (guide 3). `KIND` is `machine`, `fx` or `tool`.
+1. Create: `mise run module:new -- KIND AUTHOR/NAME [--dir DIR] [--title T] [--short S] [--no-build]` (guide 3). `KIND` is `machine`, `fx`, `tool` or `lfo-shape`.
    With `--dir`, set `PATCHKIT_MODULES=DIR`.
 2. Edit `module.toml` and the source (guide 4 to 7). Reuse `references/dsp-recipes.md`, avoid `references/selas-pitfalls.md`, size with `references/devices.md`.
    A machine and an effect are built in `init` in `src/module.c` with the builder calls of `<dk/gen/imports.h>`: `dk_module_ctx_add_machine`, `dk_machine_add_page`,

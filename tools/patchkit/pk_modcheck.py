@@ -110,14 +110,20 @@ def _daemon(device: str) -> str:
 
 
 def commit_stage(mid: str, devices: list[str]) -> bool:
-    """For a module with `[[machine]]` or `[[fx]]`: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
-    `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from them (docs/plans/sdk.md 6.1 and 6.4). The
-    conformance suite that runs next reads that gallery.json. A tool or a service has no rows to commit and is left alone: returns False."""
+    """For a module with `[[machine]]`, `[[fx]]` or a `[[record]]` (an LFO shape): load it on the emulated device, read the records it committed
+    (tools/devtools/commit_records.ts, decoded and judged by `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from
+    them (docs/plans/sdk.md 6.1 and 6.4). The conformance suite that runs next reads that gallery.json. The records must pass the rule of the service that owns
+    their kind (`patchkit records --check`, `Service::validate_records`): a problem stops the check. A tool or a service has no rows to commit and is left alone:
+    returns False."""
     moddir = modroots.module_dir(mid)
     manifest_path = moddir / "module.toml"
     original = manifest_path.read_text(encoding="utf-8")
-    if "[[machine]]" not in original and "[[fx]]" not in original:
-        return False  # declares nothing through builder calls: no rows to measure
+    if (
+        "[[machine]]" not in original
+        and "[[fx]]" not in original
+        and "[[record]]" not in original
+    ):
+        return False  # declares nothing through builder calls or records: no rows to measure
     # The measuring build takes the device limits as its `[uses]`: the loader refuses a module whose tables are absent, zero or lower than what its
     # init declares, so a new or changed module could not be measured with its own numbers. The measured rows replace them below.
     write_uses(manifest_path, {d: seed_uses(d) for d in devices})
@@ -130,6 +136,19 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
         manifest_path.write_text(original, encoding="utf-8")
         return False
     kept = tomllib.loads(original).get("uses", {})
+    refused = {
+        dev: d["records"].get("problems", [])
+        for dev, d in per.items()
+        if d["records"].get("problems")
+    }
+    if refused:
+        manifest_path.write_text(original, encoding="utf-8")
+        for dev, problems in sorted(refused.items()):
+            for line in problems:
+                print(f"{mid}: {dev}: {line}", file=sys.stderr)
+        raise SystemExit(
+            f"{mid}: the records it commits are refused by the service that owns them (the rule the runtime runs at load)"
+        )
     write_uses(
         manifest_path,
         {

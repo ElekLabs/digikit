@@ -75,7 +75,7 @@ const view: TransferView = {
   ],
 };
 
-test('the lists: on device is every card file, available is the repo in three groups', () => {
+test('the lists: on device is every card file, available is the repo in four groups', () => {
   assert.deepEqual(
     onDevice(view).map((r) => r.path),
     ['modules/effect.dkm', 'modules/junk.dkm', 'modules/machine.dkm'],
@@ -83,15 +83,15 @@ test('the lists: on device is every card file, available is the repo in three gr
   const a = available(view, false);
   assert.deepEqual(
     a.map((g) => g.group),
-    ['Machines', 'Effects', 'Tools'],
+    ['Machines', 'Effects', 'LFO shapes', 'Tools'],
   );
   assert.deepEqual(
     a[0].rows.map((r) => r.id),
     ['someone/machine'],
   );
   assert.equal(a[1].rows.length, 0); // Effects: no run-time effects yet
-  assert.equal(a[2].rows.length, 0); // the test module is hidden
-  assert.equal(available(view, true)[2].rows.length, 1);
+  assert.equal(a[3].rows.length, 0); // the test module is hidden
+  assert.equal(available(view, true)[3].rows.length, 1);
   assert.equal(available({ ...view, modules: [] }, true)[1].rows.length, 0);
 });
 

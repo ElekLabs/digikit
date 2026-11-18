@@ -17,6 +17,7 @@ export interface ModuleBrowserProps {
 const FILTER_LABEL: Partial<Record<Category, string>> = {
   machines: 'Machines',
   fx: 'Effects',
+  lfo: 'LFO shapes',
   tools: 'Tools',
 };
 

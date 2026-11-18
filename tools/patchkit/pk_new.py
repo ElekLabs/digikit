@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Create a run-time content module from a template (`mise run module:new -- machine|fx|tool|lfo AUTHOR/NAME [--dir DIR]`, or a service crate of the runtime with `module:new -- service NAME`).
+"""Create a run-time content module from a template (`mise run module:new -- machine|fx|tool|lfo-shape AUTHOR/NAME [--dir DIR]`, or a service crate of the runtime with `module:new -- service NAME`).
 
     uv run python -m tools.patchkit.pk_new machine alice/drone         # a SHARC+ voice machine
     uv run python -m tools.patchkit.pk_new fx alice/crunch --title Crunch --short CRU
     uv run python -m tools.patchkit.pk_new tool alice/hello --dir ~/my-modules
-    uv run python -m tools.patchkit.pk_new lfo alice/wobble             # an LFO waveform: modules/tools/wobble
+    uv run python -m tools.patchkit.pk_new lfo-shape alice/wobble       # LFO shapes: modules/lfo/wobble
     uv run python -m tools.patchkit.pk_new service sweep                # a service crate: modules/core/services/sweep
 
 The templates are the source trees in sdk/templates/<kind>/. The tokens `__ID__`, `__AUTHOR__`, `__NAME__` (lower snake),
 `__UPPER__`, `__TITLE__`, `__SHORT__`, `__TAB__`, `__CAMEL__` (the name in Camel case) and `__KEBAB__` (with dashes) (the first 3 characters of the short name) are replaced in file names and file contents. The module goes to
-modules/machines/NAME, modules/fx/NAME or modules/tools/NAME, or to `DIR/NAME` with `--dir` (a folder that PATCHKIT_MODULES
+modules/machines/NAME, modules/fx/NAME, modules/tools/NAME or modules/lfo/NAME, or to `DIR/NAME` with `--dir` (a folder that PATCHKIT_MODULES
 names finds it). Then the objects are built with `patchkit build` and `patchkit gen` writes the generated
 headers, so the template is known to compile. A run-time machine has no permanent type number: the runtime assigns one at
 load (docs/design/module-sdk.md 11.5 D7). `core` and `framework` are refused as author.
@@ -32,7 +32,7 @@ KIND_DIRS = {
     "fx": "fx",
     "tool": "tools",
     "service": "services",
-    "lfo": "tools",
+    "lfo-shape": "lfo",
 }
 
 AUTHOR_RE = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
