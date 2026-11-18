@@ -29,7 +29,7 @@ vi.mock('../src/runtime/local-inputs.ts', () => ({ sha256Hex: async () => '0'.re
 const emulatorOnly = noHardware.record;
 
 test('a file of a device without a hardware image gives the error and patchkit is not asked', async () => {
-    const prepare = vi.fn();
+  const prepare = vi.fn();
   const env = { log: () => {}, prepare } as unknown as FirmwareEnv;
   const transfer = {
     target: { target: () => ({ kind: 'emulator' }) },

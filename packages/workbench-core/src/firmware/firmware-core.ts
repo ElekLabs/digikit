@@ -43,7 +43,8 @@ export interface CheckRow {
  * Whether the flashed image leaves a runtime to follow up on (bind the card's services, install the default modules): a patch with the runtime, not a
  * restore and not a patch without it (`imageId` is the id the runtime's INFO reports, null when there is no runtime).
  */
-export const leavesRuntime = (p: Pick<PreparedFlash, 'restore' | 'imageId'>): boolean => !p.restore && p.imageId !== null;
+export const leavesRuntime = (p: Pick<PreparedFlash, 'restore' | 'imageId'>): boolean =>
+  !p.restore && p.imageId !== null;
 
 export function checkRows(p: PreparedFlash): CheckRow[] {
   return p.checks.map((c) => {
