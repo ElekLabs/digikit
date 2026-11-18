@@ -786,7 +786,7 @@ The output is read from the Sound array of track 1 in firmware memory (the LFO r
 - `lfo-shape-output`: stock (`core/lfo` in the image, no service: WAVE stops at RAND, waves TRI, SINE, SQR, SAW and RAMP fit their stock functions); table (WAVE reaches 7, the output fits the RAMP table and not TRI, SQR or RAND); start phase (mode TRG, speed 0, SPH at 0, 1/4, 1/2, 3/4 gives equal rising steps for RAMP, TRI's pattern otherwise); number kept (the `lfo.shapes` setting holds 7 before and after a restart and the shape fits again).
 - `lfo-shape-project`: with no `lfo.dks` a saved project with wave 7 loads without a fault, plays as RAND, shows the ERR page, and the value survives a second save and load; with `lfo.dks` and only STEP loaded (RAMP's number 7 is a gap below the highest number 8) the same project plays TRI and the page differs from the ERR page and from RAND's, pinned in `goldens.json`. Safe mode loads no module and no service, so it is the same path as "no `lfo.dks`" and has no case of its own.
 - `lfo-shape-panel`: with RAMP (7) and STEP (8) loaded WAVE goes past RAND to 7 and 8 and stops at 8; the pages of RND, RAMP and STEP differ, and the RAMP and STEP pages are pinned in `goldens.json`.
-- Not written: MIDI CC and NRPN (decision O8 is open). `goldens.json` is empty: the first device run of each device needs `UPDATE_GOLDENS=1` for the pinned pages, after the captured pictures (the PNG paths are printed) were looked at.
+- MIDI CC (O8): `lfo-shape-output` sends CC 106 = 7 without a shape (WAVE stays at RAND) and with a shape (WAVE 0x0700). NRPN has no case. The pinned pages are in `goldens.json` for both devices.
 Run: `mise run test:subset -- S:lfo --run`. A `dk:dev` screenshot of the MOD page with a loaded shape (DN2 first, DT2 at the end).
 A/B (not run): the image half alone is `uv run python -m tools.devtools.coupled_ab A=BIN B=BIN --image A=<image without core/lfo>.syx --image B=<image with core/lfo>.syx -s trig1-taps --scenarios tests/regression/scenarios/dn2-trackfx.ts --pairs 6 --out out/lfo-ab-image.json` (the images from `nx run patchkit:device-images`; one binary, two images; report: the paired ratio B/A of the DSP and CF thread CPU per audio second and the instruction ratio `cpu.dsp_thread_insns_per_audio_s`). The extended path needs `lfo.dks` on the card and all 48 LFOs on a shape on a busy pattern with step frames; no scenario source does that yet (`--image` covers firmware images, not card files), so the device check first writes `tests/regression/scenarios/dn2-lfo-busy.ts` (a pattern with 16 tracks of trigs, every LFO on wave 7) and runs the same command with that `-s` and `--scenarios`, `A` the image without `core/lfo`, `B` the image with `core/lfo` and the card with `lfo.dks` and the shape module. Stop if the ratio of the tick exceeds the 3% budget.
 
@@ -917,7 +917,11 @@ runtime-and-services.md.
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | todo |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
-| 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | active (branch e6/lfo-shapes): compute, names, panel range and graph built; graph review and device check pending |
+| 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
+| 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |
+| 8 | LFO shape template and first module | E6 | lfo test | in review (PR D, branch lfo/shapes-1): module kind `lfo-shape` (`mise run module:new -- lfo-shape AUTHOR/NAME`, `sdk/templates/lfo-shape`; `module:check` runs the service validator), module `digikit/lfo_shapes_1` with 7 shapes (STP4 PULS HSIN ABSN SOFT DUCK WOBL), Transfer group "LFO shapes" |
+| 8 | Boot window | none | none | done: PR #611, #613 |
+| 8 | Test-speed follow-up | wait audit | none | open: replace the fixed waits of the wait audit with waits on firmware state: fx-routes-persist 44,000-frame steps, project-kit load/save fixed 6 s and 3.5 s waits, machine-rows `stableFrameHash` used as a wait, boot-restart fixed settle, LFO rig waits |
 | 8 | E6c parameter range override | E6 | none until E7 | todo (design step now, build when E7 starts; before E7) |
 | 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
@@ -971,11 +975,9 @@ Open:
   (7 to 32) so the extended type survives in kit files; with the patch, a kit opened on stock firmware falls back to filter 0.
 - O7 (decided in E6): the shape graph is option A of item 1b: one hook at the vector pick, four 28 x 15 tiles per shape built by the service. Replacing
   the accessor (wider, generic) and writing into the firmware's RAM table (needs a second site and the firmware would free our memory) are rejected.
-- O8: MIDI behaviour with a shape loaded. A CC value of 7 or more, or an NRPN of 0x380 or more, reaches shape numbers instead of clamping to RAND; stock waves 0-6
-  are unchanged (finding 149 "Callers of the T1 range accessor"). The panel, CC and NRPN share the T1 maximum and the clamp. Decision for Em:
-  (a) accept it as a feature (MIDI and the panel reach the same waves; recommended), or (b) keep MIDI byte-stock with a shape loaded: a flag set
-  around the panel's encoder handler (DT2 `FUN_4006cb14`, view slot 17) and tested in the `t1_range` hook; one more site on all three ports and
-  a small task-preemption window.
+- O8 (decided in E6): MIDI behaviour with a shape loaded is accepted as a feature. A CC value of 7 or more, or an NRPN of 0x380 or more, reaches shape numbers
+  instead of clamping to RAND; stock waves 0-6 are unchanged (finding 149 "Callers of the T1 range accessor"). The panel, CC and NRPN share the T1 maximum and the clamp.
+- O10: after a MIDI CC change of WAVE, the shape name shows only after the next full page redraw.
 
 ## 10. Changes to other documents when items land
 
