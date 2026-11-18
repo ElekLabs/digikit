@@ -23,6 +23,7 @@ async function stockFrames(rt: Rt, expected?: string[]): Promise<string[]> {
   const frames: string[] = [];
   for (const key of ['SRC', 'SRC', 'FLTR', 'AMP']) {
     await rt.ui.tap(key, { until: { ms: 300, why: REDRAW } });
+    // stableFrameHash already polls on state (equal frame over two reads) and its result is the compared value, so it stays
     frames.push(await stableFrameHash(rt));
     // with `expected` (the loaded boot): keep the screen of each page that differs from the stock one
     if (expected && frames.at(-1) !== expected[frames.length - 1]) {

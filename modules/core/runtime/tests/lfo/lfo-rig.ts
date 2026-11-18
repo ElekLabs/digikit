@@ -159,16 +159,22 @@ export class LfoRig {
         const png = await captureRemoteOled(this.rt.session, 'lfo-turn-fail');
         throw new Error(`the WAVE encoder did not reach wave ${n} in ${bursts} bursts (Sound word ${KNOB_WORD.WAVE} is ${got.toString(16)}, wanted ${want.toString(16)}; screen ${png})`);
       }
-      const before = got;
       await this.turnWave(got < want ? 8 : -8, 4, 30, false); // the poll of the Sound word below is the wait
       bursts++;
       let png = '';
       try {
+        // the word is stable when two consecutive reads agree: the burst may still be stored
+        let prev = -1;
         got = await pollUntil(
           this.rt.clock,
-          () => this.word(KNOB_WORD.WAVE),
-          (w) => w !== before,
-          { withinMs: 1000, intervalMs: 20, message: () => `the WAVE word stays at ${before.toString(16)} after burst ${bursts} toward wave ${n}` },
+          async () => {
+            const w = await this.word(KNOB_WORD.WAVE);
+            const same = w === prev;
+            prev = w;
+            return same ? w : -1;
+          },
+          (w) => w !== -1,
+          { withinMs: 1000, intervalMs: 20, message: () => `the WAVE word does not settle after burst ${bursts} toward wave ${n} (last read ${prev.toString(16)})` },
         );
       } catch (e) {
         png = await captureRemoteOled(this.rt.session, 'lfo-turn-fail');

@@ -55,7 +55,7 @@ cardRigs(
         expect(recs[0]?.paths).toEqual(paths);
         expect(recs[0]?.seq).toBe(2);
 
-        /** `dkrt_restart` (mailbox command), then the emulator's soft reset; returns when the new boot has run its first UI-loop passes: it read the record's sequence number and raised `ui_reached`. */
+        /** `dkrt_restart` (mailbox command), then the emulator's soft reset; returns when the new boot has read the record's sequence number and its stable period has ended (`stable`, set in the branch that clears the boot counter). */
         const restart = async () => {
           const seq = currentRecord(await h.records())?.seq;
           await pokeWord(session, planSymbol(h.plan, 'DKRT_MAILBOX'), MAILBOX.RESTART);
@@ -63,8 +63,8 @@ cardRigs(
           await pollUntil(
             rt.clock,
             () => bootInfo(session, h.plan),
-            (info) => info.seq === seq && info.uiReached === 1,
-            { withinMs: UI_WITHIN_MS, message: `the new boot (record seq ${seq}) reaches the UI loop` },
+            (info) => info.seq === seq && info.stable === 1,
+            { withinMs: UI_WITHIN_MS, message: `the new boot (record seq ${seq}) ends its stable period` },
           );
           return bootInfoLoaded(session, h.plan);
         };
