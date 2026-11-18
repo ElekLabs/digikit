@@ -39,6 +39,7 @@ doc = "st-1.42 0x40082e84: the code the peer thread takes when the section 7 dir
 name = "cf.peer.hook.nor_read_lea"
 site = "cf.peer.site.nor_read_lea"
 cpu = "cf"
+devices = ["st"]
 mode = "replace"
 regs = { in = [], clobbers = ["a2", "ccr"] }   # the displaced `lea ...,A2` writes A2; the flags are dead before the next `move.b`
 mark = "O"

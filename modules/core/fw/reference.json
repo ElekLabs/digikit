@@ -11289,6 +11289,9 @@
         ]
       },
       "cpu": "cf",
+      "devices": [
+        "st"
+      ],
       "doc": "The `lea <NOR read>,A2` of the peer thread; the hook loads A2 with the wrapper that has the same stack signature and continues after the site.",
       "file": "devices/fw/peer.toml",
       "kind": "hook",
