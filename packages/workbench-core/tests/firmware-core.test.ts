@@ -191,10 +191,7 @@ test('the image file name tells the device, the OS and the runtime', () => {
 });
 
 test('a refused file gets a lead-in unless patchkit already says which file it was', () => {
-  assert.equal(
-    refusalText('expected F0 at offset 0'),
-    'This is not an Elektron firmware update file: expected F0 at offset 0',
-  );
+  assert.equal(refusalText('expected F0 at offset 0'), 'Patchkit cannot use this file: expected F0 at offset 0');
   assert.equal(
     refusalText('this file is a patched image; give the stock file it was made from (sha256 abc)'),
     'This file is a patched image; give the stock file it was made from (sha256 abc)',

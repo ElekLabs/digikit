@@ -1,7 +1,11 @@
 // The state of the Firmware page for the life of the window, and the actions on it (the page is FirmwarePage.tsx; the rules are in
 // firmware-core.ts, the run in firmware-flow.ts). Signals, so the desktop app keeps a half-finished flash screen while another page is shown.
 import { createSignal } from 'solid-js';
+import type { DeviceRecord } from '@digi/devices/vite';
+import { registry } from '../data/device-profiles';
 import { JobBusyError } from '../jobs/jobs';
+import { identify } from '../patch/identify';
+import { sha256Hex } from '../runtime/local-inputs';
 import type { TransferApp } from '../transfer/app';
 import type { DefaultModulesApp } from './default-modules-state';
 import type { FirmwareEnv } from './env';
@@ -53,17 +57,31 @@ export function createFirmwareState({
     setAck(false);
   }
 
-  let file: { name: string; bytes: Uint8Array } | undefined;
+  let file: { name: string; bytes: Uint8Array; record: DeviceRecord | undefined } | undefined;
   let preparing = 0;
+  /** Ticket of the newest file pick: a slow older pick must not overwrite a newer one. */
+  let choosing = 0;
+  /** The device record of the chosen file, from its sha256 against the registry; undefined when no file is chosen or patchkit has to decide. */
+  const [fileDevice, setFileDevice] = createSignal<DeviceRecord | undefined>(undefined);
 
   /** Patch and check the picked file (again for another mode). A newer request makes the older answer unused. */
   async function prepare(): Promise<void> {
     if (!file) return;
     const mine = ++preparing;
-    const { name, bytes } = file;
+    const { name, bytes, record } = file;
+    if (record && !record.patchSets.device && !restore()) {
+      setPrepared({
+        kind: 'error',
+        name,
+        message: `There is no hardware image for the ${record.name} yet: its patched firmware runs only in the emulator. Restore stock still works.`,
+      });
+      return;
+    }
     setPrepared({ kind: 'working', name });
     try {
-      const p = await env.prepare(bytes, restore(), defaults.patchSet());
+      // a device without a boot screen patch set gets the plain device set, whatever the stored toggle says
+      const patchSet = record && !record.patchSets['device-introblank'] ? 'device' : defaults.patchSet();
+      const p = await env.prepare(bytes, restore(), patchSet);
       // a stock image patchkit knows is kept for binding services (Transfer); a failed write is not a failed prepare
       void transfer.stock.remember(p.device, p.shaStock, bytes).catch(() => {});
       if (mine !== preparing) return;
@@ -77,10 +95,12 @@ export function createFirmwareState({
   /** The user picked (or dropped) a file. */
   async function chooseFile(picked: File | undefined): Promise<void> {
     if (!picked || running(run())) return;
+    const mine = ++choosing;
     setRun(IDLE);
     setAck(false);
     if (picked.size > MAX_BYTES) {
       file = undefined;
+      setFileDevice(undefined);
       setPrepared({
         kind: 'error',
         name: picked.name,
@@ -88,7 +108,14 @@ export function createFirmwareState({
       });
       return;
     }
-    file = { name: picked.name, bytes: new Uint8Array(await picked.arrayBuffer()) };
+    const bytes = new Uint8Array(await picked.arrayBuffer());
+    if (mine !== choosing) return;
+    const hash = await sha256Hex(bytes);
+    if (mine !== choosing) return;
+    const id = identify(hash)?.device;
+    const record = id === undefined ? undefined : registry.get(id);
+    file = { name: picked.name, bytes, record };
+    setFileDevice(record);
     await prepare();
   }
 
@@ -268,6 +295,7 @@ export function createFirmwareState({
 
   return {
     prepared,
+    fileDevice,
     setPrepared,
     restore,
     setRestore,

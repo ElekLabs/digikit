@@ -51,7 +51,7 @@ export function checkRows(p: PreparedFlash): CheckRow[] {
 export function refusalText(message: string): string {
   const m = message.trim();
   if (/^this file/i.test(m)) return m.charAt(0).toUpperCase() + m.slice(1);
-  return `This is not an Elektron firmware update file: ${m}`;
+  return `Patchkit cannot use this file: ${m}`;
 }
 
 /** The first 4 digits of a hash, for the file line. */
