@@ -432,12 +432,7 @@ pub async fn bind_bundle() -> Result<tauri::ipc::Response, String> {
         let path = root()?.join("apps/web/public/modules/bind.json");
         std::fs::read(&path)
             .map(tauri::ipc::Response::new)
-            .map_err(|e| {
-                format!(
-                    "{}: {e}",
-                    path.display()
-                )
-            })
+            .map_err(|e| format!("{}: {e}", path.display()))
     })
     .await
     .map_err(|e| e.to_string())?
