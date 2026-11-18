@@ -170,7 +170,11 @@ def report(stock: Path, patched: Path, plan_path: Path) -> tuple[list[str], bool
     line(
         not (readonly & set(changed)),
         f"read-only sections {sorted(readonly)} are byte-identical"
-        + (f" (sections {sorted(repacked)} stored packed, decoded bytes identical)" if repacked else ""),
+        + (
+            f" (sections {sorted(repacked)} stored packed, decoded bytes identical)"
+            if repacked
+            else ""
+        ),
     )
 
     m0, m1 = dec_a[main], dec_b[main]
