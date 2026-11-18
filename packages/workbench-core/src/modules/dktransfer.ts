@@ -34,7 +34,7 @@ import {
 } from './services.ts';
 import type { DkEntry, DkInfoFull } from '@digi/dk-session';
 
-export type Group = 'Machines' | 'Effects' | 'Tools' | 'Services';
+export type Group = 'Machines' | 'Effects' | 'LFO shapes' | 'Tools' | 'Services';
 
 /** One row of the list: a built module (`id` set) or a card file that matches none (`id` null). */
 export interface TransferRow {
@@ -140,7 +140,7 @@ const KEYS_TAG = 3; // the KEYS entry of the header table (packages/dkneeds/src/
 /** Readers accept the header table versions 1 to TABLE_VERSION (a service is written with 2, a module with 1). */
 const tableVersionOk = (version: number): boolean => version >= 1 && version <= TABLE_VERSION;
 
-/** The group of a .dkm: Services when its role word (header 0x38) is 1, Machines when the KEYS entry of its header table (the header's 0x90 pair) has machine keys, Effects when it has effect keys, else Tools.
+/** The group of a .dkm: Services when its role word (header 0x38) is 1, Machines when the KEYS entry of its header table (the header's 0x90 pair) has machine keys, Effects when it has effect keys, LFO shapes when it has LFO shape keys, else Tools.
  * Without the table (a header alone, or the table of runtime 0.7) it is Tools. */
 export function groupOf(f: Uint8Array): Group {
   const v = new DataView(f.buffer, f.byteOffset, f.length);
@@ -168,6 +168,7 @@ export function groupOf(f: Uint8Array): Group {
   }
   if (kinds.has(RECORD_KIND.MACHINE)) return 'Machines';
   if (kinds.has(RECORD_KIND.EFFECT)) return 'Effects';
+  if (kinds.has(RECORD_KIND.LFO_SHAPE)) return 'LFO shapes';
   return 'Tools';
 }
 
@@ -221,7 +222,7 @@ export async function libraryModule(
   };
 }
 
-export const GROUP_ORDER: Group[] = ['Machines', 'Effects', 'Tools', 'Services'];
+export const GROUP_ORDER: Group[] = ['Machines', 'Effects', 'LFO shapes', 'Tools', 'Services'];
 
 /**
  * What would not fit on the target (CAPACITY): `[]` when it fits next to what is loaded now (the fit rule, fit.ts), else one line that says what is
