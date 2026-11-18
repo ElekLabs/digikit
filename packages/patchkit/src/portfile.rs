@@ -589,7 +589,7 @@ pub fn equals_bind(
     let declared: Vec<&str> = decl_hooks
         .iter()
         .filter(|h| {
-            h.users.iter().any(|u| *u == dkm.name)
+            h.users.contains(&dkm.name)
                 && (h.devices.is_empty() || h.devices.iter().any(|d| d == device))
         })
         .map(|h| h.name.as_str())
