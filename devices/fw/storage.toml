@@ -489,3 +489,33 @@ rule = { kind = "cf_func", hash = "96659286ec4dc86ce3c4112bdd5815b2", offset = 0
 mark = "D"
 users = ["core/plusdrive-write"]
 doc = "The 4-byte literal of the card sector of data page 0 (0x5ee180 on 1.17): page p of the +Drive is at sector base + p * 0x40 (the page write-back FUN_40155c34) (finding 120)."
+
+[[value]]
+name = "cf.storage.value.fs_mounted"
+cpu = "cf"
+devices = ["dt2"]
+rule = { kind = "cf_literal", hash = "0477bf2060e8860d55148d07572723a2", ordinal = 0, offset = 0x18, len = 4 }
+mark = "D"
+users = ["tests/regression"]
+codegen = false
+doc = "The filesystem mounted flag (u32 in RAM; 1 after the drive mount reads a valid superblock, 0 before): the operand of the `tst.l` in the state getter 0x4015a834 on DT2 1.17. The filesystem check that MainScreenView::vfunc_5 starts needs it nonzero. A device test reads it (the [ui.boot_window] fs_mounted_ptr fact)."
+
+[[value]]
+name = "cf.storage.value.fs_state"
+cpu = "cf"
+devices = ["dt2"]
+rule = { kind = "cf_literal", hash = "0477bf2060e8860d55148d07572723a2", ordinal = 0, offset = 0x2e, len = 4 }
+mark = "D"
+users = ["tests/regression"]
+codegen = false
+doc = "The filesystem state word of the superblock copy in RAM (u32; set by 0x4015a876): 3 asks for the filesystem check at the next main screen, the check sets 4. The operand of the load in 0x4015a834. A device test reads it (the [ui.boot_window] fs_state_ptr fact)."
+
+[[value]]
+name = "cf.storage.value.fs_checked"
+cpu = "cf"
+devices = ["dt2"]
+rule = { kind = "cf_literal", hash = "0477bf2060e8860d55148d07572723a2", ordinal = 1, offset = 0x2e, len = 4 }
+mark = "D"
+users = ["tests/regression"]
+codegen = false
+doc = "The second filesystem word of the superblock copy in RAM (u32; set by 0x4015a928): 0 asks for the filesystem check at the next main screen, the check sets 1. The operand of the load in 0x4015a8e6. A device test reads it (the [ui.boot_window] fs_checked_ptr fact)."

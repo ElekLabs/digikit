@@ -212,6 +212,11 @@ sound_words = 101
 send_template = 0x44
 send_indices = [100]
 
+# The Brain pointer global (the global that the Brain getter tests; the port anchor cf.view.value.brain, checked against devices/ports by tests/regression/host/device-facts.test.ts). This device has no
+# window that ends its boot, so it has no [ui.boot_window] table and the view stack offsets of the Digitakt II file are not needed here.
+[ui]
+brain_ptr = 0x44648900
+
 # What patchkit needs of this device: the container and section limits of a port (written into devices/ports/*.toml by
 # tools/patchkit/port_resolve.py; docs/findings/01 "NOR flash map") and the DSP L2 range the free-region search runs in.
 [patch]

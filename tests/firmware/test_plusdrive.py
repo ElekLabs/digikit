@@ -209,6 +209,11 @@ class BuildSuperblockTest(unittest.TestCase):
         self.assertEqual(struct.unpack_from(">I", sb, 0x04)[0], pd.SUPERBLOCK_VERSION)
         self.assertEqual(struct.unpack_from(">I", sb, 0x08)[0], pd.PAGE)
 
+    def test_verified_state_skips_the_boot_check(self):
+        sb = pd.build_superblock()
+        self.assertEqual(struct.unpack_from(">I", sb, 0x04)[0], 4)
+        self.assertEqual(struct.unpack_from(">I", sb, 0x34)[0], 1)
+
     def test_region_offsets_are_sector_relative(self):
         sb = pd.build_superblock()
         self.assertEqual(

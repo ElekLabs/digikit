@@ -65,6 +65,14 @@ struct Entry {
     /// Only on a `site`: `"static"` emits the site as a static, like a `data` entry.
     bind: Option<String>,
     doc: Option<String>,
+    /// `codegen = false`: the entry is a fact for tools that read the declarations and the ports (tests), so it makes no C extern, Rust static or function, and no reference entry.
+    /// Its anchor resolves and is checked like any other, but a module that does not use it never sees it change.
+    #[serde(default = "yes")]
+    codegen: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// A `hook` entry: a point in a declared `site` where a handler can run. Only a ColdFire hook with a `handler` makes output.
@@ -639,7 +647,7 @@ fn camel(rust: &str) -> String {
 
 /// A doc text that fits in a C comment.
 fn c_comment(doc: &str) -> String {
-    doc.replace("*/", "* /")
+    doc.replace("*/", "* /").replace("/*", "/ *")
 }
 
 fn rust_hook(h: &HookDef, info: &Info) -> String {
@@ -1179,7 +1187,7 @@ pub fn render(decls: &[(&str, &str)]) -> Result<Vec<(String, String)>> {
             ("site", &f.site),
             ("sites", &f.sites),
         ] {
-            for e in list {
+            for e in list.iter().filter(|e| e.codegen) {
                 if !is_cf(&e.name, &e.cpu)? {
                     continue;
                 }
@@ -1489,7 +1497,7 @@ pub fn reference(
             ("site", &f.site),
             ("sites", &f.sites),
         ] {
-            for e in list {
+            for e in list.iter().filter(|e| e.codegen) {
                 let cf = is_cf(&e.name, &e.cpu)?;
                 let (sub, rust) = split_name(&e.name, kind)?;
                 note(&e.cpu, &sub);
@@ -1683,4 +1691,49 @@ pub fn generate_with_ports(root: &Path) -> Result<Vec<(String, String)>> {
         reference(&refs, &subsystems, &reg)?,
     ));
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{c_comment, render};
+
+    #[test]
+    fn c_comment_has_no_comment_delimiters() {
+        let out = c_comment("see devices/*.toml and a */ b");
+        assert!(!out.contains("/*") && !out.contains("*/"), "{out}");
+    }
+
+    const VALUE: &str = r#"
+[[value]]
+name = "cf.view.value.probe"
+cpu = "cf"
+rule = { kind = "cf_literal", hash = "00", offset = 0, len = 4 }
+doc = "A probe."
+"#;
+
+    #[test]
+    fn codegen_false_makes_no_output() {
+        let with = render(&[("devices/fw/view.toml", VALUE)]).unwrap();
+        assert!(
+            with.iter().any(|(_, t)| t.contains("dk_fw_view_probe")),
+            "a value makes a binding by default"
+        );
+        let off = VALUE.replace("doc =", "codegen = false\ndoc =");
+        let out = render(&[("devices/fw/view.toml", off.as_str())]).unwrap();
+        assert!(
+            out.iter().all(|(_, t)| !t.contains("probe")),
+            "an entry with codegen = false is in no output"
+        );
+        let reg = crate::port::Registry::default();
+        let refs = super::reference(&[("devices/fw/view.toml", VALUE)], "", &reg).unwrap();
+        assert!(
+            refs.contains("cf.view.value.probe"),
+            "a value is in the reference by default"
+        );
+        let refs = super::reference(&[("devices/fw/view.toml", off.as_str())], "", &reg).unwrap();
+        assert!(
+            !refs.contains("probe"),
+            "an entry with codegen = false is not in the reference"
+        );
+    }
 }

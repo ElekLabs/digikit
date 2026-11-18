@@ -7,6 +7,7 @@ import { mergeTests, manifestClosure, read, records } from './module-manifests.m
 import {
   DEVICE_INPUTS,
   VITEST_SETUP,
+  bindableIds,
   builtSourceExclusions,
   deviceInputs,
   forDevice,
@@ -300,6 +301,7 @@ export const testOnlyNodes = (
         twin: targetName === 'test-device',
         subjects: config.implicitDependencies,
         services: serviceLeaves(byId),
+        bindable: bindableIds(byId),
         base: workspaceRoot,
         mergeTests: mergeTests(join(workspaceRoot, root)),
       },

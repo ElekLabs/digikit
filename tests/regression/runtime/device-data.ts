@@ -7,6 +7,8 @@ import { parse } from 'smol-toml';
 export interface DeviceProfile {
   limits: { fx_slots: number } & Record<string, number>;
   digikit: { id: number; name: string; peek: [number, number][]; dsp_area_bytes: number; sample_path_max: number };
+  /** `[ui]`: `brain_ptr`, the Brain pointer global (the port anchor `cf.view.value.brain`). The view stack and boot window facts are read by `@digi/test-support` `bootWindowFacts`. */
+  ui: { brain_ptr: number };
   capabilities: { card: 'path-fs' | 'slots' | 'none' | 'unknown' } & Record<string, string>;
   storage?: { samples?: string };
   card: {
