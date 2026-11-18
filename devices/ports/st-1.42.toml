@@ -8,7 +8,7 @@ main_sha256 = "1a9723b19fb54d0566c1f690379d2e6dfe43227f77e170ad731dd029430eb3e7"
 resolved_by = "tools/patchkit/port_resolve.py 1"
 
 [limits]
-container_max = 0x1FFE00
+container_max = 0x1ffe00
 main_staged_max = 0x3ffc00
 
 [[region]]
