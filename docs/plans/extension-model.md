@@ -897,7 +897,10 @@ Open:
 - O7 (decided in E6): the shape graph is option A of item 1b: one hook at the vector pick, four 28 x 15 tiles per shape built by the service. Replacing
   the accessor (wider, generic) and writing into the firmware's RAM table (needs a second site and the firmware would free our memory) are rejected.
 - O8: MIDI behaviour with a shape loaded. A CC value of 7 or more, or an NRPN of 0x380 or more, reaches shape numbers instead of clamping to RAND; stock waves 0-6
-  are unchanged (finding 143 "Callers of the T1 range accessor"). Decision for Em: accept this. The T1 maximum is shared by the panel, CC and NRPN, so no route is known that raises it for the panel only.
+  are unchanged (finding 143 "Callers of the T1 range accessor"). The panel, CC and NRPN share the T1 maximum and the clamp. Decision for Em:
+  (a) accept it as a feature (MIDI and the panel reach the same waves; recommended), or (b) keep MIDI byte-stock with a shape loaded: a flag set
+  around the panel's encoder handler (DT2 `FUN_4006cb14`, view slot 17) and tested in the `t1_range` hook; one more site on all three ports and
+  a small task-preemption window.
 
 ## 10. Changes to other documents when items land
 
