@@ -1217,10 +1217,33 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if k >= SEL_MAX {
             return E_NOT_FOUND;
         }
-        match self.m.stage(path) {
-            Ok(s) => self.capture(k, core::slice::from_raw_parts(s.ptr, s.size as usize)),
+        // the file can have changed since `reload_check` (a host writes it while the module drains): the rules of the check hold for the bytes that load
+        let staged = match self.m.stage(path) {
+            Ok(s) => s,
             Err(e) => return e,
+        };
+        let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+        if file.len() < dkneeds::HEADER as usize || file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] != records::module(rec).name[..] {
+            return E_FORMAT;
         }
+        let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]) as usize;
+        let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
+        if len == 0 || off > file.len() || len > file.len() - off {
+            return E_FORMAT;
+        }
+        if len > TABLE_MAX {
+            return E_TOO_BIG;
+        }
+        match (Keys::parse(&self.tables[k][..self.table_len[k]]), Keys::parse(&file[off..off + len])) {
+            (Ok(old), Ok(new)) => {
+                if old.first_missing_key(&new).is_some() {
+                    return E_RELOAD_KEYS;
+                }
+            }
+            (_, Err(_)) => return E_FORMAT,
+            (Err(_), _) => return E_NOT_FOUND,
+        }
+        self.capture(k, file);
         self.accepted[k] = true;
         // the services number the live set again: the live modules keep their numbers (sticky), a key the new file adds takes a free one
         let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));

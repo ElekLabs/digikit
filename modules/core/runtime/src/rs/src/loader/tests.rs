@@ -1731,3 +1731,31 @@ fn a_module_over_half_the_arena_is_not_refused_for_counting_itself_twice() {
         assert_eq!(l.reload_check(0, PATH.as_ptr(), &caps), OK);
     }
 }
+
+#[test]
+fn a_reload_load_checks_the_name_and_the_keys_of_the_bytes_it_loads() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
+        assert_eq!(l.unload_rec(0), OK);
+        let table_before = (l.table_len[0], l.tables[0]);
+        // the file is replaced while the module drains: one that drops a key, one of another module, one whose table is gone
+        let mut hollow = keyed_file(b'a', &[1, 2]);
+        put(&mut hollow, dkneeds::H_REG_SIZE, 0);
+        seal(&mut hollow);
+        for (what, f, want) in [
+            ("a dropped key", keyed_file(b'a', &[2]), E_RELOAD_KEYS),
+            ("another name", keyed_file(b'z', &[1, 2]), E_FORMAT),
+            ("no table", hollow, E_FORMAT),
+        ] {
+            l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), f);
+            assert_eq!(l.reload_load(0, PATH.as_ptr()), want, "{what}");
+            assert_eq!(st().modules[0].used, 0, "{what}: nothing loaded");
+            assert_eq!((l.table_len[0], l.tables[0]), table_before, "{what}: the kept table is the old one");
+        }
+        // the bytes that pass the rules load
+        l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 3]));
+        assert_eq!(l.reload_load(0, PATH.as_ptr()), OK);
+    }
+}
