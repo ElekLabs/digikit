@@ -120,8 +120,8 @@ Filter machines:
 - New filter types can use 16..31: positive as a signed byte, never 0xff, above the stock range, inside the MIDI value and the 32-word SHARC table.
 - DSP: the filter type goes to the SHARC as one frame word per track; one converter function indexes a 32-word table with it and keeps only
   the result. What the result selects is open (E0a). The "five filter routines" of findings 06 and 53 are stages of one function.
-- Hook budget: `bind_max` is 24 per service file, `install_sites` 48 overall. `machines.dks` declares 13 hooks (DT2 binds 7, DN2 10); six
-  filter hooks give 19.
+- Hook budget: with the port file, `BIND` items leave the services, so no per-file limit applies. `install_sites` 48 bounds the installed hook sites
+  overall. `machines.dks` declares 13 hooks (DT2 binds 7, DN2 10); six filter hooks give 19.
 
 LFO waveforms:
 
@@ -606,43 +606,48 @@ DSP row state into the services (step 7). The two-block DSP wait is new work, do
 cleanup of the old duplicate checks wait in E5b.
 
 Before E5 starts (about 2 hours, no code): map which code of the archive tag `digikit-hot-reload-v1` carries over to the R12-8 layout
-(`loader::unload`, `registry::in_use`, `refresh_view`, `CMD_UNLOAD`; findings 32 and 33 proved machine unload on the emulator), and try
-`clone_of >= 6` for the DT2 placeholder on the SHARC rig.
+(`loader::unload`, `registry::in_use`, `refresh_view`, `CMD_UNLOAD`; findings 32 and 33 proved machine unload on the emulator).
 
 What:
 1. Async job. A SysEx command runs on the MIDI task, but the loader, registry, DSP state and services are UI-task state. `CMD_RELOAD`
    only queues a job; `reload_poll()` in `dkrt_tick` runs it, one step per pass when it must wait; `CMD_RELOAD_STATE` polls the result. This
    is the RESTART pattern (`admin_cmds.rs`). One job at a time; a second `CMD_RELOAD` while one is queued answers `E_BUSY`.
-2. Validation before unload: the new file is staged and checked (role, ABI, firmware identity, DSP checks; split out of `load_inner` as
+2. Validation before unload: the new file is staged and checked (role, ABI, DSP checks; split out of `load_inner` as
    `check_file`), then the planner runs over the live set with the candidate in the old module's slot (`key_refusal`, E3). Keys check:
    `Keys::first_missing_key(old, new)` (`packages/dkneeds/src/keys.rs`) refuses a new file that lacks a key of the old file. Nothing is
    unloaded before both pass.
-3. Transport and state refusal: one function, in this order: safe mode; the firmware transport function returns non-zero (declared in
-   `devices/fw` as `cf.project.fn.transport_state`, found by hash on both images; `Platform::play_state`; an unresolved import refuses);
+3. Transport and state refusal: one function, in this order: safe mode; the firmware transport function returns non-zero (`cf.project.fn.transport_state` is not declared in `devices/fw` yet: it needs a new anchor found on both images by hash search, then a declaration; `Platform::play_state`; an unresolved import refuses);
    card operations; the module built its own menus; for an fx module, the effect is on a route. Refusing while the machine selection view
    is open is not needed: the list rebuild (item 9) is unconditional.
 4. Fixed record index. A reload loads into the old record (`Slot::Module(rec)`), so owner ids (`rec + 1` in machine rows, DSP rows, menus,
    `sel_of_rec`) do not move.
 5. Progress mask in `unload_rec` (`torn` per record: fini done, undo done), so a second call after `E_BUSY` does not run `fini` or the
-   service `undo` twice. The steps before `fini` already repeat safely. On a timeout the old tick is restored and the old module stays live.
+   service `undo` twice. The steps before `fini` already repeat safely. On a timeout the old module stays live, so nothing is released: the reload restores the old tick and leaves the DSP rows as they were. `release_range` needs a confirmed quiesce (`modules/core/runtime/src/rs/src/dsp/mod.rs:536`), and `dsp::release` latches `PH_RETAINED` for the session when `quiesce` fails (`dsp/mod.rs:540-541`), after which every later load sees `retained()` and returns `E_BUSY`. The reload timeout path never calls `release`.
 6. DSP wait: the in-flight counter for module SysEx commands, the span clock cleared under a mask, and a two-block wait. R12-8 gives no
    voice stop and no block wait; unloading clears the voice rows, which cuts the voices, and the wait is new. `Platform::blocks` returns the
    block count; the wait reports `E_BUSY` until two blocks passed (no spin); with no DSP clock (host tests) it is skipped. DSP instruction
    cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
 7. MISSING placeholder, written by `remove` in every unload path (reload, boot failure, take-down), for the numbers the module held. A kit
-   names a type number, not a key. A gap row plays type 0's sound today, so the placeholder must be silent: DN2 sets `own_dsp = 1` (finding 33
-   saw silence without fault); DT2: try `clone_of >= 6` on the rig first (the stock voice stage is skipped, finding 135 Q6); only if the block
-   is stale, add a silent routine in `dsp-voice`. The row keeps an empty list name, so the selection list leaves it out, and shows
+   names a type number, not a key. A gap row plays type 0's sound today, so the placeholder must be silent. DN2 sets `own_dsp = 1` (finding 33
+   saw silence without fault). DT2: the placeholder is a voice row `{type, pc nonzero, word 10 = type}`. The dispatch
+   (`modules/core/services/machines/dks/dsp/dispatch-dt2.s`, `_dv_gdis` near line 1208, compares near lines 884 and 1288) renders a silent block
+   for a disabled type; `modules/core/adapters/dsp-voice/tests/dsp-guard.rig.test.ts:169-200` shows it. `clone_of` does not reach the DSP selector
+   table: `mf_selector` is fixed at patch time (`modules/core/adapters/machines/module.toml:268-274`). One rig case with a pre-set word 10 and a
+   sounding routine closes the question in commit 6. `dsp_clear` (`modules/core/services/machines/src/records.rs:246`) calls `clear_rows`
+   (`modules/core/services/machines/src/dsp/mod.rs:58`), which frees every row the record owns: it writes `FREE_TYPE` and clears `row_pub`. The reload therefore writes
+   the placeholder row after `clear_rows`, owned by the module's fixed record index (item 4); the real row replaces it at `on_loaded`. Each placeholder uses one of the 16 type rows. The row keeps an empty list name, so the selection list leaves it out, and shows
    "MISSING" / "MISS". The E4 contract suite lists the placeholder values in `kept`.
 8. Numbering: re-run `settle` over the live set plus the candidate. Live modules keep their numbers (rule 1) and new keys take free numbers;
    `dkrt_sdk::sticky` does not change. A service `settle` must be idempotent (one contract case).
 9. Machine list rebuild after every reload, unconditional (the archive's behaviour, proven on the emulator only): port `refresh_view`
    (archive `registry.rs:479`) into the machines service, fill the `dynreg_info` words 48 and 49 (view variable and builder), declare both in
-   `devices/fw`. In a reload the machines service writes the real rows in `on_loaded`, not in `apply_record` (`CoreApi::reload_phase`), so
+   `devices/fw`. The archived list-rebuild anchors (`cf.dynreg.msv_build`, deleted from `devices/ports` in a12048c46) come back under `devices/fw/machine.toml`, near the list builder entry. `on_loaded` already exists in the service ABI (`modules/core/runtime/abi/src/service.rs`, near line 562; called at `loader/mod.rs`, near line 754); only the machines implementation and `CoreApi::reload_phase` are new. In a reload the machines service writes the real rows in `on_loaded`, not in `apply_record`, so
    the placeholder window ends when the DSP rows exist; the window lasts about 200 ms past commit. A module with no DSP calls `on_loaded`
    itself at the end of the reload. Listing counters (`unloads`, `reloads` at the end of `DkrtBootInfo`) make open lists re-read.
 10. `dk:dev` and the workbench use `CMD_RELOAD` for any content module; the emulator byte swap remains only for the runtime image and the UI
     layer (`core/ui`, `core/digikit-menu`). Document the command and its refusals in `docs/TESTING.md` "Fast iteration".
+
+Design requirement "Reusable reload": the runtime holds the generic reload work once: the job, validation before unload, the refusal order, the in-flight counter, the two-block DSP wait, the progress mask and numbering over the live set. Per-kind work sits behind required methods of the `Service` trait (for example unload records, install records, refresh view; `on_loaded` exists already), the same pattern as `validate_records` (PR #614). The reload job has no code for one service. Machines implements the methods in E5, fx in E5b, lfo shapes and filters later. Boot loads modules and the services they need; reload swaps content modules only, and services stay loaded (O5). A new module version that needs a service that is not loaded makes the reload load that service first (a plain load, not a replace). A service that no module needs any more stays loaded until the next boot. The port file ([port-file.md](port-file.md)) is a service too: reload never replaces it.
 
 Plan corrections the E5 design found (the text above already reflects them):
 - SysEx runs on the MIDI task, hence the job.
@@ -653,19 +658,22 @@ Plan corrections the E5 design found (the text above already reflects them):
 - No firmware predicate says which view is on top. The rebuild is unconditional until E5b answers it.
 - The DSP placeholder window lasts about 200 ms past commit, because machines publish rows at commit and the voice rows follow; machines writes the real rows in `on_loaded` during a reload.
 - E3/E4 and R12-8 both rewrite five files (`loader/mod.rs`, `abi/src/service.rs`, `handlers.rs`, `svc-rt`, machines `records.rs` and `assign.rs`). The second to merge pays one rebase and an object rebuild.
-- E5 changes the image (dynreg words) and `SVC_ABI` (`reload_phase`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices.
+- The transport function has no anchor in `devices/fw` yet (commit 2 finds and declares it), so the transport refusal of item 3 cannot be built on a declared name before then.
+- `PH_RETAINED` latches for the session after one failed `quiesce`, so a reload timeout must not call `release` (item 5).
+- `clear_rows` frees every row of the record, so the DT2 placeholder row is written after it (item 7).
+- E5 changes the image (dynreg words) and `SVC_ABI` (`reload_phase`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices. The port file stack ([port-file.md](port-file.md) PR2) changes `SVC_ABI` again and merges after E5. Each change makes the runtime refuse old service files with `E_SVC_ABI`, and Transfer replaces them.
 
 Commit split (host checks per commit; device runs only at the end, one gate):
 
 | # | Commit | Size |
 | --- | --- | --- |
-| 0 | Spikes: archive map, `clone_of >= 6` on the rig | 2 h |
+| 0 | Spike: archive map | 1 h |
 | 1 | `Keys::first_missing_key`, tests | 2 h |
-| 2 | Transport predicate (`devices/fw`, `Platform::play_state`, fakes) and `reload::refusal` | 4 h |
+| 2 | Transport predicate (anchor search on both images, `devices/fw`, `Platform::play_state`, fakes) and `reload::refusal` | 4 h; the anchor search may add 2-4 h |
 | 3 | Loader: `Slot`, `Phase::Reload`, progress mask, `check_file`, plan over the live set, keys check | 8 h |
 | 4 | In-flight counter, masked span clock, two-block DSP wait | 4 h |
 | 5 | Run-time numbering over the live set | 3 h |
-| 6 | MISSING placeholder, contract `kept` update | 5 h |
+| 6 | MISSING placeholder (DT2 rig case, DSP row lifecycle), contract `kept` update | 8 h |
 | 7 | Machine list rebuild: dynreg words, `devices/fw`, `refresh_view`, `on_loaded` rows, `reload_phase`, counters | 6 h |
 | 8 | Protocol: `CMD_RELOAD`, `CMD_RELOAD_STATE`, `reload_poll`, client | 4 h |
 | 9 | `dk:dev`, `wb transfer`, docs, device test file, soak | 6 h |
@@ -685,7 +693,7 @@ Tests:
 
 Done when: `dk:dev` reloads a machine module with no boot, on both devices, and the soak passes.
 
-Estimate: 2-3 days at the measured agent pace (about 45 agent hours of edits and host checks in 10 commits, with reviews and one E3/E4 plus
+Estimate: 2-3 days, upper end, at the measured agent pace (about 50 agent hours of edits and host checks in 10 commits, with reviews and one E3/E4 plus
 R12-8 rebase); device wall time about 40 minutes for the named subset on both devices plus the soak. Payoff: removes the 5-10 s boot from every machine
 iteration. Confidence: medium-high; the archive proved the machine path on the emulator (findings 32, 33); the list rebuild call on a
 stored view pointer is the main risk (emulator proof only).
@@ -723,8 +731,7 @@ What:
      leaves the T1 row untouched, so with the service absent the maximum stays 0x600. The hook reads the status register first and runs the stock code in interrupt
      context. No caller scales a value onto 0..max (finding 149, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
      a CC value above 6 selects a shape number up to the highest one instead of clamping to RAND. Gaps: the maximum follows the highest loaded number, so a number below it
-     whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (`bind_max` 24 per file;
-     installed sites DT2 18, DN2 22 of 48 before the graph site below).
+     whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (installed sites DT2 18, DN2 22 of 48 before the graph site below; table in [port-file.md](port-file.md) section 5).
    - Graph (decided, O7): see item 1b.
 1b. Graph (option A of the static design; finding 149 "Graph"). Built. The 28-byte elements of the seven RAM vectors are `Bitmap` objects (1-bit,
    column-major tiles of 28 x 15 pixels, both devices), and the cell blits them. A shape graph is a vector of four tiles.
@@ -852,8 +859,8 @@ What:
    filter the module names as its fallback. The loader-bound hook restores the choice from the store when a kit loads (O6).
 5. DSP: a stub at the filter-type site with a slot, dispatch in the `machines.dks` DSP section (R12-8 pattern). Filter DSP is a new contract
    in `sdk/dsp/contract/` (input and output buffers per voice, state per voice).
-6. Hook budget: `machines.dks` declares 13 hooks; the six filter sites give 19, under `bind_max` 24 per service file and `install_sites` 48
-   overall. Five hooks remain after E7; the next table family may need a second service file.
+6. Hook budget: the six new hooks go through the port file ([port-file.md](port-file.md)). `machines.dks` declares 13 hooks; `BIND` items leave the services with the port file, so no per-file limit applies. The runtime's `install_sites` 48 still bounds the
+   installed hook sites: 19 are taken on DT2 and 23 on DN2 today (table in port-file.md section 5), and E7 adds at most 6 per device, which gives 25 and 29.
 7. Template `sdk/templates/filter/` and a fixture `tests/fixtures/modules/test/filter-gain`.
 8. The filter response graph reuses the Bitmap and tile helpers of the shared crate (E6e), and the filter knob ranges use the registration call of E6c.
 
@@ -864,7 +871,7 @@ Done when: a module adds a filter that appears in FUNC+SYN on the FLTR page, sho
 (and DN2 if E0b item 5 shows the same shape).
 
 Estimate: 3-5 days. Payoff: proves the "table row" shape for a second table family. Confidence: medium until E0a (ColdFire side known).
-Depends on: E0a; E3; E4; E5 (MISSING placeholder for filters); R12-8.
+Depends on: E0a; E3; E4; E5 (MISSING placeholder for filters); R12-8; the port file (its six new hooks go through it).
 
 ### E8 Folder regroup and names
 
@@ -910,7 +917,7 @@ runtime-and-services.md.
 | --- | --- | --- | --- | --- |
 | 1 | E0b static spikes (extended) | - | none | done: findings 147, 148, 149; 135, 02, 06, 53 corrected (branch e0b/findings) |
 | 1 | E0a filter DSP experiment | daemon with a generated core and `sharc-profile`; UI chooser | one, about 10 min | parked: the first attempt ran on a daemon without a generated core (finding 148); retry before E7 |
-| 1 | E0c daemon hardening | - | none | done: branch e0c/daemon-hardening (host checks; two unrelated digi-control tests fail on a module count) |
+| 1 | E0c daemon hardening | - | none | done: PR #615 |
 | 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
 | 2 | E2 boilerplate codegen | - | none; objdiff | done: PR #608 (objects byte-identical by objdiff) |
 | 3 | E3 keys, trait, role check | - | subset, shared with E1 and E2 in one gate | done: PR #609 (device: runtime-refusal-tests on DT2 and DN2) |
@@ -922,8 +929,10 @@ runtime-and-services.md.
 | 8 | E6c parameter range override | E6 | none until E7 | todo (design step now, build when E7 starts; before E7) |
 | 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
-| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, E6c, R12-8 | filter test plus subset | todo |
+| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, E6c, R12-8, port file | filter test plus subset | todo |
 | 10 | E8 regroup and names (class per module, `fixes/`, shared `dyndsp`, requires edges, patch-set lists; 6-8 h) | E1, open branches merged | full run of its batch | todo |
+| 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | todo |
+| 11 | Port file step 3: adapter routines in the port file (lfo, then fx, then machines) | E8, port file stack | the device subset in port-file.md section 12 | todo |
 
 E1, E2, E3 share one subset gate. E0 runs in parallel with E1-E3. When an item starts, its status becomes `active` with the branch; when it lands, `done` with the PR, set in that PR.
 

@@ -286,23 +286,23 @@ A `.dks` uses the `.dkm` format and tools, so the loader, hash check, upload and
 - Adapter code in the arena. Adapters link at fixed addresses today (`apply.rs:1003-1011`); `.dkm` relocation looks suitable but is untested for tails and trampolines.
 - The 64 KiB limit may need raising or removing. It is a staging buffer limit. `machines` and `dsp-voice` output sizes are unmeasured.
 
-A `.dks` is one file per device and firmware. Modules stay `.dkm`, packed per device where their records or DSP code need it.
+A `.dks` is one file per device for services with a DSP section (machines, fx) and one file for all devices for the others (lfo, samples), once the port file stack of [port-file.md](port-file.md) PR4 has landed. The port file is one file per device and firmware. Modules stay `.dkm`, packed per device where their records or DSP code need it.
 
 ### 5.8 Build and install
 
-A hook's tail is firmware instructions copied from the image, so a finished `.dks` contains short pieces of Elektron's firmware. Our rule is never to commit firmware or derived material, and shipping it would be worse.
+A hook's tail is firmware instructions copied from the image, so a service that holds one would contain short pieces of Elektron's firmware. Our rule is never to commit firmware or derived material, and shipping it would be worse. The port file ([port-file.md](port-file.md)) holds the firmware names and the hook sites, built from committed data. The runtime copies a tail from the live image at load, after a hash check, so no file holds firmware bytes.
 
 Flow:
 
-1. We build unbound service objects and port data. They contain no firmware bytes. A raw hook that continues in the stock code of its site refers to a tail symbol; the tail is made in step 2.
-2. The workbench binds them against the user's own firmware, the same flow as patching the image in the browser. It generates the tails and writes the finished `.dks`.
-3. The workbench uploads the runtime and the `.dks` set to the device.
+1. We build the service files and one port file per device and firmware from committed data. They contain no firmware bytes. A raw hook that continues in the stock code of its site refers to a tail symbol; the runtime makes the tail at load.
+2. The workbench does not bind. Transfer uploads the port file that matches the device's firmware, through the same needs resolver as any other service.
+3. The workbench uploads the runtime, the port file and the `.dks` set to the device.
 4. The user uploads modules. Services load only when a selected module needs them.
 
 **Transfer installs what a module needs.**
 
-- When the user selects a module in the Transfer pane (workbench and site), the pane lists the services the module needs, read from the module's header table (its service imports and the record kinds it uses). Each service shows a status: on the device with a matching version; missing; needs binding for this firmware; or a version mismatch, refused with a reason.
-- One button installs the module with its services: it binds each missing `.dks` against the user's firmware (cached by firmware hash), uploads the `.dks` files first, then the module, and verifies. The fit check counts the `.dks` sizes.
+- When the user selects a module in the Transfer pane (workbench and site), the pane lists the services the module needs, read from the module's header table (its service imports and the record kinds it uses). Each service shows a status: on the device with a matching version; missing; needs the port file for this firmware; or a version mismatch, refused with a reason.
+- One button installs the module with its services: it uploads the missing `.dks` files and the port file first, then the module, and verifies. The fit check counts the `.dks` sizes.
 - The workbench, the site and the `wb` CLI use the same code (`packages/workbench-core`).
 - Removing a module also removes its now-unused `.dks` files in the same click. A `.dks` is unused when no `.dkm` on the card hard-needs it. Flash also replaces the `.dks` files on the card.
 - Tests: host tests of the dependency resolution behind fakes; one device test of the install flow per device.
@@ -310,7 +310,7 @@ Flow:
 
 Not checked yet: whether the web patchkit can link these objects. The spike answers this.
 
-**Device constants reach only the modules that use them.** **[D]** Each `[[gen]]` entry of kind `gas` or `sharc` lists the constants it uses (`uses` in `module.toml`); the runtime's own facts are the device object `dkrt_dev` (kind `gas-dkdv`, struct `DkrtDevice` of its `abi.toml`), which the runtime and the services read. The generator writes only those, and refuses a listed name that matches nothing or that the module's sources never reference. A new constant then changes only the includes of the modules that list it. The device profile stays the one home of device constants (future devices need only a profile). Each `.dks` will declare its own list the same way, because it is bound per device and should depend only on the profile entries it reads.
+**Device constants reach only the modules that use them.** **[D]** Each `[[gen]]` entry of kind `gas` or `sharc` lists the constants it uses (`uses` in `module.toml`); the runtime's own facts are the device object `dkrt_dev` (kind `gas-dkdv`, struct `DkrtDevice` of its `abi.toml`), which the runtime and the services read. The generator writes only those, and refuses a listed name that matches nothing or that the module's sources never reference. A new constant then changes only the includes of the modules that list it. The device profile stays the one home of device constants (future devices need only a profile). Each `.dks` will declare its own list the same way. A service with a DSP section is built per device, and the others are one file for all devices after the port file stack ([port-file.md](port-file.md) PR4), so each file should depend only on the profile entries it reads. Today `patchkit bind` makes a service per device and firmware.
 
 This does not by itself narrow test selection: a profile edit still selects every device test, because three inputs hash the whole profile. The emulator's device-profile crate embeds both profiles (`packages/emulator/device-profile/src/lib.rs`), so the daemon changes. The patchkit CLI embeds them. The device-test inputs list `devices/**/*.toml` (`READ_BY_TESTS` in `tools/nx/device-test-keys.mjs`). The runtime and the adapters are in every test image anyway. Narrowing selection is step 4 of the [test speed plan](test-speed.md) (device tasks keyed on built bytes).
 
@@ -329,7 +329,7 @@ Readers: reviewers (CI output), the Transfer tab and menu (fit before restart), 
 
 ### 5.10 New firmware plug-in points
 
-A new plug-in point starts as an experimental `.dks` with its own hook table, and needs no change to the image, provided all its hooks have handlers or raw entries (BIND) and it needs no firmware data: service firmware data stays in image adapters for R12 (decision 1, below). Modules import from it by name, and the report shows "experimental". It is not part of the default service set. When proven (two users, or Em's call), the mark comes off and module sources do not change. Only we build `.dks` files for now, because they carry firmware-level power. Whether third parties can write them is a later decision.
+A new plug-in point starts as an experimental `.dks` with its own hook table, and needs no change to the image, provided all its hooks have handlers or raw entries and it needs no firmware data. A new ordinary hook site or anchor needs a new port file and service over USB and a restart, and no reflash ([port-file.md](port-file.md)); a new interrupt site or SHARC stub still needs an image change: service firmware data stays in image adapters for R12 (decision 1, below). Modules import from it by name, and the report shows "experimental". It is not part of the default service set. When proven (two users, or Em's call), the mark comes off and module sources do not change. Only we build `.dks` files for now, because they carry firmware-level power. Whether third parties can write them is a later decision.
 
 ### 5.11 Sink slots
 
@@ -344,7 +344,7 @@ A new plug-in point starts as an experimental `.dks` with its own hook table, an
 
 Users: `digikit/debug` (`log`, later), `digikit/debug` (`span`, [profiling plan](profiling.md) section 7). The probe's per-block `dl_set_tick_cb` slot in dsp-link can follow the same rule later. Usage for a sink owner: [INSTRUMENTATION.md](../INSTRUMENTATION.md).
 
-**Decision 1 (R12): service firmware data stays in image adapters.** What a service needs about the firmware or the image (addresses, row indices, reserved rows, slot words) is a data table or slot of its image adapter, found by name hash (5.12 "Template"). So 5.10 (a plug-in point with no image change) holds only for a service whose hooks all have handlers or raw entries. A service that needs data, an interrupt stub or a reserved row has an adapter change, and the image is patched again. Revisit when the first service must ship without an image change; the options then are a data table in the `.dks` filled at bind from the user's firmware, or generated rows.
+**Decision 1 (R12): service firmware data stays in image adapters.** What a service needs about the firmware or the image (addresses, row indices, reserved rows, slot words) is a data table or slot of its image adapter, found by name hash (5.12 "Template"). So 5.10 (a plug-in point with no image change) holds only for a service whose hooks all have handlers or raw entries. A service that needs data, an interrupt stub or a reserved row has an adapter change, and the image is patched again. Revisit when the first service must ship without an image change; the options then are firmware data in the port file ([port-file.md](port-file.md)), or generated rows.
 
 ### 5.12 Service anatomy
 
@@ -353,7 +353,7 @@ A service is a module with a role.
 - Same as a module: `module.toml` with `role = "service"`, the folder layout (`src/`, `tests/`, `build/gen/`), the `dk_module` entry point with `init`, `fini` and `tick`, imports through `sdk.toml`, the naming rules of sdk.md section 10, the declare-check-commit pattern of sdk.md 6.3, and tests that live with the service.
 - Only a service has: exports (`sdk.toml` imports with `requires`), a hook table, slots, record-kind handlers, and its adapter linked into the same file.
 
-The contract is the ABI in `sdk.toml`, so a Rust service uses the generated bindings, as the runtime does today. The target firmware is bound at bind time (5.8), not written in the manifest.
+The contract is the ABI in `sdk.toml`, so a Rust service uses the generated bindings, as the runtime does today. The target firmware is not written in the manifest: the port file for the device's firmware resolves the names at load (5.8). Today `patchkit bind` does this at install time.
 
 **Manifest.** The service section of `module.toml` has: `name`, `exports` (a group of `sdk.toml`), `record_kinds`, `resources`, `[[hook]]` (a ColdFire site that the service installs, movable) and `[[slot]]` (a fixed site, ColdFire or SHARC, that the service fills). The file format of a `.dks` waits for R12. R2 only writes the schema here and in `docs/ARCHITECTURE.md`.
 
