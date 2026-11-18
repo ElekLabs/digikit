@@ -1,6 +1,6 @@
 /** The pure part of the LFO shape tests: the shapes as functions of a phase, the thresholds and the phase-free fit. No harness imports, so a host test runs it (tests/regression/host/lfo-fit.test.ts). */
 
-/** The wave numbers of the stock waves (finding 143, "Waveform names"). */
+/** The wave numbers of the stock waves (finding 149, "Waveform names"). */
 export const WAVE = { TRI: 0, SINE: 1, SQR: 2, SAW: 3, EXPO: 4, RAMP: 5, RAND: 6 } as const;
 /** The first wave number the lfo service gives a shape (`RANGE.lo` of the service). */
 export const FIRST_SHAPE = 7;
@@ -23,7 +23,7 @@ export const RAMP_SAMPLES = Array.from({ length: 32 }, (_, i) => -31744 + 2048 *
 /** The samples of `tests/fixtures/modules/lfo-shape-b/src/module.c` (STEP): -24576 for the first half, 24576 for the second. */
 export const STEP_SAMPLES = Array.from({ length: 32 }, (_, i) => (i < 16 ? -24576 : 24576));
 
-// ---- the waves as functions of a 32-bit phase, signed Q31 (finding 143, "Output scale") --------------------------------------------------
+// ---- the waves as functions of a 32-bit phase, signed Q31 (finding 149, "Output scale") --------------------------------------------------
 
 /** The value of a 32-sample table at `phase`: the formula of the service's `records::interp` (the sample at the top 5 bits, linear with the next 15). */
 export function evalTable(s: readonly number[], phase: number): number {

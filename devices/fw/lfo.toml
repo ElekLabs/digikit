@@ -1,9 +1,9 @@
-# The LFO tick and its second reader (docs/findings/143-lfo-waveforms.md): the sites that make a wave value above RAND a table shape, DT2 1.17 and DN2 1.12.
+# The LFO tick and its second reader (docs/findings/149-lfo-waveforms.md): the sites that make a wave value above RAND a table shape, DT2 1.17 and DN2 1.12.
 # Each site is the six bytes `moveq 6,Dn; cmp.l D3,Dn; beq|bne` that compare the clamped wave with 6. An image stub (core/lfo, `op = "stub"`, `when`) runs the moveq, the compare
 # and the stock branch as stock and looks at its slot only on the outcome "clamped wave is 6" (RAND, or an extended value that was clamped to 6); an empty slot continues the
 # stock path of that outcome, so the image is stock without the lfo service. The lfo service fills the slots and its routine tests the raw wave byte again.
 # `regs.clobbers` lists the registers the routine leaves changed, `dk_lfo_eval` included (it writes d0, d1, a0, a1 and the flags and saves d2; the routines of the `call` sites save and restore a0 and a1, and d1 where it is live); patchkit refuses a `when` stub whose scratch register is not in it.
-# The `regs` of each hook were found from the stock bytes with `uv run python -m tools.coldfire.liveness PORT SITE` (docs/findings/143-lfo-waveforms.md, "Registers"): the
+# The `regs` of each hook were found from the stock bytes with `uv run python -m tools.coldfire.liveness PORT SITE` (docs/findings/149-lfo-waveforms.md, "Registers"): the
 # scratch register of the stub is dead where the "clamped wave is 6" outcome continues (and where the routine continues for an extended wave); the flags are dead there too.
 
 [[site]]
@@ -258,7 +258,7 @@ mark = "D"
 users = ["core/lfo", "core/services/lfo"]
 doc = "The second reader, the compare of D3 with 6 that gives RAND a start phase of 0 (interrupt context). exit.1 is the clear. DN2 0x40137836: `moveq 6,D2; cmp.l D3,D2; beq 0x40137852`. Dead at the clear (0x40137852): D2, D6 and N Z V C; at the SPH phase code (0x4013783c): D0, D2, D6 and N Z V C."
 
-# ---- The MOD page: the sites of the UI task hooks of the lfo service (docs/findings/143-lfo-waveforms.md, "The panel hooks"). They are `.dks` hooks (bound by `patchkit bind`), not interrupt stubs.
+# ---- The MOD page: the sites of the UI task hooks of the lfo service (docs/findings/149-lfo-waveforms.md, "The panel hooks"). They are `.dks` hooks (bound by `patchkit bind`), not interrupt stubs.
 # The three functions are outside the functions that the Ghidra database of the image keeps (`catalog declare` finds no containing function), so each site is a `cf_words` signature of the stock
 # words from the function entry. A wildcard `"*"` is a whole 32-bit word: the one after `pea table` covers the low half of the name table's address (DN2 1.11 has other table addresses) and the opcode
 # half `0x486e` of the next instruction (`pea -0x1c(A6)`), which the DT2 word 0x3ffc486e shows. The high half of the address stays in the word before it: it tells the
@@ -321,9 +321,9 @@ regs = { in = ["a0"], clobbers = ["d0", "d1", "ccr"] }   # a0 is the buffer the 
 devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/services/lfo"]
-doc = "The T1 range accessor (the stock code has 172 callers on DT2, 191 on DN2; the hook does not run in interrupt context: it reads the status register first and runs the stock code when the interrupt mask is not 0): for the codes 79, 89 and 99 with a loaded shape the hook calls the stock accessor (`dk_stock_`), then raises the maximum in the buffer to the highest loaded wave number << 8 (finding 143, section Callers of the T1 range accessor: no caller scales a value onto 0..max; the clamps that MIDI CC and NRPN reach see the new maximum, a loaded shape is the only case that differs). Any other code runs the displaced `move.l D2,-(SP); move.l 8(SP),D1` and the stock code. Dead after the site (strict): D2 (written), D0 and D1 (written before use: only D0b is read before `mvs.b`), and the flags."
+doc = "The T1 range accessor (the stock code has 172 callers on DT2, 191 on DN2; the hook does not run in interrupt context: it reads the status register first and runs the stock code when the interrupt mask is not 0): for the codes 79, 89 and 99 with a loaded shape the hook calls the stock accessor (`dk_stock_`), then raises the maximum in the buffer to the highest loaded wave number << 8 (finding 149, section Callers of the T1 range accessor: no caller scales a value onto 0..max; the clamps that MIDI CC and NRPN reach see the new maximum, a loaded shape is the only case that differs). Any other code runs the displaced `move.l D2,-(SP); move.l 8(SP),D1` and the stock code. Dead after the site (strict): D2 (written), D0 and D1 (written before use: only D0b is read before `mvs.b`), and the flags."
 
-# ---- The graph of the MOD page (docs/findings/143-lfo-waveforms.md, "Graph"): the cell FUN_4010c5ee (DT2) / FUN_4010df62 (DN2) of LfoPageView, one call site each. The function is in the
+# ---- The graph of the MOD page (docs/findings/149-lfo-waveforms.md, "Graph"): the cell FUN_4010c5ee (DT2) / FUN_4010df62 (DN2) of LfoPageView, one call site each. The function is in the
 # Ghidra database; both images hash alike (h_strict), and so do DT2 1.16 and DN2 1.11 and 1.10E.
 
 [[site]]

@@ -1,5 +1,5 @@
 //! The tiles that the lfo service builds for a sampled triangle equal the stock TRI tiles of the LFO page, read from the firmware image at test time (nothing of the image is
-//! kept in the repository; skipped when the image is not here). The addresses are in docs/findings/143-lfo-waveforms.md "Graph".
+//! kept in the repository; skipped when the image is not here). The addresses are in docs/findings/149-lfo-waveforms.md "Graph".
 use dkrt_svc_lfo::graph::{TILE_W, Tile, build};
 use dkrt_svc_lfo::records::SAMPLES;
 use patchkit::firmware::Firmware;

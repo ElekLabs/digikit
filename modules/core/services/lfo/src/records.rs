@@ -4,7 +4,7 @@
 //!
 //! A shape is a value of the LFO WAVE parameter. The service gives each shape key a wave number from the sticky allocator (`dkrt_sdk::sticky`, the range
 //! [`RANGE`], the settings key `lfo.shapes`), so a sound that names the number keeps its shape while the module stays in the map. The numbers stay below 0x80:
-//! stock code clamps a wave byte of 7 to 127 to RAND and a negative byte to TRI (finding 143), so a number is safe in a sound when the service is not loaded.
+//! stock code clamps a wave byte of 7 to 127 to RAND and a negative byte to TRI (finding 149), so a number is safe in a sound when the service is not loaded.
 //!
 //! The table is indexed by `number - RANGE.lo`. It is read in the interrupt of the LFO tick (`eval`), so it is written under the interrupt mask. One owner per number.
 use core::ptr::{addr_of, addr_of_mut};
@@ -161,7 +161,7 @@ pub fn highest() -> u32 {
 }
 
 /// The largest value of the LFO WAVE parameter (`wave << 8`) while shapes are loaded: the T1 maximum of codes 79, 89 and 99 follows the highest loaded wave number,
-/// so the encoder reaches no number above it. 0 when no shape is loaded: the stock maximum stays (finding 143, "The panel hooks").
+/// so the encoder reaches no number above it. 0 when no shape is loaded: the stock maximum stays (finding 149, "The panel hooks").
 pub fn wave_max() -> u32 {
     highest() << 8
 }

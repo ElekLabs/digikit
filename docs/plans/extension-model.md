@@ -403,7 +403,7 @@ E0a Filter DSP experiment (emulator, one run, about 10 minutes; needs Em's go be
 - On DT2 1.17: dump DM `0x2567a0..0x2567df` after boot. Then one track, steady noise input, the existing DSP PC histogram; write sound+0xa3 to
   0..7, one segment each. Record which SHARC routines change with the filter type and what the table result selects.
 - Answer: whether the filter stage is a per-voice dispatch (a stub plus a slot as in R12-8) or inline stock code, and the site to hook.
-- Parked after a first attempt (finding 142 "The decisive check still open"): the run read the DSP table (types 0-5 map to S3 1, 3, 2, 4, 5,
+- Parked after a first attempt (finding 148 "The decisive check still open"): the run read the DSP table (types 0-5 map to S3 1, 3, 2, 4, 5,
   6), but a raw byte write did not reach the DSP, and the profile counted nothing because the daemon was built without a generated DSP core
   (a plain `cargo build` without `SHARC_GEN_DIR`: the stub traps on every instruction, `native-trap: no decoded instruction`).
   `sharc.profile` counts the native tier. The retry needs: the daemon built with
@@ -697,16 +697,16 @@ What:
      function-table reader with its own clamp (DT2 `FUN_401392d4`, DN2 `FUN_401376bc`). Without the clamp hook a wave of 7 or more becomes RAND
      before the table call.
    - UI-task sites, as `lfo.dks` hooks (B1 bind resolves the addresses; routines in `services/lfo/dks/src/hooks-ui.s`, sites in `devices/fw/lfo.toml`,
-     finding 143 "The panel hooks"): the name formatter (`wave_name`: DT2 0x400e1b68 and DN2 0x400e3610, four characters; `wave_name3`: DN2
+     finding 149 "The panel hooks"): the name formatter (`wave_name`: DT2 0x400e1b68 and DN2 0x400e3610, four characters; `wave_name3`: DN2
      0x4000766c, the first three characters), and the T1 range accessor (`t1_range`: DT2 0x400da368, DN2 0x400dc154, 172 callers on DT2 and 191 on DN2, among them
      the live-set clamp the encoder reaches), which raises the maximum of the codes 79, 89 and 99 to the highest loaded wave number << 8 at run time and
      leaves the T1 row untouched, so with the service absent the maximum stays 0x600. The hook reads the status register first and runs the stock code in interrupt
-     context. No caller scales a value onto 0..max (finding 143, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
+     context. No caller scales a value onto 0..max (finding 149, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
      a CC value above 6 selects a shape number up to the highest one instead of clamping to RAND. Gaps: the maximum follows the highest loaded number, so a number below it
      whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (`bind_max` 24 per file;
      installed sites DT2 18, DN2 22 of 48 before the graph site below).
    - Graph (decided, O7): see item 1b.
-1b. Graph (option A of the static design; finding 143 "Graph"). Built. The 28-byte elements of the seven RAM vectors are `Bitmap` objects (1-bit,
+1b. Graph (option A of the static design; finding 149 "Graph"). Built. The 28-byte elements of the seven RAM vectors are `Bitmap` objects (1-bit,
    column-major tiles of 28 x 15 pixels, both devices), and the cell blits them. A shape graph is a vector of four tiles.
    - One UI-task hook site per device, the `addi.l #BASE,D6` before the vector accessor call: DT2 0x4010c83c, DN2 0x4010e1b0 (a `cf_func` rule in
      `devices/fw/lfo.toml`: `cf.lfo.site.graph_vec`, offset 0x24e of the cell, the hash is the same on both images and on DN2 1.11 and DT2 1.16; hook
@@ -735,7 +735,7 @@ What:
    instruction (finding 07). The tick runs at 1,500 Hz (finding 04), so one tick is 667 us = 176,000 cycles = 59,000 to 117,000 instructions.
    The stock handler already uses 56.7% of a frame when stopped and 91 to 100% on step frames (DN2 1.11 unit, finding 04 "the stock handler
    on a unit"), so the budget is small: **all 48 LFOs extended may cost at most 3% of the tick period over stock** (5,280 cycles), and a few
-   shape LFOs well under 0.5%. Static counts from the built object (finding 143, "Interrupt context and rate"): a wave of 0 to 5 costs 2 `jmp.l`
+   shape LFOs well under 0.5%. Static counts from the built object (finding 149, "Interrupt context and rate"): a wave of 0 to 5 costs 2 `jmp.l`
    more than stock per LFO (96 per tick); an extended LFO costs 54 instructions (stub 8, routine 18, `dk_lfo_eval` 28) against 22 (TRI) to 42
    (SINE) for the stock table wave, so +12 to +32 each. Worst case, 48 extended LFOs at 1,500 Hz: 2,592 instructions per tick (3.9 M per
    second), 576 to 1,536 over stock, which is 0.5% to 2.6% of the period at 1.5 to 3 cycles per instruction: inside the budget, but a step frame
@@ -879,8 +879,8 @@ runtime-and-services.md.
 
 | # | Item | Depends on | Device runs | Status |
 | --- | --- | --- | --- | --- |
-| 1 | E0b static spikes (extended) | - | none | done: findings 141, 142, 143; 135, 02, 06, 53 corrected (branch e0b/findings) |
-| 1 | E0a filter DSP experiment | daemon with a generated core and `sharc-profile`; UI chooser | one, about 10 min | parked: the first attempt ran on a daemon without a generated core (finding 142); retry before E7 |
+| 1 | E0b static spikes (extended) | - | none | done: findings 147, 148, 149; 135, 02, 06, 53 corrected (branch e0b/findings) |
+| 1 | E0a filter DSP experiment | daemon with a generated core and `sharc-profile`; UI chooser | one, about 10 min | parked: the first attempt ran on a daemon without a generated core (finding 148); retry before E7 |
 | 1 | E0c daemon hardening | - | none | todo (about 1 h, before the E0a retry) |
 | 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
 | 2 | E2 boilerplate codegen | - | none; objdiff | done: PR #608 (objects byte-identical by objdiff) |
@@ -944,7 +944,7 @@ Open:
 - O7 (decided in E6): the shape graph is option A of item 1b: one hook at the vector pick, four 28 x 15 tiles per shape built by the service. Replacing
   the accessor (wider, generic) and writing into the firmware's RAM table (needs a second site and the firmware would free our memory) are rejected.
 - O8: MIDI behaviour with a shape loaded. A CC value of 7 or more, or an NRPN of 0x380 or more, reaches shape numbers instead of clamping to RAND; stock waves 0-6
-  are unchanged (finding 143 "Callers of the T1 range accessor"). The panel, CC and NRPN share the T1 maximum and the clamp. Decision for Em:
+  are unchanged (finding 149 "Callers of the T1 range accessor"). The panel, CC and NRPN share the T1 maximum and the clamp. Decision for Em:
   (a) accept it as a feature (MIDI and the panel reach the same waves; recommended), or (b) keep MIDI byte-stock with a shape loaded: a flag set
   around the panel's encoder handler (DT2 `FUN_4006cb14`, view slot 17) and tested in the `t1_range` hook; one more site on all three ports and
   a small task-preemption window.

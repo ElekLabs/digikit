@@ -1,7 +1,7 @@
 | lfo.dks, the hooks of the UI task (both devices, the same code): the name of a shape on the MOD page, and the maximum of the WAVE parameter so that the encoder reaches the shapes.
 | They are `.dks` hooks (`HOOKS` of the service, bound by `patchkit bind` to the firmware it runs on), not interrupt slots: the UI task runs them, one at a time. Each runs in place of the first
 | 6 bytes of a stock function and leaves by `jmp` to `lfo_x_*`, the end of its site (`[object.externs]` of module.toml, the hooks of devices/fw/lfo.toml). With no shape loaded, the stock code
-| runs unchanged. Register facts (docs/findings/143-lfo-waveforms.md, "The panel hooks", from `tools/coldfire/liveness.py` on the stock bytes): at the entry of each function the displaced
+| runs unchanged. Register facts (docs/findings/149-lfo-waveforms.md, "The panel hooks", from `tools/coldfire/liveness.py` on the stock bytes): at the entry of each function the displaced
 | instructions leave d0 (and for the range accessor d1) written before they are read, and the flags dead; every other register the routines use is saved.
 
     .text
@@ -82,7 +82,7 @@ lfo_ui_range:
 | vector, whose begin is the first stock `Bitmap` and whose first word is the vtable (D6 itself stays, the tail adds it). For a wave of 7 to 14 whose shape has a published graph, `dk_lfo_graph(wave, vtable, &flag)` returns the service's
 | vector and writes the unipolar byte; D6 gets the vector instead of table + 12 * 6 (the RAND tiles). Every other case goes to the tail: the displaced `addi` (the table address is
 | firmware data: bind generates the tail from the user's image), then the stock code.
-| Registers (strict liveness, docs/findings/143-lfo-waveforms.md "Graph"): only the flags are dead at the exit; D0, D1, A0 and A1 are saved and restored around the call, D6 is the output
+| Registers (strict liveness, docs/findings/149-lfo-waveforms.md "Graph"): only the flags are dead at the exit; D0, D1, A0 and A1 are saved and restored around the call, D6 is the output
 | (the stock `addi` writes it too). The flags: the stock `addi` of a positive table address to a small D6 leaves N, Z, V, C and X clear, so the shape path clears the condition code register,
 | and the tail path runs the `addi` itself. The hook never runs in interrupt context: the status register is read first, and a non-zero interrupt mask goes to the tail.
     .globl lfo_ui_graph

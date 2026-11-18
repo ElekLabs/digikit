@@ -16,7 +16,7 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The LFO tick (vector 191, 1,500 Hz, 48 LFOs per call) clamps the wave byte to 0..6 and calls a function table for 0..5; 6 is RAND (finding 143). Each site below is the
+# The LFO tick (vector 191, 1,500 Hz, 48 LFOs per call) clamps the wave byte to 0..6 and calls a function table for 0..5; 6 is RAND (finding 149). Each site below is the
 # six-byte `moveq 6,Dn; cmp.l D3,Dn; beq|bne` that compares the clamped wave with 6. An `op = "stub"` with `when` puts a jump there to a generated stub that runs the moveq, the compare
 # and the stock branch as stock, and looks at its pointer slot only on the outcome "clamped wave is 6" (`when = "taken"` for a beq, `"fallthrough"` for a bne). A zero slot continues the stock
 # path of that outcome, so without the lfo service (or in safe mode) the image behaves as stock, and a wave of 0 to 5 costs the stock instructions and two `jmp`s (the site jump and the jump back). The lfo service fills the

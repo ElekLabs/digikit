@@ -13,7 +13,7 @@ export * from './lfo-fit.ts';
  * Helpers of the LFO shape device tests (plan E6): the knobs of LFO 1 of track 1 set with the firmware's own MIDI CC path, the knob words read from the Sound object, the LFO output read from the
  * array the tick writes it into, and a phase-free fit of the output against a shape.
  *
- * What the tests assume of the firmware (finding 143, "Where the output lands" and "The knob words"; each is checked on the way and fails with a message, so a wrong
+ * What the tests assume of the firmware (finding 149, "Where the output lands" and "The knob words"; each is checked on the way and fails with a message, so a wrong
  * assumption shows at the first device run):
  * - the CC numbers of LFO 1 are SPD 102, MULT 103, FADE 104, DEST 105, WAVE 106, SPH 107, MODE 108, DEPTH 109 (the same on both devices); a CC value v is stored as `v << 8` in the knob word, and the
  *   DEST value is the array index itself (`set` reads the word back and fails when it differs);
@@ -29,7 +29,7 @@ export type Knob = 'SPD' | 'MULT' | 'DEST' | 'WAVE' | 'SPH' | 'MODE' | 'DEPTH';
 /** The MIDI CC number of each knob of LFO 1 (channel 1). */
 const KNOB_CC: Record<Knob, number> = { SPD: 102, MULT: 103, DEST: 105, WAVE: 106, SPH: 107, MODE: 108, DEPTH: 109 };
 const CC_FADE = 104;
-/** The word of each knob of LFO 1 in the Sound array of track 1, the same on both devices (finding 146, "The knob words"). */
+/** The word of each knob of LFO 1 in the Sound array of track 1, the same on both devices (finding 149, "The knob words"). */
 export const KNOB_WORD: Record<Knob, number> = { SPD: 1, MULT: 2, DEST: 4, WAVE: 5, SPH: 6, MODE: 7, DEPTH: 8 };
 
 /** The first array index that is no word of an LFO (1 to 24 are). The DEST word is `index << 8` (the tick reads its high byte as the array index, below the length of the row). */
@@ -39,7 +39,7 @@ const BASE_MIN = 0x2000;
 const BASE_MAX = 0x5f00;
 /** DEPTH is bipolar: the output amplitude is (depth - 0x4000) * 2 words times the shape. CC 80 gives 0x5000, which is +-0x2000 around the base word. */
 const DEPTH_CC = 80;
-/** The CC value of the stopped speed and of no fade: the word 0x4000 (bipolar, finding 146). */
+/** The CC value of the stopped speed and of no fade: the word 0x4000 (bipolar, finding 149). */
 const NEUTRAL_CC = 64;
 /** MODE 0 is FRE (free running); the others are TRG, HLD, ONE, HLF. */
 const MODE_FRE = 0;
@@ -258,7 +258,7 @@ export class LfoRig {
   }
 
   /**
-   * The phase a trigger sets for SPH `sph` (0 to 127): the tick sets phase = (smoothed SPH word << 16) * 0x5265c000 >> 31 (fractional MAC, finding 146), which is `sph * 0xA4CB80`.
+   * The phase a trigger sets for SPH `sph` (0 to 127): the tick sets phase = (smoothed SPH word << 16) * 0x5265c000 >> 31 (fractional MAC, finding 149), which is `sph * 0xA4CB80`.
    * The phase is 0 when WAVE is RAND.
    */
   static startPhase(sph: number): number {
@@ -309,7 +309,7 @@ export class LfoRig {
       if (swing(swung) === 0) {
         const ticks = await this.phaseMoves();
         reason = ticks
-          ? `wrong destination: the tick runs (the phase of LFO 1 moves) but DEST ${d} does not follow the LFO; the output is not where finding 146 says, or DEPTH/FADE give no swing`
+          ? `wrong destination: the tick runs (the phase of LFO 1 moves) but DEST ${d} does not follow the LFO; the output is not where finding 149 says, or DEPTH/FADE give no swing`
           : `no tick: the phase of LFO 1 does not move and DEST ${d} does not vary; vector 191 is not running without the DSP, or SPD is the stopped value`;
       } else if (swing(swung) < MIN_SWING) {
         reason = `the swing of DEST ${d} is below ${MIN_SWING.toString(16)}`;

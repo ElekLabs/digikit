@@ -1,4 +1,4 @@
-//! `lfo` service, the shape graph: what the MOD page draws for a wave number of a loaded shape (docs/plans/extension-model.md E6 item 1b, finding 143 "Graph").
+//! `lfo` service, the shape graph: what the MOD page draws for a wave number of a loaded shape (docs/plans/extension-model.md E6 item 1b, finding 149 "Graph").
 //!
 //! The page does not draw a curve. Its cell blits `Bitmap` tiles of one period (28 x 15 pixels, 1 bit per pixel, column-major) from a `std::vector<Bitmap>` of four
 //! tiles that it picks from a RAM table of seven vectors. A shape gets the same: one vector of four tiles, built by `publish` from the 32 samples and handed to the
@@ -8,7 +8,7 @@
 //! (`+0` vtable, `+4` width 28, `+8` height 15, `+0xc` words per column 1, `+0x10` pixel words, `+0x14` mask words, `+0x18` owner byte 0: nothing frees them). A tile is 28 words,
 //! one per column; row `r` (0 is the top) is bit `31 - r`; the 15 rows are bits 31 to 17. The mask is 28 words of `0xfffe0000`, shared by every tile of every shape.
 //!
-//! Which element the cell takes depends on the signs of the LFO speed and depth (the two values it splits at 63: finding 143). The four elements of every stock wave
+//! Which element the cell takes depends on the signs of the LFO speed and depth (the two values it splits at 63: finding 149). The four elements of every stock wave
 //! are, with `v(t)` the wave: element 2 = `v(t)`, element 3 = `v(-t)` (time reversed), element 0 = `-v(t)`, element 1 = `-v(-t)`. Measured on TRI, SIN, SQR, SAW, EXPO and
 //! RAMP; for an odd wave (TRI, SIN, SQR, SAW) `v(-t) = -v(t)`, so there are two pictures, and for the unipolar waves (EXPO, RAMP) four. A shape gets the four.
 //!

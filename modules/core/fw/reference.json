@@ -903,7 +903,7 @@
         "dt2",
         "dn2"
       ],
-      "doc": "The T1 range accessor (the stock code has 172 callers on DT2, 191 on DN2; the hook does not run in interrupt context: it reads the status register first and runs the stock code when the interrupt mask is not 0): for the codes 79, 89 and 99 with a loaded shape the hook calls the stock accessor (`dk_stock_`), then raises the maximum in the buffer to the highest loaded wave number << 8 (finding 143, section Callers of the T1 range accessor: no caller scales a value onto 0..max; the clamps that MIDI CC and NRPN reach see the new maximum, a loaded shape is the only case that differs). Any other code runs the displaced `move.l D2,-(SP); move.l 8(SP),D1` and the stock code. Dead after the site (strict): D2 (written), D0 and D1 (written before use: only D0b is read before `mvs.b`), and the flags.",
+      "doc": "The T1 range accessor (the stock code has 172 callers on DT2, 191 on DN2; the hook does not run in interrupt context: it reads the status register first and runs the stock code when the interrupt mask is not 0): for the codes 79, 89 and 99 with a loaded shape the hook calls the stock accessor (`dk_stock_`), then raises the maximum in the buffer to the highest loaded wave number << 8 (finding 149, section Callers of the T1 range accessor: no caller scales a value onto 0..max; the clamps that MIDI CC and NRPN reach see the new maximum, a loaded shape is the only case that differs). Any other code runs the displaced `move.l D2,-(SP); move.l 8(SP),D1` and the stock code. Dead after the site (strict): D2 (written), D0 and D1 (written before use: only D0b is read before `mvs.b`), and the flags.",
       "file": "devices/fw/lfo.toml",
       "kind": "hook",
       "mark": "D",
