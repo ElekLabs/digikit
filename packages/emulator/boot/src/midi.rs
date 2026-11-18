@@ -123,20 +123,21 @@ pub(crate) struct UsbCall {
     pub saved: [u32; 4],
 }
 
-/// The registration function of the USB callbacks (`FUN_4000434a`, the same address on DT2 1.16, 1.17 and DN2 1.11, 1.12) stores its two arguments
-/// in two .bss globals: `lea (4,sp),a0; move.l (a0),slot0.l; lea (8,sp),a0; move.l (a0),slot1.l; ...`. The slot addresses differ per image.
-const USB_REG_ENTRY: u32 = 0x4000_434a;
+/// The registration function of the USB callbacks (`resolve_usb_reg`: `FUN_4000434a` on DT2 and DN2, `FUN_40004636` on Syntakt 1.42) stores its two
+/// arguments in two .bss globals: `lea (4,sp),a0; move.l (a0),slot0.l; lea (8,sp),a0; move.l (a0),slot1.l; ...`. The slot addresses differ per image.
 const USB_REG_STORE0: [u8; 6] = [0x41, 0xef, 0x00, 0x04, 0x23, 0xd0];
 const USB_REG_STORE1: [u8; 6] = [0x41, 0xef, 0x00, 0x08, 0x23, 0xd0];
 
-/// The addresses of the registration function's two slots, read from its code; `None` when the code is not the known shape.
+/// The addresses of the registration function's two slots, read from its code; `None` when the function is not found or its code is not the known shape.
+/// The entry is found per image by its signature (`resolve_usb_reg`), like every other boot address of this crate.
 pub(crate) fn resolve_usb_slots(main: &[u8], load: u32) -> Option<(u32, u32)> {
+    let entry = resolve_usb_reg(main)?;
     let at = |addr: u32, n: usize| main.get(addr.checked_sub(load)? as usize..)?.get(..n);
-    if at(USB_REG_ENTRY, 6)? != USB_REG_STORE0 || at(USB_REG_ENTRY + 10, 6)? != USB_REG_STORE1 {
+    if at(entry, 6)? != USB_REG_STORE0 || at(entry + 10, 6)? != USB_REG_STORE1 {
         return None;
     }
-    let slot0 = u32::from_be_bytes(at(USB_REG_ENTRY + 6, 4)?.try_into().ok()?);
-    let slot1 = u32::from_be_bytes(at(USB_REG_ENTRY + 16, 4)?.try_into().ok()?);
+    let slot0 = u32::from_be_bytes(at(entry + 6, 4)?.try_into().ok()?);
+    let slot1 = u32::from_be_bytes(at(entry + 16, 4)?.try_into().ok()?);
     Some((slot0, slot1))
 }
 
@@ -350,12 +351,7 @@ mod tests {
     #[test]
     fn usb_slots_are_read_from_the_registration_code() {
         let mut main = image();
-        let at = (USB_REG_ENTRY - LOAD) as usize;
-        let code = [
-            0x41, 0xef, 0x00, 0x04, 0x23, 0xd0, 0x40, 0x96, 0x59, 0xd0, 0x41, 0xef, 0x00, 0x08,
-            0x23, 0xd0, 0x40, 0x96, 0x59, 0xd4,
-        ];
-        main[at..at + code.len()].copy_from_slice(&code);
+        let at = (0x4000_434a - LOAD) as usize;
         assert_eq!(
             resolve_usb_slots(&main, LOAD),
             Some((0x4096_59d0, 0x4096_59d4))
