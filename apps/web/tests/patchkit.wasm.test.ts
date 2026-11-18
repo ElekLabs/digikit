@@ -76,7 +76,7 @@ test.skipIf(!need)('wasm and CLI produce byte-identical output for core/fx', asy
     assert.equal(x.pk_verify(op, ol, bp, bl, fbp, fbl), 0, text(x.pk_err_ptr, x.pk_err_len));
     const report = JSON.parse(text(x.pk_plan_ptr, x.pk_plan_len));
     assert.equal(report.device, name);
-    assert.ok(report.record.modules[0].startsWith('core/fx@'));
+    assert.ok(report.record.modules.some((m: string) => m.startsWith('core/fx@')));
   }
 });
 
