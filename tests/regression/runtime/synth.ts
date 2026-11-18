@@ -276,7 +276,12 @@ export function fullSet(
     // range: no reference or M or V holds it (the references take the lowest numbers of the range, V the pinned numbers above them), so no key of the set is
     // repeated and the plan (E_PLAN_KEY) lets Y through to the row check that the case names.
     ...(machines
-      ? [{ spec: { name: 'cap/full-y', dsp: { image: 64, voices: pinned([g.typeFirst - 1]) } }, want: E_DSP_ROWS as Want }]
+      ? [
+          {
+            spec: { name: 'cap/full-y', dsp: { image: 64, voices: pinned([g.typeFirst - 1]) } },
+            want: E_DSP_ROWS as Want,
+          },
+        ]
       : []),
     { spec: { name: 'cap/full-z', dsp: { image: 64, bss: zLen - 64 } }, want: E_DSP_NOSPACE },
   ];
