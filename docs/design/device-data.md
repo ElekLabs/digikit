@@ -33,6 +33,9 @@ What a device file contains decides what the tools do with the device:
 written; a section may have a role and be read-only, but `main` may not be read-only. `repack` lists roles of read-only sections that a module may store packed
 when it declares that it unpacks them (`[[repack]]` of its `module.toml`, [PATCHING.md](../PATCHING.md) "Repacking a read-only section"); each must be a role with a read-only section. `devdata.rs` `validate` checks that
 the capabilities agree with the other tables (for example `dsp = "none"` forbids a `[[firmware]].dsp` image and `container.dsp`).
+`[patch] site_flash` (boolean, default true when absent): whether the public site (apps/web) may offer a patched image of the device. With `false` the site's Firmware page
+refuses to prepare one ("restore stock" still works) and only the desktop workbench flashes it. `@digi/devices` reads it as `DeviceRecord.siteFlash`; the Firmware page's
+environment (`FirmwareEnv.publicSite`, set by the site only) decides whether the flag applies, so no code names a device. patchkit ignores the key.
 `[storage]` names the backend of each kind of content (`samples`: `stock-rpc`, `digikit` or `stock-slots`; `modules`: `digikit`); `@digi/devices` reads it, the samples code of the apps and `wb` branch on it, never on a device name. `[storage.slots]` (`stock-slots` only): `path`, `count`, `bytes_max` (audio bytes of one sample), `rate`, `channels`, `bits`, `byte_order`, `apply` (`restart`: the device reads the slots only at start).
 
 Readers: Rust embeds the files (`packages/patchkit/build.rs`, `packages/emulator/device-profile`); TS and Nx use `@digi/devices`

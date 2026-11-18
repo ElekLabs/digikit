@@ -78,6 +78,14 @@ export function createFirmwareState({
       });
       return;
     }
+    if (record && env.publicSite && !record.siteFlash && !restore()) {
+      setPrepared({
+        kind: 'error',
+        name,
+        message: `This site does not offer a patched image for the ${record.name} yet: the hardware route is not proven. Restore stock still works.`,
+      });
+      return;
+    }
     setPrepared({ kind: 'working', name });
     try {
       // a device without a boot screen patch set gets the plain device set, whatever the stored toggle says

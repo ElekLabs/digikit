@@ -16,6 +16,11 @@ export interface FirmwareRun {
 
 export interface FirmwareEnv {
   /**
+   * The public site: it honours `[patch] site_flash = false` of a device file and prepares no patched image for that device (restoring stock stays
+   * available). The desktop workbench leaves it out and ignores the flag.
+   */
+  publicSite?: boolean;
+  /**
    * Patch the stock file and check the result (`flash::prepare`), or with `restore` check the stock file itself (`flash::restore`). A failed
    * check is in the result; a file that is no known stock image throws patchkit's text. `set` is the device file's patch set: empty for `device`,
    * `device-introblank` with the Custom boot screen toggle.

@@ -72,6 +72,7 @@ export function createWebFirmwareEnv({
   const kit = senderKit(wasm, createKit);
 
   const webFirmwareEnv: FirmwareEnv = {
+    publicSite: true,
     async prepare(stock, restore, set = '') {
       const w = await patchWorker();
       const id = nextId++;

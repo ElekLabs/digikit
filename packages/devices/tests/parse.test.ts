@@ -24,6 +24,14 @@ describe('parse', () => {
     expect(parse({ 'x.toml': identity('x') }).get('x').level).toBe('identity');
   });
 
+  test('[patch] site_flash defaults to true and must be a boolean', () => {
+    const base = identity('x').replace('short = "x"', 'short = "x"\nsyx_id = 0x30') + '[patch]\ncontainer_max = 1\n';
+    expect(parse({ 'x.toml': base }).get('x').siteFlash).toBe(true);
+    expect(parse({ 'x.toml': base + 'site_flash = false\n' }).get('x').siteFlash).toBe(false);
+    expect(parse({ 'x.toml': identity('x') }).get('x').siteFlash).toBe(true);
+    expect(() => parse({ 'x.toml': base + 'site_flash = "no"\n' })).toThrow(/site_flash/);
+  });
+
   test('files without [device] (the LED maps) are skipped', () => {
     expect(parse({ 'x-leds.toml': '[leds]\na = 1\n', 'x.toml': identity('x') }).ids).toEqual(['x']);
   });

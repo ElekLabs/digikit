@@ -82,3 +82,8 @@ test('the sender comes from the wasm source once, through a stub kit', async () 
   assert.equal(made, 1);
   assert.deepEqual(wasm.asked, ['patchkit.wasm']);
 });
+
+test('the site environment is the public site: it honours site_flash = false of a device file', () => {
+  const env = createWebFirmwareEnv({ workers: createFakeWorkers({}), base: '/site/', wasm: memoryWasmSource() });
+  assert.equal(env.publicSite, true);
+});
