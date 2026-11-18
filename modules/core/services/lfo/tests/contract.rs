@@ -98,6 +98,7 @@ fn fixture(device: u32) -> Fixture {
         bad: module(2, &[(KIND_LFO_SHAPE, &[SHAPE_BAD])], bad),
         // none: `check` refuses a table that is too full or an id kept already, and `apply_record` has no other limit
         bad_late: None,
+        rules: true,
     }
 }
 

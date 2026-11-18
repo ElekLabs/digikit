@@ -3009,7 +3009,7 @@
    "addend": 0,
    "offset": 22,
    "section": ".text._RNvCs1H2YknomaMO_11dkrt_svc_rt4init",
-   "symbol": "_RNvMs3_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "symbol": "_RNvMs5_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "type": "cf.32"
   },
   {
@@ -5172,7 +5172,7 @@
   },
   {
    "align": 2,
-   "hex": "af2d16fc",
+   "hex": "16be0e73",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -5615,7 +5615,7 @@
    "align": 2,
    "hex": "206f0004202800082228000c4e75",
    "kind": "text",
-   "name": ".text._RNvMs3_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "name": ".text._RNvMs5_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "size": 14
   },
   {
@@ -5941,7 +5941,7 @@
    "size": 28
   }
  ],
- "source_sha256": "28178c85b086d68665949d1d67bc7ffe89cbdf69575a7dc437b1f6f0d6b12208",
+ "source_sha256": "2728775e93d5402f0a66748d11ef947f122d4fb52ccbb110e316a414e90e6c81",
  "symbols": [
   {
    "global": false,
@@ -6959,8 +6959,8 @@
   },
   {
    "global": false,
-   "name": "_RNvMs3_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
-   "section": ".text._RNvMs3_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "name": "_RNvMs5_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "section": ".text._RNvMs5_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "value": 0
   },
   {
@@ -7531,7 +7531,7 @@
  "toolchain": {
   "exports": "dk_module dk_sample_pool_add dk_sample_pool_clear dk_sample_pool_info dk_sample_pool_open dk_sample_pool_path dk_sample_pool_peaks dk_sample_pool_peaks_window dk_sample_pool_set dk_sample_pool_status dk_svc_abi pool_done_fill pool_lost_fill",
   "instructions_redecoded": "7123",
-  "isa_check": "7bd49ca9c1c71a5e06c9d6e85f47ee588a23238b9cede2ab7c38ae2773bbb8e4",
+  "isa_check": "3dc2764fcf7070f92610c4ee1bd92c6c9324413449188b942ad227fba458af57",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

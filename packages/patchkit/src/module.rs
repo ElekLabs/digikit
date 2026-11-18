@@ -1023,8 +1023,16 @@ pub fn library_with(
         only,
         defines: &defines,
     };
+    // an extra root inside a repository root is scanned with that root: scanning it again would find each of its modules twice
+    let repo_roots: Vec<_> = ["modules", "tests/fixtures/modules"]
+        .iter()
+        .filter_map(|r| root.join(r).canonicalize().ok())
+        .collect();
     for d in extra {
-        if d.is_dir() {
+        let inside_repo = d
+            .canonicalize()
+            .is_ok_and(|c| repo_roots.iter().any(|r| c.starts_with(r)));
+        if d.is_dir() && !inside_repo {
             lib.extend_unique(Library::scan_in(Some(build), &d, lenient)?.modules)?;
         }
     }

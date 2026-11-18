@@ -367,12 +367,18 @@ pub unsafe fn available<C: CoreApi>(core: &C) -> bool {
     !info(core).is_null()
 }
 
-/// The fixed-size EFFECT record at `b` (its body), checked before anything is written. Pure: the page slots are checked by `apply`.
+/// The fixed-size EFFECT record at `b` (its body), checked before anything is written; the registry's `fxpages` table must be there. The fields are the rule of `check_body`.
 pub unsafe fn check_record<C: CoreApi>(core: &C, b: *const u8) -> i32 {
     let inf = info(core);
     if inf.is_null() {
         return E_NO_REGISTRY;
     }
+    check_body(b)
+}
+
+/// The rule of one EFFECT record at `b` (its body, `LEN_EFFECT - 8` bytes): ranges, texts, knob positions, minimum below maximum with the default inside. Reads nothing but the
+/// body (the page slots are checked by `apply`), so `Fx::validate_records` runs it on a built module.
+pub unsafe fn check_body(b: *const u8) -> i32 {
     let (fx, mix, n) = (rd32(b), rd32(b.add(4)), rd32(b.add(8)) as usize);
     let id = rd32(b.add(12));
     if fx as usize >= MAX_FX || mix > 127 || n > KNOBS || id == 0 || id > 0xffff {

@@ -11,7 +11,7 @@ use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::rd32;
 use dkrt_abi::registry::each;
-use dkrt_abi::service::{check_step, ApplyCtx, CheckCtx, Declare, Service, SettleCtx};
+use dkrt_abi::service::{check_step, ApplyCtx, CheckCtx, Declare, Problem, Service, SettleCtx};
 use dkrt_sdk::records::{KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_sdk::sticky::{assign, clean, Event, Range, MAX_KEYS};
 use dkrt_sdk::*;
@@ -327,23 +327,24 @@ fn provided(at: u32, key: u32) -> bool {
     false
 }
 
-/// A name is 4 printable characters (space to tilde).
-fn name_ok(b: *const u8) -> bool {
-    let mut i = 0;
-    while i < NAME_LEN {
-        let c = unsafe { *b.add(4 + i) };
-        if !(0x20..=0x7e).contains(&c) {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
-
 /// The lfo service.
 pub struct Lfo;
 
+impl Lfo {
+    /// The rule for the shape records of one module (`validate::check_set`); a kind other than the shape record is accepted. `Service::validate_records` is this function,
+    /// and a host tool that has no core (`patchkit records --check`) calls it directly.
+    pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+        if kind == KIND_LFO_SHAPE {
+            crate::validate::check_set(bodies, report);
+        }
+    }
+}
+
 impl<C: CoreApi> Service<C> for Lfo {
+    fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+        Lfo::validate(kind, bodies, report)
+    }
+
     unsafe fn declare(d: &mut Declare) {
         d.kind(KIND_LFO_SHAPE, LEN_LFO_SHAPE);
     }
@@ -388,30 +389,38 @@ impl<C: CoreApi> Service<C> for Lfo {
 
     unsafe fn check(core: &C, step: u32, c: &CheckCtx) -> i32 {
         if step == check_step::RECORDS {
-            // each shape has a key that the module's KEYS entry lists, a printable name, and the key is once in the file
-            let mut r = OK;
-            let mut seen = [0u32; MAX_SHAPES];
+            // the module's shapes meet the rule (`validate`: count, names, key once, samples), and each key is one the module's KEYS entry lists
+            let mut bodies: [&[u8]; MAX_SHAPES + 1] = [&[]; MAX_SHAPES + 1];
             let mut n = 0;
+            let mut r = OK;
             let at = core.boot_index();
             each(c.reg, |kind, b| {
-                if kind == KIND_LFO_SHAPE && r == OK {
-                    let id = rd32(b);
-                    let mut k = 0;
-                    while k < n {
-                        if seen[k] == id {
-                            r = E_TYPE_USED;
-                        }
-                        k += 1;
+                if kind == KIND_LFO_SHAPE {
+                    if n <= MAX_SHAPES {
+                        bodies[n] = core::slice::from_raw_parts(b, crate::validate::BODY_LEN);
                     }
-                    if id == 0 || !name_ok(b) || !provided(at, id) {
+                    n += 1;
+                    if !provided(at, rd32(b)) {
                         r = E_FORMAT;
-                    } else if n < MAX_SHAPES {
-                        seen[n] = id;
-                        n += 1;
                     }
                 }
             });
-            r
+            let mut first = OK;
+            let shown = if n < bodies.len() { n } else { bodies.len() };
+            // more than MAX_SHAPES records: the count problem is the first
+            // a module without shapes has nothing to check (the walker runs this step for every module)
+            if n > 0 {
+                crate::validate::check_set(&bodies[..shown], &mut |p: Problem| {
+                    if first == OK {
+                        first = p.code;
+                    }
+                });
+            }
+            if first != OK {
+                first
+            } else {
+                r
+            }
         } else if step == check_step::ROWS {
             // every key has a wave number, its number is free, and the table has room
             let mut r = OK;

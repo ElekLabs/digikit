@@ -82,18 +82,23 @@ fn src_id() {
     println!("cargo:rustc-env=PATCHKIT_SRC_ID={h:016x}");
 }
 
-/// The `path = "..."` dependencies (normal, build and target tables, not dev-dependencies) of the crate in `dir`, as canonical directories.
+/// The `path = "..."` dependencies (normal, build and target tables, not dev-dependencies; optional ones only with the feature `record-rules`) of the crate in `dir`, as canonical directories.
 fn path_dependencies(dir: &std::path::Path) -> Vec<PathBuf> {
     let toml = dir.join("Cargo.toml");
     println!("cargo:rerun-if-changed={}", toml.display());
     let text = std::fs::read_to_string(&toml).unwrap_or_default();
     let mut live = false;
+    // optional dependencies (patchkit's `record-rules` services) are sources of this build only with the feature
+    let optional_deps_built = std::env::var_os("CARGO_FEATURE_RECORD_RULES").is_some();
     let mut out = vec![];
     for line in text.lines() {
         let t = line.trim();
         if t.starts_with('[') {
             live = t.contains("dependencies") && !t.contains("dev-dependencies");
-        } else if live && let Some(at) = t.find("path = \"") {
+        } else if live
+            && (optional_deps_built || !t.contains("optional = true"))
+            && let Some(at) = t.find("path = \"")
+        {
             let rest = &t[at + 8..];
             if let Some(end) = rest.find('"')
                 && let Ok(p) = dir.join(&rest[..end]).canonicalize()

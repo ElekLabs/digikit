@@ -91,7 +91,9 @@ fn the_link_and_the_job_queue_answer_over_the_c_shape() {
 
 /// A service that declares nothing: only the row and the glue are looked at.
 struct Nothing;
-impl<C: CoreApi> Service<C> for Nothing {}
+impl<C: CoreApi> Service<C> for Nothing {
+    dkrt_abi::accepts_records!();
+}
 
 mod glue {
     // `dk_module`, `dk_svc_abi` and the row, as a service file's crate gets them

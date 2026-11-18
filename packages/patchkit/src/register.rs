@@ -933,6 +933,10 @@ impl Register {
                         knobs,
                     })
                 }
+                // a record of a generic kind (an LFO shape): another service owns it and `patchkit records --check` judges it; no field of the register is read from it
+                _ if dkneeds::KINDS
+                    .iter()
+                    .any(|k| k.0 == kind && k.1 as usize == len) => {}
                 _ => return Err(err!("register section: record kind {kind} length {len}")),
             }
             at += len;

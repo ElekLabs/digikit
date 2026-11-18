@@ -6,14 +6,26 @@ use dkrt_abi::dsp::{DspSec, MAX_FX};
 use dkrt_abi::mem::rd32;
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
-    tick_phase, ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, RowWrite, Service,
+    tick_phase, ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, Problem, RowWrite, Service,
 };
 use dkrt_sdk::*;
 
 /// The fx service; every method works over the core it is given.
 pub struct Fx;
 
+impl Fx {
+    /// The rule for the effect records of one module (`validate::effects`); a kind other than the effect record is accepted. `Service::validate_records` is this function,
+    /// and a host tool that has no core (`patchkit records --check`) calls it directly.
+    pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+        crate::validate::effects(kind, bodies, report)
+    }
+}
+
 impl<C: CoreApi> Service<C> for Fx {
+    fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+        Fx::validate(kind, bodies, report)
+    }
+
     unsafe fn declare(d: &mut Declare) {
         d.kind(fxpage::KIND_EFFECT, fxpage::LEN_EFFECT);
     }
@@ -33,24 +45,31 @@ impl<C: CoreApi> Service<C> for Fx {
             }
             OK
         } else if step == st::EFFECTS {
-            // effect pages need core/fxpages; each record is checked on its own, and an effect has one page
-            let mut fx_seen = 0u32;
-            let mut bad_fx = OK;
+            // effect pages need core/fxpages; the records meet the rule of `validate` (each record, and an effect has one page)
+            let mut bodies: [&[u8]; MAX_FX + 1] = [&[]; MAX_FX + 1];
+            let mut n = 0;
             each(c.reg, |kind, b| {
-                if kind == fxpage::KIND_EFFECT && bad_fx == OK {
-                    let r = fxpage::check_record(core, b);
-                    let fx = rd32(b);
-                    if r == OK && fx < 32 && fx_seen & (1 << fx) != 0 {
-                        bad_fx = E_FORMAT;
-                    } else if r != OK {
-                        bad_fx = r;
+                if kind == fxpage::KIND_EFFECT {
+                    if n <= MAX_FX {
+                        bodies[n] = core::slice::from_raw_parts(b, crate::validate::BODY_LEN);
                     }
-                    if fx < 32 {
-                        fx_seen |= 1 << fx;
-                    }
+                    n += 1;
                 }
             });
-            bad_fx
+            if n == 0 {
+                return OK;
+            }
+            if fxpage::info(core).is_null() {
+                return E_NO_REGISTRY;
+            }
+            let mut first = OK;
+            let shown = if n < bodies.len() { n } else { bodies.len() };
+            crate::validate::effects(fxpage::KIND_EFFECT, &bodies[..shown], &mut |p: Problem| {
+                if first == OK {
+                    first = p.code;
+                }
+            });
+            first
         } else {
             OK
         }

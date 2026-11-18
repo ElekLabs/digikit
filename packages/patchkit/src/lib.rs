@@ -53,6 +53,8 @@ pub mod preflight;
 pub mod prim;
 pub mod protect;
 pub mod record;
+#[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
+pub mod record_rules;
 pub mod records_cli;
 pub mod register;
 pub mod sdkgen;

@@ -1,15 +1,16 @@
 //! `machines` service, record handlers (interface B): the machine, parameter, page, click-action and native-page records of the
 //! `register` section, and the voice parts of the DSP section. The registry walker (`registry.rs`) calls them through
 //! `handlers::Service`; the rows and strings they fill are the registry's state (`DKRT_REG`, a static of this service).
+use crate::validate::{body_len, Acc};
 use crate::{dsp, nativepage, slots};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspSec;
-use dkrt_abi::mem::{cstr_len, iw, rd32};
+use dkrt_abi::mem::{iw, rd32};
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
     check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, ModuleCommitCtx,
-    RowWrite, Service, SettleCtx,
+    Problem, RowWrite, Service, SettleCtx,
 };
 use dkrt_sdk::records::{
     KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
@@ -91,7 +92,19 @@ pub fn owned_ids<C: CoreApi>(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
     types_of(core, owner, out) as u32
 }
 
+impl Machines {
+    /// The rule for the parameter, machine, page and action records of one module (`validate::Acc`); a native page kind and a kind of another service are accepted.
+    /// `Service::validate_records` is this function, and a host tool that has no core (`patchkit records --check`) calls it directly.
+    pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+        crate::validate::records(kind, bodies, report)
+    }
+}
+
 impl<C: CoreApi> Service<C> for Machines {
+    fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+        Machines::validate(kind, bodies, report)
+    }
+
     unsafe fn declare(d: &mut Declare) {
         d.kind(KIND_PARAM, LEN_PARAM);
         d.kind(KIND_MACHINE, LEN_MACHINE);
@@ -261,27 +274,6 @@ unsafe fn fits(inf: *const u32) -> bool {
         || iw(inf, w::PG_DYN_N) as usize > MAX_PAGE)
 }
 
-/// A NUL-terminated printable-ASCII text of exactly `field` bytes, 1 to `field - 1` characters.
-unsafe fn text_ok(p: *const u8, field: usize) -> bool {
-    let n = cstr_len(p, field);
-    if n == 0 || n == field {
-        return false;
-    }
-    let mut i = 0;
-    while i < field {
-        let c = *p.add(i);
-        if i < n {
-            if !(0x20..0x7f).contains(&c) {
-                return false;
-            }
-        } else if c != 0 {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
-
 unsafe fn copy_text(dst: *mut u8, src: *const u8, n: usize) {
     let mut i = 0;
     while i < n {
@@ -309,39 +301,49 @@ unsafe fn counts_of(reg: *const u8) -> (u32, u32, u32, u32, u32) {
     (np, nm, ng, na, nn)
 }
 
-/// The most rows of each kind the registry has.
+/// The records meet the rule of `validate::Acc` (row counts, sizes, fields, texts, a machine key and an action's parameter once), and the native pages are at most two a machine.
+/// The first problem's code is the refusal.
 #[allow(unused_variables)]
 unsafe fn ck_counts(c: &Ctx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let mut acc = Acc::new();
+    let mut first = OK;
+    each(reg, |kind, b| {
+        if let Some(len) = body_len(kind) {
+            // SAFETY: the walker validated the record length of `kind`
+            acc.record(
+                kind,
+                core::slice::from_raw_parts(b, len),
+                &mut |p: Problem| {
+                    if first == OK {
+                        first = p.code;
+                    }
+                },
+            );
+        }
+    });
+    if first != OK {
+        return first;
+    }
     let (np, nm, ng, na, nn) = counts_of(reg);
-    if np as usize > MAX_PARAM || nm as usize > MAX_MACH || ng as usize > MAX_PAGE || nn > 2 * nm {
+    if nn > 2 * nm {
         return E_FORMAT;
     }
     OK
 }
 
-/// An action names a parameter of the file and code inside the image; a parameter has at most one.
+/// An action names a parameter of the file and code inside the image (that a parameter has one action at most is the rule of `ck_counts`).
 #[allow(unused_variables)]
 unsafe fn ck_actions(c: &Ctx) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
-    // an action names a parameter of the file and code inside the image; a parameter has at most one
-    let mut acted = 0u32;
     let mut bad_act = OK;
     each(reg, |kind, b| {
-        if kind == KIND_ACTION && bad_act == OK {
-            let (pi, off) = (rd32(b), rd32(b.add(4)));
-            if pi >= np || pi >= 32 || acted & (1 << pi) != 0 || off >= image_size {
-                bad_act = E_FORMAT;
-            } else {
-                acted |= 1 << pi;
-            }
+        if kind == KIND_ACTION && (rd32(b) >= np || rd32(b.add(4)) >= image_size) {
+            bad_act = E_FORMAT;
         }
     });
-    if bad_act != OK || na > np {
-        return E_FORMAT;
-    }
-    OK
+    bad_act
 }
 
 /// Native pages: each record, the claimed pages, the bindings against the machine's parameters.
@@ -461,26 +463,16 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
     let mut seen_types = [0u32; MAX_MACH];
     let mut ns = 0usize;
     let mut bad = OK;
-    let mut pi = 0u32;
     each(reg, |kind, b| {
         if bad != OK || !(kind == KIND_PARAM || kind == KIND_PAGE || kind == KIND_MACHINE) {
             return; // an action and a native page were checked above, an effect belongs to another service: none has a machine, parameter or page row of this registry
         }
         if kind == KIND_PARAM {
-            let index = rd32(b);
             let (template, slot) = (rd32(b.add(4)), rd32(b.add(8)));
-            let (min, max) = (rd32(b.add(12)) as i32, rd32(b.add(16)) as i32);
-            if index != pi
-                || template >= p_first
-                || slot < slot_base
-                || slot >= slot_base + knobs
-                || min > max
-                || !text_ok(b.add(24), 32)
-                || !text_ok(b.add(56), 16)
-            {
+            // the index is its position, the names and the range: the rule of `ck_counts`; the template and the slot depend on the device
+            if template >= p_first || slot < slot_base || slot >= slot_base + knobs {
                 bad = E_FORMAT;
             }
-            pi += 1;
         } else if kind == KIND_PAGE {
             // machine type (checked against the file's machines below), eight knobs, level, name, title
             let mut j = 0;
@@ -492,11 +484,7 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
                 }
                 j += 1;
             }
-            if rd32(b.add(36)) > 0xffff
-                || !text_ok(b.add(40), MACH_TEXT)
-                || !text_ok(b.add(40 + MACH_TEXT), MACH_TEXT)
-                || knobs as usize != KNOBS
-            {
+            if knobs as usize != KNOBS {
                 bad = E_FORMAT;
             }
         } else {
@@ -504,11 +492,7 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
             let t = crate::assign::resolve(core, rd32(b));
             let clone = rd32(b.add(4));
             let own = rd32(b.add(12));
-            if rd32(b.add(8)) != 255
-                || own > 1
-                || (own == 1 && !has_pages)
-                || rd32(b.add(16)) > 0xffff
-            {
+            if own == 1 && !has_pages {
                 bad = E_FORMAT;
                 return;
             }
@@ -517,6 +501,7 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
                 bad = r;
                 return;
             }
+            // two keys that resolve to one type number (the keys differ: `ck_counts` has the same key twice)
             let mut j = 0;
             while j < ns {
                 if seen_types[j] == t {
@@ -547,9 +532,6 @@ unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
                     return;
                 }
                 j += 1;
-            }
-            if !text_ok(b.add(52), MACH_TEXT) || !text_ok(b.add(52 + MACH_TEXT), MACH_TEXT) {
-                bad = E_FORMAT;
             }
         }
     });
@@ -979,9 +961,37 @@ mod tests {
         s
     }
 
-    /// `n` records of `kind` with an empty body (only their kinds are counted).
+    /// `n` records of `kind` that meet the rule of `validate::Acc` (a native page has an empty body: the rule does not read it). The `i`-th has index `i`, its own key, parameter `i % 32`.
     fn kinds(kind: u32, n: usize) -> Vec<Rec> {
-        std::vec![(kind, std::vec![]); n]
+        (0..n)
+            .map(|i| {
+                if kind == KIND_PARAM {
+                    good_param(i as u32)
+                } else if kind == KIND_MACHINE {
+                    machine(0x100 * (i as u32 + 1), 0, 255, 0, 0)
+                } else if kind == KIND_PAGE {
+                    page(0x10, [0; 8], 0, b"N", b"T")
+                } else if kind == KIND_ACTION {
+                    action(i as u32 % 32, 0)
+                } else {
+                    (kind, std::vec![])
+                }
+            })
+            .collect()
+    }
+
+    /// Whether `Machines::validate` reports a problem for `recs` of `kind` (as `patchkit records --check` does) and whether the load check `ck_counts` refuses them: the same rule.
+    fn refused_by_both(recs: &[Rec]) -> (bool, bool) {
+        let mut problems = 0;
+        for kind in [KIND_PARAM, KIND_MACHINE, KIND_PAGE, KIND_ACTION] {
+            let bodies: Vec<&[u8]> = recs
+                .iter()
+                .filter(|r| r.0 == kind)
+                .map(|r| &r.1[..])
+                .collect();
+            Machines::validate(kind, &bodies, &mut |_| problems += 1);
+        }
+        (problems > 0, check(ck_counts, recs, true) != OK)
     }
 
     /// The words of a `dynreg_info` table: the device has page rows when `pages`; the first parameter code, knob count and slot base of these tests.
@@ -1065,7 +1075,7 @@ mod tests {
     }
 
     fn action(parameter: u32, offset: u32) -> Rec {
-        let mut b = std::vec![0u8; LEN_ACTION as usize];
+        let mut b = std::vec![0u8; LEN_ACTION as usize - 8];
         put(&mut b, 0, parameter);
         put(&mut b, 4, offset);
         (KIND_ACTION, b)
@@ -1081,12 +1091,8 @@ mod tests {
             check(ck_actions, &with(1, &[action(0, 100)]), true),
             E_FORMAT
         );
-        // a parameter the file does not have, and one parameter with two actions
+        // a parameter the file does not have (one parameter with two actions is the rule of `validate`, see `the_validator_and_the_load_check_apply_one_rule`)
         assert_eq!(check(ck_actions, &with(1, &[action(1, 0)]), true), E_FORMAT);
-        assert_eq!(
-            check(ck_actions, &with(2, &[action(0, 0), action(0, 4)]), true),
-            E_FORMAT
-        );
         assert_eq!(
             check(ck_actions, &with(2, &[action(0, 0), action(1, 4)]), true),
             OK
@@ -1110,7 +1116,7 @@ mod tests {
         name: &[u8],
         short: &[u8],
     ) -> Rec {
-        let mut b = std::vec![0u8; LEN_PARAM as usize];
+        let mut b = std::vec![0u8; LEN_PARAM as usize - 8];
         put(&mut b, 0, index);
         put(&mut b, 4, template);
         put(&mut b, 8, slot);
@@ -1126,17 +1132,11 @@ mod tests {
     }
 
     #[test]
-    fn the_parameter_records_are_in_order_with_a_template_a_slot_a_range_and_texts() {
+    fn a_parameter_has_a_template_before_the_run_time_rows_and_a_slot_of_the_page() {
         let one = |r: Rec| check_core(ck_records, &[r], false);
         assert_eq!(
             check_core(ck_records, &[good_param(0), good_param(1)], false),
             OK
-        );
-        // the index is the position among the parameters
-        assert_eq!(one(good_param(1)), E_FORMAT);
-        assert_eq!(
-            check_core(ck_records, &[good_param(0), good_param(0)], false),
-            E_FORMAT
         );
         // the template is a row before the first of the run-time parameters; the slot is one of the page's knobs
         assert_eq!(one(param(0, 100, 10, 0, 127, b"A", b"A")), E_FORMAT);
@@ -1147,22 +1147,10 @@ mod tests {
             E_FORMAT
         );
         assert_eq!(one(param(0, 5, 9 + KNOBS as u32, 0, 127, b"A", b"A")), OK);
-        // min over max; the range of one value is fine
-        assert_eq!(one(param(0, 5, 10, 1, 0, b"A", b"A")), E_FORMAT);
-        assert_eq!(one(param(0, 5, 10, 3, 3, b"A", b"A")), OK);
-        assert_eq!(one(param(0, 5, 10, -5, 5, b"A", b"A")), OK);
-        // the long name is 1 to 31 characters, the short name 1 to 15
-        assert_eq!(one(param(0, 5, 10, 0, 1, b"", b"A")), E_FORMAT);
-        assert_eq!(one(param(0, 5, 10, 0, 1, &[b'n'; 32], b"A")), E_FORMAT);
-        assert_eq!(one(param(0, 5, 10, 0, 1, &[b'n'; 31], b"A")), OK);
-        assert_eq!(one(param(0, 5, 10, 0, 1, b"A", b"")), E_FORMAT);
-        assert_eq!(one(param(0, 5, 10, 0, 1, b"A", &[b's'; 16])), E_FORMAT);
-        assert_eq!(one(param(0, 5, 10, 0, 1, b"A", &[b's'; 15])), OK);
-        assert_eq!(one(param(0, 5, 10, 0, 1, b"A\x07", b"A")), E_FORMAT);
     }
 
     fn page(machine_key: u32, knobs: [u32; 8], level: u32, name: &[u8], title: &[u8]) -> Rec {
-        let mut b = std::vec![0u8; LEN_PAGE as usize];
+        let mut b = std::vec![0u8; LEN_PAGE as usize - 8];
         put(&mut b, 0, machine_key);
         for (j, k) in knobs.iter().enumerate() {
             put(&mut b, 4 + 4 * j, *k);
@@ -1174,7 +1162,7 @@ mod tests {
     }
 
     #[test]
-    fn a_page_knob_names_a_parameter_of_the_file_and_the_page_has_a_level_and_texts() {
+    fn a_page_knob_names_a_parameter_of_the_file_and_the_table_has_the_knob_count() {
         let no_knobs = [0u32; 8];
         let with_knob = |k: u32| {
             let mut knobs = no_knobs;
@@ -1197,15 +1185,6 @@ mod tests {
             E_FORMAT,
             "a knob that is not a parameter of the file"
         );
-        let one = |p: Rec| check_core(ck_records, &[p], true);
-        assert_eq!(one(page(0x10, no_knobs, 0xffff, b"N", b"T")), OK);
-        assert_eq!(one(page(0x10, no_knobs, 0x1_0000, b"N", b"T")), E_FORMAT);
-        assert_eq!(one(page(0x10, no_knobs, 0, b"", b"T")), E_FORMAT);
-        assert_eq!(one(page(0x10, no_knobs, 0, b"N", b"")), E_FORMAT);
-        assert_eq!(
-            one(page(0x10, no_knobs, 0, &[b'n'; MACH_TEXT], b"T")),
-            E_FORMAT
-        );
         // a table that has another knob count than the build refuses every page
         let mut inf = info(true);
         inf[w::KNOBS] = KNOBS as u32 - 1;
@@ -1217,7 +1196,7 @@ mod tests {
 
     /// A machine record of the type key `key` that clones `clone` with the constant word and the own-page flag as given: the raw words that `ck_records` checks first.
     fn machine(key: u32, clone: u32, constant: u32, own: u32, last: u32) -> Rec {
-        let mut b = std::vec![0u8; LEN_MACHINE as usize];
+        let mut b = std::vec![0u8; LEN_MACHINE as usize - 8];
         put(&mut b, 0, key);
         put(&mut b, 4, clone);
         put(&mut b, 8, constant);
@@ -1229,25 +1208,15 @@ mod tests {
     }
 
     #[test]
-    fn a_machine_record_is_refused_for_its_raw_words_and_for_a_type_outside_the_run_time_range() {
+    fn a_machine_is_refused_for_an_own_page_without_page_rows_and_for_a_type_outside_the_run_time_range(
+    ) {
         let one = |r: Rec, pages: bool| check_core(ck_records, &[r], pages);
         // the run-time types are 16 to 23 and the stock machines are the types below 7 (the table of these tests)
-        assert_eq!(
-            one(machine(0x10, 0, 254, 0, 0), true),
-            E_FORMAT,
-            "the constant word is 255"
-        );
-        assert_eq!(
-            one(machine(0x10, 0, 255, 2, 0), true),
-            E_FORMAT,
-            "the own-page flag is 0 or 1"
-        );
         assert_eq!(
             one(machine(0x10, 0, 255, 1, 0), false),
             E_FORMAT,
             "an own page needs a device with page rows"
         );
-        assert_eq!(one(machine(0x10, 0, 255, 0, 0x1_0000), true), E_FORMAT);
         // the key resolves to a type below the run-time range, past it, and the clone source is not a stock machine
         assert_eq!(one(machine(0x07, 0, 255, 0, 0), true), E_TYPE_RANGE);
         assert_eq!(
@@ -1257,6 +1226,88 @@ mod tests {
         );
         assert_eq!(one(machine(0x18, 0, 255, 0, 0), true), E_TYPE_RANGE);
         assert_eq!(one(machine(0x10, 7, 255, 0, 0), true), E_TYPE_RANGE);
+    }
+
+    #[test]
+    fn the_validator_and_the_load_check_apply_one_rule() {
+        let none: [Rec; 0] = [];
+        assert_eq!(refused_by_both(&none), (false, false));
+        let ok = [
+            kinds(KIND_PARAM, 2),
+            kinds(KIND_MACHINE, 2),
+            kinds(KIND_PAGE, 1),
+            kinds(KIND_ACTION, 2),
+        ]
+        .concat();
+        assert_eq!(refused_by_both(&ok), (false, false));
+        let bad: [(&str, Vec<Rec>); 14] = [
+            (
+                "parameter index is not its position",
+                std::vec![good_param(1)],
+            ),
+            (
+                "two parameters with index 0",
+                std::vec![good_param(0), good_param(0)],
+            ),
+            (
+                "minimum over maximum",
+                std::vec![param(0, 5, 10, 1, 0, b"A", b"A")],
+            ),
+            (
+                "empty long name",
+                std::vec![param(0, 5, 10, 0, 1, b"", b"A")],
+            ),
+            (
+                "long name of 32",
+                std::vec![param(0, 5, 10, 0, 1, &[b'n'; 32], b"A")],
+            ),
+            (
+                "unprintable short name",
+                std::vec![param(0, 5, 10, 0, 1, b"A", b"\x07")],
+            ),
+            (
+                "page level over 0xffff",
+                std::vec![page(0x10, [0; 8], 0x1_0000, b"N", b"T")],
+            ),
+            (
+                "page without a title",
+                std::vec![page(0x10, [0; 8], 0, b"N", b"")],
+            ),
+            (
+                "machine constant word",
+                std::vec![machine(0x10, 0, 254, 0, 0)],
+            ),
+            ("machine own flag", std::vec![machine(0x10, 0, 255, 2, 0)]),
+            (
+                "machine level",
+                std::vec![machine(0x10, 0, 255, 0, 0x1_0000)],
+            ),
+            (
+                "same machine key twice",
+                std::vec![machine(0x10, 0, 255, 0, 0), machine(0x10, 0, 255, 0, 0)],
+            ),
+            ("action parameter 32", std::vec![action(32, 0)]),
+            (
+                "one parameter with two actions",
+                std::vec![action(0, 0), action(0, 4)],
+            ),
+        ];
+        for (what, recs) in bad {
+            assert_eq!(refused_by_both(&recs), (true, true), "{what}");
+        }
+        // more rows than the registry has: the first record past the limit is the problem
+        assert_eq!(
+            refused_by_both(&kinds(KIND_PAGE, MAX_PAGE + 1)),
+            (true, true)
+        );
+        assert_eq!(refused_by_both(&kinds(KIND_PAGE, MAX_PAGE)), (false, false));
+        // a body of the wrong size is the validator's problem (the load path never sees one: the walker checks the length)
+        let mut short = good_param(0);
+        short.1.pop();
+        let bodies = [&short.1[..]];
+        let mut n = 0;
+        Machines::validate(KIND_PARAM, &bodies, &mut |_| n += 1);
+        assert_eq!(n, 1);
     }
 
     #[test]

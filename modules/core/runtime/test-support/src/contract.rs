@@ -140,6 +140,8 @@ pub struct Fixture {
     /// A module the service refuses while it applies the records, after the rows of earlier records were written (`None`: the service has no such path; its
     /// `check` covers every limit its `apply` has).
     pub bad_late: Option<Late>,
+    /// The service's `validate_records` refuses some records (it is not `accepts_records!()`): case 1b then also checks that it refuses a fixture record whose body is one byte short.
+    pub rules: bool,
 }
 
 /// A refusal during apply and its reference.
@@ -834,6 +836,7 @@ pub fn locked() -> MutexGuard<'static, ()> {
 pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
     let _g = locked();
     declares_its_kinds::<S>(f);
+    validates_its_fixtures_records::<S>(f);
     check_writes_nothing::<S>(f);
     reload_equivalence::<S>(f);
     another_module_is_untouched::<S>(f);
@@ -853,6 +856,69 @@ fn declares_its_kinds<S: Service<FakeCore>>(f: &Fixture) {
         "{}: declare gives other kinds than [records.kinds]",
         f.name
     );
+}
+
+/// The records of kind `kind` in section `sec` (a module's committed block after its 16-byte header): their bodies, in file order. A record shorter than its 8-byte header, or
+/// past the end of the section, is a defect of the section and fails the case instead of looping.
+fn bodies_of(sec: &[u8], kind: u32) -> Vec<&[u8]> {
+    let mut bodies: Vec<&[u8]> = Vec::new();
+    let mut at = RecordSink::HEADER;
+    while at + 8 <= sec.len() {
+        let word = |o: usize| u32::from_be_bytes(sec[o..o + 4].try_into().unwrap());
+        let len = word(at + 4) as usize;
+        assert!(
+            len >= 8 && at + len <= sec.len(),
+            "the section has a record of length {len} at {at}"
+        );
+        if word(at) == kind {
+            bodies.push(&sec[at + 8..at + len]);
+        }
+        at += len;
+    }
+    bodies
+}
+
+/// Case 1b: `validate_records` accepts the records the fixture's modules produce. The section a module commits is split by record kind, and each kind the service
+/// owns goes through the validator as a set, as `patchkit records --check` does for a built module. A service that owns kinds must see records of at least one of them in
+/// each module (else the case proves nothing). A service with rules (`Fixture::rules`) refuses at least one kind when its first record's body is one byte short.
+fn validates_its_fixtures_records<S: Service<FakeCore>>(f: &Fixture) {
+    let l = Lifecycle::<S>::new(f);
+    for (what, m, rec) in [("A", &f.a, 0), ("B", &f.b, 1)] {
+        let sec = l
+            .load_staged(rec, m)
+            .unwrap_or_else(|e| panic!("{}: module {what} is refused with {e}", f.name));
+        let mut with_records = 0;
+        let mut refused = 0;
+        for &(kind, _) in f.kinds {
+            let bodies = bodies_of(&sec, kind);
+            if bodies.is_empty() {
+                continue;
+            }
+            with_records += 1;
+            let mut problems = Vec::new();
+            S::validate_records(kind, &bodies, &mut |p| problems.push(p.to_string()));
+            assert!(
+                problems.is_empty(),
+                "{}: module {what}: validate_records refuses the records the module commits: {problems:?}",
+                f.name
+            );
+            if f.rules {
+                let mut short = bodies.clone();
+                short[0] = &short[0][..short[0].len() - 1];
+                S::validate_records(kind, &short, &mut |_| refused += 1);
+            }
+        }
+        assert!(
+            !f.rules || refused > 0,
+            "{}: module {what}: validate_records accepts every kind with its first record one byte short",
+            f.name
+        );
+        assert!(
+            f.kinds.is_empty() || with_records > 0,
+            "{}: module {what} commits no record of the kinds the service owns, so validate_records saw none",
+            f.name
+        );
+    }
 }
 
 /// Case 2: `check` writes nothing. The registry check inside the load of each module runs in the state the loader checks in (after the commit, before the apply);

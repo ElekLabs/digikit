@@ -22,7 +22,7 @@ fn main() {
         let path = dir.join(&name);
         println!("cargo:rerun-if-changed={}", path.display());
         let text = std::fs::read_to_string(&path).unwrap();
-        if !text.lines().any(|l| device_header::is_device_header(l)) {
+        if !text.lines().any(device_header::is_device_header) {
             continue;
         }
         let path = path.canonicalize().unwrap();

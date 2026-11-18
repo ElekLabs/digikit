@@ -151,9 +151,11 @@ def main(argv: list[str]) -> int:
         return 0
     import os
 
-    from tools.patchkit import patchkit
+    from tools.patchkit import modroots, patchkit
 
-    roots = [str(base.parent.resolve()), os.environ.get("PATCHKIT_MODULES", "")]
+    # a folder inside a repository root is found through the root; listing it too would find its modules twice
+    new_root = [] if modroots.covered(base.parent) else [str(base.parent.resolve())]
+    roots = [*new_root, os.environ.get("PATCHKIT_MODULES", "")]
     os.environ["PATCHKIT_MODULES"] = os.pathsep.join(r for r in roots if r)
     r = patchkit.run(["gen", "--modules", a.id], capture=True)
     if r.returncode:
