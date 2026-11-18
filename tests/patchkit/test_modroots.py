@@ -52,6 +52,17 @@ def test_a_duplicate_id_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         modroots.manifests()
 
 
+def test_an_extra_root_inside_a_repository_root_is_not_scanned_twice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inside = ROOT / "modules" / "lfo"
+    assert modroots.covered(inside)
+    assert not modroots.covered(ROOT / "tools")
+    monkeypatch.setenv("PATCHKIT_MODULES", str(inside))
+    assert modroots.roots() == [ROOT / r for r in modroots.REPO_ROOTS]
+    modroots.manifests()  # no duplicate id
+
+
 def test_an_extra_root_adds_modules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

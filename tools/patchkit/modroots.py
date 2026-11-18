@@ -1,7 +1,8 @@
 """Module roots and module ids: the one place that maps a module id to its directory and a path to its module.
 
 Roots: `modules/`, `tests/fixtures/modules/`, then the os.pathsep-separated `PATCHKIT_MODULES`. A module's id is the
-`id` in its `module.toml`; it need not equal the directory name. Two modules with one id are an error.
+`id` in its `module.toml`; it need not equal the directory name. Two modules with one id are an error. A `PATCHKIT_MODULES` path inside a repository root is skipped (its modules are
+found through the root).
 """
 
 from __future__ import annotations
@@ -22,10 +23,18 @@ REPO_ROOTS = ("modules", "tests/fixtures/modules")
 _cache: dict[tuple[str, ...], dict[str, Path]] = {}
 
 
+def covered(path: Path | str) -> bool:
+    """Whether `path` is a repository module root or inside one: scanning it again would find each of its modules twice."""
+    p = Path(path).resolve()
+    return any(p.is_relative_to((ROOT / r).resolve()) for r in REPO_ROOTS)
+
+
 def roots() -> list[Path]:
     out = [ROOT / r for r in REPO_ROOTS]
     out += [
-        Path(p) for p in os.environ.get("PATCHKIT_MODULES", "").split(os.pathsep) if p
+        Path(p)
+        for p in os.environ.get("PATCHKIT_MODULES", "").split(os.pathsep)
+        if p and not covered(p)
     ]
     return out
 
