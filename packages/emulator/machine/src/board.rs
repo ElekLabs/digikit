@@ -2587,6 +2587,16 @@ impl Bus for Board {
     }
 }
 
+/// The peer CPU reaches the same 128 KB the board maps at 0x10000000.
+impl crate::peer_cpu::Window for Board {
+    fn read(&mut self, offset: u32, size: u8) -> Option<u32> {
+        self.peer_window_load(offset, size)
+    }
+    fn write(&mut self, offset: u32, size: u8, value: u32) -> bool {
+        self.ram_write(peer::WINDOW_BASE + offset, size, value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3321,15 +3331,5 @@ mod tests {
             edma::CSR_DONE
         );
         assert!(!b.dma59_armed());
-    }
-}
-
-/// The peer CPU reaches the same 128 KB the board maps at 0x10000000.
-impl crate::peer_cpu::Window for Board {
-    fn read(&mut self, offset: u32, size: u8) -> Option<u32> {
-        self.peer_window_load(offset, size)
-    }
-    fn write(&mut self, offset: u32, size: u8, value: u32) -> bool {
-        self.ram_write(peer::WINDOW_BASE + offset, size, value)
     }
 }

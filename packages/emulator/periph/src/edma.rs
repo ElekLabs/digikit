@@ -474,16 +474,16 @@ pub fn software_start(t: &SoftTcd, bus: &mut impl SoftBus) -> SoftOutcome {
         if !nbytes.is_multiple_of(u64::from(ssize)) || !nbytes.is_multiple_of(u64::from(dsize)) {
             bits |= es::NCE;
         }
-        if t.saddr % ssize != 0 {
+        if !t.saddr.is_multiple_of(ssize) {
             bits |= es::SAE;
         }
-        if t.soff.unsigned_abs() as u32 % ssize != 0 {
+        if !(t.soff.unsigned_abs() as u32).is_multiple_of(ssize) {
             bits |= es::SOE;
         }
-        if t.daddr % dsize != 0 {
+        if !t.daddr.is_multiple_of(dsize) {
             bits |= es::DAE;
         }
-        if t.doff.unsigned_abs() as u32 % dsize != 0 {
+        if !(t.doff.unsigned_abs() as u32).is_multiple_of(dsize) {
             bits |= es::DOE;
         }
     }
@@ -553,7 +553,7 @@ pub fn software_start(t: &SoftTcd, bus: &mut impl SoftBus) -> SoftOutcome {
         }
         return outcome;
     }
-    if t.dlast_sga % 32 != 0 {
+    if !t.dlast_sga.is_multiple_of(32) {
         if let SoftOutcome::Done { es, .. } = &mut outcome {
             *es = es::SGE;
         }

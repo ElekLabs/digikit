@@ -137,8 +137,8 @@ mod tests {
     fn wav(ch: u16, rate: u32, frames: &[[i16; 2]]) -> Vec<u8> {
         let mut pcm = Vec::new();
         for f in frames {
-            for c in 0..ch as usize {
-                pcm.extend(f[c].to_le_bytes());
+            for s in f.iter().take(ch as usize) {
+                pcm.extend(s.to_le_bytes());
             }
         }
         let mut v = b"RIFF".to_vec();
