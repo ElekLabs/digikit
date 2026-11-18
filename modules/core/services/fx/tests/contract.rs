@@ -267,10 +267,8 @@ fn fixture(device: u32) -> Fixture {
         b: module(1, keys_b, dyn_fx_gain_b, 3),
         a2: module(0, keys_a, fx_alt, 2),
         enable: &ENABLE,
-        disabled: &[],
         kept,
         kept_dsp,
-        kept_caps: |_, _, _| false,
         // the route of an effect is a setting of the FX ROUTES menu; a module load never writes one
         live: LIVE,
         salt_same: &[("settings", "a load writes no setting")],

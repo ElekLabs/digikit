@@ -69,31 +69,61 @@ unsafe fn reset_row(d: &mut DspState, k: usize, owner: u8, ty: u32, pc: u32) {
     d.row_latched[k] = 0;
 }
 
-/// Take the rows module record `rec` published out of its hands, so the module's code can go: each published row becomes a MISSING placeholder. The disabled word
+/// Take the rows module record `rec` published out of the DSP, so the module's code can go. Outside a reload each published row is freed (the type word first, so the
+/// scan skips the row at once). During a reload (`CoreApi::reload_phase`) each becomes a MISSING placeholder. The disabled word
 /// (word 10) takes the row's type and the pc a harmless value, then the row belongs to no record (`PLACEHOLDER_OWNER`): the dispatch finds the type and renders a
-/// silent block for it, where a freed row would send the type to the first stock machine's sound (docs/plans/extension-model.md E5 item 7). The next module that
-/// claims a voice of the same type takes the placeholder row itself (`claim`) and publishes its words over the disabled one; a placeholder nobody claims stays until
-/// the next boot. A row that was claimed but never published is freed with the module (`release`). False when a write failed: the caller keeps everything.
+/// silent block for it, where a freed row would send the type to the first stock machine's sound (docs/plans/extension-model.md E5 item 7). The new version of
+/// the module that claims a voice of the same type takes the placeholder row itself (`claim`) and publishes its words over the disabled one; `free_placeholders` frees
+/// the rows nobody took over when the reload ends. A row that was claimed but never published is freed with the module (`release`). False when a write failed: the caller keeps everything.
 pub(crate) unsafe fn clear_rows<C: CoreApi>(core: &C, rec: usize) -> bool {
     let d = core.dsp();
     let first = iw(core.dsp_info(), I_VFIRST);
+    let reload = core.reload_phase() != 0;
     let mut k = 0;
     while k < MAX_ROWS {
         if d.row_owner[k] == rec as u8 + 1 && d.row_pub[k] != 0 {
             let at = ROW_WORDS * (first + k as u32);
             let mut seq = Sequence::new();
-            seq.push(WIN_VOICES, at + 10, d.row_type[k]);
-            seq.push(WIN_VOICES, at + 1, PLACEHOLDER_PC);
+            if reload {
+                seq.push(WIN_VOICES, at + 10, d.row_type[k]);
+                seq.push(WIN_VOICES, at + 1, PLACEHOLDER_PC);
+            } else {
+                seq.push(WIN_VOICES, at, FREE_TYPE);
+            }
             if !core.link_run(Owner::Core, &seq) {
                 return false;
             }
-            // the row is invalidated (disabled): `row_pub` stands for the module's own row
-            reset_row(d, k, PLACEHOLDER_OWNER, d.row_type[k], PLACEHOLDER_PC);
-            d.mod_rows[rec] &= !(1 << k);
+            if reload {
+                // the row is invalidated (disabled): `row_pub` stands for the module's own row
+                reset_row(d, k, PLACEHOLDER_OWNER, d.row_type[k], PLACEHOLDER_PC);
+                d.mod_rows[rec] &= !(1 << k);
+            } else {
+                d.row_pub[k] = 0;
+            }
         }
         k += 1;
     }
     true
+}
+
+/// A reload ended (new version loaded or not): free every placeholder row that the new version did not take over, so no row of owner `PLACEHOLDER_OWNER` outlives its
+/// reload. The type word first, then the disabled word; a failed write leaves the row for the next reload's end.
+pub(crate) unsafe fn free_placeholders<C: CoreApi>(core: &C) {
+    let d = core.dsp();
+    let first = iw(core.dsp_info(), I_VFIRST);
+    let mut k = 0;
+    while k < MAX_ROWS {
+        if d.row_owner[k] == PLACEHOLDER_OWNER {
+            let at = ROW_WORDS * (first + k as u32);
+            let mut seq = Sequence::new();
+            seq.push(WIN_VOICES, at, FREE_TYPE);
+            seq.push(WIN_VOICES, at + 10, 0);
+            if core.link_run(Owner::Core, &seq) {
+                reset_row(d, k, 0, FREE_TYPE, 0);
+            }
+        }
+        k += 1;
+    }
 }
 
 /// DSP section, version 3 voices: the state counts must be sane before the range is computed from them.
@@ -274,7 +304,8 @@ pub(crate) unsafe fn claim<C: CoreApi>(core: &C, c: &mut Claim) {
             d.row_latched[at] = 0;
         }
         d.row_owner[at] = rec as u8 + 1;
-        d.row_pub[at] = 0;
+        // 2: the DSP holds a disabled placeholder of this type (`row_step` marks the row live one step earlier)
+        d.row_pub[at] = if fresh { 0 } else { 2 };
         claimed |= 1 << at;
         if fresh {
             row += 1;
@@ -357,21 +388,33 @@ pub(crate) unsafe fn row_step<C: CoreApi>(
     } else {
         (at, d.row_type[row])
     };
-    // from the last step on, the type word may be in the DSP: clear it on failure
-    let published = if want == ROW_STEPS - 1 {
+    // A fresh row goes live at the type word (the last step): from then on the DSP may hold it, so a failure frees it again (`undo`, and `row_pub` marks it
+    // for `clear_rows`). A row that reuses a placeholder (`claim` set `row_pub` to 2) is live, disabled, with its type word in place: it goes live at the word-10
+    // clear, one step before the type write, so that step carries the mark and the undo (the disabled word takes the type again), and the type write, which
+    // changes nothing, has neither.
+    let reused = d.row_pub[row] == 2;
+    let live_step = if reused { ROW_STEPS - 2 } else { ROW_STEPS - 1 };
+    let published = if want == live_step {
         Some(&mut d.row_pub[row])
     } else {
         None
     };
-    // the type word makes the row visible: it ends the row, and a failed sequence frees it again
     let last = want == ROW_STEPS - 1;
+    let has_undo = want == live_step;
+    let undo = if !has_undo {
+        0
+    } else if reused {
+        d.row_type[row]
+    } else {
+        FREE_TYPE
+    };
     Some(RowWrite {
         win: WIN_VOICES,
         word,
         value,
         published,
         last,
-        has_undo: last,
-        undo: if last { FREE_TYPE } else { 0 },
+        has_undo,
+        undo,
     })
 }

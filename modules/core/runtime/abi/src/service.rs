@@ -547,6 +547,9 @@ pub trait Service<C: CoreApi> {
     /// module is on a route). The reload job asks every service after the generic refusals (`reload::refusal`). A service with nothing to wait for writes
     /// `dkrt_abi::accepts_reload!();`.
     unsafe fn reload_refusal(core: &C, owner: u8) -> i32;
+    /// A reload of a module ended, with the new version loaded or not: give back what this service kept for the module during the reload (a placeholder row) that
+    /// the new version did not take over. Called on every service that is loaded, once per reload.
+    unsafe fn reload_done(core: &C) {}
     /// The service's declarations (`Declare`): called once at the runtime's init; the runtime compares them with the service's table.
     unsafe fn declare(d: &mut Declare) {}
     /// One step of the validation (`check_step`) for this service's records. Writes nothing.
@@ -645,6 +648,7 @@ pub struct ServiceRow {
     on_loaded: unsafe extern "C" fn(*const c_void, usize),
     settle: unsafe extern "C" fn(*const c_void, *const SettleCtx),
     reload_refusal: unsafe extern "C" fn(*const c_void, u8) -> i32,
+    reload_done: unsafe extern "C" fn(*const c_void),
     module_begin: unsafe extern "C" fn(*const c_void, usize),
     module_commit: unsafe extern "C" fn(*const c_void, usize, *const ModuleCommitCtx) -> i32,
     tick: unsafe extern "C" fn(*const c_void, u32),
@@ -736,6 +740,9 @@ mod thunk {
         owner: u8,
     ) -> i32 {
         S::reload_refusal(&*(core as *const C), owner)
+    }
+    pub unsafe extern "C" fn reload_done<C: CoreApi, S: Service<C>>(core: *const c_void) {
+        S::reload_done(&*(core as *const C))
     }
     pub unsafe extern "C" fn module_begin<C: CoreApi, S: Service<C>>(
         core: *const c_void,
@@ -833,6 +840,7 @@ impl ServiceRow {
             on_loaded: thunk::on_loaded::<C, S>,
             settle: thunk::settle::<C, S>,
             reload_refusal: thunk::reload_refusal::<C, S>,
+            reload_done: thunk::reload_done::<C, S>,
             module_begin: thunk::module_begin::<C, S>,
             module_commit: thunk::module_commit::<C, S>,
             tick: thunk::tick::<C, S>,
@@ -1086,6 +1094,15 @@ impl ServiceTable {
             i += 1;
         }
         OK
+    }
+    /// `Service::reload_done` on every row, in table order.
+    #[inline]
+    pub unsafe fn reload_done(&self) {
+        let mut i = 0;
+        while i < self.rows.len() {
+            (self.row(i).reload_done)(self.core);
+            i += 1;
+        }
     }
     /// `Service::module_begin` on every row, in table order.
     #[inline]

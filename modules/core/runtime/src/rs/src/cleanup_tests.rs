@@ -433,17 +433,12 @@ unsafe fn successful_case(fx: bool, published: bool) {
     assert!(!entry::has_tick(0));
     assert_eq!(st().modules[0].used, 0);
     assert_eq!(dsp::ds().mod_len[0], 0);
-    // a published voice row is parked as a MISSING placeholder (no module owns it, the type stays silent); an effect row and a row that never went out are freed
-    let parked = published && !fx;
-    assert_eq!(
-        (dsp::ds().row_owner[0], dsp::ds().fx_owner[0]),
-        (if parked { dkrt_abi::dsp::PLACEHOLDER_OWNER } else { 0 }, 0)
-    );
+    assert_eq!((dsp::ds().row_owner[0], dsp::ds().fx_owner[0]), (0, 0));
     assert_eq!(dsp::cleanup_test_first_fit(256, 64), Some(0));
     assert!(LINK.events.contains(&Event::Fini));
     assert!(LINK.events.contains(&Event::Registry));
     assert!(LINK.events.contains(&Event::Free(CF)));
-    assert_eq!(if fx { dsp::ds().fx_pc[0] } else { dsp::ds().row_pc[0] }, if parked { dkrt_abi::dsp::PLACEHOLDER_PC } else { 0 });
+    assert_eq!(if fx { dsp::ds().fx_pc[0] } else { dsp::ds().row_pc[0] }, 0);
     assert_eq!(LINK.events.contains(&Event::Free(IMAGE)), !published);
     assert_eq!(dsp::ds().phase, dsp::PH_SEND);
     assert_eq!(dsp::ds().pending.rec, 1);
@@ -456,7 +451,7 @@ fn acknowledged_voice_cleanup_reclaims_and_advances_queue() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         successful_case(false, true);
-        assert_eq!(LINK.accepted, 2); // the placeholder's disabled word and pc (the type word stays)
+        assert_eq!(LINK.accepted, 1);
     }
 }
 #[test]

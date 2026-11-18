@@ -136,7 +136,15 @@ fn a_reload_is_refused_while_the_module_has_a_published_effect_row() {
         core.dsp().fx_route[1] = route;
         assert_eq!(ask(owner), dkrt_sdk::E_RELOAD_ROUTED, "route {route}");
     }
-    assert_eq!(ask(owner + 1), OK, "another module's reload is not held up by it");
+    assert_eq!(
+        ask(owner + 1),
+        OK,
+        "another module's reload is not held up by it"
+    );
     core.dsp().fx_pub[1] = 0;
-    assert_eq!(ask(owner), OK, "a row that was claimed and never published runs nothing");
+    assert_eq!(
+        ask(owner),
+        OK,
+        "a row that was claimed and never published runs nothing"
+    );
 }
