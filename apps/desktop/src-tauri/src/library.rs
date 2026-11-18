@@ -424,7 +424,7 @@ pub async fn patchkit_wasm() -> Result<tauri::ipc::Response, String> {
     .map_err(|e| e.to_string())?
 }
 
-/// The bind bundle of the site build, `apps/web/public/modules/bind.json` (`{ports, fw}`, written by `apps/web/scripts/gen-modules.mjs`): what `pk_bind` reads
+/// The bind bundle of the site build, `apps/web/public/modules/bind.json` (`{ports, fw}`, written by `apps/web/scripts/gen-bind.mjs`, Nx target `@digi/web:bind-bundle`): what `pk_bind` reads
 /// beside the user's stock image to bind a service file. It holds no firmware.
 #[tauri::command]
 pub async fn bind_bundle() -> Result<tauri::ipc::Response, String> {
@@ -432,12 +432,7 @@ pub async fn bind_bundle() -> Result<tauri::ipc::Response, String> {
         let path = root()?.join("apps/web/public/modules/bind.json");
         std::fs::read(&path)
             .map(tauri::ipc::Response::new)
-            .map_err(|e| {
-                format!(
-                    "{}: {e} (build it: node apps/web/scripts/gen-modules.mjs)",
-                    path.display()
-                )
-            })
+            .map_err(|e| format!("{}: {e}", path.display()))
     })
     .await
     .map_err(|e| e.to_string())?

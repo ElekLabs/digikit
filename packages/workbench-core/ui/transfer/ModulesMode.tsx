@@ -38,6 +38,7 @@ import {
   installModules,
   installServices,
   serviceRefusalText,
+  installOutcome,
   localTags,
   tickedFit,
   tickedLoad,
@@ -111,9 +112,14 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
           services,
         ),
       );
+      let done = DONE_ON_CARD;
       await job(
-        () => transferBackend.install(modules, onEvent),
-        () => DONE_ON_CARD,
+        async () => {
+          const out = installOutcome(await transferBackend.install(modules, onEvent), DONE_ON_CARD);
+          if ('error' in out) throw new Error(out.error);
+          done = out.message;
+        },
+        () => done,
       );
       setTicks(new Set<string>());
     });

@@ -35,9 +35,17 @@ import {
 } from '../modules/dktransfer';
 import { RPC_SOFTWARE_VERSION, parseSoftwareVersion } from './connection-core';
 import type { ConnectionApp } from './connection-state';
+import type { ServiceRefusal } from '../modules/services';
 import type { WasmSource } from '../wasm-source';
 import type { TransferEnv } from './env';
 import { targetLabel, type TargetApp } from './target';
+
+/** What an install did: the modules whose bytes were sent, the modules verified already on the card (same hash), and the modules refused by the service check. */
+export interface InstallResult {
+  uploaded: string[];
+  onCard: string[];
+  refused: ServiceRefusal[];
+}
 
 export interface BackendDeps {
   env: TransferEnv;
@@ -223,11 +231,12 @@ export function createTransferBackend({
       return libraryView(device, library);
     },
     /** Upload and VERIFY the modules (the same file hash is not sent again), with the services they need when the library has them. The device's selection is not touched. */
-    async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<void> {
+    async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<InstallResult> {
       const { s, info } = await opened();
       const library = await loadLibrary(info.port);
       const deps = await installDeps(info.port);
-      await asked(() => install(s, modules, library, onEvent, deps));
+      const out = await asked(() => install(s, modules, library, onEvent, deps));
+      return { uploaded: out.uploaded, onCard: out.onCard, refused: out.refused ?? [] };
     },
     /**
      * The Flash job's share, once the flashed runtime answers (it may still be booting: asked again for about a minute): the services the modules on

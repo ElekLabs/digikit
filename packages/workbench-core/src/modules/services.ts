@@ -44,7 +44,8 @@ export interface ServiceBinder {
   bind(dks: Uint8Array, firmwareHash: string): Promise<Uint8Array>;
 }
 
-export type ServiceRefusalKind = 'missing' | 'version' | 'fingerprint' | 'unknown-hash' | 'too-many' | 'no-stock';
+export type ServiceRefusalKind =
+  'missing' | 'version' | 'fingerprint' | 'unknown-hash' | 'too-many' | 'no-stock' | 'bind-failed';
 
 export interface ServiceRefusal {
   module: string;
@@ -54,6 +55,10 @@ export interface ServiceRefusal {
   have?: string;
   builtFor?: string;
   runtime?: string;
+  /** `bind-failed`: why the service file could not be bound. */
+  error?: string;
+  /** `bind-failed`: `bind-data` when the bind data could not be loaded (the text then names the command that builds it). */
+  hint?: 'bind-data';
 }
 
 export type ServiceState = 'not on device' | 'on device' | 'differs';

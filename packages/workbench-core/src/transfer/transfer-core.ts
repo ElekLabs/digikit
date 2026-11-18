@@ -115,6 +115,12 @@ export function serviceRefusalText(r: ServiceRefusal): string {
         `${r.module} not installed. It needs the ${r.service} service, and the workbench prepares services from your own firmware file. ` +
         `Choose that file once on the Firmware page. Nothing was uploaded for ${r.module}.`
       );
+    case 'bind-failed':
+      return (
+        `${r.module} not installed. The ${r.service} service could not be prepared: ${r.error ?? 'unknown error'}. ` +
+        `Nothing was uploaded for ${r.module}.` +
+        (r.hint === 'bind-data' ? ' Build the bind data with: pnpm nx:pilot run @digi/web:bind-bundle.' : '')
+      );
     default:
       return `${r.module} not installed. It needs the ${r.service} service, which this workbench does not have.`;
   }
@@ -173,6 +179,20 @@ export function eventText(e: TransferEvent): string {
     default:
       return e.event;
   }
+}
+
+/**
+ * The end of an install from its result: nothing uploaded, nothing already on the card and something refused is an error (a short summary
+ * naming the modules; the `refuse` events carry each refusal line); some refused adds the names to the done text; otherwise `done`.
+ */
+export function installOutcome(
+  r: { uploaded: string[]; onCard: string[]; refused: ServiceRefusal[] },
+  done: string,
+): { error: string } | { message: string } {
+  if (r.refused.length === 0) return { message: done };
+  const names = [...new Set(r.refused.map((x) => x.module))].join(', ');
+  if (r.uploaded.length === 0 && r.onCard.length === 0) return { error: `nothing installed: ${names}` };
+  return { message: `${done} Not installed: ${names}.` };
 }
 
 /** The text after a successful install. */
