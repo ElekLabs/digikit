@@ -1317,6 +1317,25 @@ mod tests {
     }
 
     #[test]
+    fn a_word_at_the_end_of_bss_is_shifted_and_one_past_it_is_refused() {
+        // old 8 + bss 16 = 24 (0x18): a pointer to the end of `.bss` (a loop bound) is legal and moves with `.bss`
+        let mut image = vec![0, 0, 0, 0x18, 0, 0, 0, 0];
+        let old = image.len();
+        let dkm = synth_service(image.clone(), vec![(0, None)], 16);
+        image.extend_from_slice(&[0; 4]);
+        shift_bss_words(&mut image, &dkm, old).unwrap();
+        assert_eq!(
+            &image[0..4],
+            &[0, 0, 0, 0x1c],
+            "moved by the 4 bytes of growth"
+        );
+        let mut image = vec![0, 0, 0, 0x19, 0, 0, 0, 0];
+        let dkm = synth_service(image.clone(), vec![(0, None)], 16);
+        image.extend_from_slice(&[0; 4]);
+        assert!(shift_bss_words(&mut image, &dkm, old).is_err());
+    }
+
+    #[test]
     fn a_pc_relative_displaced_instruction_is_refused() {
         // bne.w (4 bytes) ; nop ; nop ; nop: the branch becomes the 32-bit form whose displacement depends on where it runs
         let code = [0x66, 0x00, 0x00, 0x20, 0x4e, 0x71, 0x4e, 0x71, 0x4e, 0x71];

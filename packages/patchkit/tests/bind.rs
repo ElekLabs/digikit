@@ -308,10 +308,10 @@ fn raw_hook(raw: &[u8], reg: &Registry) -> (String, Vec<String>, patchkit::apply
         else {
             continue;
         };
-        // a hook that declares exits already is left for the real services (the test adds its own `exits`)
+        // a hook that declares exits or a tail already is left for the real services (the test adds its own `exits`)
         let at = text.find(&key).unwrap();
         let block = &text[at..text[at..].find("[[").map_or(text.len(), |e| at + e)];
-        if block.contains("exits =") {
+        if block.contains("exits =") || block.contains("tail =") {
             continue;
         }
         let mut decls = texts.clone();

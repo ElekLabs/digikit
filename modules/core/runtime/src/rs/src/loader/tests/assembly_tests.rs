@@ -665,10 +665,46 @@ fn an_effect_loads_with_the_fx_service_file() {
 fn an_lfo_loads_with_the_lfo_service_file() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        // the image half (core/lfo) has the six slots of the device, kind 1 in the info table; `fits` loads the file, whose declared fills must name them, and installs each
+        let image = Image::read(*dev, "emulator");
+        for site in ["tick_call", "tick_slew", "tick_start", "read_call", "read_slew", "read_start"] {
+            let name = std::format!("lfo_{}_{site}", dev.name);
+            assert!(image.entries.iter().any(|e| e.0 == name && e.2 == 1), "{}: no slot {name} in the image", dev.name);
+        }
         unsafe {
             fits(*dev, "emulator", &[&LFO_SHAPE], &["lfo"]);
         }
         let _ = clean_state();
+        // the UI-task hooks: the bound file has one BIND item for each hook the device has (the name formatter, the T1 range accessor and the page cell's vector pick; the Digitone II also its three-character
+        // formatter), each over the stock bytes the bind compared with the firmware: `link.w A6,-0x1c; moveq 6,D0` and `move.l D2,-(SP); move.l 8(SP),D1`
+        let bound = service_file(*dev, "lfo", "core/services/lfo");
+        let table = table_of(&bound);
+        let keys = Keys::parse(&table).unwrap();
+        let mut got = Vec::new();
+        let mut i = 0;
+        while let Some(b) = keys.bind(i) {
+            got.push((b.site, b.stock[..b.len as usize].to_vec()));
+            i += 1;
+        }
+        let name = |h: &str| name_hash(std::format!("cf.lfo.hook.{h}").as_str());
+        let mut want = std::vec![
+            (name("wave_name"), std::vec![0x4e, 0x56, 0xff, 0xe4, 0x70, 0x06]),
+            (name("t1_range"), std::vec![0x2f, 0x02, 0x22, 0x2f, 0x00, 0x08]),
+            // the vector pick of the page's cell: `addi.l #TABLE,D6` with the base of the firmware's RAM table of tile vectors (the hook's tail replays it)
+            (
+                name("graph_vec"),
+                [0x06u8, 0x86]
+                    .into_iter()
+                    .chain(if dev.name == "dn2" { 0x4450_8b68u32 } else { 0x44d2_e37cu32 }.to_be_bytes())
+                    .collect(),
+            ),
+        ];
+        if dev.name == "dn2" {
+            want.push((name("wave_name3"), std::vec![0x4e, 0x56, 0xff, 0xe4, 0x70, 0x06]));
+        }
+        got.sort();
+        want.sort();
+        assert_eq!(got, want, "{}: the BIND items of lfo.dks", dev.name);
     }
 }
 

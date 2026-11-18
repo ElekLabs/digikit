@@ -92,3 +92,27 @@ impl KeysCopy {
         Ok(k)
     }
 }
+
+/// The keys of group `kind` in a header table (`table` empty or damaged: none), at most 8, into `out`; their count. The core reads the table, whoever uses its
+/// keys: a service asks for the group of its own kind (`CoreApi::keys_of`).
+pub fn keys_of(table: &[u8], kind: u32, out: &mut [u32; 8]) -> usize {
+    let keys = match dkneeds::keys::Keys::parse(table) {
+        Ok(k) => k,
+        Err(_) => return 0,
+    };
+    let mut n = 0;
+    let mut g = 0;
+    while let Some((k, list)) = keys.group(g) {
+        g += 1;
+        if k != kind {
+            continue;
+        }
+        let mut j = 0;
+        while j < list.len() && n < out.len() {
+            out[n] = list.get(j);
+            n += 1;
+            j += 1;
+        }
+    }
+    n
+}

@@ -213,6 +213,18 @@ sound_off = 0x34
 sound_stride = 0x450
 # The number of s16 parameter words in a Sound object's array (the stock getter's bound; finding 02): the debug log's parameter watch reads them.
 sound_words = 71
+# The array the LFO tick adds its output to, track 1 word 0 (finding 149, "Where the output lands": the smoother's return value plus 0x22; word i at +2 i, track t at +2 * sound_words * t),
+# and the phase accumulator (u32) of LFO 1 of voice slot 0 in the tick's state. The device tests of the LFO read them.
+# The LFO state belongs to a voice slot, not a track: slot s is at lfo_phase + lfo_phase_stride * s. This device has one voice per track (track 1 uses slot 0).
+# The live row holds the bare base for part of every handler run; the DSP transmit frame holds the final values until the next run: lfo_frame is Sound index 25 of voice
+# slot 0 there (frame 0x80005348 + 0xda), slot s at lfo_frame + lfo_frame_stride * s, and lfo_frame_words indices (25 on) are copied after the tick.
+lfo_live = 0x80005b72
+lfo_phase = 0x44e66e78
+lfo_phase_stride = 0x78
+lfo_slots = 16
+lfo_frame = 0x80005422
+lfo_frame_stride = 0x60
+lfo_frame_words = 10
 send_template = 0x44
 send_indices = [69, 70]
 # An index of the array that nothing reads or writes either (Fx[70]; poked in the emulator without any effect, finding 61): core/fxpages keeps a mark there, set when it gave an effect row its defaults
@@ -281,15 +293,15 @@ dsp_l2_excludes = [[0x200FA000, 0x200FE000]]
 # another). Both are the flash-image roots of the rt021 images for now. The two sets are the same
 # today (core/input and core/sample-pool, the stock sample pool adapter, are in both); a module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
 [patch_sets]
-emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
+emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool"]
 # Real-device image. core/usb-bulk (inert until the usb-fast module is selected) and core/plusdrive-write (the +Drive writes usb-fast uses) are in: usb-fast requires both. core/usb-bulk-audio is in too: the bulk OUT interface in USB AUDIO/MIDI, so usb-fast works without changing USB CONFIG.
-device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
+device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
 # `device` plus the optional black intro (core/introblank): the Workbench Firmware page picks it with its "Custom boot screen" toggle.
-device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
+device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
 # Same roots as `emulator`; the name stays for the per-track sample tests (API 1.5).
-sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
+sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool"]
 # `emulator` plus core/overdrive (the OVR TYPE device test).
-overdrive-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/overdrive"]
+overdrive-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool", "core/overdrive"]
 
 # The input backend core/input uses to press keys and turn encoders from software (docs/plans/remote-control.md). The profile chooses; `panel-uart`: the panel
 # MCU's UART packets are decoded by the firmware's own key and encoder decoders, which core/input calls (anchors by hash in the port files).

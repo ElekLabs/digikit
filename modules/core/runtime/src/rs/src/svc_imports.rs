@@ -22,6 +22,10 @@ pub mod shims {
         REAL_CORE.boot_index()
     }
     #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_keys_of(at: u32, kind: u32, out: *mut u32) -> u32 {
+        REAL_CORE.keys_of(at, kind, &mut *(out as *mut [u32; 8])) as u32
+    }
+    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_legacy_state(out: *mut u8) {
         let b = REAL_CORE.legacy_state();
         let mut i = 0;

@@ -112,6 +112,8 @@ pub struct FakeCore {
     pub running: Cell<u8>,
     /// The selection index of the module being loaded (`CoreApi::boot_index`).
     pub boot_index: Cell<u32>,
+    /// What `CoreApi::keys_of` hands out: (selection index, kind, keys). Set with `set_keys`; no entry: none.
+    pub keys: RefCell<Vec<(u32, u32, Vec<u32>)>>,
     /// The bytes `CoreApi::legacy_state` hands out; `legacy_state_clear` zeroes them (and answers `legacy_clear_result`).
     pub legacy: Cell<[u8; 32]>,
     pub legacy_clear_result: Cell<i32>,
@@ -138,6 +140,13 @@ pub struct FakeCore {
 }
 
 impl FakeCore {
+    /// The module at selection index `at` provides these keys of record kind `kind` (`CoreApi::keys_of`).
+    pub fn set_keys(&self, at: u32, kind: u32, keys: &[u32]) {
+        let mut k = self.keys.borrow_mut();
+        k.retain(|(a, kd, _)| !(*a == at && *kd == kind));
+        k.push((at, kind, keys.to_vec()));
+    }
+
     /// The image has the table `dynreg_info` with these words (word 0, the magic, is set here): `dkrt_svc_params::dynreg` finds it through `CoreApi::info`.
     pub fn set_dynreg(&mut self, mut table: Vec<u32>) {
         table[0] = 0x4459_4e52;
@@ -155,6 +164,7 @@ impl FakeCore {
             source: Cell::new(0),
             running: Cell::new(0),
             boot_index: Cell::new(u32::MAX),
+            keys: RefCell::new(Vec::new()),
             legacy: Cell::new([0; 32]),
             legacy_clear_result: Cell::new(0),
             put_result: Cell::new(0),
@@ -270,6 +280,21 @@ impl dkrt_abi::mem::FwMem for FakeCore {
 impl CoreApi for FakeCore {
     fn boot_index(&self) -> u32 {
         self.boot_index.get()
+    }
+    fn keys_of(&self, at: u32, kind: u32, out: &mut [u32; 8]) -> usize {
+        match self
+            .keys
+            .borrow()
+            .iter()
+            .find(|(a, k, _)| *a == at && *k == kind)
+        {
+            Some((_, _, v)) => {
+                let n = v.len().min(8);
+                out[..n].copy_from_slice(&v[..n]);
+                n
+            }
+            None => 0,
+        }
     }
     fn legacy_state(&self) -> [u8; 32] {
         self.legacy.get()

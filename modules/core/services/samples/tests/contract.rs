@@ -24,6 +24,7 @@ fn module(sel: u32, local: u32, init: fn(&mut Init)) -> Module {
     Module {
         sel,
         keys,
+        groups: &[],
         init,
         dsp: Dsp {
             bank: Some(local),

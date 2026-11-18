@@ -152,6 +152,7 @@ fn add_hook(reg: &mut Registry, img: &str, name: &str, site: &str, offset: i64, 
             site: site.into(),
             offset,
             mode: mode.into(),
+            clobbers: vec![],
         });
     }
 }

@@ -105,6 +105,7 @@ files = [
     "tools/coldfire/cfdb.py",
     "tools/coldfire/cfisa/gen.py",
     "tools/coldfire/cfisa/oracle.py",
+    "tools/coldfire/liveness.py",
     "tools/emulator/live_audio.py",
     "tools/sharc_dev/sharc.py",
     "tools/sharc_dev/sharc_core",

@@ -84,6 +84,9 @@ pub struct Hook {
     pub offset: i64,
     /// `before` (displaced instructions still run), `replace` (they are dropped) or `retarget`
     pub mode: String,
+    /// `regs.clobbers` of the declaration (devices/fw), as written: registers or ranges like `d0-d1`. A guarded stub's scratch register is one of them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clobbers: Vec<String>,
 }
 
 impl Port {

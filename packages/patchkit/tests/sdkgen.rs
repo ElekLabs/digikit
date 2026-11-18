@@ -180,7 +180,7 @@ fn service_imports_have_a_service_a_context_a_since_and_a_missing_stub() {
         ("context = \"io-step\"", "context = \"anywhere\""),
         (
             "since = \"0.7.0\"\ncontext = \"isr\"",
-            "since = \"0.9.0\"\ncontext = \"isr\"",
+            "since = \"0.99.0\"\ncontext = \"isr\"",
         ),
         (
             "since = \"0.7.0\"\ncontext = \"isr\"",
@@ -330,4 +330,25 @@ fn a_bad_wrapper_is_refused() {
     assert_ne!(bad, text);
     let e = sdkgen::render(&bad).unwrap_err().0;
     assert!(e.contains("`wrapper`"), "{e}");
+}
+
+#[test]
+fn the_table_floor_has_the_major_and_minor_of_the_runtime_version() {
+    let text = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
+    // the checked-in file passes (every parse in this file already needs that); a MINOR bump of `version` without `table` is refused
+    let version = text
+        .lines()
+        .find(|l| l.starts_with("version = \""))
+        .and_then(|l| l.split('"').nth(1))
+        .unwrap();
+    let parts: Vec<u32> = version.split('.').map(|p| p.parse().unwrap()).collect();
+    let next = format!("{}.{}.0", parts[0], parts[1] + 1);
+    let bumped = text.replacen(
+        &format!("version = \"{version}\""),
+        &format!("version = \"{next}\""),
+        1,
+    );
+    assert_ne!(bumped, text);
+    let e = sdkgen::fx(&bumped).err().expect("a stale floor is refused");
+    assert!(e.to_string().contains("another MAJOR.MINOR"), "{e}");
 }

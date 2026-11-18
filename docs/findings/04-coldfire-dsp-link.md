@@ -3114,8 +3114,17 @@ below, by measurement]**:
 
 | device | Fx array index `k` | TX frame offset | DSP address of the frame copy |
 |---|---|---|---|
-| DT2 | 25 .. 69 | `0x6da + 2*(k-25)` | `0x2558dc + offset` |
-| DN2 | 25 .. 69 (**[C]** 2026-10-21, finding 53: fx[70..100] are not sent) | `0x9fa + 2*(k-25)` | `0x25c48c + offset` |
+| DT2 | 25 .. 69 | `0xda + 0x60*s + 2*(k-25)` with `s` = 16 (the Fx row): `0x6da + 2*(k-25)` | `0x2558dc + offset` |
+| DN2 | 25 .. 69 (**[C]** 2026-10-21, finding 53: fx[70..100] are not sent) | `0xda + 0x92*s + 2*(k-25)` with `s` = 16: `0x9fa + 2*(k-25)` | `0x25c48c + offset` |
+
+The frame holds one row per voice slot `s` (0..15) and then the Fx row (`s` = 16). The memcpy of Sound indices 25..
+from the live row (DT2 0x80005b72, DN2 0x80006906) fills row `s`: DT2 at 0x4002eb8c (destination A4 + 0xda, source
+A5 + 0x54, 0x14 bytes = indices 25..34, 16 rows, A5 += 0x8e, A4 += 0x60); DN2 at 0x40027526 (0x52 bytes = indices
+25..65, A5 += 0xca, A4 += 0x92). The frame is sent at the top of the next handler run: DT2 1.17
+`FUN_400cd420(0x802, 0x80005348, 0xabc, 0x8000488c)`, DN2 1.12 `FUN_400cf922(0xa80, 0x80005e60, 0xabc, 0x800053a4)`.
+So the ColdFire address of frame word `k` of row `s` is, on DT2 1.17, `0x80005348 + 0xda + 0x60*s + 2*(k-25)` and,
+on DN2 1.12, `0x80005e60 + 0xda + 0x92*s + 2*(k-25)`. The offsets measured below are the Fx row; the formula is
+read from the disassembly **[D]**. The frame bases are 1.17 and 1.12 only; the 1.16/1.11 bases are not recorded here.
 
 Checked offsets, DT2: fx[26] `0x6dc`, fx[35] `0x6ee`, fx[36] `0x6f0`, fx[39] `0x6f6`, fx[42] `0x6fc`, fx[43] `0x6fe`,
 fx[44] `0x700`, fx[45] `0x702`, fx[60] `0x720`, fx[61] `0x722`, fx[62] `0x724`, fx[63] `0x726`, fx[64] `0x728`,

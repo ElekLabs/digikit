@@ -6,14 +6,14 @@ import type { PatchedSession } from '@digi/regression/support.ts';
 import { DEBUG_MODULE, installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { boundService, neededServices } from '@digi/regression/runtime/service-files.ts';
 import { entry, nameHash, patched } from '../refusal/dkm-patch.ts';
 
 const A = 'test/lfo-shape';
 /** The same file under another module name: the same shape key, so a second owner of it. */
 const B = 'test/lfo-shape-copy';
-/** The lfo service is a file of the card, `services/lfo.dks` (R12-4): the runtime finds it by its name when a selected module needs the service. It has no
- * hooks, so there is nothing to `patchkit bind` against the firmware: the packed file goes on the card as it is. */
-const SERVICE = 'core/services/lfo';
+/** The lfo service is a file of the card, `services/lfo.dks` (R12-4): the runtime finds it by its name when a selected module needs the service. It has hooks, so the
+ * file on the card is the one bound to the stock firmware (`patchkit bind`, the Nx target `core/services/lfo:bind`); the two broken copies below are made from its bytes. */
 const SERVICE_PATH = 'services/lfo.dks';
 /** Header words of a `.dks` (packages/dkneeds/src/gen_limits.rs): the sha256 and the ABI fingerprint. */
 const H_SHA = 0x10;
@@ -34,6 +34,43 @@ function withAbiWord(file: Buffer, word: number): Buffer {
   return f;
 }
 
+/** The debug module on the card (a provider has no record in MODULES or LOADS: its result is the log event MOD_LOAD with the provider marker, so the debug module is selected too). */
+async function putDebug(dk: PatchedSession['dk'], device: PatchedSession['session']['options']['device']): Promise<string> {
+  const debug = `modules/${DEBUG_MODULE.split('/').at(-1)}.dkm`;
+  await dk.put(debug, fs.readFileSync(moduleArtifact(device, DEBUG_MODULE)));
+  return debug;
+}
+
+/** Select the debug module and the fixture, restart, and check that the fixture did not load and is REFUSED with E_MISSING and the hash of its service. Returns the results of the provider's MOD_LOAD events. */
+async function expectFixtureRefused(dk: PatchedSession['dk'], debug: string, why: string): Promise<{ result: number; hash: number }[]> {
+  const leafA = stored(A).split('/').at(-1)!;
+  await dk.select([debug, stored(A)]);
+  await dk.restart();
+  await dk.waitForBoot();
+  expect(
+    (await dk.modules()).map((m) => m.name),
+    `${why}: the fixture did not load`,
+  ).not.toContain(A);
+  const states = await dk.loadStates();
+  expect(
+    states.filter((m) => m.name === leafA).map((m) => [m.state, m.result, m.detail[0]]),
+    `${why}: the fixture is REFUSED with the hash of its service`,
+  ).toEqual([['REFUSED', code('E_MISSING'), nameHash('lfo')]]);
+  return ofKind(await dk.readLog(), LOG_KIND.MOD_LOAD)
+    .filter((e) => e.args[0] === PROVIDER_IDX)
+    .map((e) => ({ result: e.args[1]! | 0, hash: e.args[3]! }));
+}
+
+/** The fixture of a card that has no `services/lfo.dks`: REFUSED with E_MISSING, and no provider ran. A fresh boot: the boots of the test above leave the boot counter raised (two boots that were not stable start the third in safe mode). */
+async function expectNoServiceFile({ session, dk }: PatchedSession): Promise<void> {
+  await expectRuntimeReady(session);
+  const device = session.options.device;
+  await dk.put(stored(A), fs.readFileSync(moduleArtifact(device, A)));
+  const debug = await putDebug(dk, device);
+  expect(await expectFixtureRefused(dk, debug, 'no service file'), 'no provider event').toEqual([]);
+  await session.expectNoFault('lfo without a service file');
+}
+
 /** R7 proves that the registry is generic: the `lfo` service owns the record kind `lfo_shape`, and a fixture emits it with `dk_record_add`. The first loads and shows in
  * MODULES and CAPACITY; unloading it restores both; the second is the same file under another name, so it has the same shape key and the boot plan refuses it before it loads (a second owner). No SHARC is needed.
  *
@@ -46,9 +83,11 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   const before = { modules: await dk.modules(), cap: await dk.capacity() };
 
   // the service file goes on the card; the fixtures that emit lfo_shape need it
-  const service = fs.readFileSync(moduleArtifact(device, SERVICE));
+  const [needed] = neededServices([moduleArtifact(device, A)]);
+  expect(needed?.service, 'the fixture needs the lfo service').toBe('lfo');
+  const service = fs.readFileSync(await boundService(device, needed!, moduleArtifact(device, needed!.moduleId)));
   await dk.put(SERVICE_PATH, service);
-  expect(await dk.verifyFile(SERVICE_PATH, service), 'fresh card read matches the packed service file').toBe(true);
+  expect(await dk.verifyFile(SERVICE_PATH, service), 'fresh card read matches the bound service file').toBe(true);
 
   // one fixture: loaded, no machine type, a record block in the arena
   await installModule(dk, A, moduleArtifact(device, A), { device });
@@ -88,46 +127,28 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   // a service file built for another ABI: the loader refuses the provider with E_SVC_ABI, so the service is missing and the fixture that needs it is REFUSED.
   // A provider has no record in MODULES or LOADS (R12-3): its result is the log event MOD_LOAD with the provider marker, so the debug module is selected too.
   const abi = service.readUInt32BE(H_SVC_ABI);
-  expect(abi, 'the packed file carries the ABI word (0 would skip the check)').not.toBe(0);
-  const leafA = stored(A).split('/').at(-1)!;
-  const debug = `modules/${DEBUG_MODULE.split('/').at(-1)}.dkm`;
-  await dk.put(debug, fs.readFileSync(moduleArtifact(device, DEBUG_MODULE)));
+  expect(abi, 'the bound file carries the ABI word (0 would skip the check)').not.toBe(0);
+  const debug = await putDebug(dk, device);
   const lfoHash = nameHash('lfo');
-  const expectNotLoaded = async (why: string) => {
-    await dk.select([debug, stored(A)]);
-    await dk.restart();
-    await dk.waitForBoot();
-    expect(
-      (await dk.modules()).map((m) => m.name),
-      `${why}: the fixture did not load`,
-    ).not.toContain(A);
-    const states = await dk.loadStates();
-    expect(
-      states.filter((m) => m.name === leafA).map((m) => [m.state, m.result, m.detail[0]]),
-      `${why}: the fixture is REFUSED with the hash of its service`,
-    ).toEqual([['REFUSED', code('E_MISSING'), lfoHash]]);
-    return ofKind(await dk.readLog(), LOG_KIND.MOD_LOAD)
-      .filter((e) => e.args[0] === PROVIDER_IDX)
-      .map((e) => ({ result: e.args[1]! | 0, hash: e.args[3]! }));
-  };
+  const expectNotLoaded = (why: string) => expectFixtureRefused(dk, debug, why);
   await dk.put(SERVICE_PATH, withAbiWord(service, abi ^ 1));
   expect(await expectNotLoaded('a service file of another ABI'), 'the provider is refused with E_SVC_ABI').toEqual([{ result: code('E_SVC_ABI'), hash: lfoHash }]);
 
-  // a service file whose KINDS item names another kind than the one `init` declares: the commit finds the difference (E_DECL_KIND). A module cannot show this
-  // refusal: the role check refuses a module's KINDS (E_FORMAT) before `init`. The item's kind word is the first word of the KINDS payload.
+  // a service file whose KINDS item differs from what `init` declares: the commit compares kind, length and handler of every item and finds the difference (E_DECL_KIND).
+  // A module cannot show this refusal: the role check refuses a module's KINDS (E_FORMAT) before `init`. The table has one item of 12 bytes (kind, length, handler offset),
+  // and the boot plan refuses a file whose table does not own the kind of the fixture (E_PLAN_KIND), so the kind stays and the handler offset (the third word) moves by 4.
   const wrongKind = Buffer.from(service);
-  wrongKind.writeUInt32BE(91, entry(wrongKind, TAG_KINDS).at);
+  const kinds = entry(wrongKind, TAG_KINDS);
+  expect(kinds.count, 'the table has the one item of the lfo service').toBe(1);
+  const handlerAt = kinds.at + 8;
+  wrongKind.writeUInt32BE(wrongKind.readUInt32BE(handlerAt) + 4, handlerAt);
   wrongKind.fill(0, H_SHA, H_SHA + 32);
   createHash('sha256').update(wrongKind).digest().copy(wrongKind, H_SHA);
   await dk.put(SERVICE_PATH, wrongKind);
   expect(
-    (await expectNotLoaded('a service file with a kind table that init does not declare')).map((p) => p.result),
+    (await expectNotLoaded('a service file with a kind item that init does not declare')).map((p) => p.result),
     'the provider is refused with E_DECL_KIND',
   ).toEqual([code('E_DECL_KIND')]);
-
-  // no service file on the card: the same fixture is E_MISSING, and no provider ran
-  await dk.delete(SERVICE_PATH);
-  expect(await expectNotLoaded('no service file'), 'no provider event').toEqual([]);
 
   await dk.select([]);
   await dk.restart();
@@ -135,6 +156,8 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   await session.expectNoFault('lfo shapes');
 }
 
-runtimeTests('the lfo service file owns lfo_shape: a fixture loads and unloads, a second owner, another ABI, a kind table that init does not declare and no file are refused', expectLfoShapes, {
+runtimeTests('the lfo service file owns lfo_shape: a fixture loads and unloads, a second owner, another ABI, a kind table that init does not declare are refused', expectLfoShapes, {
   dsp: 'zero',
 });
+
+runtimeTests('without services/lfo.dks the fixture that needs the lfo service is refused with E_MISSING and no provider runs', expectNoServiceFile, { dsp: 'zero' });

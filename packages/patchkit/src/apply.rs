@@ -645,6 +645,8 @@ struct StubStage {
     slot: String,
     scratch: u8,
     tail: Option<String>,
+    /// `when`: `Some(true)` tests the slot where the stock branch is taken, `Some(false)` where it falls through
+    when: Option<bool>,
 }
 
 /// A `hook` or `stub` op, decoded.
@@ -823,7 +825,25 @@ fn stage<'a>(
                 let scratch = prim::parse_scratch(op.scratch.as_deref().unwrap())
                     .map_err(|e| err!("{who}: {e}"))?;
                 let tail = op.tail.clone();
-                if tail.is_none() {
+                let when = op.when.as_deref().map(|w| w == "taken");
+                if when.is_some() {
+                    // the instructions before the branch run before the slot test: the test overwrites `scratch` only on the path that tests the slot, which the hook's
+                    // `regs` (the registers dead there, found from the stock bytes) must allow
+                    prim::guarded_stub_len(site).map_err(|e| err!("{who}: {e}"))?;
+                    let hook = op.hook.as_deref().unwrap_or_default();
+                    let listed = port
+                        .hook(hook)
+                        .map(|h| crate::fwgen::expand_regs(hook, true, &h.clobbers))
+                        .transpose()?
+                        .unwrap_or_default();
+                    let sc = op.scratch.as_deref().unwrap();
+                    if !listed.iter().any(|r| r == sc) {
+                        return Err(err!(
+                            "{who}: scratch {sc} is not in the hook's regs.clobbers ({}): the slot test overwrites it, so the declaration must list it",
+                            listed.join(" ")
+                        ));
+                    }
+                } else if tail.is_none() {
                     prim::cf_tail(site, 0, 0).map_err(|e| {
                         err!(
                             "{who}: the stock path of the site cannot be re-encoded: {e}; give `tail = \"<symbol>\"` for a hand-written stock path"
@@ -842,10 +862,14 @@ fn stage<'a>(
                     slot: op.slot.clone().unwrap(),
                     scratch,
                     tail,
+                    when,
                 });
             }
             let tail_len = match (&cf, run) {
                 (_, false) => 0,
+                (Some(s), true) if stub.as_ref().is_some_and(|t| t.when.is_some()) => {
+                    prim::guarded_stub_len(s).map_err(|e| err!("{who}: {e}"))?
+                }
                 (Some(s), true) => {
                     let stock = match &stub {
                         Some(StubStage { tail: Some(_), .. }) => prim::CF_JMP_LEN,
@@ -1849,6 +1873,29 @@ pub fn apply_with(
                         *prim_syms.get(&format!("slot.{}", st.slot)).ok_or_else(|| {
                             err!("{who}: slot {} is not declared on this device", st.slot)
                         })?;
+                    if let Some(taken_only) = st.when {
+                        let b = prim::cf_guarded_stub(
+                            site,
+                            addr,
+                            ret,
+                            st.scratch,
+                            slot_addr as u32,
+                            taken_only,
+                        )
+                        .map_err(|e| err!("{who}: {e}"))?;
+                        debug_assert_eq!(b.len(), h.tail_len);
+                        chunks.push(Chunk {
+                            owner: h.module.tag(),
+                            cpu,
+                            region: h.place.clone(),
+                            addr,
+                            code: vec![(addr, addr + b.len() as u64)],
+                            image: pad(b, cpu),
+                            bss: 0,
+                            what: format!("hook tail {}", h.base_name),
+                        });
+                        continue;
+                    }
                     let mut b = prim::stub_prefix(st.scratch, slot_addr as u32);
                     match &st.tail {
                         Some(t) => {

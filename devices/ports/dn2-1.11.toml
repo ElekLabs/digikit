@@ -129,6 +129,166 @@ mark = "D"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.lfo.site.graph_vec"
+cpu = "cf"
+kind = "code"
+addr = 0x4010ded0
+len = 6
+sha256 = "63f2bf6dc55b7b459bd4aedab47ee1bfa7fea5b8d7da3280f2bd0c8cb2f6d90b"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_call"
+cpu = "cf"
+kind = "code"
+addr = 0x401375e4
+len = 6
+sha256 = "c0a706b60f9c27e1f571890d9d77c8f42996f8322e72546a961d07b7cbf026c1"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_done"
+cpu = "cf"
+kind = "code"
+addr = 0x40137682
+len = 2
+sha256 = "ee17b0047b7589b9069938d8417376f794a6d345a5f001b3b6fd12eea53343b6"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_rand"
+cpu = "cf"
+kind = "code"
+addr = 0x4013761a
+len = 2
+sha256 = "24cc057006592d73549d88226a92fd10eda8dd626a46eb45597f31698e2a134e"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_slew"
+cpu = "cf"
+kind = "code"
+addr = 0x40137652
+len = 6
+sha256 = "c70bafcd9b83f19c3409f27d62a31aeb06ecbb344f945a3ac0c65426415afa6c"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_start"
+cpu = "cf"
+kind = "code"
+addr = 0x40137556
+len = 6
+sha256 = "eca5788a5083a2d542dff91101cc2e2db9c148be4a0f54cad50b3a85327c7fce"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read_start_rand"
+cpu = "cf"
+kind = "code"
+addr = 0x40137572
+len = 2
+sha256 = "43a286effac35df5d4864a650a8e64ba60367543d984a7b95f9ae0a8b702d4d8"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.t1_range"
+cpu = "cf"
+kind = "code"
+addr = 0x400dbff0
+len = 6
+sha256 = "d6c9f1f60272197a17511f496fc19dd21ddd7df5f1f1ec0cab7a16cad60b0609"
+mark = "D"
+rule = "fw/lfo:cf_words"
+
+[[anchor]]
+name = "cf.lfo.site.tick_call"
+cpu = "cf"
+kind = "code"
+addr = 0x401379e6
+len = 6
+sha256 = "653daeac4978c36383c5317679688c03595f9e70f5903919e134d26f5e0f78fd"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_done"
+cpu = "cf"
+kind = "code"
+addr = 0x40137a72
+len = 2
+sha256 = "ee17b0047b7589b9069938d8417376f794a6d345a5f001b3b6fd12eea53343b6"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_rand"
+cpu = "cf"
+kind = "code"
+addr = 0x40137a0c
+len = 2
+sha256 = "f10722a69c629e0108621db21b31d91e24c5c202778f92d81bf84fc1821a6844"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_slew"
+cpu = "cf"
+kind = "code"
+addr = 0x40137a3e
+len = 6
+sha256 = "29a0aa82f7f8ea15a76d1c9106f0afd9bac10d4bcc598c0a60745be19d749bab"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_start"
+cpu = "cf"
+kind = "code"
+addr = 0x40137960
+len = 6
+sha256 = "6ec1bf39f9f594432cfb13123de7a8956716f655210eee41d3b0b06a758cfa47"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.tick_start_rand"
+cpu = "cf"
+kind = "code"
+addr = 0x4013797c
+len = 2
+sha256 = "43a286effac35df5d4864a650a8e64ba60367543d984a7b95f9ae0a8b702d4d8"
+mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.wave_name"
+cpu = "cf"
+kind = "code"
+addr = 0x400e34ac
+len = 6
+sha256 = "4fdd4081a0412168b702fa9b583f4a1be59b33b477f2979cb1ab3e2a5fb36d6d"
+mark = "D"
+rule = "fw/lfo:cf_words"
+
+[[anchor]]
+name = "cf.lfo.site.wave_name3"
+cpu = "cf"
+kind = "code"
+addr = 0x4000766c
+len = 6
+sha256 = "4fdd4081a0412168b702fa9b583f4a1be59b33b477f2979cb1ab3e2a5fb36d6d"
+mark = "D"
+rule = "fw/lfo:cf_words"
+
+[[anchor]]
 name = "cf.link.fn.block_isr"
 cpu = "cf"
 kind = "code"
@@ -3710,155 +3870,245 @@ mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
 
 [[hook]]
+name = "cf.lfo.hook.graph_vec"
+site = "cf.lfo.site.graph_vec"
+mode = "replace"
+clobbers = ["d6", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.read_call"
+site = "cf.lfo.site.read_call"
+mode = "replace"
+clobbers = ["d0", "d2", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.read_slew"
+site = "cf.lfo.site.read_slew"
+mode = "replace"
+clobbers = ["d2", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.read_start"
+site = "cf.lfo.site.read_start"
+mode = "replace"
+clobbers = ["d2", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.t1_range"
+site = "cf.lfo.site.t1_range"
+mode = "replace"
+clobbers = ["d0", "d1", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.tick_call"
+site = "cf.lfo.site.tick_call"
+mode = "replace"
+clobbers = ["d0", "d1", "d2", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.tick_slew"
+site = "cf.lfo.site.tick_slew"
+mode = "replace"
+clobbers = ["d1", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.tick_start"
+site = "cf.lfo.site.tick_start"
+mode = "replace"
+clobbers = ["d2", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.wave_name"
+site = "cf.lfo.site.wave_name"
+mode = "replace"
+clobbers = ["d0", "ccr"]
+
+[[hook]]
+name = "cf.lfo.hook.wave_name3"
+site = "cf.lfo.site.wave_name3"
+mode = "replace"
+clobbers = ["d0", "ccr"]
+
+[[hook]]
 name = "cf.link.hook.block_isr"
 site = "cf.link.fn.block_isr"
 mode = "before"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.link.hook.block_isr.frame_call"
 site = "cf.link.site.block_isr.frame_call"
 mode = "retarget"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.link.hook.boot_wire_size"
 site = "cf.link.site.boot_wire_size"
 mode = "retarget"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.link.hook.reply_copy"
 site = "cf.link.site.reply_copy"
 mode = "retarget"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.machine.hook.dispatch"
 site = "cf.machine.fn.dispatch"
 mode = "before"
+clobbers = ["d0", "ccr"]
 
 [[hook]]
 name = "cf.machine.hook.frametype"
 site = "cf.machine.site.frametype"
 mode = "replace"
+clobbers = ["d0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.machine.hook.group"
 site = "cf.machine.site.group"
 mode = "replace"
+clobbers = ["d0", "d1", "ccr"]
 
 [[hook]]
 name = "cf.machine.hook.list.copy_call"
 site = "cf.machine.site.list.copy"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.machine.hook.list.entry"
 site = "cf.machine.fn.list.entry"
 mode = "before"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.machine.hook.owner_type_load"
 site = "cf.machine.site.owner_type_load"
 mode = "replace"
+clobbers = ["d3", "ccr"]
 
 [[hook]]
 name = "cf.machine.hook.param_code.map"
 site = "cf.machine.site.param_code.map"
 mode = "replace"
+clobbers = ["d0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.machine.hook.type_page.count"
 site = "cf.machine.fn.type_page.count"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.machine.hook.type_page.desc"
 site = "cf.machine.site.type_page.desc"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.machine.hook.type_reader.load"
 site = "cf.machine.site.type_reader.load"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "ccr"]
 
 [[hook]]
 name = "cf.menu.hook.settings_list.tail"
 site = "cf.menu.site.settings_list.tail"
 mode = "before"
+clobbers = ["d0-d1", "a0-a1", "ccr"]
 
 [[hook]]
 name = "cf.midi.hook.rx"
 site = "cf.midi.site.rx"
 mode = "before"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.page.hook.filter_graph_test"
 site = "cf.page.site.filter_graph_test"
 mode = "replace"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.page.hook.fx_array.init_exit"
 site = "cf.page.site.fx_array.init_exit"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.fx_array.load"
 site = "cf.page.site.fx_array.load"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a2", "a3", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.fx_array.save"
 site = "cf.page.site.fx_array.save"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.fx_key_list.load"
 site = "cf.page.site.fx_key_list.load"
 mode = "replace"
+clobbers = ["d0", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.fx_view_list.load"
 site = "cf.page.site.fx_view_list.load"
 mode = "replace"
+clobbers = ["d0", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.page_desc"
 site = "cf.page.fn.page_desc"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.sound_load_exit"
 site = "cf.page.site.sound_load_exit"
 mode = "replace"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.page.hook.source_code"
 site = "cf.page.fn.source_code"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.source_draw"
 site = "cf.page.fn.source_draw"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.source_key"
 site = "cf.page.fn.source_key"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.source_turn"
 site = "cf.page.fn.source_turn"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.page.hook.tab_label_test"
 site = "cf.page.site.tab_label_test"
 mode = "replace"
+clobbers = ["d0", "d1", "a0", "ccr"]
 
 [[hook]]
 name = "cf.param.hook.value_class"
 site = "cf.param.fn.value_class"
 offset = 4
 mode = "before"
+clobbers = ["d0"]
 
 [[hook]]
 name = "cf.rtos.hook.idle"
@@ -3869,193 +4119,232 @@ mode = "replace"
 name = "cf.rtos.hook.intro_setup.table_arg"
 site = "cf.rtos.site.intro_setup.table_arg"
 mode = "before"
+clobbers = ["d0", "a0", "ccr"]
 
 [[hook]]
 name = "cf.rtos.hook.main_os_task"
 site = "cf.rtos.site.main_os_task"
 mode = "before"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.storage.hook.block_read.clamp_chunk"
 site = "cf.storage.site.block_read.clamp_chunk"
 mode = "replace"
+clobbers = ["d0", "d1", "d5", "ccr"]
 
 [[hook]]
 name = "cf.storage.hook.block_read.clamp_entry"
 site = "cf.storage.site.block_read.clamp_entry"
 mode = "replace"
+clobbers = ["d0", "d1", "ccr"]
 
 [[hook]]
 name = "cf.storage.hook.block_write.clamp_chunk"
 site = "cf.storage.site.block_write.clamp_chunk"
 mode = "replace"
+clobbers = ["d0", "d1", "d5", "ccr"]
 
 [[hook]]
 name = "cf.storage.hook.block_write.clamp_entry"
 site = "cf.storage.site.block_write.clamp_entry"
 mode = "replace"
+clobbers = ["d0", "d1", "ccr"]
 
 [[hook]]
 name = "cf.usb.hook.init"
 site = "cf.usb.site.init"
 mode = "before"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.view.hook.ui_loop"
 site = "cf.view.site.ui_loop"
 mode = "retarget"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "dsp.cache.hook.cache_enable"
 site = "dsp.cache.site.cache_enable"
 mode = "replace"
+clobbers = ["astat"]
 
 [[hook]]
 name = "dsp.fx.hook.entry"
 site = "dsp.fx.fn.entry"
 mode = "before"
+clobbers = ["astat"]
 
 [[hook]]
 name = "dsp.fx.hook.send"
 site = "dsp.fx.fn.send"
 mode = "before"
+clobbers = ["astat"]
 
 [[hook]]
 name = "dsp.link.hook.block_tail"
 site = "dsp.link.site.block_tail"
 mode = "before"
+clobbers = ["r10-r11", "r13-r15", "i2-i3", "i5", "astat"]
 
 [[hook]]
 name = "dsp.master.hook.q31_converter.call"
 site = "dsp.master.site.q31_converter.call"
 mode = "retarget"
+clobbers = ["r0-r3", "i4", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.case5.call"
 site = "dsp.voice.site.case5.call"
 mode = "retarget"
+clobbers = ["r0-r2", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.case5.reset.call"
 site = "dsp.voice.site.case5.reset.call"
 mode = "retarget"
+clobbers = ["r0-r2", "i4", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.filter_case1.call"
 site = "dsp.voice.site.filter_case1.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.filter_case1.reset.call"
 site = "dsp.voice.site.filter_case1.reset.call"
 mode = "retarget"
+clobbers = ["r0-r2", "i4", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.filter_case2.call"
 site = "dsp.voice.site.filter_case2.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.filter_case2.reset.call"
 site = "dsp.voice.site.filter_case2.reset.call"
 mode = "retarget"
+clobbers = ["r0-r2", "i4", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.filter_case3.call"
 site = "dsp.voice.site.filter_case3.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.filter_case3.reset.call"
 site = "dsp.voice.site.filter_case3.reset.call"
 mode = "retarget"
+clobbers = ["r0-r2", "i4", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.first_order_process.call"
 site = "dsp.voice.site.first_order_process.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.first_order_reset.call"
 site = "dsp.voice.site.first_order_reset.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.gain_stage.call"
 site = "dsp.voice.site.gain_stage.call"
 mode = "retarget"
+clobbers = ["r0-r2", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.held_sample.early.call"
 site = "dsp.voice.site.held_sample.early.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.held_sample.late.call"
 site = "dsp.voice.site.held_sample.late.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.held_sample.reset.call"
 site = "dsp.voice.site.held_sample.reset.call"
 mode = "retarget"
+clobbers = ["r0-r2", "i4", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.pan_pre"
 site = "dsp.voice.site.pan_pre"
 mode = "replace"
+clobbers = ["r0-r8", "r10", "r12-r15", "i1-i5", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.pan_slot"
 site = "dsp.voice.site.pan_slot"
 mode = "replace"
+clobbers = ["r1", "r3-r7", "r10-r11", "r13-r15", "i0-i1", "i3", "i8-i11", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.render_entry"
 site = "dsp.voice.fn.render_entry"
 mode = "replace"
+clobbers = ["r0-r2", "i4", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.ring_stage.case4.call"
 site = "dsp.voice.site.ring_stage.case4.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.ring_stage.case6.call"
 site = "dsp.voice.site.ring_stage.case6.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.ring_stage.reset.case4.call"
 site = "dsp.voice.site.ring_stage.reset.case4.call"
 mode = "retarget"
+clobbers = ["r0-r2", "i4", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.ring_stage.reset.case6.call"
 site = "dsp.voice.site.ring_stage.reset.case6.call"
 mode = "retarget"
+clobbers = ["r0-r2", "i4", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.shaper.early.call"
 site = "dsp.voice.site.shaper.early.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.shaper.late.call"
 site = "dsp.voice.site.shaper.late.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.uy_process.early.call"
 site = "dsp.voice.site.uy_process.early.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.uy_process.late.call"
 site = "dsp.voice.site.uy_process.late.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]
 
 [[hook]]
 name = "dsp.voice.hook.uy_reset.call"
 site = "dsp.voice.site.uy_reset.call"
 mode = "retarget"
+clobbers = ["r0-r2", "r4", "r8", "r12", "i4", "i12", "astat"]

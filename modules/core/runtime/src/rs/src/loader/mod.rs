@@ -92,6 +92,9 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     /// is missing, torn, of the old format or has a larger table).
     tables: [[u8; TABLE_MAX]; SEL_MAX],
     table_len: [usize; SEL_MAX],
+    /// Whether the plan accepted the module at each selection index (set by `settle`): `keys_of` gives the keys of an accepted module only, so a module the plan
+    /// refused (a repeated key, no room, a missing need) takes no number from a service.
+    accepted: [bool; SEL_MAX],
     /// The DSP load of the accepted modules of the last plan: (load, largest per-voice cost), which `dkrt_capacity` reports as used and largest of
     /// `CAPK_DSP_COST`; the module set is fixed per session, so the plan is the load.
     planned_dsp: (u32, u32),
@@ -176,6 +179,21 @@ pub unsafe fn capture(k: usize, file: &[u8]) {
     loader().capture(k, file)
 }
 
+/// The keys of record kind `kind` of the accepted module at selection index `at` (`CoreApi::keys_of`). A read of the loader's tables, which `settle` and the loads that
+/// follow do not change.
+pub fn keys_of(at: u32, kind: u32, out: &mut [u32; 8]) -> usize {
+    loader().keys_of(at, kind, out)
+}
+
+/// A host test's boot: the module at selection index `at` has the header table `table` and the plan accepted it.
+#[cfg(test)]
+pub(crate) fn test_accept(at: usize, table: &[u8]) {
+    let l = loader();
+    l.tables[at][..table.len()].copy_from_slice(table);
+    l.table_len[at] = table.len();
+    l.accepted[at] = true;
+}
+
 /// Forget the tables (the start of a boot's planning).
 pub unsafe fn reset_plan() {
     loader().reset_plan()
@@ -220,6 +238,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             decl_diff: (0, 0),
             tables: [[0; TABLE_MAX]; SEL_MAX],
             table_len: [0; SEL_MAX],
+            accepted: [false; SEL_MAX],
             planned_dsp: (0, 0),
             found: Found::new(),
             loaded: [false; PROVIDER_MAX],
@@ -891,9 +910,19 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         self.table_len[k] = len;
     }
 
+    /// The keys of record kind `kind` in the header table of the accepted module at selection index `at` (`CoreApi::keys_of`).
+    pub fn keys_of(&self, at: u32, kind: u32, out: &mut [u32; 8]) -> usize {
+        let k = at as usize;
+        if k >= SEL_MAX || !self.accepted[k] {
+            return 0;
+        }
+        dkrt_abi::keys::keys_of(&self.tables[k][..self.table_len[k]], kind, out)
+    }
+
     /// Forget the tables (the start of a boot's planning).
     pub fn reset_plan(&mut self) {
         self.table_len = [0; SEL_MAX];
+        self.accepted = [false; SEL_MAX];
         self.planned_dsp = (0, 0);
     }
 
@@ -984,6 +1013,11 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         let provs = parse_provs(&self.found, planned.np);
         plan::settle(&services(), planned, &mods[..n], &provs[..planned.np], &self.loaded[..planned.np]);
+        let mut a = 0;
+        while a < SEL_MAX {
+            self.accepted[a] = a < n && planned.verdicts[a].is_accepted();
+            a += 1;
+        }
         // every service of the boot is loaded and no module yet: the services plan what they keep per selected module
         let sel = settle_ctx(planned, &self.tables, &self.table_len, n);
         services().settle(&sel);

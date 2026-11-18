@@ -97,6 +97,8 @@ pub struct Module {
     /// The module's index in the boot's selection (`CoreApi::boot_index` while it loads; `settle` gets the keys of every module of the fixture in this order).
     pub sel: u32,
     pub keys: fn() -> KeysCopy,
+    /// The keys of other record kinds the header table lists, (kind, keys): what `CoreApi::keys_of` gives a service that numbers or checks them.
+    pub groups: &'static [(u32, &'static [u32])],
     pub init: fn(&mut Init),
     pub dsp: Dsp,
 }
@@ -444,6 +446,9 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             sel.count = i + 1;
             sel.nkeys[i] = k.nm.min(8) as u8;
             sel.keys[i][..k.nm.min(8)].copy_from_slice(&k.mk[..k.nm.min(8)]);
+            for (kind, keys) in m.groups {
+                l.core.set_keys(i as u32, *kind, keys);
+            }
         }
         unsafe { S::settle(&l.core, &sel) };
         l
