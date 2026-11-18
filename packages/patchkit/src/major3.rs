@@ -114,15 +114,16 @@ fn header_table(
                 r.kind
             ));
         }
+        let key = crate::register::record_key(id, &r.id);
         let keys = groups.entry(kind).or_default();
-        if keys.contains(&r.key) {
+        if keys.contains(&key) {
             return Err(err!(
-                "{id}: [[record]] kind {:?} key {} twice",
+                "{id}: [[record]] kind {:?} id {:?}: its key {key:#x} is already in the module (a hash collision)",
                 r.kind,
-                r.key
+                r.id
             ));
         }
-        keys.push(r.key);
+        keys.push(key);
     }
     let key_groups: Vec<dkneeds::keys::KeyGroup> = groups
         .iter()
@@ -364,12 +365,28 @@ mod tests {
 
     #[test]
     fn a_record_entry_puts_its_key_in_the_keys_entry_and_a_typed_or_unknown_kind_is_refused() {
-        let m = module("[[record]]\nkind = \"effect\"\nkey = 1\n");
+        let m = module("[[record]]\nkind = \"effect\"\nid = \"a\"\n");
         let e = sections(&m, "test/m", "dn2", None).unwrap_err().to_string();
         assert!(e.contains("not generic"), "{e}");
-        let m = module("[[record]]\nkind = \"nothing\"\nkey = 1\n");
+        let m = module("[[record]]\nkind = \"nothing\"\nid = \"a\"\n");
         let e = sections(&m, "test/m", "dn2", None).unwrap_err().to_string();
         assert!(e.contains("not in [records.kinds]"), "{e}");
+    }
+
+    #[test]
+    fn a_record_key_derives_from_the_module_id_and_the_local_id() {
+        let m = module("[[record]]\nkind = \"lfo_shape\"\nid = \"ramp\"\n");
+        let key = |name: &str| {
+            let s = sections(&m, name, "dn2", None).unwrap();
+            let k = dkneeds::keys::Keys::parse(&s.keys).unwrap();
+            k.keys_of(dkneeds::KIND_LFO_SHAPE).collect::<Vec<_>>()
+        };
+        // the module id (`test/m`) feeds the key, as in `module_ids.h`: the packed name does not
+        assert_eq!(
+            key("test/m"),
+            [crate::register::record_key("test/m", "ramp")]
+        );
+        assert_eq!(key("test/m-copy"), key("test/m"));
     }
 
     #[test]

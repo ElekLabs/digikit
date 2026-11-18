@@ -807,6 +807,25 @@ fn a_card_without_the_service_file_refuses_its_user_naming_the_service() {
     }
 }
 
+/// One key rule for every kind: the same packed module twice has the same machine key, so the boot plan refuses the second with the kind and the key that the first
+/// has (`E_PLAN_KEY`), on both devices. A different module with other keys is accepted next to the first.
+#[test]
+fn the_same_machine_key_in_two_packed_modules_is_refused_by_the_boot_plan() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        let table = table_of(&packed(*dev, SINE.leaf, "dkm", SINE.nx));
+        let key = Keys::parse(&table).unwrap().keys_of(dkneeds::KIND_MACHINE).next().expect("the sine fixture has a machine key");
+        unsafe {
+            let (_l, plan) = planned(*dev, &image, &[], &[&SINE, &SINE], &SERVICES[1..2]); // machines only
+            assert_eq!(plan.verdicts[0], Verdict::Accepted, "{}", dev.name);
+            assert_eq!(plan.verdicts[1], Verdict::Refused(Reason::DuplicateKey(dkneeds::KIND_MACHINE, key)), "{}", dev.name);
+            assert_eq!(plan.verdicts[1].result(), dkrt_sdk::E_PLAN_KEY);
+        }
+        let _ = clean_state();
+    }
+}
+
 /// The same refusal for an effect: its builder calls name the `fx` service, so a card with the machines and lfo services and no `fx.dks` refuses it.
 #[test]
 fn a_card_without_the_fx_service_file_refuses_an_effect_naming_the_service() {
@@ -872,7 +891,8 @@ fn the_builder_calls_of_a_module_resolve_to_the_exports_of_the_service_that_owns
     }
 }
 
-/// The header EXPORTS of a service file are exactly its `provided` imports of sdk/sdk.toml, by name hash (the file's `exports()` is generated from the same list).
+/// The header EXPORTS of a service file are exactly its `provided` imports of sdk/sdk.toml, by name hash (the file's `exports()` is generated from the same list): the
+/// builder calls of the modules, and the `internal` ones that only the runtime calls (`handlers::exports` names them, so a renamed export is a failure here).
 #[test]
 fn the_header_exports_of_a_service_file_are_its_provided_imports() {
     let _g = clean();
@@ -882,7 +902,13 @@ fn the_header_exports_of_a_service_file_are_its_provided_imports() {
             let table = table_of(&owner);
             let keys = Keys::parse(&table).unwrap();
             let listed: std::collections::BTreeSet<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
-            let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().map(name_hash).collect();
+            use crate::handlers::exports::{FX_ROUTES_ENTRY, MACHINES_GUARD_STATE, MACHINES_OWNED_IDS};
+            let internal: &[&str] = match service {
+                "fx" => &[FX_ROUTES_ENTRY],
+                "machines" => &[MACHINES_GUARD_STATE, MACHINES_OWNED_IDS],
+                _ => &[],
+            };
+            let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().chain(internal.iter().copied()).map(name_hash).collect();
             assert!(!want.is_empty(), "{service} provides nothing in sdk/sdk.toml");
             assert_eq!(listed, want, "{} {service}.dks: header EXPORTS differ from the provided imports", dev.name);
         }

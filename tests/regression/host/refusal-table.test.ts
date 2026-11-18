@@ -45,7 +45,6 @@ test('a module-file fixture is never marked reserved or not-a-load for a code a 
     'E_TOO_BIG',
     'E_DECL_ID',
     'E_DECL_USES',
-    'E_FX_ID_DUP',
     'E_PLAN_KIND',
     'E_PLAN_KEY',
     'E_PLAN_FIT',

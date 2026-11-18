@@ -143,13 +143,15 @@ fn the_map_of_the_selection_record_is_read_once_and_moved_to_the_settings_key() 
 fn a_key_is_resolved_for_the_module_being_loaded_only_and_a_pinned_number_is_itself() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = dt2_core();
-    // two modules with the same machine key: the second gets a fresh number
-    settle(&core, &selection(&[&[A], &[A]]));
+    // the keys of the boot are unique (the planner refuses a repeat): each module resolves its own
+    settle(&core, &selection(&[&[A], &[B]]));
     unsafe {
         core.boot_index.set(0);
         assert_eq!(resolve(&core, A), FIRST);
+        assert_eq!(resolve(&core, B), 0, "a key of another module");
         core.boot_index.set(1);
-        assert_eq!(resolve(&core, A), FIRST + 1);
+        assert_eq!(resolve(&core, B), FIRST + 1);
+        assert_eq!(resolve(&core, A), 0, "a key of another module");
         core.boot_index.set(u32::MAX);
         assert_eq!(resolve(&core, A), 0, "outside a module load");
         // a key without a hash is a pinned number: in the run-time range it is itself, outside it none

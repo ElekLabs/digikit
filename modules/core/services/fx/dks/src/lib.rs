@@ -10,6 +10,7 @@ use dkrt_svc_fx::records::Fx;
 #[rustfmt::skip]
 mod gen_exports;
 mod hooks;
+mod rt;
 
 dkrt_svc_rt::service!(
     Fx,

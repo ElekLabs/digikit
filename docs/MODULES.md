@@ -179,7 +179,7 @@ The keys are not in the header file. The packer computes them from the packed na
 
 `name` is the `--name` value of `pack` when given, else the module id. So a normal pack gives the same keys every time, and saved projects stay valid. An alias made with `pack --name` gets keys of its own, so two copies of one module do not share an effect id. Renaming a module id changes the keys and loses the projects that use it.
 
-Why the keys must be known before load: the runtime plans the type numbers of all selected machines at boot, before the first module loads (`assign::plan`). A card-side map of up to 8 entries keeps a number for a machine across boots; a clash gets a fresh number. Effect ids are 16 bits, so a clash is possible (about 1 in 65535 per pair). The loader refuses it with `E_FX_ID_DUP`.
+Why the keys must be known before load: the runtime plans the type numbers of all selected machines at boot, before the first module loads (`assign::plan`). A card-side map of up to 8 entries keeps a number for a machine across boots. A key that two modules (or one module twice) provide is refused by the boot plan with `E_PLAN_KEY`, for every kind. Effect ids are 16 bits, so a clash is possible (about 1 in 65535 per pair); the plan refuses it the same way.
 
 ### DSP names
 
@@ -209,7 +209,7 @@ The header pair at 0x90 and 0x94 is `table_off` and `table_size`. The table is v
 
 A module that needs and keeps nothing has the 8-byte head. The packer always writes a table and at least 0.8.0 as the needed version, so a module of runtime 0.7 (no table, or the old row counts) is refused with `E_CONTRACT`. The header is 160 bytes. `packages/dkneeds/src/keys.rs` owns the layout.
 
-A module that emits records of a generic kind (a kind a service owns that has no builder, such as `lfo_shape`) calls `dk_record_add(ctx, kind, bytes, len)` in `init` and lists each record as `[[record]] kind = "lfo_shape", key = 7` in `module.toml`. The boot planner reads the keys from the table: a kind no service owns, or a key another module of the selection has, is refused before the module loads (`E_PLAN_KIND`, `E_PLAN_KEY`).
+A module that emits records of a generic kind (a kind a service owns that has no builder, such as `lfo_shape`) calls `dk_record_add(ctx, kind, bytes, len)` in `init` and lists each record as `[[record]] kind = "lfo_shape", id = "ramp"` in `module.toml`. The record's key is `hash24(<module id>:<id>) << 8`, like a machine key; `patchkit gen` writes it as `DK_KEY_RAMP` in `build/gen/module_ids.h`, and `init` writes that constant as the first word of the record body. The boot planner reads the keys from the table: a kind no service owns, or a key another module of the selection has, is refused before the module loads (`E_PLAN_KIND`, `E_PLAN_KEY`).
 
 ## 7. The load path and what a refusal guarantees
 

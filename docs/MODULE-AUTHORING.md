@@ -147,7 +147,7 @@ An id names the machine or effect only. The position of the entry in its list is
 `build/gen/module_ids.h` as `DK_MACHINE_ID_<ID>` or `DK_FX_ID_<ID>`, and `init` passes it to the builder call. Do not change the order after a
 release. A tool has neither list.
 
-`[[record]]` lists a record of a generic kind that `init` emits with `dk_record_add` (a kind that a service owns and that has no builder, such as `lfo_shape`): `kind` is the kind's lower-case name from `sdk/sdk.toml` `[records.kinds]` and `key` the identity of the record (the shape id of an `lfo_shape`). The packer writes the keys into the header table, so the boot planner refuses a kind no service owns and a key that another module of the selection has before the module loads. Machines and effects are builder calls, not `[[record]]`.
+`[[record]]` lists a record of a generic kind that `init` emits with `dk_record_add` (a kind that a service owns and that has no builder, such as `lfo_shape`): `kind` is the kind's lower-case name from `sdk/sdk.toml` `[records.kinds]` and `id` a local name for the record (the shape of an `lfo_shape`). Its key is `hash24(<module id>:<id>) << 8`: `patchkit gen` writes it to `build/gen/module_ids.h` as `DK_KEY_<ID>`, and `init` writes that constant as the first word of the record body. The packer writes the keys into the header table, so the boot planner refuses a kind no service owns and a key that another module of the selection has before the module loads. Machines and effects are builder calls, not `[[record]]`.
 
 `[uses.dt2]` and `[uses.dn2]` hold the rows the module takes on each device: `machine_rows`, `param_rows`, `page_rows`, `record_bytes`, and the DSP cost
 (`dsp_cost_voice` for a machine, `dsp_cost_fx` for an effect: instructions per block). `module:check` runs `init` in the emulator and the conformance
@@ -450,8 +450,8 @@ See `modules/tools/bootscreen`.
 
 `patchkit gen` writes two files in `build/gen/` of a module. Do not edit them.
 
-- `module_ids.h`: `DK_MACHINE_ID_<ID>` and `DK_FX_ID_<ID>`, the index of each id in the `[[machine]]` and `[[fx]]` lists of `module.toml`. A typo in
-  the name is a compile error. `gen --check` fails when the file is stale.
+- `module_ids.h`: `DK_MACHINE_ID_<ID>` and `DK_FX_ID_<ID>`, the index of each id in the `[[machine]]` and `[[fx]]` lists of `module.toml`, and `DK_KEY_<ID>`, the
+  key of each `[[record]]` id. A typo in the name is a compile error. `gen --check` fails when the file is stale.
 - `gallery.json`: the machines with their knobs and parameters, for each device, for the web gallery. `module:check` writes it from what `init`
   declared in the emulator. It holds no firmware bytes.
 

@@ -54,8 +54,8 @@ const INIT_FAILS = Buffer.from([0x70, 0xf7, 0x4e, 0x75]);
 
 /**
  * The header table with its NEEDS entry moved behind the others (entries stay in ascending tag order, so it becomes the entry with tag `KINDS`) and
- * rewritten as KINDS items `(kind, length 16, handler offset 8)`. The table keeps its size. The module declares no kind in `init`, so the
- * commit finds a KINDS entry that `init` did not declare.
+ * rewritten as KINDS items `(kind, length 16, handler offset 8)`. The table keeps its size. A module owns no kinds, so the loader's role check refuses
+ * the file (E_FORMAT) before `init` runs.
  */
 function needsToKinds(f: Buffer, kinds: number[]): void {
   const table = f.readUInt32BE(H.KEYS_OFF);
@@ -110,8 +110,8 @@ export const edits = {
   unownedKind: (kind: number) => (f: Buffer) => void f.writeUInt32BE(kind, entry(f, TAG.KEYS).at),
   /** The loader: `init` returns -9 at once, so the load fails with E_INIT (state FAILED). The first four bytes of `init` become `moveq #-9,%d0; rts`. */
   failInit: (f: Buffer) => void INIT_FAILS.copy(f, f.readUInt32BE(H.IMAGE_OFF) + f.readUInt32BE(H.INIT)),
-  /** The commit: the header table owns record kinds that `init` does not declare (E_DECL_KIND, state FAILED; the plan accepts them: no service owns kinds 91 and 92). */
-  undeclaredKinds: (f: Buffer) => needsToKinds(f, [91, 92]),
+  /** The loader: a module's header table has KINDS items, which only a service owns (E_FORMAT, state FAILED, before `init`; the plan accepts the file: no service owns kinds 91 and 92). */
+  moduleKinds: (f: Buffer) => needsToKinds(f, [91, 92]),
   /** The plan: the module uses `rows` of the resource `resource` (the machine rows: more than the device has, E_PLAN_FIT). */
   machineRows: (resource: number, rows: number) => (f: Buffer) => void f.writeUInt32BE(rows, usesCountAt(f, resource)),
   /** The plan: the module uses `bytes` of record memory, more than the arena has (E_PLAN_FIT on the CPU memory). */

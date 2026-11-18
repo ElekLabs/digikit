@@ -62,7 +62,8 @@ reserved bytes of the selection record (`docs/design/digikit-store.md`): 8 entri
 1. the map has an entry for its hash and that type is not taken in this boot: use it (`MACHINE_TYPE_ASSIGNED`, sticky 1);
 2. else the lowest type in 16..23 that no map entry references and this boot has not given out; the entry is recorded (sticky 0);
 3. else drop the lowest-index entry whose hash is not a machine of this boot (`MACHINE_TYPE_EVICTED`, an error event, so it is kept), take its type, record the entry in its slot;
-4. two machines with the same key in one boot (a hash collision, or a file twice under two names): the second takes a fresh number that is not recorded.
+
+The keys of one boot are unique: the boot planner refuses a key that two modules provide (a hash collision, or a file twice under two names) or one module provides twice (`E_PLAN_KEY`), so the assignment has no rule for a repeat.
 
 The boot hook writes the record once after the loads (the boot counter's single-copy `update`, seq + 1) and only when the map changed; `SELECT` and the menu's save keep the map
 bytes. A card made by the store builder has a zero map, so a fresh card gets 16, 17, ... in load order. `DKRT_ASSIGN` (peekable) holds the boot's table; `dkupload modules`

@@ -129,7 +129,7 @@ A module reaches the device through named imports, grouped by service in `sdk.to
   `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`, `dk_sdhc_large_open`.
 - When an optional provider is not loaded, its imports bind to stubs: `_open` returns `DK_E_MISSING`, the other functions return the same
   code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the last `_open` stub that answered DK_E_MISSING during `init` as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
-- Records of a generic kind: `dk_record_add(ctx, kind, bytes, len)` (runtime 0.8.0, `<dk/gen/imports.h>`, kinds in `<dk/gen/records.h>`) emits a record of a kind that a service owns and `[records.kinds]` marks `generic`; the module lists its key in `module.toml` (`[[record]] kind = "lfo_shape", key = 7`). The typed kinds (machine, page, parameter, effect) stay builder calls. A service module declares its kinds, slots, hooks, exports and resources with `dk_service_declare_kind`, `_slot`, `_hook`, `_export` and `_resource`; the commit compares them with the header table and refuses a difference with `DK_E_DECL_KIND`.
+- Records of a generic kind: `dk_record_add(ctx, kind, bytes, len)` (runtime 0.8.0, `<dk/gen/imports.h>`, kinds in `<dk/gen/records.h>`) emits a record of a kind that a service owns and `[records.kinds]` marks `generic`; the module lists the record in `module.toml` (`[[record]] kind = "lfo_shape", id = "ramp"`); its key derives from the module id and the id, and `patchkit gen` writes it as `DK_KEY_RAMP`. The typed kinds (machine, page, parameter, effect) stay builder calls. A service module declares its kinds, slots, hooks, exports and resources with `dk_service_declare_kind`, `_slot`, `_hook`, `_export` and `_resource`; the commit compares them with the header table and refuses a difference with `DK_E_DECL_KIND`.
 - Sink channels: `dk_sink_set(channel, sink)` (runtime 0.7.1, `<dk/core/sink.h>`) sets the sink of the `log` or `span` channel for the calling module; one owner per channel
   (`DK_E_BUSY` for a second), cleared after the owner's `fini` (runtime-and-services 5.11). A new import is a PATCH: the runtime went from 0.7.0 to 0.7.1 and the import has `since = "0.7.1"`.
 - Each import has `service`, `since`, `context` and `sig` in `sdk.toml`:
@@ -413,7 +413,7 @@ Facts behind this (reviews of 2026-11-12):
 - Type numbers need every selected module's machine keys up front only for the eviction rule (`sticky.rs:173`). Static machine ids in
   the header keep `assign.rs` unchanged.
 - FX ids are a 16-bit hash (`register.rs`); a clash (about 1 in 65535 per
-  pair) makes one effect load the other's saved kit values. Machines have a sticky map for clashes; FX get a refusal (`E_FX_ID_DUP`).
+  pair) makes one effect load the other's saved kit values. The boot plan refuses a repeated key of any kind (`E_PLAN_KEY`).
 - The runtime's firmware views are built after the boot hook, so rows written at commit land before the firmware reads them.
 
 ### 6.4 Users of declaration content off the device

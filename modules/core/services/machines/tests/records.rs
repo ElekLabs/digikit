@@ -2,6 +2,7 @@
 //! record and the capacity counts. A machine or a page row is written at absolute addresses of the firmware's tables (`wr`), which a host cannot
 //! reach: those parts run in the device tests (`core/dynreg`, `core/input`).
 use dkneeds::keys::name_hash;
+use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::service::*;
 use dkrt_sdk::records::*;
@@ -441,15 +442,16 @@ fn the_machine_types_of_a_module_are_its_machine_rows_in_type_order() {
 }
 
 #[test]
-fn the_machine_types_are_a_row_method_of_the_service() {
+fn the_machine_types_of_a_module_and_the_guard_counts_are_what_the_runtime_exports_ask_for() {
     let core = core();
     rstate().mach_owner[3] = 2;
     let mut out = [0u8; 8];
-    let n = unsafe { <Machines as Service<FakeCore>>::owned_ids(&core, 2, &mut out) };
+    let n = dkrt_svc_machines::records::owned_ids(&core, 2, &mut out);
     assert_eq!(n, 1);
     assert_eq!(out[0], dkrt_abi::profiles::DT2.dyn_type_first as u8 + 3);
-    assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::owned_ids(&core, 5, &mut out) },
-        0
-    );
+    assert_eq!(dkrt_svc_machines::records::owned_ids(&core, 5, &mut out), 0);
+    let g = unsafe { dkrt_svc_machines::records::guard_state(&core, 16) };
+    assert_eq!((g.faults, g.disabled), unsafe {
+        (core.guard_faults(16), core.guard_disabled(16))
+    });
 }

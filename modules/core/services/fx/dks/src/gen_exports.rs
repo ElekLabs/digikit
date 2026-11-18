@@ -40,12 +40,13 @@ const _: api::DkFxRoutesFn = dk_fx_routes;
 const _: api::DkFxMixFn = dk_fx_mix;
 
 /// The entries `service!` declares, by name hash, in the order of `sdk/sdk.toml`.
-pub fn exports() -> [(u32, *const u8); 5] {
+pub fn exports() -> [(u32, *const u8); 6] {
     [
         (dkrt_svc_rt::name_hash("dk_module_ctx_add_fx"), dk_module_ctx_add_fx as *const u8),
         (dkrt_svc_rt::name_hash("dk_fx_add_page"), dk_fx_add_page as *const u8),
         (dkrt_svc_rt::name_hash("dk_page_add_fx_param"), dk_page_add_fx_param as *const u8),
         (dkrt_svc_rt::name_hash("dk_fx_routes"), dk_fx_routes as *const u8),
         (dkrt_svc_rt::name_hash("dk_fx_mix"), dk_fx_mix as *const u8),
+        (dkrt_svc_rt::name_hash("dk_fx_routes_entry"), crate::rt::dk_fx_routes_entry as *const u8),
     ]
 }

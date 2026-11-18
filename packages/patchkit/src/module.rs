@@ -56,8 +56,9 @@ pub struct Manifest {
     /// `[[fx]] id = "..."`: the same for effects (`dk_module_ctx_add_fx`).
     #[serde(default, rename = "fx")]
     pub fxs: Vec<IdRef>,
-    /// `[[record]] kind = "lfo_shape", key = 7`: a record of a generic kind (`[records.kinds]` `generic = true`) that `init` emits with `dk_record_add`, with its key (the first
-    /// word of the record's body). The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
+    /// `[[record]] kind = "lfo_shape", id = "ramp"`: a record of a generic kind (`[records.kinds]` `generic = true`) that `init` emits with `dk_record_add`. Its key is
+    /// `hash24(<module id>:<id>) << 8`, like a machine key; `patchkit gen` writes it as `DK_KEY_<ID>` in `build/gen/module_ids.h` and `init` writes that constant as the
+    /// first word of the record's body. The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
     #[serde(default, rename = "record")]
     pub records: Vec<RecordKey>,
     /// `[[export]]` is no longer read (an error): the functions a service module (`role = "service"`) exports are the `provided` imports of its service in sdk/sdk.toml.
@@ -128,6 +129,23 @@ impl Manifest {
                         ));
                     }
                 }
+            }
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for r in &self.records {
+            let ok = !r.id.is_empty()
+                && r.id.bytes().all(|c| {
+                    c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'_'
+                });
+            if !ok {
+                return Err(err!(
+                    "[[record]] id {:?}: use lowercase ascii letters, digits, `-` and `_`",
+                    r.id
+                ));
+            }
+            // the generated constants `DK_KEY_<ID>` of the records are one list
+            if !seen.insert(r.id.as_str()) {
+                return Err(err!("[[record]] id {:?} is declared twice", r.id));
             }
         }
         for (name, old) in [
@@ -318,12 +336,12 @@ pub struct ServiceHook {
     pub devices: Vec<String>,
 }
 
-/// An entry of `[[record]]`: the kind by its lower-case name (`dkneeds::KIND_NAMES`) and the key of one record of it.
+/// An entry of `[[record]]`: the kind by its lower-case name (`dkneeds::KIND_NAMES`) and the local id of one record of it (the key derives from the module id and this id).
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct RecordKey {
     pub kind: String,
-    pub key: u32,
+    pub id: String,
 }
 
 /// An entry of `[[machine]]` or `[[fx]]`: the id and an optional DSP symbol prefix (any other key is refused).
@@ -1454,5 +1472,16 @@ mod manifest_tests {
         assert!(e.to_string().contains("unknown field"), "{e}");
         let e = load("[uses.dt3]\nmachine_rows = 1\n").unwrap_err();
         assert!(e.to_string().contains("unknown field"), "{e}");
+    }
+
+    #[test]
+    fn a_record_has_a_local_id_and_no_key_field() {
+        let e = load("[[record]]\nkind = \"lfo_shape\"\nkey = 7\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load("[[record]]\nkind = \"lfo_shape\"\nid = \"Ramp\"\n").unwrap_err();
+        assert!(e.to_string().contains("lowercase"), "{e}");
+        let e = load("[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n").unwrap_err();
+        assert!(e.to_string().contains("declared twice"), "{e}");
+        assert!(load("[[record]]\nkind = \"lfo_shape\"\nid = \"ramp-up\"\n").is_ok());
     }
 }
