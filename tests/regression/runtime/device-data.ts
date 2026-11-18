@@ -8,7 +8,14 @@ export interface DeviceProfile {
   limits: { fx_slots: number } & Record<string, number>;
   digikit: { id: number; name: string; peek: [number, number][]; dsp_area_bytes: number; sample_path_max: number };
   /** The kit object and its Sound objects (finding 02, 61): `kit_ptr` holds the pointer to the live kit; track t's Sound object is at kit + `sound_off` + `sound_stride` * t, its parameter array 0x14 into it, `sound_words` halfwords long. `lfo_live`: word 0 of track 1 in the array the LFO tick adds its output to (a row is `sound_words` halfwords); `lfo_phase`: the phase accumulator of LFO 1 of track 1 (finding 143). */
-  fx: { kit_ptr: number; sound_off: number; sound_stride: number; sound_words: number; lfo_live: number; lfo_phase: number };
+  fx: {
+    kit_ptr: number;
+    sound_off: number;
+    sound_stride: number;
+    sound_words: number;
+    lfo_live: number;
+    lfo_phase: number;
+  };
   /** `[ui]`: `brain_ptr`, the Brain pointer global (the port anchor `cf.view.value.brain`). The view stack and boot window facts are read by `@digi/test-support` `bootWindowFacts`. */
   ui: { brain_ptr: number };
   capabilities: { card: 'path-fs' | 'slots' | 'none' | 'unknown' } & Record<string, string>;
