@@ -884,34 +884,26 @@ export async function deleteFiles(
 }
 
 /**
- * RESTART, wait for the boot (the log), then report what MODULES lists. The page expects no module: it only reports what loaded.
+ * RESTART, wait for the boot (the log: BOOT_START, then FW_READY), then report what MODULES lists. The page expects no module: it only reports what loaded.
+ * The waits run on the session's clock (`DkSession.waitForRestart`): no timer of its own.
  */
 export async function restartDevice(
   s: DkSession,
   emit: Emit = () => {},
-  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
-  loadedTimeoutMs = 20000,
-  opts: { signal?: AbortSignal; stillBooting?: () => boolean; bootTimeoutMs?: number } = {},
+  opts: {
+    signal?: AbortSignal;
+    stillBooting?: () => boolean;
+    bootTimeoutMs?: number;
+    loadedTimeoutMs?: number;
+  } = {},
 ): Promise<{ loaded: string[]; missing: string[] }> {
   const info = await s.info();
   requireRuntime(info);
   emit({ event: 'restart' });
   await s.restart();
   emit({ event: 'wait', modules: [] });
-  await s.waitForBoot(sleep, opts.bootTimeoutMs, opts);
-  // MODULES answers once the runtime is up; the modules of the selection load at the start of the boot
-  const end = Date.now() + loadedTimeoutMs;
-  let loaded: string[] = [];
-  for (;;) {
-    if (opts.signal?.aborted) throw new DkError({ error: 'cancelled', kind: 'cancelled' });
-    try {
-      loaded = (await s.modules()).map((m) => m.name);
-      break;
-    } catch (e) {
-      if (Date.now() >= end) throw e;
-      await sleep(500);
-    }
-  }
+  const { bootTimeoutMs, ...rest } = opts;
+  const loaded = (await s.waitForRestart({ ...rest, timeoutMs: bootTimeoutMs })).map((m) => m.name);
   emit({ event: 'done', restarted: true, loaded, missing: [] });
   return { loaded, missing: [] };
 }

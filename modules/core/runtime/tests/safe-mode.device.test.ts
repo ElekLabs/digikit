@@ -10,7 +10,7 @@ import { introNow, safeFrame } from '@digi/regression/runtime/intro-frame.ts';
 import { stateName } from '@digi/regression/runtime/load-states.ts';
 import { FREE_TYPE, voiceRows } from '@digi/regression/runtime/project-kit.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { waitForBootEmulated, expectPollEmulated } from '@digi/regression/runtime/waits.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
  * Safe mode and power cuts (the Python scenarios, deleted: safe-fault, safe-late-fault and cut-selection, all full
@@ -233,7 +233,7 @@ cardRigs(
         expect(recs[1], 'B is still empty').toBeNull();
 
         await dk.restart();
-        await waitForBootEmulated(dk);
+        await dk.waitForBoot(90_000, { until: 'boot' }); // the boot record test: h.ready() follows
         await h.ready();
         expect(await bootInfoLoaded(session, h.plan), 'the restart loads the new copy').toMatchObject({
           loaded: mods.length,

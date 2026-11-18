@@ -43,7 +43,6 @@ setFitReader(everythingFits);
 
 const session = (dev: DkTransport, o: Partial<ConstructorParameters<typeof DkSession>[1]> = {}) =>
   new DkSession(dev, { timeoutMs: 20, retries: 1, ...o });
-const sleep = async () => {};
 
 test('framing: the vectors of the spec, round trips, partial groups, message splitting', () => {
   // `80 01 02 03 04 05 06` packs to `40 00 01 02 03 04 05 06`; `FF` packs to `40 7F` (tests/digikit/test_dkupload.py has the same)
@@ -711,7 +710,7 @@ test('restart: RESTART, wait for the new boot in the log, then report what MODUL
   const dev = new FakeDevice();
   dev.selection = ['modules/machine.dkm'];
   const events: any[] = [];
-  const out = await restartDevice(session(dev, { timeoutMs: 5, retries: 0 }), (e) => events.push(e), sleep);
+  const out = await restartDevice(session(dev, { timeoutMs: 5, retries: 0 }), (e) => events.push(e));
   assert.deepEqual(out, { loaded: ['mod:modules/machine.dkm'], missing: [] });
   assert.deepEqual(
     events.map((e) => e.event),
@@ -721,8 +720,10 @@ test('restart: RESTART, wait for the new boot in the log, then report what MODUL
   // the old boot answered INFO first (the LOG capability: the log decides), then two requests got nothing, then the new boot's log
   assert.ok(dev.seen.filter((c) => c === 'INFO').length >= 2);
   assert.ok(dev.seen.includes('LOG'));
-  assert.equal(dev.log.length, 1);
-  assert.equal(dev.log[0].kind, LOG_KIND.BOOT_START);
+  assert.deepEqual(
+    dev.log.map((e) => e.kind),
+    [LOG_KIND.BOOT_START, LOG_KIND.UI_FIRST, LOG_KIND.FW_READY],
+  );
 });
 
 test('LIST by prefix pages through the matches; MKDIR makes a folder entry that a file replaces', async () => {

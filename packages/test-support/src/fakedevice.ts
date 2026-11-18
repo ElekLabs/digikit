@@ -18,6 +18,13 @@ export const ST = { E_BUSY: -12, E_STATE: -53, E_NOFILE: -59, E_HASH: -56, E_FUL
 type LogEvent = { seq: number; kind: number; flags: number; args: number[] };
 type Staged = { path: string; size: number; sha: Uint8Array; data: Uint8Array; last: number };
 
+/** The log of a runtime that booted and reached its UI loop: BOOT_START, UI_FIRST, FW_READY. */
+const bootLog = (): LogEvent[] => [
+  { seq: 1, kind: LOG_KIND.BOOT_START, flags: 0, args: [516, 2, 0, 0, 0] },
+  { seq: 2, kind: LOG_KIND.UI_FIRST, flags: 0, args: [100, 0, 0, 0, 0] },
+  { seq: 3, kind: LOG_KIND.FW_READY, flags: 0, args: [100, 0, 0, 0, 0] },
+];
+
 export class FakeDevice implements DkTransport {
   files = new Map<string, Uint8Array>();
   dirs = new Set<string>(); // folders with nothing in them
@@ -28,7 +35,7 @@ export class FakeDevice implements DkTransport {
   silent = 0; // requests to ignore (the reboot)
   loaded: string[] = []; // the names MODULES lists
   staged: Staged | null = null;
-  log: LogEvent[] = [{ seq: 1, kind: LOG_KIND.BOOT_START, flags: 0, args: [516, 2, 0, 0, 0] }];
+  log: LogEvent[] = bootLog();
   queue: Uint8Array[] = [];
   free = 1 << 20; // INFO's u32 free_bytes
   storeKib: number | null = null; // CAPACITY's STORE limit in KiB (null: the entry is left out); 1024 KiB are used
@@ -85,7 +92,7 @@ export class FakeDevice implements DkTransport {
     if (this.pending > 0 && cmd !== CMD.RESTART && --this.pending === 0) this.silent = 2; // the guest is resetting: two requests get no answer
   }
   boot(): void {
-    this.log = [{ seq: 1, kind: LOG_KIND.BOOT_START, flags: 0, args: [516, 2, 0, 0, 0] }];
+    this.log = bootLog();
   }
   async recv(_timeoutMs?: number): Promise<Uint8Array | null> {
     return this.queue.shift() ?? null;

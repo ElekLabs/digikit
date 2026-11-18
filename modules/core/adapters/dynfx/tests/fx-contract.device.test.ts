@@ -26,7 +26,7 @@ import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { readSmallRing } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { bindBootClock, emulatorDk, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
+import { emulatorDk } from '@digi/regression/runtime/waits.ts';
 
 /** DSP frames added to the shared trigger frame: the hooked setup takes up to the shared frame (frames 6988 to 7005 of 7000 seen). */
 const SETUP_SLACK = 300;
@@ -151,11 +151,9 @@ for (const device of DEVICES) {
         await bounded(() => wet.dk.restart());
         wet.dk.cancelPending();
         const rebootDk = emulatorDk(wet.session);
-        bindBootClock(rebootDk, wet.session);
         const reboot = withWaitApi({ session: wet.session, dk: rebootDk, close: wet.close });
         try {
-          // The boot wait counts emulated time (waitForBootEmulated), not wall time.
-          await waitForBootEmulated(rebootDk, { emulatedMs: 90_000 });
+          await rebootDk.waitForBoot(); // 90 s of the session clock: emulated time
           await bounded(() => wet.session.client.guardSet(context.baseline('wet').guard));
           const deselected = await inspect(reboot, plan, slots, false, artifacts, 'deselected-boot', Number(epoch));
           rememberEpoch(deselected.epoch);

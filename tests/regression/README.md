@@ -101,7 +101,7 @@ Helpers in `runtime/devices.ts`, `ready.ts`, `waits.ts`, `install.ts`, `artifact
 - `runtimeTests(name, body, opts)`: one test per device, after `expectRuntimeBoot`.
 - `liveOptions(device, extra)`: daemon binary, firmware version and card for `withPatchedSession`.
 - `expectRuntimeReady`: wait for the runtime's normal UI hook on a fresh free-running daemon.
-- `rt.ui`, `rt.listen()`, `pollUntil`: panel inputs with their waits, runtime-log waits and polls, all in emulated time; wall time is only a hang guard.
+- `rt.ui`, `rt.listen()`, `pollUntil`: panel inputs with their waits, runtime-log waits and polls, all in emulated time; wall time is only a hang guard; `dk.waitForBoot()` of a harness session ends at FW_READY.
 - `installModule`, `moduleArtifact`: install a prepared `.dkm` and locate it.
 - `record`: a log line in the run artifacts.
 - `liveArtifacts`: the run artifact directory.

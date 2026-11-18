@@ -16,7 +16,7 @@ import { fileTemp } from './file-temp.ts';
 import { portFile } from './runtime/device-data.ts';
 import { daemonBinary } from './runtime/devices.ts';
 import { Ui } from './runtime/ui.ts';
-import { bindBootClock, emulatorDk, pollEmulated, withEmulatedProbe } from './runtime/waits.ts';
+import { emulatedOptions, emulatorDk, pollEmulated } from './runtime/waits.ts';
 import type { RunDirClaim } from './runtime/run-claim.ts';
 import { recordPhase, setTimingContext, timePhase, timingContext } from './timing.ts';
 import { startNoProgressWatchdog, type Watchdog } from './watchdog.ts';
@@ -124,7 +124,6 @@ export async function startPatchedSession(
   setTimingContext(session, { ...context, dsp: session.dsp });
   try {
     const dk = emulatorDk(session);
-    bindBootClock(dk, session);
     let closing: Promise<void> | undefined;
     return withWaitApi({
       session,
@@ -286,9 +285,8 @@ export function withReusablePatchedSession(
         if (!active) throw new Error('runtime case protocol is no longer active');
         return result;
       }),
-      { emulatedProbe: (run, emulatedMs) => withEmulatedProbe(session!, run, emulatedMs) },
+      emulatedOptions(session!),
     );
-    bindBootClock(dk, session!);
     const invalidateCase = () => {
       active = false;
       dk.cancelPending();

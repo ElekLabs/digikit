@@ -34,7 +34,7 @@ export function sessionOps(s: DkSession, library: LibraryModule[], deps?: Instal
     loaded: async () => (await s.modules()).map((m) => m.name),
     select: (paths) => s.select(paths),
     async restart(opts) {
-      return (await restartDevice(s, undefined, undefined, undefined, opts)).loaded;
+      return (await restartDevice(s, undefined, opts)).loaded;
     },
   };
 }

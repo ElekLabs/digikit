@@ -12,7 +12,14 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { DkSession, EmuUsbTransport, RuntimeEvents } from '../../packages/dk-session/src/index.ts';
+import {
+  DkSession,
+  EmuUsbTransport,
+  RuntimeEvents,
+  emulatedClock,
+  emulatedProbe,
+  type EmuStatus,
+} from '../../packages/dk-session/src/index.ts';
 import { LOG_KIND } from '../../packages/dk-session/src/gen_proto.ts';
 import { moduleStateText, stateModule } from '../../packages/dk-session/src/loads.ts';
 import { committedRecords, type RecordsExec } from '../../packages/test-support/src/commit-records.ts';
@@ -79,7 +86,11 @@ try {
   });
   const s = session;
   // a runtime session runs freely: the daemon advances emulated time by itself, so the protocol waits in wall time
-  const dk = new DkSession(new EmuUsbTransport((method, params) => s.client.call(method, params)));
+  const clock = emulatedClock(() => s.client.call<EmuStatus>('status'));
+  const dk = new DkSession(new EmuUsbTransport((method, params) => s.client.call(method, params)), {
+    clock,
+    emulatedProbe: emulatedProbe(clock),
+  });
   // the first boot: the runtime answers INFO once its protocol is up
   for (const end = Date.now() + 120_000; ; await new Promise((r) => setTimeout(r, 500))) {
     try {

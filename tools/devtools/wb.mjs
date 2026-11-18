@@ -52,10 +52,14 @@ import {
   EmuUsbTransport,
   ProcessBulkLink,
   chooseBulk,
+  emulatedClock,
+  emulatedProbe,
   eventLine,
   identifyDevice,
+  poll,
   RPC_PING,
   runtimeEvent,
+  wallClock,
 } from '../../packages/dk-session/src/index.ts';
 import { ProcessTransport } from '../../packages/dk-session/src/process-transport.ts';
 import { Sample, converterOf } from '../../packages/dk-session/src/dksample.ts';
@@ -241,7 +245,10 @@ async function connectEmu() {
   if (!sock) fail(`no emulator socket in ${runDir} (start one: mise run emu:serve)`, 1);
   const client = await connectControl(sock);
   const transport = new EmuUsbTransport(client.call.bind(client));
-  return { session: new DkSession(transport, { timeoutMs: 60000 }), transport, close: async () => client.close() };
+  // the emulator's clock and probe, as the test harness builds them (tests/regression/runtime/waits.ts): a request lost while the guest resets ends after 2 s of emulated time, not after the 60 s timeout
+  const clock = emulatedClock(() => client.call('status'));
+  const session = new DkSession(transport, { timeoutMs: 60000, clock, emulatedProbe: emulatedProbe(clock) });
+  return { session, transport, close: async () => client.close() };
 }
 
 /**
@@ -255,24 +262,32 @@ async function connectEmu() {
 async function connectReady(waitMs = 8000) {
   // a device named by --device skips the identification, so no probe
   if (opts.device && !opts.emu) return connect();
-  const deadline = Date.now() + waitMs;
-  for (;;) {
-    const link = opts.emu ? await connectEmu() : connect();
+  let link;
+  // true: the device answered (or failed with something that is no re-enumeration: the first real request reports it); false: no answer yet
+  const answered = async () => {
+    await link?.close();
+    link = opts.emu ? await connectEmu() : connect();
     try {
       try {
-        await link.session.info(1000);
+        await link.session.probe((q) => link.session.info(q));
       } catch (e) {
         // an error reply of INFO is an answer: the runtime is up
         if (e?.kind === 'timeout') await link.session.rpc(RPC_PING, undefined, 1000);
         else if (e?.kind === 'cancelled') throw e;
       }
-      return link;
+      return true;
     } catch (e) {
-      if (e?.kind !== 'timeout' || Date.now() > deadline) return link;
-      await link.close();
-      await new Promise((r) => setTimeout(r, 500));
+      if (e?.kind === 'cancelled') throw e;
+      return e?.kind !== 'timeout';
     }
+  };
+  try {
+    await poll(wallClock, answered, Boolean, { withinMs: waitMs, intervalMs: 500, message: 'device answers' });
+  } catch (e) {
+    if (e?.kind === 'cancelled') throw e;
+    // after the time the last link is returned anyway and the first real request reports the error
   }
+  return link;
 }
 
 async function withSession(run) {

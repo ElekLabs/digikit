@@ -1,13 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DkSession } from '@digi/dk-session';
-import { RuntimeEvents } from '@digi/dk-session';
-import { emulatorClock, repoRoot, type Device, type Session } from '@digi/test-support';
+import { poll } from '@digi/dk-session';
+import { repoRoot, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import { type PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
 import { boundService, neededServices, requireCoupledForServices, servicePath } from './service-files.ts';
-import { bootClockOf, pollEmulated, waitForBootEmulated } from './waits.ts';
 
 /** Emulated milliseconds the boot-time loads of the installed modules may take after the boot is seen. */
 const MODULES_LOADED_EMULATED_MS = 30_000;
@@ -28,7 +27,7 @@ export const DEBUG_MODULE = 'digikit/debug';
 /**
  * Native USB upload of prepared modules, one selection with all of them (in this order), one restart, then wait for their registration.
  * With `device`, the services that the modules need (`patchkit services`: `fx.dks` for an effect) go on the card too, bound to the stock firmware (the Nx target
- * `<service id>:bind`; the runtime finds them by name at boot). With `session` and the debug module in the list, the wait ends on the log's FW_READY: the boot intro
+ * `<service id>:bind`; the runtime finds them by name at boot). With the debug module in the list, `dk.waitForBoot()` ends on the log's FW_READY: the boot intro
  * is over and the stock MidiRpc service answers (without the log, the session's own probe before the first stock request covers it).
  */
 export async function installModules(
@@ -66,27 +65,17 @@ export async function installModules(
       }
       await dk.select(paths);
       await timePhase('protocol.restart', () => dk.restart());
-      await timePhase('protocol.waitForBoot', () => waitForBootEmulated(dk));
-      if (session && modules.some((m) => m.id === DEBUG_MODULE)) {
-        await timePhase('boot.fwReady', async () => {
-          const events = new RuntimeEvents(dk, emulatorClock(session));
-          await events.listen({ fromBoot: true });
-          await events.untilFwReady();
-        });
-      }
+      // waitForBoot ends at FW_READY with the debug module (the log), after the stock MidiRpc service answers
+      await timePhase('protocol.waitForBoot', () => dk.waitForBoot());
       const want = modules.map((m) => m.id);
       const loaded = async () => (await dk.modules()).map((entry) => entry.name);
-      const clock = bootClockOf(dk);
-      if (clock) {
-        // the module loads (DSP parts take many blocks) run in emulated time: wait for them in emulated time
-        await pollEmulated(clock, loaded, (names) => want.every((id) => names.includes(id)), {
-          emulatedMs: MODULES_LOADED_EMULATED_MS,
-          message: `modules ${want.join(' ')} not listed`,
-          retry: true,
-        });
-      } else {
-        await expect.poll(loaded, { timeout: 30_000, interval: 500 }).toEqual(expect.arrayContaining(want));
-      }
+      // the module loads (DSP parts take many blocks) run on the session's clock: emulated time on the harness, wall time on a bare DkSession
+      await poll(dk.clock, loaded, (names) => want.every((id) => names.includes(id)), {
+        withinMs: MODULES_LOADED_EMULATED_MS,
+        intervalMs: 500,
+        message: `modules ${want.join(' ')} not listed`,
+        retry: true,
+      });
     },
     { detail: modules.map((m) => m.id).join(' ') },
   );
