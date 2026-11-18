@@ -120,8 +120,8 @@ Filter machines:
 - New filter types can use 16..31: positive as a signed byte, never 0xff, above the stock range, inside the MIDI value and the 32-word SHARC table.
 - DSP: the filter type goes to the SHARC as one frame word per track; one converter function indexes a 32-word table with it and keeps only
   the result. What the result selects is open (E0a). The "five filter routines" of findings 06 and 53 are stages of one function.
-- Hook budget: `bind_max` is 24 per service file, `install_sites` 48 overall. `machines.dks` declares 13 hooks (DT2 binds 7, DN2 10); six
-  filter hooks give 19.
+- Hook budget: with the port file, `BIND` items leave the services, so no per-file limit applies. `install_sites` 48 bounds the installed hook sites
+  overall. `machines.dks` declares 13 hooks (DT2 binds 7, DN2 10); six filter hooks give 19.
 
 LFO waveforms:
 
@@ -726,8 +726,7 @@ What:
      leaves the T1 row untouched, so with the service absent the maximum stays 0x600. The hook reads the status register first and runs the stock code in interrupt
      context. No caller scales a value onto 0..max (finding 149, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
      a CC value above 6 selects a shape number up to the highest one instead of clamping to RAND. Gaps: the maximum follows the highest loaded number, so a number below it
-     whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (`bind_max` 24 per file;
-     installed sites DT2 18, DN2 22 of 48 before the graph site below).
+     whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (installed sites DT2 18, DN2 22 of 48 before the graph site below).
    - Graph (decided, O7): see item 1b.
 1b. Graph (option A of the static design; finding 149 "Graph"). Built. The 28-byte elements of the seven RAM vectors are `Bitmap` objects (1-bit,
    column-major tiles of 28 x 15 pixels, both devices), and the cell blits them. A shape graph is a vector of four tiles.
@@ -855,8 +854,8 @@ What:
    filter the module names as its fallback. The loader-bound hook restores the choice from the store when a kit loads (O6).
 5. DSP: a stub at the filter-type site with a slot, dispatch in the `machines.dks` DSP section (R12-8 pattern). Filter DSP is a new contract
    in `sdk/dsp/contract/` (input and output buffers per voice, state per voice).
-6. Hook budget: the six new hooks go through the port file ([port-file.md](port-file.md)). `machines.dks` declares 13 hooks; the six filter sites give 19, under `bind_max` 24 per service file and `install_sites` 48
-   overall. Five hooks remain after E7; the next table family may need a second service file.
+6. Hook budget: the six new hooks go through the port file ([port-file.md](port-file.md)). `machines.dks` declares 13 hooks; `BIND` items leave the services with the port file, so no per-file limit applies. The runtime's `install_sites` 48 still bounds the
+   installed hook sites: 26 are taken per device today, and E7 adds 6, which gives 32.
 7. Template `sdk/templates/filter/` and a fixture `tests/fixtures/modules/test/filter-gain`.
 8. The filter response graph reuses the Bitmap and tile helpers of the shared crate (E6e), and the filter knob ranges use the registration call of E6c.
 
