@@ -67,7 +67,7 @@ DT2 1.17 and DN2 1.12 are compared in the last section. Purpose: which windows a
   the analog calibration menu: "PERFORMING WARM-UP CALIBRATION" is used by `AnalogCalibrationMenuView::vfunc_5` at 0x4006b434). `FUN_4006ec6e` restores `0x300000`
   from the copy at NOR `0x340000` (reads `0x22d40` bytes, no caller known).
 - **OS area (from 0x80000)**: `FUN_4011aad4` (string "Writing Flash" at 0x4026ca4f): erases from `0x80000` in `FUN_40117bd6()`-sized steps, writes the image in `FUN_40117bc2()`
-  steps, prints "Success, Rebooting", resets (`DAT_ec090000 = 0x80`). Its only caller `FUN_400e1a78` has no known caller (an OS-upload path entered by vector or message).
+  steps, prints "Success, Rebooting", resets (`DAT_ec090000 = 0x80`). Its only caller `FUN_400e1a78` is the body of the "OS Upgrade" background job that the OS UPGRADE screen starts (`FUN_400e1e1c`); [146](146-syntakt-os-upgrade-receiver.md) maps the receiver, the length bound and which callers can reach `0x300000..0x37ffff` (only `FUN_4006eb7e`, and the OS write with a forged length word).
 - `FUN_400bd608` (from `FUN_400bd74e`, from boot `FUN_40082578`) copies a "COKi" persistent arena (0x3e6714 bytes) from one of three NOR offsets (table `0x401c1490`)
   to the card at `0x7a000` and then erases the NOR copy ([138](138-syntakt-runtime-facts.md)).
 - The self-test `FUN_40080646` also writes NOR (erases `0x3c0000` via `FUN_40117672`, `FUN_40117794` is chip erase command `0xe4`, `FUN_4011794c` writes the status register). **[O]**: which cases a user can reach.

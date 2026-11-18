@@ -103,14 +103,12 @@ The largest sector written is **0x81f7f** and the largest sector erased is **0x1
 agrees with the static result (MmcFs writes refuse a sector at or above 0x180000; the format erases only the two pools above). The store starts
 at 0x800000, 5 times higher. A real Syntakt may carry a smaller part **[O]** (`SEC_COUNT` of a unit was not read).
 
-The remote stream handler (**static [D]**, `/soundbanks/...`, `FUN_400b8b8e` through `FUN_400b8100`, and the "Clear" handler `FUN_400b639a`): the
-`MidiRpcData*` request handler `FUN_4010bd9a` dispatches Read/Write/Clear/Copy/Move/Swap requests. A source record has a type, a flags word
-(bit 3: Clear permission), an offset at +0xc and a length at +0x10. Type 1 is RAM (`MemoryStreamWriter`, `FUN_40116184` is `memset`); type 2 is
-the card: `SafeMmcStreamWriter(offset, length, 0x10000)`, whose first-block erase `FUN_4010f52a(offset >> 9, 1)` and block writes carry the offset of the
-request. Nothing in these functions bounds the offset below 0x180000; the only bound is the driver's capacity check (a sector at or above `SEC_COUNT`
-is refused, -10). So the offsets are the host's: a stock host (the Elektron transfer program) sends the offsets of the pools and records above, and
-a host that sends 0x800000 would erase the store. The table that the soundbank handler resolves paths against (the vector at `handler + 0x18`, entries
-of 0x1c bytes) is filled elsewhere and was not traced **[O]**. This is the risk of every device (DT2 and DN2 have the same handler), not new here.
+The remote stream handler (**static [D]**, details in [145](145-syntakt-store-write-bounds.md)): the `MidiRpcData*` request handler `FUN_4010bd9a` dispatches
+Read/Write/Clear/Copy/Move/Swap requests. The card offset comes from the path (`/samples/N`: `N * 0x80000 + 0x380000`; `/projects`, `/soundbanks` have their own
+descriptors), not from a request field. The host controls the byte count: the u32 at +0x19 of the import header becomes the writer size with no comparison, and the
+writer (`SafeMmcStreamWriter`, first-block erase `FUN_4010f52a`) writes upward from the slot with no limit tied to it. The eMMC driver checks only the card capacity.
+So a bad size from a host client can overrun a slot into the project pool and the digikit store at 0x800000; the runtime's own writes are bounded separately
+(`card::admit`, finding 145). This is stock behaviour of every device (DT2 and DN2 share the handler).
 
 ## INFO device id
 
@@ -144,5 +142,5 @@ parsed a NUL-terminated string and read the next field one byte early. They now 
 - Canary run of the new `cf.expansion` and keep area on st (regions.py `confirm`).
 - Whether a soft reset keeps DDR on the Syntakt (same open question as DT2).
 - The card part of a real Syntakt (`SEC_COUNT`).
-- The registered soundbank path table of the remote stream handler, and the self-test write at 0x400806e0.
+- The size source of the `/projects` and `/soundbanks` writers (finding 145), and the self-test write at 0x400806e0.
 - The ring's purpose; the bootstrap's own key reads.

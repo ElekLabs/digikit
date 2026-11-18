@@ -201,8 +201,8 @@ read over USB MIDI.
 Order: runtime safety items first, then the Nx cache gap, speed, restructure, design follow-ups.
 
 - Open runtime items:
-  - [ ] Store write safety: the remote stream handler takes host offsets (finding 138). Bound them to the store range on the device side
-        before any hardware use.
+  - [ ] Store write safety: the runtime's writes are bounded (`card::admit`). The stock Data API takes the byte count from the host and has no slot bound
+        (findings 145, 142 section 6). Add a guard at the eMMC write and erase entries in `core/runtime` before any hardware use of the Data API.
   - [ ] The `core/ui` HEALTH and MEMORY pages are unverified on the Syntakt.
   - [ ] `dk_input_turn` is unverified on the Syntakt.
 - Nx cache gap: `core/input:test-device--dt2` replayed its cached result after `modules/core/adapters/ui/build/ui.dko.json` changed.
