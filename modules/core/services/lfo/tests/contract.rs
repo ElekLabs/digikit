@@ -17,30 +17,30 @@ const SHAPE_A: u32 = 0x00a1_0100;
 const SHAPE_B: u32 = 0x00b2_0200;
 const SHAPE_BAD: u32 = 0x00c3_0300;
 
-/// `tests/fixtures/modules/lfo-shape/src/module.c`: the shape record with `key`, the name RAMP and a ramp from `from` in steps of 100.
+/// `tests/fixtures/modules/lfo-shape/src/module.c`: the shape record with `key`, the name RAMP and a ramp from `from` in steps of 2048 (`from` is at most -30721, so the last sample fits i16).
 fn lfo_shape(init: &mut Init, key: u32, from: i16) {
     let mut body = key.to_be_bytes().to_vec();
     body.extend_from_slice(b"RAMP");
-    for i in 0..SAMPLES as i16 {
-        body.extend_from_slice(&(from + 100 * i).to_be_bytes());
+    for i in 0..SAMPLES as i32 {
+        body.extend_from_slice(&((from as i32 + 2048 * i) as i16).to_be_bytes());
     }
     assert_eq!(body.len() + 8, LEN_LFO_SHAPE as usize);
     init.record(KIND_LFO_SHAPE, &body);
 }
 
 fn a(init: &mut Init) {
-    lfo_shape(init, SHAPE_A, -1000);
+    lfo_shape(init, SHAPE_A, -31744);
 }
 fn b(init: &mut Init) {
-    lfo_shape(init, SHAPE_B, 500);
+    lfo_shape(init, SHAPE_B, -31000);
 }
 /// The shape key of `a` with other samples.
 fn a2(init: &mut Init) {
-    lfo_shape(init, SHAPE_A, 3000);
+    lfo_shape(init, SHAPE_A, -30800);
 }
 /// A key of 0 is no shape: the service refuses it at the check.
 fn bad(init: &mut Init) {
-    lfo_shape(init, 0, 0);
+    lfo_shape(init, 0, -31744);
 }
 
 /// The table of shapes: how many, who owns the numbers the keys of the modules got, the name and the first and last samples of what is kept.

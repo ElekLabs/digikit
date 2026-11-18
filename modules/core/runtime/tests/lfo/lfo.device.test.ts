@@ -156,7 +156,7 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   await session.expectNoFault('lfo shapes');
 }
 
-runtimeTests('the lfo service file owns lfo_shape: a fixture loads and unloads, a second owner, another ABI, a kind item that init does not declare are refused', expectLfoShapes, {
+runtimeTests('the lfo service file owns lfo_shape: a fixture loads and unloads, a second owner, another ABI, a kind table that init does not declare are refused', expectLfoShapes, {
   dsp: 'zero',
 });
 

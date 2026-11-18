@@ -17,7 +17,7 @@
 //! Publishing: a shape's graph is complete when its `valid` word is set, by one aligned 32-bit store after every other word. The hook reads `valid` first. The fields the cell
 //! reads (width, height, pointers, the vector header) are written once and never change; a replaced shape only changes tile pixels, so a draw that races a reload shows
 //! one torn picture and cannot fault. `retract` clears `valid` first.
-use crate::records::{interp, MAX_SHAPES, RANGE, SAMPLES};
+use crate::records::{highest, interp, MAX_SHAPES, RANGE, SAMPLES};
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
 use core::sync::atomic::{compiler_fence, Ordering};
 
@@ -202,8 +202,11 @@ pub unsafe fn retract(i: usize) {
     compiler_fence(Ordering::Release);
 }
 
+/// The result of [`lookup`] for a gap number: the hook sets the stock table offset of the TRI tile vector (0), since the tick plays TRI for a number with no shape. Not a valid address.
+pub const STOCK_TRI: *const u8 = 1 as *const u8;
+
 /// What the hook at the vector pick of the cell calls (UI task): the pointer to the vector header of the graph for wave `wave` (the cell's unclamped wave argument), with the
-/// unipolar byte stored at `flag`; null when `wave` is no wave number of a loaded shape (the hook then leaves the stock vector).
+/// unipolar byte stored at `flag`; [`STOCK_TRI`] when `wave` is a gap (no module keeps it, and it is at or below the highest kept number); null otherwise (the hook then leaves the stock vector).
 ///
 /// `vtable` is the vtable word of the stock tile vector the hook read (the first word of its first `Bitmap`): it is copied into the four elements whenever it differs from what they hold. Only this
 /// function writes it and only the UI task calls it, so no reader sees a half-written word. A `vtable` of 0 gives null.
@@ -216,8 +219,15 @@ pub unsafe fn lookup(wave: u32, vtable: u32, flag: *mut u8) -> *const u8 {
         None => return core::ptr::null(),
     };
     let g = at(i);
-    if vtable == 0 || read_volatile(addr_of_mut!((*g).valid)) == 0 {
+    if vtable == 0 {
         return core::ptr::null();
+    }
+    if read_volatile(addr_of_mut!((*g).valid)) == 0 {
+        return if wave <= highest() {
+            STOCK_TRI
+        } else {
+            core::ptr::null()
+        };
     }
     let mut k = 0;
     while k < 4 {

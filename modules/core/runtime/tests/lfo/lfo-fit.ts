@@ -18,10 +18,10 @@ export const BAD = 0.1;
 export const PAIR_MARGIN = 0.02;
 export const SINE_OK = 0.03;
 
-/** The 32 samples of `tests/fixtures/modules/lfo-shape/src/module.c` (RAMP): a ramp from -1000 in steps of 100. */
-export const RAMP_SAMPLES = Array.from({ length: 32 }, (_, i) => -1000 + 100 * i);
-/** The samples of `tests/fixtures/modules/lfo-shape-b/src/module.c` (STEP). */
-export const STEP_SAMPLES = Array.from({ length: 32 }, (_, i) => (i < 16 ? -800 : 800));
+/** The 32 samples of `tests/fixtures/modules/lfo-shape/src/module.c` (RAMP): a ramp from -31744 in steps of 2048. */
+export const RAMP_SAMPLES = Array.from({ length: 32 }, (_, i) => -31744 + 2048 * i);
+/** The samples of `tests/fixtures/modules/lfo-shape-b/src/module.c` (STEP): -24576 for the first half, 24576 for the second. */
+export const STEP_SAMPLES = Array.from({ length: 32 }, (_, i) => (i < 16 ? -24576 : 24576));
 
 // ---- the waves as functions of a 32-bit phase, signed Q31 (finding 143, "Output scale") --------------------------------------------------
 
@@ -145,6 +145,14 @@ export function crossings(samples: readonly Sample[]): number {
   for (let i = 1; i < vs.length; i++) if (vs[i - 1]! < mid !== vs[i]! < mid) n++;
   return n;
 }
+
+/** The values in hex and the time offsets in ms (relative to the first sample), for a failure message. */
+export const describeSamples = (samples: readonly Sample[]): string => {
+  const t0 = samples[0]?.t ?? 0;
+  const v = samples.map((s) => (s.v >>> 0).toString(16)).join(' ');
+  const t = samples.map((s) => (s.t - t0).toFixed(1)).join(' ');
+  return `v: ${v} | t: ${t}`;
+};
 
 /** Peak-to-peak of the samples. */
 export const swing = (samples: readonly Sample[]): number => {

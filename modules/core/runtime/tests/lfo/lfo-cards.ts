@@ -1,4 +1,6 @@
-import { pollUntil } from '@digi/test-support';
+import { golden, pollUntil, repoRoot } from '@digi/test-support';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
@@ -8,6 +10,17 @@ import type { TestRuntime } from '@digi/regression/support.ts';
 
 /** Pinned frames of the MOD page (`golden` of test-support; written with UPDATE_GOLDENS=1 after the captured picture was looked at). */
 export const GOLDENS = fileURLToPath(new URL('./goldens.json', import.meta.url));
+
+/** `golden(GOLDENS, name, hash)`; with UPDATE_GOLDENS=1 the captured frame `png` is also copied to `out/runs/goldens/<golden file stem>/<name>.png` to look at what is pinned. */
+export function pinFrame(name: string, hash: string, png: string): void {
+  if (process.env.UPDATE_GOLDENS === '1') {
+    const dest = path.join(repoRoot(), 'out', 'runs', 'goldens', path.basename(GOLDENS, '.json'), `${name}.png`);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(png, dest);
+    console.info(`pinned frame ${name}: ${dest}`);
+  }
+  golden(GOLDENS, name, hash);
+}
 
 /** The shape fixtures: RAMP (`test/lfo-shape`) first, STEP (`test/lfo-shape-b`) second, so the service gives them the wave numbers 7 and 8. */
 export const SHAPE_A = 'test/lfo-shape';

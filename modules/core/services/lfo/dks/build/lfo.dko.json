@@ -165,112 +165,119 @@
   },
   {
    "addend": 0,
-   "offset": 656,
+   "offset": 664,
    "section": ".text",
    "symbol": "lfo_x_graph",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 670,
+   "offset": 680,
    "section": ".text",
    "symbol": "lfo_t_graph",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 724,
+   "offset": 694,
    "section": ".text",
-   "symbol": ".sec..text.dk_lfo_eval",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 742,
-   "section": ".text",
-   "symbol": "lfo_x_tick_done",
+   "symbol": "lfo_t_graph",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 748,
    "section": ".text",
-   "symbol": "lfo_x_tick_rand",
+   "symbol": ".sec..text.dk_lfo_eval",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 774,
+   "offset": 766,
    "section": ".text",
    "symbol": "lfo_x_tick_done",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 780,
+   "offset": 772,
+   "section": ".text",
+   "symbol": "lfo_x_tick_rand",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 798,
+   "section": ".text",
+   "symbol": "lfo_x_tick_done",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 804,
    "section": ".text",
    "symbol": "lfo_x_tick_slew",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 806,
+   "offset": 830,
    "section": ".text",
    "symbol": "lfo_x_tick_start",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 812,
+   "offset": 836,
    "section": ".text",
    "symbol": "lfo_x_tick_start_rand",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 870,
+   "offset": 894,
    "section": ".text",
    "symbol": ".sec..text.dk_lfo_eval",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 888,
+   "offset": 912,
    "section": ".text",
    "symbol": "lfo_x_read_done",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 894,
+   "offset": 918,
    "section": ".text",
    "symbol": "lfo_x_read_rand",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 920,
+   "offset": 944,
    "section": ".text",
    "symbol": "lfo_x_read_done",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 926,
+   "offset": 950,
    "section": ".text",
    "symbol": "lfo_x_read_slew",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 952,
+   "offset": 976,
    "section": ".text",
    "symbol": "lfo_x_read_start",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 958,
+   "offset": 982,
    "section": ".text",
    "symbol": "lfo_x_read_start_rand",
    "type": "cf.32"
@@ -941,42 +948,42 @@
    "type": "cf.32"
   },
   {
-   "addend": 676,
+   "addend": 700,
    "offset": 568,
    "section": ".text._RNvCsfUFSJjXbQk8_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": ".sec..text",
    "type": "cf.32"
   },
   {
-   "addend": 752,
+   "addend": 776,
    "offset": 592,
    "section": ".text._RNvCsfUFSJjXbQk8_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": ".sec..text",
    "type": "cf.32"
   },
   {
-   "addend": 784,
+   "addend": 808,
    "offset": 616,
    "section": ".text._RNvCsfUFSJjXbQk8_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": ".sec..text",
    "type": "cf.32"
   },
   {
-   "addend": 816,
+   "addend": 840,
    "offset": 640,
    "section": ".text._RNvCsfUFSJjXbQk8_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": ".sec..text",
    "type": "cf.32"
   },
   {
-   "addend": 898,
+   "addend": 922,
    "offset": 664,
    "section": ".text._RNvCsfUFSJjXbQk8_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": ".sec..text",
    "type": "cf.32"
   },
   {
-   "addend": 930,
+   "addend": 954,
    "offset": 684,
    "section": ".text._RNvCsfUFSJjXbQk8_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": ".sec..text",
@@ -1747,9 +1754,16 @@
   },
   {
    "addend": 0,
-   "offset": 40,
+   "offset": 50,
    "section": ".text._RNvNtCs9JAjHijWRei_12dkrt_svc_lfo5graph6lookup",
    "symbol": ".sec..bss._RNvNtCs9JAjHijWRei_12dkrt_svc_lfo5graph6GRAPHS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 64,
+   "section": ".text._RNvNtCs9JAjHijWRei_12dkrt_svc_lfo5graph6lookup",
+   "symbol": ".sec..text._RNvNtCs9JAjHijWRei_12dkrt_svc_lfo7records7highest",
    "type": "cf.32"
   },
   {
@@ -2246,10 +2260,10 @@
  "sections": [
   {
    "align": 4,
-   "hex": "712b00020c80000000076d3a0c800000000e6e324feffff448d703022f00203c636ba875a4000800a1c2e58a2f024eb9000000004fef00084cd703024fef000c4ef9000000004ef900000000752b00020c82000000076d0e0c820000000e6e064ef9000000004ef900000000752b00020c82000000076d0e0c820000000e6e064ef9000000004ef900000000712c002a0c80000000076d400c800000000e6e384feffff448d703022f0070324c002800203c7f421f4fa4000800a1c2e58a2f024eb9000000004fef00084cd703024fef000c4ef9000000004ef900000000752c002a0c82000000076d0e0c820000000e6e064ef9000000004ef900000000752c002a0c82000000076d0e0c820000000e6e064ef9000000004ef9000000004e71202f00040c80000007006d360c8000000eff6e2e4feffff448d703022f3c000000042f2f00182f2f00184eb9000000004fef000c4cd703024fef000c4a8067024e754e56ffe470064ef900000000202f00040c80000007006d360c8000000eff6e2e4feffff448d703022f3c000000032f2f00182f2f00184eb9000000004fef000c4cd703024fef000c4a8067024e754e56ffe470064ef90000000040c1028100000700664a202f00040c800000004f67100c800000005967080c8000000063662e2f004eb900000000588f20404feffff448d703024eb9000000004cd703024fef000c4a8067042140000420084e752f02222f00084ef9000000004feffff048d7030340c00280000007006666202e00185f800c8000000007625841f900000000700030100c80000006866646700030280002484030280004d08622402051200867302010672c486effef2f002f2e00184eb9000000004fef000c4a8067142c004cd703034fef001044fc00004ef9000000004cd703034fef00104ef9000000004e71712c004c0c80000000076d3a0c800000000e6e324feffff848d703002f00203c636ba875a4000800a1c2e58a2f024eb9000000004fef00084cd703004fef00084ef9000000004ef900000000732c004c0c81000000076d0e0c810000000e6e064ef9000000004ef900000000752c004c0c82000000076d0e0c820000000e6e064ef9000000004ef900000000712c002a0c80000000076d400c800000000e6e384feffff448d703022f0070324c002800203c7f421f4fa4000800a1c2e58a2f024eb9000000004fef00084cd703024fef000c4ef9000000004ef900000000752c002a0c82000000076d0e0c820000000e6e064ef9000000004ef900000000752c002a0c82000000076d0e0c820000000e6e064ef9000000004ef900000000",
+   "hex": "712b00020c80000000076d3a0c800000000e6e324feffff448d703022f00203c636ba875a4000800a1c2e58a2f024eb9000000004fef00084cd703024fef000c4ef9000000004ef900000000752b00020c82000000076d0e0c820000000e6e064ef9000000004ef900000000752b00020c82000000076d0e0c820000000e6e064ef9000000004ef900000000712c002a0c80000000076d400c800000000e6e384feffff448d703022f0070324c002800203c7f421f4fa4000800a1c2e58a2f024eb9000000004fef00084cd703024fef000c4ef9000000004ef900000000752c002a0c82000000076d0e0c820000000e6e064ef9000000004ef900000000752c002a0c82000000076d0e0c820000000e6e064ef9000000004ef9000000004e71202f00040c80000007006d360c8000000eff6e2e4feffff448d703022f3c000000042f2f00182f2f00184eb9000000004fef000c4cd703024fef000c4a8067024e754e56ffe470064ef900000000202f00040c80000007006d360c8000000eff6e2e4feffff448d703022f3c000000032f2f00182f2f00184eb9000000004fef000c4cd703024fef000c4a8067024e754e56ffe470064ef90000000040c1028100000700664a202f00040c800000004f67100c800000005967080c8000000063662e2f004eb900000000588f20404feffff448d703024eb9000000004cd703024fef000c4a8067042140000420084e752f02222f00084ef9000000004feffff048d7030340c0028000000700667e202e00185f800c8000000007627041f900000000700030100c8000000686665e700030280002484030280004d086224020512008674820106744486effef2f002f2e00184eb9000000004fef000c4a80672c0c800000000167142c004cd703034fef001044fc00004ef9000000004cd703034fef00107c004ef9000000004cd703034fef00104ef9000000004e71712c004c0c80000000076d3a0c800000000e6e324feffff848d703002f00203c636ba875a4000800a1c2e58a2f024eb9000000004fef00084cd703004fef00084ef9000000004ef900000000732c004c0c81000000076d0e0c810000000e6e064ef9000000004ef900000000752c004c0c82000000076d0e0c820000000e6e064ef9000000004ef900000000712c002a0c80000000076d400c800000000e6e384feffff448d703022f0070324c002800203c7f421f4fa4000800a1c2e58a2f024eb9000000004fef00084cd703024fef000c4ef9000000004ef900000000752c002a0c82000000076d0e0c820000000e6e064ef9000000004ef900000000752c002a0c82000000076d0e0c820000000e6e064ef9000000004ef900000000",
    "kind": "text",
    "name": ".text",
-   "size": 962
+   "size": 986
   },
   {
    "align": 2,
@@ -2785,10 +2799,10 @@
   },
   {
    "align": 2,
-   "hex": "2f02202f0008222f000c7406b4806430740eb480652a4a8167265f80243c000002444c02080006800000000020404aa8000c670c41e80014224043e90084601c4280241f4e75204022280010206f0010108160ee41e8001cb3c867eab29067f4208160f0",
+   "hex": "2f02222f000c7006b0af000865064280241f4e75740eb4af000865f24a8167ee202f00085f80243c000002444c02080006800000000020404aa8000c66204eb900000000b0af000854c07100448060c0204022280010206f0010108160b241e80014224043e90084600a208141e8001cb1c967dcb29066f260f2",
    "kind": "text",
    "name": ".text._RNvNtCs9JAjHijWRei_12dkrt_svc_lfo5graph6lookup",
-   "size": 100
+   "size": 122
   },
   {
    "align": 2,
@@ -3141,7 +3155,7 @@
    "size": 28
   }
  ],
- "source_sha256": "4743cda7ba38d9b9e71a76c1c21a41267c13822bc51b2fdd56bd401a5b6bbe34",
+ "source_sha256": "25ac7cd39f2aebe8419f92f5d8da41470d8bbafcba2b4224ee0bee19aca33282",
  "symbols": [
   {
    "global": false,
@@ -4023,37 +4037,37 @@
    "global": true,
    "name": "lfo_dn2_read_call",
    "section": ".text",
-   "value": 816
+   "value": 840
   },
   {
    "global": true,
    "name": "lfo_dn2_read_slew",
    "section": ".text",
-   "value": 898
+   "value": 922
   },
   {
    "global": true,
    "name": "lfo_dn2_read_start",
    "section": ".text",
-   "value": 930
+   "value": 954
   },
   {
    "global": true,
    "name": "lfo_dn2_tick_call",
    "section": ".text",
-   "value": 676
+   "value": 700
   },
   {
    "global": true,
    "name": "lfo_dn2_tick_slew",
    "section": ".text",
-   "value": 752
+   "value": 776
   },
   {
    "global": true,
    "name": "lfo_dn2_tick_start",
    "section": ".text",
-   "value": 784
+   "value": 808
   },
   {
    "global": true,
@@ -4220,8 +4234,8 @@
  ],
  "toolchain": {
   "exports": "dk_lfo_eval dk_lfo_graph dk_lfo_name dk_lfo_range_max dk_module dk_svc_abi lfo_dn2_read_call lfo_dn2_read_slew lfo_dn2_read_start lfo_dn2_tick_call lfo_dn2_tick_slew lfo_dn2_tick_start lfo_dt2_read_call lfo_dt2_read_slew lfo_dt2_read_start lfo_dt2_tick_call lfo_dt2_tick_slew lfo_dt2_tick_start lfo_ui_graph lfo_ui_name3 lfo_ui_name4 lfo_ui_range",
-  "instructions_redecoded": "3255",
-  "isa_check": "454bdda7506ec056949d86791fea3a0946a7f9732caca9cb9a9ef6e26489eb7e",
+  "instructions_redecoded": "3267",
+  "isa_check": "f050425e7ec4a640ebbdb53c9fcc77685b8319ebd4fe70e6811552efb03cf5f0",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

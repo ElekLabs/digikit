@@ -119,11 +119,18 @@ lfo_ui_graph:
     lea     12(%sp),%sp
     tst.l   %d0
     beq.b   9f
+    cmpi.l  #1,%d0                      | the sentinel of a gap number (`STOCK_TRI`, not an address)
+    beq.b   8f
     move.l  %d0,%d6
     movem.l (%sp),%d0/%d1/%a0/%a1
     lea     16(%sp),%sp
     move.w  #0,%ccr
     jmp     lfo_x_graph
+| A gap number draws the stock TRI tile because the tick plays TRI: D6 = 0, the tail adds TABLE (the TRI vector). The stock flag byte set for the clamped wave stays right (TRI and RND are both bipolar).
+8:  movem.l (%sp),%d0/%d1/%a0/%a1
+    lea     16(%sp),%sp
+    moveq   #0,%d6
+    jmp     lfo_t_graph
 9:  movem.l (%sp),%d0/%d1/%a0/%a1
     lea     16(%sp),%sp
     jmp     lfo_t_graph

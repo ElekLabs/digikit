@@ -1,4 +1,4 @@
-/* test/lfo-shape: one lfo_shape record (R7): its key, the name "RAMP" and 32 samples, a ramp from -1000 in steps of 100. The `lfo` service owns the kind.
+/* test/lfo-shape: one lfo_shape record (R7): its key, the name "RAMP" and 32 samples, a ramp from -31744 in steps of 2048 (nearly full scale, so the page graph shows it). The `lfo` service owns the kind.
    test/lfo-shape-b includes this file with its own SHAPE_NAME and SHAPE_SAMPLE (a second shape identity). */
 #include <dk/core/module.h>
 #include <dk/gen/records.h>
@@ -6,7 +6,7 @@
 
 #ifndef SHAPE_NAME
 #define SHAPE_NAME "RAMP"
-#define SHAPE_SAMPLE(i) ((-1000) + 100 * (int32_t)(i))
+#define SHAPE_SAMPLE(i) ((-31744) + 2048 * (int32_t)(i))
 #endif
 
 static int32_t init(dk_module_ctx *ctx)

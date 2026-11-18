@@ -170,6 +170,60 @@ fn a_graph_is_published_looked_up_and_withdrawn() {
 }
 
 #[test]
+fn a_gap_number_gets_the_stock_tri_marker() {
+    use dkrt_abi::service::{ApplyCtx, Service, SettleCtx};
+    use dkrt_sdk::records::KIND_LFO_SHAPE;
+    use dkrt_svc_lfo::graph::STOCK_TRI;
+    use dkrt_svc_lfo::records::{Lfo, NAME_LEN};
+    use dkrt_test_support::FakeCore;
+    let _g = lock();
+    let core = FakeCore::new();
+    let (key_a, key_b) = (0x00a1_0100u32, 0x00b2_0200u32);
+    let mut sel = SettleCtx::new();
+    sel.count = 1;
+    core.set_keys(0, KIND_LFO_SHAPE, &[key_a, key_b]);
+    unsafe { <Lfo as Service<FakeCore>>::settle(&core, &sel) };
+    core.boot_index.set(0);
+    // only the second key is applied: number 8 is kept and published, number 7 is a gap
+    let mut body = key_b.to_be_bytes().to_vec();
+    body.extend_from_slice(&[b'T'; NAME_LEN]);
+    for s in 0..SAMPLES as i16 {
+        body.extend_from_slice(&(100 * s).to_be_bytes());
+    }
+    let c = ApplyCtx {
+        owner: 1,
+        reg: core::ptr::null(),
+        base: 0,
+    };
+    let r = unsafe {
+        <Lfo as Service<FakeCore>>::apply_record(&core, KIND_LFO_SHAPE, body.as_ptr(), &c)
+    };
+    assert_eq!(r, 0);
+    let mut f = 0u8;
+    let vt = 0x4021_cff8;
+    assert_eq!(
+        unsafe { lookup(7, vt, &mut f) },
+        STOCK_TRI,
+        "a gap below the highest"
+    );
+    assert!(!unsafe { lookup(8, vt, &mut f) }.is_null());
+    assert_ne!(unsafe { lookup(8, vt, &mut f) }, STOCK_TRI);
+    assert!(
+        unsafe { lookup(9, vt, &mut f) }.is_null(),
+        "above the highest"
+    );
+    assert!(
+        unsafe { lookup(6, vt, &mut f) }.is_null(),
+        "RAND stays the firmware's"
+    );
+    unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
+    assert!(
+        unsafe { lookup(7, vt, &mut f) }.is_null(),
+        "nothing kept, no gap"
+    );
+}
+
+#[test]
 fn a_unipolar_shape_sets_the_flag_byte() {
     let _g = lock();
     let mut s = [0i16; SAMPLES];
