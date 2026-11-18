@@ -1881,286 +1881,6 @@
   {
    "addend": 0,
    "offset": 22,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 40,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 54,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 174,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 194,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 252,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 342,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 354,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 434,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 456,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 506,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 696,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 710,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 716,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 728,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 760,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 776,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 808,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 890,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 904,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 22,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 44,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 136,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 270,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 286,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 370,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records9copy_text",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 396,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records9copy_text",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 426,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvCsjXhIYCfUBBv_15dkrt_svc_params8make_rep",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 454,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvCsjXhIYCfUBBv_15dkrt_svc_params8make_rep",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 22,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 44,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 178,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records9copy_text",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 202,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records9copy_text",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 236,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvCsjXhIYCfUBBv_15dkrt_svc_params8make_rep",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 266,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvCsjXhIYCfUBBv_15dkrt_svc_params8make_rep",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 532,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 634,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 646,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 704,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 720,
-   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 22,
    "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records9ck_ownersNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE00ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
    "type": "cf.32"
@@ -2776,6 +2496,286 @@
   },
   {
    "addend": 0,
+   "offset": 22,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 136,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 270,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 286,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 370,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records9copy_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 396,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records9copy_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 426,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvCsjXhIYCfUBBv_15dkrt_svc_params8make_rep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 454,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvCsjXhIYCfUBBv_15dkrt_svc_params8make_rep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 174,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 194,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 252,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 342,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 354,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 434,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 456,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 506,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 696,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 710,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 716,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 728,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 756,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 778,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 810,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records7text_ok",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 892,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 906,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 178,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records9copy_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 202,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records9copy_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 236,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvCsjXhIYCfUBBv_15dkrt_svc_params8make_rep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 266,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvCsjXhIYCfUBBv_15dkrt_svc_params8make_rep",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 518,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 620,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 632,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 710,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 726,
+   "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 124,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines10nativepage5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
@@ -3356,99 +3356,120 @@
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 86,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_REG",
-   "type": "cf.32"
-  },
-  {
    "addend": 12,
-   "offset": 96,
+   "offset": 100,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_REG",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 108,
+   "offset": 112,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_REG",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 114,
+   "offset": 118,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RINvCsjXhIYCfUBBv_15dkrt_svc_params15write_param_rowNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 120,
+   "offset": 124,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines5slots3set",
    "type": "cf.32"
   },
   {
-   "addend": 48,
-   "offset": 300,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_REG",
-   "type": "cf.32"
-  },
-  {
-   "addend": 48,
-   "offset": 312,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_REG",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 366,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines10nativepage6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
    "addend": 36,
-   "offset": 398,
+   "offset": 248,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_REG",
    "type": "cf.32"
   },
   {
    "addend": 40,
-   "offset": 404,
+   "offset": 254,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_REG",
    "type": "cf.32"
   },
   {
    "addend": 44,
-   "offset": 412,
+   "offset": 262,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_REG",
    "type": "cf.32"
   },
   {
    "addend": 48,
-   "offset": 418,
+   "offset": 268,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_REG",
    "type": "cf.32"
   },
   {
    "addend": 48,
-   "offset": 430,
+   "offset": 280,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_REG",
    "type": "cf.32"
   },
   {
    "addend": 48,
-   "offset": 442,
+   "offset": 292,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_REG",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 362,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines10nativepage6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 36,
+   "offset": 394,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_REG",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 400,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_REG",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 408,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_REG",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 414,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_REG",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 426,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_REG",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 438,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_REG",
    "type": "cf.32"
@@ -7944,27 +7965,6 @@
   },
   {
    "align": 2,
-   "hex": "4fefffcc48d77cfc266f0038286f003c486b000c4eb900000000588f4a80670003844284741045f9000000002c00600000ee2f0d4df9000000004e962600486d00044e962a00486d00084e962f400038486d000c4e962f400040486d00104e96206c00044fef0014b6906712205420bcfffffffb206c0004529060000098206c0008ba9064e6206c000c2210b2af002c62da206c0010d290b2af002c63ceb0af00306dc848780020486d00184eb900000000508f4a0067b448780010486d00384eb900000000508f4a0067a060a65883b68567222f034e92588f4a8067f06c0c206c00140880001fb09065e2205420bcfffffffb601e486d00244eb900000000588f0c800000ffff6300009e205420bcfffffffbd4875284b88667000288487328004e922600487328044e922e002054508f4a9066de4bf328087001b0836700fef27203b28367507002b08366c6262c00182f0d4df9000000004e962f002f034eb9000000002a00486d00044e962f40003c486d000c4e962600486d00084e964fef00180c80000000ff6758205420bcfffffffb6000ff7e260d58832a0d0685000000246000ff2e48780018486d00284eb900000000508f4a006700ff5048780018486d00404eb900000000508f4a006700ff3a206c00107208b2906600ff2e6000ff327001b08365a26608206c001c4a106798486d00104eb900000000588f0c800000ffff6284226c00202011b08562000186206c0024d090b0856300017a2c6c0028222f002cb2966400016c222c002c20412f50002c4aaf002c672a206c0030760996af002c7008600a588853804a8067000124ba9067000132b68066ec7007b0af002c654e206c0030202f002c21850c002041529020059091206c003422502069000c26290010220592964c031800d1e90048227018007207b280652a206c00384a3008006732205420bcffffffe96000fe60487900000000487800082f2f00344eb900000000487900000000487800082f004eb9000000004a8967044a1166c6206c00104a9067122a0d06850000001442834df900000000605048780018486d00344eb900000000508f4a00660c205420bcfffffffb6000fdf848780018486d004c4eb900000000508f4a006600fde260dc206c00140880001fb090642a52835885206c0010b69064b02f054e96588f4a806dde206c0008b09065e2205420bcfffffffb6000fdaa205420bcfffffffb6000fd9e48790000000048780008487800084eb900000000205420bcfffffffb6000fd7e205420bcffffffea6000fd724cd77cfc4fef00344e75",
-   "kind": "text",
-   "name": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 942
-  },
-  {
-   "align": 2,
-   "hex": "4fefffbc48d77cfc2a6f0048286f004c486d000c4eb9000000002f400034588f4a80670001da42867e104df900000000280d606c206f002c486800244e96226f003c23400020206f003842a80020206c00182050206800dcd1c320af0040206c00182050206800e0d1c320af0044206c00182050d6a800e8242c00242f2f00304e962f002f024eb900000000224322804fef0010de855286bcaf0030670001602044487078004e9624002244487178044e962a00508f7003b08266d8205442824a302800675c52827008b08266f260c4220002817ffffff04a816630206c001c26b00c00206c00202002d090528224c0588b7008b0826700ff3c4875a8004e96588f4a806dca4293700060e0487900000000487800100880001f2f004eb900000000224443f178082f49002c226c001411912800206c00182050262800c8202800d4222800d09081d08241e800cc4c100800d68070184c020800244048780018206f003048680028226c0004d3c02f094eb90000000048780018206f003c48680040226c0008d3ca2f094eb90000000070304c00280042a7206c0004d1ca2f08226c000cd3c22f094eb9000000002f4000604fef002442a7d5ec00082f0ad4ac00102f024eb9000000002f40004c206c001820502003d0a800e42f4000442243d3e800ec2f4900404fef000c2640244942822a6f002c588d9bc96000fefe4cd77cfc4fef00444e75",
-   "kind": "text",
-   "name": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 520
-  },
-  {
-   "align": 2,
-   "hex": "4fefffc048d77cfc2a6f0044246f0048486d000c4eb9000000002f400030588f4a80670002b042877c104df900000000600001b8286f003099ef003c226f003447f18c002044486800104e962680206a000420502068003cd1c320af003c206a000420502643d7e800402244486900084e962680206a000420502643d7e8004420444868000c4e9626804fef000c7007b08c650001e4240c72184c01280048780018204448680034226a0014d3c22f094eb900000000487800182644486b004c202a0018d0822f004eb90000000048780001222a0014d2822f01280c70304c004800222a001cd2842f014eb90000000026404fef002448780001206a0018d1c22f08d8aa00202f044eb900000000206a0004205020680030d1c3208b206a0004205020680034d1c32080206a000420502068004cd1c3226a0018d3c22089206a00042250202f003c720c4c0108002040d1e900242248266a0014d7c222cb202a0018d0822280226a00042251226900245089202f00444c010800d3c021510008206a0004205022680028202f0044e588d0a800282040222f003c23901c00206a000420502068002c4fef000c4a886710266f003843f38800266f003017918800226a0024206a00101191c800206a00042050d6a800482043d4aa00142082dc855287beaf002c670000ec487568004e962400487568044e962a00508f7002b08266dc41f56808280824122f084e962f002f024eb9000000002f40003c2244486900044e962f400048206a000420502f68001c004c2628000c202f004090a8001447e800104c130800d6802003d0a800382f400044206a000820504fef00104a886700fdd2264447eb00144282387cffec99c4d9ef0034603a487900000000487800082f0c4eb900000000220002817ffffff04a816628206a000c20300c002980b800206a000820505282588bb4886400fd842f0b4e96588f4a806ce260cc487900000000487800100880001f2f004eb9000000004cd77cfc4fef00404e75",
-   "kind": "text",
-   "name": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 734
-  },
-  {
-   "align": 2,
    "hex": "4fefffd848d73cfc246f002c286f0030486a000c4eb9000000002a00588f4a8067644284741047f90000000042064bf90000000060342e2c0004487228084e932f002f074e95206c00084fef000cb09057c044802054121082804a0156c144811081d4835284ba84671c487228004e932e00487228044e932600508f7002b08767b4100660ce4cd73cfc4fef00284e75",
    "kind": "text",
    "name": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records9ck_ownersNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE00ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
@@ -8025,6 +8025,27 @@
    "kind": "text",
    "name": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk13module_commitNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "size": 24
+  },
+  {
+   "align": 2,
+   "hex": "4fefffbc48d77cfc2a6f0048286f004c486d000c4eb9000000002f400034588f4a80670001da42867e104df900000000280d606c206f002c486800244e96226f003c23400020206f003842a80020206c00182050206800dcd1c320af0040206c00182050206800e0d1c320af0044242c001c206c00182050d6a800e82f2f00304e962f002f024eb900000000224322804fef0010de855286bcaf0030670001602044487078004e9624002244487178044e962a00508f7003b08266d8205442824a302800675c52827008b08266f260c442937000528224c0588b7008b0826700ff544875a8004e96588f4a806ce2220002817ffffff04a816612206c002026b00c00206c00242002d09060c8487900000000487800100880001f2f004eb900000000224443f178082f49002c226c001411912800206c00182050262800c8202800d4222800d09081d08241e800cc4c100800d68070184c020800244048780018206f003048680028226c0004d3c02f094eb90000000048780018206f003c48680040226c0008d3ca2f094eb90000000070304c00280042a7206c0004d1ca2f08226c000cd3c22f094eb9000000002f4000604fef002442a7d5ec00082f0ad4ac00102f024eb9000000002f40004c206c001820502003d0a800e42f4000442243d3e800ec2f4900404fef000c2640244942822a6f002c588d9bc96000fee64cd77cfc4fef00444e75",
+   "kind": "text",
+   "name": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs0_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 520
+  },
+  {
+   "align": 2,
+   "hex": "4fefffcc48d77cfc266f0038286f003c486b000c4eb900000000588f4a80670003864284741045f9000000002c00600000ee2f0d4df9000000004e962600486d00044e962a00486d00084e962f400038486d000c4e962f400040486d00104e96206c00044fef0014b6906712205420bcfffffffb206c0004529060000098206c0008ba9064e6206c000c2210b2af002c62da206c0010d290b2af002c63ceb0af00306dc848780020486d00184eb900000000508f4a0067b448780010486d00384eb900000000508f4a0067a060a65883ba8367222f034e92588f4a8067f06c0c206c00140880001fb09065e2205420bcfffffffb601e486d00244eb900000000588f0c800000ffff6300009e205420bcfffffffbd4875284b8866700028a487328004e922600487328044e922e002054508f4a9066de4bf328087001b0836700fef27203b28367507002b08366c6262c00182f0d4df9000000004e962f002f034eb9000000002a00486d00044e962f40003c486d000c4e962600486d00084e964fef00180c80000000ff6758205420bcfffffffb6000ff7e260d58832a0d0685000000246000ff2e48780018486d00284eb900000000508f4a006700ff5048780018486d00404eb900000000508f4a006700ff3a206c00107208b2906600ff2e6000ff327001b08365a26608206c001c4a106798486d00104eb900000000588f0c800000ffff6284226c00202011b08562000188206c0024d090b0856300017c2c6c0028222f002cb2966400016e222c002c20412f50002c4aaf002c672a206c0030760996af002c7008600a588853804a8067000126ba9067000134b68066ec7007b0af002c654e206c0030202f002c21850c002041529020059091206c003422502069000c26290010220592964c031800d1e90048227018007207b280652a206c00384a3008006732205420bcffffffe96000fe60487900000000487800082f2f00344eb900000000487900000000487800082f004eb9000000004a89661a206c00104a9067182a0d06850000001442834df90000000060564a1167e260aa48780018486d00344eb900000000508f4a00660c205420bcfffffffb6000fdf648780018486d004c4eb900000000508f4a006600fde060dc206c00140880001fb090642a52835885206c0010b69064b02f054e96588f4a806dde206c0008b09065e2205420bcfffffffb6000fda8205420bcfffffffb6000fd9c48790000000048780008487800084eb900000000205420bcfffffffb6000fd7c205420bcffffffea6000fd704cd77cfc4fef00344e75",
+   "kind": "text",
+   "name": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records10ck_recordsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 944
+  },
+  {
+   "align": 2,
+   "hex": "4fefffc048d77cfc2a6f0044246f0048486d000c4eb9000000002f400030588f4a80670002b642877c104df900000000600001aa286f003099ef003c226f003447f18c002044486800104e962680206a000420502068003cd1c320af003c206a000420502643d7e800402244486900084e962680206a000420502643d7e8004420444868000c4e9626804fef000c7007b08c650001d6240c72184c01280048780018204448680034226a0014d3c22f094eb900000000487800182644486b004c202a0018d0822f004eb90000000048780001222a0014d2822f01280c70304c004800222a001cd2842f014eb90000000026404fef002448780001206a0018d1c22f08d8aa00202f044eb900000000206a0004205020680030d1c3208b206a0004205020680034d1c32080206a000420502068004cd1c3226a0018d3c22089206a00042250202f003c720c4c0108002040d1e900242248266a0014d7c222cb202a0018d0822280226a00042251226900245089202f00444c010800d3c021510008206a0004205022680028202f0044e588d0a800282040222f003c23901c00206a000420502068002c4fef000c4a88660000cc226a0024206a00101191c800206a00042050d6a800482043d4aa00142082dc855287beaf002c67000100487568004e962400487568044e962a00508f7002b08266dc41f56808280824122f084e962f002f024eb9000000002f40003c2244486900044e962f400048206a000420502f68001c004c2628000c202f004090a8001447e800104c130800d6802003d0a800382f400044206a000820504fef00104a886700fde0264447eb00144282387cffec99c4d9ef0034603a487900000000487800082f0c4eb900000000266f003843f38800266f0030179188006000ff242980b800206a000820505282588bb4886400fd922f0b4e96588f4a806ce2220002817ffffff04a81660a206a000c20300c0060cc487900000000487800100880001f2f004eb9000000004cd77cfc4fef00404e75",
+   "kind": "text",
+   "name": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs1_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 740
   },
   {
    "align": 2,
@@ -8091,7 +8112,7 @@
   },
   {
    "align": 2,
-   "hex": "4e56fed02f0a206e000c1028000c1d40fed72d50fed2222800042d41fed8246800084eb900000000122efed71d41fedf206efed82d48fee02d4afee42d40fee841eefeec200e0680ffffff2c4298b08866fa41eeff2c200e0680ffffff6c4298b08866fa42aeff6c203c000000002d40ff70223c000000002d41ff7441f9000000002d48ff7841eefedf2d48ff7c41eefee42d48ff8041eefeec2d48ff8441eeff6c2d48ff8841eeff2c2d48ff8c202e00082d40ff90486eff702f2efed24eb90000000042aeff9441eeff2c2d48ff9841eefee02d48ff9c41eefee82d48ffa041eeff942d48ffa4486eff982f2efed24eb9000000002d6a00b8ffa8203c000000002d40ffac223c000000002d41ffb041f9000000002d48ffb4203c000000002d40ffb8223c000000002d41ffbc41eefedf2d48ffc041eefee42d48ffc441eefeec2d48ffc841eeffa82d48ffcc202e00082d40ffd0486effac2f2efed24eb9000000002d6a00b4ffd4222e00082d41ffd841eefee42d48ffdc41eeffd42d48ffe041eefeec2d48ffe4203c000000002d40ffe8223c000000002d41ffec41f9000000002d48fff0203c000000002d40fff4223c000000002d41fff841eefedf2d48fffc486effd82f2efed24eb9000000004fef002048780040486efeec4879000000004eb90000000041eeff6c23d00000000042b9000000004fef000c4280246efecc4e5e4e75",
+   "hex": "4e56fed02f0a206e000c1028000c1d40fed72d50fed2222800042d41fed8246800084eb900000000122efed71d41fedf206efed82d48fee02d4afee42d40fee841eefeec200e0680ffffff2c4298b08866fa41eeff2c200e0680ffffff6c4298b08866fa42aeff6c203c000000002d40ff70223c000000002d41ff7441f9000000002d48ff7841eefedf2d48ff7c41eefee42d48ff8041eefeec2d48ff8441eeff6c2d48ff8841eeff2c2d48ff8c202e00082d40ff90486eff702f2efed24eb90000000042aeff9441eeff2c2d48ff9841eefee02d48ff9c41eefee82d48ffa041eeff942d48ffa4486eff982f2efed24eb9000000002d6a00b8ffa8203c000000002d40ffac223c000000002d41ffb041f9000000002d48ffb4203c000000002d40ffb8223c000000002d41ffbc41eefedf2d48ffc041eefee42d48ffc4202e00082d40ffc841eefeec2d48ffcc41eeffa82d48ffd0486effac2f2efed24eb9000000002d6a00b4ffd4202e00082d40ffd841eefee42d48ffdc41eeffd42d48ffe041eefeec2d48ffe4203c000000002d40ffe8223c000000002d41ffec41f9000000002d48fff0203c000000002d40fff4223c000000002d41fff841eefedf2d48fffc486effd82f2efed24eb9000000004fef002048780040486efeec4879000000004eb90000000041eeff6c23d00000000042b9000000004fef000c4280246efecc4e5e4e75",
    "kind": "text",
    "name": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records5applyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "size": 520
@@ -8105,10 +8126,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffd848d77c7c2a2f002c2f054eb9000000002640588f4a8067000216282b0074286b00b42a6b001445f90000000042827daf0033719ab0866700012652827208b28266f0243c00000000224242807daf00334bf9000000006000008a45f90000000077af00337cf40486000000004bf90000000049f90000000060402c46ddc0206b0064202b00bc222b00b82f042f0442a742a742a72f012f004870e8002f0b2f054e9542001540ffff4fef002842a72f0e4e94508fb48a670001761212200a528a7381b68166ee60b228bc0000000a42ae002042011341ffff52807208b2806700ff7a7399b28666f0286b00c8222b00d4206b00d09288d28041eb00cc4c101800d9c1206b00e845eb00f02992880042ad002442ad002872ff2b41002c42ad0030204cd1eb00dc20bc00000000204cd1eb00e020bc00000000222b00e441f41800246b00ec4df4a80049e8002095c1429042b288005888b9c866f46000ff6c262b001cd6822f032f054eb900000000222b000c2003908d41eb00104c100800d2802041d1eb0048208442b90000000042b90000000070ff23c00000000042b9000000002041d1eb003020bc000000002041d1eb003420bc000000002041d1eb004c20842241d3eb0038508f4a8c670c2049428042985280b08c66f8700a2380cc002041d1eb003c4290d2ab004420414290700c4c0308002040d1eb0024224822c42284226b0024508921510008206b0028226b002821913c00206b002c4a8867041190380042001540ffff6000fe0e4cd77c7c4fef00284e75",
+   "hex": "4fefffd848d77c7c2a2f002c2f054eb9000000002640588f4a8067000214282b0074286b00b42a6b001445f90000000042827daf0033719ab0866700012252827208b28266f0243c00000000224242807daf00337399b286677652807208b28066f245f90000000077af00337cf40486000000004bf90000000049f90000000060402c46ddc0206b0064202b00bc222b00b82f042f0442a742a742a72f012f00487688002f0b2f054e9542001540ffff4fef002842a72f0e4e94508fb48a670001701212200a528a7381b68166ee60b2286b00c8222b00d4206b00d09288d28041eb00cc4c101800d9c1206b00e845eb00f02992880042b90000000042b90000000072ff23c10000000042b900000000204cd1eb00dc20bc00000000204cd1eb00e020bc00000000222b00e441f41800246b00ec4bf4a80049e8002095c1429042b288005888b1cc66f428bc0000000a42ad002042011341ffff6000fefe262b001cd6822f032f054eb900000000222b000c2003908d41eb00104c100800d2802041d1eb0048208442b90000000042b90000000070ff23c00000000042b9000000002041d1eb003020bc000000002041d1eb003420bc000000002041d1eb004c20842241d3eb0038508f4a8c670c2049428042985280b08c66f8700a2380cc002041d1eb003c4290d2ab004420414290700c4c0308002040d1eb0024224822c42284226b0024508921510008206b0028226b002821913c00206b002c4a88660a42001540ffff6000fe161190380060f04cd77c7c4fef00284e75",
    "kind": "text",
    "name": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines7records6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 572
+   "size": 570
   },
   {
    "align": 2,
@@ -9742,7 +9763,7 @@
    "size": 28
   }
  ],
- "source_sha256": "bd72fc055c1b03d4777e055dce6acfcdae2a451acced09574752b8abc4764759",
+ "source_sha256": "48d3d78a9d56838abf2b8e274a4d7347fa0a3ea4b037bec47349aea4e8ee0310",
  "symbols": [
   {
    "global": false,
@@ -12285,8 +12306,8 @@
  ],
  "toolchain": {
   "exports": "MF_TAB dk_machine_add_page dk_machines_guard_state dk_machines_owned_ids dk_module dk_module_ctx_add_machine dk_page_add_param dk_page_bind dk_page_bind_local dk_page_canvas dk_param_get dk_param_glyph dk_param_latched dk_param_on_click dk_param_range dk_param_set dk_svc_abi dks_page_key dks_page_turn mf_clone5 mf_code_hook mf_draw_hook mf_frametype mf_group mf_key_hook mf_owner mf_reader mf_srcpage mf_turn_hook mf_typearg mf_typemap0 mf_typemap1 mf_typemap2",
-  "instructions_redecoded": "11479",
-  "isa_check": "a35ceb34642ccdef98c9b24ccffe0ca01c07d737dafae4fe593433488ee855e6",
+  "instructions_redecoded": "11480",
+  "isa_check": "808e92173b093ec1fc129a3463724e9c76001a3e34af0b0e436cbf63211e3316",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

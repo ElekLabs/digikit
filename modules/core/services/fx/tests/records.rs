@@ -1,5 +1,6 @@
 //! Host tests of the `fx` service over `FakeCore`: the handlers that need no firmware page (record refusal, the row words in publishing order, the clear
-//! sequence). The page rows are raw 32-bit addresses of the firmware's tables, which a host cannot reach: the device tests (`core/fxpages`) cover those.
+//! sequence). The page rows, the send cells and the kit tables are written through `FwMem`: `tests/contract.rs` loads and unloads whole effects and compares them
+//! (the contract suite); the device tests (`core/fxpages`) cover the firmware's own use of them.
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{
     FXW_ENABLED, FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, F_FIRST, MIX_ONE, WIN_FX,

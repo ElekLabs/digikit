@@ -122,6 +122,26 @@ pub trait FwMem {
     unsafe fn wr(&self, a: u32, v: u32) {
         wr(a, v)
     }
+    /// The byte at `a`.
+    unsafe fn rd8(&self, a: u32) -> u32 {
+        read_volatile(a as *const u8) as u32
+    }
+    /// The low byte of `v` at `a`.
+    unsafe fn wr8(&self, a: u32, v: u32) {
+        write_volatile(a as *mut u8, v as u8)
+    }
+    /// The big-endian s16 at `a`, read byte by byte (`a` may be odd).
+    unsafe fn rd16(&self, a: u32) -> i32 {
+        rd16(a)
+    }
+    /// The low halfword of `v` at `a`, written byte by byte (`a` may be odd).
+    unsafe fn wr16(&self, a: u32, v: i32) {
+        wr16(a, v)
+    }
+    /// The low halfword of `v` at the even address `a` in one store (a table of the image that other code reads as halfwords).
+    unsafe fn wr_half(&self, a: u32, v: u32) {
+        write_volatile(a as *mut u16, v as u16)
+    }
     /// `call`: the function at `a` (0: none, answers 0).
     unsafe fn call(&self, a: u32, args: &[usize]) -> usize {
         call(a, args)

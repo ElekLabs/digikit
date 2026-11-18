@@ -23,7 +23,7 @@ use crate::fxpage;
 use core::ptr::addr_of_mut;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp;
-use dkrt_abi::mem::{cstr_len, iw, rd, rd16, wr, wr16};
+use dkrt_abi::mem::{cstr_len, iw};
 use dkrt_sdk::*;
 
 /// The routes of an effect (`dkrt_sdk::DkrtFx`), and the bits of the flags word of its record (docs/design/digikit-dkm.md).
@@ -241,8 +241,8 @@ unsafe fn copy(dst: &mut [u8], src: *const u8, max: usize) {
 
 /// The count cell of the track FX key's list: 2 (the send page follows the stock page) while a cell is in use, else 0 (the stock list).
 #[inline]
-unsafe fn publish_count(inf: *const u32) {
-    wr(iw(inf, w::COUNT), if ss().used != 0 { 2 } else { 0 });
+unsafe fn publish_count<C: CoreApi>(core: &C, inf: *const u32) {
+    core.wr(iw(inf, w::COUNT), if ss().used != 0 { 2 } else { 0 });
 }
 
 /// Effect row `k` (module record `owner - 1`, tab string `tab`) has been registered: read its route and amounts from the settings and, for a send effect within the limit, give it a
@@ -328,11 +328,11 @@ pub unsafe fn apply<C: CoreApi>(core: &C, k: usize, owner: u8, tab: *const u8) {
             s.name[c].as_ptr() as u32,
             s.short[c].as_ptr() as u32,
         );
-        wr(iw(inf, w::ROW) + 8 + 4 * c as u32, code);
+        core.wr(iw(inf, w::ROW) + 8 + 4 * c as u32, code);
         // every Sound array gets the stored amounts before it is read
         s.restore = 0xffff;
         s.kit = 0;
-        publish_count(inf);
+        publish_count(core, inf);
     }
     fxdsp::fx_set_route(core, k, s.route[k] as u32, s.dsp[k]);
     // the FX view lists the send effects first: the list is built again now that the route is known
@@ -346,7 +346,7 @@ unsafe fn release<C: CoreApi>(core: &C, inf: *const u32, k: usize) {
         return;
     }
     let c = s.cell[k] as usize - 1;
-    wr(iw(inf, w::ROW) + 8 + 4 * c as u32, 0);
+    core.wr(iw(inf, w::ROW) + 8 + 4 * c as u32, 0);
     dkrt_svc_params::reset_param_row(
         core,
         dkrt_svc_params::dynreg(core),
@@ -361,7 +361,7 @@ unsafe fn release<C: CoreApi>(core: &C, inf: *const u32, k: usize) {
         s.shown[c][t] = -1;
         t += 1;
     }
-    publish_count(inf);
+    publish_count(core, inf);
 }
 
 /// The effect row `k` is gone (its module was removed): its cell and its state.
@@ -403,7 +403,7 @@ pub unsafe fn tick<C: CoreApi>(core: &C) {
         return;
     }
     // a kit, a pattern's kit or a project was loaded: wait until the loads are over, then write the amounts back
-    let ns = rd(iw(inf, w::NSOUND));
+    let ns = core.rd(iw(inf, w::NSOUND));
     if ns != s.nsound {
         s.nsound = ns;
         s.settle = SETTLE;
@@ -471,11 +471,11 @@ unsafe fn tracks<C: CoreApi>(core: &C, inf: *const u32) {
                 let at = p + SOUND_ARRAY + 2 * iw(inf, w::IDX0 + c);
                 if s.restore & (1 << t) != 0 {
                     let raw = (s.amt[k][t] as i32) << 8;
-                    wr16(at, raw);
+                    core.wr16(at, raw);
                     s.shown[c][t] = raw;
                     s.zero_wait[c][t] = 0;
                 } else {
-                    let v = rd16(at);
+                    let v = core.rd16(at);
                     if v == 0 && v != s.shown[c][t] && s.zero_wait[c][t] < ZERO_PASSES {
                         s.zero_wait[c][t] += 1;
                     } else if v != s.shown[c][t] {
