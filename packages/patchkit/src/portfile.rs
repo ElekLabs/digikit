@@ -24,6 +24,7 @@
 use crate::bind::{BoundHook, FwRef, Place, bind_with_refs, eval_exit_with, parse_import};
 use crate::dkm::{Dkm, EmitParts, ROLE_PORT, emit, max_file};
 use crate::error::*;
+use crate::firmware::Firmware;
 use crate::fwgen::{HookDecl, service_decls};
 use crate::port::{Hook, Port, Registry};
 use crate::prim;
@@ -581,14 +582,28 @@ pub fn equals_bind(
     let keys =
         dkneeds::keys::Keys::parse(&dkm.register).map_err(|e| err!("header table: {e:?}"))?;
     let hooks: Vec<u32> = keys.hooks().map(|p| p.a).collect();
-    Ok(compare(
-        &dkm.imports,
-        &hooks,
-        &bound,
-        &bound_dkm.image,
-        &refs,
-        data,
-    ))
+    let (mut diff, mut n) = compare(&dkm.imports, &hooks, &bound, &bound_dkm.image, &refs, data);
+    // a file with no HOOKS compares no site and would pass: when devices/fw names hooks for this service on this device, an empty HOOKS is a stale file
+    let device = Firmware::parse(fw)?.device.short();
+    let (_, decl_hooks) = service_decls(decls)?;
+    let declared: Vec<&str> = decl_hooks
+        .iter()
+        .filter(|h| {
+            h.users.iter().any(|u| *u == dkm.name)
+                && (h.devices.is_empty() || h.devices.iter().any(|d| d == device))
+        })
+        .map(|h| h.name.as_str())
+        .collect();
+    if hooks.is_empty() && !declared.is_empty() {
+        n += 1;
+        diff.push(format!(
+            "{}: devices/fw declares {} hook(s) for this service (first: {}), the file's HOOKS is empty: stale file?",
+            dkm.name,
+            declared.len(),
+            declared[0]
+        ));
+    }
+    Ok((diff, n))
 }
 
 /// The kind of a hook as `bind` made it: a `dk_tail_` reference makes a tail site (the file may also use `dk_stock_` of it: both resolve to the same tail,
@@ -922,6 +937,7 @@ mod tests {
             tail: true,
             stock: false,
             exits: vec![],
+            users: vec![],
         };
         let port = Port::parse(&format!(
             "[port]\ndevice=\"d\"\nversion=\"1\"\nsyx_sha256=\"{0}\"\nmain_sha256=\"{0}\"\nresolved_by=\"t\"\n[limits]\ncontainer_max=1\nmain_staged_max=1\n[[anchor]]\nname=\"cf.x.site.y\"\ncpu=\"cf\"\naddr=0x4000_0200\nlen=6\nsha256=\"{0}\"\nmark=\"D\"\nrule=\"r\"\n",

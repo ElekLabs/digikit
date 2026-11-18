@@ -271,6 +271,8 @@ pub struct HookDecl {
     pub tail: bool,
     pub stock: bool,
     pub exits: Vec<String>,
+    /// The `users` of the declaration (module ids).
+    pub users: Vec<String>,
 }
 
 /// The prefix of a `users` entry that is a service module id.
@@ -306,6 +308,7 @@ pub fn service_decls(decls: &[&str]) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
                     tail: h.tail,
                     stock: h.stock,
                     exits: h.exits.clone(),
+                    users: h.users.clone(),
                 });
             }
         }
