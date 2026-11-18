@@ -2,3 +2,4 @@
     .equ DEVICE_ID, 0x2    /* [digikit] id */
     .equ DYN_TYPES, 0x8    /* run-time machine types; core/dynreg reserves one machine row and core/dyndsp one voice row for each */
     .equ DL_AREA_BYTES, 0x50000    /* [digikit] dsp_area_bytes */
+    .equ DL_SLOT_BYTES, 0x40    /* [dsp.slots] words * 4 of sdk/sdk.toml: the slot block at the start of window 0 (DK_SLOT_BYTES of dk_stub.inc) */

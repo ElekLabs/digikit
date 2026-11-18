@@ -25,9 +25,10 @@ import {
   STACK,
   STEP_WORD,
   STOCK_BP,
+  SV_M13,
   TABLE,
   UNPACK_BP,
-  VOICE_CORE,
+  VOICE_DISPATCH,
   VOICE_STATE,
   VOICE_TYPE,
   VoiceRig,
@@ -94,6 +95,51 @@ describe('core/dsp-voice on the rig', () => {
     expect(out.instructions).toBeLessThan(60);
   });
 
+  it('a zero slot takes the stock path at the render hook and keeps the heartbeat', async () => {
+    const rig = VoiceRig.sine();
+    rig.setSlot(0, 0); // no service owns the site
+    rig.setType(0, TYPE); // a registered type: without the slot nothing may dispatch
+    rig.setNote(0, 60);
+    rig.recWord(0, 0x1b8, 1);
+    const reads: Record<string, [number, number]> = { diag: [nw(DIAG), 16], sv: [nw(SV_M13), 1] };
+    const out = await rig.call(0, { reads });
+    expect(stopsAt(out, STOCK_BP), out.halt).toBe(true);
+    expect([out.regs.I7, out.regs.I6]).toEqual([STACK - 104, STACK]);
+    contextIntact(out); // M13 included: the stub pins it only on the slot path
+    savedIntact(out);
+    expect(any(out.reads.out), 'no module routine ran').toBe(false);
+    expect(out.reads.diag![0], 'the heartbeat is the stub\'s').toBe(1);
+    expect(out.reads.diag![4], 'M13 as the firmware left it').toBe(u32(out.in.M13!));
+    expect(out.reads.sv![0], 'M13 is saved only on the slot path: nothing wrote the word').toBeNull();
+    expect(out.instructions).toBeLessThan(40);
+    // every voice but 0: the check and the stock path
+    const odd = await rig.call(5);
+    expect(stopsAt(odd, STOCK_BP), odd.halt).toBe(true);
+    expect(odd.instructions).toBeLessThan(12);
+  });
+
+  it('a set slot saves M13 and the entry restores it', async () => {
+    const rig = VoiceRig.sine();
+    const reads: Record<string, [number, number]> = { sv: [nw(SV_M13), 1] };
+    rig.setType(0, 0); // an unregistered type: the dispatch entry runs, then the stock path
+    const out = await rig.call(0, { reads, ctx: { M13: 7 } });
+    expect(stopsAt(out, STOCK_BP), out.halt).toBe(true);
+    expect(out.reads.sv![0]).toBe(7);
+    expect(out.regs.M13).toBe(7);
+  });
+
+  it('a zero slot takes the stock unpack and leaves knob 7 alone', async () => {
+    const rig = VoiceRig.sine();
+    rig.dm.set(nw(TABLE) + 9, 0x1000); // the row declares knob 7's range
+    rig.setSlot(1, 0);
+    rig.setType(3, TYPE);
+    const out = await rig.unpack(3);
+    expect(out.halt).toBe('breakpoint');
+    expect(out.finalPc).toBe(UNPACK_BP);
+    expect(out.reads.lev![0] ?? 0, 'the frame word is untouched').toBe(0);
+    expect(out.instructions).toBeLessThan(10);
+  });
+
   it('with no registered type a voice costs a check and voice 0 keeps the heartbeat', async () => {
     const rig = VoiceRig.sine();
     // two free rows, then the end
@@ -105,7 +151,7 @@ describe('core/dsp-voice on the rig', () => {
     expect([out.regs.I7, out.regs.I6]).toEqual([STACK - 104, STACK]);
     contextIntact(out);
     savedIntact(out);
-    expect(out.instructions).toBeLessThan(15);
+    expect(out.instructions).toBeLessThan(25); // the stub's slot load and the dispatch entry on top of the check
     expect(any(out.reads.diag), 'no beat and no breadcrumb from a voice other than 0').toBe(false);
     // voice 0: the heartbeat, and the mask of what is registered (free rows are no type)
     out = await rig.call(0, { reads });
@@ -507,7 +553,7 @@ describe('core/dsp-voice build variants on the rig', () => {
   });
 
   it('the c3 nosys variant writes no system register on the registered path', () => {
-    const text = applyConditionals(readFileSync(VOICE_CORE, 'utf8'), C3_VARIANTS['c-nosys']);
+    const text = applyConditionals(readFileSync(VOICE_DISPATCH, 'utf8'), C3_VARIANTS['c-nosys']);
     const path = text.split('_dv_stock:')[0]!;
     expect(path).not.toContain('MODE1 =');
     expect(path).not.toContain('BIT SET MODE1');
@@ -519,7 +565,7 @@ describe('core/dsp-voice build variants on the rig', () => {
     // A load of a B register also loads its I register (PRM p.6-24, "Circular Buffer Programming Model"); the stock epilogue restores B3
     // first, in every build (the emulator does not model the I load).
     const order = (defines: string[]): [number, number] => {
-      const lines = applyConditionals(readFileSync(VOICE_CORE, 'utf8'), defines)
+      const lines = applyConditionals(readFileSync(VOICE_DISPATCH, 'utf8'), defines)
         .split('\n')
         .map((x) => x.trim());
       const at = (prefix: string) => lines.findIndex((x) => x.startsWith(prefix));
@@ -634,6 +680,6 @@ describe('core/dsp-voice raw sine routine on the rig', () => {
     expect(out.reads.lev).toEqual([0x0100]);
     out = await rig.unpack(3, 0);
     expect(stopsAt(out, UNPACK_BP)).toBe(true);
-    expect(out.instructions).toBeLessThan(6);
+    expect(out.instructions).toBeLessThan(16); // the stub's slot load and the dispatch entry on top of the check (13 measured)
   });
 });

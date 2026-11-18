@@ -86,6 +86,8 @@ Services and modules only declare hooks, slots and rows. Content modules do not 
 | S4 | Machine and fx modules: MISSING placeholder, whole-project scan, view rebuild, DSP grace wait | Fakes for scan and rebuild | Machine swap with a project open | 4 to 5 days | Content modules reload | Medium |
 | S5 | SHARC slots | Rig tests of the slot rules | DSP swap with a voice held | 2 days, after R12-8 | DSP code reloads | Medium |
 
+S5 slot ownership (found in the R12-8 review): the hot swap must hand a slot from the old owner to the new one without a gap that a second owner could hit. `DspInstaller` refuses a second owner of a slot, and `clear_sequence` zeroes the slots of a record unconditionally, so a naive reload (install the new service, then remove the old one) either fails with a second owner or clears the slots the new service just filled. The hand-off needs a compare-and-clear (the old record clears a slot only while it still holds the old pc) or one combined write (the swap chunk writes the new pcs and the old record's teardown skips its slots).
+
 S3 starts with the hook-call ceiling and the paired A/B (`tools/devtools/coupled_ab.py`); stop if the cost is weak against the payoff. Two facts from the B1 design for S3: an exit that keeps the condition codes costs about 8 instructions in a gate stub, not 2 (use 8 in the ceiling, or a declared flag per exit); and the stock bytes of five sites cannot be copied as they are, because their displaced instructions branch (clone.5, srcpage, group, type_reader.load, filter_graph_test), so S3 needs a position-independent stock path made by bind for them.
 
 ## B1 bind-time firmware addresses (design for S0)

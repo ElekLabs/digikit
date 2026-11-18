@@ -4,7 +4,7 @@ Date: 2026-11-17. Targets: DT2 OS 1.17, DN2 OS 1.12. Part of R12 ([runtime-and-s
 [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md). Basis: [finding 128](../findings/128-r4-hooks-in-services.md) (SHARC hook sites cannot move into a
 `.dks`), [finding 31](../findings/31-dsp-link.md) (dsp-link), [digikit-hot-reload.md](digikit-hot-reload.md) (S5), [runtime-slimming.md](runtime-slimming.md).
 
-Status: **designed, not built.** Branch `r12-8/slice`.
+Status: steps 1 to 6 and 8 merged (PR 601): slice gate and final device gate green on DT2 and DN2, PCM unchanged (equiv pins onset-aligned). Step 7 open (section 9, "Open: step 7"). Results are in section 9.
 
 ## 1. Goal and scope
 
@@ -121,9 +121,9 @@ Each step runs its own host tests. Device runs follow the batch rules in AGENTS.
 | 3 Patchkit and format | DSP `[[slot]]` and `[[fill]]`, the `.dks` DSP section (`dks/dsp/*.s`), `service-check`, stub contract in the SVC_ABI hash | Packed `svc-test` fixture with a DSP section; service-check cases |
 | 4 Loader and installer | Provider DSP load, `Installer` trait with the DSP backend, SLOTS fill, failure rule | `Loader` and `FakePlatform` order tests; assembly case; refusal E_MISSING of a dependent |
 | 5 Slice gate (own go point) | DT2 voice render through the stub and `machines.dks` | gate-pins at a zero slot; the `test/sine` PCM pin; `sharc_cells` instruction ratio. Changes image hashes, `.dko` objects and smoke budgets |
-| 6 Remaining sites | DN2 render, DT2 unpack, fx entry and send | The machine fixture suite and the FX contract suite |
-| 7 ColdFire leftovers | Items parked "with R12-8" in [runtime-slimming.md](runtime-slimming.md): `guard_*`, the voice and fx fields of `DspState`, `dsp_info`, `fx_info` into the services, the addrmap reader | `FakeCore` tests |
-| 8 Docs | runtime-and-services, roadmap, AGENTS.md; `smoke --update` for touched cells | |
+| 6 Remaining sites (done) | DN2 render, DT2 unpack (done in step 5: the two unpack sites share `voice_unpack`), fx entry and send | Rig cases for a zero and a set slot at every site; the machine and effect conformance suites |
+| 7 ColdFire leftovers (open) | Items parked "with R12-8" in [runtime-slimming.md](runtime-slimming.md): `guard_*`, the voice and fx fields of `DspState`, `dsp_info`, `fx_info`, the addrmap reader | `FakeCore` tests |
+| 8 Docs (done) | runtime-and-services, roadmap; `smoke --update` for touched cells is a device step (section 9 lists the cells) | |
 
 Before step 4: count the DSP imports against `MAX_IMPORTS` (fallback: one data-block import), and list the zero-DSP tests that load `machines.dks`.
 
@@ -154,3 +154,21 @@ Estimate: about 16-22 agent hours; the slice (steps 1-5) 3-4 hours. Device wall 
 subset (DT2 and DN2).
 
 Order: starts on top of B1 and RS-C. It merges after the shared B1, RS-S and RS-C gate.
+
+## 9. Results of steps 6 and 8
+
+**What moved.**
+
+- DN2 voice render: `dsp-voice-dn2.s` keeps the hook, the voice-0 heartbeat with the context words, `_gs_block`, the helpers and all data. The DN2 hook has no free register, so the stub saves R0 (and R1 on voice 0) and pins M13 and I12 as well. `dispatch-dn2.s` of `machines.dks` has the mask, scan, contract adapter, guard and breadcrumbs. The DN2 stereo and pan code stays in the image.
+- fx entry and send: `fx.s`, `fxsend.s` and `fxsend-dn2.s` keep the hooks, stubs and data. The quick scan, row loop, `_fx_exec`, guard, fades, send mix and return add are `dks/dsp/fx-<device>.s` of `fx.dks` (one object per device holds the master chain and the send route; the shared parts are `.inc` files beside it). Entries `_fx_dispatch` and `_fxs_dispatch` fill the slots `fx_entry` and `fx_send`.
+- Slots used: `voice_render` (both devices), `voice_unpack` (DT2), `fx_entry`, `fx_send`: 4 of 16.
+
+**DSP imports against `MAX_IMPORTS` (32).** machines DT2 29, machines DN2 31, fx DT2 22, fx DN2 27. No section needs the data-block fallback. The import table of `core/dyndsp` is shared by all services: 55 entries on DT2 and 61 on DN2. `core/dyndsp` requires `core/fx` for the effect anchors, and `core/fx` requires `core/dsp-link`.
+
+**Dependencies (intended).** `core/dyndsp` carries one import table that all services share, so the machines and fx services see the same names. `machines` requires the fx adapter (`core/fx`) because the table holds the effect anchors; this is intended and not a layering error.
+
+**Rig numbers.** DN2 render stub on voice 0 with a zero slot: 50 instructions (the heartbeat, the twelve context words, `_gs_block` and the slot test). fx stub with a zero slot: 6 instructions per hook. Empty fx chain with the service installed: 27 instructions (the old bound was 24); one off row costs 206 (old bound 200). The machine and effect conformance suites and the stereo proof pass with their old bounds.
+
+**Smoke budgets that change (device step, not run).** Every cell that runs a machine or an effect module changes its `dsp_cost`: each stubbed hook call now runs the stub and the dispatch entry (the slice measured about +10 instructions per voice on DT2; 6 instructions per fx hook with a zero slot); cells with no service file take the stock path. The cells to update with `smoke --update`: the machine cells of `modules/machines/*`, the fx cells (`fx`, `fxpages`, `dynfx`) and the stereo cells of `dsp-voice`, on DT2 and DN2.
+
+**Open: step 7.** The voice and fx fields of `DspState` are used by the two services' DSP modules (50 uses each) and by the core's invariants and MODULES reply; `dsp_info` and `fx_info` are read by those modules through `CoreApi`; the guard accounting and the fx fault events live in `watch.rs` and feed `Service::guard_state` through `guard_faults`. Moving them needs (a) the services' own statics for the rows with their invariants in service host tests, (b) `core.info(name_hash)` for `dyndsp_info` and `dynfx_info`, and (c) a generic `Service::diag` hook that gives each service the polled DSP words (a service ABI change). Estimate 4 to 6 agent hours, with the services' host tests as the main cost.

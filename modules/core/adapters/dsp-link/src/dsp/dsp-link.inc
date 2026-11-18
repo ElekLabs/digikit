@@ -22,7 +22,7 @@
 //   w0  bits 0-15 DL_MAGIC, bits 16-29 idx (chunk number, 0 for the first of a transfer), bits 30-31 win (the window)
 //   w1  bits 0-16 off (destination, in words from the start of the window), bits 17-24 n (payload words),
 //       bit 25 LAST, bit 26 END (stop acknowledging), bits 27-31 xid (transfer id, 1..31)
-// Windows: 0 is _dl_area (DL_AREA_WORDS long); 1 is the voices registry (_dl_vrows, 24 * _dl_vcount words: a row is 24 words), which the digikit
+// Windows: 0 is the slot block `_dl_slots` (words 0 to 15, DK_SLOTS of sdk/dsp/contract/dk_stub.inc) followed by _dl_area (DL_AREA_WORDS - DK_SLOTS words, from word 16; a chunk that starts in the slots must end there; the window is DL_AREA_WORDS long); 1 is the voices registry (_dl_vrows, 24 * _dl_vcount words: a row is 24 words), which the digikit
 // runtime fills one word per transfer so that the render scan never sees a half-written row; 2 is the effect rows of core/fx (_dl_frows, 24 *
 // _dl_fcount words, all rows of the registry `fx`, free rows included), filled the same way (the pc word last). Windows 1 and 2 refuse every write
 // when their registry is not in the image (the externs are 0), window 3 does not exist.
@@ -162,8 +162,16 @@ _dl_notend:
     R0 = FEXT R10 BY 30:2;                // the window
     R0 = PASS R0;
     IF NE JUMP _dl_win1;
-    R3 = DL_AREA_WORDS;                   // window 0: the area
+    R3 = DK_SLOTS;                        // window 0, words 0 to 15: the slot block (a chunk must not cross word 16)
+    COMP(R6, R3);
+    IF LT JUMP _dl_w0slots;
+    R3 = DL_AREA_WORDS;                   // window 0 from word 16: the area (word 16 is the first word of _dl_area)
     R4 = _dl_area;
+    R0 = DK_SLOT_BYTES;
+    R4 = R4 - R0;
+    JUMP _dl_wdone;
+_dl_w0slots:
+    R4 = _dl_slots;
     JUMP _dl_wdone;
 _dl_win1:
     R3 = 1;
@@ -436,6 +444,8 @@ _dl_nodiag:
 .VAR _dl_svl2 = 0;
 .VAR _dl_svl3 = 0;
 .VAR _dl_beat = 0;
+// The slot block (window 0 words 0 to 15): the hook sites of the image read their dispatch entry here (sdk/dsp/contract/dk_stub.inc). Zero at boot: every site takes the stock path.
+.PKDATA _dl_slots, DK_SLOT_BYTES;
 // The module step (fault table word 25): the static word that core/dyndsp exports as `_dk_step`.
 .VAR _dk_step = 0;
 // The previous block's record address (word 30).

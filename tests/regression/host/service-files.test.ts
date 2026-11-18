@@ -31,7 +31,9 @@ fs.mkdirSync(path.join(dir, 'dist/modules/dt2'), { recursive: true });
 fs.writeFileSync(path.join(dir, 'dist/modules/dt2/fx.dks'), 'packed');
 // the file the Nx target `core/services/fx:bind` wrote
 fs.mkdirSync(path.join(dir, 'dist/svc-bound/dt2'), { recursive: true });
-fs.writeFileSync(path.join(dir, 'dist/svc-bound/dt2/fx.dks'), 'bound');
+// a service file has a whole header (the DSP size word is read to see whether the card needs a coupled session): a zero DSP part
+const BOUND = Buffer.concat([Buffer.from('bound'), Buffer.alloc(0xa0)]);
+fs.writeFileSync(path.join(dir, 'dist/svc-bound/dt2/fx.dks'), BOUND);
 const FX = { service: 'fx', moduleId: 'core/services/fx' };
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 // the sidecar `patchkit bind` writes: what the bound file was made from (the stock image of this test does not exist, so only the packed file is compared)
@@ -84,7 +86,7 @@ test('install puts the bound service on the card before the selection and the re
   const effect = write('gain.dkm');
   await installModules(dk, [{ id: 'test/dyn-fx-gain', artifact: effect }], { device: 'dt2' });
   expect(order).toEqual(['put modules/dyn-fx-gain.dkm', 'put services/fx.dks', 'select', 'restart', 'boot']);
-  expect(sent.get('services/fx.dks'), 'the bound file of the Nx bind target goes on the card').toBe('bound');
+  expect(sent.get('services/fx.dks'), 'the bound file of the Nx bind target goes on the card').toBe(BOUND.toString());
   // without a device the module goes alone (a test that installs by hand)
   order.length = 0;
   await installModules(dk, [{ id: 'test/dyn-fx-gain', artifact: effect }]);

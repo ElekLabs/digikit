@@ -353,21 +353,16 @@ pub fn pack_with_samples(
     pack_with_gate(obj, device, voices, fxs, tracks).map(|(bytes, _)| bytes)
 }
 
-/// [`pack_with_samples`], and whether a voice desc carries `DESC_GATE` (the file then declares machine contract 1.6).
-pub fn pack_with_gate(
-    obj: &Dko,
-    device: u32,
-    voices: &[VoiceSpec],
-    fxs: &[FxSpec],
-    tracks: Option<&crate::typed::SampleTracksDef>,
-) -> Result<(Vec<u8>, bool)> {
-    let mut gate = false;
-    if obj.arch != "sharc" {
-        return Err(err!(
-            "a DSP section holds a SHARC+ object; the object is {}",
-            obj.arch
-        ));
-    }
+/// What the packer knows of a DSP object before it writes the section: the kind of each section, the defined symbols (kind and global flag), the imports (the undefined
+/// symbols of its relocations, sorted) and the object linked at the nominal base with every import at 0.
+struct Analysis<'a> {
+    kind_of: BTreeMap<&'a str, &'a str>,
+    defined: BTreeMap<&'a str, (&'a str, bool)>,
+    imports: Vec<&'a str>,
+    linked: link::Linked,
+}
+
+fn analyse(obj: &Dko) -> Result<Analysis<'_>> {
     let kind_of: BTreeMap<&str, &str> = obj
         .sections
         .iter()
@@ -402,6 +397,52 @@ pub fn pack_with_gate(
     }
     let externs: BTreeMap<String, u64> = imports.iter().map(|n| (n.to_string(), 0)).collect();
     let linked = link::link(obj, L2_BYTE_BASE as u64, &externs)?;
+    Ok(Analysis {
+        kind_of,
+        defined,
+        imports,
+        linked,
+    })
+}
+
+/// The byte offsets in the DSP image of global text symbols of `obj` (what a service's DSP slot fills carry: the loader adds the placement).
+pub fn text_entries(obj: &Dko, names: &[&str]) -> Result<Vec<u32>> {
+    let Analysis {
+        defined, linked, ..
+    } = analyse(obj)?;
+    names
+        .iter()
+        .map(|name| match defined.get(name) {
+            Some(("text", true)) => Ok(((linked.symbols[*name] - L2_SW_BASE as u64) * 2) as u32),
+            Some(_) => Err(err!(
+                "DSP entry {name}: not a global text symbol of the DSP object"
+            )),
+            None => Err(err!("DSP entry {name}: the DSP object does not define it")),
+        })
+        .collect()
+}
+
+/// [`pack_with_samples`], and whether a voice desc carries `DESC_GATE` (the file then declares machine contract 1.6).
+pub fn pack_with_gate(
+    obj: &Dko,
+    device: u32,
+    voices: &[VoiceSpec],
+    fxs: &[FxSpec],
+    tracks: Option<&crate::typed::SampleTracksDef>,
+) -> Result<(Vec<u8>, bool)> {
+    let mut gate = false;
+    if obj.arch != "sharc" {
+        return Err(err!(
+            "a DSP section holds a SHARC+ object; the object is {}",
+            obj.arch
+        ));
+    }
+    let Analysis {
+        kind_of,
+        defined,
+        imports,
+        linked,
+    } = analyse(obj)?;
     let image = linked.image.clone();
     if image.is_empty() || image.len() % 4 != 0 {
         return Err(err!("the DSP image is {} bytes", image.len()));

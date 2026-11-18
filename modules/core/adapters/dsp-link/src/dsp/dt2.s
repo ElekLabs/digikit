@@ -8,7 +8,9 @@
 //
 // The reserved area (window 0). The offset field of a chunk is 17 bits, so an area is at most 524288 bytes. The runtime places
 // the DSP objects of run-time modules in it (docs/design/digikit-dkm.md, "DSP section"): the init data (code and data) and the
-// zero-initialised bss of a module live in the area together.
+// zero-initialised bss of a module live in the area together. Window 0 is DL_AREA_BYTES long in all (the offset field of a chunk reaches no more) and starts with the slot block
+// (DK_SLOT_BYTES, `_dl_slots`): word 16 of the window is the first word of _dl_area, so the last DK_SLOT_BYTES of _dl_area are never reached (core/dyndsp reports the shorter area).
 #include "device-dt2.inc"
+#include "dk_stub.inc"
 #include "dsp-link.inc"
 .PKBSS _dl_area, DL_AREA_BYTES;

@@ -133,6 +133,13 @@ stack       = ["I7","PCSTK","PCSTKP"]
 never_write = ["B7","L6","L7","M5","M6","M7","M13","IMASK","IMASKP","IRPTL","MMASK","TPERIOD","TCOUNT","FLAGS"]
 entry       = { entry = "I12", return = "I13" }
 
+# The slots of the hook stubs (docs/plans/runtime-and-services.md R12-8): `words` 32-bit words, zero at boot, at the start of window 0 of core/dsp-link (`_dl_slots`). A hook site of the
+# image reads its slot; zero takes the stock path, else the word is the pc of a service's dispatch code. The order is the slot index. `patchkit gen` writes sdk/dsp/contract/dk_stub.inc
+# (DK_SLOT_*: byte offsets) from it; the file is part of the service ABI hash. A `[[slot]] space = "dsp"` of an image adapter and a `[[fill]]` of a service name an entry.
+[dsp.slots]
+words = 16
+names = ["voice_render", "voice_unpack", "fx_entry", "fx_send"]
+
 # The FX contract's numbers (sdk/include/dk/gen/fx.h is the generated C view; it includes the generated sdk/include/dk/gen/fx_consts.h).
 # `patchkit gen` writes sdk/dsp/contract/dk_fx.inc and sdk/include/dk/gen/fx_consts.h from this table. Do not include it together with dk_machine.inc (DK_BLOCK and DK_LEVEL_BOUND_BITS are in both).
 [fx]

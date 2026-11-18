@@ -21,6 +21,7 @@
 #define DK_INSTALL_SITES 48
 #define DK_SLOTS_MAX 16
 #define DK_INFO_MAX 64
+#define DK_DSP_SLOT_WORDS 16
 #define DK_MAX_VOICES 8
 #define DK_MAX_FX 4
 #define DK_MAX_MODULES 8

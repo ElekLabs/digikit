@@ -76,8 +76,3 @@ _fxs_rchan:
 _fxs_rl: DM(I2, M6) = R2;
     I0 = I2;
     RTS;
-
-.SECTION/DM seg_dmda;
-.PKDATA _fxs_bus, 260;                    // the pad word, then the send bus (32 left, 32 right floats)
-.PKDATA _fxs_gnew, 64;                    // the 16 new gains
-.PKDATA _fxs_prev, 256;                   // the old gains: 16 floats for each of up to 4 rows

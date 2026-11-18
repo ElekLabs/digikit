@@ -5,7 +5,7 @@
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { STOCK_BP, TABLE, TYPE_CACHE, FRAME, PARAM_REC, RELEASE, UNPACK_BP } from './context.ts';
+import { SLOTS, STOCK_BP, TABLE, TYPE_CACHE, FRAME, PARAM_REC, RELEASE, UNPACK_BP } from './context.ts';
 import { ROOT } from './rig.ts';
 import { ConformError, type MachineSpec } from './spec.ts';
 import { assembleSource, link, sharcIncludeDirs, type Linked, type SharcObject } from './toolchain.ts';
@@ -17,12 +17,22 @@ export const DATA_END = 0x20100000;
 /** The adapter's sources of a device, assembled as separate objects that see each other's data symbols. */
 const DSP = path.join(ROOT, 'modules/core/adapters/dsp-voice/src/dsp');
 const WRAPPER: Record<string, string[]> = {
-  dt2: [path.join(DSP, 'dsp-voice.s')],
-  dn2: [path.join(DSP, 'dsp-voice-dn2.s'), path.join(DSP, 'dsp-voice-dn2-stereo.s')],
+  dt2: [path.join(DSP, 'dsp-voice.s'), path.join(ROOT, 'modules/core/services/machines/dks/dsp/dispatch-dt2.s')],
+  dn2: [
+    path.join(DSP, 'dsp-voice-dn2.s'),
+    path.join(DSP, 'dsp-voice-dn2-stereo.s'),
+    path.join(ROOT, 'modules/core/services/machines/dks/dsp/dispatch-dn2.s'),
+  ],
 };
 const FX_DSP = path.join(ROOT, 'modules/core/adapters/fx/src/dsp');
 const FX_ADAPTER = path.join(FX_DSP, 'fx.s');
 const FX_SEND: Record<string, string> = { dt2: path.join(FX_DSP, 'fxsend.s'), dn2: path.join(FX_DSP, 'fxsend-dn2.s') };
+/** The dispatch code of the fx service for a device (master chain and send route). */
+const FX_DISPATCH: Record<string, string> = {
+  dt2: path.join(ROOT, 'modules/core/services/fx/dks/dsp/fx-dt2.s'),
+  dn2: path.join(ROOT, 'modules/core/services/fx/dks/dsp/fx-dn2.s'),
+};
+const FX_FIXED_OBJECTS = 3; // the adapter's stub, the send stub and the dispatch object
 
 /** The stock functions and sites the stereo hooks of the DN2 adapter name; the machine rig does not run them, the stand-ins only have to link. */
 const STEREO_STANDINS = [
@@ -160,6 +170,7 @@ function externsFixed(device: string): Record<string, number> {
     _fw_unpack: UNPACK_BP,
     _dv_table: TABLE,
   };
+  fixed._dl_slots = SLOTS; // the slot block of core/dsp-link, which the stubs of core/dsp-voice read
   if (device === 'dn2') STEREO_STANDINS.forEach((n, i) => (fixed[n] = STOCK_BP + 0x10 + 4 * i));
   return fixed;
 }
@@ -178,7 +189,7 @@ function buildMachineUncached(sp: MachineSpec): MachineBuilt {
   const wrappers = WRAPPER[sp.device]!;
   const nwrap = wrappers.length;
   const objs = [
-    ...wrappers.map((w) => assembleSource(w, includeDirs(path.resolve(path.dirname(w), '../..')))),
+    ...wrappers.map((w) => assembleSource(w, includeDirs(moduleAround(w)!))),
     ...sp.sources.map((s) => assembleSource(s, includeDirs(sp.moddir))),
   ];
   const layout = placeData(objs, DATA_BASE);
@@ -269,7 +280,12 @@ function fxObject(file: string): SharcObject {
 }
 
 function buildFxUncached(sources: readonly string[], device: 'dt2' | 'dn2'): FxBuilt {
-  const objs = [fxObject(FX_ADAPTER), fxObject(FX_SEND[device]!), ...sources.map(fxObject)];
+  const objs = [
+    fxObject(FX_ADAPTER),
+    fxObject(FX_SEND[device]!),
+    fxObject(FX_DISPATCH[device]!),
+    ...sources.map(fxObject),
+  ];
   const layout = placeData(objs, DATA_BASE);
   let { end: addr } = layout;
   const { data, inits } = layout;
@@ -289,6 +305,7 @@ function buildFxUncached(sources: readonly string[], device: 'dt2' | 'dn2'): FxB
   const externs: Record<string, number> = {
     _fx_table: TABLE,
     _fx_master: FX_MASTER,
+    _dl_slots: SLOTS,
     _fx_back: STOCK_BP,
     _fxs_back: STOCK_BP, // one entry runs in a call: both tails end at the stand-in
     _fxs_trackbus: FX_TRACKBUS,
@@ -306,7 +323,9 @@ function buildFxUncached(sources: readonly string[], device: 'dt2' | 'dn2'): FxB
     data,
     inits,
     symbols,
-    moduleCode: objs.slice(2).map((o, i) => [bases[2 + i]!, bases[2 + i]! + o.parcels]),
-    moduleData: own.slice(2).flat(),
+    moduleCode: objs
+      .slice(FX_FIXED_OBJECTS)
+      .map((o, i) => [bases[FX_FIXED_OBJECTS + i]!, bases[FX_FIXED_OBJECTS + i]! + o.parcels]),
+    moduleData: own.slice(FX_FIXED_OBJECTS).flat(),
   };
 }

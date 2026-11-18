@@ -369,7 +369,99 @@ fn check_dks(dir: &Path, needs_dks: bool, neutral: &[(String, String)]) -> Vec<S
                 })
                 .collect()
         };
+        // a DSP fill (`space = "dsp"`) is dispatch code in `dks/dsp/*.s`, not a Rust function of the `service!` call: it has its own rules below
+        let is_dsp = |t: &toml::Table| t.get("space").and_then(|s| s.as_str()) == Some("dsp");
+        let dsp_fills: Vec<String> = m
+            .get("fill")
+            .and_then(|h| h.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|h| h.as_table())
+            .filter(|t| is_dsp(t))
+            .map(|t| {
+                t.get("slot")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string()
+            })
+            .collect();
+        let dsp_names = crate::sdkgen::dsp_slot_names();
+        for s in &dsp_fills {
+            if !dsp_names.contains(s) {
+                out.push(format!(
+                    "dks/module.toml: [[fill]] `{s}` has space \"dsp\", but `[dsp.slots]` of sdk/sdk.toml has no such slot ({})",
+                    dsp_names.join(", ")
+                ));
+            }
+        }
+        if !dsp_fills.is_empty() {
+            let has_asm = std::fs::read_dir(dks.join("dsp"))
+                .map(|d| {
+                    d.flatten()
+                        .any(|e| e.path().extension().is_some_and(|x| x == "s"))
+                })
+                .unwrap_or(false);
+            if !has_asm {
+                out.push("dks/module.toml has DSP [[fill]] entries but dks/dsp/ holds no .s file (the dispatch code of the service)".into());
+            }
+            // every import of the DSP code must be in the import table of core/dyndsp for its device (the loader resolves a DSP import against that table only)
+            let ext = Regex::new(r"(?m)^\s*\.EXTERN\s+([A-Za-z_][A-Za-z0-9_]*)\s*;").unwrap();
+            let imp = Regex::new(r"(?m)^\s*DSP_IMPORT\s+([A-Za-z_][A-Za-z0-9_]*)\s*$").unwrap();
+            for e in std::fs::read_dir(dks.join("dsp"))
+                .into_iter()
+                .flatten()
+                .flatten()
+            {
+                let path = e.path();
+                let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                let file = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                if path.extension().is_none_or(|x| x != "s") {
+                    continue;
+                }
+                let Some(dev) = stem
+                    .rsplit('-')
+                    .next()
+                    .filter(|d| crate::devdata::by_short(d).is_some())
+                else {
+                    out.push(format!("dks/dsp/{file}: the name must end in -<device> (dt2 or dn2): a DSP object is for one device"));
+                    continue;
+                };
+                // the table of the repository around the service folder
+                let rel = format!("modules/core/adapters/dyndsp/src/cf/dyndsp-{dev}.s");
+                let table = dir.ancestors().map(|a| a.join(&rel)).find(|p| p.is_file());
+                let Some(table_text) = table.and_then(|p| std::fs::read_to_string(p).ok()) else {
+                    out.push(format!(
+                        "dks/dsp/{file}: core/dyndsp has no import table for {dev}"
+                    ));
+                    continue;
+                };
+                let known: std::collections::BTreeSet<&str> = imp
+                    .captures_iter(&table_text)
+                    .map(|c| c.get(1).unwrap().as_str())
+                    .collect();
+                let text = std::fs::read_to_string(&path).unwrap_or_default();
+                for c in ext.captures_iter(&text) {
+                    let n = c.get(1).unwrap().as_str();
+                    if !known.contains(n) {
+                        out.push(format!("dks/dsp/{file}: `.EXTERN {n}` is not a DSP_IMPORT of core/dyndsp (dyndsp-{dev}.s): the loader cannot resolve it"));
+                    }
+                }
+            }
+            let sharc_object = m
+                .get("object")
+                .and_then(|o| o.as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|o| o.as_table())
+                .any(|o| o.get("place").and_then(|p| p.as_str()) == Some("dsp.l2"));
+            if !sharc_object {
+                out.push("dks/module.toml has DSP [[fill]] entries but no [[object]] with place = \"dsp.l2\"".into());
+            }
+        }
         fills = list("fill", "slot");
+        if !dsp_fills.is_empty() {
+            fills.retain(|(n, _)| !dsp_fills.contains(n));
+        }
         exports = list("export", "name");
         let module = m.get("module").and_then(|t| t.as_table());
         let get = |k: &str| module.and_then(|t| t.get(k)).and_then(|v| v.as_str());

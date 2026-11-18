@@ -11,6 +11,7 @@ use std::vec::Vec;
 
 // the seams between the real packed artifacts (`core/runtime:test-assembly`)
 mod assembly_tests;
+mod dsp_provider_tests;
 
 const PATH: &[u8] = b"mods/a.dkm\0";
 const IMAGE_OFF: usize = 160;
@@ -864,17 +865,6 @@ fn a_provider_in_safe_mode_installs_nothing() {
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
         assert_eq!(site_bytes(&l, 6), STOCK);
         assert_eq!(l.installer.count(), 0);
-    }
-}
-
-#[test]
-fn a_provider_with_a_dsp_section_is_refused_until_the_dsp_part_of_a_service_exists() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    unsafe {
-        let bind = svc_bind(&STOCK);
-        let mut l = provider_loader(service_file(&svc_table(&bind), 64), svc_init());
-        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT);
-        assert_eq!(l.m.allocs, 0);
     }
 }
 

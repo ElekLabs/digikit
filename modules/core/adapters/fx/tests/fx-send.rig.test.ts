@@ -475,6 +475,8 @@ describe('core/fx send route: the send hook', () => {
           [
             ['_fx_save', 128],
             ['_fx_s_r0', 4],
+            ['_fx_sv_m13', 4],
+            ['_fx_sv_i12', 4],
             ['_fx_s_i4', 4],
             ['_fx_s_l4', 4],
             ['_fx_ctx', 48],

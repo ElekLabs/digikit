@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { RESOURCE } from '@digi/dk-session/gen_proto';
 
 /**
  * Edits of a packed `.dkm` that make the loader or the boot plan refuse it (docs/design/digikit-dkm.md, packages/dkneeds/src/keys.rs). Each edit changes one
@@ -9,6 +10,7 @@ import { createHash } from 'node:crypto';
 export const H = { MAGIC: 0, SHA: 0x10, RUNTIME: 0x30, NAME: 0x40, IMAGE_OFF: 0x60, INIT: 0x80, KEYS_OFF: 0x90, KEYS_SIZE: 0x94 } as const;
 /** Bytes of the module name in the header. */
 export const NAME_LEN = 32;
+const RES_RECORD_BYTES = RESOURCE.RECORD_BYTES;
 /** The tags of the header table's entries. */
 export const TAG = { NEEDS: 1, USES: 2, KEYS: 3, KINDS: 4 } as const;
 
@@ -110,8 +112,12 @@ export const edits = {
   failInit: (f: Buffer) => void INIT_FAILS.copy(f, f.readUInt32BE(H.IMAGE_OFF) + f.readUInt32BE(H.INIT)),
   /** The commit: the header table owns record kinds that `init` does not declare (E_DECL_KIND, state FAILED; the plan accepts them: no service owns kinds 91 and 92). */
   undeclaredKinds: (f: Buffer) => needsToKinds(f, [91, 92]),
-  /** The plan: the module uses `rows` machine rows, more than the device has (E_PLAN_FIT). */
+  /** The plan: the module uses `rows` of the resource `resource` (the machine rows: more than the device has, E_PLAN_FIT). */
   machineRows: (resource: number, rows: number) => (f: Buffer) => void f.writeUInt32BE(rows, usesCountAt(f, resource)),
+  /** The plan: the module uses `bytes` of record memory, more than the arena has (E_PLAN_FIT on the CPU memory). */
+  recordBytes: (bytes: number) => (f: Buffer) => void f.writeUInt32BE(bytes, usesCountAt(f, RES_RECORD_BYTES)),
+  /** The plan: another key for the module's records, so that the copies of one fixture do not collide on it (E_PLAN_KEY). The first group of the KEYS entry holds kind, count and the key. */
+  key: (key: number) => (f: Buffer) => void f.writeUInt32BE(key, entry(f, TAG.KEYS).at + 8),
 };
 
 /** The file with one bit of its sha256 field changed (E_SHA); the rest is as `patched` leaves it. */
