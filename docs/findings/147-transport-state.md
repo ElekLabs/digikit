@@ -35,28 +35,9 @@ Callers: TransportView::vfunc_2 (0x400786ae; key 0x14 PLAY, key 0x15 STOP), the 
 - UIStates+0x269, +0x270 and +0x272 are further record flags (FUN_4005ad8c, FUN_4005ac1e). Their meaning (grid record or arm) is **[O]**.
 - The UIStates pointer comes from the existing getter `cf.window.fn.ui_states` (DT2 0x401998c0, DN2 0x4018b2a4). The object pointer sits at 0x44f370c0 (DT2) and 0x446488c8 (DN2). **[D]**
 
-## Suggested rules (text only; `devices/` is not edited)
+## Declaration
 
-Declare the two functions. Do not declare variable addresses. Add a "seq" subsystem to `devices/fw/project.toml`, or put the entries in an existing subsystem.
-
-```toml
-[[fn]]
-name = "cf.project.fn.transport_state"
-cpu = "cf"
-sig = "u32 ()"
-rule = { kind = "cf_func", hash = "abf06de823684dac9b8ac6a8a12a81eb", offset = 0x0, len = 4 }
-mark = "D"
-doc = "Both sequencer play words ORed: 0 stopped, 1 playing, 2 paused, 3 mixed. The firmware's own test."
-
-[[fn]]
-name = "cf.project.fn.live_rec"
-cpu = "cf"
-sig = "u32 (u32 ui_states)"
-rule = { kind = "cf_func", hash = "dae4a4462417901868a30fa7a6d6b6e0", offset = 0x0, len = 4 }
-mark = "D"
-```
-
-Resolved addresses: DT2 0x400d688a and 0x4005ad40; DN2 0x400d86c0 and 0x40055dec. **[V]**
+`cf.project.fn.transport_state` is declared in `devices/fw/project.toml` (rule `cf_func`, hash `abf06de823684dac9b8ac6a8a12a81eb`, offset 0, len 4, mark D). `patch:port` resolves it on DT2 1.17 (0x400d688a), DN2 1.12 (0x400d86c0), DN2 1.11 (0x400d86c0) and Syntakt 1.42 (0x4008b838); on the two supported images the address equals the one found by reading. **[V]** (resolution by `patch:port`). `cf.project.fn.live_rec` is not declared; the reload does not use it.
 
 Refusal for a reload: `transport_state() != 0` (refuse while playing or paused). This is a recommendation. `== 1` plus `live_rec(ui_states())` is the narrower alternative.
 

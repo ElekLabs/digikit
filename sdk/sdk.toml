@@ -2035,6 +2035,10 @@ E_CONTRACT = { code = -48, text = "the module needs another runtime version than
 E_TABLE = { code = -49, text = "the runtime's tables failed their check" }
 E_MISSING = { code = -73, text = "the service is not in the image (the module that provides it is not loaded)" }
 E_SVC_ABI = { code = -81, text = "a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint)" }
+E_RELOAD_PLAYING = { code = -83, text = "reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read)" }
+E_RELOAD_MENUS = { code = -84, text = "reload refused: the module built menus of its own" }
+E_RELOAD_ROUTED = { code = -85, text = "reload refused: an effect of the module is on a route" }
+E_RELOAD_KEYS = { code = -86, text = "reload refused: the new file lacks a key of the file it replaces" }
 
 [load.state]        # the state of a module of the boot selection (LOADS v2, `DkrtBootInfo.states`); never renumber
 SELECTED = { code = 0, text = "in the selection, not planned yet" }

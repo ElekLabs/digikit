@@ -45,6 +45,8 @@ pub struct FakePlatform {
     pub midi: RefCell<Vec<(u32, Vec<u8>)>>,
     pub tx_in_flight: Cell<Option<u32>>,
     pub os_upgrade: Cell<bool>,
+    /// The transport state `play_state` returns (`None`: the platform cannot read it). Starts stopped.
+    pub play: Cell<Option<u32>>,
     pub reset: Cell<bool>,
     /// The exception hook word has been pointed at the runtime's hook.
     pub exc_hook: Cell<bool>,
@@ -100,6 +102,7 @@ impl FakePlatform {
             midi: RefCell::new(Vec::new()),
             tx_in_flight: Cell::new(Some(0)),
             os_upgrade: Cell::new(false),
+            play: Cell::new(Some(0)),
             reset: Cell::new(false),
             exc_hook: Cell::new(false),
             info: RefCell::new(BTreeMap::new()),
@@ -227,6 +230,9 @@ impl Platform for FakePlatform {
     }
     unsafe fn track_type(&self, _track: u32) -> Option<i32> {
         None
+    }
+    unsafe fn play_state(&self) -> Option<u32> {
+        self.play.get()
     }
     unsafe fn key_down(&self, _key: u32) -> bool {
         false

@@ -9,7 +9,7 @@ dsp_sha256 = "0f514a12a2255f5c081e292c47f1f29462003177658da4bbae0a22fd737fffa2"
 resolved_by = "tools/patchkit/port_resolve.py 1"
 
 [limits]
-container_max = 0x1FFE00
+container_max = 0x1ffe00
 dsp_stored_max = 0x100000
 dsp_depacked_max = 0xfffff
 main_staged_max = 0x3ffc00
@@ -2383,6 +2383,16 @@ kind = "code"
 addr = 0x40036266
 len = 4
 sha256 = "1752574de8d0026d70bf9141496056979060c689d8d347371a73b627becc2134"
+mark = "D"
+rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.fn.transport_state"
+cpu = "cf"
+kind = "code"
+addr = 0x400d688a
+len = 4
+sha256 = "028519d8e0a047b184b6bdf657eb6286dd0c3db60efc8be8604a123f83352321"
 mark = "D"
 rule = "fw/project:cf_func"
 

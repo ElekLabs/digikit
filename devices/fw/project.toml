@@ -61,3 +61,12 @@ rule.st = { kind = "cf_func", hash = "f7397b41ff55f42ea0c66bf04fcf25cd", offset 
 mark = "D"
 users = ["core/runtime"]
 doc = "`int f(Kit *, int track)`: the machine type of a track of a kit, -1 when the track does not exist. core/runtime uses it for the machine-change watch."
+
+[[fn]]
+name = "cf.project.fn.transport_state"
+cpu = "cf"
+sig = "u32 ()"
+rule = { kind = "cf_func", hash = "abf06de823684dac9b8ac6a8a12a81eb", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. DT2 1.17 0x400d688a, DN2 1.12 0x400d86c0; findings 147."

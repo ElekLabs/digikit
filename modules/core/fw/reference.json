@@ -7089,6 +7089,12 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4011b6b6",
+            "len": 6
+          }
+        ],
         "dn2-1.12": [
           {
             "addr": "0x4011b996",
@@ -11302,6 +11308,67 @@
       "was": [
         "dkrt.fw.track_type"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400d855c",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400d86c0",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400d688a",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4008b838",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_project_transport_state",
+        "rust": "dkfw::project::transport_state"
+      },
+      "cpu": "cf",
+      "doc": "Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. DT2 1.17 0x400d688a, DN2 1.12 0x400d86c0; findings 147.",
+      "file": "devices/fw/project.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.project.fn.transport_state",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 ()",
+      "subsystem": "project",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -22653,7 +22720,7 @@
       "name": "param"
     },
     {
-      "count": 5,
+      "count": 6,
       "cpu": "cf",
       "file": "devices/fw/project.toml",
       "meaning": "the project object, kits, tracks, serialisation",

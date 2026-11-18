@@ -243,6 +243,16 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
         "E_HOOK_STOCK",
         "a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init",
     ),
+    -83: (
+        "E_RELOAD_PLAYING",
+        "reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read)",
+    ),
+    -84: ("E_RELOAD_MENUS", "reload refused: the module built menus of its own"),
+    -85: ("E_RELOAD_ROUTED", "reload refused: an effect of the module is on a route"),
+    -86: (
+        "E_RELOAD_KEYS",
+        "reload refused: the new file lacks a key of the file it replaces",
+    ),
 }
 
 CAP: dict[str, int] = {

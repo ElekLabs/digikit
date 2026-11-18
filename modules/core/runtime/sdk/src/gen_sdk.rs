@@ -446,6 +446,10 @@ pub mod load {
     pub const E_DECL_KIND: i32 = -79;
     pub const E_SVC_ABI: i32 = -81;
     pub const E_HOOK_STOCK: i32 = -82;
+    pub const E_RELOAD_PLAYING: i32 = -83;
+    pub const E_RELOAD_MENUS: i32 = -84;
+    pub const E_RELOAD_ROUTED: i32 = -85;
+    pub const E_RELOAD_KEYS: i32 = -86;
     pub const STATE_SELECTED: u8 = 0;
     pub const STATE_PLANNED: u8 = 1;
     pub const STATE_REFUSED: u8 = 2;
