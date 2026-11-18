@@ -42,8 +42,21 @@ pub fn core_for_device(device: &str, dsp_image: &str) -> Result<&'static GenCore
     };
     let core = sharc_native::core_lib::load(std::path::Path::new(&path), env_suffix(device))
         .map_err(|e| format!("{var}: {e}; rebuild it with `uv run python -m tools.devtools.verify_build cores --device {device}`"))?;
+    check_generated(&var, &path, core)?;
     check_image(&var, core.image, device, dsp_image)?;
     Ok(core)
+}
+
+/// A library built without `SHARC_GEN_DIR` (or without its image) holds the runtime fallbacks only: its engine traps at
+/// the first DSP instruction. Refuse it when the session opens, with the cause.
+fn check_generated(var: &str, path: &std::ffi::OsStr, core: &GenCore) -> Result<(), String> {
+    if core.generated && core.has_image {
+        return Ok(());
+    }
+    Err(format!(
+        "{var}: {} was built without a generated core (SHARC_GEN_DIR unset or without image.rs): the DSP would trap at its first instruction; rebuild it with `uv run python -m tools.devtools.verify_build cores`",
+        std::path::Path::new(path).display()
+    ))
 }
 
 fn check_image(var: &str, core_image: &str, device: &str, dsp_image: &str) -> Result<(), String> {
@@ -304,6 +317,13 @@ mod tests {
             "{msg}"
         );
         check_image("V", "none", "dn2", "dn2-1.12").unwrap_err();
+    }
+
+    #[test]
+    fn a_library_without_a_generated_core_is_refused() {
+        let msg = check_generated("V", "/x/core.dylib".as_ref(), &GenCore::NONE).unwrap_err();
+        assert!(msg.contains("built without a generated core"), "{msg}");
+        assert!(msg.contains("/x/core.dylib"), "{msg}");
     }
 
     #[test]
