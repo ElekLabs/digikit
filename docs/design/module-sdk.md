@@ -89,6 +89,7 @@ The module table is three tables that agree by construction (module records, `DK
 | build | typed manifest: unknown fields, knob counts, device models | `typed.rs:26,49,65,178-236` (`deny_unknown_fields`) |
 | build / `module:check` | conformance on the concrete core: returns, context registers, finite, bound 8.0, budget `headroom/16`, retrigger, long notes | `pk_conform.py:1-24`, `machine_rig.py:1-20`, `docs/TESTING.md:140-167` |
 | pack | one ColdFire object, one DSP object per device; relocation kinds; no PC-relative import | `main.rs:370-482`, `digikit-dkm.md:57-62, 107-111` |
+| pack | a content module (not `core/*`) holds no 32-bit address inside a protected window of a device it is built for (flash controller, FPGA and peer buses) | `protect.rs`, `[protect] windows` of the device files, [finding 141](findings/141-syntakt-analog-and-nor-paths.md) |
 | load | SHA-256, format, `runtime_min`, imports, slots, name, DSP section (device, bounds, imports, rows, types, space), registry records; nothing is written before the last check | `digikit-dkm.md:131-147` |
 | run time | knob words clamped to the declared range; output must be finite and below 8.0; 8 faults in 1500 blocks disable the type | `51-pluck-tune-guard.md:36-62`, DT2 only |
 

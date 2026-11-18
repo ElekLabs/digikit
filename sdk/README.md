@@ -93,6 +93,16 @@ Off means off: without `--trace` both macros expand to nothing (the arguments of
 instruction, data or import, and the `.dkm` is byte-identical to one built from sources without the marks
 (`packages/patchkit/tests/trace.rs`). A `DK_STEP` costs two instructions when on, so keep it out of the innermost loop.
 
+## Modules never touch hardware
+
+A content module (everything outside `core/*`) reaches the device only through the runtime table and the services. It does not address a
+peripheral, the flash, the FPGA or the peer CPU. Each device file lists the windows that only the firmware and `core/*` drive
+(`[protect] windows` in `devices/*.toml`, evidence in [finding 141](../docs/findings/141-syntakt-analog-and-nor-paths.md)). `patchkit pack`
+refuses a module whose objects hold an address in such a window of any device it is built for: a relocation addend, a word of a data
+section, or a 32-bit operand of an instruction (absolute long, immediate, `lea`, `jsr`, `addi`). The error names the window and the
+device. A content module imports only from the runtime table, so there is no firmware routine name to check. Windows below 0x10000 (the
+Syntakt's FlexBus CS1 at address 0) are listed for the record and not checked: such a word is an ordinary offset or constant.
+
 ## Writing modules
 
 See [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md). The plan for the SDK API is [docs/plans/sdk-api.md](../docs/plans/sdk-api.md).
