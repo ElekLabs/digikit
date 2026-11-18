@@ -16,7 +16,7 @@
         "files": ["machine-rows-dn2.device.test.ts"],
         "devices": ["dn2"],
         "dsp": "sharc",
-        "tags": ["S:machines", "C:state"],
+        "tags": ["C:state", "C:types", "S:machines"],
         "modules": ["test/dyn-dn2", "core/services/machines"],
         "plusdrive": true
       },
@@ -24,7 +24,7 @@
         "files": ["machine-rows-dt2.device.test.ts"],
         "devices": ["dt2"],
         "dsp": "sharc",
-        "tags": ["S:machines", "C:state"],
+        "tags": ["C:state", "C:types", "S:machines"],
         "modules": ["test/sine", "core/services/machines"],
         "plusdrive": true
       }

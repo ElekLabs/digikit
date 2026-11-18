@@ -1,6 +1,7 @@
-// `mise run test:subset -- [<tags...>] [--base REF] [--run]`: the device tests of the given record tags (tools/nx/acceptance-tags.mjs)
+// `mise run test:subset -- [<tags...>] [--base REF] [--why] [--run]`: the device tests of the given record tags (tools/nx/acceptance-tags.mjs)
 // as Nx leaf targets, plus gate-smoke and gate-pins. Without --run it prints them and how many start at once by DSP mode;
 // with --run it runs them through `pnpm nx:pilot run-many` (DIGI_EMU_SLOTS and the other emulator settings pass through the environment).
+// `--why` adds a line to each selected file: the given tags it has, and the changed files that selected it with `--base`.
 // Tags of one call are a union: a test runs when any of its record tags is given.
 // `--base REF` adds the tests whose subject changed since REF (`git diff REF`, with the working tree): a record's subject is the
 // source of its project (not its tests) and of the projects of its `modules`, so a change to a machine selects the records that load it.
@@ -70,7 +71,7 @@ export const sharedInput = (file, projects) => {
 // `opts.changed`: changed files relative to the repository root: records whose subject changed, or whose test files import a changed
 // file (`opts.closureOf(projectRoot, file)`: the import closure of a test file, repository-relative), join the tag selection.
 // `opts.sharedOf(file)`: why a file is a shared input (see sharedInput), or ''.
-// Returns { tests: [{ project, file, tags, dsp, targets }], unknown, shared: [{ file, why }] } where `targets` are the leaf targets of
+// Returns { tests: [{ project, file, tags, changed, dsp, targets }], unknown, shared: [{ file, why }] } where `targets` are the leaf targets of
 // the file, one per device it runs on: `test-device--<file>--<dev>`, or `test-device--<dev>` for a project with one device test file.
 // `shared` lists the changed files that no record's subject covers (or always, for the projects of every device task).
 export const resolveSubset = (tags, projects, opts = {}) => {
@@ -86,15 +87,21 @@ export const resolveSubset = (tags, projects, opts = {}) => {
     for (const rec of metadata?.runtimeAcceptance ?? []) {
       const own = (rec.tags ?? []).filter((tag) => wanted.has(tag));
       let byPath = false;
+      let viaFiles = [];
       if (changed.length && root !== undefined) {
         const hits = subjectFiles(rec, root, changed, rootOf, subjects);
         hits.forEach((f) => covered.add(f));
         byPath = hits.length > 0;
-        if (!byPath && closureOf && tsChanged.length)
-          byPath = (rec.files ?? []).some((f) => {
+        viaFiles = hits;
+        if (!byPath && closureOf && tsChanged.length) {
+          const reached = new Set();
+          for (const f of rec.files ?? []) {
             const closure = new Set(closureOf(root, f));
-            return tsChanged.some((c) => closure.has(c));
-          });
+            tsChanged.filter((c) => closure.has(c)).forEach((c) => reached.add(c));
+          }
+          viaFiles = [...reached];
+          byPath = viaFiles.length > 0;
+        }
       }
       if (!own.length && !byPath) continue;
       own.forEach((tag) => found.add(tag));
@@ -103,7 +110,8 @@ export const resolveSubset = (tags, projects, opts = {}) => {
         const leaves = DEVICES.flatMap((dev) =>
           [`test-device--${stem}--${dev}`, `test-device--${dev}`].filter((t) => have.has(t)).slice(0, 1),
         );
-        if (leaves.length) tests.push({ project: name, file, tags: own, dsp: rec.dsp ?? 'zero', targets: leaves });
+        if (leaves.length)
+          tests.push({ project: name, file, tags: own, changed: viaFiles, dsp: rec.dsp ?? 'zero', targets: leaves });
       }
     }
   }
@@ -114,6 +122,14 @@ export const resolveSubset = (tags, projects, opts = {}) => {
   }
   return { tests, unknown: tags.filter((tag) => !found.has(tag)), shared };
 };
+
+// The `--why` line of a selected test: the given tags it has, and the changed files that selected it (`--base`).
+export const whyText = (t) =>
+  [
+    ...t.tags,
+    ...t.changed.slice(0, 3).map((f) => `changed ${f}`),
+    ...(t.changed.length > 3 ? [`${t.changed.length - 3} more changed`] : []),
+  ].join(', ');
 
 // The tasks of a selection by DSP mode, and how many start at once with the machine's core budget and slots.
 export const modeSummary = (tests, work = workCores()) => {
@@ -193,11 +209,16 @@ const loadProjects = (root) => {
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const run = args.includes('--run');
+  const why = args.includes('--why');
   const at = args.indexOf('--base');
   const base = at >= 0 ? args[at + 1] : undefined;
-  const tags = args.filter((a, i) => a !== '--run' && a !== '--' && a !== '--base' && !(at >= 0 && i === at + 1));
+  const tags = args.filter(
+    (a, i) => a !== '--run' && a !== '--why' && a !== '--' && a !== '--base' && !(at >= 0 && i === at + 1),
+  );
   if ((!tags.length && !base) || (at >= 0 && !base) || tags.some((t) => t.startsWith('-'))) {
-    console.error(`usage: mise run test:subset -- [<tag...>] [--base REF] [--run]\ntags: ${vocabulary().join(' ')}`);
+    console.error(
+      `usage: mise run test:subset -- [<tag...>] [--base REF] [--why] [--run]\ntags: ${vocabulary().join(' ')}`,
+    );
     process.exit(2);
   }
   const root = resolve(fileURLToPath(import.meta.url), '../../..');
@@ -228,7 +249,10 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   }
   const pairs = selectionPairs(tests, projects);
   console.log(`test:subset: ${[...tags, ...(base ? [`--base ${base}`] : [])].join(' ')}`);
-  for (const t of tests) console.log(`  ${t.project} ${t.file}: ${t.targets.join(' ')}`);
+  for (const t of tests) {
+    console.log(`  ${t.project} ${t.file}: ${t.targets.join(' ')}`);
+    if (why) console.log(`    why: ${whyText(t)}`);
+  }
   for (const f of FIXED) console.log(`  ${f.project}: ${f.target}`);
   const m = modeSummary(tests);
   console.log(

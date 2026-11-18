@@ -15,7 +15,7 @@
         "files": ["fault-trace.device.test.ts"],
         "devices": ["dt2"],
         "dsp": "sharc",
-        "tags": ["C:diagnostics", "C:dsp", "C:layout"],
+        "tags": ["C:diagnostics", "C:dsp", "C:fault", "C:layout"],
         "modules": [
           "digikit/debug",
           "test/dyn-crash",
@@ -127,7 +127,7 @@
         "files": ["crash-capture.device.test.ts"],
         "devices": ["dt2"],
         "dsp": "sharc",
-        "tags": ["C:diagnostics", "C:layout"],
+        "tags": ["C:diagnostics", "C:fault", "C:layout"],
         "modules": ["digikit/debug", "test/dyn-crash"],
         "plusdrive": true
       },
@@ -140,7 +140,7 @@
       },
       {
         "files": ["platform-contract.device.test.ts"],
-        "tags": ["C:boot", "C:storage", "C:tick", "C:transport"],
+        "tags": ["C:boot", "C:device-facts", "C:storage", "C:tick", "C:transport"],
         "modules": [],
         "sources": ["modules/core/runtime/tests/platform/contract.toml"]
       },

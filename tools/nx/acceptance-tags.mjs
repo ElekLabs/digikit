@@ -1,12 +1,27 @@
 // The closed vocabulary of `tags` on `metadata.runtimeAcceptance` records, and the check that every device test file has tags.
 // Tags say which service or layer a device test proves (docs/plans/test-architecture.md, T1e).
 //   S:<service>   machines, samples, lfo (a service in the runtime image; fx is a service file, `fx.dks`: its tests carry the tags of the adapters they prove)
-//   C:<area>      state, boot, loading, dsp, storage, transport, diagnostics, tick, layout
+//   C:<area>      state, boot, loading, dsp, storage, transport, diagnostics, tick, layout; and the mechanisms device-facts, fault, types
 //   A:<id>        an adapter or app module of category core (the module must exist)
 //   M:<id>        a tool module (the module must exist under modules/tools)
 // `C:layout` marks tests that depend on addresses: addrmap, log-names, memaudit, crash and fault tests.
 export const SERVICES = ['machines', 'samples', 'lfo'];
-export const AREAS = ['state', 'boot', 'loading', 'dsp', 'storage', 'transport', 'diagnostics', 'tick', 'layout'];
+// Mechanism tags: `C:device-facts` marks tests that check the device facts the runtime reads at run time (its device object against the
+// device file); `C:fault` the crash and fault record tests; `C:types` the tests that observe the machine type words and the dynamic registry.
+export const AREAS = [
+  'state',
+  'boot',
+  'loading',
+  'dsp',
+  'storage',
+  'transport',
+  'diagnostics',
+  'tick',
+  'layout',
+  'device-facts',
+  'fault',
+  'types',
+];
 
 // Why `tag` is not in the vocabulary, or '' when it is. `modules`: id -> { category, root } of every module.
 export const tagProblem = (tag, modules) => {

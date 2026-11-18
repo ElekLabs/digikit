@@ -157,7 +157,7 @@ A new service or runtime mechanism adds an assembly case before its first device
 
 ### Named device subset
 
-`mise run test:subset -- <tag...> [--base REF]` is the merge gate for a change that reaches device tests only through shared inputs (SDK, profiles, patchkit, another core module): instead of every device test it runs the tests of the named record tags. The tags are the vocabulary of `metadata.runtimeAcceptance` (`tools/nx/acceptance-tags.mjs`: `S:` services, `C:` areas, `A:` core modules, `M:` tool modules); several tags are a union. The command reads the Nx project graph, resolves each tagged file to its leaf targets `test-device--<file>--dt2` and `--dn2` (the devices the file runs on), and adds `gate-smoke:smoke` and `gate-pins:pins`. Without `--run` it prints them. With `--run` it runs them through `pnpm nx:pilot run-many` (cached, with the remote cache); `DIGI_EMU_SLOTS` and the other emulator settings pass through the environment. `--base REF` adds the records whose inputs changed since REF. It sees the tracked diff against REF (commits and working tree) and the untracked files. A record is selected when a changed file is (a) source of its project or of a project in its `modules` (not tests, Markdown or project.json), (b) a test file it lists, or (c) in the import closure of one of its test files (a helper in `tests/regression/runtime`, a test-support package; the same closure walker as the cache keys, `tools/nx/ts-imports.mjs`). It does not see files that tests read by path without importing them, or a record that omits a module it loads in practice. A changed file that every device test depends on has no subject: the source of `patchkit`, the daemons (`digi-control`) and `core/runtime`, and the shared key inputs (`SHARED_INPUT_GLOBS` in `tools/nx/device-test-keys.mjs`: SDK, device profiles, toolchain, test reads). Without tags the command then fails and names the file ("name tags or run the full set"); it also fails when nothing changed or no record matches, so it never goes green with only the smoke and pin gates. With tags the tags decide and a note counts the shared files. The command also prints how many tasks are coupled and zero-DSP and how many start at once. An unknown tag fails with the vocabulary. Tags say what a test proves, not what it loads: a sample-pool test is `S:samples` even when it loads the machines service.
+`mise run test:subset -- <tag...> [--base REF] [--why]` is the merge gate for a change that reaches device tests only through shared inputs (SDK, profiles, patchkit, another core module): instead of every device test it runs the tests of the named record tags. The tags are the vocabulary of `metadata.runtimeAcceptance` (`tools/nx/acceptance-tags.mjs`: `S:` services, `C:` areas and mechanisms, `A:` core modules, `M:` tool modules); several tags are a union. The command reads the Nx project graph, resolves each tagged file to its leaf targets `test-device--<file>--dt2` and `--dn2` (the devices the file runs on), and adds `gate-smoke:smoke` and `gate-pins:pins`. Without `--run` it prints them. With `--run` it runs them through `pnpm nx:pilot run-many` (cached, with the remote cache); `DIGI_EMU_SLOTS` and the other emulator settings pass through the environment. `--base REF` adds the records whose inputs changed since REF. It sees the tracked diff against REF (commits and working tree) and the untracked files. A record is selected when a changed file is (a) source of its project or of a project in its `modules` (not tests, Markdown or project.json), (b) a test file it lists, or (c) in the import closure of one of its test files (a helper in `tests/regression/runtime`, a test-support package; the same closure walker as the cache keys, `tools/nx/ts-imports.mjs`). It does not see files that tests read by path without importing them, or a record that omits a module it loads in practice. A changed file that every device test depends on has no subject: the source of `patchkit`, the daemons (`digi-control`) and `core/runtime`, and the shared key inputs (`SHARED_INPUT_GLOBS` in `tools/nx/device-test-keys.mjs`: SDK, device profiles, toolchain, test reads). Without tags the command then fails and names the file ("name tags or run the full set"); it also fails when nothing changed or no record matches, so it never goes green with only the smoke and pin gates. With tags the tags decide and a note counts the shared files. The command also prints how many tasks are coupled and zero-DSP and how many start at once. An unknown tag fails with the vocabulary. Tags say what a test proves, not what it loads: a sample-pool test is `S:samples` even when it loads the machines service.
 
 ```text
 $ mise run test:subset -- S:lfo
@@ -167,6 +167,23 @@ test:subset: S:lfo
   gate-smoke: smoke
   gate-pins: pins
 test:subset: pnpm nx:pilot run-many -t test-device--dt2,test-device--dn2,smoke,pins -p core/runtime-refusal-tests,core/runtime-lfo-tests,gate-smoke,gate-pins
+```
+
+The mechanism tags `C:device-facts` (the device facts the runtime reads at run time: `platform-contract`), `C:fault` (the crash and fault records: `crash-capture`, `fault-trace`) and `C:types` (the machine type words and the dynamic registry: `machine-rows-dt2`, `machine-rows-dn2`, the dynreg `equiv` and `roundtrip`) are finer than the areas: a change to one mechanism selects only the tests that observe it. `--why` adds a line to each selected file with the given tags it has and, with `--base`, the changed files that selected it:
+
+```text
+$ mise run test:subset -- C:fault C:device-facts --why
+test:subset: C:fault C:device-facts
+  core/runtime-tests fault-trace.device.test.ts: test-device--fault-trace--dt2
+    why: C:fault
+  core/runtime-tests crash-capture.device.test.ts: test-device--crash-capture--dt2
+    why: C:fault
+  core/runtime-tests platform-contract.device.test.ts: test-device--platform-contract--dt2 test-device--platform-contract--dn2
+    why: C:device-facts
+  gate-smoke: smoke
+  gate-pins: pins
+test:subset: 2 coupled and 2 zero-DSP tasks; core budget 12, 12 slots: 2 coupled and 2 zero-DSP start at once
+test:subset: pnpm nx:pilot run-many -t test-device--fault-trace--dt2,test-device--crash-capture--dt2,test-device--platform-contract--dt2,test-device--platform-contract--dn2,smoke,pins -p core/runtime-tests,gate-smoke,gate-pins
 ```
 
 The subset does not replace the static checks (`lint,fmt-check,rust-fmt,typecheck,python-checks`). The mapping from tags to targets has a host test (`tools/nx/tests/test-subset.test.ts`).
