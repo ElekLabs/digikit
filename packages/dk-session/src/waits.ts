@@ -36,6 +36,9 @@ export interface WaitRecord {
 /** Wall ms a clock may stand still before a wait fails (a halted or paused guest). */
 export const DEFAULT_HANG_MS = 60_000;
 
+/** Default failure bound of a boot or restart wait (ms of session time). A reboot with the DSP coupled and modules loading takes about 60-90 s; the bound leaves room for a slower host. A wait still ends as soon as the device is ready. */
+export const BOOT_WAIT_MS = 180_000;
+
 /** Throws when neither `clock.now` nor `clock.progress` moved for `hangMs` of wall time: a wait on a clock that never moves would end only at the test timeout. One guard per wait. */
 export function stuckGuard(what: string, hangMs: number, clock: Clock): (now: number) => Promise<void> {
   let last: number | undefined;

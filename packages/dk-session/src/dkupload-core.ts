@@ -21,7 +21,7 @@ import {
 import { parseLoads, type ModuleState } from './loads.ts';
 import type { LoadFailure } from './runtime-log.ts';
 import { LogCursor } from './runtime-events.ts';
-import { DEFAULT_HANG_MS, WALL_POLL_MS, poll, stuckGuard, wallClock, type Clock } from './waits.ts';
+import { BOOT_WAIT_MS, DEFAULT_HANG_MS, WALL_POLL_MS, poll, stuckGuard, wallClock, type Clock } from './waits.ts';
 import { PROBE_EMULATED_MS } from './emu-clock.ts';
 
 export interface DkInfo {
@@ -770,6 +770,7 @@ const SETTLE_MS = 2000;
  * same version (0.8.3), so the fallback is a time window, not a version check. 2 s of clock time is 20 emulated poll rounds.
  */
 export const FW_READY_GRACE_MS = 2000;
+
 /**
  * A reply of E_BUSY means the device's store was in use (an SDK file write or commit on its I/O task) and the command did nothing: the same request
  * is sent again after this wait, at most this many times (2 s in all) before the E_BUSY reaches the caller.
@@ -1694,7 +1695,7 @@ export class DkSession {
    * `timeoutMs` of the session. Time is the session clock (`timeoutMs` in its ms; default `wallClock`).
    * `opts.signal` cancels the wait; `opts.stillBooting()` extends the deadline.
    */
-  async waitForBoot(timeoutMs = 90_000, opts: BootWaitOptions = {}): Promise<void> {
+  async waitForBoot(timeoutMs = BOOT_WAIT_MS, opts: BootWaitOptions = {}): Promise<void> {
     await this.waitBooted(timeoutMs, opts);
   }
 
@@ -1702,7 +1703,7 @@ export class DkSession {
   async waitForRestart(
     opts: BootWaitOptions & { timeoutMs?: number; loadedTimeoutMs?: number } = {},
   ): Promise<DkModule[]> {
-    await this.waitBooted(opts.timeoutMs ?? 90_000, { ...opts, until: 'ready' });
+    await this.waitBooted(opts.timeoutMs ?? BOOT_WAIT_MS, { ...opts, until: 'ready' });
     return poll(
       this.sessionClock,
       async () => {
