@@ -454,7 +454,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             Err(e) => return e,
         };
         c.head = head;
-        let image::Head { image_size, bss, import_off, import_n, .. } = head;
+        let image::Head { import_off, import_n, .. } = head;
         // the steps of the file's role
         let role = rd32(f.add(dkneeds::H_ROLE as usize));
         c.role = role;
@@ -466,7 +466,6 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return r;
         }
-        let _ = (image_size, bss);
         // imports: every name must be in the runtime's table
         let mut i = 0;
         while i < import_n as usize {
@@ -545,9 +544,8 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return r;
         }
-        let (f, size, role) = (c.f, c.size, c.role);
+        let (f, role) = (c.f, c.role);
         let image::Head { needs, image_off, image_size, bss, reloc_off, reloc_n, init, fini, menu, tick, .. } = c.head;
-        let _ = size;
         let steps = RoleSteps::<P, M, R>::of(role);
         let name = f.add(H_NAME);
         let total = image_size + bss;
@@ -1178,6 +1176,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// The tick stops; its SysEx commands answer `E_BUSY` from now on; its sinks, with the span clock, are cleared (under the interrupt mask); the block count is
     /// noted. It returns `E_BUSY` until no command of the module is in flight and `DRAIN_BLOCKS` blocks have passed (no spinning: the next UI pass asks again).
     /// Nothing is freed and no DSP row is touched, so `reload_abort` can still give the module back its tick and commands. `E_NOT_FOUND`: no such module.
+    ///
+    /// The channel sinks (`dlog::CHAN`) are cleared and an abort does not set them again: a module that owned one (the debug module's log sink) loses it until the
+    /// next boot. The legacy single sink and tick words of `dlog` (`SINK`, `TICK`) are not touched here: they point into the module's code, which stays mapped until
+    /// `unload_rec` frees it, and `dlog::sink_drop` clears them (masked) before that free, so a task that calls them in between runs code that is still there.
     pub unsafe fn reload_quiesce(&mut self, rec: usize) -> i32 {
         if rec >= MAX_MODULES || records::module(rec).used == 0 {
             return E_NOT_FOUND;

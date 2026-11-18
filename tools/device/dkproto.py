@@ -202,7 +202,10 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -42: ("E_SEL_WRITE", "the firmware's block write failed"),
     -43: ("E_CARD_BUSY", "a card transfer is in flight"),
     -44: ("E_SAFE_MODE", "this boot is in safe mode: no module was loaded"),
-    -45: ("E_BOOT_ONLY", "the module set is fixed after the boot hook"),
+    -45: (
+        "E_BOOT_ONLY",
+        "the module set is fixed after the boot hook (a reload of a loaded module is the only later load)",
+    ),
     -46: ("E_RANGE", "a card write outside the store range"),
     -47: ("E_CARD_RO", "the card's store area is not ours and not blank"),
     -48: (

@@ -630,8 +630,9 @@ What:
    (`module_cmds::begin_cmd` / `end_cmd`, counted in the same masked step as the handler lookup) is the number of its commands that run on the MIDI task.
    The step returns `E_BUSY` until that counter is 0 and `reload::DRAIN_BLOCKS` (2) blocks passed (`Platform::blocks`, no spinning; a platform with no block
    clock skips the wait). R12-8 gives no voice stop and no block wait; unloading then clears the voice rows, which cuts the voices. Because nothing is freed
-   or cleared before the wait ends, `reload_abort` (a timeout) gives the old module its tick and commands back and leaves its DSP rows as they were; only its
-   sinks stay released. DSP instruction cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
+   or cleared before the wait ends, `reload_abort` (a timeout) gives the old module its tick and commands back and leaves its DSP rows as they were. Its channel sinks stay released after an abort and are not set again (the debug module loses its logging until the next boot); this
+   is kept on purpose, because the module's `init` is the only place that sets them. The legacy single sink and tick of `dlog` stay set: they point into code that stays
+   mapped until the free, and `sink_drop` clears them just before it. DSP instruction cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
 7. MISSING placeholder, written by `remove` in every unload path (reload, boot failure, take-down), for the numbers the module held. A kit
    names a type number, not a key. A gap row plays type 0's sound today, so the placeholder must be silent. DN2 sets `own_dsp = 1` (finding 33
    saw silence without fault). DT2: the placeholder is a voice row `{type, pc nonzero, word 10 = type}`. The dispatch
