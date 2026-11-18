@@ -235,6 +235,7 @@ export default function ProfilePanel(props: {
   const where = () => (emu() ? 'emulator' : 'USB');
   const px = (share: number) => Math.round((share / top()) * GRAPH_PX);
   const barPx = (share: number) => Math.min(36, Math.max(2, Math.round(share * 100 * 1.6)));
+  const fmtPct = (share: number) => `${(share * 100).toFixed(share > 0 && share < 0.001 ? 2 : 1)}%`;
   const kindClass = (k: OwnerKind) => `k-${k}`;
   const dspSegments = (v: DspView) => v.modules.map((m) => ({ ...m, width: dspWidth(v, m.insnPerBlock) }));
 
@@ -434,7 +435,7 @@ export default function ProfilePanel(props: {
                   <Show
                     when={dsp()}
                     fallback={
-                      <span class="hint">
+                      <span class="hint" hidden={r().noDsp && !!r().cf}>
                         {r().note ??
                           (r().noDsp
                             ? 'No DSP on this device.'
@@ -481,7 +482,52 @@ export default function ProfilePanel(props: {
                       </>
                     )}
                   </Show>
-                  <Show when={dsp() && r().note}>
+                  <Show when={r().cf}>
+                    {(cf) => (
+                      <div class="cf-view">
+                        <Show when={!r().noDsp}>
+                          <div class="sec-head">
+                            <span class="title">ColdFire (emulator)</span>
+                          </div>
+                        </Show>
+                        <div class="cf-paths" role="table" aria-label="ColdFire paths">
+                          <div class="cf-row head" role="row">
+                            <span class="name">path</span>
+                            <span class="mono">host time</span>
+                            <span class="mono">insns</span>
+                          </div>
+                          <For each={cf().paths}>
+                            {(p) => (
+                              <div class="cf-row" role="row">
+                                <span class="name">{p.path}</span>
+                                <span class="mono">{fmtPct(p.timeShare)}</span>
+                                <span class="mono">{fmtPct(p.insnShare)}</span>
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                        <Show when={cf().pcs.length > 0}>
+                          <div class="cf-paths" role="table" aria-label="Heaviest ColdFire PCs">
+                            <div class="cf-row head" role="row">
+                              <span class="name">top PCs by samples</span>
+                              <span class="mono">share</span>
+                            </div>
+                            <For each={cf().pcs}>
+                              {(c) => (
+                                <div class="cf-row" role="row">
+                                  <span class="name" title={`0x${c.addr.toString(16)}`}>
+                                    {c.name ?? `0x${c.addr.toString(16)}`}
+                                  </span>
+                                  <span class="mono">{fmtPct(c.share)}</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </div>
+                    )}
+                  </Show>
+                  <Show when={(dsp() || r().cf) && r().note}>
                     <span class="hint">{r().note}</span>
                   </Show>
                 </div>

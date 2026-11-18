@@ -15,6 +15,7 @@ import {
   sharcPart,
   spansPart,
   type CfAnswer,
+  CF_PATHS,
   type Part,
   type SharcAnswer,
 } from '@digi/workbench-core/profile/profile-artifact.ts';
@@ -34,6 +35,66 @@ export type ProfileSession = Pick<
   DkSession,
   'info' | 'modules' | 'capacity' | 'profileState' | 'profileAll' | 'logPage' | 'peek'
 >;
+
+/** One ColdFire path of the emulator (ram_clear, run_fast, step_once, idle_skip) with its share of the host time and of the instructions. */
+export interface CfPathRow {
+  path: string;
+  hostNs: number;
+  insns: number;
+  calls: number;
+  /** Share of the summed host time and of the summed instructions of all paths, 0..1 (0 when the sum is 0). */
+  timeShare: number;
+  insnShare: number;
+}
+
+/** One heavy PC of the ColdFire samples: its address, weight and share of all sampled weight. `name` is set when a lookup knows the address. */
+export interface CfPcRow {
+  addr: number;
+  weight: number;
+  share: number;
+  name?: string;
+}
+
+/** The compact ColdFire view of the Profile pane. */
+export interface CfView {
+  paths: CfPathRow[];
+  pcs: CfPcRow[];
+}
+
+export const CF_TOP_PCS = 10;
+
+/** The paths and the heaviest sampled PCs of a `cf.profile` part. Pure: the names come from `nameOf` (address to text), if given. */
+export function cfView(part: Part, nameOf?: (addr: number) => string | undefined, top = CF_TOP_PCS): CfView {
+  const metric = (path: string, what: string): number =>
+    part.metrics.find((m) => m.name === `path.${path}.${what}`)?.value ?? 0;
+  const sum = (key: 'hostNs' | 'insns', rows: { hostNs: number; insns: number }[]) =>
+    rows.reduce((t, r) => t + r[key], 0);
+  const raw = CF_PATHS.map((path) => ({
+    path,
+    hostNs: metric(path, 'host_ns'),
+    insns: metric(path, 'instructions'),
+    calls: metric(path, 'calls'),
+  }));
+  const ns = sum('hostNs', raw);
+  const ins = sum('insns', raw);
+  const paths = raw.map((r) => ({
+    ...r,
+    timeShare: ns > 0 ? r.hostNs / ns : 0,
+    insnShare: ins > 0 ? r.insns / ins : 0,
+  }));
+  const samples = (part.raw as { series?: string; addr: number; count: number }[]).filter((r) => r.series === 'pc');
+  const total = samples.reduce((t, r) => t + r.count, 0);
+  const pcs = samples
+    .sort((a, b) => b.count - a.count || a.addr - b.addr)
+    .slice(0, top)
+    .map((r) => {
+      const row: CfPcRow = { addr: r.addr, weight: r.count, share: total > 0 ? r.count / total : 0 };
+      const name = nameOf?.(r.addr);
+      if (name) row.name = name;
+      return row;
+    });
+  return { paths, pcs };
+}
 
 /** The whole-block DSP load of a device, from its newest HEALTH event (percent of the block). */
 export interface DeviceDsp {
@@ -55,6 +116,8 @@ export type ProfileReading =
       dsp?: DspView;
       /** Hardware: the newest HEALTH event, when the ring holds one. */
       deviceDsp?: DeviceDsp;
+      /** Emulator: the ColdFire paths and heaviest PCs of `cf.profile` since Start (undefined when it is off or the daemon lacks it). */
+      cf?: CfView;
       /** The emulated device has no DSP: the pane has no DSP section. */
       noDsp?: boolean;
       /** What the emulator's two instruction profiles could not give (the daemon lacks the feature), one line. */
@@ -189,6 +252,29 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       // no names: the rows say the owner only
     }
     return polls;
+  };
+
+  /** The ColdFire view of a `cf.profile` part, its heaviest PCs named through the same lookup as the poll slots (dkprof and the image's maps). */
+  const cfViewOf = async (part: Part): Promise<CfView> => {
+    const names = new Map<number, string>();
+    const view = cfView(part);
+    const inputs = deps.names?.inputs();
+    if (deps.prof && inputs && view.pcs.length > 0) {
+      try {
+        const { results } = (await deps.prof()).addrLookup({
+          maps: inputs.maps,
+          loads: inputs.loads,
+          addrs: view.pcs.map((p) => ({ cpu: 'cf' as const, addr: p.addr })),
+        });
+        view.pcs.forEach((p, i) => {
+          const t = results[i]?.text;
+          if (t) names.set(p.addr, t);
+        });
+      } catch {
+        // no names: the rows show the address
+      }
+    }
+    return cfView(part, (a) => names.get(a));
   };
 
   const moduleRefs = async (s: ProfileSession, port: string): Promise<ModuleRef[]> => {
@@ -340,6 +426,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       if (deps.rpc) {
         if (counting() && all.running) {
           const parts = await instructionParts();
+          if (parts.cf) r.cf = await cfViewOf(parts.cf);
           try {
             r.dsp = await dspOf(s, modules, parts.sharc);
           } catch {
