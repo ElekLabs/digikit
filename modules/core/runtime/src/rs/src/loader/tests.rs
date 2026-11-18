@@ -1474,7 +1474,7 @@ unsafe fn live_a() -> Fake {
 
 fn wide() -> Vec<DkrtCap> {
     let mut c = wide_caps();
-    live_caps(&mut c);
+    live_caps(&mut c, (0, 0));
     c
 }
 
@@ -1706,5 +1706,28 @@ fn a_reloads_settle_gets_the_keys_of_the_live_modules_and_the_new_file_in_its_sl
         only_b[1] = true;
         let sel = live_settle_ctx(&l.tables, &l.table_len, &only_b);
         assert_eq!((sel.count, sel.nkeys[0], sel.nkeys[1]), (2, 0, 1));
+    }
+}
+
+#[test]
+fn a_module_over_half_the_arena_is_not_refused_for_counting_itself_twice() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        let own = own_use(0);
+        assert!(own.0 >= dkneeds::arena_block(32).unwrap(), "the image block of the module is counted");
+        // an arena that the module fills to 60 percent
+        let limit = own.0 * 5 / 3;
+        let arena = |used| DkrtCap { kind: dkrt_sdk::proto::CAPK_ARENA as u32, limit, used, largest: limit };
+        let mut caps = vec![arena(own.0)];
+        caps.extend(wide().into_iter().filter(|c| c.kind != dkrt_sdk::proto::CAPK_ARENA as u32));
+        live_caps(&mut caps, own);
+        assert_eq!(caps[0].used, 0, "the old module's own blocks are given back");
+        // without the subtraction the same arena counts the module that is about to leave
+        let mut still = vec![arena(own.0)];
+        live_caps(&mut still, (0, 0));
+        assert_eq!(still[0].used, own.0);
+        l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 7]));
+        assert_eq!(l.reload_check(0, PATH.as_ptr(), &caps), OK);
     }
 }

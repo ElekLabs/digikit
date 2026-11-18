@@ -731,7 +731,7 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
             crate::selection::BOOT_IDX = u32::MAX;
             l.phase = Phase::Closed;
             let mut caps = capacity(&l.p);
-            crate::loader::live_caps(&mut caps);
+            crate::loader::live_caps(&mut caps, crate::loader::own_use(0));
             // a service file is no module: refused, and the module is as it was
             assert_eq!(l.reload_check(0, "services/lfo.dks\0".as_ptr(), &caps), E_FORMAT, "{}", dev.name);
             assert_eq!(records::module(0).used, 1);

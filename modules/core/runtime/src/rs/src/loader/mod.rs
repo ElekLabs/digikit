@@ -203,7 +203,7 @@ pub unsafe fn unload_rec(rec: usize) -> i32 {
 pub unsafe fn reload_check(rec: usize, path: *const u8) -> i32 {
     let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
     let k = crate::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
-    live_caps(&mut caps[..k]);
+    live_caps(&mut caps[..k], own_use(rec));
     loader().reload_check(rec, path, &caps[..k])
 }
 
@@ -225,16 +225,33 @@ pub unsafe fn reload_load(rec: usize, path: *const u8) -> i32 {
     loader().reload_load(rec, path)
 }
 
+/// What module record `rec` holds that its reload gives back before the new file loads: (arena bytes of its image block and its record block, DSP area bytes of its
+/// range).
+pub(crate) unsafe fn own_use(rec: usize) -> (u32, u32) {
+    if rec >= MAX_MODULES {
+        return (0, 0);
+    }
+    let block = |n: u32| if n == 0 { 0 } else { dkneeds::arena_block(n).unwrap_or(n) };
+    let m = records::module(rec);
+    (block(m.size) + block(crate::collect::block_of(rec).1), dsp::ds().mod_len[rec])
+}
+
 /// The capacity as a plan of the whole live set needs it: what the live modules use is counted by the plan again, so the counts they own go back to 0. The
-/// physical resources (arena, staging buffer, DSP area, store, settings) keep their use: the plan counts a module's record block again, which errs on the side of
-/// refusing.
+/// physical resources (arena, staging buffer, DSP area, store, settings) keep their use, less `own` (the arena and DSP bytes of the module being reloaded, which its
+/// teardown frees before the new file loads, so a large module is not refused for counting itself twice). The plan still counts the record block of every other live
+/// module again, which errs on the side of refusing.
 #[allow(dead_code)] // the reload job calls it (E5 commit 8)
-pub(crate) fn live_caps(caps: &mut [DkrtCap]) {
+pub(crate) fn live_caps(caps: &mut [DkrtCap], own: (u32, u32)) {
     use dkrt_sdk::proto::*;
     let mut c = 0;
     while c < caps.len() {
         let kind = caps[c].kind;
         let physical = kind == CAPK_ARENA as u32 || kind == CAPK_STAGE as u32 || kind == CAPK_DSP_AREA as u32 || kind == CAPK_STORE as u32 || kind == CAPK_SETTINGS as u32;
+        if kind == CAPK_ARENA as u32 {
+            caps[c].used = caps[c].used.saturating_sub(own.0);
+        } else if kind == CAPK_DSP_AREA as u32 {
+            caps[c].used = caps[c].used.saturating_sub(own.1);
+        }
         if !physical {
             caps[c].used = 0;
             caps[c].largest = if kind == CAPK_SELECTION as u32 { caps[c].limit } else { 0 };
