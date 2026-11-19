@@ -4,8 +4,10 @@ import { waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { analysisJson, captureNote, frames, pickSine, readFloatWav, word } from '@digi/regression/runtime/fx-live.ts';
-import { pageKit } from '@digi/regression/runtime/fx-pages-ui.ts';
+import { analysisJson, captureNote, frames, pickSine, readFloatWav, rpc, stableFrameHash, word } from '@digi/regression/runtime/fx-live.ts';
+import { effectPage, mainPage, pageKit } from '@digi/regression/runtime/fx-pages-ui.ts';
+import { wordBase } from '@digi/regression/runtime/memory.ts';
+import { decodeSettings, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
 import type { FxProfile } from '@digi/regression/runtime/fx-session.ts';
 import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
@@ -28,8 +30,13 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  *   array still holds 0x1900 (the user's value survives the reload). An unload and a load keep it too, as long as no kit was loaded in between.
  * - the soak: the reload of the effect, 5 cycles in the gate and 20 in the full tier (`DIGIKIT_TIER=full`): the capacity counts do not grow, the level is the same at the end.
  *
- * Test 2 (send route, no audio): the effect starts as a send, so a send cell is in use. `UNLOAD` gives the cell back (SEND_SLOTS and FX_SLOTS 0), `LOAD` takes it again, a reload keeps it; the fx route setting
- * is not written by any of them.
+ * - the FX page of the effect is open during an `UNLOAD`: no fault, the frame holds still (the page shows the empty row of the unloaded effect, the state of a failed effect load), and after leaving the page and
+ *   a `LOAD` the page shows the effect again. Whether the view should instead be put back to the stock list is open (docs/plans/extension-model.md, E5b item 2: no predicate says which view is on top).
+ *
+ * Test 2 (send route): the effect starts as a send, so a send cell is in use, and the track's send amount (Sound array of track 1, written in the kit) is 127. A note then returns the send bus on top of the
+ * dry voice: its level is above the level without the effect by at least 5%. `UNLOAD` gives the cell back (SEND_SLOTS and FX_SLOTS 0) and the send bus stops returning audio: the level is the dry level within 3%
+ * (and the capture is the control for the first one). `LOAD` takes the cell again and the return is back, a reload keeps it. The route setting `fx/route/<module id>` of the settings record is the same before and after every job
+ * (no job writes it).
  *
  * Written, not run (docs/plans/extension-model.md, "Device proof").
  */
@@ -181,6 +188,22 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
   const half2 = await level('half-again');
   expect(Math.abs(half2 / half - 1), `the level after the unload and the load (${half2.toFixed(4)}) is the level before (${half.toFixed(4)})`).toBeLessThan(0.05);
 
+  // the FX page of the effect open during an unload
+  await effectPage(rt);
+  await rt.ui.wait({ ms: 400, why: 'the effect page is drawn (no observable state of the redraw)' });
+  const shown = await stableFrameHash(rt);
+  await job(rt, plan, 'unload', MASTER_PATH, 'unload with the effect page open', epoch);
+  await rt.ui.wait({ ms: 400, why: 'the view redraws after the unload (no observable state of the redraw)' });
+  const emptied = await stableFrameHash(rt);
+  record(artifacts, 'page-open-unload', { shown, emptied });
+  await rt.session.expectNoFault('the effect page open during an unload');
+  await mainPage(rt);
+  await job(rt, plan, 'load', MASTER_PATH, 'load after the page was open', epoch);
+  await effectPage(rt);
+  await rt.ui.wait({ ms: 400, why: 'the effect page is drawn (no observable state of the redraw)' });
+  expect(await stableFrameHash(rt), 'the page shows the effect again after the load').toBe(shown);
+  await mainPage(rt);
+
   // the soak
   const start = await rt.dk.capacity();
   for (let cycle = 0; cycle < SOAK_CYCLES; cycle++) {
@@ -195,21 +218,75 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
   record(artifacts, 'soak', { cycles: SOAK_CYCLES, capacity: await rt.dk.capacity() });
 }
 
+/** The route setting of the effect in the settings record (hex of the value; undefined: none stored). */
+async function routeSetting(rt: TestRuntime, id: string): Promise<string | undefined> {
+  const rec = decodeSettings((await settingsRecord(rt.dk)).raw);
+  const hit = (rec?.entries ?? []).find(([key]) => key === `fx/route/${id}`);
+  return hit?.[1].toString('hex');
+}
+
+/** Write the halfword `value` at the firmware address `at` (the kit objects are in DDR; the write goes word by word through the daemon, as `pageKit.poke` does). */
+async function pokeHalf(rt: TestRuntime, at: number, value: number): Promise<void> {
+  for (let i = 0; i < 2; i++) {
+    const byte = at + i;
+    const shift = 8 * (3 - (byte % 4));
+    const old = await word(rt.session, wordBase(byte));
+    await rpc(rt.session, 'mem.cf.poke', {
+      addr: wordBase(byte),
+      value: ((old & ~(0xff << shift)) | (((value >>> (8 * (1 - i))) & 0xff) << shift)) >>> 0,
+    });
+  }
+}
+
 async function expectFxSend(rt: TestRuntime): Promise<void> {
-  const { artifacts, plan, epoch } = await prepare(rt, 'reload-fx-send', SEND_ID);
+  const { artifacts, plan, epoch, device } = await prepare(rt, 'reload-fx-send', SEND_ID);
   expect(await slots(rt), 'the effect starts as a send: a send cell is in use').toEqual({ fx: 1, send: 1 });
+  const route = await routeSetting(rt, SEND_ID);
+  const profile = await analysisJson<FxProfile>('tools.patchkit.pk_digikit_fxroutes', ['profile', '--device', device], artifacts, 'profile');
+  // the send amount of track 1 for cell 0 is the Sound array value `amount << 8`, as the firmware's knob writes it; the service reads it as a turn
+  const sound = (await word(rt.session, profile.fx.kit_ptr)) + profile.fx.sound_off;
+  await pokeHalf(rt, sound + 0x14 + 2 * profile.fx.send_indices[0]!, 127 << 8);
+  await rt.ui.wait({ ms: 300, why: 'the UI loop reads the amount and hands it to the DSP row (no observable state of the transfer)' });
+
+  const level = async (tag: string): Promise<number> => {
+    const file = path.join(artifacts, `${tag}.wav`);
+    const trigger = (await frames(rt.session)) + 300;
+    await captureNote(rt.session, {
+      file,
+      trigger,
+      tag,
+      length: CAPTURE_BLOCKS,
+      noPress: true,
+      during: async () => {
+        await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
+        await waitClock(rt.clock, 600);
+        await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+      },
+    });
+    const pcm = readFloatWav(file);
+    const perBlock = pcm.length / CAPTURE_BLOCKS;
+    return peakOf(pcm, Math.floor(250 * perBlock), Math.floor(700 * perBlock));
+  };
+  const withSend = await level('send-on');
   await job(rt, plan, 'unload', SEND_PATH, 'send effect unload', epoch);
   expect(await slots(rt), 'after the unload the send cell and the effect row are given back').toEqual({ fx: 0, send: 0 });
+  const dry = await level('send-unloaded');
+  expect(withSend / dry, `the send bus returns audio on top of the dry voice (${withSend.toFixed(4)} against ${dry.toFixed(4)} without the effect)`).toBeGreaterThan(1.05);
   await job(rt, plan, 'load', SEND_PATH, 'send effect load', epoch);
   expect(await slots(rt), 'after the load the route comes back from the settings').toEqual({ fx: 1, send: 1 });
+  await rt.ui.wait({ ms: 300, why: 'the amount goes to the new DSP row (no observable state of the transfer)' });
+  const back = await level('send-loaded');
+  expect(Math.abs(back / withSend - 1), `the return is back after the load (${back.toFixed(4)} against ${withSend.toFixed(4)})`).toBeLessThan(0.05);
   await job(rt, plan, 'reload', SEND_PATH, 'send effect reload', epoch);
   expect(await slots(rt), 'after the reload').toEqual({ fx: 1, send: 1 });
+  expect(await routeSetting(rt, SEND_ID), 'no job wrote the route setting').toBe(route);
   for (let cycle = 0; cycle < SOAK_CYCLES; cycle++) {
     await job(rt, plan, 'unload', SEND_PATH, `send soak cycle ${cycle}`, epoch);
     await job(rt, plan, 'load', SEND_PATH, `send soak cycle ${cycle}`, epoch);
     expect(await slots(rt), `cycle ${cycle}: the send cell and the row`).toEqual({ fx: 1, send: 1 });
   }
-  record(artifacts, 'send-soak', { cycles: SOAK_CYCLES, capacity: await rt.dk.capacity() });
+  expect(await routeSetting(rt, SEND_ID), 'the soak did not write the route setting').toBe(route);
+  record(artifacts, 'send-soak', { cycles: SOAK_CYCLES, withSend, dry, back, capacity: await rt.dk.capacity() });
 }
 
 runtimeTests('RELOAD, UNLOAD and LOAD of an effect on the master route: the level, the knob value, a note held over the swap, the soak', expectFxMaster, { dsp: 'sharc' });

@@ -695,29 +695,29 @@ Depends on: E3, E4, R12-8 merged. (E0b is done.)
 Status: built (branch e5b/fx-teardown). Host checks green; the device tests are written and not run (list in "Device proof" below). What was built:
 1. Menu owner count, as `dkrt_menu_built(code, data)` of the runtime (`abi.toml`): `core/ui` calls it from `dk_ui_menu_new` with the descriptor's `fill` and the descriptor, and the DIGIKIT menu calls it
    when it builds the settings page of a module (with the module's `menu` function). The runtime counts the menu objects of each module record (`DKRT_MENU_OBJS`, zero when a module loads into the record; the module is
-   found by the address, as the poll owner is) and refuses an unload or a reload with `E_RELOAD_MENUS` while the count is not 0. A header `menu` entry alone no longer refuses; a module that called
-   `dk_ui_menu_new` itself, which E5 let through, now does. Menus are never freed, so such a module stays refused until the next boot (menu teardown stays later work; E5c-2 drops the cached settings page).
-2. Open-view predicate spike: not done. The list rebuild after a job stays unconditional.
+   found by the address, as the poll owner is) and refuses an unload or a reload with `E_RELOAD_MENUS` while the count is not 0. The job reads the count again at the start of the UNLOAD step, before `fini` (the drain lasts many UI passes, and a settings page built meanwhile would point into freed code), and ends like a drain that does not end: the old module stays. A header `menu` entry alone no longer refuses; a module that called
+   `dk_ui_menu_new` itself, which E5 let through, now does. The call from the DIGIKIT menu for settings pages is a stand-in: E5c-2 builds the settings-page trampoline, and when it merges this coupling (the `menu.c` call to `dkrt_menu_built`) is resolved there. Menus are never freed, so such a module stays refused until the next boot (menu teardown stays later work; E5c-2 drops the cached settings page).
+2. Open-view predicate spike: not done. The list rebuild after a job stays unconditional. The FX view copies the page list when it is built and reads the row of a page through the accessor at each draw, so a view that shows an effect while its module is torn down keeps showing the emptied row (the state of a failed effect load); putting the view back to the stock list needs the predicate (which view is on top) and a firmware call to pop it, neither of which is known. The device case `reload-fx.device.test.ts` proves no fault and a stable frame with the page open.
 3. Effect teardown: the loader's `dsp_clear` (pc to free first: the master chain passes the signal dry, a send bus returns nothing) and `remove` (page, list, send cell, defaults) already were the teardown,
    so `Fx::teardown_refusal` accepts and no service refuses any more (`E_RELOAD_ROUTED` keeps its code for a service that cannot give back the module's state). There is no DSP placeholder for an
    effect: while the module is gone the row is free, the FX page of its row is empty (the state of a failed effect load, finding 61), and the route and the send amounts, which are settings keyed by
    the module id, come back with the next load. The user's knob values stay in the kit's array: `fxpage::remove` parks the effect id, the live kit and the count of kit loads and initialisations,
-   and `apply` keeps the array values when the same effect returns to its row with the same kit and no kit loaded since; otherwise the record's defaults are seeded as at a boot. A kit saved while the
+   and `apply` keeps the array values when the same effect of the same module (name hash) returns to its row with the same kit and no kit loaded since (each row has its own stamp: module, effect id, kit, hook counters); otherwise the record's defaults are seeded as at a boot. A kit saved while the
    module is gone loses the effect's values (finding 61). The fx reload device test is `reload-fx.device.test.ts`.
 4. Workbench key check: `pk_keys_check` of `patchkit.wasm` (`keys_check_json` in `packages/patchkit/src/dkm.rs`) next to `pk_fit`, called by `keyWarnings` in `fit.ts`; the install in `dktransfer.ts` emits a `keys` event
-   before the upload for each rule a file breaks (a key twice, a key of another module on the card, a key of the version on the card that the new file lacks). It only warns. One wasm test (`dkneeds.wasm.test.ts`),
+   before the upload for each rule a file breaks (a key twice, a key of another module of the device's selection, a key of the version on the card that the new file lacks; the old file is read only when its hash differs). It only warns. One wasm test (`dkneeds.wasm.test.ts`),
    one Vitest case (`dktransfer.test.ts`), one Rust unit test.
 5a. `dsp_check_rows` of the fx service counts the rows of the module being reloaded (`CoreApi::live_op`) as free; the lfo ROWS check does the same for the shapes of the module being reloaded (a reload of a
    shape module was refused with `E_TYPE_USED` because the old shapes were still in the table).
 5. `E_FX_ID_DUP` (now a reserved code, never returned) and the lfo number check with its `E_TYPE_USED` path are deleted, with the fx commit's remembered effect ids and the refusal-table row of `E_FX_ID_DUP`.
-   `E_TYPE_USED` stays for machines.
+   `E_TYPE_USED` stays for machines. The lfo `apply` keeps a cheap slot-owner check as defence in depth: it does not overwrite a slot another module holds (the module being reloaded excluded).
 6. The 20-cycle soak is the full-tier setting of the existing soaks. The project round trip is `reload-project.device.test.ts` (DT2): save a project with the machine, reload it, load the project, the same sound.
 7. Reload that needs a service that is not loaded: replaced by port file step 3 (slot fill); E5 and E5c refuse with `E_MISSING`. The installer's run-time hook writes of the first plan are not built.
 8. The soak's pitch switch: `tests/regression/runtime/module-variant.ts` packs two builds of `test/sine` that differ in one constant (the DSP phase increment, one octave; same module id and keys) from a copy of the module
    directory (`patchkit pack --manifest`); the soak in `reload.device.test.ts` puts them on the card alternately, reloads with a note held and checks the pitch of the new note each cycle.
 
 Device proof (not run; one gate on both devices, with the go of the owner): `core/runtime-tests:test-device--reload-fx` (DT2 and DN2: master-route level, knob value, swap windows, soak, send cell), `core/runtime-tests:test-device--reload`
-(the pitch soak is new), `core/runtime-tests:test-device--reload-project--dt2`, then `core/runtime-tests:test-device--live` and the subset `S:machines C:loading` with gate-smoke and gate-pins, because the image
+(the pitch soak is new), `core/runtime-tests:test-device--reload-project--dt2`, `core/runtime-tests:test-device--reload-menus` (the key path to the settings page is a guess: one `dk:dev` screenshot first), then `core/runtime-tests:test-device--live` and the subset `S:machines C:loading` with gate-smoke and gate-pins, because the image
 changed (the runtime object, `core/ui`, the DIGIKIT menu and the service files). Time: about 15 minutes for the three new files on both devices, the subset as in E5.
 
 Estimate: 1-2 days. Depends on: E5.
