@@ -34,6 +34,16 @@ static struct {
     uint8_t put_val[2];
     int flushes;
     uint32_t blocks;
+    /* the live job: the calls of dkrt_live, the scripted results, and the phase of the job */
+    int live_n;
+    uint32_t live_op[8];
+    char live_path[8][64];
+    int32_t live_queue_result[8]; /* per call: what dkrt_live answers (0: queued) */
+    int32_t live_job_result[8];   /* per job: its result when it finishes */
+    int live_wait;                /* dkrt_live_state calls that still say "running" */
+    int live_waits;               /* the wait a new job gets */
+    uint32_t live_phase;
+    int live_cur;
 } fk;
 static int settings_runs, settings_acts;
 
@@ -65,6 +75,9 @@ int32_t dkrt_selection_set(const DkrtSelection *sel)
 {
     fk.selection_sets++;
     memcpy(&fk.set_sel, sel, sizeof *sel);
+    if (fk.set_result == DKRT_OK)
+        memcpy(&fk.sel, sel,
+               sizeof *sel); /* the saved selection is what dkrt_selection_get answers next */
     return fk.set_result;
 }
 
@@ -107,15 +120,63 @@ uint32_t dkrt_blocks(void)
     return fk.blocks;
 }
 
+static int polls_on;
 int32_t dkrt_poll_add(uintptr_t f)
 {
     (void)f;
+    polls_on++;
     return 0;
 }
 
 void dkrt_poll_remove(uintptr_t f)
 {
     (void)f;
+    polls_on = 0;
+}
+
+/* The live job of the runtime: a finished load sets the file's loaded flag, a finished unload clears it and counts an unload. */
+int32_t dkrt_live(uint32_t op, const uint8_t *path)
+{
+    int i = fk.live_n;
+    if (i >= 8)
+        return -50;
+    fk.live_n++;
+    if (fk.live_queue_result[i] != 0)
+        return fk.live_queue_result[i];
+    fk.live_op[i] = op;
+    snprintf(fk.live_path[i], sizeof fk.live_path[i], "%s", (const char *)path);
+    fk.live_phase = 1;
+    fk.live_cur = i;
+    fk.live_wait = fk.live_waits;
+    return DKRT_OK;
+}
+
+void dkrt_live_state(DkrtLive *out)
+{
+    memset(out, 0, sizeof *out);
+    out->phase = fk.live_phase;
+    if (fk.live_phase == 1 && fk.live_wait > 0) {
+        fk.live_wait--;
+        return;
+    }
+    if (fk.live_phase == 1) {
+        int i = fk.live_cur;
+        fk.live_phase = 2;
+        if (fk.live_job_result[i] == 0) {
+            for (int k = 0; k < fk.n; k++) {
+                if (strcmp((const char *)fk.e[k].path, fk.live_path[i]) != 0)
+                    continue;
+                if (fk.live_op[i] == DKRT_LIVE_LOAD)
+                    fk.e[k].flags |= DKRT_SCAN_LOADED;
+                else
+                    fk.e[k].flags &= ~DKRT_SCAN_LOADED;
+            }
+            fk.boot.unloads += fk.live_op[i] == DKRT_LIVE_UNLOAD;
+            fk.boot.reloads++;
+        }
+    }
+    out->phase = fk.live_phase;
+    out->result = fk.live_phase == 2 ? fk.live_job_result[fk.live_cur] : 0;
 }
 
 void dkrt_diag(DkrtDiag *out)
@@ -229,6 +290,14 @@ void fk_reset(void)
     stock_fn = 0;
     g_main = g_about = DK_HEALTH_MENU = g_mem = g_modules = g_info = 0;
     memset(g_set, 0, sizeof g_set);
+    g_set_unloads = g_set_reloads = 0;
+    g_lq_state = LQ_IDLE;
+    g_lq_n = g_lq_pos = g_lq_wait = 0;
+    g_busy_row = -1;
+    g_bsnap = 0;
+    polls_on = 0;
+    DK_LIVE_JOBS = 0;
+    DK_LIVE_RESULT = 0;
     g_safe_shown = 0;
     g_hdr = g_lead = 0;
     STORE = 0;
@@ -396,4 +465,64 @@ void fk_boot_read_failure(void)
 void fk_set_tick(int row, int on)
 {
     set_tick(row, on);
+}
+
+/* ---- the live apply ------------------------------------------------------------------------------------------------------- */
+
+/* Script: job i (a call of dkrt_live) is refused at the queue with q, or ends with result r; each job reads "running" for `waits` state calls. */
+void fk_live_script(int i, int q, int r)
+{
+    fk.live_queue_result[i] = q;
+    fk.live_job_result[i] = r;
+}
+void fk_live_waits(int n)
+{
+    fk.live_waits = n;
+}
+/* One UI-loop pass of the callback the menu registered (the fake registry holds one flag). */
+void fk_poll(void)
+{
+    live_poll();
+}
+int fk_poll_on(void)
+{
+    return polls_on;
+}
+int fk_live_calls(void)
+{
+    return fk.live_n;
+}
+int fk_live_op(int i)
+{
+    return (int)fk.live_op[i];
+}
+const char *fk_live_path(int i)
+{
+    return fk.live_path[i];
+}
+void fk_boot_counters(uint32_t unloads, uint32_t reloads)
+{
+    fk.boot.unloads = unloads;
+    fk.boot.reloads = reloads;
+}
+/* The boot's result of selection index k: a load that failed with E_IMPORT and the module it needs. */
+void fk_boot_needs(int k, const char *name)
+{
+    fk.boot.results[k] = DKRT_E_IMPORT;
+    fk.boot.states[k] = DKRT_STATE_FAILED;
+    snprintf((char *)fk.boot.needs[k], DKRT_NEEDS_LEN, "%s", name);
+    if ((uint32_t)k >= fk.boot.count)
+        fk.boot.count = (uint32_t)k + 1;
+}
+void fk_boot_count(uint32_t n)
+{
+    fk.boot.count = n;
+}
+uintptr_t fk_set_handle(int k)
+{
+    return (uintptr_t)g_set[k];
+}
+int fk_busy_row(void)
+{
+    return g_busy_row;
 }

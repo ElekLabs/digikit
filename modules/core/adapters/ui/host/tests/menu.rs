@@ -30,6 +30,35 @@ extern "C" {
     fn fk_put_val(i: c_int) -> c_int;
     fn fk_flushes() -> c_int;
     fn fk_tick(i: c_int) -> c_int;
+    fn fk_live_script(i: c_int, queue_result: c_int, job_result: c_int);
+    fn fk_live_waits(n: c_int);
+    fn fk_poll();
+    fn fk_poll_on() -> c_int;
+    fn fk_live_calls() -> c_int;
+    fn fk_live_op(i: c_int) -> c_int;
+    fn fk_live_path(i: c_int) -> *const c_char;
+    fn fk_boot_counters(unloads: u32, reloads: u32);
+    fn fk_boot_needs(k: c_int, name: *const c_char);
+    fn fk_set_handle(k: c_int) -> usize;
+}
+
+// dkrt_live ops
+const LIVE_LOAD: c_int = 1;
+const LIVE_UNLOAD: c_int = 2;
+
+/// UI-loop passes until the batch has ended (the callback removes itself).
+fn poll_until_idle() {
+    for _ in 0..200 {
+        if unsafe { fk_poll_on() } == 0 {
+            return;
+        }
+        unsafe { fk_poll() };
+    }
+    panic!("the live batch did not end");
+}
+
+fn live_call(i: c_int) -> (c_int, String) {
+    unsafe { (fk_live_op(i), cstr(fk_live_path(i))) }
 }
 
 const COMPAT: u32 = 1;
@@ -498,7 +527,7 @@ fn no_without_changes_just_goes_back() {
 }
 
 #[test]
-fn no_with_changes_asks_to_apply_and_restart() {
+fn no_with_changes_asks_to_apply_and_runs_it_live() {
     let _g = digikit();
     add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
     add("modules/gain-fx.dkm", OK | LOADED, 100, 1, 0);
@@ -513,14 +542,230 @@ fn no_with_changes_asks_to_apply_and_restart() {
     let (kind, title, text, _) = dialog().unwrap();
     assert_eq!(
         (kind, title.as_str(), text.as_str()),
-        (DialogKind::Confirm, "APPLY & RESTART?", "2 CHANGES")
+        (DialogKind::Confirm, "APPLY 2 CHANGES?", "NO RESTART")
     );
     answer_confirm(true);
     assert_eq!(unsafe { fk_selection_sets() }, 1);
     assert_eq!(unsafe { fk_set_count() }, 1);
     assert_eq!(cstr(unsafe { fk_set_path(0) }), "modules/gain-fx.dkm");
     assert_eq!(unsafe { fk_flushes() }, 1);
+    // gain-fx is loaded already: the only job is the unload of tool, and the device does not restart
+    poll_until_idle();
+    assert_eq!(unsafe { fk_live_calls() }, 1);
+    assert_eq!(live_call(0), (LIVE_UNLOAD, "modules/tool.dkm".to_string()));
+    assert_eq!(unsafe { fk_restarts() }, 0);
+}
+
+#[test]
+fn a_batch_unloads_first_then_loads_and_the_row_reads_loading() {
+    let _g = digikit();
+    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
+    add("modules/a.dkm", OK, 20, 0, 0);
+    add("modules/b.dkm", OK, 20, 0, 0);
+    select("modules/tool.dkm");
+    unsafe { fk_live_waits(1) };
+    open_modules();
+    press_yes(2); // the loads are checked before the unload: the batch still unloads first
+    press_yes(1);
+    press_yes(0);
+    press_no();
+    assert_eq!(dialog().unwrap().1, "APPLY 3 CHANGES?");
+    answer_confirm(true);
+    assert_eq!(unsafe { fk_restarts() }, 0);
+    assert_eq!(unsafe { fk_poll_on() }, 1);
+    unsafe { fk_poll() }; // the unload of tool is queued: its row reads UNLOADING
+    assert!(render()[0].contains("UNLOADING"), "{:?}", render());
+    // the list is read-only until the batch ends: a key changes nothing and NO does not leave
+    press_yes(0);
+    assert_eq!(unsafe { fk_tick(0) }, 0);
+    press_no();
+    assert_eq!((title().as_str(), depth()), ("MODULES", 2));
+    assert!(dialog().is_none());
+    unsafe { fk_poll() }; // still running
+    unsafe { fk_poll() }; // finished: the list is scanned again, the next job follows
+    assert!(!render()[0].contains("UNLOADING"), "{:?}", render());
+    unsafe { fk_poll() };
+    assert!(render()[1].contains("LOADING"), "{:?}", render());
+    poll_until_idle();
+    assert_eq!(unsafe { fk_live_calls() }, 3);
+    assert_eq!(live_call(0), (LIVE_UNLOAD, "modules/tool.dkm".to_string()));
+    assert_eq!(live_call(1), (LIVE_LOAD, "modules/a.dkm".to_string()));
+    assert_eq!(live_call(2), (LIVE_LOAD, "modules/b.dkm".to_string()));
+    // the batch ended: the list is closed, and a new one shows what is loaded now
+    assert_eq!(depth(), 1);
+    open_modules();
+    assert_eq!(
+        render().iter().map(|r| &r[..2]).collect::<Vec<_>>(),
+        ["  ", "* ", "* "]
+    );
+    assert_eq!(unsafe { fk_restarts() }, 0);
+}
+
+/// One job of the batch (the unload of tool, then a load) is refused or fails with `code`; the dialogs that follow.
+fn refused_batch(queue_result: c_int, job_result: c_int) {
+    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
+    add("modules/a.dkm", OK, 20, 0, 0);
+    select("modules/tool.dkm");
+    unsafe { fk_live_script(0, queue_result, job_result) };
+    open_modules();
+    press_yes(0);
+    press_yes(1);
+    press_no();
+    answer_confirm(true);
+    poll_until_idle();
+    // the batch ends at the first job that did not work: the load of a is not tried
+    assert_eq!(unsafe { fk_live_calls() }, 1);
+}
+
+#[test]
+fn a_refused_job_shows_not_applied_and_offers_the_restart() {
+    let _g = digikit();
+    refused_batch(0, -83);
+    let (kind, title, text, _) = dialog().unwrap();
+    assert_eq!(
+        (kind, title.as_str(), text.as_str()),
+        (DialogKind::Confirm, "TOOL NOT APPLIED", "STOP PLAYBACK")
+    );
+    answer_confirm(true);
+    let (_, title, text, _) = dialog().expect("the restart question");
+    assert_eq!(
+        (title.as_str(), text.as_str()),
+        ("RESTART TO APPLY?", "THE CHANGE IS SAVED")
+    );
+    assert_eq!(unsafe { fk_restarts() }, 0);
+    answer_confirm(true);
     assert_eq!(unsafe { fk_restarts() }, 1);
+}
+
+#[test]
+fn a_missing_service_is_not_applied_and_no_to_the_restart_leaves_the_device_running() {
+    let _g = digikit();
+    refused_batch(-73, 0); // E_MISSING at the queue
+    let (_, dtitle, text, _) = dialog().unwrap();
+    assert_eq!(
+        (dtitle.as_str(), text.as_str()),
+        ("TOOL NOT APPLIED", "NO SERVICE")
+    );
+    answer_confirm(false);
+    assert_eq!(dialog().unwrap().1, "RESTART TO APPLY?");
+    answer_confirm(false);
+    assert!(dialog().is_none());
+    assert_eq!(unsafe { fk_restarts() }, 0);
+    // the selection is saved; the list is back to the scan of what is loaded
+    assert_eq!(unsafe { fk_selection_sets() }, 1);
+    assert_eq!(title(), "MODULES");
+}
+
+#[test]
+fn the_text_of_each_live_refusal() {
+    for (code, text) in [
+        (-84, "HAS MENUS"),
+        (-85, "ON AN FX ROUTE"),
+        (-86, "KEYS CHANGED"),
+        (-87, "RESTART DEVICE"),
+        (-53, "UPLOAD OPEN"),
+    ] {
+        let _g = digikit();
+        refused_batch(0, code);
+        assert_eq!(dialog().unwrap().2, text, "code {code}");
+    }
+}
+
+#[test]
+fn a_route_change_restarts_directly() {
+    let _g = digikit();
+    add("modules/both.dkm", OK | LOADED, 10, 1, 0);
+    loaded("modules/both.dkm", "test/both");
+    fx("test/both", 3, 1);
+    unsafe { fk_send_slots(2) };
+    select("modules/both.dkm");
+    open_modules();
+    press_right(0);
+    choose_panel_row(1);
+    pick_choice(0); // SEND
+    press_no();
+    assert_eq!(dialog().unwrap().1, "APPLY & RESTART?");
+    answer_confirm(true);
+    assert_eq!(
+        (unsafe { fk_restarts() }, unsafe { fk_live_calls() }),
+        (1, 0)
+    );
+}
+
+#[test]
+fn leaving_safe_mode_restarts_directly() {
+    let _g = digikit();
+    add("modules/tool.dkm", OK, 20, 0, 0);
+    select("modules/tool.dkm");
+    unsafe { fk_boot_safe() };
+    open_digikit();
+    answer_confirm(false); // the safe-mode notice
+    press_yes(MODULES + 1); // the SAFE row comes first
+    press_no();
+    let (_, title, text, _) = dialog().unwrap();
+    assert_eq!(
+        (title.as_str(), text.as_str()),
+        ("APPLY & RESTART?", "LEAVES SAFE MODE")
+    );
+    answer_confirm(true);
+    assert_eq!(
+        (unsafe { fk_restarts() }, unsafe { fk_live_calls() }),
+        (1, 0)
+    );
+}
+
+#[test]
+fn boot_results_follow_the_boot_selection_after_a_live_save() {
+    let _g = digikit();
+    add("modules/x.dkm", OK | LOADED, 20, 0, 0);
+    add("modules/a.dkm", OK, 20, 0, 0);
+    select("modules/x.dkm");
+    select("modules/a.dkm");
+    // the boot loaded x and a failed at selection index 1 for a missing module
+    let n = CString::new("usb-bulk").unwrap();
+    unsafe { fk_boot_needs(1, n.as_ptr()) };
+    open_modules();
+    press_yes(0); // unload x: the saved selection is [a] from now on, a has index 0 there and 1 at the boot
+    press_no();
+    answer_confirm(true);
+    poll_until_idle();
+    open_modules();
+    press_right(1);
+    choose_panel_row(1); // INFO
+    assert!(
+        render().contains(&"NEEDS USB-BULK".to_string()),
+        "{:?}",
+        render()
+    );
+}
+
+#[test]
+fn the_settings_menu_of_a_module_is_built_again_after_an_unload() {
+    let _g = digikit();
+    store_of_three();
+    loaded_menu("modules/tool.dkm", "digikit/tool");
+    select("modules/tool.dkm");
+    open_modules();
+    let open_settings = || {
+        press_right(0);
+        choose_panel_row(1);
+        let h = unsafe { fk_set_handle(0) };
+        press_no();
+        h
+    };
+    let first = open_settings();
+    assert_ne!(first, 0);
+    assert_eq!(
+        open_settings(),
+        first,
+        "the menu is kept while no module went away"
+    );
+    unsafe { fk_boot_counters(1, 0) }; // another module was unloaded: the module indexes moved
+    let again = open_settings();
+    assert_ne!(
+        again, first,
+        "the menu is built again for the module's new index"
+    );
 }
 
 #[test]
@@ -566,12 +811,10 @@ fn apply_writes_the_changed_routes_and_restarts() {
 #[test]
 fn a_refused_restart_is_shown() {
     let _g = digikit();
-    store_of_three();
     unsafe { fk_restart_result(-43) };
-    open_modules();
-    press_yes(0);
-    press_no();
-    answer_confirm(true);
+    refused_batch(0, -83);
+    answer_confirm(true); // the job is not applied
+    answer_confirm(true); // RESTART TO APPLY?
     let (_, title, text, _) = dialog().expect("the refusal");
     assert_eq!((title.as_str(), text.as_str()), ("NO RESTART", "CARD BUSY"));
 }
@@ -619,9 +862,7 @@ fn about_reports_read_failure_without_stale_selection_names() {
     let _g = digikit();
     add("modules/tool.dkm", OK, 20, 0, 0);
     select("modules/tool.dkm");
-    open_modules();
-    press_no();
-    press_no();
+    // the selection cannot be read from the boot on: no names of an earlier read
     unsafe {
         fk_get_result(-3);
         fk_boot_read_failure();
