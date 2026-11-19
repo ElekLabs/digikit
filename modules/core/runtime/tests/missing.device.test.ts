@@ -10,7 +10,7 @@ import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts'
 import { TRACK_OBJ_WORD } from '@digi/regression/runtime/project-kit.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
-import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
+import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-cli.ts';
 
 /**
  * An absent machine module reads MISSING and plays silence (docs/plans/extension-model.md E5d), on both devices. The machine is `test/sine` (the machine the other live tests use;
@@ -23,10 +23,12 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  * - `LOAD` of it again: the short name is the machine's own, the note plays at the level it had (at least half), and the kit's stored knob bytes of track 1 (the sound array, DT2:
  *   `+0x14`, 0x8c bytes of the track object) are the bytes before the unload: the unload and the load wrote nothing to the track.
  *
- * Boot path: the saved selection is the debug module alone, the device restarts, and the number of the machine is still in the sticky map with no module: once the loads of the
- * boot are over the machines service parks it, so the row's short name reads `MISS` (waited on firmware state) and the log holds no `MACHINE_TYPE_EVICTED` error (no number was left
- * without a row). The silence of that row is the unit test of the service and the rig case (a track cannot hold the type after a restart without a saved project). Then the module is
- * selected again, the device restarts, and the machine plays.
+ * Boot path: the machines service is a provider that loads only when a selected module needs it, so a boot with the debug module alone loads no machines service, reads no
+ * sticky map and writes no row. The boot path therefore runs with a second machine module (`test/native-page`) selected beside the debug module: the machines service loads, the
+ * number of `test/sine` is still in the map (the map keeps the numbers of modules that are not selected) and no module has it. After the restart, once the loads of the boot are over,
+ * the service parks it, so the row's short name reads `MISS` (waited on firmware state) and the log holds no `MACHINE_TYPE_EVICTED` error (no number was left without a row). The
+ * silence of that row is the unit test of the service and the rig case (a track cannot hold the type after a restart without a saved project). Then `test/sine` is selected again,
+ * the device restarts, and the machine is its own again.
  *
  * Replaces the "a plain unload leaves a gap row that plays the first stock machine" assertions of `live.device.test.ts`.
  *
@@ -37,6 +39,8 @@ const AMP_CC = { dt2: { hold: 80, decay: 81 }, dn2: { hold: 85, decay: 86 } } as
 const SEND_CC = { dt2: [84, 85, 12], dn2: [30, 31, 29] } as const;
 /** Where the kit's stored knob bytes of track 1 can be read (the sound array, finding 02): only the Digitakt II track object is mapped in the tests. */
 const KNOB_BYTES: Partial<Record<Device, { at: number; words: number }>> = { dt2: { at: TRACK_OBJ_WORD + 0x14, words: 0x8c / 4 } };
+/** A second machine module that keeps the machines service loaded while `test/sine` is not selected. */
+const OTHER_ID = 'test/native-page';
 const NOTE = 57;
 const CAPTURE_BLOCKS = 4000;
 const SILENT = 1e-4;
@@ -112,6 +116,7 @@ async function expectMissingAndSilent(rt: TestRuntime): Promise<void> {
   const plan = await prepareRuntimePlan(rt.session, artifacts, ['dynreg_info']);
   // the next boot would load the debug module alone: the machine is outside the saved selection
   await rt.dk.select([moduleStorePath(device as 'dt2' | 'dn2', DEBUG_MODULE)]);
+  await transferCommand(rt.session, ['install', OTHER_ID], path.join(artifacts, 'install-other.log'), 300_000);
   const sine = (await rt.dk.modules()).find((m) => m.name === 'test/sine')!;
   const type = sine.types[0]!;
   await pickSine(rt);
@@ -146,6 +151,7 @@ async function expectMissingAndSilent(rt: TestRuntime): Promise<void> {
 
   // the boot path: the selection is the debug module alone, the machine's number stays in the sticky map, and the machines service parks it once the boot's loads are over
   await rt.dk.unloadAndWait(sinePath);
+  await rt.dk.select([moduleStorePath(device as 'dt2' | 'dn2', DEBUG_MODULE), moduleStorePath(device as 'dt2' | 'dn2', OTHER_ID)]);
   await restart(rt);
   const parked = await pollUntil(rt.clock, () => shortName(rt, plan, type), (n) => n === 'MISS', { withinMs: 30_000, message: 'the absent machine reads MISS after the restart' });
   expect(parked).toBe('MISS');

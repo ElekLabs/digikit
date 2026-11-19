@@ -806,7 +806,7 @@ Mechanism:
    row. `Service::dsp_admit` (`dsp::make_room`) frees the placeholders of other numbers when a load has fewer free rows than voices without a placeholder of their own type; the number
    that lost its row falls back to the gap row (the stock sound) and logs `MACHINE_TYPE_EVICTED` as an error event (arguments hash, type, why 1). A real load is never refused for a
    placeholder.
-4. A number that cannot be parked (no free voice row, why 2; the DSP did not take the write in 3 passes in a row, why 3) keeps the gap row and logs the same event once, never a MISSING
+4. With no machines service loaded (a boot whose selection needs none) nothing parks and the map is not read: the type is no machine of the boot and a kit that names it plays the stock sound. A number that cannot be parked (no free voice row, why 2; the DSP did not take the write in 3 passes in a row, why 3) keeps the gap row and logs the same event once, never a MISSING
    row without a voice row. It is parked again at the first pass after a row frees.
 
 Follow-up E5d-fx: MISSING effect entry, after a static firmware check for a disable or grey mechanism of the FX list (finding 71 open); effects have no sticky number, so only a live
@@ -817,7 +817,7 @@ that every unload parks the rows; `absent_rows` checks that placeholders exist o
 placeholder rows; case 3 compares B's row by type. Machines service tests: unload parks and shows MISSING while the map holds the number and frees it when it does not; boot parking
 (boot loads running, loader busy, no free row with its event); a real load takes a placeholder row and the number is parked again; a boot that fits exactly loads every module. Device (one
 for each device): `missing.device.test.ts` (the machine is listed; unload live: the track label reads MISS, it is not listed, the PCM is silent, the stored knob bytes are the same after
-the load; the boot path: restart with the module unselected reads MISS, no error event). The "stock sound after untick" assertions of `live.device.test.ts` and `shot-live-dt2.device.test.ts`
+the load; the boot path: the machines service is a provider, loaded only when a selected module needs it, so the step selects `test/native-page` beside the debug module; after the restart the number of the unselected `test/sine` reads MISS, no error event). The "stock sound after untick" assertions of `live.device.test.ts` and `shot-live-dt2.device.test.ts`
 became "silent".
 
 Risks: a placeholder row is taken by the next real load, so a long-absent number can end with the gap row; a stock kit that uses a MISSING type in the page code is unknown firmware
