@@ -234,38 +234,45 @@ export function shipModules(out, root = repoRoot) {
       source: files,
     });
   }
-  // the .dks services (dist/modules/<dev>/*.dks) as built: the Transfer page uploads them as they are, with the port file of the device's firmware
+  // the .dks services as built (packed here, no firmware in them) and the port files of the firmware versions the repository has a port for: Transfer uploads a service
+  // as it is, with the port file whose FW item equals the device's fw_id. The build fails when either is missing: a site without them installs no service.
   const services = {};
-  const servicesRoot = join(root, 'dist', 'modules');
-  if (existsSync(servicesRoot)) {
-    for (const dev of readdirSync(servicesRoot, { withFileTypes: true }).filter((e) => e.isDirectory())) {
-      const names = readdirSync(join(servicesRoot, dev.name))
-        .filter((f) => f.endsWith('.dks'))
-        .sort();
-      for (const name of names) {
-        const bytes = readFileSync(join(servicesRoot, dev.name, name));
-        mkdirSync(join(out, dev.name), { recursive: true });
-        writeFileSync(join(out, dev.name, name), bytes);
-        (services[dev.name] ??= []).push({ file: `${dev.name}/${name}`, size: bytes.length, sha256: sha256(bytes) });
-      }
-    }
-  }
-  // the port files (dist/ports/<dev>-<version>.dkport, `patchkit:ports`): built from committed data, no firmware bytes in them; Transfer uploads the one whose FW item
-  // equals the device's fw_id
-  const ports = {};
-  const portsRoot = join(root, 'dist', 'ports');
-  if (existsSync(portsRoot)) {
-    for (const name of readdirSync(portsRoot)
-      .filter((f) => f.endsWith('.dkport'))
-      .sort()) {
-      const dev = deviceIds.find((d) => name.startsWith(`${d}-`));
-      if (!dev) continue;
-      const bytes = readFileSync(join(portsRoot, name));
+  const serviceManifests = walk(join(root, 'modules', 'core', 'services'), 'module.toml')
+    .sort(byParts)
+    .map((file) => parse(readFileSync(file, 'utf8')))
+    .filter((d) => d.module.role === 'service');
+  for (const dev of deviceIds) {
+    const ids = serviceManifests
+      .filter((d) => Object.keys(d.targets ?? {}).some((t) => t.startsWith(`${dev}-`)))
+      .map((d) => d.module.id);
+    if (!ids.length) continue;
+    const packed = packAll(root, ids, dev, join(scratch, `${dev}-services`));
+    for (const id of ids) {
+      const bytes = packed[id];
+      if (!bytes) throw new Error(`the service ${id} did not pack for ${dev}: the site would ship no ${id.split('/').pop()}.dks`);
+      const name = `${id.split('/').pop()}.dks`;
       mkdirSync(join(out, dev), { recursive: true });
       writeFileSync(join(out, dev, name), bytes);
-      (ports[dev] ??= []).push({ file: `${dev}/${name}`, size: bytes.length, sha256: sha256(bytes) });
+      (services[dev] ??= []).push({ file: `${dev}/${name}`, size: bytes.length, sha256: sha256(bytes) });
     }
   }
+  const ports = {};
+  const portsDir = join(scratch, 'ports');
+  rmSync(portsDir, { recursive: true, force: true });
+  mkdirSync(portsDir, { recursive: true });
+  patchkit(['port', 'build', '--all', '--out', portsDir], { root });
+  for (const name of readdirSync(portsDir)
+    .filter((f) => f.endsWith('.dkport'))
+    .sort()) {
+    const dev = deviceIds.find((d) => name.startsWith(`${d}-`));
+    if (!dev) continue;
+    const bytes = readFileSync(join(portsDir, name));
+    mkdirSync(join(out, dev), { recursive: true });
+    writeFileSync(join(out, dev, name), bytes);
+    (ports[dev] ??= []).push({ file: `${dev}/${name}`, size: bytes.length, sha256: sha256(bytes) });
+  }
+  for (const dev of Object.keys(services))
+    if (!ports[dev]?.length) throw new Error(`no port file was built for ${dev}: the site would ship services that no firmware can use`);
   const index = { modules, services, ports };
   writeFileSync(join(out, 'index.json'), JSON.stringify(index, null, 1));
   return index;
