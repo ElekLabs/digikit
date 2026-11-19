@@ -329,7 +329,10 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
                     when={
                       props.onFlash &&
                       v().refusals?.some(
-                        (r) => r.kind === 'fingerprint' || r.kind === 'no-port' || (r.kind === 'version' && r.service === 'runtime'),
+                        (r) =>
+                          r.kind === 'fingerprint' ||
+                          r.kind === 'no-port' ||
+                          (r.kind === 'version' && r.service === 'runtime'),
                       )
                     }
                   >

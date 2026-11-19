@@ -351,9 +351,9 @@ test('negative setup installs natively on its own device-set daemon without patc
   // the module is read to upload it and to find the services it needs
   expect(fake.read).toHaveBeenCalledWith(expect.stringMatching(/dt2\/remote\.dkm$/));
   expect(calls).toEqual(['put', 'verifyFile', 'select', 'restart', 'waitForBoot', 'modules']);
-  expect(dk.put.mock.calls[0]?.[0]).toBe('modules/remote.dkm');
-  expect(dk.verifyFile.mock.calls[0]?.[0]).toBe('modules/remote.dkm');
-  expect(dk.select).toHaveBeenCalledExactlyOnceWith(['modules/remote.dkm']);
+  expect(dk.put.mock.calls[0]?.[0]).toBe('modules/tool/digikit-remote.dkm');
+  expect(dk.verifyFile.mock.calls[0]?.[0]).toBe('modules/tool/digikit-remote.dkm');
+  expect(dk.select).toHaveBeenCalledExactlyOnceWith(['modules/tool/digikit-remote.dkm']);
 });
 
 test('ABOUT reads are bounded and assert the live protocol runtime identity without a Python formatter', async () => {

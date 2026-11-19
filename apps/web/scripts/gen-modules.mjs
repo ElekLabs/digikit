@@ -249,7 +249,8 @@ export function shipModules(out, root = repoRoot) {
     const packed = packAll(root, ids, dev, join(scratch, `${dev}-services`));
     for (const id of ids) {
       const bytes = packed[id];
-      if (!bytes) throw new Error(`the service ${id} did not pack for ${dev}: the site would ship no ${id.split('/').pop()}.dks`);
+      if (!bytes)
+        throw new Error(`the service ${id} did not pack for ${dev}: the site would ship no ${id.split('/').pop()}.dks`);
       const name = `${id.split('/').pop()}.dks`;
       mkdirSync(join(out, dev), { recursive: true });
       writeFileSync(join(out, dev, name), bytes);
@@ -272,7 +273,8 @@ export function shipModules(out, root = repoRoot) {
     (ports[dev] ??= []).push({ file: `${dev}/${name}`, size: bytes.length, sha256: sha256(bytes) });
   }
   for (const dev of Object.keys(services))
-    if (!ports[dev]?.length) throw new Error(`no port file was built for ${dev}: the site would ship services that no firmware can use`);
+    if (!ports[dev]?.length)
+      throw new Error(`no port file was built for ${dev}: the site would ship services that no firmware can use`);
   const index = { modules, services, ports };
   writeFileSync(join(out, 'index.json'), JSON.stringify(index, null, 1));
   return index;

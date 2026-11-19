@@ -164,7 +164,9 @@ export function eventText(e: TransferEvent): string {
     case 'delete':
       return e.why === 'duplicate'
         ? `Deleted ${e.path} (the same module is at its new path)`
-        : e.why === 'unused-service' ? `Deleted ${e.path} (no module on the card needs it)` : `Deleting ${e.path}`;
+        : e.why === 'unused-service'
+          ? `Deleted ${e.path} (no module on the card needs it)`
+          : `Deleting ${e.path}`;
     case 'verify':
       return e.ok ? `Verified ${e.path} on the card` : `Verify failed: ${e.path} differs on the card`;
     case 'reload':
@@ -327,7 +329,8 @@ export function deviceTags(r: TransferRow): RowTag[] {
   if (r.for_firmware)
     out.push({
       text: `for firmware ${r.for_firmware}`,
-      title: 'A port file of another firmware version: it stays on the card and serves no module while the device runs another firmware',
+      title:
+        'A port file of another firmware version: it stays on the card and serves no module while the device runs another firmware',
       tone: 'dim',
     });
   else if (r.needed_by?.length)

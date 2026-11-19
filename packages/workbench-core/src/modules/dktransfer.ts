@@ -556,7 +556,10 @@ export async function migrateModuleFolders(
 /** What to tell a person about files `migrateModuleFolders` could not move. */
 export const conflictText = (conflicts: Migration['conflicts']): string =>
   conflicts
-    .map((c) => `${c.id}: ${c.path} should be ${c.to}, which holds another file; nothing was uploaded for it (delete one of the two)`)
+    .map(
+      (c) =>
+        `${c.id}: ${c.path} should be ${c.to}, which holds another file; nothing was uploaded for it (delete one of the two)`,
+    )
     .join('; ');
 
 /** The store folder of the services and their file extension. */
@@ -667,7 +670,12 @@ async function cardFacts(
   card: DkEntry[],
   library: LibraryModule[],
   known: Record<string, Uint8Array | null> = {},
-): Promise<{ needs: { path: string; needs: Need[] }[]; provides: Record<string, number>; portFw: Record<string, string>; unread: number }> {
+): Promise<{
+  needs: { path: string; needs: Need[] }[];
+  provides: Record<string, number>;
+  portFw: Record<string, string>;
+  unread: number;
+}> {
   const mine = new Map(library.map((m) => [m.path, m]));
   const needs: { path: string; needs: Need[] }[] = [];
   const provides: Record<string, number> = {};

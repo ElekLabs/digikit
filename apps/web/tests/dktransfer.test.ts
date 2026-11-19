@@ -787,7 +787,9 @@ test('migration: the new path holds the same file: the flat copy is deleted; ano
   const events: any[] = [];
   const out = await migrateModuleFolders(session(dev), await session(dev).info(), (e) => events.push(e));
   assert.ok(!dev.files.has('modules/pluck.dkm'));
-  assert.deepEqual(out.conflicts, [{ id: 'digikit/probe', path: 'modules/probe.dkm', to: 'modules/tool/digikit-probe.dkm' }]);
+  assert.deepEqual(out.conflicts, [
+    { id: 'digikit/probe', path: 'modules/probe.dkm', to: 'modules/tool/digikit-probe.dkm' },
+  ]);
   assert.ok(dev.files.has('modules/probe.dkm') && dev.files.has('modules/tool/digikit-probe.dkm'));
   assert.ok(events.some((e) => e.event === 'conflict'));
 });
@@ -881,7 +883,13 @@ test('install with services: a module that needs the port file itself gets it up
   const direct = (await libraryModule(withTable(dkm('someone/raw', { size: 500 }), 0, PORT_NEED), needsOf))!;
   const matching = portFile('mine');
   const events: any[] = [];
-  const out = await install(session(dev), ['someone/raw'], [direct], (e) => events.push(e), depsOf([], { ports: [matching] }));
+  const out = await install(
+    session(dev),
+    ['someone/raw'],
+    [direct],
+    (e) => events.push(e),
+    depsOf([], { ports: [matching] }),
+  );
   assert.deepEqual(out.uploaded, ['someone/raw']);
   assert.deepEqual(dev.files.get('ports/mine.dkport'), matching.bytes);
 });

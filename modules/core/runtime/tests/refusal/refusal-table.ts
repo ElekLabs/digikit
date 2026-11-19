@@ -80,7 +80,7 @@ export const ROWS: Record<string, Row> = {
   E_PLAN_KEY: { fail: mine('a second owner of one key is E_PLAN_KEY'), pass: mine('the first owner of the key loads') },
   E_PLAN_FIT: { fail: mine('uses over the capacity are refused'), pass: loads },
   E_DECL_KIND: { fail: { file: LFO_DEVICE, test: 'a kind table' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
-  E_HOOK_STOCK: { fail: prov('a bound file whose stock bytes differ is E_HOOK_STOCK'), pass: prov('a provider installs its hook and the consumer calls it') },
+  E_HOOK_STOCK: { fail: prov('a port file whose check value differs is E_HOOK_STOCK and the service and its dependent are refused'), pass: prov('a provider installs its hook and the consumer calls it') },
   E_NO_DSP: { kind: 'host', reason: 'needs an image without the DSP loader', covered: [{ file: CLEANUP, test: 'E_NO_DSP' }] },
   E_DSP_FORMAT: { kind: 'host', reason: 'a malformed DSP section', covered: [{ file: CONTRACT, test: 'E_DSP_FORMAT' }] },
   E_DSP_IMPORT: { kind: 'open', reason: 'no fixture imports a DSP symbol the image lacks' },
