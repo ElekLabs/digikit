@@ -2,7 +2,7 @@
 // The profile, its step files and the runner are the shared code of packages/workbench-core/src/calibration; this file only connects the pieces a command line has:
 // the session and the MIDI port of wb.mjs, the transfer code path of `wb transfer install`, and the files.
 //
-//     wb [--port SUB | --emu [--run-dir DIR]] profile calibrate run --profile NAME|FILE [--out DIR]
+//     wb [--port SUB | --emu [--run-dir DIR]] profile calibrate run --profile NAME|FILE [--out DIR] [--allow-unidentified-firmware]
 //
 // NAME is a file of devices/calibration/profiles/. The captures go to --out, by default out/runs/calibration/<time>-<profile>-<target>/, as <case>-<n>.profile.json
 // with a run.json that lists them. Exit 1 when a case was skipped (the target lacks something it needs) or the run failed. Use: docs/INSTRUMENTATION.md "Calibration runs".
@@ -29,7 +29,7 @@ const dirOf = (root) => path.join(root, 'devices/calibration');
 
 /** The profile named by `--profile`: a file path, or a name in devices/calibration/profiles/. */
 function profileFile(root, spec, fail) {
-  if (!spec) fail('profile calibrate run --profile NAME|FILE [--out DIR]');
+  if (!spec) fail('profile calibrate run --profile NAME|FILE [--out DIR] [--allow-unidentified-firmware]');
   if (existsSync(spec) && !spec.includes('..')) return spec;
   const named = path.join(dirOf(root), 'profiles', `${spec}.toml`);
   if (!existsSync(named)) {
@@ -151,8 +151,20 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
   } catch {
     remote = false;
   }
+  // the emulator: wait until the controller's USB MIDI input queue is empty (the firmware took the bytes), as tests/regression/runtime/midi.ts does
+  const drained = emu
+    ? async () => {
+        for (let waited = 0; ; waited += 20) {
+          const { queued } = await link.call('midi.usb.in', { bytes: '' });
+          if (queued === 0) return;
+          if (waited >= 1000) throw new Error('USB MIDI input not taken by the firmware');
+          await clock.pause(20);
+        }
+      }
+    : undefined;
   const rig = {
     midi: new MidiOut(link.midiSink),
+    ...(drained ? { drained } : {}),
     stats: sessionStatsSource(session, nameOf),
     clock,
     events,
@@ -172,7 +184,11 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
       : {}),
   };
 
-  const run = { id: runId(emu ? 'emu' : 'dev', new Date()), target: record.id };
+  // the firmware identity both sides share: INFO `fw_id`, the first 8 bytes of the SHA-256 of the stock firmware (16 hex digits), also what the emulator's runtime reports
+  const info = await session.info();
+  const run = { id: runId(emu ? 'emu' : 'dev', new Date()), target: record.id, runtime_version: info.runtime };
+  if (info.fw_id) run.firmware_sha256 = info.fw_id;
+  if (info.image_id) run.image_id = info.image_id;
   try {
     run.source_revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   } catch {
@@ -188,40 +204,52 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
   );
   mkdirSync(out, { recursive: true });
 
-  const results = await runCalibration({
-    profile,
-    steps,
-    rig,
-    midi: record.midi,
-    run,
-    dspUnit: emu ? 'insn' : 'cycles',
-    log: (line) => console.error(`calibrate: ${line}`),
-  });
-
   const index = [];
   let skipped = 0;
   console.log(`profile ${profile.name} on ${record.id} (${emu ? 'emulator' : 'device'}), captures in ${out}`);
-  for (const r of results) {
-    if (r.skipped) {
-      skipped++;
-      console.log(`  ${r.id}: SKIPPED, ${r.skipped}`);
-      index.push({ case: r.id, skipped: r.skipped });
-      continue;
-    }
-    for (const c of r.captures) {
-      writeFileSync(path.join(out, c.file), `${JSON.stringify(c.profile)}\n`);
-      const p = c.profile;
-      const rows = (p.dsp_rows ?? []).filter((x) => x.calls > 0).length;
-      const spanTicks = (p.spans ?? []).reduce((a, s) => a + s.sum_ticks, 0);
-      console.log(
-        `  ${c.file}: ${p.dsp ? `${p.dsp.blocks} DSP blocks, ${rows} rows with calls, stock delta ${p.dsp.max_stock_block_delta}` : 'no DSP stats'}; ${(p.spans ?? []).length} spans, ${spanTicks} ticks`,
-      );
-      index.push({ case: r.id, repeat: c.repeat, file: c.file, input_sha256: p.run.input_sha256 });
-    }
+  const writeIndex = (error) =>
+    writeFileSync(
+      path.join(out, 'run.json'),
+      `${JSON.stringify({ profile: profile.name, run, captures: index, ...(error ? { error } : {}) }, null, 2)}\n`,
+    );
+  // each capture is written as it finishes, so a later failure loses nothing
+  const onCapture = (c) => {
+    writeFileSync(path.join(out, c.file), `${JSON.stringify(c.profile)}\n`);
+    const p = c.profile;
+    const rows = (p.dsp_rows ?? []).filter((x) => x.calls > 0).length;
+    const spanTicks = (p.spans ?? []).reduce((a, s) => a + s.sum_ticks, 0);
+    console.log(
+      `  ${c.file}: ${p.dsp ? `${p.dsp.blocks} DSP blocks, ${rows} rows with calls, stock delta ${p.dsp.max_stock_block_delta}` : 'no DSP stats'}; ${(p.spans ?? []).length} spans, ${spanTicks} ticks`,
+    );
+    index.push({ case: c.caseId, repeat: c.repeat, file: c.file, input_sha256: p.run.input_sha256 });
+    writeIndex();
+  };
+  const onCase = (r) => {
+    if (!r.skipped) return;
+    skipped++;
+    console.log(`  ${r.id}: SKIPPED, ${r.skipped}`);
+    index.push({ case: r.id, skipped: r.skipped });
+    writeIndex();
+  };
+  try {
+    await runCalibration({
+      profile,
+      steps,
+      rig,
+      midi: record.midi,
+      run,
+      dspUnit: emu ? 'insn' : 'cycles',
+      allowUnidentifiedFirmware: Boolean(opts['allow-unidentified-firmware']),
+      onCapture,
+      onCase,
+      log: (line) => console.error(`calibrate: ${line}`),
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    writeIndex(message);
+    console.error(`wb: the run failed: ${message} (${index.filter((x) => x.file).length} captures kept in ${out})`);
+    return 1;
   }
-  writeFileSync(
-    path.join(out, 'run.json'),
-    `${JSON.stringify({ profile: profile.name, run, captures: index }, null, 2)}\n`,
-  );
+  writeIndex();
   return skipped > 0 ? 1 : 0;
 }

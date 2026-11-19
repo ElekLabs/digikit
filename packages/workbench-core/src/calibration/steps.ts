@@ -226,6 +226,9 @@ function paramOf(s: Record<string, unknown>, ctx: ResolveContext, where: string)
   return p;
 }
 
+/** A 7-bit step value on the full 14-bit NRPN range: 0 is 0 and 127 is 16383 (rounded). */
+export const nrpnValue = (v7: number): number => Math.round((v7 * 16383) / 127);
+
 /** One substituted step as operations (a track list gives one operation per track). */
 function resolveOne(s: Record<string, unknown> & { action: string }, ctx: ResolveContext, where: string): Op[] {
   const allowed = FIELDS[s.action]!;
@@ -264,7 +267,7 @@ function resolveOne(s: Record<string, unknown> & { action: string }, ctx: Resolv
       const value14 =
         s.value14 !== undefined
           ? int(s.value14, 'value14', 0, 16383, where)
-          : int(s.value, 'value', 0, 127, where) << 7;
+          : nrpnValue(int(s.value, 'value', 0, 127, where));
       const msb = int(nrpn[0], 'nrpn msb', 0, 127, where);
       const lsb = int(nrpn[1], 'nrpn lsb', 0, 127, where);
       return channelsOf(s, ctx, where).map((ch) => ({ op: 'midi.nrpn' as const, ch, msb, lsb, value14 }));

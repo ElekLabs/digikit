@@ -83,8 +83,16 @@ test('named parameters resolve through the device table, one operation per track
     { op: 'midi.cc', ch: 9, cc: 16, value: 64 },
   ]);
   assert.deepEqual(resolveSteps([{ action: 'midi.nrpn', track: 1, param: 'amp_release', value: 127 }], {}, {}, ctx()), [
-    { op: 'midi.nrpn', ch: 1, msb: 1, lsb: 34, value14: 127 << 7 },
+    { op: 'midi.nrpn', ch: 1, msb: 1, lsb: 34, value14: 16383 },
   ]);
+  // a 7-bit value covers the whole 14-bit range: 0 is 0, 127 is 16383, 64 is 8256
+  const nrpn = (value: number) =>
+    (
+      resolveSteps([{ action: 'midi.nrpn', track: 1, param: 'amp_release', value }], {}, {}, ctx())[0] as {
+        value14: number;
+      }
+    ).value14;
+  assert.deepEqual([nrpn(0), nrpn(64), nrpn(127)], [0, 8256, 16383]);
   assert.deepEqual(resolveSteps([{ action: 'midi.nrpn', track: 1, param: 'only_nrpn', value14: 5 }], {}, {}, ctx()), [
     { op: 'midi.nrpn', ch: 1, msb: 1, lsb: 99, value14: 5 },
   ]);

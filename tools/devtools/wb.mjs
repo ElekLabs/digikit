@@ -79,7 +79,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--device ID] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] [--slot N] (--slot N writes slot N and replaces what it holds; a cancelled write leaves the slot empty) | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH... | transfer restart | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE] | profile calibrate run --profile NAME|FILE [--out DIR]';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--device ID] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] [--slot N] (--slot N writes slot N and replaces what it holds; a cancelled write leaves the slot empty) | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH... | transfer restart | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE] | profile calibrate run --profile NAME|FILE [--out DIR] [--allow-unidentified-firmware]';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -142,6 +142,7 @@ for (let i = 0; i < args.length; i++) {
   } else if (a === '--ret') opts.ret = true;
   else if (a === '--emu' || a === '--restart' || a === '--reload') opts[a.slice(2)] = true;
   else if (a === '--since-boot') opts['since-boot'] = true;
+  else if (a === '--allow-unidentified-firmware') opts['allow-unidentified-firmware'] = true;
   else if (a === '--start' || a === '--stop' || a === '--reset') opts.op = a.slice(2);
   else if (a.startsWith('--')) fail(`unknown option ${a}\n${usage}`);
   else words.push(a);
@@ -233,7 +234,10 @@ function connect(timeoutMs = 60000) {
   });
   const exited = new Promise((resolve) => child.on('exit', resolve));
   child.on('error', (e) => fail(`cannot start ${opts.bin}: ${e.message}`, 1));
-  child.stdin.on('error', () => {});
+  // why the bridge is no longer usable: the MIDI sink of a calibration run reports it instead of dropping notes
+  let dead;
+  child.on('exit', (code) => (dead ??= `the dkmidi bridge exited (${code})`));
+  child.stdin.on('error', (e) => (dead ??= `dkmidi bridge stdin: ${e.message}`));
   const transport = new ProcessTransport(
     (b) => child.stdin.write(b),
     (cb) => child.stdout.on('data', (d) => cb(new Uint8Array(d))),
@@ -243,7 +247,14 @@ function connect(timeoutMs = 60000) {
     session,
     transport,
     // one whole message per write: the bridge's pipe keeps the order of the SysEx writes of the session
-    midiSink: { send: async (b) => void child.stdin.write(b) },
+    // resolves when the bridge has taken the bytes; rejects on a write error or when the bridge is gone
+    midiSink: {
+      send: (b) =>
+        new Promise((resolve, reject) => {
+          if (dead) return reject(new Error(dead));
+          child.stdin.write(b, (err) => (err ? reject(err) : resolve()));
+        }),
+    },
     async close() {
       child.stdin.end();
       // the bridge of a port that vanished may not exit by itself
@@ -265,7 +276,13 @@ async function connectEmu() {
   // the emulator's clock and probe, as the test harness builds them (tests/regression/runtime/waits.ts): a request lost while the guest resets ends after 2 s of emulated time, not after the 60 s timeout
   const clock = emulatedClock(() => client.call('status'));
   const session = new DkSession(transport, { timeoutMs: 60000, clock, emulatedProbe: emulatedProbe(clock) });
-  return { session, transport, midiSink: emuMidiSink(client.call.bind(client)), close: async () => client.close() };
+  return {
+    session,
+    transport,
+    midiSink: emuMidiSink(client.call.bind(client)),
+    call: client.call.bind(client),
+    close: async () => client.close(),
+  };
 }
 
 /**

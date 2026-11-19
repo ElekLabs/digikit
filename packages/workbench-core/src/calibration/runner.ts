@@ -56,7 +56,22 @@ export interface RunInput {
   run: Record<string, unknown> & { id: string; target: string };
   /** `cycles` on a device, `insn` on the emulator (the unit of the `dsp` header). */
   dspUnit: string;
+  /** Called when a capture is complete, before the next one starts: the caller writes it at once, so a later failure loses nothing. */
+  onCapture?: (c: Capture) => void | Promise<void>;
+  /** Called when a case ended (played or skipped). */
+  onCase?: (r: CaseResult) => void | Promise<void>;
+  /** Without a `run.firmware_sha256` the captures cannot be refused when device and model differ in firmware: the run is refused unless this is set. */
+  allowUnidentifiedFirmware?: boolean;
   log?: (line: string) => void;
+}
+
+/** A run that failed: `results` are the cases that finished (their captures were also given to `onCapture`). */
+export class CalibrationRunError extends Error {
+  readonly results: CaseResult[];
+  constructor(message: string, results: CaseResult[], cause: unknown) {
+    super(message, { cause });
+    this.results = results;
+  }
 }
 
 export interface Capture {
@@ -93,6 +108,12 @@ function missing(ops: Op[], rig: Rig, modules: string[]): string | undefined {
 }
 
 async function play(o: Op, rig: Rig): Promise<void> {
+  await playOp(o, rig);
+  // a case must not start capturing before the firmware took the notes it was sent
+  if (o.op.startsWith('midi.') && rig.drained) await rig.drained();
+}
+
+async function playOp(o: Op, rig: Rig): Promise<void> {
   switch (o.op) {
     case 'midi.note':
       return rig.midi.note(o.ch, o.key, o.velocity);
@@ -177,26 +198,41 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
   const teardown = profile.teardown ? resolveRef(profile.teardown, i.steps, ctx('teardown')) : [];
   const resolved = profile.cases.map((c) => ({ c, ops: resolveRef(c.steps, i.steps, ctx(`case ${c.id}`)) }));
   for (const { c, ops } of resolved) splitCapture(ops, `case ${c.id}`);
+  if (!i.run.firmware_sha256 && !i.allowUnidentifiedFirmware)
+    throw new Error(
+      'the target reported no firmware identity (run.firmware_sha256): a fit could not refuse a device and a model with different firmware; allow it explicitly to capture anyway',
+    );
   const caps = await rig.stats.capabilities();
   if (!caps.dsp) log('DSP stats are not available on this target (no PROFILE_DSP): the captures carry spans only');
 
-  let hashes: Record<string, string> = {};
-  if (profile.modules.length > 0) {
-    if (!rig.modules) throw new Error('the profile loads modules, and the target cannot load them here');
-    hashes = await rig.modules.install(profile.modules);
-    for (const id of profile.modules)
-      if (!hashes[id]) throw new Error(`module ${id}: no file to install (build it first)`);
-  }
-
+  // decide what runs before the target is touched: a skipped case installs and loads nothing
+  const plan = resolved.map(({ c, ops }) => ({
+    c,
+    ops,
+    reason: missing([...setup, ...ops, ...teardown], rig, c.modules),
+  }));
+  const needed = [...new Set(plan.filter((x) => !x.reason).flatMap((x) => x.c.modules))];
   const results: CaseResult[] = [];
-  for (const { c, ops } of resolved) {
-    const reason = missing([...setup, ...ops, ...teardown], rig, c.modules);
-    if (reason) {
-      log(`case ${c.id}: skipped, ${reason}`);
-      results.push({ id: c.id, captures: [], skipped: reason });
-      continue;
+  try {
+    let hashes: Record<string, string> = {};
+    if (needed.length > 0) {
+      hashes = await rig.modules!.install(needed);
+      for (const id of needed) if (!hashes[id]) throw new Error(`module ${id}: no file to install (build it first)`);
     }
-    results.push(await runCase(i, c, setup, ops, teardown, hashes, caps.dsp, log));
+    for (const { c, ops, reason } of plan) {
+      if (reason) {
+        log(`case ${c.id}: skipped, ${reason}`);
+        const r = { id: c.id, captures: [], skipped: reason };
+        results.push(r);
+        await i.onCase?.(r);
+        continue;
+      }
+      const r = await runCase(i, c, setup, ops, teardown, hashes, caps.dsp, log);
+      results.push(r);
+      await i.onCase?.(r);
+    }
+  } catch (e) {
+    throw new CalibrationRunError(e instanceof Error ? e.message : String(e), results, e);
   }
   return results;
 }
@@ -249,18 +285,28 @@ async function runCase(
     await playAll(pre, rig);
     for (let r = 1; r <= profile.repeats; r++) {
       log(`case ${c.id}: capture ${r} of ${profile.repeats}`);
-      await rig.stats.start();
-      await rig.clock.pause(profile.warmup_s * 1000);
-      await rig.stats.clear();
-      if (marked) await playAll(body, rig);
-      else await rig.clock.pause(profile.capture_s * 1000);
-      let reading = await rig.stats.read();
-      // the DSP side answers with the newest complete sweep: give a sweep a moment to complete
-      for (let tries = 0; dsp && !reading.dsp?.sweep && tries < 20; tries++) {
-        await rig.clock.pause(200);
+      let stopped = false;
+      let reading: StatsReading;
+      try {
+        await rig.stats.start();
+        await rig.clock.pause(profile.warmup_s * 1000);
+        await rig.stats.clear();
+        if (marked) await playAll(body, rig);
+        else await rig.clock.pause(profile.capture_s * 1000);
+        // the DSP side answers with the newest complete sweep: give a first sweep a moment to complete while counting goes on
+        let waiting = await rig.stats.read();
+        for (let tries = 0; dsp && !waiting.dsp?.sweep && tries < 20; tries++) {
+          await rig.clock.pause(200);
+          waiting = await rig.stats.read();
+        }
+        // the spans and the sweep are read after counting stopped, so they describe one window
+        await rig.stats.stop();
+        stopped = true;
         reading = await rig.stats.read();
+      } finally {
+        // counters never keep running after a failure
+        if (!stopped) await rig.stats.stop().catch(() => {});
       }
-      await rig.stats.stop();
       const dspOut = dspPart(reading, i.dspUnit);
       if (dsp && !dspOut) throw new Error(`case ${c.id}: no complete DSP sweep after the capture`);
       if (c.id === STOCK_CASE && dspOut?.rows.some((x) => x.calls > 0))
@@ -278,7 +324,9 @@ async function runCase(
         ...(reading.spans ? { spans: reading.spans } : {}),
         ...(dspOut ? { dsp: dspOut } : {}),
       });
-      captures.push({ caseId: c.id, repeat: r, file: `${c.id}-${r}.profile.json`, profile: profileOut });
+      const capture = { caseId: c.id, repeat: r, file: `${c.id}-${r}.profile.json`, profile: profileOut };
+      captures.push(capture);
+      await i.onCapture?.(capture);
     }
     await playAll(post, rig);
   } finally {

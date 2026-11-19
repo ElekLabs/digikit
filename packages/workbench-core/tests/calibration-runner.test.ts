@@ -112,7 +112,15 @@ test('a case plays its steps once and captures `repeats` times: start, warm up, 
   const res = await run(f.rig, base + `teardown = { steps = "off" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`);
   assert.deepEqual(f.log, [
     'midi 144,60,100',
-    ...[1, 2].flatMap(() => ['stats.start', 'pause 1000', 'stats.clear', 'pause 2000', 'stats.read', 'stats.stop']),
+    ...[1, 2].flatMap(() => [
+      'stats.start',
+      'pause 1000',
+      'stats.clear',
+      'pause 2000',
+      'stats.read',
+      'stats.stop',
+      'stats.read',
+    ]),
     'midi 128,60,0',
     'midi 129,60,0',
   ]);
@@ -162,6 +170,7 @@ test('markers make the steps between them the capture window, in place of captur
     'pause 700',
     'stats.read',
     'stats.stop',
+    'stats.read',
   ]);
   const ops = splitCapture(
     [{ op: 'midi.start' }, { op: 'capture', mark: 'start' }, { op: 'midi.stop' }, { op: 'capture', mark: 'stop' }],
@@ -176,7 +185,7 @@ test('modules: the stock case runs with none loaded, a module case with only its
   const text =
     base.replace('repeats = 2', 'repeats = 1') +
     `modules = ["a/b", "c/d"]\n[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "ab"\nmodules = ["a/b"]\nsteps = "hold"\n[[case]]\nid = "both"\nmodules = ["c/d", "a/b"]\nsteps = "hold"\n`;
-  const res = await run(f.rig, text, { run: { id: 'r', target: 'tgt' } });
+  const res = await run(f.rig, text);
   assert.deepEqual(
     f.log.filter((l) => l.startsWith('select')),
     ['select none', 'select a/b', 'select c/d+a/b'],
@@ -268,4 +277,70 @@ test('the teardown runs after a failed case', async () => {
     /link lost/,
   );
   assert.ok(f.log.includes('midi 128,60,0'));
+});
+
+test('captures are delivered as they finish, and a later failure keeps the earlier ones', async () => {
+  const f = fake();
+  let reads = 0;
+  const inner = f.rig.stats.read;
+  f.rig.stats.read = async () => {
+    // the second case fails on its first read
+    if (++reads > 4) throw new Error('link lost');
+    return inner();
+  };
+  const delivered: string[] = [];
+  const cases: string[] = [];
+  const text = base + `[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "two"\nsteps = "hold"\n`;
+  await assert.rejects(
+    run(f.rig, text, { onCapture: (c) => void delivered.push(c.file), onCase: (r) => void cases.push(r.id) }),
+    (e: Error & { results?: { id: string }[] }) =>
+      /link lost/.test(e.message) && e.results?.map((r) => r.id).join() === 'stock',
+  );
+  assert.deepEqual(delivered, ['stock-1.profile.json', 'stock-2.profile.json']);
+  assert.deepEqual(cases, ['stock']);
+});
+
+test('a run with no firmware identity is refused unless allowed', async () => {
+  const f = fake();
+  const text = base + `[[case]]\nid = "stock"\nsteps = "hold"\n`;
+  await assert.rejects(run(f.rig, text, { run: { id: 'r', target: 'tgt' } }), /no firmware identity/);
+  assert.deepEqual(f.log, []);
+  const [c] = await run(f.rig, text, { run: { id: 'r', target: 'tgt' }, allowUnidentifiedFirmware: true });
+  assert.equal(c!.captures.length, 2);
+});
+
+test('a skipped case installs and loads nothing', async () => {
+  const f = fake();
+  const installed: string[][] = [];
+  f.rig.modules!.install = async (ids) => {
+    installed.push(ids);
+    return Object.fromEntries(ids.map((id) => [id, 'h']));
+  };
+  // "mach" needs SETUP, which this rig lacks: its module is not installed and nothing is selected for it
+  const text =
+    base.replace('repeats = 2', 'repeats = 1') +
+    `modules = ["a/b"]\n[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "m"\nmodules = ["a/b"]\nsteps = "mach"\n`;
+  const res = await run(f.rig, text);
+  assert.deepEqual(installed, []);
+  assert.equal(
+    f.log.some((l) => l.startsWith('select')),
+    false,
+  );
+  assert.match(res[1]!.skipped!, /SETUP/);
+});
+
+test('after a MIDI step the runner waits until the target took it', async () => {
+  const f = fake();
+  f.rig.drained = async () => void f.log.push('drained');
+  await run(f.rig, base.replace('repeats = 2', 'repeats = 1') + `[[case]]\nid = "stock"\nsteps = "hold"\n`);
+  assert.deepEqual(f.log.slice(0, 2), ['midi 144,60,100', 'drained']);
+});
+
+test('the counters are stopped when a capture fails, and a capture is read after they stop', async () => {
+  const f = fake();
+  f.rig.stats.clear = async () => {
+    throw new Error('clear failed');
+  };
+  await assert.rejects(run(f.rig, base + `[[case]]\nid = "stock"\nsteps = "hold"\n`), /clear failed/);
+  assert.ok(f.log.includes('stats.stop'));
 });
