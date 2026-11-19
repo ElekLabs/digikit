@@ -57,6 +57,20 @@ pub unsafe fn boot_name(k: usize) -> *const u8 {
     addr_of!(BOOT_NAME[k]) as *const u8
 }
 
+/// `dkrt_boot_name`: copy the name of index `k` to `out` (`NAME_LEN` bytes); `E_NOT_FOUND` past `SEL_MAX`.
+pub unsafe fn name_copy(k: usize, out: *mut u8) -> i32 {
+    if k >= SEL_MAX {
+        return dkrt_sdk::E_NOT_FOUND;
+    }
+    let src = boot_name(k);
+    let mut i = 0;
+    while i < NAME_LEN {
+        *out.add(i) = *src.add(i);
+        i += 1;
+    }
+    dkrt_sdk::OK
+}
+
 /// The states of this boot's modules (`dkrt_abi::state`): a view of `DKRT_BOOT.states` and `.detail`.
 pub fn states() -> dkrt_abi::state::BootStates<'static> {
     let b = info();
@@ -501,6 +515,20 @@ mod tests {
             assert_eq!((copy.states[..2].to_vec(), copy.detail[1]), (vec![STATE_ACTIVE, STATE_REFUSED], [7, 99]));
         }
     }
+    #[test]
+    fn boot_name_copies_the_name_of_an_index_and_refuses_one_past_the_selection() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            BOOT_NAME[1][..5].copy_from_slice(b"b.dkm");
+            let mut out = [0xffu8; NAME_LEN];
+            assert_eq!(name_copy(1, out.as_mut_ptr()), OK);
+            assert_eq!(&out[..6], b"b.dkm\0");
+            assert_eq!(out[NAME_LEN - 1], 0);
+            assert_eq!(name_copy(SEL_MAX, out.as_mut_ptr()), E_NOT_FOUND);
+        }
+    }
+
     /// `path` as the NUL-terminated selection path the loader hands to `report_module`.
     fn sel_path(p: &[u8]) -> [u8; SEL_PATH] {
         let mut out = [0u8; SEL_PATH];

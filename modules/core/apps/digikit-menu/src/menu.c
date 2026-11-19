@@ -1,10 +1,13 @@
 /* core/digikit-menu: SETTINGS > DIGIKIT, written in C on <dk/platform/ui.h> (core/ui draws it with the firmware's own views).
  *
  * DIGIKIT is a menu: ABOUT, HEALTH and MEMORY (text pages), and MODULES (a list). MODULES has one
- * row per .dkm file of the store. The check mark of a row means "load at the next restart"; it starts from the saved selection.
+ * row per .dkm file of the store. The check mark of a row means "loaded"; it starts from the saved selection.
  * RIGHT opens the side panel (LOAD or UNLOAD, ROUTE... for a loaded effect, SETTINGS... for a loaded module that has a menu function, INFO).
  * The check mark is the only on/off of a module. Nothing is saved until NO leaves the list with
- * changes pending and APPLY & RESTART? is answered with YES.
+ * changes pending and APPLY n CHANGES? is answered with YES. The change then runs live: the selection is saved, the unloads are queued
+ * and then the loads (dkrt_live, one job at a time; the row of the running job reads LOADING or UNLOADING), and the list is scanned again
+ * after each job. A job the runtime refuses or that fails ends the batch with "<NAME> NOT APPLIED" and RESTART TO APPLY?. A restart is
+ * direct only for an effect route change, and to leave safe mode (APPLY & RESTART?).
  *
  * The runtime does the work of the old menu: dkrt_scan (the files, their needs), dkrt_fit (what fits next to the checked ones)
  * and the selection and settings calls. This file keeps the pending state and builds the screens.
@@ -53,6 +56,9 @@ uint32_t DK_NEEDS_READS;
 int32_t DK_APPLY_SET;
 int32_t DK_APPLY_RESTART;
 uint32_t DK_APPLIES;
+/* The live apply: the jobs queued so far, and the last failure (result of dkrt_live or of the job; 0 when none). */
+uint32_t DK_LIVE_JOBS;
+int32_t DK_LIVE_RESULT;
 /* The routes of the loaded effects (1 master, 2 send), as pending; the results of the last settings writes. */
 uint8_t DK_FXR_PEND[MAX_FXR];
 int32_t DK_FXR_SET;
@@ -82,7 +88,7 @@ static uint8_t g_fx_saved[MAX_FXR];
 static int8_t g_row_fx[MAX_ENT]; /* the first effect of a loaded row's module, -1: none */
 static uint8_t g_saved[MAX_ENT];
 static int8_t g_sel_of
-    [MAX_ENT]; /* the index of a row in the saved selection (the boot's results and needs are by that index), -1: not selected */
+    [MAX_ENT]; /* the boot index the runtime holds the row's file name at (dkrt_boot_name; the boot's results and needs are by that index), -1: none */
 static uint32_t g_saved_extra;
 static int32_t g_selection_error;
 static int g_info_row;
@@ -99,7 +105,7 @@ static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first op
 
 /* The settings menu of each loaded module that has a menu function, by the module's index in dkrt_module order. Each is built the first
    time the user opens it and kept: a module that has a menu function is never unloaded or reloaded at run time (the runtime refuses with E_RELOAD_MENUS), so the module's code and the
-   ctx it passes stay valid. */
+   ctx it passes stay valid. The index of a module changes when another module is unloaded, so the cache is dropped then (panel_settings). */
 #define MAX_SET 16
 #define NAME_ROW 32 /* a module name (31 characters at most) without its author */
 /* Calls the module's menu function (dk_module.menu) at address a (DkrtModule.menu) with the module's ctx (DkrtModule.ctx) and the menu to fill: menu(ctx, menu).
@@ -108,9 +114,29 @@ static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first op
 #define DK_CALL_MENU(a, c, m)                                                                      \
     ((void (*)(void *, dk_ui_menu *))(uintptr_t)(a))((void *)(uintptr_t)(c), (m))
 #endif
+/* The cache slot of a module's settings menu is named by the module's store path (g_set_path), not by its index in dkrt_module order, which moves when
+   another module is unloaded. A module that has menus cannot be unloaded (E_RELOAD_MENUS), so a slot stays valid. A menu is never freed: a slot is built once. */
 static dk_ui_menu *g_set[MAX_SET];
+static uint8_t g_set_path[MAX_SET][64];
+static uint8_t g_set_open
+    [MAX_SET]; /* 1 while the page was opened and not yet released: only then does its fill call the module */
 static char g_set_title[MAX_SET][NAME_ROW];
 static dk_ui_menu_desc g_set_desc[MAX_SET];
+
+/* The batch of a live apply: the rows to unload, then the rows to load (g_lq_op: DKRT_LIVE_UNLOAD or DKRT_LIVE_LOAD). */
+#define LQ_IDLE 0
+#define LQ_START 1         /* queue the job of g_lq_pos */
+#define LQ_RUN 2           /* wait for it */
+#define LQ_BUSY_PASSES 600 /* UI passes a queue may wait for the runtime's one job slot */
+static uint8_t
+    g_lq_path[MAX_ENT]
+             [64]; /* the store paths of the batch: a row index is not stable across a rescan */
+static uint8_t g_lq_op[MAX_ENT];
+static uint32_t g_lq_n, g_lq_pos, g_lq_wait;
+static uint8_t g_lq_state;
+static int g_busy_row =
+    -1; /* the row whose job runs: its text reads LOADING or UNLOADING (WAITING while the runtime's job slot is taken) */
+#define BOOT_NAME_LEN 28 /* bytes of dkrt_boot_name's output */
 
 /* ---- text ------------------------------------------------------------------------------------------------------------ */
 
@@ -288,6 +314,11 @@ static const char *const text_plan[7] = {
     "NO SERVICE", "TOO MANY CALLS", "NO OWNER", "TWO OWNERS", "KEY TWICE", "NO FIT", "BAD KIND",
 };
 
+/* The live job's refusals, -83..-87 (E_RELOAD_PLAYING, E_RELOAD_MENUS, E_RELOAD_ROUTED, E_RELOAD_KEYS, E_RELOAD_RETAINED). */
+static const char *const text_live[5] = {
+    "STOP PLAYBACK", "HAS MENUS", "ON AN FX ROUTE", "KEYS CHANGED", "RESTART DEVICE",
+};
+
 static void status_text(txt *t, int32_t code)
 {
     uint32_t k = code < 0 ? (uint32_t)(-code) : (uint32_t)code;
@@ -302,8 +333,12 @@ static void status_text(txt *t, int32_t code)
         known = text_dsp[k - 30];
     else if (k < 50)
         known = text_boot[k - 40];
+    else if (k == 53) /* E_STATE of the protocol: an upload is open */
+        known = "UPLOAD OPEN";
     else if (k >= 73 && k < 80)
         known = text_plan[k - 73];
+    else if (k >= 83 && k < 88)
+        known = text_live[k - 83];
     if (!known[0]) {
         t_s(t, "ERROR ");
         t_int(t, code);
@@ -390,9 +425,8 @@ static int path_len(const uint8_t *p, int max)
 
 /* The row's file name without .dkm, upper case, at most max characters. A longer name keeps its start and its end around a ~, so that
    names with a common start (dyn-fx-gain-send, dyn-fx-gain-sendonly) still differ. */
-static void row_name(int i, int max, txt *t)
+static void path_name(const uint8_t *p, int max, txt *t)
 {
-    const uint8_t *p = g_ent[i].path;
     int l = path_len(p, 63);
     if (l > 4 && p[l - 4] == '.' && lower((char)p[l - 3]) == 'd' && lower((char)p[l - 2]) == 'k' &&
         lower((char)p[l - 1]) == 'm')
@@ -411,14 +445,52 @@ static void row_name(int i, int max, txt *t)
     t_s(t, full.b + full.n - tail);
 }
 
+static void row_name(int i, int max, txt *t)
+{
+    path_name(g_ent[i].path, max, t);
+}
+
 /* ---- dialogs --------------------------------------------------------------------------------------------------------- */
+
+/* A dialog that cannot open because another one is open waits and opens on a later UI pass (say_poll), instead of being dropped. One waits at most. */
+#define SAY_PASSES 3000
+static char g_say_title[48], g_say_text[48];
+static dk_ui_confirm_fn *g_say_done;
+static uint8_t g_say_pending;
+static uint32_t g_say_wait;
+
+static void say_poll(void);
+
+static void say_try(void)
+{
+    if (dk_ui_confirm(g_ui, g_say_title, g_say_text, g_say_done, 0) == 0) {
+        copy_text(DK_POPUP, sizeof DK_POPUP, g_say_title);
+        copy_text(DK_POPUP_TEXT, sizeof DK_POPUP_TEXT, g_say_text);
+        DK_POPUPS++;
+        g_say_pending = 0;
+    }
+}
+
+static void say_poll(void)
+{
+    if (g_say_pending && ++g_say_wait < SAY_PASSES)
+        say_try();
+    if (!g_say_pending || g_say_wait >= SAY_PASSES) {
+        g_say_pending = 0;
+        dkrt_poll_remove((uintptr_t)say_poll);
+    }
+}
 
 static void say(const char *title, const char *text, dk_ui_confirm_fn *done)
 {
-    copy_text(DK_POPUP, sizeof DK_POPUP, title);
-    copy_text(DK_POPUP_TEXT, sizeof DK_POPUP_TEXT, text);
-    DK_POPUPS++;
-    dk_ui_confirm(g_ui, title, text, done, 0);
+    copy_text((uint8_t *)g_say_title, sizeof g_say_title, title);
+    copy_text((uint8_t *)g_say_text, sizeof g_say_text, text);
+    g_say_done = done;
+    g_say_pending = 1;
+    g_say_wait = 0;
+    say_try();
+    if (g_say_pending && dkrt_poll_add((uintptr_t)say_poll) != DKRT_OK)
+        g_say_pending = 0;
 }
 
 static void fail_text(const char *what, int32_t code)
@@ -438,6 +510,8 @@ static void read_boot(void)
 
 /* ---- the module store and the pending selection ---------------------------------------------------------------------- */
 
+static int same_text(const uint8_t *a, const uint8_t *b, int max);
+
 /* The saved selection, matched against the rows: a checked row for each path the store still has. */
 static void load_selection(void)
 {
@@ -446,10 +520,8 @@ static void load_selection(void)
         STORE = 3;
         return;
     }
-    for (uint32_t i = 0; i < MAX_ENT; i++) {
+    for (uint32_t i = 0; i < MAX_ENT; i++)
         TICK[i] = 0;
-        g_sel_of[i] = -1;
-    }
     g_saved_extra = 0;
     uint32_t n = g_sel.count > DKRT_SEL_MAX ? DKRT_SEL_MAX : g_sel.count;
     for (uint32_t k = 0; k < n; k++) {
@@ -465,7 +537,6 @@ static void load_selection(void)
                 same &= q[c] == p[c];
             if (same) {
                 TICK[i] = 1;
-                g_sel_of[i] = (int8_t)k;
                 found = 1;
             }
         }
@@ -474,6 +545,38 @@ static void load_selection(void)
     }
     for (uint32_t i = 0; i < MAX_ENT; i++)
         g_saved[i] = TICK[i];
+}
+
+/* Is the file name `name` (a boot name: the leaf of a store path, 27 characters at most, NUL padded) the leaf of the path p? */
+static int leaf_is(const uint8_t *p, const uint8_t *name)
+{
+    int start = 0;
+    for (int k = 0; k < 63 && p[k]; k++)
+        if (p[k] == '/')
+            start = k + 1;
+    for (int c = 0; c < BOOT_NAME_LEN - 1; c++) {
+        if (p[start + c] != name[c])
+            return 0;
+        if (!name[c])
+            return 1;
+    }
+    return 1;
+}
+
+/* g_sel_of: the runtime holds each boot index under a file name (dkrt_boot_name), which follows a live load and unload; the rows are matched by it. */
+static void map_boot_names(void)
+{
+    for (uint32_t i = 0; i < MAX_ENT; i++)
+        g_sel_of[i] = -1;
+    uint32_t n = g_boot.count > DKRT_SEL_MAX ? DKRT_SEL_MAX : g_boot.count;
+    for (uint32_t k = 0; k < n; k++) {
+        uint8_t nm[BOOT_NAME_LEN];
+        if (dkrt_boot_name(k, nm) != DKRT_OK || !nm[0])
+            continue;
+        for (uint32_t i = 0; i < NENT; i++)
+            if (leaf_is(g_ent[i].path, nm))
+                g_sel_of[i] = (int8_t)k;
+    }
 }
 
 /* The loaded effects, the routes the settings give them and the send slots; the pending routes start as the saved ones. */
@@ -552,6 +655,7 @@ static void scan_store(void)
     }
     DK_NEEDS_READS = dkrt_scan_reads();
     load_selection();
+    map_boot_names();
 }
 
 /* Which modules fit next to the checked ones: the runtime judges them. */
@@ -590,6 +694,15 @@ static int restart_pending(void)
     return changes() > 0 || g_boot.safe != 0;
 }
 
+/* Effects with another route than the saved one: a route takes effect at a restart. */
+static uint32_t route_changes(void)
+{
+    uint32_t n = 0;
+    for (uint32_t j = 0; j < g_fx_n; j++)
+        n += DK_FXR_PEND[j] != g_fx_saved[j];
+    return n;
+}
+
 /* ---- the DIGIKIT menu ------------------------------------------------------------------------------------------------ */
 
 static void safe_notice(void *ctx, int32_t arg)
@@ -623,19 +736,12 @@ static void fill_main(dk_ui_menu *m, void *ctx)
 
 /* ---- ABOUT ----------------------------------------------------------------------------------------------------------- */
 
-/* Is the scanned file of the store path p (l characters) a build with --trace? */
-static int traced_path(const uint8_t *p, int l)
+/* Is the file that holds the boot name nm a build with --trace? */
+static int traced_name(const uint8_t *nm)
 {
-    for (uint32_t i = 0; i < NENT; i++) {
-        const uint8_t *q = g_ent[i].path;
-        if (path_len(q, 63) != l)
-            continue;
-        int same = 1;
-        for (int c = 0; c < l; c++)
-            same &= q[c] == p[c];
-        if (same)
+    for (uint32_t i = 0; i < NENT; i++)
+        if (leaf_is(g_ent[i].path, nm))
             return (g_ent[i].flags & DKRT_SCAN_TRACE) != 0;
-    }
     return 0;
 }
 
@@ -714,22 +820,21 @@ static void fill_about(dk_ui_menu *m, void *ctx)
     t_num(&t, g_boot.count);
     t_s(&t, " OK");
     arow(m, t.b);
-    /* each module of this boot's selection with its result; the names come from the saved selection, which is what the boot
-       loaded unless it was saved again without a restart */
-    int32_t selection_result = dkrt_selection_get(&g_sel);
-    if (selection_result != DKRT_OK)
+    /* each boot index with the name the runtime holds it under (dkrt_boot_name) and its result: a live load keeps the index of its file or takes a free
+       one, so a module loaded since the boot is listed and a name never meets another module's state */
+    if (dkrt_selection_get(&g_sel) != DKRT_OK)
         arow(m, "SELECTION READ ERROR");
-    uint32_t n = selection_result != DKRT_OK   ? 0
-                 : g_boot.count > DKRT_SEL_MAX ? DKRT_SEL_MAX
-                                               : g_boot.count;
+    uint32_t n = g_boot.count > DKRT_SEL_MAX ? DKRT_SEL_MAX : g_boot.count;
     for (uint32_t k = 0; k < n; k++) {
-        const uint8_t *p = g_sel.paths[k];
+        uint8_t nm[BOOT_NAME_LEN];
+        if (dkrt_boot_name(k, nm) != DKRT_OK || !nm[0])
+            continue;
         t_init(&t);
-        name_of(p, path_len(p, DKRT_SEL_PATH - 1), 17, 0, &t);
+        name_of(nm, path_len(nm, BOOT_NAME_LEN - 1), 17, 0, &t);
         arow(m, t.b);
         t_init(&t);
         result_text(&t, g_boot.states[k], g_boot.results[k], g_boot.needs[k], g_boot.detail[k]);
-        if (traced_path(p, path_len(p, DKRT_SEL_PATH - 1)))
+        if (traced_name(nm))
             t_s(&t, " TRACE");
         arow(m, t.b);
     }
@@ -1030,6 +1135,12 @@ static int dashed(int i)
     return TICK[i] && g_saved[i] && !LOADED[i];
 }
 
+/* A module that is loaded although the saved selection does not have it: a failed or not attempted unload (it unloads at the next restart). */
+static int unloads_at_restart(int i)
+{
+    return LOADED[i] && !g_saved[i] && !TICK[i];
+}
+
 /* The missing module of a dashed row (usb-bulk): the boot's load failed with E_IMPORT and the runtime kept the name; 0 when not. */
 static const uint8_t *row_needs(int i)
 {
@@ -1046,12 +1157,22 @@ static void module_text(int i, int exact, txt *t)
 {
     t_init(t);
     if (g_lead) {
-        t_c(t, dashed(i) ? '-' : PAD);
+        t_c(t, dashed(i) ? '-' : unloads_at_restart(i) ? '~' : PAD);
         row_name(i, NAME_COLS - 1, t);
     } else {
         row_name(i, NAME_COLS, t);
     }
     t_pad_px(t, (NAME_COLS + 1) * 4, exact);
+    if (i == g_busy_row) { /* the job of this row runs, or waits for the runtime's job slot */
+        t_s(t, g_lq_state == LQ_START                  ? "WAITING"
+               : g_lq_op[g_lq_pos] == DKRT_LIVE_UNLOAD ? "UNLOADING"
+                                                       : "LOADING");
+        return;
+    }
+    if (unloads_at_restart(i)) {
+        t_s(t, "UNLOADS");
+        return;
+    }
     t_s(t, kind_text(i));
     txt sz;
     t_init(&sz);
@@ -1098,7 +1219,7 @@ static void fill_modules(dk_ui_menu *m, void *ctx)
     refit();
     g_lead = 0;
     for (uint32_t i = 0; i < NENT; i++)
-        if (g_saved[i] && !LOADED[i])
+        if ((g_saved[i] && !LOADED[i]) || unloads_at_restart((int)i))
             g_lead = 1;
     g_hdr = g_boot.safe != 0;
     if (g_hdr)
@@ -1140,6 +1261,8 @@ static void refuse(int row, const char *what)
    unchecked and a dialog says why. */
 static void set_tick(int row, int on)
 {
+    if (g_lq_state != LQ_IDLE) /* a live apply runs: the list is read-only until it ends */
+        return;
     if (g_selection_error != DKRT_OK) {
         fail_text("SELECTION READ ERROR", g_selection_error);
         return;
@@ -1206,6 +1329,8 @@ static void route_done(void *ctx, int32_t index)
 static void panel_route(void *ctx, int32_t row)
 {
     (void)ctx;
+    if (g_lq_state != LQ_IDLE) /* a live apply runs; a rescan during it would drop a route choice */
+        return;
     int j = row >= 0 && row < (int)NENT ? g_row_fx[row] : -1;
     if (j < 0)
         return;
@@ -1236,19 +1361,71 @@ static int settings_module(int row, DkrtModule *mod)
     return -1;
 }
 
-/* The fill of a module's settings menu: the module adds the rows. ctx is the module's index. */
+/* The fill of a module's settings menu: the module adds the rows. ctx is the cache slot; the module is found by the path the slot holds. */
 static void fill_settings(dk_ui_menu *m, void *ctx)
 {
     static DkrtModule mod;
-    if (dkrt_module((uint32_t)(uintptr_t)ctx, &mod) == DKRT_OK && mod.menu)
-        DK_CALL_MENU(mod.menu, mod.ctx, m);
+    uint32_t slot = (uint32_t)(uintptr_t)ctx;
+    /* The rows a module adds hold pointers into its code (callbacks) and data. They exist only while the page is open: g_set_open is set at the open and cleared
+       when the page is left (settings_release), and a fill after that, or one for a module that is gone, adds a text row only. So the page keeps no pointer into a
+       module that can be unloaded. */
+    if (g_set_open[slot])
+        for (uint32_t k = 0; dkrt_module(k, &mod) == DKRT_OK; k++)
+            if (same_text(mod.path, g_set_path[slot], 63)) {
+                if (mod.menu) {
+                    DK_CALL_MENU(mod.menu, mod.ctx, m);
+                    return;
+                }
+                break;
+            }
+    dk_ui_menu_add_text(m, g_set_open[slot] ? "MODULE NOT LOADED" : "CLOSED");
+}
+
+/* The page of a slot that was left: fill it again without the module, which drops the module's rows. All of them at once. */
+static void settings_release(void)
+{
+    for (int k = 0; k < MAX_SET; k++)
+        if (g_set_open[k] && (!g_set[k] || !dk_ui_menu_is_open(g_set[k]))) {
+            g_set_open[k] = 0;
+            if (g_set[k])
+                dk_ui_menu_refresh(g_set[k]);
+        }
+}
+
+/* The UI loop's per-pass call while a settings page is open: release the pages the user left. */
+static void settings_poll(void)
+{
+    settings_release();
+    for (int k = 0; k < MAX_SET; k++)
+        if (g_set_open[k])
+            return;
+    dkrt_poll_remove((uintptr_t)settings_poll);
+}
+
+/* The cache slot of the module at store path p: the slot that holds it, else a free one (taken for it), else -1. */
+static int settings_slot(const uint8_t *p)
+{
+    for (int s = 0; s < MAX_SET; s++)
+        if (g_set_path[s][0] && same_text(g_set_path[s], p, 63))
+            return s;
+    for (int s = 0; s < MAX_SET; s++)
+        if (!g_set_path[s][0]) {
+            for (int c = 0; c < 63 && p[c]; c++)
+                g_set_path[s][c] = p[c];
+            return s;
+        }
+    return -1;
 }
 
 static void panel_settings(void *ctx, int32_t row)
 {
     (void)ctx;
+    if (g_lq_state != LQ_IDLE) /* a live apply runs */
+        return;
     static DkrtModule mod;
-    int k = settings_module(row, &mod);
+    if (settings_module(row, &mod) < 0)
+        return;
+    int k = settings_slot(mod.path);
     if (k < 0)
         return;
     if (!g_set[k]) {
@@ -1266,14 +1443,21 @@ static void panel_settings(void *ctx, int32_t row)
         g_set_desc[k].fill = fill_settings;
         g_set_desc[k].arg = (void *)(uintptr_t)k;
         g_set[k] = dk_ui_menu_new(g_ui, &g_set_desc[k]);
+        if (!g_set[k])
+            g_set_path[k][0] = 0; /* the slot is free again */
     }
-    if (g_set[k])
+    if (g_set[k]) {
+        g_set_open[k] = 1;
+        dkrt_poll_add((uintptr_t)settings_poll);
         dk_ui_menu_open(g_set[k]);
+    }
 }
 
 static void panel_info(void *ctx, int32_t row)
 {
     (void)ctx;
+    if (g_lq_state != LQ_IDLE) /* a live apply runs */
+        return;
     g_info_row = row;
     dk_ui_menu_open(g_info);
 }
@@ -1290,7 +1474,8 @@ static void modules_panel(dk_ui_menu *p, int32_t row, void *ctx)
     (void)ctx;
     DK_PANEL_N = 0;
     row -= g_hdr;
-    if (row < 0 || row >= (int)NENT)
+    if (row < 0 || row >= (int)NENT ||
+        g_lq_state != LQ_IDLE) /* no side panel while a live apply runs */
         return;
     prow(p, TICK[row] ? "UNLOAD" : "LOAD", panel_load, row);
     if (g_row_fx[row] >= 0)
@@ -1418,9 +1603,146 @@ static void fill_info(dk_ui_menu *m, void *ctx)
     refit();
 }
 
-/* ---- leaving MODULES: APPLY & RESTART? ------------------------------------------------------------------------------ */
+/* ---- leaving MODULES: APPLY n CHANGES? ------------------------------------------------------------------------------- */
 
-/* Saves the selection and the changed routes, then restarts. dkrt_restart returns only when it refuses. */
+static void live_poll(void);
+
+static void restart_answer(void *ctx, int32_t yes)
+{
+    (void)ctx;
+    if (!yes)
+        return;
+    int32_t r = dkrt_restart();
+    DK_APPLY_RESTART = r;
+    dk_ui_menu_refresh(
+        g_modules); /* the saved selection against what is loaded: the "-" and "UNLOADS" marks */
+    fail_text("NO RESTART", r);
+}
+
+/* After the "<NAME> NOT APPLIED" dialog: the saved selection loads at a restart, so offer it. */
+static void not_applied_done(void *ctx, int32_t yes)
+{
+    (void)ctx;
+    (void)yes;
+    say("RESTART TO APPLY?", "THE CHANGE IS SAVED", restart_answer);
+}
+
+static int row_by_path(const uint8_t *p)
+{
+    for (uint32_t i = 0; i < NENT; i++)
+        if (same_text(g_ent[i].path, p, 63))
+            return (int)i;
+    return -1;
+}
+
+/* Scans again after a job: the runtime's counters, which rows are loaded, the effects and their routes; the list shows it. A route choice cannot be pending:
+   a route change restarts instead of running live, and the side panel is off during a batch. */
+static void live_rescan(void)
+{
+    read_boot();
+    scan_store();
+    read_fx();
+    match_fx();
+    dk_ui_menu_refresh(g_modules);
+}
+
+static void live_end(void)
+{
+    g_lq_state = LQ_IDLE;
+    g_busy_row = -1;
+    dkrt_poll_remove((uintptr_t)live_poll);
+}
+
+/* The batch ended without a job's success: the dialog with the status text, then the restart question (the selection is saved). */
+static void live_stop(const uint8_t *path, int32_t code)
+{
+    DK_LIVE_RESULT = code;
+    live_end();
+    live_rescan();
+    txt title, why;
+    t_init(&title);
+    if (path) {
+        path_name(path, 10, &title);
+        t_s(&title, " NOT APPLIED");
+    } else {
+        t_s(&title, "NOT APPLIED");
+    }
+    t_init(&why);
+    status_text(&why, code);
+    say(title.b, why.b, not_applied_done);
+}
+
+/* The UI loop's per-pass call while a batch runs: queue the next job, then wait for it. One job at a time (the runtime has one). */
+static void live_poll(void)
+{
+    if (g_lq_state == LQ_IDLE) {
+        dkrt_poll_remove((uintptr_t)live_poll);
+        return;
+    }
+    const uint8_t *path = g_lq_path[g_lq_pos];
+    if (g_lq_state == LQ_START) {
+        int32_t r = dkrt_live(g_lq_op[g_lq_pos], path);
+        if (r == DKRT_E_BUSY && ++g_lq_wait < LQ_BUSY_PASSES) {
+            if (g_lq_wait == 1) { /* the row reads WAITING */
+                g_busy_row = row_by_path(path);
+                dk_ui_menu_refresh(g_modules);
+            }
+            return;
+        }
+        if (r != DKRT_OK) {
+            live_stop(path, r);
+            return;
+        }
+        DK_LIVE_JOBS++;
+        g_lq_state = LQ_RUN;
+        g_busy_row = row_by_path(path);
+        dk_ui_menu_refresh(g_modules); /* the row reads LOADING */
+        return;
+    }
+    DkrtLive st;
+    dkrt_live_state(&st);
+    if (st.phase != 2)
+        return;
+    if (st.result != DKRT_OK) {
+        live_stop(path, st.result);
+        return;
+    }
+    g_busy_row = -1;
+    g_lq_pos++;
+    g_lq_wait = 0;
+    live_rescan();
+    if (g_lq_pos >= g_lq_n) {
+        live_end();
+        if (dk_ui_menu_is_open(g_modules))
+            dk_ui_menu_close(g_modules);
+        return;
+    }
+    g_lq_state = LQ_START;
+}
+
+static void live_add(uint32_t i, uint32_t op)
+{
+    for (int c = 0; c < 64; c++)
+        g_lq_path[g_lq_n][c] = g_ent[i].path[c];
+    g_lq_op[g_lq_n++] = (uint8_t)op;
+}
+
+/* The rows the user changed since the saved state, as jobs: the unloads, then the loads. A row the boot did not load that stays checked is no change. */
+static void live_plan(void)
+{
+    g_lq_n = 0;
+    g_lq_pos = 0;
+    g_lq_wait = 0;
+    for (uint32_t i = 0; i < NENT; i++)
+        if (TICK[i] != g_saved[i] && !TICK[i] && LOADED[i])
+            live_add(i, DKRT_LIVE_UNLOAD);
+    for (uint32_t i = 0; i < NENT; i++)
+        if (TICK[i] != g_saved[i] && TICK[i] && !LOADED[i])
+            live_add(i, DKRT_LIVE_LOAD);
+}
+
+/* Saves the selection and the changed routes. A route change, or leaving safe mode, restarts (dkrt_restart returns only when it refuses); every other
+   change runs live: the unloads, then the loads, polled from the UI loop. */
 static void apply(void)
 {
     if (g_selection_error != DKRT_OK) {
@@ -1473,14 +1795,33 @@ static void apply(void)
         fail_text("NOT SAVED", r);
         return;
     }
+    int restart = g_boot.safe != 0 || route_changes() > 0;
+    live_plan();
     for (uint32_t i = 0; i < MAX_ENT; i++)
         g_saved[i] = TICK[i];
     for (uint32_t j = 0; j < g_fx_n; j++)
         g_fx_saved[j] = DK_FXR_PEND[j];
     g_saved_extra = 0;
-    r = dkrt_restart();
-    DK_APPLY_RESTART = r;
-    fail_text("NO RESTART", r);
+    if (restart) {
+        r = dkrt_restart();
+        DK_APPLY_RESTART = r;
+        dk_ui_menu_refresh(
+            g_modules); /* a refused restart: the list shows what the saved selection still has to change */
+        fail_text("NO RESTART", r);
+        return;
+    }
+    if (g_lq_n ==
+        0) { /* nothing to load or unload (a dashed row unchecked): the selection is saved */
+        dk_ui_menu_close(g_modules);
+        return;
+    }
+    settings_release(); /* no page keeps rows of a module the batch may unload */
+    g_lq_state = LQ_START;
+    r = dkrt_poll_add((uintptr_t)live_poll);
+    if (r != DKRT_OK) { /* the batch cannot run: the selection is saved, so a restart applies it */
+        g_lq_state = LQ_IDLE;
+        live_stop(0, r);
+    }
 }
 
 /* NO on the confirm drops the pending changes and closes the list. */
@@ -1505,12 +1846,21 @@ static void apply_answer(void *ctx, int32_t yes)
 static int32_t modules_back(void *ctx)
 {
     (void)ctx;
+    if (g_lq_state != LQ_IDLE) /* a live apply runs */
+        return 1;
     uint32_t n = changes();
     DK_PENDING = n;
     if (!restart_pending())
         return 0;
     txt t;
     t_init(&t);
+    if (g_boot.safe == 0 && route_changes() == 0) {
+        t_s(&t, "APPLY ");
+        t_num(&t, n);
+        t_s(&t, n == 1 ? " CHANGE?" : " CHANGES?");
+        say(t.b, "NO RESTART", apply_answer);
+        return 1;
+    }
     if (n) {
         t_num(&t, n);
         t_s(&t, n == 1 ? " CHANGE" : " CHANGES");
