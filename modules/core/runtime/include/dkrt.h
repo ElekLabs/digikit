@@ -679,6 +679,9 @@ int32_t dkrt_selection_set(const DkrtSelection *sel);
 /* This boot: safe mode and why, the modules selected and each one's result. */
 void dkrt_boot_info(DkrtBootInfo *out);
 
+/* The file name of the module that holds selection index `index` of this boot (the part of its store path after the last `/`, NUL padded, at most 27 bytes; `out` has 28): the same names as the LOADS command. A live load keeps the index of its file or takes a free one, so this is the current name of the index, not the saved selection's. OK, or E_NOT_FOUND for an index at or past the selection size (the runtime's SEL_MAX). */
+int32_t dkrt_boot_name(uint32_t index, uint8_t *out);
+
 /* Write pending settings, then soft reset. Returns only when it refuses (E_CARD_BUSY, ...). */
 int32_t dkrt_restart(void);
 

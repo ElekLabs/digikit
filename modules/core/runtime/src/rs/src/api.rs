@@ -168,6 +168,13 @@ pub unsafe extern "C" fn dkrt_boot_info(out: *mut DkrtBootInfo) {
     boot::boot_info(out)
 }
 
+/// `dkrt_boot_name(index, out)`: the file name held by selection index `index` (28 bytes, NUL padded).
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_boot_name(index: u32, out: *mut u8) -> i32 {
+    init_once();
+    boot::name_copy(index as usize, out)
+}
+
 /// What `dkrt_restart` does to keep the working state (finding 40): bit 0 serializes the live project into the persistent arena
 /// (`dkfw::project::serialize`), bit 1 writes the arena to the next boot record (`dkfw::storage::boot_record_write`, the firmware's own writer for
 /// the OS-update path). The default is 0 (no save; the menu asks for a project save first): finding 40 has no edit that the save keeps,

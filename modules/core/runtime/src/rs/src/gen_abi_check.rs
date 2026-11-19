@@ -24,6 +24,7 @@ const _: sig::dkrt_module_header = crate::dkrt_module_header;
 const _: sig::dkrt_selection_get = crate::dkrt_selection_get;
 const _: sig::dkrt_selection_set = crate::dkrt_selection_set;
 const _: sig::dkrt_boot_info = crate::dkrt_boot_info;
+const _: sig::dkrt_boot_name = crate::dkrt_boot_name;
 const _: sig::dkrt_restart = crate::dkrt_restart;
 const _: sig::dkrt_settings_put = crate::settings::dkrt_settings_put;
 const _: sig::dkrt_settings_flush = crate::settings::dkrt_settings_flush;
