@@ -23,7 +23,19 @@ smaller than the area (its last sector does not read) has **no store**: nothing 
 (`CARD_TOO_SMALL`, a `CARD_CHECK` event). Sector numbers below are relative to `first_sector` unless said otherwise. A device with no `[card.store]` takes no
 `digikit/` files (the builder reports them as skipped).
 
-The area is not a path filesystem: **folders are in the paths.** The runtime's modules are in `modules/`, samples (DN2) in `samples/`.
+The area is not a path filesystem: **folders are in the paths.** The folders and what each holds (words and layout: [taxonomy](taxonomy.md) "Card layout"):
+
+| Folder | Holds |
+| --- | --- |
+| `modules/<kind>/<author>-<name>.dkm` | content modules, grouped by module kind; the file name is the module id with "/" as "-" |
+| `services/<service>.dks` | service files; the stem is the service name |
+| `ports/<device>-<version>.dkport` | port files, several side by side; `<version>` is the firmware version string, the runtime picks the one whose `FW` hash equals the image `fw_id` |
+| `projects/<slot>.dkp` | project files, slot 000 to 127 |
+| `samples/<folder>/<name>` | samples, for devices with `card = "slots"` only |
+| `data/<module id>/` | reserved for files that a module writes; not enforced |
+| `logs/` | reserved |
+
+The role word in the header decides what a file is; a file in the wrong folder is not found. A module path is at most 8 (`modules/`) + 10 (kind and `/`) + 31 (id) + 4 (`.dkm`) = 53 characters; a selection entry holds at most 55 (`SEL_PATH` 56 with the NUL). The kind comes from the module's records at pack time; if a later version changes it, Transfer moves the file with RENAME.
 
 ## Format
 
@@ -159,7 +171,7 @@ zero (no record) on a card the builder made.
   20  4   u32 count           selected modules, 0 to 8
   24  4   u32 stable_blocks    the stable period of this card in DSP blocks; 0 = the runtime's default, 45,000 (30 s)
   28  4   sticky type map, entry 0 (see below)
-  32  448 8 paths of 56 bytes: store paths ("modules/dyn-pluck.dkm"), NUL padded, at most 55 characters, load order
+  32  448 8 paths of 56 bytes: store paths ("modules/digikit/pluck.dkm"), NUL padded, at most 55 characters, load order
   480 28  sticky type map, entries 1 to 7 (4 bytes each)
   508 4   u32 crc32 of bytes 0..508 (IEEE, as the store table)
 ```

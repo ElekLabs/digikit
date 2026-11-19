@@ -23,22 +23,26 @@ A digikit project holds the digikit data that belongs to one Elektron project: t
    - Result: new modules that need saved state use the general API and need no runtime change.
 4. **Write on Elektron save.** Project-scope data is held in RAM and written to the `.dkp` when the stock project save succeeds. Changes the user discards (load without save) are discarded for digikit too. Fallback if the save hook fails the byte check: write 2 s after the last change, like the settings record.
 5. **Identity.**
-   - Key: (device, slot). The `.dkp` path is slot-based, so it survives renames: `digikit/project/<device>-<slot>.dkp` (draft; step 2 fixes the path within the store path rules: at most 159 bytes, printable ASCII).
+   - Key: (device, slot). The `.dkp` path is slot-based, so it survives renames: `projects/<slot>.dkp` (the store belongs to one device, so the path has no device part).
    - The `.dkp` header stores the project name and the save stamp: the 32-bit word at card slot header +0x18, which stock writes on each save. It is a save stamp, not an identity (finding 110 and finding 39 say the word is not an identity; both are true).
    - On load, compare the `.dkp` stamp with the listing record's stamp for the slot, before the load regenerates the live stamp. Match: the `.dkp` belongs to the saved Elektron state; if the name differs (a stock rename keeps the stamp), update the name in the `.dkp`. Mismatch (stock save-as or overwrite without digikit, an older card): warn and ignore the `.dkp`.
 6. **Validation on load.**
    - Modules missing from the card: one short warning in the firmware font. The plain Elektron project loads. No error screens.
    - Modules on the card but not selected: offer "load + restart" as one button ([one-button flows]).
    - Hot load of modules is a later item.
-7. **Layers. No new user-facing module.**
-   - `modules/core/adapters/project` (new): hooks on the slot setter and on save, both devices. Anchors in `devices/fw/project.toml`.
-   - Runtime `project` capability: reads and writes the `.dkp`, validates, sends events to modules.
-   - `modules/core/apps/digikit-menu`: the warning and the "load + restart" offer.
-   - The store writer belongs to the `store_upload` capability today; a capability may use another only through its declared API (module-architecture rule 3). Step 2 decides the declared store-write API that `project` uses, or moves a store-write API into the core next to the reader.
+7. **A `project` service and an optional tool module.** Words and card paths: [taxonomy](../design/taxonomy.md).
+   - `project` is a service (`services/project`, file `services/project.dks`, crate `dkrt-svc-project`). Its hooks on the stock project save and load come through the port file (anchors in `devices/fw/project.toml`; the hook routines are in the port file after port step 3). The slot setter and the save are the sites of the "Firmware facts" table.
+   - The service writes and reads `projects/<slot>.dkp` in the store, beside the stock files. Slot is `000` to `127`. The header holds device, slot, name and save stamp (decision 5).
+   - It restores the digikit state of the project through the runtime's live job (E5c): the module list and the filter choices.
+   - The optional module `digikit/project-manager` has kind `tool`. It is UI only: it imports the exports `dk_project_*` of the service. The user selects it when wanted.
+   - The service not selected: no service, no hooks, stock behaviour.
+   - Project scope holds the module list, the filter choices (extension-model E7, O6) and each module's own project-scope section from decision 2, for example the pool list of the sample picker (decision 3, step 5). FX routes and sends stay at device scope in the settings record for now (open question 4).
+   - Dependencies: E5c (live restore) and the port file stack (the hook sites). Order: after E8, as in the [taxonomy](../design/taxonomy.md) order.
+   - The store writer belongs to the `store_upload` capability today; the service uses a declared store-write export of the core, or the core gets a store-write API next to the reader. Step 2 decides it.
    - The `.dkp` writer reuses the card checks of settings writes (`block_write`, finding 46: a foreign card refuses, a blank card is claimed first).
    - A save during an upload: the upload uses shared RAM buffers (`IN_AT`, `OUT_AT`, `SCRATCH_AT`). Step 2 decides queue or retry, and the RAM size of the in-memory `.dkp`.
-   - New adapter callbacks (`dkrt_project_changed` moves from `at = "tracks"`, plus a new `dkrt_project_saved`) get `abi.toml` entries with an `at` target for the `project` capability, and the generated `gen_abi*.rs` files are regenerated. Update module-architecture rule 4, which lists the adapter callbacks.
    - The hooks only read stock state. Do not change stock project storage or the `Value<T>` project-data classes (ask Em before touching storage).
+   - The warning and the "load + restart" offer stay in `digikit-menu`, or move into `digikit/project-manager` when it is selected.
 8. **Later, not in this plan.**
    - Elektron project data inside the `.dkp` (maybe, after this lands).
    - A workbench bundle export: Elektron project plus `.dkp` as one backup file (host side).
@@ -120,8 +124,8 @@ Estimate: about 1.5 days of agent time. Main risk: the store file writer.
 
 1. [ ] Byte check of every firmware fact above by a second agent, both devices. Resolve the [O] cells needed by step 3. Update finding 110 and mark checked facts [V]. Unchecked: setter calls in `initializeNewProject` and `loadProjectFromMemory`, delete/format/reset rows, +Drive rename addresses, copy/move. Update finding 110: the name lookup is resolved (live+0xc, 16 bytes); loadProjectFromMmc does not call the setter; the +0x18 word is a save stamp. (2 h)
 2. [ ] Design doc `docs/design/digikit-project.md`: `.dkp` format, C signatures of the module API, events, error codes, size limits. Em's OK before code. (1 h)
-3. [ ] `core/adapters/project`: hooks on the setter (DT2 `0x400c11ca`, DN2 `0x400bb7fa`, on change; stack argument, -1 = no project) and on the save (DT2 `0x40043a30`, DN2 `0x40040190`; skip slot 0x80; act only on a nonzero result), both devices; anchors in `devices/fw/project.toml`. Calls the existing `dkrt_project_changed` and a new `dkrt_project_saved`. (0.5 day)
-4. [ ] Runtime: store file writer; read the `.dkp` on project change, write it on save; `dk_data_*` API and project event in `sdk/sdk.toml` (API minor). Module scope uses the settings record. (0.5 day)
+3. [ ] Service `project` with its port-file hooks: hooks on the setter (DT2 `0x400c11ca`, DN2 `0x400bb7fa`, on change; stack argument, -1 = no project) and on the save (DT2 `0x40043a30`, DN2 `0x40040190`; skip slot 0x80; act only on a nonzero result), both devices; anchors in `devices/fw/project.toml`. The service emits its own loaded and saved signals to modules (a module export, decision 2); the runtime has no `dkrt_project_*` calls for it. Then the optional tool module `digikit/project-manager`. (0.5 day)
+4. [ ] Runtime and service: store file writer; read the `.dkp` on project change, write it on save; `dk_data_*` API and project event in `sdk/sdk.toml` (API minor). Module scope uses the settings record. (0.5 day)
 5. [ ] Pool: remove the per-project lists from `sample_tracks.rs`; the sample picker keeps its list in project scope and re-drives on change and on lost. (3 h) Docs to update: sample-api-1.5 (lines ~45, 65, 116-118, 137-138, 168 and its TODO on store persistence), `sdk/include/dk/sample_track.h:74`, the `sample_tracks.rs` header comment and the tests calling `project_changed` (`sample_tracks/tests.rs`), module-architecture 3.10 and section 12, digikit-store "Keys by owner" and the line that only upload writes the store.
 6. [ ] Validation: missing-module warning and "load + restart" in `digikit-menu`. (2 h)
 7. [ ] Tests: host unit tests for the `.dkp` format and the API; one emulator scenario per device: load samples, save, power cycle, reload, pool restored; a project whose module is missing shows the warning and loads. (3 h)
