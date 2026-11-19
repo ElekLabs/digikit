@@ -1647,6 +1647,8 @@ fn the_block_wait_survives_a_counter_wrap_and_a_platform_without_a_clock_waits_f
         // no block clock: the entries close and the wait is over at once
         l.p.clock.set(None);
         assert_eq!(l.reload_quiesce(0), OK);
+        // the quiesce marked the module as draining (a static of `module_cmds`): give the commands back for the tests that follow
+        assert!(l.reload_abort(0));
     }
 }
 

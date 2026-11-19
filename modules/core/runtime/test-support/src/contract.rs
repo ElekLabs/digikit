@@ -439,6 +439,10 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         for owner in 1..=MAX_MODULES as u8 {
             unsafe { S::remove(&l.core, owner) };
         }
+        // a service that keeps DSP-side state per record (the samples client slots) frees it in `dsp_release`, which `remove` does not reach
+        for rec in 0..MAX_MODULES {
+            unsafe { S::dsp_release(&l.core, rec) };
+        }
         // the boot: the services settle once over the keys of the selection, before the first module loads
         let mut sel = SettleCtx::new();
         let mut mods = std::vec![&f.a, &f.b, &f.bad];
