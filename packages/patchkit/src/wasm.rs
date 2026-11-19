@@ -270,6 +270,22 @@ pub unsafe extern "C" fn pk_needs(dkm: *const u8, dkm_len: usize) -> i32 {
     set(crate::dkm::needs_json(dkm).map(|j| (vec![], j.to_string())))
 }
 
+/// The key rules of a `.dkm` (`keys_check_json` in dkm.rs): JSON `{repeat, shared, missing}` in `pk_plan_*`, or the reason in `pk_err_*` (1). `other_len` 0 means no other file
+/// (`shared` and `missing` are null).
+///
+/// # Safety
+/// The ranges must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pk_keys_check(
+    new: *const u8,
+    new_len: usize,
+    other: *const u8,
+    other_len: usize,
+) -> i32 {
+    let (new, other) = unsafe { (slice(new, new_len), slice(other, other_len)) };
+    set(crate::dkm::keys_check_json(new, other).map(|j| (vec![], j.to_string())))
+}
+
 /// The fit rule (`dkrt-fit`, the code the DIGIKIT menu runs; packages/patchkit/src/fit.rs): JSON `{caps, needs, empty?}` in; `{each, set, line}` in
 /// `pk_plan_*`, or the reason in `pk_err_*` (1).
 ///

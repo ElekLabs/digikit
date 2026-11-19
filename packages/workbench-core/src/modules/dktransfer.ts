@@ -19,7 +19,7 @@ import {
   type ModuleStateName,
 } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '@digi/dk-session/gen_proto';
-import { fitsNow, type Caps, type Needs } from './fit.ts';
+import { fitsNow, keyWarnings, type Caps, type Needs } from './fit.ts';
 import {
   planDelete,
   readFw,
@@ -800,6 +800,37 @@ export function uploadProgress(
 }
 
 /**
+ * Before the upload, one `{ event: 'keys', id, text }` for each key rule a module of `ids` breaks (`keyWarnings`, fit.ts: the Rust rules of `pk_keys_check`): a key twice, a key that a module
+ * already on the card has, a key the version on the card has and the new file lacks (that version is read from the card). Only a warning: the device refuses the module itself, at the
+ * next boot or at a reload. A read that fails gives no warning for that file.
+ */
+async function warnAboutKeys(
+  s: DkSession,
+  ids: string[],
+  by: Map<string, LibraryModule>,
+  library: LibraryModule[],
+  have: Map<string, { path: string; size: number; hash: string }>,
+  emit: Emit,
+): Promise<void> {
+  for (const id of ids) {
+    const m = by.get(id)!;
+    const others = library
+      .filter((o) => o.path !== m.path && have.get(o.path)?.hash === o.hash && have.get(o.path)?.size === o.file_size)
+      .map((o) => ({ name: o.label, bytes: o.bytes }));
+    const there = have.get(m.path);
+    let old: Uint8Array | undefined;
+    if (there && !(there.size === m.file_size && there.hash === m.hash)) {
+      try {
+        old = await readStoreFile(s, m.path);
+      } catch {
+        old = undefined;
+      }
+    }
+    for (const text of keyWarnings(m.label, m.bytes, others, old)) emit({ event: 'keys', id, text });
+  }
+}
+
+/**
  * For each of `ids`, in order: upload unless the card has the same file hash (a `skip` event), then VERIFY (the device hashes the file from a
  * fresh read of the card; a mismatch is an error). Nothing else: the device's selection is not touched.
  *
@@ -890,6 +921,7 @@ export async function install(
     }
   }
   const have = new Map((await listModules(s, info)).map((c) => [c.path, c]));
+  await warnAboutKeys(s, ids, by, library, have, emit);
   const uploaded: string[] = [];
   const onCard: string[] = [];
   for (const id of ids) {
