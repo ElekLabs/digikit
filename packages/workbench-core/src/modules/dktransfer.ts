@@ -22,6 +22,7 @@ import { LOAD_STATUS, STATUS } from '@digi/dk-session/gen_proto';
 import { fitsNow, type Caps, type Needs } from './fit.ts';
 import {
   planDelete,
+  readFw,
   readNeeds,
   readProvides,
   resolveServices,
@@ -34,7 +35,7 @@ import {
 } from './services.ts';
 import type { DkEntry, DkInfoFull } from '@digi/dk-session';
 
-export type Group = 'Machines' | 'Effects' | 'LFO shapes' | 'Tools' | 'Services';
+export type Group = 'Machines' | 'Effects' | 'Filters' | 'LFO shapes' | 'Tools' | 'Services';
 
 /** One row of the list: a built module (`id` set) or a card file that matches none (`id` null). */
 export interface TransferRow {
@@ -63,6 +64,8 @@ export interface TransferRow {
   services?: ServiceRef[];
   /** For a `.dks` file on the card: the files on the card that hard-need it. */
   needed_by?: string[];
+  /** For a `.dkport` on the card built for another firmware than the device runs: that firmware's identity (16 hex digits). Such a file stays on the card but serves no module now. */
+  for_firmware?: string;
   /** Why the module cannot install with the services of this workbench and the runtime of the device. */
   service_refusal?: ServiceRefusal;
 }
@@ -84,7 +87,7 @@ export interface TransferView {
 export interface InstallDeps {
   /** The `.dks` files of the workbench: they go on the card as built, with no firmware bytes in them. */
   services: ServiceFile[];
-  /** The port files of the workbench (`ports/<device>-<version>.dkport`). The one whose FW item equals the device's `fw_id` goes on the card with the services; with none, a module that needs a service is refused (`no-port`: this firmware version is not supported yet). */
+  /** The port files of the workbench (`ports/<device>-<version>.dkport`). The one whose FW item equals the device's `fw_id` goes on the card with the services; with none, a module that needs a service or the port file is refused (`no-port`). */
   ports: PortFile[];
   runtimeIdentity: (info: DkInfoFull) => RuntimeIdentity;
   /** The name hashes of the services the runtime itself provides (no `.dks` file). */
@@ -125,6 +128,8 @@ export interface LibraryModule extends HeaderInfo {
   test: boolean;
   /** The store path the file is uploaded to: `modules/<kind>/<author>-<name>.dkm` (`modulePath`). */
   path: string;
+  /** Set when `modulePath` refused the id (too long): the module is listed with this text and not installed. */
+  path_error?: string;
   /** `fileHashHex` of the file: what the store's LIST and VERIFY say of it. */
   hash: string;
   file_size: number;
@@ -200,13 +205,33 @@ export function headerInfo(h: Uint8Array): HeaderInfo | null {
 export const KIND_FOLDER: Record<Exclude<Group, 'Services'>, string> = {
   Machines: 'machine',
   Effects: 'fx',
+  Filters: 'filter',
   'LFO shapes': 'lfo-shape',
   Tools: 'tool',
 };
 
-/** The store path of a module: `modules/<kind>/<author>-<name>.dkm`, the file name the module id with "/" as "-". The kind is the group Transfer shows the module in (its records). */
-export const modulePath = (id: string, group: Group = 'Tools'): string =>
-  `modules/${KIND_FOLDER[group === 'Services' ? 'Tools' : group]}/${id.replace(/\//g, '-')}.dkm`;
+/** The longest module id: the module name the runtime keeps in 32 bytes, NUL included (`NAME_MAX` of the module header). */
+export const MODULE_ID_LIMIT = 31;
+/** The longest path of a selection entry: `SEL_PATH` is 56 bytes with the NUL (`gen_abi.rs`). */
+export const SELECTION_PATH_LIMIT = 55;
+
+/** The store path of a module: `modules/<kind>/<author>-<name>.dkm`, the file name the module id with "/" as "-". The kind is the group Transfer shows the module in (its records).
+ * Throws a `request` error when the id is longer than 31 bytes or the path longer than 55 characters (a selection entry holds no more). */
+export function modulePath(id: string, group: Group = 'Tools'): string {
+  const bytes = new TextEncoder().encode(id).length;
+  if (bytes > MODULE_ID_LIMIT)
+    throw new DkError({
+      error: `the module id "${id}" is ${bytes} bytes; an id may have at most ${MODULE_ID_LIMIT}`,
+      kind: 'request',
+    });
+  const path = `modules/${KIND_FOLDER[group === 'Services' ? 'Tools' : group]}/${id.replace(/\//g, '-')}.dkm`;
+  if (path.length > SELECTION_PATH_LIMIT)
+    throw new DkError({
+      error: `the store path ${path} is ${path.length} characters; a selection entry holds at most ${SELECTION_PATH_LIMIT}: shorten the module id`,
+      kind: 'request',
+    });
+  return path;
+}
 
 /** The path a module had before the kind folders: `modules/<last part of the id>.dkm`. */
 export const flatModulePath = (id: string): string => `modules/${id.split('/').pop()}.dkm`;
@@ -219,20 +244,30 @@ export async function libraryModule(
 ): Promise<LibraryModule | null> {
   const h = headerInfo(bytes);
   if (!h) return null;
+  let path: string;
+  let path_error: string | undefined;
+  try {
+    path = modulePath(h.name, h.group);
+  } catch (e) {
+    if (!(e instanceof DkError)) throw e;
+    path = `modules/${KIND_FOLDER[h.group === 'Services' ? 'Tools' : h.group]}/${h.name.replace(/\//g, '-')}.dkm`;
+    path_error = e.message;
+  }
   return {
     ...h,
     needs: needsOf?.(bytes) ?? null,
     id: h.name,
     label: h.name.split('/').pop() ?? h.name,
     test: h.name.startsWith('test/'),
-    path: modulePath(h.name, h.group),
+    path,
+    ...(path_error ? { path_error } : {}),
     hash: fileHashHex(bytes),
     file_size: bytes.length,
     bytes,
   };
 }
 
-export const GROUP_ORDER: Group[] = ['Machines', 'Effects', 'LFO shapes', 'Tools', 'Services'];
+export const GROUP_ORDER: Group[] = ['Machines', 'Effects', 'Filters', 'LFO shapes', 'Tools', 'Services'];
 
 /**
  * What would not fit on the target (CAPACITY): `[]` when it fits next to what is loaded now (the fit rule, fit.ts), else one line that says what is
@@ -256,7 +291,14 @@ export interface ServiceView {
   card: { path: string; needs: Need[] }[];
   /** The provided service name hash of each `.dks` on the card, by path. */
   provides: Record<string, number>;
+  /** The firmware identity (FW item) of each `.dkport` on the card, by path, and the firmware the device runs (null when it reports none). */
+  portFw?: Record<string, string>;
+  deviceFw?: string | null;
 }
+
+/** A port file on the card whose FW item is not the firmware the device runs: allowed side by side, but no provider of the current need. */
+const isForOtherFirmware = (sv: ServiceView, path: string): boolean =>
+  path.endsWith(PORT_EXT) && sv.portFw?.[path] !== undefined && sv.portFw[path] !== sv.deviceFw;
 
 /** The other files on the card that hard-need the service in the `.dks` file at `path`. */
 function neededBy(sv: ServiceView, path: string): string[] {
@@ -337,7 +379,7 @@ export function mergeView(
       loaded: loaded.includes(m.name),
       ...whyNot(m.path, loaded.includes(m.name)),
     };
-    row.warnings = fitWarnings(row, cap);
+    row.warnings = [...(m.path_error ? [m.path_error] : []), ...fitWarnings(row, cap)];
     row.fits = cap === null ? null : row.warnings.length === 0;
     if (sv) {
       const refs = serviceRefs(m, sv, onCard);
@@ -369,7 +411,11 @@ export function mergeView(
       ...whyNot(c.path, h ? loaded.includes(h.name) : false),
       // a file without the header table of this runtime was built for an older one
       ...(h && !hasHeaderTable(headers[c.path]!) ? { warnings: [OLDER_RUNTIME_TEXT] } : {}),
-      ...(sv && isProvider(c.path) && sv.provides[c.path] !== undefined ? { needed_by: neededBy(sv, c.path) } : {}),
+      ...(sv && isForOtherFirmware(sv, c.path)
+        ? { for_firmware: sv.portFw![c.path]! }
+        : sv && isProvider(c.path) && sv.provides[c.path] !== undefined
+          ? { needed_by: neededBy(sv, c.path) }
+          : {}),
     });
   }
   return { modules, card_only };
@@ -399,57 +445,119 @@ export async function listModules(s: DkSession, info: DkInfoFull): Promise<DkEnt
   return (await s.list()).filter((e) => e.path.startsWith(MODULES_FOLDER));
 }
 
+/** What `migrateModuleFolders` did and could not do. */
+export interface Migration {
+  /** The files renamed (old path, new path). */
+  moved: [string, string][];
+  /** Files whose new path holds another file: nothing was changed for them. */
+  conflicts: { id: string; path: string; to: string }[];
+}
+
 /**
- * The one-time move of the module files to the kind folders (`install` runs it before it compares or uploads; a view only reads, so a card in the old layout shows its files as card-only rows until the first install) (docs/design/taxonomy.md, "Card layout"): each `modules/<name>.dkm` of the old flat layout that holds a module
- * goes to `modules/<kind>/<author>-<name>.dkm` with RENAME (the data and its hash stay), and the selection record is written again with the new paths. The selection
- * is not readable, so it is rebuilt from the files of the last boot (LOADS, else MODULES: what the boot selected, in its order, by file name) and written only when a
- * file moved. A file that is no module, one whose new path is taken, and a device without RENAME or READ stay as they are. Returns the paths moved (old, new).
+ * Puts each module file of the store at its module path (docs/design/taxonomy.md, "Card layout"): the old flat layout `modules/<name>.dkm`, a file in the folder of another kind
+ * (the module's kind changed), or a module a caller wants elsewhere (`want`: module id to store path). `install` runs it first; a view only reads, so a card in the old layout shows
+ * its files as card-only rows until the first install. The module is identified by the id in the file's header, read from the card, never by its file name.
+ * A file moves with RENAME (the data and its hash stay). When the new path holds a file with the same hash the old one is deleted; when it holds another file nothing changes
+ * and the pair is reported in `conflicts` (and a `conflict` event).
+ *
+ * The selection record is not readable. It is written again from the file names of the last boot (LOADS, else MODULES: what the boot selected, in its order) when a moved
+ * file is in it, or when a name of it is only known by the old flat file name of a module (an earlier run moved the files and stopped before it wrote the selection).
+ * A selection the menu changed after the boot is therefore not touched by a run that moves nothing. A name that matches no file is reported (a `stale-selection` event).
+ * A failed RENAME, DELETE or SELECT is thrown. A device without RENAME or READ is left as it is.
  */
 export async function migrateModuleFolders(
   s: DkSession,
   info: DkInfoFull,
   emit: Emit = () => {},
-): Promise<[string, string][]> {
-  if (!hasCap(info, 'RENAME') || !hasCap(info, 'READ')) return [];
+  want: ReadonlyMap<string, string> = new Map(),
+): Promise<Migration> {
+  const result: Migration = { moved: [], conflicts: [] };
+  if (!hasCap(info, 'RENAME') || !hasCap(info, 'READ')) return result;
   const before = await listModules(s, info);
-  const flat = before.filter((e) => /^modules\/[^/]+\.dkm$/.test(e.path));
-  if (flat.length === 0) return [];
-  const taken = new Set(before.map((e) => e.path));
-  const moved: [string, string][] = [];
-  for (const e of flat) {
+  const files = before.filter((e) => /^modules\/([^/]+\/)?[^/]+\.dkm$/.test(e.path));
+  // the module of each file, by its header
+  const ids = new Map<string, { id: string; group: Group }>();
+  for (const e of files) {
     const h = await headerWithKeys(s, e.path).catch((err) => {
       if (err instanceof DkError && err.kind === 'device') return null;
       throw err;
     });
     const head = h && headerInfo(h);
-    if (!head) continue;
-    const to = modulePath(head.name, head.group);
-    if (taken.has(to)) continue;
+    if (head) ids.set(e.path, { id: head.name, group: head.group });
+  }
+  const at = new Map(before.map((e) => [e.path, e]));
+  const moved = new Set<string>();
+  for (const e of files) {
+    const m = ids.get(e.path);
+    if (!m) continue;
+    let to: string;
+    try {
+      to = want.get(m.id) ?? modulePath(m.id, m.group);
+    } catch (err) {
+      if (err instanceof DkError && err.kind === 'request') continue; // an id too long for the layout stays where it is
+      throw err;
+    }
+    if (to === e.path) continue;
+    const there = at.get(to);
+    if (there) {
+      if (there.hash === e.hash && there.size === e.size) {
+        emit({ event: 'delete', path: e.path, why: 'duplicate' });
+        await s.delete(e.path);
+        at.delete(e.path);
+        moved.add(e.path);
+        result.moved.push([e.path, to]);
+      } else {
+        emit({ event: 'conflict', id: m.id, path: e.path, to });
+        result.conflicts.push({ id: m.id, path: e.path, to });
+      }
+      continue;
+    }
     emit({ event: 'rename', path: e.path, to });
     await s.rename(e.path, to);
-    taken.delete(e.path);
-    taken.add(to);
-    moved.push([e.path, to]);
+    at.delete(e.path);
+    at.set(to, { ...e, path: to });
+    moved.add(e.path);
+    result.moved.push([e.path, to]);
   }
-  if (moved.length === 0) return moved;
-  // the selection record: what the last boot selected, by file name, at the new paths
+  // the selection, rebuilt from the last boot's names at the current paths
   const names = hasCap(info, 'LOADS')
     ? (await s.loadStates()).map((m) => m.name)
     : hasCap(info, 'MODULES')
-      ? (await s.modules()).map((m) => `${modulePath(m.name).split('/').pop()}`)
+      ? (await s.modules()).map((m) => m.name)
       : [];
-  if (names.length === 0) return moved;
-  // the last boot's file names are the old ones for a moved file; a file already in a kind folder keeps its name
-  const byLeaf = new Map<string, string>();
-  for (const e of await listModules(s, info)) byLeaf.set((e.path.split('/').pop() ?? e.path).slice(0, 27), e.path);
-  for (const [from, to] of moved) byLeaf.set((from.split('/').pop() ?? from).slice(0, 27), to);
-  const selection = names.map((n) => byLeaf.get(n.slice(0, 27))).filter((p): p is string => p !== undefined);
+  if (names.length === 0) return result;
+  const leaf = (p: string): string => (p.split('/').pop() ?? p).slice(0, 27);
+  const current = [...at.keys()].filter((p) => /^modules\/([^/]+\/)?[^/]+\.dkm$/.test(p));
+  const byLeaf = new Map(current.map((p) => [leaf(p), p]));
+  const where = new Map<string, string>(); // module id: current path
+  for (const [old, m] of ids) where.set(m.id, result.moved.find(([from]) => from === old)?.[1] ?? old);
+  const byOldLeaf = new Map([...where].map(([id, p]) => [leaf(flatModulePath(id)), p]));
+  const selection: string[] = [];
+  const stale: string[] = [];
+  let rewrite = false;
+  for (const n of names) {
+    const direct = where.get(n) ?? byLeaf.get(n.slice(0, 27));
+    const old = byOldLeaf.get(n.slice(0, 27));
+    const path = direct ?? old;
+    if (path === undefined) stale.push(n);
+    else selection.push(path);
+    if (direct === undefined && old !== undefined) rewrite = true;
+    if (path !== undefined && result.moved.some(([, to]) => to === path)) rewrite = true;
+  }
+  if (!rewrite) return result;
+  if (stale.length) emit({ event: 'stale-selection', names: stale });
   if (selection.length) {
     emit({ event: 'select', paths: selection });
     await s.select(selection);
   }
-  return moved;
+  return result;
 }
+
+/** What to tell a person about files `migrateModuleFolders` could not move. */
+export const conflictText = (conflicts: Migration['conflicts']): string =>
+  conflicts
+    .map((c) => `${c.id}: ${c.path} should be ${c.to}, which holds another file; nothing was uploaded for it (delete one of the two)`)
+    .join('; ');
 
 /** The store folder of the services and their file extension. */
 export const SERVICES_FOLDER = 'services/';
@@ -559,10 +667,11 @@ async function cardFacts(
   card: DkEntry[],
   library: LibraryModule[],
   known: Record<string, Uint8Array | null> = {},
-): Promise<{ needs: { path: string; needs: Need[] }[]; provides: Record<string, number>; unread: number }> {
+): Promise<{ needs: { path: string; needs: Need[] }[]; provides: Record<string, number>; portFw: Record<string, string>; unread: number }> {
   const mine = new Map(library.map((m) => [m.path, m]));
   const needs: { path: string; needs: Need[] }[] = [];
   const provides: Record<string, number> = {};
+  const portFw: Record<string, string> = {};
   let unread = 0;
   for (const c of card) {
     const isService = isProvider(c.path);
@@ -582,8 +691,12 @@ async function cardFacts(
     needs.push({ path: c.path, needs: readNeeds(bytes) });
     const p = isService ? readProvides(bytes) : null;
     if (p) provides[c.path] = p.hash32;
+    if (c.path.endsWith(PORT_EXT)) {
+      const fw = readFw(bytes);
+      if (fw) portFw[c.path] = fw;
+    }
   }
-  return { needs, provides, unread };
+  return { needs, provides, portFw, unread };
 }
 
 /** The merged view for the device behind `s`. With `deps` the library rows list their services, the card's `.dks` and `.dkport` rows say what needs them, and a module the services cannot serve carries its refusal. */
@@ -609,8 +722,16 @@ export async function buildView(s: DkSession, library: LibraryModule[], deps?: I
   let refused: ServiceRefusal[] = [];
   if (deps) {
     const files: ServiceView['services'] = deps.services.map((file) => ({ file, needs: deps.needsOf?.(file.bytes) }));
-    const facts = hasCap(info, 'READ') ? await cardFacts(s, card, library, headers) : { needs: [], provides: {} };
-    sv = { services: files, card: facts.needs, provides: facts.provides };
+    const facts = hasCap(info, 'READ')
+      ? await cardFacts(s, card, library, headers)
+      : { needs: [], provides: {}, portFw: {} };
+    sv = {
+      services: files,
+      card: facts.needs,
+      provides: facts.provides,
+      portFw: facts.portFw,
+      deviceFw: deps.runtimeIdentity(info).fw,
+    };
     refused = resolveServices(
       library.map((m) => ({ id: m.id, needs: readNeeds(m.bytes) })),
       deps.services,
@@ -695,7 +816,6 @@ export async function install(
 }> {
   const info = await s.info();
   requireRuntime(info);
-  await migrateModuleFolders(s, info, emit);
   const by = new Map(library.map((m) => [m.id, m]));
   const missing = ids.filter((i) => !by.has(i));
   if (missing.length)
@@ -703,6 +823,15 @@ export async function install(
       error: `not a run-time module that packs for this device: ${missing.join(', ')}`,
       kind: 'request',
     });
+  const longId = ids.map((i) => by.get(i)!).find((m) => m.path_error);
+  if (longId) throw new DkError({ error: longId.path_error!, kind: 'request' });
+  // the files of the card to their module paths first (the layout, a changed kind): no second copy of a module is uploaded
+  const { conflicts } = await migrateModuleFolders(s, info, emit, new Map(ids.map((i) => [i, by.get(i)!.path])));
+  if (conflicts.length) {
+    const bad = new Set(conflicts.map((c) => c.id));
+    ids = ids.filter((id) => !bad.has(id));
+    if (ids.length === 0) throw new DkError({ error: conflictText(conflicts), kind: 'request' });
+  }
   const canVerify = hasCap(info, 'VERIFY');
   let order: ServiceFile[] = [];
   let port: PortFile | null = null;
@@ -724,7 +853,7 @@ export async function install(
     port = plan.port;
   }
   emit({ event: 'start', device: info.port, modules: ids });
-  if (deps && order.length) {
+  if (deps && (order.length || port)) {
     // the port file first: the services resolve their firmware names from it, and a refusal at the check above has uploaded nothing
     const files: { id: string; path: string; bytes: Uint8Array }[] = [
       ...(port ? [{ id: port.stem, path: port.path, bytes: port.bytes }] : []),

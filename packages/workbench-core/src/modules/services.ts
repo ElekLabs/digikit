@@ -260,6 +260,8 @@ export function resolveServices(
     return visit(needs) ?? out;
   };
 
+  // a chosen module that hard-needs the port file itself (not through a service) puts it on the card too
+  let portDirect = false;
   for (const m of mods) {
     const r = closure(m.id, m.needs);
     if (!Array.isArray(r)) {
@@ -268,13 +270,15 @@ export function resolveServices(
     }
     const union = new Set([...chosen, ...r]);
     // the port file takes a provider slot when a service needs it
+    const direct = portDirect || m.needs.some((n) => n.hard && n.hash32 === PORT_HASH);
     const needsPort = (files: Iterable<ServiceFile>) =>
-      [...files].some((s) => s.needs.some((n) => n.hard && n.hash32 === PORT_HASH));
+      direct || [...files].some((s) => s.needs.some((n) => n.hard && n.hash32 === PORT_HASH));
     if (union.size + (needsPort(union) ? 1 : 0) > PROVIDER_MAX) {
       const extra = r.find((s) => !chosen.has(s))!;
       refused.push({ module: m.id, service: extra.stem, kind: 'too-many' });
       continue;
     }
+    portDirect = direct;
     for (const s of r)
       if (!chosen.has(s)) {
         chosen.add(s);
@@ -285,7 +289,10 @@ export function resolveServices(
   return {
     byModule,
     order,
-    port: port && [...chosen].some((s) => s.needs.some((n) => n.hard && n.hash32 === PORT_HASH)) ? port : null,
+    port:
+      port && (portDirect || [...chosen].some((s) => s.needs.some((n) => n.hard && n.hash32 === PORT_HASH)))
+        ? port
+        : null,
     refused,
   };
 }

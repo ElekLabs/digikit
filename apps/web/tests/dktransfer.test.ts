@@ -580,7 +580,7 @@ test('install with services: no port file for the firmware refuses the module th
   );
   const refusal = events.find((e) => e.event === 'refuse').refusal;
   assert.deepEqual([refusal.module, refusal.kind, refusal.fw], ['someone/pluck', 'no-port', FW]);
-  assert.match(serviceRefusalText(refusal), /This firmware version is not supported yet/);
+  assert.match(serviceRefusalText(refusal), /needs the port file for this firmware version/);
   assert.deepEqual(out.uploaded, ['someone/shot']);
   assert.ok(![...dev.files.keys()].some((k) => k.startsWith('ports/')), 'no port file was sent');
 });
@@ -722,18 +722,18 @@ test('the one-time migration renames the flat module files to their kind folders
   dev.files.set('modules/pluck.dkm', machine);
   dev.files.set('modules/probe.dkm', tool);
   dev.files.set('modules/notes.dkm', Buffer.from('not a module'));
-  dev.files.set('modules/machine/already-there.dkm', dkm('x/y', { machine: 1, size: 500 }));
+  dev.files.set('modules/machine/x-y.dkm', dkm('x/y', { machine: 1, size: 500 }));
   // the last boot selected the pluck, by its old file name (LOADS lists what the boot selected)
   dev.loadFailures = [{ name: 'pluck.dkm', result: -7 }];
   const events: any[] = [];
-  const moved = await migrateModuleFolders(session(dev), await session(dev).info(), (e) => events.push(e));
+  const { moved } = await migrateModuleFolders(session(dev), await session(dev).info(), (e) => events.push(e));
   assert.deepEqual(moved, [
     ['modules/pluck.dkm', 'modules/machine/someone-pluck.dkm'],
     ['modules/probe.dkm', 'modules/tool/digikit-probe.dkm'],
   ]);
   assert.deepEqual([...dev.files.keys()].sort(), [
-    'modules/machine/already-there.dkm',
     'modules/machine/someone-pluck.dkm',
+    'modules/machine/x-y.dkm',
     'modules/notes.dkm',
     'modules/tool/digikit-probe.dkm',
   ]);
@@ -745,7 +745,70 @@ test('the one-time migration renames the flat module files to their kind folders
   );
   assert.deepEqual(dev.selection, ['modules/machine/someone-pluck.dkm']);
   // nothing moves a second time
-  assert.deepEqual(await migrateModuleFolders(session(dev), await session(dev).info()), []);
+  assert.deepEqual((await migrateModuleFolders(session(dev), await session(dev).info())).moved, []);
+});
+
+test('migration: a module is found by the id in its header, whatever the file name is', async () => {
+  const dev = deviceOn();
+  // the old flat name is not the last part of the id
+  dev.files.set('modules/odd-name.dkm', dkm('someone/pluck', { machine: 1, size: 900 }));
+  const { moved } = await migrateModuleFolders(session(dev), await session(dev).info());
+  assert.deepEqual(moved, [['modules/odd-name.dkm', 'modules/machine/someone-pluck.dkm']]);
+});
+
+test('migration: an interrupted run (files moved, selection not written) writes the selection at the next run', async () => {
+  const dev = deviceOn();
+  dev.files.set('modules/machine/someone-pluck.dkm', dkm('someone/pluck', { machine: 1, size: 900 }));
+  dev.loadFailures = [{ name: 'pluck.dkm', result: -7 }]; // the last boot selected the old flat name
+  const events: any[] = [];
+  const { moved } = await migrateModuleFolders(session(dev), await session(dev).info(), (e) => events.push(e));
+  assert.deepEqual(moved, []);
+  assert.deepEqual(dev.selection, ['modules/machine/someone-pluck.dkm']);
+});
+
+test('migration: a menu selection of files already in place is left alone', async () => {
+  const dev = deviceOn();
+  dev.files.set('modules/machine/someone-pluck.dkm', dkm('someone/pluck', { machine: 1, size: 900 }));
+  dev.loadFailures = [{ name: 'someone-pluck.dkm', result: -7 }];
+  dev.selection = ['modules/machine/someone-pluck.dkm', 'modules/machine/other.dkm'];
+  await migrateModuleFolders(session(dev), await session(dev).info());
+  assert.deepEqual(dev.selection, ['modules/machine/someone-pluck.dkm', 'modules/machine/other.dkm']);
+});
+
+test('migration: the new path holds the same file: the flat copy is deleted; another file: a conflict, nothing changes', async () => {
+  const dev = deviceOn();
+  const pluck = dkm('someone/pluck', { machine: 1, size: 900 });
+  dev.files.set('modules/pluck.dkm', pluck);
+  dev.files.set('modules/machine/someone-pluck.dkm', pluck);
+  const probeA = dkm('digikit/probe', { size: 600 });
+  const probeB = dkm('digikit/probe', { size: 700 });
+  dev.files.set('modules/probe.dkm', probeA);
+  dev.files.set('modules/tool/digikit-probe.dkm', probeB);
+  const events: any[] = [];
+  const out = await migrateModuleFolders(session(dev), await session(dev).info(), (e) => events.push(e));
+  assert.ok(!dev.files.has('modules/pluck.dkm'));
+  assert.deepEqual(out.conflicts, [{ id: 'digikit/probe', path: 'modules/probe.dkm', to: 'modules/tool/digikit-probe.dkm' }]);
+  assert.ok(dev.files.has('modules/probe.dkm') && dev.files.has('modules/tool/digikit-probe.dkm'));
+  assert.ok(events.some((e) => e.event === 'conflict'));
+});
+
+test('install moves the copy of a module whose kind changed instead of leaving two', async () => {
+  const dev = deviceOn();
+  const asTool = dkm('someone/pluck', { size: 900 });
+  dev.files.set('modules/tool/someone-pluck.dkm', asTool);
+  const machine = (await libraryModule(dkm('someone/pluck', { machine: 1, size: 900 }), needsOf))!;
+  dev.loadFailures = [{ name: 'someone-pluck.dkm', result: -7 }];
+  await install(session(dev), ['someone/pluck'], [machine]);
+  assert.deepEqual([...dev.files.keys()], ['modules/machine/someone-pluck.dkm']);
+  assert.deepEqual(dev.selection, ['modules/machine/someone-pluck.dkm']);
+});
+
+test('install refuses a module id or path the selection cannot hold', async () => {
+  const long = (await libraryModule(dkm('someone/' + 'x'.repeat(30), { machine: 1, size: 900 }), needsOf))!;
+  assert.match(long.path_error ?? '', /at most 31/);
+  await assert.rejects(install(session(deviceOn()), [long.id], [long]), /at most 31/);
+  assert.throws(() => modulePath('a'.repeat(32)), /at most 31/);
+  assert.equal(modulePath('someone/blur', 'Filters'), 'modules/filter/someone-blur.dkm');
 });
 
 /** A card with pluck (needs fx and machines), shot (needs machines) and the two services. */
@@ -811,6 +874,31 @@ test('buildView with services: a library module lists its services with their st
   assert.equal(view.refusals?.length, 1);
   const fxRow = view.card_only.find((r) => r.path === 'services/fx.dks')!;
   assert.deepEqual(fxRow.needed_by, [shot.path]);
+});
+
+test('install with services: a module that needs the port file itself gets it uploaded', async () => {
+  const dev = deviceOn();
+  const direct = (await libraryModule(withTable(dkm('someone/raw', { size: 500 }), 0, PORT_NEED), needsOf))!;
+  const matching = portFile('mine');
+  const events: any[] = [];
+  const out = await install(session(dev), ['someone/raw'], [direct], (e) => events.push(e), depsOf([], { ports: [matching] }));
+  assert.deepEqual(out.uploaded, ['someone/raw']);
+  assert.deepEqual(dev.files.get('ports/mine.dkport'), matching.bytes);
+});
+
+test('buildView: a port file of another firmware on the card is listed as for that firmware, not as needed', async () => {
+  const dev = deviceOn();
+  const mine = portFile('mine');
+  const theirs = portFile('theirs', FW_OTHER);
+  dev.files.set('ports/mine.dkport', mine.bytes);
+  dev.files.set('ports/theirs.dkport', theirs.bytes);
+  const direct = (await libraryModule(withTable(dkm('someone/raw', { size: 500 }), 0, PORT_NEED), needsOf))!;
+  dev.files.set(direct.path, direct.bytes);
+  const view = await buildView(session(dev), [direct], depsOf([], { ports: [mine] }));
+  const row = (path: string) => view.card_only.find((r) => r.path === path)!;
+  assert.deepEqual(row('ports/mine.dkport').needed_by, [direct.path]);
+  assert.equal(row('ports/theirs.dkport').for_firmware, FW_OTHER);
+  assert.equal(row('ports/theirs.dkport').needed_by, undefined);
 });
 
 test('restart: RESTART, wait for the new boot in the log, then report what MODULES lists', async () => {

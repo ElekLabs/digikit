@@ -91,16 +91,12 @@ export function createTransferBackend({
     return needsReader;
   }
 
-  /** The files of the last scan of each device, kept for the `installDeps` that follows the `loadLibrary` of the same read (one scan serves both). */
-  const scanned = new Map<string, LibraryFile[]>();
-
-  /** The built modules of the device's folder, read again each time (a rebuild in a terminal shows up at the next read). */
-  async function loadLibrary(device: string): Promise<LibraryModule[]> {
+  /** The built modules of the device's folder, read again each time (a rebuild in a terminal shows up at the next read). `files` is a scan the caller made and also gives to `installDeps` (one scan serves both). */
+  async function loadLibrary(device: string, files?: LibraryFile[]): Promise<LibraryModule[]> {
     const reader = await needs();
     const { library } = env;
     const out: LibraryModule[] = [];
-    const files = await library.scan(device);
-    scanned.set(device, files);
+    files ??= await library.scan(device);
     for (const f of files) {
       if (f.path.endsWith(SERVICE_EXT) || f.path.endsWith(PORT_EXT)) continue;
       const m = await libraryModule(await library.read(device, f.path), (b) => reader.of(b));
@@ -110,13 +106,14 @@ export function createTransferBackend({
   }
 
   /** The `.dks` and `.dkport` files of the library for the device, from one scan (a file that is no service or port file is left out). */
-  async function loadProviders(device: string): Promise<{ services: ServiceFile[]; ports: PortFile[] }> {
+  async function loadProviders(
+    device: string,
+    scan?: LibraryFile[],
+  ): Promise<{ services: ServiceFile[]; ports: PortFile[] }> {
     const { library } = env;
     const services: ServiceFile[] = [];
     const ports: PortFile[] = [];
-    // the scan of the `loadLibrary` just before, once; else a scan of its own
-    const files = scanned.get(device) ?? (await library.scan(device));
-    scanned.delete(device);
+    const files = scan ?? (await library.scan(device));
     for (const f of files) {
       const isService = f.path.endsWith(SERVICE_EXT);
       if (!isService && !f.path.endsWith(PORT_EXT)) continue;
@@ -135,9 +132,9 @@ export function createTransferBackend({
   }
 
   /** The service-aware install and view inputs for the device, or none when the library has no service. */
-  async function installDeps(device: string): Promise<InstallDeps | undefined> {
-    const { services, ports } = await loadProviders(device);
-    if (services.length === 0) return undefined;
+  async function installDeps(device: string, scan?: LibraryFile[]): Promise<InstallDeps | undefined> {
+    const { services, ports } = await loadProviders(device, scan);
+    if (services.length === 0 && ports.length === 0) return undefined;
     const reader = await needs();
     return {
       services,
@@ -218,17 +215,20 @@ export function createTransferBackend({
     /** The merged list: the library folder and what the device holds (INFO, LIST, MODULES, CAPACITY, READ). */
     async list(device: string, showLibrary: (view: TransferView) => void): Promise<TransferView> {
       const [local, remote] = await Promise.allSettled([
-        loadLibrary(device).then((library) => {
+        env.library.scan(device).then(async (files) => {
+          const library = await loadLibrary(device, files);
           showLibrary(libraryView(device, library));
-          return library;
+          return { files, library };
         }),
         opened(),
       ]);
       if (remote.status === 'rejected') throw remote.reason;
       const { s, info } = remote.value;
       if (local.status === 'rejected' && info.port === device) throw local.reason;
-      const library = local.status === 'fulfilled' && info.port === device ? local.value : await loadLibrary(info.port);
-      const deps = await installDeps(info.port);
+      const same = local.status === 'fulfilled' && info.port === device ? local.value : undefined;
+      const files = same?.files ?? (await env.library.scan(info.port));
+      const library = same?.library ?? (await loadLibrary(info.port, files));
+      const deps = await installDeps(info.port, files);
       return asked(() => buildView(s, library, deps));
     },
     /** The library alone, for a device id: nothing is read from a device. */
@@ -239,8 +239,9 @@ export function createTransferBackend({
     /** Upload and VERIFY the modules (the same file hash is not sent again), with the services they need when the library has them. The device's selection is not touched. */
     async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<InstallResult> {
       const { s, info } = await opened();
-      const library = await loadLibrary(info.port);
-      const deps = await installDeps(info.port);
+      const files = await env.library.scan(info.port);
+      const library = await loadLibrary(info.port, files);
+      const deps = await installDeps(info.port, files);
       const out = await asked(() => install(s, modules, library, onEvent, deps));
       return { uploaded: out.uploaded, onCard: out.onCard, refused: out.refused ?? [] };
     },
