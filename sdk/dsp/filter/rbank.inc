@@ -37,7 +37,7 @@
 //                                 first block
 //   saves:         R3, R5, R6, R7, R9, R10, R11, R13, R14, R15, I0, I1, I2, I3, I5 and one slot for the state pointer
 //                  (16 slots, S = 16). M4 is written (M4 = 8, caller-saved). SIMD is not used: PEYEN stays clear.
-//   instructions:  steady block with eight active bands 2403 with DK_CALL (measured in sdk/tests/dsp/rbank.rig.test.ts; the
+//   instructions:  steady block 2485 with DK_CALL (measured in sdk/tests/dsp/rbank.rig.test.ts; the
 //                  test asserts at most 2500; 8 x 208 of it is the band loop). The first block adds the clear of 96 words.
 //   registers:     F0 .. F15 and R4 .. R15 as listed in the steps; I1 state or band record, I2 input block, I3 output block,
 //                  I4 input pointer, I0 output pointer, I5 output read pointer, M4 = 8 (record stride).
