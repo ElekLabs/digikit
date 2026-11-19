@@ -11,23 +11,24 @@
  *     to PEER_DEST, check the output length and its SHA-256 against the stock section, and store the output length where the thread stored the
  *     packed length. Any failed check returns 1: peer_read then takes the stock path of a missing section 7 (status 1, the boot failure screen).
  *     The DMA that streams the buffer is armed later, so a failed check streams nothing.
- * The addresses and the expected length and hash are the `[[repack]]` of module.toml: patchkit checks the stored stream's in-place margin against
- * them and the decoded section against the hash; packages/patchkit/tests/repack.rs checks that this file names the same values.
+ * The addresses and the expected length and hash are the `[[repack]]` of module.toml, through the generated build/gen/repack.h: patchkit checks the stored
+ * stream's in-place margin against them and the decoded section against the hash.
  * tests/peer-host.test.ts compiles this file for the host (PEER_HOST) and runs peer_sha256 and peer_load against stubs of the two firmware calls. */
 
 #include <stdint.h>
 #include "dk_fw_peer.h"
+#include "repack.h" /* build/gen/repack.h: the [[repack]] of module.toml (patchkit gen) */
 
 typedef uint32_t u32;
 typedef uint8_t u8;
 
-/* Where the stock thread reads section 7 (uncached alias), the end of its buffer (0x4f84f2c1 + 0x60000), the big-endian length word the thread
- * stores 4 bytes below the payload, and the length of the stock section 7. */
-#define PEER_DEST 0x4f84f2c6u
-#define PEER_STAGE_END 0x4f8af2c1u
-#define PEER_LEN_WORD 0x4f84f2c2u
+/* The layout and the stock section come from the manifest's [[repack]] of role cf2 (one source: patchkit checks the stored stream against the same values).
+ * The thread stores the big-endian length of the payload 4 bytes below it, behind the 0xAA byte. */
+#define PEER_DEST REPACK_CF2_DEST
+#define PEER_STAGE_END REPACK_CF2_STAGE_END
+#define PEER_LEN_WORD (REPACK_CF2_DEST - 4u)
 #ifndef PEER_LEN /* the host test uses a short section */
-#define PEER_LEN 383760u
+#define PEER_LEN REPACK_CF2_LEN
 #endif
 
 /* Guest addresses to pointers and back. The host test defines PEER_HOST and maps them into an array. */
@@ -38,10 +39,7 @@ typedef uint8_t u8;
 #endif
 
 /* SHA-256 of the stock section 7 */
-static PEER_CONST u8 PEER_SHA256[32] = {
-    0xda, 0xf6, 0x45, 0x1c, 0xf9, 0x58, 0x7c, 0x0b, 0x62, 0x8e, 0x90, 0x1b, 0x7b, 0xb6, 0xb2, 0x5f,
-    0x4e, 0x26, 0x33, 0xd4, 0x48, 0xc5, 0x34, 0xc0, 0xc1, 0x81, 0xdd, 0x35, 0xec, 0x78, 0x3b, 0xc2,
-};
+static PEER_CONST u8 PEER_SHA256[32] = REPACK_CF2_SHA256;
 
 static const u32 SHA_K[64] = {
     0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu, 0x59f111f1u, 0x923f82a4u,

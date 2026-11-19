@@ -171,50 +171,6 @@ fn the_syntakt_emulator_set_fits_the_flash_container_with_section_7_stored_packe
     assert_eq!(got.section(7).unwrap().data, stock.section(7).unwrap().data);
 }
 
-/// The adapter's C code and its `[[repack]]` name the same buffer, length and hash: patchkit checks the stream against the manifest, the code
-/// checks the unpacked bytes against its own constants.
-#[test]
-fn the_adapter_source_names_the_layout_of_its_manifest() {
-    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
-        return;
-    };
-    let m = lib.get("core/peer-image").expect("core/peer-image");
-    let r = &m.manifest.repack[0];
-    let src =
-        std::fs::read_to_string(root().join("modules/core/adapters/peer-image/src/cf/peer.c"))
-            .unwrap();
-    let define = |name: &str| -> u64 {
-        let line = src
-            .lines()
-            .find_map(|l| l.strip_prefix(&format!("#define {name} ")))
-            .unwrap_or_else(|| panic!("no #define {name}"));
-        let v = line
-            .split_whitespace()
-            .next()
-            .unwrap()
-            .trim_end_matches('u');
-        match v.strip_prefix("0x") {
-            Some(h) => u64::from_str_radix(h, 16).unwrap(),
-            None => v.parse().unwrap(),
-        }
-    };
-    assert_eq!(define("PEER_DEST"), r.dest);
-    assert_eq!(define("PEER_STAGE_END"), r.stage_end);
-    assert_eq!(define("PEER_LEN"), r.len);
-    // the thread stores the length 4 bytes below the payload, behind the 0xAA byte
-    assert_eq!(define("PEER_LEN_WORD"), r.dest - 4);
-    let table = src
-        .split("PEER_SHA256[32] = {")
-        .nth(1)
-        .and_then(|s| s.split("};").next())
-        .unwrap();
-    let hex: String = table
-        .split(',')
-        .filter_map(|b| b.trim().strip_prefix("0x"))
-        .collect();
-    assert_eq!(hex, r.sha256);
-}
-
 /// The Rust margin equals the reference `tools.firmware.aplibpack.inplace_margin` on the real stream (9,444 bytes, finding 150).
 #[test]
 fn the_in_place_margin_of_the_real_section_7_stream_matches_the_python_reference() {

@@ -28,6 +28,11 @@ stage_end = 0x4f8af2c1
 len = 383760
 sha256 = "daf6451cf9587c0b628e901b7bb6b25f4e2633d448c534c0c181dd35ec783bc2"
 
+# The [[repack]] above as C macros for src/cf/peer.c (REPACK_CF2_*): one source for the layout, the length and the hash.
+[[gen]]
+kind = "c-repack"
+path = "build/gen/repack.h"
+
 [[object]]
 path = "build/peer.dko.json"
 sources = ["src/cf/peer.c", "src/cf/hook.s"]

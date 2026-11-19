@@ -1848,6 +1848,26 @@ fn c_shared(module: &str) -> String {
     )
 }
 
+/// The `[[repack]]` entries of a module as C macros (`REPACK_<ROLE>_DEST`, `_STAGE_END`, `_LEN` and `_SHA256`, an initializer list of 32 bytes): the layout
+/// that patchkit checks the stored stream against is the one the module's code uses, from one source.
+fn c_repack(module: &str, repacks: &[crate::module::RepackDef]) -> Result<String> {
+    if repacks.is_empty() {
+        return Err(err!("{module}: a `c-repack` gen needs a [[repack]]"));
+    }
+    let mut s = format!("/* {module}: {NOTE}. The [[repack]] of module.toml. */\n");
+    for r in repacks {
+        let role = r.role.to_ascii_uppercase();
+        let sha = crate::error::unhex(&r.sha256)
+            .map_err(|_| err!("{module}: [[repack]] sha256 is not hex"))?;
+        let bytes: Vec<String> = sha.iter().map(|b| format!("{b:#04x}")).collect();
+        let _ = writeln!(s, "#define REPACK_{role}_DEST {:#x}u", r.dest);
+        let _ = writeln!(s, "#define REPACK_{role}_STAGE_END {:#x}u", r.stage_end);
+        let _ = writeln!(s, "#define REPACK_{role}_LEN {}u", r.len);
+        let _ = writeln!(s, "#define REPACK_{role}_SHA256 {{ {} }}", bytes.join(", "));
+    }
+    Ok(s)
+}
+
 fn gas(module: &str, dev: &str, cs: &[C], emit: Option<&[&str]>) -> String {
     let mut s = format!("/* {module} on {dev}: {NOTE}. */\n");
     for k in cs
@@ -2074,6 +2094,14 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
                 out.push((g.path.clone(), rust_profiles(module, lib, &facts.docs)?));
+            }
+            "c-repack" => {
+                if g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `c-repack` gen is one file for all devices"
+                    ));
+                }
+                out.push((g.path.clone(), c_repack(module, &m.manifest.repack)?));
             }
             "c-shared" => {
                 if g.path.contains("{dev}") {

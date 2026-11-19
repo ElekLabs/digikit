@@ -21,6 +21,7 @@ test('the adapter C code: SHA-256, the section 6 pass-through, the section 7 unp
         '-std=c11', '-Wall', '-Wextra', '-Werror',
         '-I', path.join(root, 'modules/core/fw/include'),
         '-I', path.join(module, 'src/cf'),
+        '-I', path.join(module, 'build/gen'),
         path.join(module, 'tests/peer-host.c'),
         '-o', binary,
       ],
