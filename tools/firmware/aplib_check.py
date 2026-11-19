@@ -45,15 +45,21 @@ def depacker_entry(bootstrap: bytes, base: int = 0x80000400) -> int:
     return base + at
 
 
-def device_patch(image: str) -> dict:
-    """`[patch]` of the device file of an image key (`dt2-1.17`): `main_stage` and `boot_load`."""
+def device_numbers(image: str) -> dict:
+    """The numbers of the device file of an image key (`dt2-1.17`) that the check needs: `[patch] main_stage`, `main_dest`, `boot_load` and `[container] main`."""
     import tomllib
 
     short = image.split("-")[0]
     for f in sorted((ROOT / "devices").glob("*.toml")):
         doc = tomllib.loads(f.read_text())
         if doc.get("device", {}).get("short") == short:
-            return doc["patch"]
+            p = doc["patch"]
+            return {
+                "main_stage": p["main_stage"],
+                "main_dest": p["main_dest"],
+                "boot_load": p["boot_load"],
+                "main_section": doc["container"]["main"],
+            }
     raise ValueError(f"no device file for {image}")
 
 
@@ -88,15 +94,14 @@ def native_binary() -> pathlib.Path:
     return target / "release" / "examples" / "depack_check"
 
 
-def firmware_depack(
-    binary, bootstrap_path, stream: bytes, patch: dict, sid: int
-) -> dict:
+def firmware_depack(binary, bootstrap_path, stream: bytes, dev: dict, sid: int) -> dict:
     boot = bootstrap_path.read_bytes()
-    entry = depacker_entry(boot, patch["boot_load"])
-    # The device's `main_stage` is where the bootstrap stages the MAIN OS (section 3). The other sections are unpacked by the bootstrap and by
-    # MAIN into their own buffers, which are not device data; for them the check only needs a stage that does not overlap the output, the default
-    # of depack_check (0x40400000, past every section).
-    stage = ["--stage", hex(patch["main_stage"])] if sid == 3 else []
+    entry = depacker_entry(boot, dev["boot_load"])
+    # The device's `main_stage` is where the bootstrap stages the MAIN OS (the `[container] main` section). The other sections are unpacked into their
+    # own buffers, which are not device data; for them the check only needs a stage that does not overlap the output: 8 MiB above the output.
+    stage = (
+        dev["main_stage"] if sid == dev["main_section"] else dev["main_dest"] + 0x800000
+    )
     with tempfile.TemporaryDirectory() as tmp:
         f = pathlib.Path(tmp) / "stream.bin"
         f.write_bytes(stream)
@@ -106,9 +111,12 @@ def firmware_depack(
                 str(bootstrap_path),
                 str(f),
                 hex(entry),
-                *stage,
+                "--stage",
+                hex(stage),
                 "--base",
-                hex(patch["boot_load"]),
+                hex(dev["boot_load"]),
+                "--dest",
+                hex(dev["main_dest"]),
             ],
             check=True,
             capture_output=True,
@@ -123,7 +131,7 @@ def check_image(image: str, ids: list[int], binary) -> int:
     stock = {sid: clen for sid, _, clen, _ in table}
     bootstrap = sdir / "section_2_DSP.bin"
     failures = 0
-    patch = device_patch(image)
+    dev = device_numbers(image)
     for sid in ids:
         path = sdir / f"section_{sid}_{NAMES[sid]}.bin"
         if not path.exists():
@@ -135,7 +143,7 @@ def check_image(image: str, ids: list[int], binary) -> int:
         ok_py = elz.depack_section(stream) == data
         ok_fw = None
         if binary is not None:
-            fw = firmware_depack(binary, bootstrap, stream, patch, sid)
+            fw = firmware_depack(binary, bootstrap, stream, dev, sid)
             ok_fw = (
                 fw["len"] == len(data)
                 and fw["sha256"] == hashlib.sha256(data).hexdigest()

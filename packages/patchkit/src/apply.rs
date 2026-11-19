@@ -108,7 +108,7 @@ pub struct PlanOutput {
     pub changed_sections: Vec<(u32, u64, u64)>,
     /// `bootstrap margin 9.1 KB, container 31.4 KB free` (the in-place margin of MAIN at the bootstrap's stage and the container space left).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub budget: Option<String>,
+    pub budget: Option<crate::verify::Budget>,
 }
 
 pub struct Applied {
@@ -2511,11 +2511,7 @@ pub fn apply_with(
         syx_sha256: sha256_hex(&applied.syx),
         syx_bytes: applied.syx.len() as u64,
         container_bytes: report.container_bytes,
-        budget: report
-            .checks
-            .iter()
-            .find(|c| c.starts_with("bootstrap margin"))
-            .cloned(),
+        budget: report.budget,
         changed_sections: fw
             .sections
             .iter()

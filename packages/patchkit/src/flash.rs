@@ -326,17 +326,17 @@ fn finish(
             })
             .map(|r| {
                 // the bootstrap budget first: the detail is cut when it is shown
-                let (budget, rest): (Vec<&String>, Vec<&String>) = r
+                let budget = r.budget.map(|b| b.to_string());
+                let rest: Vec<&str> = r
                     .checks
                     .iter()
-                    .partition(|c| c.starts_with("bootstrap margin"));
+                    .map(String::as_str)
+                    .filter(|c| Some(*c) != budget.as_deref())
+                    .collect();
                 let d = format!(
                     "{}{}; container {} bytes, {} data messages",
-                    budget.first().map_or(String::new(), |b| format!("{b}; ")),
-                    rest.iter()
-                        .map(|c| c.as_str())
-                        .collect::<Vec<_>>()
-                        .join("; "),
+                    budget.map_or(String::new(), |b| format!("{b}; ")),
+                    rest.join("; "),
                     r.container_bytes,
                     r.data_messages
                 );

@@ -228,7 +228,9 @@ fn a_main_stream_whose_unpack_overtakes_the_staged_stream_is_refused_and_a_liter
         "the stream with the tail decodes to the same bytes"
     );
     fw.replace_main_stored(data, made.stream).unwrap();
-    let line = patchkit::verify::main_budget(&fw, 1 << 20, 1 << 21).unwrap();
+    let line = patchkit::verify::main_budget(&fw, 1 << 20, 1 << 21)
+        .unwrap()
+        .to_string();
     assert!(
         line.starts_with("bootstrap margin ") && line.contains("KB free"),
         "{line}"

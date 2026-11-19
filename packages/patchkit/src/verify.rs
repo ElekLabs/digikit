@@ -22,6 +22,8 @@ pub struct Report {
     pub sections: Vec<(u32, u64, u64)>,
     pub record: Option<Record>,
     pub port: Option<String>,
+    /// The bootstrap budget of the image (verify without `need_base` leaves it out).
+    pub budget: Option<Budget>,
     pub checks: Vec<String>,
 }
 
@@ -113,27 +115,50 @@ fn kb(n: i64) -> String {
 /// The in-place margin of the stored MAIN stream at the bootstrap's stage (`[patch] main_stage`), refused below `main_margin_min`, and the budget line:
 /// the bootstrap unpacks MAIN over its own staged stream with no bounds check, so a stream whose output overtakes the unread input runs away before MAIN
 /// starts (finding 151). Returns `bootstrap margin 9.1 KB, container 31.4 KB free`.
-pub fn main_budget(fw: &Firmware, container_bytes: u64, container_max: u64) -> Result<String> {
+pub fn main_budget(fw: &Firmware, container_bytes: u64, container_max: u64) -> Result<Budget> {
     let main = fw
         .main()
         .ok_or_else(|| err!("the image has no MAIN OS section"))?;
     let (dest, stage, floor) = fw.device.main_unpack();
-    let free = container_max as i64 - container_bytes as i64;
     let margin = crate::aplib::inplace_margin(&main.stored, dest, stage)
         .map_err(|e| err!("MAIN OS stream: {e}"))?;
-    match margin {
-        Some(m) if m < floor as i64 => Err(err!(
+    if let Some(m) = margin.filter(|m| *m < floor as i64) {
+        return Err(err!(
             "the bootstrap would unpack MAIN OS over its own unread stream: in-place margin {m} bytes at the stage {stage:#x} (at least {floor} needed): the unit would hang before MAIN starts"
-        )),
-        Some(m) => Ok(format!(
-            "bootstrap margin {}, container {} free",
-            kb(m),
-            kb(free)
-        )),
-        None => Ok(format!(
-            "bootstrap margin: the unpack stays below the stage {stage:#x}, container {} free",
-            kb(free)
-        )),
+        ));
+    }
+    Ok(Budget {
+        margin,
+        stage,
+        container_free: container_max as i64 - container_bytes as i64,
+    })
+}
+
+/// The bootstrap budget of an image: the in-place margin of its MAIN stream at the device's stage (`None`: the unpack stays below the stage) and the
+/// container space left under the limit. `Display` is the line `bootstrap margin 9.1 KB, container 31.4 KB free`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct Budget {
+    pub margin: Option<i64>,
+    pub stage: u64,
+    pub container_free: i64,
+}
+
+impl std::fmt::Display for Budget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.margin {
+            Some(m) => write!(
+                f,
+                "bootstrap margin {}, container {} free",
+                kb(m),
+                kb(self.container_free)
+            ),
+            None => write!(
+                f,
+                "bootstrap margin: the unpack stays below the stage {:#x}, container {} free",
+                self.stage,
+                kb(self.container_free)
+            ),
+        }
     }
 }
 
@@ -270,6 +295,7 @@ fn check(
     recorded: bool,
 ) -> Result<Report> {
     let mut checks = vec![];
+    let mut budget: Option<Budget> = None;
     let msgs = syx::messages(syx_bytes)?;
     if msgs.len() < 3 || msgs[0].len() != 16 || msgs[msgs.len() - 1].len() != 16 {
         return Err(err!("missing framing messages"));
@@ -403,7 +429,9 @@ fn check(
     checks.push("size limits".into());
     if need_base {
         // `inspect` only identifies a file; a proof for flashing also holds the bootstrap's in-place unpack to its margin
-        checks.push(main_budget(&fw, total as u64, container_max as u64)?);
+        let b = main_budget(&fw, total as u64, container_max as u64)?;
+        checks.push(b.to_string());
+        budget = Some(b);
     }
 
     if base.is_none() && need_base && port.is_none() && !fw.device.readonly_sections().is_empty() {
@@ -503,6 +531,7 @@ fn check(
             .collect(),
         record,
         port: port_id,
+        budget,
         checks,
     })
 }

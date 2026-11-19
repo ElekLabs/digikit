@@ -1,9 +1,11 @@
 //! Run the firmware's own aPLib depacker (the bootstrap's, section 2) on a stream.
 //!
-//! usage: depack_check BOOTSTRAP.bin STREAM.bin ENTRY_HEX [OUT.bin] [--stage HEX] [--base HEX]
-//!   --stage  where the bootstrap stages a packed section: the device's `[patch] main_stage` (default 0x40400000, the Digitakt II and Digitone II; the
-//!            Syntakt stages at 0x40200000, finding 151)
-//!   --base   the address section 2 is loaded at (default 0x80000400; the Syntakt's is 0x800003ec)
+//! usage: depack_check BOOTSTRAP.bin STREAM.bin ENTRY_HEX --stage HEX --base HEX --dest HEX [OUT.bin]
+//!   --stage  where the packed section is staged: the device's `[patch] main_stage` for the MAIN OS (0x40400000 on the Digitakt II and Digitone II, 0x40200000 on the
+//!            Syntakt, finding 151); for another section any address that does not overlap the output
+//!   --base   the address section 2 is loaded at: the device's `[patch] boot_load`
+//!   --dest   where the output goes: the device's `[patch] main_dest`
+//!   No defaults: a device's numbers are device data, and a wrong default would make a check pass or fail for the wrong device.
 //!
 //! BOOTSTRAP.bin is the decompressed section 2 (loaded at 0x80000400). STREAM.bin
 //! is a section as stored in the container, with its 8-byte header. The bootstrap
@@ -22,9 +24,6 @@ const SRAM: u32 = 0x8000_0000;
 const SRAM_LEN: usize = 0x10_0000;
 const DDR: u32 = 0x4000_0000;
 const DDR_LEN: usize = 0x0200_0000;
-const DEFAULT_BOOT_BASE: u32 = 0x8000_0400;
-const DEFAULT_STREAM_AT: u32 = 0x4040_0000;
-const OUT_AT: u32 = 0x4000_0400;
 const RETURN_TO: u32 = 0x8000_0100;
 
 struct Mem {
@@ -75,7 +74,7 @@ impl Bus for Mem {
     }
 }
 
-fn hex_flag(args: &mut Vec<String>, name: &str, default: u32) -> u32 {
+fn hex_flag(args: &mut Vec<String>, name: &str) -> u32 {
     match args.iter().position(|a| a == name) {
         Some(i) => {
             let v = args
@@ -85,17 +84,21 @@ fn hex_flag(args: &mut Vec<String>, name: &str, default: u32) -> u32 {
             args.drain(i..i + 2);
             n
         }
-        None => default,
+        None => {
+            eprintln!("{name} is required (the device's value)");
+            std::process::exit(2);
+        }
     }
 }
 
 fn main() {
     let mut args: Vec<String> = env::args().collect();
-    let stream_at = hex_flag(&mut args, "--stage", DEFAULT_STREAM_AT);
-    let boot_base = hex_flag(&mut args, "--base", DEFAULT_BOOT_BASE);
+    let stream_at = hex_flag(&mut args, "--stage");
+    let boot_base = hex_flag(&mut args, "--base");
+    let out_at = hex_flag(&mut args, "--dest");
     if args.len() < 4 {
         eprintln!(
-            "usage: depack_check BOOTSTRAP.bin STREAM.bin ENTRY_HEX [OUT.bin] [--stage HEX] [--base HEX]"
+            "usage: depack_check BOOTSTRAP.bin STREAM.bin ENTRY_HEX [OUT.bin] --stage HEX --base HEX --dest HEX"
         );
         std::process::exit(2);
     }
@@ -116,7 +119,7 @@ fn main() {
     // Stack at the call: [return address][src][dst].
     mem.write32(sp, RETURN_TO).unwrap();
     mem.write32(sp + 4, stream_at).unwrap();
-    mem.write32(sp + 8, OUT_AT).unwrap();
+    mem.write32(sp + 8, out_at).unwrap();
     cpu.a[7] = sp;
     cpu.pc = u32::from_str_radix(args[3].trim_start_matches("0x"), 16).unwrap();
     cpu.sr = 0x2700;
@@ -133,7 +136,7 @@ fn main() {
         }
     }
     let len = cpu.d[0] as usize;
-    let out = mem.slot(OUT_AT, len).unwrap().to_vec();
+    let out = mem.slot(out_at, len).unwrap().to_vec();
     if let Some(path) = args.get(4) {
         fs::write(path, &out).unwrap();
     }

@@ -813,3 +813,17 @@ fn only_runtime_targets_enter_the_shared_constants() {
     let half = "[device]\nname = \"X\"\nshort = \"x\"\n[digikit]\nid = 9\nname = \"x\"\n";
     assert!(Facts::from_texts([half]).is_err());
 }
+
+#[test]
+fn a_device_that_patches_core_ui_must_say_the_key_ids_of_its_key_events() {
+    let dt2 = std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap();
+    Facts::from_texts([dt2.as_str()]).unwrap();
+    // without [input.view_keys] the table core/ui reads would be zeros: refused, naming the table
+    let start = dt2
+        .find("[input.view_keys]")
+        .expect("the device file has the table");
+    let end = dt2[start..].find("\n\n").map_or(dt2.len(), |n| start + n);
+    let without = format!("{}{}", &dt2[..start], &dt2[end..]);
+    let e = Facts::from_texts([without.as_str()]).unwrap_err().0;
+    assert!(e.contains("[input.view_keys] is missing"), "{e}");
+}

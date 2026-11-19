@@ -57,6 +57,10 @@ extern const uint32_t dk_ui_view_keys[4];
 #define KEY_YES2 (dk_ui_view_keys[1]) /* 0: the device has no second YES key */
 #define KEY_NO (dk_ui_view_keys[2])
 #define KEY_RIGHT (dk_ui_view_keys[3])
+/* Flags of a key event (+0x10), as the compact handler of the firmware reads them (finding 71): bit 0 is the one UP, DOWN and the item adjust keys act on,
+   bit 4 the one YES and NO act on. Their names are open; the bits are the same on the devices checked (the Digitakt II, and NO and YES on the Syntakt). */
+#define KEYFL_MOVE 1
+#define KEYFL_ACT 16
 #define MAX_CHOICE 32
 #define LIST_ROWS 8
 #define LIST_COLS 20 /* characters of a list row that the label of a toggle or value row fills */
@@ -585,16 +589,18 @@ static uint32_t list_key(uint8_t *view, uint8_t *ev)
     MenuWithPopoutSideBarsView *p = (MenuWithPopoutSideBarsView *)obj;
     uint32_t id = read_u32(ev + 0xc), fl = read_u32(ev + 0x10);
     if (m && m->d && p->active == (uint32_t)obj) {
-        if (id == KEY_NO && (fl & 16) && m->d->back && m->d->back(m->d->arg) == 1)
+        if (id == KEY_NO && (fl & KEYFL_ACT) && m->d->back && m->d->back(m->d->arg) == 1)
             return 1;
-        if (m->n == 0) /* only the hidden item: nothing to move on or act on; NO closes */
-            return id == KEY_NO ? ((uint32_t (*)(uint8_t *, uint8_t *))g_list_stock_key)(view, ev)
-                                : 1;
-        if (id == KEY_RIGHT && (fl & 1) && m->d->panel && p->has_right) {
+        /* only the hidden item: YES and RIGHT have nothing to act on or open; every other key (NO, the cursor keys, an unknown one) is the stock handler's */
+        if (m->n == 0 && (id == KEY_YES || (KEY_YES2 && id == KEY_YES2) || id == KEY_RIGHT))
+            return 1;
+        if (m->n == 0)
+            return ((uint32_t (*)(uint8_t *, uint8_t *))g_list_stock_key)(view, ev);
+        if (id == KEY_RIGHT && (fl & KEYFL_MOVE) && m->d->panel && p->has_right) {
             open_panel(m);
             return 1;
         }
-        if ((id == KEY_YES || (KEY_YES2 && id == KEY_YES2)) && (fl & 16) && m->d->check) {
+        if ((id == KEY_YES || (KEY_YES2 && id == KEY_YES2)) && (fl & KEYFL_ACT) && m->d->check) {
             int row_ = (int)p->main.selected;
             if (row_ >= 0 && row_ < m->n)
                 toggle_check(m, row_);

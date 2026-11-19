@@ -42,6 +42,8 @@ struct Doc {
     input: Option<InputDoc>,
     panel: Option<PanelDoc>,
     fx: Option<FxDoc>,
+    #[serde(default)]
+    patch_sets: BTreeMap<String, Vec<String>>,
 }
 /// `[fx]`: the facts of the effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages"): where the kit keeps its
 /// effect values, which of them the firmware does not use (effect row k owns `value_indices[8k .. 8k + 8]`), the page numbering and the stock
@@ -514,6 +516,17 @@ impl Facts {
                 k.dsp_area_bytes.unwrap_or(0),
                 &crate::sdkgen::limits_max(),
             )?;
+            // core/ui (and the DIGIKIT menu on it) reads the key ids of the firmware's key events: a device that patches either in must say them
+            let ui = d
+                .patch_sets
+                .values()
+                .flatten()
+                .any(|m| m == "core/ui" || m == "core/digikit-menu");
+            if ui && d.input.as_ref().is_none_or(|i| i.view_keys.is_none()) {
+                return Err(err!(
+                    "{short}: [input.view_keys] is missing: its patch sets include core/ui, which compares the key events of the firmware's views with these key ids"
+                ));
+            }
             let input = input_facts(&short, d.input, d.panel)?;
             let fx = fx_facts(&short, d.fx, l.fx_slots, l.send_slots)?;
             let (adapter_machine, sample_pool) = match d.adapter {

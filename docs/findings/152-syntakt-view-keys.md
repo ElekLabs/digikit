@@ -21,6 +21,15 @@ On a Syntakt, DIGIKIT > MODULES showed an empty list ("NO STORE") and no key wor
 words and `ui.c` reads them (`dk_ui_view_keys`). Digitakt II and Digitone II: 10, 0x31, 12, 15 (as before). Syntakt: 12, 0, 13, 17. The patchkit test
 `the_syntakt_view_keys_are_the_decoder_table_entries` reads the table from the stock image and compares.
 
+## Data of the same kind, and what is not device data
+
+- `[digikit] safe_key` (a firmware key index held at power-on) and `[input.view_keys]` (the key ids of key events) are the same kind of data: firmware key indices, which equal the panel code on the Digitakt II and Digitone II and
+  differ on the Syntakt. They are kept apart because they are read by different code (the runtime's boot path, core/ui); unifying them is a data change for later.
+- `[input.view_keys]` is required for a device whose patch sets include core/ui or core/digikit-menu (`patchkit gen` names the missing table).
+- In an empty list `core/ui` swallows only YES and RIGHT (nothing to act on or open); every other key, including an unknown one, goes to the stock handler.
+- The flag bits of a key event that the handler tests (bit 0 for RIGHT, bit 4 for YES and NO) are named `KEYFL_MOVE` and `KEYFL_ACT` in `ui.c`. They are the Digitakt II's bits (finding 71); on the Syntakt bit 4 is seen to
+  work for NO and YES (the emulator run above), bit 0 for RIGHT is **[O]**. They stay in code until a device differs.
+
 ## Open
 
 - **[O]** The cause on the unit has not been confirmed by a flash; the emulator reproduction and the fix are the evidence.
