@@ -28,7 +28,7 @@ impl<C: CoreApi> Service<C> for Fx {
 
     /// E5 has no teardown of an effect row, so a module with a published effect row (the row runs in the DSP, on the master chain or a send: route 0 is the master)
     /// is never reloaded. Effect reload comes with E5b (docs/plans/extension-model.md), which relaxes this.
-    unsafe fn reload_refusal(core: &C, owner: u8) -> i32 {
+    unsafe fn teardown_refusal(core: &C, owner: u8) -> i32 {
         let d = core.dsp();
         let mut k = 0;
         while k < MAX_FX {

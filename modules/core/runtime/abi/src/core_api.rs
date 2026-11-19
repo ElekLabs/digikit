@@ -38,10 +38,11 @@ pub trait CoreApi: crate::mem::FwMem {
     unsafe fn guard_faults(&self, ty: u32) -> u32;
     unsafe fn guard_disabled(&self, ty: u32) -> bool;
 
-    /// The module being reloaded (`reload::phase`): its owner (module record index + 1), or 0 when no reload runs. From the checks of the new file until the job ends. A service
+    /// The module that a live operation changes (`reload::phase`): its owner (module record index + 1), or 0 when none runs. Today the only operation is a reload (E5); E5c
+    /// (enable and disable from the menu) will extend the value to say which operation runs. From the checks of the new file until the job ends. A service
     /// leaves that module's own rows out of "used by another module" in its checks of the new file (voice types, rows), parks what the module held in the teardown instead of
-    /// freeing it, and at the end of the job (`Service::reload_done`) gives back what the new version did not take over.
-    fn reload_phase(&self) -> u32;
+    /// freeing it, and at the end of the job (`Service::live_done`) gives back what the new version did not take over.
+    fn live_op(&self) -> u32;
 
     // ---- the device ------------------------------------------------------------------------------------------------------
     /// The device id of the profile the runtime was built for (`Platform::device_id`), to compare with what an adapter table records.

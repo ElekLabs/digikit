@@ -266,7 +266,7 @@ unsafe fn capacity(p: &FakePlatform) -> Vec<DkrtCap> {
 struct Nothing;
 impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Nothing {
     dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_reload!();
+    dkrt_abi::accepts_teardown!();
 }
 
 /// The store and the arena of a card: every import resolves against the runtime's own tables (`RealImages`); `init` of a service file replays what its header

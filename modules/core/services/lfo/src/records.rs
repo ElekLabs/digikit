@@ -345,7 +345,7 @@ impl<C: CoreApi> Service<C> for Lfo {
         Lfo::validate(kind, bodies, report)
     }
 
-    dkrt_abi::accepts_reload!();
+    dkrt_abi::accepts_teardown!();
 
     unsafe fn declare(d: &mut Declare) {
         d.kind(KIND_LFO_SHAPE, LEN_LFO_SHAPE);

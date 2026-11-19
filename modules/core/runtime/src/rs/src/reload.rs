@@ -15,7 +15,7 @@ pub fn drained<P: Platform>(p: &P, start: Option<u32>) -> bool {
 }
 
 /// While a reload runs: the owner of the module being reloaded (module record index + 1), else 0. From the checks of the new file until the end of the job
-/// (`CoreApi::reload_phase`). The reload job sets and clears it; a service reads it where the module's own rows must not count against the new file (the
+/// (`CoreApi::live_op`). The reload job sets and clears it; a service reads it where the module's own rows must not count against the new file (the
 /// checks of its types and rows) and where its teardown differs from a plain unload (the placeholder rows).
 static mut PHASE: u32 = 0;
 
@@ -50,7 +50,7 @@ pub struct Facts {
 }
 
 /// The refusal of a reload, or `None` when it may go on. One function, one order: safe mode, the firmware's transport (playing, paused, or not
-/// readable), an open upload, card operations, menus of the module. The first that holds names the status. The services' own refusals (`Service::reload_refusal`, for
+/// readable), an open upload, card operations, menus of the module. The first that holds names the status. The services' own refusals (`Service::teardown_refusal`, for
 /// example an effect on a route) come after it: `refusal_with_services`.
 pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
     if f.safe_mode {
@@ -72,12 +72,12 @@ pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
     None
 }
 
-/// `refusal`, then the refusals of the services about module record `owner - 1` (`Service::reload_refusal`, every service in table order). The reload job calls this.
+/// `refusal`, then the refusals of the services about module record `owner - 1` (`Service::teardown_refusal`, every service in table order). The reload job calls this.
 pub unsafe fn refusal_with_services<P: Platform>(p: &P, f: &Facts, services: &dkrt_abi::service::ServiceTable, owner: u8) -> Option<i32> {
     if let Some(r) = refusal(p, f) {
         return Some(r);
     }
-    let r = services.reload_refusal(owner);
+    let r = services.teardown_refusal(owner);
     if r != OK {
         return Some(r);
     }
@@ -97,7 +97,7 @@ pub trait Ops {
     unsafe fn refusal(&mut self, rec: usize) -> Option<i32>;
     /// `Loader::reload_check`.
     unsafe fn check(&mut self, rec: usize, path: *const u8) -> i32;
-    /// The reload phase (`CoreApi::reload_phase`) of the module with this owner (record index + 1), or off (0).
+    /// The reload phase (`CoreApi::live_op`) of the module with this owner (record index + 1), or off (0).
     fn phase(&mut self, owner: u8);
     /// `Loader::reload_quiesce`.
     unsafe fn quiesce(&mut self, rec: usize) -> i32;
@@ -119,7 +119,7 @@ pub trait Ops {
     unsafe fn cancel_dsp(&mut self, rec: usize, code: i32) -> bool;
     /// Every service: `Service::on_loaded` of module record `rec` (a module with no DSP gets it here; one with DSP got it from the DSP loader).
     unsafe fn on_loaded(&mut self, rec: usize);
-    /// The end of a reload that got past the checks, whatever the result: `Service::reload_done` on every service (placeholders freed, the machine rows of a module that is not
+    /// The end of a reload that got past the checks, whatever the result: `Service::live_done` on every service (placeholders freed, the machine rows of a module that is not
     /// back written as gap rows, the machine list rebuilt), and the reload counter when the module was loaded or torn down (`changed`). A refusal before `set_phase` skips it:
     /// nothing was touched.
     unsafe fn finish(&mut self, ok: bool, changed: bool);
@@ -416,7 +416,7 @@ impl Ops for RealOps {
         crate::handlers::services().on_loaded(rec)
     }
     unsafe fn finish(&mut self, ok: bool, changed: bool) {
-        crate::handlers::services().reload_done();
+        crate::handlers::services().live_done();
         if ok || changed {
             note_reloaded();
         }
@@ -483,7 +483,7 @@ mod tests {
     struct Refuser;
     impl<C: CoreApi> Service<C> for Refuser {
         dkrt_abi::accepts_records!();
-        unsafe fn reload_refusal(_core: &C, owner: u8) -> i32 {
+        unsafe fn teardown_refusal(_core: &C, owner: u8) -> i32 {
             if owner == 2 {
                 E_RELOAD_ROUTED
             } else {
@@ -494,7 +494,7 @@ mod tests {
     struct Quiet;
     impl<C: CoreApi> Service<C> for Quiet {
         dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_reload!();
+        dkrt_abi::accepts_teardown!();
     }
     static ROWS: [ServiceRow; 2] = [ServiceRow::of::<Quiet, crate::core_api::RealCore>("quiet", &[]), ServiceRow::of::<Refuser, crate::core_api::RealCore>("refuser", &[])];
     static ROWS_P: RowPtrs<2> = RowPtrs::of(&ROWS);

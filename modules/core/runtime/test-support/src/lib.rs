@@ -112,8 +112,8 @@ pub struct FakeCore {
     pub running: Cell<u8>,
     /// The selection index of the module being loaded (`CoreApi::boot_index`).
     pub boot_index: Cell<u32>,
-    /// What `CoreApi::reload_phase` answers (0: no reload runs).
-    pub reload_phase: Cell<u32>,
+    /// What `CoreApi::live_op` answers (0: no reload runs).
+    pub live_op: Cell<u32>,
     /// What `CoreApi::keys_of` hands out: (selection index, kind, keys). Set with `set_keys`; no entry: none.
     pub keys: RefCell<Vec<(u32, u32, Vec<u32>)>>,
     /// The bytes `CoreApi::legacy_state` hands out; `legacy_state_clear` zeroes them (and answers `legacy_clear_result`).
@@ -166,7 +166,7 @@ impl FakeCore {
             source: Cell::new(0),
             running: Cell::new(0),
             boot_index: Cell::new(u32::MAX),
-            reload_phase: Cell::new(0),
+            live_op: Cell::new(0),
             keys: RefCell::new(Vec::new()),
             legacy: Cell::new([0; 32]),
             legacy_clear_result: Cell::new(0),
@@ -284,8 +284,8 @@ impl CoreApi for FakeCore {
     fn boot_index(&self) -> u32 {
         self.boot_index.get()
     }
-    fn reload_phase(&self) -> u32 {
-        self.reload_phase.get()
+    fn live_op(&self) -> u32 {
+        self.live_op.get()
     }
     fn keys_of(&self, at: u32, kind: u32, out: &mut [u32; 8]) -> usize {
         match self

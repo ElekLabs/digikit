@@ -25,7 +25,7 @@ macro_rules! core_imports {
             fn dkc_legacy_state_clear() -> i32;
             fn dkc_guard_faults(ty: u32) -> u32;
             fn dkc_guard_disabled(ty: u32) -> bool;
-            fn dkc_reload_phase() -> u32;
+            fn dkc_live_op() -> u32;
             // ---- the device
             fn dkc_device_id() -> u32;
             // ---- the module table

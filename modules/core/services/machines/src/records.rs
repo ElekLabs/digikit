@@ -105,7 +105,7 @@ impl<C: CoreApi> Service<C> for Machines {
         Machines::validate(kind, bodies, report)
     }
 
-    dkrt_abi::accepts_reload!();
+    dkrt_abi::accepts_teardown!();
 
     unsafe fn declare(d: &mut Declare) {
         d.kind(KIND_PARAM, LEN_PARAM);
@@ -180,7 +180,7 @@ impl<C: CoreApi> Service<C> for Machines {
         apply_record(core, kind, body, c)
     }
 
-    unsafe fn reload_done(core: &C) {
+    unsafe fn live_done(core: &C) {
         // the placeholder rows the new version did not take over (a type it no longer has, or a load that failed)
         dsp::free_placeholders(core);
         // the machine rows of a module that did not come back: gap rows, as after a plain unload
@@ -962,7 +962,7 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
         if s.mach_owner[k] == owner {
             let t = iw(inf, w::M_DYN0) + k as u32;
             nativepage::remove(core, t); // callbacks must go before code/strings can be released
-            let missing = core.reload_phase() != 0;
+            let missing = core.live_op() != 0;
             reset_machine_row(core, inf, k, missing);
             if missing {
                 MISSING_ROWS |= 1 << k;

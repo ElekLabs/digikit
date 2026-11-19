@@ -393,7 +393,7 @@ fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_typ
             Some(ty),
             "the row is published"
         );
-        l.core.reload_phase.set(1);
+        l.core.live_op.set(1);
         l.unload(0);
         let d = l.core.dsp();
         assert_eq!(
@@ -426,7 +426,7 @@ fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_typ
             "a parked row is in use and in no module's row mask"
         );
         // the reload ended without the module: the row is free, in the DSP too
-        unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::reload_done(&l.core) };
+        unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::live_done(&l.core) };
         let d = l.core.dsp();
         assert_eq!((d.row_owner[row], d.row_type[row]), (0, FREE_TYPE));
         assert_eq!(used(&l), 0);
@@ -476,7 +476,7 @@ fn the_module_of_the_same_number_takes_its_placeholder_row_and_another_module_le
     let l = Lifecycle::<Machines>::new(&f);
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
     let row = rows_owned_by(&l.core, 1)[0];
-    l.core.reload_phase.set(1);
+    l.core.live_op.set(1);
     l.unload(0);
     // module B (another key) loads: A's placeholder stays, B has its own row
     assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
@@ -497,9 +497,9 @@ fn the_module_of_the_same_number_takes_its_placeholder_row_and_another_module_le
     );
     assert_eq!(voice_row_word(&l.core, row, 0), Some(d.row_type[row]));
     // nothing is left to free when the reload ends
-    unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::reload_done(&l.core) };
+    unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::live_done(&l.core) };
     assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
-    l.core.reload_phase.set(0);
+    l.core.live_op.set(0);
     l.unload(0);
     l.unload(1);
 }
@@ -526,14 +526,14 @@ fn many_types_loaded_and_reloaded_do_not_use_up_the_voice_rows() {
         }
         // a reload of each, then the plain unload of the boot's failure path
         for rec in 0..2 {
-            l.core.reload_phase.set(1);
+            l.core.live_op.set(1);
             l.unload(rec);
             assert_eq!(
                 l.load(rec, if rec == 0 { &f.a } else { &f.b }),
                 dkrt_sdk::OK
             );
-            unsafe { <Machines as Service<FakeCore>>::reload_done(&l.core) };
-            l.core.reload_phase.set(0);
+            unsafe { <Machines as Service<FakeCore>>::live_done(&l.core) };
+            l.core.live_op.set(0);
         }
         assert_eq!(
             used(&l),
@@ -556,7 +556,7 @@ fn a_voice_whose_type_has_a_placeholder_needs_no_free_row() {
     let l = Lifecycle::<Machines>::new(&f);
     assert_eq!(l.load(1, &f.b), dkrt_sdk::OK); // one row
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK); // one row, which the reload parks
-    l.core.reload_phase.set(1);
+    l.core.live_op.set(1);
     l.unload(0);
     // 4 rows: B's, A's placeholder, 2 free. A file with 3 voices fits through the placeholder when one of them has A's type, and not when none has
     let check = |keys: [u32; 3]| {
@@ -592,8 +592,8 @@ fn a_voice_whose_type_has_a_placeholder_needs_no_free_row() {
         check([0x00cc_0000, 0x00dd_0000, 0x00ee_0000]),
         dkrt_sdk::E_DSP_ROWS
     );
-    unsafe { <Machines as Service<FakeCore>>::reload_done(&l.core) };
-    l.core.reload_phase.set(0);
+    unsafe { <Machines as Service<FakeCore>>::live_done(&l.core) };
+    l.core.live_op.set(0);
     l.unload(1);
 }
 
@@ -608,7 +608,7 @@ fn a_failed_publication_into_a_reused_placeholder_row_disables_it_again() {
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
     let row = rows_owned_by(&l.core, 1)[0];
     let ty = l.core.dsp().row_type[row];
-    l.core.reload_phase.set(1);
+    l.core.live_op.set(1);
     l.unload(0);
     // claim the placeholder again (the DSP load of the new version) without publishing
     l.claim_only(0, &f.a);
@@ -638,7 +638,7 @@ fn a_failed_publication_into_a_reused_placeholder_row_disables_it_again() {
         PLACEHOLDER_OWNER,
         "parked again"
     );
-    unsafe { <Machines as Service<FakeCore>>::reload_done(&l.core) };
+    unsafe { <Machines as Service<FakeCore>>::live_done(&l.core) };
     assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
 }
 
@@ -649,7 +649,7 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
     let f = fixture(DN2.id);
     let l = Lifecycle::<Machines>::new(&f);
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
-    l.core.reload_phase.set(1);
+    l.core.live_op.set(1);
     l.unload(0);
     let s = &rstate().s;
     let text = |b: &[u8]| {
@@ -703,13 +703,13 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
         let mut core = FakeCore::new();
         core.set_dynreg(words);
         core.mem.borrow_mut().insert(VAR, view);
-        core.reload_phase.set(phase);
+        core.live_op.set(phase);
         let log = calls.clone();
         *core.on_call.borrow_mut() = Some(Box::new(move |a, args| {
             log.borrow_mut().push((a, args.to_vec()));
             0
         }));
-        unsafe { <Machines as Service<FakeCore>>::reload_done(&core) };
+        unsafe { <Machines as Service<FakeCore>>::live_done(&core) };
         let got = calls.borrow().clone();
         calls.borrow_mut().clear();
         got
@@ -735,7 +735,7 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
 }
 
 /// The check of a new file that reloads module A (`reload_check` runs the DSP section checks while A is live): A's own voice type and rows are not "used by another module".
-/// On the device this was `E_DSP_TYPE` for the reload of any machine with DSP. The phase names the module being reloaded (`CoreApi::reload_phase`: record index + 1).
+/// On the device this was `E_DSP_TYPE` for the reload of any machine with DSP. The phase names the module being reloaded (`CoreApi::live_op`: record index + 1).
 #[test]
 fn the_dsp_checks_of_a_reload_leave_the_module_being_replaced_out_of_used_by_another_module() {
     use dkrt_abi::dsp::{DspSec, VOICE_ENTRY, VOICE_TYPE, VOICE_V3};
@@ -777,7 +777,7 @@ fn the_dsp_checks_of_a_reload_leave_the_module_being_replaced_out_of_used_by_ano
             bank_off: 0,
         };
         l.core.boot_index.set(0); // the module being checked is at selection index 0: `reload_check` sets it as a load does
-        l.core.reload_phase.set(phase);
+        l.core.live_op.set(phase);
         let r = unsafe {
             if rows {
                 <Machines as Service<FakeCore>>::dsp_check_rows(&l.core, &sec)
@@ -786,7 +786,7 @@ fn the_dsp_checks_of_a_reload_leave_the_module_being_replaced_out_of_used_by_ano
             }
         };
         l.core.boot_index.set(u32::MAX);
-        l.core.reload_phase.set(0);
+        l.core.live_op.set(0);
         r
     };
     // the types: another module that takes A's type is refused; the reload of A is not

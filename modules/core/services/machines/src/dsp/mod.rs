@@ -70,7 +70,7 @@ unsafe fn reset_row(d: &mut DspState, k: usize, owner: u8, ty: u32, pc: u32) {
 }
 
 /// Take the rows module record `rec` published out of the DSP, so the module's code can go. Outside a reload each published row is freed (the type word first, so the
-/// scan skips the row at once). During a reload (`CoreApi::reload_phase`) each becomes a MISSING placeholder. The disabled word
+/// scan skips the row at once). During a reload (`CoreApi::live_op`) each becomes a MISSING placeholder. The disabled word
 /// (word 10) takes the row's type and the pc a harmless value, then the row belongs to no record (`PLACEHOLDER_OWNER`): the dispatch finds the type and renders a
 /// silent block for it, where a freed row would send the type to the first stock machine's sound (docs/plans/extension-model.md E5 item 7). The new version of
 /// the module that claims a voice of the same type takes the placeholder row itself (`claim`) and publishes its words over the disabled one; `free_placeholders` frees
@@ -78,7 +78,7 @@ unsafe fn reset_row(d: &mut DspState, k: usize, owner: u8, ty: u32, pc: u32) {
 pub(crate) unsafe fn clear_rows<C: CoreApi>(core: &C, rec: usize) -> bool {
     let d = core.dsp();
     let first = iw(core.dsp_info(), I_VFIRST);
-    let reload = core.reload_phase() != 0;
+    let reload = core.live_op() != 0;
     let mut k = 0;
     while k < MAX_ROWS {
         if d.row_owner[k] == rec as u8 + 1 && d.row_pub[k] != 0 {
@@ -184,7 +184,7 @@ pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         let mut k = 0;
         while k < MAX_ROWS {
             // a placeholder row, or a row of the module being reloaded (it is parked by the teardown that comes before the load): the same type takes it over
-            let own = d.row_owner[k] as u32 == core.reload_phase() && d.row_owner[k] != 0;
+            let own = d.row_owner[k] as u32 == core.live_op() && d.row_owner[k] != 0;
             if (d.row_owner[k] == PLACEHOLDER_OWNER || own) && d.row_type[k] == t {
                 parked += 1;
                 break;
@@ -227,7 +227,7 @@ pub(crate) unsafe fn check_types<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
             // (a placeholder row keeps the number of an unloaded module: the module that loads again may take it)
             if d.row_owner[k] != 0
                 && d.row_owner[k] != PLACEHOLDER_OWNER
-                && d.row_owner[k] as u32 != core.reload_phase()
+                && d.row_owner[k] as u32 != core.live_op()
                 && d.row_type[k] == t
             {
                 return E_DSP_TYPE; // used by a module that is loaded or loading (the module being reloaded does not count: it goes first)

@@ -137,7 +137,7 @@ mod tests {
     struct Nothing;
     impl<C: CoreApi> Service<C> for Nothing {
         dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_reload!();
+        dkrt_abi::accepts_teardown!();
     }
 
     macro_rules! row {
@@ -212,7 +212,7 @@ mod tests {
     struct Last;
     impl<C: CoreApi> Service<C> for First {
         dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_reload!();
+        dkrt_abi::accepts_teardown!();
 
         unsafe fn module_begin(_: &C, _: usize) {
             seen("first", "begin");
@@ -224,7 +224,7 @@ mod tests {
     }
     impl<C: CoreApi> Service<C> for Refuses {
         dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_reload!();
+        dkrt_abi::accepts_teardown!();
 
         unsafe fn module_begin(_: &C, _: usize) {
             seen("refuses", "begin");
@@ -236,7 +236,7 @@ mod tests {
     }
     impl<C: CoreApi> Service<C> for Last {
         dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_reload!();
+        dkrt_abi::accepts_teardown!();
 
         unsafe fn module_begin(_: &C, _: usize) {
             seen("last", "begin");

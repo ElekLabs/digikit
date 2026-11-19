@@ -131,7 +131,7 @@ fn clearing_a_module_sends_the_free_pc_first_and_frees_the_row() {
 fn a_reload_is_refused_while_the_module_has_a_published_effect_row() {
     let core = core_with_row();
     let owner = REC as u8 + 1;
-    let ask = |who: u8| unsafe { <Fx as Service<FakeCore>>::reload_refusal(&core, who) };
+    let ask = |who: u8| unsafe { <Fx as Service<FakeCore>>::teardown_refusal(&core, who) };
     for route in [0, 1] {
         core.dsp().fx_route[1] = route;
         assert_eq!(ask(owner), dkrt_sdk::E_RELOAD_ROUTED, "route {route}");

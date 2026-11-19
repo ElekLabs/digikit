@@ -3575,15 +3575,15 @@
   {
    "addend": 0,
    "offset": 6,
-   "section": ".text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE14reload_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "section": ".text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE16teardown_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
    "symbol": "_RNvXs_Cs8bqlSpJqGKy_11dkrt_svc_rtNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi3dsp",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 12,
-   "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk14reload_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
-   "symbol": ".sec..text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE14reload_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk16teardown_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "symbol": ".sec..text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE16teardown_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
    "type": "cf.32"
   },
   {
@@ -4262,14 +4262,14 @@
    "addend": 0,
    "offset": 52,
    "section": ".rodata._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk14reload_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "symbol": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk16teardown_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 56,
    "section": ".rodata._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11reload_doneNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "symbol": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk9live_doneNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "type": "cf.32"
   },
   {
@@ -6203,14 +6203,14 @@
    "align": 2,
    "hex": "4e75",
    "kind": "text",
-   "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11reload_doneNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk6settleNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "size": 2
   },
   {
    "align": 2,
    "hex": "4e75",
    "kind": "text",
-   "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk6settleNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk9live_doneNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "size": 2
   },
   {
@@ -6798,14 +6798,14 @@
    "align": 2,
    "hex": "2f2f00044eb900000000204041e804ec0680000004f0588f73af000b22416004b08867107398b3c166f64a28000367f070ab600242804e75",
    "kind": "text",
-   "name": ".text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE14reload_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "name": ".text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE16teardown_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
    "size": 56
   },
   {
    "align": 2,
    "hex": "71af000b2f002f2f00084eb900000000508f4e75",
    "kind": "text",
-   "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk14reload_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk16teardown_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "size": 20
   },
   {
@@ -7118,7 +7118,7 @@
   },
   {
    "align": 2,
-   "hex": "69933808",
+   "hex": "5dbf8e20",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -8209,7 +8209,7 @@
    "size": 28
   }
  ],
- "source_sha256": "11867f74835fea8d7292c6b556f27b3d0c3390aa4fb73f0fc313bf2d18f6130b",
+ "source_sha256": "2fb7beb9295226dab980123536fac09257b85c3c169e3c6f3c799063cafa1638",
  "symbols": [
   {
    "global": false,
@@ -8849,12 +8849,6 @@
   },
   {
    "global": false,
-   "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11reload_doneNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
-   "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11reload_doneNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
-   "value": 0
-  },
-  {
-   "global": false,
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12apply_recordNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12apply_recordNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "value": 0
@@ -8885,14 +8879,14 @@
   },
   {
    "global": false,
-   "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk14reload_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
-   "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk14reload_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk15dsp_check_typesNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk15dsp_check_typesNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "value": 0
   },
   {
    "global": false,
-   "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk15dsp_check_typesNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
-   "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk15dsp_check_typesNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk16teardown_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk16teardown_refusalNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "value": 0
   },
   {
@@ -8965,6 +8959,12 @@
    "global": false,
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk9dsp_clearNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk9dsp_clearNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk9live_doneNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk9live_doneNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs18JH71OYjh5_11dkrt_svc_fx7records2FxECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "value": 0
   },
   {
@@ -9287,8 +9287,8 @@
   },
   {
    "global": false,
-   "name": ".sec..text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE14reload_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
-   "section": ".text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE14reload_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "name": ".sec..text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE16teardown_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
+   "section": ".text._RNvXs_NtCs18JH71OYjh5_11dkrt_svc_fx7recordsNtB4_2FxINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE16teardown_refusalCse0keKd3R4h8_15dkrt_svc_fx_dks",
    "value": 0
   },
   {
@@ -10309,7 +10309,7 @@
  "toolchain": {
   "exports": "DKRT_FXP_FW dk_fx_add_page dk_fx_mix dk_fx_routes dk_fx_routes_entry dk_module dk_module_ctx_add_fx dk_page_add_fx_param dk_svc_abi fxp_acc fxp_graph fxp_init fxp_keylist fxp_label fxp_list fxp_load fxp_save fxp_sound",
   "instructions_redecoded": "8689",
-  "isa_check": "3823b8f82870ab25eeada08f850af3a642dc8f9eabf03f20287be7ae6b68b564",
+  "isa_check": "5f7b98b747f099ff88697c5348f1483b5fdd274cef51f7220dc0ee13891fc398",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

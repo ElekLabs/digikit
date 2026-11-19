@@ -617,9 +617,9 @@ What:
    `Keys::first_missing_key(old, new)` (`packages/dkneeds/src/keys.rs`) refuses a new file that lacks a key of the old file (`E_RELOAD_KEYS`). The new
    file must have the old file's module name (`E_FORMAT` otherwise: another name is another module). The planner is `plan::plan_live`: the loaded providers
    are not judged again (their rows are in the service table, which the boot's judgment refuses as a second owner) and the capacity counts that the live
-   modules own start at 0 (`live_caps`), because the plan counts every live module again. The checks of the new file run as a load runs them: `reload_check` sets `CoreApi::boot_index` to the module's selection index and numbers the file's keys first (`settle` over the live set with the file in the old slot; the old keys keep their numbers), because the services' DSP checks resolve a voice's key to its type by that index and the numbering; and `CoreApi::reload_phase` is the owner of the module being reloaded for the whole job, so the machines service leaves the module's own voice rows out of "used by another module" in `check_types` and counts them as takeable in `check_rows`. (Without this every reload of a machine with DSP was refused with `E_DSP_TYPE`.) Nothing is unloaded before both pass.
+   modules own start at 0 (`live_caps`), because the plan counts every live module again. The checks of the new file run as a load runs them: `reload_check` sets `CoreApi::boot_index` to the module's selection index and numbers the file's keys first (`settle` over the live set with the file in the old slot; the old keys keep their numbers), because the services' DSP checks resolve a voice's key to its type by that index and the numbering; and `CoreApi::live_op` is the owner of the module being reloaded for the whole job, so the machines service leaves the module's own voice rows out of "used by another module" in `check_types` and counts them as takeable in `check_rows`. (Without this every reload of a machine with DSP was refused with `E_DSP_TYPE`.) Nothing is unloaded before both pass.
 3. Transport and state refusal: one function, in this order: safe mode; the firmware transport function returns non-zero (`cf.project.fn.transport_state`, declared in `devices/fw/project.toml`; `Platform::play_state`; a platform that cannot read it refuses);
-   card operations; the module built its own menus; then each service's `Service::reload_refusal(core, owner)` (required, like `validate_records`; the fx service answers `E_RELOAD_ROUTED` for any module with a published effect row, because E5 has no fx teardown (route 0 is the master chain; E5b relaxes it), machines and lfo never refuse, samples never refuses: whether a pool entry is in use is not cheap to know, a follow-up). Refusing while the machine selection view
+   card operations; the module built its own menus; then each service's `Service::teardown_refusal(core, owner)` (required, like `validate_records`; the fx service answers `E_RELOAD_ROUTED` for any module with a published effect row, because E5 has no fx teardown (route 0 is the master chain; E5b relaxes it), machines and lfo never refuse, samples never refuses: whether a pool entry is in use is not cheap to know, a follow-up). Refusing while the machine selection view
    is open is not needed: the list rebuild (item 9) is unconditional.
 4. Fixed record index. A reload loads into the old record (`Slot::Module(rec)`), so owner ids (`rec + 1` in machine rows, DSP rows, menus,
    `sel_of_rec`) do not move.
@@ -633,7 +633,7 @@ What:
    or cleared before the wait ends, `reload_abort` (a timeout) gives the old module its tick and commands back and leaves its DSP rows as they were. Its channel sinks stay released after an abort and are not set again (the debug module loses its logging until the next boot); this
    is kept on purpose, because the module's `init` is the only place that sets them. The legacy single sink and tick of `dlog` stay set: they point into code that stays
    mapped until the free, and `sink_drop` clears them just before it. DSP instruction cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
-7. MISSING placeholder, written only while a reload runs (`CoreApi::reload_phase`): a plain unload and the boot's failure path keep their behaviour (a free voice
+7. MISSING placeholder, written only while a reload runs (`CoreApi::live_op`): a plain unload and the boot's failure path keep their behaviour (a free voice
    row, a gap machine row). A kit names a type number, not a key. A gap row plays type 0's sound today, so the placeholder must be silent. The machines
    service does two things, on both devices (no capability separates them; the dispatch of both devices reads word 10 of a voice row as "the disabled
    type", `dispatch-dt2.s` `_dv_gdis`, `dispatch-dn2.s` `_dv_contract`):
@@ -644,7 +644,7 @@ What:
      unload does not free it). The new version's claim of a voice of the same type takes the placeholder row itself (`dsp::claim`, `row_pub` 2), and the row
      publication clears word 10 and writes the new words; that step carries the mark and the undo (a failed publication disables the row again), so the window
      is silent from the unload to the publication. `check_rows` counts such a row as free for that voice and `check_types` does not refuse its number. When the
-     reload ends, with the new version loaded or not, the job calls `Service::reload_done` (machines: `free_placeholders`) and every placeholder row nobody took
+     reload ends, with the new version loaded or not, the job calls `Service::live_done` (machines: `free_placeholders`) and every placeholder row nobody took
      over is freed, so no row of owner 0xfe outlives its reload. A placeholder row uses one of the 16 type rows for the length of the reload.
    One rig case on each device proves it: a row with word 10 pre-set to its type renders silence from a routine that sounds, without a fault
    (`modules/core/adapters/dsp-voice/tests/dsp-guard.rig.test.ts` for the Digitakt II dispatch, `dsp-voice-dn2.rig.test.ts` for the Digitone II one). The machines
@@ -656,7 +656,7 @@ What:
    view's item list once and keeps it. `core/dynreg` has the view hook again (`dynreg_view_hook`, hook `cf.machine.hook.view.build` on the function
    `cf.machine.fn.view.build`, declared in `devices/fw/machine.toml` with the archived hash on DT2 1.17 and DN2 1.12): it stores the view in `dynreg_view`, and
    words 48 and 49 of `dynreg_info` (`dynreg::w::VIEW_VAR`, `VIEW_BUILD`) hold that variable and the builder. The machines service rebuilds the list in
-   `Service::reload_done`, which the job calls at the end of every reload that got past the checks, success or failure (after a failed load the cached list would keep
+   `Service::live_done`, which the job calls at the end of every reload that got past the checks, success or failure (after a failed load the cached list would keep
    an entry the rows no longer have): it calls the builder with the stored view (`refresh_view`; nothing while the view does not exist). The machines service writes the machine
    rows in `apply_record`, as at the boot: the placeholder voice row of item 7 keeps the type silent until the module's row is published, so the window needs no later row write.
    A module with no DSP gets `on_loaded` from the job. The stored view pointer is the risk of this step; the device gate proves it (archive: emulator only). Counters
@@ -670,7 +670,7 @@ What:
 10. `dk:dev` and the workbench use `CMD_RELOAD` for any content module; the emulator byte swap remains only for the runtime image and the UI
     layer (`core/ui`, `core/digikit-menu`). Document the command and its refusals in `docs/TESTING.md` "Fast iteration".
 
-Design requirement "Reusable reload": the runtime holds the generic reload work once: the job, validation before unload, the refusal order, the in-flight counter, the two-block DSP wait, the progress mask and numbering over the live set. Per-kind work sits behind required methods of the `Service` trait (for example unload records, install records, refresh view, `reload_refusal`; `on_loaded` exists already), the same pattern as `validate_records` (PR #614). The reload job has no code for one service. Machines implements the methods in E5, fx in E5b, lfo shapes and filters later. Boot loads modules and the services they need; reload swaps content modules only, and services stay loaded (O5). A new module version that needs a service that is not loaded makes the reload load that service first (a plain load, not a replace). A service that no module needs any more stays loaded until the next boot. The port file ([port-file.md](port-file.md)) is a service too: reload never replaces it.
+Design requirement "Reusable reload": the runtime holds the generic reload work once: the job, validation before unload, the refusal order, the in-flight counter, the two-block DSP wait, the progress mask and numbering over the live set. Per-kind work sits behind required methods of the `Service` trait (for example unload records, install records, refresh view, `teardown_refusal`; `on_loaded` exists already), the same pattern as `validate_records` (PR #614). The reload job has no code for one service. Machines implements the methods in E5, fx in E5b, lfo shapes and filters later. Boot loads modules and the services they need; reload swaps content modules only, and services stay loaded (O5). A new module version that needs a service that is not loaded makes the reload load that service first (a plain load, not a replace). A service that no module needs any more stays loaded until the next boot. The port file ([port-file.md](port-file.md)) is a service too: reload never replaces it.
 
 Plan corrections the E5 design found (the text above already reflects them):
 - SysEx runs on the MIDI task, hence the job.
@@ -683,7 +683,7 @@ Plan corrections the E5 design found (the text above already reflects them):
 - E3/E4 and R12-8 both rewrite five files (`loader/mod.rs`, `abi/src/service.rs`, `handlers.rs`, `svc-rt`, machines `records.rs` and `assign.rs`). The second to merge pays one rebase and an object rebuild.
 - `PH_RETAINED` latches for the session after one failed `quiesce`, so a reload timeout must not call `release` (item 5).
 - `clear_rows` frees every row of the record on an unload; during a reload it parks each published row as a placeholder instead, and the reload's end frees the rows nobody took over (item 7).
-- E5 changes the image (dynreg words) and `SVC_ABI` (`reload_phase`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices. The port file stack ([port-file.md](port-file.md) PR2) changes `SVC_ABI` again and merges after E5. Each change makes the runtime refuse old service files with `E_SVC_ABI`, and Transfer replaces them.
+- E5 changes the image (dynreg words) and `SVC_ABI` (`live_op`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices. The port file stack ([port-file.md](port-file.md) PR2) changes `SVC_ABI` again and merges after E5. Each change makes the runtime refuse old service files with `E_SVC_ABI`, and Transfer replaces them.
 
 Commit split (host checks per commit; device runs only at the end, one gate):
 
@@ -696,7 +696,7 @@ Commit split (host checks per commit; device runs only at the end, one gate):
 | 4 | In-flight counter, masked span clock, two-block DSP wait | 4 h |
 | 5 | Run-time numbering over the live set | 3 h |
 | 6 | MISSING placeholder (DT2 rig case, DSP row lifecycle), contract `kept` update | 8 h |
-| 7 | Machine list rebuild: dynreg words, `devices/fw`, `refresh_view`, `on_loaded` rows, `reload_phase`, counters | 6 h |
+| 7 | Machine list rebuild: dynreg words, `devices/fw`, `refresh_view`, `on_loaded` rows, `live_op`, counters | 6 h |
 | 8 | Protocol: `CMD_RELOAD`, `CMD_RELOAD_STATE`, `reload_poll`, client | 4 h |
 | 9 | `dk:dev`, `wb transfer`, docs, device test file, soak | 6 h |
 
@@ -732,7 +732,7 @@ What:
    allow fx reload while the effect is on a route, and add the fx reload device test.
 4. Workbench key check: a `pk_keys_check` wasm export next to `pk_fit` (`Keys::first_shared_key`, `first_repeat`, `first_missing_key`), called by
    `fit.ts`, shown by `transfer-backend.ts` before the upload; one wasm test and one Vitest case.
-5a. The fx reload must leave the module's own effect rows out of the fx service's `dsp_check_rows` (`fx_owner`, as the machines service does for voice rows with `reload_phase`).
+5a. The fx reload must leave the module's own effect rows out of the fx service's `dsp_check_rows` (`fx_owner`, as the machines service does for voice rows with `live_op`).
 5. Delete `E_FX_ID_DUP` and the lfo `E_TYPE_USED` path with their refusal-table rows, after the reload planner case of E5 is green.
 6. The 20-cycle soak and the full project round trip (save a project that uses the module, reload, load the project, same sound), if E5 did
    not carry them.

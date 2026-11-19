@@ -97,8 +97,8 @@ impl CoreApi for ImportCore {
     unsafe fn guard_disabled(&self, ty: u32) -> bool {
         dkc_guard_disabled(ty)
     }
-    fn reload_phase(&self) -> u32 {
-        unsafe { dkc_reload_phase() }
+    fn live_op(&self) -> u32 {
+        unsafe { dkc_live_op() }
     }
     fn device_id(&self) -> u32 {
         unsafe { dkc_device_id() }
