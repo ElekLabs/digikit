@@ -1296,7 +1296,7 @@ service = "runtime"
 since = "0.10.1"
 context = "any"
 sig = "u32 (u32 *out, u32 max)"
-doc = "Copy the newest complete DSP stats sweep to `out` (at most `max` words; the window is 100 words: 4 header words, then 16 rows of 6) and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. See <dk/core/trace.h>."
+doc = "Copy the newest complete DSP stats sweep to `out` and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. At most `max` words of 103 are copied: the window of 100 words (4 header words, then 16 rows of 6; zeros when there is no sweep), then the counters of the link's mirror (sweeps published, sweeps ended by a gap, records ignored), which are valid either way. See <dk/core/trace.h>."
 
 # Test-only (`test = true`): an import of the test-only service `svc-test`, which a `.dks` provider (tests/fixtures/modules/svc-test) exports. It is in no
 # public header, doc or template and not in the runtime's table (no `requires`): a module that calls it resolves it at load from the provider's EXPORTS.

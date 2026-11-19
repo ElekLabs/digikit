@@ -648,3 +648,43 @@ def test_tick_callback_gets_the_reply_record_and_can_be_cleared(machine, built):
         ],
     )
     assert r[2].reads[0] == bytes(4)
+
+
+@needs_gcc
+def test_stats_pages_in_the_acknowledgement_slot_go_to_the_runtime_feed(machine, built):
+    stub, seen, rec = DATA + 0x7000, DATA + 0x7100, DATA + 0x8000
+    # the feed stores its three arguments (tag, a, b) at seen, seen + 4, seen + 8
+    code = struct.pack(
+        ">HHHIHHHIHHHIH",
+        *(0x202F, 4, 0x23C0, seen),
+        *(0x202F, 8, 0x23C0, seen + 4),
+        *(0x202F, 12, 0x23C0, seen + 8),
+        0x4E75,
+    )
+    tag, a, b = 0x57A7 | 3 << 16 | 9 << 24, 0x11223344, 0x55667788
+
+    def record(words):  # the slot at +0x60: three words, the low half first
+        slot = b"".join(struct.pack(">HH", w & 0xFFFF, w >> 16) for w in words)
+        return bytes(0x60) + slot
+
+    tick = call(built, "dl_tick", [0x802, 0, 0xABC, rec], [(seen, 12)])
+    r = run(
+        machine,
+        built,
+        {stub: code, seen: bytes(12), rec: record([tag, a, b])},
+        [
+            tick,  # no feed: nothing stored
+            call(built, "dl_stats_hook", [stub]),
+            tick,  # a page: the feed gets it
+        ],
+    )
+    assert r[0].reads[0] == bytes(12)
+    assert struct.unpack(">3I", r[2].reads[0]) == (tag, a, b)
+    # an acknowledgement (magic 0xA5D1) in the slot is not a page
+    r = run(
+        machine,
+        built,
+        {stub: code, seen: bytes(12), rec: record([0xA5D1 | 5 << 16, 0, 0])},
+        [call(built, "dl_stats_hook", [stub]), tick],
+    )
+    assert r[1].reads[0] == bytes(12)

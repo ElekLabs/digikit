@@ -254,7 +254,7 @@ impl<T: Transport> Link<T> {
         self.set_live(slot, value);
     }
 
-    /// Set a control word of the stats window (window 3, `STATS_ON` or `STATS_CLEAR`). Only the runtime calls this, for the owner of the span channel
+    /// Set a control word of the stats window (window 3, `STATS_ON`, `STATS_CLEAR` or `STATS_PERIOD`). Only the runtime calls this, for the owner of the span channel
     /// (`dk_dsp_stats_ctl`); `set` and `submit` refuse window 3. Returns false for another word.
     pub fn set_stats_ctl(&mut self, word: u32, value: u32) -> bool {
         if word >= STATS_CTL_WORDS {
@@ -1297,11 +1297,12 @@ mod tests {
         let mut l = link();
         assert!(l.set_stats_ctl(STATS_ON, 1));
         assert!(l.set_stats_ctl(STATS_CLEAR, 7));
-        assert!(!l.set_stats_ctl(2, 1), "no third control word");
+        assert!(l.set_stats_ctl(STATS_PERIOD, 666_582));
+        assert!(!l.set_stats_ctl(3, 1), "no fourth control word");
         unsafe { settle_all(&mut l) };
         let mut w = l.t.words();
         w.sort();
-        assert_eq!(w, vec![(3, 0, 1), (3, 1, 7)]);
+        assert_eq!(w, vec![(3, 0, 1), (3, 1, 7), (3, 2, 666_582)]);
         assert_eq!(l.confirmed(Slot::new(3, 1)), Some(7));
     }
 

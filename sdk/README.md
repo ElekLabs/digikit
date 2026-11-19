@@ -81,6 +81,7 @@ Trace marks tell you where a module was when it faulted or hung. They are opt-in
 | --- | --- | --- | --- |
 | ColdFire C | `<dk/core/trace.h>` | `DK_TRACE_LOG("msg", value);` | Calls `dk_log(DK_LOG_TRACE, msg, value)`: the message (24 bytes kept) and a word go to the runtime's log ring (`dk:log`). |
 | SHARC+ | `#include "dk_trace.inc"` | `DK_STEP(3, R0);` | Loads the step number 3 into the scratch register `R0` and stores it in the word `_dk_step`. Pick a register that is free at that point: SHARC+ cannot store an immediate to memory. |
+| SHARC+ (a service's dispatch code only) | `#include "dk_trace.inc"`, `#include "dk_span.inc"` | `DK_SPAN_BEGIN(skip, _dv_diag + 124, R3, I1);` | The span of a module call for the DSP stats window (docs/plans/profiling.md 13.1): with stats off a load, a compare and a jump. R3 and I1 must be free at the site; `dk_span.inc` holds the routines and takes `DK_SPAN_PTR_WORD` and `DK_SPAN_ROW_CODE` from the including file. Content modules do not use it (`check:layers`, rule spans). |
 
 The C macro is `DK_TRACE_LOG` because the build define is `DK_TRACE` and a function-like macro of that name would clash with it.
 

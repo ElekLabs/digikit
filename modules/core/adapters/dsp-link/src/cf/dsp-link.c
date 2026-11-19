@@ -24,6 +24,8 @@
  *   The one per-block callback of a module is set with dk_dsp_link_set_tick (below): `void cb(const volatile u16 *rec)` (NULL: off), called from dl_tick
  *       with the copy of the previous reply, in the block interrupt. It must be a short C function with no allocation and no logging. Off costs one pointer test.
  *   void dl_tick_cb_drop(u32 lo, u32 hi);   the runtime calls it after a module's fini: clears the callback when it points into [lo, hi)
+ *   void dl_stats_hook(u32 (*cb)(u32 tag, u32 a, u32 b));   the runtime's feed of the DSP stats pages (P8d): dl_tick calls it for every reply whose
+ *       acknowledgement slot holds a page of the stats window (tag magic DL_STATS_MAGIC, src/dsp/dsp-link.inc). Set once, when stats are first started; off costs one pointer test per block.
  * dst_l2 is a byte address in window 0 of the DSP: the reserved area (_dl_area; DL_AREA_BYTES - DL_SLOT_WORDS * 4 long) or the slot block of the hook stubs (DL_SLOT_WORDS words directly
  * below _dl_area, which a write may not leave), 4-aligned; len is a multiple of 4;
  * buf must stay valid until the state is DL_DONE or DL_ERROR. DL_DONE means the DSP has taken every chunk, has the bytes
@@ -46,6 +48,7 @@ typedef unsigned char u8;
 #define DL_ACK_OFF 0x60u
 #define DL_DG_MAGIC 0xD1A6u /* low half of diagnostic word 0; the high half is the word count */
 #define DL_DG_WORDS 32u
+#define DL_STATS_MAGIC 0x57A7u /* low half of the tag word of a stats page in the acknowledgement slot */
 /* The largest area the 17-bit offset reaches (generated, sdk.toml); the DSP knows the real size (status 3). */
 #define DL_AREA_BYTES DL_AREA_MAX_BYTES
 /* DL_SLOT_WORDS (generated, sdk.toml [dsp.slots]): window 0 words 0 to DL_SLOT_WORDS - 1 are the slot block, the next word is the first word of the area. */
@@ -101,6 +104,14 @@ DlLink dl_link __attribute__((aligned(16)));
 
 /* The per-block callback of a probe module (dk_dsp_link_set_tick); 0 = none. */
 static void (*volatile dl_tick_cb)(const volatile u16 *rec);
+
+/* The runtime's feed of the stats pages (dl_stats_hook); 0 = none. */
+static u32 (*volatile dl_stats_cb)(u32 tag, u32 a, u32 b);
+
+void dl_stats_hook(u32 (*cb)(u32, u32, u32))
+{
+    dl_stats_cb = cb;
+}
 
 void dl_tick_cb_drop(u32 lo, u32 hi)
 {
@@ -267,6 +278,14 @@ void dl_tick(int len, const u16 *src, int reclen, const volatile u16 *rec)
     (void)src;
     if (cb)
         cb(rec);
+    {
+        u32 (*scb)(u32, u32, u32) = dl_stats_cb;
+        if (scb && rec && rec[DL_ACK_OFF / 2u] == DL_STATS_MAGIC) {
+            /* the slot holds a tag and two window words: three 32-bit words, the low half first (like the acknowledgement's) */
+            const volatile u16 *p = rec + DL_ACK_OFF / 2u;
+            scb((u32)p[0] | ((u32)p[1] << 16), (u32)p[2] | ((u32)p[3] << 16), (u32)p[4] | ((u32)p[5] << 16));
+        }
+    }
     if (st != DL_START && st != DL_BUSY && !l->ending && !l->dirty)
         return;
     tx = dl_tx_lit;

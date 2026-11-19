@@ -194,7 +194,7 @@ uint32_t dk_debug_poll(uint32_t slot, uint32_t *out_fn);
 /* Control the DSP stats window (P8d): `on` 1 starts and 0 stops the counters and the stream of snapshots; `clear` is the clear generation, and the DSP clears its counters when it changes. Only the module that owns the span channel (`dk_span_sink_set`) may call it. Returns 0, DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the span channel, or none does). See <dk/core/trace.h>. Context: any. Since runtime 0.10.1. */
 int32_t dk_dsp_stats_ctl(uint32_t on, uint32_t clear);
 
-/* Copy the newest complete DSP stats sweep to `out` (at most `max` words; the window is 100 words: 4 header words, then 16 rows of 6) and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. See <dk/core/trace.h>. Context: any. Since runtime 0.10.1. */
+/* Copy the newest complete DSP stats sweep to `out` and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. At most `max` words of 103 are copied: the window of 100 words (4 header words, then 16 rows of 6; zeros when there is no sweep), then the counters of the link's mirror (sweeps published, sweeps ended by a gap, records ignored), which are valid either way. See <dk/core/trace.h>. Context: any. Since runtime 0.10.1. */
 uint32_t dk_dsp_stats_read(uint32_t *out, uint32_t max);
 
 /* The machine type of track 0 to 15 of the active kit, read from the firmware (read-only); -1 for a track the firmware has no type for, -2 when there is no project yet. Context: ui. Since runtime 0.7.0. */

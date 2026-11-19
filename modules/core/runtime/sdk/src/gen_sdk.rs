@@ -1070,7 +1070,7 @@ pub mod api {
     /// `dk_dsp_stats_ctl`: Control the DSP stats window (P8d): `on` 1 starts and 0 stops the counters and the stream of snapshots; `clear` is the clear generation, and the DSP clears its counters when it changes. Only the module that owns the span channel (`dk_span_sink_set`) may call it. Returns 0, DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the span channel, or none does). See <dk/core/trace.h>.
     pub type DkDspStatsCtlFn = unsafe extern "C" fn(on: u32, clear: u32) -> i32;
 
-    /// `dk_dsp_stats_read`: Copy the newest complete DSP stats sweep to `out` (at most `max` words; the window is 100 words: 4 header words, then 16 rows of 6) and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. See <dk/core/trace.h>.
+    /// `dk_dsp_stats_read`: Copy the newest complete DSP stats sweep to `out` and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. At most `max` words of 103 are copied: the window of 100 words (4 header words, then 16 rows of 6; zeros when there is no sweep), then the counters of the link's mirror (sweeps published, sweeps ended by a gap, records ignored), which are valid either way. See <dk/core/trace.h>.
     pub type DkDspStatsReadFn = unsafe extern "C" fn(out: *mut u32, max: u32) -> u32;
 
     /// `dk_debug_track_type`: The machine type of track 0 to 15 of the active kit, read from the firmware (read-only); -1 for a track the firmware has no type for, -2 when there is no project yet.

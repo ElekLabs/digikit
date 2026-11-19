@@ -1,15 +1,35 @@
 //! The DSP stats window on the ColdFire side (docs/plans/profiling.md 13.1, P8d).
 //!
-//! - `dk_dsp_stats_ctl(on, clear)`: the two control words of window 3, written only for the module that owns the span channel.
+//! - `dk_dsp_stats_ctl(on, clear)`: the control words of window 3 (on, clear generation, the block period of the device), written only for the module that owns the span channel.
 //! - `dkrt_dsp_stats_feed(tag, a, b)`: `dl_tick` hands every acknowledgement record of the DSP to the mirror (`dkrt_link::stats`).
 //! - `dk_dsp_stats_read(out, max)`: the newest complete sweep of the mirror, for the debug module.
 use crate::dlog;
 use core::ptr::addr_of_mut;
-use dkrt_abi::link::{STATS_CLEAR, STATS_ON};
+use dkrt_abi::link::{STATS_CLEAR, STATS_ON, STATS_PERIOD};
 use dkrt_link::stats::{Mirror, WINDOW_WORDS};
 use dkrt_sdk::{E_BUSY, E_CONTEXT, OK};
 
+extern "C" {
+    /// `core/dsp-link`: `void dl_stats_hook(u32 (*cb)(u32, u32, u32))`, the feed of the stats pages from `dl_tick`. 0 when the image has no such function
+    /// (`[object] optional`).
+    fn dl_stats_hook();
+}
+
+/// Words `dk_dsp_stats_read` gives: the window and the three counters.
+const READ_WORDS: usize = WINDOW_WORDS + 3;
+
 static mut MIRROR: Mirror = Mirror::new();
+/// The clear generation the control words last carried (the published sweep belongs to an older one when it differs).
+static mut LAST_CLEAR: u32 = 0;
+
+/// Hand `dkrt_dsp_stats_feed` to `dl_tick` (once is enough; again is harmless).
+unsafe fn hook_feed() {
+    if core::hint::black_box(dl_stats_hook as usize) == 0 {
+        return;
+    }
+    let set: unsafe extern "C" fn(unsafe extern "C" fn(u32, u32, u32) -> u32) = core::mem::transmute(dl_stats_hook as unsafe extern "C" fn());
+    set(dkrt_dsp_stats_feed);
+}
 
 pub fn mirror() -> &'static mut Mirror {
     unsafe { &mut *addr_of_mut!(MIRROR) }
@@ -26,9 +46,18 @@ pub unsafe extern "C" fn dk_dsp_stats_ctl(on: u32, clear: u32) -> i32 {
     if dlog::span_owner() != me {
         return E_BUSY;
     }
+    if on & 1 != 0 {
+        hook_feed();
+    }
+    if clear != LAST_CLEAR {
+        // the DSP clears its window for the new generation: the sweep the mirror holds, and what it counted, are stale
+        LAST_CLEAR = clear;
+        *mirror() = Mirror::new();
+    }
     let l = crate::link::lk();
     l.set_stats_ctl(STATS_ON, on & 1);
     l.set_stats_ctl(STATS_CLEAR, clear);
+    l.set_stats_ctl(STATS_PERIOD, crate::profile().dsp_block_cycles);
     OK
 }
 
@@ -38,20 +67,26 @@ pub unsafe extern "C" fn dkrt_dsp_stats_feed(tag: u32, a: u32, b: u32) -> u32 {
     u32::from(mirror().feed(tag, a, b))
 }
 
-/// `dk_dsp_stats_read(out, max)`, an import of the modules (sdk/sdk.toml): the newest complete sweep (at most `max` words) and its number, 0 for none.
+/// `dk_dsp_stats_read(out, max)`, an import of the modules (sdk/sdk.toml): the newest complete sweep and its number, 0 for none. `out` gets at most `max`
+/// words of the 103 the call can give: the 100 words of the window (0 when there is no sweep), then the mirror's counters (sweeps published, sweeps ended
+/// by a gap, records ignored), which are valid with or without a sweep.
 #[no_mangle]
 pub unsafe extern "C" fn dk_dsp_stats_read(out: *mut u32, max: u32) -> u32 {
-    let mut w = [0u32; WINDOW_WORDS];
-    match mirror().read(&mut w) {
-        Some(seq) => {
-            let n = (max as usize).min(WINDOW_WORDS);
-            if !out.is_null() {
-                core::ptr::copy_nonoverlapping(w.as_ptr(), out, n);
-            }
-            seq
-        }
-        None => 0,
+    let mut w = [0u32; READ_WORDS];
+    let m = mirror();
+    let seq = m.read(array_mut_ref(&mut w)).unwrap_or(0);
+    w[WINDOW_WORDS] = m.counts.sweeps;
+    w[WINDOW_WORDS + 1] = m.counts.gaps;
+    w[WINDOW_WORDS + 2] = m.counts.ignored;
+    let n = (max as usize).min(READ_WORDS);
+    if !out.is_null() {
+        core::ptr::copy_nonoverlapping(w.as_ptr(), out, n);
     }
+    seq
+}
+
+fn array_mut_ref(w: &mut [u32; READ_WORDS]) -> &mut [u32; WINDOW_WORDS] {
+    (&mut w[..WINDOW_WORDS]).try_into().unwrap()
 }
 
 #[cfg(test)]
@@ -62,6 +97,7 @@ mod tests {
     use dkrt_link::stats::{tag, PAGES};
 
     unsafe fn reset() {
+        LAST_CLEAR = 0;
         dlog::test_reset_sinks();
         *crate::link::lk() = crate::link::Link::new(crate::link::DspTransport);
         *mirror() = Mirror::new();
@@ -87,7 +123,11 @@ mod tests {
             assert_eq!(in_module(0, || dk_dsp_stats_ctl(1, 3)), E_BUSY, "another module owns it");
             assert!(!crate::link::lk().dirty(Slot::new(3, 0)));
             assert_eq!(in_module(1, || dk_dsp_stats_ctl(1, 3)), OK);
-            assert!(crate::link::lk().dirty(Slot::new(3, 0)) && crate::link::lk().dirty(Slot::new(3, 1)));
+            assert!(
+                crate::link::lk().dirty(Slot::new(3, 0))
+                    && crate::link::lk().dirty(Slot::new(3, 1))
+                    && crate::link::lk().dirty(Slot::new(3, 2))
+            );
             reset();
         }
     }
@@ -106,6 +146,29 @@ mod tests {
             assert_eq!(dk_dsp_stats_read(out.as_mut_ptr(), 4), 1);
             assert_eq!(&out[..4], &[0, 7, 1, 7]);
             assert_eq!(out[4], 0, "only `max` words are copied");
+            let mut all = [0u32; 103];
+            assert_eq!(dk_dsp_stats_read(all.as_mut_ptr(), 103), 1);
+            assert_eq!(&all[100..], &[1, 0, 1], "sweeps, gaps and ignored records follow the window");
+            reset();
+        }
+    }
+
+    #[test]
+    fn a_new_clear_generation_drops_the_published_sweep_and_the_counts() {
+        let _g = LOCK.lock().unwrap();
+        unsafe {
+            reset();
+            in_module(1, || dlog::dk_span_sink_set(emit as usize as *mut u8, 1usize as *mut u8));
+            for p in 0..PAGES as u8 {
+                dkrt_dsp_stats_feed(tag(0, p), p as u32, 7);
+            }
+            let mut out = [0u32; 103];
+            assert_eq!(dk_dsp_stats_read(out.as_mut_ptr(), 103), 1);
+            assert_eq!(in_module(1, || dk_dsp_stats_ctl(1, 0)), OK, "the same generation keeps the sweep");
+            assert_eq!(dk_dsp_stats_read(out.as_mut_ptr(), 103), 1);
+            assert_eq!(in_module(1, || dk_dsp_stats_ctl(1, 1)), OK);
+            assert_eq!(dk_dsp_stats_read(out.as_mut_ptr(), 103), 0, "a new generation: no sweep until the DSP sends one");
+            assert_eq!(&out[100..], &[0, 0, 0]);
             reset();
         }
     }

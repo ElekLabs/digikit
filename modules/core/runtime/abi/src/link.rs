@@ -18,12 +18,14 @@ pub const SEQ_MAX: usize = 18;
 pub const OWNED_MAX: usize = 28;
 /// The first window number no writer may use.
 pub const WIN_RESERVED: u8 = 3;
-/// The stats control window: word `STATS_ON` (0 or 1) and word `STATS_CLEAR` (the clear generation; the DSP clears its counters when it changes).
+/// The stats control window: word `STATS_ON` (0 or 1), word `STATS_CLEAR` (the clear generation; the DSP clears its counters when it changes) and word
+/// `STATS_PERIOD` (the block period in cycles: a block whose stock delta reaches it is an overrun; 0 counts none).
 pub const WIN_STATS: u8 = 3;
 pub const STATS_ON: u32 = 0;
 pub const STATS_CLEAR: u32 = 1;
+pub const STATS_PERIOD: u32 = 2;
 /// The control words of window 3.
-pub const STATS_CTL_WORDS: u32 = 2;
+pub const STATS_CTL_WORDS: u32 = 3;
 
 /// One word of a window: `word` is the word offset from the start of the window (window 0: the byte address in the area).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
