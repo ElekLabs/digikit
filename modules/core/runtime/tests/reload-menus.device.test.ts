@@ -1,4 +1,5 @@
 import { expect } from 'vitest';
+import type { Device } from '@digi/test-support';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { REDRAW } from '@digi/regression/runtime/fx-live.ts';
@@ -26,7 +27,7 @@ import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';
  * tested (`menu.rs` `an_open_settings_page_holds_its_module_and_leaving_it_gives_the_hold_back`, `spans_tests.rs` `an_open_page_holds_the_module_and_the_release_lets_it_go`); the device step
  * shows the real DIGIKIT menu taking and giving back the hold.
  *
- * Key path (dk:dev screenshots, DN2): `openDigikitMenu` (SETTINGS, eight rows down is DIGIKIT), three rows down is MODULES; MODULES lists DEBUG then ENTRY-DEMO; RIGHT opens the row's side
+ * Key path (dk:dev screenshots): `openDigikitMenu` (SETTINGS, eight rows down is DIGIKIT), three rows down is MODULES; MODULES lists DEBUG then ENTRY-DEMO; RIGHT opens the row's side
  * panel (UNLOAD or LOAD, SETTINGS..., INFO); one row down is SETTINGS...
  */
 const MENU_ID = 'test/entry-demo';
@@ -67,13 +68,14 @@ async function menuObjects(rt: TestRuntime, symbol: number): Promise<number> {
 
 async function expectMenuRefusal(rt: TestRuntime): Promise<void> {
   const artifacts = liveArtifacts(rt.session, 'reload-menus');
-  const path = moduleStorePath(rt.session.options.device as 'dt2' | 'dn2', MENU_ID);
+  const device = rt.session.options.device as Device;
+  const path = moduleStorePath(device, MENU_ID);
   await cliInstall(rt.session, MENU_ID, artifacts, 300_000, [DEBUG_MODULE]);
   const objs = planSymbol(await prepareRuntimePlan(rt.session, artifacts, ['DKRT_MENU_OBJS']), 'DKRT_MENU_OBJS');
   const before = (await rt.dk.modules()).map((m) => m.name).sort();
   expect(before, 'the menu module is loaded').toContain(MENU_ID);
   // a rows-only settings page: digikit/debug's page holds its module while open, and gives the hold back when left
-  const debugPath = moduleStorePath(rt.session.options.device as 'dt2' | 'dn2', DEBUG_MODULE);
+  const debugPath = moduleStorePath(device, DEBUG_MODULE);
   expect(await menuObjects(rt, objs), 'no hold before any page is opened').toBe(0);
   await openModuleSettings(rt, DEBUG_ROW);
   expect(await menuObjects(rt, objs), 'the open DEBUG settings page holds its module: if this is 0 the key path is misaligned').toBe(1);

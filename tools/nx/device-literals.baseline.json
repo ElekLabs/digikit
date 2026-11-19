@@ -267,7 +267,6 @@
   "modules/core/runtime/tests/modules-capacity.device.test.ts": 3,
   "modules/core/runtime/tests/project.json": 13,
   "modules/core/runtime/tests/reload-fx.device.test.ts": 6,
-  "modules/core/runtime/tests/reload-menus.device.test.ts": 2,
   "modules/core/runtime/tests/reload-project.device.test.ts": 9,
   "modules/core/runtime/tests/reload.device.test.ts": 17,
   "modules/core/runtime/tests/safe-mode.device.test.ts": 6,

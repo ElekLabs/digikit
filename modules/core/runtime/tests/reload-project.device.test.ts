@@ -89,7 +89,7 @@ describeOn('dt2', `DT2 ${FIRMWARE.dt2} reload: a project that uses the reloaded 
     expect(before.peak, `the machine is audible (peak ${before.peak.toFixed(4)})`).toBeGreaterThan(0.01);
 
     // queue the reload over the paused protocol, then let emulated time run until the job finishes: the job needs the DSP, and the paused protocol's
-    // short steps under its 30 s wall deadline do not reach the end of a DT2 reload with a DSP load
+    // short steps under its 30 s wall deadline do not reach the end of a reload with a DSP load
     // DkrtBootInfo.reloads (offset 252) moves when a live job finished; with phase 2 it tells this job's end from the state an earlier job left
     const reloads = planSymbol(run.plan, 'DKRT_BOOT') + 252;
     const reloads0 = await word(rt.session, reloads);
