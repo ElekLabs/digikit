@@ -69,7 +69,9 @@ test('liveModules: a load and an unload sort their results the same way and name
     'm/d.dkm': { result: -9, unloaded: true },
   });
   const events: { event: string }[] = [];
-  const out = await liveModules(s, 'load', ['m/a.dkm', 'm/b.dkm', 'm/c.dkm', 'm/d.dkm'], (e) => events.push(e as { event: string }));
+  const out = await liveModules(s, 'load', ['m/a.dkm', 'm/b.dkm', 'm/c.dkm', 'm/d.dkm'], (e) =>
+    events.push(e as { event: string }),
+  );
   expect(asked).toEqual(['load m/a.dkm', 'load m/b.dkm', 'load m/c.dkm', 'load m/d.dkm']);
   expect(out.done).toEqual(['m/a.dkm']);
   expect(out.refused).toEqual([
@@ -77,7 +79,16 @@ test('liveModules: a load and an unload sort their results the same way and name
     { path: 'm/c.dkm', result: -10 },
   ]);
   expect(out.failed).toEqual([{ path: 'm/d.dkm', result: -9 }]);
-  expect(events.map((e) => e.event)).toEqual(['load', 'load', 'load-refused', 'load', 'load-refused', 'load', 'load-failed', 'done']);
+  expect(events.map((e) => e.event)).toEqual([
+    'load',
+    'load',
+    'load-refused',
+    'load',
+    'load-refused',
+    'load',
+    'load-failed',
+    'done',
+  ]);
   expect(events.at(-1)).toMatchObject({ event: 'done', op: 'load', done: ['m/a.dkm'] });
   expect(eventText(events.at(-1) as never)).toBe('Loaded m/a.dkm');
   const gone = await liveModules(fakeSession({ 'm/a.dkm': { result: 0, unloaded: true } }).s, 'unload', ['m/a.dkm']);

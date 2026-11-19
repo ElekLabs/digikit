@@ -343,7 +343,7 @@
   "modules/machines/shot/README.md": 9,
   "modules/machines/shot/build/gen/gallery.json": 4,
   "modules/machines/shot/module.toml": 4,
-  "modules/machines/shot/project.json": 13,
+  "modules/machines/shot/project.json": 15,
   "modules/machines/shot/src/module.c": 1,
   "modules/machines/shot/src/pages.c": 1,
   "modules/machines/shot/tests/rig/shot.toml": 61,

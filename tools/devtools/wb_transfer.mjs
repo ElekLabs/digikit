@@ -80,7 +80,8 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
           ? `wb: ${r.path} was not ${sub}ed: the DSP loader holds a module it could not release. Restart the device (wb transfer restart)`
           : `wb: ${r.path} was not ${sub}ed (status ${r.result}); nothing changed`,
       );
-    for (const r of failed) console.error(`wb: the ${sub} of ${r.path} failed (status ${r.result}); the module is not loaded`);
+    for (const r of failed)
+      console.error(`wb: the ${sub} of ${r.path} failed (status ${r.result}); the module is not loaded`);
     return refused.length + failed.length ? 1 : 0;
   }
   if (sub === 'reload') {

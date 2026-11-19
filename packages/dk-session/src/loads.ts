@@ -3,7 +3,7 @@
 import { CAPACITY_LABELS, LOAD_STATE, LOAD_STATUS } from './gen_proto.ts';
 
 export type ModuleStateName =
-  'SELECTED' | 'PLANNED' | 'REFUSED' | 'INIT' | 'DSP_LOADING' | 'ACTIVE' | 'FAILED' | 'SKIPPED';
+  'SELECTED' | 'PLANNED' | 'REFUSED' | 'INIT' | 'DSP_LOADING' | 'ACTIVE' | 'FAILED' | 'SKIPPED' | 'UNLOADED';
 
 /** A module of the last boot's selection as the runtime's LOADS record has it. */
 export interface ModuleState {
@@ -91,6 +91,7 @@ export function moduleReason(m: ModuleState): string | undefined {
   if (m.state === 'DSP_LOADING') return 'its DSP part is still loading';
   if (m.state === 'SELECTED' || m.state === 'PLANNED' || m.state === 'INIT') return 'loading has not finished';
   if (m.state === 'SKIPPED') return 'this boot is in safe mode, so no module is loaded';
+  if (m.state === 'UNLOADED') return 'it was unloaded while the device was running; its file is still on the card';
   if (m.state === 'REFUSED') {
     if (m.result === E_PLAN_FIT) {
       const what = CAPACITY_LABELS[m.detail[0]] ?? `resource ${m.detail[0]}`;

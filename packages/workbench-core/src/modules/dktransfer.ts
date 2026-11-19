@@ -965,7 +965,9 @@ export async function liveModules(
       emit({ event: `${op}-refused`, path, result: code });
     }
   }
-  emit(op === 'reload' ? { event: 'done', reloaded: done, refused, failed } : { event: 'done', op, done, refused, failed });
+  emit(
+    op === 'reload' ? { event: 'done', reloaded: done, refused, failed } : { event: 'done', op, done, refused, failed },
+  );
   return { done, refused, failed };
 }
 

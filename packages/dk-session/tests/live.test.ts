@@ -7,7 +7,12 @@ import { CMD } from '@digi/dk-session/gen_proto';
 const concat = (...p: Uint8Array[]) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
 const PREFIX = [0xf0, 0x7d, 0x64, 0x6b, 1];
 const reply = (cmd: number, seq: number, status: number, body: number[] = []) =>
-  concat(Uint8Array.from(PREFIX), Uint8Array.of(cmd | 0x40, seq), encode8in7(Uint8Array.of(status & 255, ...body)), Uint8Array.of(0xf7));
+  concat(
+    Uint8Array.from(PREFIX),
+    Uint8Array.of(cmd | 0x40, seq),
+    encode8in7(Uint8Array.of(status & 255, ...body)),
+    Uint8Array.of(0xf7),
+  );
 const i32 = (n: number) => [(n >> 24) & 255, (n >> 16) & 255, (n >> 8) & 255, n & 255];
 
 /** A device whose live job needs `busyPolls` asks of RELOAD_STATE to end with `result`; a request it answers with `queueStatus` is not queued. */
@@ -34,7 +39,9 @@ class FakeLive {
       this.polls++;
       const done = this.running && this.polls > this.busyPolls;
       const phase = done ? 2 : this.running ? 1 : 0;
-      return void this.queue.push(reply(cmd, seq, 0, [phase, ...i32(done ? this.result : 0), done ? 6 : 1, done ? this.unloaded : 0]));
+      return void this.queue.push(
+        reply(cmd, seq, 0, [phase, ...i32(done ? this.result : 0), done ? 6 : 1, done ? this.unloaded : 0]),
+      );
     }
     this.seen.push({ cmd, path: new TextDecoder().decode(body.subarray(0, body.length - 1)) });
     if (body[body.length - 1] !== 0) return void this.queue.push(reply(cmd, seq, -60));
@@ -75,5 +82,8 @@ test('a refusal before anything changed and a failure after the teardown come ba
   assert.deepEqual(await failed.reloadAndWait('modules/a.dkm', { pollMs: 0 }), { result: -9, unloaded: true });
   // E_LOADED (-10) answers a LOAD of a path that is loaded
   const loaded = new DkSession(new FakeLive(0, 0, 0, -10), { timeoutMs: 200 });
-  await assert.rejects(loaded.loadAndWait('modules/a.dkm', { pollMs: 0 }), (e) => e instanceof DkError && e.status === 'E_LOADED');
+  await assert.rejects(
+    loaded.loadAndWait('modules/a.dkm', { pollMs: 0 }),
+    (e) => e instanceof DkError && e.status === 'E_LOADED',
+  );
 });

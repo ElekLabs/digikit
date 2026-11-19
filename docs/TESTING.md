@@ -282,7 +282,7 @@ the numbers it had.
 Host tests: the job over a scripted system and the loader's live load and unload (`pnpm nx:pilot run core/runtime:rust-tests`), the selection index rule (`boot::pick_index`), a real packed module loaded, unloaded and loaded
 again (`core/runtime:test-assembly`), `packages/dk-session/tests/live.test.ts`, `packages/workbench-core/tests/reload-modules.test.ts`. Device tests: `modules/core/runtime/tests/live.device.test.ts`
 (the PR 1 proof of the plan: a code-only module loaded outside the boot selection, `test/sine` loaded and played with a pitch report, an unload with a note held, the load and unload soak with 5 cycles and 20 with
-`DIGIKIT_TIER=full`, `E_MISSING` without the machines service, a sample-pool module loaded, bound, unloaded and loaded again).
+`DIGIKIT_TIER=full`, `E_MISSING` without the machines service, a sample-pool module loaded, bound, unloaded and loaded again: `modules/machines/shot/tests/shot-live-dt2.device.test.ts`, DT2).
 
 Device tests: `modules/core/runtime/tests/reload.device.test.ts` (reload of a code-only module, of a machine with a note held, the refusal while the transport plays, and the soak:
 5 cycles, 20 with `DIGIKIT_TIER=full`). Host tests: `pnpm nx:pilot run core/runtime:rust-tests` (the job over a scripted system, the loader's reload steps, the placeholder rows)
