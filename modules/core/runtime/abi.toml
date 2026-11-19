@@ -87,7 +87,7 @@ doc = "The module arena: a static array of the runtime's bss. Every device has t
 [[const]]
 name = "STAGE_BYTES"
 type = "usize"
-value = 65536
+value = 131072
 doc = "The staging buffer of a .dkm file and of the store directory: a static array of the runtime's bss ([limits.max] stage_bytes of sdk/sdk.toml)."
 
 [[const]]

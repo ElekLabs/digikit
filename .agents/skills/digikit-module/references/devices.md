@@ -50,7 +50,7 @@ The runtime refuses a module that does not fit, with its own code (docs/findings
 | | Digitakt II | Digitone II | Refusal |
 | --- | --- | --- | --- |
 | modules at once (selection) | 8 | 8 | SELECT of a ninth: `E_SEL_COUNT` |
-| module file | 64 KiB | 64 KiB | `E_TOO_BIG` |
+| module file | 128 KiB | 128 KiB | `E_TOO_BIG` |
 | ColdFire memory (image + bss, all modules) | 512 KiB | 512 KiB | `E_NOMEM` |
 | DSP area (all modules; 64-byte granules, 60 bytes unusable) | 512 KiB | 320 KiB | `E_DSP_NOSPACE` |
 | machine types, voice rows | 8 | 8 | a ninth machine `E_TYPE_RANGE`, a ninth voice `E_DSP_ROWS` |

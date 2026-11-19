@@ -53,7 +53,7 @@ Changed:
 
 ### 2.2 ColdFire range reader and conversion
 
-The store file is contiguous sectors (`store::read_sectors(first, n, buf, cap)`), so a range read is sector arithmetic. Finding 104's `STAGE_BYTES` (64 KiB, whole file with sha check) cannot hold a long sample. Add to the runtime, additive, C ABI in `dkrt.h`:
+The store file is contiguous sectors (`store::read_sectors(first, n, buf, cap)`), so a range read is sector arithmetic. Finding 104's `STAGE_BYTES` (128 KiB, whole file with sha check) cannot hold a long sample. Add to the runtime, additive, C ABI in `dkrt.h`:
 - `int32_t dkrt_store_stat(const uint8_t *path, dkrt_store_file *out)`: `{first_sector, size, sha[32]}`. Uses `find()`; leaves the staging buffer dirty, so call only at load start.
 - `int32_t dkrt_store_read(const dkrt_store_file *f, uint32_t sector, uint32_t count, uint8_t *dst)`: no staging buffer, no sha, bounds checked against `f->size`.
 `dkrt_store_stat` runs in the UI loop task; `dkrt_store_read` also runs in the worker task (section 8.2).

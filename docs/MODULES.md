@@ -217,7 +217,7 @@ A module that emits records of a generic kind (a kind a service owns that has no
  card (store)
     |  find, load to the staging buffer              E_NOT_FOUND E_BAD_STORE E_READ E_SHA E_TOO_BIG
     v
- staging buffer (at most 64 KiB; the only place the file is read from)
+ staging buffer (at most 128 KiB; the only place the file is read from)
     |  checks; nothing is written outside the buffer
     |   - magic, header size, file size, sha256       E_FORMAT, E_SHA
     |   - runtime version (header 0x30)               E_CONTRACT

@@ -62,7 +62,7 @@ level is fixed another way). On DN2 a machine can have several pages and up to 4
 | DSP area | 512 KiB DT2, 320 KiB DN2 | about 900 KiB DT2 (needs a wider offset field), about 450 KiB DN2 |
 | L1 for modules | none | 60 to 84 KiB in block 1, 112 KiB in block 2 |
 | ColdFire arena | 512 KiB | DT2 about 1.3 MiB less runtime and staging; DN2 about 24 MiB |
-| Module file (`stage_bytes`) | 64 KiB | ours only |
+| Module file (`stage_bytes`) | 128 KiB | ours only |
 | DDR for modules | none | DT2 sample pool; DN2 512 MiB configured, free range [O] |
 
 ## 5. Arena holes after boot, and the steps list

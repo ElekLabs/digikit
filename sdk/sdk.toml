@@ -6,7 +6,7 @@
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
 table = "0.10.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-version = "0.10.0"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.10.1"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -1842,7 +1842,7 @@ dsp_area_bytes = 524288  # the 17-bit word offset of a core/dsp-link chunk reach
 param_rows = 16     # parameter rows core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
 page_rows = 8       # page rows core/dynreg reserves (Digitone II)
 machine_rows = 8    # run-time machine types core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
-stage_bytes = 65536  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
+stage_bytes = 131072  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
 
 [limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, modules/core/runtime/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
                     # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).

@@ -784,7 +784,7 @@ After the tests pass, `module:check` packs the module for each device. It prints
 | Limit | Digitakt II | Digitone II |
 | --- | --- | --- |
 | Modules at once | 8 | 8 |
-| Module file | 64 KiB | 64 KiB |
+| Module file | 128 KiB | 128 KiB |
 | ColdFire memory, all modules | 512 KiB | 512 KiB |
 | DSP area, all modules | 512 KiB | 320 KiB |
 | Machine types and voice rows | 8 | 8 |

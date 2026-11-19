@@ -141,4 +141,4 @@ Rules:
 5. E8, the top-level lift. The merge gate is a byte manifest (it proves no behaviour change), the host stage, `mise run test:plan`, gate-smoke and one device test per device, with the skips named in the PR ([extension model](../plans/extension-model.md) E8). The full device set reruns in the next batch's `test:full`. Merge `test/t1i-rig-read-hook` first (it edits `dsp-stereo-proof`).
 6. After E8: port step 3 (`ports/routines/`), the project service ([digikit project](../plans/digikit-project.md)) and E7.
 
-Known limits: all routines of one port file must fit `stage_bytes` 65536. The card and store facts of Syntakt are not read for this document.
+Known limits: all routines of one port file must fit `stage_bytes` 131072. The card and store facts of Syntakt are not read for this document.

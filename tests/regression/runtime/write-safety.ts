@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { cloneFile, type Device } from '@digi/test-support';
-import { cardStore, expansionRegion, uploadStore } from './device-data.ts';
+import { cardStore, deviceProfile, expansionRegion, uploadStore } from './device-data.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
 /** Write-watch and card-overlay safety of the runtime proofs. */
@@ -170,7 +170,9 @@ export function dmaHoles(plan: RuntimePlan): [number, number][] {
     if (start !== undefined) holes.push([start, size]);
     return start !== undefined;
   };
-  if (!hole('DKRT_STAGE', 64 * 1024)) throw new Error('no symbol core/runtime:DKRT_STAGE');
+  const stageBytes = deviceProfile(plan.base.device as Device).limits.stage_bytes;
+  if (stageBytes === undefined) throw new Error(`no limits.stage_bytes in the ${plan.base.device} profile`);
+  if (!hole('DKRT_STAGE', stageBytes)) throw new Error('no symbol core/runtime:DKRT_STAGE');
   hole('DKRT_SECBUF', 512);
   hole('DKRT_UPLOAD_BUF', 36896);
   hole('DKRT_SDK_BUF', 17408); // the SDK file calls' table streams (card reads land by DMA)

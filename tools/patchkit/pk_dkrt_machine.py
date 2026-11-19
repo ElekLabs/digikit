@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 from tools.coldfire import arena_safety  # noqa: E402
 from tools.control.digi_client import Emu  # noqa: E402
 from tools.device.dkproto import SETTINGS_SECTORS  # noqa: E402
-from tools.patchkit import hook_ab  # noqa: E402
+from tools.patchkit import hook_ab, pk_device  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit.pk_dkrt import (  # noqa: E402
     ProofError,
@@ -166,7 +166,9 @@ def runtime_watch_env(
         plan["base"]["device"] + "-" + plan["base"]["version"]
     )
     # the card reads land by DMA in the runtime's staging buffer (and the 512-byte record buffer): left out of the watch
-    holes = [(sym(plan, "core/runtime", "DKRT_STAGE"), 64 * 1024)]
+    holes = [
+        (sym(plan, "core/runtime", "DKRT_STAGE"), pk_device.shared_limits().stage_bytes)
+    ]
     with contextlib.suppress(
         ProofError
     ):  # an image of an older runtime has no record buffer

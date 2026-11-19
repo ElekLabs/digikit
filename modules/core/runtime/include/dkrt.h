@@ -32,7 +32,7 @@
 /* The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it). */
 #define DKRT_ARENA_BYTES 524288
 /* The staging buffer of a .dkm file and of the store directory: a static array of the runtime's bss ([limits.max] stage_bytes of sdk/sdk.toml). */
-#define DKRT_STAGE_BYTES 65536
+#define DKRT_STAGE_BYTES 131072
 /* Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start). */
 #define DKRT_MACHINE_ROWS 8
 /* DkrtDevice.magic: DKDV. */
