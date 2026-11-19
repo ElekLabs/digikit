@@ -6,6 +6,7 @@ import { moduleStorePathOf } from '@digi/test-support';
 import { cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
+import { logEvents, RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { packSynth } from '@digi/regression/runtime/synth.ts';
 
@@ -29,7 +30,7 @@ function menuSymbol(plan: RuntimePlan, name: string): number {
   return plan.symbols[key]!;
 }
 
-const SYMBOLS = ['DK_LOAD', 'DK_LOAD_N', 'DK_POPUP', 'DK_POPUP_TEXT', 'DK_POPUPS'];
+const SYMBOLS = ['DK_LOAD', 'DK_LOAD_N', 'DK_POPUP', 'DK_POPUP_TEXT', 'DK_POPUPS', ...RING_SYMBOLS];
 
 cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols: SYMBOLS }, (rig) => {
   test('tick loads and untick unloads without a boot; a playing transport refuses; YES restarts', async () => {
@@ -59,14 +60,16 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
     };
     const flagsText = (v: number[]) => v.join();
     const state = async (file: string) => (await rig.usb(rt, (dk) => dk.loadStates())).find((m) => m.name === file)?.state;
-    const bootStarts = async () => (await rig.usb(rt, (dk) => dk.readLog())).filter((e) => e.kind === LOG_KIND.BOOT_START).length;
+    // the runtime log: over SysEx with the debug module, else the runtime's own ring of 32 events; a BOOT_START newer than seq0 is a boot
+    const log = () => rig.usb(rt, (dk) => logEvents({ ...rt, dk }, rig.plan));
+    const bootStartsAfter = async (seq: number) => (await log()).filter((e) => e.kind === LOG_KIND.BOOT_START && e.seq > seq).length;
     const epoch = async () => Number((await session.status()).epoch);
     const drained = { drained: true } as const;
     const press = (key: string) => ui.tap(key, { until: drained });
     const popups = () => peek('DK_POPUPS');
 
     const epoch0 = await epoch();
-    const starts0 = await bootStarts();
+    const seq0 = Math.max(0, ...(await log()).map((e) => e.seq));
     expect(await state('a.dkm'), 'the boot loaded a').toBe('ACTIVE');
 
     /** SETTINGS > DIGIKIT > MODULES (the fourth row), the cursor on the first row. */
@@ -91,7 +94,7 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
     await press('YES');
     await ui.wait({ state: () => state('b.dkm'), done: (s) => s === 'ACTIVE', withinMs: 60_000, what: 'b loaded' });
     expect(await epoch(), 'no new boot').toBe(epoch0);
-    expect(await bootStarts(), 'no BOOT_START after the first').toBe(starts0);
+    expect(await bootStartsAfter(seq0), 'no BOOT_START after the first').toBe(0);
 
     // untick a: unloaded live (the list closed itself when the batch ended; the cursor is on MODULES)
     await ui.tap('YES', {
@@ -107,7 +110,7 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
     await press('YES');
     await ui.wait({ state: () => state('a.dkm'), done: (s) => s === 'UNLOADED', withinMs: 60_000, what: 'a unloaded' });
     expect(await epoch(), 'no new boot').toBe(epoch0);
-    expect(await bootStarts(), 'no BOOT_START after the first').toBe(starts0);
+    expect(await bootStartsAfter(seq0), 'no BOOT_START after the first').toBe(0);
 
     // the transport plays: tick a is refused, then the restart question; NO leaves the device running
     await press('NO');
