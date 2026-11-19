@@ -239,6 +239,7 @@ export const CAP = {
   LOADS: 15,
   SVC_ABI: 16,
   RELOAD: 17,
+  FW_ID: 18,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */

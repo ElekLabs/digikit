@@ -605,6 +605,8 @@ export interface DkInfoFull extends DkInfo {
   image_id: string | null;
   /** The runtime's ABI fingerprint for service files (`CAP_SVC_ABI`; the word a `.dks` carries at header 0x3c), or null when the runtime does not report it. */
   svc_abi: number | null;
+  /** The firmware identity of the image as 16 hex digits (`CAP_FW_ID`): the first 8 bytes of the SHA-256 of the stock firmware, the `FW` item of its port file; null when the runtime does not report it. */
+  fw_id: string | null;
 }
 
 /** The LOGCFG state: the default log level, the level of each module record (0xff: the default), and whether the debug module is loaded (it always answers 1). */
@@ -1133,6 +1135,7 @@ export class DkSession {
     let caps: number | null = null;
     let imageId: string | null = null;
     let svcAbi: number | null = null;
+    let fwId: string | null = null;
     if (b.length >= at + 9 + 8 + 8) {
       runtime = u32(b, at + 9 + 8);
       caps = u32(b, at + 9 + 12);
@@ -1143,6 +1146,9 @@ export class DkSession {
       // then the ABI fingerprint of service files (4 bytes), when the capability SVC_ABI is set
       if (caps !== null && ((caps >>> GCAP.SVC_ABI) & 1) === 1 && b.length >= at + 9 + 24 + 4)
         svcAbi = u32(b, at + 9 + 24);
+      // then the firmware identity (8 bytes), when the capability FW_ID is set
+      if (svcAbi !== null && caps !== null && ((caps >>> GCAP.FW_ID) & 1) === 1 && b.length >= at + 9 + 28 + 8)
+        fwId = Array.from(b.subarray(at + 9 + 28, at + 9 + 36), (x) => x.toString(16).padStart(2, '0')).join('');
     }
     return {
       protocol,
@@ -1151,6 +1157,7 @@ export class DkSession {
       caps,
       image_id: imageId,
       svc_abi: svcAbi,
+      fw_id: fwId,
       port,
       free_bytes: free,
       max_chunk: maxChunk,

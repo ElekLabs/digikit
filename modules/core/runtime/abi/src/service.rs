@@ -522,6 +522,11 @@ macro_rules! accepts_teardown {
     };
 }
 
+/// How a service file names the firmware. 2: through the port file (docs/plans/port-file.md): `dk_fw_`, `dk_exit_`, `dk_tail_`, `dk_stock_` and `dk_ret_` imports that the
+/// loader resolves from it, and raw `HOOKS` entries whose sites it lists; the file has a hard `NEED` of `port` and no `BIND` or `FW` item. 1 was the file bound to one
+/// firmware by `patchkit bind`. The constant is part of the boundary files, so a change of it changes `SVC_ABI` and the runtime refuses the older files (`E_SVC_ABI`).
+pub const FIRMWARE_REFERENCES: u32 = 2;
+
 /// A service. Every method but `validate_records` and `teardown_refusal` has a default that declares nothing; a service implements the ones it owns.
 /// The core is passed by reference to every method that may touch it (`declare` reads nothing but its argument); a service
 /// that a host test drives is generic over `C: CoreApi` and the test passes a `FakeCore`.

@@ -1,7 +1,9 @@
 //! Status codes, request bodies and reply parsers.
 
 use crate::codec::*;
-use crate::gen_proto::{CAP_LOG, CAP_LOGCFG, CAP_PEEK, CAP_RESTART, CAP_SELECT, CAP_SVC_ABI};
+use crate::gen_proto::{
+    CAP_FW_ID, CAP_LOG, CAP_LOGCFG, CAP_PEEK, CAP_RESTART, CAP_SELECT, CAP_SVC_ABI,
+};
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -170,6 +172,8 @@ pub struct Info {
     pub image_id: Option<[u8; 8]>,
     /// The runtime's ABI fingerprint for service files (`CAP_SVC_ABI`; the word a `.dks` carries at header 0x3c), when the reply carries it.
     pub svc_abi: Option<u32>,
+    /// The firmware identity of the image (`CAP_FW_ID`): the first 8 bytes of the SHA-256 of the stock firmware, which names the port file; after `svc_abi`.
+    pub fw_id: Option<[u8; 8]>,
 }
 impl Info {
     /// The packed runtime version: the 32-bit field when present, else the 16-bit one.
@@ -287,6 +291,11 @@ pub fn parse_info(body: &[u8]) -> Result<Info, Error> {
         } else {
             None
         };
+    let fw_id = if svc_abi.is_some() && caps.is_some_and(|c| c & CAP_FW_ID != 0) && c.0.len() >= 8 {
+        Some(c.take(8)?.try_into().expect("8 bytes"))
+    } else {
+        None
+    };
     Ok(Info {
         protocol,
         runtime_version,
@@ -300,6 +309,7 @@ pub fn parse_info(body: &[u8]) -> Result<Info, Error> {
         caps,
         image_id,
         svc_abi,
+        fw_id,
     })
 }
 
@@ -511,6 +521,36 @@ mod tests {
             parse_info(&info_body(0, &tail(CAP_SVC_ABI, &[])))
                 .unwrap()
                 .svc_abi,
+            None
+        );
+    }
+
+    #[test]
+    fn the_firmware_identity_follows_the_service_abi_when_its_capability_is_set() {
+        let tail = |caps: u32, fw: &[u8]| {
+            let mut t = 5u32.to_be_bytes().to_vec();
+            t.extend(9u32.to_be_bytes());
+            t.extend(0x0005_0000u32.to_be_bytes());
+            t.extend(caps.to_be_bytes());
+            t.extend([1, 2, 3, 4, 5, 6, 7, 8]);
+            t.extend(0xdead_beefu32.to_be_bytes());
+            t.extend(fw);
+            t
+        };
+        let fw = [0xd1, 0x5e, 0xa5, 0xe0, 1, 2, 3, 4];
+        let on = parse_info(&info_body(0, &tail(CAP_SVC_ABI | CAP_FW_ID, &fw))).unwrap();
+        assert_eq!(on.fw_id, Some(fw));
+        // without the capability, or without the bytes, there is none
+        assert_eq!(
+            parse_info(&info_body(0, &tail(CAP_SVC_ABI, &fw)))
+                .unwrap()
+                .fw_id,
+            None
+        );
+        assert_eq!(
+            parse_info(&info_body(0, &tail(CAP_SVC_ABI | CAP_FW_ID, &[])))
+                .unwrap()
+                .fw_id,
             None
         );
     }
