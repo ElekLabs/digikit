@@ -137,10 +137,13 @@ export class LfoRig {
     this.opened = false;
   }
 
-  /** `count` events of `step` detents of the WAVE encoder (ENC E) `gapMs` apart, then a settle for the firmware to store the last one. The page must be open. */
-  async turnWave(step: number, count = 1, gapMs = 2): Promise<void> {
+  /**
+   * `count` events of `step` detents of the WAVE encoder (ENC E) `gapMs` apart, then (`settle`, default) a settle for the firmware to store the last one: no state shows the store of the last event
+   * of a burst the stock filter may swallow. A caller that polls the Sound word itself passes `settle: false`. The page must be open.
+   */
+  async turnWave(step: number, count = 1, gapMs = 2, settle = true): Promise<void> {
     for (let i = 0; i < count; i++) await this.rt.ui.turn(encoderCode('ENC E'), step, { until: { ms: gapMs, why: GAP } });
-    await this.rt.ui.wait({ ms: 150, why: SETTLE });
+    if (settle) await this.rt.ui.wait({ ms: 150, why: SETTLE });
   }
 
   /**
@@ -156,16 +159,22 @@ export class LfoRig {
         const png = await captureRemoteOled(this.rt.session, 'lfo-turn-fail');
         throw new Error(`the WAVE encoder did not reach wave ${n} in ${bursts} bursts (Sound word ${KNOB_WORD.WAVE} is ${got.toString(16)}, wanted ${want.toString(16)}; screen ${png})`);
       }
-      const before = got;
-      await this.turnWave(got < want ? 8 : -8, 4, 30);
+      await this.turnWave(got < want ? 8 : -8, 4, 30, false); // the poll of the Sound word below is the wait
       bursts++;
       let png = '';
       try {
+        // the word is stable when two consecutive reads agree: the burst may still be stored
+        let prev = -1;
         got = await pollUntil(
           this.rt.clock,
-          () => this.word(KNOB_WORD.WAVE),
-          (w) => w !== before,
-          { withinMs: 1000, intervalMs: 20, message: () => `the WAVE word stays at ${before.toString(16)} after burst ${bursts} toward wave ${n}` },
+          async () => {
+            const w = await this.word(KNOB_WORD.WAVE);
+            const same = w === prev;
+            prev = w;
+            return same ? w : -1;
+          },
+          (w) => w !== -1,
+          { withinMs: 1000, intervalMs: 20, message: () => `the WAVE word does not settle after burst ${bursts} toward wave ${n} (last read ${prev.toString(16)})` },
         );
       } catch (e) {
         png = await captureRemoteOled(this.rt.session, 'lfo-turn-fail');
@@ -299,7 +308,7 @@ export class LfoRig {
     const refused: string[] = [];
     for (const d of candidates) {
       await this.set('DEST', d);
-      // the smoother glides the destination word to the base of the new destination: read after it has settled
+      // the smoother glides the destination word to the base of the new destination: read after it has settled. The LFO swings the word, so no read of it shows the end of the glide: the wait stays.
       await this.rt.ui.wait({ ms: SMOOTH_MS, why: SMOOTH });
       const swung = await this.sample(d, 40, 12);
       const vs = swung.map((x) => x.v);
@@ -337,8 +346,12 @@ export class LfoRig {
    */
   async freeze(dest: number): Promise<void> {
     await this.set('SPD', NEUTRAL_CC);
-    // the rate change reaches the output after the smoother
-    await this.rt.ui.wait({ ms: SMOOTH_MS, why: SMOOTH });
+    // `set` returned: the tick reads the stopped speed. The output follows once the phase of LFO 1 stands still (firmware state), then the next handler run copies the final word.
+    await pollUntil(this.rt.clock, () => this.phaseMoves(), (moves) => !moves, {
+      withinMs: 3 * SMOOTH_MS,
+      intervalMs: 20,
+      message: 'the phase of LFO 1 still moves after SPD was set to the stopped speed',
+    });
     const reads = await this.sample(dest, 4, 40);
     expect(
       reads.map((r) => r.v),
