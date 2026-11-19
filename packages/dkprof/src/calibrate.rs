@@ -67,9 +67,12 @@ pub struct ErrorStats {
     /// The worst underprediction of the fit factor, as a positive fraction (0 when it never underpredicts).
     pub worst_under: f64,
     /// The worst underprediction of a row (or owner) of a case predicted with a fit that left it out.
-    pub loo_worst: f64,
+    /// `None` (null): not computable with one group or fewer.
+    #[serde(default)]
+    pub loo_worst: Option<f64>,
     /// The same with the budget factor of the others: the budget never underpredicting a row it has not seen.
-    pub loo_budget_under: f64,
+    #[serde(default)]
+    pub loo_budget_under: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
@@ -215,7 +218,14 @@ fn read_side(p: &Value) -> Result<(Option<String>, Side), String> {
     for r in p["spans"].as_array().into_iter().flatten() {
         let owner = r["owner"].as_u64().ok_or("span without an owner")?;
         let e = s.spans.entry(owner).or_default();
-        e.kind = r["kind"].as_str().unwrap_or("").to_owned();
+        let kind = r["kind"].as_str().unwrap_or("");
+        if e.kind.is_empty() {
+            e.kind = kind.to_owned();
+        } else if !kind.is_empty() && e.kind != kind {
+            return Err(format!(
+                "span owner {owner:#x} has two kinds in one profile"
+            ));
+        }
         e.calls += u(r, "calls");
         e.sum += u(r, "sum_ticks");
         e.max = e.max.max(u(r, "max_ticks"));
@@ -253,7 +263,14 @@ fn merge(mut parts: Vec<Side>, who: &str, case: &str) -> Result<Side, String> {
         }
         for (k, v) in b.spans {
             let e = a.spans.entry(k).or_default();
-            e.kind = v.kind;
+            if e.kind.is_empty() {
+                e.kind = v.kind;
+            } else if !v.kind.is_empty() && e.kind != v.kind {
+                return Err(format!(
+                    "{who} captures of case {case} give span owner {k:#x} the kinds {:?} and {:?}",
+                    e.kind, v.kind
+                ));
+            }
             e.calls += v.calls;
             e.sum += v.sum;
             e.max = e.max.max(v.max);
@@ -354,8 +371,9 @@ fn section(raw: Vec<Raw>) -> Option<Section> {
         .collect();
     groups.sort();
     groups.dedup();
-    let (mut loo_worst, mut loo_budget_under) = (0.0f64, 0.0f64);
+    let (mut loo_worst, mut loo_budget_under) = (None, None);
     if groups.len() > 1 {
+        let (mut lw, mut lb) = (0.0f64, 0.0f64);
         for g in &groups {
             let rest: Vec<&Raw> = worst
                 .iter()
@@ -367,10 +385,11 @@ fn section(raw: Vec<Raw>) -> Option<Section> {
                 .iter()
                 .filter(|p| (p.case.as_str(), p.id.as_str()) == *g)
             {
-                loo_worst = loo_worst.max(under(err(f, p)));
-                loo_budget_under = loo_budget_under.max(under(err(b, p)));
+                lw = lw.max(under(err(f, p)));
+                lb = lb.max(under(err(b, p)));
             }
         }
+        (loo_worst, loo_budget_under) = (Some(lw), Some(lb));
     }
     let means: Vec<f64> = raw
         .iter()
@@ -442,7 +461,10 @@ fn key_mismatch(d: &Side, m: &Side) -> Option<String> {
             d.target, m.target
         ));
     }
-    if d.firmware.is_some() && m.firmware.is_some() && d.firmware != m.firmware {
+    if d.firmware.is_some() != m.firmware.is_some() {
+        return Some("firmware missing on one side".into());
+    }
+    if d.firmware != m.firmware {
         return Some("firmware sha256 differs".into());
     }
     if d.modules != m.modules {
@@ -545,6 +567,10 @@ fn dsp_pairs(case: &str, d: &Side, m: &Side, raw: &mut Vec<Raw>, refused: &mut V
 }
 
 fn cf_pairs(case: &str, d: &Side, m: &Side, raw: &mut Vec<Raw>, refused: &mut Vec<Refused>) {
+    if d.hz == Some(0) || m.hz == Some(0) {
+        refuse(refused, "cf", case, "*", "span_clock_hz is 0");
+        return;
+    }
     let (Some(dhz), Some(mhz)) = (d.hz, m.hz) else {
         if !d.spans.is_empty() || !m.spans.is_empty() {
             refuse(refused, "cf", case, "*", "a side has no span_clock_hz");
@@ -650,6 +676,18 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
     if dev.is_empty() || mdl.is_empty() {
         return Err("calibrate: needs at least one device and one model profile".into());
     }
+    let mut mfirst: Option<(&String, &Side)> = None;
+    for (case, m) in &mdl {
+        match mfirst {
+            Some((c0, f)) if f.target != m.target || f.firmware != m.firmware => {
+                return Err(format!(
+                    "calibrate: model cases {c0} and {case} differ in target or firmware: one file holds one device and firmware"
+                ));
+            }
+            None => mfirst = Some((case, m)),
+            _ => {}
+        }
+    }
     let mut raw_dsp = Vec::new();
     let mut raw_cf = Vec::new();
     let mut stocks = Vec::new();
@@ -668,16 +706,14 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
             target = Some(d.target.clone());
             firmware = d.firmware.clone();
         }
-        // A module-free case (a stock-only run: a header and no row with calls) gives the stock figure directly.
-        if let Some(delta) = d
+        // A module-free case: no module loaded, a header, no row with calls. It gives the stock figure directly.
+        let stock_of = d
             .stock_delta
-            .filter(|_| d.rows.values().all(|r| r.calls == 0))
-        {
-            stocks.push(delta as f64);
-        }
+            .filter(|_| d.modules.is_empty() && d.rows.values().all(|r| r.calls == 0));
         let Some(m) = mdl.get(case) else {
-            if d.rows.values().all(|r| r.calls == 0) && d.spans.is_empty() {
-                continue; // stock-only, no model needed
+            if let (Some(delta), true) = (stock_of, d.spans.is_empty()) {
+                stocks.push(delta as f64); // stock-only, no model needed
+                continue;
             }
             refuse(
                 &mut refused,
@@ -714,6 +750,9 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
             }
             unit = d.unit.clone();
         }
+        if let Some(delta) = stock_of {
+            stocks.push(delta as f64);
+        }
         dsp_pairs(case, d, m, &mut raw_dsp, &mut refused);
         cf_pairs(case, d, m, &mut raw_cf, &mut refused);
     }
@@ -745,6 +784,11 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
         }
     }
     for (name, s) in [("DSP", &dsp), ("ColdFire", &cf)] {
+        if s.as_ref().is_some_and(|s| s.error.loo_worst.is_none()) {
+            warnings.push(format!(
+                "{name} leave-one-out: n/a (one group): add cases to see how a row not in the fit is predicted"
+            ));
+        }
         if let Some(s) = s.as_ref().filter(|s| s.spread > SPREAD_LIMIT) {
             warnings.push(format!(
                 "{name} spread {:.1}% is over {:.0}%: one factor per device is too coarse here (a per-class model is out of scope; the budget factor covers the worst row)",
@@ -788,12 +832,18 @@ fn section_text(out: &mut String, name: &str, unit: &str, s: &Section) {
     let e = &s.error;
     let _ = writeln!(
         out,
-        "  error (worst-case pairs): n {} mean {} worst under {:.2}% leave-one-out worst {:.2}% (budget {:.2}%)",
+        "  error (worst-case pairs): n {} mean {} worst under {:.2}% {}",
         e.n,
         pct(e.mean),
         e.worst_under * 100.0,
-        e.loo_worst * 100.0,
-        e.loo_budget_under * 100.0
+        match (e.loo_worst, e.loo_budget_under) {
+            (Some(w), Some(b)) => format!(
+                "leave-one-out worst {:.2}% (budget {:.2}%)",
+                w * 100.0,
+                b * 100.0
+            ),
+            _ => "leave-one-out: n/a (one group)".to_owned(),
+        }
     );
     if s.steady.n > 0 {
         let _ = writeln!(
@@ -855,7 +905,7 @@ pub fn estimate(c: &Calibration, profile: &Value) -> Result<(Value, String), Str
     let mut o = String::new();
     let _ = writeln!(
         o,
-        "# estimated device cycles (fit {:.4}, budget {:.4}; error: mean {}, worst under {:.2}%)",
+        "# estimated device cycles (fit {:.4}, budget {:.4}; global error over the calibration: mean {}, worst underprediction {:.2}%)",
         s.factor.fit,
         s.factor.budget,
         pct(s.error.mean),
@@ -870,10 +920,9 @@ pub fn estimate(c: &Calibration, profile: &Value) -> Result<(Value, String), Str
         let share = block.map(|b| bud / b);
         let _ = writeln!(
             o,
-            "row {row:>2}: {:>9} insn/block -> {:>10.0} cycles ({:.2}% low), budget {:>10.0}{}",
+            "row {row:>2}: {:>9} insn/block -> {:>10.0} cycles (fit), budget {:>10.0}{}",
             r.max_block,
             fit,
-            s.error.worst_under * 100.0,
             bud,
             share.map_or(String::new(), |x| format!(
                 " = {:.2}% of a block",
@@ -882,7 +931,7 @@ pub fn estimate(c: &Calibration, profile: &Value) -> Result<(Value, String), Str
         );
         rows.push(serde_json::json!({
             "row": row, "max_block_insn": r.max_block, "est_cycles": fit,
-            "est_cycles_budget": bud, "error_under": s.error.worst_under,
+            "est_cycles_budget": bud,
             "pct_of_block": share,
         }));
     }
@@ -975,11 +1024,94 @@ mod tests {
     }
 
     #[test]
+    fn a_single_group_has_no_leave_one_out_and_says_so() {
+        let (d, m) = pair_for(2.0, "one", &[(0, 1000, 3000)]);
+        let c = fit(&req(vec![d], vec![m])).unwrap();
+        let e = &c.dsp.as_ref().unwrap().error;
+        assert!(e.loo_worst.is_none() && e.loo_budget_under.is_none());
+        assert!(c.warnings.iter().any(|w| w.contains("leave-one-out: n/a")));
+        assert!(text(&c).contains("leave-one-out: n/a (one group)"));
+        assert!(serde_json::to_value(&c).unwrap()["dsp"]["error"]["loo_worst"].is_null());
+    }
+
+    #[test]
+    fn modules_loaded_with_no_rows_and_refused_cases_are_no_stock() {
+        let (d, m) = pair_for(2.0, "shot", &[(0, 1000, 3000)]);
+        // modules loaded, rows lost: not a module-free case
+        let mut lost = prof("dev-a", "lost", "cycles", 5, 350_000, vec![], json!([]));
+        lost["run"]["module_sha256"] = json!(["a"]);
+        // a stock-only case whose model run has a different input hash is refused, and feeds nothing
+        let mut bad = prof("dev-a", "bad", "cycles", 5, 360_000, vec![], json!([]));
+        bad["run"]["module_sha256"] = json!([]);
+        let mut bad_m = bad.clone();
+        bad_m["run"]["input_sha256"] = json!("22");
+        bad_m["dsp"]["unit"] = json!("insn");
+        let mut idle = prof("dev-a", "idle", "cycles", 5, 300_000, vec![], json!([]));
+        idle["run"]["module_sha256"] = json!([]);
+        let c = fit(&req(vec![d, lost, bad, idle], vec![m, bad_m])).unwrap();
+        let k = c.dsp.unwrap().stock.unwrap();
+        assert_eq!((k.max, k.cases), (300_000.0, 1));
+    }
+
+    #[test]
+    fn firmware_missing_on_one_side_or_across_model_cases_is_refused() {
+        let (d, mut m) = pair_for(2.0, "fw", &[(0, 1000, 3000)]);
+        m["run"].as_object_mut().unwrap().remove("firmware_sha256");
+        let (d2, m2) = pair_for(2.0, "ok", &[(1, 1000, 3000)]);
+        let e = fit(&req(vec![d], vec![m])).unwrap_err();
+        assert!(e.contains("firmware missing on one side"), "{e}");
+        let (_, mut m3) = pair_for(2.0, "other", &[(2, 1000, 3000)]);
+        m3["run"]["firmware_sha256"] = json!("ee");
+        let e = fit(&req(vec![d2], vec![m2, m3])).unwrap_err();
+        assert!(e.contains("model cases"), "{e}");
+    }
+
+    #[test]
+    fn a_zero_span_clock_and_a_kind_change_are_refused() {
+        let sp = |kind: &str| json!([{"owner": 1, "kind": kind, "name": "m", "calls": 10, "sum_ticks": 100, "max_ticks": 10}]);
+        let m = prof("dev-a", "z", "insn", 1, 0, vec![], sp("module"));
+        let mut d = prof("dev-a", "z", "cycles", 1, 0, vec![], sp("module"));
+        d["span_clock_hz"] = json!(0);
+        let mut ok = prof(
+            "dev-a",
+            "ok",
+            "cycles",
+            1,
+            0,
+            vec![row(0, 10, 100, 10, 10)],
+            json!([]),
+        );
+        ok["run"]["case_id"] = json!("ok");
+        let mut okm = ok.clone();
+        okm["dsp"]["unit"] = json!("insn");
+        let c = fit(&req(vec![d, ok.clone()], vec![m.clone(), okm.clone()])).unwrap();
+        assert!(
+            c.refused
+                .iter()
+                .any(|r| r.section == "cf" && r.reason == "span_clock_hz is 0")
+        );
+        // two device captures of one case that disagree on a span kind
+        let d1 = prof("dev-a", "z", "cycles", 1, 0, vec![], sp("module"));
+        let d2 = prof("dev-a", "z", "cycles", 1, 0, vec![], sp("poll"));
+        let c = fit(&req(vec![d1, d2, ok], vec![m, okm])).unwrap();
+        assert!(
+            c.refused
+                .iter()
+                .any(|r| r.section == "case" && r.reason.contains("kinds")),
+            "{:?}",
+            c.refused
+        );
+    }
+
+    #[test]
     fn the_stock_comes_from_module_free_cases_only() {
         let (d, m) = pair_for(2.0, "shot", &[(0, 1000, 3000)]);
         // two stock-only device runs (a header, no row with calls); no model run is needed
-        let idle =
-            |case: &str, stock: u64| prof("dev-a", case, "cycles", 5, stock, vec![], json!([]));
+        let idle = |case: &str, stock: u64| {
+            let mut p = prof("dev-a", case, "cycles", 5, stock, vec![], json!([]));
+            p["run"]["module_sha256"] = json!([]);
+            p
+        };
         let c = fit(&req(
             vec![d, idle("idle", 300_000), idle("held", 340_000)],
             vec![m],
@@ -988,7 +1120,7 @@ mod tests {
         let k = c.dsp.unwrap().stock.unwrap();
         assert_eq!((k.avg, k.max, k.cases), (320_000.0, 340_000.0, 2));
         assert!(
-            c.warnings.is_empty() && c.refused.is_empty(),
+            c.refused.is_empty() && c.warnings.iter().all(|w| w.contains("leave-one-out")),
             "{:?} {:?}",
             c.warnings,
             c.refused
@@ -1010,8 +1142,8 @@ mod tests {
         // the budget factor covers every measured pair
         assert!(s.pairs.iter().all(|p| s.factor.budget >= p.ratio - 1e-12));
         // leave-one-out: the budget of the other row does not cover the 2.2 row
-        assert!(s.error.loo_budget_under > 0.05);
-        assert!(s.error.loo_worst >= s.error.worst_under);
+        assert!(s.error.loo_budget_under.unwrap() > 0.05);
+        assert!(s.error.loo_worst.unwrap() >= s.error.worst_under);
         // spread 10% exactly is not over the limit; this one is 10.0%
         assert!((s.spread - 0.1).abs() < 0.001);
     }
@@ -1101,7 +1233,7 @@ mod tests {
         d["dsp_rows"][2]["max_block"] = json!(2400);
         let c = fit(&req(vec![d], vec![m])).unwrap();
         let e = c.dsp.unwrap().error;
-        assert!(e.loo_worst > 0.15, "{e:?}");
+        assert!(e.loo_worst.unwrap() > 0.15, "{e:?}");
     }
 
     #[test]

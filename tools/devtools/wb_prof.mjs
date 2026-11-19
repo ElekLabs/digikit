@@ -171,7 +171,8 @@ function calibrate({ prof, rest, opts, format, fail }) {
     writeFileSync(opts.out, `${JSON.stringify(cal, null, 2)}\n`);
     if (format === 'json') console.log(JSON.stringify(cal));
     else process.stdout.write(prof.calibrateReport({ calibration: cal, format: 'text' }).text);
-    console.log(
+    // json mode: stdout is only the JSON
+    (format === 'json' ? console.error : console.log)(
       `${opts.out}: ${cal.dsp?.pairs.length ?? 0} DSP pairs, ${cal.cf?.pairs.length ?? 0} ColdFire pairs, ${cal.refused.length} refused`,
     );
     return 0;
