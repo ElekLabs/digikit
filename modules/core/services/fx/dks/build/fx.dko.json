@@ -7195,7 +7195,7 @@
   },
   {
    "align": 2,
-   "hex": "ed59ad42",
+   "hex": "77db6299",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -8293,7 +8293,7 @@
    "size": 28
   }
  ],
- "source_sha256": "b754d5a01f038d5a3a597b14276b432f22b6b365f3816a8f81b216f19d3a0b25",
+ "source_sha256": "3cbf7976b49136278eca6f1a6290311a4737f26d558e2255c8024a05b42c5116",
  "symbols": [
   {
    "global": false,
@@ -10411,7 +10411,7 @@
  "toolchain": {
   "exports": "DKRT_FXP_FW dk_fx_add_page dk_fx_mix dk_fx_routes dk_fx_routes_entry dk_module dk_module_ctx_add_fx dk_page_add_fx_param dk_svc_abi fxp_acc fxp_graph fxp_init fxp_keylist fxp_label fxp_list fxp_load fxp_save fxp_sound",
   "instructions_redecoded": "8650",
-  "isa_check": "d6830aa4dc1be39f4c698df0b257b95955e94d3b852cd2384b74ce5523d2fea5",
+  "isa_check": "c40440024941accf30fae99fa9cde295b05899c3f0024652749e79111a8fe427",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
