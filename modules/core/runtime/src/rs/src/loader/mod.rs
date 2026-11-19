@@ -459,7 +459,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         };
         match self.port_keys() {
             Some((keys, base, image_size)) => port::lookup(&keys, base, image_size, r),
-            None => port::Lookup::Unlisted(r.hash()),
+            None => port::Lookup::Unlisted(r.hash),
         }
     }
 
@@ -556,18 +556,16 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             if a == 0 && role == 1 {
                 // the firmware references of a service file are the port file's: an address, 0 for a name that this firmware lacks, or a refusal
                 let n = cstr_len(p, dkneeds::CF_IMPORT_LEN as usize);
-                match self.port_lookup(core::slice::from_raw_parts(p, n)) {
-                    port::Lookup::Addr(x) => a = x,
-                    port::Lookup::Absent => {
-                        c.import_addrs[i] = 0;
-                        i += 1;
-                        continue;
-                    }
-                    port::Lookup::Unlisted(h) => {
-                        self.import_hash = h;
-                        return E_IMPORT;
-                    }
-                    port::Lookup::NotPort => {}
+                let found = self.port_lookup(core::slice::from_raw_parts(p, n));
+                if let port::Lookup::Addr(x) = found {
+                    a = x;
+                } else if found == port::Lookup::Absent {
+                    c.import_addrs[i] = 0;
+                    i += 1;
+                    continue;
+                } else if let port::Lookup::Unlisted(h) = found {
+                    self.import_hash = h;
+                    return E_IMPORT;
                 }
             }
             if a == 0 {

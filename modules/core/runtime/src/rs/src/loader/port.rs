@@ -21,40 +21,29 @@ const JMP_BYTES: u32 = 6;
 /// `rts`: the first word of the port file's image, the target of every `dk_ret_`.
 pub const RTS: u16 = 0x4e75;
 
-/// A firmware reference of an import name.
+/// A firmware reference of an import name: its kind (`R_*`), the name hash and, for an exit, the exit number. A struct and plain tests, not an enum and a `match`: a
+/// match on four or more dense arms compiles to a jump table, which is not ColdFire code (`patchkit build` refuses it).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Ref {
-    /// `dk_fw_`: the address of a firmware name.
-    Name(u32),
-    /// `dk_exit_<hash>_<n>`: the end of a hook's site (`n` 0) or an exit of the hook.
-    Exit(u32, u16),
-    /// `dk_tail_`: the copy of the displaced instructions of a hook.
-    Tail(u32),
-    /// `dk_stock_`: the same code, called from inside the hook.
-    Stock(u32),
-    /// `dk_ret_`: one `rts`.
-    Ret(u32),
+pub struct Ref {
+    pub kind: u8,
+    pub hash: u32,
+    pub n: u16,
 }
 
+/// `dk_fw_`: the address of a firmware name.
+pub const R_NAME: u8 = 0;
+/// `dk_exit_<hash>_<n>`: the end of a hook's site (`n` 0) or an exit of the hook.
+pub const R_EXIT: u8 = 1;
+/// `dk_tail_`: the copy of the displaced instructions of a hook.
+pub const R_TAIL: u8 = 2;
+/// `dk_stock_`: the same code, called from inside the hook.
+pub const R_STOCK: u8 = 3;
+/// `dk_ret_`: one `rts`.
+pub const R_RET: u8 = 4;
+
 impl Ref {
-    /// The name hash of the reference. Plain tests, not a `match`: a match on this enum compiles to a jump table, which is not ColdFire code (`patchkit build` refuses it).
-    pub fn hash(&self) -> u32 {
-        if let Ref::Exit(h, _) = *self {
-            return h;
-        }
-        if let Ref::Name(h) = *self {
-            return h;
-        }
-        if let Ref::Tail(h) = *self {
-            return h;
-        }
-        if let Ref::Stock(h) = *self {
-            return h;
-        }
-        if let Ref::Ret(h) = *self {
-            return h;
-        }
-        0
+    pub const fn new(kind: u8, hash: u32, n: u16) -> Ref {
+        Ref { kind, hash, n }
     }
 }
 
@@ -99,17 +88,13 @@ fn strip<'a>(name: &'a [u8], prefix: &[u8]) -> Option<&'a [u8]> {
 
 /// The reference an import name stands for; `None` for every other name (a function of the runtime, an export of a service).
 pub fn parse_import(name: &[u8]) -> Option<Ref> {
-    if let Some(h) = strip(name, b"dk_fw_") {
-        return hex8(h).map(Ref::Name);
-    }
-    if let Some(h) = strip(name, b"dk_tail_") {
-        return hex8(h).map(Ref::Tail);
-    }
-    if let Some(h) = strip(name, b"dk_stock_") {
-        return hex8(h).map(Ref::Stock);
-    }
-    if let Some(h) = strip(name, b"dk_ret_") {
-        return hex8(h).map(Ref::Ret);
+    const FORMS: [(&[u8], u8); 4] = [(b"dk_fw_", R_NAME), (b"dk_tail_", R_TAIL), (b"dk_stock_", R_STOCK), (b"dk_ret_", R_RET)];
+    let mut f = 0;
+    while f < FORMS.len() {
+        if let Some(h) = strip(name, FORMS[f].0) {
+            return hex8(h).map(|h| Ref::new(FORMS[f].1, h, 0));
+        }
+        f += 1;
     }
     let rest = strip(name, b"dk_exit_")?;
     if rest.len() < 10 || rest.len() > 11 || rest[8] != b'_' {
@@ -125,7 +110,7 @@ pub fn parse_import(name: &[u8]) -> Option<Ref> {
         n = n * 10 + (digits[i] - b'0') as u16;
         i += 1;
     }
-    Some(Ref::Exit(hex8(&rest[..8])?, n))
+    Some(Ref::new(R_EXIT, hex8(&rest[..8])?, n))
 }
 
 /// Does the site carry a copy of its displaced bytes (a tail or a stock path)?
@@ -176,23 +161,26 @@ pub fn tail_off(keys: &Keys, image_size: u32, hash: u32) -> Option<u32> {
 
 /// Resolve `r` against the table `keys` of the port file loaded at `base` with an image of `image_size` bytes.
 pub fn lookup(keys: &Keys, base: u32, image_size: u32, r: Ref) -> Lookup {
-    match r {
-        Ref::Name(h) => name(keys, NAME_FW, h, 0),
-        Ref::Exit(h, n) => name(keys, NAME_EXIT, h, n),
-        Ref::Tail(h) | Ref::Stock(h) => match keys.find_site(h) {
-            None => Lookup::Unlisted(h),
-            Some(s) if s.flags & FLAG_ABSENT != 0 => Lookup::Absent,
-            Some(s) if !copies(&s) => Lookup::Unlisted(h),
-            Some(_) => match tail_off(keys, image_size, h) {
-                Some(off) => Lookup::Addr(base.wrapping_add(off)),
-                None => Lookup::Unlisted(h),
-            },
-        },
-        Ref::Ret(h) => match keys.find_site(h) {
-            None => Lookup::Unlisted(h),
-            Some(s) if s.flags & FLAG_ABSENT != 0 => Lookup::Absent,
-            Some(_) => Lookup::Addr(base),
-        },
+    if r.kind == R_NAME || r.kind == R_EXIT {
+        return name(keys, if r.kind == R_NAME { NAME_FW } else { NAME_EXIT }, r.hash, r.n);
+    }
+    let h = r.hash;
+    let Some(s) = keys.find_site(h) else {
+        return Lookup::Unlisted(h);
+    };
+    if s.flags & FLAG_ABSENT != 0 {
+        return Lookup::Absent;
+    }
+    if r.kind == R_RET {
+        return Lookup::Addr(base);
+    }
+    // a tail or a stock path: the copy (a raw site has none)
+    if !copies(&s) {
+        return Lookup::Unlisted(h);
+    }
+    match tail_off(keys, image_size, h) {
+        Some(off) => Lookup::Addr(base.wrapping_add(off)),
+        None => Lookup::Unlisted(h),
     }
 }
 
@@ -247,12 +235,12 @@ mod tests {
 
     #[test]
     fn the_import_names_of_the_firmware_references_are_parsed() {
-        assert_eq!(parse_import(b"dk_fw_0000beef"), Some(Ref::Name(0xbeef)));
-        assert_eq!(parse_import(b"dk_tail_deadbeef"), Some(Ref::Tail(0xdead_beef)));
-        assert_eq!(parse_import(b"dk_stock_00000001"), Some(Ref::Stock(1)));
-        assert_eq!(parse_import(b"dk_ret_00000002"), Some(Ref::Ret(2)));
-        assert_eq!(parse_import(b"dk_exit_00000003_0"), Some(Ref::Exit(3, 0)));
-        assert_eq!(parse_import(b"dk_exit_00000003_12"), Some(Ref::Exit(3, 12)));
+        assert_eq!(parse_import(b"dk_fw_0000beef"), Some(Ref::new(R_NAME, 0xbeef, 0)));
+        assert_eq!(parse_import(b"dk_tail_deadbeef"), Some(Ref::new(R_TAIL, 0xdead_beef, 0)));
+        assert_eq!(parse_import(b"dk_stock_00000001"), Some(Ref::new(R_STOCK, 1, 0)));
+        assert_eq!(parse_import(b"dk_ret_00000002"), Some(Ref::new(R_RET, 2, 0)));
+        assert_eq!(parse_import(b"dk_exit_00000003_0"), Some(Ref::new(R_EXIT, 3, 0)));
+        assert_eq!(parse_import(b"dk_exit_00000003_12"), Some(Ref::new(R_EXIT, 3, 12)));
         // another name, upper-case digits, a short hash or a bad exit number is no reference
         for bad in [&b"dk_alloc"[..], b"dk_fw_0000BEEF", b"dk_fw_beef", b"dk_exit_00000003_", b"dk_exit_00000003_x", b"dk_exit_00000003_123", b"dk_exit_00000003", b"dk_tail_"] {
             assert_eq!(parse_import(bad), None, "{:?}", std::str::from_utf8(bad));
@@ -263,13 +251,13 @@ mod tests {
     fn a_name_resolves_to_its_address_to_zero_when_absent_and_is_refused_when_not_listed() {
         let b = table();
         let k = Keys::parse(&b).unwrap();
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Name(5)), Lookup::Addr(0x100));
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Name(6)), Lookup::Absent);
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Name(99)), Lookup::Unlisted(99));
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_NAME, 5, 0)), Lookup::Addr(0x100));
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_NAME, 6, 0)), Lookup::Absent);
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_NAME, 99, 0)), Lookup::Unlisted(99));
         // a name is not an exit and an exit is not a name
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Exit(5, 0)), Lookup::Unlisted(5));
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Exit(9, 1)), Lookup::Addr(0x240));
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Exit(9, 2)), Lookup::Unlisted(9));
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_EXIT, 5, 0)), Lookup::Unlisted(5));
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_EXIT, 9, 1)), Lookup::Addr(0x240));
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_EXIT, 9, 2)), Lookup::Unlisted(9));
     }
 
     #[test]
@@ -282,14 +270,14 @@ mod tests {
         assert_eq!(tail_off(&k, 16, 8), None);
         assert_eq!(tail_off(&k, 16, 11), None);
         assert_eq!(tails_total(&k), 14 + 16);
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Tail(7)), Lookup::Addr(0x4010));
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Stock(10)), Lookup::Addr(0x4000 + 30));
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Tail(8)), Lookup::Unlisted(8), "a raw site has no copy");
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Tail(11)), Lookup::Absent);
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Tail(77)), Lookup::Unlisted(77));
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_TAIL, 7, 0)), Lookup::Addr(0x4010));
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_STOCK, 10, 0)), Lookup::Addr(0x4000 + 30));
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_TAIL, 8, 0)), Lookup::Unlisted(8), "a raw site has no copy");
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_TAIL, 11, 0)), Lookup::Absent);
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_TAIL, 77, 0)), Lookup::Unlisted(77));
         // the return stub is the first word of the image, for every listed site
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Ret(8)), Lookup::Addr(0x4000));
-        assert_eq!(lookup(&k, 0x4000, 16, Ref::Ret(11)), Lookup::Absent);
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_RET, 8, 0)), Lookup::Addr(0x4000));
+        assert_eq!(lookup(&k, 0x4000, 16, Ref::new(R_RET, 11, 0)), Lookup::Absent);
     }
 
     #[test]

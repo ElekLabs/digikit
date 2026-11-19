@@ -864,19 +864,22 @@ impl<'a> Keys<'a> {
         self.count(tag::FWNAMES)
     }
 
-    /// `FWNAMES` item `i`; `None` outside the entry.
+    /// `FWNAMES` item `i`; `None` outside the entry. (Fixed-size array reads, no slice indexing: the runtime calls it and a bounds check is code.)
     pub fn name(&self, i: usize) -> Option<NameRec> {
         let (n, b) = entry(self.bytes, tag::FWNAMES)?;
         if i >= n {
             return None;
         }
-        let at = NAME_BYTES * i;
+        let c: &[u8; NAME_BYTES] = b
+            .get(NAME_BYTES * i..NAME_BYTES * (i + 1))?
+            .try_into()
+            .ok()?;
         Some(NameRec {
-            hash: u32_at(b, at),
-            addr: u32_at(b, at + 4),
-            n: u16_at(b, at + 8),
-            kind: b[at + 10],
-            flags: b[at + 11],
+            hash: u32::from_be_bytes([c[0], c[1], c[2], c[3]]),
+            addr: u32::from_be_bytes([c[4], c[5], c[6], c[7]]),
+            n: u16::from_be_bytes([c[8], c[9]]),
+            kind: c[10],
+            flags: c[11],
         })
     }
 
@@ -903,16 +906,17 @@ impl<'a> Keys<'a> {
         if i >= n {
             return None;
         }
-        let at = SITE_BYTES * i;
-        let mut check = [0u8; 8];
-        check.copy_from_slice(&b[at + 12..at + 20]);
+        let c: &[u8; SITE_BYTES] = b
+            .get(SITE_BYTES * i..SITE_BYTES * (i + 1))?
+            .try_into()
+            .ok()?;
         Some(SiteRec {
-            hash: u32_at(b, at),
-            addr: u32_at(b, at + 4),
-            len: u16_at(b, at + 8),
-            kind: b[at + 10],
-            flags: b[at + 11],
-            check,
+            hash: u32::from_be_bytes([c[0], c[1], c[2], c[3]]),
+            addr: u32::from_be_bytes([c[4], c[5], c[6], c[7]]),
+            len: u16::from_be_bytes([c[8], c[9]]),
+            kind: c[10],
+            flags: c[11],
+            check: [c[12], c[13], c[14], c[15], c[16], c[17], c[18], c[19]],
         })
     }
 
