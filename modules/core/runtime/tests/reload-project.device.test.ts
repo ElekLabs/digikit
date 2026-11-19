@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { waitClock } from '@digi/test-support';
+import { pollUntil, waitClock } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { cardRig, RT, CARD_SYMBOLS } from '@digi/regression/runtime/card-rig.ts';
@@ -87,8 +87,11 @@ describeOn('dt2', `DT2 ${FIRMWARE.dt2} reload: a project that uses the reloaded 
     const before = await note(rt, artifacts, 'before');
     expect(before.peak, `the machine is audible (peak ${before.peak.toFixed(4)})`).toBeGreaterThan(0.01);
 
-    const end = await run.usb(rt, (dk) => dk.reloadAndWait(PATH));
-    expect(end, 'the reload of the machine').toEqual({ result: 0, unloaded: true });
+    // queue the reload over the paused protocol, then let emulated time run until the job finishes: the job needs the DSP, and the paused protocol's
+    // short steps under its 30 s wall deadline do not reach the end of a DT2 reload with a DSP load
+    await run.usb(rt, (dk) => dk.reload(PATH));
+    const end = await pollUntil(rt.clock, () => run.usb(rt, (dk) => dk.reloadState()), (st) => st.phase === 2, { withinMs: 20_000, message: 'the reload of the machine finished' });
+    expect({ result: end.result, unloaded: end.unloaded }, 'the reload of the machine').toEqual({ result: 0, unloaded: true });
     await loadPanelProject(rt);
     expect(await trackType(rt.session, 1), 'after the project load track 1 holds the type of the reloaded machine').toBe(type);
     const after = await note(rt, artifacts, 'after');
