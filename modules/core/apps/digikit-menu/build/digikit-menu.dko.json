@@ -256,34 +256,6 @@
   },
   {
    "addend": 0,
-   "offset": 10,
-   "section": ".text.settings_release",
-   "symbol": ".sec..bss.g_set",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 18,
-   "section": ".text.settings_release",
-   "symbol": ".sec..bss.g_set_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 24,
-   "section": ".text.settings_release",
-   "symbol": "dk_ui_menu_refresh",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 76,
-   "section": ".text.settings_release",
-   "symbol": "dk_ui_menu_is_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 18,
    "section": ".text.prow",
    "symbol": ".sec..bss.DK_PANEL_N",
@@ -739,6 +711,48 @@
   },
   {
    "addend": 0,
+   "offset": 10,
+   "section": ".text.settings_release",
+   "symbol": ".sec..bss.g_set_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.settings_release",
+   "symbol": ".sec..bss.g_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text.settings_release",
+   "symbol": ".sec..bss.g_set_hold",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.settings_release",
+   "symbol": "dkrt_menu_release",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 86,
+   "section": ".text.settings_release",
+   "symbol": "dk_ui_menu_is_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 118,
+   "section": ".text.settings_release",
+   "symbol": "dk_ui_menu_refresh",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 2,
    "section": ".text.refit",
    "symbol": ".sec..bss.g_fit",
@@ -1055,27 +1069,6 @@
   {
    "addend": 0,
    "offset": 2,
-   "section": ".text.settings_poll",
-   "symbol": ".sec..text.settings_release",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 10,
-   "section": ".text.settings_poll",
-   "symbol": ".sec..bss.g_set_open",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 34,
-   "section": ".text.settings_poll",
-   "symbol": "dkrt_poll_remove",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2,
    "section": ".text.panel_info",
    "symbol": ".sec..bss.g_lq_state",
    "type": "cf.32"
@@ -1127,6 +1120,27 @@
    "offset": 90,
    "section": ".text.settings_module",
    "symbol": ".sec..text.same_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.settings_poll",
+   "symbol": ".sec..text.settings_release",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.settings_poll",
+   "symbol": ".sec..bss.g_set_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text.settings_poll",
+   "symbol": "dkrt_poll_remove",
    "type": "cf.32"
   },
   {
@@ -1747,28 +1761,49 @@
   },
   {
    "addend": 0,
-   "offset": 400,
+   "offset": 398,
+   "section": ".text.panel_settings",
+   "symbol": ".sec..bss.g_set_hold",
+   "type": "cf.32"
+  },
+  {
+   "addend": 116,
+   "offset": 410,
+   "section": ".text.panel_settings",
+   "symbol": ".sec..bss.mod.4",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 424,
+   "section": ".text.panel_settings",
+   "symbol": "dkrt_menu_built",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 432,
    "section": ".text.panel_settings",
    "symbol": ".sec..bss.g_set_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 414,
+   "offset": 448,
    "section": ".text.panel_settings",
    "symbol": ".sec..text.settings_poll",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 420,
+   "offset": 454,
    "section": ".text.panel_settings",
    "symbol": "dkrt_poll_add",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 440,
+   "offset": 474,
    "section": ".text.panel_settings",
    "symbol": "dk_ui_menu_open",
    "type": "cf.32"
@@ -6803,13 +6838,6 @@
   },
   {
    "align": 2,
-   "hex": "4fefffec48d73c0445f900000000428247f9000000004bf9000000004a332800671220124a80662042001780280020124a8066245282588a7010b08266de4cd73c044fef00144e752f004eb900000000588f4a8067d260dc2f004e95588f60d4",
-   "kind": "text",
-   "name": ".text.settings_release",
-   "size": 96
-  },
-  {
-   "align": 2,
    "hex": "2039000000007203b28065242200528123c10000000072184c0108002f2f00080680000000002f004eb900000000508f2f2f001042a72f2f00142f2f00142f2f00144eb9000000004fef00144e75",
    "kind": "text",
    "name": ".text.prow",
@@ -6842,6 +6870,13 @@
    "kind": "text",
    "name": ".text.open_health",
    "size": 66
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe848d77c0445f900000000428247f90000000049f9000000004df9000000004a1a673a203328004a80662442001540ffff203328004a806636203428004a80671c42a72f004e9642b42800508f600e2f004eb900000000588f4a8067ce58827040b08266ba4cd77c044fef00184e752f004eb900000000588f60be",
+   "kind": "text",
+   "name": ".text.settings_release",
+   "size": 126
   },
   {
    "align": 2,
@@ -6894,13 +6929,6 @@
   },
   {
    "align": 2,
-   "hex": "4eb900000000428041f9000000004a300800661452807210b28066f2487affe24eb900000000588f4e75",
-   "kind": "text",
-   "name": ".text.settings_poll",
-   "size": 42
-  },
-  {
-   "align": 2,
    "hex": "4a3900000000661a41ef000823d00000000041f9000000002f5000044ef9000000004e75",
    "kind": "text",
    "name": ".text.panel_info",
@@ -6912,6 +6940,13 @@
    "kind": "text",
    "name": ".text.settings_module",
    "size": 128
+  },
+  {
+   "align": 2,
+   "hex": "4eb900000000428041f9000000004a300800661452807210b28066f2487affe24eb900000000588f4e75",
+   "kind": "text",
+   "name": ".text.settings_poll",
+   "size": 42
   },
   {
    "align": 2,
@@ -6978,10 +7013,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffe848d71c1c202f00204a39000000006600016e4879000000002f004eb900000000508f52804a806700015647f9000000004282244b4a12671a4878003f4879000000002f0a4eb9000000004fef000c4a80663c528245ea00407810b88266d641f90000000042824a106600010671c243f900000000ed8841f30800428012310800670c118108005280723fb28066ee49f9000000004ab42c00660000ee4283428041f90000000012300800671273815280782fb881660226007220b28066e871c248790000000048780020eb882440d5fc000000002f0a4eb9000000004fef000c20434281d1fc0000000010301800672226000683ffffff9f77837819b88365060680ffffffe0158018005281701fb08166d8702478044c02080041f900000000223c0000000021810800d1c0203c000000002140000c214a000430022144000821420010c0fc00240680000000002f002f39000000004eb900000000508f29802c004a806622ed8a420117812800600e528241e800407810b8826600feea4cd71c1c4fef00184e75780141f90000000049f42c00118428004879000000004eb9000000002f5400204cef1c1c00044fef001c4ef900000000",
+   "hex": "4fefffe848d71c1c202f00204a39000000006600016e4879000000002f004eb900000000508f52804a806700015647f9000000004282244b4a12671a4878003f4879000000002f0a4eb9000000004fef000c4a80663c528245ea00407810b88266d641f90000000042824a106600010671c243f900000000ed8841f30800428012310800670c118108005280723fb28066ee49f9000000004ab42c00660000ee4283428041f90000000012300800671273815280782fb881660226007220b28066e871c248790000000048780020eb882440d5fc000000002f0a4eb9000000004fef000c20434281d1fc0000000010301800672226000683ffffff9f77837819b88365060680ffffffe0158018005281701fb08166d8702478044c02080041f900000000223c0000000021810800d1c0203c000000002140000c214a000430022144000821420010c0fc00240680000000002f002f39000000004eb900000000508f29802c004a806622ed8a420117812800600e528241e800407810b8826600feea4cd71c1c4fef00184e7541f9000000004ab02c00661620390000000021802c0042a72f004eb900000000508f41f900000000780149f42c00118428004879000000004eb9000000002f5400204cef1c1c00044fef001c4ef900000000",
    "kind": "text",
    "name": ".text.panel_settings",
-   "size": 444
+   "size": 478
   },
   {
    "align": 2,
@@ -7663,6 +7698,13 @@
    "size": 512
   },
   {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_set_hold",
+   "size": 64
+  },
+  {
    "align": 1,
    "hex": "",
    "kind": "bss",
@@ -8111,7 +8153,7 @@
    "size": 4
   }
  ],
- "source_sha256": "a6a697d797c239d6486c6909295fc7dd4ee5cd18d7e6351c52a1ea4ee031cd87",
+ "source_sha256": "cefa87dc828712cc801da90fc2bc42ca43cd3481fc5f852c06f592750f93d1b2",
  "symbols": [
   {
    "global": false,
@@ -8555,6 +8597,12 @@
    "global": false,
    "name": ".sec..bss.g_set_desc",
    "section": ".bss.g_set_desc",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_set_hold",
+   "section": ".bss.g_set_hold",
    "value": 0
   },
   {
@@ -9711,6 +9759,18 @@
   },
   {
    "global": true,
+   "name": "dkrt_menu_built",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_menu_release",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dkrt_module",
    "section": null,
    "value": 0
@@ -10085,6 +10145,12 @@
    "global": false,
    "name": "g_set_desc",
    "section": ".bss.g_set_desc",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_set_hold",
+   "section": ".bss.g_set_hold",
    "value": 0
   },
   {
@@ -10590,8 +10656,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "4088",
-  "isa_check": "d6edad9c68706ce587775fa7f7854535cd7e97d88c18b737e8fc96e0f0ff1284",
+  "instructions_redecoded": "4105",
+  "isa_check": "e947f6a02498b886eb7135db43c821818c1a3874b41ba7e6204af544176fbba5",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }
