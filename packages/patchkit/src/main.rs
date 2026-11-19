@@ -443,6 +443,9 @@ fn run(a: Args) -> Result<()> {
                 let lib = selected_library(&a.root, &selected_source(rest)?, true, &[], &only)?;
                 let models = patchkit::typed::Models::from_dir(&a.root.join("devices"))?;
                 let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
+                if only.is_empty() {
+                    patchkit::devgen::check_device_tables(&lib, &facts)?;
+                }
                 for m in &lib.modules {
                     if !only.is_empty() && !only.iter().any(|o| o == m.id()) {
                         continue;

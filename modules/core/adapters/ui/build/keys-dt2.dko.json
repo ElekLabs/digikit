@@ -1,18 +1,45 @@
 {
  "arch": "cf",
  "format": 1,
- "relocs": [],
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".rodata",
+   "symbol": "UI_KEYFL_MOVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".rodata",
+   "symbol": "UI_KEYFL_ACT",
+   "type": "cf.32"
+  }
+ ],
  "sections": [
   {
    "align": 2,
-   "hex": "0000000a000000310000000c0000000f",
+   "hex": "0000000a000000310000000c0000000f0000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 16
+   "size": 24
   }
  ],
- "source_sha256": "248aefa34826138f73cd00fbf5a6cac737555a4a905d7ac7707233de37868f73",
+ "source_sha256": "0199f8044158c16fe82d699bc6fd7a80ec3106b4b917c2a61bae9feb492bacf9",
  "symbols": [
+  {
+   "global": true,
+   "name": "UI_KEYFL_ACT",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "UI_KEYFL_MOVE",
+   "section": null,
+   "value": 0
+  },
   {
    "global": true,
    "name": "dk_ui_view_keys",
@@ -25,7 +52,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "2b619a20087bbc670158c513474298a9426fa131a99cbe6efb74bced599cf280",
+  "isa_check": "4c0ca5d5c1fef9ae3e0774bef38fe35cc0d56b10401b3e7b7dd25597339ad8b3",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

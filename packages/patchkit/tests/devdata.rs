@@ -815,15 +815,26 @@ fn only_runtime_targets_enter_the_shared_constants() {
 }
 
 #[test]
-fn a_device_that_patches_core_ui_must_say_the_key_ids_of_its_key_events() {
+fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    // every device of the repository has the tables of the modules in its patch sets
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
+    // core/ui declares `input.view_keys`: a device file without it is refused, naming the table, the set and the module
     let dt2 = std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap();
-    Facts::from_texts([dt2.as_str()]).unwrap();
-    // without [input.view_keys] the table core/ui reads would be zeros: refused, naming the table
     let start = dt2
         .find("[input.view_keys]")
         .expect("the device file has the table");
     let end = dt2[start..].find("\n\n").map_or(dt2.len(), |n| start + n);
     let without = format!("{}{}", &dt2[..start], &dt2[end..]);
-    let e = Facts::from_texts([without.as_str()]).unwrap_err().0;
-    assert!(e.contains("[input.view_keys] is missing"), "{e}");
+    let facts = Facts::from_texts([without.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("needs [input.view_keys]") && e.contains("core/ui"),
+        "{e}"
+    );
 }

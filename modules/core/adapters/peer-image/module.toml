@@ -12,6 +12,9 @@ requires = []
 conflicts = []
 ports = ["st-1.42"]
 
+[targets]
+"st-1.42" = "experimental"
+
 # The Syntakt's MAIN reads the second CPU's program (container section 7, 383,760 bytes) from the NOR flash into a transmit buffer and streams the buffer
 # byte for byte. Elektron stores the section raw; the patched image is 32 KB over the 2 MiB stage of the OS upgrade with it raw and about 85 KB under it
 # with it packed. A hook gives the peer thread a wrapper in place of the NOR read: for section 7 it reads the packed stream into the tail of the transmit

@@ -32,6 +32,9 @@ from tools.firmware import aplibpack, config, elz  # noqa: E402
 from tools.firmware.container import sections  # noqa: E402
 
 IMAGES = config.DEVICE_SYX
+# The depacker check stages a section other than the MAIN OS this far above the output address: no section unpacks to 8 MiB or more, so stream and output never overlap,
+# and the window stays inside the 32 MiB of DDR that depack_check models. (The stage of the MAIN OS is the device's `[patch] main_stage`.)
+SCRATCH_STAGE_OFFSET = 0x800000
 NAMES = {2: "DSP", 3: "MAIN_OS", 7: "BLOB", 8: "SECTION"}
 # The depacker's prologue: lea -20(a7),a7; clr.l d1; movem.l d2-d5/a2,(a7);
 # move.l 28(a7),d4; moveq #1,d3; movea.l 24(a7),a0; movea.l d4,a1; addq.l #8,a0.
@@ -98,9 +101,11 @@ def firmware_depack(binary, bootstrap_path, stream: bytes, dev: dict, sid: int) 
     boot = bootstrap_path.read_bytes()
     entry = depacker_entry(boot, dev["boot_load"])
     # The device's `main_stage` is where the bootstrap stages the MAIN OS (the `[container] main` section). The other sections are unpacked into their
-    # own buffers, which are not device data; for them the check only needs a stage that does not overlap the output: 8 MiB above the output.
+    # own buffers, which are not device data; for them the check only needs a stage that does not overlap the output (SCRATCH_STAGE_OFFSET above it).
     stage = (
-        dev["main_stage"] if sid == dev["main_section"] else dev["main_dest"] + 0x800000
+        dev["main_stage"]
+        if sid == dev["main_section"]
+        else dev["main_dest"] + SCRATCH_STAGE_OFFSET
     )
     with tempfile.TemporaryDirectory() as tmp:
         f = pathlib.Path(tmp) / "stream.bin"

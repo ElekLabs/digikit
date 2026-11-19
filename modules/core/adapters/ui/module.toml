@@ -11,10 +11,13 @@ summary = "The UI adapter behind <dk/platform/ui.h>: menus, text pages, lists wi
 requires = ["core/runtime"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12", "st-1.42"]
+# The key ids of the firmware's key events (build/gen/ui-<dev>.inc): a device without the table would give zeros.
+needs_device = ["input.view_keys"]
 
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
 
 # One C source for both devices: every firmware call is a generated anchor (modules/core/fw/include/dk_fw_*.h), so the object has no
 # externs table for C. The assembly shim maps its own symbol below. The dk_ui_* functions are plain global symbols that other

@@ -33,3 +33,15 @@ test('built site (when present) carries no firmware', { skip: !existsSync(join(r
     assert.ok(statSync(f).size < 5 * 1024 * 1024 || f.endsWith('emulator-core.wasm'), f);
   }
 });
+
+test('the gallery names only the devices the site offers, whatever the modules list in [targets]', async () => {
+  const { modules } = await import('../src/data/modules.ts');
+  const { SITE_DEVICES } = await import('../src/firmware/site-policy.ts');
+  assert.ok(modules.length > 0);
+  for (const m of modules) {
+    for (const d of m.devices) assert.ok(SITE_DEVICES.includes(d), `${m.id} names ${d}`);
+  }
+  // modules of the Syntakt list it in [targets]: it is not on the site
+  assert.ok(modules.some((m) => m.id === 'core/runtime'));
+  assert.ok(modules.every((m) => !m.devices.includes('st')));
+});

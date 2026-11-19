@@ -17,8 +17,8 @@ On a Syntakt, DIGIKIT > MODULES showed an empty list ("NO STORE") and no key wor
 
 ## What was built
 
-`[input.view_keys]` of the device file (`yes`, `yes2` (0: none), `no`, `right`) holds the key ids; `patchkit gen` writes `build/gen/ui-<dev>.inc`; a small object per device (`core/ui/src/keys/<dev>.s`) holds the four
-words and `ui.c` reads them (`dk_ui_view_keys`). Digitakt II and Digitone II: 10, 0x31, 12, 15 (as before). Syntakt: 12, 0, 13, 17. The patchkit test
+`[input.view_keys]` of the device file (`yes`, `yes2` (0: none), `no`, `right`, `move_flag`, `act_flag`) holds the key ids; `patchkit gen` writes `build/gen/ui-<dev>.inc`; a small object per device (`core/ui/src/keys/<dev>.s`) holds the six
+words and `ui.c` reads them (`dk_ui_view_keys`). Digitakt II and Digitone II: 10, 0x31, 12, 15 (as before). Syntakt: 12, 48, 13, 17. The patchkit test
 `the_syntakt_view_keys_are_the_decoder_table_entries` reads the table from the stock image and compares.
 
 ## Data of the same kind, and what is not device data
@@ -27,11 +27,12 @@ words and `ui.c` reads them (`dk_ui_view_keys`). Digitakt II and Digitone II: 10
   differ on the Syntakt. They are kept apart because they are read by different code (the runtime's boot path, core/ui); unifying them is a data change for later.
 - `[input.view_keys]` is required for a device whose patch sets include core/ui or core/digikit-menu (`patchkit gen` names the missing table).
 - In an empty list `core/ui` swallows only YES and RIGHT (nothing to act on or open); every other key, including an unknown one, goes to the stock handler.
-- The flag bits of a key event that the handler tests (bit 0 for RIGHT, bit 4 for YES and NO) are named `KEYFL_MOVE` and `KEYFL_ACT` in `ui.c`. They are the Digitakt II's bits (finding 71); on the Syntakt bit 4 is seen to
-  work for NO and YES (the emulator run above), bit 0 for RIGHT is **[O]**. They stay in code until a device differs.
+- The flag bits of a key event that the stock key handler tests are device data too (`move_flag`, `act_flag` of `[input.view_keys]`, generated into `ui-<dev>.inc`). Read from the Syntakt's compact
+  menu view (`CompactVerticalMenuView` key handler 0x400f5c82) **[D]**: the accessor 0x400f97e4 (`flags & 1`) is used for the ids 15, 16 and 17 (the cursor keys and RIGHT: bit 0 moves) and 0x400f97b4
+  (`(flags >> 4) & 1`) for the ids 12 and 0x30 (YES and the second YES key: bit 4 acts), the same bits as on the Digitakt II. That NO (13) acts on bit 4 too is **[O]** (NO leaves a page in the emulator).
+- The second YES key of the Syntakt is id 0x30 = 48 (the LEVEL push, channel 6 bit 0 of the decoder table), read from the same handler **[D]**; the Digitakt II's is 0x31. It is now set in the device file.
 
 ## Open
 
 - **[O]** The cause on the unit has not been confirmed by a flash; the emulator reproduction and the fix are the evidence.
-- **[O]** What `yes2` (0x31 on the other devices) is. The Syntakt has no key with that id in its table; it stays 0.
 - **[O]** The emulator run that first reached DIGIKIT in another analysis never opened the menu (YES on DIGIKIT); that run used another cursor position or timing. This one opened it.

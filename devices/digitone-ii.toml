@@ -274,12 +274,14 @@ sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "co
 [input]
 backend = "panel-uart"
 
-# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes). DT2 1.17 and DN2 1.12: the decoder tables are the identity (finding 58). `yes2` is a second YES key.
+# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes) and the bits of the event's flags word (+0x10) that the views' stock key handler tests: `move_flag` (bit number) for the cursor and RIGHT keys, `act_flag` for YES and the second YES key. Digitone II 1.12 (the same numbers as the Digitakt II): the decoder tables are the identity (finding 58); `yes2` is a second YES key (0x31); the flag bits are those of finding 71 **[D]**.
 [input.view_keys]
 yes = 10
 yes2 = 49
 no = 12
 right = 15
+move_flag = 0
+act_flag = 4
 
 [panel]
 # The wire carries (channel, bit); the firmware reports a control code.

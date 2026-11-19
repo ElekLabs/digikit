@@ -3,7 +3,7 @@
 // pane's (../transfer/web-env.ts). Every URL goes through BASE_URL.
 import { SHOW_EMULATOR } from '../../site.config.mjs';
 import { handoffStore, putHandoff } from '../patch/handoff';
-import { siteOffersPatched } from './site-policy';
+import { siteOffers } from './site-policy';
 import type { PatchKitLike, PreparedFlash } from '@digi/workbench-core/patch/patchkit-core.ts';
 import { senderKit } from '@digi/workbench-core/patch/sender-kit.ts';
 import { createWebTransferApp, type WebTransfer } from '../transfer/web-env';
@@ -73,7 +73,7 @@ export function createWebFirmwareEnv({
   const kit = senderKit(wasm, createKit);
 
   const webFirmwareEnv: FirmwareEnv = {
-    offersPatched: siteOffersPatched,
+    offersPatched: siteOffers,
     async prepare(stock, restore, set = '') {
       const w = await patchWorker();
       const id = nextId++;

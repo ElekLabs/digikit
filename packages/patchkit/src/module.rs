@@ -705,6 +705,10 @@ pub struct ModuleInfo {
     /// are not lowered into registry rows; the packer lowers them into the `.dkm` `register` records.
     #[serde(default)]
     pub dynamic: bool,
+    /// Tables of the device file that the module reads, as dotted paths (`input.view_keys`). Every device whose patch sets include the module must have them
+    /// (`devgen::check_device_tables`, run by `patchkit gen`); the module's `[[gen]]` constants come from them.
+    #[serde(default)]
+    pub needs_device: Vec<String>,
 }
 
 impl ModuleInfo {

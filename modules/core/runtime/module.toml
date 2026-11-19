@@ -20,6 +20,7 @@ optional_anchors = ["cf.link.site.block_isr.counter_lit", "cf.samples.fn.worker.
 "dt2-1.17" = "experimental"
 "dn2-1.11" = "experimental"
 "dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
 
 # The runtime: Rust, built with rustc_codegen_gcc for -mcpu=54418 (finding 26). Its bss holds the module arena
 # (DKRT_ARENA, 512 KiB) and the staging buffer (64 KiB), so patchkit reserves both together with the code and no other

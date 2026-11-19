@@ -270,12 +270,14 @@ frame_samples = 32
 [input]
 backend = "panel-uart"
 
-# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes). Syntakt: the firmware's key indices from the decoder table at 0x401d7a48 (word per wire position channel * 8 + bit; finding 138 "Safe key", finding 152): YES = channel 4 bit 6 = 12, NO = channel 3 bit 3 = 13, RIGHT = channel 3 bit 6 = 17; no second YES key.
+# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes) and the bits of the event's flags word (+0x10) that the views' stock key handler tests: `move_flag` (bit number) for the cursor and RIGHT keys, `act_flag` for YES and the second YES key. Syntakt 1.42: the firmware's key indices from the decoder table at 0x401d7a48 (word per wire position channel * 8 + bit; finding 138 "Safe key", finding 152): YES = channel 4 bit 6 = 12, NO = channel 3 bit 3 = 13, RIGHT = channel 3 bit 6 = 17 **[V]**; `yes2` 0x30 = 48 (the LEVEL push, channel 6 bit 0): the compact view's key handler (CompactVerticalMenuView, 0x400f5c82) treats id 0xc and 0x30 alike **[D]**. Flag bits, same handler: the accessors 0x400f97e4 (`and #1`, used for the ids 15, 16 and 17: bit 0 moves) and 0x400f97b4 (`lsr #4; and #1`, used for the ids 12 and 0x30: bit 4 acts) **[D]**; that NO (13) acts on bit 4 too, as on the Digitakt II, is **[O]** (NO leaves a page in the emulator).
 [input.view_keys]
 yes = 12
-yes2 = 0
+yes2 = 48
 no = 13
 right = 17
+move_flag = 0
+act_flag = 4
 
 # Panel, measured on the emulated OS 1.42 (finding 70 "Panel sweep"). The wire carries (channel, bit); code = channel * 8 + bit + 1 for the six
 # linear channels, as on the other devices. Unlike them, the firmware's decoder table (0x401d7a48, 32 bytes per channel) is not the identity:

@@ -388,7 +388,7 @@ fn the_digitakt_and_digitone_device_images_have_no_literal_tail() {
 }
 
 /// The key ids of the Syntakt's key events that core/ui compares (`[input.view_keys]`) are the entries of the firmware's decoder table at 0x401d7a48 for the
-/// wire positions of YES, NO and RIGHT (panel codes 39, 28 and 31: wire position = code - 1 = channel * 8 + bit; finding 152).
+/// wire positions of YES, NO, RIGHT and the second YES key (panel codes 39, 28, 31 and 49: wire position = code - 1 = channel * 8 + bit; finding 152).
 #[test]
 fn the_syntakt_view_keys_are_the_decoder_table_entries() {
     let Some(raw) = image() else { return };
@@ -405,5 +405,6 @@ fn the_syntakt_view_keys_are_the_decoder_table_entries() {
     assert_eq!(get("yes"), table(39 - 1));
     assert_eq!(get("no"), table(28 - 1));
     assert_eq!(get("right"), table(31 - 1));
-    assert_eq!(get("yes2"), 0, "the Syntakt has no second YES key");
+    // the second YES key is the LEVEL push, panel code 49 (channel 6, bit 0: wire position 48)
+    assert_eq!(get("yes2"), table(49 - 1));
 }

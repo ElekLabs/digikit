@@ -52,15 +52,14 @@ void dk_make_sp(shared_ptr *out, uint8_t *parent, uint8_t *view);
 #define VT_DETACH_ADD 16
 #define VT_CLOSE 10
 /* The key ids of the firmware's key events (the id at +0xc of the event): the device's `[input.view_keys]`, in the per-device object src/keys/<dev>.s. */
-extern const uint32_t dk_ui_view_keys[4];
+extern const uint32_t dk_ui_view_keys[6];
 #define KEY_YES (dk_ui_view_keys[0])
 #define KEY_YES2 (dk_ui_view_keys[1]) /* 0: the device has no second YES key */
 #define KEY_NO (dk_ui_view_keys[2])
 #define KEY_RIGHT (dk_ui_view_keys[3])
-/* Flags of a key event (+0x10), as the compact handler of the firmware reads them (finding 71): bit 0 is the one UP, DOWN and the item adjust keys act on,
-   bit 4 the one YES and NO act on. Their names are open; the bits are the same on the devices checked (the Digitakt II, and NO and YES on the Syntakt). */
-#define KEYFL_MOVE 1
-#define KEYFL_ACT 16
+/* The flags word of a key event (+0x10): the bit the move keys act on, the bit YES and NO act on (the firmware's own handler reads them). Device data too. */
+#define KEYFL_MOVE (1u << dk_ui_view_keys[4])
+#define KEYFL_ACT (1u << dk_ui_view_keys[5])
 #define MAX_CHOICE 32
 #define LIST_ROWS 8
 #define LIST_COLS 20 /* characters of a list row that the label of a toggle or value row fills */

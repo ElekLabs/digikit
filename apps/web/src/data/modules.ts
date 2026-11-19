@@ -1,5 +1,6 @@
 // The module gallery, read at build time from the committed modules/**/module.toml and each module's
 // gallery/icon.svg (line art on a 48 grid; apps/web/tests/icons.test.ts checks what an icon may contain).
+import { siteOffers } from '../firmware/site-policy';
 import { parse } from 'smol-toml';
 import { runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import { isShipped } from './shipped.mjs';
@@ -128,7 +129,8 @@ export const modules: ModuleInfo[] = Object.entries(manifests)
       requires: m.requires ?? [],
       conflicts: m.conflicts ?? [],
       claims: claim.map((c) => c.resource),
-      devices: order.filter((d) => named.has(d)),
+      // the site's own list decides which devices the gallery names (apps/web/src/firmware/site-policy.ts), not the modules' `[targets]`
+      devices: order.filter((d) => named.has(d) && siteOffers(d)),
       icon: icons[path.replace(/module\.toml$/, 'gallery/icon.svg')] ?? FRAMEWORK_ICON,
       machines: galleryMachines(galleries[path.replace(/module\.toml$/, 'build/gen/gallery.json')]),
       dynamic: m.dynamic ?? false,

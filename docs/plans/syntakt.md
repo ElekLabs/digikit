@@ -238,6 +238,6 @@ Two images, built and preflighted on the host, emulator-proved for section 7 and
 
 - [ ] Optional first flash: `patchkit flash firmware/Syntakt_OS1.42.syx --port NAME --set device-peer`: `core/peer-image` only, no runtime.
 - [ ] The full set: the workbench Firmware page (or `--set device`): the runtime and the core modules of the `emulator` set.
-- The public site (apps/web) does not offer a patched Syntakt image until the proof is complete; then add `st` to `SITE_PATCHED_DEVICES` (`apps/web/src/firmware/site-policy.ts`).
+- The public site (apps/web) does not offer a patched Syntakt image until the proof is complete; then add `st` to `SITE_DEVICES` (`apps/web/src/firmware/site-policy.ts`).
 - Before: back up the +Drive card; do not use Transfer to put samples or sounds into the stock slots until the Data API write guard (above) lands.
 - Recovery: hold FUNC at power-on, TRIG 4 (OS UPGRADE), send the stock file over 5-pin MIDI DIN ([PATCHING.md](../PATCHING.md) "Flashing a Syntakt").
