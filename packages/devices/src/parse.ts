@@ -76,8 +76,6 @@ export interface DeviceRecord {
   storage?: Storage;
   acceptance?: Acceptance;
   firmware: readonly Firmware[];
-  /** `[patch] site_flash`: whether the public site may offer a patched image of the device (default true; false: only the workbench does). */
-  siteFlash: boolean;
   /** `[patch_sets]`: the module ids of each named set (`device`, `emulator`); empty when the file has none. */
   patchSets: Readonly<Record<string, readonly string[]>>;
   /** `[digikit] default_modules`: the module ids the apps install after a flash; empty when the file has none. */
@@ -192,14 +190,6 @@ function storage(file: string, t: unknown): Storage | undefined {
   return out as unknown as Storage;
 }
 
-function siteFlash(file: string, t: unknown): boolean {
-  if (t === undefined) return true;
-  const v = need(file, '[patch]', t, isTable).site_flash;
-  if (v === undefined) return true;
-  if (typeof v !== 'boolean') throw new Error(`devices/${file}: [patch] site_flash must be true or false`);
-  return v;
-}
-
 function container(file: string, t: unknown, caps: Capabilities): Container {
   const c = need(file, '[container]', t, isTable);
   const main = need(file, '[container] main', c.main, isInt);
@@ -305,7 +295,6 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
       capabilities: caps,
       container: container(file, doc.container, caps),
       firmware: fw,
-      siteFlash: siteFlash(file, doc.patch),
       patchSets: patchSets(file, doc.patch_sets),
       defaultModules: defaultModules(file, doc.digikit),
     };

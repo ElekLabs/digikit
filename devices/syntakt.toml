@@ -75,8 +75,6 @@ apply = "restart"
 # What patchkit needs of this device (the DT2 and DN2 files explain each key; tools/patchkit/port_resolve.py copies the limits into
 # devices/ports/st-1.42.toml). There are no dsp_* keys: the device has no DSP (`[capabilities] dsp = "none"`).
 [patch]
-# The public site offers no patched Syntakt image: the hardware route is unproven and only the workbench flashes it (docs/design/device-data.md "[patch]").
-site_flash = false
 # The container (the OS image in the NOR flash) is at most 0x1FFE00 bytes: the OS-upgrade receiver stages it in RAM at 0x403d10d0, 2 MiB, 101 bytes per
 # message and no size check (finding 146 section 4), so 20763 messages of 101 bytes = 2,097,063 bytes fit the stage, rounded down to a 0x200 page: 0x1FFE00. The stock container is
 # 2,029,486 bytes; the emulator dry run 2,000,880 (finding 137). Written from 0x80000, so it also stays below the calibration record at 0x300000.

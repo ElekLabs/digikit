@@ -16,10 +16,11 @@ export interface FirmwareRun {
 
 export interface FirmwareEnv {
   /**
-   * The public site: it honours `[patch] site_flash = false` of a device file and prepares no patched image for that device (restoring stock stays
-   * available). The desktop workbench leaves it out and ignores the flag.
+   * Which devices' patched images this app offers. The public site passes its own list (apps/web/src/firmware/site-policy.ts: a publication decision, not a device
+   * fact); the Firmware page then prepares no patched image for another device (restoring stock stays available for every device). The desktop workbench leaves
+   * it out and offers every device that has a `device` patch set.
    */
-  publicSite?: boolean;
+  offersPatched?(device: string): boolean;
   /**
    * Patch the stock file and check the result (`flash::prepare`), or with `restore` check the stock file itself (`flash::restore`). A failed
    * check is in the result; a file that is no known stock image throws patchkit's text. `set` is the device file's patch set: empty for `device`,

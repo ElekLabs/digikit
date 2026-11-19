@@ -8,20 +8,19 @@ import { createDefaultModules } from '../src/firmware/default-modules-state.ts';
 import type { FirmwareEnv } from '../src/firmware/env.ts';
 import type { TransferApp } from '../src/transfer/app.ts';
 
-// devices the registry does not have: one with no `device` patch set, one with a set and `site_flash = false`; the registry and the file identity answer for them
+// devices the registry does not have: one with no `device` patch set, one with a set that the site's policy does not list; the registry and the file identity answer for them
 const fake = vi.hoisted(() => {
-  const record = (id: string, name: string, patchSets: Record<string, string[]>, siteFlash: boolean) => ({
+  const record = (id: string, name: string, patchSets: Record<string, string[]>) => ({
     id,
     name,
     patchSets,
-    siteFlash,
     firmware: [],
   });
   return {
     chosen: 'nohw',
     records: {
-      nohw: record('nohw', 'Nohardware', {}, true),
-      locked: record('locked', 'Sitelocked', { device: ['core/x'] }, false),
+      nohw: record('nohw', 'Nohardware', {}),
+      locked: record('locked', 'Sitelocked', { device: ['core/x'] }),
     } as Record<string, ReturnType<typeof record>>,
   };
 });
@@ -67,9 +66,9 @@ test('a file of a device without a hardware image gives the error and patchkit i
   assert.equal(state.fileDevice()?.id, 'nohw');
 });
 
-test('the public site prepares no patched image of a device with site_flash = false; the workbench does', async () => {
+test('the site prepares no patched image of a device outside its list; the workbench offers every device with a set', async () => {
   fake.chosen = 'locked';
-  const site = page({ publicSite: true });
+  const site = page({ offersPatched: (id) => id === 'listed' });
   await pick(site.state);
   const p = site.state.prepared();
   assert.equal(p.kind, 'error');
@@ -79,6 +78,12 @@ test('the public site prepares no patched image of a device with site_flash = fa
   // restoring stock stays available on the site
   site.state.setRestore(true);
   await vi.waitFor(() => expect(site.prepare).toHaveBeenCalledTimes(1));
+
+  // a device the site lists is prepared
+  const listed = page({ offersPatched: (id) => id === 'locked' });
+  await pick(listed.state);
+  await vi.waitFor(() => expect(listed.prepare).toHaveBeenCalledTimes(1));
+  assert.notEqual(listed.state.prepared().kind, 'error');
 
   const workbench = page({});
   await pick(workbench.state);

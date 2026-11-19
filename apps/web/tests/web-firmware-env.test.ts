@@ -83,7 +83,10 @@ test('the sender comes from the wasm source once, through a stub kit', async () 
   assert.deepEqual(wasm.asked, ['patchkit.wasm']);
 });
 
-test('the site environment is the public site: it honours site_flash = false of a device file', () => {
+test('the site environment offers the devices of its policy list only', () => {
   const env = createWebFirmwareEnv({ workers: createFakeWorkers({}), base: '/site/', wasm: memoryWasmSource() });
-  assert.equal(env.publicSite, true);
+  assert.equal(env.offersPatched?.('dt2'), true);
+  assert.equal(env.offersPatched?.('dn2'), true);
+  assert.equal(env.offersPatched?.('st'), false, 'the Syntakt is not in the list yet');
+  assert.equal(env.offersPatched?.('nothing'), false);
 });

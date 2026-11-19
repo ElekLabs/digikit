@@ -78,7 +78,7 @@ export function createFirmwareState({
       });
       return;
     }
-    if (record && env.publicSite && !record.siteFlash && !restore()) {
+    if (record && env.offersPatched && !env.offersPatched(record.id) && !restore()) {
       setPrepared({
         kind: 'error',
         name,
