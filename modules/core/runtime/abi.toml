@@ -292,7 +292,7 @@ doc = "DkrtDiag.card_state: a read of the area failed: the runtime cannot tell, 
 name = "CARD_TOO_SMALL"
 type = "u32"
 value = 5
-doc = "DkrtDiag.card_state: the card is smaller than the store area (its last sector cannot be read): there is no store."
+doc = "DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store."
 
 [[const]]
 name = "DIAG_MAGIC"
@@ -424,7 +424,7 @@ fields = [
 
 [[struct]]
 name = "DkrtHealth"
-doc = "dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000)."
+doc = "dkrt_health result (finding 41). Image code only: core/digikit-menu and the runtime call dkrt_health; it is not in the content-module SDK (sdk/), so the layout may grow at the end without a contract change. Keep it that way. The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000)."
 fields = [
     "u32 magic // HEALTH_MAGIC",
     "u32 version // 4",

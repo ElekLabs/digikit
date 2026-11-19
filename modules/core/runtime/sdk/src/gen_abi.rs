@@ -94,7 +94,7 @@ pub const CARD_BLANK: u32 = 2;
 pub const CARD_FOREIGN: u32 = 3;
 /// DkrtDiag.card_state: a read of the area failed: the runtime cannot tell, so it never writes the card.
 pub const CARD_UNREADABLE: u32 = 4;
-/// DkrtDiag.card_state: the card is smaller than the store area (its last sector cannot be read): there is no store.
+/// DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store.
 pub const CARD_TOO_SMALL: u32 = 5;
 /// DkrtDiag.magic, "DIAG".
 pub const DIAG_MAGIC: u32 = 0x44494147;
@@ -242,7 +242,7 @@ const _: () = assert!(offset_of!(DkrtDevice, dsp_block_cycles) == 48, "DkrtDevic
 const _: () = assert!(offset_of!(DkrtDevice, dyn_type_first) == 52, "DkrtDevice.dyn_type_first");
 const _: () = assert!(offset_of!(DkrtDevice, dyn_types) == 56, "DkrtDevice.dyn_types");
 
-/// dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000).
+/// dkrt_health result (finding 41). Image code only: core/digikit-menu and the runtime call dkrt_health; it is not in the content-module SDK (sdk/), so the layout may grow at the end without a contract change. Keep it that way. The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000).
 #[repr(C)]
 pub struct DkrtHealth {
     /// HEALTH_MAGIC

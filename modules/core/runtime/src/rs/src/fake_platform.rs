@@ -453,6 +453,7 @@ fn the_card_check_decides_from_the_capacity_the_driver_reports() {
     assert_eq!(card::state(), CARD_UNKNOWN);
     assert!(f.reads.borrow().is_empty() && f.writes.borrow().is_empty(), "no card access");
     assert_eq!(card::info().checked, 0, "asked again later");
+    assert_eq!(card::info().refused, 1, "the refusal is counted (and logged) with its own reason");
     f.card_sectors.set(end + 10);
     unsafe {
         assert_eq!(write(&f, L.first + 10, 1), OK);

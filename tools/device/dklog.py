@@ -171,6 +171,7 @@ REFUSAL = {
     2: "card read-only",
     3: "claim failed",
     4: "card too small",
+    5: "card driver not ready",
 }
 REGS = [f"d{i}" for i in range(8)] + [f"a{i}" for i in range(8)]
 VECTORS = {

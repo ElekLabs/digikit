@@ -99,7 +99,7 @@
 #define DKRT_CARD_FOREIGN 3
 /* DkrtDiag.card_state: a read of the area failed: the runtime cannot tell, so it never writes the card. */
 #define DKRT_CARD_UNREADABLE 4
-/* DkrtDiag.card_state: the card is smaller than the store area (its last sector cannot be read): there is no store. */
+/* DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store. */
 #define DKRT_CARD_TOO_SMALL 5
 /* DkrtDiag.magic, "DIAG". */
 #define DKRT_DIAG_MAGIC 0x44494147u
@@ -266,7 +266,7 @@ typedef struct DkrtDevice {
     uint32_t dyn_types;                          /* run-time machine types (0 without DEV_HAS_DSP) */
 } DkrtDevice;
 
-/* dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000). */
+/* dkrt_health result (finding 41). Image code only: core/digikit-menu and the runtime call dkrt_health; it is not in the content-module SDK (sdk/), so the layout may grow at the end without a contract change. Keep it that way. The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000). */
 typedef struct DkrtHealth {
     uint32_t magic;                              /* HEALTH_MAGIC */
     uint32_t version;                            /* 4 */

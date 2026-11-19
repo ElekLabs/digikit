@@ -56,6 +56,11 @@ pub static mut DKRT_CARD: CardInfo = CardInfo {
     sectors: 0,
 };
 
+/// `CARD_REFUSED` reason: the firmware's driver has not reported a capacity yet, so nothing is decided (the write is refused this time).
+pub const REFUSE_NOT_READY: u32 = 5;
+/// The not-ready CARD_CHECK was logged.
+static mut NOT_READY_LOGGED: bool = false;
+
 #[repr(C, align(16))]
 struct Sec([u8; 512]);
 static mut CLAIM_BUF: Sec = Sec([0; 512]);
@@ -184,6 +189,11 @@ pub unsafe fn check_with<P: Platform>(p: &P) {
     c.sectors = p.card_sectors();
     if c.sectors == u32::MAX {
         c.checked = 0;
+        // one CARD_CHECK for the whole wait (the state stays unknown); every refused write says why (reason `REFUSE_NOT_READY`)
+        if !NOT_READY_LOGGED {
+            NOT_READY_LOGGED = true;
+            report();
+        }
         return;
     }
     let l = lay();
@@ -281,7 +291,7 @@ enum Gate {
     Claim,
     /// The card was not checked yet: run `check`, then decide again.
     Check,
-    /// Refuse with this reason (1 range, 2 foreign or unreadable, 4 too small).
+    /// Refuse with this reason (1 range, 2 foreign or unreadable, 4 too small, 5 driver not ready).
     Refuse(u32),
 }
 
@@ -317,6 +327,11 @@ pub unsafe fn admit_with<P: Platform>(p: &P, sector: u32, bytes: u32) -> i32 {
     if g == Gate::Check {
         check_with(p);
         g = gate(&lay(), state(), sector, bytes);
+        if g == Gate::Check {
+            // the driver reported no capacity yet: refused this time, asked again at the next write
+            count_refusal(sector, bytes, REFUSE_NOT_READY);
+            return E_CARD_RO;
+        }
     }
     if g == Gate::Allow {
         return OK;
