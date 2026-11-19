@@ -175,7 +175,7 @@ async function restart(rt: TestRuntime, plan: RuntimePlan): Promise<void> {
     message: 'the session is stable (the boot counter is back to 0) before the restart',
   });
   await rt.dk.restart();
-  await rt.dk.waitForRestart();
+  await rt.dk.waitForBoot();
 }
 
 runtimeTests('an unloaded machine reads MISSING and plays silence, and the load restores the sound only', expectMissingAndSilent, { dsp: 'sharc' });
