@@ -242,6 +242,11 @@ export class FxRig {
     return this.rows[i]!.state || `_fx_auto_state${i}`;
   }
 
+  /** Write a DM word (normal-word address) for the following calls. */
+  poke(address: number, word: number): void {
+    this.q.poke(address, word);
+  }
+
   setRowWord(i: number, word: number, value: number): void {
     this.q.poke(nw(TABLE) + i * ROW_WORDS + word, value);
   }

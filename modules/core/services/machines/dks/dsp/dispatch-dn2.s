@@ -53,6 +53,7 @@
 #include "adapter-dn2.inc"
 #include "dk_machine.inc"
 #include "dk_stub.inc"
+#include "dk_trace.inc"
 
 .SECTION/PM seg_pmco;
 .GLOBAL _dv_run;
@@ -296,12 +297,14 @@ _dv_scan:
     R6 = 4;                               // `last`: the core is about to call the module; the module step is cleared (fault table, dsp-link.inc)
     R7 = 0;
     CALL _dv_mark;
+    DK_SPAN_BEGIN(_dv_sp0, _dv_diag + 124, R3, I1);   // the module's span (profiling 13.1): R3 and I1 are free here
     I13 = _dv_back;
     JUMP (M13, I12);                      // the routine returns with JUMP (M13, I13)
 _dv_back:
     R6 = 5;                               // `last`: the module returned (its step stays)
     R7 = -1;
     CALL _dv_mark;
+    DK_SPAN_END(_dv_sp1, _dv_diag + 124, R3, I1);
     I4 = _dv_ctx;
     R0 = DM(11, I4);
     MODE1 = R0;
@@ -735,3 +738,19 @@ _dv_cz:
 _dv_gdz: DM(I0, M6) = R3;
     JUMP _dv_back;
 
+// The stats rows of the spans (sdk/dsp/contract/dk_span.inc): the machine row of the voices registry (24 words each; the last stats row takes the rest).
+#define DK_SPAN_PTR_WORD _dv_diag + 124
+#define DK_SPAN_ROW_CODE \
+    R2 = DM(_dv_row); \
+    R0 = _dv_table; \
+    R2 = R2 - R0; \
+    R0 = 96; \
+    R2 = R2 - R0; \
+    R0 = LSHIFT R2 BY 3; \
+    R0 = R0 + R2; \
+    R2 = LSHIFT R2 BY 1; \
+    R2 = R0 + R2; \
+    R2 = LSHIFT R2 BY -10; \
+    R0 = 7; \
+    R2 = MIN(R2, R0);
+#include "dk_span.inc"

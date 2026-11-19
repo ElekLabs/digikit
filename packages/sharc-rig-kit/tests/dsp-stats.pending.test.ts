@@ -1,19 +1,8 @@
-// P8d, DSP stats window (docs/plans/profiling.md 13.1): the cases the SHARC parts must pass. Pending until `DK_SPAN_BEGIN/END` sit at the mark sites of
-// fx.s and dsp-voice-*.s and the dsp-link block tail folds the window. Each todo says what it will assert; turn it into a case with the SHARC parts.
+// P8d, DSP stats window (docs/plans/profiling.md 13.1): the device case, pending until it can run on the emulator.
 import { describe, it } from 'vitest';
 
-describe('DSP stats on the rig (pending the SHARC parts)', () => {
-  // Rig: one machine and one effect module (the conformance set's smallest), the same block run twice on a fresh core per case.
-  it.todo(
-    'stats off adds exactly 6 instructions per module call: instructions(new image) - instructions(stock image) = 6 * calls, for a machine call and an effect call',
-  );
-  it.todo(
-    'stats on gives calls = voices x blocks for the machine row and calls = blocks for the effect row, with cycles > 0 and largest block >= largest call',
-  );
-  it.todo('stats on adds at most 300 instructions per block (the fold included), and off adds at most 100');
-  it.todo('the PCM of the block is equal with stats on and off (bit exact, every conformance case)');
-  it.todo('a clear generation change zeroes every row and the header; the counters then count again from 0');
-});
+// The rig cases of P8d are real tests now: modules/core/adapters/dsp-link/tests/dsp-stats.rig.test.ts (window 3, the fold, the pages), and the span
+// marks of the services in modules/core/adapters/dsp-voice/tests/dsp-stats.rig.test.ts and modules/core/adapters/fx/tests/dsp-stats.rig.test.ts.
 
 // Device shape (modules/tools/debug, registered in its runtimeAcceptance with the SHARC parts; DT2 and DN2; `dsp: 'sharc'`; one machine and one effect
 // module loaded with digikit/debug):

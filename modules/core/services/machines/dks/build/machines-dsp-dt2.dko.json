@@ -269,610 +269,638 @@
    "type": "sharc.abs24"
   },
   {
+   "addend": 124,
+   "offset": 427,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
    "addend": 0,
-   "offset": 430,
+   "offset": 431,
+   "section": "seg_pmco",
+   "symbol": "_dv_sp0",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 436,
+   "section": "seg_pmco",
+   "symbol": "_dk_span_begin",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 442,
    "section": "seg_pmco",
    "symbol": "_dv_st",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 440,
+   "offset": 452,
    "section": "seg_pmco",
    "symbol": "_dv_clrstep",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 443,
+   "offset": 455,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 451,
+   "offset": 463,
    "section": "seg_pmco",
    "symbol": "_dv_contract",
    "type": "sharc.abs24"
   },
   {
    "addend": 4,
-   "offset": 454,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 8,
-   "offset": 457,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 12,
-   "offset": 460,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 16,
-   "offset": 463,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 20,
    "offset": 466,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
-   "addend": 24,
-   "offset": 471,
+   "addend": 8,
+   "offset": 469,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 12,
+   "offset": 472,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 16,
+   "offset": 475,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 20,
-   "offset": 474,
+   "offset": 478,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 24,
+   "offset": 483,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 20,
+   "offset": 486,
    "section": "seg_pmco",
    "symbol": "_dv_c",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 477,
+   "offset": 489,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 485,
+   "offset": 497,
    "section": "seg_pmco",
    "symbol": "_dv_gdis",
    "type": "sharc.abs24"
   },
   {
    "addend": 28,
-   "offset": 498,
+   "offset": 510,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 501,
+   "offset": 513,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 511,
+   "offset": 523,
    "section": "seg_pmco",
    "symbol": "_dv_gloc",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 539,
+   "offset": 551,
    "section": "seg_pmco",
    "symbol": "_dv_gn",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 545,
+   "offset": 557,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 575,
+   "offset": 587,
    "section": "seg_pmco",
    "symbol": "_dv_gl",
    "type": "sharc.abs24"
   },
   {
    "addend": 24,
-   "offset": 578,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 4,
-   "offset": 581,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 8,
-   "offset": 584,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 12,
-   "offset": 587,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 16,
    "offset": 590,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
-   "addend": 20,
+   "addend": 4,
    "offset": 593,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
+   "addend": 8,
+   "offset": 596,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 12,
+   "offset": 599,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 16,
+   "offset": 602,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 20,
+   "offset": 605,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
    "addend": 0,
-   "offset": 598,
+   "offset": 610,
    "section": "seg_pmco",
    "symbol": "_dv_back",
    "type": "sharc.abs32"
   },
   {
    "addend": 56,
-   "offset": 603,
+   "offset": 615,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 56,
-   "offset": 607,
+   "offset": 619,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 612,
+   "offset": 624,
    "section": "seg_pmco",
    "symbol": "_dv_crumb",
    "type": "sharc.abs24"
   },
   {
+   "addend": 124,
+   "offset": 627,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
    "addend": 0,
-   "offset": 615,
+   "offset": 631,
+   "section": "seg_pmco",
+   "symbol": "_dv_sp1",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 636,
+   "section": "seg_pmco",
+   "symbol": "_dk_span_end",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 639,
    "section": "seg_pmco",
    "symbol": "_dv_gcheck",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 621,
+   "offset": 645,
    "section": "seg_pmco",
    "symbol": "_dv_st",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 634,
+   "offset": 658,
    "section": "seg_pmco",
    "symbol": "_dv_odd6",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 655,
+   "offset": 679,
    "section": "seg_pmco",
    "symbol": "_dv_crumb",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 685,
+   "offset": 709,
    "section": "seg_pmco",
    "symbol": "_dv_crumb",
    "type": "sharc.abs24"
   },
   {
    "addend": 20,
-   "offset": 737,
+   "offset": 761,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 12,
-   "offset": 742,
+   "offset": 766,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 748,
+   "offset": 772,
    "section": "seg_pmco",
    "symbol": "_dv_st",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 785,
+   "offset": 809,
    "section": "seg_pmco",
    "symbol": "_dv_gfault",
    "type": "sharc.abs24"
   },
   {
    "addend": 24,
-   "offset": 788,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 792,
-   "section": "seg_pmco",
-   "symbol": "_dv_done",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 0,
-   "offset": 795,
-   "section": "seg_pmco",
-   "symbol": "_dv_grestore",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 0,
-   "offset": 798,
-   "section": "seg_pmco",
-   "symbol": "_dv_done",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 32,
    "offset": 812,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
-   "addend": 20,
-   "offset": 815,
+   "addend": 0,
+   "offset": 816,
    "section": "seg_pmco",
-   "symbol": "_dv_c",
-   "type": "sharc.abs32"
+   "symbol": "_dv_done",
+   "type": "sharc.abs24"
   },
   {
    "addend": 0,
    "offset": 819,
    "section": "seg_pmco",
-   "symbol": "_dv_gseen",
+   "symbol": "_dv_grestore",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
    "offset": 822,
    "section": "seg_pmco",
+   "symbol": "_dv_done",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 32,
+   "offset": 836,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 20,
+   "offset": 839,
+   "section": "seg_pmco",
+   "symbol": "_dv_c",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 843,
+   "section": "seg_pmco",
+   "symbol": "_dv_gseen",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 846,
+   "section": "seg_pmco",
    "symbol": "_dv_call_params",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 825,
+   "offset": 849,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 842,
+   "offset": 866,
    "section": "seg_pmco",
    "symbol": "_dv_gpack",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 847,
+   "offset": 871,
    "section": "seg_pmco",
    "symbol": "_dv_gloc",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 859,
+   "offset": 883,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 873,
+   "offset": 897,
    "section": "seg_pmco",
    "symbol": "_dv_gcl",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 876,
+   "offset": 900,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 68,
-   "offset": 888,
+   "offset": 912,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 72,
-   "offset": 897,
+   "offset": 921,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 76,
-   "offset": 906,
+   "offset": 930,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 80,
-   "offset": 915,
+   "offset": 939,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 24,
-   "offset": 918,
+   "offset": 942,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 922,
+   "offset": 946,
    "section": "seg_pmco",
    "symbol": "_dv_gnr",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 925,
+   "offset": 949,
    "section": "seg_pmco",
    "symbol": "_dv_grestore",
    "type": "sharc.abs24"
   },
   {
    "addend": 12,
-   "offset": 928,
+   "offset": 952,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 934,
+   "offset": 958,
    "section": "seg_pmco",
    "symbol": "_dv_st",
    "type": "sharc.abs32"
   },
   {
    "addend": 20,
-   "offset": 954,
+   "offset": 978,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 16,
-   "offset": 965,
+   "offset": 989,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 979,
+   "offset": 1003,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 984,
+   "offset": 1008,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 994,
+   "offset": 1018,
    "section": "seg_pmco",
    "symbol": "_dv_gwin",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1016,
+   "offset": 1040,
    "section": "seg_pmco",
    "symbol": "_dv_gnd",
    "type": "sharc.abs24"
   },
   {
    "addend": 4,
-   "offset": 1019,
+   "offset": 1043,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1025,
+   "offset": 1049,
    "section": "seg_pmco",
    "symbol": "_dv_gnd",
    "type": "sharc.abs24"
   },
   {
    "addend": 84,
-   "offset": 1030,
+   "offset": 1054,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 40,
-   "offset": 1033,
+   "offset": 1057,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 40,
-   "offset": 1037,
+   "offset": 1061,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 36,
-   "offset": 1040,
+   "offset": 1064,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 36,
-   "offset": 1044,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 32,
-   "offset": 1051,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 40,
-   "offset": 1058,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 60,
-   "offset": 1065,
-   "section": "seg_pmco",
-   "symbol": "_dv_diag",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 4,
    "offset": 1068,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
+   "addend": 32,
+   "offset": 1075,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 40,
+   "offset": 1082,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 60,
+   "offset": 1089,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 4,
+   "offset": 1092,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
    "addend": 8,
-   "offset": 1071,
+   "offset": 1095,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 64,
-   "offset": 1078,
+   "offset": 1102,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1081,
+   "offset": 1105,
    "section": "seg_pmco",
    "symbol": "_dv_done",
    "type": "sharc.abs24"
   },
   {
    "addend": 4,
-   "offset": 1094,
+   "offset": 1118,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 8,
-   "offset": 1097,
+   "offset": 1121,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 12,
-   "offset": 1100,
+   "offset": 1124,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 16,
-   "offset": 1103,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1108,
-   "section": "seg_pmco",
-   "symbol": "_dv_back",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 28,
-   "offset": 1116,
+   "offset": 1127,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
@@ -881,322 +909,315 @@
    "addend": 0,
    "offset": 1132,
    "section": "seg_pmco",
+   "symbol": "_dv_back",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 28,
+   "offset": 1140,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1156,
+   "section": "seg_pmco",
    "symbol": "_fw_frame",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1146,
+   "offset": 1170,
    "section": "seg_pmco",
    "symbol": "_dv_grn",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1149,
+   "offset": 1173,
    "section": "seg_pmco",
    "symbol": "_dv_gloc",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1156,
+   "offset": 1180,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1181,
+   "offset": 1205,
    "section": "seg_pmco",
    "symbol": "_dv_grl",
    "type": "sharc.abs24"
   },
   {
    "addend": 4,
-   "offset": 1187,
+   "offset": 1211,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 8,
-   "offset": 1190,
+   "offset": 1214,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 12,
-   "offset": 1193,
+   "offset": 1217,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 16,
-   "offset": 1196,
+   "offset": 1220,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 20,
-   "offset": 1199,
+   "offset": 1223,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 24,
-   "offset": 1204,
+   "offset": 1228,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 20,
-   "offset": 1209,
+   "offset": 1233,
    "section": "seg_pmco",
    "symbol": "_dv_c",
    "type": "sharc.abs32"
   },
   {
    "addend": 28,
-   "offset": 1218,
+   "offset": 1242,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1224,
+   "offset": 1248,
    "section": "seg_pmco",
    "symbol": "_dv_gdis",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1237,
+   "offset": 1261,
    "section": "seg_pmco",
    "symbol": "_dv_cidle",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1255,
+   "offset": 1279,
    "section": "seg_pmco",
    "symbol": "_dv_blk",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1268,
+   "offset": 1292,
    "section": "seg_pmco",
    "symbol": "_dv_cmarked",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1275,
+   "offset": 1299,
    "section": "seg_pmco",
    "symbol": "_dv_c",
    "type": "sharc.abs32"
   },
   {
    "addend": 12,
-   "offset": 1278,
+   "offset": 1302,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 16,
-   "offset": 1281,
-   "section": "seg_pmco",
-   "symbol": "_dv_in",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1287,
-   "section": "seg_pmco",
-   "symbol": "_dv_frame_hw",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 4,
-   "offset": 1290,
-   "section": "seg_pmco",
-   "symbol": "_dv_c",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1295,
-   "section": "seg_pmco",
-   "symbol": "_dv_pw",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 4,
-   "offset": 1298,
-   "section": "seg_pmco",
-   "symbol": "_dv_c",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
    "offset": 1305,
    "section": "seg_pmco",
    "symbol": "_dv_in",
    "type": "sharc.abs32"
   },
   {
-   "addend": 12,
-   "offset": 1308,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
    "addend": 0,
-   "offset": 1314,
+   "offset": 1311,
    "section": "seg_pmco",
    "symbol": "_dv_frame_hw",
    "type": "sharc.abs24"
   },
   {
    "addend": 4,
-   "offset": 1317,
+   "offset": 1314,
+   "section": "seg_pmco",
+   "symbol": "_dv_c",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1319,
+   "section": "seg_pmco",
+   "symbol": "_dv_pw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 4,
+   "offset": 1322,
+   "section": "seg_pmco",
+   "symbol": "_dv_c",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1329,
    "section": "seg_pmco",
    "symbol": "_dv_in",
    "type": "sharc.abs32"
   },
   {
    "addend": 12,
-   "offset": 1320,
+   "offset": 1332,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1326,
+   "offset": 1338,
+   "section": "seg_pmco",
+   "symbol": "_dv_frame_hw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 4,
+   "offset": 1341,
+   "section": "seg_pmco",
+   "symbol": "_dv_in",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 12,
+   "offset": 1344,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1350,
    "section": "seg_pmco",
    "symbol": "_dv_blk",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1336,
+   "offset": 1360,
    "section": "seg_pmco",
    "symbol": "_dv_c",
    "type": "sharc.abs32"
   },
   {
    "addend": 8,
-   "offset": 1343,
-   "section": "seg_pmco",
-   "symbol": "_dv_in",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 20,
-   "offset": 1349,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 12,
-   "offset": 1352,
-   "section": "seg_pmco",
-   "symbol": "_dv_in",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 20,
-   "offset": 1358,
-   "section": "seg_pmco",
-   "symbol": "_dv_in",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 12,
-   "offset": 1361,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
    "offset": 1367,
    "section": "seg_pmco",
-   "symbol": "_dv_gate",
+   "symbol": "_dv_in",
    "type": "sharc.abs32"
   },
   {
-   "addend": 0,
-   "offset": 1377,
+   "addend": 20,
+   "offset": 1373,
    "section": "seg_pmco",
-   "symbol": "_dv_c",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 12,
+   "offset": 1376,
+   "section": "seg_pmco",
+   "symbol": "_dv_in",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 20,
+   "offset": 1382,
+   "section": "seg_pmco",
+   "symbol": "_dv_in",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 12,
+   "offset": 1385,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
    "offset": 1391,
    "section": "seg_pmco",
+   "symbol": "_dv_gate",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1401,
+   "section": "seg_pmco",
+   "symbol": "_dv_c",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1415,
+   "section": "seg_pmco",
    "symbol": "_fw_release_latch",
    "type": "sharc.abs32"
   },
   {
    "addend": 24,
-   "offset": 1419,
+   "offset": 1443,
    "section": "seg_pmco",
    "symbol": "_dv_in",
    "type": "sharc.abs32"
   },
   {
    "addend": 8,
-   "offset": 1424,
+   "offset": 1448,
    "section": "seg_pmco",
    "symbol": "_dv_c",
    "type": "sharc.abs32"
   },
   {
    "addend": 8,
-   "offset": 1427,
+   "offset": 1451,
    "section": "seg_pmco",
    "symbol": "_dv_c",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1433,
+   "offset": 1457,
    "section": "seg_pmco",
    "symbol": "_dv_slots",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1444,
-   "section": "seg_pmco",
-   "symbol": "_dv_cpe",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 0,
-   "offset": 1450,
-   "section": "seg_pmco",
-   "symbol": "_dv_cpw",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 0,
-   "offset": 1453,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
@@ -1208,111 +1229,104 @@
   },
   {
    "addend": 0,
-   "offset": 1471,
+   "offset": 1474,
+   "section": "seg_pmco",
+   "symbol": "_dv_cpw",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1477,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1492,
+   "section": "seg_pmco",
+   "symbol": "_dv_cpe",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1495,
    "section": "seg_pmco",
    "symbol": "_dv_pw",
    "type": "sharc.abs24"
   },
   {
    "addend": 8,
-   "offset": 1474,
+   "offset": 1498,
    "section": "seg_pmco",
    "symbol": "_dv_c",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1480,
+   "offset": 1504,
    "section": "seg_pmco",
    "symbol": "_dv_params",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1488,
+   "offset": 1512,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1501,
+   "offset": 1525,
    "section": "seg_pmco",
    "symbol": "_dv_cplive",
    "type": "sharc.abs24"
   },
   {
    "addend": 12,
-   "offset": 1504,
+   "offset": 1528,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1510,
+   "offset": 1534,
    "section": "seg_pmco",
    "symbol": "_dv_trig_params",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1520,
+   "offset": 1544,
    "section": "seg_pmco",
    "symbol": "_dv_c",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1524,
+   "offset": 1548,
    "section": "seg_pmco",
    "symbol": "_dv_cpread",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1529,
+   "offset": 1553,
    "section": "seg_pmco",
    "symbol": "_dv_cplive",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1537,
+   "offset": 1561,
    "section": "seg_pmco",
    "symbol": "_dv_call_params",
    "type": "sharc.abs32"
   },
   {
    "addend": 8,
-   "offset": 1546,
-   "section": "seg_pmco",
-   "symbol": "_dv_c",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1552,
-   "section": "seg_pmco",
-   "symbol": "_dv_cpl",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 12,
-   "offset": 1555,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1558,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 12,
    "offset": 1570,
    "section": "seg_pmco",
    "symbol": "_dv_c",
@@ -1320,247 +1334,247 @@
   },
   {
    "addend": 0,
-   "offset": 1573,
+   "offset": 1576,
+   "section": "seg_pmco",
+   "symbol": "_dv_cpl",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 12,
+   "offset": 1579,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1582,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 12,
+   "offset": 1594,
    "section": "seg_pmco",
    "symbol": "_dv_c",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1577,
+   "offset": 1597,
+   "section": "seg_pmco",
+   "symbol": "_dv_c",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1601,
    "section": "seg_pmco",
    "symbol": "_dv_crender",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1590,
+   "offset": 1614,
    "section": "seg_pmco",
    "symbol": "_dv_cseen",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1603,
+   "offset": 1627,
    "section": "seg_pmco",
    "symbol": "_dv_cnoclr",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1620,
-   "section": "seg_pmco",
-   "symbol": "_dv_in",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1623,
-   "section": "seg_pmco",
-   "symbol": "_dv_call_params",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1626,
-   "section": "seg_pmco",
-   "symbol": "_dv_nback",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1632,
-   "section": "seg_pmco",
-   "symbol": "_dv_nfault",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 0,
-   "offset": 1635,
-   "section": "seg_pmco",
-   "symbol": "_dv_g",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 12,
    "offset": 1644,
    "section": "seg_pmco",
-   "symbol": "_dv_c",
+   "symbol": "_dv_in",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
    "offset": 1647,
    "section": "seg_pmco",
-   "symbol": "_dv_in",
+   "symbol": "_dv_call_params",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
    "offset": 1650,
    "section": "seg_pmco",
-   "symbol": "_dv_call_params",
+   "symbol": "_dv_nback",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1653,
+   "offset": 1656,
    "section": "seg_pmco",
-   "symbol": "_dv_rback",
-   "type": "sharc.abs32"
+   "symbol": "_dv_nfault",
+   "type": "sharc.abs24"
   },
   {
-   "addend": 12,
-   "offset": 1658,
+   "addend": 0,
+   "offset": 1659,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
-   "addend": 0,
-   "offset": 1664,
+   "addend": 12,
+   "offset": 1668,
    "section": "seg_pmco",
-   "symbol": "_dv_st",
+   "symbol": "_dv_c",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1671,
+   "section": "seg_pmco",
+   "symbol": "_dv_in",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1674,
+   "section": "seg_pmco",
+   "symbol": "_dv_call_params",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
    "offset": 1677,
    "section": "seg_pmco",
-   "symbol": "_dv_nogate",
-   "type": "sharc.abs24"
+   "symbol": "_dv_rback",
+   "type": "sharc.abs32"
   },
   {
    "addend": 12,
-   "offset": 1680,
+   "offset": 1682,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1686,
+   "offset": 1688,
+   "section": "seg_pmco",
+   "symbol": "_dv_st",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1701,
+   "section": "seg_pmco",
+   "symbol": "_dv_nogate",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 12,
+   "offset": 1704,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1710,
    "section": "seg_pmco",
    "symbol": "_fw_param_rec",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1704,
+   "offset": 1728,
    "section": "seg_pmco",
    "symbol": "_dv_rdone",
    "type": "sharc.abs24"
   },
   {
    "addend": 16,
-   "offset": 1707,
+   "offset": 1731,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 4,
-   "offset": 1721,
+   "offset": 1745,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 8,
-   "offset": 1724,
+   "offset": 1748,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 12,
-   "offset": 1727,
+   "offset": 1751,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 16,
-   "offset": 1730,
+   "offset": 1754,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1735,
+   "offset": 1759,
    "section": "seg_pmco",
    "symbol": "_dv_back",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1740,
+   "offset": 1764,
    "section": "seg_pmco",
    "symbol": "_dv_gfaultk",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1748,
+   "offset": 1772,
    "section": "seg_pmco",
    "symbol": "_dv_gdis",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1756,
+   "offset": 1780,
    "section": "seg_pmco",
    "symbol": "_dv_gdis",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1759,
+   "offset": 1783,
    "section": "seg_pmco",
    "symbol": "_dv_gloc",
    "type": "sharc.abs24"
   },
   {
    "addend": 0,
-   "offset": 1768,
+   "offset": 1792,
    "section": "seg_pmco",
    "symbol": "_dv_g",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1802,
-   "section": "seg_pmco",
-   "symbol": "_dv_stock_go",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 0,
-   "offset": 1805,
-   "section": "seg_pmco",
-   "symbol": "_dv_sv3",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1808,
-   "section": "seg_pmco",
-   "symbol": "_dv_sv5",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1821,
-   "section": "seg_pmco",
-   "symbol": "_dv_bcw",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
    "offset": 1826,
    "section": "seg_pmco",
-   "symbol": "_dv_crumb",
+   "symbol": "_dv_stock_go",
    "type": "sharc.abs24"
   },
   {
@@ -1579,21 +1593,7 @@
   },
   {
    "addend": 0,
-   "offset": 1835,
-   "section": "seg_pmco",
-   "symbol": "_dv_sv_l4",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1843,
-   "section": "seg_pmco",
-   "symbol": "_fw_render_next",
-   "type": "sharc.abs24"
-  },
-  {
-   "addend": 0,
-   "offset": 1846,
+   "offset": 1845,
    "section": "seg_pmco",
    "symbol": "_dv_bcw",
    "type": "sharc.abs32"
@@ -1602,185 +1602,260 @@
    "addend": 0,
    "offset": 1850,
    "section": "seg_pmco",
-   "symbol": "_dv_diag",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1855,
-   "section": "seg_pmco",
-   "symbol": "_dv_rec",
-   "type": "sharc.abs32"
-  },
-  {
-   "addend": 0,
-   "offset": 1861,
-   "section": "seg_pmco",
-   "symbol": "_dv_cb",
+   "symbol": "_dv_crumb",
    "type": "sharc.abs24"
   },
   {
-   "addend": 52,
+   "addend": 0,
+   "offset": 1853,
+   "section": "seg_pmco",
+   "symbol": "_dv_sv3",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1856,
+   "section": "seg_pmco",
+   "symbol": "_dv_sv5",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1859,
+   "section": "seg_pmco",
+   "symbol": "_dv_sv_l4",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1867,
+   "section": "seg_pmco",
+   "symbol": "_fw_render_next",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 1870,
+   "section": "seg_pmco",
+   "symbol": "_dv_bcw",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
    "offset": 1874,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
-   "addend": 56,
-   "offset": 1880,
-   "section": "seg_pmco",
-   "symbol": "_dv_diag",
-   "type": "sharc.abs32"
-  },
-  {
    "addend": 0,
-   "offset": 1886,
+   "offset": 1879,
    "section": "seg_pmco",
    "symbol": "_dv_rec",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1892,
+   "offset": 1885,
+   "section": "seg_pmco",
+   "symbol": "_dv_cb",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 52,
+   "offset": 1898,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 56,
+   "offset": 1904,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1910,
+   "section": "seg_pmco",
+   "symbol": "_dv_rec",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1916,
    "section": "seg_pmco",
    "symbol": "_dv_cc",
    "type": "sharc.abs24"
   },
   {
    "addend": 52,
-   "offset": 1905,
+   "offset": 1929,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 56,
-   "offset": 1911,
+   "offset": 1935,
    "section": "seg_pmco",
    "symbol": "_dv_diag",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
-   "offset": 1918,
+   "offset": 1942,
    "section": "seg_pmco",
    "symbol": "_dv_rec",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1982,
+   "section": "seg_pmco",
+   "symbol": "_dv_g",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 1985,
+   "section": "seg_pmco",
+   "symbol": "_dv_table",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 124,
+   "offset": 2048,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
    "type": "sharc.abs32"
   }
  ],
  "sections": [
   {
    "align": 8,
-   "hex": "2d10000000001c100000000000100000000000c20006000000003e0210000cc13e0200000002010f0000000001c03e703f0a089880003e0210000c403e0200000004820f000402cda4011001140f000000000898000000c200060000000001c30006000000008415000018003e06000000000898090122c2000600000000800f60009701c000010f0000000001c0810fec0001c03e703f0a08988000000fffff000010cc820f006412cd089980003e06000000002d1000000000800f20000ec300060000000000100000000000c20006000000007e733f00001100000000b40f0000800f20000ec1200600000000140f00000000800f00000898800084150000180011c2000600000000020600000000820f1f0012c3240102002011820f0100a001210202cd3e0600000000001100000000800f00003e02000010083e02300011000111000000003e0210082001810f0e00840121013e0200001101020f00000000800121113e703f8a089880003e02100820013e02100022403e0200002204800f000420cda4011201820f1f003e703f8002c3240102002010820f000080012020021000000000a0012002800f010020cc000600000000140f00000000089800000898010184150000180000c200060000000001c32006000000007e713f000011000000003f703f0e8715ffffd8ff089dfa01089df902089d7803089df703089df604089d7505089df405089df306089d7207089df1073e713f01089d70013e713f81089d6f013f713f01089d6e013f713f81089d6d017e713f81089d6c013e723f81089d6b013f723f01089d6a013f723f81089d69013f743f81089d6801089de70e7e723f81089d66017f723f01089d65017f723f81089d6401089de316089d6217089de1173e733f01089d60013e733f81089d5f013f733f01089d5e013f733f81089d5d01031000000000089ddc017e733f81089d5b013f77bf01089dda01a50f0000a60f0100a70fffffad0f0000ae0f0100af0fffffb00f0000b10f0000b20f0000b30f0000b50f00002214200000a00214010000000100830f20003ec13e02000033083e020000511035cd031100000000830f0200be06000000003e703f80810f20001ec13e02100821013e021000314033c220060000000003100000000033c5031100000000830f0400be06000000003e0200003202050f0000000053c07e70bf88830f000008938001be06000000000310000000003f703f8a0898f80133c2200600000000001100000000011100000000021100000000041100000000081100000000850f00000511000000000511000000000310000000003f703f8a0898f20130c30006000000003e02000032053e020000620436c0860f6d0036c0031100000000031000000000860f580036c13f70bf89860f0000be060000000059958b0f0004bacda4019b0c9d970e0f007f0000ddc200010200e01d3e021020ed103e021020dd008601ce1f8601fd2ffcc30006000000003e02000036020e0f00000000e3c0830f2c00e3c0ff70bf087c93830f0100a001360353cd030f0000ffffa0013a0333c493cca001fa0393cd799566c5830f080063c30206000000000511000000000010000000000110000000000210000000000410000000000810000000008c0f20001d0f000000003f083f2803100000000033c5031100000000830f0500be06000000003e06000000003e0200003202050f0000000053c07e70bf8808928001850f00000893800233c2200600000000be70bf080116ffff80ffbe703f08000c00200600be5300000000be5100800000830f0600be0600000000089c5a003e703f390100089ce612089c6513089ce413089ce316089c6217089ce117089c6018089cdf18089c5e19089cdd19830f0700be0600000000089c5c1a089cdb1a089ce821089cf902089c7803089cf703089cf604089c7505089cf405089cf306089c7207089cf107089c7008089cef08089c6e09089ced09089cec0a089ceb10089c6a11089ce911089ce70efe4d3f0e3f083f34089cfa010119081000000000be703f080210000000003e0200002202030f0000000032c03f70bf8808928002840f2000860f400055c22001020060148d0f0000090fff7fffff040d00000900be51000000003e01040009003e010600d02d000f00410000d0c324060000000005100000000055c2000600000000be06000000003e06000000008c0f0100000f807f0000d0c3830f020002010200301c0c110000000003100000000033c2000600000000110f000000000e0f00000000830f4c00e3c0ff703f09000c00080600be5380010000be55808100003e0600000000860f0000be060000000059958b0f0004bacda4019b0c3e02000036020e0f00000000e3c0830f4c00e3c0ff70bf087c9366c5830f080063c3020600000000110f00000000011600004c00939399933e020000991039cd031100000000939399933e020000991039cd031100000000939399933e020000991039cd031100000000939399933e020000991039cd03110000000005100000000055c2000600000000be06000000000210000000003e0200002202030f0000000032c03f70bf8808928002830f000008938001840f2000860f400055c2200102006014081000000000be703f08040d00000300be51808100000410000000007e70bf0801160000b8015993030fffff000093cc79930310000000003f703f8a0510000000000898730380015627830fdc0573c30206000000000899f302870f00000899f4030898f40377c50899f4030898f50499c50899f504830f080073c30206000000000010000000000898f20130c30006000000000899720000110000000003100000000033c503110000000003100000000033c5031100000000000f0000ffff30cc0010000000003e020000001030cd0010000000003e020000001830cd0311000000000010000000000310000000003e020000331003cd0011000000003e0600000000be703f08830f0000000c00200300be51808100000010000000000110000000000210000000000410000000008c0f20003e06000000003e021000964299c096c00a10000000009ac03e021000a9403e020000aa048b0ffe019bcc3e02000099010b0f000000009bc0be703f89be0a860f0000830f0100a001360335cc000600000000be060000000059953e02000036020e0f00000000e3c0830f2c00e3c0ff70bf085c93030f0000ffffa0013a0333c493cca001ca0393cd799566c5830f080063c30206000000003e0a00000000001100000000011100000000021100000000041100000000081100000000850f0000051100000000850f0100051100000000830f300032c7860f6d0036c00311000000000898f20130c30006000000007e70bf0801160000b8015993800fff00840190000006000000008c0f01008b0f0000000f000000ff8401900000010200c01b3e0200003202060f0000000063c07f70bf090896800133c200010200c01bbbc2000600000000800f005a90cd79930b1100000000021000000000021100000000800f010002c0be0600000000001100000000860f0000be060000000001100000000001c0810f004001c1001100000000021000000000800f1a0002c0be06000000000011000000000210000000003e0200002202030f0000000032c03f70bf8808920000810f00000b1000000000bbc220010200101000110000000000c508930000081000000000081100000000800f800008c00011000000000210000000003e0200003202060f0000000063c07f70bf0808920000810f01000b1000000000bbc22001020010103e0200003201810ffcff84013106010f0000000061c07f70bf0908960003810f030031cc3e020000330382013023a0016306810fff0061cc810f000020010200101008930000001100000000800f00000011000000000010000000003e0200001002020f0000000021c03f70bf0808920003820fff0062c3000600000000820f040002c30206000000000310000000003e020000260232c0820f580032c13f70bf880892000122c2000600000000be06000000000110000000003e0200002102030f0000000032c03f70bf88089300000210000000003f70bf0808927e01830f0100a001310323cc22c20006000000000210000000003e0200002205030f0000000032c03e020000210232c03f703f8905100000000055c2000600000000089500003e0600000000089400003e0200002102030f0000000032c03f70bf880893000011c5011100000000820f080012c30206000000000210000000000310000000003f703f8a0898f9000898fa0132c7800113140411000000000b1000000000bbc20006000000000898ff03890f0100a001920a84017a090898fb022006000000007acd0899ff030898fa02860ffeffa001560555c20006000000007e703f09800f0000050d00000300be5500800000089878003e703f0e080f000000000c0f000000001d0f000000003f083f2800c20206000000000310000000003f703f8a089869003e703f0e041000000000080f000000000c0f000000001d0f000000003f083f280210000000003e0200002202030f0000000032c03f70bf88810f0200840101020893000122c2000600000000031000000000840fb80134c7040f0000000034c0840fd80034c03f70bf88840f01000893000211c401cc810f010001c32006000000000410000000007e70bf0801160000b8015993030fffff000093cc79930010000000000110000000000210000000000410000000008c0f20003e06000000008c0f03003e0600000000000f000000ff84019000000600000000000fffffff0090cc79933e0600000000be060000000059958b0f0004bacda4019b0c0d10000000003e020000e602dec08e0f5800dec1fe70bf895d970e0f007f0000ddc200010200e01d3e021020ed103e021020dd008601ce1086010d20be0a800f070010c3020600000000031100000000051100000000800f20000ec13e02000000083e020000211002cd001100000000830f0300be06000000000310000000000510000000000010000000003e703f1a8715ffffe6ff3e060000000005100000000035cd140f0000000008998c01140f000000000898800255c20006000000007e703f8a03a90000c000050f2000a6d10899ad0205100000000005a90000c10005100000000005a90000d500140f000000000898810255c20006000000007e703f8a03a90000c000050f2000a6d10899ad0205100000000005a90000c10005100000000005a90000d500be0a140f000000000898820255c2800a7e703f8a830f000008998001be0a01000100",
+   "hex": "2d10000000001c100000000000100000000000c20006000000003e0210000cc13e0200000002010f0000000001c03e703f0a089880003e0210000c403e0200000004820f000402cda4011001140f000000000898000000c200060000000001c30006000000008415000018003e06000000000898090122c2000600000000800f60009701c000010f0000000001c0810fec0001c03e703f0a08988000000fffff000010cc820f006412cd089980003e06000000002d1000000000800f20000ec300060000000000100000000000c20006000000007e733f00001100000000b40f0000800f20000ec1200600000000140f00000000800f00000898800084150000180011c2000600000000020600000000820f1f0012c3240102002011820f0100a001210202cd3e0600000000001100000000800f00003e02000010083e02300011000111000000003e0210082001810f0e00840121013e0200001101020f00000000800121113e703f8a089880003e02100820013e02100022403e0200002204800f000420cda4011201820f1f003e703f8002c3240102002010820f000080012020021000000000a0012002800f010020cc000600000000140f00000000089800000898010184150000180000c200060000000001c32006000000007e713f000011000000003f703f0e8715ffffd8ff089dfa01089df902089d7803089df703089df604089d7505089df405089df306089d7207089df1073e713f01089d70013e713f81089d6f013f713f01089d6e013f713f81089d6d017e713f81089d6c013e723f81089d6b013f723f01089d6a013f723f81089d69013f743f81089d6801089de70e7e723f81089d66017f723f01089d65017f723f81089d6401089de316089d6217089de1173e733f01089d60013e733f81089d5f013f733f01089d5e013f733f81089d5d01031000000000089ddc017e733f81089d5b013f77bf01089dda01a50f0000a60f0100a70fffffad0f0000ae0f0100af0fffffb00f0000b10f0000b20f0000b30f0000b50f00002214200000a00214010000000100830f20003ec13e02000033083e020000511035cd031100000000830f0200be06000000003e703f80810f20001ec13e02100821013e021000314033c220060000000003100000000033c5031100000000830f0400be060000000003100000000033c20006000000003f70bf88be06000000003e0200003202050f0000000053c07e70bf88830f000008938001be06000000000310000000003f703f8a0898f80133c2200600000000001100000000011100000000021100000000041100000000081100000000850f00000511000000000511000000000310000000003f703f8a0898f20130c30006000000003e02000032053e020000620436c0860f6d0036c0031100000000031000000000860f580036c13f70bf89860f0000be060000000059958b0f0004bacda4019b0c9d970e0f007f0000ddc200010200e01d3e021020ed103e021020dd008601ce1f8601fd2ffcc30006000000003e02000036020e0f00000000e3c0830f2c00e3c0ff70bf087c93830f0100a001360353cd030f0000ffffa0013a0333c493cca001fa0393cd799566c5830f080063c30206000000000511000000000010000000000110000000000210000000000410000000000810000000008c0f20001d0f000000003f083f2803100000000033c5031100000000830f0500be060000000003100000000033c20006000000003f70bf88be06000000003e06000000003e0200003202050f0000000053c07e70bf8808928001850f00000893800233c2200600000000be70bf080116ffff80ffbe703f08000c00200600be5300000000be5100800000830f0600be0600000000089c5a003e703f390100089ce612089c6513089ce413089ce316089c6217089ce117089c6018089cdf18089c5e19089cdd19830f0700be0600000000089c5c1a089cdb1a089ce821089cf902089c7803089cf703089cf604089c7505089cf405089cf306089c7207089cf107089c7008089cef08089c6e09089ced09089cec0a089ceb10089c6a11089ce911089ce70efe4d3f0e3f083f34089cfa010119081000000000be703f080210000000003e0200002202030f0000000032c03f70bf8808928002840f2000860f400055c22001020060148d0f0000090fff7fffff040d00000900be51000000003e01040009003e010600d02d000f00410000d0c324060000000005100000000055c2000600000000be06000000003e06000000008c0f0100000f807f0000d0c3830f020002010200301c0c110000000003100000000033c2000600000000110f000000000e0f00000000830f4c00e3c0ff703f09000c00080600be5380010000be55808100003e0600000000860f0000be060000000059958b0f0004bacda4019b0c3e02000036020e0f00000000e3c0830f4c00e3c0ff70bf087c9366c5830f080063c3020600000000110f00000000011600004c00939399933e020000991039cd031100000000939399933e020000991039cd031100000000939399933e020000991039cd031100000000939399933e020000991039cd03110000000005100000000055c2000600000000be06000000000210000000003e0200002202030f0000000032c03f70bf8808928002830f000008938001840f2000860f400055c2200102006014081000000000be703f08040d00000300be51808100000410000000007e70bf0801160000b8015993030fffff000093cc79930310000000003f703f8a0510000000000898730380015627830fdc0573c30206000000000899f302870f00000899f4030898f40377c50899f4030898f50499c50899f504830f080073c30206000000000010000000000898f20130c30006000000000899720000110000000003100000000033c503110000000003100000000033c5031100000000000f0000ffff30cc0010000000003e020000001030cd0010000000003e020000001830cd0311000000000010000000000310000000003e020000331003cd0011000000003e0600000000be703f08830f0000000c00200300be51808100000010000000000110000000000210000000000410000000008c0f20003e06000000003e021000964299c096c00a10000000009ac03e021000a9403e020000aa048b0ffe019bcc3e02000099010b0f000000009bc0be703f89be0a860f0000830f0100a001360335cc000600000000be060000000059953e02000036020e0f00000000e3c0830f2c00e3c0ff70bf085c93030f0000ffffa0013a0333c493cca001ca0393cd799566c5830f080063c30206000000003e0a00000000001100000000011100000000021100000000041100000000081100000000850f0000051100000000850f0100051100000000830f300032c7860f6d0036c00311000000000898f20130c30006000000007e70bf0801160000b8015993800fff00840190000006000000008c0f01008b0f0000000f000000ff8401900000010200c01b3e0200003202060f0000000063c07f70bf090896800133c200010200c01bbbc2000600000000800f005a90cd79930b1100000000021000000000021100000000800f010002c0be0600000000001100000000860f0000be060000000001100000000001c0810f004001c1001100000000021000000000800f1a0002c0be06000000000011000000000210000000003e0200002202030f0000000032c03f70bf8808920000810f00000b1000000000bbc220010200101000110000000000c508930000081000000000081100000000800f800008c00011000000000210000000003e0200003202060f0000000063c07f70bf0808920000810f01000b1000000000bbc22001020010103e0200003201810ffcff84013106010f0000000061c07f70bf0908960003810f030031cc3e020000330382013023a0016306810fff0061cc810f000020010200101008930000001100000000800f00000011000000000010000000003e0200001002020f0000000021c03f70bf0808920003820fff0062c3000600000000820f040002c30206000000000310000000003e020000260232c0820f580032c13f70bf880892000122c2000600000000be06000000000110000000003e0200002102030f0000000032c03f70bf88089300000210000000003f70bf0808927e01830f0100a001310323cc22c20006000000000210000000003e0200002205030f0000000032c03e020000210232c03f703f8905100000000055c2000600000000089500003e0600000000089400003e0200002102030f0000000032c03f70bf880893000011c5011100000000820f080012c30206000000000210000000000310000000003f703f8a0898f9000898fa0132c7800113140411000000000b1000000000bbc20006000000000898ff03890f0100a001920a84017a090898fb022006000000007acd0899ff030898fa02860ffeffa001560555c20006000000007e703f09800f0000050d00000300be5500800000089878003e703f0e080f000000000c0f000000001d0f000000003f083f2800c20206000000000310000000003f703f8a089869003e703f0e041000000000080f000000000c0f000000001d0f000000003f083f280210000000003e0200002202030f0000000032c03f70bf88810f0200840101020893000122c2000600000000031000000000840fb80134c7040f0000000034c0840fd80034c03f70bf88840f01000893000211c401cc810f010001c32006000000000410000000007e70bf0801160000b8015993030fffff000093cc79930010000000000110000000000210000000000410000000008c0f20003e06000000008c0f03003e0600000000000f000000ff84019000000600000000000fffffff0090cc79933e0600000000be060000000059958b0f0004bacda4019b0c0d10000000003e020000e602dec08e0f5800dec1fe70bf895d970e0f007f0000ddc200010200e01d3e021020ed103e021020dd008601ce1086010d20be0a800f070010c3020600000000031100000000051100000000800f20000ec13e02000000083e020000211002cd001100000000830f0300be06000000000310000000000510000000000010000000003e703f1a8715ffffe6ff3e060000000005100000000035cd140f0000000008998c01140f000000000898800255c20006000000007e703f8a03a90000c000050f2000a6d10899ad0205100000000005a90000c10005100000000005a90000d500140f000000000898810255c20006000000007e703f8a03a90000c000050f2000a6d10899ad0205100000000005a90000c10005100000000005a90000d500be0a140f000000000898820255c2800a7e703f8a830f000008998001be0a00a300006400be763f800893030000a200006400be0a00a30000640001a30000650002a300006600be763f800892830080010121021000000000000f0000000020c1800f600020c13e020000020302c03e0200002201800102123e02007822f6800f0700860120123e02000002043e020000220302c0820f100002c003c03e70bf080892000000c5089300000892010001c0089301000892020082010050089302000892030086010120089303000892050001c0089305000310000000003f70bf8800a20000640001a20000650002a200006600be0a",
    "kind": "text",
    "name": "seg_pmco",
-   "size": 3868
+   "size": 4126
   }
  ],
- "source_sha256": "9ae616b42a370a89045d4665b6cb545ca3b109c05d7ca822b41fb4ccf01e2ee8",
+ "source_sha256": "bfc1b0adb5df0b7fdd28e711c3c1953c0537d4b70e3d414d2b262207a2728616",
  "symbols": [
+  {
+   "global": false,
+   "name": "_dk_span_begin",
+   "section": "seg_pmco",
+   "value": 1956
+  },
+  {
+   "global": false,
+   "name": "_dk_span_end",
+   "section": "seg_pmco",
+   "value": 1967
+  },
   {
    "global": false,
    "name": "_dv_back",
    "section": "seg_pmco",
-   "value": 603
+   "value": 615
   },
   {
    "global": false,
    "name": "_dv_cb",
    "section": "seg_pmco",
-   "value": 1889
+   "value": 1913
   },
   {
    "global": false,
    "name": "_dv_cc",
    "section": "seg_pmco",
-   "value": 1917
+   "value": 1941
   },
   {
    "global": false,
    "name": "_dv_cidle",
    "section": "seg_pmco",
-   "value": 1743
+   "value": 1767
   },
   {
    "global": false,
    "name": "_dv_clrstep",
    "section": "seg_pmco",
-   "value": 1918
+   "value": 1942
   },
   {
    "global": false,
    "name": "_dv_cmarked",
    "section": "seg_pmco",
-   "value": 1275
+   "value": 1299
   },
   {
    "global": false,
    "name": "_dv_cnoclr",
    "section": "seg_pmco",
-   "value": 1616
+   "value": 1640
   },
   {
    "global": false,
    "name": "_dv_contract",
    "section": "seg_pmco",
-   "value": 1187
+   "value": 1211
   },
   {
    "global": false,
    "name": "_dv_cpe",
    "section": "seg_pmco",
-   "value": 1555
+   "value": 1579
   },
   {
    "global": false,
    "name": "_dv_cpl",
    "section": "seg_pmco",
-   "value": 1427
+   "value": 1451
   },
   {
    "global": false,
    "name": "_dv_cplive",
    "section": "seg_pmco",
-   "value": 1534
+   "value": 1558
   },
   {
    "global": false,
    "name": "_dv_cpread",
    "section": "seg_pmco",
-   "value": 1532
+   "value": 1556
   },
   {
    "global": false,
    "name": "_dv_cpw",
    "section": "seg_pmco",
-   "value": 1471
+   "value": 1495
   },
   {
    "global": false,
    "name": "_dv_crender",
    "section": "seg_pmco",
-   "value": 1635
+   "value": 1659
   },
   {
    "global": false,
    "name": "_dv_crumb",
    "section": "seg_pmco",
-   "value": 1846
+   "value": 1870
   },
   {
    "global": false,
    "name": "_dv_cseen",
    "section": "seg_pmco",
-   "value": 1598
+   "value": 1622
   },
   {
    "global": false,
    "name": "_dv_done",
    "section": "seg_pmco",
-   "value": 658
+   "value": 682
   },
   {
    "global": false,
@@ -1792,97 +1867,97 @@
    "global": false,
    "name": "_dv_gcheck",
    "section": "seg_pmco",
-   "value": 737
+   "value": 761
   },
   {
    "global": false,
    "name": "_dv_gcl",
    "section": "seg_pmco",
-   "value": 847
+   "value": 871
   },
   {
    "global": false,
    "name": "_dv_gdis",
    "section": "seg_pmco",
-   "value": 1084
+   "value": 1108
   },
   {
    "global": false,
    "name": "_dv_gfault",
    "section": "seg_pmco",
-   "value": 801
+   "value": 825
   },
   {
    "global": false,
    "name": "_dv_gfaultk",
    "section": "seg_pmco",
-   "value": 812
+   "value": 836
   },
   {
    "global": false,
    "name": "_dv_gl",
    "section": "seg_pmco",
-   "value": 511
+   "value": 523
   },
   {
    "global": false,
    "name": "_dv_gloc",
    "section": "seg_pmco",
-   "value": 1111
+   "value": 1135
   },
   {
    "global": false,
    "name": "_dv_gn",
    "section": "seg_pmco",
-   "value": 571
+   "value": 583
   },
   {
    "global": false,
    "name": "_dv_gnd",
    "section": "seg_pmco",
-   "value": 1040
+   "value": 1064
   },
   {
    "global": false,
    "name": "_dv_gnr",
    "section": "seg_pmco",
-   "value": 928
+   "value": 952
   },
   {
    "global": false,
    "name": "_dv_gpack",
    "section": "seg_pmco",
-   "value": 876
+   "value": 900
   },
   {
    "global": false,
    "name": "_dv_grestore",
    "section": "seg_pmco",
-   "value": 1139
+   "value": 1163
   },
   {
    "global": false,
    "name": "_dv_grl",
    "section": "seg_pmco",
-   "value": 1141
+   "value": 1165
   },
   {
    "global": false,
    "name": "_dv_grn",
    "section": "seg_pmco",
-   "value": 1177
+   "value": 1201
   },
   {
    "global": false,
    "name": "_dv_gseen",
    "section": "seg_pmco",
-   "value": 845
+   "value": 869
   },
   {
    "global": false,
    "name": "_dv_gwin",
    "section": "seg_pmco",
-   "value": 1003
+   "value": 1027
   },
   {
    "global": false,
@@ -1900,13 +1975,13 @@
    "global": false,
    "name": "_dv_nback",
    "section": "seg_pmco",
-   "value": 1631
+   "value": 1655
   },
   {
    "global": false,
    "name": "_dv_nfault",
    "section": "seg_pmco",
-   "value": 1738
+   "value": 1762
   },
   {
    "global": false,
@@ -1918,37 +1993,37 @@
    "global": false,
    "name": "_dv_nogate",
    "section": "seg_pmco",
-   "value": 1699
+   "value": 1723
   },
   {
    "global": false,
    "name": "_dv_odd",
    "section": "seg_pmco",
-   "value": 618
+   "value": 642
   },
   {
    "global": false,
    "name": "_dv_odd6",
    "section": "seg_pmco",
-   "value": 653
+   "value": 677
   },
   {
    "global": false,
    "name": "_dv_pw",
    "section": "seg_pmco",
-   "value": 1759
+   "value": 1783
   },
   {
    "global": false,
    "name": "_dv_rback",
    "section": "seg_pmco",
-   "value": 1658
+   "value": 1682
   },
   {
    "global": false,
    "name": "_dv_rdone",
    "section": "seg_pmco",
-   "value": 1721
+   "value": 1745
   },
   {
    "global": true,
@@ -1964,15 +2039,27 @@
   },
   {
    "global": false,
+   "name": "_dv_sp0",
+   "section": "seg_pmco",
+   "value": 439
+  },
+  {
+   "global": false,
+   "name": "_dv_sp1",
+   "section": "seg_pmco",
+   "value": 639
+  },
+  {
+   "global": false,
    "name": "_dv_stock",
    "section": "seg_pmco",
-   "value": 1799
+   "value": 1823
   },
   {
    "global": false,
    "name": "_dv_stock_go",
    "section": "seg_pmco",
-   "value": 1835
+   "value": 1859
   },
   {
    "global": false,
@@ -2168,7 +2255,7 @@
   }
  ],
  "toolchain": {
-  "instructions_redecoded": "883",
+  "instructions_redecoded": "942",
   "selache_rev": "967c1d1e4d02e41f483181964f0ba333558a1fa7"
  }
 }
