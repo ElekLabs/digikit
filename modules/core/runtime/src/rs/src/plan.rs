@@ -680,7 +680,7 @@ mod tests {
     }
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[] };
 
     #[test]
     fn a_module_with_no_table_and_a_module_with_nothing_to_share_are_accepted_in_selection_order() {

@@ -1782,3 +1782,224 @@ fn a_reload_check_runs_the_file_checks_as_a_load_does_with_the_selection_index_o
         assert_eq!((l.table_len[0], l.tables[0]), table);
     }
 }
+
+// ---- the port file (role 2): the check, the copies of its sites, and the firmware imports of the service files that load after it ----
+
+const PORT_PATH: &[u8] = b"ports/dt2-1.17.dkport\0";
+const IMP_PATH: &[u8] = b"services/imp.dks\0";
+/// The hook and the name the port file lists.
+const HOOK_H: &str = "hook.a";
+const NAME_H: &str = "cf.thing";
+
+/// The first 8 bytes of the SHA-256 of `b`: the check value of a site.
+fn check8(b: &[u8]) -> [u8; 8] {
+    let mut sha = Sha::new();
+    let mut out = [0u8; 32];
+    unsafe {
+        sha.update(b.as_ptr(), b.len() as u32);
+        sha.finish(out.as_mut_ptr());
+    }
+    out[..8].try_into().unwrap()
+}
+
+/// A port file for `FW_ID`: the name `NAME_H` at 0x1234, an absent name, and the sites `HOOK_H` (a tail copy of `STOCK` at `SITE`), a raw one and an absent one.
+/// The image is the `rts` and 30 bytes; `bss` holds the copy.
+fn port_file_with(bss: u32, tweak: impl Fn(&mut Vec<dkneeds::keys::SiteRec>)) -> Vec<u8> {
+    use dkneeds::keys::{name_hash, NameRec, Pair, SiteRec, Table, FLAG_ABSENT, SITE_RAW, SITE_TAIL};
+    let names = [
+        NameRec { hash: name_hash(NAME_H), addr: 0x1234, n: 0, kind: 0, flags: 0 },
+        NameRec { hash: name_hash("cf.other"), addr: 0, n: 0, kind: 0, flags: FLAG_ABSENT },
+        NameRec { hash: name_hash(HOOK_H), addr: SITE + 6, n: 0, kind: 1, flags: 0 },
+    ];
+    let mut sites = vec![
+        SiteRec { hash: name_hash(HOOK_H), addr: SITE, len: 6, kind: SITE_TAIL, flags: 0, check: check8(&STOCK) },
+        SiteRec { hash: name_hash("hook.raw"), addr: 0x400b_0000, len: 6, kind: SITE_RAW, flags: 0, check: [0; 8] },
+        SiteRec { hash: name_hash("hook.gone"), addr: 0, len: 0, kind: SITE_RAW, flags: FLAG_ABSENT, check: [0; 8] },
+    ];
+    tweak(&mut sites);
+    let provides = [Pair { a: name_hash("port"), b: 0x000100 }];
+    let table = Table { provides: &provides, fw: &[FW_ID], names: &names, sites: &sites, ..Default::default() };
+    let mut v = service_file_of(module_file(), &table, 0);
+    put(&mut v, dkneeds::H_ROLE, 2);
+    put(&mut v, dkneeds::H_BSS, bss);
+    put(&mut v, dkneeds::H_INIT, dkneeds::NONE);
+    put(&mut v, dkneeds::H_FINI, dkneeds::NONE);
+    v[IMAGE_OFF] = 0x4e;
+    v[IMAGE_OFF + 1] = 0x75;
+    seal(&mut v);
+    v
+}
+
+fn port_file() -> Vec<u8> {
+    port_file_with(12, |_| {})
+}
+
+/// A loader with the port file at `PORT_PATH` and the stock bytes at the site.
+unsafe fn port_loader(file: Vec<u8>) -> Fake {
+    let mut l = loader_of(Init::Ok, Vec::new());
+    l.m.files.clear();
+    l.m.files.insert(PORT_PATH[..PORT_PATH.len() - 1].to_vec(), file);
+    l.p.put_code(SITE, &STOCK);
+    set_fw_id(&l, Some(FW_ID));
+    l
+}
+
+#[test]
+fn a_port_file_loads_as_a_provider_copies_its_tail_sites_and_unloads_clean() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = port_loader(port_file());
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), OK);
+        let rec = MAX_MODULES;
+        let base = records::module(rec).base;
+        assert_eq!((records::module(rec).used, l.roles[rec], st().loads), (1, 2, 0));
+        // the image block (32 bytes of image and 12 of bss) and the table copy
+        assert_eq!(l.m.live.len(), 2);
+        // the copy of the site follows the image: the stock bytes, then `jmp.l` behind the site
+        let mem = core::slice::from_raw_parts(l.m.live[0].1.as_ptr() as *const u8, 44);
+        assert_eq!(&mem[..2], [0x4e, 0x75], "the return stub");
+        assert_eq!(&mem[32..38], STOCK);
+        assert_eq!(&mem[38..40], [0x4e, 0xf9]);
+        assert_eq!(rd32(mem.as_ptr().add(40)), SITE + 6);
+        assert!(l.p.calls.borrow().contains(&crate::fake_platform::Call::Flush { addr: base + 32, len: 12 }), "the copy is written back");
+        // the port file installs nothing and publishes nothing
+        assert_eq!((l.installer.count(), l.exports.count()), (0, 0));
+        assert_eq!(site_bytes(&l, 6), STOCK);
+        // taken down, it gives both blocks back
+        assert_eq!(l.unload_rec(rec), OK);
+        assert!(l.m.live.is_empty());
+        assert_eq!(records::module(rec).used, 0);
+    }
+}
+
+#[test]
+fn a_port_file_for_another_firmware_or_over_other_stock_is_refused_before_anything_is_allocated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // another firmware, an image with no fw_id
+        let mut other = FW_ID;
+        other[0] ^= 1;
+        for id in [Some(other), None] {
+            let mut l = port_loader(port_file());
+            set_fw_id(&l, id);
+            assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_HOOK_STOCK, "image id {id:?}");
+            assert_eq!(l.m.allocs, 0);
+        }
+        // the live bytes of the copied site are not the stock ones: the check value names them
+        let mut l = port_loader(port_file());
+        l.p.put_code(SITE + 1, &[0x99]);
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_HOOK_STOCK);
+        assert_eq!(l.m.allocs, 0);
+        // a raw site is not copied: its bytes are not read at the load of the port file (the installer checks them)
+        let mut l = port_loader(port_file());
+        l.p.put_code(0x400b_0000, &[0x77; 6]);
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), OK);
+    }
+}
+
+#[test]
+fn a_port_file_that_does_not_fit_its_image_or_its_sites_is_refused_before_anything_is_allocated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // the bss is smaller than the copies need
+        let mut l = port_loader(port_file_with(11, |_| {}));
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_FORMAT);
+        assert_eq!(l.m.allocs, 0);
+        // a site of 5 bytes (not whole instructions) and one of 4 (no room for jmp.l)
+        for len in [5u16, 4] {
+            let mut l = port_loader(port_file_with(12, |s| s[1].len = len));
+            assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_RANGE, "len {len}");
+            assert_eq!(l.m.allocs, 0);
+        }
+        // the image does not start with `rts`
+        let mut f = port_file();
+        f[IMAGE_OFF] = 0;
+        seal(&mut f);
+        let mut l = port_loader(f);
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_FORMAT);
+        assert_eq!(l.m.allocs, 0);
+        // a port file only loads into a provider record, and a service file never takes a port file's role
+        let mut l = port_loader(port_file());
+        assert_eq!(l.load(PORT_PATH.as_ptr()), E_FORMAT);
+        assert_eq!(l.m.allocs, 0);
+    }
+}
+
+/// A service file of `provides` only, with the firmware imports `names` (each word of the 32-byte image at 4, 8, ... holds 4 and is relocated against the import).
+fn importing_service(names: &[&str]) -> Vec<u8> {
+    use dkneeds::keys::{name_hash, Pair, Table};
+    static PROVIDES: std::sync::OnceLock<[Pair; 1]> = std::sync::OnceLock::new();
+    let table = Table { provides: PROVIDES.get_or_init(|| [Pair { a: name_hash(SVC), b: 0x000802 }]), ..Default::default() };
+    let imports: Vec<Vec<u8>> = names.iter().map(|n| n.as_bytes().to_vec()).collect();
+    let refs: Vec<&[u8]> = imports.iter().map(|v| &v[..]).collect();
+    let relocs: Vec<(u32, u32)> = (0..names.len()).map(|i| (4 + 4 * i as u32, 1 << 24 | i as u32)).collect();
+    let mut f = module_file_with(&relocs, &refs);
+    for i in 0..names.len() {
+        f[IMAGE_OFF + 7 + 4 * i] = 4;
+    }
+    service_file_of(f, &table, 0)
+}
+
+fn fw_import(prefix: &str, name: &str) -> String {
+    std::format!("{prefix}{:08x}", dkneeds::keys::name_hash(name))
+}
+
+#[test]
+fn the_firmware_imports_of_a_service_file_resolve_through_the_port_file() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let names = [
+            fw_import("dk_fw_", NAME_H),           // an address
+            fw_import("dk_fw_", "cf.other"),       // absent: 0
+            fw_import("dk_exit_", HOOK_H) + "_0",  // the end of the site
+            fw_import("dk_tail_", HOOK_H),         // the copy
+            fw_import("dk_stock_", HOOK_H),        // the same copy
+            fw_import("dk_ret_", HOOK_H),          // the return stub
+            fw_import("dk_ret_", "hook.gone"),     // an absent site: 0
+        ];
+        let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+        let mut l = port_loader(port_file());
+        l.m.files.insert(IMP_PATH[..IMP_PATH.len() - 1].to_vec(), importing_service(&refs));
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), OK);
+        let port_base = records::module(MAX_MODULES).base;
+        assert_eq!(l.load_provider(IMP_PATH.as_ptr(), 1), OK);
+        // the service's image block is the one allocated for provider 1: the third block (port image, port table, service image)
+        let mem = core::slice::from_raw_parts(l.m.live[2].1.as_ptr() as *const u8, 32);
+        let word = |i: usize| rd32(mem.as_ptr().add(4 + 4 * i));
+        assert_eq!(word(0), 0x1234 + 4);
+        assert_eq!(word(1), 4, "an absent name is 0 plus the addend");
+        assert_eq!(word(2), SITE + 6 + 4);
+        assert_eq!(word(3), port_base + 32 + 4);
+        assert_eq!(word(4), port_base + 32 + 4);
+        assert_eq!(word(5), port_base + 4);
+        assert_eq!(word(6), 4);
+    }
+}
+
+#[test]
+fn a_firmware_import_the_port_file_does_not_list_or_that_has_no_port_file_refuses_the_service_file() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // a name the port file lacks, and a tail of a raw site (it has no copy)
+        for bad in [fw_import("dk_fw_", "cf.unknown"), fw_import("dk_tail_", "hook.raw"), fw_import("dk_ret_", "hook.unknown")] {
+            let mut l = port_loader(port_file());
+            l.m.files.insert(IMP_PATH[..IMP_PATH.len() - 1].to_vec(), importing_service(&[&bad]));
+            assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), OK);
+            let allocs = l.m.allocs;
+            assert_eq!(l.load_provider(IMP_PATH.as_ptr(), 1), E_IMPORT, "{bad}");
+            assert_eq!(l.m.allocs, allocs, "refused before anything is allocated");
+            assert_ne!(l.import_hash, 0, "the hash of the missing name is kept for the log");
+        }
+        // no port file loaded: the same import is refused
+        let mut l = port_loader(port_file());
+        l.m.files.insert(IMP_PATH[..IMP_PATH.len() - 1].to_vec(), importing_service(&[&fw_import("dk_fw_", NAME_H)]));
+        assert_eq!(l.load_provider(IMP_PATH.as_ptr(), 1), E_IMPORT);
+        assert_eq!(l.m.allocs, 0);
+        // a module with such an import is not a service file: the port file is not asked, and the name stays unknown
+        let mut f = module_file_with(&[(8, 1 << 24)], &[fw_import("dk_fw_", NAME_H).as_bytes()]);
+        seal(&mut f);
+        let mut l = loader_of(Init::Ok, f);
+        assert_eq!(l.load(PATH.as_ptr()), E_IMPORT);
+        assert_eq!(l.m.allocs, 0);
+    }
+}

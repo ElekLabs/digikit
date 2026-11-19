@@ -356,7 +356,7 @@ mod service_fixtures {
         let mut fs = crate::loader::discover::fake::cards(vec![("services/svc-test.dks".into(), svc.clone())]);
         let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let mut out = Found::new();
-        unsafe { find(&mut fs, &services, &[name_hash("svc-test")], &mut out) };
+        unsafe { find(&mut fs, &services, &[name_hash("svc-test")], None, &mut out) };
         (svc, out)
     }
 

@@ -33,6 +33,7 @@ pub(crate) mod discover;
 pub(crate) mod exports;
 mod image;
 pub(crate) mod install;
+mod port;
 mod records;
 pub(crate) mod role;
 mod seams;
@@ -101,7 +102,7 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     m: M,
     r: R,
     phase: Phase,
-    /// The role word of each record's file (0 module, 1 service): which `RoleSteps` its undo uses.
+    /// The role word of each record's file (0 module, 1 service, 2 port): which `RoleSteps` its undo uses.
     roles: [u8; records::REC_MAX],
     /// The name of the missing module of the last load that failed with E_IMPORT (`import_needs`), NUL padded; empty when none. The boot clears it before
     /// each load and takes it after.
@@ -109,6 +110,8 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     /// The first item that `init`'s declarations and the header table do not both hold, of the last load that failed with E_DECL_KIND: (tag of the item, its first
     /// word), and 0x100 added to the tag when only the header has it. `(0, 0)`: none (`report_provider` logs it).
     decl_diff: (u32, u32),
+    /// The name hash that the port file did not list, of the last service file that failed with E_IMPORT for it (`port::Lookup::Unlisted`); 0: none.
+    import_hash: u32,
     /// The header table of the module at each selection index, kept while the boot reads each file once (`capture`); `table_len` 0: none (the file
     /// is missing, torn, of the old format or has a larger table).
     tables: [[u8; TABLE_MAX]; SEL_MAX],
@@ -414,6 +417,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             roles: [0; records::REC_MAX],
             missing: [0; NEEDS_LEN],
             decl_diff: (0, 0),
+            import_hash: 0,
             tables: [[0; TABLE_MAX]; SEL_MAX],
             table_len: [0; SEL_MAX],
             accepted: [false; SEL_MAX],
@@ -428,6 +432,36 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             torn: [0; records::REC_MAX],
             saved_tick: [0; MAX_MODULES],
             drain_at: [None; MAX_MODULES],
+        }
+    }
+
+    /// The port file that is loaded: its record, the copy of its table and the base and image size of its block. `None` when no port file is loaded.
+    unsafe fn port_keys(&self) -> Option<(Keys<'static>, u32, u32)> {
+        let mut j = 0;
+        while j < PROVIDER_MAX {
+            let rec = MAX_MODULES + j;
+            if self.roles[rec] == 2 && records::module(rec).used != 0 {
+                let pr = &self.provs[j];
+                let blk = pr.block?;
+                let keys = Keys::parse(core::slice::from_raw_parts(blk.ptr as *const u8, pr.len as usize)).ok()?;
+                return Some((keys, records::module(rec).base, pr.image_size));
+            }
+            j += 1;
+        }
+        None
+    }
+
+    /// Resolve the import `name` of a service file against the loaded port file. A name that is no firmware reference is `NotPort`; a firmware reference with no port
+    /// file loaded is `Unlisted` (the hash is the reference's), as a name the port file does not list.
+    unsafe fn port_lookup(&self, name: &[u8]) -> port::Lookup {
+        let Some(r) = port::parse_import(name) else {
+            return port::Lookup::NotPort;
+        };
+        match self.port_keys() {
+            Some((keys, base, image_size)) => port::lookup(&keys, base, image_size, r),
+            None => port::Lookup::Unlisted(match r {
+                port::Ref::Name(h) | port::Ref::Tail(h) | port::Ref::Stock(h) | port::Ref::Ret(h) | port::Ref::Exit(h, _) => h,
+            }),
         }
     }
 
@@ -501,7 +535,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         // the steps of the file's role
         let role = rd32(f.add(dkneeds::H_ROLE as usize));
         c.role = role;
-        if (role == 1) != matches!(slot, Slot::Provider(_)) {
+        if (role == 1 || role == 2) != matches!(slot, Slot::Provider(_)) {
             return E_FORMAT;
         }
         let steps = RoleSteps::<P, M, R>::of(role);
@@ -520,6 +554,23 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             if a == 0 && role == 1 {
                 // a service file also links the service-only imports (`SVC_IMPORTS`)
                 a = self.m.svc_import_addr(p);
+            }
+            if a == 0 && role == 1 {
+                // the firmware references of a service file are the port file's: an address, 0 for a name that this firmware lacks, or a refusal
+                let n = cstr_len(p, dkneeds::CF_IMPORT_LEN as usize);
+                match self.port_lookup(core::slice::from_raw_parts(p, n)) {
+                    port::Lookup::Addr(x) => a = x,
+                    port::Lookup::Absent => {
+                        c.import_addrs[i] = 0;
+                        i += 1;
+                        continue;
+                    }
+                    port::Lookup::Unlisted(h) => {
+                        self.import_hash = h;
+                        return E_IMPORT;
+                    }
+                    port::Lookup::NotPort => {}
+                }
             }
             if a == 0 {
                 // the runtime's table has no such name: a loaded provider may export it
@@ -670,7 +721,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         self.p.flush(base, total);
 
         // ---- record, init, publish ----
-        self.roles[rec] = (role == 1) as u8;
+        self.roles[rec] = if role == 2 { 2 } else { (role == 1) as u8 };
         if rec < MAX_MODULES {
             let k = read_volatile(addr_of!(BOOT_IDX));
             self.sel_of_rec[rec] = if (k as usize) < SEL_MAX { k as u8 } else { u8::MAX };
@@ -696,7 +747,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         m.fini = if fini == NONE { 0 } else { base + fini };
         crate::entry::bind(rec);
         records::set_menu(rec, if menu == NONE { 0 } else { base + menu });
-        let place = PlaceArgs { file: f, keys_off: reg_off, keys_len: reg_size, image_size, dsp_image: if dsp_size != 0 { job.image_size } else { 0 } };
+        let place = PlaceArgs { file: f, keys_off: reg_off, keys_len: reg_size, image_size, dsp_image: if dsp_size != 0 { job.image_size } else { 0 }, mem, base, bss };
         let initaddr = if init == NONE { 0 } else { base + init };
         let tickaddr = if tick == NONE { 0 } else { base + tick };
         if dsp_size != 0 {
@@ -1406,7 +1457,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let mut want = [0u32; WANT_MAX];
         let nw = unmet_needs(&mods[..n], &mut want);
         if nw != 0 {
-            discover::find(&mut self.m, &services(), &want[..nw], &mut self.found);
+            discover::find(&mut self.m, &services(), &want[..nw], role::image_fw_id(&self.p), &mut self.found);
         }
         let provs = parse_provs(&self.found, self.found.n);
         let env = Env { services: services(), runtime: dkrt_sdk::RUNTIME_VERSION, caps };
@@ -1440,6 +1491,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             pos += 1;
             self.missing = [0; NEEDS_LEN];
             self.decl_diff = (0, 0);
+            self.import_hash = 0;
             let res = match planned.provider_verdicts[j] {
                 dkrt_abi::plan::Verdict::Refused(why) => why.code(),
                 dkrt_abi::plan::Verdict::Accepted => {
@@ -1454,7 +1506,13 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             self.loaded[j] = res == OK || res == LOADING;
             let base = if res == OK || res == LOADING { records::module(MAX_MODULES + j).base } else { 0 };
             // a refusal of the declare-check names the item that differs, in the words of the base (the tag) and the service hash (the item's first word)
-            let (hash, base) = if res == E_DECL_KIND && self.decl_diff.0 != 0 { (self.decl_diff.1, self.decl_diff.0) } else { (hashes[j], base) };
+            let (hash, base) = if res == E_DECL_KIND && self.decl_diff.0 != 0 {
+                (self.decl_diff.1, self.decl_diff.0)
+            } else if res == E_IMPORT && self.import_hash != 0 {
+                (self.import_hash, 0)
+            } else {
+                (hashes[j], base)
+            };
             crate::boot::report_provider(self.found.path(j), res, hash, base);
         }
         crate::selection::BOOT_IDX = u32::MAX;
