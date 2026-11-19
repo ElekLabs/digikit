@@ -123,8 +123,9 @@ pub struct Fixture {
     /// The link words the DSP reads to run a row (`(window, word, off)`: the pc of an effect row, the type of a voice row, and the value that turns the row off): a
     /// release must send the word that turns the row off. The words other than these are the content of a row, which stays in the DSP memory until the next module's row overwrites it.
     pub enable: &'static [(u32, u32, u32)],
-    /// The service keeps the DSP rows of a module that unloads in a reload (a placeholder: the row's link word stays on, the row is disabled by other means), so the reload
-    /// takes the same row over; `false`: it frees them at the unload and the load takes a free row again. The `enable` words show which.
+    /// The service keeps the DSP rows of an absent module (a placeholder: the row's link word stays on, the row is disabled by other means), after every unload and not only
+    /// during a reload (docs/plans/extension-model.md E5d), so a load takes the same row over; `false`: it frees them at the unload and the load takes a free row again. The
+    /// `enable` words show which. A service with `true` also names the parked bytes of the DSP state in `kept_dsp`; the cases that compare rows by position skip what the parked rows move.
     pub parks_rows: bool,
     /// `(core, address, value)`: whether a word of firmware memory may hold `value` after a release although the start state holds another (the service's documented
     /// free values, such as the empty string a released row points to). The value is part of the question: a word that holds anything else, such as the value `A`
