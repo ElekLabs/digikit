@@ -1,5 +1,6 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { runtimeFaceplateIds, panels, type Panel as PanelData } from '@digi/workbench-core/data/faceplates.ts';
+import { panels, type Panel as PanelData } from '@digi/workbench-core/data/faceplates.ts';
+import { siteFaceplateIds } from '../firmware/site-policy';
 import { deviceProfiles, localReadyFirmwareSha256, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import { browserRuntimeDeps } from '../runtime/browser-deps';
 import { browserRuntime, type EmulatorRuntime, type RuntimeUpdate } from '@digi/workbench-core/runtime/runtime.ts';
@@ -34,7 +35,7 @@ export default function Faceplate(props: { runtime?: EmulatorRuntime } = {}) {
 
 function Panel(props: { runtime?: EmulatorRuntime }) {
   const dev = devEnabled();
-  const [device, setDevice] = createSignal<DeviceId>(runtimeFaceplateIds[0] ?? '');
+  const [device, setDevice] = createSignal<DeviceId>(siteFaceplateIds()[0] ?? '');
   // `?leds=<128 hex digits>` shows a fixed LED state without a running emulator (a styling aid; a loaded firmware replaces it).
   onMount(() => {
     const preview = dev ? new URLSearchParams(location.search).get('leds') : null;
@@ -278,7 +279,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
             <p>Pick your device, then choose its firmware file: stock, or patched with digikit. Nothing is uploaded.</p>
           </header>
           <div class="devices">
-            <For each={runtimeFaceplateIds}>
+            <For each={siteFaceplateIds()}>
               {(d) => (
                 <button
                   type="button"

@@ -57,7 +57,7 @@ each reads the tables it needs and checks those.
 Faceplates and LED maps are not device-file tables. The web app and the workbench pair files by the stem of the device file
 (`devices/<stem>.toml`): the faceplate is `apps/web/src/data/faceplates/<stem>.toml`, the LED map `devices/<stem>-leds.toml`. A
 device has a faceplate when its faceplate file exists; the LED map is optional. The LED maps carry no `[device]` table, so
-readers that scan `devices/` skip them. The public site offers only the faceplates of runtime targets.
+readers that scan `devices/` skip them. Which devices the public site offers is not a device fact: `SITE_DEVICES` in `apps/web/src/firmware/site-policy.ts` is the one list that its pages, gallery, emulator pick and Transfer library follow.
 
 ## Where each fact lives
 
@@ -119,6 +119,12 @@ files and `types.toml`; `gen --check` fails when one is stale. The kinds (`packa
 - `sharc`: `#define` lines, one file per device, for DSP sources (`#include "device-dt2.inc"`). Each note is on its own line:
   the assembler's preprocessor keeps a trailing comment in a macro body, which swallows the rest of a line that uses the macro.
   `.PKBSS name, MACRO;` takes a `#define`d number as its size (`packages/patchkit/src/build/sharc_obj.rs`).
+
+A module that reads a table of the device file declares it in `[module] needs_device` (dotted paths, for example `["input.view_keys"]` for `core/ui`, whose
+`ui-<dev>.inc` holds the key ids and flag bits). Every device file with a patch set that includes the module (as a root or through `requires`; a device with no
+`[digikit]` too) must have the table, or `patchkit gen`, `patchkit build`, `patchkit pack` and the module's own generator refuse, naming the device, the patch
+set, the module and the table. A module id in a patch set that the library lacks is an error. `[input.view_keys]`: `yes`, `no`, `right`, an optional `yes2` (a
+second YES key; absent: none, generated as 0xffffffff), and the bit numbers `move_flag` and `act_flag` (0 to 31) of the key event's flags word.
 
 The runtime object is built once and used on every device, so it has no device value in its code: what differs between devices is data of
 `dkrt_dev` (and of the other per-device symbols of `device.s`: `dkrt_device_id`, `dkrt_store_*`, `dkrt_peek_*`), which the runtime reads through

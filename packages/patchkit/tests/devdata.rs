@@ -821,7 +821,7 @@ fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
     };
     // every device of the repository has the tables of the modules in its patch sets
     let facts = Facts::from_dir(&root().join("devices")).unwrap();
-    patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
+    patchkit::devgen::check_device_tables(&lib, &facts, None).unwrap();
     // core/ui declares `input.view_keys`: a device file without it is refused, naming the table, the set and the module
     let dt2 = std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap();
     let start = dt2
@@ -830,11 +830,57 @@ fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
     let end = dt2[start..].find("\n\n").map_or(dt2.len(), |n| start + n);
     let without = format!("{}{}", &dt2[..start], &dt2[end..]);
     let facts = Facts::from_texts([without.as_str()]).unwrap();
-    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+    let e = patchkit::devgen::check_device_tables(&lib, &facts, None)
         .unwrap_err()
         .0;
     assert!(
         e.contains("needs [input.view_keys]") && e.contains("core/ui"),
         "{e}"
     );
+    // the generator of the module alone refuses the same device, and a patch set that names a module the library lacks is an error
+    let e = devgen::generate(&lib, &facts, "core/ui").unwrap_err().0;
+    assert!(e.contains("needs [input.view_keys]"), "{e}");
+    let bare = r#"[device]
+short = "xx"
+name = "Bare"
+[patch_sets]
+device = ["core/ui"]
+"#;
+    let facts = Facts::from_texts([bare]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts, None)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("xx: patch set device includes core/ui"),
+        "a device file without [digikit] is checked too: {e}"
+    );
+    let ghost = bare.replace("core/ui", "core/no-such-module");
+    let facts = Facts::from_texts([ghost.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts, None)
+        .unwrap_err()
+        .0;
+    assert!(e.contains("core/no-such-module"), "{e}");
+}
+
+#[test]
+fn view_keys_flag_bits_are_range_checked_and_the_second_yes_key_is_optional() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let st = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
+    let bad = st.replace("act_flag = 4", "act_flag = 32");
+    let e = Facts::from_texts([bad.as_str()])
+        .err()
+        .expect("32 is refused")
+        .0;
+    assert!(e.contains("act_flag = 32"), "{e}");
+    // no yes2: the generated constant is no key id
+    let none = st.replace("yes2 = 48\n", "");
+    let facts = Facts::from_texts([none.as_str()]).unwrap();
+    let files = devgen::generate(&lib, &facts, "core/ui").unwrap();
+    let inc = files
+        .iter()
+        .find(|(p, _)| p.ends_with("ui-st.inc"))
+        .expect("ui-st.inc");
+    assert!(inc.1.contains("UI_KEY_YES2, 0xffffffff"), "{}", inc.1);
 }

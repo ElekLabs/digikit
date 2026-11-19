@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { parse } from 'smol-toml';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { patchedFileName } from '@digi/workbench-core/patch/patchkit-core.ts';
 import { manifestFiles, root } from './support/patchkit-env.ts';
 
@@ -41,7 +41,22 @@ test('the gallery names only the devices the site offers, whatever the modules l
   for (const m of modules) {
     for (const d of m.devices) assert.ok(SITE_DEVICES.includes(d), `${m.id} names ${d}`);
   }
-  // modules of the Syntakt list it in [targets]: it is not on the site
-  assert.ok(modules.some((m) => m.id === 'core/runtime'));
-  assert.ok(modules.every((m) => !m.devices.includes('st')));
+});
+
+test('adding a device to the site list is the only change the gallery needs', async () => {
+  vi.resetModules();
+  vi.doMock('../src/firmware/site-policy.ts', async (orig) => {
+    const real = await orig<typeof import('../src/firmware/site-policy.ts')>();
+    return { ...real, siteDevices: () => real.siteDevices([...real.SITE_DEVICES, 'st']) };
+  });
+  try {
+    const { modules } = await import('../src/data/modules.ts');
+    assert.ok(
+      modules.some((m) => m.devices.includes('st')),
+      'a module that lists the Syntakt in [targets] shows it',
+    );
+  } finally {
+    vi.doUnmock('../src/firmware/site-policy.ts');
+    vi.resetModules();
+  }
 });

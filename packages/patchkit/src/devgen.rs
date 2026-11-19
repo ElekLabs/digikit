@@ -95,19 +95,21 @@ struct InputDoc {
 }
 /// `[input.view_keys]`: the key ids of the firmware's key events (the id the views' key handlers get at +0xc of the event), which are the firmware's
 /// key indices and differ from the panel codes on some devices (the Syntakt's decoder table is not the identity, finding 138 "Safe key"). core/ui reads
-/// them to tell YES, NO and RIGHT in its list views. `yes2` is a second key that acts as YES (0: none).
+/// them to tell YES, NO and RIGHT in its list views. `yes2` is a second key that acts as YES; absent: none (generated as `UI_NO_KEY`, which is no key id).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ViewKeysDoc {
     yes: u64,
-    #[serde(default)]
-    yes2: u64,
+    yes2: Option<u64>,
     no: u64,
     right: u64,
     /// The bit of the key event's flags word (+0x10) that the move keys (RIGHT here) act on, and the bit that YES and NO act on: read from the firmware's own key handler.
     move_flag: u64,
     act_flag: u64,
 }
+/// The value of `UI_KEY_YES2` on a device with no second YES key: no firmware key id (they are small numbers), so the comparison in core/ui never matches.
+const UI_NO_KEY: u64 = 0xFFFF_FFFF;
+
 /// `[panel]`: the key codes: codes 1 to 8 * `linear_channels` are linear (code = channel * 8 + bit + 1), `[panel.exceptions]` lists the others as
 /// code = [channel, bit]. Only these numbers are generated; the groups are for hosts that draw the panel.
 #[derive(Deserialize)]
@@ -234,6 +236,16 @@ struct Store {
 #[derive(Debug, Default)]
 pub struct Facts {
     docs: BTreeMap<String, Entry>,
+    /// Every device file (a runtime target or not): the tables a module's `needs_device` can name, and the patch sets.
+    devices: BTreeMap<String, DeviceTables>,
+}
+
+#[derive(Debug)]
+struct DeviceTables {
+    /// The tables of the device file as dotted paths (`input`, `input.view_keys`).
+    tables: std::collections::BTreeSet<String>,
+    /// `[patch_sets]`: the root modules of each named set.
+    patch_sets: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug)]
@@ -253,10 +265,6 @@ struct Entry {
     /// DSP instructions per block left for modules (`dkprof::budget`: the block at the default margin, less the stock firmware's load). 0 where `devices/cycle-factors.json`
     /// has no entry for the device, and in the wasm build (which has no `dkprof`).
     dsp_headroom: u64,
-    /// The tables of the device file as dotted paths (`input`, `input.view_keys`): what a module's `needs_device` names.
-    tables: std::collections::BTreeSet<String>,
-    /// `[patch_sets]`: the root modules of each named set.
-    patch_sets: BTreeMap<String, Vec<String>>,
 }
 
 /// The DSP headroom of a device: see `Entry::dsp_headroom`.
@@ -440,6 +448,7 @@ struct StoreF {
 impl Facts {
     pub fn from_texts<'a>(texts: impl IntoIterator<Item = &'a str>) -> Result<Facts> {
         let mut docs = BTreeMap::new();
+        let mut devices = BTreeMap::new();
         let texts: Vec<&str> = texts.into_iter().collect();
         let models = crate::typed::Models::from_texts(texts.iter().copied())?;
         for t in texts {
@@ -450,6 +459,18 @@ impl Facts {
             }
             let d: Doc = toml::from_str(t)?;
             let short = d.device.short.clone();
+            if devices
+                .insert(
+                    short.clone(),
+                    DeviceTables {
+                        tables: table_paths(&table),
+                        patch_sets: d.patch_sets.clone(),
+                    },
+                )
+                .is_some()
+            {
+                return Err(err!("two device files describe {short}"));
+            }
             // only a runtime target (a file with [digikit]) has shared constants; an identity-only or patch-only device is skipped
             let Some(k) = d.digikit else {
                 continue;
@@ -568,8 +589,6 @@ impl Facts {
                             settings_sectors: s.settings_sectors,
                             header_b: s.header_b_sector,
                         }),
-                        tables: table_paths(&table),
-                        patch_sets: d.patch_sets.clone(),
                         caps: cap_bits,
                         limits: LimitsF {
                             modules: l.modules,
@@ -594,7 +613,7 @@ impl Facts {
                 return Err(err!("two device files describe {short}"));
             }
         }
-        Ok(Facts { docs })
+        Ok(Facts { docs, devices })
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -793,8 +812,36 @@ fn input_facts(short: &str, i: Option<InputDoc>, p: Option<PanelDoc>) -> Result<
         }
         exceptions.push([code, *ch, *bit]);
     }
-    let view_keys = i.view_keys.map_or([0; 6], |k| {
-        [k.yes, k.yes2, k.no, k.right, k.move_flag, k.act_flag]
+    if let Some(k) = &i.view_keys {
+        for (what, bit) in [("move_flag", k.move_flag), ("act_flag", k.act_flag)] {
+            if bit >= 32 {
+                return Err(err!(
+                    "{short}: [input.view_keys] {what} = {bit}: a bit number of the 32-bit flags word, 0 to 31"
+                ));
+            }
+        }
+        for (what, id) in [
+            ("yes", Some(k.yes)),
+            ("yes2", k.yes2),
+            ("no", Some(k.no)),
+            ("right", Some(k.right)),
+        ] {
+            if id.is_some_and(|v| v >= UI_NO_KEY) {
+                return Err(err!(
+                    "{short}: [input.view_keys] {what}: a key id below {UI_NO_KEY:#x}"
+                ));
+            }
+        }
+    }
+    let view_keys = i.view_keys.map_or([0, UI_NO_KEY, 0, 0, 0, 0], |k| {
+        [
+            k.yes,
+            k.yes2.unwrap_or(UI_NO_KEY),
+            k.no,
+            k.right,
+            k.move_flag,
+            k.act_flag,
+        ]
     });
     Ok(InputF {
         view_keys,
@@ -1392,7 +1439,7 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             value,
             match what {
                 "yes" => "[input.view_keys] yes (the key id of YES in a key event)",
-                "yes2" => "[input.view_keys] yes2 (a second YES key, 0 none)",
+                "yes2" => "[input.view_keys] yes2 (a second YES key; 0xffffffff: none, no key id)",
                 "no" => "[input.view_keys] no (the key id of NO)",
                 "right" => "[input.view_keys] right (the key id of RIGHT)",
                 "move" => "[input.view_keys] move_flag (the flags bit the move keys act on)",
@@ -2010,7 +2057,7 @@ fn check_sources(
     ))
 }
 
-/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-`; a module that lists neither is for every device.
+/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-` (TODO: the port file format, devices/ports/, has no device field; the prefix is the identity, as in apps/web/src/data/modules.ts; finding 152); a module that lists neither is for every device.
 fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
     let prefix = format!("{short}-");
     let listed = m.module.ports.iter().chain(m.targets.keys());
@@ -2024,7 +2071,6 @@ fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
     !any
 }
 
-/// The files a module asks for with `[[gen]]` (empty: it asks for none).
 /// The tables of a device file as dotted paths (`input`, `input.view_keys`).
 fn table_paths(t: &toml::Table) -> std::collections::BTreeSet<String> {
     fn walk(t: &toml::Table, prefix: &str, out: &mut std::collections::BTreeSet<String>) {
@@ -2045,17 +2091,23 @@ fn table_paths(t: &toml::Table) -> std::collections::BTreeSet<String> {
     out
 }
 
-/// A module names the tables of the device file that it reads (`[module] needs_device`, for example `input.view_keys`): every device whose patch sets include the
-/// module (as a root or through `requires`) must have them. The generated constants of an absent table would be zeros, which no module should run on.
-/// Modules that are not in `lib` are not checked.
-pub fn check_device_tables(lib: &Library, facts: &Facts) -> Result<()> {
-    for (dev, e) in &facts.docs {
+/// A module names the tables of the device file that it reads (`[module] needs_device`, for example `input.view_keys`): every device (runtime target or not)
+/// whose patch sets include the module (as a root or through `requires`) must have them. The generated constants of an absent table would be zeros, which no
+/// module should run on. A module id of a patch set that the library does not have is an error. `only`: check the devices for this module only (the generator of
+/// one module, `pack`); `None`: every module of every patch set (`patchkit gen`).
+pub fn check_device_tables(lib: &Library, facts: &Facts, only: Option<&str>) -> Result<()> {
+    for (dev, e) in &facts.devices {
         for (set, roots) in &e.patch_sets {
-            let Ok((ids, _)) = lib.with_requires(roots) else {
-                continue;
-            };
+            let (ids, _) = lib
+                .with_requires(roots)
+                .map_err(|x| err!("{dev}: patch set {set}: {x}"))?;
             for id in ids {
-                let Some(m) = lib.get(&id) else { continue };
+                if only.is_some_and(|o| o != id) {
+                    continue;
+                }
+                let m = lib
+                    .get(&id)
+                    .ok_or_else(|| err!("{dev}: patch set {set}: unknown module {id}"))?;
                 for need in &m.manifest.module.needs_device {
                     if !e.tables.contains(need) {
                         return Err(err!(
@@ -2069,10 +2121,14 @@ pub fn check_device_tables(lib: &Library, facts: &Facts) -> Result<()> {
     Ok(())
 }
 
+/// The files a module asks for with `[[gen]]` (empty: it asks for none). A module with `needs_device` is first checked against every device that patches it in.
 pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFile>> {
     let m = lib
         .get(module)
         .ok_or_else(|| err!("unknown module {module}"))?;
+    if !m.manifest.module.needs_device.is_empty() {
+        check_device_tables(lib, facts, Some(module))?;
+    }
     if m.manifest.gens.is_empty() {
         return Ok(vec![]);
     }

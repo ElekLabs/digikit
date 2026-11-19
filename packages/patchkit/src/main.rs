@@ -293,7 +293,17 @@ fn run(a: Args) -> Result<()> {
             storedump::run(&rest[1..]).map_err(Error)?;
         }
         #[cfg(not(target_arch = "wasm32"))]
-        "build" => build_cli::build(&a.root, rest)?,
+        "build" => {
+            // a module that needs device tables is not built for a device that lacks them (the objects hold the generated constants)
+            if flag(rest, "--tree").is_none()
+                && !rest.iter().any(|a| a == "--status" || a == "--paths")
+            {
+                let lib = selected_library(&a.root, &selected_source(rest)?, true, &[], &[])?;
+                let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
+                patchkit::devgen::check_device_tables(&lib, &facts, None)?;
+            }
+            build_cli::build(&a.root, rest)?
+        }
         #[cfg(not(target_arch = "wasm32"))]
         "dko" => build_cli::dko(rest)?,
         "owners" => {
@@ -444,7 +454,7 @@ fn run(a: Args) -> Result<()> {
                 let models = patchkit::typed::Models::from_dir(&a.root.join("devices"))?;
                 let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
                 if only.is_empty() {
-                    patchkit::devgen::check_device_tables(&lib, &facts)?;
+                    patchkit::devgen::check_device_tables(&lib, &facts, None)?;
                 }
                 for m in &lib.modules {
                     if !only.is_empty() && !only.iter().any(|o| o == m.id()) {
@@ -688,6 +698,8 @@ plan.json {}",
                 std::slice::from_ref(id),
                 std::slice::from_ref(id),
             )?;
+            let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
+            patchkit::devgen::check_device_tables(&lib, &facts, Some(id))?;
             let opts = patchkit::pack::PackOptions {
                 device: flag(rest, "--device"),
                 name: flag(rest, "--name"),

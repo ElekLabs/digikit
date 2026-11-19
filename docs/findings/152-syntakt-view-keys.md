@@ -36,3 +36,6 @@ words and `ui.c` reads them (`dk_ui_view_keys`). Digitakt II and Digitone II: 10
 
 - **[O]** The cause on the unit has not been confirmed by a flash; the emulator reproduction and the fix are the evidence.
 - **[O]** The emulator run that first reached DIGIKIT in another analysis never opened the menu (YES on DIGIKIT); that run used another cursor position or timing. This one opened it.
+
+- On the Syntakt the LEVEL push (id 48, `yes2`) acts like YES in DIGIKIT lists, because core/ui treats `yes2` as a second YES key; the stock handler treats id 0x30 like id 12 too, so this matches it. Em may revisit. A device with no second YES key leaves `yes2` out of `[input.view_keys]`; it is then generated as 0xffffffff, which no key event has.
+- **[O]** Device identity is the port-file prefix (`<short>-<version>`) in two places that predate this work: `targets_device` in `packages/patchkit/src/devgen.rs` and the gallery in `apps/web/src/data/modules.ts`. A module's `[targets]` keys and `ports` entries name devices only by that prefix; the port file format (devices/ports/) has no `device` field to read instead. Replace the prefix parse when the port file gets one.

@@ -1,6 +1,6 @@
 /* core/ui: the device adapter behind <dk/platform/ui.h> (docs/plans/sdk-api.md phase 3, docs/findings/71-ui-components-1-17.md).
  *
- * The same source runs on the Digitakt II and the Digitone II: every firmware call is a generated anchor (dk_fw_*.h).
+ * The same source runs on every device that has the digikit menu: the device's facts come from the device file and every firmware call is a generated anchor (dk_fw_*.h).
  *
  * Views. A plain menu or text page is a stock VerticalMenuView, a DK_UI_LIST is a stock MenuWithPopoutSideBarsView (a list with a
  * title bar, check marks and a right side panel). Each is built once, in the firmware heap, and kept for the session through a
@@ -54,7 +54,7 @@ void dk_make_sp(shared_ptr *out, uint8_t *parent, uint8_t *view);
 /* The key ids of the firmware's key events (the id at +0xc of the event): the device's `[input.view_keys]`, in the per-device object src/keys/<dev>.s. */
 extern const uint32_t dk_ui_view_keys[6];
 #define KEY_YES (dk_ui_view_keys[0])
-#define KEY_YES2 (dk_ui_view_keys[1]) /* 0: the device has no second YES key */
+#define KEY_YES2 (dk_ui_view_keys[1]) /* 0xffffffff: the device has no second YES key (no key event has that id) */
 #define KEY_NO (dk_ui_view_keys[2])
 #define KEY_RIGHT (dk_ui_view_keys[3])
 /* The flags word of a key event (+0x10): the bit the move keys act on, the bit YES and NO act on (the firmware's own handler reads them). Device data too. */
@@ -591,7 +591,7 @@ static uint32_t list_key(uint8_t *view, uint8_t *ev)
         if (id == KEY_NO && (fl & KEYFL_ACT) && m->d->back && m->d->back(m->d->arg) == 1)
             return 1;
         /* only the hidden item: YES and RIGHT have nothing to act on or open; every other key (NO, the cursor keys, an unknown one) is the stock handler's */
-        if (m->n == 0 && (id == KEY_YES || (KEY_YES2 && id == KEY_YES2) || id == KEY_RIGHT))
+        if (m->n == 0 && (id == KEY_YES || id == KEY_YES2 || id == KEY_RIGHT))
             return 1;
         if (m->n == 0)
             return ((uint32_t (*)(uint8_t *, uint8_t *))g_list_stock_key)(view, ev);
@@ -599,7 +599,7 @@ static uint32_t list_key(uint8_t *view, uint8_t *ev)
             open_panel(m);
             return 1;
         }
-        if ((id == KEY_YES || (KEY_YES2 && id == KEY_YES2)) && (fl & KEYFL_ACT) && m->d->check) {
+        if ((id == KEY_YES || id == KEY_YES2) && (fl & KEYFL_ACT) && m->d->check) {
             int row_ = (int)p->main.selected;
             if (row_ >= 0 && row_ < m->n)
                 toggle_check(m, row_);
