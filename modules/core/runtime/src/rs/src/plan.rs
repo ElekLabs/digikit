@@ -187,7 +187,7 @@ fn order_of(mods: &[Option<Keys>], order: &mut [u8; SEL_MAX], cyclic: &mut [bool
     }
 }
 
-/// The most bytes of a header table the boot planner keeps (a module with eight machines, three effects and nine needs has about 260; a larger table is not planned and the loader decides). A service file's table without its BIND and FW entries
+/// The most bytes of a header table the boot planner keeps (a module with eight machines, three effects and nine needs has about 260; a larger table is not planned and the loader decides). A provider file's table without its FW, FWNAMES and SITES entries
 /// holds its hooks and exports too: `machines.dks` with its builder exports needs about 480.
 pub(crate) const TABLE_MAX: usize = 640;
 

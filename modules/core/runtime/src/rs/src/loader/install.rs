@@ -1,10 +1,10 @@
-//! The hook installer (docs/plans/runtime-and-services.md, R12-3): writes a `jmp.l` to a trampoline over each BIND site and writes the stock bytes
-//! back on restore. Generic over `Platform`, so the host tests run it on `FakePlatform`, whose call log is the fake of the installer.
+//! The hook installer (docs/plans/runtime-and-services.md, R12-3): writes a `jmp.l` to the entry of a service over each hook site and writes the stock bytes
+//! back on restore. The sites come from the port file (`SITES`): address, displaced length and the check value of the stock bytes. Generic over `Platform`,
+//! so the host tests run it on `FakePlatform`, whose call log is the fake of the installer.
 //!
-//! All-or-nothing per provider: pass 1 checks every site and writes nothing; pass 2 writes under the same interrupt mask, flushes the covered
-//! lines and fills the slot words. Standalone for now: the Loader calls it in R12-3a/R12-3.
+//! All-or-nothing per provider: pass 1 checks every site and writes nothing; pass 2 reads the live stock bytes (kept for the restore), writes under the same
+//! interrupt mask, flushes the covered lines and fills the slot words.
 
-use dkneeds::keys::BindRef;
 use dkrt_abi::link::Sequence;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::*;
@@ -23,15 +23,25 @@ pub trait Backend {
     fn count(&self) -> usize;
 }
 
-/// The ColdFire items of one record: its hook sites (`binds`, with the trampolines in the image at `image_base`) and the slot words it fills (address, value).
+/// One hook site a service takes, from the port file's `SITES` item of the hook and the service's `HOOKS` item: where the site is, how many stock bytes it
+/// displaces, the check value of those bytes (the first 8 bytes of their SHA-256) and the image offset of the service's entry that the site jumps to.
+#[derive(Clone, Copy)]
+pub struct HookItem {
+    pub addr: u32,
+    pub len: u32,
+    pub check: [u8; 8],
+    pub entry: u32,
+}
+
+/// The ColdFire items of one record: its hook sites (`hooks`, with the entries in the image at `image_base`) and the slot words it fills (address, value).
 pub struct CfItems<'a> {
-    pub binds: &'a [BindRef<'a>],
+    pub hooks: &'a [HookItem],
     pub image_base: u32,
     pub image_size: u32,
     pub slots: &'a [(u32, u32)],
 }
 
-/// Installed sites at most (`[limits.format] install_sites` of sdk/sdk.toml): machines 21 + fx 9 and room.
+/// Installed sites at most (`[limits.format] install_sites` of sdk/sdk.toml): 18 and 22 on the two devices today, and room.
 pub const SITES_MAX: usize = dkneeds::INSTALL_SITES as usize;
 
 /// `jmp.l` and `nop`, as big-endian words.
@@ -75,18 +85,18 @@ impl Installer {
         self.n
     }
 
-    /// Pass 1: check every item, write nothing. Errors: `E_RANGE` (length, trampoline, stock slice), `E_PLAN_FIT` (no room for the sites),
-    /// `E_PLAN_OWNER` (an installed site or an earlier item overlaps), `E_HOOK_STOCK` (the live bytes are not the stock bytes).
+    /// Pass 1: check every item, write nothing. Errors: `E_RANGE` (length, entry), `E_PLAN_FIT` (no room for the sites), `E_PLAN_OWNER` (an installed site or an
+    /// earlier item overlaps), `E_HOOK_STOCK` (the live bytes are not the stock bytes: their check value differs from the item's).
     #[inline(never)]
-    pub unsafe fn check<P: Platform>(&self, p: &P, binds: &[BindRef], _image_base: u32, image_size: u32) -> Result<(), i32> {
-        if self.n + binds.len() > SITES_MAX {
+    pub unsafe fn check<P: Platform>(&self, p: &P, hooks: &[HookItem], image_size: u32) -> Result<(), i32> {
+        if self.n + hooks.len() > SITES_MAX {
             return Err(E_PLAN_FIT);
         }
         let mut i = 0;
-        while i < binds.len() {
-            let b = &binds[i];
+        while i < hooks.len() {
+            let b = &hooks[i];
             let len = b.len as usize;
-            if !(6..=64).contains(&len) || len % 2 != 0 || b.tramp >= image_size || b.stock.len() < len {
+            if !(6..=64).contains(&len) || len % 2 != 0 || b.entry >= image_size {
                 return Err(E_RANGE);
             }
             let end = b.addr.wrapping_add(b.len);
@@ -100,15 +110,13 @@ impl Installer {
             }
             let mut j = 0;
             while j < i {
-                let o = &binds[j];
+                let o = &hooks[j];
                 if b.addr < o.addr + o.len && o.addr < end {
                     return Err(E_PLAN_OWNER);
                 }
                 j += 1;
             }
-            let mut cur = [0u8; 64];
-            p.read_code(b.addr, &mut cur[..len]);
-            if cur[..len] != b.stock[..len] {
+            if super::port::site_check(p, b.addr, len) != b.check {
                 return Err(E_HOOK_STOCK);
             }
             i += 1;
@@ -117,13 +125,13 @@ impl Installer {
     }
 
     /// Install the hooks of record `rec` and fill `slots` (slot address, value). Safe mode (not armed): `Ok` with no platform call. One mask:
-    /// pass 1 again, then the writes, then the flush of the covered lines, then the slot words, then the restore. A refusal in pass 1 writes
-    /// nothing.
+    /// pass 1 again, then the stock bytes are read, then the writes, then the flush of the covered lines, then the slot words, then the restore. A refusal in pass 1
+    /// writes nothing.
     pub unsafe fn install<P: Platform>(
         &mut self,
         p: &P,
         rec: u8,
-        binds: &[BindRef],
+        hooks: &[HookItem],
         image_base: u32,
         image_size: u32,
         slots: &[(u32, u32)],
@@ -132,14 +140,14 @@ impl Installer {
             return Ok(());
         }
         let sr = p.irq_mask();
-        if let Err(e) = self.check(p, binds, image_base, image_size) {
+        if let Err(e) = self.check(p, hooks, image_size) {
             p.irq_restore(sr);
             return Err(e);
         }
         let first = self.n;
         let mut i = 0;
-        while i < binds.len() {
-            let b = &binds[i];
+        while i < hooks.len() {
+            let b = &hooks[i];
             let len = b.len as usize;
             let mut bytes = [0u8; 64];
             let mut k = 0;
@@ -148,10 +156,11 @@ impl Installer {
                 k += 2;
             }
             bytes[0..2].copy_from_slice(&JMP_L.to_be_bytes());
-            bytes[2..6].copy_from_slice(&image_base.wrapping_add(b.tramp).to_be_bytes());
-            p.write_code(b.addr, &bytes[..len]);
+            bytes[2..6].copy_from_slice(&image_base.wrapping_add(b.entry).to_be_bytes());
+            // the stock bytes are the live ones (the check just compared them), kept for the restore
             let mut stock = [0u8; 64];
-            stock[..len].copy_from_slice(&b.stock[..len]);
+            p.read_code(b.addr, &mut stock[..len]);
+            p.write_code(b.addr, &bytes[..len]);
             self.sites[self.n] = Site { rec, addr: b.addr, len: b.len as u8, stock };
             self.n += 1;
             i += 1;
@@ -215,7 +224,7 @@ impl Installer {
 impl Backend for Installer {
     type Items<'a> = CfItems<'a>;
     unsafe fn install<P: Platform>(&mut self, p: &P, rec: u8, items: &CfItems<'_>) -> Result<(), i32> {
-        Installer::install(self, p, rec, items.binds, items.image_base, items.image_size, items.slots)
+        Installer::install(self, p, rec, items.hooks, items.image_base, items.image_size, items.slots)
     }
     unsafe fn restore<P: Platform>(&mut self, p: &P, rec: u8) {
         Installer::restore(self, p, rec)
@@ -358,10 +367,36 @@ mod tests {
     const BASE: u32 = 0x4100_0000;
     const SIZE: u32 = 0x1000;
 
-    fn bind(addr: u32, len: u32, stock: &[u8]) -> BindRef<'_> {
-        BindRef { site: addr, addr, len, tramp: 0x40, stock }
+    /// A hook site of `len` stock bytes (the first `len` of `stock`) at `addr`, with the entry 0x40 in the image.
+    #[derive(Clone, Copy)]
+    struct Bd<'a> {
+        addr: u32,
+        len: u32,
+        stock: &'a [u8],
     }
-    fn fake(binds: &[BindRef]) -> FakePlatform {
+    fn bind(addr: u32, len: u32, stock: &[u8]) -> Bd<'_> {
+        Bd { addr, len, stock }
+    }
+    /// The installer's items of `bs`: the check value is the one of the stock bytes.
+    fn items(bs: &[Bd]) -> Vec<HookItem> {
+        bs.iter()
+            .map(|b| {
+                let n = (b.len as usize).min(b.stock.len());
+                let mut check = [0u8; 8];
+                if n != 0 {
+                    let mut sha = crate::sha256::Sha::new();
+                    let mut out = [0u8; 32];
+                    unsafe {
+                        sha.update(b.stock.as_ptr(), n as u32);
+                        sha.finish(out.as_mut_ptr());
+                    }
+                    check.copy_from_slice(&out[..8]);
+                }
+                HookItem { addr: b.addr, len: b.len, check, entry: 0x40 }
+            })
+            .collect()
+    }
+    fn fake(binds: &[Bd]) -> FakePlatform {
         let f = FakePlatform::new(profiles::DN2);
         for b in binds {
             f.put_code(b.addr, &b.stock[..b.len as usize]);
@@ -380,7 +415,7 @@ mod tests {
         let bs = [bind(0x1000_0000, 6, &sa), bind(0x1000_0100, 8, &sb)];
         let f = fake(&bs);
         let mut ins = Installer::new();
-        unsafe { ins.install(&f, 3, &bs, BASE, SIZE, &[(0x2000_0000, 0x4100_0080), (0x2000_0004, 0x4100_0090)]).unwrap() };
+        unsafe { ins.install(&f, 3, &items(&bs), BASE, SIZE, &[(0x2000_0000, 0x4100_0080), (0x2000_0004, 0x4100_0090)]).unwrap() };
         assert_eq!(
             *f.calls.borrow(),
             [
@@ -401,23 +436,23 @@ mod tests {
         assert_eq!((ins.count(), f.depth.get()), (2, 0));
     }
 
-    /// A raw hook with a tail (`patchkit bind`): its BIND item holds the stock bytes of the site like any hook and its trampoline is the entry of the service's
-    /// asm, whose tail was made from the same stock. A firmware that differs from those bytes is refused before any write, and the stock one installs `jmp entry`.
+    /// A hook whose site carries the port file's check value of the stock bytes: a firmware that differs from those bytes is refused before any write, and the stock
+    /// one installs `jmp entry`.
     #[test]
-    fn a_raw_hook_with_a_tail_is_refused_on_other_stock_and_installed_on_its_own() {
+    fn a_hook_is_refused_on_other_stock_and_installed_on_its_own() {
         let stock = [0x70, 0x06, 0xb2, 0x80, 0x67, 0x00, 0x00, 0x20];
-        let bs = [BindRef { site: 0x1000_0000, addr: 0x1000_0000, len: 8, tramp: 0x80, stock: &stock }];
+        let bs = [Bd { addr: 0x1000_0000, len: 8, stock: &stock }];
         let f = fake(&bs);
         let mut other = stock;
         other[1] = 0x07;
         f.put_code(0x1000_0000, &other);
         let mut ins = Installer::new();
-        assert_eq!(unsafe { ins.install(&f, 0, &bs, BASE, SIZE, &[]) }, Err(E_HOOK_STOCK));
+        assert_eq!(unsafe { ins.install(&f, 0, &items(&bs), BASE, SIZE, &[]) }, Err(E_HOOK_STOCK));
         assert_eq!(*f.calls.borrow(), [Call::Mask, Call::Restore]);
         assert_eq!(code(&f, 0x1000_0000, 8), other, "nothing was written");
         f.put_code(0x1000_0000, &stock);
-        unsafe { ins.install(&f, 0, &bs, BASE, SIZE, &[]).unwrap() };
-        assert_eq!(code(&f, 0x1000_0000, 6), [0x4e, 0xf9, 0x41, 0x00, 0x00, 0x80]);
+        unsafe { ins.install(&f, 0, &items(&bs), BASE, SIZE, &[]).unwrap() };
+        assert_eq!(code(&f, 0x1000_0000, 6), [0x4e, 0xf9, 0x41, 0x00, 0x00, 0x40]);
     }
 
     #[test]
@@ -427,7 +462,7 @@ mod tests {
         let f = fake(&bs);
         f.put_code(0x1000_0100, &[0; 6]);
         let mut ins = Installer::new();
-        assert_eq!(unsafe { ins.install(&f, 0, &bs, BASE, SIZE, &[(0x2000_0000, 1)]) }, Err(E_HOOK_STOCK));
+        assert_eq!(unsafe { ins.install(&f, 0, &items(&bs), BASE, SIZE, &[(0x2000_0000, 1)]) }, Err(E_HOOK_STOCK));
         assert_eq!(*f.calls.borrow(), [Call::Mask, Call::Restore]);
         assert_eq!(ins.count(), 0);
         assert_eq!(code(&f, 0x1000_0000, 6), sa, "the first site is still stock");
@@ -439,7 +474,7 @@ mod tests {
         let bs = [bind(0x1000_0000, 6, &sa)];
         let f = fake(&bs);
         let ins = Installer::new();
-        assert_eq!(unsafe { ins.check(&f, &bs, BASE, SIZE) }, Ok(()));
+        assert_eq!(unsafe { ins.check(&f, &items(&bs), SIZE) }, Ok(()));
         assert!(f.calls.borrow().is_empty());
     }
 
@@ -449,12 +484,12 @@ mod tests {
         let bs = [bind(0x1000_0000, 6, &sa)];
         let f = fake(&bs);
         let mut ins = Installer::new();
-        unsafe { ins.install(&f, 0, &bs, BASE, SIZE, &[]).unwrap() };
+        unsafe { ins.install(&f, 0, &items(&bs), BASE, SIZE, &[]).unwrap() };
         f.calls.borrow_mut().clear();
         // overlapping range, stock that matches nothing is irrelevant: the owner check comes first
         let again = [bind(0x1000_0004, 6, &sc)];
         f.put_code(0x1000_0004, &sc);
-        assert_eq!(unsafe { ins.install(&f, 1, &again, BASE, SIZE, &[]) }, Err(E_PLAN_OWNER));
+        assert_eq!(unsafe { ins.install(&f, 1, &items(&again), BASE, SIZE, &[]) }, Err(E_PLAN_OWNER));
         assert_eq!(*f.calls.borrow(), [Call::Mask, Call::Restore]);
         assert_eq!(ins.count(), 1);
     }
@@ -465,22 +500,22 @@ mod tests {
         let bs = [bind(0x1000_0000, 8, &s), bind(0x1000_0006, 6, &s)];
         let f = fake(&bs);
         let mut ins = Installer::new();
-        assert_eq!(unsafe { ins.install(&f, 0, &bs, BASE, SIZE, &[]) }, Err(E_PLAN_OWNER));
+        assert_eq!(unsafe { ins.install(&f, 0, &items(&bs), BASE, SIZE, &[]) }, Err(E_PLAN_OWNER));
         assert!(!f.calls.borrow().iter().any(|c| matches!(c, Call::Write { .. })));
         assert_eq!(ins.count(), 0);
     }
 
     #[test]
-    fn bad_length_or_trampoline_is_refused() {
+    fn bad_length_or_entry_is_refused() {
         let s = [0xaa; 66];
         let f = FakePlatform::new(profiles::DN2);
         let ins = Installer::new();
         for len in [4u32, 7, 66] {
-            assert_eq!(unsafe { ins.check(&f, &[bind(0x1000_0000, len, &s)], BASE, SIZE) }, Err(E_RANGE), "len {len}");
+            assert_eq!(unsafe { ins.check(&f, &items(&[bind(0x1000_0000, len, &s)]), SIZE) }, Err(E_RANGE), "len {len}");
         }
-        let mut b = bind(0x1000_0000, 6, &s);
-        b.tramp = SIZE;
-        assert_eq!(unsafe { ins.check(&f, &[b], BASE, SIZE) }, Err(E_RANGE));
+        let mut it = items(&[bind(0x1000_0000, 6, &s)]);
+        it[0].entry = SIZE;
+        assert_eq!(unsafe { ins.check(&f, &it, SIZE) }, Err(E_RANGE));
     }
 
     #[test]
@@ -490,7 +525,7 @@ mod tests {
         let f = fake(&bs);
         let mut ins = Installer::new();
         ins.set_armed(false);
-        assert_eq!(unsafe { ins.install(&f, 0, &bs, BASE, SIZE, &[(0x2000_0000, 1)]) }, Ok(()));
+        assert_eq!(unsafe { ins.install(&f, 0, &items(&bs), BASE, SIZE, &[(0x2000_0000, 1)]) }, Ok(()));
         assert!(f.calls.borrow().is_empty());
         assert_eq!(ins.count(), 0);
         assert_eq!(code(&f, 0x1000_0000, 6), sa);
@@ -502,7 +537,7 @@ mod tests {
         let bs = [bind(0x1000_0000, 6, &sa), bind(0x1000_0100, 6, &sb)];
         let f = fake(&bs);
         let mut ins = Installer::new();
-        unsafe { ins.install(&f, 4, &bs, BASE, SIZE, &[(0x2000_0000, 0x4100_0080)]).unwrap() };
+        unsafe { ins.install(&f, 4, &items(&bs), BASE, SIZE, &[(0x2000_0000, 0x4100_0080)]).unwrap() };
         f.calls.borrow_mut().clear();
         unsafe { ins.restore(&f, 4) };
         assert_eq!(code(&f, 0x1000_0000, 6), sa);
@@ -524,8 +559,8 @@ mod tests {
         f.put_code(0x1000_0100, &sb);
         let mut ins = Installer::new();
         unsafe {
-            ins.install(&f, 1, &a, BASE, SIZE, &[]).unwrap();
-            ins.install(&f, 2, &b, BASE, SIZE, &[]).unwrap();
+            ins.install(&f, 1, &items(&a), BASE, SIZE, &[]).unwrap();
+            ins.install(&f, 2, &items(&b), BASE, SIZE, &[]).unwrap();
             ins.restore(&f, 1);
         }
         assert_eq!(ins.count(), 1);
@@ -539,7 +574,7 @@ mod tests {
         let bs = [bind(0x1000_000c, 6, &sa), bind(0x1000_0100, 6, &sb)];
         let f = fake(&bs);
         let mut ins = Installer::new();
-        unsafe { ins.install(&f, 0, &bs, BASE, SIZE, &[]).unwrap() };
+        unsafe { ins.install(&f, 0, &items(&bs), BASE, SIZE, &[]).unwrap() };
         let c = f.calls.borrow();
         assert!(c.contains(&Call::Flush { addr: 0x1000_0000, len: 32 }));
         assert!(c.contains(&Call::Flush { addr: 0x1000_0100, len: 16 }));
@@ -548,14 +583,14 @@ mod tests {
     #[test]
     fn more_sites_than_the_table_holds_are_refused() {
         let s = [0xaa; 6];
-        let bs: Vec<BindRef> = (0..SITES_MAX as u32 + 1).map(|i| bind(0x1000_0000 + i * 16, 6, &s)).collect();
+        let bs: Vec<Bd> = (0..SITES_MAX as u32 + 1).map(|i| bind(0x1000_0000 + i * 16, 6, &s)).collect();
         let f = fake(&bs);
         let mut ins = Installer::new();
-        assert_eq!(unsafe { ins.install(&f, 0, &bs, BASE, SIZE, &[]) }, Err(E_PLAN_FIT));
+        assert_eq!(unsafe { ins.install(&f, 0, &items(&bs), BASE, SIZE, &[]) }, Err(E_PLAN_FIT));
         assert_eq!(ins.count(), 0);
         // exactly the capacity fits, and the next provider then finds no room
-        unsafe { ins.install(&f, 0, &bs[..SITES_MAX], BASE, SIZE, &[]).unwrap() };
-        assert_eq!(unsafe { ins.check(&f, &bs[SITES_MAX..], BASE, SIZE) }, Err(E_PLAN_FIT));
+        unsafe { ins.install(&f, 0, &items(&bs[..SITES_MAX]), BASE, SIZE, &[]).unwrap() };
+        assert_eq!(unsafe { ins.check(&f, &items(&bs[SITES_MAX..]), SIZE) }, Err(E_PLAN_FIT));
     }
 
     #[test]

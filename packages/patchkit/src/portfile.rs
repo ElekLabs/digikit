@@ -446,14 +446,22 @@ pub fn pack(data: &PortData) -> Result<Vec<u8>> {
     };
     let mut table = vec![0u8; table_size(&t)];
     write_table(&t, &mut table).map_err(|e| err!("header table: {e:?}"))?;
+    // the image is the `rts` that every `dk_ret_` resolves to (and a `nop` to fill the word); the bss holds the copy of each tail and stock site (the displaced bytes
+    // and `jmp.l`), which the runtime fills from flash after it checked them
+    let bss: usize = data
+        .sites
+        .iter()
+        .filter(|x| !x.absent && x.kind.copies())
+        .map(|x| usize::from(x.len) + 6)
+        .sum();
     emit(&EmitParts {
         name: PORT_SERVICE,
         version: PORT_VERSION,
         role: ROLE_PORT,
         runtime_word: 0,
         svc_abi: 0,
-        image: &[],
-        bss: 0,
+        image: &[0x4e, 0x75, 0x4e, 0x71],
+        bss: bss as u32,
         align: 4,
         imports: &[],
         relocs: &[],
@@ -776,7 +784,7 @@ mod tests {
         let dkm = Dkm::parse(&f).unwrap();
         assert_eq!(
             (dkm.role, dkm.name.as_str(), dkm.image.len()),
-            (ROLE_PORT, "port", 0)
+            (ROLE_PORT, "port", 4)
         );
         // it provides the service `port`
         let t = dkm.register.as_slice();

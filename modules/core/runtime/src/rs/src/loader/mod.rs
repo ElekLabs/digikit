@@ -45,7 +45,7 @@ pub use seams::{Block, Images, RealImages, RealRegistry, Registry, Staged};
 /// The index the log shows for a provider file (`MOD_LOAD` and the events of its load): not a selection index, and not `u32::MAX` (no load running).
 pub const PROVIDER_IDX: u32 = 0xffff_fffe;
 
-/// What a provider record keeps after its load started: the copy of its header table (BIND, EXPORTS and SLOTS; the staged file is gone once `init` reads
+/// What a provider record keeps after its load started: the copy of its header table (HOOKS, EXPORTS and SLOTS; for the port file the whole table; the staged file is gone once `init` reads
 /// from the store) and the size of its image.
 #[derive(Clone, Copy)]
 pub(crate) struct ProvRec {
@@ -459,9 +459,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         };
         match self.port_keys() {
             Some((keys, base, image_size)) => port::lookup(&keys, base, image_size, r),
-            None => port::Lookup::Unlisted(match r {
-                port::Ref::Name(h) | port::Ref::Tail(h) | port::Ref::Stock(h) | port::Ref::Ret(h) | port::Ref::Exit(h, _) => h,
-            }),
+            None => port::Lookup::Unlisted(r.hash()),
         }
     }
 

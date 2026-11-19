@@ -120,7 +120,7 @@ fn stem_of(path: &[u8]) -> Option<&[u8]> {
 }
 
 #[inline(never)]
-/// Check the staged file `file` as a provider and put its table, without the BIND and FW entries, into slot `k` of `out`; false when the file is not a usable provider.
+/// Check the staged file `file` as a provider and put its table, without the FW, FWNAMES and SITES entries, into slot `k` of `out`; false when the file is not a usable provider.
 fn table_of(file: &[u8], k: usize, out: &mut Found, role: u32, fw: Option<[u8; 8]>) -> bool {
     let be = |p: usize| u32::from_be_bytes([file[p], file[p + 1], file[p + 2], file[p + 3]]);
     if file.len() < dkneeds::H_REG_SIZE as usize + 4 || be(dkneeds::H_ROLE as usize) != role {
@@ -131,9 +131,9 @@ fn table_of(file: &[u8], k: usize, out: &mut Found, role: u32, fw: Option<[u8; 8
         return false;
     }
     let src = &file[off..off + len];
-    // The full table must parse (heads and sizes fit, the entries use it up exactly). The planner's copy is the table without its BIND entry: a service with
-    // many BIND items has a table over TABLE_MAX, and the planner never needs BIND (the load reads it). The entries are in ascending tag order and BIND has
-    // the highest tag, so it is the last entry: the copy is the table up to it, with one entry less.
+    // The full table must parse (heads and sizes fit, the entries use it up exactly). The planner's copy is the table without its FW, FWNAMES and SITES entries: the
+    // port file's table has many names and is over TABLE_MAX, and the planner never needs them (the load reads them). The entries are in ascending tag order and these
+    // have the highest tags, so they are the last entries: the copy is the table up to the first of them, with fewer entries.
     let full = match Keys::parse(src) {
         Ok(k) => k,
         Err(_) => return false,
@@ -147,12 +147,11 @@ fn table_of(file: &[u8], k: usize, out: &mut Found, role: u32, fw: Option<[u8; 8
     }
     let mut n_entries = u16::from_be_bytes([src[6], src[7]]) as usize;
     let mut end = len;
-    if full.count(tag::BIND) != 0 || full.count(tag::FW) != 0 {
-        // BIND and FW have the highest tags, so they are the last entries: the copy ends at the first entry of a tag from BIND up
+    if full.count(tag::FW) != 0 {
         let mut pos = 8;
         let mut e = 0;
         while e < n_entries {
-            if u16::from_be_bytes([src[pos], src[pos + 1]]) >= tag::BIND {
+            if u16::from_be_bytes([src[pos], src[pos + 1]]) >= tag::FW {
                 break;
             }
             pos += 8 + u32::from_be_bytes([src[pos + 4], src[pos + 5], src[pos + 6], src[pos + 7]]) as usize;
@@ -420,7 +419,7 @@ mod tests {
     #[test]
     fn the_port_file_whose_fw_is_the_images_is_found_whatever_its_name_and_the_others_are_ignored() {
         let mut fs = cards(vec![
-            ("ports/dt2-1.16.dkport".into(), port_file(FW_B)),
+            ("ports/p-1.16.dkport".into(), port_file(FW_B)),
             ("ports/z-any-name.dkport".into(), port_file(FW_A)),
             ("ports/notes.txt".into(), port_file(FW_A)),
         ]);
@@ -435,16 +434,16 @@ mod tests {
 
     #[test]
     fn no_port_file_for_the_firmware_finds_no_provider_and_a_service_is_still_found() {
-        let mut fs = cards(vec![("ports/dt2-1.16.dkport".into(), port_file(FW_B)), ("services/lfo.dks".into(), file(1, "lfo", &["port"]))]);
+        let mut fs = cards(vec![("ports/p-1.16.dkport".into(), port_file(FW_B)), ("services/lfo.dks".into(), file(1, "lfo", &["port"]))]);
         // another firmware, and an image with no fw_id
         for fw in [Some(FW_A), None] {
             let out = run_fw(&mut fs, &["lfo"], fw);
             assert_eq!((out.n, out.path(0)), (1, &b"services/lfo.dks"[..]), "{fw:?}");
         }
         // with the matching port file the service and the port file are both providers
-        fs.files.push((b"ports/dt2-1.17.dkport".to_vec(), port_file(FW_A)));
+        fs.files.push((b"ports/p-1.17.dkport".to_vec(), port_file(FW_A)));
         let out = run_fw(&mut fs, &["lfo"], Some(FW_A));
-        assert_eq!((out.n, out.path(0), out.path(1)), (2, &b"services/lfo.dks"[..], &b"ports/dt2-1.17.dkport"[..]));
+        assert_eq!((out.n, out.path(0), out.path(1)), (2, &b"services/lfo.dks"[..], &b"ports/p-1.17.dkport"[..]));
     }
 
     #[test]
@@ -480,35 +479,34 @@ mod tests {
         assert_eq!(out.path(1), b"services/base.dks");
     }
 
-    /// The file of a service whose BIND entry holds `n` items of 64 stock bytes: its table is over `TABLE_MAX`.
-    fn file_with_bind(name: &str, n: usize) -> Vec<u8> {
-        let stock = [0xa5u8; 64];
-        let binds: Vec<dkneeds::keys::Bind> =
-            (0..n).map(|i| dkneeds::keys::Bind { site: i as u32 + 1, addr: 0x1000, tramp: 0x20, stock: &stock }).collect();
-        raw_file(1, &table_of_t(&Table { provides: &[Pair { a: name_hash(name), b: 0x010000 }], bind: &binds, fw: &[[7; 8]], ..KEEP }))
+    /// The port file with `n` names: its table is over `TABLE_MAX` (12 bytes a name).
+    fn big_port_file(n: usize) -> Vec<u8> {
+        let names: Vec<dkneeds::keys::NameRec> =
+            (0..n).map(|i| dkneeds::keys::NameRec { hash: i as u32 + 1, addr: 0x1000 + i as u32, n: 0, kind: 0, flags: 0 }).collect();
+        raw_file(2, &table_of_t(&Table { provides: &[Pair { a: name_hash("port"), b: 0x000100 }], fw: &[FW_A], names: &names, ..KEEP }))
     }
 
     #[test]
-    fn a_provider_whose_full_table_is_over_the_planner_limit_because_of_bind_is_found_and_planned() {
-        let f = file_with_bind("big", 8);
+    fn a_port_file_whose_full_table_is_over_the_planner_limit_is_found_and_planned() {
+        let f = big_port_file(80);
         let full = u32::from_be_bytes(f[dkneeds::H_REG_SIZE as usize..][..4].try_into().unwrap()) as usize;
         assert!(full > TABLE_MAX, "{full}");
-        let mut fs = cards(vec![("services/big.dks".into(), f)]);
-        let out = run(&mut fs, &["big"]);
+        let mut fs = cards(vec![("ports/big.dkport".into(), f)]);
+        let out = run_fw(&mut fs, &["port"], Some(FW_A));
         assert_eq!(out.n, 1);
-        // the planner's copy is the table without BIND and FW, still version 2 with its one PROVIDES
+        // the planner's copy is the table without FW, FWNAMES and SITES (their tags are the highest), with its one PROVIDES
         let keys = Keys::parse(out.table(0)).unwrap();
-        assert_eq!(keys.version(), 2);
-        assert_eq!((keys.count(tag::BIND), keys.count(tag::FW)), (0, 0));
+        assert_eq!((keys.count(tag::FW), keys.name_count(), keys.site_count()), (0, 0, 0));
         assert_eq!(keys.count(tag::PROVIDES), 1);
         assert!(out.table(0).len() <= TABLE_MAX);
-        let user = table_of_t(&Table { needs: &[Need { service: name_hash("big"), min_version: 0x010000, hard: true }], ..KEEP });
+        let user = table_of_t(&Table { needs: &[Need { service: name_hash("port"), min_version: 0x000100, hard: true }], ..KEEP });
         let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let caps = [dkrt_sdk::DkrtCap { kind: dkrt_sdk::proto::CAPK_MODULES as u32, limit: 8, used: 0, largest: 8 }];
         let env = crate::plan::Env { services, runtime: 0x000900, caps: &caps };
         let p = crate::plan::plan_with(&env, &[Some(Keys::parse(&user).unwrap())], &[Some(keys)]);
         assert_eq!((p.provider_verdicts[0], p.verdicts[0]), (dkrt_abi::plan::Verdict::Accepted, dkrt_abi::plan::Verdict::Accepted));
     }
+
 
     #[test]
     fn a_stem_over_50_bytes_is_skipped_so_its_path_fits_a_selection_path() {
@@ -668,7 +666,7 @@ mod tests {
         tiny[dkneeds::H_REG_SIZE as usize..][..4].copy_from_slice(&4u32.to_be_bytes());
         assert_eq!(run(&mut store(tiny), &["bad"]).n, 0);
         assert_eq!(run(&mut store(good[..dkneeds::H_REG_SIZE as usize].to_vec()), &["bad"]).n, 0);
-        // a table over the planner's limit without a BIND entry to cut
+        // a table over the planner's limit without an entry to cut
         let needs: Vec<Need> = (0..TABLE_MAX as u32 / 8).map(|k| Need { service: 1000 + k, min_version: 0, hard: false }).collect();
         let big = table_of_t(&Table { needs: &needs, provides: &one, ..KEEP });
         assert!(big.len() > TABLE_MAX);

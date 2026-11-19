@@ -12,7 +12,7 @@
 //! A name that the port file does not list is `Lookup::Unlisted`, which refuses the service file with `E_IMPORT`.
 use dkneeds::keys::{Keys, SiteRec, FLAG_ABSENT, NAME_EXIT, NAME_FW, SITE_RAW, SITE_STOCK};
 
-/// The longest displaced run of a site (a `BIND` item held the same).
+/// The longest displaced run of a site (the longest stock run a bound file held).
 const SITE_LEN_MAX: u16 = 64;
 /// The shortest: `jmp.l` is 6 bytes.
 const SITE_LEN_MIN: u16 = 6;
@@ -34,6 +34,28 @@ pub enum Ref {
     Stock(u32),
     /// `dk_ret_`: one `rts`.
     Ret(u32),
+}
+
+impl Ref {
+    /// The name hash of the reference. Plain tests, not a `match`: a match on this enum compiles to a jump table, which is not ColdFire code (`patchkit build` refuses it).
+    pub fn hash(&self) -> u32 {
+        if let Ref::Exit(h, _) = *self {
+            return h;
+        }
+        if let Ref::Name(h) = *self {
+            return h;
+        }
+        if let Ref::Tail(h) = *self {
+            return h;
+        }
+        if let Ref::Stock(h) = *self {
+            return h;
+        }
+        if let Ref::Ret(h) = *self {
+            return h;
+        }
+        0
+    }
 }
 
 /// What the port file says about a reference.

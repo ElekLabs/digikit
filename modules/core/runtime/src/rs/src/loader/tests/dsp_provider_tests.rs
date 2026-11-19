@@ -52,8 +52,7 @@ fn service_file_dsp(table: &Table, dsp: &[u8]) -> Vec<u8> {
 fn dsp_provider_file() -> Vec<u8> {
     static SLOTS: std::sync::OnceLock<[Slot; 1]> = std::sync::OnceLock::new();
     let slots = SLOTS.get_or_init(|| [Slot { id: name_hash(SLOT_NAME), flags: dkneeds::keys::SLOT_DSP, entry: 0 }]);
-    let bind = svc_bind(&STOCK);
-    let table = Table { slots, ..svc_table(&bind) };
+    let table = Table { slots, ..svc_table() };
     service_file_dsp(&table, &dsp_part(16))
 }
 
