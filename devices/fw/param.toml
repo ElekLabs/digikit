@@ -8,8 +8,8 @@ cpu = "cf"
 devices = ["dt2", "dn2"]
 rule = { kind = "cf_params_t1" }
 mark = "D"
-users = ["core/params"]
-doc = "the parameter table (60-byte rows), by the signature of its reader"
+users = ["core/params", "core/services/lfo"]
+doc = "the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/params` makes."
 
 [[data]]
 name = "cf.param.data.descriptor_table.master_sidechain_filter"

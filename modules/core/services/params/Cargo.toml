@@ -12,3 +12,6 @@ path = "src/lib.rs"
 dkrt-abi = { path = "../../runtime/abi" }
 dkrt-sdk = { path = "../../runtime/sdk" }
 dkneeds = { path = "../../../../packages/dkneeds" }
+
+[dev-dependencies]
+dkrt-test-support = { path = "../../runtime/test-support" }

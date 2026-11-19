@@ -15,6 +15,7 @@ use dkrt_abi::service::{check_step, ApplyCtx, CheckCtx, Declare, Problem, Servic
 use dkrt_sdk::records::{KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_sdk::sticky::{assign, clean, Event, Range, MAX_KEYS};
 use dkrt_sdk::*;
+use dkrt_svc_params::{dynreg, set_stock_range, stock_range};
 
 /// Samples of one shape.
 pub const SAMPLES: usize = 32;
@@ -160,10 +161,80 @@ pub fn highest() -> u32 {
     hi
 }
 
-/// The largest value of the LFO WAVE parameter (`wave << 8`) while shapes are loaded: the T1 maximum of codes 79, 89 and 99 follows the highest loaded wave number,
-/// so the encoder reaches no number above it. 0 when no shape is loaded: the stock maximum stays (finding 149, "The panel hooks").
+/// The largest value of the LFO WAVE parameter (`wave << 8`) while shapes are loaded: the maximum of the WAVE rows follows the highest loaded wave number, so the
+/// encoder reaches no number above it. 0 when no shape is loaded: the stock maximum stays (finding 149, "Direct readers of the parameter table").
 pub fn wave_max() -> u32 {
     highest() << 8
+}
+
+/// The three WAVE rows of the parameter table (one for each LFO): the stock addresses of the table and of the rows, which `patchkit bind` resolves (`cf.param.data.descriptor_table`,
+/// `cf.lfo.data.wave_row.N`), and the pair (minimum, maximum) each row had before the first shape was loaded. Words 0: a host build with no firmware, which has no rows to write.
+struct Wave {
+    table: u32,
+    row: [u32; 3],
+    /// the rows hold the shape maximum; `stock` has what to put back
+    armed: bool,
+    stock: [(u32, u32); 3],
+}
+static mut WAVE: Wave = Wave {
+    table: 0,
+    row: [0; 3],
+    armed: false,
+    stock: [(0, 0); 3],
+};
+
+/// The firmware addresses of the WAVE rows (the service file's `setup`, from the words `bind` resolved): the stock table and the rows of the three LFOs. Not called by a host
+/// build; with `table` 0 the service writes no row and refuses nothing.
+pub fn set_firmware(table: u32, rows: [u32; 3]) {
+    let w = unsafe { &mut *addr_of_mut!(WAVE) };
+    w.table = table;
+    w.row = rows;
+    w.armed = false;
+}
+
+/// The pairs (minimum, maximum) the three WAVE rows hold now, or `None` when the image cannot take the maximum: it has no registry table, or a row is not a stock row of its
+/// parameter table. Nothing is written.
+unsafe fn wave_rows<C: CoreApi>(core: &C) -> Option<[(u32, u32); 3]> {
+    let w = &*addr_of!(WAVE);
+    let inf = dynreg(core);
+    let mut now = [(0, 0); 3];
+    let mut i = 0;
+    while i < 3 {
+        now[i] = stock_range(core, inf, w.table, w.row[i])?;
+        i += 1;
+    }
+    Some(now)
+}
+
+/// Make the maximum of the WAVE rows in the RAM copy of the parameter table equal `wave_max()` while a shape is loaded, and put the stock pair back when the last one
+/// is gone. The page and the encoder read the row through the firmware's range accessor, which reads the copy. `E_NO_REGISTRY` when the image cannot take it (`wave_rows`);
+/// then nothing was written.
+unsafe fn sync_range<C: CoreApi>(core: &C) -> i32 {
+    let w = &mut *addr_of_mut!(WAVE);
+    if w.table == 0 {
+        return OK;
+    }
+    let now = match wave_rows(core) {
+        Some(n) => n,
+        None => return E_NO_REGISTRY,
+    };
+    let inf = dynreg(core);
+    let max = wave_max();
+    if !w.armed {
+        if max == 0 {
+            return OK;
+        }
+        w.stock = now;
+        w.armed = true;
+    }
+    let mut i = 0;
+    while i < 3 {
+        let (min, top) = if max == 0 { w.stock[i] } else { (w.stock[i].0, max) };
+        set_stock_range(core, inf, w.table, w.row[i], min, top);
+        i += 1;
+    }
+    w.armed = max != 0;
+    OK
 }
 
 /// Writes the name of the shape that the WAVE parameter value `value` (`wave << 8`; the stock formatter ignores the low byte) names, `width` characters at most (a name stops at
@@ -444,6 +515,10 @@ impl<C: CoreApi> Service<C> for Lfo {
             if r == OK && used() + add > MAX_SHAPES {
                 r = E_TABLE_FULL;
             }
+            // the WAVE rows must take the maximum (`sync_range`): the image has the registry's parameter table
+            if r == OK && add > 0 && (*addr_of!(WAVE)).table != 0 && wave_rows(core).is_none() {
+                r = E_NO_REGISTRY;
+            }
             r
         } else {
             OK
@@ -485,7 +560,8 @@ impl<C: CoreApi> Service<C> for Lfo {
         core.irq_restore(sr);
         // the page's picture (UI task): published last, after the table entry
         crate::graph::publish(i, &samples, !neg);
-        OK
+        // the WAVE maximum reaches the new number (UI task reads it; a write of one word)
+        sync_range(core)
     }
 
     unsafe fn remove(core: &C, owner: u8) {
@@ -501,5 +577,7 @@ impl<C: CoreApi> Service<C> for Lfo {
             }
             i += 1;
         }
+        // the highest number may be lower now, or no shape is left: the stock pair goes back
+        sync_range(core);
     }
 }

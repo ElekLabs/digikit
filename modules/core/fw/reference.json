@@ -556,6 +556,153 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x401f9218",
+            "len": 60
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401f9628",
+            "len": 60
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40210820",
+            "len": 60
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_lfo_wave_row_1",
+        "rust": "dkfw::lfo::WAVE_ROW_1"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The descriptor row (60 bytes) of the WAVE parameter of LFO 1 (code 79; DT2 0x40210820, DN2 0x401f9628): mirror index 5, range 0..0x600, default 0x100, slot 0xae.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "data",
+      "mark": "D",
+      "name": "cf.lfo.data.wave_row.1",
+      "rule": {
+        "dn2": {
+          "kind": "cf_words"
+        },
+        "dt2": {
+          "kind": "cf_words"
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401f9470",
+            "len": 60
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401f9880",
+            "len": 60
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40210a78",
+            "len": 60
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_lfo_wave_row_2",
+        "rust": "dkfw::lfo::WAVE_ROW_2"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The descriptor row of the WAVE parameter of LFO 2 (code 89; DT2 0x40210a78, DN2 0x401f9880): mirror index 0xd, range 0..0x600, default 0, slot 0xb6.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "data",
+      "mark": "D",
+      "name": "cf.lfo.data.wave_row.2",
+      "rule": {
+        "dn2": {
+          "kind": "cf_words"
+        },
+        "dt2": {
+          "kind": "cf_words"
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401f96c8",
+            "len": 60
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401f9ad8",
+            "len": 60
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40210cd0",
+            "len": 60
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_lfo_wave_row_3",
+        "rust": "dkfw::lfo::WAVE_ROW_3"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The descriptor row of the WAVE parameter of LFO 3 (code 99; DT2 0x40210cd0, DN2 0x401f9ad8): mirror index 0x15, range 0..0x600, default 0, slot 0xbe.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "data",
+      "mark": "D",
+      "name": "cf.lfo.data.wave_row.3",
+      "rule": {
+        "dn2": {
+          "kind": "cf_words"
+        },
+        "dt2": {
+          "kind": "cf_words"
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4010ded0"
           }
         ],
@@ -877,52 +1024,6 @@
       "subsystem": "lfo",
       "users": [
         "core/lfo",
-        "core/services/lfo"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x400dbff0"
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x400dc154"
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x400da368"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2",
-        "dn2"
-      ],
-      "doc": "The T1 range accessor (the stock code has 172 callers on DT2, 191 on DN2; the hook does not run in interrupt context: it reads the status register first and runs the stock code when the interrupt mask is not 0): for the codes 79, 89 and 99 with a loaded shape the hook calls the stock accessor (`dk_stock_`), then raises the maximum in the buffer to the highest loaded wave number << 8 (finding 149, section Callers of the T1 range accessor: no caller scales a value onto 0..max; the clamps that MIDI CC and NRPN reach see the new maximum, a loaded shape is the only case that differs). Any other code runs the displaced `move.l D2,-(SP); move.l 8(SP),D1` and the stock code. Dead after the site (strict): D2 (written), D0 and D1 (written before use: only D0b is read before `mvs.b`), and the flags.",
-      "file": "devices/fw/lfo.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.lfo.hook.t1_range",
-      "regs": {
-        "clobbers": [
-          "d0",
-          "d1",
-          "ccr"
-        ],
-        "in": [
-          "a0"
-        ]
-      },
-      "site": "cf.lfo.site.t1_range",
-      "subsystem": "lfo",
-      "users": [
         "core/services/lfo"
       ],
       "was": []
@@ -1606,51 +1707,6 @@
       "subsystem": "lfo",
       "users": [
         "core/lfo",
-        "core/services/lfo"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x400dbff0",
-            "len": 6
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x400dc154",
-            "len": 6
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x400da368",
-            "len": 6
-          }
-        ]
-      },
-      "cpu": "cf",
-      "doc": "DT2 0x400da368, DN2 0x400dc154: the entry of the T1 range accessor (A0 = a 12-byte buffer, 4(SP) = the parameter code): it copies {min, max, default} of the code's T1 row (row + 8) to the buffer and returns it in d0. `move.l D2,-(SP); move.l 8(SP),D1` (6 bytes). 172 callers on DT2 (171 in the Ghidra database, one more found by refscan at 0x400c81be), 191 on DN2; the live-set clamp FUN_4003b570 is one of them.",
-      "file": "devices/fw/lfo.toml",
-      "kind": "site",
-      "mark": "D",
-      "name": "cf.lfo.site.t1_range",
-      "rule": {
-        "dn2": {
-          "kind": "cf_words",
-          "len": 6,
-          "offset": 0
-        },
-        "dt2": {
-          "kind": "cf_words",
-          "len": 6,
-          "offset": 0
-        }
-      },
-      "subsystem": "lfo",
-      "users": [
         "core/services/lfo"
       ],
       "was": []
@@ -9487,7 +9543,7 @@
         "dt2",
         "dn2"
       ],
-      "doc": "the parameter table (60-byte rows), by the signature of its reader",
+      "doc": "the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/params` makes.",
       "file": "devices/fw/param.toml",
       "kind": "data",
       "mark": "D",
@@ -9502,7 +9558,8 @@
       },
       "subsystem": "param",
       "users": [
-        "core/params"
+        "core/params",
+        "core/services/lfo"
       ],
       "was": [
         "cf.param.data.t1",
@@ -22785,7 +22842,7 @@
       "name": "input"
     },
     {
-      "count": 32,
+      "count": 33,
       "cpu": "cf",
       "file": "devices/fw/lfo.toml",
       "meaning": "the LFO tick, its wave function table and the wave parameter readers",

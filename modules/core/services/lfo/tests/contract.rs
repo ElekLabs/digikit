@@ -4,7 +4,8 @@ use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::profiles::ALL;
 use dkrt_sdk::records::{KINDS_LFO, KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_svc_lfo::graph;
-use dkrt_svc_lfo::records::{name_of, number_of, owner_of, shape, used, Lfo, SAMPLES};
+use dkrt_abi::mem::FwMem;
+use dkrt_svc_lfo::records::{name_of, number_of, owner_of, set_firmware, shape, used, Lfo, SAMPLES};
 use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module};
 use dkrt_test_support::FakeCore;
 use std::sync::Mutex;
@@ -43,8 +44,30 @@ fn bad(init: &mut Init) {
     lfo_shape(init, 0, -31744);
 }
 
+/// The fixture image's parameter table: the stock table at `STOCK`, its RAM copy at `COPY` (`P_TABLE`), 60-byte rows, the registry from row 300, and the WAVE rows of the three LFOs
+/// (codes 79, 89 and 99) holding 0..0x600 with the default 0x100, 0 and 0 in the copy.
+const STOCK: u32 = 0x1000;
+const COPY: u32 = 0x8000;
+const CODES: [u32; 3] = [79, 89, 99];
+
+fn image(core: &mut FakeCore) {
+    let mut t = vec![0u32; 90];
+    t[20] = COPY;
+    t[27] = 60;
+    t[23] = 300;
+    core.set_dynreg(t);
+    for (c, def) in CODES.iter().zip([0x100, 0, 0]) {
+        unsafe {
+            core.wr(COPY + 60 * c + 8, 0);
+            core.wr(COPY + 60 * c + 12, 0x600);
+            core.wr(COPY + 60 * c + 16, def);
+        }
+    }
+    set_firmware(STOCK, CODES.map(|c| STOCK + 60 * c));
+}
+
 /// The table of shapes: how many, who owns the numbers the keys of the modules got, the name and the first and last samples of what is kept.
-fn state(_core: &FakeCore) -> Vec<u32> {
+fn state(core: &FakeCore) -> Vec<u32> {
     let mut v = vec![used() as u32];
     for key in [SHAPE_A, SHAPE_B] {
         // modules `a` and `b` are at selection indexes 0 and 1
@@ -58,6 +81,10 @@ fn state(_core: &FakeCore) -> Vec<u32> {
     }
     // the pictures the page draws for the shapes
     v.push(graph::digest());
+    // the maximum of the WAVE rows: the highest loaded number << 8, the stock 0x600 when none is loaded (the contract compares it with the start state in cases 3 and 7)
+    for c in CODES {
+        v.push(unsafe { core.rd(COPY + 60 * c + 12) });
+    }
     v
 }
 
@@ -81,7 +108,7 @@ fn fixture(device: u32) -> Fixture {
         name: "lfo-shape",
         device,
         kinds: &KINDS_LFO,
-        image: |_| {},
+        image,
         state,
         a: module(0, &[(KIND_LFO_SHAPE, &[SHAPE_A])], a),
         b: module(1, &[(KIND_LFO_SHAPE, &[SHAPE_B])], b),
@@ -91,7 +118,7 @@ fn fixture(device: u32) -> Fixture {
         kept_dsp: |_, _| false,
         live: None,
         salt_same: &[
-            ("memory", "the shape table is the service's own state, shown by the state view; no firmware word"),
+            ("memory", "the maximum of the WAVE rows is the highest loaded number << 8, and A and a2 have the same key, so the same number"),
             ("dsp", "an LFO shape has no DSP section"),
             ("settings", "a load writes no setting"),
         ],
@@ -108,4 +135,5 @@ fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
     for p in ALL.iter().filter(|p| p.dyn_types > 0) {
         contract::<Lfo>(&fixture(p.id));
     }
+    set_firmware(0, [0; 3]);
 }
