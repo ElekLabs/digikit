@@ -264,7 +264,7 @@
   "modules/core/runtime/tests/machines/project.json": 7,
   "modules/core/runtime/tests/memaudit-module.manual.device.test.ts": 2,
   "modules/core/runtime/tests/memaudit.device.test.ts": 5,
-  "modules/core/runtime/tests/missing.device.test.ts": 25,
+  "modules/core/runtime/tests/missing.device.test.ts": 23,
   "modules/core/runtime/tests/modules-capacity.device.test.ts": 3,
   "modules/core/runtime/tests/project.json": 13,
   "modules/core/runtime/tests/reload-fx.device.test.ts": 6,
