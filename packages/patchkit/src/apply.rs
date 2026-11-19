@@ -430,6 +430,57 @@ fn device_ops(m: &Module, port: &Port) -> Result<Vec<Op>> {
         .collect()
 }
 
+/// One range of ColdFire code or data that a module of the image changes on a firmware.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatchedRange {
+    pub module: String,
+    pub what: String,
+    pub lo: u64,
+    pub hi: u64,
+}
+
+/// The ColdFire ranges that module `m` changes on `port` (its active ops, no firmware needed): a hook or stub op takes the bytes of the displaced whole instructions
+/// (`len` of the hook in the port, at least the 6 bytes of the jump; a hook that no service uses has no `len`, so 6 is a lower bound), a write op its width or bytes,
+/// a retarget the 6 bytes of a call or jump. SHARC ops are not listed.
+pub fn patched_ranges(m: &Module, port: &Port) -> Result<Vec<PatchedRange>> {
+    let mut out = vec![];
+    for op in device_ops(m, port)? {
+        let anchors: Vec<&Anchor> = match &op.anchors {
+            Some(g) => glob_anchors(port, g),
+            None => port.anchor(&op.anchor).into_iter().collect(),
+        };
+        for a in anchors.into_iter().filter(|a| a.cpu != SHARC) {
+            let site = if a.kind == "value" {
+                a.src.unwrap_or(a.addr)
+            } else {
+                a.addr
+            };
+            let lo = (site as i64 + op.offset) as u64;
+            let len = match op.op.as_str() {
+                "hook" | "stub" => op
+                    .hook
+                    .as_deref()
+                    .and_then(|h| port.hook(h))
+                    .and_then(|h| h.len)
+                    .map_or(6, |l| u64::from(l).max(6)),
+                "write" => op
+                    .width
+                    .map(u64::from)
+                    .or_else(|| op.hex.as_ref().map(|h| h.len() as u64 / 2))
+                    .unwrap_or(a.len),
+                _ => 6,
+            };
+            out.push(PatchedRange {
+                module: m.id().to_string(),
+                what: format!("{} {}{:+}", op.op, a.name, op.offset),
+                lo,
+                hi: lo + len,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// Is `name`, an undefined symbol's anchor name, one that an optional anchor switched off: the optional anchor itself, or a tail
 /// (`hook.<site>.tail`, `hook.<site>.return`) of a hook whose site is one?
 fn switched_off(name: &str, off: &[String]) -> bool {
