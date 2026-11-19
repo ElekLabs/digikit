@@ -502,7 +502,7 @@ These come from the profiling work and land after the steps in section 12 that t
 - A repository `.clang-format` and a format check target for C. `clang-tidy` later.
 - Names: functions `dk_<area>_<verb>`, types `dk_<thing>`, constants `DK_<AREA>_<NAME>`. No version suffixes (`_v1`, `_V2`); versions
   live in `sdk.toml`: one runtime version, and `since` of each import.
-- Naming (agreed 2026-11-12):
+- Naming:
 
 | Rule | Form | Examples |
 | --- | --- | --- |

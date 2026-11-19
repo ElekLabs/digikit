@@ -29,13 +29,13 @@ The area is not a path filesystem: **folders are in the paths.** The folders and
 | --- | --- |
 | `modules/<author>/<name>.dkm` | content modules; the path is `modules/<module id>.dkm` |
 | `services/<service>.dks` | service files; the stem is the service name |
-| `ports/<device>-<fw>.dkport` | port files, several side by side; the runtime picks the one whose `FW` equals the image `fw_id` |
+| `ports/<device>-<version>.dkport` | port files, several side by side; `<version>` is the firmware version string, the runtime picks the one whose `FW` hash equals the image `fw_id` |
 | `projects/<slot>.dkp` | project files, slot 000 to 127 |
 | `samples/<folder>/<name>` | samples, for devices with `card = "slots"` only |
 | `data/<module id>/` | reserved for files that a module writes; not enforced |
 | `logs/` | reserved |
 
-The role word in the header decides what a file is; a file in the wrong folder is not found. A module id is at most 31 characters, so a module path is at most 43 characters, under the 55 of a selection entry.
+The role word in the header decides what a file is; a file in the wrong folder is not found. A module id is at most 31 characters, so a module path is at most 43 characters; a selection entry holds at most 55 (`SEL_PATH` 56 with the NUL).
 
 ## Format
 

@@ -148,7 +148,7 @@ Machine rows and transport (for E5):
 
 | Word | Meaning |
 | --- | --- |
-| role | module or service: the header role word. Nothing else is a role. |
+| role | in the file header: 0 module, 1 service, 2 port. In `module.toml`: runtime, installer, platform, image-half, adapter, fix, proof, app or service (the repo class of a unit; the taxonomy lists them). Different words for different things: say "header role" or "manifest role" where it matters. |
 | record kind | a record type in `[records.kinds]`. A content module has a module kind (machine, fx, filter, lfo-shape, tool). |
 | service | owns a set of kinds that write to the same family of firmware tables, plus the hooks on them. |
 | image half | the part of a service that must sit in the patched image: reserved rows, stubs, slots, info tables, interrupt-site stubs (class `image-half`). Today an "adapter". |
@@ -160,7 +160,7 @@ Machine rows and transport (for E5):
 | init window | the builder check that accepts builder calls only from the module whose `init` runs. Today `Gate` in `params/src/builder.rs`. |
 | hook gate | the planned counter around a service hook (hot reload S3). Not built, not in this plan. |
 
-"Adapter" and the bare word "gate" leave the code and the docs in E1 and E8.
+"Adapter" (as a name for all L1 image code) and the bare word "gate" leave the docs in E8 and the code in the Rust rename PR.
 
 ### 3.2 Three ways to extend the firmware
 
@@ -336,15 +336,15 @@ Class and home of every image module (inventory of the 25 `adapters/` folders an
 
 | Class | Modules (id) | Home |
 | --- | --- | --- |
-| service image half | machines, params, dynreg, dsp-voice | `services/machines/image/` |
-| service image half | fx, dynfx, fxpages | `services/fx/image/` |
-| service image half | sample-pool | `services/samples/image/` |
-| service image half | lfo | `services/lfo/image/` |
+| service image half | machines, params, dynreg, dsp-voice | `services/machines/image-halves/` |
+| service image half | fx, dynfx, fxpages | `services/fx/image-halves/` |
+| service image half | sample-pool | `services/samples/image-halves/` |
+| service image half | lfo | `services/lfo/image-halves/` |
 | runtime platform | platform, ui, health, input, dsp-link, expansion, dyndsp | `runtime/platform/` |
-| adapter | usb-bulk (usb-bulk-audio merged in a separate PR), plusdrive-write, sdhc-large | `image/adapters/` |
-| fix | overdrive, introblank | `image/fixes/` |
+| adapter | usb-bulk (usb-bulk-audio merged in a separate PR), plusdrive-write, sdhc-large | `image-modules/adapters/` |
+| fix | overdrive, introblank | `image-modules/fixes/` |
 | proof | dsp-stereo-proof | tests of `dsp-voice` |
-| proof | storage-fault-proof, file-catalog-proof | `image/proofs/` |
+| proof | storage-fault-proof, file-catalog-proof | `image-modules/proofs/` |
 | not image | runtime, digikit-menu | `runtime/core`, `runtime/apps/digikit-menu` |
 
 `dsp-stereo-proof` becomes test assets of the call sites it proves; its id stays. `file-catalog-proof` stays a proof (E1: the gate covers directory open and next through `plusdrive-write`'s lookups, but nothing else covers `path.size`). Proofs are in no patch set. `overdrive` may later move to a service or become a content module (O3).
@@ -722,7 +722,7 @@ Estimate: 1-2 days. Depends on: E5.
 
 What:
 1. Hook contexts (sites in the LFO waveforms finding, both devices):
-   - Interrupt sites, as an image half (a stub with a slot in `services/lfo/image/`; new image hashes, patch sets updated): the tick's wave
+   - Interrupt sites, as an image half (a stub with a slot in `services/lfo/image-halves/`; new image hashes, patch sets updated): the tick's wave
      clamp (DT2 `0x40139698`, DN2 `0x40137b56`) and its function-table call and RAND compares (DT2 `0x40139804`, `0x4013986c`), and the second
      function-table reader with its own clamp (DT2 `FUN_401392d4`, DN2 `FUN_401376bc`). Without the clamp hook a wave of 7 or more becomes RAND
      before the table call.
@@ -877,20 +877,20 @@ Depends on: E0a; E3; E4; E5 (MISSING placeholder for filters); R12-8; the port f
 
 ### E8 Top-level lift and names
 
-What: the target tree of [taxonomy](../design/taxonomy.md) (layers, `runtime/`, `services/`, `ports/`, `image/`, content modules under `modules/<kind>/<author>/<name>`), as one mechanical PR in two commits.
+What: the target tree of [taxonomy](../design/taxonomy.md) (layers, `runtime/`, `services/`, `ports/`, `image-modules/`, content modules under `modules/<kind>/<module id>`), as one mechanical PR in two commits.
 
 Scope:
-- Commit 1: `git mv` of every folder in the mapping table of the taxonomy, with the path edits in `tools/nx/modules.mjs`, `tools/devtools/layercheck.py`, `project.json` files (Nx project roots and inputs; Nx project names stay), Cargo path dependencies, patchkit manifest roots and `tools/nx/*.mjs` inputs. `services/params` becomes `services/rows` (crate `dkrt-svc-rows`).
-- Commit 2: roles in `module.toml` (`runtime`, `installer`, `platform`, `image-half` with `service = "<x>"`, `adapter`, `fix`, `proof`, `app`, `service`; they replace `role = adapter` and `type = framework`), the layercheck `roles` table and folder rules, the requires edges (`plusdrive-write` and `sdhc-large` get an edge from the tool that needs them; every patch-set list that names `core/ui` or `core/health` also names `core/runtime`, as ST does), patch-set comments in `devices/*.toml` (ids unchanged), `InitWindow` (4.2), `dsp-stereo-proof` into the tests of `dsp-voice`, and the `users` of `cf.storage.fn.directory.open` and `.next` in `devices/fw/storage.toml` (E1: drop `core/runtime`).
+- Commit 1: `git mv` of every folder in the mapping table of the taxonomy, with the path edits in `tools/nx/modules.mjs`, `tools/devtools/layercheck.py`, `project.json` files (Nx project roots and inputs; Nx project names stay), Cargo path dependencies, patchkit manifest roots and `tools/nx/*.mjs` inputs. `services/params` becomes `services/rows` as a folder; the crate keeps its name.
+- Commit 2: roles in `module.toml` (`runtime`, `installer`, `platform`, `image-half` with `service = "<x>"`, `adapter`, `fix`, `proof`, `app`, `service`; they replace `role = adapter` and `type = framework`), the layercheck `roles` table and folder rules, the requires edges (`plusdrive-write` and `sdhc-large` get an edge from the tool that needs them; every patch-set list that names `core/ui` or `core/health` also names `core/runtime`, as ST does), patch-set comments in `devices/*.toml` (ids unchanged), `dsp-stereo-proof` into the tests of `dsp-voice`, and the `users` of `cf.storage.fn.directory.open` and `.next` in `devices/fw/storage.toml` (E1: drop `core/runtime`). The `category` values change from the plural (`machines`, `tools`, `lfo`) to the template names (`machine`, `tool`, `lfo-shape`) only if the check below shows that `category` reaches no `.dkm` byte: today `pack.rs` only compares it with `core` and `digikit-dkm.md` lists no category field; the workbench (`FilesPage.tsx`), the tests and the templates still read it. If it reaches bytes, keep the values and rename folders only.
 - Docs: ARCHITECTURE.md (layers, folder map), LAYOUT.md, AGENTS.md directory map, runtime-and-services.md wording.
-- Not in E8: the merge of `usb-bulk-audio` into `usb-bulk`. It changes bytes on purpose, so it is a separate small PR before or after the move, with its own named device tests (usb-bulk, usb-bulk-audio). Module ids do not change.
-- Check first: the Rust objects embed no source path (a moved source would change their bytes).
+- Not in E8, each its own small PR with its own proof: the merge of `usb-bulk-audio` into `usb-bulk` (changes bytes on purpose; named device tests usb-bulk and usb-bulk-audio), and the renames of Rust names (`Gate` to `InitWindow`, `gate()` to `init_window()`, crate `dkrt-svc-params` to `dkrt-svc-rows`). Rust symbol names can reach `.dko.json`, so those PRs compare objects with `patchkit objdiff` and, if bytes change, show why. Module ids do not change.
+- Check first: the Rust objects and `.dko.json` files embed no source path (a moved source would change their bytes), and `category` as above.
 
-Proof, by bytes first:
-- Tooling, part of E8: one small command that writes and compares a hash manifest. It reuses the existing byte tooling (`patchkit device-bytes`, `dist/bytes/images-<device>.sha256`, `dist/bytes/pack-verdicts.json`). The manifest lists the patched image per device, every `.dks` and `.dkm` in `dist/`, every committed `.dko.json` object, and the generated headers and tables.
-- Before the move: build every artifact and write the manifest. After the move: rebuild and compare. All hashes identical is the proof that every device test sees the same inputs. The merge-test cache keys on the image hashes, so the device tests replay from cache and do not run.
-- Then only what bytes cannot show: the host stage (`typecheck`, `lint`, `fmt-check`, `test-host`, `python-checks`), `mise run test:plan` (the same targets as before, modulo renamed paths), `gate-smoke`, and one device test per device (for example module-load) to prove that the harness finds the moved files. About an hour of checking.
-- `git diff -M` shows renames plus path edits only.
+Proof:
+- The byte manifest proves no behaviour change. Tool, part of E8: `node tools/nx/byte-manifest.mjs write|compare` (it reuses `tools/nx/device-bytes.mjs` and `object-hash.mjs`). Manifest: `out/e8/manifest-<device>.json`, one line per file with its SHA-256. Artifacts: the patched image per device (`dist/bytes/images.sha256`), `dist/modules/<device>/*.dkm` and `*.dks`, every committed `**/build/*.dko.json` (whole-file hash, so an embedded path shows), `dist/bytes/pack-verdicts.json`, and the generated files that `patchkit gen --check` covers (for example `gen_sdk.rs`, `gen_abi.rs`, `gen_limits.rs` and the generated headers).
+- Write the manifest before commit 1 (a clean build of everything). Compare after commit 2. Compare after commit 1 too, to find which commit changed a hash.
+- Merge gate (about an hour of checking): the manifest compare, the host stage (`typecheck`, `lint`, `fmt-check`, `test-host`, `python-checks`), `mise run test:plan` (the same targets as before, modulo renamed paths), `gate-smoke`, one named device test per device (for example `module-load` on DT2 and DN2) to show that the harness finds the moved files, and `git diff -M` showing renames plus path edits only.
+- The merge-test files key on image hashes (AGENTS.md), but other device tests key on the production files of their project, their imports and packs, so a move changes their keys and they would run. The PR does not run them: it names what it skips and argues from the bytes (the targeted route; Em decides per PR). The full device set reruns in the next batch's full run in the background lane, as for any batch of merges.
 - Stop rule: any hash change stops the PR.
 
 Estimate: 10-14 h of agent editing time (the move, the path users, roles, requires edges and the manifest tool). It is not test time. Payoff: the folders show the layers; new code lands in the right place. Confidence: high.
@@ -923,6 +923,7 @@ runtime-and-services.md.
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |
 | 8 | LFO shape template and first module | E6 | lfo test | done: PR #618: module kind `lfo-shape` (`mise run module:new -- lfo-shape AUTHOR/NAME`, `sdk/templates/lfo-shape`; `module:check` runs the service validator), module `digikit/lfo_shapes_1` with 7 shapes (STP4 PULS HSIN ABSN SOFT DUCK WOBL), Transfer group "LFO shapes"; `mise run lfo:report -- <author/name>` measures each shape's output on the emulator (DN2 report: all seven shapes OK) |
 | 8 | Boot window | none | none | done: PR #611, #613 |
+| 8 | Taxonomy and card layout | - | none | done: docs/design/taxonomy.md |
 | 8 | Test-speed follow-up | wait audit | none | active (branch test/waits-on-state): built, device proof pending. boot-restart waits on `ui_reached` and the record sequence; the LFO rig turns the WAVE burst into a poll and freezes on the phase standing still. Kept with a reason: fx-routes-persist 44,000 is ColdFire instructions (a press offset inside a DSP block), project-kit save 3.5 s and load 6 s (no firmware state marks the end), machine-rows `stableFrameHash` (the frame is the observed value), the LFO destination glide (the LFO swings the word) |
 | 8 | Flash waits for the device write | none | host tests of the flash flow | open: after the last SysEx block the device still writes the image to flash while the workbench can already report done (`packages/workbench-core/src/firmware/firmware-flow.ts` `afterSend`: if the port does not leave within `leaveMs` 10 s it asks INFO, and the old image can answer). Show "the device is writing, keep it powered" and accept an answer only after the port left and came back, or after a minimum write time; size it from a device log of the "rebooting: <stage> · ports:" lines (real write time unknown, finding 75) |
 | 8 | Python tests red on main | none | python-tests | done: PR #622 (test_dktiming fake INFO layout, test_core_fx section list, menu-dkrun-pluck binds its services) |
@@ -931,9 +932,8 @@ runtime-and-services.md.
 | 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
 | 9 | E7 filter machines | E0a, E0b, E3, E4, E5, E6c, R12-8, port file | filter test plus subset | todo |
-| 10 | E8 top-level lift and names (taxonomy tree, roles, requires edges, patch-set lists, hash-manifest tool; 10-14 h agent editing time) | E1, port-file stack, E5c/E5b, open branches merged | host stage, `test:plan`, gate-smoke, one device test per device; proof by hash manifest | todo |
-| 10 | Taxonomy and card layout | - | none | done: docs/design/taxonomy.md |
-| 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | active: PR1 done (PR #621); PR2 next after E5 |
+| 10 | E8 top-level lift and names (taxonomy tree, roles, requires edges, patch-set lists, byte-manifest tool; 10-14 h agent editing time) | E1, port-file stack, E5c/E5b, open branches merged | byte manifest, host stage, `test:plan`, gate-smoke, one device test per device; the rest in the next batch's full run | todo |
+| 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | active: PR1 done (PR #621); PR2 next |
 | 11 | Port file step 3: adapter routines in the port file (lfo, then fx, then machines) | E8, port file stack | the device subset in port-file.md section 12 | todo |
 
 E1, E2, E3 share one subset gate. E0 runs in parallel with E1-E3. When an item starts, its status becomes `active` with the branch; when it lands, `done` with the PR, set in that PR.

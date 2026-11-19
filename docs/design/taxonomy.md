@@ -22,10 +22,10 @@ One meaning per word. A second use gets a new word.
 | Term | Meaning |
 | --- | --- |
 | runtime | the base in every digikit image. "Runtime core" is `core/runtime`. "Everything we flash" is the image. |
-| image | the patched firmware only. Qualify the others: module code image, DSP image, card image. |
+| image | the patched firmware only. Qualify the others: module code image, DSP image, card image. The repo folder for image modules is `image-modules/`. |
 | image module | a `module.toml` unit patched into the image. Its role gives its class. |
 | platform | the `Platform` trait and the image modules behind it. |
-| adapter | an image module for one device function that is no service half and no runtime part: usb-bulk, plusdrive-write, sdhc-large. |
+| adapter | an image module for one device function that is no service half and no runtime part: usb-bulk, plusdrive-write, sdhc-large. ARCHITECTURE.md still uses "adapter" for all L1 image code (platform glue, hooks) until E8 renames the classes; read it as "image module" there. |
 | image half | the part of a service that must be in the image (class `image-half`). |
 | stub | image code at a site that calls a filled pointer slot. The fallback for an absent optional import is the "absent-import fallback". |
 | slot | a pointer word that a service fills. Always qualified (`<service>_<site>`). |
@@ -47,7 +47,7 @@ One meaning per word. A second use gets a new word.
 <store root>                   card: the area of [card.store]; host mirror: plus_drive/<device>/digikit/
   modules/<author>/<name>.dkm  path = modules/<module id>.dkm
   services/<service>.dks       stem = service name
-  ports/<device>-<fw>.dkport   picked by FW == fw_id
+  ports/<device>-<version>.dkport   <version> is the firmware version string; picked by the FW hash == fw_id
   projects/<slot>.dkp          slot 000..127; header: device, slot, name, save stamp
   samples/<folder>/<name>      devices with card = "slots" only
   data/<module id>/...         reserved for files that a module writes; not enforced
@@ -56,8 +56,8 @@ fixed sectors outside the table, two copies each: the settings record, the selec
 ```
 
 - The folder shows the role. The role word in the header decides. A file in the wrong folder is not found.
-- Port files of several firmware versions sit side by side. The runtime picks the one whose `FW` equals the image `fw_id` and ignores the others. With no match, the planner refuses every service that needs `port`.
-- The module path carries the author, so two authors can use the same name. Module ids are at most 31 characters; the longest path, `modules/` + id + `.dkm`, is 43 characters, under the 55 of a selection entry.
+- Port files of several firmware versions sit side by side. `<version>` is only the firmware version string, for people; the match is on the `FW` hash (the first 8 bytes of the stock image's SHA-256), which must equal the image `fw_id`. The runtime ignores the other files. With no match, the planner refuses every service that needs `port`. It never loads a non-matching port file.
+- The module path carries the author, so two authors can use the same name. Module ids are at most 31 characters; the longest path, `modules/` + id + `.dkm`, is 43 characters. A selection entry holds at most 55 characters (`SEL_PATH` 56 with the NUL, `gen_abi.rs`), so every module path fits.
 - Scopes: device scope is the settings record. Project scope is a section of the `.dkp`. Keys are `<owner>/<key>`, with a service name or a module id as owner. Elektron files stay stock.
 - A store belongs to one device. Each structure keeps its own version; paths carry none.
 - Migration: Transfer renames existing module files once with the store's RENAME and rewrites the selection. Sticky maps and settings are keyed by module id, not by path, so nothing else moves. `services/port.dks` was never shipped.
@@ -72,11 +72,11 @@ Target tree (E8):
 runtime/{core, platform/<name>, apps/digikit-menu}
 services/<x>/{src, tests}      crate dkrt-svc-<x>
 services/<x>/dks/              the .dks module
-services/<x>/image/<half>/     the image halves of the service
-services/rows/                 today services/params; crate dkrt-svc-rows
+services/<x>/image-halves/<half>/   the image halves of the service
+services/rows/                 today services/params; the crate is renamed to dkrt-svc-rows in a later PR
 ports/{<device>-<fw>.toml, fw/, bindings/, routines/<service>/}
-image/{adapters, fixes, proofs}
-modules/<kind>/<author>/<name>/    content only; kind folders: machine, fx, tool, lfo-shape, filter
+image-modules/{adapters, fixes, proofs}
+modules/<kind>/<module id>/    content only; the folder is the id (<author>/<name>); kind folders: machine, fx, tool, lfo-shape, filter
 devices/*.toml  sdk/  packages/  tools/  apps/  tests/  docs/          unchanged
 ```
 
@@ -86,19 +86,22 @@ devices/*.toml  sdk/  packages/  tools/  apps/  tests/  docs/          unchanged
 | `modules/core/expansion`; `modules/core/adapters/{platform,dsp-link,dyndsp,ui,health,input}` | `runtime/platform/<name>` |
 | `modules/core/apps/digikit-menu` | `runtime/apps/digikit-menu` |
 | `modules/core/services/{machines,fx,samples,lfo}` | `services/<x>` |
-| `modules/core/services/params` | `services/rows` |
-| adapters `machines`, `params`, `dynreg`, `dsp-voice` | `services/machines/image/` |
-| adapters `fx`, `dynfx`, `fxpages` | `services/fx/image/` |
-| adapter `sample-pool` | `services/samples/image/` |
-| adapter `lfo` | `services/lfo/image/` |
-| adapters `usb-bulk` (with `usb-bulk-audio` merged in), `plusdrive-write`, `sdhc-large` | `image/adapters/` |
-| adapters `overdrive`, `introblank` | `image/fixes/` |
-| adapters `storage-fault-proof`, `file-catalog-proof` | `image/proofs/` |
+| `modules/core/services/params` | `services/rows` (the folder; the crate keeps its name until the later rename PR) |
+| adapters `machines`, `params`, `dynreg`, `dsp-voice` | `services/machines/image-halves/` |
+| adapters `fx`, `dynfx`, `fxpages` | `services/fx/image-halves/` |
+| adapter `sample-pool` | `services/samples/image-halves/` |
+| adapter `lfo` | `services/lfo/image-halves/` |
+| adapters `usb-bulk` (with `usb-bulk-audio` merged in), `plusdrive-write`, `sdhc-large` | `image-modules/adapters/` |
+| adapters `overdrive`, `introblank` | `image-modules/fixes/` |
+| adapters `storage-fault-proof`, `file-catalog-proof` | `image-modules/proofs/` |
 | adapter `dsp-stereo-proof` | the tests of `dsp-voice` |
 | `devices/ports`, `devices/fw`, `modules/core/fw` | `ports/`, `ports/fw`, `ports/bindings` |
-| `modules/{machines,fx,tools,lfo}/<name>` | `modules/{machine,fx,tool,lfo-shape}/digikit/<name>` |
+| `modules/machines/<name>` (analog, bd, pd: id `fadedlimes/<name>`; pluck, shot: `digikit/<name>`; tb303: `tom/tb303`) | `modules/machine/<module id>` |
+| `modules/fx/freqshift` (`digikit/freqshift`) | `modules/fx/digikit/freqshift` |
+| `modules/lfo/lfo_shapes_1` (`digikit/lfo_shapes_1`) | `modules/lfo-shape/digikit/lfo_shapes_1` |
+| `modules/tools/<name>` (debug, probe, remote, usb-fast: `digikit/<name>`; bootscreen: id `tools/bootscreen`) | `modules/tool/<module id>`; bootscreen is the one id whose first part is not its author (author `digikit`), so its folder is `modules/tool/tools/bootscreen`; its id stays |
 
-What does not move or change name: module ids, Nx project names (a module id or a crate name), crate names except `params` to `rows`, the `dkrt-sdk` name, `tests/fixtures/modules`, `devices/*.toml`, the text of findings and handovers.
+What does not move or change name: module ids, Nx project names (a module id or a crate name), crate names (the rename of crate `dkrt-svc-params` to `dkrt-svc-rows` is a later PR with an objdiff proof, because Rust symbol names may reach the objects), the `dkrt-sdk` name, `tests/fixtures/modules`, `devices/*.toml`, the text of findings and handovers.
 
 Code that reads the paths and must change with the move: `tools/nx/modules.mjs` (the glob and `startsWith('modules/')`), `tools/devtools/layercheck.py`, literal paths in `modules/core/runtime/project.json`, Cargo path dependencies, the patchkit manifest roots. Before the move, check that the Rust objects embed no source path.
 
@@ -122,8 +125,8 @@ Rules:
 2. Never a bare kind, key, slot, image, port, project or service where two meanings are possible.
 3. A record kind is singular snake case, unique, with one owner service and a constant `KIND_<NAME>`.
 4. Settings keys and `.dkp` sections start with the owner: `<service>/...` or `<author>/<name>/...`. An author may not be a service name, `core` or `test`; patchkit refuses it.
-5. A module id is `<author>/<name>`. The repo folder, the `dist` file and the card path are the id plus a prefix.
-6. Module kind names are the template names. `category` has the same value. `type` goes.
+5. A module id is `<author>/<name>`. The repo folder, the `dist` file and the card path are the id plus a prefix. (`tools/bootscreen` predates the rule: its first part is not its author. Its id stays.)
+6. Module kind names are the template names. `category` has the same value where it can change (E8 checks that). `type` goes.
 7. Extensions: `.dkm` role 0, `.dks` role 1, `.dkport` role 2, `.dkp` project file.
 
 ## Order
@@ -132,7 +135,7 @@ Rules:
 2. E5 (merged).
 3. Port file PR 2 (search of `ports/` by `FW`) and PR 3 (port pick in Transfer, `modulePath` with the author, the rename migration, the harness cards; about 3-4 h more than planned).
 4. E5c and E5b. They do not depend on the layout and come before E8.
-5. E8, the top-level lift. It proves itself with a hash manifest, not with a long test run ([extension model](../plans/extension-model.md) E8). Merge `test/t1i-rig-read-hook` first (it edits `dsp-stereo-proof`).
+5. E8, the top-level lift. The merge gate is a byte manifest (it proves no behaviour change), the host stage, `mise run test:plan`, gate-smoke and one device test per device, with the skips named in the PR ([extension model](../plans/extension-model.md) E8). The full device set reruns in the next batch's `test:full`. Merge `test/t1i-rig-read-hook` first (it edits `dsp-stereo-proof`).
 6. After E8: port step 3 (`ports/routines/`), the project service ([digikit project](../plans/digikit-project.md)) and E7.
 
 Known limits: all routines of one port file must fit `stage_bytes` 65536. The card and store facts of Syntakt are not read for this document.
