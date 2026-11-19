@@ -48,13 +48,14 @@ One meaning per word. A second use gets a new word.
   modules/<kind>/<author>-<name>.dkm   file name = module id with "/" as "-"
   services/<service>.dks       stem = service name
   ports/<device>-<version>.dkport   <version> is the firmware version string; picked by the FW hash == fw_id
-  projects/<slot>.dkp          slot 000..127; header: device, slot, name, save stamp
+  projects/<slot>-<name>.dkp   slot 000..127; header: device, slot, name, save stamp
   samples/<folder>/<name>      devices with card = "slots" only
   data/<module id>/...         reserved for files that a module writes; not enforced
   logs/                        reserved
 fixed sectors outside the table, two copies each: the settings record, the selection record
 ```
 
+- A project file is `projects/<slot>-<name>.dkp`. The slot is the identity, the name is for reading ([plan](../plans/digikit-project.md), Architecture "File name and identity").
 - The folder shows the role. The role word in the header decides. A file in the wrong folder is not found.
 - Port files of several firmware versions sit side by side. `<version>` is only the firmware version string, for people; the match is on the `FW` hash (the first 8 bytes of the stock image's SHA-256), which must equal the image `fw_id`. The runtime ignores the other files. With no match, the planner refuses every service that needs `port`. It never loads a non-matching port file.
 - Module files are grouped by module kind (machine, fx, filter, lfo-shape, tool). The file name is the module id with "/" replaced by "-" (`modules/machine/fadedlimes-analog.dkm`, `modules/lfo-shape/digikit-lfo_shapes_1.dkm`, `modules/tool/digikit-remote.dkm`; `tools/bootscreen` is `modules/tool/tools-bootscreen.dkm`). The author is in the name, so two authors can use the same module name. Path length: at most 8 (`modules/`) + 10 (kind and `/`) + 31 (id) + 4 (`.dkm`) = 53 characters, under the 55 of a selection entry (`SEL_PATH` 56 with the NUL, `gen_abi.rs`).
