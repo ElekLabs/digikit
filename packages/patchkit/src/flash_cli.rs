@@ -515,24 +515,16 @@ fn after_device_flash(p: &Prepared, name: &str, t0: Instant) -> Result<()> {
         return Ok(());
     }
     if !p.leaves_runtime() {
-        if !left {
-            return Err(Error("the restart was not seen (the port stayed listed; macOS keeps it): an image without the runtime cannot be asked for INFO, so look at the device screen to confirm the flash and the restart".into()));
-        }
-        let mut last = String::from("no answer");
-        let deadline = Instant::now() + Duration::from_secs(90);
-        while Instant::now() < deadline {
-            std::thread::sleep(Duration::from_secs(2));
-            match open(name)
-                .and_then(|mut l| ping_name(&mut l, Duration::from_secs(2)).map_err(Error))
-            {
-                Ok(Some(n)) => return check_identity(p, &n),
-                Ok(None) => {}
-                Err(e) => last = e.0,
-            }
-        }
-        return Err(Error(format!(
-            "the port is back but the device does not answer Ping ({last}): look at the screen"
-        )));
+        return ask_identity(
+            p,
+            left,
+            || {
+                open(name)
+                    .and_then(|mut l| ping_name(&mut l, Duration::from_secs(2)).map_err(Error))
+            },
+            Duration::from_secs(if left { 90 } else { 240 }),
+            Duration::from_secs(2),
+        );
     }
     let mut last = String::from("no answer");
     let mut seen: Option<Info> = None;
@@ -610,6 +602,46 @@ fn check_identity(p: &Prepared, name: &str) -> Result<()> {
         "OK: the device restarted and answers as {name} (this image has no digikit runtime to ask)"
     );
     Ok(())
+}
+
+/// After a flash of an image without the runtime: ask the stock identity (`ping` returns the model name, or `None` for silence) every `pause` until
+/// `wait` is up. When the restart was seen (`left`) the name confirms it. When it was not (macOS keeps the port listed, or the restart was faster
+/// than a poll) the old image would answer too, so the name is reported as unproven and the flash, which the device already accepted, stays done.
+fn ask_identity(
+    p: &Prepared,
+    left: bool,
+    mut ping: impl FnMut() -> Result<Option<String>>,
+    wait: Duration,
+    pause: Duration,
+) -> Result<()> {
+    let mut last = String::from("no answer");
+    let deadline = Instant::now() + wait;
+    loop {
+        std::thread::sleep(pause);
+        match ping() {
+            Ok(Some(n)) if left => return check_identity(p, &n),
+            Ok(Some(n)) => {
+                check_identity(p, &n)?;
+                println!(
+                    "NOTE: the restart was not seen (the port stayed listed), so this answer could come from the old image: look at the device screen to confirm the new one"
+                );
+                return Ok(());
+            }
+            Ok(None) => {}
+            Err(e) => last = e.0,
+        }
+        if Instant::now() >= deadline {
+            break;
+        }
+    }
+    Err(Error(format!(
+        "the device does not answer Ping ({last}){}: look at the device screen",
+        if left {
+            ""
+        } else {
+            " and the restart was not seen (the port stayed listed)"
+        }
+    )))
 }
 
 /// How long to wait for the port to go away before the device is asked anyway (the web flow's `leaveMs`).
@@ -1079,6 +1111,49 @@ mod tests {
         m.push(0xf7);
         let e = ping_name(&mut Raw(Some(m)), Duration::from_secs(1)).unwrap_err();
         assert!(e.contains("no model name"), "{e}");
+    }
+
+    #[test]
+    fn the_identity_is_asked_until_the_device_answers_also_when_the_restart_was_not_seen() {
+        let mut st = prepared(false);
+        st.device = "st".into();
+        let none = Duration::ZERO;
+        // silence, then the name: confirmed, with or without a seen restart
+        for left in [true, false] {
+            let mut answers = vec![Ok(None), Ok(None), Ok(Some("Syntakt".to_string()))].into_iter();
+            let r = ask_identity(
+                &st,
+                left,
+                || answers.next().unwrap(),
+                Duration::from_secs(5),
+                none,
+            );
+            assert!(r.is_ok(), "left={left}: {r:?}");
+        }
+        // another model is an error either way
+        let r = ask_identity(
+            &st,
+            false,
+            || Ok(Some("Digitakt II".into())),
+            Duration::from_secs(5),
+            none,
+        );
+        assert!(r.is_err());
+        // no answer at all: the error says whether the restart was seen
+        let e = ask_identity(&st, false, || Ok(None), none, none)
+            .unwrap_err()
+            .0;
+        assert!(
+            e.contains("does not answer Ping") && e.contains("restart was not seen"),
+            "{e}"
+        );
+        let e = ask_identity(&st, true, || Err(Error("link".into())), none, none)
+            .unwrap_err()
+            .0;
+        assert!(
+            e.contains("link") && !e.contains("restart was not seen"),
+            "{e}"
+        );
     }
 
     #[test]

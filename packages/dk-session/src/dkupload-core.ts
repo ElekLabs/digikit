@@ -601,6 +601,10 @@ export interface DkInfoFull extends DkInfo {
   runtime: number;
   caps: number | null;
   card_read_only: boolean;
+  /** INFO flags bit 3: the debug module's log sink is present. */
+  log_sink: boolean;
+  /** INFO flags bit 4: the runtime found a fault record from an earlier run (`crate::fault::seen`). Reading it does not send the FAULT command. */
+  fault_found: boolean;
   /** The id of the flashed image as 16 hex digits (runtime 0.5.2 and later; patchkit stamps it), or null when the reply has none. */
   image_id: string | null;
   /** The runtime's ABI fingerprint for service files (`CAP_SVC_ABI`; the word a `.dks` carries at header 0x3c), or null when the runtime does not report it. */
@@ -1164,6 +1168,8 @@ export class DkSession {
       safe_mode: (flags & 1) !== 0,
       upload_open: (flags & 2) !== 0,
       card_read_only: (flags & 4) !== 0,
+      log_sink: (flags & 8) !== 0,
+      fault_found: (flags & 16) !== 0,
     };
   }
 
