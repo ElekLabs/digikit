@@ -617,7 +617,7 @@ What:
    `Keys::first_missing_key(old, new)` (`packages/dkneeds/src/keys.rs`) refuses a new file that lacks a key of the old file (`E_RELOAD_KEYS`). The new
    file must have the old file's module name (`E_FORMAT` otherwise: another name is another module). The planner is `plan::plan_live`: the loaded providers
    are not judged again (their rows are in the service table, which the boot's judgment refuses as a second owner) and the capacity counts that the live
-   modules own start at 0 (`live_caps`), because the plan counts every live module again. Nothing is unloaded before both pass.
+   modules own start at 0 (`live_caps`), because the plan counts every live module again. The checks of the new file run as a load runs them: `reload_check` sets `CoreApi::boot_index` to the module's selection index and numbers the file's keys first (`settle` over the live set with the file in the old slot; the old keys keep their numbers), because the services' DSP checks resolve a voice's key to its type by that index and the numbering; and `CoreApi::reload_phase` is the owner of the module being reloaded for the whole job, so the machines service leaves the module's own voice rows out of "used by another module" in `check_types` and counts them as takeable in `check_rows`. (Without this every reload of a machine with DSP was refused with `E_DSP_TYPE`.) Nothing is unloaded before both pass.
 3. Transport and state refusal: one function, in this order: safe mode; the firmware transport function returns non-zero (`cf.project.fn.transport_state`, declared in `devices/fw/project.toml`; `Platform::play_state`; a platform that cannot read it refuses);
    card operations; the module built its own menus; then each service's `Service::reload_refusal(core, owner)` (required, like `validate_records`; the fx service answers `E_RELOAD_ROUTED` for any module with a published effect row, because E5 has no fx teardown (route 0 is the master chain; E5b relaxes it), machines and lfo never refuse, samples never refuses: whether a pool entry is in use is not cheap to know, a follow-up). Refusing while the machine selection view
    is open is not needed: the list rebuild (item 9) is unconditional.
@@ -732,6 +732,7 @@ What:
    allow fx reload while the effect is on a route, and add the fx reload device test.
 4. Workbench key check: a `pk_keys_check` wasm export next to `pk_fit` (`Keys::first_shared_key`, `first_repeat`, `first_missing_key`), called by
    `fit.ts`, shown by `transfer-backend.ts` before the upload; one wasm test and one Vitest case.
+5a. The fx reload must leave the module's own effect rows out of the fx service's `dsp_check_rows` (`fx_owner`, as the machines service does for voice rows with `reload_phase`).
 5. Delete `E_FX_ID_DUP` and the lfo `E_TYPE_USED` path with their refusal-table rows, after the reload planner case of E5 is green.
 6. The 20-cycle soak and the full project round trip (save a project that uses the module, reload, load the project, same sound), if E5 did
    not carry them.

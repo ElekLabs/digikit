@@ -62,6 +62,8 @@ struct FakeImages {
     fail_alloc: Option<u32>,
     init: Init,
     log: Vec<Ev>,
+    /// The selection index that `BOOT_IDX` held at each `stage` (the index the services read to find the module that loads).
+    boot_at_stage: Vec<u32>,
 }
 
 /// The one import the fake runtime has.
@@ -74,6 +76,7 @@ const SVC_ADDR: u32 = 0x5000;
 impl Images for FakeImages {
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
         self.log.push(Ev::Stage);
+        self.boot_at_stage.push(core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)));
         let n = cstr_len(path, 64);
         let key = core::slice::from_raw_parts(path, n).to_vec();
         match self.files.get(&key) {
@@ -324,7 +327,7 @@ unsafe fn loader_of(init: Init, file: Vec<u8>) -> Fake {
     crate::cleanup_tests::lenient_tick_drop();
     let mut files = BTreeMap::new();
     files.insert(PATH[..PATH.len() - 1].to_vec(), file);
-    let imgs = FakeImages { files, staged: Vec::new(), live: Vec::new(), allocs: 0, fail_alloc: None, init, log: Vec::new() };
+    let imgs = FakeImages { files, staged: Vec::new(), live: Vec::new(), allocs: 0, fail_alloc: None, init, log: Vec::new(), boot_at_stage: Vec::new() };
     let reg = FakeRegistry {
         abi: true,
         add_result: OK,
@@ -1757,5 +1760,25 @@ fn a_reload_load_checks_the_name_and_the_keys_of_the_bytes_it_loads() {
         // the bytes that pass the rules load
         l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 3]));
         assert_eq!(l.reload_load(0, PATH.as_ptr()), OK);
+    }
+}
+
+#[test]
+fn a_reload_check_runs_the_file_checks_as_a_load_does_with_the_selection_index_of_the_module_set_and_restores_it() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a();
+        l.m.boot_at_stage.clear();
+        let table = (l.table_len[0], l.tables[0]);
+        l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 7]));
+        assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
+        // the first stage reads the table (numbering of the new keys), the second is the file checks: the services' checks of the DSP section read the index of the module that loads
+        assert_eq!(l.m.boot_at_stage, vec![u32::MAX, 0]);
+        assert_eq!(crate::selection::BOOT_IDX, u32::MAX, "the index is as it was");
+        assert_eq!((l.table_len[0], l.tables[0]), table, "the kept table is the old one: the numbering used the new table for a moment only");
+        // a file that drops a key is refused without numbering anything (the table is not touched either)
+        l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1]));
+        assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), E_RELOAD_KEYS);
+        assert_eq!((l.table_len[0], l.tables[0]), table);
     }
 }

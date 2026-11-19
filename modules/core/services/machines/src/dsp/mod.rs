@@ -183,7 +183,9 @@ pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         let t = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
         let mut k = 0;
         while k < MAX_ROWS {
-            if d.row_owner[k] == PLACEHOLDER_OWNER && d.row_type[k] == t {
+            // a placeholder row, or a row of the module being reloaded (it is parked by the teardown that comes before the load): the same type takes it over
+            let own = d.row_owner[k] as u32 == core.reload_phase() && d.row_owner[k] != 0;
+            if (d.row_owner[k] == PLACEHOLDER_OWNER || own) && d.row_type[k] == t {
                 parked += 1;
                 break;
             }
@@ -223,8 +225,12 @@ pub(crate) unsafe fn check_types<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         let mut k = 0;
         while k < MAX_ROWS {
             // (a placeholder row keeps the number of an unloaded module: the module that loads again may take it)
-            if d.row_owner[k] != 0 && d.row_owner[k] != PLACEHOLDER_OWNER && d.row_type[k] == t {
-                return E_DSP_TYPE; // used by a module that is loaded or loading
+            if d.row_owner[k] != 0
+                && d.row_owner[k] != PLACEHOLDER_OWNER
+                && d.row_owner[k] as u32 != core.reload_phase()
+                && d.row_type[k] == t
+            {
+                return E_DSP_TYPE; // used by a module that is loaded or loading (the module being reloaded does not count: it goes first)
             }
             k += 1;
         }

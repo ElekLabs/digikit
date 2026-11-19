@@ -1158,6 +1158,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded: nothing changes but the staging buffer. In this order: the
     /// record is a live module of the boot selection; the file passes every check of a load (`check_file`), has the same name, a header table the planner can keep, and
     /// every key of the old file (`E_RELOAD_KEYS`); the planner accepts the live set with the file in the old module's slot (`caps`: `live_caps`). `OK`, or the refusal.
+    ///
+    /// The checks of a file read the numbers the services gave its keys (`resolve` of the machines service names a voice's type by the selection index of the module that loads,
+    /// `CoreApi::boot_index`). A load has that index set and the keys numbered by `settle`; so the check sets the index to the module's, and numbers the file's keys first (the old
+    /// keys keep their numbers, a key the file adds takes a free one, as `reload_load` does again). The numbering is done only for a file that has the module's name and every old key.
     pub unsafe fn reload_check(&mut self, rec: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
         if rec >= MAX_MODULES || records::module(rec).used == 0 {
             return E_NOT_FOUND;
@@ -1166,6 +1170,30 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if k >= SEL_MAX || self.table_len[k] == 0 {
             return E_NOT_FOUND;
         }
+        if let Ok(staged) = self.m.stage(path) {
+            let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+            if let Some(table) = table_of_file(file) {
+                let same_name = file.len() >= H_NAME + dkneeds::NAME_LEN as usize && file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] == records::module(rec).name[..];
+                if let (true, Ok(old), Ok(new)) = (same_name, Keys::parse(&self.tables[k][..self.table_len[k]]), Keys::parse(table)) {
+                    if old.first_missing_key(&new).is_none() {
+                        let saved = (self.tables[k], self.table_len[k]);
+                        self.capture(k, file);
+                        let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
+                        services().settle(&sel);
+                        self.tables[k] = saved.0;
+                        self.table_len[k] = saved.1;
+                    }
+                }
+            }
+        }
+        let was = read_volatile(addr_of!(BOOT_IDX));
+        crate::selection::BOOT_IDX = k as u32;
+        let r = self.reload_check_inner(rec, k, path, caps);
+        crate::selection::BOOT_IDX = was;
+        r
+    }
+
+    unsafe fn reload_check_inner(&mut self, rec: usize, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
         let mut c = Checked::empty();
         let r = self.check_file(path, Slot::Module(rec), &mut c);
         if r != OK {
@@ -1299,11 +1327,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if file.len() < dkneeds::HEADER as usize || file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] != records::module(rec).name[..] {
             return E_FORMAT;
         }
-        let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]) as usize;
-        let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
-        if len == 0 || off > file.len() || len > file.len() - off {
-            return E_FORMAT;
-        }
+        let (off, len) = match table_span(file) {
+            Some(s) => s,
+            None => return E_FORMAT,
+        };
         if len > TABLE_MAX {
             return E_TOO_BIG;
         }
@@ -1473,6 +1500,30 @@ pub(crate) fn settle_ctx(planned: &Plan, tables: &[[u8; TABLE_MAX]; SEL_MAX], le
         i += 1;
     }
     sel
+}
+
+/// The header table of a `.dkm`: its offset and length in `file`, `None` when the header is short, the table empty or outside the file.
+fn table_span(file: &[u8]) -> Option<(usize, usize)> {
+    if file.len() < dkneeds::HEADER as usize {
+        return None;
+    }
+    let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]) as usize;
+    let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
+    if len == 0 || off > file.len() || len > file.len() - off {
+        None
+    } else {
+        Some((off, len))
+    }
+}
+
+/// The header table of `file` when it fits the planner's limit.
+fn table_of_file(file: &[u8]) -> Option<&[u8]> {
+    let (off, len) = table_span(file)?;
+    if len > TABLE_MAX {
+        None
+    } else {
+        Some(&file[off..off + len])
+    }
 }
 
 /// What a reload's `settle` hands to the services: the keys of the modules in `live` (selection indices), in selection order. The count reaches the last live one.

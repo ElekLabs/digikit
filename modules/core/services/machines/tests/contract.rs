@@ -733,3 +733,87 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
         "an image without the hook has no view variable or builder"
     );
 }
+
+/// The check of a new file that reloads module A (`reload_check` runs the DSP section checks while A is live): A's own voice type and rows are not "used by another module".
+/// On the device this was `E_DSP_TYPE` for the reload of any machine with DSP. The phase names the module being reloaded (`CoreApi::reload_phase`: record index + 1).
+#[test]
+fn the_dsp_checks_of_a_reload_leave_the_module_being_replaced_out_of_used_by_another_module() {
+    use dkrt_abi::dsp::{DspSec, VOICE_ENTRY, VOICE_TYPE, VOICE_V3};
+    use dkrt_abi::service::Service;
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK); // A holds a published voice row
+    let sec_of = |keys: &[u32]| {
+        let mut bytes = vec![0u8; VOICE_V3 as usize * keys.len()];
+        for (i, k) in keys.iter().enumerate() {
+            let at = VOICE_V3 as usize * i;
+            bytes[at + VOICE_TYPE as usize..at + VOICE_TYPE as usize + 4]
+                .copy_from_slice(&k.to_be_bytes());
+            bytes[at + VOICE_ENTRY as usize..at + VOICE_ENTRY as usize + 4]
+                .copy_from_slice(&0u32.to_be_bytes());
+        }
+        bytes
+    };
+    let run = |keys: &[u32], phase: u32, rows: bool| {
+        let bytes = sec_of(keys);
+        let sec = DspSec {
+            s: bytes.as_ptr(),
+            version: 5,
+            size: bytes.len() as u32,
+            image_size: 0x1000,
+            image_off: 0,
+            reloc_off: 0,
+            nreloc: 0,
+            import_off: 0,
+            nimport: 0,
+            voice_off: 0,
+            nvoice: keys.len() as u32,
+            fx_off: 0,
+            nfx: 0,
+            vstride: VOICE_V3,
+            bank_off: 0,
+        };
+        l.core.boot_index.set(0); // the module being checked is at selection index 0: `reload_check` sets it as a load does
+        l.core.reload_phase.set(phase);
+        let r = unsafe {
+            if rows {
+                <Machines as Service<FakeCore>>::dsp_check_rows(&l.core, &sec)
+            } else {
+                <Machines as Service<FakeCore>>::dsp_check_types(&l.core, &sec)
+            }
+        };
+        l.core.boot_index.set(u32::MAX);
+        l.core.reload_phase.set(0);
+        r
+    };
+    // the types: another module that takes A's type is refused; the reload of A is not
+    assert_eq!(
+        run(&[KEY_A], 0, false),
+        dkrt_sdk::E_DSP_TYPE,
+        "a second module with A's type is used by another module"
+    );
+    assert_eq!(
+        run(&[KEY_A], 1, false),
+        dkrt_sdk::OK,
+        "the reload of A (owner 1) may use A's type"
+    );
+    assert_eq!(
+        run(&[KEY_A], 2, false),
+        dkrt_sdk::E_DSP_TYPE,
+        "the reload of B does not make A's type free"
+    );
+    // the rows: 4 rows, B's and A's, 2 free. Three voices, one of A's type, fit through A's own row in a reload and do not otherwise
+    let keys = [KEY_A, 0x00dd_0000, 0x00ee_0000];
+    assert_eq!(run(&keys, 1, true), dkrt_sdk::OK, "A's row is taken over");
+    assert_eq!(run(&keys, 0, true), dkrt_sdk::E_DSP_ROWS);
+    assert_eq!(
+        run(&[0x00cc_0000, 0x00dd_0000, 0x00ee_0000], 1, true),
+        dkrt_sdk::E_DSP_ROWS,
+        "no voice of A's type: no row to take over"
+    );
+    l.unload(0);
+    l.unload(1);
+}

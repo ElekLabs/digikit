@@ -14,8 +14,9 @@ pub fn drained<P: Platform>(p: &P, start: Option<u32>) -> bool {
     blocks_since(p, start).is_none_or(|n| n >= DRAIN_BLOCKS)
 }
 
-/// 1 while a reload runs: from the check of the new file until its DSP rows are in place (`CoreApi::reload_phase`). The reload job sets and clears it; a service
-/// reads it in `on_loaded`.
+/// While a reload runs: the owner of the module being reloaded (module record index + 1), else 0. From the checks of the new file until the end of the job
+/// (`CoreApi::reload_phase`). The reload job sets and clears it; a service reads it where the module's own rows must not count against the new file (the
+/// checks of its types and rows) and where its teardown differs from a plain unload (the placeholder rows).
 static mut PHASE: u32 = 0;
 
 /// The reload phase now.
@@ -23,9 +24,9 @@ pub fn phase() -> u32 {
     unsafe { core::ptr::read_volatile(core::ptr::addr_of!(PHASE)) }
 }
 
-/// Start (`on`) or end the reload phase. Only the reload job calls it.
-pub(crate) fn set_phase(on: bool) {
-    unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(PHASE), on as u32) }
+/// Start the reload phase of module `owner` (record index + 1), or end it (0). Only the reload job calls it.
+pub(crate) fn set_phase(owner: u8) {
+    unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(PHASE), owner as u32) }
 }
 
 /// A reload finished: the counter that tells a host and the menus their lists of modules and machines are out of date (`DkrtBootInfo.reloads`).
@@ -96,8 +97,8 @@ pub trait Ops {
     unsafe fn refusal(&mut self, rec: usize) -> Option<i32>;
     /// `Loader::reload_check`.
     unsafe fn check(&mut self, rec: usize, path: *const u8) -> i32;
-    /// The reload phase (`CoreApi::reload_phase`) on or off.
-    fn phase(&mut self, on: bool);
+    /// The reload phase (`CoreApi::reload_phase`) of the module with this owner (record index + 1), or off (0).
+    fn phase(&mut self, owner: u8);
     /// `Loader::reload_quiesce`.
     unsafe fn quiesce(&mut self, rec: usize) -> i32;
     /// `Loader::reload_abort`: the old module gets its tick and commands back; false when its `fini` ran.
@@ -224,7 +225,7 @@ impl Job {
     /// The job ends with `result` after `set_phase`: the services' end of a reload, the phase off.
     unsafe fn end<O: Ops>(&mut self, o: &mut O, result: i32, ok: bool) {
         o.finish(ok, self.torn);
-        o.phase(false);
+        o.phase(0);
         self.result = result;
         self.step = step::DONE;
         self.phase = 2;
@@ -244,17 +245,21 @@ impl Job {
             };
             self.rec = rec;
             self.sel = k;
+            // the phase is on for the checks too: the services leave the module's own rows out of "used by another module" (types, rows)
+            o.phase(rec as u8 + 1);
             if o.dsp_retained() {
+                o.phase(0);
                 return self.refused(E_RELOAD_RETAINED);
             }
             if let Some(r) = o.refusal(rec) {
+                o.phase(0);
                 return self.refused(r);
             }
             let r = o.check(rec, path);
             if r != OK {
+                o.phase(0);
                 return self.refused(r);
             }
-            o.phase(true);
             self.wait_restart(o);
             self.step = step::QUIESCE;
         } else if self.step == step::QUIESCE {
@@ -363,8 +368,8 @@ impl Ops for RealOps {
     unsafe fn check(&mut self, rec: usize, path: *const u8) -> i32 {
         crate::loader::reload_check(rec, path)
     }
-    fn phase(&mut self, on: bool) {
-        set_phase(on)
+    fn phase(&mut self, owner: u8) {
+        set_phase(owner)
     }
     unsafe fn quiesce(&mut self, rec: usize) -> i32 {
         crate::loader::reload_quiesce(rec)
@@ -574,9 +579,9 @@ mod tests {
             self.log.push("check");
             self.check
         }
-        fn phase(&mut self, on: bool) {
-            self.phase_on = on;
-            self.log.push(if on { "phase on" } else { "phase off" });
+        fn phase(&mut self, owner: u8) {
+            self.phase_on = owner != 0;
+            self.log.push(if owner != 0 { "phase on" } else { "phase off" });
         }
         unsafe fn quiesce(&mut self, _: usize) -> i32 {
             self.log.push("quiesce");
@@ -656,8 +661,8 @@ mod tests {
         let order: Vec<&str> = s.log.clone();
         let first = |name: &str| order.iter().position(|l| *l == name).unwrap();
         // nothing changes before the refusals and the check; the phase is on from there to the end; the services hear the end once, after the load
-        assert!(first("find") < first("refusal") && first("refusal") < first("check") && first("check") < first("phase on"));
-        assert!(first("phase on") < first("quiesce") && first("quiesce") < first("unload") && first("unload") < first("begin load") && first("begin load") < first("load"));
+        assert!(first("find") < first("phase on") && first("phase on") < first("refusal") && first("refusal") < first("check"));
+        assert!(first("check") < first("quiesce") && first("quiesce") < first("unload") && first("unload") < first("begin load") && first("begin load") < first("load"));
         assert!(first("load") < first("on_loaded") && first("on_loaded") < first("finish ok") && first("finish ok") < first("phase off"));
         assert_eq!(order.iter().filter(|l| **l == "finish ok").count(), 1);
         assert_eq!(order.iter().filter(|l| **l == "quiesce").count(), 4, "a busy drain is asked again on the next pass");
@@ -733,7 +738,8 @@ mod tests {
             s.check = check;
             assert_eq!(run(&mut s), (2, want, step::DONE));
             assert!(!s.torn_seen);
-            for changed in ["phase on", "quiesce", "unload", "load", "finish ok", "finish failed", "finish torn"] {
+            assert!(!s.phase_on, "{want}: the phase is off again");
+            for changed in ["quiesce", "unload", "load", "finish ok", "finish failed", "finish torn"] {
                 assert!(!s.log.contains(&changed), "{want}: {changed} ran");
             }
         }
@@ -800,7 +806,7 @@ mod tests {
             j.poll(&mut s);
         }
         assert_eq!((j.phase, j.result), (2, E_RELOAD_RETAINED));
-        assert!(!s.log.contains(&"phase on") && !s.log.contains(&"quiesce"));
+        assert!(!s.phase_on && !s.log.contains(&"quiesce"));
         // a teardown that fails because the DSP rows cannot be cleared: the DSP is retained, the job does not wait out its budget
         let mut s = Script::new();
         s.unload_busy = u32::MAX;
