@@ -89,6 +89,31 @@ main = 3
 dsp = 7
 readonly = [2, 4, 8]
 
+# MIDI map the calibration runner and the tests use (packages/dk-session `midi-out.ts`, `@digi/devices` `midi`). Source: Digitone II manual (OS 1.12) Appendix C, pp. 112-114; track channels: section 8.4 (default channels 1-16).
+# `track_channels[n]` is the factory MIDI channel (1-16) of track n+1 (SETTINGS > MIDI CONFIG > CHANNELS); a user can change it, so a runner reads or sets it.
+# The device also needs INPUT FROM = USB (or MIDI+USB), RECEIVE NOTES on and RECEIVE CC/NRPN on (SETTINGS > MIDI CONFIG > PORT CONFIG); the menu is the only place to read them.
+# A parameter has `cc` (7-bit, value 0-127) and `nrpn = [msb, lsb]` (14-bit).
+# DN2: the manual's AMP table gives CC 86 to both decay and sustain (a manual error); release is CC 88 (attack 84, hold 85, decay 86, ... mode 91). Parameters are the track channel's CC/NRPN of the active machine.
+[midi]
+track_channels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+[midi.params]
+track_mute = { cc = 94, nrpn = [1, 108] }
+track_level = { cc = 95, nrpn = [1, 110] }
+filter_attack = { cc = 20, nrpn = [1, 16] }
+filter_decay = { cc = 21, nrpn = [1, 17] }
+filter_sustain = { cc = 22, nrpn = [1, 18] }
+filter_release = { cc = 23, nrpn = [1, 19] }
+filter_freq = { cc = 16, nrpn = [1, 20] }
+filter_reso = { cc = 17, nrpn = [1, 21] }
+filter_env_depth = { cc = 24, nrpn = [1, 26] }
+filter_base = { cc = 27, nrpn = [1, 24] }
+filter_width = { cc = 28, nrpn = [1, 25] }
+amp_release = { cc = 88, nrpn = [1, 34] }
+send_delay = { cc = 30, nrpn = [1, 36] }
+send_reverb = { cc = 31, nrpn = [1, 37] }
+send_chorus = { cc = 29, nrpn = [1, 35] }
+
 # The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
 # part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
 # ready_dir (private, firmware-derived, never committed; the one source of the ready directory, formerly tools/emulator/ready_inputs.json): rebuilt

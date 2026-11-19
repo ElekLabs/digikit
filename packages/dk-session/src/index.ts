@@ -13,3 +13,4 @@ export { EmuBulkLink, EmuOutOnlyLink, type EmuBulkOptions } from './emu-bulk-lin
 export { ProcessBulkLink } from './process-bulk.ts';
 export * from './bulk-select.ts';
 export * from './identify.ts';
+export * from './midi-out.ts';
