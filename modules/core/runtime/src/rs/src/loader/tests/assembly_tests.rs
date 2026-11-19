@@ -37,15 +37,19 @@ struct Dev {
     firmware: &'static str,
     /// The device file whose `[patch_sets]` name the roots of each image set.
     toml: &'static str,
-    /// The port file of the firmware: `dist/ports/<port>.dkport`.
-    port: &'static str,
 }
 
-const DT2: Dev = Dev { name: "dt2", profile: profiles::DT2, firmware: "firmware/Digitakt_II_OS1.17.syx", toml: "devices/digitakt-ii.toml", port: "dt2-1.17" };
-const DN2: Dev = Dev { name: "dn2", profile: profiles::DN2, firmware: "firmware/Digitone_II_OS1.12.syx", toml: "devices/digitone-ii.toml", port: "dn2-1.12" };
+const DT2: Dev = Dev { name: "dt2", profile: profiles::DT2, firmware: "firmware/Digitakt_II_OS1.17.syx", toml: "devices/digitakt-ii.toml" };
+const DN2: Dev = Dev { name: "dn2", profile: profiles::DN2, firmware: "firmware/Digitone_II_OS1.12.syx", toml: "devices/digitone-ii.toml" };
 const DEVICES: [Dev; 2] = [DT2, DN2];
 
 impl Dev {
+    /// The name of the port file of the firmware: `<device>-<version>`, the version from the firmware file's name (`..._OS1.17.syx`).
+    fn port(&self) -> String {
+        let stem = self.firmware.rsplit('/').next().unwrap().trim_end_matches(".syx");
+        std::format!("{}-{}", self.name, stem.rsplit("OS").next().unwrap())
+    }
+
     /// False (with a note) when the firmware is not here: its images and bound files are not made, and nothing of this device can be assembled.
     fn has_firmware(&self) -> bool {
         let ok = repo().join(self.firmware).exists();
@@ -81,7 +85,7 @@ fn bound_file(dev: Dev, leaf: &str) -> Option<Vec<u8>> {
 
 /// The port file of the device's firmware as the card holds it.
 fn port_file(dev: Dev) -> Vec<u8> {
-    read(&repo().join(format!("dist/ports/{}.dkport", dev.port)), "pnpm nx:pilot run patchkit:ports")
+    read(&repo().join(format!("dist/ports/{}.dkport", dev.port())), "pnpm nx:pilot run patchkit:ports")
 }
 
 fn be(f: &[u8], at: u32) -> u32 {
@@ -462,7 +466,7 @@ fn card_of(dev: Dev, modules: &[&Fixture], services: &[Fixture]) -> Vec<(String,
     for s in services {
         files.push((std::format!("services/{}.dks", s.leaf), service_file(dev, s.leaf, s.nx)));
     }
-    files.push((std::format!("ports/{}.dkport", dev.port), port_file(dev)));
+    files.push((std::format!("ports/{}.dkport", dev.port()), port_file(dev)));
     files
 }
 
@@ -1048,7 +1052,7 @@ fn a_provider_with_another_abi_word_or_a_site_that_is_not_stock_is_refused_befor
             let port = (0..plan.np).find(|j| l.found.path(*j).starts_with(b"ports/")).expect("the port file is found");
             let j = (0..plan.np).find(|j| l.found.path(*j) == b"services/fx.dks").unwrap();
             l.phase = Phase::Boot;
-            let ppath = std::format!("ports/{}.dkport\0", dev.port);
+            let ppath = std::format!("ports/{}.dkport\0", dev.port());
             assert_eq!(l.load_provider(ppath.as_ptr(), port), OK, "{}", dev.name);
             // a raw site of fx (the port copies no raw site, so the port file is not what refuses): its address is in the bound file
             let pf = port_file(*dev);
@@ -1089,7 +1093,7 @@ fn the_port_file_carries_the_identity_of_its_image_and_a_port_file_for_another_f
         unsafe {
             // the search takes it
             let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
-            let ppath = std::format!("ports/{}.dkport", dev.port);
+            let ppath = std::format!("ports/{}.dkport", dev.port());
             assert!((0..plan.np).any(|j| l.found.path(j) == ppath.as_bytes()), "{}: the port file is not found", dev.name);
             // another firmware: the image's id differs by one bit; the search finds no port file, and a load by path is refused
             let h = name_hash("fw_id");

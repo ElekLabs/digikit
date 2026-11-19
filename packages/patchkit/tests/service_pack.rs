@@ -104,7 +104,10 @@ fn a_service_packs_to_a_dks_with_provides_and_exports_and_a_user_has_a_hard_need
     assert_eq!(hooks[0].a, name_hash("cf.menu.hook.settings_list.test"));
     assert!(((hooks[0].b & dkneeds::keys::HOOK_ENTRY_MASK) as usize) < dkm.image.len());
     // a service that takes a hook (or names the firmware) has a hard need of the port file
-    let port = k.needs().find(|n| n.service == name_hash("port")).expect("a need of port");
+    let port = k
+        .needs()
+        .find(|n| n.service == name_hash("port"))
+        .expect("a need of port");
     assert!(port.hard);
 
     let user = packed(&here, "test/svc-test-user", &d.join("svc-test-user.dkm"));

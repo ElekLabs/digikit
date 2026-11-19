@@ -85,8 +85,8 @@ FOLDER_ROLES = {
     "services": "service",
 }
 # Content modules that patch the firmware themselves (they have [[op]] and anchor externs by design: patchkit's own
-# example of a hook). They are exempt from the objects and apps rules.
-FIRMWARE_PATCH_MODULES = {"test/registry-demo"}
+# example of a hook; the test service takes a raw hook like a core service file does). They are exempt from the objects and apps rules.
+FIRMWARE_PATCH_MODULES = {"test/registry-demo", "test/svc-test"}
 # Test fixtures that stand in for an app (they use core/ui like core/digikit-menu does): app include rights.
 APP_LIKE = {"test/ui-demo"}
 # Headers of the core layers an app may include.

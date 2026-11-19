@@ -12,7 +12,8 @@
 int dk_svctest_ping(void);
 uint32_t dk_svctest_hits(void);
 void svc_test_settings_tail(uint8_t *menu);
-void svc_test_hook(void); /* src/cf/hook.s: saves registers, calls svc_test_settings_tail(a2), runs the tail */
+void svc_test_hook(
+    void); /* src/cf/hook.s: saves registers, calls svc_test_settings_tail(a2), runs the tail */
 
 static uint32_t hits;
 
