@@ -688,17 +688,15 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
             target = Some(d.target.clone());
             firmware = d.firmware.clone();
         }
-        if let Some(mu) = &m.unit {
-            if mu != "insn" {
-                refuse(
-                    &mut refused,
-                    "dsp",
-                    case,
-                    "",
-                    format!("the model unit is {mu:?}, expected insn"),
-                );
-                continue;
-            }
+        if let Some(mu) = m.unit.as_ref().filter(|mu| *mu != "insn") {
+            refuse(
+                &mut refused,
+                "dsp",
+                case,
+                "",
+                format!("the model unit is {mu:?}, expected insn"),
+            );
+            continue;
         }
         if d.unit.is_some() {
             if unit.is_some() && unit != d.unit {
@@ -745,14 +743,12 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
         });
     }
     for (name, s) in [("DSP", &dsp), ("ColdFire", &cf)] {
-        if let Some(s) = s {
-            if s.spread > SPREAD_LIMIT {
-                warnings.push(format!(
-                    "{name} spread {:.1}% is over {:.0}%: one factor per device is too coarse here (a per-class model is out of scope; the budget factor covers the worst row)",
-                    s.spread * 100.0,
-                    SPREAD_LIMIT * 100.0
-                ));
-            }
+        if let Some(s) = s.as_ref().filter(|s| s.spread > SPREAD_LIMIT) {
+            warnings.push(format!(
+                "{name} spread {:.1}% is over {:.0}%: one factor per device is too coarse here (a per-class model is out of scope; the budget factor covers the worst row)",
+                s.spread * 100.0,
+                SPREAD_LIMIT * 100.0
+            ));
         }
     }
     if unit.as_deref() == Some("insn") {
