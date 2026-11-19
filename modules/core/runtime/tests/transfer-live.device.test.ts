@@ -55,10 +55,12 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
       .map(({ path, hash }) => ({ path, hash }))
       .sort((x, y) => x.path.localeCompare(y.path)),
     'mirror metadata matches the card',
-  ).toEqual([
-    { path: debugPath, hash: entries.find((e) => e.path === debugPath)!.hash },
-    { path: modulePath, hash: entry.hash },
-  ]);
+  ).toEqual(
+    [
+      { path: debugPath, hash: entries.find((e) => e.path === debugPath)!.hash },
+      { path: modulePath, hash: entry.hash },
+    ].sort((x, y) => x.path.localeCompare(y.path)),
+  );
 
   const deleted = await transferCommand(session, ['delete', modulePath], path.join(artifacts, 'delete.log'), 300_000);
   expect(
