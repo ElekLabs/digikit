@@ -14,7 +14,7 @@ import { AUDIBLE, RATE, captureNote, onset, selectDynamicMachine, tone, trackApi
 //
 // 1. The sample is on the card, bound to pool entry 0 (ready), and a note sounds (the 440 Hz and 660 Hz tones of its two channels in the PCM).
 // 2. With the key held and the voice sounding, `UNLOAD` takes the module down: the job ends with result 0, no fault is logged, the module is not in MODULES and the held voice
-//    does not play any more (the machine row is a gap row: the stock first machine plays, not the sample).
+//    does not play any more (the machine reads MISSING and its parked voice row renders silence: no stock machine's sound, E5d).
 // 3. `LOAD` puts the module back: the pool table is new and empty, the same sample is bound again and ends ready, and a new note sounds with the same tones.
 // 4. The capacity counts after the cycle are those before it.
 //
@@ -70,6 +70,9 @@ runtimeTests(
     expect((await dk.loadStates()).find((m) => m.name === SHOT_PATH.split('/').at(-1)), 'LOADS says UNLOADED').toMatchObject({ state: 'UNLOADED' });
     const after = [440, 660].map((hz) => Math.max(tone(held.l, hz, pressedBeforeUnload + RATE / 4, held.l.length), tone(held.r, hz, pressedBeforeUnload + RATE / 4, held.l.length)));
     for (const t of after) expect(t, `the sample does not play after the unload (${after.join(' ')})`).toBeLessThan(AUDIBLE / 4);
+    // the absent machine plays silence, not the first stock machine's sound
+    const quiet = [held.l, held.r].reduce((m, ch) => ch.subarray(Math.floor(pressedBeforeUnload + RATE / 4)).reduce((p, x) => Math.max(p, Math.abs(x)), m), 0);
+    expect(quiet, `the held voice of the absent machine is silent (peak ${quiet.toExponential(2)})`).toBeLessThan(1e-4);
 
     // 3: load again, bind the sample again, play it
     expect(await dk.loadAndWait(SHOT_PATH), 'the load ended with the module in').toEqual({ result: 0, unloaded: false });

@@ -61,7 +61,8 @@ fn fixture(device: u32) -> Fixture {
         enable: &[],
         parks_rows: false,
         kept: |_, _, _| false,
-        kept_dsp: |_, _| false,
+        kept_dsp: |_, _, _| false,
+        absent_rows: None,
         live: None,
         salt_same: &[
             ("memory", "the track table is the service's own state, shown by the state view; no firmware word"),

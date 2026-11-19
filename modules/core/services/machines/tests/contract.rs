@@ -106,10 +106,11 @@ const ENABLE: [(u32, u32, u32); 4] = [
 
 /// The words that differ from the start after a release, with the value each may hold (`remove` gives a row back as a gap row, which the start state of this
 /// image does not hold; any other value, such as the one the module wrote, is a leftover). The offsets are those of `image`:
-/// - machine row (`0x30_0000`, 0x100 bytes): the name (0) and the short name (0x4c) are the empty firmware string; the long and short text (4, 8) are the service's
-///   empty representation; word 0x30 after the eight knob codes (`O_F0 + 4 * KNOBS`) is the track level code 10; the position in the list (0x44) is not written by
+/// - machine row (`0x30_0000`, 0x100 bytes): the name (0) is the empty firmware string; the long and short text (4, 8) are the representations of the row's MISSING
+///   texts (`rep_long`, `rep_short` of the registry state: an absent module reads MISSING while the sticky map holds its number, E5d); the short name (0x4c) is the
+///   row's own MISSING short text (`s.mach_short`); own_dsp (0x48) is 1 (the DSP gets the row's own number, which no engine has); word 0x30 after the eight knob codes (`O_F0 + 4 * KNOBS`) is the track level code 10; the position in the list (0x44) is not written by
 ///   `remove` and is no order in a hidden row (any value);
-/// - names table (`0x40_0000`, 12 bytes per type), the types of the module rows: tab and title are the empty string;
+/// - names table (`0x40_0000`, 12 bytes per type), the types of the module rows: tab and title are the row's MISSING texts (`s.mach_name`, `s.mach_short`);
 /// - parameter registry row (`0x20_0000`, 0x20 bytes): name and short are the empty string, the template (8) is `RESERVE_TEMPLATE`, the slot (0xc) is `SLOT_BASE`;
 /// - Digitone II page row (`0x60_0000`, 0x80 bytes): name and title are the empty representation, the level code after the eight knob codes (0x28) is 10, the machine
 ///   (0x70) is the free machine `PG_FREE` (0xff).
@@ -120,9 +121,30 @@ fn kept(_core: &FakeCore, addr: u32, value: u32) -> bool {
         (addr >= base && ((addr - base) / size) < n as u32).then(|| (addr - base) % size)
     };
     if let Some(off) = in_rows(0x30_0000, 0x100, limits::MACHINE_ROWS) {
+        let s = &rstate().s;
+        let inside =
+            |base: usize, size: usize| value >= base as u32 && value < base as u32 + size as u32;
         return match off {
-            0 | 0x4c => value == EMPTY,
-            4 | 8 => value == rep,
+            0 => value == EMPTY,
+            0x4c => inside(
+                addr_of!(s.mach_short) as usize,
+                core::mem::size_of_val(&s.mach_short),
+            ),
+            0x48 => value == 1,
+            4 => {
+                value == rep
+                    || inside(
+                        addr_of!(s.rep_long) as usize,
+                        core::mem::size_of_val(&s.rep_long),
+                    )
+            }
+            8 => {
+                value == rep
+                    || inside(
+                        addr_of!(s.rep_short) as usize,
+                        core::mem::size_of_val(&s.rep_short),
+                    )
+            }
             0x30 => value == 10,
             0x44 => true,
             _ => false,
@@ -146,7 +168,26 @@ fn kept(_core: &FakeCore, addr: u32, value: u32) -> bool {
     }
     let names = 0x40_0000 + 12 * DYN_TYPE_FIRST;
     if let Some(off) = in_rows(names, 12, limits::MACHINE_ROWS) {
-        return matches!(off, 0 | 4) && value == EMPTY;
+        let s = &rstate().s;
+        let inside =
+            |base: usize, size: usize| value >= base as u32 && value < base as u32 + size as u32;
+        return match off {
+            0 => {
+                value == EMPTY
+                    || inside(
+                        addr_of!(s.mach_name) as usize,
+                        core::mem::size_of_val(&s.mach_name),
+                    )
+            }
+            4 => {
+                value == EMPTY
+                    || inside(
+                        addr_of!(s.mach_short) as usize,
+                        core::mem::size_of_val(&s.mach_short),
+                    )
+            }
+            _ => false,
+        };
     }
     false
 }
@@ -165,6 +206,17 @@ fn keys_a() -> KeysCopy {
 }
 fn keys_b() -> KeysCopy {
     keys_of(&[KEY_B])
+}
+/// The number of the first run-time machine, pinned (a key with hash 0): no sticky map entry holds it.
+fn keys_pinned() -> KeysCopy {
+    keys_of(&[DYN_TYPE_FIRST])
+}
+/// Two more pinned numbers (hash 0), in the run-time range, in no map entry.
+fn keys_pinned_other() -> KeysCopy {
+    keys_of(&[DYN_TYPE_FIRST + 5])
+}
+fn keys_pinned_third() -> KeysCopy {
+    keys_of(&[DYN_TYPE_FIRST + 6])
 }
 fn keys_late() -> KeysCopy {
     keys_of(&[KEY_L1])
@@ -296,6 +348,48 @@ fn state(core: &FakeCore) -> Vec<u32> {
     v
 }
 
+/// The DSP state bytes an unload leaves (docs/plans/extension-model.md E5d): the voice row of an absent module whose number the sticky map holds stays as a MISSING placeholder.
+/// Only the bytes of such a row are accepted: the owner byte `PLACEHOLDER_OWNER`, the row's type (a held number) and the placeholder pc; `reset_row` clears every other word.
+fn kept_dsp(core: &FakeCore, off: usize, value: u8) -> bool {
+    use core::mem::offset_of;
+    use dkrt_abi::dsp::{DspState, MAX_ROWS, PLACEHOLDER_OWNER, PLACEHOLDER_PC};
+    let d = core.dsp();
+    let row_of = |base: usize, size: usize| {
+        (off >= base && off < base + size * MAX_ROWS)
+            .then(|| ((off - base) / size, (off - base) % size))
+    };
+    if let Some((r, _)) = row_of(offset_of!(DspState, row_owner), 1) {
+        return d.row_owner[r] == PLACEHOLDER_OWNER && value == PLACEHOLDER_OWNER;
+    }
+    if let Some((r, i)) = row_of(offset_of!(DspState, row_type), 4) {
+        return d.row_owner[r] == PLACEHOLDER_OWNER
+            && dkrt_svc_machines::assign::holds(d.row_type[r])
+            && value == d.row_type[r].to_ne_bytes()[i];
+    }
+    if let Some((r, i)) = row_of(offset_of!(DspState, row_pc), 4) {
+        return d.row_owner[r] == PLACEHOLDER_OWNER && value == PLACEHOLDER_PC.to_ne_bytes()[i];
+    }
+    false
+}
+
+/// (placeholder voice rows, numbers the map holds that no module has): the rows of absent modules are parked for held numbers only.
+fn absent_rows(core: &FakeCore) -> (usize, usize) {
+    let d = core.dsp();
+    let rows = rows_owned_by(core, dkrt_abi::dsp::PLACEHOLDER_OWNER).len();
+    let held = (0..dkrt_sdk::sel::MAP_N)
+        .map(dkrt_svc_machines::assign::number_at)
+        .filter(|t| {
+            *t != 0
+                && !(0..dkrt_abi::dsp::MAX_ROWS).any(|k| {
+                    d.row_owner[k] != 0
+                        && d.row_owner[k] != dkrt_abi::dsp::PLACEHOLDER_OWNER
+                        && d.row_type[k] == *t as u32
+                })
+        })
+        .count();
+    (rows, held)
+}
+
 fn module(sel: u32, keys: fn() -> KeysCopy, init: fn(&mut Init), salt: u32) -> Module {
     Module {
         sel,
@@ -323,7 +417,8 @@ fn fixture(device: u32) -> Fixture {
         enable: &ENABLE,
         parks_rows: true,
         kept,
-        kept_dsp: |_, _| false,
+        kept_dsp,
+        absent_rows: Some(absent_rows),
         // the machines service queues no live value for its rows
         live: None,
         salt_same: &[
@@ -379,8 +474,19 @@ fn rows_owned_by(core: &FakeCore, owner: u8) -> Vec<usize> {
         .collect()
 }
 
+/// The sticky map forgets every number, then holds those of `mods` only (a boot that does not know the module, or a number the map dropped): the settings key is zeroed and
+/// `settle` runs over `mods`.
+fn forget_numbers_but(l: &dkrt_test_support::contract::Lifecycle<Machines>, mods: &[&Module]) {
+    l.core
+        .settings
+        .borrow_mut()
+        .retain(|(k, _)| k.as_slice() != dkrt_svc_machines::assign::SETTING);
+    l.settle_over(mods);
+}
+
 #[test]
-fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_type() {
+fn a_voice_row_of_an_absent_module_is_a_disabled_placeholder_that_keeps_its_type_while_the_map_holds_its_number(
+) {
     use dkrt_abi::dsp::{PLACEHOLDER_OWNER, PLACEHOLDER_PC};
     use dkrt_test_support::contract::{locked, Lifecycle};
     let _g = locked();
@@ -411,7 +517,7 @@ fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_typ
             "the dispatch renders a silent block for it"
         );
         assert_eq!(voice_row_word(&l.core, row, 1), Some(PLACEHOLDER_PC));
-        // a placeholder row counts in the CAPACITY figure (`capacity::used_rows` counts every non-zero owner): the device test reads that figure against the row masks
+        // a placeholder row is no row in use in the CAPACITY figure (it gives way to a real load, so the planner counts it free): the device test reads that figure against the row masks
         let used = |l: &dkrt_test_support::contract::Lifecycle<Machines>| {
             unsafe {
                 <Machines as dkrt_abi::service::Service<FakeCore>>::cap(
@@ -424,10 +530,18 @@ fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_typ
         };
         assert_eq!(
             (used(&l), l.core.dsp().mod_rows[0]),
-            (1, 0),
-            "a parked row is in use and in no module's row mask"
+            (0, 0),
+            "a parked row is not in use and in no module's row mask"
         );
-        // the reload ended without the module: the row is free, in the DSP too
+        // the reload ended without the module: its number is in the sticky map, so the row stays parked (the module is absent: MISSING and silent, E5d)
+        unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::live_done(&l.core) };
+        let d = l.core.dsp();
+        assert_eq!((d.row_owner[row], d.row_type[row]), (PLACEHOLDER_OWNER, ty));
+        assert_eq!(used(&l), 0);
+        assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER), vec![row]);
+        assert_eq!(voice_row_word(&l.core, row, 10), Some(ty));
+        // the number leaves the map (settings forgotten, a settle that does not name it): the next end of a reload frees the row, in the DSP too
+        forget_numbers_but(&l, &[]);
         unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::live_done(&l.core) };
         let d = l.core.dsp();
         assert_eq!((d.row_owner[row], d.row_type[row]), (0, FREE_TYPE));
@@ -438,14 +552,46 @@ fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_typ
 }
 
 #[test]
-fn an_unload_outside_a_reload_frees_the_voice_row_and_leaves_a_gap_row_as_it_did() {
+fn a_plain_unload_parks_the_voice_row_and_shows_missing_while_the_map_holds_the_number() {
+    use dkrt_abi::dsp::{PLACEHOLDER_OWNER, PLACEHOLDER_PC};
     use dkrt_test_support::contract::{locked, Lifecycle};
     let _g = locked();
     let f = fixture(DT2.id);
     let l = Lifecycle::<Machines>::new(&f);
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
     let row = rows_owned_by(&l.core, 1)[0];
-    l.unload(0); // the boot's failure path (`undo_early`) is this
+    let ty = l.core.dsp().row_type[row];
+    l.unload(0); // no reload runs: the unload of a module taken down from the menu, or the boot's failure path (`undo_early`)
+    let d = l.core.dsp();
+    assert_eq!(
+        (d.row_owner[row], d.row_type[row]),
+        (PLACEHOLDER_OWNER, ty),
+        "a parked row, no free row"
+    );
+    assert_eq!(voice_row_word(&l.core, row, 0), Some(ty));
+    assert_eq!(voice_row_word(&l.core, row, 10), Some(ty), "disabled");
+    assert_eq!(voice_row_word(&l.core, row, 1), Some(PLACEHOLDER_PC));
+    // the machine row reads MISSING and stays out of the list (empty list name), the DSP gets the row's own number
+    assert_eq!(missing_row(&l.core), (true, true, true));
+    // the module loads again: it takes the row and the text is its own
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    assert_eq!(rows_owned_by(&l.core, 1), vec![row]);
+    assert_eq!(missing_row(&l.core), (false, false, false));
+    l.unload(0);
+}
+
+#[test]
+fn a_plain_unload_of_a_number_the_map_does_not_hold_frees_the_voice_row_and_leaves_a_gap_row() {
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    forget_numbers_but(&l, &[]);
+    // a pinned number is in no map entry
+    let pinned = module(0, keys_pinned, sine, 1);
+    assert_eq!(l.load(0, &pinned), dkrt_sdk::OK);
+    let row = rows_owned_by(&l.core, 1)[0];
+    l.unload(0);
     let d = l.core.dsp();
     assert_eq!(
         (d.row_owner[row], d.row_type[row]),
@@ -454,19 +600,319 @@ fn an_unload_outside_a_reload_frees_the_voice_row_and_leaves_a_gap_row_as_it_did
     );
     assert_eq!(voice_row_word(&l.core, row, 0), Some(FREE_TYPE));
     assert!(rows_owned_by(&l.core, dkrt_abi::dsp::PLACEHOLDER_OWNER).is_empty());
-    // the machine row is the gap row: empty names, own_dsp 0
-    let s = &rstate().s;
-    assert_ne!(s.mach_name[0][0], b'M', "no MISSING text");
-    let inf = unsafe { dkrt_svc_params::dynreg(&l.core) };
-    let row = unsafe {
-        dkrt_abi::mem::iw(inf, w::M_ROWS)
-            + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
-                * dkrt_abi::mem::iw(inf, w::M_ROW_SIZE)
+    // the machine row is the gap row: hidden, no MISSING text, own_dsp 0
+    assert_eq!(missing_row(&l.core), (true, false, false));
+}
+
+#[test]
+fn a_number_in_the_map_that_no_module_has_reads_missing_and_is_parked_once_the_loader_is_idle() {
+    use dkrt_abi::dsp::{PH_IDLE, PLACEHOLDER_OWNER, PLACEHOLDER_PC};
+    use dkrt_abi::service::{tick_phase, Service};
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    for dev in [DT2.id, DN2.id] {
+        let f = fixture(dev);
+        // the boot's settle numbered A and B (the map holds both), and neither loaded: a module not on the card, or one that failed before its rows were written
+        let l = Lifecycle::<Machines>::new(&f);
+        let tick = || unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+        // the loader is busy with a module: the machine rows are written, the voice rows wait
+        l.core.dsp().phase = PH_IDLE + 1;
+        tick();
+        assert!(
+            !missing_row(&l.core).2,
+            "dev {dev}: no MISSING row before the voice row is parked"
+        );
+        assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
+        l.core.dsp().phase = PH_IDLE;
+        tick();
+        let rows = rows_owned_by(&l.core, PLACEHOLDER_OWNER);
+        assert_eq!(
+            rows.len() as u32,
+            dkrt_svc_machines::assign::map_used(),
+            "dev {dev}: one parked row for each absent number"
+        );
+        let d = l.core.dsp();
+        for r in &rows {
+            assert_eq!(d.row_pc[*r], PLACEHOLDER_PC);
+            assert_eq!(
+                voice_row_word(&l.core, *r, 10),
+                Some(d.row_type[*r]),
+                "disabled"
+            );
+            assert_eq!(voice_row_word(&l.core, *r, 0), Some(d.row_type[*r]));
+        }
+        // nothing more is written by another pass
+        let writes = l.core.link.borrow().t.wire.len();
+        tick();
+        assert_eq!(l.core.link.borrow().t.wire.len(), writes);
+        // A loads: it takes its placeholder and its machine row is its own again
+        assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+        assert_eq!(
+            rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+            rows.len() - 1
+        );
+        let own = missing_row(&l.core);
+        assert_eq!(
+            (own.0, own.1),
+            (false, false),
+            "the row is A's own: listed, its own text"
+        );
+        tick();
+        assert_eq!(
+            rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+            rows.len() - 1
+        );
+        assert_eq!(rows_owned_by(&l.core, 1).len(), 1);
+        l.unload(0);
+    }
+}
+
+#[test]
+fn a_removal_writes_missing_only_when_a_voice_row_is_parked_and_a_busy_loader_is_bounded() {
+    use dkrt_abi::dsp::{PH_IDLE, PLACEHOLDER_OWNER};
+    use dkrt_abi::service::{tick_phase, Service};
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    let tick = || unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    let whys = || {
+        l.core
+            .calls
+            .borrow()
+            .iter()
+            .filter_map(|c| match c {
+                dkrt_test_support::Call::Log { kind, args }
+                    if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED =>
+                {
+                    Some(args[2])
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
     };
-    assert_eq!(
-        unsafe { l.core.rd(row + dkrt_abi::mem::iw(inf, w::O_OWN)) },
-        0
+    // the unload of a module whose voice row was never published: no voice row stands for the number, so the row is the gap row, not MISSING
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    let row = rows_owned_by(&l.core, 1)[0];
+    l.core.dsp().row_pub[row] = 0;
+    l.unload(0);
+    assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
+    assert!(
+        !missing_row(&l.core).2,
+        "no MISSING row without a voice row"
     );
+    // the loader stays busy: nothing is parked, the row stays a gap row, and after the bound one event says why (once)
+    l.core.dsp().phase = PH_IDLE + 1;
+    for _ in 0..1799 {
+        tick();
+    }
+    assert!(whys().is_empty());
+    tick();
+    tick();
+    assert_eq!(
+        whys().iter().filter(|w| **w == 4).count() as u32,
+        dkrt_svc_machines::assign::map_used(),
+        "one event for each held number, logged once"
+    );
+    assert!(!missing_row(&l.core).2);
+    // the loader is idle again: the number is parked and reads MISSING
+    l.core.dsp().phase = PH_IDLE;
+    tick();
+    assert!(missing_row(&l.core).2);
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).len() as u32,
+        dkrt_svc_machines::assign::map_used()
+    );
+}
+
+#[test]
+fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_when_a_row_frees() {
+    use dkrt_abi::dsp::PLACEHOLDER_OWNER;
+    use dkrt_abi::service::{tick_phase, Service};
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    let tick = || unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    // every row is a placeholder: the boot's numbers (A, B and the two refused modules) are absent
+    tick();
+    let held = dkrt_svc_machines::assign::map_used() as usize;
+    assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(), held);
+    let free = unsafe { dkrt_abi::mem::iw(l.core.dsp_info(), I_VFREE) } as usize;
+    // modules of numbers that have no row (pinned, in no map entry) load until the rows are full: a placeholder gives way to a real load, never the other way
+    for (rec, keys) in [
+        (2usize, keys_pinned_other as fn() -> KeysCopy),
+        (3, keys_pinned_third),
+    ] {
+        let m = module(rec as u32, keys, sine, 3);
+        assert_eq!(
+            l.load(rec, &m),
+            dkrt_sdk::OK,
+            "a placeholder gives way to a real load"
+        );
+    }
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+        held.min(free - 2)
+    );
+    // the number that lost its row: the gap row and an error event
+    let gave: Vec<(u32, u32)> = l
+        .core
+        .calls
+        .borrow()
+        .iter()
+        .filter_map(|c| match c {
+            dkrt_test_support::Call::Log { kind, args }
+                if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED =>
+            {
+                Some((args[1], args[2]))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        gave.len(),
+        held + 2 - free,
+        "one event for each row a load took"
+    );
+    assert_eq!(gave[0].1, 1, "reason: a real load took the row");
+    let lost = gave[0].0;
+    assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER)
+        .iter()
+        .all(|r| l.core.dsp().row_type[*r] != lost));
+    tick();
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+        held.min(free - 2),
+        "no row is free: the number stays without one"
+    );
+    // a module goes: its row is free, and the number is parked again at the next pass
+    l.unload(3);
+    tick();
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+        held.min(free - 1)
+    );
+    l.unload(2);
+}
+
+#[test]
+fn a_boot_that_fits_exactly_loads_every_selected_module_beside_a_parked_number() {
+    use dkrt_abi::dsp::PLACEHOLDER_OWNER;
+    use dkrt_abi::service::{tick_phase, Service};
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    let free = unsafe { dkrt_abi::mem::iw(l.core.dsp_info(), I_VFREE) } as usize;
+    // the first passes: the boot's loads are not over (a load is in flight), nothing is parked, so no placeholder stands in the way of a later module
+    l.core.boot_index.set(0);
+    unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
+    l.core.boot_index.set(u32::MAX);
+    // `free` modules fill every row: the boot fits exactly, and one more number is held for an absent module
+    let mods = [(0usize, &f.a), (1, &f.b)];
+    for (rec, m) in mods {
+        assert_eq!(l.load(rec, m), dkrt_sdk::OK);
+    }
+    let p1 = module(2, keys_pinned_other, sine, 3);
+    let p2 = module(3, keys_pinned_third, sine, 4);
+    assert_eq!(l.load(2, &p1), dkrt_sdk::OK);
+    assert_eq!(l.load(3, &p2), dkrt_sdk::OK);
+    assert_eq!(free, 4);
+    unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    assert!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty(),
+        "no free row: no placeholder, every module loaded"
+    );
+    for rec in (0..4).rev() {
+        l.unload(rec);
+    }
+}
+
+#[test]
+fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_runs_during_a_live_operation(
+) {
+    use dkrt_abi::dsp::PLACEHOLDER_OWNER;
+    use dkrt_abi::service::{tick_phase, Service};
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    let tick = || unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    // a live operation: nothing is written
+    l.core.live_op.set(1);
+    tick();
+    assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
+    assert!(!missing_row(&l.core).2, "no MISSING row was written");
+    l.core.live_op.set(0);
+    // only one voice row is free: the first absent number is parked, the other waits without an error (it plays what a gap row plays until a row is free)
+    let inf = unsafe { l.core.dsp_info() };
+    let free = unsafe { dkrt_abi::mem::iw(inf, I_VFREE) } as usize;
+    for k in 1..free {
+        l.core.dsp().row_owner[k] = 9;
+        l.core.dsp().row_type[k] = 0x77 + k as u32;
+    }
+    tick();
+    assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(), 1);
+    // the numbers without a row keep the gap row (not MISSING: that would play the stock sound), and one error event for each says why
+    let events = || {
+        l.core
+            .calls
+            .borrow()
+            .iter()
+            .filter_map(|c| match c {
+                dkrt_test_support::Call::Log { kind, args }
+                    if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED =>
+                {
+                    Some((args[1], args[2]))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let held = dkrt_svc_machines::assign::map_used() as usize;
+    assert_eq!(
+        events().len(),
+        held - 1,
+        "one event for each number without a row"
+    );
+    assert!(
+        events().iter().all(|(_, why)| *why == 2),
+        "the reason is: no free row"
+    );
+    tick();
+    assert_eq!(
+        events().len(),
+        held - 1,
+        "an event is logged once, not at every pass"
+    );
+    for k in 1..free {
+        l.core.dsp().row_owner[k] = 0;
+        l.core.dsp().row_type[k] = FREE_TYPE;
+    }
+    tick();
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).len() as u32,
+        dkrt_svc_machines::assign::map_used()
+    );
+}
+
+/// The machine row of the first run-time type: (its list name is empty, its long name reads MISSING, own_dsp is 1).
+fn missing_row(core: &FakeCore) -> (bool, bool, bool) {
+    let s = &rstate().s;
+    let inf = unsafe { dkrt_svc_params::dynreg(core) };
+    let (empty, own, name) = unsafe {
+        let row = dkrt_abi::mem::iw(inf, w::M_ROWS)
+            + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
+                * dkrt_abi::mem::iw(inf, w::M_ROW_SIZE);
+        (
+            dkrt_abi::mem::iw(inf, w::EMPTY),
+            core.rd(row + dkrt_abi::mem::iw(inf, w::O_OWN)),
+            core.rd(row + dkrt_abi::mem::iw(inf, w::O_NAME)),
+        )
+    };
+    (name == empty, s.mach_name[0][0] == b'M', own == 1)
 }
 
 #[test]
@@ -544,12 +990,16 @@ fn many_types_loaded_and_reloaded_do_not_use_up_the_voice_rows() {
         );
         l.unload(0);
         l.unload(1);
-        assert_eq!(used(&l), 0, "round {round}");
+        assert_eq!(
+            used(&l),
+            0,
+            "round {round}: the two numbers are absent: their rows stay parked (placeholders are no rows in use)"
+        );
     }
 }
 
 #[test]
-fn a_voice_whose_type_has_a_placeholder_needs_no_free_row() {
+fn a_placeholder_is_a_free_row_for_a_real_load() {
     use dkrt_abi::dsp::{DspSec, VOICE_TYPE, VOICE_V3};
     use dkrt_abi::service::Service;
     use dkrt_test_support::contract::{locked, Lifecycle};
@@ -560,9 +1010,10 @@ fn a_voice_whose_type_has_a_placeholder_needs_no_free_row() {
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK); // one row, which the reload parks
     l.core.live_op.set(1);
     l.unload(0);
-    // 4 rows: B's, A's placeholder, 2 free. A file with 3 voices fits through the placeholder when one of them has A's type, and not when none has
-    let check = |keys: [u32; 3]| {
-        let mut bytes = vec![0u8; VOICE_V3 as usize * 3];
+    // 4 rows: B's, A's placeholder, 2 free. A placeholder is free for any real load, so a file with 3 voices fits (whatever their types) and one with 4 does not
+    let check = |keys: &[u32]| {
+        let n = keys.len() as u32;
+        let mut bytes = vec![0u8; VOICE_V3 as usize * keys.len()];
         for (i, k) in keys.iter().enumerate() {
             let at = VOICE_V3 as usize * i + VOICE_TYPE as usize;
             bytes[at..at + 4].copy_from_slice(&k.to_be_bytes());
@@ -578,7 +1029,7 @@ fn a_voice_whose_type_has_a_placeholder_needs_no_free_row() {
             import_off: 0,
             nimport: 0,
             voice_off: 0,
-            nvoice: 3,
+            nvoice: n,
             fx_off: 0,
             nfx: 0,
             vstride: VOICE_V3,
@@ -589,9 +1040,14 @@ fn a_voice_whose_type_has_a_placeholder_needs_no_free_row() {
         l.core.boot_index.set(u32::MAX);
         r
     };
-    assert_eq!(check([KEY_A, 0x00dd_0000, 0x00ee_0000]), dkrt_sdk::OK);
+    assert_eq!(check(&[KEY_A, 0x00dd_0000, 0x00ee_0000]), dkrt_sdk::OK);
     assert_eq!(
-        check([0x00cc_0000, 0x00dd_0000, 0x00ee_0000]),
+        check(&[0x00cc_0000, 0x00dd_0000, 0x00ee_0000]),
+        dkrt_sdk::OK,
+        "the placeholder of A is free for a voice of another type"
+    );
+    assert_eq!(
+        check(&[0x00cc_0000, 0x00dd_0000, 0x00ee_0000, 0x00ff_0000]),
         dkrt_sdk::E_DSP_ROWS
     );
     unsafe { <Machines as Service<FakeCore>>::live_done(&l.core) };
@@ -641,7 +1097,11 @@ fn a_failed_publication_into_a_reused_placeholder_row_disables_it_again() {
         "parked again"
     );
     unsafe { <Machines as Service<FakeCore>>::live_done(&l.core) };
-    assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER),
+        vec![row],
+        "the number is in the map: the module is absent and its row stays parked"
+    );
 }
 
 #[test]

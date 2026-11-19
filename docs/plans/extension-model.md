@@ -602,19 +602,20 @@ What:
    or cleared before the wait ends, `reload_abort` (a timeout) gives the old module its tick and commands back and leaves its DSP rows as they were. Its channel sinks stay released after an abort and are not set again (the debug module loses its logging until the next boot); this
    is kept on purpose, because the module's `init` is the only place that sets them. The legacy single sink and tick of `dlog` stay set: they point into code that stays
    mapped until the free, and `sink_drop` clears them just before it. DSP instruction cache on range reuse stays open (hardware only); the device test with a changed constant proves the new code runs.
-7. MISSING placeholder, written only while a reload runs (`CoreApi::live_op`): a plain unload and the boot's failure path keep their behaviour (a free voice
-   row, a gap machine row). A kit names a type number, not a key. A gap row plays type 0's sound today, so the placeholder must be silent. The machines
+7. MISSING placeholder of an absent machine module (E5 wrote it while a reload runs; E5d keeps it after every unload and at the boot, while the sticky map holds the number).
+   A kit names a type number, not a key. A gap row plays type 0's sound, so the placeholder must be silent. The machines
    service does two things, on both devices (no capability separates them; the dispatch of both devices reads word 10 of a voice row as "the disabled
    type", `dispatch-dt2.s` `_dv_gdis`, `dispatch-dn2.s` `_dv_contract`):
-   - `remove` writes the machine row as a placeholder: the list name stays empty (the selection list leaves it out), the long and short names (descriptor and
-     names table) are "MISSING" and "MISS" in the row's own text buffers, `own_dsp = 1` (DN2: finding 33 saw silence without fault).
-   - `dsp_clear` (`dsp::clear_rows`) parks each published voice row instead of freeing it: word 10 takes the row's type, the pc becomes
+   - `remove` writes the machine row as a placeholder for every unload (a reload, a plain unload, the boot's failure path) of a number the sticky map holds: the list
+     name stays empty (the selection list leaves it out), the long and short names (descriptor and names table) are "MISSING" and "MISS" in the row's own text buffers,
+     `own_dsp = 1` (DN2: finding 33 saw silence without fault). A pinned number (in no map entry) gets the gap row after a plain unload, as before.
+   - `dsp_clear` (`dsp::clear_rows`) parks each published voice row of such a number instead of freeing it: word 10 takes the row's type, the pc becomes
      `PLACEHOLDER_PC`, the type word stays, and the row's owner becomes `dkrt_abi::dsp::PLACEHOLDER_OWNER` (0xfe, no record: the table check accepts it, and the
      unload does not free it). The new version's claim of a voice of the same type takes the placeholder row itself (`dsp::claim`, `row_pub` 2), and the row
      publication clears word 10 and writes the new words; that step carries the mark and the undo (a failed publication disables the row again), so the window
      is silent from the unload to the publication. `check_rows` counts such a row as free for that voice and `check_types` does not refuse its number. When the
-     reload ends, with the new version loaded or not, the job calls `Service::live_done` (machines: `free_placeholders`) and every placeholder row nobody took
-     over is freed, so no row of owner 0xfe outlives its reload. A placeholder row uses one of the 16 type rows for the length of the reload.
+     reload ends, with the new version loaded or not, the job calls `Service::live_done` (machines: `free_placeholders`) and a placeholder row whose number the sticky map no
+     longer holds is freed. A placeholder row uses one of the 16 type rows for as long as its number is in the map and no real load needs the row (E5d: a real load takes it, `dsp::make_room`).
    One rig case on each device proves it: a row with word 10 pre-set to its type renders silence from a routine that sounds, without a fault
    (`modules/core/adapters/dsp-voice/tests/dsp-guard.rig.test.ts` for the Digitakt II dispatch, `dsp-voice-dn2.rig.test.ts` for the Digitone II one). The machines
    contract lists the placeholder values in `kept`, `kept_dsp` and `kept_caps`, and the `disabled` words of the rows that count as off.
@@ -632,8 +633,8 @@ What:
    `unloads` and `reloads` at the end of `DkrtBootInfo` make open lists re-read (`unloads` counts every module teardown; the job counts `reloads` for every reload that loaded the
    new file or tore the old one down).
    End state of a reload that fails after the old module was torn down (the load fails, the DSP part fails, or it stalls and is cancelled):
-   the module is not loaded, as after a plain unload. The boot record says FAILED with the code and `loaded` drops; the machine rows that read MISSING are written as gap rows
-   (a MISSING row with no voice row would play the first stock machine's sound); the placeholders are freed; the list is rebuilt; `RELOAD_STATE` carries `unloaded = 1`. A
+   the module is not loaded, as after a plain unload. The boot record says FAILED with the code and `loaded` drops; the machine rows of a number the map holds read MISSING and
+   keep their placeholder voice rows (E5d; a pinned number's row is written as a gap row, because a MISSING row with no voice row would play the first stock machine's sound); the list is rebuilt; `RELOAD_STATE` carries `unloaded = 1`. A
    DSP part that does not end in 4 s is cancelled through the DSP loader's own failure path (`Loader::cancel_dsp`), so no transfer outlives the job. Every wait also ends after
    1800 UI passes, whatever the block clock does. `unload_rec` answers `E_BUSY` only before `fini` (a file or I/O step of the module still runs, or the DSP rows cannot be cleared), so a teardown that does not end gives the old module back; a DSP loader that cannot clear the rows is retained for good, and from then on every reload is refused at the queue with `E_RELOAD_RETAINED` (restart the device). The DSP wait has one budget for a stalled load: it starts again whenever the loader moves (an image or a row goes out, a load starts), so a healthy slow load of many rows is not cancelled.
 10. `dk:dev` and the workbench use `CMD_RELOAD` for any content module; the emulator byte swap remains only for the runtime image and the UI
@@ -728,8 +729,8 @@ MODULES list and see the change without a restart. Both are built on E5's job: r
 (`reload.rs`), so one job with three operations replaces three mechanisms.
 
 Decisions (taken with Em):
-1. Untick while a track uses the machine: a plain unload. The live state equals the state after "untick and restart" today: a gap row, which plays the
-   first stock machine's sound. "MISSING and silent for an absent module everywhere" is a separate later item.
+1. Untick while a track uses the machine: a plain unload. The live state equals the state after "untick and restart": the machine reads MISSING and plays silence
+   (E5d; a gap row would play the first stock machine's sound).
 2. A needed service is not loaded: the plan answers `E_MISSING` and the menu offers "restart to apply". Loading a service at run time waits for port file
    step 3 (slot fill). E5b item 7 as written (writing hook jumps while the device runs) is not built.
 3. The menu applies a change as one batch when the user leaves the MODULES list: the unloads first, then the loads.
@@ -759,7 +760,7 @@ What:
 
    The `E_RELOAD_*` codes keep their numbers and also answer an unload and a load.
 7. Numbering: load and reload run `settle` over the live set plus the candidate; unload runs none.
-8. Services: no new method. `CoreApi::live_op` stays the owner of a module that is being reloaded (a plain unload and a failed load must write gap rows, not placeholders, so they leave it 0).
+8. Services: no new method. `CoreApi::live_op` stays the owner of a module that is being reloaded (a plain unload and a failed load leave it 0; the machines service writes the MISSING placeholder for them as well when the sticky map holds the number, E5d).
    `live_done` runs at the end of every job that passed its checks. A multi-service module (for example a machine with sample pool entries) needs no service list: each
    lifecycle step goes to all service rows in table order, and the teardown runs in phases (`dsp_clear` of all, `fini`, `remove` of all in reverse, `dsp_release` of all).
    One host case covers the edge: `dsp_clear` runs on every service even when one fails, and the abort that follows leaves every service's rows as they were.
@@ -784,6 +785,45 @@ unload with a note held; load and unload soak (5 cycles, 20 in the full tier); `
 sounding, loaded again. Plus C:loading, gate-smoke and gate-pins.
 
 Estimate: PR 1 12 to 16 h of agent editing time, PR 2 6 to 8 h. Depends on: E5.
+
+### E5d MISSING and silent for an absent machine module
+
+What: an absent machine module reads MISSING and plays silence, whether unticked live, failed at boot, or not loaded. Before E5d a plain unload wrote a gap row, which plays the
+first stock machine's sound; the reload placeholder (E5 item 7) did the job only while a reload ran. This item is machines only; the effect half is the follow-up below.
+
+Decided (with Em): MISSING machine rows stay out of the machine selection list; a later load restores only the sound (the stored knob bytes of the kit are untouched, as when a
+track's machine is swapped; no UI state); placeholders give way: a real module always wins a voice row.
+
+Mechanism:
+1. `remove` writes the MISSING machine row for every unload of a number the sticky map holds (`assign::holds`), and `dsp::clear_rows` parks the voice row. `live_done` no longer turns
+   MISSING rows into gap rows (a pinned number still gets one: it is in no map entry); `free_placeholders` frees a placeholder only when its number is not in the map. A later load
+   takes the row through `claim` (`row_pub` 2).
+2. Boot: a number the map holds that no module loads (a module not on the card, or one that failed before its rows were written) has no unload to leave a placeholder. The machines
+   `tick` (`park_absent`, last phase of every UI pass) parks its voice row (`dsp::park_missing`: the disabled word, the pc, then the type word) once the boot's loads are over
+   (`CoreApi::boot_index` is `u32::MAX` again) and the DSP loader is idle (`phase` IDLE, nothing waiting), and only then writes the MISSING machine row: at the end of `dkrt_boot`
+   the DSP frames do not flow yet, and a `link_run` there would wait out its bound on every pass. Nothing runs during a live operation.
+3. Placeholders give way. CAPACITY `VOICE_ROWS` counts the rows modules own, not placeholders, so the host planner (`fit`) and `dsp::check_rows` both treat a placeholder as a free
+   row. `Service::dsp_admit` (`dsp::make_room`) frees the placeholders of other numbers when a load has fewer free rows than voices without a placeholder of their own type; the number
+   that lost its row falls back to the gap row (the stock sound) and logs `MACHINE_TYPE_EVICTED` as an error event (arguments hash, type, why 1). A real load is never refused for a
+   placeholder.
+4. With no machines service loaded (a boot whose selection needs none) nothing parks and the map is not read: the type is no machine of the boot and a kit that names it plays the stock sound. A number that cannot be parked (no free voice row, why 2; the DSP did not take the write in 3 passes in a row, why 3) keeps the gap row and logs the same event once, never a MISSING
+   row without a voice row. It is parked again at the first pass after a row frees.
+
+Follow-up E5d-fx: MISSING effect entry, after a static firmware check for a disable or grey mechanism of the FX list (finding 71 open); effects have no sticky number, so only a live
+unload can show it.
+
+Tests: the DT2 rig case is `dsp-guard.rig.test.ts` (a row whose disabled word names its type renders silence, no reload running; finding 135 Q6). Contract: `Fixture::parks_rows` means
+that every unload parks the rows; `absent_rows` checks that placeholders exist only for held numbers and that an unloaded module's rows are parked; `kept_dsp` accepts only the bytes of
+placeholder rows; case 3 compares B's row by type. Machines service tests: unload parks and shows MISSING while the map holds the number and frees it when it does not; boot parking
+(boot loads running, loader busy, no free row with its event); a real load takes a placeholder row and the number is parked again; a boot that fits exactly loads every module. Device (one
+for each device): `missing.device.test.ts` (the machine is listed; unload live: the track label reads MISS, it is not listed, the PCM is silent, the stored knob bytes are the same after
+the load; the boot path: the machines service is a provider, loaded only when a selected module needs it, so the step selects `test/native-page` beside the debug module; after the restart the number of the unselected `test/sine` reads MISS, no error event). The "stock sound after untick" assertions of `live.device.test.ts` and `shot-live-dt2.device.test.ts`
+became "silent".
+
+Risks: a placeholder row is taken by the next real load, so a long-absent number can end with the gap row; a stock kit that uses a MISSING type in the page code is unknown firmware
+behaviour; another reader of stored numbers (finding 135) may still see the row.
+
+Depends on: E5b, E5c-2, the contract case of lane P. Effort: machines 4 h, tests 3 h.
 
 ### E6 LFO shapes
 
@@ -997,6 +1037,7 @@ runtime-and-services.md.
 | 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | done: PR #623 (device: reload test on DT2 and DN2 incl. PCM swap check and soak; named subset 35 halves, gate-smoke, gate-pins) |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | built on branch e5b/fx-teardown; device tests written, not run |
 | 7 | E5c-1 live job: load, unload and reload (runtime, protocol, clients) | E5 | live test (list in E5c), subset | done: PR (device: live, shot-live, reload, C:loading subset, gate-smoke, gate-pins on DT2 and DN2) |
+| 7 | E5d MISSING and silent for an absent machine module | E5b, E5c-2, lane P contract case | DT2 rig silence case, one unload test per device, subset | machines built on branch e5d/missing (host tests done, device test written, not run); E5d-fx follows |
 | 7 | E5c-2 MODULES applies live (menu) | E5c-1 | menu device test, subset | active: branch e5c/menu-live (host tests and checks done; the device test is written, not run) |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |

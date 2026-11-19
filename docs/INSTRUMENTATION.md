@@ -572,6 +572,12 @@ a channel by calling `dk_sink_set(channel, sink)` (an import, runtime 0.7.1). Th
   sets a sink in `init` may still clear it in `fini` itself.
 - Cost with no sink: a producer tests one word per channel and calls nothing.
 
+## `MACHINE_TYPE_EVICTED` of the machines service (E5d)
+
+Error event, arguments hash, type, why. The sticky map's own eviction logs it with why 0. The machines service logs it, once for each number until the number is parked again,
+when a number held for an absent module has no voice row and keeps the gap row (the stock sound) instead of MISSING: why 1 a real load took the placeholder row, 2 no voice row is
+free, 3 the DSP did not take the write in 3 passes in a row, 4 the DSP loader stayed busy for 1800 UI passes in a row.
+
 ## Cost when off
 
 - Interpreter loop: `cov`, `hist`, `wwatch` and `pcdump` are tested through one

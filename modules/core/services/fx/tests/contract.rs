@@ -154,7 +154,7 @@ fn kept(core: &FakeCore, addr: u32, _value: u32) -> bool {
 
 /// The DSP state bytes that differ from the start after a release, on purpose: the MIX word of a released effect row is 1.0f (`MIX_ONE`, the mix of a row without
 /// a page; the start state holds 0 because no row was ever released).
-fn kept_dsp(at: usize, value: u8) -> bool {
+fn kept_dsp(_core: &FakeCore, at: usize, value: u8) -> bool {
     let mix = core::mem::offset_of!(DspState, fx_mix);
     at >= mix && at < mix + 4 * MAX_FX && value == MIX_ONE.to_le_bytes()[(at - mix) % 4]
 }
@@ -272,6 +272,7 @@ fn fixture(device: u32) -> Fixture {
         parks_rows: false,
         kept,
         kept_dsp,
+        absent_rows: None,
         // the route of an effect is a setting of the FX ROUTES menu; a module load never writes one
         live: LIVE,
         salt_same: &[("settings", "a load writes no setting")],
