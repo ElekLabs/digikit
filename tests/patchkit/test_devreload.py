@@ -692,7 +692,8 @@ def test_upload_store_waits_for_boot_and_module_without_debug_log(
     else:
         assert elapsed < 22
     if failure in ("boot", "no_boot"):
-        up.modules.assert_not_called()
+        # One ask before the boot (is the module loaded, can it reload); none after a failed boot.
+        assert up.modules.call_count == 1
     assert [c[0] for c in events.mock_calls] == [
         "upload",
         "verify",
