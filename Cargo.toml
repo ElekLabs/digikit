@@ -43,6 +43,7 @@ members = [
     "modules/core/runtime/svc-rt",
     "modules/core/runtime/test-support",
     "modules/core/services/params",
+    "modules/core/services/bitmap",
     "modules/core/services/fx",
     "modules/core/services/machines",
     "modules/core/services/lfo",

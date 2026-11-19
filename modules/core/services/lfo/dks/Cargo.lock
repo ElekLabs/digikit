@@ -19,12 +19,17 @@ name = "dkrt-sdk"
 version = "0.1.0"
 
 [[package]]
+name = "dkrt-svc-bitmap"
+version = "0.1.0"
+
+[[package]]
 name = "dkrt-svc-lfo"
 version = "0.1.0"
 dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
+ "dkrt-svc-bitmap",
  "dkrt-svc-params",
 ]
 

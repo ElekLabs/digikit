@@ -913,10 +913,11 @@ Refactors with no behaviour change, proven by objdiff of the built objects:
 1. Move the firmware `Bitmap`, vector header and tile helpers from the lfo service into a shared no_std library crate that follows the
    `modules/core/services/params` pattern (a library crate used by more than one service, not a service). lfo is the first user and E7's filter graph
    the second. Check the layercheck service-crates rule allows it as it allows params.
-2. Unify `hooks-dt2.s` and `hooks-dn2.s` into one routine source. The per-device facts are declared in `devices/fw/lfo.toml` (a `[[struct]]` for the offset of
-   the wave field of the LFO state, the base register, the scratch register of each site, the D1 save) and reach the routines through the generated
-   `dk_fw_lfo.inc` symbols and macros of `patchkit gen`, so a new firmware version is a TOML change plus `patch:port`. This reworks reviewed interrupt
-   code, so it gets a new review.
+   Done: crate `dkrt-svc-bitmap` (modules/core/services/bitmap/); `patchkit objdiff --strict` of lfo.dko.json identical (112 functions, 50 data objects).
+2. Moved to port step 3 (lfo slice): one routine source for `hooks-dt2.s` and `hooks-dn2.s`. The per-device differences are registers and save lists, not
+   offsets (the wave operand `2(%a3)` on DT2 and `0x4c(%a4)` on DN2; `tick_call` saves d1 on DT2 only; the `tick_slew` scratch register is d2 on DT2 and d1
+   on DN2), so they need a per-hook routine schema in the port file, not `[[struct]]` constants. Port step 3 moves these routines into the port file and
+   defines that schema there; doing it before would rework reviewed interrupt code twice.
 
 ### E7 Filter machines
 
