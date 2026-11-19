@@ -119,10 +119,12 @@ test('after the first round the log is read from the cursor, not from the start'
   };
   await s.waitForBoot(5000);
   assert.equal(froms[0], 0);
+  // each later round reads the boot's identity (the log head, one page from 0) and then the events after the cursor
   assert.ok(
-    froms.slice(1, -1).every((f) => f === 1),
-    `rounds after the first ask from the last event: ${froms}`,
+    froms.slice(2, -1).every((f, i) => f === (i % 2 === 0 ? 0 : 1)),
+    `rounds after the first ask the log head, then the last event: ${froms}`,
   );
+  assert.ok(froms.filter((f) => f === 1).length >= 2, `the events are read from the cursor: ${froms}`);
   assert.equal(froms[froms.length - 1], 0, 'a new boot is read from its start');
 });
 
@@ -265,7 +267,7 @@ test('a probe lost during the restart ends with the caller signal, and the next 
   });
   const started = Date.now();
   await s.waitForBoot(20_000);
-  assert.equal(probes, 3, 'the lost info probe, then info and the log read of the second try');
+  assert.equal(probes, 4, 'the lost info probe, then info, the boot identity and the log read of the second try');
   assert.ok(Date.now() - started < 5000, 'a lost probe did not wait for the wall guard');
 });
 

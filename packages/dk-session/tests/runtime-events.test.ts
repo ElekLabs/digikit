@@ -251,3 +251,38 @@ test('onWait reports success and failure', async () => {
   );
   assert.ok(records[1]!.clockMs >= 100);
 });
+
+test('two identical boot logs: another boot record in BOOT_START is a new boot, the same one is not', async () => {
+  const boot = (seq: number) => {
+    const log = new FakeLog();
+    log.add('BOOT_START', [1, 2, 3, seq, 0], 0);
+    for (let i = 0; i < 6; i++) log.add('SAFE', [i], 10 + i);
+    return log;
+  };
+  // the cursor follows boot record seq 1; the log then holds the same events again, the same numbers and times, with the record seq 5
+  const log = boot(1);
+  const cur = new LogCursor(log);
+  cur.fromBoot();
+  await cur.read();
+  const again = boot(5);
+  log.events = again.events;
+  log.next = again.next;
+  const r = await cur.read();
+  assert.equal(r.newBoot, true);
+  assert.equal(cur.boots, 1);
+  assert.equal(r.events[0]!.kind, LOG_KIND.BOOT_START);
+  // nothing restarted: the same BOOT_START, more events
+  log.add('SAFE', [9], 30);
+  const same = await cur.read();
+  assert.equal(same.newBoot, false);
+  assert.deepEqual(
+    same.events.map((e) => e.seq),
+    [8],
+  );
+  // a restart with the same boot record and the same events cannot be told from the log (the wait then relies on the RESTART request event): no new boot is claimed
+  const identical = boot(5);
+  log.events = identical.events;
+  log.next = identical.next;
+  log.add('SAFE', [9], 30);
+  assert.equal((await cur.read()).newBoot, false);
+});

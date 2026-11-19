@@ -5,6 +5,9 @@
 //   again (same seq, time, kind and arguments). Only sequence numbers order events.
 // - A new boot restarts the log at sequence 1: the anchor is missing or differs, a BOOT_START follows it, or the log is shorter than the anchor. The cursor
 //   then starts at the new boot's first event and `boots` counts it.
+// - Two boots of the emulator can log the same events at the same numbers, so the anchor alone cannot tell them apart. The cursor also keeps the identity of its boot: the
+//   BOOT_START at sequence 1 (its arguments hold the boot record's sequence number and the boot counter), read again with every `read` while the ring still holds it. Another
+//   BOOT_START there is a new boot.
 // - A gap (the oldest kept event is newer than the anchor in the same boot: the ring dropped events we had not read) is reported as `lost`, never thrown.
 import { LOG_KIND } from './gen_proto.ts';
 import type { DkLogEvent, DkSession, Quick } from './dkupload-core.ts';
@@ -24,6 +27,8 @@ const sameEvent = (a: DkLogEvent, b: DkLogEvent): boolean =>
 
 export class LogCursor {
   private last: DkLogEvent | null = null;
+  /** The BOOT_START (sequence 1) of the boot the cursor follows, once seen. */
+  private boot: DkLogEvent | null = null;
   private count = 0;
   private readonly src: LogPageSource;
   private readonly probe: <T>(run: (quick: Quick) => Promise<T>) => Promise<T>;
@@ -41,9 +46,17 @@ export class LogCursor {
     return this.probe((q) => this.src.logPage(from, q));
   }
 
+  /** The BOOT_START of the log's first sequence number while the ring still holds it. */
+  private async bootStart(): Promise<DkLogEvent | null> {
+    const [, , events] = await this.page(0);
+    const head = events[0];
+    return head !== undefined && head.seq === 1 && head.kind === LOG_KIND.BOOT_START ? head : null;
+  }
+
   /** Start after the newest event: older events are never returned. */
   async fromNewest(): Promise<void> {
     this.last = null;
+    this.boot = await this.bootStart();
     const [, newest] = await this.page(NEWEST);
     if (newest > 0) {
       const [, , events] = await this.page(newest);
@@ -63,6 +76,18 @@ export class LogCursor {
     let lost = 0;
     let from = this.last ? this.last.seq : 0;
     let anchored = this.last !== null;
+    // the identity of the boot: another BOOT_START at sequence 1 is a new boot, whatever the events at the anchor's number say
+    const head = await this.bootStart();
+    if (head !== null) {
+      if (this.boot !== null && anchored && (head.time !== this.boot.time || !sameEvent(head, this.boot))) {
+        this.count++;
+        newBoot = true;
+        this.last = null;
+        from = 0;
+        anchored = false;
+      }
+      this.boot = head;
+    }
     for (;;) {
       const [oldest, newest, events] = await this.page(from);
       let batch = events;
@@ -79,6 +104,7 @@ export class LogCursor {
             this.count++;
             newBoot = true;
             this.last = null;
+            this.boot = null;
             out = [];
             lost = 0;
             from = 0;
