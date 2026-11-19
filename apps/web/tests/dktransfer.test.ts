@@ -362,11 +362,7 @@ test('install: a key rule the new file breaks is a `keys` warning before the upl
     const out = await install(
       session(dev),
       ['x/b'],
-      [
-        (await libraryModule(a, needsOf))!,
-        (await libraryModule(b, needsOf))!,
-        (await libraryModule(c, needsOf))!,
-      ],
+      [(await libraryModule(a, needsOf))!, (await libraryModule(b, needsOf))!, (await libraryModule(c, needsOf))!],
       (e) => events.push(e),
     );
     assert.deepEqual(out.uploaded, ['x/b']);
