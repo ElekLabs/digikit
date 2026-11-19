@@ -254,15 +254,15 @@ warm `firmware.load`, `state.load`, first run of our runtime).
 
 A content module (a machine, an effect, an LFO shape, a code-only module) is reloaded without a boot: the new `.dkm` is uploaded to the path of the old one and the runtime's
 `RELOAD` command (0x06, capability bit `RELOAD`) swaps it (docs/plans/extension-model.md E5). The reply only says the job is queued; `RELOAD_STATE` (0x07) gives `phase` (1 running, 2
-finished), `result` (0 is ok) and `step`. Clients: `DkSession.reloadAndWait(path)` (TypeScript), `Uploader.reload_and_wait(path, step)` (`tools/device/dkupload.py`),
+finished), `result` (0 is ok), `step` and `unloaded` (1: the old module was torn down, so a result other than 0 means it is not loaded; 0: a refusal or an abort left it running). The command itself answers `E_NOT_FOUND` for a path no loaded content module came from and `E_FORMAT` for a service file. Clients: `DkSession.reloadAndWait(path)` (TypeScript, `{ result, unloaded }`), `Uploader.reload_and_wait(path, step)` (`tools/device/dkupload.py`, `(result, unloaded)`),
 `wb transfer reload PATH...` and `wb transfer install ID... --reload` (the install, then a reload of each loaded module; a module that is not loaded or whose reload is refused goes
-through the select and restart as before), and `dk:dev` with `--store` (a preview module that is loaded already is reloaded; a refusal falls back to the restart).
+through the select and restart as before), and `dk:dev` with `--store` (a preview module that is loaded already is reloaded; a refusal or a failed reload falls back to the restart).
 
-The runtime refuses a reload, with the old module untouched, in this order: `E_SAFE_MODE`, the transport playing or paused or unreadable (`E_RELOAD_PLAYING`), `E_CARD_BUSY`, a module
+The runtime refuses a reload, with the old module untouched, in this order: `E_SAFE_MODE`, the transport playing or paused or unreadable (`E_RELOAD_PLAYING`), an open upload (`E_STATE`), `E_CARD_BUSY`, a module
 that built menus of its own (`E_RELOAD_MENUS`), a module whose service refuses (`E_RELOAD_ROUTED`: an effect module with a published effect row; E5 has no effect teardown),
 then the file itself (any load check; another module name is `E_FORMAT`; a dropped key is `E_RELOAD_KEYS`; a plan failure over the live set is the plan's code, `E_MISSING` for a service
-that is not loaded). While it runs the module's commands answer `E_BUSY`. A job that does not end in about 4 s gives the old module its tick and commands back; after `fini` the module
-is gone and the job ends with `E_BUSY`. Every job, whatever its result, rebuilds the machine list and frees the placeholder rows. A silent window (the machine's voice row is a
+that is not loaded). While it runs the module's commands answer `E_BUSY`. A drain that does not end in about 4 s (or 1800 UI passes) gives the old module its tick and commands back; after `fini` the module
+is not loaded and the job ends with `E_BUSY`; a DSP part that does not end is cancelled and the job ends with `E_DSP_XFER`. A reload that fails after the old module was torn down leaves it not loaded, as a plain unload does. Every job that got past the checks, whatever its result, rebuilds the machine list, writes gap rows for the machines that did not come back and frees the placeholder rows. A silent window (the machine's voice row is a
 placeholder, the machine row reads MISSING) lasts from the teardown to the new row.
 
 Device tests: `modules/core/runtime/tests/reload.device.test.ts` (reload of a code-only module, of a machine with a note held, the refusal while the transport plays, and the soak:

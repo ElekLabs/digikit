@@ -655,14 +655,18 @@ What:
 9. Machine list rebuild after every reload, unconditional (the archive's behaviour, proven on the emulator only). The firmware builds the machine selection
    view's item list once and keeps it. `core/dynreg` has the view hook again (`dynreg_view_hook`, hook `cf.machine.hook.view.build` on the function
    `cf.machine.fn.view.build`, declared in `devices/fw/machine.toml` with the archived hash on DT2 1.17 and DN2 1.12): it stores the view in `dynreg_view`, and
-   words 48 and 49 of `dynreg_info` (`dynreg::w::VIEW_VAR`, `VIEW_BUILD`) hold that variable and the builder. The machines service implements
-   `Service::on_loaded`: when `CoreApi::reload_phase()` is not 0 (new; the reload job sets it from the check of the new file until the DSP rows are in place) it calls
-   the builder with the stored view (`refresh_view`; nothing while the view does not exist). A module with no DSP calls `on_loaded` itself at the end of the reload.
-   The machines service writes the machine rows in `apply_record`, as at the boot: the placeholder voice row of item 7 keeps the type silent until the module's row is
-   published, so the window needs no later row write. The job rebuilds the list at the end of every reload, success or failure (after a failed load the cached list
-   would keep a stale entry): `on_loaded` of a module with DSP, and the job itself for the rest and for a failed load. The stored view pointer is the risk of this step; the
-   device gate proves it (archive: emulator only). Counters
-   `unloads` and `reloads` at the end of `DkrtBootInfo` make open lists re-read (`unloads` counts every module teardown; `reloads` is counted by the job).
+   words 48 and 49 of `dynreg_info` (`dynreg::w::VIEW_VAR`, `VIEW_BUILD`) hold that variable and the builder. The machines service rebuilds the list in
+   `Service::reload_done`, which the job calls at the end of every reload that got past the checks, success or failure (after a failed load the cached list would keep
+   an entry the rows no longer have): it calls the builder with the stored view (`refresh_view`; nothing while the view does not exist). The machines service writes the machine
+   rows in `apply_record`, as at the boot: the placeholder voice row of item 7 keeps the type silent until the module's row is published, so the window needs no later row write.
+   A module with no DSP gets `on_loaded` from the job. The stored view pointer is the risk of this step; the device gate proves it (archive: emulator only). Counters
+   `unloads` and `reloads` at the end of `DkrtBootInfo` make open lists re-read (`unloads` counts every module teardown; the job counts `reloads` for every reload that loaded the
+   new file or tore the old one down).
+   End state of a reload that fails after the old module was torn down (the teardown does not end after `fini`, the load fails, the DSP part fails or does not end in time):
+   the module is not loaded, as after a plain unload. The boot record says FAILED with the code and `loaded` drops; the machine rows that read MISSING are written as gap rows
+   (a MISSING row with no voice row would play the first stock machine's sound); the placeholders are freed; the list is rebuilt; `RELOAD_STATE` carries `unloaded = 1`. A
+   DSP part that does not end in 4 s is cancelled through the DSP loader's own failure path (`Loader::cancel_dsp`), so no transfer outlives the job. Every wait also ends after
+   1800 UI passes, whatever the block clock does. A teardown that does not end after `fini` leaves the record held by the DSP loader (retained) until the next boot.
 10. `dk:dev` and the workbench use `CMD_RELOAD` for any content module; the emulator byte swap remains only for the runtime image and the UI
     layer (`core/ui`, `core/digikit-menu`). Document the command and its refusals in `docs/TESTING.md` "Fast iteration".
 
