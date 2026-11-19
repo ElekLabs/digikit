@@ -58,6 +58,8 @@ export const deviceTarget = (
     for (const id of rec.modules ?? []) {
       dependsOn.push(`${id}:pack`);
       if (opts.bindable?.has(id)) dependsOn.push(`${id}:bind`); // a service with hooks: the bound file the tests copy to the card
+      // the test fixture service takes the port file of the test image (it lists the fixture's hook, which a production port file does not)
+      if (id === 'test/svc-test' && !dependsOn.includes('patchkit:ports-test')) dependsOn.push('patchkit:ports-test');
     }
     if (Object.keys(rec.aliases ?? {}).length) dependsOn.push('pack-aliases');
     if (rec.plusdrive) dependsOn.push('plusdrive-format:cli');

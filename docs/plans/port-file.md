@@ -69,7 +69,9 @@ It stays in the runtime; the growth is accepted. Cuts that were measured or esti
 
 Who installs sites: the init of the port file builds the name table and the tails only. Each service's load installs its own hooks and takes the site facts from the port records. The one-owner rule of the planner and the install lifecycle do not change.
 
-`PROVIDER_MAX` is 6 (`sdk/sdk.toml:1862`). The service files today are lfo, machines, fx and samples, so the port provider makes 5, and the test fixture `svc-test` makes 6 at most: the limit holds and PR2 leaves it at 6. `SLOT_WORDS_MAX` (`loader/install.rs:53`) and the provider rows stay as they are. If a later service file or a test with more fixtures reaches 7, raise the limit then (+128 bytes of installer RAM for one more provider).
+`PROVIDER_MAX` is 8 (`provider_max` in `sdk/sdk.toml`; it was 6). The service files are lfo, machines, fx and samples, the port file makes 5, and the test fixture `svc-test` and its second copy in `providers.device.test.ts` make 7. The raise costs about 2.3 KiB of runtime RAM (`data` +1991, `bss` +370 bytes, from the search tables `Found`, the provider records, the claim rows of the DSP installer and `SLOT_WORDS_MAX`) and 426 bytes of text. A search that finds no slot for a need or for the port file sets `Found::truncated`, and the boot logs one `MOD_LOAD` provider event with `E_PLAN_FIT` ("(provider table full)"), so the user sees the cause and not a silent unmet need.
+
+A production port file lists no hook of the test fixture: the fixture's hook sits on the site of `core/digikit-menu`'s hook, and `port_check` compares every copied site with its check value, which a patched image changes. `patchkit port build --with-test-hooks` (Nx `patchkit:ports-test`, `dist/ports-test/`) builds the port file of the test image, which runs without digikit-menu; the assembly tests and `providers.device.test.ts` use it. A host test (`patchkit` unit test) checks that no copied site of a production port file lies on a site that an image module patches.
 
 `BIND_MAX` leaves with BIND: PR2 deletes `bind_max` in `[limits]` of `sdk/sdk.toml` (line 1863), the generated `BIND_MAX` (`packages/dkneeds/src/gen_limits.rs`, `packages/dk-session/src/gen_proto.ts`) and the runtime copy (`loader/role.rs`).
 
@@ -86,6 +88,8 @@ All use existing codes at MOD_LOAD. A name that the firmware lacks is not a refu
 | Full site table | `E_PLAN_FIT` |
 | Port file for another firmware | `E_HOOK_STOCK` |
 | Port file missing | the planner refuses the dependents |
+| Service file bound by an older patchkit (`BIND` or `FW` item) | skipped by the search and logged as a refused provider: `E_SVC_ABI` (a Rust service, which carries the ABI word that changed) or `E_FORMAT` (a C service, ABI word 0) |
+| Provider table full | `E_PLAN_FIT` in the provider log, with the unmet need left unmet |
 
 ## 8. Format and ABI
 

@@ -104,6 +104,7 @@ const SHARED_BUILT = [
   'dist/bytes/core-objects.sha256',
   'dist/modules/*/*.dkm',
   'dist/modules/*/*.dks',
+  'dist/ports-test/*.dkport',
   'dist/plusdrive/plusdrive',
   'apps/web/public/dksample.wasm',
 ];
@@ -234,6 +235,10 @@ export const deviceInputs = (
             dependentTasksOutputFiles: `dist/modules/*/${leaf}.${opts.services?.has(leaf) ? 'dks' : 'dkm'}`,
             transitive: true,
           })),
+          // the port file of the test image, for the fixture service
+          ...(recs.some((r) => (r.modules ?? []).includes('test/svc-test'))
+            ? [{ dependentTasksOutputFiles: 'dist/ports-test/*.dkport', transitive: true }]
+            : []),
           // tools the test runs directly
           ...(recs.some((r) => r.plusdrive)
             ? [{ dependentTasksOutputFiles: 'dist/plusdrive/plusdrive', transitive: true }]

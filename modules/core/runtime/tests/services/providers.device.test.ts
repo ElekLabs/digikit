@@ -15,7 +15,7 @@ import { entry, nameHash, patched, rehash } from '../refusal/dkm-patch.ts';
 /**
  * Providers (docs/plans/runtime-and-services.md section 13.2, R12-3; docs/plans/port-file.md): the selection [debug, svc-test-user] needs the service `svc-test`, which
  * is not the runtime's. The service names the firmware, so it needs the port file: the boot finds `ports/<device>-<version>.dkport` (built from committed data by
- * `patchkit:ports`, no firmware bytes in it) by its firmware identity, loads it first, then `services/svc-test.dks`, which takes the test hook `cf.menu.hook.settings_list.test`
+ * `patchkit:ports-test`, no firmware bytes in it) by its firmware identity, loads it first, then `services/svc-test.dks`, which takes the test hook `cf.menu.hook.settings_list.test`
  * (the last step of the SETTINGS list rebuild) after its `init`. The user calls `dk_svctest_ping` (42) and logs it, and logs how often the hook ran. The provider file is
  * the packed one. The image is `rt`: no core/ui and no core/digikit-menu, which hook the same site.
  *
@@ -45,7 +45,7 @@ const text = (words: number[]) =>
 interface Bound {
   /** The packed service file (it holds no firmware bytes). */
   file: string;
-  /** The port file of the firmware of the device (`patchkit:ports`). */
+  /** The port file of the test image for the firmware of the device (`patchkit:ports-test`). */
   port: string;
   /** The site of the hook on this firmware, from the port file. */
   site: number;
@@ -58,7 +58,8 @@ interface Bound {
 /** The packed `test/svc-test`, the port file of the device's firmware and the facts the test needs from them. */
 function bind(rig: CardRig): Bound {
   const file = moduleArtifact(rig.device, 'test/svc-test');
-  const port = path.join(repoRoot(), 'dist/ports', `${rig.device}-${FIRMWARE[rig.device]}.dkport`);
+  // the port file of the test image: it lists the fixture's hook, which a production port file does not (the site is digikit-menu's too)
+  const port = path.join(repoRoot(), 'dist/ports-test', `${rig.device}-${FIRMWARE[rig.device]}.dkport`);
   const svc = fs.readFileSync(file);
   const hooks = entry(svc, TAG_HOOKS);
   expect(hooks.count, 'the service takes its one hook').toBe(1);

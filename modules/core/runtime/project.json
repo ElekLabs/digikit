@@ -55,7 +55,7 @@
         "{workspaceRoot}/tools/nx/device-images.mjs",
         { "dependentTasksOutputFiles": "dist/modules/*/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/svc-bound/*/*", "transitive": false },
-        { "dependentTasksOutputFiles": "dist/ports/*", "transitive": false },
+        { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/bytes/images/*/*.info", "transitive": false },
         "{workspaceRoot}/firmware/Digitakt_II_OS1.17.syx",
         "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx"
@@ -77,7 +77,7 @@
         "core/services/samples:bind",
         "core/services/lfo:bind",
         "test/svc-test:bind",
-        "patchkit:ports",
+        "patchkit:ports-test",
         "patchkit:device-images"
       ],
       "outputs": [],

@@ -83,7 +83,7 @@ fn bound_file(dev: Dev, leaf: &str) -> Option<Vec<u8>> {
     std::fs::read(repo().join(format!("dist/svc-bound/{}/{leaf}.dks", dev.name))).ok()
 }
 
-/// The port file of the device's firmware as the card holds it.
+/// The port file of the test image for the device's firmware, as the card holds it: the production port file and the hooks of the fixture service `test/svc-test`.
 fn port_file(dev: Dev) -> Vec<u8> {
     read(&repo().join(format!("dist/ports/{}.dkport", dev.port())), "pnpm nx:pilot run patchkit:ports")
 }
