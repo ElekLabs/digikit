@@ -1055,6 +1055,22 @@ mod tests {
     }
 
     /// The wire mapping of the live commands (`admin_cmds`): the queue's refusal is the reply status, and `RELOAD_STATE` carries phase, result, step, torn and op of the job as bytes.
+    /// The end of a job counts in `DkrtBootInfo.reloads` when the module set changed: a finished job (`ok`) or one that tore a module down (`changed`), not a refusal.
+    #[test]
+    fn a_job_that_changed_the_module_set_counts_one_reload_and_a_refusal_counts_none() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let n = || crate::boot::info().reloads;
+            let start = n();
+            RealOps.finish(false, false);
+            assert_eq!(n(), start);
+            RealOps.finish(true, false);
+            assert_eq!(n(), start.wrapping_add(1));
+            RealOps.finish(false, true);
+            assert_eq!(n(), start.wrapping_add(2));
+        }
+    }
+
     #[test]
     fn the_live_commands_answer_with_the_jobs_refusal_and_state_in_the_reload_state_body() {
         use crate::admin_cmds::{cmd_load, cmd_reload, cmd_reload_state, cmd_unload};
