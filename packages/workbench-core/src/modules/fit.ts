@@ -108,10 +108,12 @@ export function keyWarnings(
   try {
     const own = keysCheck(bytes, old);
     if (own.repeat) out.push(`${name} has the ${keyText(own.repeat)} twice`);
-    if (own.missing) out.push(`${name} lacks the ${keyText(own.missing)} of the version on the card: a reload is refused`);
+    if (own.missing)
+      out.push(`${name} lacks the ${keyText(own.missing)} of the version on the card: a reload is refused`);
     for (const o of others) {
       const r = keysCheck(bytes, o.bytes);
-      if (r.shared) out.push(`${name} and ${o.name} both have the ${keyText(r.shared)}: the second is refused at the next boot`);
+      if (r.shared)
+        out.push(`${name} and ${o.name} both have the ${keyText(r.shared)}: the second is refused at the next boot`);
     }
   } catch {
     // not a module this reader understands: the device says so

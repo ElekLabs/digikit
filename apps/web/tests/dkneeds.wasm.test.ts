@@ -99,26 +99,29 @@ test.skipIf(!existsSync(wasmPath))(
   },
 );
 
-test.skipIf(!existsSync(wasmPath))('the key check names a shared key, a dropped key and a repeated key of packed modules', async () => {
-  const work = workDir('dkkeys-');
-  const reader = await DkNeeds.create(readBytes(wasmPath));
-  const pack = (id: string) => {
-    const path = join(work, `${id.replace('/', '-')}.dkm`);
-    patchkit('pack', id, '--device', 'dt2', '-o', path);
-    return new Uint8Array(readFileSync(path));
-  };
-  const sine = pack('test/sine');
-  const demo = pack('test/dyn-demo');
-  // a file against itself: every key is shared, none is missing, none is repeated
-  const same = reader.keys(sine, sine);
-  assert.equal(same.repeat, null);
-  assert.ok(same.shared, 'the same keys are shared');
-  assert.equal(same.missing, null);
-  // another module: no key is shared, and the old version (`other`) has keys the new file lacks
-  const apart = reader.keys(demo, sine);
-  assert.equal(apart.shared, null);
-  assert.ok(apart.missing, 'the keys of test/sine are not in test/dyn-demo');
-  // no other file: only the repeat is asked
-  assert.deepEqual(reader.keys(sine), { repeat: null, shared: null, missing: null });
-  assert.throws(() => reader.keys(new Uint8Array(200)), /magic/);
-});
+test.skipIf(!existsSync(wasmPath))(
+  'the key check names a shared key, a dropped key and a repeated key of packed modules',
+  async () => {
+    const work = workDir('dkkeys-');
+    const reader = await DkNeeds.create(readBytes(wasmPath));
+    const pack = (id: string) => {
+      const path = join(work, `${id.replace('/', '-')}.dkm`);
+      patchkit('pack', id, '--device', 'dt2', '-o', path);
+      return new Uint8Array(readFileSync(path));
+    };
+    const sine = pack('test/sine');
+    const demo = pack('test/dyn-demo');
+    // a file against itself: every key is shared, none is missing, none is repeated
+    const same = reader.keys(sine, sine);
+    assert.equal(same.repeat, null);
+    assert.ok(same.shared, 'the same keys are shared');
+    assert.equal(same.missing, null);
+    // another module: no key is shared, and the old version (`other`) has keys the new file lacks
+    const apart = reader.keys(demo, sine);
+    assert.equal(apart.shared, null);
+    assert.ok(apart.missing, 'the keys of test/sine are not in test/dyn-demo');
+    // no other file: only the repeat is asked
+    assert.deepEqual(reader.keys(sine), { repeat: null, shared: null, missing: null });
+    assert.throws(() => reader.keys(new Uint8Array(200)), /magic/);
+  },
+);

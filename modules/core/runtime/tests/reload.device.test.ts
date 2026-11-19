@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { waitClock } from '@digi/test-support';
@@ -7,6 +8,7 @@ import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { captureNote, frames, pickSine, readFloatWav, runFrames, word } from '@digi/regression/runtime/fx-live.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
+import { packModuleVariant, SINE_OCTAVE_UP } from '@digi/regression/runtime/module-variant.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
@@ -27,7 +29,10 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  *   The machine type keeps its number and its voice row.
  * - (c) the reload is refused while the transport plays (`E_RELOAD_PLAYING`, the old module is live and the counter did not move) and goes through after STOP.
  * - the soak: the reload of the machine, 5 cycles in the gate and 20 in the full tier (`DIGIKIT_TIER=full`), with the same checks each cycle and the capacity counts
- *   unchanged. The pitch switch of the plan's soak (two builds of `test/sine` that differ in one constant) needs a build helper and is not written yet.
+ *   unchanged.
+ * - the pitch soak (docs/plans/extension-model.md E5b item 8): two builds of `test/sine` with the same module id and keys that differ in one constant (`packModuleVariant`: the DSP
+ *   phase increment, one octave), put on the card alternately and reloaded with a note held, 5 cycles in the gate and 20 in the full tier. Each cycle: the checks of every reload, then the
+ *   pitch of a new note after the swap is that of the build just loaded (220 Hz or 440 Hz, within 2%), so a reload that kept the old DSP image would fail it.
  *
  * Run only with the go of the owner (docs/plans/extension-model.md, "Device proof").
  */
@@ -242,5 +247,83 @@ async function expectReloadSoak(rt: TestRuntime): Promise<void> {
   record(artifacts, 'soak', { cycles: SOAK_CYCLES, capacity: await rt.dk.capacity() });
 }
 
+/** Upward zero crossings of the left channel (every second sample of the interleaved stereo PCM) of `xs[from..to)`: the frequency between the first and the last. */
+function leftHz(xs: Float32Array, from: number, to: number, rate = 48_000): number {
+  const at: number[] = [];
+  let prev = xs[from]!;
+  for (let i = from + 2; i < to; i += 2) {
+    if (prev < 0 && xs[i]! >= 0) at.push((i - from) / 2);
+    prev = xs[i]!;
+  }
+  if (at.length < 3) throw new Error(`fewer than two periods in ${(to - from) / 2} samples`);
+  return (rate * (at.length - 1)) / (at.at(-1)! - at[0]!);
+}
+
+async function expectReloadPitchSoak(rt: TestRuntime): Promise<void> {
+  const artifacts = liveArtifacts(rt.session, 'reload-pitch-soak');
+  const device = rt.session.options.device as 'dt2' | 'dn2';
+  const build = (name: string, edits: Parameters<typeof packModuleVariant>[0]['edits']) =>
+    packModuleVariant({ moduleDir: 'tests/fixtures/modules/sine', id: 'test/sine', device, edits, out: path.join(artifacts, `${name}.dkm`) });
+  // both builds go through the same pack, so the only difference is the constant
+  const builds = [fs.readFileSync(await build('sine-base', [])), fs.readFileSync(await build('sine-octave', [SINE_OCTAVE_UP]))];
+  await cliInstall(rt.session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
+  const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'dynreg_info']);
+  const epoch = await epochOf(rt);
+  const start = await rt.dk.capacity();
+  const sine = (await moduleRows(rt)).find((m) => m.name === 'test/sine')!;
+  await pickSine(rt);
+  const amp = AMP_CC[device];
+  await sendCc(rt, MIDI_CHANNEL, amp.hold, 127);
+  await sendCc(rt, MIDI_CHANNEL, amp.decay, 64);
+  for (const cc of SEND_CC[device]) await sendCc(rt, MIDI_CHANNEL, cc, 0);
+  const length = CAPTURE_BLOCKS;
+  const hzOf = [220, 440]; // NOTE 57 = A3, then an octave up
+  const seen: number[] = [];
+  for (let cycle = 0; cycle < SOAK_CYCLES; cycle++) {
+    // the card holds the build of this cycle; the build that runs is the other one (the first cycle: the packed fixture, which is the base build)
+    const which = (cycle + 1) % 2; // 1 (octave) first, then 0 (base), ...
+    await rt.dk.put(MODULE_PATH, builds[which]!);
+    const file = path.join(artifacts, `cycle-${cycle}.wav`);
+    const trigger = (await frames(rt.session)) + 300;
+    const mark = { end: 0 };
+    await captureNote(rt.session, {
+      file,
+      trigger,
+      tag: `pitch soak ${cycle}`,
+      length,
+      noPress: true,
+      during: async () => {
+        await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
+        await waitClock(rt.clock, 400);
+        const counter = await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS);
+        const end = await rt.dk.reloadAndWait(MODULE_PATH);
+        mark.end = (await frames(rt.session)) - trigger;
+        expect(end, `soak cycle ${cycle}: the reload`).toEqual({ result: 0, unloaded: true });
+        await expectReloadLeftNothing(rt, plan, `soak cycle ${cycle}`, epoch, counter);
+        await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+        await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
+      },
+    });
+    const pcm = readFloatWav(file);
+    const perBlock = pcm.length / length;
+    const from = Math.floor((mark.end + 150) * perBlock);
+    const to = Math.floor((mark.end + 150 + 400) * perBlock);
+    expect(to, `soak cycle ${cycle}: the recording holds the note after the swap (swap ended at block ${mark.end} of ${length})`).toBeLessThanOrEqual(pcm.length);
+    const hz = leftHz(pcm, from - (from % 2), to);
+    seen.push(hz);
+    expect(Math.abs(hz / hzOf[which]! - 1), `soak cycle ${cycle}: the pitch after the swap is ${hz.toFixed(1)} Hz, the build just loaded plays ${hzOf[which]} Hz`).toBeLessThan(0.02);
+    const m = (await moduleRows(rt)).find((x) => x.name === 'test/sine')!;
+    expect(m.types, `cycle ${cycle}: the machine type moved`).toEqual(sine.types);
+    expect(m.rows, `cycle ${cycle}: the voice row moved`).toBe(sine.rows);
+    expect(m.faults, `cycle ${cycle}: the guard counted a fault`).toBe(0);
+    const cap = await rt.dk.capacity();
+    for (const kind of ['MODULES', 'MACHINE_ROWS', 'VOICE_ROWS', 'PARAM_ROWS', 'DSP_AREA', 'ARENA']) {
+      expect(cap[kind]?.used, `cycle ${cycle}: ${kind} in use grew`).toBe(start[kind]?.used);
+    }
+  }
+  record(artifacts, 'pitch-soak', { cycles: SOAK_CYCLES, hz: seen, capacity: await rt.dk.capacity() });
+}
+
 runtimeTests('RELOAD swaps a code-only module and a machine without a boot, and refuses while the transport plays', expectReloadLive, { dsp: 'sharc' });
 runtimeTests('RELOAD of a machine leaves no row, record or byte behind over many cycles', expectReloadSoak, { dsp: 'sharc' });
+runtimeTests('RELOAD between two builds of a machine that differ in one constant plays the pitch of the build just loaded, cycle after cycle', expectReloadPitchSoak, { dsp: 'sharc' });

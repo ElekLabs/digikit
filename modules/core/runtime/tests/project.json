@@ -16,6 +16,28 @@
         ]
       },
       {
+        "files": ["reload-fx.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "C:dsp", "A:core/fx"],
+        "modules": ["digikit/debug", "test/sine", "test/dyn-fx-gain", "test/dyn-fx-gain-send", "core/services/machines", "core/services/fx"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts",
+          "tools/patchkit/pk_digikit_fxroutes.py"
+        ]
+      },
+      {
+        "files": ["reload-project.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "C:dsp", "C:storage", "S:machines"],
+        "modules": ["test/sine", "core/services/machines"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts"
+        ]
+      },
+      {
         "files": ["live.device.test.ts"],
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "S:machines"],
