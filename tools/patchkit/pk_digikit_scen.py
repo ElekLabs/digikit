@@ -824,6 +824,17 @@ def run_menu(c: Ctx) -> None:
         t.get("dkrun")
     )  # the selection and the restart come from `tools.device.dkrun` (SELECT, RESTART)
     assert dkrun, "the menu kind needs dkrun in its table"
+    # the services the set needs are files of the card (`services/<name>.dks`, bound to the stock firmware), put there as the device tests do
+    from tools.patchkit import pk_services
+
+    for svc in pk_services.bound_services(
+        c.device,
+        c.work / "svc-bound",
+        files=[c.env.folder / "digikit" / p for p in files.values()],
+    ):
+        to = c.env.folder / "digikit" / svc["store_path"]
+        to.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(svc["bound_path"], to)
     blobs = {}
     for path in files.values():  # the store is filled over USB SysEx, not by the card build: take the packed files out of the folder
         f = c.env.folder / "digikit" / path
