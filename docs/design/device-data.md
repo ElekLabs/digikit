@@ -33,6 +33,10 @@ What a device file contains decides what the tools do with the device:
 written; a section may have a role and be read-only, but `main` may not be read-only. `repack` lists roles of read-only sections that a module may store packed
 when it declares that it unpacks them (`[[repack]]` of its `module.toml`, [PATCHING.md](../PATCHING.md) "Repacking a read-only section"); each must be a role with a read-only section. `devdata.rs` `validate` checks that
 the capabilities agree with the other tables (for example `dsp = "none"` forbids a `[[firmware]].dsp` image and `container.dsp`).
+`[patch] main_dest`, `main_stage`, `main_margin_min`, `boot_load`: where the bootstrap unpacks MAIN OS to (`main_dest`, 0x40000400), where it first stages the packed MAIN (`main_stage`: 0x40400000
+on the Digitakt II and Digitone II, 0x40200000 on the Syntakt), the least in-place margin an image may have there (`main_margin_min`, bytes of unread stream ahead of the output, default 8192) and the
+address the bootstrap is loaded at (`boot_load`, used by `tools/firmware/aplib_check.py`). patchkit stores MAIN with a literal tail when needed and refuses an image below the floor (finding 151).
+`main_staged_max` is a different bound: the decoded MAIN may not reach the next 4 MiB boundary.
 `[patch] site_flash` (boolean, default true when absent): whether the public site (apps/web) may offer a patched image of the device. With `false` the site's Firmware page
 refuses to prepare one ("restore stock" still works) and only the desktop workbench flashes it. `@digi/devices` reads it as `DeviceRecord.siteFlash`; the Firmware page's
 environment (`FirmwareEnv.publicSite`, set by the site only) decides whether the flag applies, so no code names a device. patchkit ignores the key.

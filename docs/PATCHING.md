@@ -579,6 +579,19 @@ prove that the constants in MAIN's hook (the adapter's C code) match the record:
 ([README](../modules/core/adapters/peer-image/README.md), [finding 150](findings/150-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
 32,672 bytes over `container_max`; with it the container is 2,011,488 bytes.
 
+### The bootstrap's in-place unpack of MAIN
+
+The bootstrap stages the packed MAIN OS (section 3) at the device's stage (`[patch] main_stage`: 0x40400000 on the Digitakt II and Digitone II, 0x40200000 on the Syntakt) and unpacks it
+from `main_dest` over its own staged stream, with no bounds check ([finding 151](findings/151-syntakt-bootstrap-main-stage.md)). If the output passes the unread part of the stream, the
+decoder runs away before MAIN starts and the unit stays at its logo. The **in-place margin** is the least, over the stream, of the bytes consumed minus the output written past the stage
+(`aplib::inplace_margin`; `tools.firmware.aplibpack.inplace_margin` is the reference).
+
+- `apply` packs MAIN with `aplib::pack_section_in_place`: the plain stream when its margin is at least `[patch] main_margin_min` (default 8 KiB) or the output never reaches the stage (the Digitakt II and
+  Digitone II images are byte for byte as before), otherwise the same optimal path with the shortest tail written as literals that reaches the floor (the bootstrap reads them like any token). When the tail
+  and the container cap cannot both be met, `apply` refuses and says how much the tail costs: trim the runtime or move it out of MAIN.
+- `verify` (with and without a library), `preflight`, `flash` and the workbench path refuse a stored MAIN stream below the floor.
+- They print the budget: `bootstrap margin 8.0 KB, container 23.3 KB free` (`bootstrap margin: the unpack stays below the stage ...` when the output never reaches it).
+
 ### Codec and safety rules
 
 - The codec reproduces all four stock images byte for byte (framing, 8-in-7 coding, packet checksums, content
