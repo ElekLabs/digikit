@@ -9092,7 +9092,7 @@
    "addend": 0,
    "offset": 128,
    "section": ".text._RNvNtNtCs7sxP7D8NSdT_4dkrt7storage5store13load_to_stage",
-   "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store12read_sectors",
+   "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9read_span",
    "type": "cf.32"
   },
   {
@@ -40114,6 +40114,13 @@
   },
   {
    "addend": 0,
+   "offset": 44,
+   "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9read_span",
+   "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store12read_sectors",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 70,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9table_crc",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store12read_sectors",
@@ -48705,6 +48712,13 @@
   },
   {
    "align": 2,
+   "hex": "4fefffd848d73cfc2a2f002c2c2f0030246f0034282f0038266f003c2e2f00404a84674842823a7c008049f900000000602a20027209e3a8220792802f01487308002f03487228002f062f054e944fef00184a806618d483b4846412260496820c830000008063ca260d60c642804cd73cfc4fef00284e75",
+   "kind": "text",
+   "name": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9read_span",
+   "size": 120
+  },
+  {
+   "align": 2,
    "hex": "4fefffcc48d77cfc2f480030266f003c286f0040282f00442a2f00482e2f004c4a84672e2c077009e0ae66027c010c860000008063062c3c0000008076ff95ca2f46002c4bf9000000004df900000000605076ff46834240206f003030802143000220084cd77cfc4fef00344e752f072f052f024874a8002f0b2f2f004c4e954fef00184a80662820027209e3a82f002f052f034e964fef000c2600d5c2b5c464b22404948abc8264c4242f002c60be2600700160a2",
    "kind": "text",
    "name": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9table_crc",
@@ -49299,7 +49313,7 @@
    "size": 24
   }
  ],
- "source_sha256": "e7ddc4194d8ced84c77a8d17c72c6241490d08c6e45542b8e62d8280a0fd0cae",
+ "source_sha256": "e93050bdd1555e6482b92ec7a95cad39eac3ba4bb1ea11ec62a7e1393621f8a0",
  "symbols": [
   {
    "global": false,
@@ -55729,6 +55743,12 @@
   },
   {
    "global": false,
+   "name": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9read_span",
+   "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9read_span",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk8settings10module_key",
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk8settings10module_key",
    "value": 0
@@ -56780,8 +56800,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MENU_OBJS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_live dkrt_live_state dkrt_load dkrt_menu_built dkrt_menu_release dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
-  "instructions_redecoded": "61350",
-  "isa_check": "27caa33ebb4a24082151ca2488b748dadd833302dc2663fbba43547f15ffff3a",
+  "instructions_redecoded": "61392",
+  "isa_check": "a32802e65670135996047c59af397154049ed2e4c71bb33123d1fa8b09e9eddf",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

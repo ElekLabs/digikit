@@ -138,7 +138,7 @@ pub unsafe fn load_to_stage(f: &File) -> i32 {
     if !super::lock::acquire() {
         return E_BUSY;
     }
-    let r = store::read_sectors(&reader(), &layout(), f.first, sectors, buf, STAGE_BYTES);
+    let r = store::read_span(&reader(), &layout(), f.first, sectors, buf, STAGE_BYTES);
     super::lock::unlock();
     if r != OK {
         return r;

@@ -28,10 +28,43 @@ static READS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new
 
 unsafe extern "C" fn rd(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
     READS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    assert!(bytes <= 0x10000, "a card read over 64 KiB: {bytes}");
     let c = CARD.lock().unwrap();
     let at = (sector - FIRST) as usize * 512;
     core::ptr::copy_nonoverlapping(c.as_ptr().add(at), buf, bytes as usize);
     0
+}
+
+#[test]
+fn read_span_splits_a_long_file_into_firmware_sized_reads() {
+    let _g = lock();
+    fresh();
+    let count = 2 * MAX_IO_SECTORS + 3;
+    let at = 10usize;
+    {
+        let mut c = CARD.lock().unwrap();
+        for i in 0..count as usize * 512 {
+            c[at * 512 + i] = (i / 512 + i) as u8;
+        }
+    }
+    let mut buf = std::vec![0u8; count as usize * 512 + 16];
+    let off = buf.as_ptr().align_offset(16);
+    let p = unsafe { buf.as_mut_ptr().add(off) };
+    let cap = count as usize * 512;
+    // one call over the firmware limit is refused; the span reads it in pieces
+    assert_eq!(
+        unsafe { read_sectors(&IO, &LAY, at as u32, count, p, cap) },
+        E_BAD_STORE
+    );
+    assert_eq!(
+        unsafe { read_span(&IO, &LAY, at as u32, count, p, cap) },
+        OK
+    );
+    let got = unsafe { core::slice::from_raw_parts(p, cap) };
+    assert!(got
+        .iter()
+        .enumerate()
+        .all(|(i, b)| *b == (i / 512 + i) as u8));
 }
 
 unsafe extern "C" fn wr(sector: u32, bytes: u32, buf: *mut u8) -> i32 {

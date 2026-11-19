@@ -202,6 +202,35 @@ pub unsafe fn read_sectors(
     OK
 }
 
+/// Read `count` contiguous sectors starting `rel` sectors into the store, in calls of at most `MAX_IO_SECTORS`; `cap` is the size of `buf` in bytes.
+/// Returns the first result that is not `OK`.
+pub unsafe fn read_span(
+    io: &Io,
+    lay: &Layout,
+    rel: u32,
+    count: u32,
+    buf: *mut u8,
+    cap: usize,
+) -> i32 {
+    let mut done = 0;
+    while done < count {
+        let n = core::cmp::min(count - done, MAX_IO_SECTORS);
+        let r = read_sectors(
+            io,
+            lay,
+            rel + done,
+            n,
+            buf.add(done as usize * 512),
+            cap - done as usize * 512,
+        );
+        if r != OK {
+            return r;
+        }
+        done += n;
+    }
+    OK
+}
+
 /// The store sector where `count` sectors of a file start, `sector` sectors into it (`first` and `size` are the file's table entry). The
 /// range must lie inside the file rounded up to whole sectors, and `count` is 1 to `MAX_IO_SECTORS`: `E_RANGE` otherwise. A file's sectors
 /// are contiguous.
@@ -700,21 +729,9 @@ pub unsafe fn snapshot<F: FnMut(&[u8]) -> [u8; 32]>(
             }
             // Bounded reads even when the caller permits a file larger than one
             // firmware block read. Nothing retains a table extent after return.
-            let mut done = 0;
-            while done < sectors {
-                let count = core::cmp::min(sectors - done, MAX_IO_SECTORS);
-                let r = read_sectors(
-                    io,
-                    lay,
-                    entry.first + done,
-                    count,
-                    dst.add(done as usize * 512),
-                    dst_cap - done as usize * 512,
-                );
-                if r != OK {
-                    return Err(r);
-                }
-                done += count;
+            let r = read_span(io, lay, entry.first, sectors, dst, dst_cap);
+            if r != OK {
+                return Err(r);
             }
             if hash(core::slice::from_raw_parts(dst, entry.size as usize)) != entry.sha {
                 return Err(crate::E_SHA);
