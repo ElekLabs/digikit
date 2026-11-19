@@ -30,7 +30,7 @@ cpu = "cf"
 sig = "u32 (u32 key)"
 rule = { kind = "cf_func", hash = "1ffd7e389bfa418309caabcfbe980b9f", offset = 0x0, len = 4 }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/runtime", "core/services/machines"]
 doc = "Key state by logical key index: 1 while the key is held, else 0. The stock parameter page tests 0x10, 0x11 and 0x16 (turn modes that change what a parameter write does). DT2 0x4011e150, DN2 0x4011fac4."
 
 [[site]]

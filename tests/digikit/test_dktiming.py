@@ -20,7 +20,7 @@ def _ok_reply(msg: bytes) -> bytes:
     ):  # an INFO with the capability bits (the file hash among them), as the runtime sends them
         body += (
             struct.pack(">HH", 1, 0x300)
-            + b"p\0"
+            + b"p\0\0\0"  # the id sits in a 4-byte field
             + struct.pack(">IIB", 100, 32768, 0)
             + bytes(8)
         )

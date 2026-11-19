@@ -87,6 +87,28 @@ pub struct Hook {
     /// `regs.clobbers` of the declaration (devices/fw), as written: registers or ranges like `d0-d1`. A guarded stub's scratch register is one of them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub clobbers: Vec<String>,
+    /// The site facts of a hook that a service uses (`devices/fw` `users`), written by `port_resolve` from the local firmware (`patchkit port-facts`); a hook of
+    /// no service has none. No firmware bytes: a length, a kind and a truncated hash. `len` is the bytes of the displaced whole instructions (at least 6, the jump).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub len: Option<u32>,
+    /// `raw` (the service redoes the instructions), `tail` (`tail = true` of the declaration) or `stock` (`stock = true`): the last two copy the displaced bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// The first 8 bytes of the sha256 of the displaced bytes, as 16 hex digits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<String>,
+    /// Reserved: re-encodings that the displaced bytes need to run elsewhere (a PC-relative operand). Empty today; the port build refuses any.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixups: Vec<Fixup>,
+}
+
+/// One fixup of a copied site (reserved).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Fixup {
+    /// Byte offset in the displaced bytes.
+    pub at: u32,
+    /// The form to re-encode (for example `pcrel16_to_abs32`).
+    pub form: String,
 }
 
 impl Port {

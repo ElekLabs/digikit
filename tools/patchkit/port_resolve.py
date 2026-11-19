@@ -89,7 +89,10 @@ from __future__ import annotations
 import argparse
 import functools
 import hashlib
+import json
+import os
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -892,7 +895,50 @@ def render(
         o.append(f'mode = "{h["mode"]}"')
         if h.get("clobbers"):
             o.append("clobbers = [" + ", ".join(f'"{c}"' for c in h["clobbers"]) + "]")
+        if "len" in h:
+            # site facts of a hook that a service uses (`patchkit port facts`): no bytes, a length, a kind and a truncated sha256
+            o += [
+                f"len = {h['len']}",
+                f'kind = "{h["kind"]}"',
+                f'check = "{h["check"]}"',
+            ]
     return "\n".join(o) + "\n"
+
+
+def patchkit_bin(root: Path) -> Path:
+    """The built patchkit (`pnpm nx:pilot run patchkit:cli`), or the one PATCHKIT_BIN names."""
+    p = Path(os.environ.get("PATCHKIT_BIN") or root / "dist" / "patchkit" / "patchkit")
+    if not p.is_file():
+        raise ResolveError(
+            f"{p} is missing: build patchkit first (pnpm nx:pilot run patchkit:cli) or set PATCHKIT_BIN"
+        )
+    return p
+
+
+def site_facts(syx: Path, root: Path, port_text: str) -> dict[str, dict]:
+    """hook name -> {len, kind, check} for the hooks of the port text that a service uses (devices/fw `users`), read from the image by
+    `patchkit port facts` (its ColdFire decoder gives the whole instructions the 6-byte jump covers)."""
+    r = subprocess.run(
+        [
+            str(patchkit_bin(root)),
+            "--root",
+            str(root),
+            "port",
+            "facts",
+            "--firmware",
+            str(syx),
+            "--port",
+            "-",
+        ],
+        input=port_text,
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        raise ResolveError(
+            f"patchkit port facts: {r.stderr.strip() or r.stdout.strip()}"
+        )
+    return json.loads(r.stdout)
 
 
 def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
@@ -1031,6 +1077,11 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
                 raise ResolveError(
                     f"{device}: [patch] {k} is missing, and the firmware has a DSP section"
                 )
+    # the site facts of the hooks that services use: the first text has none, `patchkit port facts` reads them from the image through it
+    facts = site_facts(syx, root, render(port, limits, regions, unique, hooks))
+    for h in hooks:
+        if h["name"] in facts:
+            h.update(facts[h["name"]])
     return f"{device}-{version}", render(port, limits, regions, unique, hooks)
 
 

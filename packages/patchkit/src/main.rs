@@ -56,6 +56,13 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   bind    IN.dks --firmware FW.syx -o OUT.dks [--addrmap IN.addrmap.json]   bind a packed service to the firmware: a trampoline and a BIND item for each hook it declares;
                                          prints the bound hooks as JSON (a hook the file lists for this device that the port lacks is an error); --addrmap writes the address map moved by the appended code to OUT.addrmap.json; OUT.dks holds firmware bytes: -o is refused in the source tree
                                          unless under dist/ or out/
+  port    facts --firmware FW.syx [--port FILE|-]   the site facts (len, kind, check) of the hooks that services use, as JSON; the port TOML on stdin or in FILE
+                                         (`tools/patchkit/port_resolve.py` calls it and writes them into devices/ports/*.toml)
+  port    build (--device SHORT --version V | --all) --out DIR   the port file DIR/<device>-<version>.dks (role 2) of each committed port (with --all, only of devices that a service targets), from devices/ports and
+                                         devices/fw only (no firmware); one JSON line each {port, file, bytes, sha256, names, sites}
+  port    check --firmware FW.syx [--names-only] SERVICE.dks...   one-time equivalence: the port file of this firmware says what `bind` does for each unbound
+                                         service (site, return, check value, kind, tail bytes, exits, names); with --names-only (no firmware) only that each
+                                         firmware name a service uses is in the port set of every committed port; exit 1 on a difference
   dkm-identity BEFORE_DIR AFTER_DIR      do two sets of .dkm (patchkit pack-all) differ only in the header table? (image, relocs, imports, DSP section compared)
   fit     --json -                       the fit rule (dkrt-fit): {caps, needs, empty?} on stdin -> {each, set, line}; exit 1 on a bad request
   records --json FILE|-                  the decoded records (counts, params, machines, pages, effects, and `problems`) of a committed record block
@@ -696,6 +703,8 @@ plan.json {}",
             }
             print!("{}", patchkit::bind::bind_json(&hooks));
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        "port" => port_cmd(&a.root, rest)?,
         "rebuild" => {
             let fw = Firmware::parse(&read(need(rest)?)?)?;
             let o = flag(rest, "-o").ok_or_else(|| Error(USAGE.into()))?;
@@ -1524,4 +1533,143 @@ uses = ["DEVICE_ID"]
         assert!(library_for_apply(&root.0, &[], vec!["test/selected".into()]).is_err());
         assert!(!cache_dir(&root.0).exists());
     }
+}
+
+/// `patchkit port facts|build|check`: the port file (docs/plans/port-file.md).
+#[cfg(not(target_arch = "wasm32"))]
+fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
+    use patchkit::portfile;
+    let sub = rest.first().map(String::as_str).unwrap_or("");
+    let texts = patchkit::fwgen::fw_texts(root)?;
+    let decls: Vec<&str> = texts.iter().map(String::as_str).collect();
+    match sub {
+        "facts" => {
+            let fw = read(&flag(rest, "--firmware").ok_or_else(|| Error(USAGE.into()))?)?;
+            let src = flag(rest, "--port").unwrap_or_else(|| "-".into());
+            let text = if src == "-" {
+                let mut t = String::new();
+                std::io::Read::read_to_string(&mut std::io::stdin(), &mut t)
+                    .map_err(|e| Error(format!("stdin: {e}")))?;
+                t
+            } else {
+                String::from_utf8_lossy(&read(&src)?).into_owned()
+            };
+            let mut o = serde_json::Map::new();
+            for f in portfile::site_facts(&fw, &text, &decls)? {
+                o.insert(
+                    f.hook,
+                    serde_json::json!({
+                        "len": f.len,
+                        "kind": match f.kind {
+                            portfile::SiteKind::Raw => "raw",
+                            portfile::SiteKind::Tail => "tail",
+                            portfile::SiteKind::Stock => "stock",
+                        },
+                        "check": patchkit::error::hex(&f.check),
+                    }),
+                );
+            }
+            println!("{}", serde_json::Value::Object(o));
+        }
+        "build" => {
+            let reg = registry(root)?;
+            let out = PathBuf::from(flag(rest, "--out").ok_or_else(|| Error(USAGE.into()))?);
+            let all = rest.iter().any(|x| x == "--all");
+            let (dev, ver) = (flag(rest, "--device"), flag(rest, "--version"));
+            if !all && (dev.is_none() || ver.is_none()) {
+                return Err(Error(USAGE.into()));
+            }
+            std::fs::create_dir_all(&out).map_err(|e| Error(format!("{}: {e}", out.display())))?;
+            for p in reg.ports.iter().filter(|p| {
+                all || (Some(&p.port.device) == dev.as_ref()
+                    && Some(&p.port.version) == ver.as_ref())
+            }) {
+                // with --all, a port of a device that no service targets gets no port file
+                if all && !portfile::targeted(p, &decls)? {
+                    eprintln!("{}: no service targets this device: no port file", p.id());
+                    continue;
+                }
+                let data = portfile::build_data(&reg, p, &decls)?;
+                let bytes = portfile::pack(&data)?;
+                let file = out.join(portfile::file_name(p));
+                std::fs::write(&file, &bytes)
+                    .map_err(|e| Error(format!("{}: {e}", file.display())))?;
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "port": p.id(), "file": file.display().to_string(), "bytes": bytes.len(),
+                        "sha256": patchkit::error::sha256_hex(&bytes),
+                        "names": data.names.len(), "sites": data.sites.len(),
+                    })
+                );
+            }
+        }
+        "check" => {
+            let reg = registry(root)?;
+            let names_only = rest.iter().any(|x| x == "--names-only");
+            let files: Vec<&String> = {
+                let mut v = vec![];
+                let mut it = rest.iter().skip(1);
+                while let Some(x) = it.next() {
+                    match x.as_str() {
+                        "--firmware" => {
+                            it.next();
+                        }
+                        "--names-only" => {}
+                        _ => v.push(x),
+                    }
+                }
+                v
+            };
+            if files.is_empty() {
+                return Err(Error(USAGE.into()));
+            }
+            let mut bad = 0;
+            if names_only {
+                for p in reg
+                    .ports
+                    .iter()
+                    .filter(|p| portfile::targeted(p, &decls).unwrap_or(false))
+                {
+                    let data = portfile::build_data(&reg, p, &decls)?;
+                    for f in &files {
+                        let d = patchkit::dkm::Dkm::parse(&read(f)?)?;
+                        for n in portfile::outside_set(&d, &data) {
+                            println!("{}: {f}: {n} is outside the port set", p.id());
+                            bad += 1;
+                        }
+                    }
+                }
+            } else {
+                let fwp = flag(rest, "--firmware").ok_or_else(|| Error(USAGE.into()))?;
+                let fw = read(&fwp)?;
+                let f = Firmware::parse(&fw)?;
+                let port = reg
+                    .find(&f.syx_sha256)
+                    .ok_or_else(|| Error(format!("no port for firmware {}", f.syx_sha256)))?;
+                let data = portfile::build_data(&reg, port, &decls)?;
+                // the file as it would be on the card must parse back to the same data
+                if portfile::parse(&portfile::pack(&data)?)? != data {
+                    return Err(Error("the port file does not read back to its data".into()));
+                }
+                for file in &files {
+                    let (diff, n) = portfile::equals_bind(&read(file)?, &fw, &reg, &decls, &data)?;
+                    println!(
+                        "{} {file}: {n} facts compared, {} difference(s)",
+                        port.id(),
+                        diff.len()
+                    );
+                    for d in &diff {
+                        println!("  {d}");
+                    }
+                    bad += diff.len();
+                }
+            }
+            if bad != 0 {
+                std::process::exit(1);
+            }
+        }
+        _ => return Err(Error(USAGE.into())),
+    }
+    Ok(())
 }

@@ -13,6 +13,9 @@ use std::collections::{BTreeMap, BTreeSet};
 /// The import names a `.dkm` links, sorted (the file is parsed and checked as the runtime does).
 pub fn linked_imports(file: &[u8]) -> Result<(String, Vec<String>)> {
     let d = Dkm::parse(file)?;
+    if d.role == crate::dkm::ROLE_PORT {
+        return Err(err!("{}: a port file is not a module or a service", d.name));
+    }
     let mut v = d.imports;
     v.sort();
     v.dedup();
