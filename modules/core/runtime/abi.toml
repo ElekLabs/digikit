@@ -691,7 +691,7 @@ doc = "Remove a function added with dkrt_poll_add; no effect when it is not in t
 [[fn]]
 name = "dkrt_menu_built"
 sig = "void dkrt_menu_built(usize code, usize data)"
-doc = "A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module: no effect."
+doc = "A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module (the firmware image, and the DIGIKIT menu, whose own menus count against no content module): no effect."
 
 [[fn]]
 name = "dkrt_store_stat"
