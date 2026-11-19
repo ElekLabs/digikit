@@ -3,9 +3,6 @@
   "name": "@digi/sharc-rig-kit",
   "implicitDependencies": ["sharc-rig"],
   "targets": {
-    "typecheck": {
-      "inputs": ["default", "{workspaceRoot}/sdk/tests/dsp/**/*", "jsToolchain"]
-    },
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
@@ -36,7 +33,9 @@
         "{workspaceRoot}/modules/core/adapters/dsp-voice/**/*",
         "{workspaceRoot}/modules/core/adapters/fx/**/*",
         "{workspaceRoot}/modules/core/adapters/machines/types.toml",
-        "{workspaceRoot}/sdk/**/*",
+        "{workspaceRoot}/sdk/dsp/**/*",
+        "{workspaceRoot}/sdk/sdk.toml",
+        "{workspaceRoot}/sdk/include/**/*",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/devices/cycle-factors.json",
         "{workspaceRoot}/tests/support/fx_effects.s",

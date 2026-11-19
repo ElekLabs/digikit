@@ -352,6 +352,53 @@ describe('sdk/dsp resonator bank on the rig', () => {
     expect(worstModel).toBeLessThan(2e-5); // measured 7.8e-6: the macros' errors (about 1e-6 on a coefficient)
   }, 120_000);
 
+  it('smooths a knob step by 1 - exp(-1/3) per block (2 ms at 1500 blocks per second)', async () => {
+    // derived here, not from the constants of rbank.inc: 48000 / 32 blocks per second, time constant 2 ms
+    const alpha = 1 - Math.exp(-1 / 1500 / 0.002);
+    const from = [0.1, 0.2, 0.3];
+    const to = [0.9, 0.8, 0.7];
+    const x = Array.from<number>({ length: BLOCK }).fill(0);
+    resetState(true);
+    await oneBlock(x, knobs(from as [number, number, number]));
+    const pw = (p: number): number => word(p) / 0x7f00;
+    const first = (await stateWords()).slice(1, 4).map((w) => w2f(w));
+    first.forEach((v, i) => expect(Math.abs(v - pw(from[i]!))).toBeLessThan(1e-6));
+    for (let n = 1; n <= 8; n++) {
+      await oneBlock(x, knobs(to as [number, number, number]));
+      const got = (await stateWords()).slice(1, 4).map((w) => w2f(w));
+      got.forEach((v, i) => {
+        const want = pw(to[i]!) - (pw(to[i]!) - pw(from[i]!)) * (1 - alpha) ** n;
+        expect(Math.abs(v - want), `knob ${i}, block ${n}`).toBeLessThan(2e-6);
+      });
+    }
+  });
+
+  it('maps FREQ, SPRD and Q to 20 Hz .. 5 kHz, 0 .. 2 octaves and Q 0.7 .. 50 at the knob extremes', async () => {
+    const x = Array.from<number>({ length: BLOCK }).fill(0);
+    const cases: { p: [number, number, number]; centres: number[]; q: number }[] = [
+      { p: [0, 0, 0], centres: Array.from<number>({ length: 8 }).fill(20), q: 0.7 },
+      { p: [1, 0, 1], centres: Array.from<number>({ length: 8 }).fill(5000), q: 50 },
+      { p: [0, 1, 0], centres: [20, 20, 20, 20, 40, 160, 640, 2560], q: 0.7 },
+      { p: [1, 1, 1], centres: [5000 / 128, 5000 / 32, 5000 / 8, 5000 / 2, 10000, 40000, 160000, 640000].map((c) => Math.min(Math.max(c, 20), 21600)), q: 50 },
+    ];
+    for (const { p, centres, q } of cases) {
+      resetState();
+      await oneBlock(x, knobs(p));
+      const words = await stateWords();
+      // S of the middle band in double precision, from the spacing and Q alone
+      const u = 2 ** (2 * p[1]);
+      const S = [0, 1, 2, 3, 4].reduce((a, d) => a + (d === 0 || d === 4 ? 1 : 2) / Math.sqrt(1 + q * q * (u ** d - u ** -d) ** 2), 0);
+      centres.forEach((c, i) => {
+        const r = recordOf(words, i);
+        const g = r.a3d / r.a2d; // a3d = g a2d
+        const fc = (Math.atan(g) * FS) / Math.PI;
+        expect(Math.abs(fc / c - 1), `knobs ${p}, band ${i}: ${fc} Hz, want ${c}`).toBeLessThan(5e-5);
+        const k = (r.ka1 / ((r.e1 + 1) / 2)) * S; // ka1 = (k / S) a1, a1 = (e1 + 1) / 2
+        expect(Math.abs(k * q - 1), `knobs ${p}, Q`).toBeLessThan(2e-5);
+      });
+    }
+  });
+
   it('has its centre gain at the band centres and between them', async () => {
     const settings: [number, number, number][] = [
       [0.45, 0.15, 0.4],
@@ -459,6 +506,7 @@ describe('sdk/dsp resonator bank on the rig', () => {
       expect(finite).toBe(true);
       expect(peak).toBeLessThan(8);
       expect(stateMax).toBeLessThan(1e-6);
+      expect(silentPeak).toBeLessThan(1e-6);
     }
     console.log(`stability (Q 50, FREQ 20 Hz, 10 s noise at 0.5, impulses, 3 s sine at 20 Hz):\n  ${stats.join('\n  ')}`);
   }, 600_000);

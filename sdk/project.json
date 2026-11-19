@@ -26,6 +26,21 @@
         "cwd": "."
       }
     },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "jsToolchain",
+        "{projectRoot}/tests/dsp/**/*",
+        "{workspaceRoot}/tsconfig*.json",
+        { "input": "production", "projects": ["@digi/sharc-rig-kit"] }
+      ],
+      "outputs": [],
+      "options": {
+        "command": "pnpm --filter @digi/sharc-rig-kit exec tsc -p ../../sdk/tests/dsp/tsconfig.json",
+        "cwd": "."
+      }
+    },
     "test-rig": {
       "executor": "nx:run-commands",
       "cache": true,
@@ -38,6 +53,8 @@
         "{workspaceRoot}/vitest.host.config.ts",
         "{workspaceRoot}/vitest.host.projects.json",
         "{workspaceRoot}/tools/patchkit/toolchain/pins.toml",
+        "{workspaceRoot}/tsconfig*.json",
+        { "externalDependencies": ["vitest"] },
         { "dependentTasksOutputFiles": "**/*" }
       ],
       "outputs": [],

@@ -1,12 +1,12 @@
 // digikit DSP kernels: resonator bank, 8 bandpass bands (TPT state-variable filters, unity peak gain) summed.
 //
 // _dk_rbank (C: dk_rbank.)   void dk_rbank(int state, int args, int params)   convention: dsp/contract/call.inc
-//   maths:         three knob words w in 0 .. 0x7f00 (DK_P_PERCENT, an integer) give p = min(w / 32512, 1):
+//   maths:         three knob words w in 0 .. 0x7f00 (DK_P_PERCENT, an integer) give p = clamp(w / 32512, 0, 1) (a word outside the range cannot overflow k):
 //                    FREQ  p0   centre of the band 3.5 octaves below the mean: 20 Hz .. 5 kHz, logarithmic  f = 20 250^p0
 //                    SPRD  p1   0 .. 2 octaves between neighbouring bands                                    s = 2 p1
 //                    Q     p2   0.7 .. 50, logarithmic                                                       Q = 0.7 (50/0.7)^p2
 //                  Each p is smoothed by a one-pole, p' = p' + alpha (p - p'), alpha = 1 - exp(-1/3) = 0.2835 (the 2 ms time
-//                  constant at one step per block, 32 samples at 48 kHz = 0.667 ms; the pattern of machines/tb303): the first
+//                  constant at one step per block, 32 samples at 48 kHz = 0.667 ms; one step per block): the first
 //                  block after the state is cleared uses the knobs as they are, with no smoothing. The smoothed values are
 //                  kept in the state.
 //                  Band i (0 .. 7) has the centre c_i = f 2^(s (i - 3.5)) Hz, taken as c_0 = 2^(log2 f - 3.5 s), c_(i+1) = c_i 2^s,
@@ -37,7 +37,7 @@
 //                                 first block
 //   saves:         R3, R5, R6, R7, R9, R10, R11, R13, R14, R15, I0, I1, I2, I3, I5 and one slot for the state pointer
 //                  (16 slots, S = 16). M4 is written (M4 = 8, caller-saved). SIMD is not used: PEYEN stays clear.
-//   instructions:  steady block 2485 with DK_CALL (measured in sdk/tests/dsp/rbank.rig.test.ts; the
+//   instructions:  steady block 2489 with DK_CALL (measured in sdk/tests/dsp/rbank.rig.test.ts; the
 //                  test asserts at most 2500; 8 x 208 of it is the band loop). The first block adds the clear of 96 words.
 //   registers:     F0 .. F15 and R4 .. R15 as listed in the steps; I1 state or band record, I2 input block, I3 output block,
 //                  I4 input pointer, I0 output pointer, I5 output read pointer, M4 = 8 (record stride).
@@ -92,9 +92,13 @@ dk_rbank.:
     F0 = F0 * F7;
     F1 = F1 * F7;
     F2 = F2 * F7;
-    F0 = MIN(F0, F9);                  // p = min(w / 32512, 1), three knobs in F0, F1, F2
+    F0 = MIN(F0, F9);                  // p = clamp(w / 32512, 0, 1), three knobs in F0, F1, F2
     F1 = MIN(F1, F9);
     F2 = MIN(F2, F9);
+    R4 = 0;
+    F0 = MAX(F0, F4);
+    F1 = MAX(F1, F4);
+    F2 = MAX(F2, F4);
     R3 = DM(0, I1);                    // init flag
     R3 = PASS R3;
     IF EQ JUMP _dk_rbank_first;
@@ -233,13 +237,13 @@ _dk_rbank_first:
     DM(1, I1) = F0;
     DM(2, I1) = F1;
     DM(3, I1) = F2;
-    R3 = 1;
-    DM(0, I1) = R3;                    // init flag
     R5 = DM(-17, I6);                  // state pointer
-    R3 = 0;
     R7 = 8;
     R5 = R5 + R7;
     I4 = R5;
+    R3 = 1;
+    DM(0, I1) = R3;                    // init flag
+    R3 = 0;
     LCNTR = 24, DO _dk_rbank_clear_end UNTIL LCE;
         DM(I4, M6) = R3;
         DM(I4, M6) = R3;
