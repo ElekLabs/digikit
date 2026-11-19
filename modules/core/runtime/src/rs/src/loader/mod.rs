@@ -1204,12 +1204,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 let same_name = file.len() >= H_NAME + dkneeds::NAME_LEN as usize && file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] == records::module(rec).name[..];
                 if let (true, Ok(old), Ok(new)) = (same_name, Keys::parse(&self.tables[k][..self.table_len[k]]), Keys::parse(table)) {
                     if old.first_missing_key(&new).is_none() {
-                        let saved = (self.tables[k], self.table_len[k]);
-                        self.capture(k, file);
-                        let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
-                        services().settle(&sel);
-                        self.tables[k] = saved.0;
-                        self.table_len[k] = saved.1;
+                        self.number_keys(k, file);
                     }
                 }
             }
@@ -1392,6 +1387,17 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         r
     }
 
+    /// The services number the keys of `file` as if it were the module at selection index `k` (`settle` over the live set with its table there); the kept table of `k` is as it was after.
+    #[inline(never)]
+    unsafe fn number_keys(&mut self, k: usize, file: &[u8]) {
+        let saved = (self.tables[k], self.table_len[k]);
+        self.capture(k, file);
+        let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
+        services().settle(&sel);
+        self.tables[k] = saved.0;
+        self.table_len[k] = saved.1;
+    }
+
     /// The checks of a load of the file at `path` into selection index `k` (`boot::live_index`), before anything is loaded: nothing changes but the staging buffer. The file
     /// passes every check of a load (`check_file`, as a free record), no loaded module has its name (`E_LOADED`), and the planner accepts the live set with the file at `k`
     /// (`caps`: `live_caps` with `own = (0, 0)`, since nothing is given back). The services number the file's keys first, as a reload's check does, because the checks of the
@@ -1403,12 +1409,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if let Ok(staged) = self.m.stage(path) {
             let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
             if table_of_file(file).is_some() {
-                let saved = (self.tables[k], self.table_len[k]);
-                self.capture(k, file);
-                let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
-                services().settle(&sel);
-                self.tables[k] = saved.0;
-                self.table_len[k] = saved.1;
+                self.number_keys(k, file);
             }
         }
         let was = read_volatile(addr_of!(BOOT_IDX));

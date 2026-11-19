@@ -292,7 +292,7 @@ CAP: dict[str, int] = {
     "LOADS": 15,
     "SVC_ABI": 16,
     "RELOAD": 17,
-    "LIVE": 18,
+    "LIVE": 19,
 }
 
 RANGES: dict[str, tuple[int, int]] = {

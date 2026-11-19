@@ -760,7 +760,7 @@ What:
    `live_done` runs at the end of every job that passed its checks. A multi-service module (for example a machine with sample pool entries) needs no service list: each
    lifecycle step goes to all service rows in table order, and the teardown runs in phases (`dsp_clear` of all, `fini`, `remove` of all in reverse, `dsp_release` of all).
    One host case covers the edge: `dsp_clear` runs on every service even when one fails, and the abort that follows leaves every service's rows as they were.
-9. Protocol: `CMD_LOAD` (0x08) and `CMD_UNLOAD` (0x09) take the body and give the reply of `CMD_RELOAD`; `RELOAD_STATE` serves all three (capability bit `LIVE`, 18). C calls for the
+9. Protocol: `CMD_LOAD` (0x08) and `CMD_UNLOAD` (0x09) take the body and give the reply of `CMD_RELOAD`; `RELOAD_STATE` serves all three (capability bit `LIVE`, 19). C calls for the
    menu: `dkrt_live(op, path)` (queue a job on the same `Job::queue`) and `dkrt_live_state(out)`.
 10. Clients: `dk-session` (`DkUpload.load`, `unload`, `loadAndWait`, `unloadAndWait`), the Rust uploader, `dkproto`/`dkupload` (Python), `wb transfer load|unload PATH`.
 

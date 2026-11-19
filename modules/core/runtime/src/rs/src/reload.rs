@@ -273,6 +273,7 @@ impl Job {
 
     /// The first step: nothing changes before the refusals and the checks pass, and a refusal ends the job with everything as it was. The path is looked up again (the module may
     /// be gone, or have come, since the queue).
+    #[inline(never)]
     unsafe fn check<O: Ops>(&mut self, o: &mut O) {
         let path = self.path.as_ptr();
         let found = o.find(path);

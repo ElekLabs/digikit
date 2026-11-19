@@ -243,7 +243,7 @@ export const CAP = {
   LOADS: 15,
   SVC_ABI: 16,
   RELOAD: 17,
-  LIVE: 18,
+  LIVE: 19,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */
