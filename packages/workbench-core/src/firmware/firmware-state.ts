@@ -82,8 +82,6 @@ export function createFirmwareState({
       // a device without a boot screen patch set gets the plain device set, whatever the stored toggle says
       const patchSet = record && !record.patchSets['device-introblank'] ? 'device' : defaults.patchSet();
       const p = await env.prepare(bytes, restore(), patchSet);
-      // a stock image patchkit knows is kept for binding services (Transfer); a failed write is not a failed prepare
-      void transfer.stock.remember(p.device, p.shaStock, bytes).catch(() => {});
       if (mine !== preparing) return;
       setPrepared({ kind: 'ready', name, size: bytes.length, p });
     } catch (e) {

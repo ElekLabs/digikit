@@ -27,16 +27,23 @@ import {
   hasHeaderTable,
   install,
   libraryModule,
+  migrateModuleFolders,
+  modulePath,
   refreshServices,
   restartDevice,
   uploadProgress,
   type InstallDeps,
 } from '@digi/workbench-core/modules/dktransfer.ts';
 import { setFitReader } from '@digi/workbench-core/modules/fit.ts';
-import { nameHash, readProvides, serviceFileOf, type ServiceFile } from '@digi/workbench-core/modules/services.ts';
+import {
+  nameHash,
+  portFileOf,
+  serviceFileOf,
+  type PortFile,
+  type ServiceFile,
+} from '@digi/workbench-core/modules/services.ts';
 import { fileHashHex } from '@digi/dk-session';
 import { installOutcome, serviceRefusalText, DONE_ON_CARD } from '@digi/workbench-core/transfer/transfer-core.ts';
-import { createServiceBinder } from '@digi/workbench-core/modules/dkbind.ts';
 import { parseSoftwareVersion } from '@digi/workbench-core/transfer/connection-core.ts';
 import { FakeDevice, concat, hex, sha } from '@digi/test-support/fakedevice';
 import { dkm, everythingFits, needsOf } from './support/dkm.ts';
@@ -189,10 +196,11 @@ test('restarted(): the log of the old boot holds the RESTART request, the new bo
 test('buildView reads the device: INFO, LIST, MODULES, CAPACITY and the headers of the card-only files by READ', async () => {
   const dev = new FakeDevice();
   const mach = dkm('someone/machine', { machine: 1, dsp: 64, size: 900 });
-  dev.files.set('modules/machine.dkm', mach);
+  const lib = (await libraryModule(mach, needsOf))!;
+  dev.files.set(lib.path, mach);
   dev.files.set('modules/other.dkm', dkm('someone/effect', { fx: 1, size: 700 }));
   dev.loaded = ['someone/machine'];
-  const view = await buildView(session(dev), [(await libraryModule(mach, needsOf))!]);
+  const view = await buildView(session(dev), [lib]);
   assert.deepEqual(
     [view.device, view.runtime, view.free_bytes, view.loaded],
     ['dt2', '0.2.4', 1 << 20, ['someone/machine']],
@@ -218,7 +226,7 @@ test('Modules mode lists the modules/ folder only: the samples/ of a version 3 s
   const mach = dkm('someone/machine', { machine: 1, dsp: 64, size: 900 });
   const withSamples = () => {
     const dev = new FakeDevice();
-    dev.files.set('modules/machine.dkm', mach);
+    dev.files.set(modulePath('someone/machine', 'Machines'), mach);
     dev.files.set('modules/other.dkm', dkm('someone/effect', { fx: 1, size: 700 }));
     dev.files.set('samples/01', new Uint8Array(3000).fill(7));
     dev.files.set('samples/ff_ht_bass_drop_A#', new Uint8Array(500).fill(9));
@@ -234,7 +242,7 @@ test('Modules mode lists the modules/ folder only: the samples/ of a version 3 s
   // FOLDERS: the device filters by the LIST prefix, and the host does not read the other files' headers
   const dev = withSamples();
   const view = await buildView(session(dev), lib);
-  assert.deepEqual(rows(view), ['modules/other.dkm', 'modules/machine.dkm'].sort());
+  assert.deepEqual(rows(view), ['modules/other.dkm', modulePath('someone/machine', 'Machines')].sort());
   assert.deepEqual(
     view.card_only.map((r) => r.name),
     ['someone/effect'],
@@ -242,7 +250,10 @@ test('Modules mode lists the modules/ folder only: the samples/ of a version 3 s
   // a runtime without FOLDERS answers every entry to a LIST: the host filters
   const old = withSamples();
   old.caps = Object.values(CAP).reduce((a: number, bit) => a | (1 << bit), 0) & ~(1 << CAP.FOLDERS);
-  assert.deepEqual(rows(await buildView(session(old), lib)), ['modules/other.dkm', 'modules/machine.dkm'].sort());
+  assert.deepEqual(
+    rows(await buildView(session(old), lib)),
+    ['modules/other.dkm', modulePath('someone/machine', 'Machines')].sort(),
+  );
   // install compares with the modules/ entries too, and leaves the samples alone
   const events: any[] = [];
   await install(session(dev), ['someone/machine'], lib, (e) => events.push(e));
@@ -302,7 +313,7 @@ test('install: skip the same file hash, upload the rest with capped progress, VE
   const dev = new FakeDevice();
   const mach = dkm('someone/machine', { machine: 1, size: 900 });
   const big = dkm('test/big', { size: 20000 });
-  dev.files.set('modules/machine.dkm', mach); // already on the card
+  dev.files.set(modulePath('someone/machine', 'Machines'), mach); // already on the card
   const events: any[] = [];
   const out = await install(
     session(dev, { chunk: 512 }),
@@ -311,7 +322,7 @@ test('install: skip the same file hash, upload the rest with capped progress, VE
     (e) => events.push(e),
   );
   assert.deepEqual(out, { uploaded: ['test/big'], onCard: ['someone/machine'], selected: [], restarted: false });
-  assert.deepEqual(dev.files.get('modules/big.dkm') ?? dev.files.get('modules/big.dkm'), big);
+  assert.deepEqual(dev.files.get(modulePath('test/big', 'Tools')), big);
   assert.ok(!dev.seen.includes('SELECT') && !dev.seen.includes('RESTART'));
   assert.equal(dev.seen.filter((c) => c === 'VERIFY').length, 2);
   const kinds = events.map((e) => e.event);
@@ -341,7 +352,12 @@ test('install: a VERIFY that does not match is an error', async () => {
     install(session(dev), ['someone/machine'], [(await libraryModule(m, needsOf))!], (e) => events.push(e)),
     /did not keep the file/,
   );
-  assert.deepEqual(events.at(-1), { event: 'verify', id: 'someone/machine', path: 'modules/machine.dkm', ok: false });
+  assert.deepEqual(events.at(-1), {
+    event: 'verify',
+    id: 'someone/machine',
+    path: modulePath('someone/machine', 'Machines'),
+    ok: false,
+  });
 });
 
 test('the upload progress callback: at most a tenth apart, always the last', () => {
@@ -450,39 +466,62 @@ const needing = (name: string, stems: string[]): Uint8Array =>
     stems.map((s) => [nameHash(s), V1_0, true]),
   );
 
-/** The fake binder: the user's firmware hash is appended, so the bound file differs from the unbound one. */
-const binder = {
-  bind: async (b: Uint8Array, fw: string) => {
-    // like patchkit bind: lfo hooks no firmware site and comes back as built; the others need the stock image (an empty hash: none is kept)
-    if (readProvides(b)?.hash32 === nameHash('lfo')) return b;
-    if (!fw) throw new Error('no stock firmware');
-    return concat(b, Buffer.from(fw));
-  },
-};
-const bound = (f: ServiceFile): Uint8Array => concat(f.bytes, Buffer.from('fw1'));
+/** The firmware identity of the fake device (INFO `fw_id`) and of another firmware. */
+const FW = '0102030405060708';
+const FW_OTHER = 'a1a2a3a4a5a6a7a8';
+
+/** A port file of the workbench for the firmware `fw` (role 2, table version 3: PROVIDES `port` and the FW item). */
+function portFile(stem: string, fw = FW): PortFile {
+  const base = dkm(`port/${stem}`, { size: 400 });
+  const b = withTable(base, 2, [], [nameHash('port'), V1_0]);
+  // a version 3 table with the FW item after PROVIDES
+  const v = new DataView(b.buffer);
+  const table = 0xa0;
+  const size = v.getUint32(0x94);
+  v.setUint16(table + 4, 3);
+  v.setUint16(table + 6, v.getUint16(table + 6) + 1);
+  const at = table + size;
+  v.setUint16(at, 11);
+  v.setUint16(at + 2, 1);
+  v.setUint32(at + 4, 8);
+  b.set(Buffer.from(fw, 'hex'), at + 8);
+  v.setUint32(0x94, size + 16);
+  return portFileOf(stem, b, fileHashHex(b))!;
+}
+
+/** A hard need of the port file. */
+const PORT_NEED: [number, number, boolean][] = [[nameHash('port'), 0, true]];
 
 const depsOf = (services: ServiceFile[], over: Partial<InstallDeps> = {}): InstallDeps => ({
   services,
-  binder,
-  firmwareHash: 'fw1',
-  runtimeIdentity: (info) => ({ version: info.runtime, fingerprint: null }),
+  ports: [portFile('dt-1')],
+  runtimeIdentity: (info) => ({ version: info.runtime, fingerprint: null, fw: info.fw_id }),
   runtimeServices: new Set(),
   ...over,
 });
 
-test('install with services: a needed service is bound, uploaded and verified before its module', async () => {
+/** A device that reports its firmware identity (INFO `fw_id`). */
+function deviceOn(fw: string | null = FW): FakeDevice {
+  const dev = new FakeDevice();
+  dev.imageId = '1122334455667788';
+  dev.svcAbi = 0;
+  dev.fwId = fw;
+  return dev;
+}
+
+test('install with services: a needed service is uploaded as built and verified before its module', async () => {
   const fx = service('fx');
   const dev = new FakeDevice();
   const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
   const events: any[] = [];
   const out = await install(session(dev), ['someone/pluck'], [pluck], (e) => events.push(e), depsOf([fx]));
   assert.deepEqual(out.uploaded, ['someone/pluck']);
-  assert.deepEqual(dev.files.get('services/fx.dks'), bound(fx));
-  assert.deepEqual(dev.files.get('modules/pluck.dkm'), pluck.bytes);
+  assert.deepEqual(dev.files.get('services/fx.dks'), fx.bytes, 'the service goes on the card as built');
+  assert.deepEqual(dev.files.get(pluck.path), pluck.bytes);
   const uploads = events.filter((e) => e.event === 'upload').map((e) => [e.kind ?? 'module', e.path]);
   assert.deepEqual(uploads, [
     ['service', 'services/fx.dks'],
-    ['module', 'modules/pluck.dkm'],
+    ['module', pluck.path],
   ]);
   assert.ok(events.filter((e) => e.kind === 'service').every((e) => e.id === 'fx'));
   assert.deepEqual(
@@ -494,10 +533,62 @@ test('install with services: a needed service is bound, uploaded and verified be
   );
 });
 
-test('install with services: the same bound bytes on the card are not sent again', async () => {
+test('install with services: a service that needs the port file brings the port file of the device first', async () => {
+  const lfo = service('lfo', PORT_NEED);
+  const dev = deviceOn();
+  const user = (await libraryModule(needing('someone/mod', ['lfo']), needsOf))!;
+  const matching = portFile('any-name');
+  const other = portFile('dt-1.16', FW_OTHER);
+  const events: any[] = [];
+  const out = await install(
+    session(dev),
+    ['someone/mod'],
+    [user],
+    (e) => events.push(e),
+    depsOf([lfo], { ports: [other, matching] }),
+  );
+  assert.deepEqual(out.uploaded, ['someone/mod']);
+  assert.deepEqual(
+    dev.files.get('ports/any-name.dkport'),
+    matching.bytes,
+    'the port file whose FW is the device`s, whatever its name',
+  );
+  assert.ok(!dev.files.has('ports/dt-1.16.dkport'), 'a port file of another firmware is not sent');
+  assert.deepEqual(
+    events.filter((e) => e.event === 'upload').map((e) => e.path),
+    ['ports/any-name.dkport', 'services/lfo.dks', user.path],
+  );
+  // the port file on the card with the same bytes is not sent again
+  const again: any[] = [];
+  await install(session(dev), ['someone/mod'], [user], (e) => again.push(e), depsOf([lfo], { ports: [matching] }));
+  assert.ok(again.some((e) => e.event === 'skip' && e.kind === 'service' && e.id === 'any-name'));
+});
+
+test('install with services: no port file for the firmware refuses the module that needs one, the others install', async () => {
+  const lfo = service('lfo', PORT_NEED);
+  const fx = service('fx');
+  const dev = deviceOn();
+  const needsPort = (await libraryModule(needing('someone/pluck', ['lfo']), needsOf))!;
+  const plain = (await libraryModule(needing('someone/shot', ['fx']), needsOf))!;
+  const events: any[] = [];
+  const out = await install(
+    session(dev),
+    ['someone/pluck', 'someone/shot'],
+    [needsPort, plain],
+    (e) => events.push(e),
+    depsOf([lfo, fx], { ports: [portFile('other', FW_OTHER)] }),
+  );
+  const refusal = events.find((e) => e.event === 'refuse').refusal;
+  assert.deepEqual([refusal.module, refusal.kind, refusal.fw], ['someone/pluck', 'no-port', FW]);
+  assert.match(serviceRefusalText(refusal), /This firmware version is not supported yet/);
+  assert.deepEqual(out.uploaded, ['someone/shot']);
+  assert.ok(![...dev.files.keys()].some((k) => k.startsWith('ports/')), 'no port file was sent');
+});
+
+test('install with services: the same bytes on the card are not sent again', async () => {
   const fx = service('fx');
   const dev = new FakeDevice();
-  dev.files.set('services/fx.dks', bound(fx));
+  dev.files.set('services/fx.dks', fx.bytes);
   const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
   const events: any[] = [];
   await install(session(dev), ['someone/pluck'], [pluck], (e) => events.push(e), depsOf([fx]));
@@ -525,7 +616,7 @@ test('install with services: a module the services cannot serve is named and ski
     ['someone/pluck'],
   );
   assert.deepEqual(out.uploaded, ['someone/shot']);
-  assert.deepEqual([...dev.files.keys()].sort(), ['modules/shot.dkm', 'services/fx.dks']);
+  assert.deepEqual([...dev.files.keys()].sort(), [shot.path, 'services/fx.dks'].sort());
   // every ticked module refused: only the refusals are emitted
   const only: any[] = [];
   const none = await install(session(new FakeDevice()), ['someone/pluck'], [pluck], (e) => only.push(e), depsOf([fx]));
@@ -545,119 +636,20 @@ test('install with services: a service that fails VERIFY stops the install befor
     install(session(dev), ['someone/pluck'], [pluck], () => {}, depsOf([fx])),
     /services\/fx\.dks: .*did not keep the file/,
   );
-  assert.ok(!dev.files.has('modules/pluck.dkm'));
-});
-
-test('install with services: without a kept stock image a module that needs a service is refused, the others install', async () => {
-  const fx = service('fx');
-  const dev = new FakeDevice();
-  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
-  const plain = (await libraryModule(needing('someone/plain', []), needsOf))!;
-  const events: any[] = [];
-  const out = await install(
-    session(dev),
-    ['someone/pluck', 'someone/plain'],
-    [pluck, plain],
-    (e) => events.push(e),
-    depsOf([fx], { firmwareHash: null }),
-  );
-  assert.deepEqual(
-    events.filter((e) => e.event === 'refuse').map((e) => [e.refusal.module, e.refusal.kind]),
-    [['someone/pluck', 'no-stock']],
-  );
-  assert.deepEqual(out.uploaded, ['someone/plain']);
-  assert.deepEqual([...dev.files.keys()], ['modules/plain.dkm']);
-});
-
-test('install with services: a service with no hook (lfo) comes back from the binder as built and needs no stock image', async () => {
-  const lfo = service('lfo');
-  const dev = new FakeDevice();
-  const user = (await libraryModule(needing('someone/mod', ['lfo']), needsOf))!;
-  const out = await install(session(dev), ['someone/mod'], [user], () => {}, depsOf([lfo], { firmwareHash: null }));
-  assert.deepEqual(out.uploaded, ['someone/mod']);
-  assert.deepEqual(dev.files.get('services/lfo.dks'), lfo.bytes);
-});
-
-test('buildView with services: a binder that fails shows the unbound rows and refuses the modules that need them', async () => {
-  const fx = service('fx');
-  const dev = new FakeDevice();
-  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
-  const failing = { bind: async () => Promise.reject(new Error('no port for this firmware')) };
-  const v = await buildView(session(dev), [pluck], depsOf([fx], { binder: failing }));
-  assert.deepEqual(
-    v.refusals?.map((r) => [r.module, r.kind]),
-    [['someone/pluck', 'bind-failed']],
-  );
-  assert.equal(v.refusals?.[0]?.error, 'no port for this firmware');
-  assert.equal(v.modules[0]!.services?.[0]?.state, 'not on device');
-});
-
-test('install with services: a binder that fails with a stock image kept is bind-failed with the error text, not no-stock', async () => {
-  const fx = service('fx');
-  const dev = new FakeDevice();
-  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
-  const failing = { bind: async () => Promise.reject(new Error('no port for this firmware')) };
-  const out = await install(session(dev), ['someone/pluck'], [pluck], () => {}, depsOf([fx], { binder: failing }));
-  assert.deepEqual(out.uploaded, []);
-  assert.equal(out.refused?.[0]?.kind, 'bind-failed');
-  assert.match(serviceRefusalText(out.refused![0]!), /fx service could not be prepared: no port for this firmware/);
-});
-
-test('install with services: a missing bind bundle is bind-failed even without a stock image, and the text names the command', async () => {
-  const fx = service('fx');
-  const dev = new FakeDevice();
-  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
-  const binder = createServiceBinder(() => Promise.reject(new Error('bind.json: not found')), {
-    bytesOf: async () => undefined,
-  });
-  const out = await install(
-    session(dev),
-    ['someone/pluck'],
-    [pluck],
-    () => {},
-    depsOf([fx], { binder, firmwareHash: null }),
-  );
-  assert.equal(out.refused?.[0]?.kind, 'bind-failed');
-  assert.match(out.refused![0]!.error!, /bind data cannot be loaded \(bind.json: not found\)/);
-  assert.match(serviceRefusalText(out.refused![0]!), /@digi\/web:bind-bundle/);
-});
-
-test('install with services: a loaded bind bundle but no stock bytes and no stock image is no-stock', async () => {
-  const fx = service('fx');
-  const dev = new FakeDevice();
-  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
-  const binder = createServiceBinder(
-    () =>
-      Promise.resolve({
-        bind: () => {
-          throw new Error('no stock');
-        },
-      } as never),
-    {
-      bytesOf: async () => undefined,
-    },
-  );
-  const out = await install(
-    session(dev),
-    ['someone/pluck'],
-    [pluck],
-    () => {},
-    depsOf([fx], { binder, firmwareHash: null }),
-  );
-  assert.equal(out.refused?.[0]?.kind, 'no-stock');
+  assert.ok(!dev.files.has(pluck.path));
 });
 
 test('install with every module refused uploads nothing and finds nothing on the card', async () => {
-  const fx = service('fx');
-  const dev = new FakeDevice();
-  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
-  const failing = { bind: async () => Promise.reject(new Error('no port for this firmware')) };
-  const out = await install(session(dev), ['someone/pluck'], [pluck], () => {}, depsOf([fx], { binder: failing }));
+  const lfo = service('lfo', PORT_NEED);
+  const dev = deviceOn();
+  const pluck = (await libraryModule(needing('someone/pluck', ['lfo']), needsOf))!;
+  const out = await install(session(dev), ['someone/pluck'], [pluck], () => {}, depsOf([lfo], { ports: [] }));
   assert.deepEqual([out.uploaded, out.onCard], [[], []]);
+  assert.equal(dev.files.size, 0);
 });
 
 test('installOutcome: all refused is an error naming the modules, some refused names them, a module on the card counts as installed', () => {
-  const r = (module: string) => ({ module, service: 'fx', kind: 'no-stock' as const });
+  const r = (module: string) => ({ module, service: 'fx', kind: 'no-port' as const });
   const all = installOutcome({ uploaded: [], onCard: [], refused: [r('a/one'), r('a/two')] }, DONE_ON_CARD);
   assert.deepEqual(all, { error: 'nothing installed: a/one, a/two' });
   const some = installOutcome({ uploaded: ['a/plain'], onCard: [], refused: [r('a/one')] }, DONE_ON_CARD);
@@ -667,42 +659,35 @@ test('installOutcome: all refused is an error naming the modules, some refused n
   assert.deepEqual(installOutcome({ uploaded: [], onCard: [], refused: [] }, DONE_ON_CARD), { message: DONE_ON_CARD });
 });
 
-test('install with services: the bound file is made once per firmware and unbound hash', async () => {
-  const fx = service('fx');
-  const cache = new Map<string, Uint8Array>();
-  let calls = 0;
-  const counting = {
-    bind: async (b: Uint8Array, fw: string) => {
-      calls++;
-      return concat(b, Buffer.from(fw));
-    },
-  };
-  const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
-  const deps = depsOf([fx], { binder: counting, cache });
-  await install(session(new FakeDevice()), ['someone/pluck'], [pluck], () => {}, deps);
-  await install(session(new FakeDevice()), ['someone/pluck'], [pluck], () => {}, deps);
-  assert.equal(calls, 1);
-  // another firmware binds again
-  await install(session(new FakeDevice()), ['someone/pluck'], [pluck], () => {}, { ...deps, firmwareHash: 'fw2' });
-  assert.equal(calls, 2);
+test('buildView with services: no port file for the firmware refuses the modules that need one and shows the service not on the device', async () => {
+  const lfo = service('lfo', PORT_NEED);
+  const dev = deviceOn();
+  const pluck = (await libraryModule(needing('someone/pluck', ['lfo']), needsOf))!;
+  const v = await buildView(session(dev), [pluck], depsOf([lfo], { ports: [] }));
+  assert.deepEqual(
+    v.refusals?.map((r) => [r.module, r.kind]),
+    [['someone/pluck', 'no-port']],
+  );
+  assert.equal(v.modules[0]!.services?.[0]?.state, 'not on device');
 });
 
-test('refreshServices (Flash): a .dks on the card with other bytes is replaced, an equal one and one the workbench lacks stay', async () => {
+test('refreshServices (Flash): a .dks or .dkport on the card with other bytes is replaced, an equal one and one the workbench lacks stay', async () => {
   const fx = service('fx');
-  const lfo = service('lfo');
+  const lfo = service('lfo', PORT_NEED);
+  const port = portFile('dt-1');
   const dev = new FakeDevice();
   dev.files.set('modules/m.dkm', needing('x/m', ['fx', 'lfo']));
   dev.files.set('services/fx.dks', Buffer.from('old build'));
   dev.files.set('services/lfo.dks', lfo.bytes);
   dev.files.set('services/other.dks', Buffer.from('not ours'));
+  dev.files.set('ports/dt-1.dkport', Buffer.from('old port'));
   const events: any[] = [];
-  const replaced = await refreshServices(session(dev), depsOf([fx, lfo]), [], (e) => events.push(e));
-  assert.deepEqual(replaced, ['services/fx.dks']);
-  assert.deepEqual(dev.files.get('services/fx.dks'), bound(fx));
+  const replaced = await refreshServices(session(dev), depsOf([fx, lfo], { ports: [port] }), [], (e) => events.push(e));
+  assert.deepEqual(replaced.sort(), ['ports/dt-1.dkport', 'services/fx.dks']);
+  assert.deepEqual(dev.files.get('services/fx.dks'), fx.bytes);
+  assert.deepEqual(dev.files.get('ports/dt-1.dkport'), port.bytes);
   assert.deepEqual(dev.files.get('services/other.dks'), Buffer.from('not ours'));
   assert.ok(events.some((e) => e.event === 'verify' && e.kind === 'service' && e.ok));
-  // no stock image: the binder cannot bind, nothing is touched
-  assert.deepEqual(await refreshServices(session(dev), depsOf([fx], { firmwareHash: null }), []), []);
 });
 
 test('install with services: a .dks that no module on the card needs any more is deleted', async () => {
@@ -713,11 +698,54 @@ test('install with services: a .dks that no module on the card needs any more is
   const pluck = (await libraryModule(needing('someone/pluck', ['fx']), needsOf))!;
   const events: any[] = [];
   await install(session(dev), ['someone/pluck'], [pluck], (e) => events.push(e), depsOf([fx, old]));
-  assert.deepEqual([...dev.files.keys()].sort(), ['modules/pluck.dkm', 'services/fx.dks']);
+  assert.deepEqual([...dev.files.keys()].sort(), [pluck.path, 'services/fx.dks'].sort());
   assert.deepEqual(
     events.filter((e) => e.event === 'delete'),
     [{ event: 'delete', path: 'services/old.dks', why: 'unused-service' }],
   );
+});
+
+test('the module path is modules/<kind>/<author>-<name>.dkm, the kind from the module`s records', async () => {
+  assert.equal(modulePath('someone/analog', 'Machines'), 'modules/machine/someone-analog.dkm');
+  assert.equal(modulePath('someone/lfo_shapes_1', 'LFO shapes'), 'modules/lfo-shape/someone-lfo_shapes_1.dkm');
+  assert.equal(modulePath('tools/bootscreen', 'Tools'), 'modules/tool/tools-bootscreen.dkm');
+  assert.equal(modulePath('a/gain', 'Effects'), 'modules/fx/a-gain.dkm');
+  // the kind is the group of the file: a file with a machine key is in modules/machine/
+  const m = (await libraryModule(dkm('someone/pluck', { machine: 1, size: 900 }), needsOf))!;
+  assert.equal(m.path, 'modules/machine/someone-pluck.dkm');
+});
+
+test('the one-time migration renames the flat module files to their kind folders and writes the selection again', async () => {
+  const dev = deviceOn();
+  const machine = dkm('someone/pluck', { machine: 1, size: 900 });
+  const tool = dkm('digikit/probe', { size: 600 });
+  dev.files.set('modules/pluck.dkm', machine);
+  dev.files.set('modules/probe.dkm', tool);
+  dev.files.set('modules/notes.dkm', Buffer.from('not a module'));
+  dev.files.set('modules/machine/already-there.dkm', dkm('x/y', { machine: 1, size: 500 }));
+  // the last boot selected the pluck, by its old file name (LOADS lists what the boot selected)
+  dev.loadFailures = [{ name: 'pluck.dkm', result: -7 }];
+  const events: any[] = [];
+  const moved = await migrateModuleFolders(session(dev), await session(dev).info(), (e) => events.push(e));
+  assert.deepEqual(moved, [
+    ['modules/pluck.dkm', 'modules/machine/someone-pluck.dkm'],
+    ['modules/probe.dkm', 'modules/tool/digikit-probe.dkm'],
+  ]);
+  assert.deepEqual([...dev.files.keys()].sort(), [
+    'modules/machine/already-there.dkm',
+    'modules/machine/someone-pluck.dkm',
+    'modules/notes.dkm',
+    'modules/tool/digikit-probe.dkm',
+  ]);
+  assert.deepEqual(dev.files.get('modules/machine/someone-pluck.dkm'), machine, 'the bytes stay');
+  assert.deepEqual(
+    events.find((e) => e.event === 'select')?.paths,
+    ['modules/machine/someone-pluck.dkm'],
+    'the selection is written again, at the new path',
+  );
+  assert.deepEqual(dev.selection, ['modules/machine/someone-pluck.dkm']);
+  // nothing moves a second time
+  assert.deepEqual(await migrateModuleFolders(session(dev), await session(dev).info()), []);
 });
 
 /** A card with pluck (needs fx and machines), shot (needs machines) and the two services. */
@@ -760,11 +788,11 @@ test('buildView with services: a library module lists its services with their st
   const fx = service('fx');
   const machines = service('machines');
   const dev = new FakeDevice();
-  dev.files.set('services/fx.dks', bound(fx));
-  dev.files.set('services/machines.dks', concat(machines.bytes, [9])); // another file than the bound one
+  dev.files.set('services/fx.dks', fx.bytes);
+  dev.files.set('services/machines.dks', concat(machines.bytes, [9])); // another file than the workbench's
   const pluck = (await libraryModule(needing('someone/pluck', ['fx', 'machines', 'ghost']), needsOf))!;
   const shot = (await libraryModule(needing('someone/shot', ['fx']), needsOf))!;
-  dev.files.set('modules/shot.dkm', shot.bytes);
+  dev.files.set(shot.path, shot.bytes);
   const view = await buildView(session(dev), [pluck, shot], depsOf([fx, machines]));
   const rows = Object.fromEntries(view.modules.map((r): [string, typeof r] => [String(r.id), r]));
   assert.deepEqual(
@@ -782,7 +810,7 @@ test('buildView with services: a library module lists its services with their st
   );
   assert.equal(view.refusals?.length, 1);
   const fxRow = view.card_only.find((r) => r.path === 'services/fx.dks')!;
-  assert.deepEqual(fxRow.needed_by, ['modules/shot.dkm']);
+  assert.deepEqual(fxRow.needed_by, [shot.path]);
 });
 
 test('restart: RESTART, wait for the new boot in the log, then report what MODULES lists', async () => {

@@ -1,23 +1,21 @@
 // The Transfer commands of wb (tools/devtools/wb.mjs): the Transfer pane's install and delete, through the pane's own code
-// (packages/workbench-core/src/modules/dktransfer.ts). `install` resolves the services each module needs, binds them to your stock firmware and
-// uploads them before the modules; `delete` takes the services no remaining module needs along with the modules. No child process.
+// (packages/workbench-core/src/modules/dktransfer.ts). `install` resolves the services each module needs and uploads them as built, with the port file of
+// the device's firmware, before the modules; `delete` takes the services no remaining module needs along with the modules. No child process.
 //
-//     wb [--port SUB | --emu [--run-dir DIR]] transfer install ID... [--stock STOCK.syx] [--restart] [--library DIR]
+//     wb [--port SUB | --emu [--run-dir DIR]] transfer install ID... [--restart] [--library DIR]
 //     wb [--port SUB | --emu [--run-dir DIR]] transfer restart
 //     wb [--port SUB | --emu [--run-dir DIR]] transfer delete PATH...
 //
 // ID is a module id of the library (`out/modules/<device>/`, `dist/modules/<device>/` for the `.dks` services); PATH is a card path (`modules/pluck.dkm`).
-// `--stock` is the stock firmware .syx of the device: it is what a service that hooks the firmware is bound to. The default is the harness's stock image of the
-// device (`stockImage`: dt2 1.17, dn2 1.12 in $DIGI_FIRMWARE_DIR or firmware/); when that file is missing a module that needs such a service is refused (the others install).
+// A service goes on the card as built (`dist/modules/<device>/<name>.dks`) with the port file of the device's firmware (`dist/ports/<device>-<version>.dkport`, `patchkit:ports`),
+// the one whose FW item equals the device's `fw_id`; with none, a module that needs a service is refused (this firmware version is not supported yet).
 // `--restart` then selects the installed modules (the selection is exactly these), restarts the device, waits for the boot and checks that MODULES lists them (exit 1 when
 // one is missing). `restart` alone restarts with the selection the device has. `--library DIR` reads the `.dkm` files from DIR/<device>/ instead of out/modules/<device>/. One JSON object per event, like the pane's progress (`--format text` prints the pane's lines).
-import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
 import { fileHashHex } from '../../packages/dk-session/src/index.ts';
 import { DkNeeds } from '../../packages/workbench-core/src/modules/dkneeds.ts';
-import { DkBind, createServiceBinder } from '../../packages/workbench-core/src/modules/dkbind.ts';
 import { RUNTIME_SERVICE_NAMES } from '../../packages/dk-session/src/gen_proto.ts';
 import {
+  PORT_EXT,
   SERVICE_EXT,
   deleteFiles,
   install,
@@ -25,29 +23,33 @@ import {
   reloadModules,
   restartDevice,
 } from '../../packages/workbench-core/src/modules/dktransfer.ts';
-import { nameHash, serviceFileOf } from '../../packages/workbench-core/src/modules/services.ts';
-import { stockImage } from '../../packages/workbench-core/src/node/stock-image.ts';
+import { nameHash, portFileOf, serviceFileOf } from '../../packages/workbench-core/src/modules/services.ts';
 import { eventText } from '../../packages/workbench-core/src/transfer/transfer-core.ts';
 
-/** The library of a device: the built modules and the unbound services (the files the Transfer pane lists). */
+/** The library of a device: the built modules, the services as built and the port files (the files the Transfer pane lists). */
 async function loadLibrary(host, device, needs) {
   const modules = [];
   const services = [];
+  const ports = [];
   for (const f of await host.library.scan(device)) {
     const bytes = new Uint8Array(await host.library.read(device, f.path));
     if (f.path.endsWith(SERVICE_EXT)) {
       const stem = (f.path.split('/').pop() ?? f.path).slice(0, -SERVICE_EXT.length);
       const s = serviceFileOf(stem, bytes, fileHashHex(bytes));
       if (s) services.push(s);
+    } else if (f.path.endsWith(PORT_EXT)) {
+      const stem = (f.path.split('/').pop() ?? f.path).slice(0, -PORT_EXT.length);
+      const p = portFileOf(stem, bytes, fileHashHex(bytes));
+      if (p) ports.push(p);
     } else {
       const m = await libraryModule(bytes, (b) => needs.of(b));
       if (m) modules.push(m);
     }
   }
-  return { modules, services };
+  return { modules, services, ports };
 }
 
-export async function transferCommand({ host, root: repoRoot, session, sub, rest, opts, fail }) {
+export async function transferCommand({ host, session, sub, rest, opts, fail }) {
   // an emulator on a busy host boots slowly in real time (DN2 more than DT2)
   const bootTimeoutMs = opts.emu ? 600_000 : undefined;
   const emit = (e) => console.log(opts.format === 'text' ? eventText(e) : JSON.stringify(e));
@@ -82,26 +84,17 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
   }
   if (sub !== 'install' || rest.length === 0)
     fail(
-      'usage: wb transfer install ID... [--stock STOCK.syx] [--restart] [--reload] | wb transfer reload PATH... | wb transfer restart | wb transfer delete PATH...',
+      'usage: wb transfer install ID... [--restart] [--reload] | wb transfer reload PATH... | wb transfer restart | wb transfer delete PATH...',
     );
   const info = await session.info();
   const wasm = new Uint8Array(await host.firmware.patchkitWasm());
   const needs = await DkNeeds.create(wasm);
-  const { modules, services } = await loadLibrary(host, info.port, needs);
-  const stockFile = opts.stock ?? defaultStock(info.port, repoRoot);
-  const stock = stockFile ? new Uint8Array(readFileSync(stockFile)) : undefined;
-  const stockHash = stock ? createHash('sha256').update(stock).digest('hex') : null;
-  const binder = createServiceBinder(
-    async () => DkBind.create(wasm, new Uint8Array(await host.firmware.bindBundle())),
-    { bytesOf: async (h) => (h === stockHash ? stock : undefined) },
-  );
+  const { modules, services, ports } = await loadLibrary(host, info.port, needs);
   const deps = {
     services,
-    binder,
-    firmwareHash: stockHash,
-    runtimeIdentity: (i) => ({ version: i.runtime, fingerprint: i.svc_abi }),
+    ports,
+    runtimeIdentity: (i) => ({ version: i.runtime, fingerprint: i.svc_abi, fw: i.fw_id }),
     runtimeServices: new Set(RUNTIME_SERVICE_NAMES.map(nameHash)),
-    cache: new Map(),
     needsOf: (b) => needs.of(b),
   };
   const refusedAll = (r) => r.refused?.length && r.uploaded.length === 0 && rest.length === r.refused.length;
@@ -129,14 +122,4 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
   const missing = toBoot.filter((id) => !loaded.includes(id));
   emit({ event: 'loaded', loaded, missing });
   return missing.length ? 1 : 0;
-}
-
-/** The stock image of the device (the harness's file, `stockImage`). A missing file says where it looked; refused modules follow. */
-function defaultStock(device, root) {
-  const file = stockImage(device, root);
-  if (existsSync(file)) return file;
-  console.error(
-    `wb: the stock firmware of ${device} is not at ${file} (set $DIGI_FIRMWARE_DIR or pass --stock FILE.syx): a module that needs a service is refused`,
-  );
-  return undefined;
 }

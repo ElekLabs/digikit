@@ -19,8 +19,6 @@ import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
 import { loadDevices } from '@digi/devices/node';
-import { buildBindBundle } from '../../../packages/workbench-core/src/node/bind-bundle.ts';
-import { writeBindBundle } from './gen-bind.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const deviceIds = loadDevices().runtimeIds;
@@ -140,9 +138,6 @@ export function buildModuleData(root = repoRoot) {
   return { bundle: { ports, modules, devices } };
 }
 
-// `buildBindBundle(root)`: the Transfer page's bind data; it lives with the Node host, which reads the same files for `wb transfer`.
-export { buildBindBundle };
-
 const SOURCE_MAX = 256 * 1024;
 
 /** The files of a module that the site shows: module.toml, README.md and src/** (text only), relative to the module, sorted. */
@@ -239,7 +234,7 @@ export function shipModules(out, root = repoRoot) {
       source: files,
     });
   }
-  // the unbound .dks services (dist/modules/<dev>/*.dks): the Transfer page binds them to the user's firmware
+  // the .dks services (dist/modules/<dev>/*.dks) as built: the Transfer page uploads them as they are, with the port file of the device's firmware
   const services = {};
   const servicesRoot = join(root, 'dist', 'modules');
   if (existsSync(servicesRoot)) {
@@ -255,7 +250,23 @@ export function shipModules(out, root = repoRoot) {
       }
     }
   }
-  const index = { modules, services };
+  // the port files (dist/ports/<dev>-<version>.dkport, `patchkit:ports`): built from committed data, no firmware bytes in them; Transfer uploads the one whose FW item
+  // equals the device's fw_id
+  const ports = {};
+  const portsRoot = join(root, 'dist', 'ports');
+  if (existsSync(portsRoot)) {
+    for (const name of readdirSync(portsRoot)
+      .filter((f) => f.endsWith('.dkport'))
+      .sort()) {
+      const dev = deviceIds.find((d) => name.startsWith(`${d}-`));
+      if (!dev) continue;
+      const bytes = readFileSync(join(portsRoot, name));
+      mkdirSync(join(out, dev), { recursive: true });
+      writeFileSync(join(out, dev, name), bytes);
+      (ports[dev] ??= []).push({ file: `${dev}/${name}`, size: bytes.length, sha256: sha256(bytes) });
+    }
+  }
+  const index = { modules, services, ports };
   writeFileSync(join(out, 'index.json'), JSON.stringify(index, null, 1));
   return index;
 }
@@ -318,7 +329,6 @@ if (
   const { bundle } = buildModuleData();
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
-  writeBindBundle(out);
   const index = shipModules(out);
   console.log(`shipped: ${index.modules.map((m) => `${m.id} (${Object.keys(m.devices).join(',')})`).join(', ')}`);
   console.log(

@@ -27,8 +27,8 @@
           "target": "patchkit-wasm"
         },
         {
-          "projects": ["@digi/web"],
-          "target": "bind-bundle"
+          "projects": ["patchkit"],
+          "target": "ports"
         }
       ]
     },

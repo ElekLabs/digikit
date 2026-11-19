@@ -9,11 +9,13 @@ import { NoRuntimeError, isCancelled, isTimeout } from '../modules/backend';
 import {
   nameHash,
   serviceFileOf,
+  portFileOf,
+  type PortFile,
   type RuntimeIdentity,
-  type ServiceBinder,
   type ServiceFile,
 } from '../modules/services';
 import {
+  PORT_EXT,
   SERVICE_EXT,
   buildView,
   deleteFiles,
@@ -37,7 +39,7 @@ import { RPC_SOFTWARE_VERSION, parseSoftwareVersion } from './connection-core';
 import type { ConnectionApp } from './connection-state';
 import type { ServiceRefusal } from '../modules/services';
 import type { WasmSource } from '../wasm-source';
-import type { TransferEnv } from './env';
+import type { LibraryFile, TransferEnv } from './env';
 import { targetLabel, type TargetApp } from './target';
 
 /** What an install did: the modules whose bytes were sent, the modules verified already on the card (same hash), and the modules refused by the service check. */
@@ -54,15 +56,11 @@ export interface BackendDeps {
   /** Makes the needs reader from the app's wasm (default: patchkit.wasm in `DkNeeds`); a test gives a stub. */
   needs?: (wasm: WasmSource) => Promise<NeedsLike>;
   /**
-   * Service seams (R12-7). The services come from the library: `env.library.scan` also lists `.dks` files (unbound), which the backend splits off by
-   * their extension. Install and the view are service-aware only when the library has `.dks` files and `binder` and `firmwareHash` are given;
-   * without them the backend behaves as before.
+   * Service seams (R12-7). The services and the port files come from the library: `env.library.scan` also lists `.dks` and `.dkport` files, which the
+   * backend splits off by their extension. Install and the view are service-aware when the library has `.dks` files; a service goes on the card as
+   * built, with the port file whose FW item equals the device's `fw_id`.
    */
-  /** Binds an unbound `.dks` to the user's firmware (the wasm `pk_bind`, `createServiceBinder`); a test gives a fake. */
-  binder?: ServiceBinder;
-  /** The hash of the user's stock firmware for the device id (the key of a bound file); null when none is kept (a module that needs a service is then refused). */
-  firmwareHash?: (device: string) => Promise<string | null>;
-  /** The runtime of the device as the service check sees it (default: its version and the INFO `svc_abi`; a runtime that reports none is not checked). */
+  /** The runtime of the device as the service check sees it (default: its version, the INFO `svc_abi` and `fw_id`; a runtime that reports none of them is not checked, and has no port file). */
   runtimeIdentity?: (info: DkInfoFull) => RuntimeIdentity;
   /** The name hashes of the services the runtime provides itself (default: the generated `RUNTIME_SERVICE_NAMES`). */
   runtimeServices?: Set<number>;
@@ -73,9 +71,7 @@ export function createTransferBackend({
   target: targetApp,
   connection,
   needs: makeNeeds = async (wasm) => DkNeeds.create(await wasm.bytes('patchkit.wasm')),
-  binder,
-  firmwareHash,
-  runtimeIdentity = (info) => ({ version: info.runtime, fingerprint: info.svc_abi }),
+  runtimeIdentity = (info) => ({ version: info.runtime, fingerprint: info.svc_abi, fw: info.fw_id }),
   runtimeServices = new Set(RUNTIME_SERVICE_NAMES.map(nameHash)),
 }: BackendDeps) {
   const { target, checkRuntime, session: running } = targetApp;
@@ -95,49 +91,59 @@ export function createTransferBackend({
     return needsReader;
   }
 
+  /** The files of the last scan of each device, kept for the `installDeps` that follows the `loadLibrary` of the same read (one scan serves both). */
+  const scanned = new Map<string, LibraryFile[]>();
+
   /** The built modules of the device's folder, read again each time (a rebuild in a terminal shows up at the next read). */
   async function loadLibrary(device: string): Promise<LibraryModule[]> {
     const reader = await needs();
     const { library } = env;
     const out: LibraryModule[] = [];
-    for (const f of await library.scan(device)) {
-      if (f.path.endsWith(SERVICE_EXT)) continue;
+    const files = await library.scan(device);
+    scanned.set(device, files);
+    for (const f of files) {
+      if (f.path.endsWith(SERVICE_EXT) || f.path.endsWith(PORT_EXT)) continue;
       const m = await libraryModule(await library.read(device, f.path), (b) => reader.of(b));
       if (m) out.push(m);
     }
     return out;
   }
 
-  /** Bound `.dks` files by firmware hash and unbound hash, kept for the life of the backend. */
-  const bound = new Map<string, Uint8Array>();
-
-  /** The unbound `.dks` files of the library for the device (those that are not a service file are left out). */
-  async function loadServices(device: string): Promise<ServiceFile[]> {
+  /** The `.dks` and `.dkport` files of the library for the device, from one scan (a file that is no service or port file is left out). */
+  async function loadProviders(device: string): Promise<{ services: ServiceFile[]; ports: PortFile[] }> {
     const { library } = env;
-    const out: ServiceFile[] = [];
-    for (const f of await library.scan(device)) {
-      if (!f.path.endsWith(SERVICE_EXT)) continue;
+    const services: ServiceFile[] = [];
+    const ports: PortFile[] = [];
+    // the scan of the `loadLibrary` just before, once; else a scan of its own
+    const files = scanned.get(device) ?? (await library.scan(device));
+    scanned.delete(device);
+    for (const f of files) {
+      const isService = f.path.endsWith(SERVICE_EXT);
+      if (!isService && !f.path.endsWith(PORT_EXT)) continue;
       const bytes = await library.read(device, f.path);
-      const stem = (f.path.split('/').pop() ?? f.path).slice(0, -SERVICE_EXT.length);
-      const file = serviceFileOf(stem, bytes, fileHashHex(bytes));
-      if (file) out.push(file);
+      const ext = isService ? SERVICE_EXT : PORT_EXT;
+      const stem = (f.path.split('/').pop() ?? f.path).slice(0, -ext.length);
+      if (isService) {
+        const file = serviceFileOf(stem, bytes, fileHashHex(bytes));
+        if (file) services.push(file);
+      } else {
+        const file = portFileOf(stem, bytes, fileHashHex(bytes));
+        if (file) ports.push(file);
+      }
     }
-    return out;
+    return { services, ports };
   }
 
-  /** The service-aware install and view inputs for the device, or none when the library has no service or no binder is given. */
+  /** The service-aware install and view inputs for the device, or none when the library has no service. */
   async function installDeps(device: string): Promise<InstallDeps | undefined> {
-    if (!binder || !firmwareHash) return undefined;
-    const services = await loadServices(device);
+    const { services, ports } = await loadProviders(device);
     if (services.length === 0) return undefined;
     const reader = await needs();
     return {
       services,
-      binder,
-      firmwareHash: await firmwareHash(device),
+      ports,
       runtimeIdentity,
       runtimeServices,
-      cache: bound,
       needsOf: (b) => reader.of(b),
     };
   }

@@ -1,15 +1,23 @@
 // Services (.dks files) as dependencies of modules (.dkm): read the NEEDS and PROVIDES of a header table, pick the services an
 // install needs (dependencies first), refuse a module whose services do not fit, and plan which files a delete takes with it.
-// Pure: no I/O. The runtime fingerprint and the binding of a service to the firmware arrive through seams (RuntimeIdentity, ServiceBinder).
-import { HEADER_BYTES, TABLE_MAGIC, fmtVersion } from '@digi/dk-session';
+// Pure: no I/O. The runtime fingerprint and the firmware identity of the device arrive through a seam (RuntimeIdentity).
+//
+// A service file names the firmware by imports and hooks and holds none of its bytes; the runtime resolves them from the port file whose FW item equals the device's fw_id
+// (docs/plans/port-file.md). A service that names the firmware has a hard need of `port`, which is met by a port file of the workbench, never by a service.
+import { HEADER_BYTES, TABLE_MAGIC, TABLE_VERSION, fmtVersion } from '@digi/dk-session';
 import type { Needs } from './fit.ts';
 
 /** The most services one install set may hold. */
-export const PROVIDER_MAX = 6;
+export const PROVIDER_MAX = 8;
 
 const NEEDS_TAG = 1;
 const PROVIDES_TAG = 9;
+const FW_TAG = 11;
 const ROLE_SERVICE = 1;
+const ROLE_PORT = 2;
+
+/** The name a port file provides: the hard need of `port` is met by a port file (a provider, not a service). */
+export const PORT_NAME = 'port';
 
 export interface Need {
   hash32: number;
@@ -34,18 +42,28 @@ export interface ServiceFile {
   needs: Need[];
 }
 
+/** A port file of the workbench (`ports/<device>-<version>.dkport`, role 2): built from committed data, no firmware bytes in it. */
+export interface PortFile {
+  /** The file name without the extension: `<device>-<version>`. */
+  stem: string;
+  label: string;
+  /** The first 8 bytes of the SHA-256 of the stock firmware it is for (its FW item) as 16 hex digits: what the device's INFO `fw_id` is compared with. */
+  fw: string;
+  path: string;
+  bytes: Uint8Array;
+  file_size: number;
+  hash: string;
+}
+
 export interface RuntimeIdentity {
   version: number;
   /** The runtime's service ABI fingerprint (INFO `svc_abi`); null when the runtime does not report it (not checked). */
   fingerprint: number | null;
+  /** The firmware identity of the device (INFO `fw_id`, 16 hex digits); null when the runtime does not report it. */
+  fw: string | null;
 }
 
-export interface ServiceBinder {
-  bind(dks: Uint8Array, firmwareHash: string): Promise<Uint8Array>;
-}
-
-export type ServiceRefusalKind =
-  'missing' | 'version' | 'fingerprint' | 'unknown-hash' | 'too-many' | 'no-stock' | 'bind-failed';
+export type ServiceRefusalKind = 'missing' | 'version' | 'fingerprint' | 'unknown-hash' | 'too-many' | 'no-port';
 
 export interface ServiceRefusal {
   module: string;
@@ -55,10 +73,8 @@ export interface ServiceRefusal {
   have?: string;
   builtFor?: string;
   runtime?: string;
-  /** `bind-failed`: why the service file could not be bound. */
-  error?: string;
-  /** `bind-failed`: `bind-data` when the bind data could not be loaded (the text then names the command that builds it). */
-  hint?: 'bind-data';
+  /** `no-port`: the firmware identity of the device (16 hex digits), or undefined when the runtime reports none. */
+  fw?: string;
 }
 
 export type ServiceState = 'not on device' | 'on device' | 'differs';
@@ -69,7 +85,7 @@ export interface ServiceRef {
   version: number;
   state: ServiceState;
   size: number;
-  /** What a load of the bound service file takes of the device (the same capacity figures as a module); the fit of a ticked set adds it once. */
+  /** What a load of the service file takes of the device (the same capacity figures as a module); the fit of a ticked set adds it once. */
   needs?: Needs;
 }
 
@@ -83,7 +99,7 @@ export function nameHash(s: string): number {
   return h >>> 0;
 }
 
-/** The items of one tag of the header table (header 0x90/0x94 pair); [] without a v1 or v2 table. */
+/** The items of one tag of the header table (header 0x90/0x94 pair); [] without a table of a version the runtime reads. */
 function tableItems(f: Uint8Array, tag: number, itemBytes: number): DataView[] {
   if (f.length < HEADER_BYTES) return [];
   const v = new DataView(f.buffer, f.byteOffset, f.length);
@@ -91,7 +107,7 @@ function tableItems(f: Uint8Array, tag: number, itemBytes: number): DataView[] {
   const size = v.getUint32(0x94);
   if (size < 8 || off + size > f.length || v.getUint32(off) !== TABLE_MAGIC) return [];
   const version = v.getUint16(off + 4);
-  if (version < 1 || version > 2) return [];
+  if (version < 1 || version > TABLE_VERSION) return [];
   const out: DataView[] = [];
   let at = off + 8;
   for (let i = v.getUint16(off + 6); i > 0 && at + 8 <= off + size; i--) {
@@ -144,6 +160,21 @@ export function serviceFileOf(stem: string, bytes: Uint8Array, hash: string): Se
   };
 }
 
+/** The FW item of a port file (tag 11: the first 8 bytes of the stock firmware's SHA-256) as 16 hex digits; null when there is none. */
+export function readFw(bytes: Uint8Array): string | null {
+  const [d] = tableItems(bytes, FW_TAG, 8);
+  return d ? Array.from({ length: 8 }, (_, i) => d.getUint8(i).toString(16).padStart(2, '0')).join('') : null;
+}
+
+/** The port file a .dkport holds: header role word 2 (u32 BE at 0x38), a PROVIDES item and a FW item; null otherwise. */
+export function portFileOf(stem: string, bytes: Uint8Array, hash: string): PortFile | null {
+  if (bytes.length < HEADER_BYTES) return null;
+  if (new DataView(bytes.buffer, bytes.byteOffset, bytes.length).getUint32(0x38) !== ROLE_PORT) return null;
+  const fw = readFw(bytes);
+  if (!fw || readProvides(bytes)?.hash32 !== nameHash(PORT_NAME)) return null;
+  return { stem, label: `${stem} port file`, fw, path: `ports/${stem}.dkport`, bytes, file_size: bytes.length, hash };
+}
+
 function fmt(v: number): string {
   return `${(v >>> 16) & 0xff}.${(v >>> 8) & 0xff}`;
 }
@@ -162,15 +193,22 @@ function hex(h: number): string {
 export interface ResolvedServices {
   byModule: Map<string, ServiceFile[]>;
   order: ServiceFile[];
+  /** The port file for the device's firmware, when a chosen service needs one; null otherwise. */
+  port: PortFile | null;
   refused: ServiceRefusal[];
 }
+
+const PORT_HASH = nameHash(PORT_NAME);
 
 export function resolveServices(
   mods: { id: string; needs: Need[] }[],
   set: ServiceFile[],
   rt: RuntimeIdentity,
   runtimeServices: Set<number>,
+  ports: PortFile[] = [],
 ): ResolvedServices {
+  /** The port file of the device's firmware (the match is on the FW item, not on the file name). */
+  const port = rt.fw === null ? undefined : ports.find((p) => p.fw === rt.fw);
   const provider = new Map<number, ServiceFile>();
   for (const s of set) {
     const o = provider.get(s.hash32);
@@ -188,6 +226,11 @@ export function resolveServices(
     const visit = (ns: Need[]): ServiceRefusal | null => {
       for (const n of ns) {
         if (!n.hard) continue;
+        if (n.hash32 === PORT_HASH) {
+          if (!port)
+            return { module: id, service: PORT_NAME, kind: 'no-port', ...(rt.fw === null ? {} : { fw: rt.fw }) };
+          continue;
+        }
         if (runtimeServices.has(n.hash32)) {
           if (!versionFits(rt.version, n.minVersion))
             return { module: id, service: 'runtime', kind: 'version', need: fmt(n.minVersion), have: fmt(rt.version) };
@@ -224,7 +267,10 @@ export function resolveServices(
       continue;
     }
     const union = new Set([...chosen, ...r]);
-    if (union.size > PROVIDER_MAX) {
+    // the port file takes a provider slot when a service needs it
+    const needsPort = (files: Iterable<ServiceFile>) =>
+      [...files].some((s) => s.needs.some((n) => n.hard && n.hash32 === PORT_HASH));
+    if (union.size + (needsPort(union) ? 1 : 0) > PROVIDER_MAX) {
       const extra = r.find((s) => !chosen.has(s))!;
       refused.push({ module: m.id, service: extra.stem, kind: 'too-many' });
       continue;
@@ -236,11 +282,16 @@ export function resolveServices(
       }
     byModule.set(m.id, r);
   }
-  return { byModule, order, refused };
+  return {
+    byModule,
+    order,
+    port: port && [...chosen].some((s) => s.needs.some((n) => n.hard && n.hash32 === PORT_HASH)) ? port : null,
+    refused,
+  };
 }
 
-/** The files a delete takes: each .dks no remaining .dkm hard-needs goes with the modules that used it; a .dks that is still needed
- * is kept (named with the modules that need it), and deleting a needed .dks alone is refused. A service hash is `nameHash(stem)`. */
+/** The files a delete takes: each .dks and .dkport no remaining .dkm hard-needs goes with the modules that used it; a provider that is still needed
+ * is kept (named with the modules that need it), and deleting a needed provider alone is refused. A service hash is `nameHash(stem)`; every `.dkport` provides `port`. */
 export function planDelete(
   card: { path: string; needs: Need[] }[],
   paths: string[],
@@ -250,38 +301,43 @@ export function planDelete(
   refused: { path: string; by: string[] }[];
 } {
   const chosen = new Set(paths);
-  const isService = (p: string) => p.endsWith('.dks');
+  const isProvider = (p: string) => p.endsWith('.dks') || p.endsWith('.dkport');
   const stemOf = (p: string) => p.replace(/^.*\//, '').replace(/\.dks$/, '');
-  const services = new Map<number, { path: string; needs: Need[] }>();
-  for (const c of card) if (isService(c.path)) services.set(nameHash(stemOf(c.path)), c);
+  const hashOf = (p: string) => (p.endsWith('.dkport') ? PORT_HASH : nameHash(stemOf(p)));
+  const providers = new Map<number, { path: string; needs: Need[] }[]>();
+  for (const c of card)
+    if (isProvider(c.path)) providers.set(hashOf(c.path), [...(providers.get(hashOf(c.path)) ?? []), c]);
 
-  // The .dks paths a file reaches through hard needs.
+  // The provider paths a file reaches through hard needs.
   const reach = (needs: Need[]): Set<string> => {
     const out = new Set<string>();
     const walk = (ns: Need[]) => {
       for (const n of ns) {
-        const s = n.hard ? services.get(n.hash32) : undefined;
-        if (!s || out.has(s.path)) continue;
-        out.add(s.path);
-        walk(s.needs);
+        if (!n.hard) continue;
+        for (const s of providers.get(n.hash32) ?? []) {
+          if (out.has(s.path)) continue;
+          out.add(s.path);
+          walk(s.needs);
+        }
       }
     };
     walk(needs);
     return out;
   };
 
-  const modules = card.filter((c) => !isService(c.path));
+  const modules = card.filter((c) => !isProvider(c.path));
   const remaining = modules.filter((m) => !chosen.has(m.path));
   const deleted = modules.filter((m) => chosen.has(m.path));
   const usedBy = new Map<string, string[]>();
+  // reach walks the needs of the providers too, so the port file a remaining module's service needs is used by that module
   for (const m of remaining) for (const p of reach(m.needs)) usedBy.set(p, [...(usedBy.get(p) ?? []), m.path]);
 
-  const del = new Set<string>(paths.filter((p) => !isService(p)));
+  const del = new Set<string>(paths.filter((p) => !isProvider(p)));
   const kept: { path: string; by: string[] }[] = [];
   const refused: { path: string; by: string[] }[] = [];
   const freed = new Set<string>();
   for (const m of deleted) for (const p of reach(m.needs)) freed.add(p);
-  for (const p of paths) if (isService(p)) freed.add(p);
+  for (const p of paths) if (isProvider(p)) freed.add(p);
   for (const p of freed) {
     const by = usedBy.get(p);
     if (!by) del.add(p);

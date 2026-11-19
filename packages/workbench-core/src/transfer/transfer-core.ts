@@ -110,16 +110,11 @@ export function serviceRefusalText(r: ServiceRefusal): string {
         `Nothing was uploaded for ${r.module}. Update the workbench, or flash a matching runtime from the Firmware page.`
       );
     }
-    case 'no-stock':
+    case 'no-port':
       return (
-        `${r.module} not installed. It needs the ${r.service} service, and the workbench prepares services from your own firmware file. ` +
-        `Choose that file once on the Firmware page. Nothing was uploaded for ${r.module}.`
-      );
-    case 'bind-failed':
-      return (
-        `${r.module} not installed. The ${r.service} service could not be prepared: ${r.error ?? 'unknown error'}. ` +
-        `Nothing was uploaded for ${r.module}.` +
-        (r.hint === 'bind-data' ? ' Build the bind data with: pnpm nx:pilot run @digi/web:bind-bundle.' : '')
+        `${r.module} not installed. It needs the ${r.service} service, which needs the port file of the firmware on your device, and this workbench has none for it` +
+        (r.fw ? ` (firmware ${r.fw}). ` : `: the device does not report its firmware. `) +
+        `This firmware version is not supported yet. Nothing was uploaded for ${r.module}.`
       );
     default:
       return `${r.module} not installed. It needs the ${r.service} service, which this workbench does not have.`;
