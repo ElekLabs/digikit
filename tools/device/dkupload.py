@@ -579,16 +579,38 @@ class Uploader:
         E_NOT_FOUND when no loaded module has that path, E_BUSY while a reload runs, E_STATE while an upload is open. See `reload_state`."""
         self._ok(dkproto.CMD["RELOAD"], "reload", path.encode() + b"\0")
 
+    def load(self, path: str) -> None:
+        """LOAD (runtime capability LIVE): queue the load of the module file at the store path `path`, which no loaded module came from (the file is already there). The same
+        replies as `reload`, but E_LOADED when a module of that path is loaded. See `load_and_wait`."""
+        self._ok(dkproto.CMD["LOAD"], "load", path.encode() + b"\0")
+
+    def unload(self, path: str) -> None:
+        """UNLOAD (runtime capability LIVE): queue the unload of the loaded module that came from the store path `path` (no replacement; the file stays on the card). The same
+        replies as `reload`. See `unload_and_wait`."""
+        self._ok(dkproto.CMD["UNLOAD"], "unload", path.encode() + b"\0")
+
     def reload_state(self) -> dict[str, int]:
-        """RELOAD_STATE: `phase` (0 none yet, 1 queued or running, 2 finished), `result` (0 is ok; else the refusal before anything changed, or the failure after the old module
-        was torn down), `step`, and `unloaded` (1: the old module was torn down, so it is not loaded unless the result is 0; 0: it still runs)."""
+        """RELOAD_STATE: the state of the live job, whichever it is (a load, an unload or a reload): `phase` (0 none yet, 1 queued or running, 2 finished), `result` (0 is ok;
+        else the refusal before anything changed, or the failure after the old module was torn down), `step`, `op` (1 load, 2 unload, 3 reload; 0 from a runtime that does not say) and `unloaded` (1: the module was torn down, so it is not loaded
+        unless the result is 0 and the job loaded; 0: it still runs, or a load never had one)."""
         b = self._ok(dkproto.CMD["RELOAD_STATE"], "reload state")
         return {
             "phase": b[0],
             "result": struct.unpack_from(">i", b, 1)[0],
             "step": b[5],
             "unloaded": b[6],
+            "op": b[7] if len(b) > 7 else 0,
         }
+
+    def _wait_live(
+        self, what: str, step: Callable[[], None], limit: int
+    ) -> tuple[int, bool]:
+        for _ in range(limit):
+            s = self.reload_state()
+            if s["phase"] == 2:
+                return s["result"], bool(s["unloaded"])
+            step()
+        raise TimeoutError(f"the {what} did not end")
 
     def reload_and_wait(
         self, path: str, step: Callable[[], None], limit: int = 2000
@@ -596,12 +618,21 @@ class Uploader:
         """`reload`, then ask `reload_state` until the job ends, calling `step()` between the asks (an emulator is stepped there): `(result, unloaded)` as in `reload_state`
         (result 0 is ok). A job that does not end within `limit` asks raises `TimeoutError`."""
         self.reload(path)
-        for _ in range(limit):
-            s = self.reload_state()
-            if s["phase"] == 2:
-                return s["result"], bool(s["unloaded"])
-            step()
-        raise TimeoutError(f"the reload of {path} did not end")
+        return self._wait_live(f"reload of {path}", step, limit)
+
+    def load_and_wait(
+        self, path: str, step: Callable[[], None], limit: int = 2000
+    ) -> tuple[int, bool]:
+        """`load`, then wait as `reload_and_wait` does: result 0 means the module is loaded."""
+        self.load(path)
+        return self._wait_live(f"load of {path}", step, limit)
+
+    def unload_and_wait(
+        self, path: str, step: Callable[[], None], limit: int = 2000
+    ) -> tuple[int, bool]:
+        """`unload`, then wait as `reload_and_wait` does: result 0 (with `unloaded`) means the module is not loaded any more."""
+        self.unload(path)
+        return self._wait_live(f"unload of {path}", step, limit)
 
     # -- digikit/remote (docs/plans/remote-control.md): the commands of a run-time service module, `dkproto.SERVICE_CMD`
     def remote_state(self) -> dict[str, int]:

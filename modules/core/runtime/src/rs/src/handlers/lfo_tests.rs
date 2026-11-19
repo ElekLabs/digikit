@@ -135,6 +135,8 @@ fn a_second_owner_of_a_shape_id_and_an_id_twice_or_zero_are_refused() {
 
 #[test]
 fn a_record_of_a_kind_that_is_not_generic_or_has_the_wrong_length_never_reaches_the_service() {
+    // `add_record` reads the service table, a static that the tests of the service rows replace under this lock
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let b = body(1, 0);
     assert_eq!(b.len() + 8, LEN_LFO_SHAPE as usize);
     let mut c = Collect::new();

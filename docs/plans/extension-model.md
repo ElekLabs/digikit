@@ -25,7 +25,7 @@ and make every content module hot-reloadable. In detail:
 7. The folders and names show the layers: runtime, platform, services with their image halves, apps, content modules.
 
 Not in scope: replacing a service while the device runs (hot reload S3, hook gates). A changed service still needs a restart
-([digikit-hot-reload.md](digikit-hot-reload.md) decision 4). Unload without a replacement, offered to the user, waits for a later decision (O5).
+([digikit-hot-reload.md](digikit-hot-reload.md) decision 4). Unload and load of a content module while the device runs, offered to the user in the MODULES list, are E5c.
 
 ## 2. State before this plan
 
@@ -298,7 +298,7 @@ No hand-built record bytes where a builder call exists.
 Service statics are reset by `module_begin` and `remove`; the suite takes the shared test lock.
 
 This is the "contract suites for `Service`" item of [test-architecture.md](test-architecture.md) T1 and the follow-up named in the 2026-11-17
-handovers. Key refusal is a planner test (E3), not a contract case. `in_use` and its case wait for O5.
+handovers. Key refusal is a planner test (E3), not a contract case. There is no `in_use` scan: the refusals of an unload are the menu check and `teardown_refusal` (E5c).
 
 ### 3.6 Reload of content modules
 
@@ -309,7 +309,7 @@ Order:
 1. **Validate the new file first**, before anything is unloaded: role, ABI, firmware identity, and the planner (keys, owners, fit, needs)
    for the candidate against the live set minus the old module.
 2. **Keys check**: the new file's `KEYS` must contain every key of the old file that kit data can name. If not, refuse (this replaces an
-   `in_use` scan for reload; a key the new file drops needs unload, which waits for O5).
+   `in_use` scan for reload; a key the new file drops needs an unload and a load, E5c).
 3. **Refuse** while the transport plays or records, during card operations, in safe mode, when the module built its own menus (until
    `core/ui` can tear down a module's menus, E5b), and for an fx module that has a published effect row (E5b).
 4. **Unload the old module**: stop its voices, wait for in-flight SysEx commands and the span clock, run `unload_rec`. `unload_rec` resumes
@@ -718,6 +718,65 @@ What:
 
 Estimate: 1-2 days. Depends on: E5.
 
+### E5c Live enable and disable of content modules
+
+E5 reloads a module that is loaded. E5c adds load and unload of a content module at run time, so the user can tick and untick a module in the
+MODULES list and see the change without a restart. Both are built on E5's job: reload is already "the unload half, then the load half"
+(`reload.rs`), so one job with three operations replaces three mechanisms.
+
+Decisions (taken with Em):
+1. Untick while a track uses the machine: a plain unload. The live state equals the state after "untick and restart" today: a gap row, which plays the
+   first stock machine's sound. "MISSING and silent for an absent module everywhere" is a separate later item.
+2. A needed service is not loaded: the plan answers `E_MISSING` and the menu offers "restart to apply". Loading a service at run time waits for port file
+   step 3 (slot fill). E5b item 7 as written (writing hook jumps while the device runs) is not built.
+3. The menu applies a change as one batch when the user leaves the MODULES list: the unloads first, then the loads.
+4. A load is refused while the transport plays, like an unload and a reload (one rule).
+
+What:
+1. One job, three operations (`reload::Job.op`): load, unload, reload. The states keep their numbers (IDLE, CHECK, QUIESCE, UNLOAD, LOAD, DSP, DONE), so
+   `RELOAD_STATE` keeps its bytes. Load: CHECK, LOAD, DSP (if the module has a DSP part), DONE. Unload: CHECK, QUIESCE, UNLOAD, DONE. Reload: as E5.
+   Every job that passes CHECK ends with `finish` (`Service::live_done`: the machine list is rebuilt, placeholders freed, counters).
+2. No new two-phase protocol across services. The loader already sends each lifecycle step to every loaded service by owner id, and its undo is the
+   rollback: a load that fails ends as `fail` leaves it, a failed DSP part ends through `take_down`.
+3. Loader: `Phase::Reload` becomes `Phase::Live` and accepts `Slot::Free` as well as `Slot::Module`. `live_check_load` runs `check_file(path, Slot::Free)` and the planner
+   over the live set with the file at its selection index (`live_caps(own = (0,0))`); `live_load` keeps the file's header table at that index, runs `settle` over the
+   live set plus the file and loads into the first free record. `pick_record` answers `E_LOADED` for a name that is loaded.
+4. Selection index of a load (`boot::pick_index`): the index the full path had at this boot, if no module lives there (the boot's load loop writes a 32-bit hash of each selection path once, `BOOT_PATH`; a live load never writes it, so a module gets its index back after another module used a new one); else the first index below the count that no module lives at and no boot path owns; else a new
+   index (`count + 1`); `E_SEL_COUNT` at `SEL_MAX`. `BOOT_NAME` stays the display name. The boot record (`states`, `results`, `needs`), `BOOT_NAME`, `tables`, `accepted` and `sel_of_rec` use that index, as at the boot. A load that fails puts the boot record row and the count back as they were (UNLOADED stays UNLOADED; an unused index is SELECTED again).
+5. Unload end state: the record is free, `accepted[k]` and `sel_of_rec[rec]` are cleared, `loaded` drops, the state is the new `STATE_UNLOADED` (8, "taken down at run time"), the services' `live_done`
+   ran. The sticky numbers stay, so a later load of the same file gets the same numbers. Unload runs no settle. A load that fails ends as it began: the index is free again.
+6. Refusals, one order (`reload::refusal`):
+
+   | Rule | load | unload | reload |
+   | --- | --- | --- | --- |
+   | safe mode, DSP retained, transport not stopped, upload open, card busy | yes | yes | yes |
+   | the module built menus (`E_RELOAD_MENUS`); `Service::teardown_refusal` (an fx on a route: `E_RELOAD_ROUTED`) | - | yes | yes |
+   | file checks and the plan over the live set (`E_MISSING` for a service that is not loaded) | yes | - | yes |
+   | same name, keys superset (`E_RELOAD_KEYS`) | - | - | yes |
+
+   The `E_RELOAD_*` codes keep their numbers and also answer an unload and a load.
+7. Numbering: load and reload run `settle` over the live set plus the candidate; unload runs none.
+8. Services: no new method. `CoreApi::live_op` stays the owner of a module that is being reloaded (a plain unload and a failed load must write gap rows, not placeholders, so they leave it 0).
+   `live_done` runs at the end of every job that passed its checks. A multi-service module (for example a machine with sample pool entries) needs no service list: each
+   lifecycle step goes to all service rows in table order, and the teardown runs in phases (`dsp_clear` of all, `fini`, `remove` of all in reverse, `dsp_release` of all).
+   One host case covers the edge: `dsp_clear` runs on every service even when one fails, and the abort that follows leaves every service's rows as they were.
+9. Protocol: `CMD_LOAD` (0x08) and `CMD_UNLOAD` (0x09) take the body and give the reply of `CMD_RELOAD`; `RELOAD_STATE` serves all three (capability bit `LIVE`, 19) and ends with a byte `op` (1 load, 2 unload, 3 reload; an old runtime sends 7 bytes). C calls for the
+   menu: `dkrt_live(op, path)` (queue a job on the same `Job::queue`) and `dkrt_live_state(out)`.
+10. Clients: `DkSession.load`, `unload`, `loadAndWait`, `unloadAndWait` (TypeScript, with `liveModules` in `dktransfer.ts`), `Uploader.load`, `unload`, `load_and_wait`, `unload_and_wait` (`tools/device/dkupload.py`), `wb transfer load|unload PATH`. The Rust `dkupload` crate has no uploader method for reload either: it carries the generated command and capability constants only.
+
+PR 1 (E5c-1) is items 1 to 10 without the menu. PR 2 (E5c-2): `menu.c` `apply()` keeps the save, queues the changed rows through `dkrt_live` (unloads first), polls with the per-pass
+callback and restarts directly only for a route change or to leave safe mode. The user sees "APPLY n CHANGES?"; rows read LOADING; a refusal or failure shows "<NAME> NOT APPLIED" and
+the status text, then "RESTART TO APPLY?" ("STOP PLAYBACK" for the transport refusal). New `status_text` rows -83 to -87. The same PR maps the boot results by the saved selection index
+(`g_sel_of`; read results by path) and drops the `g_set[k]` settings-menu cache when the `unloads` or `reloads` counters change. The menu is an image change: named-subset gate.
+
+Tests: job unit tests over the scripted `Ops` for each operation and each refusal; loader tests (load into a free record with index allocation: a path seen at boot, a new path, `SEL_MAX`;
+the unload end state; a load after an unload keeps the sticky number; the `dsp_clear` abort case); assembly cases in `core/runtime:test-assembly` (a packed fixture loaded at run time, unloaded,
+loaded again). Device proof (file `modules/core/runtime/tests/live.device.test.ts`): a code-only fixture loaded outside the boot selection; `test/sine` loaded, then a note with a pitch report;
+unload with a note held; load and unload soak (5 cycles, 20 in the full tier); `E_MISSING` with no machines service; a sample-pool fixture loaded, a sample bound, unloaded with the voice
+sounding, loaded again. Plus C:loading, gate-smoke and gate-pins.
+
+Estimate: PR 1 12 to 16 h of agent editing time, PR 2 6 to 8 h. Depends on: E5.
+
 ### E6 LFO shapes
 
 What:
@@ -928,6 +987,8 @@ runtime-and-services.md.
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | done: PR #623 (device: reload test on DT2 and DN2 incl. PCM swap check and soak; named subset 35 halves, gate-smoke, gate-pins) |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
+| 7 | E5c-1 live job: load, unload and reload (runtime, protocol, clients) | E5 | live test (list in E5c), subset | done: PR (device: live, shot-live, reload, C:loading subset, gate-smoke, gate-pins on DT2 and DN2) |
+| 7 | E5c-2 MODULES applies live (menu) | E5c-1 | menu device test, subset | todo |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |
 | 8 | LFO shape template and first module | E6 | lfo test | done: PR #618: module kind `lfo-shape` (`mise run module:new -- lfo-shape AUTHOR/NAME`, `sdk/templates/lfo-shape`; `module:check` runs the service validator), module `digikit/lfo_shapes_1` with 7 shapes (STP4 PULS HSIN ABSN SOFT DUCK WOBL), Transfer group "LFO shapes"; `mise run lfo:report -- <author/name>` measures each shape's output on the emulator (DN2 report: all seven shapes OK) |
@@ -982,7 +1043,7 @@ Taken:
 - Extended values (rule 7): LFO waves in the sound (stock readers clamp them); filter types in digikit's store (the stock loader resets them).
 - Proof adapters stay; they move next to what they prove (4.1); E1 checks whether `file-catalog-proof` is still needed.
 - O1: filters get a typed `dk_filter *` handle; the machines service implements them.
-- O5: reload first; user-facing unload without a replacement later.
+- O5 (decided with E5c): reload first (E5), then one live job for load, unload and reload (E5c); the user applies a MODULES change as one batch, unloads first.
 - O2: the top-level lift of the taxonomy (E8), after the port-file stack and E5c/E5b, before port step 3, the project service and E7.
 - Effect id format stays 16-bit.
 
@@ -1003,6 +1064,6 @@ Open:
   validate-then-reload with a placeholder (3.6); S3 stays deferred; "gate" becomes "hook gate".
 - [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md): row E; row H points to E5 for S1 and S4.
 - [test-architecture.md](test-architecture.md): T1 "contract suites for `Service`" is E4.
-- `docs/ARCHITECTURE.md`, `docs/LAYOUT.md`, `AGENTS.md` directory map: E8. ARCHITECTURE.md:198 (no unload) changes with E5.
+- `docs/ARCHITECTURE.md`, `docs/LAYOUT.md`, `AGENTS.md` directory map: E8. The lifetime rule of ARCHITECTURE.md (no module unloads) changes with E5c.
 - `docs/MODULE-AUTHORING.md` and `sdk/README.md`: the three shapes of 3.2 and the rules of 3.3 (E2), filters and LFO shapes (E6, E7).
 - `.agents/skills/digikit-module/SKILL.md`: the filter and LFO builder calls (E6, E7).

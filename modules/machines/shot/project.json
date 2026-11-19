@@ -13,6 +13,16 @@
         "dksampleWasm": true
       },
       {
+        "files": ["tests/shot-live-dt2.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "S:machines", "S:samples"],
+        "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
+        "plusdrive": true,
+        "dksampleWasm": true,
+        "sources": ["packages/dk-session/src/dkupload-core.ts", "packages/dk-session/src/gen_proto.ts"]
+      },
+      {
         "files": ["tests/shot-dn2-pool.device.test.ts"],
         "devices": ["dn2"],
         "dsp": "sharc",

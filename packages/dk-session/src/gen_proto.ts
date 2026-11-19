@@ -64,6 +64,8 @@ export const CMD = {
   LOADS: 0x05,
   RELOAD: 0x06,
   RELOAD_STATE: 0x07,
+  LOAD: 0x08,
+  UNLOAD: 0x09,
   BEGIN: 0x10,
   DATA: 0x11,
   END: 0x12,
@@ -218,6 +220,7 @@ export const LOAD_STATE: [number, string, string][] = [
   [5, 'ACTIVE', 'loaded; its DSP part, if any, is in place'],
   [6, 'FAILED', 'loading failed after the plan accepted it; the result code says why'],
   [7, 'SKIPPED', 'not loaded on purpose: this boot is in safe mode'],
+  [8, 'UNLOADED', 'taken down at run time by an unload (it can be loaded again)'],
 ];
 
 export const CAP = {
@@ -240,6 +243,7 @@ export const CAP = {
   SVC_ABI: 16,
   RELOAD: 17,
   FW_ID: 18,
+  LIVE: 19,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */

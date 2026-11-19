@@ -16,6 +16,12 @@ pub const STATE_UNLOADING: u32 = 2;
 pub const MOD_LOADED: u32 = 0;
 /// DkrtModule.state: its DSP part is still being sent.
 pub const MOD_LOADING: u32 = 1;
+/// dkrt_live op: load the content module of a store file that is not loaded.
+pub const LIVE_LOAD: u32 = 1;
+/// dkrt_live op: unload the loaded content module that came from a store path.
+pub const LIVE_UNLOAD: u32 = 2;
+/// dkrt_live op: replace the loaded content module that came from a store path by the file now at that path.
+pub const LIVE_RELOAD: u32 = 3;
 /// Room for the entries a caller of dkrt_capacity gives (the runtime has 16 kinds; new kinds are appended).
 pub const CAP_MAX: usize = 20;
 /// The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it).
@@ -342,6 +348,27 @@ const _: () = assert!(offset_of!(DkrtStoreFile, first) == 0, "DkrtStoreFile.firs
 const _: () = assert!(offset_of!(DkrtStoreFile, size) == 4, "DkrtStoreFile.size");
 const _: () = assert!(offset_of!(DkrtStoreFile, sha) == 8, "DkrtStoreFile.sha");
 
+/// dkrt_live_state result: the live job (a load, an unload or a reload; the runtime has one). The same words as the RELOAD_STATE command.
+#[repr(C)]
+pub struct DkrtLive {
+    /// 0 no job yet, 1 queued or running, 2 finished
+    pub phase: u32,
+    /// 0, or the refusal or failure (E_* of sdk/sdk.toml); valid when phase is 2
+    pub result: i32,
+    /// 0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done
+    pub step: u32,
+    /// 1: the module was torn down, so it is not loaded unless the job was a load or reload that ended with result 0
+    pub unloaded: u32,
+    /// LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD of the last job (0: none yet)
+    pub op: u32,
+}
+const _: () = assert!(size_of::<DkrtLive>() == 20, "DkrtLive size");
+const _: () = assert!(offset_of!(DkrtLive, phase) == 0, "DkrtLive.phase");
+const _: () = assert!(offset_of!(DkrtLive, result) == 4, "DkrtLive.result");
+const _: () = assert!(offset_of!(DkrtLive, step) == 8, "DkrtLive.step");
+const _: () = assert!(offset_of!(DkrtLive, unloaded) == 12, "DkrtLive.unloaded");
+const _: () = assert!(offset_of!(DkrtLive, op) == 16, "DkrtLive.op");
+
 /// dkrt_module result: one loaded module.
 #[repr(C)]
 pub struct DkrtModule {
@@ -642,6 +669,12 @@ pub mod sig {
 
     /// Load the module at store path (NUL-terminated). Only at boot: after it, E_BOOT_ONLY.
     pub type dkrt_load = unsafe extern "C" fn(path: *const u8) -> i32;
+
+    /// Queue a live job: op is LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD, path the store path (NUL-terminated, at most 63 bytes; the file of a load or a reload is on the card already). The job runs from the UI loop, one step a pass; dkrt_live_state says where it is. OK (queued), E_BUSY (a job is queued or running), E_MSG (no path, one that does not fit, or an unknown op), E_RELOAD_RETAINED, E_FORMAT (the path is the file of a service), E_NOT_FOUND (unload and reload: no loaded content module came from that path), E_LOADED (load: a module of that path is loaded).
+    pub type dkrt_live = unsafe extern "C" fn(op: u32, path: *const u8) -> i32;
+
+    /// Fill out: the phase, result and step of the live job and whether the module was torn down.
+    pub type dkrt_live_state = unsafe extern "C" fn(out: *mut DkrtLive);
 
     /// The index-th loaded module (in load-slot order); OK, or E_NOT_FOUND past the end.
     pub type dkrt_module = unsafe extern "C" fn(index: u32, out: *mut DkrtModule) -> i32;

@@ -365,6 +365,58 @@ mod table {
         }
     }
 
+    use core::sync::atomic::{AtomicU32, Ordering::SeqCst};
+
+    /// What each service of the abort case did: the number of `dsp_clear` calls it saw, and (the first) how many calls still fail.
+    static FAILS_LEFT: AtomicU32 = AtomicU32::new(0);
+    static CLEARS: [AtomicU32; 3] = [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
+
+    macro_rules! counting {
+        ($name:ident, $slot:expr, $fails:expr) => {
+            struct $name;
+            impl<C: CoreApi> Service<C> for $name {
+                dkrt_abi::accepts_records!();
+                dkrt_abi::accepts_teardown!();
+                unsafe fn dsp_clear(_: &C, _: usize) -> bool {
+                    CLEARS[$slot].fetch_add(1, SeqCst);
+                    if $fails && FAILS_LEFT.load(SeqCst) > 0 {
+                        FAILS_LEFT.fetch_sub(1, SeqCst);
+                        return false;
+                    }
+                    true
+                }
+            }
+        };
+    }
+    counting!(First, 0, false);
+    counting!(Failing, 1, true);
+    counting!(Last, 2, false);
+
+    /// A module with rows in several services (a machine with sample pool entries): the DSP clear of an unload goes to every service even when one of them fails
+    /// (E5c), so a service that comes after the failing one has cleared its rows too. The unload then answers `E_BUSY` before `fini` and the job gives the module
+    /// back (`reload_abort`); the next try clears every service again and succeeds.
+    #[test]
+    fn the_dsp_clear_reaches_every_service_when_one_fails_and_a_second_try_after_the_abort_clears_all_again() {
+        static MULTI: [ServiceRow; 3] = [
+            ServiceRow::of::<First, crate::core_api::RealCore>("first", &[]),
+            ServiceRow::of::<Failing, crate::core_api::RealCore>("failing", &[]),
+            ServiceRow::of::<Last, crate::core_api::RealCore>("last", &[]),
+        ];
+        static MULTI_P: dkrt_abi::service::RowPtrs<3> = dkrt_abi::service::RowPtrs::of(&MULTI);
+        let t = ServiceTable { rows: &MULTI_P.0, ..T };
+        FAILS_LEFT.store(1, SeqCst);
+        for c in &CLEARS {
+            c.store(0, SeqCst);
+        }
+        unsafe {
+            assert!(!t.dsp_clear(0), "the failing service holds the unload");
+            assert_eq!(CLEARS.iter().map(|c| c.load(SeqCst)).collect::<Vec<_>>(), [1, 1, 1], "the service after the failing one cleared too");
+            // after the abort the job tries again from the same record
+            assert!(t.dsp_clear(0));
+            assert_eq!(CLEARS.iter().map(|c| c.load(SeqCst)).collect::<Vec<_>>(), [2, 2, 2], "every service clears again; a clear of rows already clear is harmless");
+        }
+    }
+
     #[test]
     fn a_kind_two_services_count_is_the_sum_of_their_counts() {
         static TWO_B: [ServiceRow; 2] = [ServiceRow::of::<B, crate::core_api::RealCore>("b1", &[]), ServiceRow::of::<B, crate::core_api::RealCore>("b2", &[])];
