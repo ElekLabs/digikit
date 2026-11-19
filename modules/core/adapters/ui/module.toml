@@ -45,7 +45,7 @@ resource = "cf.menu.site.settings_list.tail"
 [[gen]]
 kind = "gas"
 path = "build/gen/ui-{dev}.inc"
-uses = ["UI_KEY_*"]
+uses = ["UI_KEY_*", "UI_KEYFL_*"]
 
 [[object]]
 path = "build/keys-dt2.dko.json"

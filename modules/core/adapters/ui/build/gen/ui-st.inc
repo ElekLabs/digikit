@@ -3,3 +3,5 @@
     .equ UI_KEY_YES2, 0x30    /* [input.view_keys] yes2 (a second YES key, 0 none) */
     .equ UI_KEY_NO, 0xd    /* [input.view_keys] no (the key id of NO) */
     .equ UI_KEY_RIGHT, 0x11    /* [input.view_keys] right (the key id of RIGHT) */
+    .equ UI_KEYFL_MOVE, 0x0    /* [input.view_keys] move_flag (the flags bit the move keys act on) */
+    .equ UI_KEYFL_ACT, 0x4    /* [input.view_keys] act_flag (the flags bit YES and NO act on) */
