@@ -1,0 +1,31 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [],
+ "sections": [
+  {
+   "align": 2,
+   "hex": "0000000a000000310000000c0000000f",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 16
+  }
+ ],
+ "source_sha256": "6a9447065cd38a24edd1b2c336165830420c360b6beacff23f0c9be92b6dfcbe",
+ "symbols": [
+  {
+   "global": true,
+   "name": "dk_ui_view_keys",
+   "section": ".rodata",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "0",
+  "isa_check": "2b619a20087bbc670158c513474298a9426fa131a99cbe6efb74bced599cf280",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

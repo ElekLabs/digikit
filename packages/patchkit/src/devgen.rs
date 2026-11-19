@@ -88,6 +88,20 @@ struct FxDoc {
 #[derive(Deserialize)]
 struct InputDoc {
     backend: String,
+    #[serde(default)]
+    view_keys: Option<ViewKeysDoc>,
+}
+/// `[input.view_keys]`: the key ids of the firmware's key events (the id the views' key handlers get at +0xc of the event), which are the firmware's
+/// key indices and differ from the panel codes on some devices (the Syntakt's decoder table is not the identity, finding 138 "Safe key"). core/ui reads
+/// them to tell YES, NO and RIGHT in its list views. `yes2` is a second key that acts as YES (0: none).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ViewKeysDoc {
+    yes: u64,
+    #[serde(default)]
+    yes2: u64,
+    no: u64,
+    right: u64,
 }
 /// `[panel]`: the key codes: codes 1 to 8 * `linear_channels` are linear (code = channel * 8 + bit + 1), `[panel.exceptions]` lists the others as
 /// code = [channel, bit]. Only these numbers are generated; the groups are for hosts that draw the panel.
@@ -338,6 +352,8 @@ struct InputF {
     encoders: u64,
     /// (code, channel, bit)
     exceptions: Vec<[u64; 3]>,
+    /// The key ids of the firmware's key events: yes, yes2, no, right.
+    view_keys: [u64; 4],
 }
 #[derive(Debug)]
 struct SamplePoolF {
@@ -766,7 +782,11 @@ fn input_facts(short: &str, i: Option<InputDoc>, p: Option<PanelDoc>) -> Result<
         }
         exceptions.push([code, *ch, *bit]);
     }
+    let view_keys = i
+        .view_keys
+        .map_or([0; 4], |k| [k.yes, k.yes2, k.no, k.right]);
     Ok(InputF {
+        view_keys,
         backend: backend as u64 + 1,
         linear_channels: p.linear_channels,
         button_channels: p.button_channels,
@@ -1348,6 +1368,23 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         "[panel] button_channels (the button decoder's tables: a key channel is below it)",
     ));
     v.push(c("PANEL_ENCODERS", inp.encoders, "[panel] encoders"));
+    for (name, value, what) in [
+        ("UI_KEY_YES", inp.view_keys[0], "yes"),
+        ("UI_KEY_YES2", inp.view_keys[1], "yes2"),
+        ("UI_KEY_NO", inp.view_keys[2], "no"),
+        ("UI_KEY_RIGHT", inp.view_keys[3], "right"),
+    ] {
+        v.push(c(
+            name,
+            value,
+            match what {
+                "yes" => "[input.view_keys] yes (the key id of YES in a key event)",
+                "yes2" => "[input.view_keys] yes2 (a second YES key, 0 none)",
+                "no" => "[input.view_keys] no (the key id of NO)",
+                _ => "[input.view_keys] right (the key id of RIGHT)",
+            },
+        ));
+    }
     v.push(c(
         "PANEL_EXC_N",
         inp.exceptions.len() as u64,

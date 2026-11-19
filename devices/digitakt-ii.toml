@@ -313,6 +313,13 @@ overdrive-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", 
 [input]
 backend = "panel-uart"
 
+# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes). DT2 1.17 and DN2 1.12: the decoder tables are the identity (finding 58). `yes2` is a second YES key.
+[input.view_keys]
+yes = 10
+yes2 = 49
+no = 12
+right = 15
+
 [panel]
 # The wire carries (channel, bit); the firmware reports a control code.
 # Channels 0..5 are linear -- code = channel * 8 + bit + 1, codes 1..48 --

@@ -48,7 +48,7 @@ Every reply body starts with `i8 status` (0 = ok). Codes, in the runtime's code 
 | -58 | E_READ | the firmware's block read failed |
 | -59 | E_NOFILE | DELETE of a path that is not in the store |
 | -60 | E_PROTO | unknown protocol version or command |
-| -61 | E_NOSTORE | the device has no `[card.store]` or the store header is unreadable (CLEAR still works) |
+| -61 | E_NOSTORE | the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then) |
 | -62 | E_INUSE | BEGIN, DELETE or CLEAR on a card whose store area is not ours and not blank: the runtime writes nothing there (see "Card safety") |
 | -63 | E_PEEK | PEEK of a range that the device file does not list, or a length of 0 or over 512 |
 | -65 | (free) | was `E_DISABLED`, the guard of the remote range while DIGIKIT > REMOTE was off; the switch and the guard are gone |
@@ -93,7 +93,7 @@ SoftwareVersion (the stock route is unchanged). *Changed 2026-10-18 (lane r4); t
 Behaviour the first draft left open (lane r4, built and tested):
 
 - A card with nothing in the store area is an empty store: INFO, LIST and BEGIN work, and the first END writes both headers. A card that is smaller than the area has no store (`E_NOSTORE` for every command that needs it).
-  `E_NOSTORE` is for a header that is there but unreadable (no usable copy); CLEAR still works then.
+  `E_NOSTORE` is also for a header that is there but unreadable (no usable copy) and for an area that holds other data; CLEAR still works then, and it is refused with a card that is too small.
 - END closes the upload whatever its result (a failed END needs a new BEGIN). BEGIN, DELETE and CLEAR drop an open upload. ABORT with
   none open is ok.
 - The table is streamed through two 8 KiB buffers, so a store holds as many entries as the card has room for (version 4, docs/design/digikit-store.md); a request body is at most 256 bytes (a path of 159 bytes

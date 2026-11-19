@@ -270,6 +270,13 @@ frame_samples = 32
 [input]
 backend = "panel-uart"
 
+# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes). Syntakt: the firmware's key indices from the decoder table at 0x401d7a48 (word per wire position channel * 8 + bit; finding 138 "Safe key", finding 152): YES = channel 4 bit 6 = 12, NO = channel 3 bit 3 = 13, RIGHT = channel 3 bit 6 = 17; no second YES key.
+[input.view_keys]
+yes = 12
+yes2 = 0
+no = 13
+right = 17
+
 # Panel, measured on the emulated OS 1.42 (finding 70 "Panel sweep"). The wire carries (channel, bit); code = channel * 8 + bit + 1 for the six
 # linear channels, as on the other devices. Unlike them, the firmware's decoder table (0x401d7a48, 32 bytes per channel) is not the identity:
 # the code is a wire position, not the firmware's control number. Channel 6 has one key, LEVEL push, at bit 0.

@@ -51,10 +51,12 @@ void dk_make_sp(shared_ptr *out, uint8_t *parent, uint8_t *view);
 #define VT_KEY 2
 #define VT_DETACH_ADD 16
 #define VT_CLOSE 10
-#define KEY_YES 10
-#define KEY_YES2 0x31
-#define KEY_NO 12
-#define KEY_RIGHT 15
+/* The key ids of the firmware's key events (the id at +0xc of the event): the device's `[input.view_keys]`, in the per-device object src/keys/<dev>.s. */
+extern const uint32_t dk_ui_view_keys[4];
+#define KEY_YES (dk_ui_view_keys[0])
+#define KEY_YES2 (dk_ui_view_keys[1]) /* 0: the device has no second YES key */
+#define KEY_NO (dk_ui_view_keys[2])
+#define KEY_RIGHT (dk_ui_view_keys[3])
 #define MAX_CHOICE 32
 #define LIST_ROWS 8
 #define LIST_COLS 20 /* characters of a list row that the label of a toggle or value row fills */
@@ -592,7 +594,7 @@ static uint32_t list_key(uint8_t *view, uint8_t *ev)
             open_panel(m);
             return 1;
         }
-        if ((id == KEY_YES || id == KEY_YES2) && (fl & 16) && m->d->check) {
+        if ((id == KEY_YES || (KEY_YES2 && id == KEY_YES2)) && (fl & 16) && m->d->check) {
             int row_ = (int)p->main.selected;
             if (row_ >= 0 && row_ < m->n)
                 toggle_check(m, row_);
