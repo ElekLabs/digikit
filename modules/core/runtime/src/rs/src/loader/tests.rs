@@ -1782,3 +1782,150 @@ fn a_reload_check_runs_the_file_checks_as_a_load_does_with_the_selection_index_o
         assert_eq!((l.table_len[0], l.tables[0]), table);
     }
 }
+
+// ---- live load and unload (docs/plans/extension-model.md E5c) ----------------------------------------------------------------------------------
+
+const PATH_C: &[u8] = b"mods/c.dkm\0";
+
+/// What a live job leaves of module `a` in a closed loader: a loader with `a` live at index 0 and a second file `b` (key 9) in the store at `PATH_B`.
+unsafe fn live_a_with_b() -> Fake {
+    let mut l = live_a();
+    l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
+    l
+}
+
+#[test]
+fn a_live_load_takes_the_first_free_record_at_the_given_index_and_the_check_changes_nothing() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a_with_b();
+        let (live, allocs) = (l.m.live.len(), l.m.allocs);
+        // the check: no record, no table, no acceptance of the index, the selection index as it was
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), OK);
+        assert_eq!((l.m.live.len(), l.m.allocs, st().modules[1].used, l.table_len[1], l.accepted[1]), (live, allocs, 0, 0, false));
+        assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
+        // the load: the record is the first free one, whatever the index; the table and the acceptance are kept at the index
+        assert_eq!(l.live_load(4, PATH_B.as_ptr()), OK);
+        assert_eq!((st().modules[1].used, l.sel_of_rec[1], l.accepted[4], l.phase == Phase::Closed), (1, 4, true, true));
+        assert_eq!(crate::entry::tick_of(1), st().modules[1].base + 8);
+        let mut out = [0u32; 8];
+        assert_eq!(l.keys_of(4, dkneeds::KIND_MACHINE, &mut out), 1);
+        assert_eq!(out[0], 9);
+        assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
+        // the module that was live is untouched, and both are live at their indices
+        assert_eq!((st().modules[0].used, l.sel_of_rec[0], l.accepted[0]), (1, 0, true));
+        assert_eq!(l.live_at(SEL_MAX), [true, false, false, false, true, false, false, false]);
+        assert!(cstr_eq(records::path(1).as_ptr(), PATH_B.as_ptr()), "the record keeps the path it was loaded from");
+    }
+}
+
+#[test]
+fn a_live_check_refuses_a_loaded_name_a_key_clash_a_full_capacity_a_damaged_file_and_an_index_past_the_selection() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a_with_b();
+        let mut check = |l: &mut Fake, f: Option<Vec<u8>>, caps: &[DkrtCap]| {
+            match f {
+                Some(f) => l.m.files.insert(PATH_C[..PATH_C.len() - 1].to_vec(), f),
+                None => l.m.files.remove(&PATH_C[..PATH_C.len() - 1].to_vec()),
+            };
+            l.live_check_load(1, PATH_C.as_ptr(), caps)
+        };
+        assert_eq!(check(&mut l, Some(keyed_file(b'a', &[7])), &wide()), E_LOADED, "the name of a loaded module");
+        assert_eq!(check(&mut l, Some(keyed_file(b'c', &[1])), &wide()), E_PLAN_KEY, "a key a loaded module has");
+        let mut tight = wide();
+        let mods = tight.iter().position(|c| c.kind == dkrt_sdk::proto::CAPK_MODULES as u32).unwrap();
+        tight[mods].limit = 1;
+        assert_eq!(check(&mut l, Some(keyed_file(b'c', &[5])), &tight), E_PLAN_FIT);
+        let mut bad = keyed_file(b'c', &[5]);
+        bad[0] ^= 1;
+        assert_eq!(check(&mut l, Some(bad), &wide()), E_FORMAT);
+        assert_eq!(check(&mut l, None, &wide()), E_NOT_FOUND, "no such file");
+        assert_eq!(check(&mut l, Some(keyed_file(b'c', &[5])), &wide()), OK);
+        assert_eq!(l.live_check_load(SEL_MAX, PATH_C.as_ptr(), &wide()), E_SEL_COUNT);
+        assert_eq!(l.live_load(SEL_MAX, PATH_C.as_ptr()), E_SEL_COUNT);
+        // nothing was loaded, and no refused file left a table or an acceptance behind
+        assert_eq!((st().modules[1].used, l.m.live.len(), l.table_len[1], l.accepted[1]), (0, 1, 0, false));
+    }
+}
+
+#[test]
+fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a_with_b();
+        l.m.init = Init::Fails(E_INIT);
+        assert_eq!(l.live_load(1, PATH_B.as_ptr()), E_INIT);
+        assert_eq!((st().modules[1].used, l.accepted[1], l.sel_of_rec[1], l.phase == Phase::Closed), (0, false, u8::MAX, true));
+        assert_eq!(l.m.live.len(), 1, "nothing leaked: the image block of module a only");
+        let mut out = [0u32; 8];
+        assert_eq!(l.keys_of(1, dkneeds::KIND_MACHINE, &mut out), 0);
+        assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
+        // a file that is torn between the check and the load is refused at the load
+        l.m.init = Init::Ok;
+        let mut hollow = keyed_file(b'b', &[9]);
+        put(&mut hollow, dkneeds::H_REG_SIZE, 0);
+        seal(&mut hollow);
+        l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), hollow);
+        assert_eq!(l.live_load(1, PATH_B.as_ptr()), E_FORMAT);
+        assert_eq!((st().modules[1].used, l.accepted[1]), (0, false));
+        l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
+        assert_eq!(l.live_load(1, PATH_B.as_ptr()), OK);
+        assert_eq!((st().modules[1].used, l.sel_of_rec[1], l.accepted[1]), (1, 1, true));
+        // a loaded name is refused by the loader itself, with the index free again
+        l.m.files.insert(PATH_C[..PATH_C.len() - 1].to_vec(), keyed_file(b'b', &[11]));
+        assert_eq!(l.live_load(2, PATH_C.as_ptr()), E_LOADED);
+        assert_eq!((l.accepted[2], st().modules[2].used), (false, 0));
+    }
+}
+
+#[test]
+fn an_unload_leaves_no_acceptance_and_no_index_behind_and_the_same_file_loads_again_at_its_index() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a_with_b();
+        assert_eq!(l.live_load(1, PATH_B.as_ptr()), OK);
+        // the unload half of a job (no block clock: the drain is over at once), then its end state
+        l.p.clock.set(None);
+        assert_eq!(l.reload_quiesce(0), OK);
+        assert_eq!(l.unload_rec(0), OK);
+        l.retire_index(0);
+        assert_eq!((st().modules[0].used, l.accepted[0], l.sel_of_rec[0]), (0, false, u8::MAX));
+        assert_eq!(l.live_at(SEL_MAX), [false, true, false, false, false, false, false, false], "only b is live");
+        assert_eq!(crate::entry::tick_of(0), 0);
+        let mut out = [0u32; 8];
+        assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut out), 0, "an unloaded module has no keys for a service");
+        assert_eq!(l.m.live.len(), 1, "its image block is freed");
+        // another module's retire leaves b alone
+        l.retire_index(3);
+        assert_eq!((st().modules[1].used, l.sel_of_rec[1], l.accepted[1]), (1, 1, true));
+        // the same file loads again into the free record, at the same index, and again after another unload
+        for round in 0..2 {
+            assert_eq!(l.live_check_load(0, PATH.as_ptr(), &wide()), OK, "round {round}");
+            assert_eq!(l.live_load(0, PATH.as_ptr()), OK, "round {round}");
+            assert_eq!((st().modules[0].used, l.sel_of_rec[0], l.accepted[0]), (1, 0, true), "round {round}");
+            assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut out), 2);
+            assert_eq!(l.unload_rec(0), OK);
+            l.retire_index(0);
+        }
+        assert_eq!(l.m.live.len(), 1);
+    }
+}
+
+#[test]
+fn a_load_after_the_boot_needs_the_live_phase_and_a_provider_record_is_never_loaded_by_it() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a_with_b();
+        // outside a live job the loader loads nothing after the boot
+        assert_eq!(l.load(PATH_B.as_ptr()), E_BOOT_ONLY);
+        assert_eq!(l.phase == Phase::Closed, true);
+        // the live phase accepts a free record and a module's own record, and nothing for a provider
+        l.phase = Phase::Live;
+        crate::selection::BOOT_IDX = 1;
+        assert_eq!(l.load_file(PATH_B.as_ptr(), Slot::Free), OK);
+        crate::selection::BOOT_IDX = u32::MAX;
+        assert_eq!(l.load_file(PATH_B.as_ptr(), Slot::Provider(MAX_MODULES)), E_BOOT_ONLY);
+        l.phase = Phase::Closed;
+    }
+}

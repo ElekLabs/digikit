@@ -1,5 +1,5 @@
-//! Reload of a content module (docs/plans/extension-model.md E5): what the runtime holds once for every kind of module. This file has the refusal order;
-//! the job, the loader steps and the DSP wait follow in the other files of E5. Per-kind work sits behind the `Service` trait, never in here.
+//! Live changes of the module set (docs/plans/extension-model.md E5 and E5c): what the runtime holds once for every kind of module. This file has the refusal order and
+//! the job: one job with three operations (load, unload, reload), made of the loader steps and the DSP wait. Per-kind work sits behind the `Service` trait, never in here.
 
 use dkrt_abi::platform::{blocks_since, Platform};
 use dkrt_sdk::*;
@@ -16,7 +16,8 @@ pub fn drained<P: Platform>(p: &P, start: Option<u32>) -> bool {
 
 /// While a reload runs: the owner of the module being reloaded (module record index + 1), else 0. From the checks of the new file until the end of the job
 /// (`CoreApi::live_op`). The reload job sets and clears it; a service reads it where the module's own rows must not count against the new file (the
-/// checks of its types and rows) and where its teardown differs from a plain unload (the placeholder rows).
+/// checks of its types and rows) and where its teardown differs from a plain unload (the placeholder rows). A load and an unload leave it 0: a plain unload
+/// writes gap rows, and a load has no rows of its own to leave out.
 static mut PHASE: u32 = 0;
 
 /// The reload phase now.
@@ -29,7 +30,7 @@ pub(crate) fn set_phase(owner: u8) {
     unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(PHASE), owner as u32) }
 }
 
-/// A reload finished: the counter that tells a host and the menus their lists of modules and machines are out of date (`DkrtBootInfo.reloads`).
+/// A live job changed the module set: the counter that tells a host and the menus their lists of modules and machines are out of date (`DkrtBootInfo.reloads`).
 pub(crate) unsafe fn note_reloaded() {
     let b = crate::boot::info();
     b.reloads = b.reloads.wrapping_add(1);
@@ -49,9 +50,9 @@ pub struct Facts {
     pub menus: bool,
 }
 
-/// The refusal of a reload, or `None` when it may go on. One function, one order: safe mode, the firmware's transport (playing, paused, or not
-/// readable), an open upload, card operations, menus of the module. The first that holds names the status. The services' own refusals (`Service::teardown_refusal`, for
-/// example an effect on a route) come after it: `refusal_with_services`.
+/// The refusal of a live job (a load, an unload or a reload), or `None` when it may go on. One function, one order: safe mode, the firmware's transport (playing, paused, or not
+/// readable), an open upload, card operations, menus of the module (`Facts::menus`: false for a load, which has no module yet). The first that holds names the status.
+/// The services' own refusals (`Service::teardown_refusal`, for example an effect on a route) come after it, for an unload and a reload: `refusal_with_services`.
 pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
     if f.safe_mode {
         return Some(E_SAFE_MODE);
@@ -87,16 +88,19 @@ pub unsafe fn refusal_with_services<P: Platform>(p: &P, f: &Facts, services: &dk
 
 // ---- the job ----------------------------------------------------------------------------------------------------------------------------------
 
-/// What the reload job asks of the system, one call per step. The real one (`RealOps`) calls the loader, the services and the boot record; a host test scripts it.
+/// What the live job asks of the system, one call per step. `op` is `LIVE_LOAD`, `LIVE_UNLOAD` or `LIVE_RELOAD`; a module of a load has no record yet (`None`). The real one (`RealOps`) calls the loader, the services and the boot record; a host test scripts it.
 pub trait Ops {
     /// The module record and selection index of the loaded content module that came from `path`.
     unsafe fn find(&mut self, path: *const u8) -> Option<(usize, usize)>;
     /// Is `path` the file of a loaded service (a provider record)? A reload is for content modules only.
     unsafe fn is_service(&mut self, path: *const u8) -> bool;
-    /// The refusals before anything changes: `reload::refusal_with_services` over the facts of the system (safe mode, an open upload or a card transfer, menus).
-    unsafe fn refusal(&mut self, rec: usize) -> Option<i32>;
-    /// `Loader::reload_check`.
-    unsafe fn check(&mut self, rec: usize, path: *const u8) -> i32;
+    /// The selection index a load of the file at `path` takes (`boot::live_index`), or `E_SEL_COUNT`.
+    unsafe fn alloc_index(&mut self, path: *const u8) -> Result<usize, i32>;
+    /// The refusals before anything changes: `reload::refusal` over the facts of the system (safe mode, an open upload or a card transfer), and for the module `rec` (an
+    /// unload or a reload) its menus and `Service::teardown_refusal`.
+    unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32>;
+    /// The checks of the file before anything changes: `Loader::reload_check` of a reload, `Loader::live_check_load` of a load at index `k`. An unload has no file to check.
+    unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32;
     /// The reload phase (`CoreApi::live_op`) of the module with this owner (record index + 1), or off (0).
     fn phase(&mut self, owner: u8);
     /// `Loader::reload_quiesce`.
@@ -109,18 +113,22 @@ pub trait Ops {
     unsafe fn dsp_retained(&mut self) -> bool;
     /// How far the DSP loader has got with its loads (a counter that moves with every image or row it sends and every load it starts).
     unsafe fn dsp_progress(&mut self) -> u32;
-    /// The boot record's view of the module goes to INIT (and the loaded count drops if it was ACTIVE).
+    /// The boot record's view of the module goes to INIT (`boot::begin_live`).
     unsafe fn begin_load(&mut self, k: usize);
-    /// `Loader::reload_load` and the boot record's account of its result.
-    unsafe fn load(&mut self, rec: usize, k: usize, path: *const u8) -> i32;
+    /// `Loader::reload_load` of a reload (into record `rec`), `Loader::live_load` of a load (into a free record at index `k`), and the boot record's account of the result.
+    unsafe fn load(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32;
+    /// The end state of an unload: the index is free again (`Loader::retire_index`) and the boot record says UNLOADED (`boot::unloaded`).
+    unsafe fn unloaded(&mut self, k: usize);
+    /// The end state of a load that failed: the index is free again, as before the load.
+    unsafe fn retire(&mut self, k: usize);
     /// The DSP part of the new file: `None` while it goes on, else its result (the boot record's `results[k]`).
     unsafe fn dsp_result(&mut self, k: usize) -> Option<i32>;
     /// Give up the DSP part (`Loader::cancel_dsp`): the transfer is taken down as a failed one is, and the module is torn down.
     unsafe fn cancel_dsp(&mut self, rec: usize, code: i32) -> bool;
     /// Every service: `Service::on_loaded` of module record `rec` (a module with no DSP gets it here; one with DSP got it from the DSP loader).
     unsafe fn on_loaded(&mut self, rec: usize);
-    /// The end of a reload that got past the checks, whatever the result: `Service::live_done` on every service (placeholders freed, the machine rows of a module that is not
-    /// back written as gap rows, the machine list rebuilt), and the reload counter when the module was loaded or torn down (`changed`). A refusal before `set_phase` skips it:
+    /// The end of a job that got past the checks, whatever the result: `Service::live_done` on every service (placeholders freed, the machine rows of a module that is not
+    /// back written as gap rows, the machine list rebuilt), and the counter when the module was loaded or torn down (`changed`). A refusal before the checks skips it:
     /// nothing was touched.
     unsafe fn finish(&mut self, ok: bool, changed: bool);
     /// The block count, `None` without a block clock.
@@ -143,7 +151,12 @@ const WAIT_BLOCKS: u32 = 6000;
 /// UI passes for the same, counted whatever the block clock says: a stalled or missing clock still ends the wait (the UI loop runs 30 to 120 passes a second).
 const WAIT_PASSES: u32 = 1800;
 
-/// One reload at a time. `poll` runs one step per UI pass and never waits.
+/// The record of a load before its file is in one (and after a load that failed).
+const NO_REC: usize = usize::MAX;
+
+/// One live job at a time. `poll` runs one step per UI pass and never waits.
+///
+/// The steps of each operation: load CHECK, LOAD, DSP (a module with a DSP part), DONE; unload CHECK, QUIESCE, UNLOAD, DONE; reload CHECK, QUIESCE, UNLOAD, LOAD, DSP, DONE.
 pub struct Job {
     pub step: u8,
     /// 0 none yet, 1 queued or running, 2 finished.
@@ -151,7 +164,10 @@ pub struct Job {
     /// The load status of the new file, or the refusal.
     pub result: i32,
     /// The old module was torn down (its `fini` ran): the module is not loaded unless the new file loaded. A refusal or an abort before that leaves the old module running.
+    /// Always false for a load.
     pub torn: bool,
+    /// `LIVE_LOAD`, `LIVE_UNLOAD` or `LIVE_RELOAD` of the last job (0: none yet).
+    pub op: u8,
     path: [u8; 64],
     rec: usize,
     sel: usize,
@@ -161,17 +177,32 @@ pub struct Job {
     progress: u32,
 }
 
+/// What `poll` reads about the operation: a load has no old module, an unload no new file.
+fn is_load(op: u8) -> bool {
+    op as u32 == LIVE_LOAD
+}
+fn is_unload(op: u8) -> bool {
+    op as u32 == LIVE_UNLOAD
+}
+fn is_reload(op: u8) -> bool {
+    op as u32 == LIVE_RELOAD
+}
+
 impl Job {
     pub const fn new() -> Job {
-        Job { step: step::IDLE, phase: 0, result: OK, torn: false, path: [0; 64], rec: 0, sel: 0, start: None, passes: 0, progress: 0 }
+        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0 }
     }
 
-    /// Queue a reload of the module loaded from `path` (NUL terminated, at most 63 bytes). `OK`; `E_BUSY` while one is queued or running; `E_MSG` for a path that does not
-    /// fit; `E_RELOAD_RETAINED` while the DSP loader holds a module it could not release (restart the device); `E_FORMAT` for the file of a service; `E_NOT_FOUND` when no loaded
-    /// content module came from that path.
-    pub unsafe fn queue<O: Ops>(&mut self, o: &mut O, path: *const u8) -> i32 {
+    /// Queue job `op` for the module at `path` (NUL terminated, at most 63 bytes): a load of a file that no loaded module came from, or an unload or a reload of the module
+    /// loaded from that path. `OK`; `E_BUSY` while one is queued or running; `E_MSG` for a path that does not fit or an unknown `op`; `E_RELOAD_RETAINED` while the DSP loader holds
+    /// a module it could not release (restart the device); `E_FORMAT` for the file of a service; `E_NOT_FOUND` when an unload or a reload names a path no loaded content module
+    /// came from; `E_LOADED` when a load names the path of a loaded module.
+    pub unsafe fn queue<O: Ops>(&mut self, o: &mut O, op: u32, path: *const u8) -> i32 {
         if self.phase == 1 {
             return E_BUSY;
+        }
+        if op != LIVE_LOAD && op != LIVE_UNLOAD && op != LIVE_RELOAD {
+            return dkrt_sdk::proto::E_MSG;
         }
         let n = crate::cstr_len(path, 64);
         if n == 0 || n >= 64 {
@@ -183,7 +214,11 @@ impl Job {
         if o.is_service(path) {
             return E_FORMAT;
         }
-        if o.find(path).is_none() {
+        let found = o.find(path).is_some();
+        if op == LIVE_LOAD && found {
+            return E_LOADED;
+        }
+        if op != LIVE_LOAD && !found {
             return E_NOT_FOUND;
         }
         let mut i = 0;
@@ -192,9 +227,11 @@ impl Job {
             i += 1;
         }
         self.phase = 1;
+        self.op = op as u8;
         self.step = step::CHECK;
         self.result = OK;
         self.torn = false;
+        self.rec = NO_REC;
         self.passes = 0;
         self.start = None;
         OK
@@ -222,13 +259,68 @@ impl Job {
         self.phase = 2;
     }
 
-    /// The job ends with `result` after `set_phase`: the services' end of a reload, the phase off.
+    /// The job ends with `result` after its checks: a load that did not come up frees its index, the services hear the end (`finish`), the phase is off.
     unsafe fn end<O: Ops>(&mut self, o: &mut O, result: i32, ok: bool) {
+        if is_load(self.op) && !ok {
+            o.retire(self.sel);
+        }
         o.finish(ok, self.torn);
         o.phase(0);
         self.result = result;
         self.step = step::DONE;
         self.phase = 2;
+    }
+
+    /// The first step: nothing changes before the refusals and the checks pass, and a refusal ends the job with everything as it was. The path is looked up again (the module may
+    /// be gone, or have come, since the queue).
+    unsafe fn check<O: Ops>(&mut self, o: &mut O) {
+        let path = self.path.as_ptr();
+        let found = o.find(path);
+        let mut rec = None;
+        if is_load(self.op) {
+            if found.is_some() {
+                return self.refused(E_LOADED);
+            }
+            match o.alloc_index(path) {
+                Ok(k) => self.sel = k,
+                Err(e) => return self.refused(e),
+            }
+        } else {
+            match found {
+                Some((r, k)) => {
+                    self.rec = r;
+                    self.sel = k;
+                    rec = Some(r);
+                }
+                None => return self.refused(E_NOT_FOUND),
+            }
+            // the phase is on for the checks of a reload too: the services leave the module's own rows out of "used by another module" (types, rows)
+            if is_reload(self.op) {
+                o.phase(self.rec as u8 + 1);
+            }
+        }
+        if o.dsp_retained() {
+            o.phase(0);
+            return self.refused(E_RELOAD_RETAINED);
+        }
+        if let Some(r) = o.refusal(rec) {
+            o.phase(0);
+            return self.refused(r);
+        }
+        if !is_unload(self.op) {
+            let r = o.check(self.op as u32, self.rec, self.sel, path);
+            if r != OK {
+                o.phase(0);
+                return self.refused(r);
+            }
+        }
+        if is_load(self.op) {
+            o.begin_load(self.sel);
+            self.step = step::LOAD;
+        } else {
+            self.wait_restart(o);
+            self.step = step::QUIESCE;
+        }
     }
 
     /// One step. Called once per UI pass (`dkrt_tick`).
@@ -238,30 +330,7 @@ impl Job {
         }
         let path = self.path.as_ptr();
         if self.step == step::CHECK {
-            // nothing changes before these pass: a refusal ends the job with the old module as it was. The path is looked up again (the module may be gone since the queue).
-            let (rec, k) = match o.find(path) {
-                Some(f) => f,
-                None => return self.refused(E_NOT_FOUND),
-            };
-            self.rec = rec;
-            self.sel = k;
-            // the phase is on for the checks too: the services leave the module's own rows out of "used by another module" (types, rows)
-            o.phase(rec as u8 + 1);
-            if o.dsp_retained() {
-                o.phase(0);
-                return self.refused(E_RELOAD_RETAINED);
-            }
-            if let Some(r) = o.refusal(rec) {
-                o.phase(0);
-                return self.refused(r);
-            }
-            let r = o.check(rec, path);
-            if r != OK {
-                o.phase(0);
-                return self.refused(r);
-            }
-            self.wait_restart(o);
-            self.step = step::QUIESCE;
+            self.check(o);
         } else if self.step == step::QUIESCE {
             let r = o.quiesce(self.rec);
             if r == OK {
@@ -276,8 +345,13 @@ impl Job {
             let r = o.unload(self.rec);
             if r == OK {
                 self.torn = true;
-                o.begin_load(self.sel);
-                self.step = step::LOAD;
+                if is_unload(self.op) {
+                    o.unloaded(self.sel);
+                    self.end(o, OK, true);
+                } else {
+                    o.begin_load(self.sel);
+                    self.step = step::LOAD;
+                }
             } else if r != E_BUSY || o.dsp_retained() || self.timed_out(o) {
                 // `unload_rec` answers E_BUSY only before `fini` (a file or I/O step of the module still runs, or the DSP rows cannot be cleared), so the old module is whole and gets
                 // its tick and commands back. A DSP loader that holds rows it could not clear is permanent: say so at once instead of waiting out the budget.
@@ -286,7 +360,11 @@ impl Job {
                 self.end(o, if retained { E_RELOAD_RETAINED } else { r }, false);
             }
         } else if self.step == step::LOAD {
-            let r = o.load(self.rec, self.sel, path);
+            let r = o.load(self.op as u32, self.rec, self.sel, path);
+            if is_load(self.op) {
+                // the loader chose the record
+                self.rec = o.find(path).map_or(NO_REC, |f| f.0);
+            }
             if r == OK {
                 o.on_loaded(self.rec);
                 self.end(o, OK, true);
@@ -321,22 +399,49 @@ impl Job {
     }
 }
 
-/// The reload job of the device.
+/// The live job of the device.
 static mut JOB: Job = Job::new();
 
 fn job() -> &'static mut Job {
     unsafe { &mut *core::ptr::addr_of_mut!(JOB) }
 }
 
-/// The `RELOAD` command: queue the reload of the module loaded from `path` (see `Job::queue`).
-pub unsafe fn cmd_queue(path: *const u8) -> i32 {
-    job().queue(&mut RealOps, path)
+/// The `RELOAD`, `LOAD` and `UNLOAD` commands and `dkrt_live`: queue job `op` for the module at `path` (see `Job::queue`).
+pub unsafe fn cmd_queue(op: u32, path: *const u8) -> i32 {
+    job().queue(&mut RealOps, op, path)
 }
 
-/// `(phase, result, step, torn)` for `RELOAD_STATE`.
-pub fn state() -> (u8, i32, u8, bool) {
+/// The job as `RELOAD_STATE` and `dkrt_live_state` report it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct State {
+    pub phase: u8,
+    pub result: i32,
+    pub step: u8,
+    pub torn: bool,
+    pub op: u8,
+}
+
+/// The state of the job.
+pub fn state() -> State {
     let j = job();
-    (j.phase, j.result, j.step, j.torn)
+    State { phase: j.phase, result: j.result, step: j.step, torn: j.torn, op: j.op }
+}
+
+/// `dkrt_live(op, path)`: queue a live job from the DIGIKIT menu (the UI task). The same refusals as the SysEx commands: an open upload or a store write in flight is `E_STATE`.
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_live(op: u32, path: *const u8) -> i32 {
+    crate::init_once();
+    if crate::store_writer::is_open() || crate::store_writer::is_locked() {
+        return dkrt_sdk::proto::E_STATE;
+    }
+    cmd_queue(op, path)
+}
+
+/// `dkrt_live_state(out)`: the phase, result, step and teardown flag of the live job.
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_live_state(out: *mut DkrtLive) {
+    let s = state();
+    *out = DkrtLive { phase: s.phase as u32, result: s.result, step: s.step as u32, unloaded: s.torn as u32, op: s.op as u32 };
 }
 
 /// One step of the job, once per UI pass (`dkrt_tick`).
@@ -356,17 +461,31 @@ impl Ops for RealOps {
     unsafe fn is_service(&mut self, path: *const u8) -> bool {
         crate::loader::is_provider_path(path)
     }
-    unsafe fn refusal(&mut self, rec: usize) -> Option<i32> {
+    unsafe fn alloc_index(&mut self, path: *const u8) -> Result<usize, i32> {
+        crate::boot::live_index(path, &crate::loader::live_indices())
+    }
+    unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
+        let menus = match rec {
+            Some(r) => core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENUS[r])) != 0,
+            None => false,
+        };
         let f = Facts {
             safe_mode: crate::boot::info().safe != 0,
             upload_open: crate::store_writer::is_open() || crate::store_writer::is_locked(),
             card_busy: crate::api::card_busy(),
-            menus: core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENUS[rec])) != 0,
+            menus,
         };
-        refusal_with_services(&crate::PLATFORM, &f, &crate::handlers::services(), rec as u8 + 1)
+        match rec {
+            Some(r) => refusal_with_services(&crate::PLATFORM, &f, &crate::handlers::services(), r as u8 + 1),
+            None => refusal(&crate::PLATFORM, &f),
+        }
     }
-    unsafe fn check(&mut self, rec: usize, path: *const u8) -> i32 {
-        crate::loader::reload_check(rec, path)
+    unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
+        if op == LIVE_LOAD {
+            crate::loader::live_check_load(k, path)
+        } else {
+            crate::loader::reload_check(rec, path)
+        }
     }
     fn phase(&mut self, owner: u8) {
         set_phase(owner)
@@ -387,18 +506,21 @@ impl Ops for RealOps {
         crate::loader::dsp_progress()
     }
     unsafe fn begin_load(&mut self, k: usize) {
-        let b = crate::boot::info();
-        if b.states[k] == dkrt_sdk::STATE_ACTIVE && b.loaded > 0 {
-            b.loaded -= 1;
-        }
-        b.states[k] = dkrt_sdk::STATE_INIT;
+        crate::boot::begin_live(k);
     }
-    unsafe fn load(&mut self, rec: usize, k: usize, path: *const u8) -> i32 {
-        let r = crate::loader::reload_load(rec, path);
-        let missing = [0u8; dkrt_sdk::NEEDS_LEN];
+    unsafe fn load(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
+        let r = if op == LIVE_LOAD { crate::loader::live_load(k, path) } else { crate::loader::reload_load(rec, path) };
+        let missing = if r == E_IMPORT { crate::loader::missing() } else { [0u8; dkrt_sdk::NEEDS_LEN] };
         crate::boot::states().finished(k, r);
         crate::boot::report_module(k, path, r, &missing);
         r
+    }
+    unsafe fn unloaded(&mut self, k: usize) {
+        crate::loader::retire_index(k);
+        crate::boot::unloaded(k);
+    }
+    unsafe fn retire(&mut self, k: usize) {
+        crate::loader::retire_index(k);
     }
     unsafe fn dsp_result(&mut self, k: usize) -> Option<i32> {
         let b = crate::boot::info();
@@ -517,6 +639,8 @@ mod tests {
     /// What the fake system answers, and what the job asked of it, in order.
     struct Script {
         found: Option<(usize, usize)>,
+        /// The index a load is given (`Ops::alloc_index`).
+        alloc: Result<usize, i32>,
         refusal: Option<i32>,
         check: i32,
         /// `quiesce` answers `E_BUSY` this many times, then `OK` (`u32::MAX`: always busy).
@@ -546,7 +670,7 @@ mod tests {
 
     impl Script {
         fn new() -> Script {
-            Script { found: Some((2, 5)), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false }
+            Script { found: Some((2, 5)), alloc: Ok(5), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false }
         }
     }
 
@@ -571,11 +695,15 @@ mod tests {
             self.log.push("cancel dsp");
             self.cancels
         }
-        unsafe fn refusal(&mut self, _: usize) -> Option<i32> {
-            self.log.push("refusal");
+        unsafe fn alloc_index(&mut self, _: *const u8) -> Result<usize, i32> {
+            self.log.push("alloc");
+            self.alloc
+        }
+        unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
+            self.log.push(if rec.is_some() { "refusal" } else { "refusal load" });
             self.refusal
         }
-        unsafe fn check(&mut self, _: usize, _: *const u8) -> i32 {
+        unsafe fn check(&mut self, _: u32, _: usize, _: usize, _: *const u8) -> i32 {
             self.log.push("check");
             self.check
         }
@@ -610,9 +738,19 @@ mod tests {
         unsafe fn begin_load(&mut self, _: usize) {
             self.log.push("begin load");
         }
-        unsafe fn load(&mut self, _: usize, _: usize, _: *const u8) -> i32 {
+        unsafe fn load(&mut self, op: u32, _: usize, k: usize, _: *const u8) -> i32 {
             self.log.push("load");
+            // the loader chose a record for a load that got as far as a record
+            if op == LIVE_LOAD && (self.load == OK || self.load == LOADING) {
+                self.found = Some((2, k));
+            }
             self.load
+        }
+        unsafe fn unloaded(&mut self, _: usize) {
+            self.log.push("unloaded");
+        }
+        unsafe fn retire(&mut self, _: usize) {
+            self.log.push("retire");
         }
         unsafe fn dsp_result(&mut self, _: usize) -> Option<i32> {
             self.log.push("dsp");
@@ -634,11 +772,19 @@ mod tests {
         }
     }
 
-    /// Run a job over `s` until it ends (at most 100000 polls); the log and the final state.
+    /// Run a reload over `s` until it ends (at most 100000 polls); the final state.
     fn run(s: &mut Script) -> (u8, i32, u8) {
+        run_op(s, LIVE_RELOAD)
+    }
+
+    /// Run a load, an unload or a reload over `s` until it ends (at most 100000 polls); the final state. A load starts from a system that has no module of that path.
+    fn run_op(s: &mut Script, op: u32) -> (u8, i32, u8) {
         let mut j = Job::new();
+        if op == LIVE_LOAD {
+            s.found = None;
+        }
         unsafe {
-            assert_eq!(j.queue(s, b"mods/a.dkm\0".as_ptr()), OK);
+            assert_eq!(j.queue(s, op, b"mods/a.dkm\0".as_ptr()), OK);
             let mut n = 0;
             while j.phase == 1 && n < 100_000 {
                 j.poll(s);
@@ -711,7 +857,7 @@ mod tests {
         s.cancels = false;
         let mut j = Job::new();
         unsafe {
-            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), OK);
+            assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"mods/a.dkm\0".as_ptr()), OK);
             let mut n = 0;
             while j.step != step::DSP || n < 3 {
                 j.poll(&mut s);
@@ -747,7 +893,7 @@ mod tests {
         let mut s = Script::new();
         let mut j = Job::new();
         unsafe {
-            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), OK);
+            assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"mods/a.dkm\0".as_ptr()), OK);
             s.found = None;
             j.poll(&mut s);
         }
@@ -794,14 +940,14 @@ mod tests {
         s.retained = true;
         let mut j = Job::new();
         unsafe {
-            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), E_RELOAD_RETAINED);
+            assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"mods/a.dkm\0".as_ptr()), E_RELOAD_RETAINED);
             assert_eq!(j.phase, 0);
         }
         // in a job that was queued before the DSP was retained: the check refuses
         let mut s = Script::new();
         let mut j = Job::new();
         unsafe {
-            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), OK);
+            assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"mods/a.dkm\0".as_ptr()), OK);
             s.retained = true;
             j.poll(&mut s);
         }
@@ -812,7 +958,7 @@ mod tests {
         s.unload_busy = u32::MAX;
         let mut j = Job::new();
         unsafe {
-            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), OK);
+            assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"mods/a.dkm\0".as_ptr()), OK);
             for _ in 0..4 {
                 j.poll(&mut s);
             }
@@ -844,7 +990,7 @@ mod tests {
         s.dsp = (u32::MAX, OK);
         let mut j = Job::new();
         unsafe {
-            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), OK);
+            assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"mods/a.dkm\0".as_ptr()), OK);
             s.progressing = true;
             for _ in 0..3000 {
                 j.poll(&mut s);
@@ -871,28 +1017,252 @@ mod tests {
         let mut s = Script::new();
         let mut j = Job::new();
         unsafe {
-            assert_eq!(j.queue(&mut s, b"a\0".as_ptr()), OK);
-            assert_eq!(j.queue(&mut s, b"b\0".as_ptr()), E_BUSY);
+            assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"a\0".as_ptr()), OK);
+            assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"b\0".as_ptr()), E_BUSY);
             let mut k = Job::new();
-            assert_eq!(k.queue(&mut s, b"\0".as_ptr()), dkrt_sdk::proto::E_MSG);
+            assert_eq!(k.queue(&mut s, LIVE_RELOAD, b"\0".as_ptr()), dkrt_sdk::proto::E_MSG);
             let mut v = [b'x'; 70].to_vec();
             v.push(0);
-            assert_eq!(k.queue(&mut s, v.as_ptr()), dkrt_sdk::proto::E_MSG);
+            assert_eq!(k.queue(&mut s, LIVE_RELOAD, v.as_ptr()), dkrt_sdk::proto::E_MSG);
             // no loaded module came from the path: the reply says so at once, and no job is queued
             s.found = None;
-            assert_eq!(k.queue(&mut s, b"mods/x.dkm\0".as_ptr()), E_NOT_FOUND);
+            assert_eq!(k.queue(&mut s, LIVE_RELOAD, b"mods/x.dkm\0".as_ptr()), E_NOT_FOUND);
+            assert_eq!(k.queue(&mut s, LIVE_UNLOAD, b"mods/x.dkm\0".as_ptr()), E_NOT_FOUND);
+            assert_eq!(k.phase, 0);
+            // a load of a path that is loaded is `E_LOADED`; an operation that does not exist is `E_MSG`
+            s.found = Some((2, 5));
+            assert_eq!(k.queue(&mut s, LIVE_LOAD, b"mods/x.dkm\0".as_ptr()), E_LOADED);
+            assert_eq!(k.queue(&mut s, 0, b"mods/x.dkm\0".as_ptr()), dkrt_sdk::proto::E_MSG);
+            assert_eq!(k.queue(&mut s, 9, b"mods/x.dkm\0".as_ptr()), dkrt_sdk::proto::E_MSG);
             assert_eq!(k.phase, 0);
             // the file of a service is no module
-            s.found = Some((2, 5));
             s.service = true;
-            assert_eq!(k.queue(&mut s, b"services/fx.dks\0".as_ptr()), E_FORMAT);
+            for op in [LIVE_LOAD, LIVE_UNLOAD, LIVE_RELOAD] {
+                assert_eq!(k.queue(&mut s, op, b"services/fx.dks\0".as_ptr()), E_FORMAT);
+            }
             assert_eq!(k.phase, 0);
             s.service = false;
             // a finished job takes the next one
             while j.phase == 1 {
                 j.poll(&mut s);
             }
-            assert_eq!(j.queue(&mut s, b"c\0".as_ptr()), OK);
+            assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"c\0".as_ptr()), OK);
+        }
+    }
+
+    // ---- load and unload (E5c) ------------------------------------------------------------------------------------------------
+
+    fn first(s: &Script, name: &str) -> usize {
+        s.log.iter().position(|l| *l == name).unwrap_or_else(|| panic!("{name} did not run: {:?}", s.log))
+    }
+
+    fn nothing_changed(s: &Script, what: &str) {
+        for changed in ["begin load", "load", "quiesce", "unload", "unloaded", "retire", "finish ok", "finish failed", "finish torn"] {
+            assert!(!s.log.contains(&changed), "{what}: {changed} ran: {:?}", s.log);
+        }
+        assert!(!s.phase_on && !s.torn_seen, "{what}");
+    }
+
+    #[test]
+    fn a_load_checks_loads_and_ends_with_the_services_told_once_and_never_drains_or_unloads() {
+        let mut s = Script::new();
+        assert_eq!(run_op(&mut s, LIVE_LOAD), (2, OK, step::DONE));
+        // the index, the refusals (those of a load: no module record), the file checks, then the load; no phase (a load has no rows of its own to leave out), no drain, no teardown
+        assert!(first(&s, "find") < first(&s, "alloc") && first(&s, "alloc") < first(&s, "refusal load") && first(&s, "refusal load") < first(&s, "check"));
+        assert!(first(&s, "check") < first(&s, "begin load") && first(&s, "begin load") < first(&s, "load") && first(&s, "load") < first(&s, "on_loaded"));
+        assert!(first(&s, "on_loaded") < first(&s, "finish ok") && first(&s, "finish ok") < first(&s, "phase off"));
+        for never in ["phase on", "refusal", "quiesce", "unload", "unloaded", "abort", "retire", "finish torn"] {
+            assert!(!s.log.contains(&never), "{never}: {:?}", s.log);
+        }
+        assert!(!s.torn_seen, "a load tears nothing down");
+        assert_eq!(s.log.iter().filter(|l| **l == "finish ok").count(), 1);
+    }
+
+    #[test]
+    fn a_load_with_a_dsp_part_waits_for_it_like_a_reload() {
+        let mut s = Script::new();
+        s.load = LOADING;
+        s.dsp = (3, OK);
+        assert_eq!(run_op(&mut s, LIVE_LOAD), (2, OK, step::DONE));
+        assert_eq!(s.log.iter().filter(|l| **l == "dsp").count(), 4);
+        assert!(!s.log.contains(&"on_loaded") && !s.log.contains(&"retire"));
+        assert_eq!(s.log.last(), Some(&"phase off"));
+    }
+
+    #[test]
+    fn a_load_that_does_not_come_up_ends_as_it_began_with_the_index_free() {
+        // the load fails
+        let mut s = Script::new();
+        s.load = E_INIT;
+        assert_eq!(run_op(&mut s, LIVE_LOAD), (2, E_INIT, step::DONE));
+        assert!(s.log.contains(&"retire") && !s.log.contains(&"on_loaded") && !s.log.contains(&"finish ok"));
+        assert!(first(&s, "retire") < first(&s, "finish failed"));
+        assert!(!s.torn_seen && !s.phase_on);
+        // its DSP part fails, or stalls and is cancelled
+        for (dsp, code) in [((1, E_DSP_XFER), E_DSP_XFER), ((u32::MAX, OK), E_DSP_XFER)] {
+            let mut s = Script::new();
+            s.load = LOADING;
+            s.dsp = dsp;
+            assert_eq!(run_op(&mut s, LIVE_LOAD), (2, code, step::DONE));
+            assert!(s.log.contains(&"retire") && !s.log.contains(&"on_loaded"), "{:?}", s.log);
+            assert_eq!(s.log.iter().filter(|l| **l == "finish failed").count(), 1);
+            assert!(!s.torn_seen && !s.phase_on);
+        }
+        // a reload that fails after its teardown keeps the module's index (the module is FAILED, not free): no retire
+        let mut s = Script::new();
+        s.load = E_INIT;
+        assert_eq!(run_op(&mut s, LIVE_RELOAD), (2, E_INIT, step::DONE));
+        assert!(!s.log.contains(&"retire"));
+    }
+
+    #[test]
+    fn a_load_that_is_refused_or_fails_its_check_changes_nothing() {
+        for (refusal, check, alloc, want) in [
+            (Some(E_RELOAD_PLAYING), OK, Ok(5), E_RELOAD_PLAYING),
+            (Some(E_SAFE_MODE), OK, Ok(5), E_SAFE_MODE),
+            (Some(dkrt_sdk::proto::E_STATE), OK, Ok(5), dkrt_sdk::proto::E_STATE),
+            (None, E_MISSING, Ok(5), E_MISSING),
+            (None, E_PLAN_KEY, Ok(5), E_PLAN_KEY),
+            (None, OK, Err(E_SEL_COUNT), E_SEL_COUNT),
+        ] {
+            let mut s = Script::new();
+            s.refusal = refusal;
+            s.check = check;
+            s.alloc = alloc;
+            assert_eq!(run_op(&mut s, LIVE_LOAD), (2, want, step::DONE), "{want}");
+            nothing_changed(&s, &format!("{want}"));
+        }
+        // a module of that path came while the job waited: E_LOADED, still nothing changed
+        let mut s = Script::new();
+        let mut j = Job::new();
+        s.found = None;
+        unsafe {
+            assert_eq!(j.queue(&mut s, LIVE_LOAD, b"mods/a.dkm\0".as_ptr()), OK);
+            s.found = Some((2, 5));
+            j.poll(&mut s);
+        }
+        assert_eq!((j.phase, j.result), (2, E_LOADED));
+        nothing_changed(&s, "E_LOADED");
+    }
+
+    #[test]
+    fn a_load_into_a_retained_dsp_is_refused_at_the_queue_and_in_a_running_job() {
+        let mut s = Script::new();
+        s.retained = true;
+        let mut j = Job::new();
+        unsafe {
+            assert_eq!(j.queue(&mut s, LIVE_LOAD, b"mods/a.dkm\0".as_ptr()), E_RELOAD_RETAINED);
+        }
+        assert_eq!(j.phase, 0);
+        let mut s = Script::new();
+        s.found = None;
+        let mut j = Job::new();
+        unsafe {
+            assert_eq!(j.queue(&mut s, LIVE_LOAD, b"mods/a.dkm\0".as_ptr()), OK);
+            s.retained = true;
+            j.poll(&mut s);
+        }
+        assert_eq!((j.phase, j.result), (2, E_RELOAD_RETAINED));
+        nothing_changed(&s, "retained");
+    }
+
+    #[test]
+    fn an_unload_checks_the_module_drains_tears_down_and_ends_not_loaded_with_the_services_told_once() {
+        let mut s = Script::new();
+        s.quiesce_busy = 3;
+        s.unload_busy = 2;
+        assert_eq!(run_op(&mut s, LIVE_UNLOAD), (2, OK, step::DONE));
+        // the refusals of a module (menus, services), no file check, no phase, no load half
+        assert!(first(&s, "find") < first(&s, "refusal") && first(&s, "refusal") < first(&s, "quiesce"));
+        assert!(first(&s, "quiesce") < first(&s, "unload") && first(&s, "unload") < first(&s, "unloaded") && first(&s, "unloaded") < first(&s, "finish ok"));
+        assert!(first(&s, "finish ok") < first(&s, "phase off"));
+        for never in ["alloc", "refusal load", "check", "phase on", "begin load", "load", "on_loaded", "dsp", "retire", "abort", "finish torn"] {
+            assert!(!s.log.contains(&never), "{never}: {:?}", s.log);
+        }
+        assert!(s.torn_seen, "the module is gone");
+        assert_eq!(s.log.iter().filter(|l| **l == "finish ok").count(), 1);
+        assert_eq!(s.log.iter().filter(|l| **l == "unloaded").count(), 1);
+        assert_eq!(s.log.iter().filter(|l| **l == "quiesce").count(), 4, "a busy drain is asked again on the next pass");
+    }
+
+    #[test]
+    fn an_unload_that_is_refused_changes_nothing_and_one_of_a_module_that_is_gone_is_not_found() {
+        for refusal in [E_RELOAD_PLAYING, E_RELOAD_MENUS, E_RELOAD_ROUTED, E_CARD_BUSY, dkrt_sdk::proto::E_STATE, E_SAFE_MODE] {
+            let mut s = Script::new();
+            s.refusal = Some(refusal);
+            assert_eq!(run_op(&mut s, LIVE_UNLOAD), (2, refusal, step::DONE), "{refusal}");
+            nothing_changed(&s, &format!("{refusal}"));
+        }
+        let mut s = Script::new();
+        let mut j = Job::new();
+        unsafe {
+            assert_eq!(j.queue(&mut s, LIVE_UNLOAD, b"mods/a.dkm\0".as_ptr()), OK);
+            s.found = None;
+            j.poll(&mut s);
+        }
+        assert_eq!((j.phase, j.result), (2, E_NOT_FOUND));
+        nothing_changed(&s, "gone");
+    }
+
+    #[test]
+    fn an_unload_whose_drain_or_teardown_does_not_end_gives_the_module_back() {
+        // the drain: nothing was freed
+        let mut s = Script::new();
+        s.quiesce_busy = u32::MAX;
+        assert_eq!(run_op(&mut s, LIVE_UNLOAD), (2, E_BUSY, step::DONE));
+        assert!(s.log.contains(&"abort") && !s.log.contains(&"unload") && !s.log.contains(&"unloaded"));
+        assert_eq!(s.log.iter().filter(|l| **l == "finish failed").count(), 1);
+        assert!(!s.phase_on && !s.torn_seen);
+        // the teardown stops before `fini`
+        let mut s = Script::new();
+        s.unload_busy = u32::MAX;
+        assert_eq!(run_op(&mut s, LIVE_UNLOAD), (2, E_BUSY, step::DONE));
+        assert!(s.log.contains(&"abort") && !s.log.contains(&"unloaded"));
+        assert!(!s.torn_seen, "before fini the module is live");
+        // the DSP rows cannot be cleared: retained, said at once
+        let mut s = Script::new();
+        s.unload_busy = u32::MAX;
+        let mut j = Job::new();
+        unsafe {
+            assert_eq!(j.queue(&mut s, LIVE_UNLOAD, b"mods/a.dkm\0".as_ptr()), OK);
+            for _ in 0..4 {
+                j.poll(&mut s);
+            }
+            s.retained = true;
+            j.poll(&mut s);
+        }
+        assert_eq!((j.phase, j.result), (2, E_RELOAD_RETAINED));
+        assert!(!j.torn && !s.log.contains(&"unloaded"));
+    }
+
+    #[test]
+    fn a_reload_does_not_free_its_index_and_the_state_names_the_operation() {
+        let mut s = Script::new();
+        assert_eq!(run(&mut s), (2, OK, step::DONE));
+        assert!(!s.log.contains(&"unloaded") && !s.log.contains(&"retire") && !s.log.contains(&"alloc"));
+        for (op, torn) in [(LIVE_LOAD, false), (LIVE_UNLOAD, true), (LIVE_RELOAD, true)] {
+            let mut s = Script::new();
+            if op == LIVE_LOAD {
+                s.found = None;
+            }
+            let mut j = Job::new();
+            unsafe {
+                assert_eq!(j.queue(&mut s, op, b"mods/a.dkm\0".as_ptr()), OK);
+                assert_eq!((j.op as u32, j.phase), (op, 1));
+                while j.phase == 1 {
+                    j.poll(&mut s);
+                }
+            }
+            assert_eq!((j.op as u32, j.torn, j.result), (op, torn, OK), "op {op}");
+        }
+    }
+
+    #[test]
+    fn the_checks_of_a_reload_run_with_its_phase_on_and_those_of_a_load_and_an_unload_without() {
+        for (op, phase) in [(LIVE_RELOAD, true), (LIVE_LOAD, false), (LIVE_UNLOAD, false)] {
+            let mut s = Script::new();
+            assert_eq!(run_op(&mut s, op), (2, OK, step::DONE));
+            assert_eq!(s.log.contains(&"phase on"), phase, "op {op}");
         }
     }
 }

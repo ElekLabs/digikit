@@ -220,6 +220,85 @@ unsafe fn read_tables(rec: &Record) {
     }
 }
 
+/// The file name part of the NUL-terminated store path `path` (after the last `/`, at most `NAME_LEN - 1` bytes): what `BOOT_NAME` keeps.
+pub unsafe fn leaf_of(path: *const u8) -> &'static [u8] {
+    let mut at = 0;
+    let mut n = 0;
+    while n < SEL_PATH && *path.add(n) != 0 {
+        if *path.add(n) == b'/' {
+            at = n + 1;
+        }
+        n += 1;
+    }
+    let len = (n - at).min(NAME_LEN - 1);
+    core::slice::from_raw_parts(path.add(at), len)
+}
+
+/// Is `name` (a `BOOT_NAME` entry: NUL padded) the file name `leaf`? An empty `leaf` is no name.
+fn name_is(name: &[u8; NAME_LEN], leaf: &[u8]) -> bool {
+    let n = leaf.len().min(NAME_LEN - 1);
+    n != 0 && name[..n] == leaf[..n] && (n == NAME_LEN - 1 || name[n] == 0)
+}
+
+/// The selection index a run-time load of the file named `leaf` takes (docs/plans/extension-model.md E5c): the index that file name had at this boot, when no module lives
+/// there now (`live`); else the first index no module lives at; else a new index (`count`). `E_SEL_COUNT` when all `SEL_MAX` are taken.
+pub fn pick_index(leaf: &[u8], names: &[[u8; NAME_LEN]; SEL_MAX], count: usize, live: &[bool; SEL_MAX]) -> Result<usize, i32> {
+    let count = count.min(SEL_MAX);
+    let mut k = 0;
+    while k < count {
+        if !live[k] && name_is(&names[k], leaf) {
+            return Ok(k);
+        }
+        k += 1;
+    }
+    k = 0;
+    while k < count {
+        if !live[k] {
+            return Ok(k);
+        }
+        k += 1;
+    }
+    if count < SEL_MAX {
+        Ok(count)
+    } else {
+        Err(E_SEL_COUNT)
+    }
+}
+
+/// `pick_index` over this boot's record for the file at `path`.
+pub unsafe fn live_index(path: *const u8, live: &[bool; SEL_MAX]) -> Result<usize, i32> {
+    pick_index(leaf_of(path), &*addr_of!(BOOT_NAME), info().count as usize, live)
+}
+
+/// A live job starts the load of selection index `k` (a load into a free index, or the load half of a reload): the module is INIT, the loaded count drops if it was ACTIVE,
+/// an index past the boot's count joins it, and the result words of the last attempt are cleared.
+pub unsafe fn begin_live(k: usize) {
+    let b = info();
+    if b.states[k] == STATE_ACTIVE && b.loaded > 0 {
+        b.loaded -= 1;
+    }
+    if k >= b.count as usize {
+        b.count = k as u32 + 1;
+    }
+    b.states[k] = STATE_INIT;
+    b.results[k] = OK;
+    b.needs[k] = [0; NEEDS_LEN];
+    b.detail[k] = [0; 2];
+}
+
+/// Module `k` was taken down by an unload: UNLOADED, and the loaded count drops if it was ACTIVE.
+pub unsafe fn unloaded(k: usize) {
+    if k >= SEL_MAX {
+        return;
+    }
+    let b = info();
+    if b.states[k] == STATE_ACTIVE && b.loaded > 0 {
+        b.loaded -= 1;
+    }
+    b.states[k] = STATE_UNLOADED;
+    b.results[k] = OK;
+}
+
 /// The result `res` of the load of selection entry `k` (the file at `path`): the boot record, the log events and the name the LOADS report shows.
 pub unsafe fn report_module(k: usize, path: *const u8, res: i32, missing: &[u8; NEEDS_LEN]) {
     let b = info();
@@ -473,6 +552,100 @@ mod tests {
             report_dsp(0, E_INIT);
             report_dsp(1, OK);
             assert_eq!((info().results, info().states, info().loaded), before);
+        }
+    }
+
+    fn names(list: &[&[u8]]) -> [[u8; NAME_LEN]; SEL_MAX] {
+        let mut out = [[0u8; NAME_LEN]; SEL_MAX];
+        for (k, n) in list.iter().enumerate() {
+            out[k][..n.len()].copy_from_slice(n);
+        }
+        out
+    }
+
+    #[test]
+    fn a_live_load_takes_the_index_its_file_had_at_the_boot_else_a_free_one_else_a_new_one() {
+        let n = names(&[b"a.dkm", b"b.dkm", b"c.dkm"]);
+        let mut live = [false; SEL_MAX];
+        // the file name was in the boot's selection and no module lives there
+        assert_eq!(pick_index(b"b.dkm", &n, 3, &live), Ok(1));
+        // a module lives at that index now (another file took it): the first free index
+        live[1] = true;
+        assert_eq!(pick_index(b"b.dkm", &n, 3, &live), Ok(0));
+        live[0] = true;
+        assert_eq!(pick_index(b"b.dkm", &n, 3, &live), Ok(2));
+        // all of the boot's indices are live: a new one, then the table is full
+        live[2] = true;
+        assert_eq!(pick_index(b"b.dkm", &n, 3, &live), Ok(3));
+        assert_eq!(pick_index(b"new.dkm", &n, 3, &live), Ok(3));
+        let full = [true; SEL_MAX];
+        assert_eq!(pick_index(b"new.dkm", &n, SEL_MAX, &full), Err(E_SEL_COUNT));
+        assert_eq!(pick_index(b"b.dkm", &n, SEL_MAX + 3, &full), Err(E_SEL_COUNT), "a count past the table is cut to it");
+        // an unknown file with room takes the first free index of the boot, not past it
+        let mut some = [false; SEL_MAX];
+        some[0] = true;
+        assert_eq!(pick_index(b"x.dkm", &n, 3, &some), Ok(1));
+        // an empty boot selection: the first index
+        assert_eq!(pick_index(b"x.dkm", &names(&[]), 0, &[false; SEL_MAX]), Ok(0));
+    }
+
+    #[test]
+    fn the_file_name_match_is_the_leaf_cut_to_the_name_field_and_exact_below_it() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            assert_eq!(leaf_of(b"modules/x/a.dkm\0".as_ptr()), b"a.dkm");
+            assert_eq!(leaf_of(b"a.dkm\0".as_ptr()), b"a.dkm");
+            assert_eq!(leaf_of(b"dir/\0".as_ptr()), b"");
+            let mut long = b"mods/".to_vec();
+            long.extend_from_slice(&[b'n'; 40]);
+            long.push(0);
+            assert_eq!(leaf_of(long.as_ptr()), [b'n'; NAME_LEN - 1]);
+        }
+        let n = names(&[b"ab.dkm", b"a.dkm"]);
+        let live = [false; SEL_MAX];
+        // a prefix is not a match
+        assert_eq!(pick_index(b"a.dk", &n, 2, &live), Ok(0), "no match: the first free index");
+        assert_eq!(pick_index(b"a.dkm", &n, 2, &live), Ok(1));
+        assert_eq!(pick_index(b"", &n, 2, &live), Ok(0), "an empty name matches nothing");
+        // a name over the field matches by its first NAME_LEN - 1 bytes, as it was kept
+        let mut kept = [[0u8; NAME_LEN]; SEL_MAX];
+        kept[1][..NAME_LEN - 1].copy_from_slice(&[b'n'; NAME_LEN - 1]);
+        assert_eq!(pick_index(&[b'n'; NAME_LEN - 1], &kept, 2, &live), Ok(1));
+    }
+
+    #[test]
+    fn a_live_job_moves_the_boot_record_through_init_active_and_unloaded() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            info().count = 2;
+            for k in 0..2 {
+                states().planned(k, Verdict::Accepted);
+                states().init(k);
+                states().finished(k, OK);
+                report_module(k, sel_path(b"a.dkm").as_ptr(), OK, &[0; NEEDS_LEN]);
+            }
+            assert_eq!((info().loaded, info().states[..2].to_vec()), (2, vec![STATE_ACTIVE, STATE_ACTIVE]));
+            // an unload: UNLOADED, the loaded count drops once, the other module is untouched; a second one does not drop it again
+            unloaded(0);
+            assert_eq!((info().loaded, info().states[..2].to_vec(), info().results[0]), (1, vec![STATE_UNLOADED, STATE_ACTIVE], OK));
+            unloaded(0);
+            assert_eq!(info().loaded, 1);
+            unloaded(SEL_MAX);
+            // a load into the free index, and one into a new index that joins the count
+            info().needs[0] = [7; NEEDS_LEN];
+            info().results[0] = E_IMPORT;
+            begin_live(0);
+            assert_eq!((info().states[0], info().results[0], info().needs[0], info().count), (STATE_INIT, OK, [0; NEEDS_LEN], 2));
+            begin_live(2);
+            assert_eq!((info().states[2], info().count), (STATE_INIT, 3));
+            assert!(states().finished(2, OK) && states().finished(0, LOADING));
+            report_module(2, sel_path(b"new.dkm").as_ptr(), OK, &[0; NEEDS_LEN]);
+            assert_eq!((info().loaded, info().states[..3].to_vec()), (2, vec![STATE_DSP_LOADING, STATE_ACTIVE, STATE_ACTIVE]));
+            assert_eq!(name_of(2)[..8], *b"new.dkm\0");
+            // the load half of a reload takes an active module to INIT and drops the count
+            begin_live(1);
+            assert_eq!((info().loaded, info().states[1]), (1, STATE_INIT));
         }
     }
 }

@@ -1647,7 +1647,9 @@ MODULES = 0x03      # the loaded modules with their ranges, types and faults
 CAPACITY = 0x04     # per resource: the limit, what is used and the largest free piece (kinds in [capacity.kinds])
 LOADS = 0x05        # what this boot's selection did, for a host without the debug module: u8 version (2), u8 n, then per module (56 bytes) i32 result (OK, a negative E_*, or LOADING), u8 state ([load.state]), 3 zero bytes, u32 detail[2] (what the plan refused on, by result: E_PLAN_KIND the kind, E_PLAN_OWNER the kind, slot or hook site, E_PLAN_KEY the kind and the key, E_PLAN_FIT the capacity kind and 0; else 0), needs[12] (with E_IMPORT: the missing module, e.g. usb-bulk) and name[28] (file name), NUL padded. Version 1 had 44 bytes per module without state, pad and detail
 RELOAD = 0x06       # queue the reload of a loaded content module: body = the store path it loaded from (NUL terminated; the new file is already there); status 0 (queued), E_BUSY (a reload is queued or running), E_STATE (an upload is open or a store write is in flight), E_RELOAD_RETAINED (the DSP loader holds a module it could not release: restart the device), E_NOT_FOUND (no loaded content module came from that path), E_FORMAT (the path is the file of a service), E_MSG (no path, or one that does not fit)
-RELOAD_STATE = 0x07 # the reload job: reply u8 phase (0 none yet, 1 queued or running, 2 finished), i32 result (0, or the refusal before anything changed: E_SAFE_MODE, E_STATE, E_CARD_BUSY, E_RELOAD_*, E_NOT_FOUND, the load checks and the plan's codes; or the failure after the old module was torn down: the load status of the new file, E_DSP_XFER when its DSP part stalled and was cancelled), u8 step (0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done), u8 unloaded (1: the old module was torn down, so it is not loaded unless the result is 0; 0: it still runs)
+RELOAD_STATE = 0x07 # the live job (a reload, a load or an unload; the one job the runtime has): reply u8 phase (0 none yet, 1 queued or running, 2 finished), i32 result (0, or the refusal before anything changed: E_SAFE_MODE, E_STATE, E_CARD_BUSY, E_RELOAD_*, E_NOT_FOUND, the load checks and the plan's codes; or the failure after the old module was torn down: the load status of the new file, E_DSP_XFER when its DSP part stalled and was cancelled), u8 step (0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done), u8 unloaded (1: the old module was torn down, so it is not loaded unless the result is 0; 0: it still runs)
+LOAD = 0x08        # queue the load of a content module that is not loaded: body, status and errors as RELOAD, except E_LOADED (a module of that name is loaded; E_NOT_FOUND does not occur) and E_SEL_COUNT (no selection index is free); the file is on the card already. The job is the same as RELOAD's: its progress is RELOAD_STATE (steps check, load, DSP part, done; `unloaded` is 0)
+UNLOAD = 0x09      # queue the unload of a loaded content module (no replacement): body, status and errors as RELOAD (the file need not exist or be the same: only the path names the module). The progress is RELOAD_STATE (steps check, quiesce, unload, done); a result of 0 with `unloaded` 1 means the module is not loaded any more
 BEGIN = 0x10
 DATA = 0x11
 END = 0x12
@@ -1756,6 +1758,7 @@ READBACK = 14       # END (and the SDK file_close) read the written file back fr
 LOADS = 15          # the LOADS command (the result of each module of the boot selection, and the missing module of an E_IMPORT)
 SVC_ABI = 16        # the INFO reply ends with `svc_abi`: u32, the ABI fingerprint of interfaces B and C (`dkrt_abi::SVC_ABI`) a service file (.dks) must carry in header word H_SVC_ABI
 RELOAD = 17         # the RELOAD and RELOAD_STATE commands (a content module is reloaded without a boot)
+LIVE = 18           # the LOAD and UNLOAD commands (a content module is loaded or unloaded without a boot); RELOAD_STATE reports them too
 
 [capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused.
                    # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code); every kind is in CAP_KINDS
@@ -2053,6 +2056,7 @@ DSP_LOADING = { code = 4, text = "its ColdFire part is live and its DSP part is 
 ACTIVE = { code = 5, text = "loaded; its DSP part, if any, is in place" }
 FAILED = { code = 6, text = "loading failed after the plan accepted it; the result code says why" }
 SKIPPED = { code = 7, text = "not loaded on purpose: this boot is in safe mode" }
+UNLOADED = { code = 8, text = "taken down at run time by an unload (it can be loaded again)" }
 
 [sample]            # the sample pool contract (<dk/sample/pool.h>, dsp/sample/pool.inc); `patchkit gen` writes sdk/include/dk/gen/sample.h and sdk/dsp/contract/dk_sample_pool.inc (DK_SAMPLE_POOL_*) from it
 peak_bins = 512     # bins of sample_pool_peaks

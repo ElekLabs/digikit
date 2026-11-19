@@ -209,6 +209,8 @@ pub mod proto {
     pub const CMD_LOADS: u8 = 0x05;
     pub const CMD_RELOAD: u8 = 0x06;
     pub const CMD_RELOAD_STATE: u8 = 0x07;
+    pub const CMD_LOAD: u8 = 0x08;
+    pub const CMD_UNLOAD: u8 = 0x09;
     pub const CMD_BEGIN: u8 = 0x10;
     pub const CMD_DATA: u8 = 0x11;
     pub const CMD_END: u8 = 0x12;
@@ -273,6 +275,7 @@ pub mod proto {
     pub const CAP_LOADS: u32 = 1 << 15;
     pub const CAP_SVC_ABI: u32 = 1 << 16;
     pub const CAP_RELOAD: u32 = 1 << 17;
+    pub const CAP_LIVE: u32 = 1 << 18;
     pub const CAPK_MODULES: u8 = 1;
     pub const CAPK_SELECTION: u8 = 2;
     pub const CAPK_ARENA: u8 = 3;
@@ -462,6 +465,7 @@ pub mod load {
     pub const STATE_ACTIVE: u8 = 5;
     pub const STATE_FAILED: u8 = 6;
     pub const STATE_SKIPPED: u8 = 7;
+    pub const STATE_UNLOADED: u8 = 8;
 }
 
 /// The imports of a module (`[[import]]`) and the callback types they take (`[handle.callbacks]`).
