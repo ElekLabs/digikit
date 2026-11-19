@@ -108,6 +108,20 @@ impl Firmware {
         Ok(())
     }
 
+    /// Replace the decoded bytes of the MAIN section and give its stored stream, made for the bootstrap's in-place unpack (`aplib::pack_section_in_place`).
+    pub fn replace_main_stored(&mut self, data: Vec<u8>, stored: Vec<u8>) -> Result<()> {
+        let id = self.device.main_section();
+        let s = self
+            .sections
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| err!("the image has no section {id}"))?;
+        s.data = data;
+        s.stored = stored;
+        s.changed = true;
+        Ok(())
+    }
+
     /// Store a read-only section packed. Its decoded bytes do not change, so the second CPU gets the stock bytes once the module that declared the
     /// repack has unpacked them. Only a section of `[container] repack` is accepted. Returns the new stored length.
     pub fn repack(&mut self, id: u32) -> Result<usize> {

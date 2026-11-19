@@ -402,6 +402,9 @@ fn run(a: Args) -> Result<()> {
                     out.plan.writes.len(),
                     o.container_bytes
                 );
+                if let Some(b) = &o.budget {
+                    println!("{b}");
+                }
             }
         }
         #[cfg(not(target_arch = "wasm32"))]

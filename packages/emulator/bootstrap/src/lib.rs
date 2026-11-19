@@ -30,7 +30,8 @@ pub const DDR_SIZE: u32 = 0x400_0000;
 pub const FLAG_BASE: u32 = 0x4800_0000;
 pub const FLASH_SIZE: usize = 0x100_0000;
 pub const CONTAINER_FLASH_OFFSET: usize = 0x8_0000;
-/// MAIN OS is depacked to 0x4000_0400; the packed copy is staged at 0x4040_0000.
+/// MAIN OS is depacked to 0x4000_0400; the packed copy is staged at 0x4040_0000 (the Digitakt II and Digitone II bootstraps this runner models; the Syntakt's
+/// stage is 0x4020_0000, `[patch] main_stage` of `devices/syntakt.toml`, finding 151). The runner is for the Digitakt II recovery only.
 pub const MAIN_LOAD: u32 = 0x4000_0400;
 pub const MAIN_STAGE: u32 = 0x4040_0000;
 

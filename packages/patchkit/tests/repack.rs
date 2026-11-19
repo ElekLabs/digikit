@@ -328,7 +328,10 @@ fn verify_without_a_library_needs_the_repack_entry_of_the_patch_record() {
     let mut main = fw.main().unwrap().data.clone();
     let at = main.windows(4).position(|w| w == b"RPK1").expect("RPK1");
     main[at + 3] = b'0';
-    fw.replace(fw.device.main_section(), main).unwrap();
+    // stored the way the guard needs it (the plain packer would leave a negative bootstrap margin)
+    let (dest, stage, floor) = fw.device.main_unpack();
+    let made = patchkit::aplib::pack_section_in_place(&main, dest, stage, floor as i64).unwrap();
+    fw.replace_main_stored(main, made.stream).unwrap();
     let cut = fw.build(None).unwrap();
     let e = patchkit::verify::verify(&cut, Some(&reg), Some(&raw))
         .unwrap_err()
@@ -361,4 +364,69 @@ fn the_step_a_set_carries_the_peer_image_and_its_claim_but_no_runtime() {
         .collect();
     assert_eq!(names, ["core/expansion", "core/peer-image"]);
     assert_eq!(rec.repacks.len(), 1);
+}
+
+#[test]
+fn the_syntakt_device_set_keeps_the_bootstrap_margin_and_fits_the_container() {
+    let Some(raw) = image() else { return };
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let reg = registry();
+    let dev = patchkit::devdata::all()
+        .iter()
+        .find(|d| d.short == "st")
+        .unwrap();
+    let (ids, _) = lib.with_requires(&dev.patch_sets["device"]).unwrap();
+    // apply refuses an image below the floor and a container over the cap, so success is the proof; the numbers are read back
+    let out = apply::apply(&raw, &reg, &lib, &ids).unwrap();
+    let fw = Firmware::parse(&out.syx).unwrap();
+    let (dest, stage, floor) = fw.device.main_unpack();
+    let main = fw.main().unwrap();
+    let m = patchkit::aplib::inplace_margin(&main.stored, dest, stage)
+        .unwrap()
+        .expect("the unpack reaches the stage");
+    assert!(m >= floor as i64, "margin {m}");
+    let report = patchkit::verify::verify(&out.syx, Some(&reg), Some(&raw)).unwrap();
+    assert!(report.container_bytes <= dev.container_max);
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|c| c.starts_with("bootstrap margin "))
+    );
+    // the stock image has margin too (finding 151: +96,356 bytes)
+    let stock = Firmware::parse(&raw).unwrap();
+    let sm = patchkit::aplib::inplace_margin(&stock.main().unwrap().stored, dest, stage).unwrap();
+    assert_eq!(sm, Some(96_356));
+}
+
+#[test]
+fn the_digitakt_and_digitone_device_images_have_no_literal_tail() {
+    for (name, short) in [
+        ("Digitakt_II_OS1.17.syx", "dt2"),
+        ("Digitone_II_OS1.12.syx", "dn2"),
+    ] {
+        let Ok(raw) = std::fs::read(root().join("firmware").join(name)) else {
+            continue;
+        };
+        let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+            return;
+        };
+        let reg = registry();
+        let dev = patchkit::devdata::all()
+            .iter()
+            .find(|d| d.short == short)
+            .unwrap();
+        let (ids, _) = lib.with_requires(&dev.patch_sets["device"]).unwrap();
+        let out = apply::apply(&raw, &reg, &lib, &ids).unwrap();
+        let fw = Firmware::parse(&out.syx).unwrap();
+        let main = fw.main().unwrap();
+        // the plain packer's stream: the images of these devices are what they were before the margin guard
+        assert_eq!(
+            main.stored,
+            patchkit::aplib::pack_section(&main.data),
+            "{short}"
+        );
+    }
 }

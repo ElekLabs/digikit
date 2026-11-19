@@ -1,12 +1,15 @@
 //! Run the firmware's own aPLib depacker (the bootstrap's, section 2) on a stream.
 //!
-//! usage: depack_check BOOTSTRAP.bin STREAM.bin ENTRY_HEX [OUT.bin]
+//! usage: depack_check BOOTSTRAP.bin STREAM.bin ENTRY_HEX [OUT.bin] [--stage HEX] [--base HEX]
+//!   --stage  where the bootstrap stages a packed section: the device's `[patch] main_stage` (default 0x40400000, the Digitakt II and Digitone II; the
+//!            Syntakt stages at 0x40200000, finding 151)
+//!   --base   the address section 2 is loaded at (default 0x80000400; the Syntakt's is 0x800003ec)
 //!
 //! BOOTSTRAP.bin is the decompressed section 2 (loaded at 0x80000400). STREAM.bin
 //! is a section as stored in the container, with its 8-byte header. The bootstrap
 //! calls the depacker as `pea dst; pea src; jsr` (0x800005f0); this does
 //! the same on the native ColdFire core (ENTRY is the depacker's address; 0x80000436
-//! in the 1.16 and 1.11 bootstraps, found by tools/firmware/aplib_check.py from its prologue), with the stream at 0x40400000 (where the
+//! in the 1.16 and 1.11 bootstraps, found by tools/firmware/aplib_check.py from its prologue), with the stream at the stage (where the
 //! bootstrap stages a packed section) and the output at 0x40000400 (where MAIN OS
 //! goes). Prints one JSON line: bytes written (the routine's return value), the
 //! SHA-256 of the output and the instruction count.
@@ -19,8 +22,8 @@ const SRAM: u32 = 0x8000_0000;
 const SRAM_LEN: usize = 0x10_0000;
 const DDR: u32 = 0x4000_0000;
 const DDR_LEN: usize = 0x0200_0000;
-const BOOT_BASE: u32 = 0x8000_0400;
-const STREAM_AT: u32 = 0x4040_0000;
+const DEFAULT_BOOT_BASE: u32 = 0x8000_0400;
+const DEFAULT_STREAM_AT: u32 = 0x4040_0000;
 const OUT_AT: u32 = 0x4000_0400;
 const RETURN_TO: u32 = 0x8000_0100;
 
@@ -72,10 +75,28 @@ impl Bus for Mem {
     }
 }
 
+fn hex_flag(args: &mut Vec<String>, name: &str, default: u32) -> u32 {
+    match args.iter().position(|a| a == name) {
+        Some(i) => {
+            let v = args
+                .get(i + 1)
+                .unwrap_or_else(|| panic!("{name} needs a value"));
+            let n = u32::from_str_radix(v.trim_start_matches("0x"), 16).unwrap();
+            args.drain(i..i + 2);
+            n
+        }
+        None => default,
+    }
+}
+
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+    let stream_at = hex_flag(&mut args, "--stage", DEFAULT_STREAM_AT);
+    let boot_base = hex_flag(&mut args, "--base", DEFAULT_BOOT_BASE);
     if args.len() < 4 {
-        eprintln!("usage: depack_check BOOTSTRAP.bin STREAM.bin ENTRY_HEX [OUT.bin]");
+        eprintln!(
+            "usage: depack_check BOOTSTRAP.bin STREAM.bin ENTRY_HEX [OUT.bin] [--stage HEX] [--base HEX]"
+        );
         std::process::exit(2);
     }
     let boot = fs::read(&args[1]).unwrap();
@@ -84,17 +105,17 @@ fn main() {
         sram: vec![0; SRAM_LEN],
         ddr: vec![0; DDR_LEN],
     };
-    mem.slot(BOOT_BASE, boot.len())
+    mem.slot(boot_base, boot.len())
         .unwrap()
         .copy_from_slice(&boot);
-    mem.slot(STREAM_AT, stream.len())
+    mem.slot(stream_at, stream.len())
         .unwrap()
         .copy_from_slice(&stream);
     let mut cpu = Cpu::new();
     let sp = SRAM + SRAM_LEN as u32 - 0x100;
     // Stack at the call: [return address][src][dst].
     mem.write32(sp, RETURN_TO).unwrap();
-    mem.write32(sp + 4, STREAM_AT).unwrap();
+    mem.write32(sp + 4, stream_at).unwrap();
     mem.write32(sp + 8, OUT_AT).unwrap();
     cpu.a[7] = sp;
     cpu.pc = u32::from_str_radix(args[3].trim_start_matches("0x"), 16).unwrap();

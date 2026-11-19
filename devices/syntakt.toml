@@ -88,6 +88,12 @@ main_staged_max = 0x3ffc00
 stream_id = 0x11
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`; the section's destination word, finding 70).
 main_dest = 0x40000400
+# Where the bootstrap stages the packed MAIN OS (section 3): 0x40200000, not the 0x40400000 of the other devices (the stage constant is at 0x800005b2, 0x800005d2,
+# 0x80000622, 0x8000155c and 0x8000157e of section 2, finding 151 **[V]**). The bootstrap unpacks in place with no bounds check, so patchkit refuses an image whose
+# in-place margin at this stage is below main_margin_min (bytes of unread stream kept ahead of the output, default 8192).
+# Where the bootstrap (section 2) is loaded: tools that run its own depacker (tools/firmware/aplib_check.py) need it.
+boot_load = 0x800003ec
+main_stage = 0x40200000
 
 # Address windows that only the firmware and core/* drive: the packer refuses a content module that holds a 32-bit address in one of them
 # (docs/design/module-sdk.md "Modules never touch hardware"; packages/patchkit/src/protect.rs). Each window is [lo, hi), hi exclusive.

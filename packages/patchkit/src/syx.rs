@@ -102,6 +102,11 @@ impl Device {
     pub fn repack_roles(self) -> &'static [String] {
         &self.0.identity.container.repack
     }
+    /// Where the bootstrap unpacks MAIN to (`[patch] main_dest`), where it stages the packed MAIN first (`main_stage`) and the least in-place margin an
+    /// image may have there (`main_margin_min`).
+    pub fn main_unpack(self) -> (u64, u64, u64) {
+        (self.0.main_dest, self.0.main_stage, self.0.main_margin_min)
+    }
     /// Limits of an image with no port: container, stored DSP, depacked DSP, staged MAIN (`[patch]` of the device file).
     pub fn limits(self) -> (usize, usize, usize, usize) {
         let d = self.0;

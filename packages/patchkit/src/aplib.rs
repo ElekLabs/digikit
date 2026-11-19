@@ -139,8 +139,22 @@ fn mlen(data: &[u8], i: usize, j: usize, limit: usize) -> usize {
     m
 }
 
+/// One token of the packed path: `data[from..to]` as one literal (`off == 0`, `to == from + 1`) or as a match at distance `off`.
+#[derive(Clone, Copy, Debug)]
+pub struct Tok {
+    pub from: usize,
+    pub to: usize,
+    pub off: i64,
+}
+
 /// data -> aPLib-shaped stream (no section header), ending with the marker.
 pub fn pack_with(data: &[u8], depth: usize, nice: usize) -> Vec<u8> {
+    let toks = plan_with(data, depth, nice);
+    emit(data, &toks, data.len())
+}
+
+/// The optimal path of `data` as tokens (the dynamic program of `pack_with`).
+pub fn plan_with(data: &[u8], depth: usize, nice: usize) -> Vec<Tok> {
     let n = data.len();
     let inf: i64 = 1 << 60;
     let mut cost = vec![inf; n + 1];
@@ -260,33 +274,45 @@ pub fn pack_with(data: &[u8], depth: usize, nice: usize) -> Vec<u8> {
         }
     }
 
-    let mut path: Vec<(usize, usize, i64)> = Vec::new();
+    let mut path: Vec<Tok> = Vec::new();
     let mut j = n;
     while j > 0 {
         let pi = prv[j] as usize;
-        path.push((pi, j, koff[j]));
+        path.push(Tok {
+            from: pi,
+            to: j,
+            off: koff[j],
+        });
         j = pi;
     }
     path.reverse();
+    path
+}
+
+/// The stream of a path. Every token that starts at or after `literal_from` is written as literals instead (a match is cut into its bytes): a tail of
+/// literals consumes one stream byte per output byte, which is what an in-place unpack needs at the end. `literal_from == data.len()` is the plain stream.
+pub fn emit(data: &[u8], toks: &[Tok], literal_from: usize) -> Vec<u8> {
     let mut out = Bits::new();
     let mut last = 1i64;
-    for (pi, j, off) in path {
-        if off == 0 {
-            out.bit(true);
-            out.byte(data[pi]);
+    for t in toks {
+        if t.off == 0 || t.from >= literal_from {
+            for &b in &data[t.from..t.to] {
+                out.bit(true);
+                out.byte(b);
+            }
             continue;
         }
-        let copies = (j - pi) as i64;
+        let copies = (t.to - t.from) as i64;
         out.bit(false);
-        if off == last {
+        if t.off == last {
             out.gamma(2);
         } else {
-            let raw = off + BIAS;
+            let raw = t.off + BIAS;
             out.gamma((raw >> 8) as u64);
             out.byte((raw & 0xFF) as u8);
-            last = off;
+            last = t.off;
         }
-        out.length(copies - 1 - (off > FAR) as i64);
+        out.length(copies - 1 - (t.off > FAR) as i64);
     }
     out.bit(false);
     out.gamma(END_GAMMA);
@@ -298,15 +324,90 @@ pub fn pack(data: &[u8]) -> Vec<u8> {
     pack_with(data, DEFAULT_DEPTH, DEFAULT_NICE)
 }
 
-/// pack(data) with the section header `[u32 stream length][u32 byte sum]`.
-pub fn pack_section(data: &[u8]) -> Vec<u8> {
-    let body = pack(data);
+/// `body` (a packed stream) with the section header `[u32 stream length][u32 byte sum]`.
+fn section_of(body: Vec<u8>) -> Vec<u8> {
     let sum = body.iter().fold(0u32, |s, &b| s.wrapping_add(b as u32));
     let mut out = Vec::with_capacity(body.len() + 8);
     out.extend_from_slice(&(body.len() as u32).to_be_bytes());
     out.extend_from_slice(&sum.to_be_bytes());
     out.extend_from_slice(&body);
     out
+}
+
+/// pack(data) with the section header `[u32 stream length][u32 byte sum]`.
+pub fn pack_section(data: &[u8]) -> Vec<u8> {
+    section_of(pack(data))
+}
+
+/// A section stream made for an unpack in place (the bootstrap stages the stream at `stage` and unpacks it from `dest` over it).
+#[derive(Debug)]
+pub struct InPlace {
+    pub stream: Vec<u8>,
+    /// Output bytes at the end that are stored as literals to keep the margin (0: the plain stream).
+    pub literal_tail: usize,
+    /// The margin of `stream` (`None`: the output never reaches `stage`).
+    pub margin: Option<i64>,
+    /// The length of the plain stream, for what the tail costs.
+    pub plain_len: usize,
+}
+
+/// `pack_section(data)` when its in-place margin at `stage` is at least `floor` (or the output never reaches `stage`); otherwise the same path with the
+/// shortest tail of the data stored as literals that brings the margin to `floor`. The bootstrap's depacker reads such literals like any other. Err when
+/// even a stream of literals only does not reach the floor.
+pub fn pack_section_in_place(
+    data: &[u8],
+    dest: u64,
+    stage: u64,
+    floor: i64,
+) -> Result<InPlace, String> {
+    let toks = plan_with(data, DEFAULT_DEPTH, DEFAULT_NICE);
+    let plain = section_of(emit(data, &toks, data.len()));
+    let plain_len = plain.len();
+    let ok = |m: &Option<i64>| m.is_none_or(|m| m >= floor);
+    let margin = inplace_margin(&plain, dest, stage)?;
+    if ok(&margin) {
+        return Ok(InPlace {
+            stream: plain,
+            literal_tail: 0,
+            margin,
+            plain_len,
+        });
+    }
+    // the stream from token k on as literals: k = 0 is all literals, k = toks.len() the plain stream
+    let at = |k: usize| {
+        let from = toks.get(k).map_or(data.len(), |t| t.from);
+        let s = section_of(emit(data, &toks, from));
+        let m = inplace_margin(&s, dest, stage);
+        (s, m, data.len() - from)
+    };
+    let (s0, m0, tail0) = at(0);
+    let m0 = m0?;
+    if !ok(&m0) {
+        return Err(format!(
+            "even a stream of literals only has margin {} at stage {stage:#x} (floor {floor}): the unpacked image ({} bytes from {dest:#x}) is too large for this stage",
+            m0.unwrap_or(0),
+            data.len()
+        ));
+    }
+    let (mut lo, mut hi) = (0usize, toks.len());
+    let mut best = (s0, m0, tail0);
+    while hi - lo > 1 {
+        let mid = lo + (hi - lo) / 2;
+        let (s, m, tail) = at(mid);
+        let m = m?;
+        if ok(&m) {
+            lo = mid;
+            best = (s, m, tail);
+        } else {
+            hi = mid;
+        }
+    }
+    Ok(InPlace {
+        stream: best.0,
+        literal_tail: best.2,
+        margin: best.1,
+        plain_len,
+    })
 }
 
 /// Reads the packed bit stream the way the firmware's depacker does (tag byte, 8 flags, MSB first).

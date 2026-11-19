@@ -334,6 +334,17 @@ fn finish(
                 (r, d)
             }),
     );
+    // the budget in a check of its own: the verify detail is cut when it is shown
+    if let Some(b) = rep
+        .as_ref()
+        .and_then(|r| r.checks.iter().find(|c| c.starts_with("bootstrap margin")))
+    {
+        cs.0.push(Check {
+            name: "bootstrap".into(),
+            ok: true,
+            detail: b.clone(),
+        });
+    }
     if let Some(r) = &rep
         && restore
         && r.record.is_some()

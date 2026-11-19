@@ -185,3 +185,67 @@ fn a_device_without_repack_roles_stores_nothing_packed() {
         assert!(fw.repack(id).is_err(), "section {id}");
     }
 }
+
+/// MAIN data that packs to almost nothing and is longer than the bootstrap's stage lies above its load address: 3 MiB of zeros against the stage 2 MiB up.
+fn big_main() -> Vec<u8> {
+    vec![0u8; 3 << 20]
+}
+
+#[test]
+fn a_main_stream_whose_unpack_overtakes_the_staged_stream_is_refused_and_a_literal_tail_repairs_it()
+{
+    let dev = bare();
+    let (dest, stage, floor) = dev.main_unpack();
+    assert!(
+        stage - dest < 3 << 20,
+        "the test data reaches past the stage"
+    );
+    let data = big_main();
+    // the plain stream is a few bytes: the output passes the stage with nothing read ahead
+    let mut fw = image(dev, &[3]);
+    let plain = patchkit::aplib::pack_section(&data);
+    fw.replace_main_stored(data.clone(), plain.clone()).unwrap();
+    let e = patchkit::verify::main_budget(&fw, 0, 1 << 22)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("in-place margin") && e.contains("hang before MAIN starts"),
+        "{e}"
+    );
+    // the same bytes with the shortest literal tail that reaches the floor
+    let made = patchkit::aplib::pack_section_in_place(&data, dest, stage, floor as i64).unwrap();
+    assert!(made.literal_tail > 0 && made.stream.len() > plain.len());
+    assert!(made.margin.unwrap() >= floor as i64);
+    // shortest: one token less of literals would not do (the tail is minimal up to one token)
+    assert_eq!(
+        patchkit::aplib::inplace_margin(&made.stream, dest, stage).unwrap(),
+        made.margin,
+        "the margin is that of the final stream"
+    );
+    let back = dt2_firmware_loader::depack_section(&made.stream, 0, 1 << 24).unwrap();
+    assert!(
+        back == data,
+        "the stream with the tail decodes to the same bytes"
+    );
+    fw.replace_main_stored(data, made.stream).unwrap();
+    let line = patchkit::verify::main_budget(&fw, 1 << 20, 1 << 21).unwrap();
+    assert!(
+        line.starts_with("bootstrap margin ") && line.contains("KB free"),
+        "{line}"
+    );
+}
+
+#[test]
+fn a_main_stream_with_room_is_packed_exactly_as_before() {
+    let dev = bare();
+    let (dest, stage, floor) = dev.main_unpack();
+    let data: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+    let made = patchkit::aplib::pack_section_in_place(&data, dest, stage, floor as i64).unwrap();
+    assert_eq!(made.literal_tail, 0);
+    assert_eq!(
+        made.stream,
+        patchkit::aplib::pack_section(&data),
+        "no tail: the bytes of the plain packer"
+    );
+    assert_eq!(made.margin, None, "the output stays below the stage");
+}

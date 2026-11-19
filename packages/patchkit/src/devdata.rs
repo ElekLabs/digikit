@@ -27,6 +27,11 @@ pub struct DeviceInfo {
     pub dsp_stored_max: u64,
     pub dsp_depacked_max: u64,
     pub main_staged_max: u64,
+    /// `[patch] main_dest`: where MAIN OS is unpacked to. `main_stage`: where the bootstrap stages the packed MAIN before it unpacks it in place.
+    /// `main_margin_min`: the least in-place margin (bytes of unread stream ahead of the output) an image may have; default 8192.
+    pub main_dest: u64,
+    pub main_stage: u64,
+    pub main_margin_min: u64,
     /// `[patch] stream_id`: the id byte of the OS UPGRADE header message (0x0f DT2, 0x10 DN2).
     pub stream_id: u8,
     /// `[patch] build_floor`: the four ASCII characters the OS validator compares the container's build word with (DT2 "0060");
@@ -217,6 +222,9 @@ struct Patch {
     main_staged_max: u64,
     stream_id: u8,
     build_floor: Option<String>,
+    main_dest: u64,
+    main_stage: u64,
+    main_margin_min: Option<u64>,
 }
 
 /// Words each capability may take.
@@ -405,6 +413,9 @@ fn parse_all(files: &[(&str, &str)]) -> Result<(Vec<Identity>, Vec<DeviceInfo>)>
             dsp_stored_max: p.dsp_stored_max.unwrap_or(0),
             dsp_depacked_max: p.dsp_depacked_max.unwrap_or(0),
             main_staged_max: p.main_staged_max,
+            main_dest: p.main_dest,
+            main_stage: p.main_stage,
+            main_margin_min: p.main_margin_min.unwrap_or(8192),
             stream_id: p.stream_id,
             build_floor: match p.build_floor {
                 None => None,
@@ -514,7 +525,7 @@ mod tests {
         assert_eq!((ids.len(), patchable.len()), (1, 0));
         assert!(!ids[0].patchable && !ids[0].runtime_target);
         let patch = format!(
-            "[device]\nname = \"X\"\nshort = \"x\"\nsyx_id = 0x30\n{caps}[patch]\ncontainer_max = 1\nmain_staged_max = 1\nstream_id = 1\n"
+            "[device]\nname = \"X\"\nshort = \"x\"\nsyx_id = 0x30\n{caps}[patch]\ncontainer_max = 1\nmain_staged_max = 1\nstream_id = 1\nmain_dest = 16\nmain_stage = 32\n"
         );
         let (ids, patchable) = parse_all(&[("x.toml", patch.as_str())]).unwrap();
         assert!(ids[0].patchable && !ids[0].runtime_target);

@@ -106,6 +106,37 @@ pub fn patch_record(syx_bytes: &[u8]) -> Result<Option<Record>> {
     find_record(&Firmware::parse(syx_bytes)?)
 }
 
+fn kb(n: i64) -> String {
+    format!("{:.1} KB", n as f64 / 1024.0)
+}
+
+/// The in-place margin of the stored MAIN stream at the bootstrap's stage (`[patch] main_stage`), refused below `main_margin_min`, and the budget line:
+/// the bootstrap unpacks MAIN over its own staged stream with no bounds check, so a stream whose output overtakes the unread input runs away before MAIN
+/// starts (finding 151). Returns `bootstrap margin 9.1 KB, container 31.4 KB free`.
+pub fn main_budget(fw: &Firmware, container_bytes: u64, container_max: u64) -> Result<String> {
+    let main = fw
+        .main()
+        .ok_or_else(|| err!("the image has no MAIN OS section"))?;
+    let (dest, stage, floor) = fw.device.main_unpack();
+    let free = container_max as i64 - container_bytes as i64;
+    let margin = crate::aplib::inplace_margin(&main.stored, dest, stage)
+        .map_err(|e| err!("MAIN OS stream: {e}"))?;
+    match margin {
+        Some(m) if m < floor as i64 => Err(err!(
+            "the bootstrap would unpack MAIN OS over its own unread stream: in-place margin {m} bytes at the stage {stage:#x} (at least {floor} needed): the unit would hang before MAIN starts"
+        )),
+        Some(m) => Ok(format!(
+            "bootstrap margin {}, container {} free",
+            kb(m),
+            kb(free)
+        )),
+        None => Ok(format!(
+            "bootstrap margin: the unpack stays below the stage {stage:#x}, container {} free",
+            kb(free)
+        )),
+    }
+}
+
 /// What the hook of a module that unpacks section `id` relies on, checked from the patch record's `repacks` entry for the section's role: the entry
 /// must name a module of the record, the stream header length and byte sum must hold, the decoded section must be the stock one the entry names
 /// (length and SHA-256), the stream must fit `stage_end - dest`, and the in-place margin must be above 0. With a library the module's own `[[repack]]`
@@ -370,6 +401,10 @@ fn check(
         ));
     }
     checks.push("size limits".into());
+    if need_base {
+        // `inspect` only identifies a file; a proof for flashing also holds the bootstrap's in-place unpack to its margin
+        checks.push(main_budget(&fw, total as u64, container_max as u64)?);
+    }
 
     if base.is_none() && need_base && port.is_none() && !fw.device.readonly_sections().is_empty() {
         let ids: Vec<String> = fw

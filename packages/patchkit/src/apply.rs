@@ -106,6 +106,9 @@ pub struct PlanOutput {
     pub syx_bytes: u64,
     pub container_bytes: u64,
     pub changed_sections: Vec<(u32, u64, u64)>,
+    /// `bootstrap margin 9.1 KB, container 31.4 KB free` (the in-place margin of MAIN at the bootstrap's stage and the container space left).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget: Option<String>,
 }
 
 pub struct Applied {
@@ -2427,6 +2430,7 @@ pub fn apply_with(
             ));
         }
     }
+    let mut main_tail: Option<(usize, usize)> = None;
     if mem.main_dirty {
         if mem.main.len() as u64 > lim.main_staged_max {
             return Err(err!(
@@ -2435,10 +2439,24 @@ pub fn apply_with(
                 lim.main_staged_max
             ));
         }
-        fw.replace(fw.device.main_section(), mem.main.clone())?;
+        // the bootstrap unpacks MAIN in place over its staged stream with no bounds check: keep the margin its stage needs (finding 151)
+        let (dest, stage, floor) = fw.device.main_unpack();
+        let packed = crate::aplib::pack_section_in_place(&mem.main, dest, stage, floor as i64)
+            .map_err(|e| err!("MAIN OS: {e}"))?;
+        main_tail = Some((
+            packed.literal_tail,
+            packed.stream.len() - packed.plain_len.min(packed.stream.len()),
+        ));
+        fw.replace_main_stored(mem.main.clone(), packed.stream)?;
     }
     store_repacked(&mut fw, &repacks)?;
-    let syx = fw.build(opts.flash_cap.then_some(lim.container_max as usize))?;
+    let syx = fw.build(opts.flash_cap.then_some(lim.container_max as usize)).map_err(|e| match main_tail {
+        Some((tail, extra)) if tail > 0 && e.0.contains("over the") => err!(
+            "{}: MAIN OS needs a tail of {tail} bytes stored as literals so that the bootstrap's in-place unpack keeps its margin, which costs {extra} bytes more than the plain stream; the image needs more than the container allows: trim the runtime or move it out of MAIN",
+            e.0
+        ),
+        _ => e,
+    })?;
     let regions = allocs
         .iter()
         .map(|(k, v)| (k.clone(), (v.used, v.cap)))
@@ -2485,6 +2503,11 @@ pub fn apply_with(
         syx_sha256: sha256_hex(&applied.syx),
         syx_bytes: applied.syx.len() as u64,
         container_bytes: report.container_bytes,
+        budget: report
+            .checks
+            .iter()
+            .find(|c| c.starts_with("bootstrap margin"))
+            .cloned(),
         changed_sections: fw
             .sections
             .iter()
