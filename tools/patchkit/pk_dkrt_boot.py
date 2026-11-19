@@ -440,10 +440,22 @@ class BootRig(M.Rig):
             raise Fail(
                 f"{self.tag}: service {service} is not in the load table: {[m['id'] for m in loads]}"
             )
-        mapfile = (
-            Path(__file__).resolve().parents[2]
-            / "dist" / "svc-bound" / self.env.device / f"{service}.addrmap.json"
-        )  # fmt: skip
+        # the offsets are relative to the load address, the base of the load table (as `loadAddress` + `serviceMapEntries` of
+        # tests/regression/runtime/service-symbols.ts). The map is the Nx bind's: it must describe the file on this card.
+        bound = (
+            Path(__file__).resolve().parents[2] / "dist" / "svc-bound" / self.env.device
+        )
+        card_file = self.work / "svc-bound" / f"{service}.dks"
+        nx_file = bound / f"{service}.dks"
+        stale = f"stale or missing Nx bind: run `pnpm nx:pilot run core/services/{service}:bind`"
+        if not (card_file.exists() and nx_file.exists()):
+            raise Fail(f"{stale} ({card_file} or {nx_file} is missing)")
+        if (
+            hashlib.sha256(card_file.read_bytes()).digest()
+            != hashlib.sha256(nx_file.read_bytes()).digest()
+        ):
+            raise Fail(f"{stale} ({nx_file} differs from the card's {service}.dks)")
+        mapfile = bound / f"{service}.addrmap.json"
         if not mapfile.exists():
             raise Fail(f"{mapfile}: run nx run core/services/{service}:bind")
         entries = json.loads(mapfile.read_text())["entries"]
