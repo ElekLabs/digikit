@@ -7,7 +7,7 @@ import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { captureNote, frames, pickSine, readFloatWav, runFrames, word } from '@digi/regression/runtime/fx-live.ts';
 import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
-import { sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
+import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
@@ -22,7 +22,7 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  *
  * - (a) a code-only module (`test/lfo-shape`) reloads.
  * - (b) the machine `test/sine`, with a note held by MIDI over the reload and the PCM captured: the level before the reload is audible, at least 3 windows in a row inside the
- *   swap are below 1% of it (the placeholder row, not a stock sound), a control capture of the same note and span without a reload stays above that threshold over the whole
+ *   swap (queued to the new note; the AMP hold is set to NOTE by CC so a held note does not fade by itself) are below 1% of it (the placeholder row, not a stock sound), a control capture of the same note and span without a reload stays above that threshold over the whole
  *   span (so decay alone cannot make the quiet run), and a new note after the swap is audible again. The peaks per window are in the assertion messages and `pcm-windows.json`.
  *   The machine type keeps its number and its voice row.
  * - (c) the reload is refused while the transport plays (`E_RELOAD_PLAYING`, the old module is live and the counter did not move) and goes through after STOP.
@@ -40,6 +40,11 @@ const BOOT_RELOADS = 252;
 const DYNREG_VIEW_VAR = 4 * 48;
 const DYNREG_VIEW_BUILD = 4 * 49;
 const MIDI_CHANNEL = 1;
+/**
+ * The AMP envelope CCs of the track (MIDI appendix of each manual: Digitakt II B.5, Digitone II C.5): HOLD and DECAY. HOLD = 127 is NOTE: the hold phase lasts as long as the key
+ * is held (the default hold ends by itself and the note faded out in the middle of the measured span), the decay then only shapes the release after the note off.
+ */
+const AMP_CC = { dt2: { hold: 80, decay: 81 }, dn2: { hold: 85, decay: 86 } } as const;
 const NOTE = 57;
 
 const moduleRows = async (rt: TestRuntime) => (await rt.dk.modules()).filter((m) => m.name !== DEBUG_MODULE);
@@ -98,6 +103,9 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
   // (b) the machine with DSP, a note held over the reload, PCM captured
   const sine = before.find((m) => m.name === 'test/sine')!;
   await pickSine(rt);
+  const amp = AMP_CC[rt.session.options.device as 'dt2' | 'dn2'];
+  await sendCc(rt, MIDI_CHANNEL, amp.hold, 127); // the note sounds as long as the key is held: the same in the capture with the reload and in the control
+  await sendCc(rt, MIDI_CHANNEL, amp.decay, 64);
   const length = 1500;
   const WINDOWS = 32;
   const windowsOf = async (file: string, a: number, b: number): Promise<number[]> => {
