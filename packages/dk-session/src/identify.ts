@@ -13,7 +13,7 @@ export const RPC_SOFTWARE_VERSION = 0x02;
  * - plain: `u8 blobLen`, the blob of request types, NUL-ended strings (the first is the name);
  * - length-prefixed: `u8 rest`, then the plain layout, where `rest` is the number of bytes after the `blobLen` byte (the Syntakt 1.42 reply,
  *   `1e 16 <22 types> "Syntakt" 00`, finding 144). A payload whose first byte is two less than its length is this one.
- * Undefined when the payload is empty, cut short or has no name. The vectors are `tests/fixtures/ping-vectors.json`, shared with `parse_ping` of
+ * Undefined when the payload is empty, cut short, or the first string is not printable ASCII. The vectors are `tests/fixtures/ping-vectors.json`, shared with `parse_ping` of
  * `packages/patchkit/src/flash_rpc.rs`.
  */
 export function parsePing(payload: Uint8Array): string | undefined {
@@ -23,7 +23,9 @@ export function parsePing(payload: Uint8Array): string | undefined {
   const start = 1 + first;
   const end = body.indexOf(0, start);
   if (start >= body.length || end < 0 || end === start) return undefined;
-  return new TextDecoder('latin1').decode(body.subarray(start, end));
+  const name = body.subarray(start, end);
+  // a name is printable text: an unknown or damaged reply gives no name, not junk
+  return name.every((b) => b >= 0x20 && b < 0x7f) ? new TextDecoder('latin1').decode(name) : undefined;
 }
 
 /** The OS version in the reply of SoftwareVersion (`"00"`, `"79"`, `"1.17"`: the string that looks like a version), or undefined. */

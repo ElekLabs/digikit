@@ -642,8 +642,8 @@ mod tail_tests {
     #[test]
     fn the_in_place_tail_reaches_the_floor_when_the_cut_falls_in_such_matches() {
         let data = mixed();
-        // a stage inside the data and a floor that needs a tail
-        let mut tails = 0;
+        // a stage inside the data and a floor: where the plain stream's margin is below the floor a tail is needed and taken
+        let mut needed = 0;
         for (dest, stage, floor) in [(0u64, 11_000u64, 64i64), (0, 13_000, 200), (0, 9_500, 32)] {
             let made = pack_section_in_place(&data, dest, stage, floor).unwrap();
             assert_eq!(depack_section(&made.stream, 0, 1 << 20).unwrap(), data);
@@ -652,6 +652,28 @@ mod tail_tests {
                 inplace_margin(&made.stream, dest, stage).unwrap(),
                 made.margin
             );
+            let plain = inplace_margin(&pack_section(&data), dest, stage).unwrap();
+            if plain.is_some_and(|m| m < floor) {
+                needed += 1;
+                assert!(
+                    made.literal_tail > 0,
+                    "the plain margin {plain:?} is below {floor}: a tail is taken"
+                );
+                assert!(
+                    made.literal_tail < data.len(),
+                    "and it is a tail, not all of the data"
+                );
+                assert!(made.stream.len() > pack_section(&data).len());
+            } else {
+                assert_eq!(
+                    made.literal_tail, 0,
+                    "the plain stream is kept when it holds"
+                );
+            }
         }
+        assert!(
+            needed > 0,
+            "a tail was needed and taken in at least one case"
+        );
     }
 }

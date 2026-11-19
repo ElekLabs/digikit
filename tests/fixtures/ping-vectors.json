@@ -50,6 +50,16 @@
       "name": "length-prefixed with an empty name",
       "payload": "0302010200",
       "model": null
+    },
+    {
+      "name": "plain, a damaged name with control bytes",
+      "payload": "004e01ff6d6500",
+      "model": null
+    },
+    {
+      "name": "length-prefixed, a name with a high byte",
+      "payload": "0401015a8000",
+      "model": null
     }
   ]
 }

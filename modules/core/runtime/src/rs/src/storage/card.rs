@@ -58,8 +58,9 @@ pub static mut DKRT_CARD: CardInfo = CardInfo {
 
 /// `CARD_REFUSED` reason: the firmware's driver has not reported a capacity yet, so nothing is decided (the write is refused this time).
 pub const REFUSE_NOT_READY: u32 = 5;
-/// The not-ready CARD_CHECK was logged.
+/// The not-ready CARD_CHECK and the first refused write of the period were logged (one event each; the refusals are all counted).
 static mut NOT_READY_LOGGED: bool = false;
+static mut NOT_READY_REFUSAL_LOGGED: bool = false;
 
 #[repr(C, align(16))]
 struct Sec([u8; 512]);
@@ -184,10 +185,10 @@ pub unsafe fn check_with<P: Platform>(p: &P) {
         c.state = CARD_TOO_SMALL;
         return;
     }
-    // the card's capacity from the firmware's driver (no card access): 0xFFFFFFFF while the driver is not ready, then nothing is decided and nothing is read,
-    // and the next write asks again
+    // the card's capacity from the firmware's driver (no card access): 0xFFFFFFFF while the driver is not ready (0 is no capacity either), then nothing is
+    // decided and nothing is read, and the next write asks again
     c.sectors = p.card_sectors();
-    if c.sectors == u32::MAX {
+    if c.sectors == u32::MAX || c.sectors == 0 {
         c.checked = 0;
         // one CARD_CHECK for the whole wait (the state stays unknown); every refused write says why (reason `REFUSE_NOT_READY`)
         if !NOT_READY_LOGGED {
@@ -196,6 +197,8 @@ pub unsafe fn check_with<P: Platform>(p: &P) {
         }
         return;
     }
+    NOT_READY_LOGGED = false;
+    NOT_READY_REFUSAL_LOGGED = false;
     let l = lay();
     // the card must reach the end of the area
     if c.sectors < l.first + l.sectors {
@@ -328,8 +331,13 @@ pub unsafe fn admit_with<P: Platform>(p: &P, sector: u32, bytes: u32) -> i32 {
         check_with(p);
         g = gate(&lay(), state(), sector, bytes);
         if g == Gate::Check {
-            // the driver reported no capacity yet: refused this time, asked again at the next write
-            count_refusal(sector, bytes, REFUSE_NOT_READY);
+            // the driver reported no capacity yet: refused this time, asked again at the next write; every refusal is counted, the first one is logged
+            let c = info();
+            c.refused = c.refused.wrapping_add(1);
+            if !NOT_READY_REFUSAL_LOGGED {
+                NOT_READY_REFUSAL_LOGGED = true;
+                dlog::ev(logk::CARD_REFUSED, logk::F_ERROR, [sector, bytes, REFUSE_NOT_READY, c.state, 0]);
+            }
             return E_CARD_RO;
         }
     }

@@ -85,7 +85,7 @@ pub fn parse_reply(msg: &[u8]) -> Option<(u16, u8, Vec<u8>)> {
 /// - length-prefixed: `u8 rest`, then the plain layout, where `rest` is the number of bytes after the `blobLen` byte (the Syntakt 1.42 reply,
 ///   `1e 16 <22 types> "Syntakt" 00`, finding 144). A payload whose first byte is two less than its length is this one.
 ///
-/// `None` when the payload is empty, cut short or has no name. The vectors are `tests/fixtures/ping-vectors.json`, shared with `parsePing` of
+/// `None` when the payload is empty, cut short, or the first string is not printable ASCII. The vectors are `tests/fixtures/ping-vectors.json`, shared with `parsePing` of
 /// `packages/dk-session/src/identify.ts`.
 pub fn parse_ping(payload: &[u8]) -> Option<String> {
     let body = match payload.split_first() {
@@ -95,7 +95,10 @@ pub fn parse_ping(payload: &[u8]) -> Option<String> {
     let start = 1 + *body.first()? as usize;
     let strings = body.get(start..)?;
     let end = strings.iter().position(|&b| b == 0)?;
-    (end > 0).then(|| strings[..end].iter().map(|&b| b as char).collect())
+    // a name is printable text: an unknown or damaged reply gives no name, not junk
+    let name = &strings[..end];
+    (end > 0 && name.iter().all(|b| (0x20..0x7f).contains(b)))
+        .then(|| name.iter().map(|&b| b as char).collect())
 }
 
 /// Why a run ended without a flash.

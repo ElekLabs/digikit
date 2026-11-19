@@ -454,12 +454,30 @@ fn the_card_check_decides_from_the_capacity_the_driver_reports() {
     assert!(f.reads.borrow().is_empty() && f.writes.borrow().is_empty(), "no card access");
     assert_eq!(card::info().checked, 0, "asked again later");
     assert_eq!(card::info().refused, 1, "the refusal is counted (and logged) with its own reason");
+    unsafe {
+        assert_eq!(write(&f, L.first + 11, 1), E_CARD_RO);
+    }
+    assert_eq!(card::info().refused, 2, "every refusal is counted, the event is logged once per period");
     f.card_sectors.set(end + 10);
     unsafe {
         assert_eq!(write(&f, L.first + 10, 1), OK);
     }
     assert_eq!(card::state(), CARD_OURS, "the second write claimed the blank area");
     assert_eq!(card::info().sectors, end + 10, "the capacity is recorded");
+    // a capacity of 0 is no capacity either: undecided, no access, asked again (not CARD_TOO_SMALL for good)
+    card_reset();
+    let f = FakePlatform::new(profiles::DT2);
+    f.card_sectors.set(0);
+    unsafe {
+        assert_eq!(write(&f, L.first + 10, 1), E_CARD_RO);
+    }
+    assert_eq!(card::state(), CARD_UNKNOWN);
+    assert!(f.reads.borrow().is_empty() && f.writes.borrow().is_empty());
+    f.card_sectors.set(end);
+    unsafe {
+        assert_eq!(write(&f, L.first + 10, 1), OK);
+    }
+    assert_eq!(card::state(), CARD_OURS);
     // one sector short: too small, and nothing was read
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
