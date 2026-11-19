@@ -122,8 +122,7 @@ pub(crate) unsafe fn park_missing<C: CoreApi>(core: &C, t: u32) -> Option<bool> 
         if d.row_owner[k] != 0 && d.row_type[k] == t {
             return Some(true);
         }
-        if free == MAX_ROWS && d.row_owner[k] == 0 && (k as u32) < iw(core.dsp_info(), I_VFREE)
-        {
+        if free == MAX_ROWS && d.row_owner[k] == 0 && (k as u32) < iw(core.dsp_info(), I_VFREE) {
             free = k;
         }
         k += 1;

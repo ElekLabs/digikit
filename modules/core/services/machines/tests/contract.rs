@@ -122,15 +122,29 @@ fn kept(_core: &FakeCore, addr: u32, value: u32) -> bool {
     };
     if let Some(off) = in_rows(0x30_0000, 0x100, limits::MACHINE_ROWS) {
         let s = &rstate().s;
-        let inside = |base: usize, size: usize| {
-            value >= base as u32 && value < base as u32 + size as u32
-        };
+        let inside =
+            |base: usize, size: usize| value >= base as u32 && value < base as u32 + size as u32;
         return match off {
             0 => value == EMPTY,
-            0x4c => inside(addr_of!(s.mach_short) as usize, core::mem::size_of_val(&s.mach_short)),
+            0x4c => inside(
+                addr_of!(s.mach_short) as usize,
+                core::mem::size_of_val(&s.mach_short),
+            ),
             0x48 => value == 1,
-            4 => value == rep || inside(addr_of!(s.rep_long) as usize, core::mem::size_of_val(&s.rep_long)),
-            8 => value == rep || inside(addr_of!(s.rep_short) as usize, core::mem::size_of_val(&s.rep_short)),
+            4 => {
+                value == rep
+                    || inside(
+                        addr_of!(s.rep_long) as usize,
+                        core::mem::size_of_val(&s.rep_long),
+                    )
+            }
+            8 => {
+                value == rep
+                    || inside(
+                        addr_of!(s.rep_short) as usize,
+                        core::mem::size_of_val(&s.rep_short),
+                    )
+            }
             0x30 => value == 10,
             0x44 => true,
             _ => false,
@@ -155,17 +169,22 @@ fn kept(_core: &FakeCore, addr: u32, value: u32) -> bool {
     let names = 0x40_0000 + 12 * DYN_TYPE_FIRST;
     if let Some(off) = in_rows(names, 12, limits::MACHINE_ROWS) {
         let s = &rstate().s;
-        let inside = |base: usize, size: usize| {
-            value >= base as u32 && value < base as u32 + size as u32
-        };
+        let inside =
+            |base: usize, size: usize| value >= base as u32 && value < base as u32 + size as u32;
         return match off {
             0 => {
                 value == EMPTY
-                    || inside(addr_of!(s.mach_name) as usize, core::mem::size_of_val(&s.mach_name))
+                    || inside(
+                        addr_of!(s.mach_name) as usize,
+                        core::mem::size_of_val(&s.mach_name),
+                    )
             }
             4 => {
                 value == EMPTY
-                    || inside(addr_of!(s.mach_short) as usize, core::mem::size_of_val(&s.mach_short))
+                    || inside(
+                        addr_of!(s.mach_short) as usize,
+                        core::mem::size_of_val(&s.mach_short),
+                    )
             }
             _ => false,
         };
@@ -430,7 +449,8 @@ fn forget_numbers_but(l: &dkrt_test_support::contract::Lifecycle<Machines>, mods
 }
 
 #[test]
-fn a_voice_row_of_an_absent_module_is_a_disabled_placeholder_that_keeps_its_type_while_the_map_holds_its_number() {
+fn a_voice_row_of_an_absent_module_is_a_disabled_placeholder_that_keeps_its_type_while_the_map_holds_its_number(
+) {
     use dkrt_abi::dsp::{PLACEHOLDER_OWNER, PLACEHOLDER_PC};
     use dkrt_test_support::contract::{locked, Lifecycle};
     let _g = locked();
@@ -574,7 +594,11 @@ fn a_number_in_the_map_that_no_module_has_reads_missing_and_is_parked_once_the_l
         let d = l.core.dsp();
         for r in &rows {
             assert_eq!(d.row_pc[*r], PLACEHOLDER_PC);
-            assert_eq!(voice_row_word(&l.core, *r, 10), Some(d.row_type[*r]), "disabled");
+            assert_eq!(
+                voice_row_word(&l.core, *r, 10),
+                Some(d.row_type[*r]),
+                "disabled"
+            );
             assert_eq!(voice_row_word(&l.core, *r, 0), Some(d.row_type[*r]));
         }
         // nothing more is written by another pass
@@ -583,18 +607,29 @@ fn a_number_in_the_map_that_no_module_has_reads_missing_and_is_parked_once_the_l
         assert_eq!(l.core.link.borrow().t.wire.len(), writes);
         // A loads: it takes its placeholder and its machine row is its own again
         assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
-        assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(), rows.len() - 1);
+        assert_eq!(
+            rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+            rows.len() - 1
+        );
         let own = missing_row(&l.core);
-        assert_eq!((own.0, own.1), (false, false), "the row is A's own: listed, its own text");
+        assert_eq!(
+            (own.0, own.1),
+            (false, false),
+            "the row is A's own: listed, its own text"
+        );
         tick();
-        assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(), rows.len() - 1);
+        assert_eq!(
+            rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+            rows.len() - 1
+        );
         assert_eq!(rows_owned_by(&l.core, 1).len(), 1);
         l.unload(0);
     }
 }
 
 #[test]
-fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_runs_during_a_live_operation() {
+fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_runs_during_a_live_operation(
+) {
     use dkrt_abi::dsp::PLACEHOLDER_OWNER;
     use dkrt_abi::service::{tick_phase, Service};
     use dkrt_test_support::contract::{locked, Lifecycle};

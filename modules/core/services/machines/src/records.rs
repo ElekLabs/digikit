@@ -1012,9 +1012,9 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     let mut k = 0;
     while k < MAX_MACH {
         if s.mach_owner[k] == owner {
+            // an absent module reads MISSING and plays silence while its number is in the sticky map (E5d), and during a reload; a pinned number is a gap row after the reload
             let t = iw(inf, w::M_DYN0) + k as u32;
             nativepage::remove(core, t); // callbacks must go before code/strings can be released
-            // an absent module reads MISSING and plays silence while its number is in the sticky map (E5d), and during a reload; a pinned number is a gap row after the reload
             let held = crate::assign::holds(t);
             let missing = held || core.live_op() != 0;
             reset_machine_row(core, inf, k, missing);
