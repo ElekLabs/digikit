@@ -167,7 +167,7 @@ pub fn wave_max() -> u32 {
     highest() << 8
 }
 
-/// The three WAVE rows of the parameter table (one for each LFO): the stock addresses of the table and of the rows, which `patchkit bind` resolves (`cf.param.data.descriptor_table`,
+/// The three WAVE rows of the parameter table (one for each LFO): the stock addresses of the table and of the rows, which the port file resolves (`cf.param.data.descriptor_table`,
 /// `cf.lfo.data.wave_row.N`), and the pair (minimum, maximum) each row had before the first shape was loaded. Words 0: a host build with no firmware, which has no rows to write.
 struct Wave {
     table: u32,

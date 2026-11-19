@@ -1,9 +1,9 @@
 | machines.dks on the Digitone II (1.12): the ColdFire routines the service's hooks run. They were in core/machines (`src/cf/dn2/machines.s`).
 |
-| Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (`patchkit bind` made the hook raw: no trampoline); the frame type is entered
+| Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (a hook of a service is raw: no trampoline); the frame type is entered
 | through the image stub of the pointer slot `frametype` (an interrupt site). The routine takes the whole control flow of the site: it runs in place of the stock
-| instructions there and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, made by `patchkit bind`) or, when a
-| branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `devices/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address `patchkit bind` resolves: the jump changes no
+| instructions there and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, copied by the runtime from the port file) or, when a
+| branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `devices/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address the port file resolves: the jump changes no
 | register or flag). A routine that ends the hooked function leaves by `jmp mf_ret_*` (`dk_ret_<hash>`, an `rts`). The aliases are the `[object.externs]` of module.toml. `MF_TAB` is the image table
 | `machines_info` of core/machines, copied by `setup` (lib.rs). Offsets T_* below; the same layout is in hooks-dt2.s and in `image.rs`.
 |
@@ -103,7 +103,7 @@ mf_typemap0:
     jmp     mf_ret_tm0                  | ordinary pages plus an opt-in native callback page
 1:  move.l  %a1,%d0
     CLONEMAP 4
-9:  jmp     dk_tail_02e8a3f1            | the stock instructions of the site, made by `patchkit bind`, and on
+9:  jmp     dk_tail_02e8a3f1            | the stock instructions of the site, copied by the runtime from the port file, and on
 
 | FUN(type, page) -> the page descriptor (D2 is saved by the stock code before the site). Site (8 bytes): `move.l 8(sp),D1; move.l 0xc(sp),D0`.
     .globl mf_typemap1

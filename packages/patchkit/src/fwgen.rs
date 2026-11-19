@@ -88,11 +88,11 @@ struct Hook {
     regs: Regs,
     handler: Option<Handler>,
     /// A hook without a `handler` (a raw hook, entered at its own entry) may continue in the displaced stock instructions of the site: `tail = true`.
-    /// `patchkit bind` then generates that code from the user's firmware and resolves the `dk_tail_<hash>` references of the service to it.
+    /// The runtime copies that code from flash after the hash check (the port file) and resolves the `dk_tail_<hash>` references of the service to it.
     #[serde(default)]
     tail: bool,
     /// A raw hook whose service calls the stock path (`dk_stock_<hash>`, `jsr`) and takes no `tail`: `stock = true`. The port file marks the site as kind `stock`
-    /// (the displaced instructions are copied from flash after the hash check). `patchkit bind` infers it from the references of the file.
+    /// (the displaced instructions are copied from flash after the hash check). `patchkit port build` lists it in the port file.
     #[serde(default)]
     stock: bool,
     /// The places a raw hook may leave the site besides its end (`dk_exit_<hook>_<n>` of a service, `n` from 1): each is an expression like the ones of a module manifest,
@@ -238,7 +238,7 @@ pub fn handler_plan(decls: &[&str], device_short: &str, hook: &str) -> Result<Ha
     Err(err!("{hook}: no declared hook with a handler"))
 }
 
-/// Does the declared hook `hook` have a `handler` (a C-callable function the trampoline calls)? A hook without one is a raw hook: entered at its `entry` itself (`bind`).
+/// Does the declared hook `hook` have a `handler` (a C-callable function the trampoline calls)? A hook without one is a raw hook: entered at its `entry` itself.
 pub fn hook_has_handler(decls: &[&str], device_short: &str, hook: &str) -> Result<bool> {
     Ok(declared_hook(decls, device_short, hook, |h| {
         h.handler.is_some()

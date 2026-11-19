@@ -38,12 +38,12 @@ def committed(
 ) -> dict[str, Any]:
     """The decoded records of module MID (packed as DKM) on DEVICE: `{module, commit, records}` of `commit_records.ts`.
     DEBUG_DKM is the packed debug module the device boots with; without it the tool reads `dist/modules/<device>/debug.dkm`.
-    SERVICES are the bound `.dks` files (`patchkit bind`) the module needs: they go on the card as `services/<name>.dks`."""
+    SERVICES are the files the module needs on the card: the packed `.dks` files go to `services/<name>.dks` and a `.dkport` file to `ports/<name>.dkport`."""
     cmd = [
         "node", CLI, "--device", device, "--module", mid, "--dkm", str(dkm), "--patchkit", patchkit,
         *(["--binary", binary] if binary else []),
         *(["--debug-dkm", str(debug_dkm)] if debug_dkm else []),
-        *[a for s in services or [] for a in ("--service", str(s))],
+        *[a for s in services or [] for a in (("--port", str(s)) if s.suffix == ".dkport" else ("--service", str(s)))],
     ]  # fmt: skip
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if r.returncode:

@@ -9,7 +9,7 @@
 | fills them into its copy of the table (`fxpage::bind_table`).
 |
 | The firmware addresses of version 3 (the stock page lists and the return words from 196: where each hook continues in the stock code) are not here: the service file
-| names them and `patchkit bind` resolves them for the user's firmware (devices/fw `exits`); their words are 0.
+| names them and the port file resolves them for the user's firmware (devices/fw `exits`); their words are 0.
 |
 | fxpages_info is the table the service reads (all words big endian).
 

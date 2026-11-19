@@ -9316,7 +9316,7 @@
   },
   {
    "align": 2,
-   "hex": "3b7582f1",
+   "hex": "ed59ad42",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -10456,7 +10456,7 @@
    "size": 28
   }
  ],
- "source_sha256": "522ec4eba9156b1e6daa24147a059380f3bda5817cb877b2cb904fe9195c20c6",
+ "source_sha256": "85b01aa2676f7c7f58f519efe3cc77860a00a40d6f4ce040b7564eed27d6d2bb",
  "symbols": [
   {
    "global": false,
@@ -13144,7 +13144,7 @@
  "toolchain": {
   "exports": "MF_TAB dk_machine_add_page dk_machines_guard_state dk_machines_owned_ids dk_module dk_module_ctx_add_machine dk_page_add_param dk_page_bind dk_page_bind_local dk_page_canvas dk_param_get dk_param_glyph dk_param_latched dk_param_on_click dk_param_range dk_param_set dk_svc_abi dks_page_key dks_page_turn mf_clone5 mf_code_hook mf_draw_hook mf_frametype mf_group mf_key_hook mf_owner mf_reader mf_srcpage mf_turn_hook mf_typearg mf_typemap0 mf_typemap1 mf_typemap2",
   "instructions_redecoded": "12373",
-  "isa_check": "d1646fee1809da38d52432d8cdc53251816050a6c467bf39bab04320fbcf317f",
+  "isa_check": "60ba39787bb5d0c0fb24bfb923410d15325c4db065a1c7cbe4d78c0e44b3e5b5",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

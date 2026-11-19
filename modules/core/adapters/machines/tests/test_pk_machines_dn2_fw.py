@@ -31,7 +31,7 @@ HOOKS = (
     ROOT / "modules" / "core" / "services" / "machines" / "dks" / "src" / "hooks-dn2.s"
 )
 TAB = ROOT / "tests" / "fixtures" / "machines-info-dn2.s"
-# the stock tail `patchkit bind` makes, by hook: what the type maps continue in
+# the stock tail the port file makes, by hook: what the type maps continue in
 TAILS = {
     "typemap0": "dk_tail_02e8a3f1",
     "typemap1": "dk_tail_763365db",

@@ -27,7 +27,7 @@
 //! - `PROVIDES` (8, version 2): u32 service name hash, u32 version: the services the module provides.
 //! - `BIND` (`count` items of u32 site hash, u32 firmware address, u32 stock length, u32 trampoline offset (image offset), then the stock
 //!   bytes padded to 4; at most 64 stock bytes): the firmware sites a service is bound to. The entry is used up exactly.
-//! - `FW` (8, version 2): the first 8 bytes of the SHA-256 of the stock firmware image the file was bound to (`patchkit bind` writes it when the file holds a
+//! - `FW` (8, version 2): the first 8 bytes of the SHA-256 of the stock firmware image the file was bound to (the port file writes it when the file holds a
 //!   firmware address; the port file, role 2, carries it). The loader compares it with the `fw_id` entry of the image's info table; a file has at most one.
 //! - `FWNAMES` (12, version 3): u32 hash, u32 addr, u16 n, u8 kind, u8 flags: every firmware name (kind 0) and hook exit (kind 1) of one firmware, sorted by (kind,
 //!   hash, n); flag bit 0 `absent` (a name that only another device has: it resolves to 0).

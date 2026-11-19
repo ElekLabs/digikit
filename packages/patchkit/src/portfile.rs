@@ -21,11 +21,10 @@
 //!     [u8; 8]    the first 8 bytes of the sha256 of the displaced bytes
 //! ```
 
-use crate::bind::{BoundHook, FwRef, Place, bind_with_refs, eval_exit_with, parse_import};
 use crate::dkm::{Dkm, EmitParts, ROLE_PORT, emit, max_file};
 use crate::error::*;
-use crate::firmware::Firmware;
-use crate::fwgen::{HookDecl, image_hooks, service_decls, service_decls_with};
+use crate::fwgen::{HookDecl, service_decls, service_decls_with};
+use crate::fwnames::{FwRef, eval_exit_with, parse_import};
 use crate::port::{Hook, Port, Registry};
 use crate::prim;
 use dkneeds::keys::{
@@ -558,6 +557,17 @@ pub fn outside_set(dks: &Dkm, data: &PortData) -> Vec<String> {
     outside_imports(&dks.imports, data)
 }
 
+/// The hooks a service file takes (its `HOOKS` items) that the port file has no `SITES` item for, as name hashes: the file would be refused at load with `E_IMPORT`.
+pub fn unlisted_hooks(dks: &Dkm, data: &PortData) -> Result<Vec<u32>> {
+    let keys =
+        dkneeds::keys::Keys::parse(&dks.register).map_err(|e| err!("header table: {e:?}"))?;
+    Ok(keys
+        .hooks()
+        .map(|p| p.a)
+        .filter(|h| data.site(*h).is_none())
+        .collect())
+}
+
 fn outside_imports(imports: &[String], data: &PortData) -> Vec<String> {
     let mut out = vec![];
     for i in imports {
@@ -574,206 +584,10 @@ fn outside_imports(imports: &[String], data: &PortData) -> Vec<String> {
     out
 }
 
-/// The one-time check that the port file says what `patchkit bind` does for `dks` on the stock image `fw`: for each hook the service takes, the site address,
-/// the return address, the check value, the kind and the tail bytes (the displaced bytes and `jmp.l ret`, read from the bound file); for each firmware reference
-/// the place it resolves to. Returns the differences (empty: equal) and the number of facts compared.
-pub fn equals_bind(
-    dks: &[u8],
-    fw: &[u8],
-    reg: &Registry,
-    decls: &[&str],
-    data: &PortData,
-) -> Result<(Vec<String>, usize)> {
-    let dkm = Dkm::parse(dks)?;
-    let (bound_file, bound, refs) = bind_with_refs(dks, fw, reg, decls)?;
-    let bound_dkm = Dkm::parse(&bound_file)?;
-    let keys =
-        dkneeds::keys::Keys::parse(&dkm.register).map_err(|e| err!("header table: {e:?}"))?;
-    let hooks: Vec<u32> = keys.hooks().map(|p| p.a).collect();
-    let (mut diff, mut n) = compare(&dkm.imports, &hooks, &bound, &bound_dkm.image, &refs, data);
-    // a file with no HOOKS compares no site and would pass: when devices/fw names hooks for this service on this device, an empty HOOKS is a stale file
-    let device = Firmware::parse(fw)?.device.short();
-    let (_, decl_hooks) = service_decls(decls)?;
-    let declared: Vec<&str> = decl_hooks
-        .iter()
-        .filter(|h| {
-            h.users.contains(&dkm.name)
-                && (h.devices.is_empty() || h.devices.iter().any(|d| d == device))
-        })
-        .map(|h| h.name.as_str())
-        .collect();
-    if hooks.is_empty() && !declared.is_empty() {
-        n += 1;
-        diff.push(format!(
-            "{}: devices/fw declares {} hook(s) for this service (first: {}), the file's HOOKS is empty: stale file?",
-            dkm.name,
-            declared.len(),
-            declared[0]
-        ));
-    }
-    Ok((diff, n))
-}
-
-/// The kind of a hook as `bind` made it: a `dk_tail_` reference makes a tail site (the file may also use `dk_stock_` of it: both resolve to the same tail,
-/// as `source_draw` of machines does), a `dk_stock_` reference alone a stock site, else raw.
-fn bind_kind(b: &BoundHook, imports: &[String], refs: &[(FwRef, Place)]) -> SiteKind {
-    let stock = refs
-        .iter()
-        .any(|(r, _)| matches!(r, FwRef::Stock(h) if *h == b.site_hash));
-    let tail = imports
-        .iter()
-        .any(|i| matches!(parse_import(i), Some(FwRef::Tail(h)) if h == b.site_hash));
-    if tail {
-        SiteKind::Tail
-    } else if stock {
-        SiteKind::Stock
-    } else {
-        SiteKind::Raw
-    }
-}
-
-/// The comparison of `equals_bind`, on what bind made: the imports and the declared hook hashes of the service, the bound hooks with the image of the bound
-/// file, and the resolved references.
-fn compare(
-    imports: &[String],
-    hooks: &[u32],
-    bound: &[BoundHook],
-    bound_image: &[u8],
-    refs: &[(FwRef, Place)],
-    data: &PortData,
-) -> (Vec<String>, usize) {
-    let (mut diff, mut n) = (vec![], 0usize);
-    let mut d = |what: String, ok: bool, diff: &mut Vec<String>| {
-        n += 1;
-        if !ok {
-            diff.push(what);
-        }
-    };
-    for i in outside_imports(imports, data) {
-        d(format!("{i}: not in the port file"), false, &mut diff);
-    }
-    // a hook that the service declares and the port file lists for this device must have been bound and compared
-    for h in hooks {
-        if data.site(*h).is_some_and(|s| !s.absent) && !bound.iter().any(|b| b.site_hash == *h) {
-            d(
-                format!("hook {h:#010x}: the port lists a site, bind bound none"),
-                false,
-                &mut diff,
-            );
-        }
-    }
-    for b in bound {
-        let Some(s) = data.site(b.site_hash) else {
-            d(format!("{}: no SITES item", b.hook), false, &mut diff);
-            continue;
-        };
-        d(
-            format!("{}: absent in the port file but bound", b.hook),
-            !s.absent,
-            &mut diff,
-        );
-        d(
-            format!("{}: site {:#x} vs port {:#x}", b.hook, b.site_addr, s.addr),
-            b.site_addr == s.addr,
-            &mut diff,
-        );
-        d(
-            format!("{}: length {} vs port {}", b.hook, b.site_len, s.len),
-            b.site_len == u32::from(s.len),
-            &mut diff,
-        );
-        d(
-            format!(
-                "{}: return {:#x} vs port {:#x}",
-                b.hook,
-                b.ret,
-                s.addr + u32::from(s.len)
-            ),
-            b.ret == s.addr + u32::from(s.len),
-            &mut diff,
-        );
-        d(
-            format!("{}: check value differs", b.hook),
-            check_of(&b.stock) == s.check,
-            &mut diff,
-        );
-        let bk = bind_kind(b, imports, refs);
-        d(
-            format!(
-                "{}: bind makes kind {bk:?}, the port says {:?}",
-                b.hook, s.kind
-            ),
-            bk == s.kind,
-            &mut diff,
-        );
-        if let Some(off) = b.tail_off {
-            let mut want = b.stock.clone();
-            want.extend_from_slice(&prim::CF_JMP_L.to_be_bytes());
-            want.extend_from_slice(&b.ret.to_be_bytes());
-            let at = off as usize;
-            d(
-                format!(
-                    "{}: the tail bytes are not the displaced bytes and a jump",
-                    b.hook
-                ),
-                bound_image.get(at..at + want.len()) == Some(&want[..]),
-                &mut diff,
-            );
-        }
-    }
-    for (r, p) in refs {
-        match (r, p) {
-            (FwRef::Name(h), Place::Abs(a)) => match data.name(*h) {
-                Some(x) => d(
-                    format!("name {h:#010x}: bind {a:#x} vs port {:#x}", x.addr),
-                    *a == x.addr,
-                    &mut diff,
-                ),
-                None => d(
-                    format!("name {h:#010x}: not in the port file"),
-                    false,
-                    &mut diff,
-                ),
-            },
-            (FwRef::Exit(h, k), Place::Abs(a)) => match data.exit(*h, *k) {
-                Some(x) => d(
-                    format!("exit {h:#010x}_{k}: bind {a:#x} vs port {:#x}", x.addr),
-                    *a == x.addr,
-                    &mut diff,
-                ),
-                None => d(
-                    format!("exit {h:#010x}_{k}: not in the port file"),
-                    false,
-                    &mut diff,
-                ),
-            },
-            (FwRef::Stock(h), p) => match data.site(*h) {
-                // an idle hook (listed for another device) resolves to 0; a bound one needs a copied site
-                Some(s) => d(
-                    format!("stock {h:#010x}: bind {p:?} vs kind {:?}", s.kind),
-                    s.absent && *p == Place::Rel(0) || s.kind.copies() && *p != Place::Rel(0),
-                    &mut diff,
-                ),
-                None => d(
-                    format!("stock {h:#010x}: not in the port file"),
-                    false,
-                    &mut diff,
-                ),
-            },
-            (FwRef::Ret(h), _) => d(
-                format!("ret {h:#010x}: not in the port file"),
-                data.site(*h).is_some(),
-                &mut diff,
-            ),
-            _ => d(format!("{r:?} resolved to {p:?}"), false, &mut diff),
-        }
-    }
-    (diff, n)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fwgen::image_hooks;
 
     fn data() -> PortData {
         PortData {
@@ -831,90 +645,6 @@ mod tests {
         assert_eq!(
             (k.version(), k.name_count(), k.site_count()),
             (3, d.names.len(), d.sites.len())
-        );
-    }
-
-    fn bound(hook: &str, len: u32, stock: &[u8], tail_off: Option<u32>) -> BoundHook {
-        BoundHook {
-            hook: hook.into(),
-            site_hash: 0x30,
-            site_addr: 0x4000_0200,
-            site_len: len,
-            stock: stock.to_vec(),
-            tramp_off: 0,
-            displaced: vec![],
-            ret: 0x4000_0200 + len,
-            tail_off,
-        }
-    }
-
-    /// The bound image with the tail of a bound hook at offset 0: the stock bytes, then `jmp.l ret`.
-    fn tail_image(b: &BoundHook) -> Vec<u8> {
-        let mut v = b.stock.clone();
-        v.extend_from_slice(&prim::CF_JMP_L.to_be_bytes());
-        v.extend_from_slice(&b.ret.to_be_bytes());
-        v
-    }
-
-    #[test]
-    fn equals_bind_reports_a_wrong_length_check_kind_or_missing_site() {
-        let stock = [0x4e, 0x71, 0x4e, 0x71, 0x4e, 0x71];
-        let mut d = data();
-        d.sites[0].check = check_of(&stock);
-        let b = bound("h", 6, &stock, Some(0));
-        let img = tail_image(&b);
-        let imports = vec!["dk_tail_00000030".to_string()];
-        let run = |d: &PortData, b: &BoundHook, hooks: &[u32], refs: &[(FwRef, Place)]| {
-            compare(&imports, hooks, std::slice::from_ref(b), &img, refs, d).0
-        };
-        // all equal
-        assert!(run(&d, &b, &[0x30], &[]).is_empty());
-        // a wrong length
-        let mut w = d.clone();
-        w.sites[0].len = 8;
-        assert!(
-            run(&w, &b, &[0x30], &[])
-                .iter()
-                .any(|x| x.contains("length"))
-        );
-        // a wrong check value
-        let mut w = d.clone();
-        w.sites[0].check = [0; 8];
-        assert!(
-            run(&w, &b, &[0x30], &[])
-                .iter()
-                .any(|x| x.contains("check value"))
-        );
-        // a wrong kind: the port says raw or stock where bind makes a tail
-        for k in [SiteKind::Raw, SiteKind::Stock] {
-            let mut w = d.clone();
-            w.sites[0].kind = k;
-            assert!(
-                run(&w, &b, &[0x30], &[]).iter().any(|x| x.contains("kind")),
-                "{k:?}"
-            );
-        }
-        // a stock reference (the same tail) is fine on a tail site and wrong on a raw site
-        let stock_ref = [(FwRef::Stock(0x30), Place::Rel(0x10))];
-        assert!(run(&d, &b, &[0x30], &stock_ref).is_empty());
-        let mut w = d.clone();
-        w.sites[0].kind = SiteKind::Raw;
-        let diff = run(&w, &b, &[0x30], &stock_ref);
-        assert!(diff.iter().any(|x| x.contains("stock 0x")), "{diff:?}");
-        // a site that the service declares for this device and bind did not bind
-        assert!(
-            compare(&[], &[0x30], &[], &[], &[], &d)
-                .0
-                .iter()
-                .any(|x| x.contains("bind bound none"))
-        );
-        // a hook with no SITES item at all
-        let mut w = d.clone();
-        w.sites.clear();
-        assert!(
-            run(&w, &b, &[0x30], &[])
-                .iter()
-                .any(|x| x.contains("no SITES item"))
         );
     }
 

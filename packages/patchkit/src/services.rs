@@ -1,9 +1,8 @@
-//! `patchkit services`: which card services a set of modules needs, and the bound file of each. A service with hooks is a file of the card
-//! (`services/<name>.dks`), bound to the stock firmware of the device. A module that needs one has a hard NEEDS item for its name hash in its header
+//! `patchkit services`: which card services a set of modules needs, and the packed file of each. A service is a file of the card
+//! (`services/<name>.dks`), as packed: it holds no firmware bytes, and the port file of the firmware resolves its firmware references. A module that needs one has a hard NEEDS item for its name hash in its header
 //! table; the service of a name is the module whose `module.toml` has `role = "service"` and `service = NAME`. The device tests, `dk:dev` and
 //! `module:check` all ask this one command.
 
-use crate::bind;
 use crate::dkm::Dkm;
 use crate::error::*;
 use crate::module::{LibrarySource, ModuleRole, library_with, selected_library};
@@ -57,48 +56,24 @@ pub fn needed_services(
         .collect())
 }
 
-/// Pack the service module `id` for `device` and bind it to the stock image `firmware` as `dir/<name>.dks`. A file whose sidecar matches the fresh
-/// pack and the image is kept.
-fn bound(
-    root: &Path,
-    id: &str,
-    name: &str,
-    device: &str,
-    firmware: &Path,
-    dir: &Path,
-) -> Result<PathBuf> {
+/// Pack the service module `id` for `device` as `dir/<name>.dks`.
+fn packed_file(root: &Path, id: &str, name: &str, device: &str, dir: &Path) -> Result<PathBuf> {
     let ids = [id.to_string()];
     let lib = selected_library(root, &LibrarySource::default(), false, &ids, &ids)?;
     let opts = PackOptions {
         device: Some(device.into()),
         ..Default::default()
     };
-    let packed = pack_module(&lib, id, &opts)?.bytes;
-    let fw = std::fs::read(firmware).map_err(|e| err!("{}: {e}", firmware.display()))?;
+    let bytes = pack_module(&lib, id, &opts)?.bytes;
     let out = dir.join(format!("{name}.dks"));
-    if bind::stale_binding(&out, &packed, &sha256_hex(&fw)).is_none() {
-        return Ok(out);
-    }
-    if !bind::output_allowed(root, &out) {
-        return Err(err!(
-            "{}: the bound file holds firmware bytes: write it under dist/ or out/ (or outside the source tree)",
-            out.display()
-        ));
-    }
-    let reg = crate::port::Registry::from_dir(&root.join("devices/ports"))?;
-    let texts = crate::fwgen::fw_texts(root)?;
-    let decls: Vec<&str> = texts.iter().map(String::as_str).collect();
-    let (file, _hooks) = bind::bind(&packed, &fw, &reg, &decls)?;
     std::fs::create_dir_all(dir).map_err(|e| err!("{}: {e}", dir.display()))?;
-    std::fs::write(&out, file).map_err(|e| err!("{}: {e}", out.display()))?;
-    std::fs::write(bind::sidecar_path(&out), bind::sidecar_json(&packed, &fw))
-        .map_err(|e| err!("{}: {e}", out.display()))?;
+    std::fs::write(&out, bytes).map_err(|e| err!("{}: {e}", out.display()))?;
     Ok(out)
 }
 
 /// The command line: see the usage text of `patchkit`.
 pub fn run(root: &Path, rest: &[String]) -> Result<()> {
-    let (mut device, mut firmware, mut dir) = (None, None, None);
+    let (mut device, mut dir) = (None, None);
     let (mut named, mut by_name, mut files) = (vec![], vec![], vec![]);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -109,8 +84,7 @@ pub fn run(root: &Path, rest: &[String]) -> Result<()> {
         };
         match a.as_str() {
             "--device" => device = Some(value("--device")?),
-            "--firmware" => firmware = Some(PathBuf::from(value("--firmware")?)),
-            "--bind-dir" => dir = Some(PathBuf::from(value("--bind-dir")?)),
+            "--pack-dir" => dir = Some(PathBuf::from(value("--pack-dir")?)),
             "--module" => named.push(value("--module")?),
             "--service" => by_name.push(value("--service")?),
             f if f.starts_with('-') => return Err(err!("services: unknown flag {f}")),
@@ -118,11 +92,6 @@ pub fn run(root: &Path, rest: &[String]) -> Result<()> {
         }
     }
     let device = device.ok_or_else(|| err!("services: --device is required"))?;
-    let bind_to = match (&firmware, &dir) {
-        (Some(f), Some(d)) => Some((f, d)),
-        (None, None) => None,
-        _ => return Err(err!("services: --firmware and --bind-dir go together")),
-    };
     let modules = service_modules(root)?;
     let mut wanted: BTreeMap<String, String> = BTreeMap::new();
     for id in &named {
@@ -149,53 +118,12 @@ pub fn run(root: &Path, rest: &[String]) -> Result<()> {
             "module_id": id,
             "store_path": format!("services/{name}.dks"),
         });
-        if let Some((fw, dir)) = bind_to {
-            line["bound_path"] = bound(root, id, name, &device, fw, dir)?
+        if let Some(dir) = &dir {
+            line["file"] = packed_file(root, id, name, &device, dir)?
                 .to_string_lossy()
                 .into();
         }
         println!("{line}");
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_missing_or_foreign_sidecar_is_stale() {
-        let dir = std::env::temp_dir().join(format!("pk-stale-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let out = dir.join("fx.dks");
-        let (packed, fw) = (b"packed".as_slice(), sha256_hex(b"image"));
-        assert!(
-            bind::stale_binding(&out, packed, &fw)
-                .unwrap()
-                .contains("missing")
-        );
-        std::fs::write(&out, b"bound").unwrap();
-        assert!(
-            bind::stale_binding(&out, packed, &fw)
-                .unwrap()
-                .contains("no .src.json")
-        );
-        std::fs::write(
-            bind::sidecar_path(&out),
-            bind::sidecar_json(packed, b"image"),
-        )
-        .unwrap();
-        assert_eq!(bind::stale_binding(&out, packed, &fw), None);
-        assert!(
-            bind::stale_binding(&out, b"packed again", &fw)
-                .unwrap()
-                .contains("another packed")
-        );
-        assert!(
-            bind::stale_binding(&out, packed, &sha256_hex(b"other"))
-                .unwrap()
-                .contains("another firmware")
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
 }

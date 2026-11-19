@@ -3,7 +3,7 @@
 //! file serves both devices. Design: docs/design/digikit-registry.md ("Effect pages"), docs/findings/61-fx-pages.md.
 //!
 //! Each hook runs in place of the first whole instructions of its stock site (6 bytes, or 8 for two of them) and ends in the stock code behind them: the displaced
-//! instructions are redone by the hook, and it leaves by `jmp` to an exit that `patchkit bind` resolves (`dk_exit_<hook>_<n>`, an absolute address: `fx_x_*`; n = 0 is the
+//! instructions are redone by the hook, and it leaves by `jmp` to an exit that the port file resolves (`dk_exit_<hook>_<n>`, an absolute address: `fx_x_*`; n = 0 is the
 //! site plus its length, n >= 1 another place of the stock routine, the `exits` of the hook in `devices/fw/page.toml`). A routine that ends the hooked function leaves by
 //! `jmp fx_ret_acc` (`dk_ret_`), and `fxp_acc` calls the stock accessor with `jsr fx_stock_acc` (`dk_stock_`). `jmp abs.l` leaves every register and flag (the code behind
 //! `fxp_label` tests the flags of the compare). The aliases are the `[object.externs]` of module.toml; the stock page lists are `fx_stock` and `fx_keystock` (`dk_fw_`).
@@ -29,7 +29,7 @@ use dkrt_svc_rt::ImportCore;
 
 #[cfg(target_arch = "m68k")]
 extern "C" {
-    /// Two words of the asm below: the stock page list of the FX view and the instruction of its builder that holds the stock count (`dk_fw_` words, resolved by `patchkit bind`).
+    /// Two words of the asm below: the stock page list of the FX view and the instruction of its builder that holds the stock count (`dk_fw_` words, resolved by the port file).
     static DKRT_FXP_FW: [u32; 2];
 }
 

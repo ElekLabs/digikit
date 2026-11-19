@@ -1,7 +1,7 @@
 //! The image table `machines_info` of `core/machines` (its `[[info]]`), as the machines service file (`machines.dks`) uses it.
 //!
 //! The table holds what only the patched image knows: the registry rows and counts, `mf_ensure`, the adapter's native page functions, the slot map and the page rows.
-//! The firmware (function addresses, where each hook continues in the stock code) is not in it: the service file names it and `patchkit bind` resolves it for the user's firmware
+//! The firmware (function addresses, where each hook continues in the stock code) is not in it: the service file names it and the port file resolves it for the user's firmware
 //! (the `dk_fw_`, `dk_exit_`, `dk_ret_` and `dk_stock_` imports of docs/PATCHING.md "Firmware references"). The file reads the table through `CoreApi::info` and copies it into its
 //! own bss (`bind_table`, from `setup`), where its hooks (`hooks-dt2.s`, `hooks-dn2.s`) read it as `MF_TAB`. One layout for both devices; a word a device does not use is 0.
 //!

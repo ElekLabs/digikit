@@ -14,7 +14,7 @@ global_asm!(include_str!("hooks-ui.s"));
 
 #[cfg(target_arch = "m68k")]
 extern "C" {
-    /// Four words of the asm of `hooks-ui.s`: the stock parameter table and the rows of the three WAVE parameters (`dk_fw_` words, resolved by `patchkit bind`).
+    /// Four words of the asm of `hooks-ui.s`: the stock parameter table and the rows of the three WAVE parameters (`dk_fw_` words, resolved by the port file).
     static DKRT_LFO_FW: [u32; 4];
 }
 
