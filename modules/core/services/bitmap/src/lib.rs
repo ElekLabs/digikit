@@ -11,6 +11,8 @@
 //! The owner keeps the storage (a `static mut` array of [`Graph`] and one mask in `.bss`: code never copies a `Graph`, which would be a `.rodata` object the packer refuses
 //! past its alignment) and passes pointers; this crate holds no state.
 #![no_std]
+#[cfg(test)]
+extern crate std;
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
 use core::sync::atomic::{compiler_fence, Ordering};
 
@@ -166,4 +168,65 @@ pub unsafe fn digest(mut d: u32, g: *mut Graph, salt: u32) -> u32 {
         }
     }
     d
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tiles() -> [Tile; 4] {
+        let mut t = [[0u32; TILE_W]; 4];
+        for (k, tile) in t.iter_mut().enumerate() {
+            for (c, w) in tile.iter_mut().enumerate() {
+                *w = 0x8000_0000 >> (k + c % 15);
+            }
+        }
+        t
+    }
+
+    #[test]
+    fn publish_writes_the_header_the_cell_reads_and_retract_withdraws_it() {
+        let mut g = NONE;
+        let mut mask = [0u32; TILE_W];
+        let gp = &mut g as *mut Graph;
+        let t = tiles();
+        unsafe {
+            assert!(is_empty(gp));
+            publish(gp, mask.as_mut_ptr(), &t, true);
+            assert!(!is_empty(gp));
+            assert_eq!(tiles_of(gp), Some(t));
+            assert_eq!(*unipolar_word(gp), 1);
+            assert!(mask.iter().all(|w| *w == MASK_WORD));
+            // vector header: begin, end and end of storage over four 28-byte Bitmaps
+            let begin = gp.cast::<u8>().add(core::mem::offset_of!(Graph, elems)) as usize as u32;
+            assert_eq!(g.vec, [begin, begin + 112, begin + 112]);
+            for k in 0..4 {
+                let e = g.elems[k];
+                assert_eq!(&e[1..4], &[TILE_W as u32, 15, 1]);
+                assert_eq!(e[4], addr_of_mut!(g.tiles[k]) as usize as u32);
+                assert_eq!((e[5], e[6]), (mask.as_ptr() as usize as u32, 0));
+            }
+            retract(gp);
+            assert!(is_empty(gp));
+            assert_eq!(tiles_of(gp), None);
+        }
+    }
+
+    #[test]
+    fn the_vtable_word_of_each_element_is_addressable_and_the_digest_follows_the_tiles() {
+        let mut g = NONE;
+        let mut mask = [0u32; TILE_W];
+        let gp = &mut g as *mut Graph;
+        unsafe {
+            assert_eq!(digest(7, gp, 1), 7, "an unpublished graph changes nothing");
+            publish(gp, mask.as_mut_ptr(), &tiles(), false);
+            for k in 0..4 {
+                write_volatile(vtable_word(gp, k), 0x1000 + k as u32);
+            }
+            assert_eq!(g.elems.map(|e| e[0]), [0x1000, 0x1001, 0x1002, 0x1003]);
+            let a = digest(0, gp, 1);
+            assert_ne!(a, digest(0, gp, 2));
+            assert_ne!(a, 0);
+        }
+    }
 }
