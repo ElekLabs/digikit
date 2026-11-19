@@ -3175,6 +3175,69 @@
   },
   {
    "addend": 0,
+   "offset": 108,
+   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 130,
+   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "symbol": "_RINvNtCs6uNbiqmv1Ak_4core5slice20copy_from_slice_implhEB4_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 184,
+   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice6memchr14memchr_aligned",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 226,
+   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 248,
+   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 258,
+   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 264,
+   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 278,
+   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 24,
    "section": ".text._RNvXs0_NtNtCs6uNbiqmv1Ak_4core3str7patternNtB5_12CharSearcherNtB5_15ReverseSearcher15next_match_back",
    "symbol": "_RNvMNtNtCs6uNbiqmv1Ak_4core3str7patternNtB2_12CharSearcher9utf8_size",
@@ -3325,69 +3388,6 @@
    "offset": 12,
    "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7imports8optional6absent10dk_ui_open",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt6loader12stub_missing",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 108,
-   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 130,
-   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "symbol": "_RINvNtCs6uNbiqmv1Ak_4core5slice20copy_from_slice_implhEB4_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 184,
-   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice6memchr14memchr_aligned",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 226,
-   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 242,
-   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 248,
-   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 258,
-   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 264,
-   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 278,
-   "section": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
@@ -29019,119 +29019,161 @@
   },
   {
    "addend": 0,
-   "offset": 132,
+   "offset": 134,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
    "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt9selection8BOOT_IDX",
    "type": "cf.32"
   },
   {
    "addend": 11746,
-   "offset": 146,
+   "offset": 148,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
    "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
    "type": "cf.32"
   },
   {
    "addend": 11758,
-   "offset": 154,
+   "offset": 156,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 17625,
+   "offset": 168,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
    "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 166,
+   "offset": 178,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..text._RNvMs0_NtCs7sxP7D8NSdT_4dkrt6loaderNtB5_7Checked5empty",
+   "symbol": ".sec..text._RNvXNtNtCs7sxP7D8NSdT_4dkrt6loader5seamsNtB2_10RealImagesNtB2_6Images5stage",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 184,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 190,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE10check_fileB7_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 210,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt9selection8BOOT_IDX",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 228,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 242,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 264,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt6loader13table_of_file",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 288,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 294,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE11number_keysB7_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 336,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 370,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 376,
-   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "symbol": ".sec..text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9live_planB7_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 394,
+   "offset": 220,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
    "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt6loader7records6module",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 462,
+   "offset": 242,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 256,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 278,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt6loader13table_of_file",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 302,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 308,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE11number_keysB7_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 330,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt6loader13table_of_file",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 350,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 384,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 390,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE9live_planB7_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 416,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..text._RNvMs0_NtCs7sxP7D8NSdT_4dkrt6loaderNtB5_7Checked5empty",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 432,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt6loader6LOADER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 438,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..text._RNvMs1_NtCs7sxP7D8NSdT_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE10check_fileB7_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 460,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..data._RNvNtCs7sxP7D8NSdT_4dkrt9selection8BOOT_IDX",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 528,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": "memcmp",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 578,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5parse",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 604,
+   "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
+   "symbol": ".sec..text._RNvNtNtCs7sxP7D8NSdT_4dkrt6loader7records6module",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 660,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
    "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem7cstr_eq",
    "type": "cf.32"
@@ -41943,6 +41985,13 @@
   },
   {
    "align": 2,
+   "hex": "4fefffe848d7400c2c48242f00204a82661672d870013c802d410002200e4cd7400c4fef00184e757007b082657c4281206f001c4a301800670000925281b28266ee0c82000000ff620000d04aaf0028670000a4206f002410bc002f260252832f43000cb6af002862764879000000002f022f2f00242f02206f0034486800014eb9000000004fef0014262f000cb6af002864724200206f0024262f000c11803800428142406000ff6e2f022f2f002042a741ef001e4eb900000000302f001e4fef000c4a4066066000ff78700172d877c020437601b6886700ff3c6000ff644879000000002f2f002c2f03487800014eb90000000048790000000042a742a74eb9000000004879000000002f2f002c2f2f00144eb90000000072f370016000fef6",
+   "kind": "text",
+   "name": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
+   "size": 290
+  },
+  {
+   "align": 2,
    "hex": "4fefffd048d75cfc28482c6f0034282e00042a2e000845f90000000047f9000000006050b3c56258260996812404d4814a82674c2f0e4e922f032f0271b608132f0041ef003a4e93302f003a4fef00104a4066082d6e000c00106026242f002cd4ae000c2f0e4e925380588fb08263202d420010222e000c226e0010b3c164a442403880200c4cd75cfc4fef00304e752c029c802f0e4e9226002006d083588fb08665ccb08562c82e04de864a8767c02f0e4e92588f7204b2806536b08366b02f03486e00142f074eb9000000004fef000c4a80669a2d4600102f0e4eb90000000029460002dc8029460006588f70016090487900000000487800042f0042a74eb900000000",
    "kind": "text",
    "name": ".text._RNvXs0_NtNtCs6uNbiqmv1Ak_4core3str7patternNtB5_12CharSearcherNtB5_15ReverseSearcher15next_match_back",
@@ -41989,13 +42038,6 @@
    "kind": "text",
    "name": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7imports8optional6absent10dk_ui_open",
    "size": 22
-  },
-  {
-   "align": 2,
-   "hex": "4fefffe848d7400c2c48242f00204a82661672d870013c802d410002200e4cd7400c4fef00184e757007b082657c4281206f001c4a301800670000925281b28266ee0c82000000ff620000d04aaf0028670000a4206f002410bc002f260252832f43000cb6af002862764879000000002f022f2f00242f02206f0034486800014eb9000000004fef0014262f000cb6af002864724200206f0024262f000c11803800428142406000ff6e2f022f2f002042a741ef001e4eb900000000302f001e4fef000c4a4066066000ff78700172d877c020437601b6886700ff3c6000ff644879000000002f2f002c2f03487800014eb90000000048790000000042a742a74eb9000000004879000000002f2f002c2f2f00144eb90000000072f370016000fef6",
-   "kind": "text",
-   "name": ".text._RNvNtNtNtCs7sxP7D8NSdT_4dkrt7storage8backends4fwfs6fs_key",
-   "size": 290
   },
   {
    "align": 2,
@@ -44176,10 +44218,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56f70c2f0a2f0241eef71c200e0680fffff85c42814282208121420004214100082142000c41e80010b08866e648780014486ef71c4eb9000000002400508f7014b0826500009c42a742a72f02486ef71c4eb9000000004fef00107207b2ae00086500017c2f2e000c48790000000041eef85c4eb900000000508f4a6ef85c677441f9000000002d50f71020ae000841f9000000004218b1fc0000000066f641eef8664eb900000000486ef86642a742a72f2e000c4879000000004eb9000000004fef00144a80670000ba242ef71023c200000000242ef704246ef7084e5e4e75487900000000487800142f0242a74eb900000000206ef85e2d48f710246ef8622f0a2f084eb900000000508f4a806700ff702f0a2f2ef7102f2e00084879000000004eb9000000004fef00106000ff52202efb5e0c800000028062522f00202efb4ed0aefb5a2f0041eef7144eb900000000222ef718202ef714508f4a8067342f02486ef71c2f012f002f2e00084879000000004eb9000000004fef00186000ff4a42aef70c45f900000000601870f36000ff3870fb6000ff3252aef70c7008b0aef70c678a2f2ef70c4e92588f20404a9067e62f2ef70c4e92206efb4e41e800402f082040486800044eb9000000004fef000c4a0067c270f66000feee70d76000fef2",
+   "hex": "4e56f6f42f0a2f0241eef712200e0680fffff85242814282208121420004214100082142000c41e80010b08866e648780014486ef7124eb9000000002400508f7014b082650000aa42a742a72f02486ef7124eb9000000004fef00107207b2ae0008650002402f2e000c48790000000041eef8524eb900000000508f4a6ef8526700008241f9000000002d50f6f820ae000841f9000000004218b1fc0000000066f62f2e000c48790000000041eef85c4eb900000000508f4a6ef85c660000d6202ef85e2d40f700222ef8622d41f6fc705fb081646a42aef6f445f900000000206ef70041e800402d48f704600000fe487900000000487800142f0242a74eb900000000246ef854206ef8582d48f6f82f082f0a4eb900000000508f4a806700ff642f2ef6f82f0a2f2e00084879000000004eb9000000004fef00106000ff462f2ef6fc2f2ef7004eb900000000508f4a8067402f012f0041eef7084eb900000000202ef708222ef70c508f4a8067242f02486ef7122f012f002f2e00084879000000004eb90000000024004fef00184a806632240e0682fffff86620424eb9000000002f0242a742a72f2e000c4879000000004eb90000000024004fef00144a8067000092222ef6f823c1000000002002242ef6ec246ef6f04e5e4e7552aef6f47008b0aef6f46700ff562f2ef6f44e92588f20404a9067e42f2ef6f44e92487800202f2ef7042040486800044eb9000000004fef00104a8066c274f660a674f360a2202efb5e0c800000028062f02f00202efb4ed0aefb5a2f0041eef7084eb900000000508f4aaef7086600ff7874fb6000ff7242aef6fc45f900000000600c52aef6fc7008b0aef6fc67b62f2ef6fc4e92588f20404a9067e62f2ef6fc4e92206efb4e41e800402f082040486800044eb9000000004fef000c4a0067c26000ff7a74d76000ff28",
    "kind": "text",
    "name": ".text._RNvNtCs7sxP7D8NSdT_4dkrt6loader15live_check_load",
-   "size": 486
+   "size": 682
   },
   {
    "align": 2,
@@ -48130,7 +48172,7 @@
    "size": 24
   }
  ],
- "source_sha256": "ae11aa68dc01733b2113fb6cef1d3ba0c4fdf2522da92b334518a093f2907055",
+ "source_sha256": "79779f6b036792cefd1e5f9aa5d3b70314b25d6f369b0c85dd971e8fae917b21",
  "symbols": [
   {
    "global": false,
@@ -55455,8 +55497,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_live dkrt_live_state dkrt_load dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
-  "instructions_redecoded": "59416",
-  "isa_check": "fa0f58e0752236c7d0bb9df79897c57dc05e3dcb59ab58234afc7bf1d2ca4538",
+  "instructions_redecoded": "59476",
+  "isa_check": "c026b6573419d9fe8c3c692aa767c6a04536f22fa733ab506d00e34bdef8a037",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

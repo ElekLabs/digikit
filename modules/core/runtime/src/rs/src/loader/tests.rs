@@ -1929,3 +1929,37 @@ fn a_load_after_the_boot_needs_the_live_phase_and_a_provider_record_is_never_loa
         l.phase = Phase::Closed;
     }
 }
+
+#[test]
+fn a_live_check_answers_e_missing_for_a_service_nobody_provides_before_it_looks_at_the_files_imports() {
+    use dkneeds::keys::{name_hash, write_table, KeyGroup, Need, Table};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = live_a_with_b();
+        // a module that needs a service no loaded provider offers, and imports a name that nothing resolves (what the file of a machine does: its imports are the exports of the service)
+        let machine = |imports: &[&[u8]], needs: &[Need]| {
+            let mut v = module_file_with(&[], imports);
+            v.truncate(v.len() - 8);
+            let t = Table { needs, keys: &[KeyGroup { kind: dkneeds::KIND_MACHINE, keys: &[5] }], ..Default::default() };
+            let at = v.len();
+            v.resize(at + dkneeds::keys::table_size(&t), 0);
+            write_table(&t, &mut v[at..]).unwrap();
+            let n = (v.len() - at) as u32;
+            put(&mut v, dkneeds::H_REG_SIZE, n);
+            v[dkneeds::H_NAME as usize] = b'c';
+            seal(&mut v);
+            v
+        };
+        let need = Need { service: name_hash("no-such-service"), min_version: 0, hard: true };
+        l.m.files.insert(PATH_C[..PATH_C.len() - 1].to_vec(), machine(&[b"dk_no_such_export"], &[need]));
+        assert_eq!(l.live_check_load(1, PATH_C.as_ptr(), &wide()), E_MISSING, "the plan answers before the imports are resolved");
+        // the same file with no unmet need is refused by its import, as a load refuses it
+        l.m.files.insert(PATH_C[..PATH_C.len() - 1].to_vec(), machine(&[b"dk_no_such_export"], &[]));
+        assert_eq!(l.live_check_load(1, PATH_C.as_ptr(), &wide()), E_IMPORT);
+        // an optional need that is not met does not refuse
+        let soft = Need { hard: false, ..need };
+        l.m.files.insert(PATH_C[..PATH_C.len() - 1].to_vec(), machine(&[], &[soft]));
+        assert_eq!(l.live_check_load(1, PATH_C.as_ptr(), &wide()), OK);
+        assert_eq!((st().modules[1].used, l.table_len[1], l.accepted[1]), (0, 0, false), "nothing was kept");
+    }
+}

@@ -4,7 +4,7 @@ import { waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { captureNote, frames, pickSine, readFloatWav, runFrames, word } from '@digi/regression/runtime/fx-live.ts';
+import { captureNote, frames, pickSine, readFloatWav, word } from '@digi/regression/runtime/fx-live.ts';
 import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
@@ -29,7 +29,7 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  * selection" for the rest):
  * - (b) the machine plays a note with a pitch report (the pitch from the upward zero crossings of the left channel, and the peak); `UNLOAD` and `LOAD` of it; the same note plays
  *   at the same pitch and level again, the machine type keeps its number and its voice row.
- * - (c) `UNLOAD` with a note held over it ends with no fault; the held voice goes silent (PCM windows after the unload below 1% of the level before, against a control capture of the same held note without an unload; AMP HOLD is NOTE, FX sends 0); the module is not in MODULES; the next note after
+ * - (c) `UNLOAD` with a note held over it ends with no fault; the module's sine is gone (its amplitude at its pitch after the unload is below 2% of the level before; the machine type is a gap row, which plays the first stock machine's sound, so the output is not silent), against a control capture of the same held note without an unload (at least 50%); AMP HOLD is NOTE, FX sends 0; the module is not in MODULES; the next note after
  *   the load is audible.
  * - (d) refusals: while the transport plays `UNLOAD` and `LOAD` are refused with `E_RELOAD_PLAYING`, the module is as it was and nothing is counted.
  * - the soak: unload and load of the machine, 5 cycles in the gate and 20 in the full tier (`DIGIKIT_TIER=full`), the capacity counts unchanged each cycle.
@@ -242,9 +242,45 @@ async function expectLiveMachine(rt: TestRuntime): Promise<void> {
   expect(Math.abs(second.hz / first.hz - 1), `(b) the pitch after the load (${second.hz.toFixed(2)} Hz) is the pitch before (${first.hz.toFixed(2)} Hz)`).toBeLessThan(0.01);
   expect(second.peak, `(b) the level after the load (${second.peak.toFixed(4)}) is the level before (${first.peak.toFixed(4)})`).toBeGreaterThan(first.peak * 0.5);
 
-  // (c) an unload with a note held over it: no fault, the held voice goes silent (its voice row is freed: a held key does not play again until a new note), a control capture of
-  // the same held note without an unload stays audible over the same span, and the next note after the load is audible. AMP HOLD is NOTE and the FX sends are 0 (set above).
+  // (c) an unload with a note held over it: no fault, and the module's sound stops. A plain unload leaves the machine type a gap row, which plays the first stock machine's
+  // sound (the state after "untick and restart"), so the held key keeps sounding with that sound: the check is that the module's own sine is gone, not that the output is silent.
+  // The sine is measured at its pitch (found in the level before the unload) over a window that begins after the unload ended: its amplitude there is below 2% of the
+  // amplitude before. A control capture of the same note held without an unload keeps at least 50% of it over the same window, so the window itself holds the sine when
+  // the module is loaded. AMP HOLD is NOTE and the FX sends are 0 (set above).
   await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+  const WINDOW = [1100, 1700]; // blocks after the trigger: the unload ends before 1000 on both devices (the check below), the key is held to past the end
+  const leftOf = (pcm: Float32Array, a: number, b: number) => {
+    const perBlock = pcm.length / CAPTURE_BLOCKS;
+    const out = new Float32Array(Math.floor(((b - a) * perBlock) / 2));
+    const from = Math.floor(a * perBlock);
+    for (let i = 0; i < out.length; i++) out[i] = pcm[from + 2 * i]!;
+    return out;
+  };
+  /** The amplitude of the sine of `hz` in `xs` (Goertzel, one bin). */
+  const amp = (xs: Float32Array, hz: number): number => {
+    let re = 0;
+    let im = 0;
+    for (let n = 0; n < xs.length; n++) {
+      const w = (2 * Math.PI * hz * n) / 48_000;
+      re += xs[n]! * Math.cos(w);
+      im -= xs[n]! * Math.sin(w);
+    }
+    return (2 * Math.hypot(re, im)) / xs.length;
+  };
+  const controlFile = path.join(artifacts, 'held-control.wav');
+  const controlTrigger = (await frames(rt.session)) + 300;
+  await captureNote(rt.session, {
+    file: controlFile,
+    trigger: controlTrigger,
+    tag: 'held note control',
+    length: CAPTURE_BLOCKS,
+    noPress: true,
+    during: async () => {
+      await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
+      await waitClock(rt.clock, 1400); // longer than the window ends (1700 blocks is 1130 ms)
+      await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+    },
+  });
   const heldFile = path.join(artifacts, 'held.wav');
   const mark = { start: 0, end: 0 };
   const heldTrigger = (await frames(rt.session)) + 300;
@@ -260,43 +296,26 @@ async function expectLiveMachine(rt: TestRuntime): Promise<void> {
       mark.start = (await frames(rt.session)) - heldTrigger;
       await liveChecked(rt, plan, 'unload', SINE_PATH, '(c) unload with a note held', epoch);
       mark.end = (await frames(rt.session)) - heldTrigger;
-      await waitClock(rt.clock, 600); // the key stays down after the unload
+      await waitClock(rt.clock, 800); // the key stays down after the unload
       await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
     },
   });
   await rt.session.expectNoFault('(c) unload with a note held');
   expect((await moduleRows(rt)).map((m) => m.name), '(c) the machine is gone').toEqual([]);
+  expect(mark.start, '(c) the unload started after the note began').toBeGreaterThan(300);
+  expect(mark.end + 50, `(c) the unload (${mark.start}..${mark.end}) ended before the window (${WINDOW[0]}..${WINDOW[1]} blocks)`).toBeLessThanOrEqual(WINDOW[0]!);
   const held = readFloatWav(heldFile);
-  const perBlock = held.length / CAPTURE_BLOCKS;
-  const peakBlocks = (pcm: Float32Array, a: number, b: number) => peakOf(pcm, Math.floor(a * perBlock), Math.ceil(b * perBlock));
-  const silentFrom = mark.end + 100;
-  const silentTo = silentFrom + 600; // blocks: 0.4 s of the held key after the unload
-  expect(mark.start, '(c) the unload started after the note began').toBeGreaterThan(100);
-  expect(silentTo, `(c) the recording (${CAPTURE_BLOCKS} blocks) holds the unload (${mark.start}..${mark.end}) and the silent window after it`).toBeLessThanOrEqual(CAPTURE_BLOCKS);
-  const heldBefore = peakBlocks(held, mark.start - 100, mark.start);
-  const heldAfter = peakBlocks(held, silentFrom, silentTo);
-  expect(heldBefore, `(c) the held note is audible before the unload (peak ${heldBefore.toFixed(4)})`).toBeGreaterThan(0.01);
-  // the control: the same note held for the same span with no unload stays audible over the same window
-  const controlFile = path.join(artifacts, 'held-control.wav');
-  const controlTrigger = (await frames(rt.session)) + 300;
-  await captureNote(rt.session, {
-    file: controlFile,
-    trigger: controlTrigger,
-    tag: 'held note control',
-    length: CAPTURE_BLOCKS,
-    noPress: true,
-    during: async () => {
-      await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
-      await waitClock(rt.clock, 400);
-      await runFrames(rt.session, silentTo - mark.start + 50);
-      await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
-    },
-  });
   const control = readFloatWav(controlFile);
-  const controlAfter = peakOf(control, Math.floor(silentFrom * (control.length / CAPTURE_BLOCKS)), Math.ceil(silentTo * (control.length / CAPTURE_BLOCKS)));
-  record(artifacts, 'held-unload', { start: mark.start, end: mark.end, heldBefore, heldAfter, controlAfter });
-  expect(controlAfter, `(c) the control without an unload stays audible over the same window (peak ${controlAfter.toFixed(4)})`).toBeGreaterThan(heldBefore * 0.1);
-  expect(heldAfter, `(c) the held voice is silent after the unload (peak ${heldAfter.toFixed(4)} against ${heldBefore.toFixed(4)} before)`).toBeLessThan(heldBefore * 0.01);
+  const levelBefore = leftOf(held, mark.start - 200, mark.start);
+  let hz = 220;
+  for (let f = 200; f <= 240; f += 0.5) if (amp(levelBefore, f) > amp(levelBefore, hz)) hz = f;
+  const ampBefore = amp(levelBefore, hz);
+  const ampAfter = amp(leftOf(held, WINDOW[0]!, WINDOW[1]!), hz);
+  const ampControl = amp(leftOf(control, WINDOW[0]!, WINDOW[1]!), hz);
+  record(artifacts, 'held-unload', { start: mark.start, end: mark.end, hz, ampBefore, ampAfter, ampControl });
+  expect(ampBefore, `(c) the module's sine is audible before the unload (${ampBefore.toFixed(4)} at ${hz} Hz)`).toBeGreaterThan(0.01);
+  expect(ampControl, `(c) the control without an unload still has the sine in the window (${ampControl.toFixed(4)} against ${ampBefore.toFixed(4)} before)`).toBeGreaterThan(ampBefore * 0.5);
+  expect(ampAfter, `(c) the module's sine is gone after the unload (${ampAfter.toFixed(5)} at ${hz} Hz against ${ampBefore.toFixed(4)} before)`).toBeLessThan(ampBefore * 0.02);
   await liveChecked(rt, plan, 'load', SINE_PATH, '(c) load after the held note', epoch);
   const third = await notePitch(rt, artifacts, 'after-held');
   expect(third.peak, `(c) a new note after the load is audible (peak ${third.peak.toFixed(4)})`).toBeGreaterThan(first.peak * 0.5);

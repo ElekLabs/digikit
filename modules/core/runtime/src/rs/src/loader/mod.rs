@@ -1422,6 +1422,27 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     }
 
     unsafe fn live_check_load_inner(&mut self, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
+        // the plan first, as the boot does (it plans every file before it loads one): a service that no loaded provider offers is `E_MISSING` before the file's imports
+        // are looked up, where it would be `E_IMPORT` for the first export of that service. A file whose table cannot be read goes on to `check_file`, which says why.
+        if let Ok(staged) = self.m.stage(path) {
+            let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+            // a loaded name is its own answer: its keys would clash with the loaded module's, which the plan would call `E_PLAN_KEY`
+            if file.len() >= H_NAME + dkneeds::NAME_LEN as usize {
+                let mut rec = 0;
+                while rec < MAX_MODULES {
+                    if records::module(rec).used != 0 && records::module(rec).name[..] == file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] {
+                        return E_LOADED;
+                    }
+                    rec += 1;
+                }
+            }
+            if let Some(Ok(new)) = table_of_file(file).map(Keys::parse) {
+                let r = self.live_plan(k, new, caps);
+                if r != OK {
+                    return r;
+                }
+            }
+        }
         let mut c = Checked::empty();
         let r = self.check_file(path, Slot::Free, &mut c);
         if r != OK {
@@ -1437,11 +1458,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if c.reg_size as usize > TABLE_MAX {
             return E_TOO_BIG;
         }
-        let new = match Keys::parse(core::slice::from_raw_parts(c.f.add(c.reg_off as usize), c.reg_size as usize)) {
-            Ok(t) => t,
-            Err(_) => return E_FORMAT,
-        };
-        self.live_plan(k, new, caps)
+        if Keys::parse(core::slice::from_raw_parts(c.f.add(c.reg_off as usize), c.reg_size as usize)).is_err() {
+            return E_FORMAT;
+        }
+        OK
     }
 
     /// Load the file at `path` into the first free record at selection index `k`: the file's header table is kept at `k`, the services number the live set again (the live
