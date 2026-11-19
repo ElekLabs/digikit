@@ -104,8 +104,10 @@ pub trait Ops {
     unsafe fn abort(&mut self, rec: usize) -> bool;
     /// `Loader::unload_rec`.
     unsafe fn unload(&mut self, rec: usize) -> i32;
-    /// The module is not loaded though its teardown did not finish (`fini` ran, the DSP did not let go): its boot state is FAILED with `code` and the count of loaded modules drops.
-    unsafe fn mark_unloaded(&mut self, k: usize, code: i32);
+    /// Does the DSP loader hold a module it could not release? Permanent until the next boot.
+    unsafe fn dsp_retained(&mut self) -> bool;
+    /// How far the DSP loader has got with its loads (a counter that moves with every image or row it sends and every load it starts).
+    unsafe fn dsp_progress(&mut self) -> u32;
     /// The boot record's view of the module goes to INIT (and the loaded count drops if it was ACTIVE).
     unsafe fn begin_load(&mut self, k: usize);
     /// `Loader::reload_load` and the boot record's account of its result.
@@ -154,15 +156,18 @@ pub struct Job {
     sel: usize,
     start: Option<u32>,
     passes: u32,
+    /// `Ops::dsp_progress` at the last pass of the DSP wait.
+    progress: u32,
 }
 
 impl Job {
     pub const fn new() -> Job {
-        Job { step: step::IDLE, phase: 0, result: OK, torn: false, path: [0; 64], rec: 0, sel: 0, start: None, passes: 0 }
+        Job { step: step::IDLE, phase: 0, result: OK, torn: false, path: [0; 64], rec: 0, sel: 0, start: None, passes: 0, progress: 0 }
     }
 
     /// Queue a reload of the module loaded from `path` (NUL terminated, at most 63 bytes). `OK`; `E_BUSY` while one is queued or running; `E_MSG` for a path that does not
-    /// fit; `E_FORMAT` for the file of a service; `E_NOT_FOUND` when no loaded content module came from that path.
+    /// fit; `E_RELOAD_RETAINED` while the DSP loader holds a module it could not release (restart the device); `E_FORMAT` for the file of a service; `E_NOT_FOUND` when no loaded
+    /// content module came from that path.
     pub unsafe fn queue<O: Ops>(&mut self, o: &mut O, path: *const u8) -> i32 {
         if self.phase == 1 {
             return E_BUSY;
@@ -170,6 +175,9 @@ impl Job {
         let n = crate::cstr_len(path, 64);
         if n == 0 || n >= 64 {
             return dkrt_sdk::proto::E_MSG;
+        }
+        if o.dsp_retained() {
+            return E_RELOAD_RETAINED;
         }
         if o.is_service(path) {
             return E_FORMAT;
@@ -236,6 +244,9 @@ impl Job {
             };
             self.rec = rec;
             self.sel = k;
+            if o.dsp_retained() {
+                return self.refused(E_RELOAD_RETAINED);
+            }
             if let Some(r) = o.refusal(rec) {
                 return self.refused(r);
             }
@@ -262,13 +273,12 @@ impl Job {
                 self.torn = true;
                 o.begin_load(self.sel);
                 self.step = step::LOAD;
-            } else if r != E_BUSY || self.timed_out(o) {
-                // before `fini` the old module is given back; after it the module is gone: not loaded, as after a plain unload
-                if !o.abort(self.rec) {
-                    self.torn = true;
-                    o.mark_unloaded(self.sel, r);
-                }
-                self.end(o, r, false);
+            } else if r != E_BUSY || o.dsp_retained() || self.timed_out(o) {
+                // `unload_rec` answers E_BUSY only before `fini` (a file or I/O step of the module still runs, or the DSP rows cannot be cleared), so the old module is whole and gets
+                // its tick and commands back. A DSP loader that holds rows it could not clear is permanent: say so at once instead of waiting out the budget.
+                o.abort(self.rec);
+                let retained = o.dsp_retained();
+                self.end(o, if retained { E_RELOAD_RETAINED } else { r }, false);
             }
         } else if self.step == step::LOAD {
             let r = o.load(self.rec, self.sel, path);
@@ -277,6 +287,7 @@ impl Job {
                 self.end(o, OK, true);
             } else if r == LOADING {
                 self.wait_restart(o);
+                self.progress = o.dsp_progress();
                 self.step = step::DSP;
             } else {
                 self.end(o, r, false);
@@ -285,7 +296,12 @@ impl Job {
             match o.dsp_result(self.sel) {
                 Some(r) => self.end(o, r, r == OK),
                 None => {
-                    if self.timed_out(o) {
+                    // one budget for a stalled load, not for a slow one: the loader's own guard restarts after the image and each row, so the wait does too
+                    let p = o.dsp_progress();
+                    if p != self.progress {
+                        self.progress = p;
+                        self.wait_restart(o);
+                    } else if self.timed_out(o) {
                         // the DSP loader can take a load down (the way it does when a load fails): no transfer outlives the job
                         if o.cancel_dsp(self.rec, E_DSP_XFER) {
                             self.end(o, E_DSP_XFER, false);
@@ -359,13 +375,11 @@ impl Ops for RealOps {
     unsafe fn unload(&mut self, rec: usize) -> i32 {
         crate::loader::unload_rec(rec)
     }
-    unsafe fn mark_unloaded(&mut self, k: usize, code: i32) {
-        let b = crate::boot::info();
-        if b.states[k] == dkrt_sdk::STATE_ACTIVE && b.loaded > 0 {
-            b.loaded -= 1;
-        }
-        b.states[k] = dkrt_sdk::STATE_FAILED;
-        b.results[k] = code;
+    unsafe fn dsp_retained(&mut self) -> bool {
+        crate::loader::dsp_retained()
+    }
+    unsafe fn dsp_progress(&mut self) -> u32 {
+        crate::loader::dsp_progress()
     }
     unsafe fn begin_load(&mut self, k: usize) {
         let b = crate::boot::info();
@@ -513,6 +527,11 @@ mod tests {
         cancels: bool,
         service: bool,
         torn_seen: bool,
+        /// The DSP loader holds a module it could not release.
+        retained: bool,
+        /// `dsp_progress` moves on every call (a slow load that goes on).
+        progressing: bool,
+        progress: u32,
         log: Vec<&'static str>,
         phase_on: bool,
         now: Option<u32>,
@@ -522,7 +541,7 @@ mod tests {
 
     impl Script {
         fn new() -> Script {
-            Script { found: Some((2, 5)), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, dsp: (0, OK), cancels: true, service: false, torn_seen: false, log: Vec::new(), phase_on: false, now: Some(0), stalled: false }
+            Script { found: Some((2, 5)), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false }
         }
     }
 
@@ -534,8 +553,14 @@ mod tests {
         unsafe fn is_service(&mut self, _: *const u8) -> bool {
             self.service
         }
-        unsafe fn mark_unloaded(&mut self, _: usize, _: i32) {
-            self.log.push("mark unloaded");
+        unsafe fn dsp_retained(&mut self) -> bool {
+            self.retained
+        }
+        unsafe fn dsp_progress(&mut self) -> u32 {
+            if self.progressing {
+                self.progress += 1;
+            }
+            self.progress
         }
         unsafe fn cancel_dsp(&mut self, _: usize, _: i32) -> bool {
             self.log.push("cancel dsp");
@@ -746,19 +771,85 @@ mod tests {
     }
 
     #[test]
-    fn a_teardown_that_does_not_end_gives_the_old_module_back_before_fini_and_leaves_it_not_loaded_after_it() {
+    fn a_teardown_that_does_not_end_gives_the_old_module_back_because_unload_answers_busy_only_before_fini() {
         let mut s = Script::new();
         s.unload_busy = u32::MAX;
         assert_eq!(run(&mut s), (2, E_BUSY, step::DONE));
-        assert!(s.log.contains(&"abort") && !s.log.contains(&"load") && !s.log.contains(&"mark unloaded"));
+        assert!(s.log.contains(&"abort") && !s.log.contains(&"load"));
         assert!(!s.torn_seen, "before fini the old module is live");
-        // `fini` ran: the module is not loaded, as after a plain unload; the boot record says so and the services are told
-        let mut s2 = Script::new();
-        s2.unload_busy = u32::MAX;
-        s2.can_abort = false;
-        assert_eq!(run(&mut s2), (2, E_BUSY, step::DONE));
-        assert!(s2.log.contains(&"mark unloaded"));
-        assert_not_loaded(&s2, "a teardown that failed after fini");
+        assert_eq!(s.log.iter().filter(|l| **l == "finish failed").count(), 1);
+        assert!(!s.phase_on);
+    }
+
+    #[test]
+    fn a_retained_dsp_refuses_at_the_queue_and_in_a_running_job_at_once() {
+        // at the queue: no job, the code that says to restart
+        let mut s = Script::new();
+        s.retained = true;
+        let mut j = Job::new();
+        unsafe {
+            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), E_RELOAD_RETAINED);
+            assert_eq!(j.phase, 0);
+        }
+        // in a job that was queued before the DSP was retained: the check refuses
+        let mut s = Script::new();
+        let mut j = Job::new();
+        unsafe {
+            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), OK);
+            s.retained = true;
+            j.poll(&mut s);
+        }
+        assert_eq!((j.phase, j.result), (2, E_RELOAD_RETAINED));
+        assert!(!s.log.contains(&"phase on") && !s.log.contains(&"quiesce"));
+        // a teardown that fails because the DSP rows cannot be cleared: the DSP is retained, the job does not wait out its budget
+        let mut s = Script::new();
+        s.unload_busy = u32::MAX;
+        let mut j = Job::new();
+        unsafe {
+            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), OK);
+            for _ in 0..4 {
+                j.poll(&mut s);
+            }
+            s.retained = true;
+            j.poll(&mut s);
+        }
+        assert_eq!((j.phase, j.result), (2, E_RELOAD_RETAINED));
+        assert!(s.log.contains(&"abort") && !j.torn);
+    }
+
+    #[test]
+    fn a_slow_dsp_load_that_goes_on_is_not_cancelled_and_a_stalled_one_is() {
+        // ten rows at 17 passes each, and a long image: far more passes than one budget, but the loader moves all the time
+        let mut s = Script::new();
+        s.load = LOADING;
+        s.progressing = true;
+        s.dsp = (10 * 17 * 40, OK);
+        assert_eq!(run(&mut s), (2, OK, step::DONE));
+        assert!(!s.log.contains(&"cancel dsp"));
+        // the loader stands still: cancelled after one budget
+        let mut s = Script::new();
+        s.load = LOADING;
+        s.dsp = (u32::MAX, OK);
+        assert_eq!(run(&mut s), (2, E_DSP_XFER, step::DONE));
+        assert!(s.log.contains(&"cancel dsp"));
+        // progress that stops half way is cancelled one budget after it stopped
+        let mut s = Script::new();
+        s.load = LOADING;
+        s.dsp = (u32::MAX, OK);
+        let mut j = Job::new();
+        unsafe {
+            assert_eq!(j.queue(&mut s, b"mods/a.dkm\0".as_ptr()), OK);
+            s.progressing = true;
+            for _ in 0..3000 {
+                j.poll(&mut s);
+            }
+            assert_eq!(j.phase, 1, "a load that moves is left alone");
+            s.progressing = false;
+            for _ in 0..WAIT_PASSES + 10 {
+                j.poll(&mut s);
+            }
+        }
+        assert_eq!((j.phase, j.result), (2, E_DSP_XFER));
     }
 
     #[test]

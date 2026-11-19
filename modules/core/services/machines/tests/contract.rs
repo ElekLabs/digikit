@@ -409,10 +409,27 @@ fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_typ
             "the dispatch renders a silent block for it"
         );
         assert_eq!(voice_row_word(&l.core, row, 1), Some(PLACEHOLDER_PC));
+        // a placeholder row counts in the CAPACITY figure (`capacity::used_rows` counts every non-zero owner): the device test reads that figure against the row masks
+        let used = |l: &dkrt_test_support::contract::Lifecycle<Machines>| {
+            unsafe {
+                <Machines as dkrt_abi::service::Service<FakeCore>>::cap(
+                    &l.core,
+                    dkrt_sdk::proto::CAPK_VOICE_ROWS,
+                )
+            }
+            .unwrap()
+            .1
+        };
+        assert_eq!(
+            (used(&l), l.core.dsp().mod_rows[0]),
+            (1, 0),
+            "a parked row is in use and in no module's row mask"
+        );
         // the reload ended without the module: the row is free, in the DSP too
         unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::reload_done(&l.core) };
         let d = l.core.dsp();
         assert_eq!((d.row_owner[row], d.row_type[row]), (0, FREE_TYPE));
+        assert_eq!(used(&l), 0);
         assert_eq!(voice_row_word(&l.core, row, 0), Some(FREE_TYPE));
         assert_eq!(voice_row_word(&l.core, row, 10), Some(0));
     }

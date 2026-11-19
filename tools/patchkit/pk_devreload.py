@@ -449,6 +449,8 @@ def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
             what = (
                 "failed, the module is not loaded"
                 if unloaded
+                else "the DSP loader is retained, restart needed"
+                if result == -87
                 else "refused, the old module ran"
             )
             print(f"preview: reload {what} ({result}); restarting instead", flush=True)

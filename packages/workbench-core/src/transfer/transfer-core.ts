@@ -167,7 +167,9 @@ export function eventText(e: TransferEvent): string {
     case 'reload':
       return `Reloading ${e.path} without a boot`;
     case 'reload-refused':
-      return `${e.path}: not reloaded (status ${s(e.result)}); the old module still runs`;
+      return e.result === -87
+        ? `${e.path}: not reloaded: the DSP loader holds a module it could not release. Restart the device`
+        : `${e.path}: not reloaded (status ${s(e.result)}); the old module still runs`;
     case 'reload-failed':
       return `${e.path}: the reload failed after the old module was removed (status ${s(e.result)}); the module is not loaded`;
     case 'restart':

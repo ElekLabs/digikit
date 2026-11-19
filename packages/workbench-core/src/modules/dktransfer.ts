@@ -968,7 +968,15 @@ export interface ReloadOutcome {
 }
 
 /** The statuses of a RELOAD request that mean "not now or not this way": nothing changed and the old module runs. */
-const REFUSED_AT_QUEUE = new Set<string>(['E_NOT_FOUND', 'E_BUSY', 'E_STATE', 'E_PROTO', 'E_FORMAT', 'E_MSG']);
+const REFUSED_AT_QUEUE = new Set<string>([
+  'E_NOT_FOUND',
+  'E_BUSY',
+  'E_STATE',
+  'E_PROTO',
+  'E_FORMAT',
+  'E_MSG',
+  'E_RELOAD_RETAINED',
+]);
 const STATUS_CODE = new Map<string, number>([...STATUS, ...LOAD_STATUS].map(([code, name]) => [name, code]));
 
 /**

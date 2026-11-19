@@ -263,6 +263,10 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
         "E_RELOAD_KEYS",
         "reload refused: the new file lacks a key of the file it replaces",
     ),
+    -87: (
+        "E_RELOAD_RETAINED",
+        "reload refused: the DSP loader holds a module it could not release; restart the device",
+    ),
 }
 
 CAP: dict[str, int] = {

@@ -232,6 +232,17 @@ pub unsafe fn cancel_dsp(rec: usize, code: i32) -> bool {
     loader().cancel_dsp(rec, code)
 }
 
+/// Does the DSP loader hold a module it could not release? Permanent until the next boot: every load and reload is refused.
+pub unsafe fn dsp_retained() -> bool {
+    dsp::retained()
+}
+
+/// How far the DSP loader has got with its loads: a counter that moves when an image or a row goes out or a load starts.
+pub unsafe fn dsp_progress() -> u32 {
+    let d = dsp::ds();
+    d.step.wrapping_add(d.transfers).wrapping_add(d.row_writes)
+}
+
 /// Is `path` the store path of a loaded provider (a service file)?
 pub unsafe fn is_provider_path(path: *const u8) -> bool {
     let mut j = 0;
@@ -976,7 +987,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             true
         } else if dsp::dequeue(rec) {
             let idx = self.sel_of_rec[rec] as u32;
-            self.take_down(rec, code);
+            if self.take_down(rec, code) != OK {
+                // as for the load in flight: a teardown that cannot release the rows leaves the DSP retained (`fail_done`)
+                dsp::ds().phase = dsp::PH_RETAINED;
+            }
             crate::boot::report_dsp(idx, code);
             true
         } else {

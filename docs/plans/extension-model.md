@@ -662,11 +662,11 @@ What:
    A module with no DSP gets `on_loaded` from the job. The stored view pointer is the risk of this step; the device gate proves it (archive: emulator only). Counters
    `unloads` and `reloads` at the end of `DkrtBootInfo` make open lists re-read (`unloads` counts every module teardown; the job counts `reloads` for every reload that loaded the
    new file or tore the old one down).
-   End state of a reload that fails after the old module was torn down (the teardown does not end after `fini`, the load fails, the DSP part fails or does not end in time):
+   End state of a reload that fails after the old module was torn down (the load fails, the DSP part fails, or it stalls and is cancelled):
    the module is not loaded, as after a plain unload. The boot record says FAILED with the code and `loaded` drops; the machine rows that read MISSING are written as gap rows
    (a MISSING row with no voice row would play the first stock machine's sound); the placeholders are freed; the list is rebuilt; `RELOAD_STATE` carries `unloaded = 1`. A
    DSP part that does not end in 4 s is cancelled through the DSP loader's own failure path (`Loader::cancel_dsp`), so no transfer outlives the job. Every wait also ends after
-   1800 UI passes, whatever the block clock does. A teardown that does not end after `fini` leaves the record held by the DSP loader (retained) until the next boot.
+   1800 UI passes, whatever the block clock does. `unload_rec` answers `E_BUSY` only before `fini` (a file or I/O step of the module still runs, or the DSP rows cannot be cleared), so a teardown that does not end gives the old module back; a DSP loader that cannot clear the rows is retained for good, and from then on every reload is refused at the queue with `E_RELOAD_RETAINED` (restart the device). The DSP wait has one budget for a stalled load: it starts again whenever the loader moves (an image or a row goes out, a load starts), so a healthy slow load of many rows is not cancelled.
 10. `dk:dev` and the workbench use `CMD_RELOAD` for any content module; the emulator byte swap remains only for the runtime image and the UI
     layer (`core/ui`, `core/digikit-menu`). Document the command and its refusals in `docs/TESTING.md` "Fast iteration".
 

@@ -69,7 +69,11 @@ export async function transferCommand({ host, root: repoRoot, session, sub, rest
     if (rest.length === 0) fail('transfer reload needs card paths');
     const { refused, failed } = await reloadModules(session, rest, emit);
     for (const r of refused)
-      console.error(`wb: ${r.path} was not reloaded (status ${r.result}); the old module still runs`);
+      console.error(
+        r.result === -87
+          ? `wb: ${r.path} was not reloaded: the DSP loader holds a module it could not release. Restart the device (wb transfer restart)`
+          : `wb: ${r.path} was not reloaded (status ${r.result}); the old module still runs`,
+      );
     for (const r of failed)
       console.error(
         `wb: the reload of ${r.path} failed after the old module was removed (status ${r.result}); the module is not loaded`,

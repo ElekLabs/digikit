@@ -472,6 +472,23 @@ fn a_cancelled_dsp_part_ends_like_a_failed_one() {
         assert!(!crate::loader::cancel_dsp(0, E_DSP_XFER));
     }
 }
+/// The load that waits in the queue is given up: it is removed and its record taken down, the load in flight goes on, and the DSP is not retained.
+#[test]
+fn a_cancelled_queued_dsp_part_is_removed_and_the_load_in_flight_goes_on() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        seed(Completion::Ack, false, true, true);
+        // the seed's module 0 is the one the test stubs know: let it be the queued one, and module 1 the load in flight
+        let d = dsp::ds();
+        d.waiting[0].rec = 0;
+        d.pending.rec = 1;
+        assert!(crate::loader::cancel_dsp(0, E_DSP_XFER));
+        assert_eq!((dsp::ds().nwait, dsp::ds().pending.rec), (0, 1), "nothing waits, the load in flight goes on");
+        assert_eq!(st().modules[0].used, 0, "the queued module is taken down");
+        assert!(st().modules[1].used == 1 && !dsp::retained());
+        assert!(!crate::loader::cancel_dsp(0, E_DSP_XFER), "nothing is left to cancel");
+    }
+}
 #[test]
 fn acknowledged_fx_cleanup_reclaims_after_all_words() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());

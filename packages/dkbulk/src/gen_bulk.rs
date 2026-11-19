@@ -102,3 +102,4 @@ pub const L_E_RELOAD_PLAYING: i16 = -83;
 pub const L_E_RELOAD_MENUS: i16 = -84;
 pub const L_E_RELOAD_ROUTED: i16 = -85;
 pub const L_E_RELOAD_KEYS: i16 = -86;
+pub const L_E_RELOAD_RETAINED: i16 = -87;

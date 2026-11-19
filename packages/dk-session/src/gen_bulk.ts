@@ -110,4 +110,5 @@ export const BULK_STATUS = {
   L_E_RELOAD_MENUS: -84,
   L_E_RELOAD_ROUTED: -85,
   L_E_RELOAD_KEYS: -86,
+  L_E_RELOAD_RETAINED: -87,
 } as const;

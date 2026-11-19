@@ -206,6 +206,7 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-84, 'E_RELOAD_MENUS', 'reload refused: the module built menus of its own'],
   [-85, 'E_RELOAD_ROUTED', 'reload refused: the module has a published effect row (no effect teardown yet)'],
   [-86, 'E_RELOAD_KEYS', 'reload refused: the new file lacks a key of the file it replaces'],
+  [-87, 'E_RELOAD_RETAINED', 'reload refused: the DSP loader holds a module it could not release; restart the device'],
 ];
 
 /** The state of a module of the boot selection (LOADS v2): [code, name, text] */

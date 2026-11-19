@@ -62,6 +62,7 @@
 #define DK_E_RELOAD_MENUS (-84) /* reload refused: the module built menus of its own */
 #define DK_E_RELOAD_ROUTED (-85) /* reload refused: the module has a published effect row (no effect teardown yet) */
 #define DK_E_RELOAD_KEYS (-86) /* reload refused: the new file lacks a key of the file it replaces */
+#define DK_E_RELOAD_RETAINED (-87) /* reload refused: the DSP loader holds a module it could not release; restart the device */
 
 /* Replies of the upload commands ([protocol.status]). */
 #define DK_E_MSG (-50) /* body too short or malformed */
