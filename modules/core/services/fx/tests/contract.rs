@@ -346,3 +346,93 @@ fn an_unloaded_effect_page_row_points_to_the_empty_string() {
     assert_eq!((word(0), word(4), word(8)), (0, 0, 0xffff_ffff));
     assert_eq!(unsafe { *at.add(12) }, 0);
 }
+
+const KIT_CELL: u32 = 0x7000;
+const KIT_A: u32 = 0x4000_1000;
+const KIT_B: u32 = 0x4000_3000;
+
+/// `image` with a live kit: the cell `KIT_CELL` holds the kit pointer `KIT_A` (a DDR address), and word `j` of effect row `k` lives at array index `8k + j`.
+fn image_with_kit(core: &mut FakeCore) {
+    image(core);
+    let t = &mut core
+        .info_tables
+        .iter_mut()
+        .find(|(h, _)| *h == INFO_HASH)
+        .unwrap()
+        .1;
+    t[19] = KIT_CELL;
+    let bytes = unsafe { core::slice::from_raw_parts_mut(t.as_mut_ptr() as *mut u8, 4 * t.len()) };
+    for i in 0..24 {
+        bytes[80 + i] = i as u8;
+    }
+}
+
+/// A live kit: the first effect word's index, the kit array, and the mark the pages put in it.
+fn kit_array(kit: u32) -> u32 {
+    kit + 0x14
+}
+
+/// The effect of a module that is reloaded keeps the user's knob values (the array of the live kit still holds them), the route and the send cell it had; a unload
+/// and a load with a kit loaded in between (or another live kit) give the defaults, as a restart does. Docs: docs/plans/extension-model.md, E5b.
+#[test]
+fn a_reloaded_effect_keeps_its_knob_values_route_and_send_cell() {
+    let _g = locked();
+    let mut f = fixture(DT2.id);
+    f.image = image_with_kit;
+    let l = Lifecycle::<Fx>::new(&f);
+    unsafe {
+        l.core.wr(KIT_CELL, KIT_A);
+        let arr = kit_array(KIT_A);
+        let knob = |kit: u32| l.core.rd16(kit_array(kit));
+        // the effect with the default route "send": a send cell
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!(fxsend::used(), 1, "the effect has its send cell");
+        let default = knob(KIT_A);
+        assert_ne!(default, 0x1234);
+        l.core.wr16(arr, 0x1234); // the user turned the knob
+                                  // a reload: the job sets the live op, the teardown runs, the file loads again
+        l.core.live_op.set(1);
+        assert_eq!(
+            <Fx as dkrt_abi::service::Service<FakeCore>>::teardown_refusal(&l.core, 1),
+            dkrt_sdk::OK
+        );
+        l.unload(0);
+        assert_eq!(fxsend::used(), 0, "the cell is given back with the module");
+        assert_eq!(fxpage::page_owner(0), 0);
+        l.core.live_op.set(0);
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!(fxsend::used(), 1, "the route comes back");
+        assert_eq!(knob(KIT_A), 0x1234, "the user's value stays");
+        // unload, then another kit becomes live before the load: defaults
+        l.unload(0);
+        l.core.wr(KIT_CELL, KIT_B);
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!(
+            knob(KIT_B),
+            default,
+            "a kit the module never held gets the defaults"
+        );
+        // unload, a kit load runs in the firmware, then the load: defaults
+        l.core.wr16(kit_array(KIT_B), 0x2222);
+        l.unload(0);
+        let n = core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD);
+        core::ptr::write_volatile(n, core::ptr::read_volatile(n) + 1);
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!(
+            knob(KIT_B),
+            default,
+            "a kit was loaded while the module was gone"
+        );
+        // another effect takes the row: its defaults, not the left values
+        l.core.wr16(kit_array(KIT_B), 0x2222);
+        l.unload(0);
+        assert_eq!(l.load(0, &f.b), dkrt_sdk::OK);
+        assert_ne!(
+            knob(KIT_B),
+            0x2222,
+            "another effect does not inherit the values"
+        );
+        l.unload(0);
+        core::ptr::write_volatile(n, 0);
+    }
+}

@@ -259,7 +259,7 @@ finished), `result` (0 is ok), `step` and `unloaded` (1: the old module was torn
 through the select and restart as before), and `dk:dev` with `--store` (a preview module that is loaded already is reloaded; a refusal or a failed reload falls back to the restart).
 
 The runtime refuses a reload, with the old module untouched, in this order: `E_SAFE_MODE`, the transport playing or paused or unreadable (`E_RELOAD_PLAYING`), an open upload (`E_STATE`), `E_CARD_BUSY`, a module
-that built menus of its own (`E_RELOAD_MENUS`), a module whose service refuses (`E_RELOAD_ROUTED`: an effect module with a published effect row; E5 has no effect teardown),
+that built menus of its own (`E_RELOAD_MENUS`), a module whose service refuses (`E_RELOAD_ROUTED`; no service refuses today: the fx service tears an effect down on any route),
 then the file itself (any load check; another module name is `E_FORMAT`; a dropped key is `E_RELOAD_KEYS`; a plan failure over the live set is the plan's code, `E_MISSING` for a service
 that is not loaded). While it runs the module's commands answer `E_BUSY`. A drain or teardown that does not end in about 4 s (or 1800 UI passes) gives the old module its tick and commands back (a teardown answers busy only before `fini`); a DSP loader that holds rows it could not clear is retained until the next boot, and every reload is then refused at once with `E_RELOAD_RETAINED`: restart the device. A DSP part that stalls (no image or row goes out for the budget) is cancelled and the job ends with `E_DSP_XFER`. A reload that fails after the old module was torn down leaves it not loaded, as a plain unload does. Every job that got past the checks, whatever its result, rebuilds the machine list, writes gap rows for the machines that did not come back and frees the placeholder rows. A silent window (the machine's voice row is a
 placeholder, the machine row reads MISSING) lasts from the teardown to the new row.
@@ -274,7 +274,7 @@ module needs a free selection index (`E_SEL_COUNT` at 8). A finished unload has 
 the DIGIKIT menu, `dkrt_live(op, path)` with `dkrt_live_state(out)`.
 
 Refusals, in the order of the reload list above, with the old state untouched: safe mode, the DSP retained, the transport, an open upload and card operations apply to all three; the module's menus
-(`E_RELOAD_MENUS`) and the services' refusals (`E_RELOAD_ROUTED`: an effect on a route) to an unload and a reload; the file checks and the plan over the live set (`E_MISSING` for a service that is not loaded:
+(`E_RELOAD_MENUS`) and the services' refusals (`E_RELOAD_ROUTED`; none today) to an unload and a reload; the file checks and the plan over the live set (`E_MISSING` for a service that is not loaded:
 the service loads at the next boot) to a load and a reload. The `E_RELOAD_*` codes keep their names and also answer an unload and a load. An unload of a module that a track uses leaves a gap row, which plays the first
 stock machine's sound, as after "untick and restart". The boot record then says `UNLOADED` (state 8) for that selection index; a later load of the same file takes the index its path had at the boot (else a free one that no boot path owns, else a new one) and
 the numbers it had.

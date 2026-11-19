@@ -208,6 +208,11 @@ pub struct FxpState {
     short: [[u8; 16]; MAX_FX * WORDS],
     rep_tab: [[u8; REP_SIZE]; MAX_FX],
     rep_title: [[u8; REP_SIZE]; MAX_FX],
+    /// What `remove` found at a row: the effect ID that left (0: none), the live kit object, and the count of kit loads and initialisations at that time. A load of
+    /// the same effect into the row finds the user's values still in the kit's array and keeps them (`apply`), unless a kit was loaded or the live kit changed in between.
+    parked_id: [u32; MAX_FX],
+    parked_kit: u32,
+    parked_hooks: u32,
 }
 
 #[no_mangle]
@@ -570,9 +575,20 @@ pub unsafe fn apply<C: CoreApi>(core: &C, owner: u8, b: *const u8) -> i32 {
         j += 1;
     }
     s.nknob[k] = n as u8;
-    publish_row(core, inf, k, rd32(b.add(12)));
+    let id = rd32(b.add(12));
+    publish_row(core, inf, k, id);
     let live = kit(core, inf);
-    if live != 0 {
+    // the effect that left this row comes back (a reload or a live load after an unload), and the live kit is the one it left, with no kit loaded or initialised since:
+    // the row's values in the array are the user's, so they stay and the next tick sends them
+    let back = live != 0
+        && id != 0
+        && s.parked_id[k] == id
+        && s.parked_kit == live
+        && s.parked_hooks == hook_runs()
+        && core.rd16(live + iw(inf, w::ARRAY_OFF) + 2 * iw(inf, w::MARK_INDEX))
+            == iw(inf, w::MARK_VALUE) as i32;
+    s.parked_id[k] = 0;
+    if live != 0 && !back {
         // a kit object is live already and holds nothing of this effect (the init hook ran before the effect was here): its defaults now
         seed_row(core, inf, k, live + iw(inf, w::ARRAY_OFF));
         mark(core, inf, live + iw(inf, w::ARRAY_OFF));
@@ -605,6 +621,7 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     while k < MAX_FX {
         if s.owner[k] == owner {
             s.owner[k] = 0;
+            s.parked_id[k] = s.id[k];
             gone |= 1 << k;
         }
         k += 1;
@@ -612,6 +629,8 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     if gone == 0 {
         return;
     }
+    s.parked_kit = kit(core, inf);
+    s.parked_hooks = hook_runs();
     rebuild_list(core, inf);
     k = 0;
     while k < MAX_FX {
@@ -675,6 +694,15 @@ unsafe fn publish_row<C: CoreApi>(core: &C, inf: *const u32, k: usize, id: u32) 
         core.wr_half(ids + 2 * k as u32, id);
     }
     s.id[k] = id;
+}
+
+/// Kit loads and kit initialisations the hooks of `core/fxpages` have done (their counters move when a kit's rows are replaced).
+#[inline]
+fn hook_runs() -> u32 {
+    unsafe {
+        read_volatile(addr_of_mut!(DKRT_FXP_NLOAD))
+            .wrapping_add(read_volatile(addr_of_mut!(DKRT_FXP_NINIT)))
+    }
 }
 
 /// Put the mark of `core/fxpages` into the kit array `arr`: its effect rows hold values.

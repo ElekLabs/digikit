@@ -205,7 +205,7 @@ export const LOAD_STATUS: [number, string, string][] = [
     "reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read)",
   ],
   [-84, 'E_RELOAD_MENUS', 'reload refused: the module built menus of its own'],
-  [-85, 'E_RELOAD_ROUTED', 'reload refused: the module has a published effect row (no effect teardown yet)'],
+  [-85, 'E_RELOAD_ROUTED', "reload refused: a service cannot give back the module's state now"],
   [-86, 'E_RELOAD_KEYS', 'reload refused: the new file lacks a key of the file it replaces'],
   [-87, 'E_RELOAD_RETAINED', 'reload refused: the DSP loader holds a module it could not release; restart the device'],
 ];

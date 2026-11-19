@@ -126,25 +126,68 @@ fn clearing_a_module_sends_the_free_pc_first_and_frees_the_row() {
     assert!(!core.calls().iter().any(|c| matches!(c, Call::Log { .. })));
 }
 
-/// E5 refuses the reload of a module with a published effect row, whatever its route (route 0 is the master chain), and only that module's.
+/// An effect is torn down on any route (route 0 is the master chain) and is never what holds up a reload or an unload: the service refuses nothing, for its own
+/// module or another's, published row or not.
 #[test]
-fn a_reload_is_refused_while_the_module_has_a_published_effect_row() {
+fn a_published_effect_row_never_refuses_a_teardown() {
     let core = core_with_row();
     let owner = REC as u8 + 1;
     let ask = |who: u8| unsafe { <Fx as Service<FakeCore>>::teardown_refusal(&core, who) };
     for route in [0, 1] {
         core.dsp().fx_route[1] = route;
-        assert_eq!(ask(owner), dkrt_sdk::E_RELOAD_ROUTED, "route {route}");
+        assert_eq!(ask(owner), OK, "route {route}");
     }
-    assert_eq!(
-        ask(owner + 1),
-        OK,
-        "another module's reload is not held up by it"
-    );
+    assert_eq!(ask(owner + 1), OK);
     core.dsp().fx_pub[1] = 0;
+    assert_eq!(ask(owner), OK);
+}
+
+/// The rows the module being reloaded owns count as free in the check of its new file (the teardown that precedes the load frees them), and the rows of another module
+/// do not: with all four rows taken, a file of four effects fits the reload of their owner and no other load.
+#[test]
+fn the_rows_of_the_module_being_reloaded_count_as_free_in_the_row_check() {
+    use dkrt_abi::dsp::DspSec;
+    let mut core = core_with_row();
+    core.fx_table[dkrt_abi::dsp::F_FREE] = 4;
+    let d = core.dsp();
+    for k in 0..4 {
+        d.fx_owner[k] = if k < 3 { REC as u8 + 1 } else { REC as u8 + 2 };
+    }
+    let sec = |nfx: u32| DspSec {
+        s: core::ptr::null(),
+        version: 5,
+        size: 0,
+        image_size: 0,
+        image_off: 0,
+        reloc_off: 0,
+        nreloc: 0,
+        import_off: 0,
+        nimport: 0,
+        voice_off: 0,
+        nvoice: 0,
+        fx_off: 0,
+        nfx,
+        vstride: 0,
+        bank_off: 0,
+    };
+    let run = |nfx: u32, live_op: u32| {
+        core.live_op.set(live_op);
+        let r = unsafe { <Fx as Service<FakeCore>>::dsp_check_rows(&core, &sec(nfx)) };
+        core.live_op.set(0);
+        r
+    };
+    let owner = REC as u32 + 1;
+    assert_eq!(run(1, 0), dkrt_sdk::E_DSP_ROWS, "no free row");
+    assert_eq!(run(3, 0), dkrt_sdk::E_DSP_ROWS, "no reload runs");
+    assert_eq!(run(3, owner), OK, "the module's own three rows");
     assert_eq!(
-        ask(owner),
-        OK,
-        "a row that was claimed and never published runs nothing"
+        run(4, owner),
+        dkrt_sdk::E_DSP_ROWS,
+        "the fourth row is another module's"
+    );
+    assert_eq!(
+        run(3, owner + 1),
+        dkrt_sdk::E_DSP_ROWS,
+        "one row of the reloaded module is not enough"
     );
 }

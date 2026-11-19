@@ -110,7 +110,7 @@ export const ROWS: Record<string, Row> = {
   E_SVC_ABI: { fail: { file: LFO_DEVICE, test: 'another ABI' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
   E_RELOAD_PLAYING: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it; `reload.device.test.ts` drives it on both devices (the transport plays)', covered: [{ file: RELOAD_RS, test: 'playing_paused_mixed_or_unreadable' }] },
   E_RELOAD_MENUS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_refusals_come_in_the_documented_order' }] },
-  E_RELOAD_ROUTED: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_services_refuse_after_the_generic_refusals' }, { file: 'modules/core/services/fx/tests/records.rs', test: 'a_reload_is_refused_while_the_module_has_a_published_effect_row' }] },
+  E_RELOAD_ROUTED: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_services_refuse_after_the_generic_refusals' }] },
   E_RELOAD_RETAINED: { kind: 'host', reason: 'only a DSP loader that could not clear rows causes it', covered: [{ file: RELOAD_RS, test: 'a_retained_dsp_refuses_at_the_queue' }] },
   E_RELOAD_KEYS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: 'packages/dkneeds/src/keys.rs', test: 'a_reload_may_add_keys_but_not_drop_one' }] },
 };

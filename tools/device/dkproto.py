@@ -260,7 +260,7 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -84: ("E_RELOAD_MENUS", "reload refused: the module built menus of its own"),
     -85: (
         "E_RELOAD_ROUTED",
-        "reload refused: the module has a published effect row (no effect teardown yet)",
+        "reload refused: a service cannot give back the module's state now",
     ),
     -86: (
         "E_RELOAD_KEYS",
