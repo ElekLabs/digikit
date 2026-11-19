@@ -59,7 +59,8 @@ async function expectFixtureRefused(dk: PatchedSession['dk'], device: Device, de
     `${why}: the fixture is REFUSED with the hash of its service`,
   ).toEqual([['REFUSED', code('E_MISSING'), nameHash('lfo')]]);
   return ofKind(await dk.readLog(), LOG_KIND.MOD_LOAD)
-    .filter((e) => e.args[0] === PROVIDER_IDX)
+    // the port file is a provider too (it loads before the service); this test is about the service
+    .filter((e) => e.args[0] === PROVIDER_IDX && (e.args[3]! >>> 0) !== (nameHash('port') >>> 0))
     .map((e) => ({ result: e.args[1]! | 0, hash: e.args[3]! }));
 }
 

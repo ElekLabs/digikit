@@ -5,6 +5,7 @@ import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
+import { portFile } from '@digi/regression/runtime/service-files.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-cli.ts';
@@ -34,11 +35,12 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect((await session.status()).epoch, 'CLI RESTART boots another epoch').toBeGreaterThan(epoch);
   const entries = await dk.list();
   record(artifacts, 'installed-store', entries);
-  const modulePaths = (files: { path: string }[]) => files.map((f) => f.path).filter((p) => !p.endsWith('.dks')).sort();
+  const modulePaths = (files: { path: string }[]) => files.map((f) => f.path).filter((p) => !p.endsWith('.dks') && !p.endsWith('.dkport')).sort();
   expect(modulePaths(entries), 'upload survives the soft reset').toEqual([debugPath, modulePath].sort());
   // the services the modules need went on the card with them
   const services = entries.map((e) => e.path).filter((p) => p.startsWith('services/') && p.endsWith('.dks'));
   expect(services, 'the needed services are in the store listing').not.toEqual([]);
+  expect(entries.map((e) => e.path).filter((p) => p.endsWith('.dkport')), 'with the port file of the firmware').toEqual([portFile(device).name]);
   const entry = entries.find((e) => e.path === modulePath)!;
 
   // The store follows the guest's card writes after its quiet period (about two seconds).
@@ -49,7 +51,7 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect(folder.continuous, 'card.folder continuously mirrors the store').toBe(true);
   expect(
     folder.files
-      .filter((f) => !f.path.endsWith('.dks'))
+      .filter((f) => !f.path.endsWith('.dks') && !f.path.endsWith('.dkport'))
       .map(({ path, hash }) => ({ path, hash }))
       .sort((x, y) => x.path.localeCompare(y.path)),
     'mirror metadata matches the card',

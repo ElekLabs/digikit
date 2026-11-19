@@ -8,7 +8,7 @@ import type { PatchedSession } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { DEBUG_MODULE, installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
-import { neededServices, servicePath } from '@digi/regression/runtime/service-files.ts';
+import { neededServices, portFile, servicePath } from '@digi/regression/runtime/service-files.ts';
 import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 import type { RuntimeModule } from './manifests.ts';
 
@@ -26,7 +26,9 @@ export async function expectModuleLoad(
   // The debug module is loaded next to every module (the cell reads its LOG); for the debug module itself, once.
   const names = [...new Set([DEBUG_MODULE, module.id])];
   // the service files the module needs (services/<name>.dks) go on the card with it
-  const paths = [...new Set([debugPath, storePath, ...neededServices([artifact]).map((s) => servicePath(s.service))])].sort();
+  const services = neededServices([artifact]).map((s) => servicePath(s.service));
+  // a service on the card brings the port file of the device's firmware
+  const paths = [...new Set([debugPath, storePath, ...services, ...(services.length ? [portFile(session.options.device as Device).name] : [])])].sort();
   const hash = fileHashHex(bytes);
   const artifacts = path.join(liveArtifacts(session, 'module-load'), module.id.split('/')[1]!);
   fs.mkdirSync(artifacts, { recursive: true });
