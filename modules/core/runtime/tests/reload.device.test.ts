@@ -4,7 +4,7 @@ import { waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { captureNote, frames, pickSine, readFloatWav, word } from '@digi/regression/runtime/fx-live.ts';
+import { captureNote, frames, pickSine, readFloatWav, runFrames, word } from '@digi/regression/runtime/fx-live.ts';
 import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
@@ -21,8 +21,9 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  * and 49 name the variable and the builder, and the variable is not 0: the rebuild of the list at the end of a reload has a view to rebuild). The rebuilt list itself is not read.
  *
  * - (a) a code-only module (`test/lfo-shape`) reloads.
- * - (b) the machine `test/sine`, with a note held by MIDI over the reload and the PCM captured: the level before the reload is audible, there is a stretch of silence inside
- *   the swap (the placeholder row, not a stock sound), and a new note after it is audible again. The peaks per window are in the assertion messages and `pcm-windows.json`.
+ * - (b) the machine `test/sine`, with a note held by MIDI over the reload and the PCM captured: the level before the reload is audible, at least 3 windows in a row inside the
+ *   swap are below 1% of it (the placeholder row, not a stock sound), a control capture of the same note and span without a reload stays above that threshold over the whole
+ *   span (so decay alone cannot make the quiet run), and a new note after the swap is audible again. The peaks per window are in the assertion messages and `pcm-windows.json`.
  *   The machine type keeps its number and its voice row.
  * - (c) the reload is refused while the transport plays (`E_RELOAD_PLAYING`, the old module is live and the counter did not move) and goes through after STOP.
  * - the soak: the reload of the machine, 5 cycles in the gate and 20 in the full tier (`DIGIKIT_TIER=full`), with the same checks each cycle and the capacity counts
@@ -97,8 +98,18 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
   // (b) the machine with DSP, a note held over the reload, PCM captured
   const sine = before.find((m) => m.name === 'test/sine')!;
   await pickSine(rt);
-  const trigger = (await frames(rt.session)) + 300;
   const length = 1500;
+  const WINDOWS = 32;
+  const windowsOf = async (file: string, a: number, b: number): Promise<number[]> => {
+    const pcm = readFloatWav(file);
+    const perFrame = pcm.length / length;
+    const step = Math.max(1, Math.floor((b - a) / WINDOWS));
+    const peaks: number[] = [];
+    for (let f = a; f + step <= b; f += step) peaks.push(peakOf(pcm, Math.floor(f * perFrame), Math.ceil((f + step) * perFrame)));
+    return peaks;
+  };
+  const before0 = await frames(rt.session);
+  const trigger = before0 + 300;
   const file = path.join(artifacts, 'swap.wav');
   const mark: { start: number; end: number } = { start: 0, end: 0 };
   await captureNote(rt.session, {
@@ -123,15 +134,41 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
   });
   const pcm = readFloatWav(file);
   const perFrame = pcm.length / length;
-  const win = (a: number, b: number) => peakOf(pcm, Math.floor(a * perFrame), Math.ceil(b * perFrame));
-  const pre = win(Math.max(0, mark.start - 100), mark.start);
-  const swapPeaks: number[] = [];
-  const step = Math.max(1, Math.floor((mark.end - mark.start) / 32));
-  for (let f = mark.start; f < mark.end; f += step) swapPeaks.push(win(f, f + step));
-  const post = win(mark.end + 100, length);
-  record(artifacts, 'pcm-windows', { start: mark.start, end: mark.end, pre, swapPeaks, post });
+  const peak = (a: number, b: number) => peakOf(pcm, Math.floor(a * perFrame), Math.ceil(b * perFrame));
+  const pre = peak(Math.max(0, mark.start - 100), mark.start);
+  const swap = await windowsOf(file, mark.start, mark.end);
+  const post = peak(mark.end + 100, length);
   expect(pre, `(b) the held note is audible before the reload (peak ${pre.toFixed(4)})`).toBeGreaterThan(0.01);
-  expect(Math.min(...swapPeaks), `(b) a stretch of the swap is silent: peaks per window ${swapPeaks.map((p) => p.toFixed(4)).join(' ')} against ${pre.toFixed(4)} before`).toBeLessThan(pre * 0.01);
+  // a contiguous run of quiet windows inside the swap (queued .. new note), not one dip: at least 3 windows in a row below 1% of the level before
+  const quiet = swap.map((p) => p < pre * 0.01);
+  let run = 0;
+  let best = 0;
+  for (const q of quiet) {
+    run = q ? run + 1 : 0;
+    best = Math.max(best, run);
+  }
+  // the control: the same note and length, held for the same span, no reload. Its level over the span stays above the threshold, so decay alone cannot make a quiet stretch
+  const controlFile = path.join(artifacts, 'control.wav');
+  const span = mark.end - mark.start;
+  const controlTrigger = (await frames(rt.session)) + 300;
+  await captureNote(rt.session, {
+    file: controlFile,
+    trigger: controlTrigger,
+    tag: 'reload control',
+    length,
+    noPress: true,
+    during: async () => {
+      await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+      await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
+      await waitClock(rt.clock, 400);
+      await runFrames(rt.session, span);
+    },
+  });
+  const control = await windowsOf(controlFile, mark.start, mark.end);
+  const controlPre = peakOf(readFloatWav(controlFile), 0, 100 * (readFloatWav(controlFile).length / length));
+  record(artifacts, 'pcm-windows', { start: mark.start, end: mark.end, pre, swap, post, control, controlPre });
+  expect(best, `(b) a run of at least 3 quiet windows inside the swap: peaks per window ${swap.map((p) => p.toFixed(4)).join(' ')} against ${pre.toFixed(4)} before`).toBeGreaterThanOrEqual(3);
+  expect(Math.min(...control), `(b) the control without a reload stays audible over the same span: peaks ${control.map((p) => p.toFixed(4)).join(' ')} against ${controlPre.toFixed(4)}`).toBeGreaterThan(controlPre * 0.01);
   expect(post, `(b) the new module plays again (peak ${post.toFixed(4)} after, ${pre.toFixed(4)} before)`).toBeGreaterThan(pre * 0.1);
   const again = (await moduleRows(rt)).find((m) => m.name === 'test/sine')!;
   record(artifacts, 'sine-after', again);
