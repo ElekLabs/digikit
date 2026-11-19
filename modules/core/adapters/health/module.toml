@@ -14,6 +14,8 @@ ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
 # What the module does without on a firmware that lacks the anchor or hook (no DSP: no block interrupt, so no per-block window; the idle count still runs).
 optional_anchors = ["cf.link.site.reply_copy_lit", "cf.link.hook.block_isr", "cf.link.fn.block_isr"]
 
+# `st-1.42` is in `ports` and not here on purpose: the public gallery (apps/web/src/data/modules.ts) names the devices of `[targets]`, and the Syntakt is not offered on the site
+# yet (apps/web/src/firmware/site-policy.ts). The module works on the Syntakt in the emulator and on the unit (HEALTH page, no DSP rows; `CPU REL` needs a window clock, see README).
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.11" = "experimental"
