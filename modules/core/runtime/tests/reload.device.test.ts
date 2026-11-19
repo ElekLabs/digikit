@@ -82,9 +82,16 @@ async function reloadChecked(rt: TestRuntime, plan: RuntimePlan, modulePath: str
   await expectReloadLeftNothing(rt, plan, why, epoch, before);
 }
 
+/** Blocks (1500 a second) each capture records: the note, the reload (a few hundred blocks) and the note after it fit with room to spare; `expect` below checks it. */
+const CAPTURE_BLOCKS = 8000;
+/** Blocks after the swap that the level of the new note is read over. */
+const POST_BLOCKS = 300;
+
+/** The largest magnitude of `xs[from..to)`. A window outside the recording is an error, not silence: an empty window reads 0 and would pass for a quiet one. */
 const peakOf = (xs: Float32Array, from: number, to: number): number => {
+  if (from < 0 || to > xs.length || to <= from) throw new Error(`window ${from}..${to} is outside the PCM of ${xs.length} samples`);
   let p = 0;
-  for (let i = Math.max(0, from); i < Math.min(xs.length, to); i++) p = Math.max(p, Math.abs(xs[i]!));
+  for (let i = from; i < to; i++) p = Math.max(p, Math.abs(xs[i]!));
   return p;
 };
 
@@ -106,14 +113,15 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
   const amp = AMP_CC[rt.session.options.device as 'dt2' | 'dn2'];
   await sendCc(rt, MIDI_CHANNEL, amp.hold, 127); // the note sounds as long as the key is held: the same in the capture with the reload and in the control
   await sendCc(rt, MIDI_CHANNEL, amp.decay, 64);
-  const length = 1500;
+  const length = CAPTURE_BLOCKS;
   const WINDOWS = 32;
-  const windowsOf = async (file: string, a: number, b: number): Promise<number[]> => {
-    const pcm = readFloatWav(file);
-    const perFrame = pcm.length / length;
-    const step = Math.max(1, Math.floor((b - a) / WINDOWS));
+  /** Peaks of `WINDOWS` equal windows of blocks `a..b` of a recording of `length` blocks; a window past the recording throws. */
+  const windowsOf = (pcm: Float32Array, a: number, b: number): number[] => {
+    const perBlock = pcm.length / length;
+    const step = Math.floor((b - a) / WINDOWS);
+    if (step < 1) throw new Error(`the span ${a}..${b} is too short for ${WINDOWS} windows`);
     const peaks: number[] = [];
-    for (let f = a; f + step <= b; f += step) peaks.push(peakOf(pcm, Math.floor(f * perFrame), Math.ceil((f + step) * perFrame)));
+    for (let f = a; f + step <= b; f += step) peaks.push(peakOf(pcm, Math.floor(f * perBlock), Math.ceil((f + step) * perBlock)));
     return peaks;
   };
   const before0 = await frames(rt.session);
@@ -141,11 +149,14 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
     },
   });
   const pcm = readFloatWav(file);
-  const perFrame = pcm.length / length;
-  const peak = (a: number, b: number) => peakOf(pcm, Math.floor(a * perFrame), Math.ceil(b * perFrame));
-  const pre = peak(Math.max(0, mark.start - 100), mark.start);
-  const swap = await windowsOf(file, mark.start, mark.end);
-  const post = peak(mark.end + 100, length);
+  const perBlock = pcm.length / length;
+  expect(perBlock, `(b) samples per block of the recording (${pcm.length} samples for ${length} blocks)`).toBeGreaterThan(32);
+  expect(mark.start, '(b) the reload started after the note began').toBeGreaterThan(100);
+  expect(mark.end + 100 + POST_BLOCKS, `(b) the recording (${length} blocks) must hold the whole swap (${mark.start}..${mark.end}) and ${POST_BLOCKS} blocks of the new note after it`).toBeLessThanOrEqual(length);
+  const peak = (a: number, b: number) => peakOf(pcm, Math.floor(a * perBlock), Math.ceil(b * perBlock));
+  const pre = peak(mark.start - 100, mark.start);
+  const swap = windowsOf(pcm, mark.start, mark.end);
+  const post = peak(mark.end + 100, mark.end + 100 + POST_BLOCKS);
   expect(pre, `(b) the held note is audible before the reload (peak ${pre.toFixed(4)})`).toBeGreaterThan(0.01);
   // a contiguous run of quiet windows inside the swap (queued .. new note), not one dip: at least 3 windows in a row below 1% of the level before
   const quiet = swap.map((p) => p < pre * 0.01);
@@ -172,8 +183,9 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
       await runFrames(rt.session, span);
     },
   });
-  const control = await windowsOf(controlFile, mark.start, mark.end);
-  const controlPre = peakOf(readFloatWav(controlFile), 0, 100 * (readFloatWav(controlFile).length / length));
+  const controlPcm = readFloatWav(controlFile);
+  const control = windowsOf(controlPcm, mark.start, mark.end);
+  const controlPre = peakOf(controlPcm, Math.floor((mark.start - 100) * perBlock), Math.floor(mark.start * perBlock));
   record(artifacts, 'pcm-windows', { start: mark.start, end: mark.end, pre, swap, post, control, controlPre });
   expect(best, `(b) a run of at least 3 quiet windows inside the swap: peaks per window ${swap.map((p) => p.toFixed(4)).join(' ')} against ${pre.toFixed(4)} before`).toBeGreaterThanOrEqual(3);
   expect(Math.min(...control), `(b) the control without a reload stays audible over the same span: peaks ${control.map((p) => p.toFixed(4)).join(' ')} against ${controlPre.toFixed(4)}`).toBeGreaterThan(controlPre * 0.01);
