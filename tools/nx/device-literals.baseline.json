@@ -258,7 +258,7 @@
   "modules/core/runtime/tests/fixtures/project.json": 1,
   "modules/core/runtime/tests/lfo/goldens.json": 6,
   "modules/core/runtime/tests/lfo/lfo-report.manual.device.test.ts": 2,
-  "modules/core/runtime/tests/live.device.test.ts": 11,
+  "modules/core/runtime/tests/live.device.test.ts": 15,
   "modules/core/runtime/tests/machines/frametype-slot.device.test.ts": 4,
   "modules/core/runtime/tests/machines/machines-kit.ts": 10,
   "modules/core/runtime/tests/machines/project.json": 7,
