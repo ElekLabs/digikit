@@ -21,11 +21,13 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  * After every job: RELOAD_STATE says finished with result 0; no new boot (the epoch); the `reloads` counter moved by one; no `TABLE_BAD` in the log. AMP HOLD is NOTE and the stock FX sends are 0, so a
  * capture holds the voice and the run-time effect only.
  *
- * The test shows what only the firmware shows: the audio of the effect and of the send bus, the DSP row taking the knob value, the swap windows and the page frame. What the service keeps is a unit
- * test and not asserted here: the effect row, page row and send cell counts, the residue of a unload and the soak of many reloads (the contract suite of the fx service,
- * `modules/core/runtime/test-support/src/contract.rs`: cases 3, 6, 7, 11 and 12), the parked knob values per module and kit (case 13, `Fixture::knobs`), the send cell and the page row that come
- * back with a reload (`modules/core/services/fx/tests/contract.rs` `a_reloaded_effect_gets_its_send_cell_and_page_row_back`), and that no load or unload writes a setting (case 3 and 7 compare the
- * settings).
+ * After every job FX_SLOTS and SEND_SLOTS in use are read (two capacity reads): 1 and the module's send cell (0 or 1) while it is loaded, 0 and 0 after an unload. Only the device shows a real effect
+ * row or send cell that leaks in a reload (the real loader's `dsp_clear` and `fxsend::remove`); the contract suite of the fx service runs a FakeCore.
+ *
+ * The test shows what only the firmware shows: the audio of the effect and of the send bus, the capacity counts of the real loader, the DSP row taking the knob value, the swap windows and the page
+ * frame. The rest is a unit test and not asserted here: the residue of an unload and the soak of many reloads (the contract suite of the fx service, `modules/core/runtime/test-support/src/contract.rs`:
+ * cases 3, 6, 7, 11 and 12; no soak loop here), the parked knob values per module and kit (case 13), the send cell and the page row that come back with a reload
+ * (`modules/core/services/fx/tests/contract.rs` `a_reloaded_effect_gets_its_send_cell_and_page_row_back`), and that no load or unload writes a setting (cases 3 and 7 compare the settings).
  *
  * Test 1 (master route, `test/sine` on the track, a note held 600 emulated ms per capture; the levels are peaks of the left and right channels over the span 250 .. 700 blocks after the trigger):
  * - the level with the effect is `wet`; after `UNLOAD` it is `dry` and `dry / wet` is 2 within 5% (the gain 0.5: the row is gone, the chain passes the signal); after `LOAD` the level is `wet` again within 3%
@@ -73,7 +75,7 @@ const peakOf = (xs: Float32Array, from: number, to: number): number => {
 type Op = 'reload' | 'unload' | 'load';
 
 /** One live job on `file`, then what every job leaves (see the header). `counted` is whether the `reloads` counter moves (a load and a reload do, an unload moves `unloads` only). */
-async function job(rt: TestRuntime, plan: RuntimePlan, op: Op, file: string, why: string, epoch: number): Promise<void> {
+async function job(rt: TestRuntime, plan: RuntimePlan, op: Op, file: string, why: string, epoch: number, send: 0 | 1): Promise<void> {
   const before = await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS);
   const end = await (op === 'reload' ? rt.dk.reloadAndWait(file) : op === 'unload' ? rt.dk.unloadAndWait(file) : rt.dk.loadAndWait(file));
   expect(end, `${why}: ${op} of ${file}`).toEqual({ result: 0, unloaded: op !== 'load' });
@@ -82,6 +84,8 @@ async function job(rt: TestRuntime, plan: RuntimePlan, op: Op, file: string, why
   expect(await epochOf(rt), `${why}: a boot happened`).toBe(epoch);
   expect(await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS), `${why}: the reloads counter`).toBe(before + (op === 'unload' ? 0 : 1));
   expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
+  const cap = await rt.dk.capacity();
+  expect({ fx: cap['FX_SLOTS']?.used, send: cap['SEND_SLOTS']?.used }, `${why}: FX_SLOTS and SEND_SLOTS in use`).toEqual(op === 'unload' ? { fx: 0, send: 0 } : { fx: 1, send });
 }
 
 async function prepare(rt: TestRuntime, name: string, fxId: string) {
@@ -122,11 +126,11 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
 
   const wet = await level('wet');
   expect(wet, `the effect passes the machine (peak ${wet.toFixed(4)})`).toBeGreaterThan(0.01);
-  await job(rt, plan, 'unload', MASTER_PATH, 'unload', epoch);
+  await job(rt, plan, 'unload', MASTER_PATH, 'unload', epoch, 0);
   const dry = await level('dry');
   expect(dry / wet, `the machine alone is twice the level of the 0.5 gain (dry ${dry.toFixed(4)}, wet ${wet.toFixed(4)})`).toBeGreaterThan(1.9);
   expect(dry / wet).toBeLessThan(2.1);
-  await job(rt, plan, 'load', MASTER_PATH, 'load', epoch);
+  await job(rt, plan, 'load', MASTER_PATH, 'load', epoch, 0);
   const wet2 = await level('wet-again');
   expect(Math.abs(wet2 / wet - 1), `the level after the load (${wet2.toFixed(4)}) is the level before (${wet.toFixed(4)})`).toBeLessThan(0.03);
 
@@ -153,7 +157,7 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
       await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
       await waitClock(rt.clock, 400);
       mark.start = (await frames(rt.session)) - trigger;
-      await job(rt, plan, 'reload', MASTER_PATH, 'reload with a note held', epoch);
+      await job(rt, plan, 'reload', MASTER_PATH, 'reload with a note held', epoch, 0);
       mark.end = (await frames(rt.session)) - trigger;
       await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
       await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
@@ -171,8 +175,8 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
   expect(Math.abs(after / half - 1), `the level after the reload (${after.toFixed(4)}) is the level before (${half.toFixed(4)}): the knob value survived`).toBeLessThan(0.05);
 
   // an unload and a load keep it too (no kit was loaded in between)
-  await job(rt, plan, 'unload', MASTER_PATH, 'unload with the knob turned', epoch);
-  await job(rt, plan, 'load', MASTER_PATH, 'load with the knob turned', epoch);
+  await job(rt, plan, 'unload', MASTER_PATH, 'unload with the knob turned', epoch, 0);
+  await job(rt, plan, 'load', MASTER_PATH, 'load with the knob turned', epoch, 0);
   await rt.ui.wait({ ms: 200, why: 'the UI loop sends the knob to the new DSP row (no observable state of the transfer)' });
   const half2 = await level('half-again');
   expect(Math.abs(half2 / half - 1), `the level after the unload and the load (${half2.toFixed(4)}) is the level before (${half.toFixed(4)})`).toBeLessThan(0.05);
@@ -181,13 +185,13 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
   await effectPage(rt);
   await rt.ui.wait({ ms: 400, why: 'the effect page is drawn (no observable state of the redraw)' });
   const shown = await stableFrameHash(rt);
-  await job(rt, plan, 'unload', MASTER_PATH, 'unload with the effect page open', epoch);
+  await job(rt, plan, 'unload', MASTER_PATH, 'unload with the effect page open', epoch, 0);
   await rt.ui.wait({ ms: 400, why: 'the view redraws after the unload (no observable state of the redraw)' });
   const emptied = await stableFrameHash(rt);
   record(artifacts, 'page-open-unload', { shown, emptied });
   await rt.session.expectNoFault('the effect page open during an unload');
   await mainPage(rt);
-  await job(rt, plan, 'load', MASTER_PATH, 'load after the page was open', epoch);
+  await job(rt, plan, 'load', MASTER_PATH, 'load after the page was open', epoch, 0);
   await effectPage(rt);
   await rt.ui.wait({ ms: 400, why: 'the effect page is drawn (no observable state of the redraw)' });
   expect(await stableFrameHash(rt), 'the page shows the effect again after the load').toBe(shown);
@@ -235,14 +239,14 @@ async function expectFxSend(rt: TestRuntime): Promise<void> {
     return peakOf(pcm, Math.floor(250 * perBlock), Math.floor(700 * perBlock));
   };
   const withSend = await level('send-on');
-  await job(rt, plan, 'unload', SEND_PATH, 'send effect unload', epoch);
+  await job(rt, plan, 'unload', SEND_PATH, 'send effect unload', epoch, 1);
   const dry = await level('send-unloaded');
   expect(withSend / dry, `the send bus returns audio on top of the dry voice (${withSend.toFixed(4)} against ${dry.toFixed(4)} without the effect)`).toBeGreaterThan(1.05);
-  await job(rt, plan, 'load', SEND_PATH, 'send effect load', epoch);
+  await job(rt, plan, 'load', SEND_PATH, 'send effect load', epoch, 1);
   await rt.ui.wait({ ms: 300, why: 'the amount goes to the new DSP row (no observable state of the transfer)' });
   const back = await level('send-loaded');
   expect(Math.abs(back / withSend - 1), `the return is back after the load (${back.toFixed(4)} against ${withSend.toFixed(4)})`).toBeLessThan(0.05);
-  await job(rt, plan, 'reload', SEND_PATH, 'send effect reload', epoch);
+  await job(rt, plan, 'reload', SEND_PATH, 'send effect reload', epoch, 1);
   await rt.ui.wait({ ms: 300, why: 'the amount goes to the new DSP row (no observable state of the transfer)' });
   const reloaded = await level('send-reloaded');
   expect(Math.abs(reloaded / withSend - 1), `the return after the reload (${reloaded.toFixed(4)} against ${withSend.toFixed(4)})`).toBeLessThan(0.05);
