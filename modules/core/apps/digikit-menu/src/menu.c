@@ -104,8 +104,8 @@ static dk_ui_menu *g_main, *g_about, *g_mem, *g_modules, *g_info;
 static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first open */
 
 /* The settings menu of each loaded module that has a menu function, by the module's index in dkrt_module order. Each is built the first
-   time the user opens it and kept: a module that has a menu function is never unloaded or reloaded at run time (the runtime refuses with E_RELOAD_MENUS), so the module's code and the
-   ctx it passes stay valid. The index of a module changes when another module is unloaded, so the cache is dropped then (panel_settings). */
+   time the user opens it and kept. The page holds no row of the module once it is left (the module's menu function runs only while the page is open), so this menu keeps no pointer into the module's code;
+   a menu object that the module builds itself (dk_ui_menu_new in its menu function) is counted by core/ui (dkrt_menu_built) and the runtime refuses to unload or reload that module (E_RELOAD_MENUS). The index of a module changes when another module is unloaded, so the cache is dropped then (panel_settings). */
 #define MAX_SET 16
 #define NAME_ROW 32 /* a module name (31 characters at most) without its author */
 /* Calls the module's menu function (dk_module.menu) at address a (DkrtModule.menu) with the module's ctx (DkrtModule.ctx) and the menu to fill: menu(ctx, menu).
@@ -115,7 +115,7 @@ static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first op
     ((void (*)(void *, dk_ui_menu *))(uintptr_t)(a))((void *)(uintptr_t)(c), (m))
 #endif
 /* The cache slot of a module's settings menu is named by the module's store path (g_set_path), not by its index in dkrt_module order, which moves when
-   another module is unloaded. A module that has menus cannot be unloaded (E_RELOAD_MENUS), so a slot stays valid. A menu is never freed: a slot is built once. */
+   another module is unloaded. A menu is never freed: a slot is built once. */
 static dk_ui_menu *g_set[MAX_SET];
 static uint8_t g_set_path[MAX_SET][64];
 static uint8_t g_set_open

@@ -213,12 +213,6 @@ void dkrt_live_state(DkrtLive *out)
     out->result = fk.live_phase == 2 ? fk.live_job_result[fk.live_cur] : 0;
 }
 
-void dkrt_menu_built(uintptr_t code, uintptr_t data)
-{
-    (void)code;
-    (void)data;
-}
-
 void dkrt_diag(DkrtDiag *out)
 {
     memset(out, 0, sizeof *out);

@@ -46,7 +46,7 @@ pub struct Facts {
     pub upload_open: bool,
     /// A card transfer or a store job is in flight.
     pub card_busy: bool,
-    /// A menu object was built for the module (`dkrt_menu_built`: it called `dk_ui_menu_new`, or the DIGIKIT menu built the page of its settings menu; the DIGIKIT menu's own menus count for no content module): the menu keeps
+    /// A menu object was built for the module (`dkrt_menu_built`: it called `dk_ui_menu_new`; the DIGIKIT menu's own menus, its settings pages among them, count for no content module): the menu keeps
     /// pointers into the module's code and data.
     pub menus: bool,
 }
