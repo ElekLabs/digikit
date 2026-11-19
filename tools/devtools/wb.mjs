@@ -18,6 +18,7 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
 //     node tools/devtools/wb.mjs [--format json|text] addrmap lookup ADDR... | module analyse DKM DKO | profile report FILE | profile record --seconds N --out FILE [--cpu cf|sharc]
 //
+//     node tools/devtools/wb.mjs profile calibrate fit --device D.json --model E.json --out cal.json | profile calibrate report cal.json   (offline; wb_prof.mjs)
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] profile spans [--start|--stop|--reset] [--out FILE]   (a device command: reads the runtime span counters; --start resets them, then starts)
 //
 // The `--format` line above is the offline group (no device, no dkmidi): names for addresses, module DSP analysis and profiles, through dkprof.wasm (`mise run wasm:dkprof`).
@@ -91,7 +92,7 @@ const opts = {
   ret: false,
 };
 // the offline group takes these several times
-const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse']);
+const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model']);
 const OFFLINE = ['addrmap', 'module', 'profile'];
 const words = [];
 for (let i = 0; i < args.length; i++) {
@@ -110,6 +111,11 @@ for (let i = 0; i < args.length; i++) {
     a === '--library' ||
     [
       '--format',
+      '--model',
+      '--block-cycles',
+      '--model-id',
+      '--calibration',
+      '--model-profile',
       '--map',
       '--image',
       '--loads',
@@ -127,6 +133,8 @@ for (let i = 0; i < args.length; i++) {
     const key = a.slice(2);
     if (REPEATED.has(key)) (opts[key] ??= []).push(args[++i]);
     else opts[key] = args[++i];
+    // `profile calibrate fit` takes --device FILE several times (the other commands: one device id)
+    if (key === 'device') (opts['device-files'] ??= []).push(opts[key]);
   } else if (a === '--ret') opts.ret = true;
   else if (a === '--emu' || a === '--restart' || a === '--reload') opts[a.slice(2)] = true;
   else if (a === '--since-boot') opts['since-boot'] = true;

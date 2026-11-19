@@ -23,6 +23,12 @@ pub struct Run {
     pub runtime_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub module_sha256: Vec<String>,
+    /// The calibration case this run measured (`shot-note60`, ...): a device run and its model run share it ([`crate::calibrate`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub case_id: Option<String>,
+    /// Hash of the input of the case (project, notes, sample), so two runs of one case id are known to have played the same thing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_revision: Option<String>,
     /// The emulator binary or device build that made the counters.

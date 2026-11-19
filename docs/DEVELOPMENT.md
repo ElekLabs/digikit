@@ -244,7 +244,7 @@ Core library store (`verify_build cores`, `tools/devtools/store.py`, shared with
 Owner hashes of the runtime object (`patchkit owners`, `objdiff --owners`, `modules/core/runtime/owners.toml`): [TESTING.md](TESTING.md#owner-hashes-patchkit-owners).
 Usage of the SDK-surface coverage (`patchkit imports`, `patchkit coverage`, `patchkit:sdk-coverage`): [TESTING.md](TESTING.md#sdk-surface-coverage).
 Usage of the module DSP analysis (`wb module analyse`): [packages/dksharc/README.md](../packages/dksharc/README.md#usage).
-Usage of profiles (`wb profile report`, `wb profile record`, the `dk.profile/1` artifact): [INSTRUMENTATION.md](INSTRUMENTATION.md#profiles).
+Usage of profiles (`wb profile report`, `wb profile record`, the `dk.profile/1` artifact, `wb profile calibrate`: [Calibration](INSTRUMENTATION.md#calibration-wb-profile-calibrate)): [INSTRUMENTATION.md](INSTRUMENTATION.md#profiles).
 
 ### ColdFire UI candidate review
 
