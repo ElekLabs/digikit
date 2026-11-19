@@ -401,6 +401,9 @@ fn clean() -> Clean {
         *dsp::ds() = core::mem::zeroed();
         dsp::init_once();
         CALLED_NEED = [0; NEEDS_LEN];
+        // the link script is a static: a test with no DSP part never calls `script_link`, and would see the strict tick drop of the initial value or the state of
+        // whichever test ran before it
+        crate::cleanup_tests::lenient_tick_drop();
     }
     Clean(g)
 }
