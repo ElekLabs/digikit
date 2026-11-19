@@ -5,6 +5,8 @@ import { REDRAW } from '@digi/regression/runtime/fx-live.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { word } from '@digi/regression/runtime/fx-live.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
 
 /**
@@ -41,15 +43,31 @@ async function openModuleSettings(rt: TestRuntime): Promise<void> {
   for (let i = 0; i < 6; i++) await tap('NO'); // back out of every menu
 }
 
+/** The menu objects the runtime counts for all module records (`DKRT_MENU_OBJS`, one byte per record, 8 records): only `test/entry-demo` builds any, so the sum is its count. */
+async function menuObjects(rt: TestRuntime, symbol: number): Promise<number> {
+  let n = 0;
+  for (let i = 0; i < 2; i++) {
+    const w = await word(rt.session, symbol + 4 * i);
+    n += (w >>> 24) + ((w >>> 16) & 0xff) + ((w >>> 8) & 0xff) + (w & 0xff);
+  }
+  return n;
+}
+
 async function expectMenuRefusal(rt: TestRuntime): Promise<void> {
   const artifacts = liveArtifacts(rt.session, 'reload-menus');
   const path = moduleStorePath(rt.session.options.device as 'dt2' | 'dn2', MENU_ID);
   await cliInstall(rt.session, MENU_ID, artifacts, 300_000, [DEBUG_MODULE]);
+  const objs = planSymbol(await prepareRuntimePlan(rt.session, artifacts, ['DKRT_MENU_OBJS']), 'DKRT_MENU_OBJS');
   const before = (await rt.dk.modules()).map((m) => m.name).sort();
   expect(before, 'the menu module is loaded').toContain(MENU_ID);
-  // no menu object yet: a reload goes through
+  // no menu object yet (the count is the proof; a reload would also reset it): a reload goes through
+  expect(await menuObjects(rt, objs), 'no menu object before the settings page is opened').toBe(0);
   expect(await rt.dk.reloadAndWait(path), 'before the settings page is opened').toEqual({ result: 0, unloaded: true });
   await openModuleSettings(rt);
+  expect(
+    await menuObjects(rt, objs),
+    'the module built a menu object when its settings page opened: if this is 0 the key path of openModuleSettings is misaligned (take a dk:dev screenshot of each step)',
+  ).toBeGreaterThan(0);
   const counters = (await rt.dk.reloadState()).step;
   expect(await rt.dk.unloadAndWait(path), 'after the settings page was built: UNLOAD').toEqual({ result: E_RELOAD_MENUS, unloaded: false });
   expect(await rt.dk.reloadAndWait(path), 'after the settings page was built: RELOAD').toEqual({ result: E_RELOAD_MENUS, unloaded: false });
