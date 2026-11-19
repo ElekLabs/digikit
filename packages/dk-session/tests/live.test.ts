@@ -21,6 +21,7 @@ class FakeLive {
   queue: Uint8Array[] = [];
   polls = 0;
   running = false;
+  op = 0;
   busyPolls: number;
   result: number;
   unloaded: number;
@@ -40,12 +41,13 @@ class FakeLive {
       const done = this.running && this.polls > this.busyPolls;
       const phase = done ? 2 : this.running ? 1 : 0;
       return void this.queue.push(
-        reply(cmd, seq, 0, [phase, ...i32(done ? this.result : 0), done ? 6 : 1, done ? this.unloaded : 0]),
+        reply(cmd, seq, 0, [phase, ...i32(done ? this.result : 0), done ? 6 : 1, done ? this.unloaded : 0, this.op]),
       );
     }
     this.seen.push({ cmd, path: new TextDecoder().decode(body.subarray(0, body.length - 1)) });
     if (body[body.length - 1] !== 0) return void this.queue.push(reply(cmd, seq, -60));
     if (this.queueStatus === 0) {
+      this.op = cmd === CMD.LOAD ? 1 : cmd === CMD.UNLOAD ? 2 : 3;
       this.running = true;
       this.polls = 0;
     }
@@ -72,6 +74,11 @@ test('each operation sends its command with the NUL-terminated path, then asks t
     assert.deepEqual(dev.seen, [{ cmd, path: 'modules/a.dkm' }], op);
     assert.deepEqual(end, { result: 0, unloaded: op !== 'loadAndWait' }, op);
     assert.equal(dev.polls, 3, `${op}: two asks while it runs, one that sees it finished`);
+    assert.equal(
+      (await s.reloadState()).op,
+      op === 'loadAndWait' ? 1 : op === 'unloadAndWait' ? 2 : 3,
+      `${op}: the state says which job it is`,
+    );
   }
 });
 

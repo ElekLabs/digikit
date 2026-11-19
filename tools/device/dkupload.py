@@ -591,7 +591,7 @@ class Uploader:
 
     def reload_state(self) -> dict[str, int]:
         """RELOAD_STATE: the state of the live job, whichever it is (a load, an unload or a reload): `phase` (0 none yet, 1 queued or running, 2 finished), `result` (0 is ok;
-        else the refusal before anything changed, or the failure after the old module was torn down), `step`, and `unloaded` (1: the module was torn down, so it is not loaded
+        else the refusal before anything changed, or the failure after the old module was torn down), `step`, `op` (1 load, 2 unload, 3 reload; 0 from a runtime that does not say) and `unloaded` (1: the module was torn down, so it is not loaded
         unless the result is 0 and the job loaded; 0: it still runs, or a load never had one)."""
         b = self._ok(dkproto.CMD["RELOAD_STATE"], "reload state")
         return {
@@ -599,6 +599,7 @@ class Uploader:
             "result": struct.unpack_from(">i", b, 1)[0],
             "step": b[5],
             "unloaded": b[6],
+            "op": b[7] if len(b) > 7 else 0,
         }
 
     def _wait_live(

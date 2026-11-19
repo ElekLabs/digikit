@@ -268,7 +268,7 @@ placeholder, the machine row reads MISSING) lasts from the teardown to the new r
 
 The same job loads and unloads a content module without a boot (docs/plans/extension-model.md E5c; capability bit `LIVE`). `LOAD` (0x08) takes the store path of a `.dkm` that is on the card and that
 no loaded module came from; `UNLOAD` (0x09) takes the path of a loaded module and leaves its file on the card. Both take the body and give the reply of `RELOAD`, and `RELOAD_STATE` (0x07) is the
-progress of whichever job runs (steps: load check, load, DSP part, done; unload check, quiesce, unload, done). A load answers `E_LOADED` for a path that is loaded, a service file is `E_FORMAT`, and a
+progress of whichever job runs (its last byte `op`: 1 load, 2 unload, 3 reload) (steps: load check, load, DSP part, done; unload check, quiesce, unload, done). A load answers `E_LOADED` for a path that is loaded, a service file is `E_FORMAT`, and a
 module needs a free selection index (`E_SEL_COUNT` at 8). A finished unload has `result` 0 and `unloaded` 1; after a load `unloaded` is 0. Clients: `DkSession.loadAndWait(path)` and `unloadAndWait(path)`,
 `Uploader.load_and_wait(path, step)` and `unload_and_wait(path, step)` (`tools/device/dkupload.py`), `wb transfer load PATH...` and `wb transfer unload PATH...` (exit 1 when a path was refused or failed), and, from
 the DIGIKIT menu, `dkrt_live(op, path)` with `dkrt_live_state(out)`.
@@ -276,7 +276,7 @@ the DIGIKIT menu, `dkrt_live(op, path)` with `dkrt_live_state(out)`.
 Refusals, in the order of the reload list above, with the old state untouched: safe mode, the DSP retained, the transport, an open upload and card operations apply to all three; the module's menus
 (`E_RELOAD_MENUS`) and the services' refusals (`E_RELOAD_ROUTED`: an effect on a route) to an unload and a reload; the file checks and the plan over the live set (`E_MISSING` for a service that is not loaded:
 the service loads at the next boot) to a load and a reload. The `E_RELOAD_*` codes keep their names and also answer an unload and a load. An unload of a module that a track uses leaves a gap row, which plays the first
-stock machine's sound, as after "untick and restart". The boot record then says `UNLOADED` (state 8) for that selection index; a later load of the same file takes the index its file name had at the boot (else a free one) and
+stock machine's sound, as after "untick and restart". The boot record then says `UNLOADED` (state 8) for that selection index; a later load of the same file takes the index its path had at the boot (else a free one that no boot path owns, else a new one) and
 the numbers it had.
 
 Host tests: the job over a scripted system and the loader's live load and unload (`pnpm nx:pilot run core/runtime:rust-tests`), the selection index rule (`boot::pick_index`), a real packed module loaded, unloaded and loaded

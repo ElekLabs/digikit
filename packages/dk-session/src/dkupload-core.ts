@@ -1348,16 +1348,17 @@ export class DkSession {
   }
   /**
    * RELOAD_STATE: the state of the live job, whichever it is (a load, an unload or a reload). `phase` 0 (no job yet), 1 (queued or running) or 2 (finished), the `result` (0 is ok;
-   * else the refusal before anything changed, or the failure after the old module was torn down), the job's `step`, and `unloaded`: true when the module was torn down, so it is not
+   * else the refusal before anything changed, or the failure after the old module was torn down), the job's `step`, `op` (1 load, 2 unload, 3 reload; 0 from a runtime that does not say) and `unloaded`: true when the module was torn down, so it is not
    * loaded unless the result is 0 and the job loaded; false when it still runs (or, for a load, was never there).
    */
-  async reloadState(): Promise<{ phase: number; result: number; step: number; unloaded: boolean }> {
+  async reloadState(): Promise<{ phase: number; result: number; step: number; unloaded: boolean; op: number }> {
     const b = await this.ok(GCMD.RELOAD_STATE, 'reload state');
     return {
       phase: b[0]!,
       result: new DataView(b.buffer, b.byteOffset, b.byteLength).getInt32(1),
       step: b[5]!,
       unloaded: b[6] === 1,
+      op: b[7] ?? 0,
     };
   }
   /** Queue with `queue`, then `reloadState` on the session clock until the job ends: `{ result, unloaded }` (see `reloadState`). A job that does not end within `withinMs` rejects. */

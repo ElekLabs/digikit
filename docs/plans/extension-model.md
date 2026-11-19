@@ -741,8 +741,8 @@ What:
 3. Loader: `Phase::Reload` becomes `Phase::Live` and accepts `Slot::Free` as well as `Slot::Module`. `live_check_load` runs `check_file(path, Slot::Free)` and the planner
    over the live set with the file at its selection index (`live_caps(own = (0,0))`); `live_load` keeps the file's header table at that index, runs `settle` over the
    live set plus the file and loads into the first free record. `pick_record` answers `E_LOADED` for a name that is loaded.
-4. Selection index of a load (`boot::pick_index`): the index the file name had at this boot, if no module lives there; else the first index with no live module; else a new
-   index (`count + 1`); `E_SEL_COUNT` at `SEL_MAX`. The boot record (`states`, `results`, `needs`), `BOOT_NAME`, `tables`, `accepted` and `sel_of_rec` use that index, as at the boot.
+4. Selection index of a load (`boot::pick_index`): the index the full path had at this boot, if no module lives there (the boot's load loop writes a 32-bit hash of each selection path once, `BOOT_PATH`; a live load never writes it, so a module gets its index back after another module used a new one); else the first index below the count that no module lives at and no boot path owns; else a new
+   index (`count + 1`); `E_SEL_COUNT` at `SEL_MAX`. `BOOT_NAME` stays the display name. The boot record (`states`, `results`, `needs`), `BOOT_NAME`, `tables`, `accepted` and `sel_of_rec` use that index, as at the boot. A load that fails puts the boot record row and the count back as they were (UNLOADED stays UNLOADED; an unused index is SELECTED again).
 5. Unload end state: the record is free, `accepted[k]` and `sel_of_rec[rec]` are cleared, `loaded` drops, the state is the new `STATE_UNLOADED` (8, "taken down at run time"), the services' `live_done`
    ran. The sticky numbers stay, so a later load of the same file gets the same numbers. Unload runs no settle. A load that fails ends as it began: the index is free again.
 6. Refusals, one order (`reload::refusal`):
@@ -760,9 +760,9 @@ What:
    `live_done` runs at the end of every job that passed its checks. A multi-service module (for example a machine with sample pool entries) needs no service list: each
    lifecycle step goes to all service rows in table order, and the teardown runs in phases (`dsp_clear` of all, `fini`, `remove` of all in reverse, `dsp_release` of all).
    One host case covers the edge: `dsp_clear` runs on every service even when one fails, and the abort that follows leaves every service's rows as they were.
-9. Protocol: `CMD_LOAD` (0x08) and `CMD_UNLOAD` (0x09) take the body and give the reply of `CMD_RELOAD`; `RELOAD_STATE` serves all three (capability bit `LIVE`, 19). C calls for the
+9. Protocol: `CMD_LOAD` (0x08) and `CMD_UNLOAD` (0x09) take the body and give the reply of `CMD_RELOAD`; `RELOAD_STATE` serves all three (capability bit `LIVE`, 19) and ends with a byte `op` (1 load, 2 unload, 3 reload; an old runtime sends 7 bytes). C calls for the
    menu: `dkrt_live(op, path)` (queue a job on the same `Job::queue`) and `dkrt_live_state(out)`.
-10. Clients: `dk-session` (`DkUpload.load`, `unload`, `loadAndWait`, `unloadAndWait`), the Rust uploader, `dkproto`/`dkupload` (Python), `wb transfer load|unload PATH`.
+10. Clients: `DkSession.load`, `unload`, `loadAndWait`, `unloadAndWait` (TypeScript, with `liveModules` in `dktransfer.ts`), `Uploader.load`, `unload`, `load_and_wait`, `unload_and_wait` (`tools/device/dkupload.py`), `wb transfer load|unload PATH`. The Rust `dkupload` crate has no uploader method for reload either: it carries the generated command and capability constants only.
 
 PR 1 (E5c-1) is items 1 to 10 without the menu. PR 2 (E5c-2): `menu.c` `apply()` keeps the save, queues the changed rows through `dkrt_live` (unloads first), polls with the per-pass
 callback and restarts directly only for a route change or to leave safe mode. The user sees "APPLY n CHANGES?"; rows read LOADING; a refusal or failure shows "<NAME> NOT APPLIED" and

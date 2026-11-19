@@ -95,7 +95,7 @@ export const ROWS: Record<string, Row> = {
     reason: 'a SELECT result, and a live load that finds no free selection index',
     covered: [
       { file: CAP_RS, test: 'E_SEL_COUNT' },
-      { file: 'modules/core/runtime/src/rs/src/boot.rs', test: 'a_live_load_takes_the_index_its_file_had' },
+      { file: 'modules/core/runtime/src/rs/src/boot.rs', test: 'a_live_load_takes_the_index_its_path_had_at_the_boot' },
     ],
   },
   E_SEL_WRITE: { kind: 'open', reason: 'the block write of the selection record fails: needs a card that refuses writes' },

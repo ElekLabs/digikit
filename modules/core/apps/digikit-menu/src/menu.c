@@ -320,7 +320,7 @@ static const char *const fit_label[17] = {
 };
 
 /* The text of a module's state and result at boot (the runtime's DkrtBootInfo.states, .results, .needs and .detail of that selection index):
-   OK, LOADING (the DSP part is still going), REFUSED <reason> (the boot plan refused it; E_PLAN_FIT names the resource that is full), NEEDS <module>
+   OK, LOADING (the DSP part is still going), UNLOADED (taken down at run time), REFUSED <reason> (the boot plan refused it; E_PLAN_FIT names the resource that is full), NEEDS <module>
    when the load failed because a module it imports from is not in the image, or the code's text. A refusal has no "- " lead: the row is 23 characters. */
 static void result_text(txt *t, uint32_t state, int32_t code, const uint8_t *needs,
                         const uint32_t *detail)
@@ -333,6 +333,11 @@ static void result_text(txt *t, uint32_t state, int32_t code, const uint8_t *nee
         } else {
             status_text(t, code);
         }
+        return;
+    }
+    if (state == DKRT_STATE_UNLOADED) {
+        t_s(t,
+            "- UNLOADED"); /* taken down at run time: its result word is 0, which must not read OK */
         return;
     }
     t_s(t, "- ");

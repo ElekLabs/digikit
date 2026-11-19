@@ -119,7 +119,7 @@ pub trait Ops {
     unsafe fn load(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32;
     /// The end state of an unload: the index is free again (`Loader::retire_index`) and the boot record says UNLOADED (`boot::unloaded`).
     unsafe fn unloaded(&mut self, k: usize);
-    /// The end state of a load that failed: the index is free again, as before the load.
+    /// The end state of a load that failed: the index is free again and its boot record row is as before the load (`boot::restore_live`).
     unsafe fn retire(&mut self, k: usize);
     /// The DSP part of the new file: `None` while it goes on, else its result (the boot record's `results[k]`).
     unsafe fn dsp_result(&mut self, k: usize) -> Option<i32>;
@@ -522,6 +522,7 @@ impl Ops for RealOps {
     }
     unsafe fn retire(&mut self, k: usize) {
         crate::loader::retire_index(k);
+        crate::boot::restore_live(k);
     }
     unsafe fn dsp_result(&mut self, k: usize) -> Option<i32> {
         let b = crate::boot::info();

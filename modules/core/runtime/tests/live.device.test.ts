@@ -4,7 +4,7 @@ import { waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { captureNote, frames, pickSine, readFloatWav, word } from '@digi/regression/runtime/fx-live.ts';
+import { captureNote, frames, pickSine, readFloatWav, runFrames, word } from '@digi/regression/runtime/fx-live.ts';
 import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
@@ -21,7 +21,7 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  *
  * Test 1 (both devices, code-only modules, a boot with the debug module alone):
  * - (e) `test/sine` is on the card but the machines service is not loaded (no module of the boot needed it): `LOAD` ends with `E_MISSING`, nothing is loaded and nothing is counted.
- * - (a) `test/lfo-shape` is on the card, not in the boot selection: `LOAD` loads it (`wb transfer load` the first time), LOADS says ACTIVE at a new selection index with its file name,
+ * - (a) `test/cf-demo` (needs no service) is on the card, not in the boot selection: `LOAD` loads it (`wb transfer load` the first time), LOADS says ACTIVE at a new selection index with its file name,
  *   MODULES lists it, the `reloads` counter went up. A second `LOAD` of the same path is `E_LOADED` at the queue.
  * - `UNLOAD` takes it down (`wb transfer unload`): not in MODULES, LOADS says UNLOADED at the same index, its file is still on the card. `LOAD` again gives the same index and ACTIVE.
  *
@@ -29,14 +29,16 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  * selection" for the rest):
  * - (b) the machine plays a note with a pitch report (the pitch from the upward zero crossings of the left channel, and the peak); `UNLOAD` and `LOAD` of it; the same note plays
  *   at the same pitch and level again, the machine type keeps its number and its voice row.
- * - (c) `UNLOAD` with a note held over it ends with no fault; the held voice stops being the module's (the module is not in MODULES and its voice row is free); the next note after
+ * - (c) `UNLOAD` with a note held over it ends with no fault; the held voice goes silent (PCM windows after the unload below 1% of the level before, against a control capture of the same held note without an unload; AMP HOLD is NOTE, FX sends 0); the module is not in MODULES; the next note after
  *   the load is audible.
  * - (d) refusals: while the transport plays `UNLOAD` and `LOAD` are refused with `E_RELOAD_PLAYING`, the module is as it was and nothing is counted.
  * - the soak: unload and load of the machine, 5 cycles in the gate and 20 in the full tier (`DIGIKIT_TIER=full`), the capacity counts unchanged each cycle.
  *
  * Run only with the go of the owner (docs/plans/extension-model.md, "Device proof"). The sample-pool case is in the tests of the module that uses the pool (DT2).
  */
-const SHAPE_PATH = 'modules/lfo-shape.dkm';
+/** A module that needs no service and builds no menu (code, data and bss; nothing calls it): the code-only case needs no service of the boot. */
+const SHAPE_PATH = 'modules/cf-demo.dkm';
+const SHAPE_ID = 'test/cf-demo';
 const SINE_PATH = 'modules/sine.dkm';
 const E_RELOAD_PLAYING = loadCode('E_RELOAD_PLAYING');
 const E_MISSING = loadCode('E_MISSING');
@@ -121,7 +123,7 @@ async function expectLiveCodeOnly(rt: TestRuntime): Promise<void> {
   const artifacts = liveArtifacts(rt.session, 'live-code');
   await cliInstall(rt.session, DEBUG_MODULE, artifacts, 300_000);
   // the files go on the card (with the services they need), the selection stays the debug module alone
-  await transferCommand(rt.session, ['install', 'test/lfo-shape', 'test/sine'], path.join(artifacts, 'install-files.log'), 300_000);
+  await transferCommand(rt.session, ['install', SHAPE_ID, 'test/sine'], path.join(artifacts, 'install-files.log'), 300_000);
   const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT']);
   const epoch = await epochOf(rt);
   const start = await rt.dk.capacity();
@@ -143,7 +145,7 @@ async function expectLiveCodeOnly(rt: TestRuntime): Promise<void> {
   const shape = await loadsEntry(rt, SHAPE_PATH);
   expect(shape?.state, '(a) LOADS says ACTIVE').toBe('ACTIVE');
   expect(shape?.index, '(a) the load took a new selection index').toBe(rows.length);
-  expect((await moduleRows(rt)).map((m) => m.name), '(a) MODULES lists it').toEqual(['test/lfo-shape']);
+  expect((await moduleRows(rt)).map((m) => m.name), '(a) MODULES lists it').toEqual([SHAPE_ID]);
   await expect(rt.dk.loadAndWait(SHAPE_PATH), '(a) a second load of the same path').rejects.toMatchObject({ status: 'E_LOADED' });
 
   // the unload (CLI), then the load again: the same index
@@ -222,29 +224,79 @@ async function expectLiveMachine(rt: TestRuntime): Promise<void> {
   await sendCc(rt, MIDI_CHANNEL, AMP_CC[device].decay, 64);
   for (const cc of SEND_CC[device]) await sendCc(rt, MIDI_CHANNEL, cc, 0);
 
-  // (b) the pitch report before and after an unload and a load
+  // (b) the pitch report before and after an unload and a load; the module keeps its selection index through both
+  const bootIndex = (await loadsEntry(rt, SINE_PATH))?.index;
+  expect(bootIndex, '(b) the machine has a selection index from the boot').toBeGreaterThanOrEqual(0);
   const first = await notePitch(rt, artifacts, 'before');
   expect(first.peak, `(b) the machine is audible (peak ${first.peak.toFixed(4)})`).toBeGreaterThan(0.01);
   await liveChecked(rt, plan, 'unload', SINE_PATH, '(b) unload', epoch);
   expect((await moduleRows(rt)).map((m) => m.name), '(b) the machine is gone').toEqual([]);
-  expect(await loadsEntry(rt, SINE_PATH), '(b) LOADS says UNLOADED').toMatchObject({ state: 'UNLOADED' });
+  expect(await loadsEntry(rt, SINE_PATH), '(b) LOADS says UNLOADED').toMatchObject({ state: 'UNLOADED', index: bootIndex });
   await liveChecked(rt, plan, 'load', SINE_PATH, '(b) load', epoch);
   const again = (await moduleRows(rt)).find((m) => m.name === 'test/sine')!;
   expect(again.types, '(b) the machine type keeps its number (a track that names it plays it again)').toEqual(sine.types);
   expect(again.rows, '(b) the voice row is the one it had').toBe(sine.rows);
-  expect(await loadsEntry(rt, SINE_PATH), '(b) LOADS says ACTIVE at the index it had').toMatchObject({ state: 'ACTIVE' });
+  expect(await loadsEntry(rt, SINE_PATH), '(b) LOADS says ACTIVE at the index it had').toMatchObject({ state: 'ACTIVE', index: bootIndex });
   const second = await notePitch(rt, artifacts, 'after');
   record(artifacts, 'pitch-report', { before: first, after: second });
   expect(Math.abs(second.hz / first.hz - 1), `(b) the pitch after the load (${second.hz.toFixed(2)} Hz) is the pitch before (${first.hz.toFixed(2)} Hz)`).toBeLessThan(0.01);
   expect(second.peak, `(b) the level after the load (${second.peak.toFixed(4)}) is the level before (${first.peak.toFixed(4)})`).toBeGreaterThan(first.peak * 0.5);
 
-  // (c) an unload with a note held over it: no fault, the voice is not the module's any more, and the next note after the load plays
-  await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
-  await waitClock(rt.clock, 300);
-  await liveChecked(rt, plan, 'unload', SINE_PATH, '(c) unload with a note held', epoch);
+  // (c) an unload with a note held over it: no fault, the held voice goes silent (its voice row is freed: a held key does not play again until a new note), a control capture of
+  // the same held note without an unload stays audible over the same span, and the next note after the load is audible. AMP HOLD is NOTE and the FX sends are 0 (set above).
+  await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+  const heldFile = path.join(artifacts, 'held.wav');
+  const mark = { start: 0, end: 0 };
+  const heldTrigger = (await frames(rt.session)) + 300;
+  await captureNote(rt.session, {
+    file: heldFile,
+    trigger: heldTrigger,
+    tag: 'unload with a note held',
+    length: CAPTURE_BLOCKS,
+    noPress: true,
+    during: async () => {
+      await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
+      await waitClock(rt.clock, 400); // the note sounds before the unload starts
+      mark.start = (await frames(rt.session)) - heldTrigger;
+      await liveChecked(rt, plan, 'unload', SINE_PATH, '(c) unload with a note held', epoch);
+      mark.end = (await frames(rt.session)) - heldTrigger;
+      await waitClock(rt.clock, 600); // the key stays down after the unload
+      await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+    },
+  });
   await rt.session.expectNoFault('(c) unload with a note held');
   expect((await moduleRows(rt)).map((m) => m.name), '(c) the machine is gone').toEqual([]);
-  await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+  const held = readFloatWav(heldFile);
+  const perBlock = held.length / CAPTURE_BLOCKS;
+  const peakBlocks = (pcm: Float32Array, a: number, b: number) => peakOf(pcm, Math.floor(a * perBlock), Math.ceil(b * perBlock));
+  const silentFrom = mark.end + 100;
+  const silentTo = silentFrom + 600; // blocks: 0.4 s of the held key after the unload
+  expect(mark.start, '(c) the unload started after the note began').toBeGreaterThan(100);
+  expect(silentTo, `(c) the recording (${CAPTURE_BLOCKS} blocks) holds the unload (${mark.start}..${mark.end}) and the silent window after it`).toBeLessThanOrEqual(CAPTURE_BLOCKS);
+  const heldBefore = peakBlocks(held, mark.start - 100, mark.start);
+  const heldAfter = peakBlocks(held, silentFrom, silentTo);
+  expect(heldBefore, `(c) the held note is audible before the unload (peak ${heldBefore.toFixed(4)})`).toBeGreaterThan(0.01);
+  // the control: the same note held for the same span with no unload stays audible over the same window
+  const controlFile = path.join(artifacts, 'held-control.wav');
+  const controlTrigger = (await frames(rt.session)) + 300;
+  await captureNote(rt.session, {
+    file: controlFile,
+    trigger: controlTrigger,
+    tag: 'held note control',
+    length: CAPTURE_BLOCKS,
+    noPress: true,
+    during: async () => {
+      await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
+      await waitClock(rt.clock, 400);
+      await runFrames(rt.session, silentTo - mark.start + 50);
+      await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+    },
+  });
+  const control = readFloatWav(controlFile);
+  const controlAfter = peakOf(control, Math.floor(silentFrom * (control.length / CAPTURE_BLOCKS)), Math.ceil(silentTo * (control.length / CAPTURE_BLOCKS)));
+  record(artifacts, 'held-unload', { start: mark.start, end: mark.end, heldBefore, heldAfter, controlAfter });
+  expect(controlAfter, `(c) the control without an unload stays audible over the same window (peak ${controlAfter.toFixed(4)})`).toBeGreaterThan(heldBefore * 0.1);
+  expect(heldAfter, `(c) the held voice is silent after the unload (peak ${heldAfter.toFixed(4)} against ${heldBefore.toFixed(4)} before)`).toBeLessThan(heldBefore * 0.01);
   await liveChecked(rt, plan, 'load', SINE_PATH, '(c) load after the held note', epoch);
   const third = await notePitch(rt, artifacts, 'after-held');
   expect(third.peak, `(c) a new note after the load is audible (peak ${third.peak.toFixed(4)})`).toBeGreaterThan(first.peak * 0.5);

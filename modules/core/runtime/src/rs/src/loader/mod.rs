@@ -471,6 +471,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         while pos < r.count as usize {
             let k = planned.order[pos] as usize;
             crate::selection::BOOT_IDX = k as u32;
+            crate::boot::note_boot_path(k, r.paths[k].as_ptr());
             self.missing = [0; NEEDS_LEN];
             let res = match planned.verdicts[k] {
                 dkrt_abi::plan::Verdict::Accepted => {

@@ -190,7 +190,7 @@ pub(crate) unsafe fn cmd_unload(seq: u32, body: *const u8, blen: usize) -> i32 {
 }
 
 /// RELOAD_STATE: `u8 phase` (0 none yet, 1 queued or running, 2 finished), `i32 result`, `u8 step`, `u8 unloaded` (1: the old module was torn down, so it is not loaded
-/// unless the result is 0 and the job loaded; 0: a refusal or an abort left it running). The state of the one live job, whichever operation it is. No body.
+/// unless the result is 0 and the job loaded; 0: a refusal or an abort left it running), `u8 op` (1 load, 2 unload, 3 reload of the last job; 0 none yet). The state of the one live job, whichever operation it is. No body.
 pub(crate) unsafe fn cmd_reload_state(seq: u32) -> i32 {
     let s = crate::reload::state();
     let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
@@ -198,7 +198,8 @@ pub(crate) unsafe fn cmd_reload_state(seq: u32) -> i32 {
     wr32(rb.add(1), s.result as u32);
     *rb.add(5) = s.step;
     *rb.add(6) = s.torn as u8;
-    reply(CMD_RELOAD_STATE, seq, OK, 7)
+    *rb.add(7) = s.op;
+    reply(CMD_RELOAD_STATE, seq, OK, 8)
 }
 
 pub(crate) unsafe fn h_reload(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
