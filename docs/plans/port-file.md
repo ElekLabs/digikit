@@ -54,7 +54,18 @@ PR1 data (done): each hook of a service in `devices/ports/*.toml` carries `len`,
 
 ## 6. Runtime work and size
 
-Port role steps; name lookup in the existing import seam (`loader/seams.rs:28-36`); tail copy from flash after the hash check; the installer takes site facts from SITES (`loader/install.rs` keeps the masked check, the `jmp.l` write, the flush and the restore); the commit step compares declared hooks with the HOOKS entries that have a port record. Size: +0.5 to +1 KiB text on about 216 KiB, under 1 KiB arena RAM. It stays in the runtime. Removed: BIND parsing in services (`fw_check`, `binds_of`). Service hooks stay raw-only.
+Port role steps; name lookup in the existing import seam (`loader/seams.rs:28-36`); tail copy from flash after the hash check; the installer takes site facts from SITES (`loader/install.rs` keeps the masked check, the `jmp.l` write, the flush and the restore); the commit step compares declared hooks with the HOOKS entries that have a port record. Size, measured on the runtime object (text 192518 bytes before, 196640 after, +4122; arena RAM: the port file's table copy and its bss, about 2 KiB with the 65 names and 22 sites):
+
+| Group | Bytes |
+| --- | --- |
+| Port provider: check (`port_check` 528), place (356), `site_check` (256), `Sha::new` and `finish` outlined (386) | 1526 |
+| Import lookup: `check_file` +524, `port_keys` 204, `Keys::name` 210, `find_name` and `find_site` 146, `parse_import` with `hex8` and `strip` about 180 | about 1260 |
+| Hooks from `SITES`: `hook_items` 340, `filter_hooks` 256 | about 600 |
+| Search by `FW`: `read_provider` 296, `plan_with_caps` +142, `table_of` +52, `has` 70 | about 560 |
+| Readers and other: `Keys::site` 262, `role_ok` 282, `image_fw_id` 198, INFO +92, `load_inner` +98 | about 930 |
+| Removed: `binds_of`, `Keys::bind`, the service `fw_check` and other bind code | about -1500 |
+
+It stays in the runtime; the growth is accepted. Cuts that were measured or estimated and not taken: a bitmask `role_ok` (+84), dropping the search by `FW` (about -560), dropping the hash check of the copied sites (about -900, unsafe). It stays in the runtime. Removed: BIND parsing in services (`fw_check`, `binds_of`). Service hooks stay raw-only.
 
 Who installs sites: the init of the port file builds the name table and the tails only. Each service's load installs its own hooks and takes the site facts from the port records. The one-owner rule of the planner and the install lifecycle do not change.
 
