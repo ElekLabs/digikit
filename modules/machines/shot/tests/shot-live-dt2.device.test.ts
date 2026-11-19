@@ -67,7 +67,7 @@ runtimeTests(
     for (const t of l) expect(t, `the tones of the sample before the unload (${l.join(' ')})`).toBeGreaterThan(AUDIBLE);
     await session.expectNoFault('unload with the voice sounding');
     expect((await dk.modules()).map((m) => m.name), 'shot is not loaded').not.toContain('digikit/shot');
-    expect((await dk.loadStates()).find((m) => m.name === 'shot.dkm'), 'LOADS says UNLOADED').toMatchObject({ state: 'UNLOADED' });
+    expect((await dk.loadStates()).find((m) => m.name === SHOT_PATH.split('/').at(-1)), 'LOADS says UNLOADED').toMatchObject({ state: 'UNLOADED' });
     const after = [440, 660].map((hz) => Math.max(tone(held.l, hz, pressedBeforeUnload + RATE / 4, held.l.length), tone(held.r, hz, pressedBeforeUnload + RATE / 4, held.l.length)));
     for (const t of after) expect(t, `the sample does not play after the unload (${after.join(' ')})`).toBeLessThan(AUDIBLE / 4);
 

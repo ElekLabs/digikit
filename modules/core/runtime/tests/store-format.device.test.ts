@@ -91,13 +91,13 @@ cardRigs(
       'a flipped byte on the card: VERIFY reports it and the module is not loaded',
       async () => {
         const good = bytes();
-        let rt: PatchedSession = await h.load('hash-good', { modules: [demo], selection: [MOD_PATH] });
+        let rt: PatchedSession = await h.load('hash-good', { modules: [demo], selection: [demo.name] });
         expect(await bootInfoLoaded(rt.session, h.plan), 'the builder\'s hash is the runtime\'s: the module loads').toMatchObject({
           count: 1,
           loaded: 1,
           safe: 0,
         });
-        check('VERIFY of the module equals the host hash', (await h.usb(rt, (dk) => dk.verify(MOD_PATH))) === fileHashHex(good));
+        check('VERIFY of the module equals the host hash', (await h.usb(rt, (dk) => dk.verify(demo.name))) === fileHashHex(good));
         // a second file, as a sample is: uploaded by the host over the protocol, verified, listed
         const sample = blob(5000, 9);
         expect(await statusOf(() => h.usb(rt, (dk) => dk.put('samples/s', sample)))).toBe(0);
@@ -115,13 +115,13 @@ cardRigs(
         };
         rt = await h.load('hash-bad', {
           base: after,
-          foreign: { [abs(MOD_PATH)]: flipped(MOD_PATH, 300), [abs('samples/s')]: flipped('samples/s', 100) },
+          foreign: { [abs(demo.name)]: flipped(demo.name, 300), [abs('samples/s')]: flipped('samples/s', 100) },
         });
         const badModule = Buffer.from(good);
         badModule.writeUInt8(badModule.readUInt8(300) ^ 0x10, 300);
         const badSample = Buffer.from(sample);
         badSample.writeUInt8(badSample.readUInt8(100) ^ 0x10, 100);
-        check('VERIFY of the module says what the card holds now', (await h.usb(rt, (dk) => dk.verify(MOD_PATH))) === fileHashHex(badModule));
+        check('VERIFY of the module says what the card holds now', (await h.usb(rt, (dk) => dk.verify(demo.name))) === fileHashHex(badModule));
         check('VERIFY of the sample says what the card holds now', (await h.usb(rt, (dk) => dk.verify('samples/s'))) === fileHashHex(badSample));
         check('and that is not the host hash', fileHashHex(badModule) !== fileHashHex(good));
         const info = await bootInfoLoaded(rt.session, h.plan);

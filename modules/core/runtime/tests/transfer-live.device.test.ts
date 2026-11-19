@@ -5,7 +5,7 @@ import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-cli.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
@@ -20,9 +20,10 @@ interface FolderResult {
 async function expectTransferLive({ session, dk }: PatchedSession): Promise<void> {
   const artifacts = liveArtifacts(session, 'transfer-live');
   const mirror = path.join(session.runDir, 'mirror');
-  const modulePath = 'modules/sine.dkm';
+  const device = session.options.device as 'dt2' | 'dn2';
+  const modulePath = moduleStorePath(device, 'test/sine');
   // the debug module is installed next to it: the log of the last boot is read at the end
-  const debugPath = 'modules/debug.dkm';
+  const debugPath = moduleStorePath(device, DEBUG_MODULE);
   const mirrored = path.join(mirror, 'digikit', modulePath);
   const mirroredHash = async () => (fs.existsSync(mirrored) ? fileHashHex(fs.readFileSync(mirrored)) : null);
 
@@ -35,7 +36,7 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   record(artifacts, 'installed-store', entries);
   const modulePaths = (files: { path: string }[]) => files.map((f) => f.path).filter((p) => !p.endsWith('.dks')).sort();
   expect(modulePaths(entries), 'upload survives the soft reset').toEqual([debugPath, modulePath].sort());
-  // the services the modules need went on the card with them, bound to the stock firmware
+  // the services the modules need went on the card with them
   const services = entries.map((e) => e.path).filter((p) => p.startsWith('services/') && p.endsWith('.dks'));
   expect(services, 'the needed services are in the store listing').not.toEqual([]);
   const entry = entries.find((e) => e.path === modulePath)!;

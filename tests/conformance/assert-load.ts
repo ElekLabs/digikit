@@ -1,4 +1,4 @@
-import { emulatorClock, waitClock } from '@digi/test-support';
+import { emulatorClock, moduleStorePathOf, waitClock, type Device } from '@digi/test-support';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileHashHex, type DkLogEvent } from '@digi/dk-session';
@@ -6,7 +6,7 @@ import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { DEBUG_MODULE, installWithDebug } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE, installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
 import { neededServices, servicePath } from '@digi/regression/runtime/service-files.ts';
 import { pollEmulated } from '@digi/regression/runtime/waits.ts';
@@ -21,11 +21,12 @@ export async function expectModuleLoad(
 ): Promise<void> {
   const { session, dk } = runtime;
   const bytes = fs.readFileSync(artifact);
-  const storePath = `modules/${module.id.split('/')[1]}.dkm`;
+  const storePath = moduleStorePathOf(module.id, bytes);
+  const debugPath = moduleStorePath(session.options.device as Device, DEBUG_MODULE);
   // The debug module is loaded next to every module (the cell reads its LOG); for the debug module itself, once.
   const names = [...new Set([DEBUG_MODULE, module.id])];
   // the service files the module needs (services/<name>.dks) go on the card with it
-  const paths = [...new Set(['modules/debug.dkm', storePath, ...neededServices([artifact]).map((s) => servicePath(s.service))])].sort();
+  const paths = [...new Set([debugPath, storePath, ...neededServices([artifact]).map((s) => servicePath(s.service))])].sort();
   const hash = fileHashHex(bytes);
   const artifacts = path.join(liveArtifacts(session, 'module-load'), module.id.split('/')[1]!);
   fs.mkdirSync(artifacts, { recursive: true });

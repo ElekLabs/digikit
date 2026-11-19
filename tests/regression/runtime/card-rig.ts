@@ -94,7 +94,7 @@ export interface CardRigOptions {
   /** Configure coupled audio without loading stock firmware before the first explicit baseline. */
   startEmpty?: boolean;
   /** The first card: a function that gives its spec (default a blank store card) or `small`, a blank 1 MiB file (a test sets `DIGI_CARD_IDENTITY=small`). */
-  initial?: 'small' | (() => CardSpec);
+  initial?: 'small' | ((rig: { mod: (id: string, as?: string) => { name: string; file: string } }) => CardSpec);
   /** Seed every card with the stock firmware's project (Python `Env.card`). */
   project?: boolean;
   /** Uploads and project writes are part of the scenario: the card writes may be the store range and the firmware project sectors only (`common_checks_upload`). */
@@ -333,7 +333,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
         if (o.initial === 'small') {
           image = path.join(freshDir(session), 'small-card.img');
           fs.writeFileSync(image, Buffer.alloc(1 << 20)); // blank; the identity, not the file, sets the capacity
-        } else image = await build(session, 'initial', o.initial?.());
+        } else image = await build(session, 'initial', o.initial?.({ mod }));
         return baseline(image);
       },
       finishCase: async (runtime) => {

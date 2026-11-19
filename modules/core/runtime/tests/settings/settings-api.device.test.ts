@@ -22,7 +22,6 @@ import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 
 const A = 'test/settings-a';
 const B = 'test/settings-b';
-const SELECTION = ['modules/settings-a.dkm', 'modules/settings-b.dkm'];
 const CMD = { [A]: 0x38, [B]: 0x3a };
 const PUT = 1;
 const GET = 2;
@@ -41,7 +40,7 @@ for (const device of DEVICES) {
       initial: () => ({ selection: [] }),
       storeExtra: [s.setA, s.setB],
     });
-    const spec = { modules: ['test/settings-a', 'test/settings-b'], selection: SELECTION };
+    const spec = { modules: ['test/settings-a', 'test/settings-b'], selection: ['test/settings-a', 'test/settings-b'].map((id) => kit.mod(id).name) };
 
     /** One request of a fixture module: queued by the service command, run by `tick`, then read back. */
     async function call(

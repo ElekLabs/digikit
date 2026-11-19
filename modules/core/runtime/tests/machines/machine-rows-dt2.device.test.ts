@@ -53,7 +53,7 @@ describeOn('dt2', `DT2 ${FIRMWARE.dt2} machines.dks: the SRC page of a run-time 
     }
     expect(new Set(stock).size, 'the stock pages show different frames').toBeGreaterThan(1);
 
-    const rt = await run.load('with-machines', { modules: [ID], selection: ['modules/sine.dkm'] });
+    const rt = await run.load('with-machines', { modules: [ID], selection: [run.mod(ID).name] });
     const { session } = rt;
     await expectLoaded(rt, run);
     await session.expectNoFault('machines.dks loaded');
