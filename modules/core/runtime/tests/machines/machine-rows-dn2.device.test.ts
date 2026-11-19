@@ -46,6 +46,7 @@ async function stockFrames(rt: Rt): Promise<string[]> {
   const frames: string[] = [];
   for (const key of ['SYN', 'SYN', 'SYN', 'SYN', 'FLTR', 'AMP']) {
     await rt.ui.tap(key, { until: { ms: 300, why: REDRAW } });
+    // stableFrameHash already polls on state (equal frame over two reads) and its result is the compared value, so it stays
     frames.push(await stableFrameHash(rt));
   }
   return frames;

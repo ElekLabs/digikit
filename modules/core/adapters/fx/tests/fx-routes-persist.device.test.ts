@@ -86,6 +86,7 @@ for (const device of DEVICES) {
         const file = path.join(artifacts, `${tag}.wav`);
         try {
           await runToFrame(session, trigger);
+          // 44,000 ColdFire instructions (half a DSP block of 88,000), not frames: places the TRIG press inside the block so that separate boots compare onsets; no firmware state replaces it
           await stepWithProgress(session.client, 44_000);
           await rpc(session, 'pcm.tap', { action: 'capture', path: file });
           await bounded(() => session.client.inputButton(button('TRIG 1'), true));
