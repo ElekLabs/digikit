@@ -12,8 +12,24 @@ global_asm!(include_str!("hooks-dn2.s"));
 #[cfg(target_arch = "m68k")]
 global_asm!(include_str!("hooks-ui.s"));
 
-/// The first step of `init`: nothing to bind (the slots are named by `fills`; a file without `core/lfo` in the image is refused for its missing slots).
+#[cfg(target_arch = "m68k")]
+extern "C" {
+    /// Four words of the asm of `hooks-ui.s`: the stock parameter table and the rows of the three WAVE parameters (`dk_fw_` words, resolved by `patchkit bind`).
+    static DKRT_LFO_FW: [u32; 4];
+}
+
+/// The first step of `init`: give the service the firmware addresses of the WAVE rows (the slots are named by `fills`; a file without `core/lfo` in the image is refused for its
+/// missing slots). A host build has no firmware: nothing is set and no row is written.
 pub unsafe fn setup(_core: &dkrt_svc_rt::ImportCore) -> i32 {
+    #[cfg(target_arch = "m68k")]
+    dkrt_svc_lfo::records::set_firmware(
+        core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[0])),
+        [
+            core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[1])),
+            core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[2])),
+            core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[3])),
+        ],
+    );
     0
 }
 
@@ -45,7 +61,6 @@ entries! {
     lfo_dn2_read_start,
     lfo_ui_name4,
     lfo_ui_name3,
-    lfo_ui_range,
     lfo_ui_graph,
 }
 
@@ -66,13 +81,6 @@ pub extern "C" fn dk_lfo_eval(phase: u32, wave: u32) -> i32 {
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_lfo_name(value: i32, buf: *mut u8, width: u32) -> u32 {
     dkrt_svc_lfo::records::name_into(value, buf, width as usize) as u32
-}
-
-/// The maximum of the WAVE parameter while shapes are loaded (the highest loaded wave number << 8), 0 when none is: the range accessor of the T1 rows calls it for the codes 79, 89 and 99.
-#[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
-#[cfg_attr(target_arch = "m68k", no_mangle)]
-pub extern "C" fn dk_lfo_range_max() -> u32 {
-    dkrt_svc_lfo::records::wave_max()
 }
 
 /// The vector of tiles the MOD page draws for the LFO wave `wave` (the unclamped wave argument of its cell), 0 when no loaded shape has that number; stores the unipolar byte at `flag`.

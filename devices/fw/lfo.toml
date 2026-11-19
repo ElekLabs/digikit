@@ -259,7 +259,7 @@ users = ["core/lfo", "core/services/lfo"]
 doc = "The second reader, the compare of D3 with 6 that gives RAND a start phase of 0 (interrupt context). exit.1 is the clear. DN2 0x40137836: `moveq 6,D2; cmp.l D3,D2; beq 0x40137852`. Dead at the clear (0x40137852): D2, D6 and N Z V C; at the SPH phase code (0x4013783c): D0, D2, D6 and N Z V C."
 
 # ---- The MOD page: the sites of the UI task hooks of the lfo service (docs/findings/149-lfo-waveforms.md, "The panel hooks"). They are `.dks` hooks (bound by `patchkit bind`), not interrupt stubs.
-# The three functions are outside the functions that the Ghidra database of the image keeps (`catalog declare` finds no containing function), so each site is a `cf_words` signature of the stock
+# The name formatters are outside the functions that the Ghidra database of the image keeps (`catalog declare` finds no containing function), so each site is a `cf_words` signature of the stock
 # words from the function entry. A wildcard `"*"` is a whole 32-bit word: the one after `pea table` covers the low half of the name table's address (DN2 1.11 has other table addresses) and the opcode
 # half `0x486e` of the next instruction (`pea -0x1c(A6)`), which the DT2 word 0x3ffc486e shows. The high half of the address stays in the word before it: it tells the
 # four-character formatter (0x401f....) from the three-character one (0x401d....). The other name formatters differ in the size of the frame and the length of their tables.
@@ -280,15 +280,6 @@ rule.dn2 = { kind = "cf_words", as = "code", words = [0x4e56ffe4, 0x70062f03, 0x
 mark = "D"
 users = ["core/services/lfo"]
 doc = "DN2 0x4000766c: the entry of the second wave name formatter of the Digitone II, the three-character names (TRI SIN SQR SAW EXP RMP RND): `link.w A6,-0x1c; moveq 6,D0` (6 bytes)."
-
-[[site]]
-name = "cf.lfo.site.t1_range"
-cpu = "cf"
-rule.dt2 = { kind = "cf_words", as = "code", words = [0x2f02222f, 0x00080c81, 0x00000113, 0x55c04878, 0x000c2408, 0x7100c280, 0x2001e588, 0xed899280], offset = 0, len = 6 }
-rule.dn2 = { kind = "cf_words", as = "code", words = [0x2f02222f, 0x00080c81, 0x00000141, 0x55c04878, 0x000c2408, 0x7100c280, 0x2001e588, 0xed899280], offset = 0, len = 6 }
-mark = "D"
-users = ["core/services/lfo"]
-doc = "DT2 0x400da368, DN2 0x400dc154: the entry of the T1 range accessor (A0 = a 12-byte buffer, 4(SP) = the parameter code): it copies {min, max, default} of the code's T1 row (row + 8) to the buffer and returns it in d0. `move.l D2,-(SP); move.l 8(SP),D1` (6 bytes). 172 callers on DT2 (171 in the Ghidra database, one more found by refscan at 0x400c81be), 191 on DN2; the live-set clamp FUN_4003b570 is one of them."
 
 [[hook]]
 name = "cf.lfo.hook.wave_name"
@@ -311,18 +302,6 @@ devices = ["dn2"]
 mark = "D"
 users = ["core/services/lfo"]
 doc = "The three-character wave name formatter of the Digitone II (UI task): as `wave_name`, with the first three characters of the shape's name."
-
-[[hook]]
-name = "cf.lfo.hook.t1_range"
-site = "cf.lfo.site.t1_range"
-cpu = "cf"
-mode = "replace"
-stock = true
-regs = { in = ["a0"], clobbers = ["d0", "d1", "ccr"] }   # a0 is the buffer the stock code returns; the hook saves d1, a0 and a1 around its Rust call
-devices = ["dt2", "dn2"]
-mark = "D"
-users = ["core/services/lfo"]
-doc = "The T1 range accessor (the stock code has 172 callers on DT2, 191 on DN2; the hook does not run in interrupt context: it reads the status register first and runs the stock code when the interrupt mask is not 0): for the codes 79, 89 and 99 with a loaded shape the hook calls the stock accessor (`dk_stock_`), then raises the maximum in the buffer to the highest loaded wave number << 8 (finding 149, section Callers of the T1 range accessor: no caller scales a value onto 0..max; the clamps that MIDI CC and NRPN reach see the new maximum, a loaded shape is the only case that differs). Any other code runs the displaced `move.l D2,-(SP); move.l 8(SP),D1` and the stock code. Dead after the site (strict): D2 (written), D0 and D1 (written before use: only D0b is read before `mvs.b`), and the flags."
 
 # ---- The graph of the MOD page (docs/findings/149-lfo-waveforms.md, "Graph"): the cell FUN_4010c5ee (DT2) / FUN_4010df62 (DN2) of LfoPageView, one call site each. The function is in the
 # Ghidra database; both images hash alike (h_strict), and so do DT2 1.16 and DN2 1.11 and 1.10E.
@@ -347,3 +326,35 @@ devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/services/lfo"]
 doc = "The cell of the LFO page (UI task): for a wave 7 to 14 with a published shape graph D6 becomes the service's vector of four tiles and the byte at -0x11(A6) the unipolar mark; otherwise the tail runs the displaced `addi.l #TABLE,D6`. The wave is 0x18(A6). The vtable word of the tiles is read from the stock vector (the tail's displaced `addi` gives TABLE; TABLE + D6 is the vector, its first word the first Bitmap's vtable). Strict liveness: only the flags are dead; D0, D1, A0 and A1 are saved."
+
+# ---- The WAVE rows of the parameter table (docs/findings/149-lfo-waveforms.md, "Direct readers of the parameter table"): the rows of the parameters 79, 89 and 99, the WAVE of the three LFOs.
+# The lfo service writes the maximum word of each row (+0xc) in the RAM copy of the table that `core/params` makes, so the encoder stops at the highest loaded shape. A signature of the
+# row's words from its owner: the mirror index (+4), the minimum 0, the maximum 0x600 (RND), the default, the flag 0, the CC half (a wildcard: the CC and the NRPN halves differ between
+# the devices), the slot (+0x1c) and wildcards for the owner, name, template and formatter words (the addresses of each firmware).
+
+[[data]]
+name = "cf.lfo.data.wave_row.1"
+cpu = "cf"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_words", words = ["*", 0x5, 0x0, 0x600, 0x100, 0x0, "*", 0xae, "*", "*", "*", "*", "*", "*", "*"] }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The descriptor row (60 bytes) of the WAVE parameter of LFO 1 (code 79): mirror index 5, range 0..0x600, default 0x100, slot 0xae."
+
+[[data]]
+name = "cf.lfo.data.wave_row.2"
+cpu = "cf"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_words", words = ["*", 0xd, 0x0, 0x600, 0x0, 0x0, "*", 0xb6, "*", "*", "*", "*", "*", "*", "*"] }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The descriptor row of the WAVE parameter of LFO 2 (code 89): mirror index 0xd, range 0..0x600, default 0, slot 0xb6."
+
+[[data]]
+name = "cf.lfo.data.wave_row.3"
+cpu = "cf"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_words", words = ["*", 0x15, 0x0, 0x600, 0x0, 0x0, "*", 0xbe, "*", "*", "*", "*", "*", "*", "*"] }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The descriptor row of the WAVE parameter of LFO 3 (code 99): mirror index 0x15, range 0..0x600, default 0, slot 0xbe."

@@ -156,6 +156,54 @@ pub unsafe fn reset_param_row(m: &impl FwMem, inf: *const u32, code: u32) {
     );
 }
 
+/// The address in the RAM copy of the parameter table (`P_TABLE` of `dynreg_info`) of the stock row at `row`, where `table` is the address of the stock table (both firmware
+/// addresses, resolved by `patchkit bind`). `None` for a null `inf` or table, a row that is not on a row boundary of the stock table, and a row at or above `P_FIRST`: only a
+/// stock row has a stock address, the rows from `P_FIRST` on belong to the registry's writers.
+unsafe fn stock_row(inf: *const u32, table: u32, row: u32) -> Option<u32> {
+    if inf.is_null() || table == 0 || row < table {
+        return None;
+    }
+    let size = iw(inf, w::PF_SIZE);
+    let copy = iw(inf, w::P_TABLE);
+    if size == 0
+        || copy == 0
+        || (row - table) % size != 0
+        || (row - table) / size >= iw(inf, w::P_FIRST)
+    {
+        return None;
+    }
+    Some(copy + (row - table))
+}
+
+/// The minimum and the maximum of a stock row of the table's RAM copy (`None` for a row `stock_row` refuses).
+pub unsafe fn stock_range(
+    m: &impl FwMem,
+    inf: *const u32,
+    table: u32,
+    row: u32,
+) -> Option<(u32, u32)> {
+    let at = stock_row(inf, table, row)?;
+    Some((m.rd(at + 8), m.rd(at + 12)))
+}
+
+/// Set the minimum and the maximum of a stock row of the table's RAM copy (the words at +8 and +0xc of the row at the stock address `row`; `table` is the stock table's
+/// address) and return the pair it held. `None`, nothing written, for a row `stock_row` refuses. The copy is the table every reader of the firmware uses after `core/params`
+/// repointed the stock references to it, so the new range is the one the firmware sees; the stock table in the image is not changed.
+pub unsafe fn set_stock_range(
+    m: &impl FwMem,
+    inf: *const u32,
+    table: u32,
+    row: u32,
+    min: u32,
+    max: u32,
+) -> Option<(u32, u32)> {
+    let prev = stock_range(m, inf, table, row)?;
+    let at = stock_row(inf, table, row)?;
+    m.wr(at + 8, min);
+    m.wr(at + 12, max);
+    Some(prev)
+}
+
 /// Build a std::string representation {len, cap, refcount -1, chars, 0} at `rep` (upper-cased when `upper`); returns the
 /// chars' address.
 pub unsafe fn make_rep(rep: *mut u8, src: *const u8, upper: bool) -> u32 {
@@ -198,5 +246,62 @@ mod tests {
         let mut up = [0u8; 64];
         unsafe { make_rep(up.as_mut_ptr(), b"Name 2\0".as_ptr(), true) };
         assert_eq!(&up[12..19], b"NAME 2\0");
+    }
+
+    #[test]
+    fn a_stock_row_of_the_copy_takes_a_range_and_gives_back_the_old_one() {
+        use dkrt_test_support::FakeCore;
+        // the stock table at 0x1000 (60-byte rows), its copy at 0x8000; registry rows from code 100 on
+        let mut core = FakeCore::new();
+        let mut t = std::vec![0u32; 90];
+        t[w::P_TABLE] = 0x8000;
+        t[w::PF_SIZE] = 60;
+        t[w::P_FIRST] = 100;
+        core.set_dynreg(t);
+        let inf = unsafe { dynreg(&core) };
+        let row = |code: u32| 0x1000 + 60 * code;
+        unsafe {
+            core.wr(0x8000 + 60 * 79 + 8, 0);
+            core.wr(0x8000 + 60 * 79 + 12, 0x600);
+            let prev = set_stock_range(&core, inf, 0x1000, row(79), 0, 0xe00);
+            assert_eq!(prev, Some((0, 0x600)), "the pair that was there");
+            assert_eq!(core.rd(0x8000 + 60 * 79 + 12), 0xe00, "the copy changed");
+            assert_eq!(core.rd(row(79) + 12), 0, "the stock address is not written");
+            // the pair goes back
+            assert_eq!(
+                set_stock_range(&core, inf, 0x1000, row(79), 0, 0x600),
+                Some((0, 0xe00))
+            );
+            assert_eq!(core.rd(0x8000 + 60 * 79 + 12), 0x600);
+        }
+    }
+
+    #[test]
+    fn a_row_that_is_not_stock_and_a_missing_table_are_refused_without_a_write() {
+        use dkrt_test_support::FakeCore;
+        let mut core = FakeCore::new();
+        let mut t = std::vec![0u32; 90];
+        t[w::P_TABLE] = 0x8000;
+        t[w::PF_SIZE] = 60;
+        t[w::P_FIRST] = 100;
+        core.set_dynreg(t);
+        let inf = unsafe { dynreg(&core) };
+        unsafe {
+            // a registry row (code 100), a row off the 60-byte grid, below the table, no stock table
+            for row in [0x1000 + 60 * 100, 0x1000 + 61, 0x0fff] {
+                assert_eq!(
+                    set_stock_range(&core, inf, 0x1000, row, 1, 2),
+                    None,
+                    "{row:#x}"
+                );
+            }
+            assert_eq!(set_stock_range(&core, inf, 0, 0x1000, 1, 2), None);
+            // the image has no registry table
+            assert_eq!(
+                set_stock_range(&core, core::ptr::null(), 0x1000, 0x1000, 1, 2),
+                None
+            );
+            assert!(core.mem.borrow().is_empty(), "nothing was written");
+        }
     }
 }

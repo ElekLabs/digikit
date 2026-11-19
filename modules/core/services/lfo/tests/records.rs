@@ -2,13 +2,14 @@
 //! site's lookup reads the table, and that it ignores a record of another service. The statics of the crate (the shape table, the settled keys) are shared,
 //! so each test takes `LOCK` and starts from an empty table.
 //! The runtime's own tests (`handlers/lfo_tests.rs` in the runtime crate) drive the same service through the collector, the registry walkers and the planner.
+use dkrt_abi::mem::FwMem;
 use dkrt_abi::service::{check_step, ApplyCtx, CheckCtx, Declare, Service, SettleCtx};
 use dkrt_sdk::records::{KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
 use dkrt_svc_lfo::graph;
 use dkrt_svc_lfo::records::{
-    eval, highest, interp, name_into, name_of, number_of, owner_of, shape, tri, unipolar_of, used,
-    wave_max, Lfo, MAX_SHAPES, NAME_LEN, RANGE, SAMPLES, SETTING,
+    eval, highest, interp, name_into, name_of, number_of, owner_of, set_firmware, shape, tri,
+    unipolar_of, used, wave_max, Lfo, MAX_SHAPES, NAME_LEN, RANGE, SAMPLES, SETTING,
 };
 use dkrt_test_support::FakeCore;
 use std::sync::{Mutex, MutexGuard};
@@ -20,6 +21,7 @@ static LOCK: Mutex<()> = Mutex::new(());
 fn fresh() -> (MutexGuard<'static, ()>, FakeCore) {
     let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = FakeCore::new();
+    set_firmware(0, [0; 3]);
     for owner in 0..=8u8 {
         unsafe { <Lfo as Service<FakeCore>>::remove(&core, owner) };
     }
@@ -361,6 +363,132 @@ fn the_wave_maximum_follows_the_highest_loaded_wave_number() {
     assert_eq!((highest(), wave_max()), (7, 0x700));
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
     assert_eq!((highest(), wave_max()), (0, 0));
+}
+
+/// The address of the stock table and of its RAM copy in the fake image, and the registry's first row (the WAVE codes are stock rows below it).
+const STOCK: u32 = 0x1000;
+const COPY: u32 = 0x8000;
+const CODES: [u32; 3] = [79, 89, 99];
+
+/// An image with the registry's parameter table (`P_TABLE` = the copy, 60-byte rows, the registry from row 300) and the three WAVE rows in the copy (0..0x600, defaults 0x100, 0, 0);
+/// the service knows the stock addresses (`set_firmware`, as `setup` gives them from the bound anchors).
+fn image_with_rows(core: &mut FakeCore) {
+    let mut t = vec![0u32; 90];
+    t[20] = COPY; // P_TABLE
+    t[27] = 60; // PF_SIZE
+    t[23] = 300; // P_FIRST
+    core.set_dynreg(t);
+    for (c, def) in CODES.iter().zip([0x100, 0, 0]) {
+        unsafe {
+            core.wr(COPY + 60 * c + 8, 0);
+            core.wr(COPY + 60 * c + 12, 0x600);
+            core.wr(COPY + 60 * c + 16, def);
+        }
+    }
+    set_firmware(STOCK, CODES.map(|c| STOCK + 60 * c));
+}
+
+/// The maximum words of the three WAVE rows in the copy.
+fn wave_words(core: &FakeCore) -> [u32; 3] {
+    CODES.map(|c| unsafe { core.rd(COPY + 60 * c + 12) })
+}
+
+#[test]
+fn the_wave_rows_of_the_copy_follow_the_highest_loaded_shape_and_go_back_to_stock() {
+    let (_g, mut core) = fresh();
+    image_with_rows(&mut core);
+    settle(&core, &[&[KEY_A], &[KEY_B]]);
+    assert_eq!(wave_words(&core), [0x600; 3], "no shape: the stock maximum");
+    core.boot_index.set(1);
+    assert_eq!(
+        apply(&core, 2, KIND_LFO_SHAPE, &body(KEY_B, b"UP  ", 0)),
+        OK
+    );
+    assert_eq!(wave_words(&core), [0x800; 3], "the second key has number 8");
+    core.boot_index.set(0);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"DOWN", 0)),
+        OK
+    );
+    assert_eq!(wave_words(&core), [0x800; 3]);
+    unsafe { <Lfo as Service<FakeCore>>::remove(&core, 2) };
+    assert_eq!(
+        wave_words(&core),
+        [0x700; 3],
+        "the highest left is number 7"
+    );
+    // a reload: the same module goes and comes back
+    unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
+    assert_eq!(
+        wave_words(&core),
+        [0x600; 3],
+        "the last shape is gone: the word is back at its start value"
+    );
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"DOWN", 0)),
+        OK
+    );
+    assert_eq!(wave_words(&core), [0x700; 3]);
+    unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
+    assert_eq!(wave_words(&core), [0x600; 3]);
+    // the minimum and the default of the rows and the stock addresses were never touched
+    for (c, def) in CODES.iter().zip([0x100, 0, 0]) {
+        unsafe {
+            assert_eq!(
+                (core.rd(COPY + 60 * c + 8), core.rd(COPY + 60 * c + 16)),
+                (0, def)
+            );
+            assert_eq!(
+                core.rd(STOCK + 60 * c + 12),
+                0,
+                "the stock table is not written"
+            );
+        }
+    }
+    assert!(
+        core.mem
+            .borrow()
+            .keys()
+            .all(|a| (COPY..COPY + 60 * 300).contains(a)),
+        "only the copy was written"
+    );
+    set_firmware(0, [0; 3]);
+}
+
+#[test]
+fn an_image_without_the_registry_table_refuses_a_shape_and_writes_nothing() {
+    let (_g, core) = fresh();
+    // the service has the firmware addresses, the image has no dynreg_info
+    set_firmware(STOCK, CODES.map(|c| STOCK + 60 * c));
+    settle(&core, &[&[KEY_A]]);
+    core.boot_index.set(0);
+    let sec = section(&[(KEY_A, 0)]);
+    assert_eq!(check(&core, check_step::ROWS, &sec), E_NO_REGISTRY);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)),
+        E_NO_REGISTRY
+    );
+    unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
+    assert_eq!(used(), 0, "the loader's remove takes the shape back");
+    assert!(core.mem.borrow().is_empty(), "no word was written");
+    // a module with no shape has nothing to refuse
+    let none = section(&[]);
+    assert_eq!(check(&core, check_step::ROWS, &none), OK);
+    set_firmware(0, [0; 3]);
+}
+
+#[test]
+fn a_build_without_firmware_rows_loads_shapes_and_writes_no_row() {
+    let (_g, core) = fresh();
+    settle(&core, &[&[KEY_A]]);
+    core.boot_index.set(0);
+    let sec = section(&[(KEY_A, 0)]);
+    assert_eq!(check(&core, check_step::ROWS, &sec), OK);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)),
+        OK
+    );
+    assert!(core.mem.borrow().is_empty());
 }
 
 /// The 32 samples `s[i] = 1000 * i`, so that every value of the interpolation is easy to compute by hand.
