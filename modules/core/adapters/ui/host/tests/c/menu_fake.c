@@ -21,6 +21,7 @@ static struct {
     DkrtSelection sel;
     int scan_result, get_result;
     DkrtBootInfo boot;
+    char boot_name[DKRT_SEL_MAX][28]; /* the file name the runtime holds each boot index under */
     int fx_n;
     DkrtFx fx[MAX_FXR];
     uint32_t send_slots;
@@ -120,18 +121,41 @@ uint32_t dkrt_blocks(void)
     return fk.blocks;
 }
 
-static int polls_on;
+/* The per-pass callbacks: up to four addresses. */
+static uintptr_t polls[4];
+static int poll_slots = 4; /* callbacks the registry takes */
+static int poll_is_on(uintptr_t f)
+{
+    for (int i = 0; i < 4; i++)
+        if (polls[i] == f)
+            return 1;
+    return 0;
+}
 int32_t dkrt_poll_add(uintptr_t f)
 {
-    (void)f;
-    polls_on++;
-    return 0;
+    if (poll_is_on(f))
+        return 0;
+    for (int i = 0; i < poll_slots; i++)
+        if (!polls[i]) {
+            polls[i] = f;
+            return 0;
+        }
+    return DKRT_E_NOMEM;
 }
 
 void dkrt_poll_remove(uintptr_t f)
 {
-    (void)f;
-    polls_on = 0;
+    for (int i = 0; i < 4; i++)
+        if (polls[i] == f)
+            polls[i] = 0;
+}
+
+int32_t dkrt_boot_name(uint32_t index, uint8_t *out)
+{
+    if (index >= DKRT_SEL_MAX)
+        return DKRT_E_NOT_FOUND;
+    memcpy(out, fk.boot_name[index], 28);
+    return DKRT_OK;
 }
 
 /* The live job of the runtime: a finished load sets the file's loaded flag, a finished unload clears it and counts an unload. */
@@ -170,6 +194,16 @@ void dkrt_live_state(DkrtLive *out)
                     fk.e[k].flags |= DKRT_SCAN_LOADED;
                 else
                     fk.e[k].flags &= ~DKRT_SCAN_LOADED;
+            }
+            if (fk.live_op[i] == DKRT_LIVE_UNLOAD) {
+                /* the module leaves the runtime's list: the modules after it move up one index */
+                for (int m = 0; m < fk.mod_n; m++)
+                    if (strcmp((const char *)fk.mod[m].path, fk.live_path[i]) == 0) {
+                        memmove(&fk.mod[m], &fk.mod[m + 1],
+                                (size_t)(fk.mod_n - m - 1) * sizeof fk.mod[0]);
+                        fk.mod_n--;
+                        break;
+                    }
             }
             fk.boot.unloads += fk.live_op[i] == DKRT_LIVE_UNLOAD;
             fk.boot.reloads++;
@@ -290,12 +324,13 @@ void fk_reset(void)
     stock_fn = 0;
     g_main = g_about = DK_HEALTH_MENU = g_mem = g_modules = g_info = 0;
     memset(g_set, 0, sizeof g_set);
-    g_set_unloads = g_set_reloads = 0;
+    memset(g_set_path, 0, sizeof g_set_path);
+    g_say_pending = 0;
     g_lq_state = LQ_IDLE;
     g_lq_n = g_lq_pos = g_lq_wait = 0;
     g_busy_row = -1;
-    g_bsnap = 0;
-    polls_on = 0;
+    memset(polls, 0, sizeof polls);
+    poll_slots = 4;
     DK_LIVE_JOBS = 0;
     DK_LIVE_RESULT = 0;
     g_safe_shown = 0;
@@ -323,6 +358,9 @@ void fk_add(const char *path, uint32_t flags, uint32_t arena, uint32_t fx_slots,
 
 void fk_select(const char *path)
 {
+    /* the boot loaded the selection as it was: index k holds the leaf of the path */
+    const char *leaf = strrchr(path, '/');
+    snprintf(fk.boot_name[fk.sel.count], 28, "%s", leaf ? leaf + 1 : path);
     snprintf((char *)fk.sel.paths[fk.sel.count], DKRT_SEL_PATH, "%s", path);
     fk.sel.count++;
 }
@@ -457,6 +495,7 @@ void fk_boot_safe(void)
 }
 void fk_boot_read_failure(void)
 {
+    memset(fk.boot_name, 0, sizeof fk.boot_name); /* nothing was loaded */
     fk.boot.safe = 1;
     fk.boot.reason = DKRT_SAFE_READ;
     fk.boot.count = 1;
@@ -486,7 +525,24 @@ void fk_poll(void)
 }
 int fk_poll_on(void)
 {
-    return polls_on;
+    return poll_is_on((uintptr_t)live_poll);
+}
+/* One pass of the callback that retries a dialog that could not open. */
+void fk_say_poll(void)
+{
+    if (poll_is_on((uintptr_t)say_poll))
+        say_poll();
+}
+/* Two dialogs at once: the second waits for the first. */
+void fk_say_twice(void)
+{
+    say("FIRST", "1", 0);
+    say("SECOND", "2", 0);
+}
+/* A live load that took the index of another file: index k now holds name. */
+void fk_boot_rename(int k, const char *name)
+{
+    snprintf(fk.boot_name[k], 28, "%s", name);
 }
 int fk_live_calls(void)
 {
@@ -525,4 +581,8 @@ uintptr_t fk_set_handle(int k)
 int fk_busy_row(void)
 {
     return g_busy_row;
+}
+void fk_poll_slots(int n)
+{
+    poll_slots = n;
 }

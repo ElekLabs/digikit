@@ -40,6 +40,11 @@ extern "C" {
     fn fk_boot_counters(unloads: u32, reloads: u32);
     fn fk_boot_needs(k: c_int, name: *const c_char);
     fn fk_set_handle(k: c_int) -> usize;
+    fn fk_say_poll();
+    fn fk_say_twice();
+    fn fk_boot_rename(k: c_int, name: *const c_char);
+    fn fk_boot_count(n: u32);
+    fn fk_poll_slots(n: c_int);
 }
 
 // dkrt_live ops
@@ -299,6 +304,7 @@ fn empty_and_missing_store_texts() {
 fn yes_toggles_the_mark_and_nothing_is_saved_yet() {
     let _g = digikit();
     store_of_three();
+    select("modules/gain-fx.dkm"); // loaded and saved
     open_modules();
     press_yes(0);
     assert_eq!(unsafe { fk_tick(0) }, 1);
@@ -312,6 +318,7 @@ fn yes_toggles_the_mark_and_nothing_is_saved_yet() {
 fn a_module_that_does_not_fit_is_refused_with_a_confirm() {
     let _g = digikit();
     store_of_three();
+    select("modules/gain-fx.dkm"); // loaded and saved
     open_modules();
     press_yes(2);
     // the mark went back off
@@ -320,7 +327,7 @@ fn a_module_that_does_not_fit_is_refused_with_a_confirm() {
     let (kind, title, text, _) = dialog().expect("a dialog");
     assert_eq!(kind, DialogKind::Confirm);
     assert_eq!(title, "HUGE DOES NOT FIT");
-    assert_eq!(text, "CPU 900K > 512K FREE");
+    assert_eq!(text, "CPU 900K > 412K FREE");
     // it is a notice: either answer closes it and changes nothing
     answer_confirm(true);
     assert!(dialog().is_none());
@@ -740,137 +747,198 @@ fn boot_results_follow_the_boot_selection_after_a_live_save() {
 }
 
 #[test]
-fn the_settings_menu_of_a_module_is_built_again_after_an_unload() {
+fn the_settings_menu_is_built_once_per_module_whatever_the_applies_do_to_the_module_order() {
     let _g = digikit();
-    store_of_three();
+    add("modules/a.dkm", OK | LOADED, 20, 0, 0);
+    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
+    add("modules/b.dkm", OK, 20, 0, 0);
+    loaded("modules/a.dkm", "test/a"); // before tool in the runtime's list
     loaded_menu("modules/tool.dkm", "digikit/tool");
+    select("modules/a.dkm");
     select("modules/tool.dkm");
     open_modules();
     let open_settings = || {
-        press_right(0);
+        press_right(1);
         choose_panel_row(1);
         let h = unsafe { fk_set_handle(0) };
+        assert_eq!(render(), ["HELD 0", "RELEASE"]);
         press_no();
         h
     };
     let first = open_settings();
     assert_ne!(first, 0);
+    // two applies: a is unloaded (tool moves to index 0 of the runtime's list), then b is loaded and a again
+    press_yes(0);
+    press_no();
+    answer_confirm(true);
+    poll_until_idle();
+    open_modules();
+    press_yes(2);
+    press_yes(0);
+    press_no();
+    answer_confirm(true);
+    poll_until_idle();
+    open_modules();
     assert_eq!(
         open_settings(),
         first,
-        "the menu is kept while no module went away"
+        "the menu of the module is built once"
     );
-    unsafe { fk_boot_counters(1, 0) }; // another module was unloaded: the module indexes moved
-    let again = open_settings();
-    assert_ne!(
-        again, first,
-        "the menu is built again for the module's new index"
+    assert_eq!(
+        unsafe { fk_settings_runs() },
+        2,
+        "its rows are filled at each open"
     );
 }
 
 #[test]
-fn no_on_the_question_drops_the_changes_and_closes_the_list() {
+fn about_names_each_boot_index_as_the_runtime_holds_it() {
     let _g = digikit();
-    store_of_three();
+    add("modules/a.dkm", OK | LOADED, 20, 0, 0);
+    select("modules/a.dkm");
+    unsafe { fk_boot_count(1) };
+    let rows = || {
+        open_digikit();
+        press_yes(0);
+        let r = render();
+        press_no();
+        press_no();
+        r
+    };
+    assert!(rows().iter().any(|s| s == "A.DKM"), "{:?}", rows());
+    // a was unloaded and c loaded into its index; d took a new one
+    let (c, d) = (
+        CString::new("c.dkm").unwrap(),
+        CString::new("d.dkm").unwrap(),
+    );
+    unsafe {
+        fk_boot_rename(0, c.as_ptr());
+        fk_boot_rename(1, d.as_ptr());
+        fk_boot_count(2);
+    }
+    let r = rows();
+    assert!(
+        r.iter().any(|s| s == "C.DKM") && r.iter().any(|s| s == "D.DKM"),
+        "{r:?}"
+    );
+    assert!(!r.iter().any(|s| s == "A.DKM"), "{r:?}");
+}
+
+#[test]
+fn a_failed_unload_and_a_failed_load_leave_marks_in_the_list() {
+    let _g = digikit();
+    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
+    add("modules/a.dkm", OK, 20, 0, 0);
+    select("modules/tool.dkm");
+    unsafe { fk_live_script(0, 0, -83) };
     open_modules();
     press_yes(0);
+    press_yes(1);
     press_no();
-    assert!(dialog().is_some());
-    press_no(); // NO answers the confirm
-    assert_eq!(unsafe { fk_selection_sets() }, 0);
-    assert_eq!(unsafe { fk_restarts() }, 0);
-    assert_eq!((depth(), title().as_str()), (1, "DIGIKIT"));
-    assert_eq!(unsafe { fk_tick(0) }, 0);
-    // a fresh list starts from the saved selection again
-    open_modules();
-    assert!(render()[0].starts_with("  TOOL"));
-    press_no();
-    assert_eq!(depth(), 1);
+    answer_confirm(true);
+    poll_until_idle();
+    answer_confirm(false); // NOT APPLIED
+    answer_confirm(false); // RESTART TO APPLY?: no
+                           // the unload did not happen: tool is loaded and not selected; the load was not tried: a is selected and not loaded
+    let r = render();
+    assert!(
+        r[0].starts_with("  ~TOOL") && r[0].contains("UNLOADS"),
+        "{r:?}"
+    );
+    assert!(r[1].starts_with("  -A"), "{r:?}");
+    // the info page says what happens at a restart
+    press_right(0);
+    choose_panel_row(1);
+    assert!(
+        render().contains(&"UNLOADS AT RESTART".to_string()),
+        "{:?}",
+        render()
+    );
 }
 
 #[test]
-fn apply_writes_the_changed_routes_and_restarts() {
+fn a_refused_restart_after_the_save_keeps_the_marks_visible() {
     let _g = digikit();
     add("modules/both.dkm", OK | LOADED, 10, 1, 0);
     loaded("modules/both.dkm", "test/both");
-    fx("test/both", 3, 1); // master
-    unsafe { fk_send_slots(2) };
+    fx("test/both", 3, 1);
+    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
     select("modules/both.dkm");
+    select("modules/tool.dkm");
+    unsafe { fk_send_slots(2) };
+    unsafe { fk_restart_result(-43) };
     open_modules();
+    press_yes(1); // unselect tool
     press_right(0);
     choose_panel_row(1);
-    pick_choice(0); // SEND
+    pick_choice(0); // and a route change: this restarts directly
     press_no();
     answer_confirm(true);
-    assert_eq!(unsafe { fk_puts() }, 1);
-    assert_eq!(cstr(unsafe { fk_put_key(0) }), "fx/route/test/both");
-    assert_eq!(unsafe { fk_put_val(0) }, 1);
-    assert_eq!((unsafe { fk_flushes() }, unsafe { fk_restarts() }), (1, 1));
+    assert_eq!(dialog().unwrap().2, "CARD BUSY");
+    answer_confirm(false);
+    assert!(render()[1].starts_with("  ~TOOL"), "{:?}", render());
 }
 
 #[test]
-fn a_refused_restart_is_shown() {
+fn a_dialog_that_finds_another_open_waits_for_the_next_pass() {
     let _g = digikit();
-    unsafe { fk_restart_result(-43) };
-    refused_batch(0, -83);
-    answer_confirm(true); // the job is not applied
-    answer_confirm(true); // RESTART TO APPLY?
-    let (_, title, text, _) = dialog().expect("the refusal");
-    assert_eq!((title.as_str(), text.as_str()), ("NO RESTART", "CARD BUSY"));
+    open_digikit();
+    unsafe { fk_say_twice() };
+    assert_eq!(dialog().unwrap().1, "FIRST");
+    answer_confirm(false);
+    assert!(dialog().is_none());
+    unsafe { fk_say_poll() };
+    assert_eq!(dialog().unwrap().1, "SECOND");
 }
 
 #[test]
-fn selection_read_failure_blocks_apply_until_a_successful_refresh() {
+fn the_side_panel_and_its_rows_do_nothing_while_a_batch_runs() {
+    let _g = digikit();
+    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
+    add("modules/a.dkm", OK, 20, 0, 0);
+    select("modules/tool.dkm");
+    unsafe { fk_live_waits(5) };
+    open_modules();
+    press_yes(0);
+    press_yes(1);
+    press_no();
+    answer_confirm(true);
+    unsafe { fk_poll() };
+    let depth_before = depth();
+    press_right(0);
+    assert_eq!(depth(), depth_before, "no side panel during a batch");
+    poll_until_idle();
+}
+
+#[test]
+fn a_busy_job_slot_reads_waiting() {
     let _g = digikit();
     add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
     select("modules/tool.dkm");
+    unsafe { fk_live_script(0, -12, 0) }; // E_BUSY at the queue
     open_modules();
-    assert!(render()[0].starts_with("* TOOL"));
+    press_yes(0);
     press_no();
-    press_no();
-    unsafe { fk_get_result(-3) };
-    open_modules();
-    assert_eq!(render(), ["STORE READ ERROR"]);
-    unsafe { fk_set_tick(0, 1) };
-    assert_eq!(unsafe { fk_tick(0) }, 0);
-    assert_eq!(
-        dialog().expect("read error dialog").1,
-        "SELECTION READ ERROR"
-    );
-    answer_confirm(false);
-    // Even if storage recovers, the failed refresh's empty ticks must not be saved.
-    unsafe {
-        fk_get_result(0);
-        fk_apply();
-    }
-    assert_eq!(unsafe { fk_selection_sets() }, 0);
-    assert_eq!(unsafe { fk_restarts() }, 0);
-    assert_eq!(dialog().expect("read error dialog").1, "NOT SAVED");
-    press_no();
-    press_no();
-    press_no();
-    open_modules();
-    assert!(render()[0].starts_with("* TOOL"));
-    unsafe { fk_apply() };
-    assert_eq!(unsafe { fk_selection_sets() }, 1);
-    assert_eq!(unsafe { fk_set_count() }, 1);
-    assert_eq!(cstr(unsafe { fk_set_path(0) }), "modules/tool.dkm");
+    answer_confirm(true);
+    unsafe { fk_poll() };
+    assert!(render()[0].contains("WAITING"), "{:?}", render());
 }
 
 #[test]
-fn about_reports_read_failure_without_stale_selection_names() {
+fn a_queue_that_cannot_be_polled_shows_the_status_and_offers_the_restart() {
     let _g = digikit();
-    add("modules/tool.dkm", OK, 20, 0, 0);
+    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
     select("modules/tool.dkm");
-    // the selection cannot be read from the boot on: no names of an earlier read
-    unsafe {
-        fk_get_result(-3);
-        fk_boot_read_failure();
-    }
-    open_digikit();
-    press_yes(1);
-    let rows = render();
-    assert!(rows.iter().any(|s| s == "SAFE: READ FAILED"), "{rows:?}");
-    assert!(rows.iter().any(|s| s == "SELECTION READ ERROR"), "{rows:?}");
-    assert!(!rows.iter().any(|s| s.contains("TOOL")), "{rows:?}");
+    unsafe { fk_poll_slots(0) };
+    open_modules();
+    press_yes(0);
+    press_no();
+    answer_confirm(true);
+    let (_, title, text, _) = dialog().unwrap();
+    assert_eq!(
+        (title.as_str(), text.as_str()),
+        ("NOT APPLIED", "NO MEMORY")
+    );
+    answer_confirm(false);
+    assert_eq!(dialog().unwrap().1, "RESTART TO APPLY?");
 }

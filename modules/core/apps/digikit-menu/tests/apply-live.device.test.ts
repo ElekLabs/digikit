@@ -3,7 +3,8 @@ import { expect, test } from 'vitest';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';
-import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { loadCode } from '@digi/regression/runtime/load-states.ts';
+import { planSymbol, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { packSynth } from '@digi/regression/runtime/synth.ts';
 
 /**
@@ -16,6 +17,15 @@ import { packSynth } from '@digi/regression/runtime/synth.ts';
  * The host cases of the batch (order, texts, refusals, the settings cache, the boot results by index) are in modules/core/adapters/ui/host/tests/menu.rs.
  * Run only with the go of the owner.
  */
+
+const E_RELOAD_PLAYING = loadCode('E_RELOAD_PLAYING');
+
+/** TICK and LOADED are also names of runtime statics: take the menu's. */
+function menuSymbol(plan: RuntimePlan, name: string): number {
+  const key = Object.keys(plan.symbols).find((k) => k.startsWith('core/digikit-menu@') && k.endsWith(`:${name}`));
+  if (key === undefined) throw new Error(`no menu symbol ${name}`);
+  return plan.symbols[key]!;
+}
 
 const SYMBOLS = ['DK_LOAD', 'DK_LOAD_N', 'DK_POPUP', 'DK_POPUP_TEXT', 'DK_POPUPS'];
 
@@ -38,7 +48,12 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
       return bytes.toString('latin1').split('\0')[0]!;
     };
     const dialog = async () => [await text('DK_POPUP', 0, 48), await text('DK_POPUP_TEXT', 0, 48)];
-    const rows = async () => Promise.all(Array.from({ length: await peek('DK_LOAD_N') }, (_, i) => text('DK_LOAD', i)));
+    /** TICK or LOADED of the menu: one byte for each row (a), b, c. The check mark itself is not row text. */
+    const flags = async (name: 'TICK' | 'LOADED') => {
+      const v = (await session.client.memPeek(menuSymbol(rig.plan, name)))! >>> 0;
+      return names.map((_, k) => (v >>> (24 - 8 * k)) & 0xff);
+    };
+    const flagsText = (v: number[]) => v.join();
     const state = async (file: string) => (await rig.usb(rt, (dk) => dk.loadStates())).find((m) => m.name === file)?.state;
     const bootStarts = async () => (await rig.usb(rt, (dk) => dk.readLog())).filter((e) => e.kind === LOG_KIND.BOOT_START).length;
     const epoch = async () => Number((await session.status()).epoch);
@@ -56,10 +71,10 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
       for (let i = 0; i < 3; i++) await press('DOWN');
       await ui.tap('YES', { until: { state: () => peek('DK_LOAD_N'), done: (n) => n === 3, withinMs: 60_000, what: 'MODULES rows' } });
     };
-    /** YES on row `row` (the cursor starts on row 0), then NO: the question. */
-    const changeRow = async (row: number) => {
+    /** YES on row `row` (the cursor starts on row 0), ending when TICK is `ticked`; then NO: the question. */
+    const changeRow = async (row: number, ticked: number[]) => {
       for (let i = 0; i < row; i++) await press('DOWN');
-      await ui.tap('YES', { until: { ms: 300, why: 'the check mark has no state row' } });
+      await ui.tap('YES', { until: { state: () => flags('TICK'), done: (v: number[]) => flagsText(v) === flagsText(ticked), what: 'the row is checked or unchecked' } });
       for (let i = 0; i < row; i++) await press('UP');
       const before = await popups();
       await ui.tap('NO', { until: { state: popups, done: (v) => v === before + 1, what: 'APPLY n CHANGE? opened' } });
@@ -67,7 +82,7 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
 
     // tick b: loaded live
     await openModules();
-    await changeRow(1);
+    await changeRow(1, [1, 1, 0]);
     expect(await dialog(), 'the confirm of a live change').toEqual(['APPLY 1 CHANGE?', 'NO RESTART']);
     await press('YES');
     await ui.wait({ state: () => state('b.dkm'), done: (s) => s === 'ACTIVE', withinMs: 60_000, what: 'b loaded' });
@@ -76,10 +91,14 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
 
     // untick a: unloaded live (the list closed itself when the batch ended; the cursor is on MODULES)
     await ui.tap('YES', {
-      until: { state: rows, done: (r: string[]) => r.length === 3 && r[1]!.startsWith('* '), withinMs: 60_000, what: 'MODULES rows with b checked' },
+      until: {
+        state: async () => [await flags('TICK'), await flags('LOADED')],
+        done: ([t, l]: number[][]) => flagsText(t!) === '1,1,0' && flagsText(l!) === '1,1,0',
+        withinMs: 60_000,
+        what: 'MODULES scanned again: a and b checked and loaded',
+      },
     });
-    expect((await rows()).map((r) => r.slice(0, 2)), 'the list shows b checked, a not').toEqual(['  ', '* ', '  ']);
-    await changeRow(0);
+    await changeRow(0, [0, 1, 0]);
     expect(await dialog()).toEqual(['APPLY 1 CHANGE?', 'NO RESTART']);
     await press('YES');
     await ui.wait({ state: () => state('a.dkm'), done: (s) => s === 'UNLOADED', withinMs: 60_000, what: 'a unloaded' });
@@ -90,9 +109,16 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
     await press('NO');
     await press('NO');
     await press('NO');
-    await ui.tap('PLAY', { until: { ms: 300, why: 'the transport starts' } });
+    await ui.tap('PLAY', { until: drained });
+    // the transport state has no address to read: a reload of b (loaded, no menus) is refused while it plays, and harmless while it does not
+    await ui.wait({
+      state: async () => (await rig.usb(rt, (dk) => dk.reloadAndWait('modules/b.dkm'))).result,
+      done: (r) => r === E_RELOAD_PLAYING,
+      withinMs: 30_000,
+      what: 'the transport plays',
+    });
     await openModules();
-    await changeRow(0);
+    await changeRow(0, [1, 1, 0]);
     await press('YES');
     await ui.wait({ state: dialog, done: (d) => d[0] === 'A NOT APPLIED', withinMs: 60_000, what: 'the refusal dialog' });
     expect(await dialog()).toEqual(['A NOT APPLIED', 'STOP PLAYBACK']);
@@ -104,7 +130,7 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
     expect(await epoch(), 'no restart').toBe(epoch0);
 
     // c, with the transport still playing: the same refusal, and YES on the question restarts the device (the list stayed open)
-    await changeRow(2);
+    await changeRow(2, [1, 1, 1]);
     await press('YES');
     await ui.wait({ state: dialog, done: (d) => d[0] === 'C NOT APPLIED', withinMs: 60_000, what: 'the refusal dialog' });
     await press('YES');
