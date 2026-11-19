@@ -9,7 +9,9 @@
     "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": { "@digi/sharc-rig-kit": ["./src/index.ts"] }
   },
-  "include": ["src", "tests", "conformance"]
+  "include": ["src", "tests", "conformance", "../../sdk/tests/dsp"]
 }

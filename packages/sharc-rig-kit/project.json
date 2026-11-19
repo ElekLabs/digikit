@@ -3,6 +3,9 @@
   "name": "@digi/sharc-rig-kit",
   "implicitDependencies": ["sharc-rig"],
   "targets": {
+    "typecheck": {
+      "inputs": ["default", "{workspaceRoot}/sdk/tests/dsp/**/*", "jsToolchain"]
+    },
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,

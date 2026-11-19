@@ -21,7 +21,7 @@
 //   arguments:     R4 = band record, R8 = args block (2 words: input block, output block), R12 unused;
 //                  all normal-word DM addresses
 //                  band record, 8 words: ic1, ic2, ka1, e1, a2d, ka2, a3d, unused (ic1 and ic2 are read at entry and written
-//                  back at exit; the coefficients are only read; ka1 = 0 means a muted band in the bank, not here)
+//                  back at exit; the coefficients are only read; the bank scales ka1 and ka2 by its output gain)
 //                  The input block and the output block must not overlap; the routine reads x[0] .. x[31] and reads and
 //                  writes out[0] .. out[31] (accumulate mode: the caller clears the block for the first band).
 //   block:         DK_BLOCK (32) samples; the sample count is fixed by the loop schedule (peeled first and last sample).
@@ -30,12 +30,12 @@
 //   instructions:  252 with DK_CALL, measured (208 in the band loop, see _dk_svf_band, the rest the frame, the three loads of the
 //                  arguments, CALL and the saves of 13 registers).
 //
-// DK_SVF_COEFS(KA1, E1, A2D, KA2, A3D, G, K, T1, T2, CR, CF)
-//   maths:         the record's coefficients from g and k:  d = 1 + g (g + k), a1 = 1 / d, a2d = 2 g a1, a3d = g a2d,
-//                  ka1 = k a1, ka2 = ka1 g, e1 = 2 a1 - 1
+// DK_SVF_COEFS(KA1, E1, A2D, KA2, A3D, G, K, KS, T1, T2, CR, CF)
+//   maths:         the record's coefficients from g, k and ks = k times the band's output gain (ks = k for unity peak gain):
+//                  d = 1 + g (g + k), a1 = 1 / d, a2d = 2 g a1, a3d = g a2d, ka1 = ks a1, ka2 = ka1 g, e1 = 2 a1 - 1
 //                  Operation order: d = g (g + k) + 1 (two roundings); a1 = DK_RECIP; a2d = g a1, a2d = a2d + a2d;
-//                  a3d = g a2d; ka1 = k a1; ka2 = ka1 g; e1 = a1 + a1, e1 = e1 - 1.
-//   arguments:     KA1, E1, A2D, KA2, A3D = the five coefficient results; G = g and K = k (not changed); T1 and T2 =
+//                  a3d = g a2d; ka1 = ks a1; ka2 = ka1 g; e1 = a1 + a1, e1 = e1 - 1.
+//   arguments:     KA1, E1, A2D, KA2, A3D = the five coefficient results; G = g, K = k and KS = ks (not changed); T1 and T2 =
 //                  temporaries; CR and CF = one more temporary named by its R and F name (1.0 and 2.0 are loaded into it);
 //                  all float registers distinct (E1 holds a1 until the end)
 //   range:         g > 0 and k > 0; DK_RECIP needs 1 + g (g + k) in a normal range (no check)
@@ -73,7 +73,7 @@
 // Needs "dsp/contract/call.inc", DK_BLOCK (dk_machine.inc or dk_fx.inc) and, for DK_SVF_COEFS, "dsp/util/recip.inc" included
 // before this file.
 
-#define DK_SVF_COEFS(KA1, E1, A2D, KA2, A3D, G, K, T1, T2, CR, CF) \
+#define DK_SVF_COEFS(KA1, E1, A2D, KA2, A3D, G, K, KS, T1, T2, CR, CF) \
     T1 = G + K; \
     T1 = G * T1; \
     CR = 0x3f800000; \
@@ -83,7 +83,7 @@
     A2D = G * E1; \
     A2D = A2D + A2D; \
     A3D = G * A2D; \
-    KA1 = K * E1; \
+    KA1 = KS * E1; \
     KA2 = KA1 * G; \
     E1 = E1 + E1; \
     CR = 0x3f800000; \

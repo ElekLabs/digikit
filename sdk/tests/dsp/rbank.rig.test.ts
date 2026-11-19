@@ -130,14 +130,14 @@ function bandLoop(r: Record7, x: ArrayLike<number>, out: Float32Array): { ic1: n
 }
 
 /** The coefficients of svf.inc from g and k, in the order of DK_SVF_COEFS, with an ideal 1 / d. */
-function svfCoefs(g: number, k: number): Omit<Record7, 'ic1' | 'ic2'> {
+function svfCoefs(g: number, k: number, ks: number = k): Omit<Record7, 'ic1' | 'ic2'> {
   const t = f(g * f(g + k));
   const d = f(t + 1);
   const a1 = f(1 / d);
   const a2d0 = f(g * a1);
   const a2d = f(a2d0 + a2d0);
   const a3d = f(g * a2d);
-  const ka1 = f(k * a1);
+  const ka1 = f(ks * a1);
   const ka2 = f(ka1 * g);
   const e1 = f(f(a1 + a1) - 1);
   return { ka1, e1, a2d, ka2, a3d };
@@ -147,7 +147,7 @@ class BankModel {
   first = true;
   ps = [0, 0, 0];
   bands: Record7[] = Array.from({ length: 8 }, () => ({ ic1: 0, ic2: 0, ka1: 0, e1: 0, a2d: 0, ka2: 0, a3d: 0 }));
-  /** the coefficients of the last block (ka1 = 0: muted) */
+  /** the coefficients of the last block  */
   used: Record7[] = [];
 
   block(x: ArrayLike<number>, words: [number, number, number]): Float32Array {
@@ -164,22 +164,36 @@ class BankModel {
     let cn = f(2 ** x0);
     const r = f(2 ** f(pS + pS));
     const k = f(2 ** f(f(pQ * NLQ) + QOFF));
+    // the output gain 1 / S at the middle band, then ks = k / S
+    const q2 = f(f(1 / k) * f(1 / k));
+    const iu = f(1 / r);
+    let [u, v] = [r, iu];
+    const term = (): number => {
+      const w = f(f(f(f(u - v) * f(u - v)) * q2) + 1);
+      return f(1 / Math.sqrt(w));
+    };
+    let acc = term();
+    for (let d = 2; d <= 3; d++) {
+      u = f(u * r);
+      v = f(v * iu);
+      acc = f(acc + term());
+    }
+    acc = f(acc + acc);
+    u = f(u * r);
+    v = f(v * iu);
+    const sum = f(f(acc + term()) + 1);
+    const ks = f(k * f(1 / sum));
     const out = new Float32Array(BLOCK);
     this.used = [];
     this.bands.forEach((b, i) => {
       const cc = Math.max(cn, LO);
       const ct = Math.min(cc, HI);
       const g = f(Math.tan(Math.PI * ct));
-      const c = svfCoefs(g, k);
-      if (cc > HI) {
-        c.ka1 = 0;
-        b.ic1 = 0;
-        b.ic2 = 0;
-      }
+      const c = svfCoefs(g, k, ks);
       cn = f(cn * r);
       Object.assign(b, c);
       this.used[i] = { ...b, ...c };
-      if (c.ka1 !== 0) Object.assign(b, bandLoop(b, x, out));
+      Object.assign(b, bandLoop(b, x, out));
     });
     return out;
   }
@@ -189,19 +203,22 @@ class BankModel {
 class IdealBank {
   private readonly c: { a1: number; a2: number; a3: number; k: number; ic1: number; ic2: number }[] = [];
   readonly centres: number[] = [];
+  /** S of rbank.inc in double precision */
+  readonly norm: number;
   constructor(words: [number, number, number]) {
     const [p0, p1, p2] = words.map((w) => Math.min(w / 32512, 1)) as [number, number, number];
     const F = 20 * 250 ** p0;
     const s = 2 * p1;
     const Q = 0.7 * (50 / 0.7) ** p2;
+    const u = 2 ** s;
+    this.norm = [0, 1, 2, 3, 4].reduce((a, d) => a + (d === 0 || d === 4 ? 1 : 2) / Math.sqrt(1 + Q * Q * (u ** d - u ** -d) ** 2), 0);
     for (let i = 0; i < 8; i++) {
-      const fc = Math.max(F * 2 ** (s * (i - 3.5)), 20);
+      const fc = Math.min(Math.max(F * 2 ** (s * (i - 3.5)), 20), 0.45 * FS);
       this.centres.push(fc);
-      if (fc / FS > 0.45) continue;
       const g = Math.tan((Math.PI * fc) / FS);
       const k = 1 / Q;
       const a1 = 1 / (1 + g * (g + k));
-      this.c.push({ a1, a2: g * a1, a3: g * g * a1, k, ic1: 0, ic2: 0 });
+      this.c.push({ a1, a2: g * a1, a3: g * g * a1, k: k / this.norm, ic1: 0, ic2: 0 });
     }
   }
   run(x: ArrayLike<number>): number[] {
@@ -350,8 +367,9 @@ describe('sdk/dsp resonator bank on the rig', () => {
     for (const p of settings) {
       const words = knobs(p);
       const ideal0 = new IdealBank(words);
-      const active = ideal0.centres.filter((c) => c / FS <= 0.45);
-      const freqs = [...active, ...active.slice(1).map((c, i) => Math.sqrt(c * active[i]!)).filter((v, i) => v !== active[i])];
+      // the centres (a band above 0.45 fs sits at 0.45 fs) and the geometric means of neighbouring distinct centres
+      const c = ideal0.centres;
+      const freqs = [...c, ...c.slice(1).map((v, i) => Math.sqrt(v * c[i]!))];
       for (const fc of new Set(freqs)) {
         const x = sine(fc, blocks * BLOCK, 0.25);
         resetState();
@@ -372,20 +390,32 @@ describe('sdk/dsp resonator bank on the rig', () => {
     console.log(`response: ${tones} tones; max gain difference (relative to the input amplitude) rig vs model ${worstModel.toExponential(2)}, rig vs double-precision ideal ${worstIdeal.toExponential(2)}`);
   }, 300_000);
 
-  it('has unity peak gain for one isolated band and the documented worst-case gain of 8', async () => {
-    // SPRD 0: the eight bands are the same filter; the sum at the centre is 8 times the single band's gain of 1
-    const words = knobs([0.5, 0, 0.5]);
-    const fc = 20 * 250 ** (words[0] / 32512);
+  it('has a peak gain of about 1 at SPRD 0 and at wide spacing (output scaled by 1 / S)', async () => {
     const blocks = 512;
-    const x = sine(fc, blocks * BLOCK, 0.5);
-    resetState();
-    pokeF(IN, x);
-    const { out } = await runBlocks(blocks, words);
-    const gain = amplitudeAt(out, fc, 8192) / 0.5;
-    console.log(`SPRD 0, tone at the centre ${fc.toFixed(1)} Hz: sum gain ${gain.toFixed(4)} (8 bands)`);
-    expect(gain).toBeGreaterThan(7.9);
-    expect(gain).toBeLessThan(8.1);
-  }, 120_000);
+    const rows: string[] = [];
+    for (const [label, p, lo, hi] of [
+      ['SPRD 0, Q 9', [0.5, 0, 0.6], 0.99, 1.01],
+      ['SPRD 1 octave, Q 9, no band clamped', [0.55, 0.5, 0.6], 0.7, 1.05],
+      ['SPRD 1.2 octaves, Q 25, no band clamped', [0.6, 0.6, 0.8], 0.7, 1.05],
+      // bands piled up at a clamp add up: three bands sit at 20 Hz here (an information row: no gain is claimed)
+      ['SPRD 2 octaves, Q 9, bands 0 to 2 at 20 Hz', [0.3, 1, 0.6], 0, 10],
+    ] as [string, [number, number, number], number, number][]) {
+      const words = knobs(p);
+      const bank = new IdealBank(words);
+      let top = 0;
+      for (const fc of bank.centres) {
+        const x = sine(fc, blocks * BLOCK, 0.5);
+        resetState();
+        pokeF(IN, x);
+        const { out } = await runBlocks(blocks, words);
+        top = Math.max(top, amplitudeAt(out, fc, 8192) / 0.5);
+      }
+      rows.push(`${label}: S ${bank.norm.toFixed(4)}, largest gain at a band centre ${top.toFixed(4)}`);
+      expect(top, label).toBeGreaterThan(lo);
+      expect(top, label).toBeLessThan(hi);
+    }
+    console.log(`peak gain:\n  ${rows.join('\n  ')}`);
+  }, 300_000);
 
   it('is stable at Q = 50 and the lowest FREQ: noise, impulses, then silence', async () => {
     const chunk = 256;
@@ -406,7 +436,7 @@ describe('sdk/dsp resonator bank on the rig', () => {
         finite &&= out.every(Number.isFinite);
         peak = Math.max(peak, maxAbs(out));
       }
-      // 3 s of a full-strength sine at the lowest centre (20 Hz): the bands ring at their peak gain (8 times 0.5 at SPRD 0)
+      // 3 s of a full-strength sine at the lowest centre (20 Hz): the bands ring at their peak gain (0.5 at SPRD 0)
       for (let c = 0; c < Math.ceil((3 * FS) / BLOCK / chunk); c++) {
         pokeF(IN, sine(20, chunk * BLOCK, 0.5, c * chunk * BLOCK));
         const { out } = await runBlocks(chunk, words);
@@ -485,7 +515,7 @@ describe('sdk/dsp resonator bank on the rig', () => {
     pokeF(IN, x);
     poke(PARAMS, knobs([0.5, 0.2, 0.5]));
     poke(ARGS, [IN, OUT]);
-    const regs = { ...CONSTS, ...poison(), I6: STACK, I7: STACK, R4: STATE, R8: ARGS, R12: PARAMS };
+    const regs: Record<string, number> = { ...CONSTS, ...poison(), I6: STACK, I7: STACK, R4: STATE, R8: ARGS, R12: PARAMS };
     const before = { ...regs };
     const res = await rig.call('_h_rbank', regs, {
       readRegs: [...KEPT_OK, ...SAVED],
@@ -578,7 +608,7 @@ describe('sdk/dsp resonator bank on the rig', () => {
     for (const [label, p] of [
       ['8 active bands', [0.45, 0.15, 0.4]],
       ['8 active bands, knobs moving', [0.2, 0.0, 0.9]],
-      ['bands 6 and 7 muted', [1.0, 0.4, 0.5]],
+      ['bands 6 and 7 clamped at 0.45 fs', [1.0, 0.4, 0.5]],
     ] as [string, [number, number, number]][]) {
       resetState(true);
       const first = await oneBlock(x, knobs(p));
@@ -587,7 +617,7 @@ describe('sdk/dsp resonator bank on the rig', () => {
       // the harness adds DK_CALL's 3 instructions to the routine's count and one RTS
       const n = [first, second, third].map((r) => r.res.instructions - 1);
       rows.push(`${label}: first block ${n[0]}, steady blocks ${n[1]} and ${n[2]} (with DK_CALL)`);
-      if (label !== 'bands 6 and 7 muted') steadyWorst = Math.max(steadyWorst, n[1]!, n[2]!);
+      steadyWorst = Math.max(steadyWorst, n[1]!, n[2]!);
     }
     console.log(`cost, instructions per block:\n  ${rows.join('\n  ')}`);
     expect(steadyWorst).toBeLessThanOrEqual(2500);
