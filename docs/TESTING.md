@@ -941,6 +941,7 @@ On a fresh checkout there is no cache: the verdict is `fingerprint-only` (`envel
 
 The tests of the SHARC adapters (`core/dsp-voice`, `core/fx`, `core/overdrive`, `core/sample-pool`) are Vitest files `modules/core/adapters/<name>/tests/<topic>.rig.test.ts`.
 They use the kit classes by `import { ... } from '@digi/sharc-rig-kit'` and run with `pnpm nx:pilot run core/<name>:test-rig` (same inputs as the sound checks above).
+The SDK's own DSP routines are tested the same way in `sdk/tests/dsp/*.rig.test.ts` (`pnpm nx:pilot run sdk:test-rig`): a small harness object includes the SDK files and calls the routine with `DK_CALL` (the resonator bank, its band and the `DK_EXP2` and `DK_TAN` macros).
 The kit has three rigs for them:
 
 - `RawRig` (`raw.ts`): objects placed at bases the test names, data at its alignment, stand-in externs; `call(symbol, regs, { reads, readRegs })`, `poke`, `peek`.

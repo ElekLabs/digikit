@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "typeRoots": ["../../../packages/sharc-rig-kit/node_modules/@types"],
+    "strict": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": { "@digi/sharc-rig-kit": ["../../../packages/sharc-rig-kit/src/index.ts"] }
+  },
+  "include": ["*.ts"]
+}
