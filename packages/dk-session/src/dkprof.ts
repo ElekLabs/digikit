@@ -16,6 +16,8 @@ interface Exports {
   dp_addr_lookup(req: number, len: number): number;
   dp_load_table(req: number, len: number): number;
   dp_profile_report(req: number, len: number): number;
+  dp_calibrate_fit(req: number, len: number): number;
+  dp_calibrate_report(req: number, len: number): number;
   dp_module_analyse(dkm: number, dkmLen: number, dko: number, dkoLen: number, text: number): number;
   dp_out_ptr(): number;
   dp_out_len(): number;
@@ -63,6 +65,16 @@ export interface ProfileReportRequest {
   /** Module id to the `dksharc::Analysis` of its DSP code (`moduleAnalyse`): SHARC counters are also added per loop. */
   analyses?: Record<string, unknown>;
   top?: number;
+}
+
+export interface CalibrateRequest {
+  /** Device and model `dk.profile/1` documents (`run.case_id`, `dsp_rows`, `spans`), several captures per case. */
+  device: unknown[];
+  model: unknown[];
+  block_cycles?: number;
+  model_id?: string;
+  /** Names and hashes of the files the profiles came from, kept in the output. */
+  sources?: unknown;
 }
 
 export class DkProf {
@@ -114,6 +126,21 @@ export class DkProf {
   /** The named self aggregates of a `dk.profile/1` document (a `Report`, or `{ text }` with `format: 'text'`). */
   profileReport(req: ProfileReportRequest & { format?: 'text' }): Record<string, unknown> {
     return this.json((p, n) => this.x.dp_profile_report(p, n), req) as Record<string, unknown>;
+  }
+
+  /** The fit of device against model profiles: a `dk.calibration/1` document (`dkprof::calibrate`), or `{ text }` with `format: 'text'`. */
+  calibrateFit(req: CalibrateRequest & { format?: 'text' }): Record<string, unknown> {
+    return this.json((p, n) => this.x.dp_calibrate_fit(p, n), req) as Record<string, unknown>;
+  }
+
+  /** The text of a calibration and, with a model `profile`, the estimated device cycles of its DSP rows (`{ text }`); JSON: `{ calibration, estimate }`. */
+  calibrateReport(req: {
+    calibration: unknown;
+    profile?: unknown;
+    estimate_only?: boolean;
+    format?: 'text';
+  }): Record<string, unknown> {
+    return this.json((p, n) => this.x.dp_calibrate_report(p, n), req) as Record<string, unknown>;
   }
 
   /** The static analysis of the DSP section of a `.dkm` with the symbols of its DSP `.dko.json` (`dksharc::Analysis`, or `{ text }`). */

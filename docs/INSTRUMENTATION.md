@@ -627,7 +627,7 @@ Profiles, crash records and PC dumps name their addresses through the address ma
 
 A profile is one JSON file, schema `dk.profile/1` (design: [profiling.md](plans/profiling.md) section 9; model: `packages/dkprof/src/profile.rs`). JSON is the artifact; the text of a report is a view of it.
 
-- `run`: id, target (`dt2`, `dn2`), firmware, runtime and module hashes, source revision, binary hash, and the load table of the run (where each module sat).
+- `run`: id, target (`dt2`, `dn2`), firmware, runtime and module hashes, source revision, binary hash, `case_id` and `input_sha256` (the calibration case and the hash of what it played; both optional), and the load table of the run (where each module sat).
 - `clock`: what the counts measure (`emu.cf.insn`), their unit and how they were sampled.
 - `raw`: counters `{cpu, addr, count, series}`. `series` is `pc` or a producer's own (`idle_pc`, `exit_pc`). Raw counters are kept as taken.
 - `metrics` and `overhead`: `{name, value, unit}`, or `{name, unit, na_reason}` for what a target cannot provide. N/A is never a zero.
@@ -676,6 +676,42 @@ node tools/devtools/wb.mjs profile spans --out out/try/spans.profile.json
 # digikit/pluck 812   120.500   148.4    210.0
 # out/try/spans.profile.json: 2 spans
 ```
+
+### Calibration (`wb profile calibrate`)
+
+Calibration fits the factor between what a device measured and what the model (the emulator) counted ([profiling.md](plans/profiling.md) 13.2). It needs no device: the inputs are profiles
+already captured, a device one and an emulator one per case, each with `run.case_id` and `run.input_sha256` and the DSP stats rows (`dsp_rows`, `dsp`) and/or `spans`. The fit runs in Rust
+(`packages/dkprof/src/calibrate.rs`, through `dkprof.wasm`), so `wb`, the workbench and patchkit use one code. The capture runner `wb profile calibrate run` is not built yet and prints so.
+
+```sh
+mise run wasm:dkprof                    # once: apps/web/public/dkprof.wasm
+node tools/devtools/wb.mjs profile calibrate fit --device dev-shot.json --device dev-pluck.json --model emu-shot.json --model emu-pluck.json \
+  --block-cycles 666784 --model-id <daemon sha256 or core fingerprint> --out cal.json
+# # dk.calibration/1 device dn2 firmware ff model ? block 666784 cycles
+# dsp: factor fit 2.0000 budget 2.0000 (device cycles per model instruction)
+#   error (worst-case pairs): n 2 mean +0.00% worst under 0.00% leave-one-out worst 0.00% (budget 0.00%)
+#   steady means: n 1 mean +0.00% worst under 0.00%
+#   spread 0.0%
+#   stock: avg 394000 max 394000 over 1 cases (the budget uses max)
+# cal.json: 3 DSP pairs, 0 ColdFire pairs, 0 refused
+node tools/devtools/wb.mjs profile calibrate report cal.json [--model-profile emu-shot.json]   # the same text; with a model profile also its estimated cycles
+node tools/devtools/wb.mjs profile report emu-shot.json --calibration cal.json                  # the report, then estimated device cycles per DSP row
+```
+
+Pairing. Several captures of one case (`--device` and `--model` repeat) are merged: counters add up, largest values stay largest. A device and a model case must agree on target, firmware, the module
+hash lists and the input hash; a row (DSP) must have equal calls per block, a span owner equal calls. A case or row that does not pair is not fitted and is listed under `refused` with its reason
+(`unpaired`, `key mismatch`, `call-count mismatch`); a file with no pair at all is an error.
+
+Fit. DSP: one factor per device, `cycles ~ f * instructions`, from the worst-case statistics (largest call, largest block). `fit` minimises the squared relative error, `budget` is the worst observed
+ratio, so it never underpredicts a measured pair. Steady means are paired apart (`steady`) and do not enter the fit. `error`: `n`, `mean` of `(f*insn - cyc)/cyc`, `worst_under` (the fit factor), `loo_worst`
+(each row of each case predicted by a fit without it) and `loo_budget_under` (the same with the others' budget factor); both are null, and the text says `n/a (one group)`, with fewer than two (case, row) groups. `spread` is the worst ratio over the best, minus one; above 10% the report warns
+that one factor is too coarse. `stock`: only from module-free cases, device runs with a `dsp` header and no row with calls (no machine or effect playing); each gives its header's largest stock block delta directly, nothing is subtracted. `avg` and `max` run over those cases (the budget uses `max`). Without such a case `stock` is null and the file warns `no module-free case: budget keeps the configured stock_busy`. A module-free case has no `run.module_sha256`, a `dsp` header and no row with calls (a case with modules loaded but no rows does not count), needs no model profile, and feeds the stock only after its key checks pass. A firmware hash on only one side of a pair is refused (`firmware missing on one side`); a span clock of 0 and a span kind that changes between captures are refused too.
+ColdFire: the same over span owners, in time (ticks over `span_clock_hz`, in microseconds), without `stock`. An emulator-against-emulator run gives exactly 1.000 and warns that it is no
+device calibration (`key.device_unit` is `insn`).
+
+`dk.calibration/1` (JSON): `key` {`device`, `firmware_sha256`, `block_cycles`, `model`, `device_unit`}, `sources` (file name and sha256 of every profile), `dsp` and `cf` each {`factor` {`fit`, `budget`},
+`error`, `steady`, `spread`, `stock` (dsp only), `pairs` [{`case`, `id`, `stat`, `model`, `device`, `ratio`, `error`}]}, `refused` [{`section`, `case`, `id`, `reason`}] and `warnings`.
+`patchkit budget` does not read this file yet.
 
 `cf.profile` keeps the 400 heaviest rows of its tables, which the artifact records under `loss`.
 

@@ -349,7 +349,7 @@ Risks: the window-3 read case adds a DSP routine path and one read per ColdFire 
 
 ### 13.2 Item 9: device calibration (`wb profile calibrate`)
 
-Not started. Order: after R12, P8c and P8d.
+Steps 1 and 3 built (prof/c4-calibrate); the rest waits for P8d and the device. Order: after R12, P8c and P8d.
 
 - Same counter on both sides: the P8d DSP stats rows read EMUCLK around each dispatch (`sdk/dsp/contract/dk_trace.inc:48-69`). On the device EMUCLK counts core cycles (SHARC+ PRM p.28-18). In the emulator it advances one per instruction plus modelled jump costs (finding 125, finding 103 section 8). Calibration is the device/emulator ratio per stats row.
 - Model: one factor per device for module rows, fitted on worst-case statistics (largest call, largest block), not means. The budget factor is the worst observed device/emulator ratio in the calibration set, so it never underpredicts a measured case. Move to a per-class model (instructions plus weighted taken jumps and calls, from per-PC counts and the dksharc class of each PC) only if the spread exceeds 10%. Cache-set conflicts are reported as outliers, not modelled.
@@ -362,7 +362,7 @@ Not started. Order: after R12, P8c and P8d.
 - Calibration set: shot (memory-heavy), pluck (compute), analog (filters), tb303, bd (light), freqshift (FX).
 - Without the device: `dkprof::calibrate` host tests on synthetic pairs (known factor recovered, underprediction flagged, unpaired and key-mismatched rows refused, leave-one-out); `report --calibration` and the patchkit budget against fakes. After P8d, an emulator-vs-emulator run must give exactly 1.000.
 - With Em's go (the device restarts on upload): P8d capture on DT2 and DN2; the dsp-facts rerun.
-- Steps: (1) calibrate crate, format, host tests (0.5 day, no P8d needed); (2) `dsp_rows` and case id in dk.profile/1 with P8d/P8e; (3) `wb profile calibrate` and `report --calibration` (0.5 day); (4) emulator captures of the set; (5) device captures (Em's go); (6) the patchkit budget switches to the calibration. Patched image hashes change, so `test:full` runs once for the batch.
+- Steps: (1) [x] calibrate crate, format, host tests (0.5 day, no P8d needed); (2) `dsp_rows` in dk.profile/1 with P8d/P8e (`run.case_id` and `run.input_sha256` landed with step 1); (3) [x] `wb profile calibrate fit|report` and `report --calibration` (0.5 day; `calibrate run` reserved, not built; use: INSTRUMENTATION.md "Calibration"); (4) emulator captures of the set; (5) device captures (Em's go); (6) the patchkit budget switches to the calibration. Patched image hashes change, so `test:full` runs once for the batch.
 
 ## 14. Open items
 

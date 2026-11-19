@@ -4,11 +4,13 @@
 //! - [`report`]: raw counters named through the address map into per-function and per-module self aggregates. Only self counts are added up:
 //!   a raw counter is a count at one address, never an inclusive cost.
 //! - [`budget`]: the machine budget in instructions per block, the verdict on a measurement and the rule that admits a selection of modules.
+//! - [`calibrate`]: the device/model factor of the DSP stats rows and the ColdFire spans, the file `dk.calibration/1`, its report and the estimate for a profile.
 //! - [`lookup`]: the address lookup and the load table decode, as JSON in and out.
 //! - [`module`]: static analysis of a module's DSP section (`dksharc`), with a text view.
 //! - [`wasm`]: the C ABI of `dkprof.wasm` (JSON in and out, no bindgen), the one entry for the CLI and the browser.
 
 pub mod budget;
+pub mod calibrate;
 pub mod lookup;
 pub mod module;
 pub mod profile;

@@ -4,6 +4,9 @@
 //     wb [--format json|text] addrmap lookup ADDR... [--map F]... [--image X.syx] [--loads F | --snapshot F] [--load ID=BASE] [--dsp-base ID=PC] [--cpu cf|sharc] [--ret]
 //     wb [--format json|text] module analyse MODULE.dkm DSP.dko.json
 //     wb [--format json|text] profile report FILE [--top N] [--map F]... [--image X.syx] [--loads F] [--analyse ID=MODULE.dkm:DSP.dko.json]...
+//     wb profile calibrate fit --device D.json... --model E.json... --out cal.json [--block-cycles N] [--model-id ID]   (device and model captures of the same cases: docs/INSTRUMENTATION.md "Calibration")
+//     wb [--format json|text] profile calibrate report cal.json [--model-profile FILE]    (--calibration FILE on `profile report` adds the estimate to a model profile's DSP rows)
+//     wb profile calibrate run   (the capture runner: not built yet)
 //     wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot] [--cpu cf|sharc]
 //     wb [--port SUB] [--bin PATH] profile spans [--start|--stop|--reset] [--out FILE]   (a device command, run from wb.mjs: profSpans; --start resets the counters, then starts)
 //
@@ -72,6 +75,11 @@ function show(answer, format) {
 export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
   const format = opts.format ?? 'text';
   if (format !== 'json' && format !== 'text') fail('--format is json or text');
+  if (cmd === 'profile' && sub === 'calibrate' && rest[0] === 'run')
+    fail(
+      'profile calibrate run (the capture runner) is not built yet: capture with profile record / profile spans, then calibrate fit',
+      1,
+    );
   const prof = cmd === 'profile' && sub === 'record' ? null : await loadProf(root, fail);
   if (cmd === 'addrmap' && sub === 'lookup') {
     if (rest.length === 0) fail('addrmap lookup ADDR... [--map F]...');
@@ -111,13 +119,72 @@ export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
         Uint8Array.from(readFileSync(dko)),
       );
     }
-    show(prof.profileReport(req), format);
+    const rep = prof.profileReport(req);
+    if (opts.calibration) {
+      const cal = readJson(opts.calibration);
+      const est = prof.calibrateReport({ calibration: cal, profile: req.profile, estimate_only: true, format });
+      if (format === 'json') console.log(JSON.stringify({ ...rep, estimate: est.estimate }));
+      else {
+        show(rep, format);
+        process.stdout.write(est.text);
+      }
+      return 0;
+    }
+    show(rep, format);
     return 0;
   }
+  if (cmd === 'profile' && sub === 'calibrate') return calibrate({ prof, rest, opts, format, fail });
   if (cmd === 'profile' && sub === 'record') return record({ opts, root, fail });
   fail(
     'usage: wb addrmap lookup | module analyse | profile report | profile record | profile spans (see tools/devtools/wb_prof.mjs)',
   );
+}
+
+const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+
+/** `profile calibrate fit | report`: the fit of device against model profiles, in Rust (dkprof::calibrate), and its views. */
+function calibrate({ prof, rest, opts, format, fail }) {
+  const [what, ...args] = rest;
+  if (what === 'fit') {
+    const dev = opts['device-files'] ?? [];
+    const mdl = opts.model ?? [];
+    if (args.length || dev.length === 0 || mdl.length === 0 || !opts.out)
+      fail(
+        'profile calibrate fit --device D.json... --model E.json... --out cal.json [--block-cycles N] [--model-id ID]',
+      );
+    const req = {
+      device: dev.map(readJson),
+      model: mdl.map(readJson),
+      sources: [
+        ...dev.map((f) => ({ role: 'device', file: path.basename(f), sha256: sha256(f) })),
+        ...mdl.map((f) => ({ role: 'model', file: path.basename(f), sha256: sha256(f) })),
+      ],
+    };
+    if (opts['block-cycles'] !== undefined) req.block_cycles = Number(opts['block-cycles']);
+    if (opts['model-id'] !== undefined) req.model_id = opts['model-id'];
+    let cal;
+    try {
+      cal = prof.calibrateFit(req);
+    } catch (e) {
+      fail(e.message, 1);
+    }
+    writeFileSync(opts.out, `${JSON.stringify(cal, null, 2)}\n`);
+    if (format === 'json') console.log(JSON.stringify(cal));
+    else process.stdout.write(prof.calibrateReport({ calibration: cal, format: 'text' }).text);
+    // json mode: stdout is only the JSON
+    (format === 'json' ? console.error : console.log)(
+      `${opts.out}: ${cal.dsp?.pairs.length ?? 0} DSP pairs, ${cal.cf?.pairs.length ?? 0} ColdFire pairs, ${cal.refused.length} refused`,
+    );
+    return 0;
+  }
+  if (what === 'report') {
+    if (args.length !== 1) fail('profile calibrate report cal.json [--model-profile FILE]');
+    const req = { calibration: readJson(args[0]), format };
+    if (opts['model-profile']) req.profile = readJson(opts['model-profile']);
+    show(prof.calibrateReport(req), format);
+    return 0;
+  }
+  return fail('usage: wb profile calibrate fit | report | run');
 }
 
 /** `profile spans`: the runtime span counters of a device (dk-session `profileAll`) as a dk.profile/1 with `spans`, and a table. */

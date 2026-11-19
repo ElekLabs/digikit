@@ -9,11 +9,13 @@
 //! | `dp_addr_lookup` | `{maps, loads?, snapshot?, dsp_base?, ret?, addrs: [{cpu, addr}]}` | `{unloaded, results}` ([`crate::lookup`]) |
 //! | `dp_load_table` | `{maps, snapshot?}` | the load table, or `{reads}` without a snapshot |
 //! | `dp_profile_report` | `{profile, maps?, loads?, analyses?, top?}` (`analyses`: module id to the `dksharc::Analysis` of its DSP code) | [`crate::report::Report`] |
+//! | `dp_calibrate_fit` | `{device: [profile], model: [profile], block_cycles?, model_id?, sources?}` | `dk.calibration/1` ([`crate::calibrate`]), or `{text}` |
+//! | `dp_calibrate_report` | `{calibration, profile?}` | `{text}`: the calibration and, with a model `profile`, the estimated device cycles of its DSP rows (`estimate` in JSON form with `format: "json"`) |
 //! | `dp_module_analyse` | the `.dkm` bytes and the `.dko.json` bytes as two buffers, and a text flag | `dksharc::Analysis`, or the text view |
 
 use crate::lookup::{self, LoadTableReq, LookupReq};
 use crate::profile::Profile;
-use crate::{module, report};
+use crate::{calibrate, module, report};
 use dkaddrmap::{AddrMap, LoadTable};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -95,6 +97,47 @@ pub fn profile_report(req: &[u8]) -> Result<String, String> {
     })
 }
 
+pub fn calibrate_fit(req: &[u8]) -> Result<String, String> {
+    let (r, v): (calibrate::Request, Value) = parse(req, "calibrate_fit")?;
+    let c = calibrate::fit(&r)?;
+    Ok(if wants_text(&v) {
+        text_of(calibrate::text(&c))
+    } else {
+        serde_json::to_string(&c).map_err(|e| e.to_string())?
+    })
+}
+
+#[derive(Deserialize)]
+struct CalReportReq {
+    calibration: calibrate::Calibration,
+    #[serde(default)]
+    profile: Option<Value>,
+    /// With a profile: only the estimate in the text, not the calibration's own report.
+    #[serde(default)]
+    estimate_only: bool,
+}
+
+pub fn calibrate_report(req: &[u8]) -> Result<String, String> {
+    let (r, v): (CalReportReq, Value) = parse(req, "calibrate_report")?;
+    let mut est = None;
+    let mut text = if r.estimate_only && r.profile.is_some() {
+        String::new()
+    } else {
+        calibrate::text(&r.calibration)
+    };
+    if let Some(p) = &r.profile {
+        let (j, t) = calibrate::estimate(&r.calibration, p)?;
+        text.push_str(&t);
+        est = Some(j);
+    }
+    Ok(if wants_text(&v) {
+        text_of(text)
+    } else {
+        json!({ "calibration": r.calibration, "estimate": est.map(|e| e["estimate"].clone()) })
+            .to_string()
+    })
+}
+
 pub fn module_analyse(dkm: &[u8], dko: &[u8], text: bool) -> Result<String, String> {
     let a = module::analyse(dkm, dko)?;
     if text {
@@ -148,6 +191,20 @@ pub unsafe extern "C" fn dp_load_table(req: *const u8, len: usize) -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dp_profile_report(req: *const u8, len: usize) -> i32 {
     finish(profile_report(unsafe { slice(req, len) }))
+}
+
+/// # Safety
+/// `req..req+len` must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dp_calibrate_fit(req: *const u8, len: usize) -> i32 {
+    finish(calibrate_fit(unsafe { slice(req, len) }))
+}
+
+/// # Safety
+/// `req..req+len` must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dp_calibrate_report(req: *const u8, len: usize) -> i32 {
+    finish(calibrate_report(unsafe { slice(req, len) }))
 }
 
 /// # Safety
