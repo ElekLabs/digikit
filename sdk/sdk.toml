@@ -1848,7 +1848,8 @@ dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick of
 # Tags: 1 NEEDS (service name hash, minimum version, hard or optional), 2 USES (resource id, count; ids in [records.resources]), 3 KEYS (record kind, n, keys: the
 # machine keys, effect ids and the keys of a service's kind), 4 KINDS (kind, length, handler entry: a service module's kinds), 5 SLOTS, 6 HOOKS, 7 EXPORTS, 8 RESOURCES,
 # and, in a version 2 table only: 9 PROVIDES (service name hash, version: the services the module provides), 10 BIND (site hash, address, stock length, trampoline offset,
-# then the stock bytes padded to 4, at most 64: the firmware sites a service binds). In a version 2 table a SLOTS item has 12 bytes (slot id, flags, entry).
+# then the stock bytes padded to 4, at most 64: the firmware sites a service binds), 11 FW (the firmware identity), and, in a version 3 table only (the port file): 12 FWNAMES
+# (hash, address, exit number, kind, flags), 13 SITES (hook hash, address, displaced length, kind, flags, check value). In a version 2 or 3 table a SLOTS item has 12 bytes (slot id, flags, entry).
 # A module that needs and keeps nothing has the 8-byte head. A file with no table, or another magic, is the format of runtime 0.7: E_CONTRACT.
 dsp_header = 64     # 0x40: the header of the DSP section
 max_records = 32    # records of the `register` table
@@ -1861,7 +1862,7 @@ granule = 64        # the DSP area's placement granule
 dsp_slack = 8       # bytes the DSP range may start before its alignment
 arena_hdr = 16      # the arena's block header
 table_magic = 1145787458  # 0x444b5442 "DKTB": the first word of the header table of a `.dkm` (packages/dkneeds/src/keys.rs); another word is a file of the 0.7 format
-table_version = 2   # the newest version of the header table a reader accepts (1 and 2; a writer uses 2 only for a table with PROVIDES or BIND; a change is a MINOR of the runtime)
+table_version = 3   # the newest version of the header table a reader accepts (1 to 3; a writer uses 2 for a table with PROVIDES, BIND or FW and 3 for the port file's FWNAMES and SITES; a change is a MINOR of the runtime)
 provider_max = 6    # provider slots of the boot plan (the services that provide; separate from the module records, SEL_MAX)
 bind_max = 24       # BIND items (hook sites) of one provider file (`patchkit bind` refuses more)
 install_sites = 48  # hook sites installed at once over all providers (the installer's table: machines 21 + fx 9 and room)

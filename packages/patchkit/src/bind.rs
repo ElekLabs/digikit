@@ -746,6 +746,7 @@ fn table_with_bind(
         provides: &provides,
         bind: &bind,
         fw,
+        ..Table::default()
     };
     let mut out = vec![0u8; table_size(&t)];
     write_table(&t, &mut out).map_err(|e| err!("header table: {e:?}"))?;

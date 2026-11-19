@@ -368,13 +368,13 @@ bytes, 16 hex digits). The decoder is patchkit's, so `port_resolve` calls `dist/
 ### Port file
 
 ```sh
-pnpm nx:pilot run patchkit:ports                                   # dist/ports/<device>-<version>.dks for every committed port (cached)
+pnpm nx:pilot run patchkit:ports                                   # dist/ports/<device>-<version>.dkport for every committed port (cached)
 dist/patchkit/patchkit port build --all --out DIR                  # the same without Nx; --device SHORT --version V for one
 dist/patchkit/patchkit port check --firmware FW.syx SERVICE.dks... # one-time: the port file says what `patchkit bind` does
 dist/patchkit/patchkit port check --names-only SERVICE.dks...      # no firmware: every firmware name a service uses is in the port set
 ```
 
-The port file (docs/plans/port-file.md) is a `.dks` of role 2 with the service `port`, the firmware identity (`FW`) and two table entries: FWNAMES (name and exit
+The port file (docs/plans/port-file.md) is a `.dkport` of role 2 that provides the name `port` (a provider, not a service), with the firmware identity (`FW`) and two entries of a version 3 header table: FWNAMES (name and exit
 hash to address, with an `absent` flag for a name that only another device's firmware has) and SITES (per hook: site address, displaced length, kind, check value).
 `port build` reads only `devices/ports` and `devices/fw`: no firmware, so CI builds it. `port check` needs the stock `.syx`: for each unbound service it runs
 `patchkit bind` and compares the port file with it (site, return address, check value, kind, tail bytes, every `dk_fw_` and `dk_exit_` place, `dk_stock_` and `dk_ret_`

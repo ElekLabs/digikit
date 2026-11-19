@@ -277,6 +277,7 @@ fn table_with_needs(
         hooks: &hooks,
         exports: &exports,
         resources: &resources,
+        ..Table::default()
     };
     let mut out = vec![0u8; dkneeds::keys::table_size(&t)];
     write_table(&t, &mut out).map_err(|e| err!("header table: {e:?}"))?;

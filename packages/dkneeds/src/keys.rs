@@ -3,14 +3,15 @@
 //!
 //! ```text
 //! +0  u32 magic "DKTB"
-//! +4  u16 version (1 or 2)
+//! +4  u16 version (1, 2 or 3)
 //! +6  u16 n_entries
 //! +8  entries, in ascending tag order, each tag at most once:
 //!       u16 tag, u16 count, u32 payload_bytes (a multiple of 4), the payload
 //! ```
 //!
-//! The writer picks the version by content: 2 if and only if the table has `PROVIDES`, `BIND` or `FW` items, else 1. A reader accepts both. `PROVIDES`,
-//! `BIND` and `FW` are valid only in a version 2 table, and the `SLOTS` item has 12 bytes there (8 in version 1).
+//! The writer picks the version by content: 3 if the table has `FWNAMES` or `SITES` items (the port file), else 2 if it has `PROVIDES`, `BIND` or `FW` items,
+//! else 1. A reader accepts all three. `PROVIDES`, `BIND` and `FW` are valid only in a table of version 2 or 3, `FWNAMES` and `SITES` only in a version 3
+//! table, and the `SLOTS` item has 12 bytes from version 2 (8 in version 1).
 //!
 //! Entries (the payload of each of `count` items):
 //! - `NEEDS` (12 bytes): u32 service name hash (`name_hash`), u32 minimum version (major << 16 | minor << 8 | patch), u32 flags (bit 0: hard).
@@ -27,7 +28,11 @@
 //! - `BIND` (`count` items of u32 site hash, u32 firmware address, u32 stock length, u32 trampoline offset (image offset), then the stock
 //!   bytes padded to 4; at most 64 stock bytes): the firmware sites a service is bound to. The entry is used up exactly.
 //! - `FW` (8, version 2): the first 8 bytes of the SHA-256 of the stock firmware image the file was bound to (`patchkit bind` writes it when the file holds a
-//!   firmware address). The loader compares it with the `fw_id` entry of the image's info table; a file has at most one.
+//!   firmware address; the port file, role 2, carries it). The loader compares it with the `fw_id` entry of the image's info table; a file has at most one.
+//! - `FWNAMES` (12, version 3): u32 hash, u32 addr, u16 n, u8 kind, u8 flags: every firmware name (kind 0) and hook exit (kind 1) of one firmware, sorted by (kind,
+//!   hash, n); flag bit 0 `absent` (a name that only another device has: it resolves to 0).
+//! - `SITES` (20, version 3): u32 hook hash, u32 site address, u16 displaced length, u8 kind (0 raw, 1 tail, 2 stock), u8 flags (bit 0 absent; bits 4 to 7 the
+//!   number of fixups that follow: reserved, 0), 8 bytes: the first 8 bytes of the SHA-256 of the displaced bytes. Sorted by hash.
 //!
 //! The packer always writes a table (a module that needs and keeps nothing has the 8-byte head). A file with no table or another magic is the
 //! format of runtime 0.7: the loader refuses it with `E_CONTRACT`.
@@ -60,7 +65,22 @@ pub mod tag {
     pub const PROVIDES: u16 = 9;
     pub const BIND: u16 = 10;
     pub const FW: u16 = 11;
+    pub const FWNAMES: u16 = 12;
+    pub const SITES: u16 = 13;
 }
+
+/// Bytes of one `FWNAMES` item and of one `SITES` item.
+pub const NAME_BYTES: usize = 12;
+pub const SITE_BYTES: usize = 20;
+/// Bit 0 of the flags of a `FWNAMES` or `SITES` item: the name or hook is absent on this firmware.
+pub const FLAG_ABSENT: u8 = 1;
+/// The kinds of a `FWNAMES` item: a firmware name (`dk_fw_<hash>`) and an exit (`dk_exit_<hash>_<n>`).
+pub const NAME_FW: u8 = 0;
+pub const NAME_EXIT: u8 = 1;
+/// The kinds of a `SITES` item: a raw site, and the two whose displaced bytes the runtime copies from flash (a tail and a stock path).
+pub const SITE_RAW: u8 = 0;
+pub const SITE_TAIL: u8 = 1;
+pub const SITE_STOCK: u8 = 2;
 
 /// Bytes of one `FW` item (the first 8 bytes of the stock firmware's SHA-256).
 pub const FW_BYTES: usize = 8;
@@ -79,6 +99,10 @@ pub fn item_bytes(t: u16) -> Option<usize> {
 pub fn item_bytes_v(t: u16, version: u16) -> Option<usize> {
     if t == tag::NEEDS || t == tag::KINDS || (t == tag::SLOTS && version >= 2) {
         Some(12)
+    } else if t == tag::FWNAMES {
+        Some(NAME_BYTES)
+    } else if t == tag::SITES {
+        Some(SITE_BYTES)
     } else if t == tag::KEYS || t == tag::BIND {
         None
     } else {
@@ -183,6 +207,28 @@ fn bind_item_bytes(n: usize) -> usize {
     BIND_HEAD + n.div_ceil(4) * 4
 }
 
+/// One `FWNAMES` item.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NameRec {
+    pub hash: u32,
+    pub addr: u32,
+    /// The exit number of a kind 1 item (0: the end of the site); 0 for a name.
+    pub n: u16,
+    pub kind: u8,
+    pub flags: u8,
+}
+
+/// One `SITES` item.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SiteRec {
+    pub hash: u32,
+    pub addr: u32,
+    pub len: u16,
+    pub kind: u8,
+    pub flags: u8,
+    pub check: [u8; 8],
+}
+
 /// What the packer writes: every list may be empty.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Table<'a> {
@@ -200,12 +246,18 @@ pub struct Table<'a> {
     pub bind: &'a [Bind<'a>],
     /// The firmware identity items (a file has at most one; the loader refuses more). A table with any is written as version 2.
     pub fw: &'a [[u8; FW_BYTES]],
+    /// The firmware names of a port file. A table with any is written as version 3.
+    pub names: &'a [NameRec],
+    /// The hook sites of a port file. A table with any is written as version 3.
+    pub sites: &'a [SiteRec],
 }
 
 impl Table<'_> {
-    /// The version `write_table` writes: 2 if and only if the table has `PROVIDES`, `BIND` or `FW` items.
+    /// The version `write_table` writes: 3 if the table has `FWNAMES` or `SITES` items, else 2 if it has `PROVIDES`, `BIND` or `FW` items, else 1.
     pub fn version(&self) -> u16 {
-        if self.provides.is_empty() && self.bind.is_empty() && self.fw.is_empty() {
+        if !self.names.is_empty() || !self.sites.is_empty() {
+            3
+        } else if self.provides.is_empty() && self.bind.is_empty() && self.fw.is_empty() {
             1
         } else {
             2
@@ -213,7 +265,7 @@ impl Table<'_> {
     }
 
     /// (tag, items, payload bytes) of each entry, in tag order.
-    fn entries(&self) -> [(u16, usize, usize); 11] {
+    fn entries(&self) -> [(u16, usize, usize); 13] {
         let kb: usize = self.keys.iter().map(|g| 8 + 4 * g.keys.len()).sum();
         let bb: usize = self
             .bind
@@ -237,6 +289,12 @@ impl Table<'_> {
             (tag::PROVIDES, self.provides.len(), 8 * self.provides.len()),
             (tag::BIND, self.bind.len(), bb),
             (tag::FW, self.fw.len(), FW_BYTES * self.fw.len()),
+            (
+                tag::FWNAMES,
+                self.names.len(),
+                NAME_BYTES * self.names.len(),
+            ),
+            (tag::SITES, self.sites.len(), SITE_BYTES * self.sites.len()),
         ]
     }
 }
@@ -335,6 +393,25 @@ pub fn write_table(t: &Table, out: &mut [u8]) -> Result<usize, KeysError> {
                 out[at..at + FW_BYTES].copy_from_slice(x);
                 at += FW_BYTES;
             }
+        } else if tg == tag::FWNAMES {
+            for x in t.names {
+                put32(out, &mut at, x.hash);
+                put32(out, &mut at, x.addr);
+                out[at..at + 2].copy_from_slice(&x.n.to_be_bytes());
+                out[at + 2] = x.kind;
+                out[at + 3] = x.flags;
+                at += 4;
+            }
+        } else if tg == tag::SITES {
+            for x in t.sites {
+                put32(out, &mut at, x.hash);
+                put32(out, &mut at, x.addr);
+                out[at..at + 2].copy_from_slice(&x.len.to_be_bytes());
+                out[at + 2] = x.kind;
+                out[at + 3] = x.flags;
+                out[at + 4..at + 12].copy_from_slice(&x.check);
+                at += 12;
+            }
         } else {
             let list = if tg == tag::HOOKS {
                 t.hooks
@@ -408,7 +485,9 @@ impl<'a> Keys<'a> {
             let tg = u16_at(bytes, at);
             let count = u16_at(bytes, at + 2) as usize;
             let len = u32_at(bytes, at + 4) as usize;
-            let top = if version >= 2 {
+            let top = if version >= 3 {
+                tag::SITES
+            } else if version >= 2 {
                 tag::FW
             } else {
                 tag::RESOURCES
@@ -481,7 +560,7 @@ impl<'a> Keys<'a> {
         u16_at(self.bytes, 6) as usize
     }
 
-    /// The version of the table (1 or 2).
+    /// The version of the table (1 to 3).
     pub fn version(&self) -> u16 {
         u16_at(self.bytes, 4)
     }
@@ -778,6 +857,75 @@ impl<'a> Keys<'a> {
         let mut out = [0u8; FW_BYTES];
         out.copy_from_slice(&body[FW_BYTES * i..FW_BYTES * (i + 1)]);
         Some(out)
+    }
+
+    /// How many `FWNAMES` items the table has.
+    pub fn name_count(&self) -> usize {
+        self.count(tag::FWNAMES)
+    }
+
+    /// `FWNAMES` item `i`; `None` outside the entry.
+    pub fn name(&self, i: usize) -> Option<NameRec> {
+        let (n, b) = entry(self.bytes, tag::FWNAMES)?;
+        if i >= n {
+            return None;
+        }
+        let at = NAME_BYTES * i;
+        Some(NameRec {
+            hash: u32_at(b, at),
+            addr: u32_at(b, at + 4),
+            n: u16_at(b, at + 8),
+            kind: b[at + 10],
+            flags: b[at + 11],
+        })
+    }
+
+    /// The `FWNAMES` item of `kind` (`NAME_FW`, `NAME_EXIT`), `hash` and exit number `n`: a plain index loop (the runtime calls it for every import).
+    pub fn find_name(&self, kind: u8, hash: u32, n: u16) -> Option<NameRec> {
+        let mut i = 0;
+        while let Some(x) = self.name(i) {
+            if x.hash == hash && x.kind == kind && x.n == n {
+                return Some(x);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    /// How many `SITES` items the table has.
+    pub fn site_count(&self) -> usize {
+        self.count(tag::SITES)
+    }
+
+    /// `SITES` item `i`; `None` outside the entry.
+    pub fn site(&self, i: usize) -> Option<SiteRec> {
+        let (n, b) = entry(self.bytes, tag::SITES)?;
+        if i >= n {
+            return None;
+        }
+        let at = SITE_BYTES * i;
+        let mut check = [0u8; 8];
+        check.copy_from_slice(&b[at + 12..at + 20]);
+        Some(SiteRec {
+            hash: u32_at(b, at),
+            addr: u32_at(b, at + 4),
+            len: u16_at(b, at + 8),
+            kind: b[at + 10],
+            flags: b[at + 11],
+            check,
+        })
+    }
+
+    /// The `SITES` item of the hook `hash`.
+    pub fn find_site(&self, hash: u32) -> Option<SiteRec> {
+        let mut i = 0;
+        while let Some(x) = self.site(i) {
+            if x.hash == hash {
+                return Some(x);
+            }
+            i += 1;
+        }
+        None
     }
 
     /// `BIND` item `i`; `None` outside the entry.
@@ -1256,11 +1404,75 @@ mod tests {
         );
         assert!(Keys::parse(&raw(2, &[(tag::PROVIDES, 1, &prov)])).is_ok());
         assert_eq!(Keys::parse(&raw(0, &[])).unwrap_err(), KeysError::Format);
-        assert_eq!(Keys::parse(&raw(3, &[])).unwrap_err(), KeysError::Format);
+        assert_eq!(Keys::parse(&raw(4, &[])).unwrap_err(), KeysError::Format);
         // a version 1 slot item has 8 bytes, a version 2 item 12
         assert!(Keys::parse(&raw(1, &[(tag::SLOTS, 1, &[0u8; 8])])).is_ok());
         assert_eq!(
             Keys::parse(&raw(2, &[(tag::SLOTS, 1, &[0u8; 8])])).unwrap_err(),
+            KeysError::Size
+        );
+    }
+
+    #[test]
+    fn the_port_entries_are_version_3_only_and_are_read_back() {
+        let names = [
+            NameRec {
+                hash: 5,
+                addr: 0x100,
+                n: 0,
+                kind: NAME_FW,
+                flags: 0,
+            },
+            NameRec {
+                hash: 9,
+                addr: 0x200,
+                n: 2,
+                kind: NAME_EXIT,
+                flags: 0,
+            },
+            NameRec {
+                hash: 9,
+                addr: 0,
+                n: 3,
+                kind: NAME_EXIT,
+                flags: FLAG_ABSENT,
+            },
+        ];
+        let sites = [SiteRec {
+            hash: 7,
+            addr: 0x1000,
+            len: 8,
+            kind: SITE_TAIL,
+            flags: 0,
+            check: [1, 2, 3, 4, 5, 6, 7, 8],
+        }];
+        let t = Table {
+            names: &names,
+            sites: &sites,
+            fw: &[[9; 8]],
+            provides: &[Pair { a: 1, b: 2 }],
+            ..Table::default()
+        };
+        assert_eq!(t.version(), 3);
+        let mut b = vec![0u8; table_size(&t)];
+        write_table(&t, &mut b).unwrap();
+        let k = Keys::parse(&b).unwrap();
+        assert_eq!((k.version(), k.name_count(), k.site_count()), (3, 3, 1));
+        assert_eq!(k.find_name(NAME_FW, 5, 0), Some(names[0]));
+        assert_eq!(k.find_name(NAME_EXIT, 9, 3), Some(names[2]));
+        assert_eq!(k.find_name(NAME_EXIT, 9, 1), None);
+        assert_eq!(k.find_name(NAME_FW, 9, 0), None);
+        assert_eq!(k.find_site(7), Some(sites[0]));
+        assert_eq!(k.find_site(8), None);
+        // a version 2 table refuses the entries; a size that does not fit the item width is refused
+        b[4..6].copy_from_slice(&2u16.to_be_bytes());
+        assert_eq!(Keys::parse(&b).unwrap_err(), KeysError::Tag);
+        assert_eq!(
+            Keys::parse(&raw(3, &[(tag::SITES, 1, &[0u8; 12])])).unwrap_err(),
+            KeysError::Size
+        );
+        assert_eq!(
+            Keys::parse(&raw(3, &[(tag::FWNAMES, 1, &[0u8; 8])])).unwrap_err(),
             KeysError::Size
         );
     }

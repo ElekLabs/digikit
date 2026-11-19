@@ -191,8 +191,10 @@ fn the_menu_reader_accepts_a_version_2_table() {
     keys::write_table(&table, &mut t).unwrap();
     assert_eq!(t[5], 2);
     assert_eq!(of(&dkm(4, 0, &t, &[])).unwrap().machine_rows, 3);
-    // another version is refused
+    // version 3 is the port file's, and is read the same way; another version is refused
     t[5] = 3;
+    assert_eq!(of(&dkm(4, 0, &t, &[])).unwrap().machine_rows, 3);
+    t[5] = 4;
     assert_eq!(of(&dkm(4, 0, &t, &[])), Err(Error::Register));
 }
 

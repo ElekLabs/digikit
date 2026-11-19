@@ -1,9 +1,9 @@
-//! The port file (docs/plans/port-file.md): one `.dks` of role 2 ("port") per device and firmware version, built from committed data only: the anchors,
+//! The port file (docs/plans/port-file.md): one `.dkport` of role 2 ("port") per device and firmware version, built from committed data only: the anchors,
 //! hooks and site facts of `devices/ports/<device>-<version>.toml` and the declarations of `devices/fw/`. It holds no firmware bytes: addresses, lengths and
 //! a truncated sha256 of each site.
 //!
-//! The file has the container of a `.dkm` (header, sha256, table) with no code. It provides the service `port`, carries the identity of the firmware
-//! (`FW`, the first 8 bytes of the stock `.syx` sha256) and two table entries that PR2 moves into `dkneeds` with the runtime:
+//! The file has the container of a `.dkm` (header, sha256, table) with no code. It provides the name `port`, carries the identity of the firmware
+//! (`FW`, the first 8 bytes of the stock `.syx` sha256) and two table entries of a version 3 table (`dkneeds::keys`, which the runtime reads too):
 //!
 //! ```text
 //! FWNAMES (tag 12), items of 12 bytes, sorted by (kind, hash, n):
@@ -28,7 +28,10 @@ use crate::firmware::Firmware;
 use crate::fwgen::{HookDecl, service_decls};
 use crate::port::{Hook, Port, Registry};
 use crate::prim;
-use dkneeds::keys::{Pair, Table, name_hash, table_size, write_table};
+use dkneeds::keys::{
+    FLAG_ABSENT, Keys, NameRec, Pair, SITE_RAW, SITE_STOCK, SITE_TAIL, SiteRec, Table, name_hash,
+    table_size, write_table,
+};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
@@ -36,12 +39,6 @@ use std::collections::BTreeSet;
 pub const PORT_SERVICE: &str = "port";
 /// The version of the service `port` (major << 16 | minor << 8 | patch).
 pub const PORT_VERSION: u32 = 0x000100;
-/// The table entry tags of the port file.
-pub const TAG_FWNAMES: u16 = 12;
-pub const TAG_SITES: u16 = 13;
-const NAME_ITEM: usize = 12;
-const SITE_ITEM: usize = 20;
-const FLAG_ABSENT: u8 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SiteKind {
@@ -410,13 +407,6 @@ fn site_of(port: &Port, h: &Hook, decl: &HookDecl, who: &str) -> Result<(SiteIte
     ))
 }
 
-fn put_entry(t: &mut Vec<u8>, tag: u16, count: usize, body: &[u8]) {
-    t.extend_from_slice(&tag.to_be_bytes());
-    t.extend_from_slice(&(count as u16).to_be_bytes());
-    t.extend_from_slice(&(body.len() as u32).to_be_bytes());
-    t.extend_from_slice(body);
-}
-
 /// The port file: a role 2 container with no code and the table of `data`.
 pub fn pack(data: &PortData) -> Result<Vec<u8>> {
     let provides = [Pair {
@@ -424,35 +414,38 @@ pub fn pack(data: &PortData) -> Result<Vec<u8>> {
         b: PORT_VERSION,
     }];
     let fw = [data.fw_id];
+    let names: Vec<NameRec> = data
+        .names
+        .iter()
+        .map(|x| NameRec {
+            hash: x.hash,
+            addr: x.addr,
+            n: x.n,
+            kind: x.kind,
+            flags: if x.absent { FLAG_ABSENT } else { 0 },
+        })
+        .collect();
+    let sites: Vec<SiteRec> = data
+        .sites
+        .iter()
+        .map(|x| SiteRec {
+            hash: x.hash,
+            addr: x.addr,
+            len: x.len,
+            kind: x.kind as u8,
+            flags: if x.absent { FLAG_ABSENT } else { 0 },
+            check: x.check,
+        })
+        .collect();
     let t = Table {
         provides: &provides,
         fw: &fw,
+        names: &names,
+        sites: &sites,
         ..Table::default()
     };
     let mut table = vec![0u8; table_size(&t)];
     write_table(&t, &mut table).map_err(|e| err!("header table: {e:?}"))?;
-    // the writer knows no port tags: append the two entries (tags above FW, so the order stays ascending)
-    let mut names = Vec::with_capacity(NAME_ITEM * data.names.len());
-    for x in &data.names {
-        names.extend_from_slice(&x.hash.to_be_bytes());
-        names.extend_from_slice(&x.addr.to_be_bytes());
-        names.extend_from_slice(&x.n.to_be_bytes());
-        names.push(x.kind);
-        names.push(if x.absent { FLAG_ABSENT } else { 0 });
-    }
-    let mut sites = Vec::with_capacity(SITE_ITEM * data.sites.len());
-    for x in &data.sites {
-        sites.extend_from_slice(&x.hash.to_be_bytes());
-        sites.extend_from_slice(&x.addr.to_be_bytes());
-        sites.extend_from_slice(&x.len.to_be_bytes());
-        sites.push(x.kind as u8);
-        sites.push(if x.absent { FLAG_ABSENT } else { 0 });
-        sites.extend_from_slice(&x.check);
-    }
-    let n = u16::from_be_bytes([table[6], table[7]]) + 2;
-    table[6..8].copy_from_slice(&n.to_be_bytes());
-    put_entry(&mut table, TAG_FWNAMES, data.names.len(), &names);
-    put_entry(&mut table, TAG_SITES, data.sites.len(), &sites);
     emit(&EmitParts {
         name: PORT_SERVICE,
         version: PORT_VERSION,
@@ -477,72 +470,43 @@ pub fn parse(file: &[u8]) -> Result<PortData> {
     if d.role != ROLE_PORT {
         return Err(err!("{}: not a port file (role {})", d.name, d.role));
     }
-    let t = &d.register;
-    let bad = || err!("port file: bad header table");
-    if t.len() < 8 {
-        return Err(bad());
-    }
-    let n = u16::from_be_bytes([t[6], t[7]]) as usize;
-    let (mut at, mut names, mut sites, mut fw_id) = (8, vec![], vec![], None);
-    for _ in 0..n {
-        let head = t.get(at..at + 8).ok_or_else(bad)?;
-        let tag = u16::from_be_bytes([head[0], head[1]]);
-        let count = u16::from_be_bytes([head[2], head[3]]) as usize;
-        let len = u32::from_be_bytes(head[4..8].try_into().unwrap()) as usize;
-        let body = t.get(at + 8..at + 8 + len).ok_or_else(bad)?;
-        at += 8 + len;
-        let u32at = |b: &[u8], i: usize| u32::from_be_bytes(b[i..i + 4].try_into().unwrap());
-        match tag {
-            TAG_FWNAMES => {
-                if body.len() != count * NAME_ITEM {
-                    return Err(bad());
-                }
-                for b in body.chunks(NAME_ITEM) {
-                    names.push(NameItem {
-                        hash: u32at(b, 0),
-                        addr: u32at(b, 4),
-                        n: u16::from_be_bytes([b[8], b[9]]),
-                        kind: b[10],
-                        absent: b[11] & FLAG_ABSENT != 0,
-                    });
-                }
-            }
-            TAG_SITES => {
-                if body.len() != count * SITE_ITEM {
-                    return Err(bad());
-                }
-                for b in body.chunks(SITE_ITEM) {
-                    sites.push(SiteItem {
-                        hash: u32at(b, 0),
-                        addr: u32at(b, 4),
-                        len: u16::from_be_bytes([b[8], b[9]]),
-                        kind: match b[10] {
-                            0 => SiteKind::Raw,
-                            1 => SiteKind::Tail,
-                            2 => SiteKind::Stock,
-                            k => return Err(err!("port file: site kind {k}")),
-                        },
-                        absent: b[11] & FLAG_ABSENT != 0,
-                        check: b[12..20].try_into().unwrap(),
-                    });
-                }
-            }
-            x if x == dkneeds::keys::tag::FW => {
-                fw_id = Some(<[u8; 8]>::try_from(body.get(..8).ok_or_else(bad)?).unwrap());
-            }
-            _ => {}
-        }
+    let k = Keys::parse(&d.register).map_err(|e| err!("port file: bad header table: {e:?}"))?;
+    let names = (0..k.name_count())
+        .filter_map(|i| k.name(i))
+        .map(|x| NameItem {
+            hash: x.hash,
+            addr: x.addr,
+            n: x.n,
+            kind: x.kind,
+            absent: x.flags & FLAG_ABSENT != 0,
+        })
+        .collect();
+    let mut sites = vec![];
+    for x in (0..k.site_count()).filter_map(|i| k.site(i)) {
+        sites.push(SiteItem {
+            hash: x.hash,
+            addr: x.addr,
+            len: x.len,
+            kind: match x.kind {
+                SITE_RAW => SiteKind::Raw,
+                SITE_TAIL => SiteKind::Tail,
+                SITE_STOCK => SiteKind::Stock,
+                k => return Err(err!("port file: site kind {k}")),
+            },
+            absent: x.flags & FLAG_ABSENT != 0,
+            check: x.check,
+        });
     }
     Ok(PortData {
-        fw_id: fw_id.ok_or_else(|| err!("port file: no FW item"))?,
+        fw_id: k.fw(0).ok_or_else(|| err!("port file: no FW item"))?,
         names,
         sites,
     })
 }
 
-/// The file name of a port: `<device>-<version>.dks`.
+/// The file name of a port: `<device>-<version>.dkport`.
 pub fn file_name(port: &Port) -> String {
-    format!("{}.dks", port.id())
+    format!("{}.dkport", port.id())
 }
 
 /// The firmware references of an unbound service that the port file does not list (any device's port): the names `patchkit service-check` refuses.
@@ -818,8 +782,12 @@ mod tests {
         let t = dkm.register.as_slice();
         let provides = name_hash(PORT_SERVICE).to_be_bytes();
         assert!(t.windows(4).any(|w| w == provides));
-        // the writer's own parser does not know the port tags 12 and 13 yet and refuses them as unknown: PR2 moves them into dkneeds and flips this
-        assert!(dkneeds::keys::Keys::parse(&dkm.register).is_err());
+        // the table is a version 3 table of dkneeds, which the runtime parses
+        let k = dkneeds::keys::Keys::parse(&dkm.register).unwrap();
+        assert_eq!(
+            (k.version(), k.name_count(), k.site_count()),
+            (3, d.names.len(), d.sites.len())
+        );
     }
 
     fn bound(hook: &str, len: u32, stock: &[u8], tail_off: Option<u32>) -> BoundHook {
