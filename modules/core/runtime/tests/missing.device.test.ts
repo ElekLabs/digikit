@@ -9,6 +9,7 @@ import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { TRACK_OBJ_WORD } from '@digi/regression/runtime/project-kit.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-cli.ts';
 
@@ -27,8 +28,8 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  * sticky map and writes no row. The boot path therefore runs with a second machine module (`test/native-page`) selected beside the debug module: the machines service loads, the
  * number of `test/sine` is still in the map (the map keeps the numbers of modules that are not selected) and no module has it. After the restart, once the loads of the boot are over,
  * the service parks it, so the row's short name reads `MISS` (waited on firmware state) and the log holds no `MACHINE_TYPE_EVICTED` error (no number was left without a row). The
- * silence of that row is the unit test of the service and the rig case (a track cannot hold the type after a restart without a saved project). Then `test/sine` is selected again,
- * the device restarts, and the machine is its own again.
+ * silence of that row is the unit test of the service and the rig case (a track cannot hold the type after a restart without a saved project). Then a live load of `test/sine`
+ * takes the parked row back and the machine is its own again (a restart before the stable period ends would start a safe boot, so the test does not restart twice).
  *
  * Replaces the "a plain unload leaves a gap row that plays the first stock machine" assertions of `live.device.test.ts`.
  *
@@ -113,7 +114,7 @@ async function expectMissingAndSilent(rt: TestRuntime): Promise<void> {
   const artifacts = liveArtifacts(rt.session, 'missing');
   const sinePath = moduleStorePath(device as 'dt2' | 'dn2', 'test/sine');
   await cliInstall(rt.session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
-  const plan = await prepareRuntimePlan(rt.session, artifacts, ['dynreg_info']);
+  const plan = await prepareRuntimePlan(rt.session, artifacts, ['dynreg_info', 'DKRT_BOOT']);
   // the next boot would load the debug module alone: the machine is outside the saved selection
   await rt.dk.select([moduleStorePath(device as 'dt2' | 'dn2', DEBUG_MODULE)]);
   await transferCommand(rt.session, ['install', OTHER_ID], path.join(artifacts, 'install-other.log'), 300_000);
@@ -152,21 +153,27 @@ async function expectMissingAndSilent(rt: TestRuntime): Promise<void> {
   // the boot path: the selection is the debug module alone, the machine's number stays in the sticky map, and the machines service parks it once the boot's loads are over
   await rt.dk.unloadAndWait(sinePath);
   await rt.dk.select([moduleStorePath(device as 'dt2' | 'dn2', DEBUG_MODULE), moduleStorePath(device as 'dt2' | 'dn2', OTHER_ID)]);
-  await restart(rt);
+  await restart(rt, plan);
   const parked = await pollUntil(rt.clock, () => shortName(rt, plan, type), (n) => n === 'MISS', { withinMs: 30_000, message: 'the absent machine reads MISS after the restart' });
   expect(parked).toBe('MISS');
   expect(await listed(rt, plan, type), 'the absent machine is not in the selection list after the restart').toBe(false);
   const errors = (await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.MACHINE_TYPE_EVICTED);
   expect(errors, 'no number was left without a row (MACHINE_TYPE_EVICTED)').toEqual([]);
-  await rt.dk.select([moduleStorePath(device as 'dt2' | 'dn2', DEBUG_MODULE), sinePath]);
-  await restart(rt);
-  await pollUntil(rt.clock, async () => (await rt.dk.modules()).some((m) => m.name === 'test/sine'), (v) => v, { withinMs: 30_000, message: 'the machine is loaded after the second restart' });
-  expect(await shortName(rt, plan, type), 'the machine is its own again after the boot').toBe(ownShort);
+  // the placeholder parked at boot gives its row back to a live load of the machine: the row is its own again
+  expect(await rt.dk.loadAndWait(sinePath), 'the live load of the machine after the boot').toEqual({ result: 0, unloaded: false });
+  expect(await shortName(rt, plan, type), 'the machine is its own again after the load').toBe(ownShort);
   await rt.session.expectNoFault('the boot path of an absent machine');
 }
 
-/** `RESTART`, then the wait for the new boot in emulated time (the session's clock). */
-async function restart(rt: TestRuntime): Promise<void> {
+/**
+ * `RESTART` once the session is stable, then the wait for the new boot in emulated time. Two boots in a row that end before the stable period (30 s of
+ * DSP blocks, `DkrtBootInfo.stable`) start the third in safe mode, which loads no module (modules/core/runtime/src/rs/src/safe_mode.rs `ui_pass`).
+ */
+async function restart(rt: TestRuntime, plan: RuntimePlan): Promise<void> {
+  await pollUntil(rt.clock, async () => (await bootInfo(rt.session, plan)).stable, (v) => v === 1, {
+    withinMs: 40_000,
+    message: 'the session is stable (the boot counter is back to 0) before the restart',
+  });
   await rt.dk.restart();
   await rt.dk.waitForRestart();
 }
