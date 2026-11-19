@@ -116,6 +116,7 @@ fn fixture(device: u32) -> Fixture {
         b: module(1, &[(KIND_LFO_SHAPE, &[SHAPE_B])], b),
         a2: module(0, &[(KIND_LFO_SHAPE, &[SHAPE_A])], a2),
         enable: &[],
+        parks_rows: false,
         kept: |_, _, _| false,
         kept_dsp: |_, _| false,
         live: None,
