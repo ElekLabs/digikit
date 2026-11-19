@@ -28,6 +28,8 @@ This file says who owns which part of the repository and which moves are planned
 
 `modules/` holds the modules by kind; `modules/core` is split by layer (the rules are in [ARCHITECTURE.md](ARCHITECTURE.md), checked by `mise run check:layers`). Module ids do not follow the folders (`core/ui` is in `modules/core/adapters/ui`).
 
+In E8 the repository moves to the target tree of [taxonomy](design/taxonomy.md) (top-level `runtime/`, `services/`, `ports/` and `image/`; content modules in `modules/<kind>/<author>/<name>`). Until then this section and the owner table describe the current tree.
+
 | Folder | Role | What |
 | --- | --- | --- |
 | `modules/core/runtime` | `runtime` | Loads `.dkm` modules, links their imports, owns store, selection and policy |
