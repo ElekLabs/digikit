@@ -269,7 +269,10 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       .filter((n) => !files.some((m) => m.name === servicePath(n.service)))
       .map((n) => ({ name: servicePath(n.service), file: moduleArtifact(device, n.moduleId) }));
     // the port file the services resolve their firmware names from (a test that lists its own port file keeps it)
-    if ((services.length || files.some((m) => m.name.startsWith('services/'))) && !files.some((m) => m.name.startsWith('ports/')))
+    if (
+      (services.length || files.some((m) => m.name.startsWith('services/'))) &&
+      !files.some((m) => m.name.startsWith('ports/'))
+    )
       services.push(portFile(device));
     requireCoupledForServices([...files, ...services], o.dsp);
     for (const n of needed) cardServices.add(n.service);
