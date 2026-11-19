@@ -750,7 +750,12 @@ pub fn row_anchor_problems(name: &str, fw: &Path) -> Vec<String> {
         else {
             continue;
         };
-        for d in t.get("data").and_then(|d| d.as_array()).into_iter().flatten() {
+        for d in t
+            .get("data")
+            .and_then(|d| d.as_array())
+            .into_iter()
+            .flatten()
+        {
             let Some(d) = d.as_table() else { continue };
             let rule = d.get("rule").and_then(|r| r.as_table());
             let words = rule

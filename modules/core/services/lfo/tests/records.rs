@@ -2,15 +2,15 @@
 //! site's lookup reads the table, and that it ignores a record of another service. The statics of the crate (the shape table, the settled keys) are shared,
 //! so each test takes `LOCK` and starts from an empty table.
 //! The runtime's own tests (`handlers/lfo_tests.rs` in the runtime crate) drive the same service through the collector, the registry walkers and the planner.
+use dkrt_abi::mem::FwMem;
 use dkrt_abi::service::{check_step, ApplyCtx, CheckCtx, Declare, Service, SettleCtx};
 use dkrt_sdk::records::{KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
 use dkrt_svc_lfo::graph;
 use dkrt_svc_lfo::records::{
-    eval, highest, interp, name_into, name_of, number_of, owner_of, shape, tri, unipolar_of, used,
-    set_firmware, wave_max, Lfo, MAX_SHAPES, NAME_LEN, RANGE, SAMPLES, SETTING,
+    eval, highest, interp, name_into, name_of, number_of, owner_of, set_firmware, shape, tri,
+    unipolar_of, used, wave_max, Lfo, MAX_SHAPES, NAME_LEN, RANGE, SAMPLES, SETTING,
 };
-use dkrt_abi::mem::FwMem;
 use dkrt_test_support::FakeCore;
 use std::sync::{Mutex, MutexGuard};
 use std::vec::Vec;
@@ -400,29 +400,56 @@ fn the_wave_rows_of_the_copy_follow_the_highest_loaded_shape_and_go_back_to_stoc
     settle(&core, &[&[KEY_A], &[KEY_B]]);
     assert_eq!(wave_words(&core), [0x600; 3], "no shape: the stock maximum");
     core.boot_index.set(1);
-    assert_eq!(apply(&core, 2, KIND_LFO_SHAPE, &body(KEY_B, b"UP  ", 0)), OK);
+    assert_eq!(
+        apply(&core, 2, KIND_LFO_SHAPE, &body(KEY_B, b"UP  ", 0)),
+        OK
+    );
     assert_eq!(wave_words(&core), [0x800; 3], "the second key has number 8");
     core.boot_index.set(0);
-    assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"DOWN", 0)), OK);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"DOWN", 0)),
+        OK
+    );
     assert_eq!(wave_words(&core), [0x800; 3]);
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 2) };
-    assert_eq!(wave_words(&core), [0x700; 3], "the highest left is number 7");
+    assert_eq!(
+        wave_words(&core),
+        [0x700; 3],
+        "the highest left is number 7"
+    );
     // a reload: the same module goes and comes back
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
-    assert_eq!(wave_words(&core), [0x600; 3], "the last shape is gone: the word is back at its start value");
-    assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"DOWN", 0)), OK);
+    assert_eq!(
+        wave_words(&core),
+        [0x600; 3],
+        "the last shape is gone: the word is back at its start value"
+    );
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"DOWN", 0)),
+        OK
+    );
     assert_eq!(wave_words(&core), [0x700; 3]);
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
     assert_eq!(wave_words(&core), [0x600; 3]);
     // the minimum and the default of the rows and the stock addresses were never touched
     for (c, def) in CODES.iter().zip([0x100, 0, 0]) {
         unsafe {
-            assert_eq!((core.rd(COPY + 60 * c + 8), core.rd(COPY + 60 * c + 16)), (0, def));
-            assert_eq!(core.rd(STOCK + 60 * c + 12), 0, "the stock table is not written");
+            assert_eq!(
+                (core.rd(COPY + 60 * c + 8), core.rd(COPY + 60 * c + 16)),
+                (0, def)
+            );
+            assert_eq!(
+                core.rd(STOCK + 60 * c + 12),
+                0,
+                "the stock table is not written"
+            );
         }
     }
     assert!(
-        core.mem.borrow().keys().all(|a| (COPY..COPY + 60 * 300).contains(a)),
+        core.mem
+            .borrow()
+            .keys()
+            .all(|a| (COPY..COPY + 60 * 300).contains(a)),
         "only the copy was written"
     );
     set_firmware(0, [0; 3]);
@@ -437,7 +464,10 @@ fn an_image_without_the_registry_table_refuses_a_shape_and_writes_nothing() {
     core.boot_index.set(0);
     let sec = section(&[(KEY_A, 0)]);
     assert_eq!(check(&core, check_step::ROWS, &sec), E_NO_REGISTRY);
-    assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)), E_NO_REGISTRY);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)),
+        E_NO_REGISTRY
+    );
     unsafe { <Lfo as Service<FakeCore>>::remove(&core, 1) };
     assert_eq!(used(), 0, "the loader's remove takes the shape back");
     assert!(core.mem.borrow().is_empty(), "no word was written");
@@ -454,7 +484,10 @@ fn a_build_without_firmware_rows_loads_shapes_and_writes_no_row() {
     core.boot_index.set(0);
     let sec = section(&[(KEY_A, 0)]);
     assert_eq!(check(&core, check_step::ROWS, &sec), OK);
-    assert_eq!(apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)), OK);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)),
+        OK
+    );
     assert!(core.mem.borrow().is_empty());
 }
 

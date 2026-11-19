@@ -1,11 +1,13 @@
 //! The service contract suite (`dkrt_test_support::contract`) for the lfo service on both profiles. The call lists below stand for the shared fixture
 //! `tests/fixtures/modules/lfo-shape`: its `init` makes one `dk_record_add` of an `lfo_shape` record (the shape id is the module's key, then a ramp of 32 samples).
 use dkrt_abi::keys::KeysCopy;
+use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::ALL;
 use dkrt_sdk::records::{KINDS_LFO, KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_svc_lfo::graph;
-use dkrt_abi::mem::FwMem;
-use dkrt_svc_lfo::records::{name_of, number_of, owner_of, set_firmware, shape, used, Lfo, SAMPLES};
+use dkrt_svc_lfo::records::{
+    name_of, number_of, owner_of, set_firmware, shape, used, Lfo, SAMPLES,
+};
 use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module};
 use dkrt_test_support::FakeCore;
 use std::sync::Mutex;

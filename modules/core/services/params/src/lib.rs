@@ -165,14 +165,23 @@ unsafe fn stock_row(inf: *const u32, table: u32, row: u32) -> Option<u32> {
     }
     let size = iw(inf, w::PF_SIZE);
     let copy = iw(inf, w::P_TABLE);
-    if size == 0 || copy == 0 || (row - table) % size != 0 || (row - table) / size >= iw(inf, w::P_FIRST) {
+    if size == 0
+        || copy == 0
+        || (row - table) % size != 0
+        || (row - table) / size >= iw(inf, w::P_FIRST)
+    {
         return None;
     }
     Some(copy + (row - table))
 }
 
 /// The minimum and the maximum of a stock row of the table's RAM copy (`None` for a row `stock_row` refuses).
-pub unsafe fn stock_range(m: &impl FwMem, inf: *const u32, table: u32, row: u32) -> Option<(u32, u32)> {
+pub unsafe fn stock_range(
+    m: &impl FwMem,
+    inf: *const u32,
+    table: u32,
+    row: u32,
+) -> Option<(u32, u32)> {
     let at = stock_row(inf, table, row)?;
     Some((m.rd(at + 8), m.rd(at + 12)))
 }
@@ -259,7 +268,10 @@ mod tests {
             assert_eq!(core.rd(0x8000 + 60 * 79 + 12), 0xe00, "the copy changed");
             assert_eq!(core.rd(row(79) + 12), 0, "the stock address is not written");
             // the pair goes back
-            assert_eq!(set_stock_range(&core, inf, 0x1000, row(79), 0, 0x600), Some((0, 0xe00)));
+            assert_eq!(
+                set_stock_range(&core, inf, 0x1000, row(79), 0, 0x600),
+                Some((0, 0xe00))
+            );
             assert_eq!(core.rd(0x8000 + 60 * 79 + 12), 0x600);
         }
     }
@@ -277,11 +289,18 @@ mod tests {
         unsafe {
             // a registry row (code 100), a row off the 60-byte grid, below the table, no stock table
             for row in [0x1000 + 60 * 100, 0x1000 + 61, 0x0fff] {
-                assert_eq!(set_stock_range(&core, inf, 0x1000, row, 1, 2), None, "{row:#x}");
+                assert_eq!(
+                    set_stock_range(&core, inf, 0x1000, row, 1, 2),
+                    None,
+                    "{row:#x}"
+                );
             }
             assert_eq!(set_stock_range(&core, inf, 0, 0x1000, 1, 2), None);
             // the image has no registry table
-            assert_eq!(set_stock_range(&core, core::ptr::null(), 0x1000, 0x1000, 1, 2), None);
+            assert_eq!(
+                set_stock_range(&core, core::ptr::null(), 0x1000, 0x1000, 1, 2),
+                None
+            );
             assert!(core.mem.borrow().is_empty(), "nothing was written");
         }
     }

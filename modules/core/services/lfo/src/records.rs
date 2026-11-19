@@ -229,7 +229,11 @@ unsafe fn sync_range<C: CoreApi>(core: &C) -> i32 {
     }
     let mut i = 0;
     while i < 3 {
-        let (min, top) = if max == 0 { w.stock[i] } else { (w.stock[i].0, max) };
+        let (min, top) = if max == 0 {
+            w.stock[i]
+        } else {
+            (w.stock[i].0, max)
+        };
         set_stock_range(core, inf, w.table, w.row[i], min, top);
         i += 1;
     }

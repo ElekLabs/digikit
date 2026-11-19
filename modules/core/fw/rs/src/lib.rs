@@ -49,19 +49,19 @@ pub mod input {
 
 pub mod lfo {
     unsafe extern "C" {
-        /// The descriptor row (60 bytes) of the WAVE parameter of LFO 1 (code 79; DT2 0x40210820, DN2 0x401f9628): mirror index 5, range 0..0x600, default 0x100, slot 0xae.
+        /// The descriptor row (60 bytes) of the WAVE parameter of LFO 1 (code 79): mirror index 5, range 0..0x600, default 0x100, slot 0xae.
         #[link_name = "cf.lfo.data.wave_row.1"]
         pub static WAVE_ROW_1: u8;
     }
 
     unsafe extern "C" {
-        /// The descriptor row of the WAVE parameter of LFO 2 (code 89; DT2 0x40210a78, DN2 0x401f9880): mirror index 0xd, range 0..0x600, default 0, slot 0xb6.
+        /// The descriptor row of the WAVE parameter of LFO 2 (code 89): mirror index 0xd, range 0..0x600, default 0, slot 0xb6.
         #[link_name = "cf.lfo.data.wave_row.2"]
         pub static WAVE_ROW_2: u8;
     }
 
     unsafe extern "C" {
-        /// The descriptor row of the WAVE parameter of LFO 3 (code 99; DT2 0x40210cd0, DN2 0x401f9ad8): mirror index 0x15, range 0..0x600, default 0, slot 0xbe.
+        /// The descriptor row of the WAVE parameter of LFO 3 (code 99): mirror index 0x15, range 0..0x600, default 0, slot 0xbe.
         #[link_name = "cf.lfo.data.wave_row.3"]
         pub static WAVE_ROW_3: u8;
     }

@@ -775,7 +775,10 @@ fn a_row_anchor_has_one_service_in_its_users() {
     .unwrap();
     let found = patchkit::svccheck::row_anchor_problems("lfo", &fw);
     assert_eq!(found.len(), 1, "{found:?}");
-    assert!(mentions(&found, "`cf.a.data.row_shared` has 2 services in `users`"), "{found:?}");
+    assert!(
+        mentions(&found, "`cf.a.data.row_shared` has 2 services in `users`"),
+        "{found:?}"
+    );
     // a missing folder is no problem
     assert!(patchkit::svccheck::row_anchor_problems("lfo", &fw.join("none")).is_empty());
 }
