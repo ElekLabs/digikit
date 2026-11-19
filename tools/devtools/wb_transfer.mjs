@@ -3,9 +3,14 @@
 // the device's firmware, before the modules; `delete` takes the services no remaining module needs along with the modules. No child process.
 //
 //     wb [--port SUB | --emu [--run-dir DIR]] transfer install ID... [--restart] [--library DIR]
+//     wb [--port SUB | --emu [--run-dir DIR]] transfer reload PATH...
+//     wb [--port SUB | --emu [--run-dir DIR]] transfer load PATH...
+//     wb [--port SUB | --emu [--run-dir DIR]] transfer unload PATH...
 //     wb [--port SUB | --emu [--run-dir DIR]] transfer restart
 //     wb [--port SUB | --emu [--run-dir DIR]] transfer delete PATH...
 //
+// `reload`, `load` and `unload` change the loaded modules without a boot (the files are on the card already: `install` puts them there; an unload only names the module by its
+// path and leaves the file). Each exits 1 when a path was refused (nothing changed) or failed.
 // ID is a module id of the library (`out/modules/<device>/`, `dist/modules/<device>/` for the `.dks` services); PATH is a card path (`modules/pluck.dkm`).
 // A service goes on the card as built (`dist/modules/<device>/<name>.dks`) with the port file of the device's firmware (`dist/ports/<device>-<version>.dkport`, `patchkit:ports`),
 // the one whose FW item equals the device's `fw_id`; with none, a module that needs a service is refused (this firmware version is not supported yet).
@@ -20,6 +25,7 @@ import {
   deleteFiles,
   install,
   libraryModule,
+  liveModules,
   reloadModules,
   restartDevice,
 } from '../../packages/workbench-core/src/modules/dktransfer.ts';
@@ -66,6 +72,20 @@ export async function transferCommand({ host, session, sub, rest, opts, fail }) 
     emit({ event: 'loaded', loaded, missing: [] });
     return 0;
   }
+  if (sub === 'load' || sub === 'unload') {
+    // the file of a load is on the card (wb transfer install); an unload leaves its file there: the module is not loaded until `load` or a restart that selects it
+    if (rest.length === 0) fail(`transfer ${sub} needs card paths`);
+    const { refused, failed } = await liveModules(session, sub, rest, emit);
+    for (const r of refused)
+      console.error(
+        r.result === -87
+          ? `wb: ${r.path} was not ${sub}ed: the DSP loader holds a module it could not release. Restart the device (wb transfer restart)`
+          : `wb: ${r.path} was not ${sub}ed (status ${r.result}); nothing changed`,
+      );
+    for (const r of failed)
+      console.error(`wb: the ${sub} of ${r.path} failed (status ${r.result}); the module is not loaded`);
+    return refused.length + failed.length ? 1 : 0;
+  }
   if (sub === 'reload') {
     // the new files are on the card already (wb transfer install): reload the loaded modules without a boot
     if (rest.length === 0) fail('transfer reload needs card paths');
@@ -84,7 +104,7 @@ export async function transferCommand({ host, session, sub, rest, opts, fail }) 
   }
   if (sub !== 'install' || rest.length === 0)
     fail(
-      'usage: wb transfer install ID... [--restart] [--reload] | wb transfer reload PATH... | wb transfer restart | wb transfer delete PATH...',
+      'usage: wb transfer install ID... [--restart] [--reload] | wb transfer reload|load|unload PATH... | wb transfer restart | wb transfer delete PATH...',
     );
   const info = await session.info();
   const wasm = new Uint8Array(await host.firmware.patchkitWasm());

@@ -98,7 +98,8 @@ static dk_ui_menu *g_main, *g_about, *g_mem, *g_modules, *g_info;
 static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first open */
 
 /* The settings menu of each loaded module that has a menu function, by the module's index in dkrt_module order. Each is built the first
-   time the user opens it and kept: no module is unloaded at run time, so the module's code and the ctx it passes stay valid. */
+   time the user opens it and kept: a module that has a menu function is never unloaded or reloaded at run time (the runtime refuses with E_RELOAD_MENUS), so the module's code and the
+   ctx it passes stay valid. */
 #define MAX_SET 16
 #define NAME_ROW 32 /* a module name (31 characters at most) without its author */
 /* Calls the module's menu function (dk_module.menu) at address a (DkrtModule.menu) with the module's ctx (DkrtModule.ctx) and the menu to fill: menu(ctx, menu).
@@ -319,7 +320,7 @@ static const char *const fit_label[17] = {
 };
 
 /* The text of a module's state and result at boot (the runtime's DkrtBootInfo.states, .results, .needs and .detail of that selection index):
-   OK, LOADING (the DSP part is still going), REFUSED <reason> (the boot plan refused it; E_PLAN_FIT names the resource that is full), NEEDS <module>
+   OK, LOADING (the DSP part is still going), UNLOADED (taken down at run time), REFUSED <reason> (the boot plan refused it; E_PLAN_FIT names the resource that is full), NEEDS <module>
    when the load failed because a module it imports from is not in the image, or the code's text. A refusal has no "- " lead: the row is 23 characters. */
 static void result_text(txt *t, uint32_t state, int32_t code, const uint8_t *needs,
                         const uint32_t *detail)
@@ -332,6 +333,11 @@ static void result_text(txt *t, uint32_t state, int32_t code, const uint8_t *nee
         } else {
             status_text(t, code);
         }
+        return;
+    }
+    if (state == DKRT_STATE_UNLOADED) {
+        t_s(t,
+            "- UNLOADED"); /* taken down at run time: its result word is 0, which must not read OK */
         return;
     }
     t_s(t, "- ");

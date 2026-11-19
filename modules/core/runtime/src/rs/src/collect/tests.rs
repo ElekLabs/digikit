@@ -28,6 +28,8 @@ fn a_dsp_section_must_match_the_keys_table() {
 
 #[test]
 fn a_generic_record_of_an_unknown_or_a_typed_kind_is_refused_and_the_error_is_kept() {
+    // `add_record` reads the service table, a static that the tests of the service rows replace under this lock
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let body = [0u8; 0x100];
     // no service owns kind 999
     let mut a = Collect::new();
@@ -39,7 +41,6 @@ fn a_generic_record_of_an_unknown_or_a_typed_kind_is_refused_and_the_error_is_ke
     assert_eq!(b.add_record(KIND_PARAM, body.as_ptr(), 0x50 - 8), E_FORMAT);
     assert_eq!(b.ng, 0);
     // without an active collection the import refuses and changes nothing
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         end();
         assert_eq!(dk_record_add(core::ptr::null_mut(), KIND_PARAM, body.as_ptr(), 8), E_CONTEXT);

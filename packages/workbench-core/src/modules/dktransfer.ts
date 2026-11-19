@@ -1066,46 +1066,66 @@ export async function deleteFiles(
   return { deleted: all };
 }
 
+/** The live operations of the runtime's one job (`LOAD`, `UNLOAD`, `RELOAD`). */
+export type LiveOp = 'load' | 'unload' | 'reload';
+
 /**
- * RELOAD of the modules loaded from `paths` (a content module whose new file is on the card already): no boot. The caller tells three outcomes apart, each with a numeric result:
- * - `reloaded`: the new file is loaded.
- * - `refused`: refused before anything changed (not loaded, an upload is open, the transport plays, a key was dropped, a menu was built, a plan or load check failed, a runtime without
- *   RELOAD): the old module is still running.
- * - `failed`: failed after the old module was torn down (the load of the new file, its DSP part, or the teardown): the module is not loaded, as after a plain unload.
- * Neither list is thrown: the caller recovers (select and restart) or reports. A link error rejects.
+ * A live change of the modules at `paths` (card paths whose files are on the card already; for an unload the file only names the module): no boot. Each change is one job, one after
+ * another. The caller tells three outcomes apart, each with a numeric result:
+ * - `done`: the change is made (a load: loaded; an unload: not loaded any more; a reload: the new file is loaded).
+ * - `refused`: refused before anything changed (an unload or a reload of a module that is not loaded, a load of one that is, an upload is open, the transport plays, the module built
+ *   menus, an effect is on a route, a key was dropped, a plan or load check failed, a runtime without the operation): the module is as it was.
+ * - `failed`: failed after the old module was torn down (a reload: the load of the new file, its DSP part, or the teardown; a load never tears anything down): the module is not
+ *   loaded, as after a plain unload.
+ * Neither list is thrown: the caller recovers (select and restart) or reports. A link error rejects. The events are `<op>`, `<op>-refused`, `<op>-failed` and `done`.
  */
+export async function liveModules(
+  s: DkSession,
+  op: LiveOp,
+  paths: string[],
+  emit: Emit = () => {},
+  opts: { withinMs?: number } = {},
+): Promise<{ done: string[]; refused: ReloadOutcome[]; failed: ReloadOutcome[] }> {
+  const info = await s.info();
+  requireRuntime(info);
+  const done: string[] = [];
+  const refused: ReloadOutcome[] = [];
+  const failed: ReloadOutcome[] = [];
+  const run = op === 'load' ? s.loadAndWait : op === 'unload' ? s.unloadAndWait : s.reloadAndWait;
+  for (const path of paths) {
+    emit({ event: op, path });
+    try {
+      const { result, unloaded } = await run.call(s, path, opts);
+      if (result === 0) done.push(path);
+      else if (unloaded) {
+        failed.push({ path, result });
+        emit({ event: `${op}-failed`, path, result });
+      } else {
+        refused.push({ path, result });
+        emit({ event: `${op}-refused`, path, result });
+      }
+    } catch (e) {
+      const code = e instanceof DkError && e.status !== undefined ? STATUS_CODE.get(e.status) : undefined;
+      if (code === undefined || !REFUSED_AT_QUEUE.has(e instanceof DkError ? (e.status ?? '') : '')) throw e;
+      refused.push({ path, result: code });
+      emit({ event: `${op}-refused`, path, result: code });
+    }
+  }
+  emit(
+    op === 'reload' ? { event: 'done', reloaded: done, refused, failed } : { event: 'done', op, done, refused, failed },
+  );
+  return { done, refused, failed };
+}
+
+/** RELOAD of the modules loaded from `paths` (`liveModules`): `reloaded` is its `done`. */
 export async function reloadModules(
   s: DkSession,
   paths: string[],
   emit: Emit = () => {},
   opts: { withinMs?: number } = {},
 ): Promise<{ reloaded: string[]; refused: ReloadOutcome[]; failed: ReloadOutcome[] }> {
-  const info = await s.info();
-  requireRuntime(info);
-  const reloaded: string[] = [];
-  const refused: ReloadOutcome[] = [];
-  const failed: ReloadOutcome[] = [];
-  for (const path of paths) {
-    emit({ event: 'reload', path });
-    try {
-      const { result, unloaded } = await s.reloadAndWait(path, opts);
-      if (result === 0) reloaded.push(path);
-      else if (unloaded) {
-        failed.push({ path, result });
-        emit({ event: 'reload-failed', path, result });
-      } else {
-        refused.push({ path, result });
-        emit({ event: 'reload-refused', path, result });
-      }
-    } catch (e) {
-      const code = e instanceof DkError && e.status !== undefined ? STATUS_CODE.get(e.status) : undefined;
-      if (code === undefined || !REFUSED_AT_QUEUE.has(e instanceof DkError ? (e.status ?? '') : '')) throw e;
-      refused.push({ path, result: code });
-      emit({ event: 'reload-refused', path, result: code });
-    }
-  }
-  emit({ event: 'done', reloaded, refused, failed });
-  return { reloaded, refused, failed };
+  const { done, refused, failed } = await liveModules(s, 'reload', paths, emit, opts);
+  return { reloaded: done, refused, failed };
 }
 
 /** A path and the status a reload ended with (a number: the runtime's `E_*` code). */
@@ -1114,9 +1134,10 @@ export interface ReloadOutcome {
   result: number;
 }
 
-/** The statuses of a RELOAD request that mean "not now or not this way": nothing changed and the old module runs. */
+/** The statuses of a RELOAD, LOAD or UNLOAD request that mean "not now or not this way": nothing changed and the old module runs. */
 const REFUSED_AT_QUEUE = new Set<string>([
   'E_NOT_FOUND',
+  'E_LOADED',
   'E_BUSY',
   'E_STATE',
   'E_PROTO',
