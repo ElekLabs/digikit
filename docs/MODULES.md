@@ -315,7 +315,7 @@ Who owns what: the SDK has no device code. Adapters and device profiles carry th
 
 ## Install with services from the command line
 
-`wb transfer` (`mise run transfer`) runs the Transfer pane's install and delete through the same TypeScript (`packages/workbench-core/src/modules/dktransfer.ts`), over the NodeHost. It needs `apps/web/public/patchkit.wasm` (`mise run wasm:patchkit`), the packed modules in `out/modules/<device>/` (or `--library DIR`, for example `dist/modules` after `nx run <id>:pack`) and the unbound services in `dist/modules/<device>/`. For a device it needs the `dkmidi` bridge (`mise run dkmidi:build`); `--emu` drives the running emulator of `--run-dir DIR` (default `out/native/run`, `mise run emu:serve`) instead.
+`wb transfer` (`mise run transfer`) runs the Transfer pane's install and delete through the same TypeScript (`packages/workbench-core/src/modules/dktransfer.ts`), over the NodeHost. It needs `apps/web/public/patchkit.wasm` (`mise run wasm:patchkit`), the packed modules in `out/modules/<device>/` (or `--library DIR`, for example `dist/modules` after `nx run <id>:pack`) and the unbound services in `dist/modules/<device>/` (the task packs them first). For a device it needs the `dkmidi` bridge (`mise run dkmidi:build`); `--emu` drives the running emulator of `--run-dir DIR` (default `out/native/run`, `mise run emu:serve`) instead.
 
 ```text
 mise run transfer -- [--port SUB | --emu [--run-dir DIR]] install ID... [--stock STOCK.syx] [--restart] [--library DIR] [--format text]

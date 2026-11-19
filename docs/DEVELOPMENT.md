@@ -67,7 +67,7 @@ It needs the shared core (`mise run gen:core`). The files go to the `[acceptance
 ```sh
 mise run workbench                # build once and open the app with no firmware loaded (`-- --build-only` builds only)
 mise run workbench -- FILE.syx    # load that firmware at start (else the Emulator page's "Load on start" tick loads the last opened file)
-mise run workbench:inputs         # the UI dist and the wasm files, from the Nx cache when unchanged (the workbench runs it first)
+mise run workbench:inputs         # the UI dist, the wasm files and the packed services, from the Nx cache when unchanged (the workbench runs it first)
 mise run wasm:dkprof              # only public/dkprof.wasm (`wb` addrmap, module and profile commands load it)
 mise run workbench -- --cf-only --plus-drive DIR firmware/Digitakt_II_OS1.17.syx   # a +Drive folder (default: plus_drive/<device>/; --samples is the same option)
 mise run workbench -- --dsp-patch FILE  # overlay a DSP patch (DN2 audio)
